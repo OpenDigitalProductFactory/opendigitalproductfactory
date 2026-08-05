@@ -40,6 +40,10 @@
           {
             "type": "command",
             "command": "node \"${CLAUDE_PROJECT_DIR}/packages/dpf-skill-pack/hooks/pregate-evidence-guard.mjs\""
+          },
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PROJECT_DIR}/packages/dpf-skill-pack/hooks/pregate-invocation-guard.mjs\""
           }
         ]
       },

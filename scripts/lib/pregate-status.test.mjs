@@ -1,0 +1,171 @@
+import assert from "node:assert/strict";
+import { test } from "node:test";
+
+import {
+  classifySlotRecord,
+  exitCodeForVerdict,
+  formatStatusReport,
+  reconcileSlots,
+} from "./pregate-status.mjs";
+
+const HEAD = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+const OLD = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+const NOW = Date.parse("2026-08-04T12:00:00.000Z");
+
+function passingState(overrides = {}) {
+  return {
+    branch: "claude/topic",
+    sha: HEAD,
+    gatePassed: true,
+    status: "passed",
+    evidenceRecordId: "EXT-1",
+    evidencePending: false,
+    expiresAt: "2026-08-04T13:00:00.000Z",
+    recordedAt: "2026-08-04T11:40:00.000Z",
+    ...overrides,
+  };
+}
+
+test("PASS requires a passing record bound to THIS head", () => {
+  const r = classifySlotRecord({
+    state: passingState(),
+    metadata: { candidateSha: HEAD },
+    headSha: HEAD,
+    headBranch: "claude/topic",
+    now: NOW,
+  });
+  assert.equal(r.verdict, "PASS");
+  assert.equal(exitCodeForVerdict(r.verdict), 0);
+});
+
+test("NO-RECORD when pregate never ran here", () => {
+  const r = classifySlotRecord({ state: null, metadata: null, headSha: HEAD, now: NOW });
+  assert.equal(r.verdict, "NO-RECORD");
+  assert.equal(exitCodeForVerdict(r.verdict), 1);
+});
+
+test("STALE when HEAD has moved past the gated SHA", () => {
+  const r = classifySlotRecord({
+    state: passingState({ sha: OLD }),
+    metadata: { candidateSha: OLD },
+    headSha: HEAD,
+    now: NOW,
+  });
+  assert.equal(r.verdict, "STALE");
+  assert.equal(r.staleness, "head-moved");
+  assert.match(r.reason, /bbbbbbbbbbbb/);
+  assert.match(r.reason, /aaaaaaaaaaaa/);
+  assert.equal(exitCodeForVerdict(r.verdict), 1);
+});
+
+test("STALE when the branch moved under an otherwise-matching SHA", () => {
+  const r = classifySlotRecord({
+    state: passingState({ branch: "claude/other" }),
+    metadata: { candidateSha: HEAD },
+    headSha: HEAD,
+    headBranch: "claude/topic",
+    now: NOW,
+  });
+  assert.equal(r.verdict, "STALE");
+  assert.equal(r.staleness, "branch-moved");
+});
+
+test("STALE when the record has expired", () => {
+  const r = classifySlotRecord({
+    state: passingState({ expiresAt: "2026-08-04T11:00:00.000Z" }),
+    metadata: { candidateSha: HEAD },
+    headSha: HEAD,
+    now: NOW,
+  });
+  assert.equal(r.verdict, "STALE");
+  assert.equal(r.staleness, "expired");
+});
+
+test("STALE when the metadata record disagrees with the gate state", () => {
+  // The two records are written by different processes; a disagreement means one
+  // of them is not describing this run, which must never read as a PASS.
+  const r = classifySlotRecord({
+    state: passingState(),
+    metadata: { candidateSha: OLD },
+    headSha: HEAD,
+    now: NOW,
+  });
+  assert.equal(r.verdict, "STALE");
+  assert.equal(r.staleness, "metadata-mismatch");
+});
+
+test("FAIL when the record exists for this SHA but did not pass", () => {
+  const r = classifySlotRecord({
+    state: passingState({ gatePassed: false, status: "failed" }),
+    metadata: null,
+    headSha: HEAD,
+    now: NOW,
+  });
+  assert.equal(r.verdict, "FAIL");
+  assert.equal(exitCodeForVerdict(r.verdict), 1);
+});
+
+test("a run that gave up while queued reads FAIL, not PASS", () => {
+  // BI-2C7F51BA Defect 3: that path exits 0 having gated nothing. The record is
+  // what makes the silent exit-0 detectable.
+  const r = classifySlotRecord({
+    state: passingState({ gatePassed: false, status: "blocked_quiescence", evidenceRecordId: "" }),
+    metadata: null,
+    headSha: HEAD,
+    now: NOW,
+  });
+  assert.equal(r.verdict, "FAIL");
+  assert.match(r.reason, /blocked_quiescence/);
+});
+
+test("PENDING when the gate passed but evidence publication is unfinished", () => {
+  const r = classifySlotRecord({
+    state: passingState({ evidencePending: true, evidencePendingReason: "portal_quiescing" }),
+    metadata: { candidateSha: HEAD },
+    headSha: HEAD,
+    now: NOW,
+  });
+  assert.equal(r.verdict, "PENDING");
+  assert.match(r.reason, /finalize-evidence/);
+  assert.equal(exitCodeForVerdict(r.verdict), 1, "pending evidence is not a green light to push");
+});
+
+test("reconcile takes the best slot so a sibling's stale record cannot fake a failure", () => {
+  const best = reconcileSlots([
+    { slotKey: "slot-0", verdict: "STALE", reason: "old" },
+    { slotKey: "slot-1", verdict: "PASS", reason: "gate passed for this HEAD" },
+  ]);
+  assert.equal(best.verdict, "PASS");
+  assert.equal(best.slot, "slot-1");
+});
+
+test("reconcile still reports the worst available when nothing passed", () => {
+  const best = reconcileSlots([
+    { slotKey: "slot-0", verdict: "FAIL", reason: "failed" },
+    { slotKey: "slot-1", verdict: "STALE", reason: "old" },
+  ]);
+  assert.equal(best.verdict, "STALE", "STALE outranks FAIL — it is the more actionable of the two");
+});
+
+test("reconcile of nothing is NO-RECORD, never a pass", () => {
+  assert.equal(reconcileSlots([]).verdict, "NO-RECORD");
+});
+
+test("the report is short enough that nobody pipes it, and names the next step", () => {
+  const lines = formatStatusReport(
+    { verdict: "STALE", reason: "head moved", boundSha: OLD, boundBranch: "claude/topic", recordedAt: "2026-08-04T11:00:00.000Z", slot: "slot-0", logFile: "D:/x.log" },
+    { headBranch: "claude/topic", headSha: HEAD, now: NOW },
+  );
+  assert.ok(lines.length <= 10, `got ${lines.length} lines`);
+  assert.equal(lines[0], "local-CI gate: STALE");
+  assert.ok(lines.some((l) => l.includes("pnpm run pregate")), "a non-PASS must name the next step");
+  assert.ok(lines.some((l) => l.includes("1h 0m ago")), "staleness must be human-readable");
+});
+
+test("a PASS report does not tell you to re-run", () => {
+  const lines = formatStatusReport(
+    { verdict: "PASS", reason: "gate passed for this HEAD", boundSha: HEAD, boundBranch: "claude/topic" },
+    { headBranch: "claude/topic", headSha: HEAD, now: NOW },
+  );
+  assert.ok(!lines.some((l) => l.includes("next")), "a PASS has no next step");
+});

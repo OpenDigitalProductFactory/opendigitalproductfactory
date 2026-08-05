@@ -17,7 +17,7 @@
 // explicitly (a `dpf worktree --bootstrap` CLI / the seed script / an opt-in env),
 // so worktree creation stays fast and convergence is a deliberate step.
 
-import { existsSync, readdirSync, realpathSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, realpathSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 
 /**
@@ -28,6 +28,70 @@ import { execFileSync } from "node:child_process";
 export function classifyReadiness({ hasNodeModules, depProbeOk, gateOk }) {
   if (hasNodeModules && depProbeOk && gateOk) return "compile-ready";
   return "source-only";
+}
+
+// BI-1C1483C6: the three artifacts whose absence produces failures that look
+// exactly like real code breakage. Observed 2026-08-04: `apps/web/node_modules`
+// was an EMPTY directory (0 entries) and the worktree root had none at all,
+// which surfaced only much later as `'next' is not recognized` from the
+// pre-commit typecheck and 14 vitest suites failing with "Cannot find package
+// 'react'". Confirming those were environmental cost a `git stash` + re-run per
+// suspicion — and an agent that does not think to stash reports them as
+// regressions IT caused.
+//
+// `existsSync` alone is not the test: an EMPTY directory is the observed shape,
+// and it passes existsSync. Emptiness is the signal.
+export const WORKTREE_COMPILE_ARTIFACTS = Object.freeze([
+  Object.freeze({
+    path: "node_modules",
+    label: "root node_modules",
+    forbids: "any pnpm script, typecheck, or vitest run",
+  }),
+  Object.freeze({
+    path: "apps/web/node_modules",
+    label: "apps/web/node_modules",
+    forbids: "pnpm --filter web typecheck (fails as \"'next' is not recognized\") and component tests",
+  }),
+  Object.freeze({
+    path: "packages/db/generated",
+    label: "packages/db/generated (Prisma client)",
+    forbids: "any Prisma-touching test (fails as \"Cannot find module '../generated/client/client'\")",
+  }),
+]);
+
+/**
+ * Which of the named compile artifacts are absent or empty. READ-ONLY by
+ * construction — this module must never create, junction, or remove anything
+ * under node_modules. A worktree's node_modules is normally a JUNCTION to the
+ * root clone, and `rm -rf` on it has previously gutted the root clone (1198
+ * deleted sources); a bare `pnpm install` writes THROUGH the junction. Probing
+ * is safe precisely because it only reads.
+ *
+ * @param {string} worktreePath
+ * @param {{ readdir?: (dir: string) => string[], exists?: (p: string) => boolean }} [deps]
+ */
+export function missingCompileArtifacts(worktreePath, deps = {}) {
+  const exists = deps.exists ?? ((p) => existsSync(p));
+  const readdir = deps.readdir ?? ((dir) => {
+    try {
+      return readdirSync(dir);
+    } catch {
+      return [];
+    }
+  });
+  const wt = norm(worktreePath);
+  const missing = [];
+  for (const artifact of WORKTREE_COMPILE_ARTIFACTS) {
+    const full = `${wt}/${artifact.path}`;
+    if (!exists(full)) {
+      missing.push({ ...artifact, state: "absent" });
+      continue;
+    }
+    if (readdir(full).length === 0) {
+      missing.push({ ...artifact, state: "empty" });
+    }
+  }
+  return missing;
 }
 
 /** Operator-readable reason for the readiness outcome (written to the marker). */
@@ -106,17 +170,101 @@ export function checkWorkspaceLinksResolveLocally(worktreePath, deps = {}) {
  */
 export function probeWorktreeReadiness(worktreePath, opts = {}) {
   const pkgMgr = opts.packageManager ?? "pnpm";
-  const hasNodeModules = existsSync(`${worktreePath}/node_modules`);
+  // BI-1C1483C6: check every named artifact, not just the root. The observed
+  // failure had a root node_modules that was ABSENT and an apps/web one that
+  // existed but was EMPTY — so both the path set and the emptiness test matter.
+  const missing = missingCompileArtifacts(worktreePath, opts.artifactDeps);
+  const hasNodeModules = !missing.some((m) => m.path === "node_modules");
   const depProbeOk = hasNodeModules && run(pkgMgr, ["ls", "--depth", "-1"], worktreePath);
   const linkCheck = depProbeOk
     ? checkWorkspaceLinksResolveLocally(worktreePath, opts.linkCheckDeps)
     : { ok: true, stale: [] };
-  const gateOk = depProbeOk && linkCheck.ok;
+  const gateOk = depProbeOk && linkCheck.ok && missing.length === 0;
   return {
     status: classifyReadiness({ hasNodeModules, depProbeOk, gateOk }),
-    reason: readinessReason({ hasNodeModules, depProbeOk, gateOk, staleWorkspaceLinks: linkCheck.stale }),
+    reason: missing.length > 0 && hasNodeModules && depProbeOk && linkCheck.ok
+      ? `missing_compile_artifacts:${missing.map((m) => m.path).join(",")}`
+      : readinessReason({ hasNodeModules, depProbeOk, gateOk, staleWorkspaceLinks: linkCheck.stale }),
+    missing,
     checks: { hasNodeModules, depProbeOk, gateOk, staleWorkspaceLinks: linkCheck.stale },
   };
+}
+
+// BI-1C1483C6 (2): the exact strings an unprovisioned worktree produces. Every
+// one of them reads as a code defect at the point of use, which is why they cost
+// a `git stash` + re-run cycle per suspicion — and why an agent that skips the
+// stash reports them as regressions its own change caused.
+const UNPROVISIONED_SIGNATURES = Object.freeze([
+  { pattern: /'next' is not recognized|next: (?:command )?not found/i, artifact: "apps/web/node_modules" },
+  { pattern: /Cannot find package '(?:react|react-dom)/i, artifact: "node_modules" },
+  { pattern: /Cannot find module '.*generated[/\\]client/i, artifact: "packages/db/generated" },
+  { pattern: /Cannot find module '@dpf\//i, artifact: "node_modules" },
+  { pattern: /ERR_PNPM_NO_.*|command not found: pnpm/i, artifact: "node_modules" },
+]);
+
+/**
+ * Decide whether a command's output is the unprovisioned-worktree condition
+ * rather than a real defect. Pure — the caller supplies both the text and the
+ * readiness it already probed, because the text alone is ambiguous: `Cannot
+ * find package 'react'` in a COMPILE-READY tree really is a broken dependency
+ * and must keep reading as one.
+ *
+ * @param {string} outputText
+ * @param {{ status: string, missing?: Array<{path: string}> }} readiness
+ * @returns {{ unprovisioned: boolean, matched: string[], explanation: string }}
+ */
+export function diagnoseUnprovisionedFailure(outputText, readiness) {
+  const text = String(outputText ?? "");
+  const matched = UNPROVISIONED_SIGNATURES
+    .filter((sig) => sig.pattern.test(text))
+    .map((sig) => sig.artifact);
+  if (matched.length === 0 || readiness?.status === "compile-ready") {
+    return { unprovisioned: false, matched: [], explanation: "" };
+  }
+  const missingPaths = new Set((readiness?.missing ?? []).map((m) => m.path));
+  // Require the signature to CORROBORATE what was actually probed. Otherwise a
+  // genuinely broken dependency in a tree that merely lacks the Prisma client
+  // would be waved through as "environmental".
+  const corroborated = matched.filter((artifact) => missingPaths.has(artifact));
+  if (corroborated.length === 0) return { unprovisioned: false, matched, explanation: "" };
+  return {
+    unprovisioned: true,
+    matched: corroborated,
+    explanation:
+      "This is an UNPROVISIONED WORKTREE, not a code defect: "
+      + `${corroborated.join(", ")} ${corroborated.length === 1 ? "is" : "are"} missing or empty in this worktree. `
+      + "Do not attribute it to your change and do not stash to check. "
+      + "Provision with: node scripts/lib/bootstrap-worktree-deps.mjs . "
+      + "(never a bare `pnpm install` in a worktree — it writes THROUGH the junction into the root clone).",
+  };
+}
+
+/**
+ * The banner an agent needs BEFORE it promises a typecheck it cannot run.
+ *
+ * Naming what is missing is only half of it; naming what that FORBIDS is the
+ * half that changes behaviour. An agent that knows it is source-only does not
+ * report `Cannot find package 'react'` as a regression it caused.
+ *
+ * @param {{ status: string, reason: string, missing?: Array<{label: string, state: string, forbids: string}> }} readiness
+ * @param {string} worktreePath
+ * @returns {string[]} empty when the worktree is compile-ready (say nothing)
+ */
+export function formatReadinessBanner(readiness, worktreePath) {
+  if (readiness.status === "compile-ready") return [];
+  const lines = [
+    `Worktree verification-readiness: SOURCE-ONLY (${readiness.reason})`,
+    `  ${worktreePath}`,
+  ];
+  for (const item of readiness.missing ?? []) {
+    lines.push(`  missing  ${item.label} (${item.state}) — cannot run: ${item.forbids}`);
+  }
+  lines.push(
+    "  Do NOT report failures from those commands as code defects, and do not claim a gate you cannot run.",
+    "  Compile-ready costs one managed install: node scripts/lib/bootstrap-worktree-deps.mjs .",
+    "  (Never `pnpm install` bare in a worktree and never `rm -rf` node_modules — it is a junction to the root clone.)",
+  );
+  return lines;
 }
 
 /**
@@ -169,6 +317,24 @@ if (invokedDirectly) {
   const args = process.argv.slice(2);
   const classifyOnly = args.includes("--classify-only");
   const target = args.find((a) => !a.startsWith("--")) ?? process.cwd();
+
+  // BI-1C1483C6 (2): make the failure legible AT THE POINT OF USE. Callers that
+  // already captured a failing command's output pipe it in on stdin; if the
+  // output is the unprovisioned-worktree signature AND the probe corroborates
+  // it, print the relabelling. Silent (and exit 0) otherwise, so this can be
+  // dropped into any failure path without changing its behaviour.
+  if (args.includes("--diagnose-failure")) {
+    let text = "";
+    try {
+      text = readFileSync(0, "utf8");
+    } catch {
+      process.exit(0);
+    }
+    const diagnosis = diagnoseUnprovisionedFailure(text, probeWorktreeReadiness(target));
+    if (diagnosis.unprovisioned) process.stdout.write(`${diagnosis.explanation}\n`);
+    process.exit(0);
+  }
+
   const result = classifyOnly ? probeWorktreeReadiness(target) : bootstrapWorktreeDeps(target);
   process.stdout.write(JSON.stringify(result) + "\n");
   process.exit(0);

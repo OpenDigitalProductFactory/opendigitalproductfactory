@@ -9543,7 +9543,7 @@
         "where-ci-runs-it",
         "run-locally-before-pushing",
         "the-pre-push-gate-pregate-default-on",
-        "reading-the-result-a-queued-run-can-exit-0",
+        "reading-the-result-ask-the-record-not-the-run",
         "agent-pretooluse-refuse-bi-563f6ab6-p2",
         "keep-internal-identifiers-out-of-the-pr-body",
         "identify-your-client-and-thread",

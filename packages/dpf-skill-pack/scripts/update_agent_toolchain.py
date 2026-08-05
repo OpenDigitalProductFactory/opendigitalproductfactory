@@ -1067,6 +1067,7 @@ GROK_HOOK_GUARDS = (
     "compose-guard.mjs",
     "plan-backlog-coverage-guard.mjs",
     "pregate-evidence-guard.mjs",
+    "pregate-invocation-guard.mjs",
 )
 # Matcher-scoped groups (BI-pretooluse): without matchers Grok runs EVERY PreToolUse
 # command on EVERY tool (6 serial node spawns per call), which looks like
@@ -1081,6 +1082,7 @@ GROK_PRETOOLUSE_GROUPS = (
             "root-clone-guard.mjs",
             "compose-guard.mjs",
             "pregate-evidence-guard.mjs",
+            "pregate-invocation-guard.mjs",
         ),
     ),
     (
@@ -1288,6 +1290,7 @@ CODEX_BASH_GUARDS = (
     "compose-guard.mjs",
     "lease-punt-guard.mjs",
     "pregate-evidence-guard.mjs",
+    "pregate-invocation-guard.mjs",
 )
 CODEX_ASK_GUARDS = ("decision-routing-guard.mjs",)
 CODEX_WRITE_GUARDS = ("plan-backlog-coverage-guard.mjs",)
@@ -1461,11 +1464,13 @@ HOOK_PURPOSES = {
     "decision-routing-guard.mjs": "blocks asking the operator a platform decision with no kernel consultation",
     "plan-backlog-coverage-guard.mjs": "blocks production source edits until xlarge and independently shippable plan work has live BI coverage",
     "pregate-evidence-guard.mjs": "blocks git push / gh pr create when HEAD has no unexpired local-CI sandbox evidence",
+    "pregate-invocation-guard.mjs": "blocks a pregate run shaped so it cannot succeed or cannot be read (piped, backgrounded, chained, timeout-wrapped)",
     "ux-fit-precheck.mjs": "reminds to run a UX-fit review when editing UI surfaces",
     "spec-plan-doc-precheck.mjs": "reminds to attach a spec/plan/doc when writing gated files",
     "design-grounding-precheck.mjs": "reminds to review specs and current code substrate before UX/workflow edits",
     "tool-economy-precheck.mjs": "reminds about tool-economy budget when adding tool surface",
     "worktree-create.mjs": "seeds a new worktree with MCP config on WorktreeCreate",
+    "worktree-readiness-banner.mjs": "SessionStart: announces a SOURCE-ONLY worktree and what it forbids, so agents never promise a typecheck they cannot run",
     "process-spine-health-check.mjs": "SessionStart: warns when DPF-native replacement skills are missing or hidden by retired generic skills",
     "governance-freshness-check.mjs": "SessionStart: warns if governance guard wiring is stale",
     "grok-session-start.mjs": "Grok SessionStart: process-spine exposure probe + governance-freshness (global hook plane)",
