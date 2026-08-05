@@ -19,17 +19,28 @@ page it has no edge to, at any precision.
 
 ## The finding
 
-**95 of 612 published doc pages (15.5%) carry a doc-impact edge.**
-The other **517** (84.5%) carry none, and are invisible to
+**180 of 612 published doc pages (29.4%) carry a doc-impact edge.**
+The other **432** (70.6%) carry none, and are invisible to
 the doc-impact gate by construction — not because the gate is imprecise, but
 because there is no edge along which it could ever be told to look.
 
 | Signal | Pages |
 | ------ | ----- |
-| Code edges only | 48 |
-| Route edges only | 45 |
-| Both | 2 |
-| **No edge at all** | **517** |
+| Code edges only | 133 |
+| Route edges only | 43 |
+| Both | 4 |
+| **No edge at all** | **432** |
+
+### The uncovered remainder is not all a gap
+
+Of those 432, **416 reference no repo file anywhere in their text** — no link, no
+backticked path. They are WSID profession doctrine and founder-kernel principle
+pages: they describe how to decide, not what the code does. **No code-edge
+derivation will ever reach them**, and counting them as a shortfall argues
+forever for widening that has already run out.
+
+The genuinely recoverable set is **16** page(s) — those that cite a repo file but
+whose citation the current derivations do not turn into an edge.
 
 The timestamp detector (`build-docs-staleness.mjs`, BI-AA5DFEA2) currently reports **3** stale
 candidate(s). That number is small because its reach is small, not because the
@@ -41,40 +52,42 @@ Darkest first. These are the areas where a semantic gate would be blind today.
 
 | Area | Pages | Covered | Coverage |
 | ---- | ----- | ------- | -------- |
-| `professions` | 204 | 0 | 0% |
-| `triage` | 7 | 0 | 0% |
 | `marketing` | 4 | 0 | 0% |
-| `personas` | 4 | 0 | 0% |
-| `(root)` | 3 | 0 | 0% |
-| `specs` | 3 | 0 | 0% |
-| `dev` | 1 | 0 | 0% |
-| `maintenance` | 1 | 0 | 0% |
-| `prompts` | 1 | 0 | 0% |
-| `founder-kernel` | 125 | 2 | 1.6% |
-| `testing` | 40 | 4 | 10% |
-| `architecture` | 83 | 15 | 18.1% |
-| `operations` | 20 | 4 | 20% |
-| `runbooks` | 5 | 1 | 20% |
-| `design` | 4 | 1 | 25% |
-| `security` | 6 | 3 | 50% |
+| `professions` | 204 | 5 | 2.5% |
+| `founder-kernel` | 125 | 5 | 4% |
+| `triage` | 7 | 1 | 14.3% |
+| `(root)` | 3 | 1 | 33.3% |
+| `testing` | 40 | 14 | 35% |
+| `design` | 4 | 2 | 50% |
 | `dogfood` | 2 | 1 | 50% |
-| `strategy` | 2 | 1 | 50% |
-| `edge-node` | 7 | 4 | 57.1% |
-| `user-guide` | 80 | 52 | 65% |
-| `install` | 10 | 7 | 70% |
+| `operations` | 20 | 11 | 55% |
+| `architecture` | 83 | 48 | 57.8% |
+| `runbooks` | 5 | 3 | 60% |
+| `edge-node` | 7 | 5 | 71.4% |
+| `user-guide` | 80 | 58 | 72.5% |
+| `personas` | 4 | 3 | 75% |
+| `install` | 10 | 9 | 90% |
+| `security` | 6 | 6 | 100% |
+| `specs` | 3 | 3 | 100% |
+| `strategy` | 2 | 2 | 100% |
+| `dev` | 1 | 1 | 100% |
+| `maintenance` | 1 | 1 | 100% |
+| `prompts` | 1 | 1 | 100% |
 
 ## What this implies for BI-3E5969DF
 
-1. **Coverage is the binding constraint, not precision.** Tuning a semantic
-   detector against the covered minority would leave the uncovered majority
-   exactly as dark as it is now, while producing a green check that reads as
-   "docs are fine" — the failure mode the
+1. **Widening is close to exhausted.** Of the pages any code-edge derivation could
+   reach, 180 of 196 (91.8%) now carry an edge. The headline 29.4% understates
+   the gate because most of what it excludes is doctrine, not undocumented code.
+   Further widening buys single-digit page counts; the cheap direction is spent.
+2. **Reach is no longer the binding constraint — precision is.** That inverts
+   this report's earlier recommendation, and it is the change that makes a
+   semantic detector worth designing rather than deferring.
+3. **Gate on the addressable corpus, never on the whole.** A gate whose
+   denominator includes principle pages will always look broken, and one that
+   silently ignores them reports a coverage it does not have — the failure the
    [`gate-coverage-matches-blast-radius`](../founder-kernel/wiki/principles/gate-coverage-matches-blast-radius.md)
-   principle names.
-2. **Widening edges beats sharpening signal, for now.** PR #4004 already showed
-   the cheap direction: derive edges from references docs already contain rather
-   than ask authors to declare them (27 → 155 code edges, no annotation).
-3. **Do not gate yet.** On this corpus a semantic detector cannot be honestly
-   described as covering the docs. Advisory reporting first; binding later, and
-   only against a measured over-report rate on a corpus it can actually see.
+   principle names. Say which population is in scope, and measure against it.
+4. **Still measure over-report before binding.** Nothing here says the semantic
+   signal is accurate — only that it would now have something to look at.
 

@@ -4646,6 +4646,7 @@
         "doc-staleness-signal-coverage-measurement",
         "why-this-exists",
         "the-finding",
+        "the-uncovered-remainder-is-not-all-a-gap",
         "coverage-by-area",
         "what-this-implies-for-bi-3e5969df"
       ]

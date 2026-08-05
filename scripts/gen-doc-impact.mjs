@@ -104,6 +104,38 @@ const isExternalHref = (h) => /^(https?:|mailto:|tel:|data:|#)/i.test(h);
  *  documentation-graph concern, not a code-change blast radius. */
 const CODE_EXT_RE = /\.(ts|tsx|mts|mjs|js|jsx|prisma|sql|ya?ml|sh|ps1|json|toml)$/i;
 
+/** EDGE SOURCE 4 — a repo path cited in backticks, e.g. `apps/web/lib/foo.ts`.
+ *  Same premise as source 3 (the author already wrote the reference) applied to
+ *  the form DPF docs actually use most: prose citing a path inline rather than
+ *  linking it. Measured on this corpus, it is what the link-only walk was missing. */
+const TICK_PATH_RE = /`([A-Za-z0-9_.\-/]+\.(?:ts|tsx|mts|mjs|js|jsx|prisma|sql|ya?ml|sh|ps1))`/g;
+
+/**
+ * Fan-out ceiling for DERIVED tick edges.
+ *
+ * A path cited by more than this many published pages is a LANDMARK, not a
+ * dependency — `packages/db/src/seed.ts` is named by 14 pages because it is the
+ * canonical example of a seed file, not because those 14 pages document it.
+ * Without a ceiling, touching seed.ts would flag all 14 and the gate becomes the
+ * noise it was built to avoid.
+ *
+ * 3 is measured, not guessed — and measured against the COMBINED fan-out, which
+ * is the number that matters. Capping tick edges alone is misleading: a file also
+ * carries frontmatter and link edges, so a tick cap of 6 still produced a combined
+ * worst case of 7. Sweeping the cap and re-measuring the whole manifest each time:
+ *
+ *   tick cap 2 → combined max fan-out 4, 178 pages covered
+ *   tick cap 3 → combined max fan-out 4, 182 pages covered   ← chosen
+ *   tick cap 4 → combined max fan-out 5, 183 pages covered
+ *   tick cap 6 → combined max fan-out 7, 186 pages covered
+ *
+ * Cap 3 buys all but four pages of the available coverage while holding the
+ * ceiling at 4 — exactly what PR #4004 reported for the link-derived source. The
+ * four extra pages are not worth raising the worst case by 75%: BI-22207E9A is
+ * explicit that edges which make the gate noisy are a regression, not progress.
+ */
+const TICK_FANOUT_CAP = 3;
+
 /**
  * Repo-relative source files that `markdown` links to, resolved relative to the
  * doc's own directory.
@@ -129,6 +161,43 @@ export function linkedCodePaths(markdown, docPath, repoRoot) {
   return [...out].sort();
 }
 
+/**
+ * Repo-relative source files this markdown cites in BACKTICKS.
+ *
+ * Resolved from the repo root rather than the doc's directory: a prose citation
+ * is written as the repo path (`apps/web/lib/x.ts`), not as a relative link.
+ * Explicitly relative forms are skipped — those are link syntax, and source 3
+ * already owns them.
+ *
+ * @returns {string[]} sorted, de-duplicated repo-relative POSIX paths
+ */
+export function tickedCodePaths(markdown, repoRoot) {
+  const body = markdown.replace(FENCE_RE, "");
+  const out = new Set();
+  for (const m of body.matchAll(TICK_PATH_RE)) {
+    const rel = m[1];
+    if (rel.startsWith("./") || rel.startsWith("../") || rel.startsWith("/")) continue;
+    const abs = path.join(repoRoot, rel);
+    if (!fs.existsSync(abs) || !fs.statSync(abs).isFile()) continue;
+    out.add(rel);
+  }
+  return [...out].sort();
+}
+
+/**
+ * Drop tick-derived edges whose source file is cited by more than `cap` pages.
+ *
+ * Pure and exported so the ceiling is testable without a corpus.
+ *
+ * @param {Array<{code: string, doc: string}>} candidates
+ * @returns {Array<{code: string, doc: string}>} kept edges
+ */
+export function applyFanoutCap(candidates, cap = TICK_FANOUT_CAP) {
+  const fanout = new Map();
+  for (const { code } of candidates) fanout.set(code, (fanout.get(code) ?? 0) + 1);
+  return candidates.filter(({ code }) => fanout.get(code) <= cap);
+}
+
 export function buildManifest() {
   const entries = parseRouteMap(fs.readFileSync(ROUTE_MAP_TS, "utf-8"));
   const routeToDocs = {};
@@ -136,6 +205,8 @@ export function buildManifest() {
   const docToRoutes = {};
   const docToCode = {};
   const problems = [];
+  /** @type {Array<{code: string, doc: string}>} tick edges, capped after the walk. */
+  const tickCandidates = [];
 
   // 1. Route -> doc, inverted from DOCS_ROUTE_MAP.
   for (const { routePrefix, docsPath } of entries) {
@@ -169,6 +240,18 @@ export function buildManifest() {
       addEdge(codeToDocs, code, sourcePath);
       addEdge(docToCode, sourcePath, code);
     }
+
+    // 4. DERIVED edges from BACKTICK citations. Collected rather than added, so
+    //    the fan-out ceiling can be applied across the whole corpus below — a
+    //    per-page decision cannot see that a path is cited by fifteen pages.
+    for (const code of tickedCodePaths(raw, REPO_ROOT)) {
+      tickCandidates.push({ code, doc: sourcePath });
+    }
+  }
+
+  for (const { code, doc } of applyFanoutCap(tickCandidates)) {
+    addEdge(codeToDocs, code, doc);
+    addEdge(docToCode, doc, code);
   }
 
   const sortObj = (o) => Object.fromEntries(Object.keys(o).sort().map((k) => [k, o[k].sort()]));

@@ -74,7 +74,7 @@ export function docArea(docPath) {
  *            byCodeOnly:number, byRouteOnly:number, byBoth:number,
  *            areas: Array<{area:string,total:number,covered:number,coveredPct:number}>}}
  */
-export function computeCoverage(corpus, manifest) {
+export function computeCoverage(corpus, manifest, mentionsCode = null) {
   const withCode = new Set(Object.keys(manifest.docToCode ?? {}));
   const withRoute = new Set(Object.keys(manifest.docToRoutes ?? {}));
 
@@ -101,11 +101,30 @@ export function computeCoverage(corpus, manifest) {
   const total = corpus.length;
   const pct = (n, d) => (d === 0 ? 0 : Math.round((n / d) * 1000) / 10);
 
+  // Split the uncovered remainder (BI-22207E9A). Without this, "N% covered"
+  // reads as N% of a population that could all be covered — and it cannot. A
+  // WSID profession doctrine page or a founder-kernel principle names no source
+  // file, so no code-edge derivation will ever reach it. Those are not a gap;
+  // they are a different kind of document, and counting them as a shortfall
+  // argues forever for widening that has already run out.
+  let inert = 0;
+  if (mentionsCode) {
+    for (const doc of corpus) {
+      const c = withCode.has(doc);
+      const r = withRoute.has(doc);
+      if (!c && !r && !mentionsCode.has(doc)) inert++;
+    }
+  }
+
   return {
     total,
     covered,
     uncovered: total - covered,
     coveredPct: pct(covered, total),
+    /** Uncovered pages that reference no repo file at all — unreachable by design. */
+    inert: mentionsCode ? inert : null,
+    /** Uncovered pages that DO cite a repo file — the genuinely recoverable set. */
+    recoverable: mentionsCode ? total - covered - inert : null,
     byCodeOnly,
     byRouteOnly,
     byBoth,
@@ -161,6 +180,23 @@ export function renderReport(cov, candidates) {
   L.push(`| Route edges only | ${cov.byRouteOnly} |`);
   L.push(`| Both | ${cov.byBoth} |`);
   L.push(`| **No edge at all** | **${cov.uncovered}** |`);
+  if (cov.inert !== null) {
+    L.push("");
+    L.push("### The uncovered remainder is not all a gap");
+    L.push("");
+    L.push(
+      `Of those ${cov.uncovered}, **${cov.inert} reference no repo file anywhere in their text** — no link, no`,
+    );
+    L.push("backticked path. They are WSID profession doctrine and founder-kernel principle");
+    L.push("pages: they describe how to decide, not what the code does. **No code-edge");
+    L.push("derivation will ever reach them**, and counting them as a shortfall argues");
+    L.push("forever for widening that has already run out.");
+    L.push("");
+    L.push(
+      `The genuinely recoverable set is **${cov.recoverable}** page(s) — those that cite a repo file but`,
+    );
+    L.push("whose citation the current derivations do not turn into an edge.");
+  }
   if (candidates !== null) {
     L.push("");
     L.push(
@@ -182,20 +218,64 @@ export function renderReport(cov, candidates) {
   L.push("");
   L.push("## What this implies for BI-3E5969DF");
   L.push("");
-  L.push("1. **Coverage is the binding constraint, not precision.** Tuning a semantic");
-  L.push("   detector against the covered minority would leave the uncovered majority");
-  L.push("   exactly as dark as it is now, while producing a green check that reads as");
-  L.push("   \"docs are fine\" — the failure mode the");
-  L.push("   [`gate-coverage-matches-blast-radius`](../founder-kernel/wiki/principles/gate-coverage-matches-blast-radius.md)");
-  L.push("   principle names.");
-  L.push("2. **Widening edges beats sharpening signal, for now.** PR #4004 already showed");
-  L.push("   the cheap direction: derive edges from references docs already contain rather");
-  L.push("   than ask authors to declare them (27 → 155 code edges, no annotation).");
-  L.push("3. **Do not gate yet.** On this corpus a semantic detector cannot be honestly");
-  L.push("   described as covering the docs. Advisory reporting first; binding later, and");
-  L.push("   only against a measured over-report rate on a corpus it can actually see.");
+  if (cov.inert !== null && cov.recoverable !== null) {
+    const addressable = cov.covered + cov.recoverable;
+    const addressablePct =
+      addressable === 0 ? 0 : Math.round((cov.covered / addressable) * 1000) / 10;
+    L.push(
+      `1. **Widening is close to exhausted.** Of the pages any code-edge derivation could`,
+    );
+    L.push(
+      `   reach, ${cov.covered} of ${addressable} (${addressablePct}%) now carry an edge. The headline ${cov.coveredPct}% understates`,
+    );
+    L.push("   the gate because most of what it excludes is doctrine, not undocumented code.");
+    L.push("   Further widening buys single-digit page counts; the cheap direction is spent.");
+    L.push("2. **Reach is no longer the binding constraint — precision is.** That inverts");
+    L.push("   this report's earlier recommendation, and it is the change that makes a");
+    L.push("   semantic detector worth designing rather than deferring.");
+    L.push("3. **Gate on the addressable corpus, never on the whole.** A gate whose");
+    L.push("   denominator includes principle pages will always look broken, and one that");
+    L.push("   silently ignores them reports a coverage it does not have — the failure the");
+    L.push("   [`gate-coverage-matches-blast-radius`](../founder-kernel/wiki/principles/gate-coverage-matches-blast-radius.md)");
+    L.push("   principle names. Say which population is in scope, and measure against it.");
+    L.push("4. **Still measure over-report before binding.** Nothing here says the semantic");
+    L.push("   signal is accurate — only that it would now have something to look at.");
+  } else {
+    L.push("Coverage split unavailable — re-run with the corpus scan enabled.");
+  }
   L.push("");
   return L.join("\n") + "\n";
+}
+
+/** Any citation of a real repo source file — markdown link OR backticked path. */
+const ANY_CODE_REF =
+  /(?:\]\(\s*|`)([A-Za-z0-9_.\-/]+\.(?:ts|tsx|mts|mjs|js|jsx|prisma|sql|ya?ml|sh|ps1))(?:`|[)\s#])/g;
+
+/**
+ * Docs that mention at least one real repo source file.
+ *
+ * Deliberately LOOSER than the generator's derivations: the question here is
+ * "could any edge derivation ever reach this page?", not "does one today". A
+ * page that cites a file the generator skipped is recoverable; a page that cites
+ * nothing is not.
+ */
+function docsMentioningCode(corpus) {
+  const out = new Set();
+  for (const doc of corpus) {
+    const text = fs.readFileSync(path.join(REPO_ROOT, doc), "utf-8");
+    for (const m of text.matchAll(ANY_CODE_REF)) {
+      const rel = m[1];
+      if (rel.startsWith("./") || rel.startsWith("../")) {
+        out.add(doc);
+        break;
+      }
+      if (fs.existsSync(path.join(REPO_ROOT, rel))) {
+        out.add(doc);
+        break;
+      }
+    }
+  }
+  return out;
 }
 
 function build() {
@@ -204,7 +284,8 @@ function build() {
   const candidates = fs.existsSync(STALENESS_REPORT_PATH)
     ? parseStalenessCandidates(fs.readFileSync(STALENESS_REPORT_PATH, "utf-8"))
     : null;
-  return renderReport(computeCoverage(corpus, manifest), candidates);
+  const cov = computeCoverage(corpus, manifest, docsMentioningCode(corpus));
+  return renderReport(cov, candidates);
 }
 
 function main() {
