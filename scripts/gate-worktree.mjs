@@ -708,6 +708,16 @@ async function cancelDeadLocalQueueObservers({
   });
   if (sweptRecords.length > 0) {
     const reasons = [...new Set(sweptRecords.map((entry) => entry.reason))].join(", ");
+    // Recorded as a lease event, not just stdout: the cross-session reach is the
+    // property most likely to be "tightened" later, and an evidence record makes
+    // it auditable after the fact — which session's record was reclaimed, why,
+    // and that the sweep left live records alone.
+    leaseEvents.push({
+      type: "dead_queue_observers_swept",
+      count: sweptRecords.length,
+      observers: sweptRecords,
+      at: new Date().toISOString(),
+    });
     process.stdout.write(
       `swept ${sweptRecords.length} leaked local-CI queue observer record(s) (${reasons})\n`,
     );

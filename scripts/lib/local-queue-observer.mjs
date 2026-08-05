@@ -143,27 +143,39 @@ export function createObserverLivenessProbe({
   let snapshotResolved = processStartTimes !== undefined;
   return (record) => {
     const nowMs = now();
-    // Most specific proof first, so the reap reports WHY rather than just that
-    // the record was old enough to give up on.
+    // A dead pid is the cheapest proof and the most specific reason — check it
+    // first so a reap reports WHY, not merely that the record got old.
     if (!processAlive(record?.pid)) {
       return { alive: false, reason: "same_host_observer_process_not_running" };
     }
+
+    // POSITIVE PROOF OUTRANKS THE TTL. A gate we can SEE is still running must
+    // never be reaped, however long it has run: the TTL exists only to bound
+    // records whose liveness cannot be established, and letting it override a
+    // matching start time would yank a live gate's slot at the threshold. Only
+    // a start time that DISAGREES is proof of pid reuse.
+    const recordedStart = Date.parse(record?.startedAt ?? "");
+    if (Number.isFinite(recordedStart)) {
+      if (!snapshotResolved) {
+        snapshot = cachedProcessStartTimes(nowMs);
+        snapshotResolved = true;
+      }
+      const actualStart = snapshot?.get?.(record.pid);
+      if (Number.isFinite(actualStart)) {
+        return Math.abs(actualStart - recordedStart) <= START_TIME_TOLERANCE_MS
+          ? { alive: true, reason: "" }
+          : { alive: false, reason: "same_host_observer_pid_recycled" };
+      }
+    }
+
+    // Unverifiable — an older record with no `startedAt`, or a host that would
+    // not answer the process-table query. Fall back to pid-only liveness bounded
+    // by the TTL, so nothing can leak forever on evidence we cannot get.
     const registeredAt = Date.parse(record?.registeredAt ?? "");
     if (Number.isFinite(registeredAt) && nowMs - registeredAt > ttlMs) {
       return { alive: false, reason: "same_host_observer_record_expired" };
     }
-    const recordedStart = Date.parse(record?.startedAt ?? "");
-    if (!Number.isFinite(recordedStart)) return { alive: true, reason: "" };
-    if (!snapshotResolved) {
-      snapshot = cachedProcessStartTimes(nowMs);
-      snapshotResolved = true;
-    }
-    const actualStart = snapshot?.get?.(record.pid);
-    if (!Number.isFinite(actualStart)) return { alive: true, reason: "" };
-    if (Math.abs(actualStart - recordedStart) <= START_TIME_TOLERANCE_MS) {
-      return { alive: true, reason: "" };
-    }
-    return { alive: false, reason: "same_host_observer_pid_recycled" };
+    return { alive: true, reason: "" };
   };
 }
 

@@ -579,3 +579,35 @@ test("readProcessStartTimes reports unknown rather than dead when the query fail
     new Map([[912, Date.parse("Mon Aug 4 21:37:32 2026")]]),
   );
 });
+
+test("a verifiably-running gate outranks the TTL, however long it has run", () => {
+  // The TTL exists to bound records whose liveness cannot be ESTABLISHED. If it
+  // outranked a matching start time it would yank a live gate's queue slot the
+  // moment the threshold passed — reaping on age rather than on evidence. Only
+  // a start time that DISAGREES proves pid reuse.
+  const directory = observerDirectory();
+  const startedAt = "2026-08-01T00:00:00.000Z";
+  const registered = registerLocalQueueObserver({
+    directory,
+    identity: createGateObserverIdentity({
+      pid: 5151,
+      token: "51515151-5151-4151-8151-515151515151",
+    }),
+    ownerSessionId: "session-running-a-very-long-gate",
+    branch: "feat/marathon",
+    sha: "a".repeat(40),
+    now: () => new Date(startedAt),
+    startedAt,
+  });
+
+  const released = releaseDeadLocalQueueObserversForGate({
+    directory,
+    processAlive: () => true,
+    processStartTimes: new Map([[5151, Date.parse(startedAt)]]),
+    // Well past the TTL — but the host still reports this exact process.
+    now: () => Date.parse(startedAt) + OBSERVER_RECORD_TTL_MS * 3,
+  });
+
+  assert.deepEqual(released, []);
+  assert.equal(existsSync(registered.path), true);
+});
