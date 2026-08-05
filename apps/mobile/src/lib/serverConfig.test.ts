@@ -6,6 +6,7 @@ import {
   setServerUrl,
   clearServerUrl,
   fetchInstanceDescriptor,
+  resolveInstall,
 } from "./serverConfig";
 
 /* ------------------------------------------------------------------ */
@@ -182,5 +183,78 @@ describe("fetchInstanceDescriptor", () => {
     const result = await fetchInstanceDescriptor("acme.io");
     expect(result.orgName).toBe("DPF");
     expect(result.authModes).toEqual(["password"]);
+  });
+});
+
+/* ------------------------------------------------------------------ */
+/*  resolveInstall — resilient connect probe (BI graceful-degrade)     */
+/* ------------------------------------------------------------------ */
+
+describe("resolveInstall", () => {
+  afterEach(() => {
+    // @ts-expect-error test cleanup
+    delete global.fetch;
+  });
+
+  it("uses a valid descriptor (degraded=false)", async () => {
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      text: () =>
+        Promise.resolve(
+          JSON.stringify({
+            instanceId: "inst_1",
+            orgName: "Acme HVAC",
+            archetype: "trades-maintenance/hvac-contractor",
+            apiVersion: "v1",
+          }),
+        ),
+    }) as unknown as typeof fetch;
+
+    const { descriptor, degraded } = await resolveInstall("acme.io");
+    expect(degraded).toBe(false);
+    expect(descriptor.orgName).toBe("Acme HVAC");
+    expect(descriptor.archetype).toBe("trades-maintenance/hvac-contractor");
+  });
+
+  it("degrades when the descriptor endpoint returns HTML (login redirect landed on /welcome)", async () => {
+    // 1st call: descriptor → 200 with HTML body (auth redirect). 2nd call:
+    // origin probe → reachable. Must NOT throw a JSON parse error.
+    const fetchMock = jest
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        text: () => Promise.resolve("<!DOCTYPE html><html>welcome</html>"),
+      })
+      .mockResolvedValueOnce({ ok: true, status: 200 });
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    const { descriptor, degraded } = await resolveInstall("192.168.0.200:3000");
+    expect(degraded).toBe(true);
+    expect(descriptor.instanceId).toBe("192.168.0.200:3000");
+    expect(descriptor.orgName).toBe("192.168.0.200:3000");
+    expect(descriptor.apiVersion).toBe("v1");
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("degrades when the descriptor endpoint 404s but the origin is reachable", async () => {
+    const fetchMock = jest
+      .fn()
+      .mockResolvedValueOnce({ ok: false, status: 404, text: () => Promise.resolve("") })
+      .mockResolvedValueOnce({ ok: true, status: 200 });
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    const { degraded } = await resolveInstall("https://acme.io");
+    expect(degraded).toBe(true);
+  });
+
+  it("throws only when the origin itself is unreachable (network error)", async () => {
+    // descriptor fetch throws AND origin probe throws → fatal.
+    global.fetch = jest
+      .fn()
+      .mockRejectedValue(new Error("Network request failed")) as unknown as typeof fetch;
+
+    await expect(resolveInstall("http://192.168.0.99:3000")).rejects.toThrow(
+      /could not reach/i,
+    );
   });
 });

@@ -152,3 +152,103 @@ export async function fetchInstanceDescriptor(
     branding: data.branding,
   };
 }
+
+/** Result of the resilient connect probe. */
+export interface ResolvedInstall {
+  descriptor: InstanceDescriptor;
+  /**
+   * True when the discovery descriptor could not be read and a minimal
+   * descriptor was synthesized from the URL. The install is still connectable
+   * (sign-in works); we just don't have its org name / archetype / branding
+   * until it serves /.well-known/dpf-instance.json.
+   */
+  degraded: boolean;
+}
+
+/** Minimal descriptor built from the URL alone when discovery is unavailable. */
+function synthesizeDescriptor(baseUrl: string): InstanceDescriptor {
+  let host = baseUrl;
+  try {
+    host = new URL(baseUrl).host;
+  } catch {
+    // keep baseUrl as-is; normalizeServerUrl already validated it upstream
+  }
+  return {
+    instanceId: host,
+    orgName: host,
+    apiVersion: "v1",
+    authModes: ["password"],
+  };
+}
+
+/**
+ * Resolve an install for the connect flow, degrading gracefully rather than
+ * hard-failing when discovery is unavailable. Preference order:
+ *
+ *   1. A valid /.well-known/dpf-instance.json descriptor  → degraded=false.
+ *   2. Descriptor missing / non-JSON / redirected to a login page, BUT the
+ *      origin still answers HTTP at all → synthesize a minimal descriptor
+ *      from the URL so the user can still connect and sign in → degraded=true.
+ *      Real installs behind reverse proxies, on older versions, or not yet
+ *      upgraded past the descriptor-auth-gate fix (BI-2AC1307A) land here.
+ *   3. Genuine network failure (connection refused / DNS / timeout) → throw.
+ *
+ * This is why the connect flow no longer dies on "JSON Parse error: unexpected
+ * character": a /welcome HTML redirect is treated as "reachable but not yet
+ * describable", not a fatal error.
+ */
+export async function resolveInstall(rawUrl: string): Promise<ResolvedInstall> {
+  const baseUrl = normalizeServerUrl(rawUrl);
+
+  // (1) Preferred path: a real descriptor.
+  try {
+    const res = await fetch(`${baseUrl}/.well-known/dpf-instance.json`, {
+      method: "GET",
+      headers: { Accept: "application/json" },
+    });
+    if (res.ok) {
+      // Parse defensively: a 200 with an HTML body (auth redirect landed on a
+      // login page) must NOT throw — it falls through to the degraded probe.
+      const body = await res.text();
+      try {
+        const data = JSON.parse(body) as Partial<InstanceDescriptor> | null;
+        if (
+          data &&
+          typeof data.instanceId === "string" &&
+          typeof data.apiVersion === "string"
+        ) {
+          return {
+            degraded: false,
+            descriptor: {
+              instanceId: data.instanceId,
+              orgName: typeof data.orgName === "string" ? data.orgName : "DPF",
+              archetype: data.archetype,
+              apiVersion: data.apiVersion,
+              authModes: Array.isArray(data.authModes)
+                ? data.authModes
+                : ["password"],
+              capabilities: data.capabilities,
+              branding: data.branding,
+            },
+          };
+        }
+      } catch {
+        // non-JSON body → fall through to the reachability probe
+      }
+    }
+  } catch {
+    // descriptor request itself threw → fall through to the reachability probe
+  }
+
+  // (2)/(3) Descriptor unusable. Confirm the origin is reachable before
+  // degrading; any HTTP response (even a redirect / 4xx / 5xx) proves the host
+  // is there. Only a thrown fetch (refused / DNS / timeout) is fatal.
+  try {
+    await fetch(baseUrl, { method: "GET" });
+    return { degraded: true, descriptor: synthesizeDescriptor(baseUrl) };
+  } catch {
+    throw new Error(
+      `Could not reach ${baseUrl} — check the URL and that your device is on the same network.`,
+    );
+  }
+}
