@@ -76,6 +76,7 @@
     "migrate:deploy": "prisma migrate deploy",
     "seed": "tsx src/seed.ts",
     "graph:rebuild-doc-impact": "tsx src/rebuild-doc-impact-graph.ts",
+    "graph:rebuild-knowledge-and-portfolio": "tsx src/rebuild-knowledge-and-portfolio-graph.ts",
     "index-integrity": "node scripts/index-integrity-guard.mjs",
     "skills:audit": "tsx src/skill-quality-audit.ts",
     "studio": "prisma studio",

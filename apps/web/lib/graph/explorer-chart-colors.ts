@@ -25,10 +25,27 @@ export const NODE_CATEGORY_COLORS = {
   Portfolio: "#818cf8",
   DigitalProduct: "#4ade80",
   TaxonomyNode: "#fb923c",
+  // Knowledge corpus (BI-3045CC18). A rose/fuchsia family, deliberately coherent:
+  // the other domains already own blues (code), ambers (data model), greens (EA),
+  // cyan (infrastructure) and indigo/orange (portfolio), so the whole knowledge
+  // corpus reads as one body at a glance while the page kinds stay separable.
+  Wiki__Principle: "#fb7185",
+  Wiki__Stance: "#f0abfc",
+  Wiki__Heuristic: "#e879f9",
+  Wiki__Decision: "#d946ef",
+  Wiki__Entity: "#fda4af",
+  Wiki__Summary: "#fecdd3",
+  Wiki__Runbook: "#f5d0fe",
+  Wiki__Index: "#c026d3",
 } as const satisfies Record<string, string>;
 
 /** Any ArchiMate type without a curated entry of its own. */
 export const ARCHIMATE_DEFAULT_COLOR = "#86efac";
+
+/** Any wiki page kind without a curated entry of its own. `pageKind` is an open
+ *  string in the schema, so a new kind degrades to the family colour rather than
+ *  to the unknown-neutral, keeping it inside the knowledge domain visually. */
+export const WIKI_DEFAULT_COLOR = "#fbcfe8";
 
 /** Unknown node label or relationship type — deliberately the muted neutral. */
 export const UNKNOWN_CATEGORY_COLOR = "#8888a0";
@@ -50,4 +67,6 @@ export const REL_TYPE_COLORS: Record<string, string> = {
   HOSTS: "#22d3ee",
   RUNS_ON: "#34d399",
   ROUTES_THROUGH: "#f472b6",
+  LINKS_TO: "#f0abfc",
+  OVERRIDES: "#d946ef",
 };

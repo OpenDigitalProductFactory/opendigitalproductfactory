@@ -180,6 +180,71 @@ export async function syncPortfolio(p: {
   });
 }
 
+/**
+ * Storage label for a wiki page, derived from its `pageKind` (BI-3045CC18).
+ *
+ * One label per node rather than a generic `WikiPage` marker plus a specific kind:
+ * the explorer census sums per-label counts, so a dual-labelled node is counted
+ * twice — the reason `EaElement` needs a hard-coded skip on the read side.
+ *
+ * `pageKind` is a plain string in the schema, so an unrecognised kind still yields
+ * a well-formed `Wiki__*` label and lands in the knowledge domain via the prefix
+ * rule in explorer-vocabulary.ts.
+ */
+export function wikiPageLabel(pageKind: string): string {
+  const pascal = pageKind
+    .split(/[^a-zA-Z0-9]+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+    .join("");
+  return `Wiki__${pascal || "Page"}`;
+}
+
+/** Upsert a WikiPage node and its OVERRIDES edge onto the kernel page it refines.
+ *
+ *  Keyed by `id`, not `slug`: `WikiPage` is unique on (organizationId, slug), so a
+ *  slug is ambiguous across the kernel page and each organization's overlay of it.
+ *  This matches EaElement, which is also keyed by its cuid. */
+export async function syncWikiPage(page: {
+  id: string;
+  slug: string;
+  title: string;
+  pageKind: string;
+  status: string;
+  isKernel: boolean;
+  organizationId?: string | null;
+  kernelPageId?: string | null;
+}): Promise<void> {
+  await upsertGraphNode(page.id, [wikiPageLabel(page.pageKind)], {
+    pageId: page.id,
+    slug: page.slug,
+    // `name` is the property the explorer's search and canvas labels read across
+    // every domain; carrying the title under it keeps wiki pages findable without
+    // special-casing the read side.
+    name: page.title,
+    title: page.title,
+    pageKind: page.pageKind,
+    status: page.status,
+    isKernel: page.isKernel,
+    organizationId: page.organizationId ?? null,
+    syncedAt: nowIso(),
+  });
+
+  // An organization's overlay page refines a kernel page. This is the edge that
+  // makes the WWWD-over-kernel relationship visible rather than implied.
+  if (page.kernelPageId) {
+    await upsertGraphEdge(page.id, page.kernelPageId, "OVERRIDES");
+  }
+}
+
+/** Upsert the page-to-page link edge (`WikiPageLink`). */
+export async function syncWikiPageLink(link: {
+  fromPageId: string;
+  toPageId: string;
+}): Promise<void> {
+  await upsertGraphEdge(link.fromPageId, link.toPageId, "LINKS_TO");
+}
+
 export async function syncDocumentNode(doc: {
   documentId: string;
   title: string;

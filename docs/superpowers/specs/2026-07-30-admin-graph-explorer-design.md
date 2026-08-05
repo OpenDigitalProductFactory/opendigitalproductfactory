@@ -172,9 +172,94 @@ SQL. There is no write path and no free-form query surface.
 4. **This rulebook** — no rule is re-homed. AGENTS.md is unchanged; the operator
    documentation lives in `docs/user-guide/admin/index.md`.
 
+## Knowledge and portfolio domains (BI-3045CC18, 2026-08-04)
+
+The first cut demonstrated the *technical* substrate only. Two of the things a
+demonstration most wants were effectively absent: the knowledge corpus was not in
+the mirror at all, and Portfolio was a single node.
+
+### The scope question was already answered by the substrate
+
+The open question recorded against this work was whether the mirror is a *code and
+architecture* graph or a *whole-platform* graph. Measured before building, the
+substrate had already answered it:
+
+- `explorer-vocabulary.ts` already declared a `portfolio` domain with `Portfolio`,
+  `DigitalProduct` and `TaxonomyNode` descriptors.
+- `graph-sync.ts` already exported `syncPortfolio`, `syncTaxonomyNode` and
+  `syncDigitalProduct`.
+- The mirror already carried 569 customer-scoped `InfraCI` nodes with
+  `customerAccountId` / `customerSiteId` — business data, not code.
+
+So the mirror was already a whole-platform graph by declaration. What was missing
+was not a decision but a **backfill**: `syncPortfolio` and `syncTaxonomyNode` had
+zero callers, and `syncDigitalProduct` fired only on create/update, so nothing
+predating the explorer was ever mirrored. The governing pattern is that a domain is
+only as complete as its rebuild script — every populated domain had one
+(`neo4j-rebuild-ea.ts`, `neo4j-rebuild-documents.ts`) and every empty one did not.
+
+Scored through the kernel (`principle_decide`, high confidence, no commandment
+conflict), with *Ground New Work In Existing Platform* and *Audit Existing Schema
+Before Adding Large Features* the strongest contributors.
+
+### What landed
+
+`packages/db/src/rebuild-knowledge-and-portfolio-graph.ts`, run against the live
+install:
+
+| Domain | Before | After |
+| --- | --- | --- |
+| Knowledge | 0 | 359 nodes, 640 `LINKS_TO` edges |
+| Portfolio | 1 | 818 nodes (4 Portfolio, 323 DigitalProduct, 491 TaxonomyNode) |
+
+Totals moved from 24,225 / 32,597 to 25,397 / 34,220.
+
+### One label per wiki node, not two
+
+An EA node carries both `EaElement` and its concrete `ArchiMate__*` type, and the
+census sums per-label counts — which is why the read side needs a hard-coded skip
+for `EaElement` to avoid double-counting. Wiki pages therefore carry exactly **one**
+label, `Wiki__<PageKind>`, so the knowledge domain needs no such special case. A
+`Wiki__` prefix rule keeps an uncurated page kind inside the knowledge domain
+rather than in the architecture-flavoured unknown bucket.
+
+Nodes are keyed by `WikiPage.id`, not `slug`: the model is unique on
+`(organizationId, slug)`, so a slug is ambiguous between a kernel page and each
+organization's overlay of it. This matches `EaElement`, also keyed by its cuid.
+
+### Backfill upserts and prunes; it does not clear
+
+`clearGraphByLabel` deletes every edge touching a label before reinserting. For the
+portfolio spine that is actively unsafe: EA elements carry edges onto
+`DigitalProduct` nodes and only the EA rebuild recreates them, so clearing here
+would silently drop cross-domain edges this script cannot restore. The writers are
+idempotent UPSERTs, so re-sync suffices; the prune is scoped to the `Wiki__` label
+prefix and to the `LINKS_TO` / `OVERRIDES` relationship types this script owns.
+
+### Known limits
+
+- **No structural edge from knowledge to code or data.** `WikiPage` has FKs only to
+  its organization, its kernel page, its links, revisions and sources. The
+  "route → file → model → the decision that governed it" path is therefore still
+  broken at the last hop; closing it needs derived links, not a backfill, and is a
+  separate piece of work.
+- **`OVERRIDES` is implemented but unexercised** — no page currently sets
+  `kernelPageId`, so the backfill wrote 0 override edges.
+- 127 of 359 pages are isolated (no `LINKS_TO`); the connected 232 average 3.57
+  links, with `Founder Kernel` the largest hub at 27.
+
+### UX budget, re-measured
+
+Adding a sixth census tile adds visible words on arrival, so the budget was
+re-measured rather than assumed. The tile renders label + count only — the domain
+description is a `title` tooltip, exactly as the five existing tiles already do, so
+it contributes no visible text. Against the `detail` shell's caps the route has
+wide headroom: 174 baseline default-visible words versus a 450 cap, and
+`deferred-detail` is only required above 300. The ratified purpose contract's
+`triggeringNeed` and `prerequisites` were updated to name the corpus accurately.
+
 ## Follow-ups
 
-- `WikiPageLink` already models the knowledge-corpus link graph but is not in the
-  mirror, so the WWMD / WWWD / WSID corpus is not yet explorable here. Mirroring
-  it is the natural next domain.
+- Derive knowledge → code/data edges so the "decision that governed this route"
+  path closes. No FK exists for it today (see Known limits above).
 - Saved views ("perspectives") are deliberately out of scope for the first cut.
