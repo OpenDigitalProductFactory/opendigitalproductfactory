@@ -48,6 +48,7 @@ import { seedLawEnforcementCompliance } from "./seed-law-enforcement-compliance.
 import { seedBankingCompliance } from "./seed-banking-compliance.js";
 import { seedUkCorpGovCompliance } from "./seed-uk-corp-gov-compliance.js";
 import { seedSoftwareHorizontalCompliance } from "./seed-software-horizontal-compliance.js";
+import { seedHrEmploymentCompliance } from "./seed-hr-employment-compliance.js";
 import { seedBusinessCapabilityPerspective } from "./business-capability-perspectives.js";
 import { seedGeographicData } from "./seed-geographic-data.js";
 import { seedTaxJurisdictions } from "./seed-tax-jurisdictions.js";
@@ -2539,6 +2540,7 @@ async function main(): Promise<void> {
   await step("bankingCompliance", () => seedBankingCompliance(prisma));
   await step("ukCorpGovCompliance", () => seedUkCorpGovCompliance(prisma));
   await step("softwareHorizontalCompliance", () => seedSoftwareHorizontalCompliance(prisma));
+  await step("hrEmploymentCompliance", () => seedHrEmploymentCompliance(prisma));
   await step("businessCapabilityPerspective", async () => {
     const capabilityPerspectiveSeed = await seedBusinessCapabilityPerspective(prisma);
     console.log(
