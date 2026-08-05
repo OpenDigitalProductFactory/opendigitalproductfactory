@@ -1,0 +1,20 @@
+{
+  "version": "1",
+  "decidedOption": "workforce-primary-aggregate-safe",
+  "decisionInteractionId": "DI-621EB7CA2134",
+  "scope": {
+    "files": [
+      "apps/web/app/(shell)/platform/ai/right-now/page.tsx",
+      "apps/web/components/platform/WorkforceNowShell.tsx",
+      "apps/web/components/platform/platform-nav.ts"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "workforce-primary-aggregate-safe",
+      "detailed-per-transaction-log",
+      "resource-primary-cockpit"
+    ]
+  }
+}
