@@ -155,6 +155,53 @@ the repo is a grandfathered draft — so this route ships the registry's first
 | `MAX_SUBGRAPH_EDGES` | 2000 | Bounds the payload to the canvas |
 | `MAX_EXPAND_DEPTH` | 3 | Beyond three hops the picture stops being legible |
 
+## Canvas legibility and idle cost (added 2026-08-01, BI-C2B6396B)
+
+The caps above assume the canvas stays readable up to `MAX_SUBGRAPH_NODES`. Live
+verification after this route shipped showed it did not: a single one-hop
+expansion reached **111 nodes / 230 links** and collapsed into a knot in the middle
+of the canvas with labels stacked on top of one another. Two causes, both in
+`RelationshipGraph`:
+
+**Fixed force constants.** Repulsion was `min(3, 80 / d²)` — already negligible at
+30px and effectively zero at 60px — while the link spring pulled every edge toward
+a flat 100px regardless of how many nodes shared the canvas. For ~110 nodes in
+800×500 the ideal separation is about 60px, where repulsion contributed ~0.02 per
+frame against a spring an order of magnitude stronger. The knot was the
+equilibrium those constants described.
+
+The forces are now expressed relative to `k = sqrt(area / n)`, the
+Fruchterman-Reingold ideal separation, so the layout self-scales with occupancy.
+`k` is clamped to [34, 130]: unclamped, a three-node graph would compute a ~365px
+ideal and fling its nodes into the corners.
+
+**Unconditional label drawing.** Every node with `size >= 6` painted its name, in
+node order, with no overlap test. Labels are now a separate pass with greedy
+overlap rejection, ordered hovered/focused first and then by size, so the
+important labels always win their space. A skipped label is not lost — hovering
+its node reveals it.
+
+**Seeding is deterministic.** Start positions derive from a hash of the node id
+rather than `Math.random()`. The same graph now lays out the same way every time,
+which makes the picture stable across reloads and reproducible in tests, and it
+removes a latent trap: two nodes seeded to exactly the same point have no defined
+repulsion direction and stay fused forever.
+
+### The animation loop stops
+
+`tick()` re-armed `requestAnimationFrame` unconditionally. Once the simulation
+cooled, `simulate()` returned immediately but `draw()` kept repainting an unchanged
+canvas at ~60fps for as long as the page was open. That pinned a renderer thread on
+both `/inventory` and `/admin/graph-explorer`, and it is why CDP
+`Page.captureScreenshot` timed out against this route — any agent driving this
+surface had to fall back to `get_page_text`.
+
+The loop now stops at rest and paints one final frame. Restarting is safe and
+automatic because every input that changes the picture re-runs the effect:
+`filteredData` covers data and filter changes, and `draw`'s identity changes with
+hover, focus, dimensions, and the link legend. A resize additionally re-heats the
+layout part-way, because it moves the centre and changes `k`.
+
 ## Security
 
 Every server action asserts `view_admin`. Operator text is bound as a positional

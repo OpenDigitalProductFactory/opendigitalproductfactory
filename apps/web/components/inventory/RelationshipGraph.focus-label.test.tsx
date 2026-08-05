@@ -21,7 +21,9 @@ import type { GraphData } from "@/lib/actions/graph";
 // Reset per test: the budget is consumed by each render, and a later test that
 // starts at zero never lays out its nodes, so the click would silently miss.
 let framesLeft = 60;
+let lastArc: { x: number; y: number } | null = null;
 beforeEach(() => {
+  lastArc = null;
   // Auto-cleanup is not configured for this file, so renders would otherwise
   // accumulate and every query would match the previous test's DOM too.
   cleanup();
@@ -32,8 +34,12 @@ beforeAll(() => {
   const noop = () => {};
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   (HTMLCanvasElement.prototype as any).getContext = () => ({
-    clearRect: noop, beginPath: noop, arc: noop, fill: noop, stroke: noop,
+    clearRect: noop, beginPath: noop, fill: noop, stroke: noop,
     moveTo: noop, lineTo: noop, fillText: noop,
+    measureText: (text: string) => ({ width: text.length * 5 }),
+    // Record where the node is actually painted so the click below can land on
+    // it, rather than assuming a position.
+    arc: (x: number, y: number) => { lastArc = { x, y }; },
     set fillStyle(_v: string) {}, set strokeStyle(_v: string) {},
     set lineWidth(_v: number) {}, set globalAlpha(_v: number) {},
     set font(_v: string) {}, set textAlign(_v: string) {},
@@ -49,11 +55,6 @@ beforeAll(() => {
   globalThis.ResizeObserver = class {
     observe() {} unobserve() {} disconnect() {}
   } as never;
-
-  // Seed positions are `centre + (Math.random() - 0.5) * 300`. Pinning random to
-  // 0.5 puts the node exactly at the canvas centre, so the click below is a
-  // deterministic hit rather than a race with force-layout convergence.
-  Math.random = () => 0.5;
 });
 
 const DATA: GraphData = {
@@ -63,13 +64,20 @@ const DATA: GraphData = {
   links: [],
 };
 
-/** Click the canvas at the node's simulated position to focus it. */
+/**
+ * Click the canvas where the node was actually painted.
+ *
+ * Seed positions are derived from the node id (BI-C2B6396B), so there is no fixed
+ * coordinate to aim at — and pinning Math.random no longer moves them. Reading
+ * the position back from the last drawn arc keeps this independent of the
+ * layout's internals.
+ */
 function focusTheNode(container: HTMLElement) {
   const canvas = container.querySelector("canvas");
   if (!canvas) throw new Error("canvas did not render");
+  if (!lastArc) throw new Error("no node was painted — cannot locate it to click");
   canvas.getBoundingClientRect = () => ({ left: 0, top: 0, width: 800, height: 500 }) as DOMRect;
-  // The single node settles at the centre of the default 800x500 canvas.
-  fireEvent.click(canvas, { clientX: 400, clientY: 250 });
+  fireEvent.click(canvas, { clientX: lastArc.x, clientY: lastArc.y });
 }
 
 describe("focus chip type name (BI-AB7FE57B)", () => {
