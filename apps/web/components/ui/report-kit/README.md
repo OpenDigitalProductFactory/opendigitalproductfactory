@@ -30,6 +30,7 @@ import {
 | `Notice` | ✅ (pure) | inline callouts / banners (info · warn · success · error) |
 | `CollapsibleList` | client | preview a long list, then reveal its remaining rows |
 | `ExpandableCard` | client | reveal one peer record's subordinate detail inline |
+| `SearchableSelect` | client | pick one option out of many, by typing instead of scrolling |
 | `DataTable` | client¹ | tabular lists with sort, paging, empty/loading states |
 | `FilterBar` | client¹ | search + select + pill facets above a table |
 | `ExportButton` / `toCsv` | client | CSV export of rows (papaparse-backed) |
@@ -243,6 +244,41 @@ card styling. The caller owns domain content, data loading, errors, and actions.
 Do not use it to truncate one long list (`CollapsibleList`), hide one short piece
 of secondary prose (`<details>`), host a separate workspace (drawer), or replace
 a durable detail URL.
+
+## SearchableSelect
+
+Pick ONE option out of many, by typing rather than scrolling.
+
+```tsx
+<SearchableSelect
+  label="Agent"
+  options={agents.map((a) => ({ value: a.agentId, label: `${a.agentId} - ${a.agentName}` }))}
+  value={selectedAgent}
+  onChange={setSelectedAgent}
+  emptyLabel="No agents projected"
+/>
+```
+
+**Why it exists.** A flat select element pushes the whole option set at the
+reader — Hick's law says the decision cost grows with the number of choices,
+which is what `lib/ux-budget`'s `maxChoicesPerControl` axis measures.
+`/platform/audit/authority` shipped a 94-option agent select against a budget of
+20 (BI-D6135B88). This inverts it: the reader types and the list narrows. Every
+option stays reachable — this is a picker, not truncation.
+
+**Reach for it when** a control offers more options than its shell's
+`maxChoicesPerControl` budget (20 on `detail`/`list`, 12 on `cockpit`), or when
+the reader already knows the name of the thing they want.
+
+Built on a native datalist so keyboard, screen-reader and mobile behaviour come
+from the platform. A datalist does not constrain input, so the component owns
+that: a keystroke commits only when it resolves to a real option (by label, or
+by pasting a raw value), an unresolved value is reported inline via a `role="status"`
+region instead of silently selecting nothing, and blurring restores the committed
+selection.
+
+Do not use it to filter a list in place (that is a `FilterBar` search facet), or
+to choose several things at once — it selects exactly one.
 
 ## ExportButton
 

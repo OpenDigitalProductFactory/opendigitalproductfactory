@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 
+import { SearchableSelect } from "@/components/ui/report-kit/SearchableSelect";
 import {
   explainEffectiveAuthority,
   type EffectiveAuthorityBinding,
@@ -189,6 +190,124 @@ function getFirstRouteForAgent(bindings: EffectiveAuthorityBinding[], agentId: s
   return bindings.find((binding) => binding.appliedAgentId === agentId)?.resourceRef ?? "";
 }
 
+type EvaluatedTool = ToolInfo & {
+  userAllowed: boolean;
+  agentAllowed: boolean;
+  effective: boolean;
+  mode: string;
+  authority: ReturnType<typeof explainEffectiveAuthority>;
+};
+
+const GRID_COLUMNS = "1.8fr 90px 90px 90px 80px";
+
+/** Free-text match over the two fields an operator actually searches by. */
+function matchesQuery(tool: EvaluatedTool, query: string): boolean {
+  return (
+    tool.toolName.toLowerCase().includes(query) ||
+    tool.description.toLowerCase().includes(query)
+  );
+}
+
+function ToolRow({ tool }: { tool: EvaluatedTool }) {
+  return (
+    <div
+      style={{
+        display: "grid",
+        gridTemplateColumns: GRID_COLUMNS,
+        gap: 8,
+        padding: "5px 10px",
+        fontSize: 10,
+        color: "var(--dpf-text)",
+        borderBottom: "1px solid var(--dpf-border)",
+        alignItems: "center",
+        opacity: tool.effective ? 1 : 0.6,
+      }}
+      title={tool.description}
+    >
+      <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
+        <span style={{ fontFamily: "monospace", fontSize: 10 }}>{tool.toolName}</span>
+        {/* Descriptions stay on title= hover only — 350+ full blurbs were
+            blowing the UX default-visible word ratchet (~16k words). */}
+        {tool.authority.binding && (
+          <span style={{ fontSize: 9, color: "var(--dpf-muted)", lineHeight: "12px" }}>
+            {tool.authority.binding.bindingId} · {tool.authority.reasonCode}
+          </span>
+        )}
+      </div>
+
+      <span style={{ textAlign: "center" }}>
+        {tool.requiredCapability === null ? (
+          <Dot color="var(--dpf-muted)" />
+        ) : tool.userAllowed ? (
+          <Dot color="var(--dpf-success)" />
+        ) : (
+          <Dot color="var(--dpf-error)" />
+        )}
+      </span>
+
+      <span style={{ textAlign: "center" }}>
+        {!TOOL_TO_GRANTS[tool.toolName] ? (
+          <Dot color="var(--dpf-muted)" />
+        ) : tool.agentAllowed ? (
+          <Dot color="var(--dpf-success)" />
+        ) : (
+          <Dot color="var(--dpf-error)" />
+        )}
+      </span>
+
+      <span style={{ textAlign: "center" }}>
+        {tool.effective ? <Dot color="var(--dpf-success)" /> : <Dot color="var(--dpf-error)" />}
+      </span>
+
+      <span
+        style={{
+          textAlign: "center",
+          fontSize: 9,
+          color:
+            tool.mode === "approval" || tool.mode === "proposal"
+              ? "var(--dpf-accent)"
+              : "var(--dpf-muted)",
+          fontWeight: tool.mode === "approval" || tool.mode === "proposal" ? 600 : 400,
+        }}
+      >
+        {tool.mode}
+      </span>
+    </div>
+  );
+}
+
+function ToolTable({ tools }: { tools: EvaluatedTool[] }) {
+  return (
+    <div style={{ overflowX: "auto" }}>
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: GRID_COLUMNS,
+          gap: 8,
+          padding: "6px 10px",
+          fontSize: 9,
+          fontWeight: 600,
+          color: "var(--dpf-muted)",
+          textTransform: "uppercase",
+          letterSpacing: "0.05em",
+          borderBottom: "1px solid var(--dpf-border)",
+        }}
+      >
+        <span>Tool Name</span>
+        <span style={{ textAlign: "center" }}>User Allowed</span>
+        <span style={{ textAlign: "center" }}>Agent Allowed</span>
+        <span style={{ textAlign: "center" }}>Effective</span>
+        <span style={{ textAlign: "center" }}>Mode</span>
+      </div>
+      <div style={{ display: "flex", flexDirection: "column" }}>
+        {tools.map((tool) => (
+          <ToolRow key={tool.toolName} tool={tool} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export function EffectivePermissionsPanel({
   agents,
   roles,
@@ -201,7 +320,10 @@ export function EffectivePermissionsPanel({
 }: EffectivePermissionsProps) {
   const [selectedRole, setSelectedRole] = useState(roles[0]?.roleId ?? "");
   const [selectedAgent, setSelectedAgent] = useState(agents[0]?.agentId ?? "");
-  const [selectedProduct, setSelectedProduct] = useState(products?.[0]?.productId ?? "");
+  // Defaults to none. Product is a REFINEMENT of the role+agent question, and
+  // auto-selecting the first product rendered its whole BMR authority table on
+  // arrival for a product nobody asked about (BI-D6135B88).
+  const [selectedProduct, setSelectedProduct] = useState("");
   const [selectedRoute, setSelectedRoute] = useState(() =>
     getFirstRouteForAgent(bindings, agents[0]?.agentId ?? ""),
   );
@@ -284,9 +406,28 @@ export function EffectivePermissionsPanel({
 
   const allowedCount = evaluatedTools.filter((tool) => tool.effective).length;
   const totalCount = evaluatedTools.length;
+  const modeCounts = {
+    approval: evaluatedTools.filter((tool) => tool.effective && tool.mode === "approval").length,
+    proposal: evaluatedTools.filter((tool) => tool.effective && tool.mode === "proposal").length,
+    immediate: evaluatedTools.filter((tool) => tool.effective && tool.mode === "immediate").length,
+  };
+  const blockedByRole = evaluatedTools.filter(
+    (tool) => !tool.userAllowed && tool.requiredCapability !== null,
+  ).length;
+  const blockedByGrants = evaluatedTools.filter(
+    (tool) => !tool.agentAllowed && !!TOOL_TO_GRANTS[tool.toolName],
+  ).length;
 
-  const selectClass = "bg-[var(--dpf-surface-2)] text-[var(--dpf-text)]";
-  const optionClass = "bg-[var(--dpf-surface-2)] text-[var(--dpf-text)]";
+  // The inventory is the ANSWER ("can this pair run X?"), not the question.
+  // Rendering all ~300 rows on arrival made this the estate's worst word
+  // offender (BI-D6135B88); rows are now reached by search or the full list.
+  const [toolQuery, setToolQuery] = useState("");
+  const query = toolQuery.trim().toLowerCase();
+  const searching = query.length > 0;
+  const matchedTools = useMemo(
+    () => (query.length === 0 ? [] : evaluatedTools.filter((tool) => matchesQuery(tool, query))),
+    [evaluatedTools, query],
+  );
 
   return (
     <div
@@ -306,144 +447,74 @@ export function EffectivePermissionsPanel({
         </p>
       </div>
 
+      {/* Role and agent ARE the question this panel answers, so they stay in the
+          first viewport. Route and product only REFINE an answer, so they move
+          behind a disclosure — that keeps the arrival field count at the three
+          the reader actually needs (ux-budget `field-load`). */}
       <div style={{ display: "flex", gap: 12, marginBottom: 12, flexWrap: "wrap" }}>
-        <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
-          <label
-            style={{
-              fontSize: 9,
-              fontWeight: 600,
-              color: "var(--dpf-muted)",
-              textTransform: "uppercase",
-              letterSpacing: "0.05em",
-            }}
-          >
-            User Role
-          </label>
-          <select
-            value={selectedRole}
-            onChange={(event) => setSelectedRole(event.target.value)}
-            className={selectClass}
-            style={{
-              border: "1px solid var(--dpf-border)",
-              fontSize: 11,
-              padding: "5px 8px",
-              borderRadius: 4,
-            }}
-          >
-            {roles.map((role) => (
-              <option key={role.roleId} value={role.roleId} className={optionClass}>
-                {role.roleId} - {role.roleName}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
-          <label
-            style={{
-              fontSize: 9,
-              fontWeight: 600,
-              color: "var(--dpf-muted)",
-              textTransform: "uppercase",
-              letterSpacing: "0.05em",
-            }}
-          >
-            Agent
-          </label>
-          <select
-            value={selectedAgent}
-            onChange={(event) => setSelectedAgent(event.target.value)}
-            className={selectClass}
-            style={{
-              border: "1px solid var(--dpf-border)",
-              fontSize: 11,
-              padding: "5px 8px",
-              borderRadius: 4,
-            }}
-          >
-            {agents.map((agent) => (
-              <option key={agent.agentId} value={agent.agentId} className={optionClass}>
-                {agent.agentId} - {agent.agentName}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        {bindings.length > 0 && (
-          <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
-            <label
-              style={{
-                fontSize: 9,
-                fontWeight: 600,
-                color: "var(--dpf-muted)",
-                textTransform: "uppercase",
-                letterSpacing: "0.05em",
-              }}
-            >
-              Route Context
-            </label>
-            <select
-              value={selectedRoute}
-              onChange={(event) => setSelectedRoute(event.target.value)}
-              className={selectClass}
-              style={{
-                border: "1px solid var(--dpf-border)",
-                fontSize: 11,
-                padding: "5px 8px",
-                borderRadius: 4,
-              }}
-            >
-              {routeOptions.length === 0 ? (
-                <option value="" className={optionClass}>
-                  No route binding
-                </option>
-              ) : (
-                routeOptions.map((route) => (
-                  <option key={route} value={route} className={optionClass}>
-                    {route}
-                  </option>
-                ))
-              )}
-            </select>
-          </div>
-        )}
-
-        {products && products.length > 0 && (
-          <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
-            <label
-              style={{
-                fontSize: 9,
-                fontWeight: 600,
-                color: "var(--dpf-muted)",
-                textTransform: "uppercase",
-                letterSpacing: "0.05em",
-              }}
-            >
-              Product (BMR)
-            </label>
-            <select
-              value={selectedProduct}
-              onChange={(event) => setSelectedProduct(event.target.value)}
-              className={selectClass}
-              style={{
-                border: "1px solid var(--dpf-border)",
-                fontSize: 11,
-                padding: "5px 8px",
-                borderRadius: 4,
-              }}
-            >
-              <option value="" className={optionClass}>
-                — none —
-              </option>
-              {products.map((product) => (
-                <option key={product.productId} value={product.productId} className={optionClass}>
-                  {product.productName}
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
+        <SearchableSelect
+          label="User Role"
+          options={roles.map((role) => ({
+            value: role.roleId,
+            label: `${role.roleId} - ${role.roleName}`,
+          }))}
+          value={selectedRole}
+          onChange={setSelectedRole}
+        />
+        <SearchableSelect
+          label="Agent"
+          options={agents.map((agent) => ({
+            value: agent.agentId,
+            label: `${agent.agentId} - ${agent.agentName}`,
+          }))}
+          value={selectedAgent}
+          onChange={setSelectedAgent}
+          emptyLabel="No agents projected"
+        />
       </div>
+
+      {(bindings.length > 0 || (products && products.length > 0)) && (
+        <details
+          data-dpf-disclosure=""
+          style={{
+            marginBottom: 12,
+            border: "1px solid var(--dpf-border)",
+            borderRadius: 6,
+            padding: "8px 10px",
+          }}
+        >
+          <summary
+            style={{ cursor: "pointer", fontSize: 12, color: "var(--dpf-text)" }}
+          >
+            Refine by route or product
+          </summary>
+          <div style={{ display: "flex", gap: 12, marginTop: 10, flexWrap: "wrap" }}>
+            {bindings.length > 0 && (
+              <SearchableSelect
+                label="Route Context"
+                options={routeOptions.map((route) => ({ value: route, label: route }))}
+                value={selectedRoute}
+                onChange={setSelectedRoute}
+                emptyLabel="No route binding"
+              />
+            )}
+            {products && products.length > 0 && (
+              <SearchableSelect
+                label="Product (BMR)"
+                options={[
+                  { value: "", label: "— none —" },
+                  ...products.map((product) => ({
+                    value: product.productId,
+                    label: product.productName,
+                  })),
+                ]}
+                value={selectedProduct}
+                onChange={setSelectedProduct}
+              />
+            )}
+          </div>
+        </details>
+      )}
 
       {selectedBinding && (
         <div
@@ -594,6 +665,8 @@ export function EffectivePermissionsPanel({
         </div>
       )}
 
+      {/* The verdict, in one line. This is what the operator came for; the
+          per-tool rows below are the working-out. */}
       <div
         style={{
           display: "flex",
@@ -604,147 +677,74 @@ export function EffectivePermissionsPanel({
           background: "var(--dpf-surface-2)",
           fontSize: 10,
           alignItems: "center",
+          flexWrap: "wrap",
         }}
       >
         <span style={{ color: "var(--dpf-text)", fontWeight: 600 }}>
           {allowedCount} of {totalCount} tools available
         </span>
-        <span style={{ display: "flex", alignItems: "center", gap: 4, color: "var(--dpf-muted)" }}>
-          <Dot color="var(--dpf-success)" /> Allowed
-        </span>
-        <span style={{ display: "flex", alignItems: "center", gap: 4, color: "var(--dpf-muted)" }}>
-          <Dot color="var(--dpf-error)" /> Blocked
-        </span>
-        <span style={{ display: "flex", alignItems: "center", gap: 4, color: "var(--dpf-muted)" }}>
-          <Dot color="var(--dpf-muted)" /> N/A
-        </span>
+        <span style={{ color: "var(--dpf-muted)" }}>{modeCounts.approval} approval</span>
+        <span style={{ color: "var(--dpf-muted)" }}>{modeCounts.proposal} proposal</span>
+        <span style={{ color: "var(--dpf-muted)" }}>{modeCounts.immediate} immediate</span>
+        <span style={{ color: "var(--dpf-muted)" }}>{blockedByRole} blocked by role</span>
+        <span style={{ color: "var(--dpf-muted)" }}>{blockedByGrants} blocked by grants</span>
       </div>
 
-      <div style={{ overflowX: "auto" }}>
-        <div
+      <div style={{ display: "flex", flexDirection: "column", gap: 4, marginBottom: 12 }}>
+        <label
+          htmlFor="effective-permissions-tool-search"
           style={{
-            display: "grid",
-            gridTemplateColumns: "1.8fr 90px 90px 90px 80px",
-            gap: 8,
-            padding: "6px 10px",
-            fontSize: 9,
+            fontSize: 10,
             fontWeight: 600,
             color: "var(--dpf-muted)",
             textTransform: "uppercase",
             letterSpacing: "0.05em",
-            borderBottom: "1px solid var(--dpf-border)",
           }}
         >
-          <span>Tool Name</span>
-          <span style={{ textAlign: "center" }}>User Allowed</span>
-          <span style={{ textAlign: "center" }}>Agent Allowed</span>
-          <span style={{ textAlign: "center" }}>Effective</span>
-          <span style={{ textAlign: "center" }}>Mode</span>
-        </div>
-
-        <div style={{ display: "flex", flexDirection: "column" }}>
-          {evaluatedTools.map((tool) => (
-            <div
-              key={tool.toolName}
-              style={{
-                display: "grid",
-                gridTemplateColumns: "1.8fr 90px 90px 90px 80px",
-                gap: 8,
-                padding: "5px 10px",
-                fontSize: 10,
-                color: "var(--dpf-text)",
-                borderBottom: "1px solid var(--dpf-border)",
-                alignItems: "center",
-                opacity: tool.effective ? 1 : 0.6,
-              }}
-              title={tool.description}
-            >
-              <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
-                <span style={{ fontFamily: "monospace", fontSize: 10 }}>{tool.toolName}</span>
-                {/* Descriptions stay on title= hover only — 350+ full blurbs were
-                    blowing the UX default-visible word ratchet (~16k words). */}
-                {tool.authority.binding && (
-                  <span style={{ fontSize: 9, color: "var(--dpf-muted)", lineHeight: "12px" }}>
-                    {tool.authority.binding.bindingId} · {tool.authority.reasonCode}
-                  </span>
-                )}
-              </div>
-
-              <span style={{ textAlign: "center" }}>
-                {tool.requiredCapability === null ? (
-                  <Dot color="var(--dpf-muted)" />
-                ) : tool.userAllowed ? (
-                  <Dot color="var(--dpf-success)" />
-                ) : (
-                  <Dot color="var(--dpf-error)" />
-                )}
-              </span>
-
-              <span style={{ textAlign: "center" }}>
-                {!TOOL_TO_GRANTS[tool.toolName] ? (
-                  <Dot color="var(--dpf-muted)" />
-                ) : tool.agentAllowed ? (
-                  <Dot color="var(--dpf-success)" />
-                ) : (
-                  <Dot color="var(--dpf-error)" />
-                )}
-              </span>
-
-              <span style={{ textAlign: "center" }}>
-                {tool.effective ? (
-                  <Dot color="var(--dpf-success)" />
-                ) : (
-                  <Dot color="var(--dpf-error)" />
-                )}
-              </span>
-
-              <span
-                style={{
-                  textAlign: "center",
-                  fontSize: 9,
-                  color:
-                    tool.mode === "approval" || tool.mode === "proposal"
-                      ? "var(--dpf-accent)"
-                      : "var(--dpf-muted)",
-                  fontWeight: tool.mode === "approval" || tool.mode === "proposal" ? 600 : 400,
-                }}
-              >
-                {tool.mode}
-              </span>
-            </div>
-          ))}
-        </div>
+          Find a tool
+        </label>
+        <input
+          id="effective-permissions-tool-search"
+          type="search"
+          value={toolQuery}
+          placeholder={`Search by name or purpose…`}
+          onChange={(event) => setToolQuery(event.target.value)}
+          style={{
+            border: "1px solid var(--dpf-border)",
+            background: "var(--dpf-surface-2)",
+            color: "var(--dpf-text)",
+            fontSize: 12,
+            padding: "5px 8px",
+            borderRadius: 4,
+            maxWidth: 420,
+          }}
+        />
       </div>
 
-      <div
-        style={{
-          marginTop: 10,
-          padding: "6px 10px",
-          borderRadius: 4,
-          background: "var(--dpf-surface-2)",
-          display: "flex",
-          gap: 16,
-          fontSize: 9,
-          color: "var(--dpf-muted)",
-          flexWrap: "wrap",
-        }}
-      >
-        <span>
-          Approval required: {evaluatedTools.filter((tool) => tool.effective && tool.mode === "approval").length}
-        </span>
-        <span>
-          Proposals: {evaluatedTools.filter((tool) => tool.effective && tool.mode === "proposal").length}
-        </span>
-        <span>
-          Immediate: {evaluatedTools.filter((tool) => tool.effective && tool.mode === "immediate").length}
-        </span>
-        <span>
-          Blocked by role: {evaluatedTools.filter((tool) => !tool.userAllowed && tool.requiredCapability !== null).length}
-        </span>
-        <span>
-          Blocked by grants: {evaluatedTools.filter((tool) => !tool.agentAllowed && !!TOOL_TO_GRANTS[tool.toolName]).length}
-        </span>
-      </div>
+      {searching && matchedTools.length === 0 && (
+        <p style={{ fontSize: 12, color: "var(--dpf-muted)", margin: "0 0 12px 0" }}>
+          No match for “{toolQuery}”.
+        </p>
+      )}
+      {searching && matchedTools.length > 0 && (
+        <div style={{ marginBottom: 12 }}>
+          <p style={{ fontSize: 11, color: "var(--dpf-muted)", margin: "0 0 6px 0" }}>
+            {matchedTools.length} matching
+          </p>
+          <ToolTable tools={matchedTools} />
+        </div>
+      )}
+
+      {/* Nothing is hidden without a count and a way to reach it: the full
+          inventory is one click away and says how many rows it holds. */}
+      <details data-dpf-disclosure="" style={{ marginBottom: 4 }}>
+        <summary style={{ cursor: "pointer", fontSize: 12, color: "var(--dpf-text)" }}>
+          Browse all {totalCount} tools
+        </summary>
+        <div style={{ marginTop: 8 }}>
+          <ToolTable tools={evaluatedTools} />
+        </div>
+      </details>
 
       {products && selectedProduct && (() => {
         const product = products.find((item) => item.productId === selectedProduct);

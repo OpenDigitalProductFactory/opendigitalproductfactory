@@ -1,4 +1,6 @@
 // apps/web/app/(shell)/platform/audit/authority/page.tsx
+import type { ReactNode } from "react";
+
 import { getAgentGrantSummaries } from "@/lib/agent-grants";
 import { AuthorityMatrixPanel, type BmrRoleRow } from "@/components/platform/AuthorityMatrixPanel";
 import { AgentCardSupervisorPanel } from "@/components/platform/AgentCardSupervisorPanel";
@@ -132,62 +134,25 @@ export default async function AuditAuthorityPage() {
 
   return (
     <div>
-      <div style={{ marginBottom: 20 }}>
+      <div data-dpf-lead="" style={{ marginBottom: 20 }}>
         <h1 style={{ fontSize: 18, fontWeight: 700, color: "var(--dpf-text)", margin: 0 }}>
           Authority &amp; Audit
         </h1>
-        <p style={{ fontSize: 11, color: "var(--dpf-muted)", marginTop: 2 }}>
-          Agent grants, delegation chains, and effective permissions. Tool execution history is in{" "}
-          <a href="/platform/audit/journal" style={{ color: "var(--dpf-accent)" }}>Capability Journal</a>.
+        <p style={{ fontSize: 12, color: "var(--dpf-muted)", marginTop: 4 }}>
+          Who can do what here, and who signed off. {agentSummaries.length} agents,{" "}
+          {agentCards.length} agent cards, {bindingRecords.length} route bindings over{" "}
+          {toolsList.length} tools. Start with the inspector below; each section opens
+          on demand. Past executions live in the{" "}
+          <a href="/platform/audit/journal" style={{ color: "var(--dpf-accent)" }}>
+            Capability Journal
+          </a>
+          .
         </p>
       </div>
 
+      {/* The inspector answers the question the page exists for, so it leads —
+          the inventories that support it are deferred below (BI-D6135B88). */}
       <div style={{ marginBottom: 24 }}>
-        <div style={{ marginBottom: 12 }}>
-          <h2 style={{ fontSize: 14, fontWeight: 600, color: "var(--dpf-text)", margin: "0 0 6px 0" }}>
-            GAID Operating Profile Projection
-          </h2>
-          <p style={{ fontSize: 11, color: "var(--dpf-muted)", margin: 0 }}>
-            Shared AIDoc coverage over the live authority layer. Runtime grants remain execution truth; portable authorization classes and the operating profile fingerprint make that truth legible across identity and audit surfaces.
-          </p>
-        </div>
-        <IdentityProjectionSummaryGrid summary={identitySummary} />
-      </div>
-
-      <div style={{ marginBottom: 32 }}>
-        <AgentCardSupervisorPanel cards={agentCards} />
-      </div>
-
-      {/* Section 1: Authority Matrix */}
-      <div style={{ marginBottom: 32 }}>
-        <h2 style={{ fontSize: 14, fontWeight: 600, color: "var(--dpf-text)", margin: "0 0 12px 0" }}>
-          Authority Matrix
-        </h2>
-        <p style={{ fontSize: 11, color: "var(--dpf-muted)", marginBottom: 12 }}>
-          Which agents can access which tool categories. Click a row to see specific grants.
-        </p>
-        <AuthorityMatrixPanel agents={agentSummaries} bmrRows={bmrRows} />
-      </div>
-
-      {/* Section 2: Delegation Chain */}
-      <div style={{ marginBottom: 32 }}>
-        <h2 style={{ fontSize: 14, fontWeight: 600, color: "var(--dpf-text)", margin: "0 0 12px 0" }}>
-          Delegation Chain
-        </h2>
-        <p style={{ fontSize: 11, color: "var(--dpf-muted)", marginBottom: 12 }}>
-          Employee roles, their supervised agents, oversight tiers, and escalation paths.
-        </p>
-        <DelegationChainPanel agents={agentSummaries} bmrNodes={bmrNodes} />
-      </div>
-
-      {/* Section 3: Effective Permissions Inspector */}
-      <div>
-        <h2 style={{ fontSize: 14, fontWeight: 600, color: "var(--dpf-text)", margin: "0 0 12px 0" }}>
-          Effective Permissions Inspector
-        </h2>
-        <p style={{ fontSize: 11, color: "var(--dpf-muted)", marginBottom: 12 }}>
-          Inspect.
-        </p>
         <EffectivePermissionsPanel
           agents={agentSummaries.map((a) => ({ agentId: a.agentId, agentName: a.agentName, grants: a.grants }))}
           agentSnapshots={agentSnapshots}
@@ -199,6 +164,84 @@ export default async function AuditAuthorityPage() {
           bindingHrefBase="/platform/identity/authorization"
         />
       </div>
+
+      <AuthoritySection
+        title="Identity projection"
+        summary={`${identitySummary.projectedAgents} AIDocs projected · ${identitySummary.unlinkedAgents} still unlinked`}
+      >
+        <p style={{ fontSize: 12, color: "var(--dpf-muted)", margin: "0 0 12px 0" }}>
+          Shared AIDoc coverage over the live authority layer. Runtime grants stay the
+          execution truth; the projection makes that truth readable across identity and
+          audit surfaces.
+        </p>
+        <IdentityProjectionSummaryGrid summary={identitySummary} />
+      </AuthoritySection>
+
+      <AuthoritySection
+        title="Supervisor agent cards"
+        summary={`${agentCards.length} cards projected`}
+      >
+        <AgentCardSupervisorPanel cards={agentCards} />
+      </AuthoritySection>
+
+      <AuthoritySection
+        title="Authority matrix"
+        summary={`${agentSummaries.length} agents × ${bmrRows.length} business-model roles`}
+      >
+        <p style={{ fontSize: 12, color: "var(--dpf-muted)", margin: "0 0 12px 0" }}>
+          Which agents can reach which tool categories. Open a row to see its grants.
+        </p>
+        <AuthorityMatrixPanel agents={agentSummaries} bmrRows={bmrRows} />
+      </AuthoritySection>
+
+      <AuthoritySection
+        title="Delegation chain"
+        summary={`${bmrNodes.length} roles with an escalation path`}
+      >
+        <p style={{ fontSize: 12, color: "var(--dpf-muted)", margin: "0 0 12px 0" }}>
+          Employee roles, the agents they supervise, oversight tiers, and where each one
+          escalates.
+        </p>
+        <DelegationChainPanel agents={agentSummaries} bmrNodes={bmrNodes} />
+      </AuthoritySection>
     </div>
+  );
+}
+
+/**
+ * One deferred dimension of the authority surface.
+ *
+ * A native <details> rather than a client disclosure component on purpose: this is
+ * a server page, the summary carries the COUNT so nothing is hidden without saying
+ * how much, and `lib/ux-budget/scope.ts` promotes the summary out of the collapsed
+ * subtree — so the reader is measured on the labels they actually meet, not on the
+ * inventory behind them.
+ */
+function AuthoritySection({
+  title,
+  summary,
+  children,
+}: {
+  title: string;
+  summary: string;
+  children: ReactNode;
+}) {
+  return (
+    <details
+      data-dpf-disclosure=""
+      style={{
+        marginBottom: 12,
+        border: "1px solid var(--dpf-border)",
+        borderRadius: 8,
+        background: "var(--dpf-surface-1)",
+        padding: "10px 12px",
+      }}
+    >
+      <summary style={{ cursor: "pointer", fontSize: 13, color: "var(--dpf-text)" }}>
+        <span style={{ fontWeight: 600 }}>{title}</span>
+        <span style={{ color: "var(--dpf-muted)", fontWeight: 400 }}> — {summary}</span>
+      </summary>
+      <div style={{ marginTop: 12 }}>{children}</div>
+    </details>
   );
 }

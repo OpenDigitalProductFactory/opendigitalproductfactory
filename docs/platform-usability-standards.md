@@ -309,6 +309,7 @@ content. Do not hand-roll a new expand/collapse dialect inside a feature.
 | Hide one short, secondary piece of prose or advanced help | Native `<details>` |
 | Preserve a large detail workspace while the list remains visible | Purpose-built drawer |
 | Support linking, history, or a full record workflow | Dedicated detail route |
+| Choose ONE option out of more than the shell's choice budget | `SearchableSelect` |
 
 `ExpandableCard` follows the WAI-ARIA accordion/disclosure contract: a native
 button is the only control inside the heading; the button exposes
@@ -321,6 +322,23 @@ Render record identity and summary metadata once. Loading and recoverable error
 states belong inside the opened panel while its summary remains stable. Lists of
 peer records should normally allow one open item at a time unless research shows
 that operators need side-by-side comparison.
+
+### Choice load is disclosure too (BI-D6135B88)
+
+A control that offers more options than its shell's `maxChoicesPerControl` budget
+(20 on `detail`/`list`, 12 on `cockpit`) has pushed an unresolved decision onto the
+reader — Hick's law, and the axis `lib/ux-budget/measure.ts` measures. Deferring
+that decision is the same doctrine as deferring text: `SearchableSelect`
+(`components/ui/report-kit/`) lets the reader **type** what they are looking for
+instead of scrolling a dropdown, while every option stays reachable.
+
+This is a picker, not truncation, and the distinction matters: a control that
+silently drops options fails the completeness expectation even when it measures
+well. State the count, keep every option resolvable, and report an unresolved
+entry inline rather than selecting nothing.
+
+`/platform/audit/authority` was the motivating case — a 94-option agent select
+against a budget of 20, on the estate's worst route by default-visible words.
 
 ## Readability & Plain Language
 

@@ -1,0 +1,27 @@
+{
+  "version": "1",
+  "decidedOption": "purpose-first-inspector-with-deferred-inventories",
+  "scope": {
+    "files": [
+      "apps/web/app/(shell)/platform/audit/authority/page.tsx",
+      "apps/web/components/platform/EffectivePermissionsPanel.tsx",
+      "apps/web/components/ui/report-kit/SearchableSelect.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "sweep-measurement",
+    "baselineComparison": "improved",
+    "measured": {
+      "/platform/audit/authority": {
+        "defaultVisibleWords": 254,
+        "leadBandWords": 41,
+        "primaryActions": 1,
+        "visibleFields": 3,
+        "maxChoicesPerControl": 0,
+        "subLegibleControls": 0,
+        "buriedPrimaryAction": 0,
+        "axeViolations": 3
+      }
+    }
+  }
+}
