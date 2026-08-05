@@ -322,6 +322,41 @@ export const COWORKER_SERVICE_CATALOG_SERVICE_SEEDS: readonly CoworkerServiceSee
       },
     },
   }),
+  // BI-1A68257F: publish the existing ux-design-critic coworker as an engageable
+  // catalog service so any client (in-portal operator OR an external coding
+  // agent) can request a UX critique via request_coworker_engagement. The
+  // coworker persona + grants already exist (workforce-seed.ts); it was simply
+  // missing an offer, so it never surfaced in list_coworker_offers. Advisory
+  // ONLY — matches the deliberate no-release_gate_create stance on the critic
+  // until it is calibrated against the founder critique corpus.
+  serviceSeed("svc-ux-design-critique", "ux-design-critic", {
+    ownerAreaSlug: "foundational",
+    name: "UX design critique",
+    summary:
+      "Advisory critique of an owner-facing surface or prototype — information hierarchy, content density, and cognitive load — argued from the founder-authored critique corpus.",
+    description:
+      "Reasons over a rendered surface, route, or prototype and returns prioritized UX findings with concrete changes, referencing the founder-authored critique corpus for calibration. Advisory only: it proposes, it does not gate a build.",
+    riskTier: "low",
+    authorityBoundary: "proposal-only",
+    valueStreams: ["evaluate"],
+    personas: ["builder", "operator", "founder", "coding-agent"],
+    requiredInputs: [{ key: "surface-or-prototype" }, { key: "route-or-context" }],
+    producedOutputs: [{ key: "ux-critique-findings" }, { key: "prioritized-changes" }],
+    backingToolNames: ["capture_ux_critique", "search_ux_critique_corpus", "evaluate_page"],
+    backingGrantKeys: ["browser_read", "coworker_screen_read", "document_read", "document_write"],
+    costModel: { pricing: "internal", metering: "per-critique" },
+    contractTerms: { posture: "internal", authority: "advisory-only-until-calibrated" },
+    dataBoundary: { sensitivity: "internal" },
+    metadata: {
+      family: "ux-quality",
+      readinessProbe: {
+        taskType: "analysis",
+        prompt:
+          "Critique a provided owner-facing surface for information hierarchy, content density, and cognitive load using the critique corpus, returning prioritized advisory findings without gating.",
+        requiresToolUse: true,
+      },
+    },
+  }),
 ];
 
 export const COWORKER_SERVICE_CATALOG_OFFER_SEEDS: readonly CoworkerOfferSeed[] = [
@@ -417,6 +452,16 @@ export const COWORKER_SERVICE_CATALOG_OFFER_SEEDS: readonly CoworkerOfferSeed[] 
     ],
     deliverables: ["90-day seasonal plan", "Readiness exceptions", "Decision briefs", "Qualified-provider handoffs"],
     filters: { archetype: "agriculture-ranching", domain: "agricultural-operations" },
+  }),
+  offerSeed("offer-ux-design-critique", "svc-ux-design-critique", {
+    name: "UX design critique",
+    summary:
+      "Advisory critique of an owner-facing surface or prototype — hierarchy, density, and cognitive load — with prioritized changes.",
+    riskTier: "low",
+    authorityBoundary: "proposal-only",
+    eligibleConsumers: ["builder", "operator", "founder", "coding-agent"],
+    deliverables: ["UX critique findings", "Prioritized changes", "Corpus-referenced rationale"],
+    filters: { domain: "ux-quality", family: "critique" },
   }),
 ];
 
