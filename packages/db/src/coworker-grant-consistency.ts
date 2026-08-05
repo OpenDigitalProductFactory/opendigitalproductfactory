@@ -73,7 +73,8 @@ export const KNOWN_GRANT_DIVERGENCES: readonly string[] = [
   "ea-architect",
   "external-catalog-scout",
   "finance-controller",
-  "hr-specialist",
+  // hr-specialist was reconciled (BI-3CDEC5F0): the seed and agent_registry now
+  // carry the identical grant set, so it is no longer a tracked divergence.
   "inventory-specialist",
   "legal-operations-counsel",
   "marketing-specialist",

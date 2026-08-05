@@ -58,7 +58,9 @@ const definitions: ToolDefinition[] = [
   {
     name: "create_policy",
     description:
-      "Create a company Policy as DRAFT for human review on /compliance/policies. Never publishes. Use category 'hr' for HR policies. After create, tell the operator the draft is ready for review/edit/publish in the Policies UI. For audience-limited publish (e.g. US employees only), note the intended audience in notes until audience fields ship (BI-3CDEC5F0 P1).",
+      // Provenance (BI-3CDEC5F0 P1: structured audience scoping) stays in this
+      // comment — the model-facing description carries no backlog ids.
+      "Create a company Policy as DRAFT for human review on /compliance/policies. Never publishes. Use category 'hr' for HR policies. After create, tell the operator the draft is ready for review/edit/publish in the Policies UI. For audience-limited publish (e.g. US employees only), note the intended audience in notes until structured audience fields ship.",
     inputSchema: {
       type: "object",
       properties: {
