@@ -17,6 +17,7 @@ import {
   JOURNEY_ASSURANCE_SCOPE_TYPE,
   type JourneyStatus,
   type JourneyStepResult,
+  type UnverifiableReason,
   type VerificationDepth,
 } from "./types";
 
@@ -38,6 +39,8 @@ export type JourneyHealthRow = {
   /** "Not checked: …" — the anti-false-confidence line. */
   notCheckedSentence: string | null;
   notApplicableReason?: string;
+  /** Why the run could not check this journey — set only when unverifiable. */
+  unverifiableReason?: UnverifiableReason;
   steps: JourneyStepResult[];
   durationMs: number;
 };
@@ -50,6 +53,9 @@ export type JourneyHealth = {
   passing: number;
   notApplicable: number;
   neverRun: number;
+  /** Journeys the run could not check at all. Counted separately from `failing`
+   *  because they are a statement about the watchdog, not about the business. */
+  unverifiable: number;
 };
 
 type PersistedJourney = {
@@ -58,6 +64,7 @@ type PersistedJourney = {
   status?: JourneyStatus;
   achievedDepth?: VerificationDepth | null;
   notApplicableReason?: string | null;
+  unverifiableReason?: UnverifiableReason | null;
   durationMs?: number;
   steps?: JourneyStepResult[];
 };
@@ -116,6 +123,9 @@ export async function loadJourneyHealth(db: Db): Promise<JourneyHealth> {
       ...(persisted.notApplicableReason
         ? { notApplicableReason: persisted.notApplicableReason }
         : {}),
+      ...(persisted.unverifiableReason
+        ? { unverifiableReason: persisted.unverifiableReason }
+        : {}),
       steps: persisted.steps ?? [],
       durationMs: persisted.durationMs ?? 0,
     };
@@ -129,6 +139,7 @@ export async function loadJourneyHealth(db: Db): Promise<JourneyHealth> {
     passing: rows.filter((r) => r.status === "passed").length,
     notApplicable: rows.filter((r) => r.status === "not-applicable").length,
     neverRun: rows.filter((r) => r.status === "never-run").length,
+    unverifiable: rows.filter((r) => r.status === "unverifiable").length,
   };
 }
 
@@ -142,10 +153,17 @@ export async function loadJourneyHealth(db: Db): Promise<JourneyHealth> {
  */
 export function journeyHealthHeadline(health: JourneyHealth): string {
   if (health.lastRunAt === null) return "No checks have run yet.";
-  if (health.failing === 0) {
-    return health.passing === 0
-      ? "Nothing to check yet."
-      : `All ${health.passing} checks passed.`;
+  if (health.failing > 0) {
+    return health.failing === 1 ? "1 check is failing." : `${health.failing} checks are failing.`;
   }
-  return health.failing === 1 ? "1 check is failing." : `${health.failing} checks are failing.`;
+  // Before claiming anything passed. A run that could not reach the install has
+  // zero failures and zero passes, and the old wording called that "Nothing to
+  // check yet." — which reads as all-clear on an install where nothing had ever
+  // been checked at all.
+  if (health.unverifiable > 0) {
+    return health.unverifiable === 1
+      ? "1 check could not run."
+      : `${health.unverifiable} checks could not run.`;
+  }
+  return health.passing === 0 ? "Nothing to check yet." : `All ${health.passing} checks passed.`;
 }

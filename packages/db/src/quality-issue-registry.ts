@@ -279,6 +279,18 @@ const REGISTRY = {
     owner: "operator",
     summary: "A critical business journey failed its scheduled watchdog run.",
   },
+  journey_unverifiable: {
+    resolvedBy: "monitor-clears",
+    subject: "scope",
+    raisedBySubjectAbsence: false,
+    autoResolveWhen:
+      "the next watchdog run can reach the install — the blocking cause is re-evaluated every sweep, so fixing the setting closes the row without operator bookkeeping",
+    operatorActionable: true,
+    expectedSteadyState: 0,
+    owner: "operator",
+    summary:
+      "The watchdog could not check one or more journeys. This reports the watchdog's own readiness, never the health of the business — nothing was established about whether those journeys work.",
+  },
 } satisfies Record<string, QualityIssueContract>;
 
 /**

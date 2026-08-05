@@ -99,6 +99,8 @@ export function reachabilityProbe(pathFor: (ctx: JourneyProbeContext) => string 
     if (!path) {
       return {
         passed: false,
+        unverifiable: true,
+        unverifiableReason: "no-organization-slug",
         detail: "Could not build the customer-facing URL for this journey.",
         expected: "a resolvable public path",
         actual: "the install has no organization slug",
@@ -107,6 +109,8 @@ export function reachabilityProbe(pathFor: (ctx: JourneyProbeContext) => string 
     if (!ctx.baseUrl) {
       return {
         passed: false,
+        unverifiable: true,
+        unverifiableReason: "no-public-address",
         detail:
           "This install has no public base URL configured, so the customer-facing page cannot be checked.",
         expected: "NEXT_PUBLIC_BASE_URL or NEXT_PUBLIC_APP_URL to be set",

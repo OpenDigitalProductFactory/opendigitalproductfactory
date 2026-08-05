@@ -50,6 +50,7 @@ describe("journey surface copy stays within the high-school reading tier", () =>
       passing: 0,
       notApplicable: 0,
       neverRun: rows.length,
+      unverifiable: 0,
     };
     const html = `<p>${journeyHealthHeadline(health)}</p>${renderCards(rows)}`;
 
@@ -72,7 +73,7 @@ describe("journey surface copy stays within the high-school reading tier", () =>
       failing: rows.length,
       passing: 0,
       notApplicable: 0,
-      neverRun: 0,
+      neverRun: 0, unverifiable: 0,
     };
     // Failing cards additionally render businessImpact — the longest copy in the
     // feature — so this is the worst case for the grade.

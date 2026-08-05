@@ -38,13 +38,19 @@ function SummaryTile({ label, value }: { label: string; value: number }) {
   );
 }
 
-/** Failing first, then never-run, then working, then not-set-up. The operator's
- *  eye should land on what needs them without reading past what does not. */
+/** Failing first, then could-not-check, then never-run, then working, then
+ *  not-set-up. The operator's eye should land on what needs them without reading
+ *  past what does not.
+ *
+ *  Could-not-check ranks BELOW failing and above never-run: it is actionable
+ *  (a setting is missing) but it is not an outage, and ranking it with the reds
+ *  is what made a configuration gap look like a business failure. */
 const STATUS_RANK: Record<JourneyHealthRow["status"], number> = {
   failed: 0,
-  "never-run": 1,
-  passed: 2,
-  "not-applicable": 3,
+  unverifiable: 1,
+  "never-run": 2,
+  passed: 3,
+  "not-applicable": 4,
 };
 
 export default async function BusinessJourneysPage({ searchParams }: Props) {

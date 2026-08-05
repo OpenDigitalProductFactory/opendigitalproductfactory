@@ -24,13 +24,22 @@ const STATUS_PRESENTATION: Record<
   failed: { label: "Not working", intent: "danger" },
   "not-applicable": { label: "Not set up", intent: "neutral" },
   "never-run": { label: "Not checked yet", intent: "neutral" },
+  // Deliberately NOT "danger". This badge says nothing about the business —
+  // the check never reached it. Reading "Not working" here is what sent four
+  // false red rows to the owner for a week (BI-04CC2090).
+  unverifiable: { label: "Could not check", intent: "warning" },
 };
 
 function StepRow({ step }: { step: JourneyHealthRow["steps"][number] }) {
-  const intent: Intent =
-    step.outcome === "passed" ? "success" : step.outcome === "failed" ? "danger" : "neutral";
-  const outcomeLabel =
-    step.outcome === "passed" ? "Passed" : step.outcome === "failed" ? "Failed" : "Skipped";
+  // "Skipped" would be wrong for an unverifiable step: skipped means an earlier
+  // step already answered the question, and here nothing answered it.
+  const STEP_PRESENTATION: Record<typeof step.outcome, { label: string; intent: Intent }> = {
+    passed: { label: "Passed", intent: "success" },
+    failed: { label: "Failed", intent: "danger" },
+    skipped: { label: "Skipped", intent: "neutral" },
+    unverifiable: { label: "Could not check", intent: "warning" },
+  };
+  const { label: outcomeLabel, intent } = STEP_PRESENTATION[step.outcome];
   return (
     <li className="border-t border-[var(--dpf-border)] py-3 first:border-t-0">
       <div className="flex flex-wrap items-center gap-2">

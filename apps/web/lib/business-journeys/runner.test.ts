@@ -200,4 +200,68 @@ describe("runJourneySweep", () => {
     };
     expect(cleanup.data.status).toBe("resolved");
   });
+
+  // BI-04CC2090. The bug these cover shipped a watchdog that told an owner
+  // "Customers can book a time with you — not working" about a journey it had
+  // never once been able to reach.
+  describe("a journey the run could not check", () => {
+    const unverifiableStep = stepOf("a", "reachability", {
+      passed: false,
+      unverifiable: true,
+      unverifiableReason: "no-public-address",
+      detail: "cannot be checked",
+    } as StepProbeResult);
+
+    it("is unverifiable, not failed", async () => {
+      const result = await runJourney(journeyOf([unverifiableStep]), CTX, {
+        fetchImpl: deps.fetchImpl,
+        now: () => new Date(0),
+      });
+
+      expect(result.status).toBe("unverifiable");
+      expect(result.unverifiableReason).toBe("no-public-address");
+      expect(result.steps[0].outcome).toBe("unverifiable");
+      // Still establishes nothing — the depth ladder is unchanged.
+      expect(result.achievedDepth).toBeNull();
+    });
+
+    it("records the sweep as inconclusive, never passed", async () => {
+      await sweep([journeyOf([unverifiableStep])]);
+
+      const run = db.assuranceRun.create.mock.calls[0][0] as { data: { status: string } };
+      expect(run.data.status).toBe("inconclusive");
+    });
+
+    it("raises no AssuranceFinding claiming a step failed", async () => {
+      await sweep([journeyOf([unverifiableStep])]);
+
+      expect(db.assuranceFinding.create).not.toHaveBeenCalled();
+    });
+
+    it("still fails a journey whose probe genuinely failed", async () => {
+      const result = await runJourney(
+        journeyOf([stepOf("a", "reachability", { passed: false, detail: "500 from the route" })]),
+        CTX,
+        { fetchImpl: deps.fetchImpl, now: () => new Date(0) },
+      );
+
+      expect(result.status).toBe("failed");
+      expect(result.steps[0].outcome).toBe("failed");
+      expect(result.unverifiableReason).toBeUndefined();
+    });
+
+    it("marks a genuine failure as failed even when another journey is unverifiable", async () => {
+      await sweep([
+        journeyOf([unverifiableStep]),
+        {
+          ...journeyOf([stepOf("b", "contract", { passed: false, detail: "broken" })]),
+          journeyId: "j2",
+        },
+      ]);
+
+      const run = db.assuranceRun.create.mock.calls[0][0] as { data: { status: string } };
+      // A real failure outranks an unverifiable one.
+      expect(run.data.status).toBe("failed");
+    });
+  });
 });

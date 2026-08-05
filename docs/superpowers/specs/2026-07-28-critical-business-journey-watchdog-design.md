@@ -111,6 +111,37 @@ Both are real failures worth raising. Collapsing them would send the operator hu
 wrong problem. An HTTP error status needs no such treatment — a 500 is a 500 wherever it
 is observed.
 
+### 4a.1 "Could not check" is not a failure (added 2026-08-04, BI-04CC2090)
+
+The cases above all assume the probe *ran*. A third case comes before them: the probe could
+not be attempted at all, because the install has no public web address or no organization
+address configured. Nothing was learned about the business — not even that it is
+unreachable.
+
+The first build had no vocabulary for this. `StepProbeResult` carried only
+`passed: boolean`, so "I could not check" was recorded as `passed: false` and the journey
+verdict collapsed to `failed`. On an install with no configured address that produced four
+`error`-severity rows reading *"Customers can book a time with you — not working"*, open for
+seven days, on evidence whose own text said the page *"cannot be checked"*. Every run in
+that install's history carried `achievedDepth: null`: nothing had ever been verified.
+
+That is this section's own failure mode, arriving through a case it did not enumerate — and
+it is §3's honesty rule inverted. §3 stops the watchdog implying more *coverage* than it
+established; this stops it implying more *knowledge*.
+
+So a probe can now report `unverifiable` with a keyed reason, and a journey blocked by such
+a step is `unverifiable`, never `failed`:
+
+- it opens **no** `journey_failure` row, because that row is a claim about the business;
+- it opens a grouped `journey_unverifiable` row at `warn`, keyed by **cause** rather than by
+  journey, so four journeys blocked by one missing setting are one thing to fix;
+- it is never silent — silence here would just trade this bug for the one in BI-948E8873;
+- the sweep records `inconclusive`, never `passed`, because a run that established nothing
+  has not passed.
+
+The distinction is the whole point: a failed journey is a statement about the business, an
+unverifiable one is a statement about the watchdog. Only the first should ever be red.
+
 Every reachability request is also bounded by a 15s `AbortSignal.timeout`. A watchdog that
 can hang is worse than no watchdog: it stays silent through the very outage it exists to
 report, and silence is indistinguishable from health. A customer would have given up long

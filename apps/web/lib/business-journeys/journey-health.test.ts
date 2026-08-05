@@ -123,7 +123,7 @@ describe("loadJourneyHealth", () => {
 });
 
 describe("journeyHealthHeadline", () => {
-  const base = { lastRunAt: new Date(), runId: "r", rows: [], notApplicable: 0, neverRun: 0 };
+  const base = { lastRunAt: new Date(), runId: "r", rows: [], notApplicable: 0, neverRun: 0, unverifiable: 0 };
 
   it("counts failures in plain language", () => {
     expect(journeyHealthHeadline({ ...base, failing: 1, passing: 3 })).toBe("1 check is failing.");
@@ -145,6 +145,23 @@ describe("journeyHealthHeadline", () => {
     const headline = journeyHealthHeadline({ ...base, failing: 0, passing: 4 });
     expect(headline).toBe("All 4 checks passed.");
     expect(headline).not.toMatch(/healthy|everything|fine|all good/i);
+  });
+
+  // BI-04CC2090: on an install the watchdog could never reach, failing and
+  // passing are both 0 — and the old wording called that "Nothing to check yet."
+  it("reports checks that could not run, rather than implying all-clear", () => {
+    expect(journeyHealthHeadline({ ...base, failing: 0, passing: 0, unverifiable: 4 })).toBe(
+      "4 checks could not run.",
+    );
+    expect(journeyHealthHeadline({ ...base, failing: 0, passing: 0, unverifiable: 1 })).toBe(
+      "1 check could not run.",
+    );
+  });
+
+  it("puts a real failure ahead of a check that could not run", () => {
+    expect(journeyHealthHeadline({ ...base, failing: 1, passing: 0, unverifiable: 3 })).toBe(
+      "1 check is failing.",
+    );
   });
 
   it("every headline is a terminated sentence — unterminated copy inflates the page grade", () => {
