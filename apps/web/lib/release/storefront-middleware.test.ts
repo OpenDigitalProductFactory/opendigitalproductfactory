@@ -16,6 +16,14 @@ describe("classifyRoute", () => {
     expect(classifyRoute("/api/storefront/acme-vet/items")).toBe(RouteClass.PublicApi);
   });
 
+  it("classifies the well-known discovery namespace as public (BI-2AC1307A)", () => {
+    // The mobile connect flow fetches this pre-auth; it must not be redirected
+    // to /welcome. Also covers the universal-link / app-link assets.
+    expect(classifyRoute("/.well-known/dpf-instance.json")).toBe(RouteClass.PublicApi);
+    expect(classifyRoute("/.well-known/apple-app-site-association")).toBe(RouteClass.PublicApi);
+    expect(classifyRoute("/.well-known/assetlinks.json")).toBe(RouteClass.PublicApi);
+  });
+
   it("classifies /api/* as protected api", () => {
     expect(classifyRoute("/api/agents")).toBe(RouteClass.ProtectedApi);
   });

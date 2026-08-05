@@ -14,6 +14,14 @@ export enum RouteClass {
 const LEGACY_REDIRECT_PATHS = ["/customer-login", "/customer-signup"];
 
 export function classifyRoute(pathname: string): RouteClass {
+  // RFC 8615 well-known URIs are machine-discovery endpoints and MUST be
+  // publicly fetchable pre-auth. The mobile app's "connect to your org" flow
+  // fetches /.well-known/dpf-instance.json BEFORE login; without this the
+  // descriptor falls through to RouteClass.Other, the proxy redirects the
+  // unauthenticated request to /welcome, and the app receives HTML instead of
+  // JSON (BI-2AC1307A). Also covers the P2 universal-link / app-link assets
+  // (apple-app-site-association, assetlinks.json) which are public by spec.
+  if (pathname.startsWith("/.well-known/")) return RouteClass.PublicApi;
   if (pathname.startsWith("/s/")) return RouteClass.Storefront;
   if (pathname === "/portal/sign-in" || pathname === "/portal/sign-up") return RouteClass.PublicPage;
   if (pathname.startsWith("/portal")) return RouteClass.Portal;
