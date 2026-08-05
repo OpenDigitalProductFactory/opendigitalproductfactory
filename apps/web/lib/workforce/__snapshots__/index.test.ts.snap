@@ -9,6 +9,7 @@ exports[`workforce barrel export > exports all public symbols 1`] = `
   "getCurrentWeekStart",
   "getEmployeeDirectoryRows",
   "getEmployeeLifecycleEvents",
+  "getEmployeeProfileById",
   "getEmployeeProfileByUserId",
   "getLeaveBalances",
   "getLeavePolicies",

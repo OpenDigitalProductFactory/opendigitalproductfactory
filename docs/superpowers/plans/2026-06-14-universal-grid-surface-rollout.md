@@ -16,9 +16,17 @@ Three integration shapes, all proven:
 1. **Registered platform entity, simple list page** (suppliers, customers, invoices):
    add `searchParams.view` → `parseSurfaceView` → `<PlatformGridSection entityType view />`
    + wrap the existing list in `{!view && (…)}`. ~3 lines.
-2. **Tabbed page** where `?view=` is already used for tabs (people): add a **"Grid" tab**
+2. ~~**Tabbed page** where `?view=` is already used for tabs (people): add a **"Grid" tab**
    to the page's tab-nav and render `<SurfacePlatformGrid entityType view="grid" />`
-   when that tab is active (avoids the `?view=` collision).
+   when that tab is active (avoids the `?view=` collision).~~
+   **RETIRED 2026-08-05 (BI-00CB9CCC).** Operator review of `/employee`: a Grid tab
+   sitting next to Directory reads as a separate destination for the same records —
+   "in its own tab, vs being part of the main workforce list. Seems unorthodox."
+   That is the outcome §4's WWMD rejected; shape 2 only existed to dodge a query-param
+   collision, which turned out not to need dodging. **Use shape (1) even on a tabbed
+   page**: `grid`/`board` are simply not tab values, so the tab-nav resolves them to
+   the list tab and the same `?view=` param serves both. See
+   `EmployeeTabNav.tsx` (`rawView === "grid" || rawView === "board"` → Directory).
 3. **Unregistered entity** (compliance controls): first add a `GenericTableConfig`
    (safe field allow-list — **no PII**; select options must match the page's own facet
    keys so board/grouping align) + `registerGenericReadTable(...)` + a `PLATFORM_TABLES`
@@ -40,7 +48,7 @@ the discipline; relation ids like `ownerEmployeeId` are omitted). Set
 | /finance/suppliers | supplier | 1 | #1893 |
 | /customer | customer_account | 1 | #1895 |
 | /portfolio | digital_product | 1 | #1895 |
-| /employee | employee_profile | 2 (Grid tab) | #1895 |
+| /employee | employee_profile | ~~2 (Grid tab)~~ → **1** (in-place toggle, BI-00CB9CCC) | #1895, then BI-00CB9CCC |
 | /compliance/controls | compliance_control (new config) | 3 | #1895 |
 
 ## Remaining (~19 surfaces — mechanical, one small PR per domain batch)

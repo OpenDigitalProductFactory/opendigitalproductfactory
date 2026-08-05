@@ -50,6 +50,16 @@ export const EMPLOYEE_PROFILE_TABLE: GenericTableConfig = {
   orderBy: { field: "updatedAt", dir: "desc" },
   // Safe org-directory fields ONLY — no legal names beyond display name, no
   // personal contact, no compensation, no addresses, no termination dates.
+  //
+  // Editable inline (BI-00CB9CCC), but NOT via the raw-write tier: EmployeeProfile
+  // owns a governed domain action, so the write-through is attached at registration
+  // (platform-tables.ts) and every grid edit lands an AuthorizationDecisionLog just
+  // like the form does.
+  //
+  // `status` is deliberately excluded. A status change is a lifecycle transition —
+  // it is guarded by validateLifecycleTransition and carries EmploymentEvent
+  // semantics that a cell edit cannot express. It stays on the lifecycle control.
+  editableFields: ["displayName", "workEmail", "timezone", "startDate"],
   columns: [
     { field: "employeeId", name: "ID", fieldType: "text", width: 140 },
     { field: "displayName", name: "Name", fieldType: "text", width: 200 },

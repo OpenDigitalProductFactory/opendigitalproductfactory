@@ -71,8 +71,27 @@ describe("people/supplier safe read-only grids", () => {
     for (const f of ["taxId", "bankDetails", "address"]) expect(editable).not.toContain(f);
   });
 
-  it("CUSTOMER and EMPLOYEE grids stay read-only (no manage capability exists)", () => {
+  it("CUSTOMER grid stays read-only (no manage capability exists)", () => {
     expect(CUSTOMER_ACCOUNT_TABLE.editableFields).toBeUndefined();
-    expect(EMPLOYEE_PROFILE_TABLE.editableFields).toBeUndefined();
+  });
+
+  // BI-00CB9CCC: the People grid became editable. The allow-list is the safety
+  // boundary — it must stay a subset of the already-safe columns, and it must not
+  // reach the fields that carry domain rules a cell edit cannot honour.
+  it("EMPLOYEE editable fields are a safe subset of columns (never id or sensitive)", () => {
+    const cols = new Set(fields(EMPLOYEE_PROFILE_TABLE));
+    const editable = EMPLOYEE_PROFILE_TABLE.editableFields ?? [];
+    expect(editable.length).toBeGreaterThan(0);
+    for (const f of editable) expect(cols.has(f)).toBe(true);
+    expect(editable).not.toContain(EMPLOYEE_PROFILE_TABLE.idField);
+    for (const f of ["compensation", "nationalId", "dateOfBirth", "bankDetails", "endDate", "userId"]) {
+      expect(editable).not.toContain(f);
+    }
+  });
+
+  it("EMPLOYEE status is not cell-editable — it is a governed lifecycle transition", () => {
+    expect(EMPLOYEE_PROFILE_TABLE.editableFields).not.toContain("status");
+    // ...but it is still readable/groupable, which is what the board view needs.
+    expect(fields(EMPLOYEE_PROFILE_TABLE)).toContain("status");
   });
 });

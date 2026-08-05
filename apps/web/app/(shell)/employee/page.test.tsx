@@ -64,6 +64,7 @@ vi.mock("@/lib/workforce-data", () => ({
   getEmployeeDirectoryRows: vi.fn(),
   getWorkforceReferenceData: vi.fn(),
   getEmployeeProfileByUserId: vi.fn(),
+  getEmployeeProfileById: vi.fn(),
   getEmployeeLifecycleEvents: vi.fn(),
 }));
 
@@ -135,7 +136,7 @@ import { prisma } from "@dpf/db";
 import {
   getEmployeeDirectoryRows,
   getEmployeeLifecycleEvents,
-  getEmployeeProfileByUserId,
+  getEmployeeProfileById,
   getWorkforceReferenceData,
 } from "@/lib/workforce-data";
 import { EmployeeDirectoryPanel } from "@/components/employee/EmployeeDirectoryPanel";
@@ -206,7 +207,7 @@ beforeEach(() => {
     departments: [{ id: "dept-people", departmentId: "DEPT-001", name: "People Operations", parentDepartmentId: null }],
   });
 
-  vi.mocked(getEmployeeProfileByUserId).mockResolvedValue({
+  vi.mocked(getEmployeeProfileById).mockResolvedValue({
     id: "emp-db-1",
     employeeId: "EMP-001",
     userId: "user-1",
@@ -222,10 +223,12 @@ beforeEach(() => {
     status: "active",
     departmentId: "dept-people",
     departmentName: "People Operations",
+    employmentTypeId: "et-permanent",
     positionId: "pos-hr-manager",
     positionTitle: "HR Manager",
     managerEmployeeId: "emp-db-2",
     managerName: "Grace Hopper",
+    dottedLineManagerId: null,
     workLocationId: "loc-remote",
     workLocationName: "Remote",
     timezone: "America/Chicago",
@@ -299,10 +302,12 @@ describe("EmployeeProfilePanel", () => {
           status: "active",
           departmentId: "dept-people",
           departmentName: "People Operations",
+          employmentTypeId: "et-permanent",
           positionId: "pos-hr-manager",
           positionTitle: "HR Manager",
           managerEmployeeId: "emp-db-2",
           managerName: "Grace Hopper",
+          dottedLineManagerId: null,
           workLocationId: "loc-remote",
           workLocationName: "Remote",
           timezone: "America/Chicago",

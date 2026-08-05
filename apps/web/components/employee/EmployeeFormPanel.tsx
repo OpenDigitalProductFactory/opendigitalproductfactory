@@ -70,6 +70,14 @@ function formFromEmployee(emp: EmployeeProfileRecord): EmployeeProfileInput {
   return {
     employeeProfileId: emp.id,
     employeeId: emp.employeeId,
+    // Carried explicitly so a save cannot drop them. The action applies PATCH
+    // semantics, but the form should still round-trip what it displays.
+    userId: emp.userId,
+    middleName: emp.middleName,
+    timezone: emp.timezone,
+    confirmationDate: emp.confirmationDate,
+    endDate: emp.endDate,
+    dottedLineManagerId: emp.dottedLineManagerId,
     firstName: emp.firstName,
     lastName: emp.lastName,
     displayName: emp.displayName,
@@ -81,7 +89,7 @@ function formFromEmployee(emp: EmployeeProfileRecord): EmployeeProfileInput {
     status: emp.status,
     departmentId: emp.departmentId,
     positionId: emp.positionId,
-    employmentTypeId: null, // not on EmployeeProfileRecord; keep current
+    employmentTypeId: emp.employmentTypeId,
     workLocationId: emp.workLocationId,
     managerEmployeeId: emp.managerEmployeeId,
     startDate: emp.startDate,

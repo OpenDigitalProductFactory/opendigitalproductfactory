@@ -277,42 +277,75 @@ export async function updateEmployeeProfile(input: EmployeeProfileInput): Promis
     ...(input.employeeProfileId ? { objectRef: input.employeeProfileId } : {}),
     run: async () => {
       const employeeProfileId = trimRequired(input.employeeProfileId ?? "");
-      const userId = trimOptional(input.userId);
+
+      // PATCH semantics, not replace (BI-00CB9CCC). Every optional field used to be
+      // written with a blanket `trimOptional(input.x)`, so any field the caller did
+      // not mention was silently wiped — including `userId`, which would unlink the
+      // person's login account. That was latent while the edit form was unreachable;
+      // making it reachable makes it destructive. `patchOptional` is the helper
+      // BI-HCM-004 already added for exactly this failure: absent key -> keep
+      // current, explicit null/"" -> clear.
+      const current = await prisma.employeeProfile.findUnique({
+        where: { id: employeeProfileId },
+        select: {
+          id: true,
+          userId: true,
+          middleName: true,
+          workEmail: true,
+          personalEmail: true,
+          phoneWork: true,
+          phoneMobile: true,
+          phoneEmergency: true,
+          employmentTypeId: true,
+          departmentId: true,
+          positionId: true,
+          managerEmployeeId: true,
+          dottedLineManagerId: true,
+          workLocationId: true,
+          timezone: true,
+          startDate: true,
+          confirmationDate: true,
+          endDate: true,
+        },
+      });
+      if (!current) return workforceDenied("Employee profile not found.");
+
+      const userId = patchOptional(input, "userId", current.userId);
       const linkageError = await ensureUserLinkIsAvailable(userId, employeeProfileId);
       if (linkageError) return workforceDenied(linkageError);
 
-      const existing = await prisma.employeeProfile.findUnique({
-        where: { id: employeeProfileId },
-        select: { id: true },
-      });
-      if (!existing) return workforceDenied("Employee profile not found.");
+      const middleName = patchOptional(input, "middleName", current.middleName);
+      /** Dates follow the same rule: an absent key keeps what is stored. */
+      function patchDate(key: "startDate" | "confirmationDate" | "endDate", stored: Date | null) {
+        return key in input && input[key] !== undefined ? (input[key] ?? null) : stored;
+      }
 
-      const displayName = buildDisplayName(input);
+      const displayName = buildDisplayName({ ...input, middleName });
       await prisma.employeeProfile.update({
         where: { id: employeeProfileId },
         data: {
           employeeId: trimRequired(input.employeeId),
           userId,
           firstName: trimRequired(input.firstName),
-          middleName: trimOptional(input.middleName),
+          middleName,
           lastName: trimRequired(input.lastName),
           displayName,
-          workEmail: trimOptional(input.workEmail),
-          personalEmail: trimOptional(input.personalEmail),
-          phoneWork: trimOptional(input.phoneWork),
-          phoneMobile: trimOptional(input.phoneMobile),
-          phoneEmergency: trimOptional(input.phoneEmergency),
+          workEmail: patchOptional(input, "workEmail", current.workEmail),
+          personalEmail: patchOptional(input, "personalEmail", current.personalEmail),
+          phoneWork: patchOptional(input, "phoneWork", current.phoneWork),
+          phoneMobile: patchOptional(input, "phoneMobile", current.phoneMobile),
+          phoneEmergency: patchOptional(input, "phoneEmergency", current.phoneEmergency),
           status: input.status,
-          employmentTypeId: trimOptional(input.employmentTypeId),
-          departmentId: trimOptional(input.departmentId),
-          positionId: trimOptional(input.positionId),
-          managerEmployeeId: trimOptional(input.managerEmployeeId),
-          dottedLineManagerId: trimOptional(input.dottedLineManagerId),
-          workLocationId: trimOptional(input.workLocationId),
-          timezone: trimOptional(input.timezone),
-          startDate: input.startDate ?? null,
-          confirmationDate: input.confirmationDate ?? null,
-          endDate: input.endDate ?? null,
+          employmentTypeId: patchOptional(input, "employmentTypeId", current.employmentTypeId),
+          departmentId: patchOptional(input, "departmentId", current.departmentId),
+          positionId: patchOptional(input, "positionId", current.positionId),
+          managerEmployeeId: patchOptional(input, "managerEmployeeId", current.managerEmployeeId),
+          dottedLineManagerId: patchOptional(input, "dottedLineManagerId", current.dottedLineManagerId),
+          workLocationId: patchOptional(input, "workLocationId", current.workLocationId),
+          timezone: patchOptional(input, "timezone", current.timezone),
+          startDate: patchDate("startDate", current.startDate),
+          confirmationDate: patchDate("confirmationDate", current.confirmationDate),
+          endDate: patchDate("endDate", current.endDate),
         },
       });
 
@@ -668,6 +701,64 @@ export async function setEmployeeCompensation(
 
       revalidatePath("/employee");
       return { ok: true, message: `Pay updated for ${employee.displayName}.` };
+    },
+  });
+}
+
+/**
+ * Apply a People-grid inline cell edit (BI-00CB9CCC).
+ *
+ * The generic grid adapter's default write tier goes straight to Prisma. For an
+ * HR record that is not acceptable: every other employee-profile write is wrapped
+ * in `withGovernedWorkforceAction`, which writes an AuthorizationDecisionLog. A raw
+ * adapter write would edit people's records with no audit trail at all. So the
+ * People grid writes through here instead, and inherits the same capability check,
+ * governance resolution, and audit entry as the form.
+ *
+ * Keyed by the semantic `employeeId` because that is the grid's rowId.
+ */
+const GRID_EDITABLE_EMPLOYEE_FIELDS = new Set([
+  "displayName",
+  "workEmail",
+  "timezone",
+  "startDate",
+]);
+
+export async function applyEmployeeProfileGridEdit(
+  employeeId: string,
+  changes: Record<string, unknown>,
+): Promise<WorkforceActionResult> {
+  const trimmedId = trimRequired(employeeId);
+  if (!trimmedId) return workforceDenied("Employee is required.");
+
+  // Re-assert the allow-list server-side. The adapter already filtered, but this
+  // path must fail closed on its own — it is a governed write, not a helper.
+  const entries = Object.entries(changes);
+  if (entries.length === 0) return workforceDenied("No changes supplied.");
+  for (const [field] of entries) {
+    if (!GRID_EDITABLE_EMPLOYEE_FIELDS.has(field)) {
+      return workforceDenied(`Field "${field}" cannot be edited from the grid.`);
+    }
+  }
+
+  return withGovernedWorkforceAction({
+    actionKey: "employee_profile.grid_edit",
+    riskBand: "medium",
+    objectRef: trimmedId,
+    run: async () => {
+      const existing = await prisma.employeeProfile.findUnique({
+        where: { employeeId: trimmedId },
+        select: { id: true },
+      });
+      if (!existing) return workforceDenied("Employee profile not found.");
+
+      await prisma.employeeProfile.update({
+        where: { employeeId: trimmedId },
+        data: changes as Prisma.EmployeeProfileUpdateInput,
+      });
+
+      revalidatePath("/employee");
+      return { ok: true, message: "Employee updated." };
     },
   });
 }
