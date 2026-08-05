@@ -41,9 +41,27 @@ test("Production Build is bounded and identifies timed-out evidence", () => {
   assert.match(block, /\n\s{4}timeout-minutes:\s*45\s*\n/);
   assert.match(buildStep, /production-build.*run=\$\{\{ github\.run_id \}\}/);
   assert.match(buildStep, /tree=\$\{\{ github\.sha \}\}/);
-  assert.match(buildStep, /timeout=45m/);
+  assert.match(buildStep, /timeout=15m\/step 45m\/job/);
   // Turbopack FS cache only on pull_request — merge_group must not hard-pin "1".
   assert.match(buildStep, /DPF_TURBOPACK_BUILD_CACHE:\s*\$\{\{\s*github\.event_name\s*==\s*'pull_request'/);
   assert.match(buildStep, /pnpm --filter web build/);
   assert.doesNotMatch(buildStep, /continue-on-error:\s*true/);
+});
+
+test("the production compile fails fast on its own step timeout (BI-F75AADB7)", () => {
+  // Without a STEP bound a hung compile runs to the 45m job cap and the job ends
+  // `cancelled`, not `failure`. Measured on #3984 job 92139777135: ~53 minutes in
+  // this single step, and `gh run view --job <id> --log` returns "log not found"
+  // for a cancelled job — so the occurrence costs ~55 minutes of hosted-runner
+  // time AND leaves nothing to diagnose. The inner bound makes it a real failure
+  // with a retained log; the 45m job cap stays as the outer backstop.
+  const buildStep = stepBlock("Build web (Next.js production)");
+  const stepTimeout = /\n\s{8}timeout-minutes:\s*(\d+)\s*\n/.exec(buildStep);
+
+  assert.ok(stepTimeout, "Build web (Next.js production) must carry a step-level timeout-minutes");
+  const minutes = Number(stepTimeout[1]);
+  // Healthy PR builds run 3-4m against a documented 8-10m expectation. Below that
+  // ceiling the bound would fail honest cold compiles; far above it, it stops
+  // being fail-fast and the job cap does the work again.
+  assert.ok(minutes >= 12 && minutes < 45, `step timeout ${minutes}m must sit between the healthy ceiling and the 45m job cap`);
 });
