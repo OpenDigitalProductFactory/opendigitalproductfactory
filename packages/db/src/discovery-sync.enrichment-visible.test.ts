@@ -22,9 +22,16 @@ import { evaluateInventoryQuality } from "./discovery-attribution";
 // inngest). The reconcile shipped in #3873 correctly declined to close them:
 // from the detector's blinded view they were still warranted.
 
-/** A service entity with NO package-manager evidence — the live shape. */
+/** A service entity with NO package-manager evidence — the live shape.
+ *
+ * Keyed as MANAGED estate. The live row this was drawn from is
+ * `service:prom:redis:redis-exporter:9121`, but `prom:` is now classified
+ * `observed` for identity/lifecycle as well as staleness (BI-A3D12F85), so that
+ * key would be suppressed before the enrichment-visibility logic under test was
+ * ever reached — the assertions would pass for the wrong reason. The property
+ * shape, which is what drives `deriveInventoryEnrichment`, is unchanged. */
 const SERVICE_WITH_NO_SOFTWARE_EVIDENCE = {
-  entityKey: "service:prom:redis:redis-exporter:9121",
+  entityKey: "organization:internal:service:app:redis-exporter",
   entityType: "service",
   name: "redis-exporter",
   properties: { job: "redis", vendor: "Redis" },
@@ -99,8 +106,14 @@ describe("quality evaluation sees the enrichment the row was given", () => {
   });
 
   it("keeps raising identity when enrichment ALSO cannot determine a manufacturer", () => {
-    // A bare ARP neighbour: no vendor property, no name hint, no evidence. The
-    // fix must not paper over genuinely unidentifiable estate.
+    // Managed estate with nothing to go on: no vendor property, no name hint, no
+    // evidence. The fix must not paper over genuinely unidentifiable estate.
+    //
+    // This was originally an ARP neighbour. Identity is now asked only of the
+    // managed estate (BI-A3D12F85) — for an ARP host the correct outcome is
+    // suppression, which is asserted in discovery-attribution.reconcile.test.ts.
+    // Keeping an `arp:` key here would have made this test pass for the opposite
+    // reason to the one it was written for.
     const evidenceSnapshot = deriveInventoryEvidenceSnapshot([]);
     const enriched = deriveInventoryEnrichment({
       entityType: "host",
@@ -116,7 +129,7 @@ describe("quality evaluation sees the enrichment the row was given", () => {
 
     const { issues } = evaluateInventoryQuality([
       {
-        entityKey: "organization:internal:host:arp:192.168.0.184",
+        entityKey: "organization:internal:host:host:linux:196ab12522a9d6ca",
         entityType: "host",
         attributionStatus: "attributed" as const,
         attributionConfidence: 0.9,

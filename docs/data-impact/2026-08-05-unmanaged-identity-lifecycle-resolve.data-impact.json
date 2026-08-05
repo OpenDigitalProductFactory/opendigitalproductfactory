@@ -1,0 +1,41 @@
+{
+  "version": "1",
+  "accountableOwner": "data-steward",
+  "affectedCopies": [
+    "PortfolioQualityIssue rows (open catalog_match_ambiguous / lifecycle_unverified for merely-observed estate, Docker-origin subjects, and subjects whose entity no longer exists)",
+    "Prisma-to-EA current-state data-model mirror"
+  ],
+  "migration": {
+    "name": "20260805030000_resolve_unmanaged_identity_lifecycle_issues",
+    "backfill": "status flip only — no row is created or deleted, no id, scope FK, summary, or detection timestamp is changed. Three predicates set open->resolved with resolvedAt=NOW() on catalog_match_ambiguous / lifecycle_unverified rows: (1) issueKey carries a positional observed token (arp:, arp-host:, unifi-client:, prom:, prom-target:), matching hasObservedToken() in estate-observation-class.ts; (2) issueKey carries a positional container: segment, clearing rows stranded when the Docker suppression `continue`d without resolving; (3) inventoryEntityId is NULL or dangling, which no reconcile path can reach because reconciliation resolves by issueKey derived from entities present in a sweep. Managed estate with a genuine identity or lifecycle gap is deliberately left OPEN because it is real operator signal. Tokens match positionally so managed names containing the letters (promotions-engine, sharp-imaging) are never matched. Non-destructive and idempotent: already-resolved rows are not re-selected."
+  },
+  "tests": [
+    "packages/db/src/discovery-attribution.test.ts",
+    "packages/db/src/discovery-attribution.reconcile.test.ts",
+    "packages/db/src/discovery-sync.persisted-identity.test.ts",
+    "packages/db/src/estate-observation-class.test.ts"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:portfolio-quality-issue#unmanaged-identity-lifecycle-resolve",
+      "prismaModel": "PortfolioQualityIssue",
+      "lifecycleDisposition": "no lifecycle change to the underlying InventoryEntity or any operator-facing record: only the derived quality-issue status transitions open->resolved for issues describing merely-observed estate, Docker-origin subjects, or subjects whose entity row is gone. firstDetectedAt, lastDetectedAt, scope FKs, and summary are preserved; rows remain for audit.",
+      "fields": [
+        {
+          "fieldId": "data:portfolio-quality-issue#status",
+          "resolution": "governed",
+          "reason": "resolve identity/lifecycle issues that no operator action can close, and scope both types to the managed estate exactly as stale_entity was scoped in 20260723020000; going forward evaluateInventoryQuality gates both on classifyEntityObservation(...) === 'managed'",
+          "provenance": "measured on the live install by EXECUTING the detector (deriveInventoryEvidenceSnapshot -> persisted-first merge -> evaluateInventoryQuality) over all 341 open rows joined to an entity, not by querying stored columns — the method that produced three wrong magnitude predictions earlier in BI-A3D12F85. MAC OUI enrichment resolved 65 of 65 burned-in MACs to a vendor and 0 of 119 locally-administered (randomised) MACs; all 101 ARP hosts swept on 2026-08-05 carry randomised MACs, which have no OUI and therefore no vendor, catalog identity or support lifecycle by construction. Of 389 open rows of these two types: 180 are observed-estate, 19 are Docker-origin strays, 48 have a NULL or dangling entity FK, and 21 describe genuinely managed gear (4 UniFi APs, 1 gateway, 1 switch, 1 linux host, the docker socket, 3 NICs, 2 subnets) and are left OPEN.",
+          "operatorDecision": "Operator signed off 2026-08-05 on scoping emission to the managed estate (BI-A3D12F85 option B) together with re-enabling the arp_scan discovery connection for topology and presence coverage."
+        },
+        {
+          "fieldId": "data:portfolio-quality-issue#resolvedAt",
+          "resolution": "governed",
+          "reason": "stamp the resolution time for the audit trail on the same open->resolved transition",
+          "provenance": "set to NOW() only on rows matching the three predicates above; managed-estate rows with a live entity are untouched"
+        }
+      ]
+    }
+  ]
+}
