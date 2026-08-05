@@ -23,8 +23,16 @@
 // /architecture/platform-overview/ — a published page whose entire "three data
 // layers" section described Neo4j — went unflagged. `docs/architecture/**` is
 // as customer-visible as `docs/user-guide/**`; the site publishes both.
-// Widening is safe because edges are OPT-IN: a page contributes nothing until
-// it declares `relatedCode:` / `relatedRoutes:`.
+// Widening was safe because frontmatter edges are OPT-IN: a page contributed
+// nothing until it declared `relatedCode:` / `relatedRoutes:`.
+//
+// EDGE SOURCE 3 closes that opt-in gap. Frontmatter protects only pages someone
+// remembered to annotate, which is not the population that goes stale. A
+// markdown link from a doc INTO a source file is an edge the author already
+// wrote, so it is derived rather than declared — no annotation, no second place
+// to keep in sync. Measured on this corpus: 27 declared code edges -> 155, with
+// a maximum fan-out of 4 docs per file, so coverage rises without the gate
+// becoming noise.
 //
 //   node scripts/gen-doc-impact.mjs           # write the manifest
 //   node scripts/gen-doc-impact.mjs --check    # fail if stale, or edges are invalid
@@ -79,6 +87,48 @@ function addEdge(map, key, val) {
   if (!map[key].includes(val)) map[key].push(val);
 }
 
+// ─── Derived doc → code edges ────────────────────────────────────────────────
+// The link/fence patterns are kept deliberately identical to
+// scripts/check-doc-reference-integrity.mjs, which already parses these links to
+// validate them. Same corpus, same syntax, same nesting rule for Next.js route
+// groups — if one gate can see a reference, so should the other.
+
+/** Inline markdown links and images, allowing ONE level of nested parens so
+ *  `apps/web/app/(shell)/…` is captured whole rather than truncated at the "(". */
+const LINK_RE = /!?\[[^\]]*\]\(\s*((?:[^()\s]|\([^()]*\))+)(?:\s+"[^"]*")?\s*\)/g;
+/** Fenced blocks hold EXAMPLE links; stripped before extraction. */
+const FENCE_RE = /^([`~]{3,})[^\n]*\n[\s\S]*?^\1[^\n]*$/gm;
+const isExternalHref = (h) => /^(https?:|mailto:|tel:|data:|#)/i.test(h);
+
+/** Source-ish extensions. `.md` is excluded on purpose: a doc linking a doc is a
+ *  documentation-graph concern, not a code-change blast radius. */
+const CODE_EXT_RE = /\.(ts|tsx|mts|mjs|js|jsx|prisma|sql|ya?ml|sh|ps1|json|toml)$/i;
+
+/**
+ * Repo-relative source files that `markdown` links to, resolved relative to the
+ * doc's own directory.
+ *
+ * Silently skips links that do not resolve or escape the repo — a dead reference
+ * is the Doc Reference Integrity gate's finding to report, and duplicating it
+ * here would give the same defect two owners and two error messages.
+ *
+ * @returns {string[]} sorted, de-duplicated repo-relative POSIX paths
+ */
+export function linkedCodePaths(markdown, docPath, repoRoot) {
+  const body = markdown.replace(FENCE_RE, "");
+  const out = new Set();
+  for (const m of body.matchAll(LINK_RE)) {
+    const href = m[1].split("#")[0].trim();
+    if (!href || isExternalHref(href) || !CODE_EXT_RE.test(href)) continue;
+    const abs = path.resolve(path.dirname(path.join(repoRoot, docPath)), href);
+    const rel = path.relative(repoRoot, abs).split(path.sep).join("/");
+    if (rel.startsWith("..") || path.isAbsolute(rel)) continue;
+    if (!fs.existsSync(abs) || !fs.statSync(abs).isFile()) continue;
+    out.add(rel);
+  }
+  return [...out].sort();
+}
+
 export function buildManifest() {
   const entries = parseRouteMap(fs.readFileSync(ROUTE_MAP_TS, "utf-8"));
   const routeToDocs = {};
@@ -105,6 +155,17 @@ export function buildManifest() {
     for (const code of frontmatterList(raw, "relatedCode")) {
       const abs = path.join(REPO_ROOT, code);
       if (!fs.existsSync(abs)) problems.push(`${sourcePath}: relatedCode "${code}" does not exist`);
+      addEdge(codeToDocs, code, sourcePath);
+      addEdge(docToCode, sourcePath, code);
+    }
+
+    // 3. DERIVED edges: source files the page already links to. Declared
+    //    `relatedCode:` edges are opt-in, so they protect only pages somebody
+    //    remembered to annotate — the same "someone must remember" failure the
+    //    graph exists to remove. A markdown link from a doc INTO a source file
+    //    is an edge the author already wrote; deriving it needs no annotation
+    //    and no second place to keep in sync.
+    for (const code of linkedCodePaths(raw, sourcePath, REPO_ROOT)) {
       addEdge(codeToDocs, code, sourcePath);
       addEdge(docToCode, sourcePath, code);
     }
