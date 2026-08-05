@@ -193,7 +193,15 @@ describe("ingestBacklogItem", () => {
       { store, indexKnowledge: () => {} },
     );
 
-    expect(result).toEqual({ itemId: "BI-IMP-EXISTING", id: "cuid-existing", created: false });
+    // implementationCandidates is always present (BI-1A1EC5EC) and empty on the
+    // dedup path: a recurrence of a known origin was already advised when the
+    // item was first filed.
+    expect(result).toEqual({
+      itemId: "BI-IMP-EXISTING",
+      id: "cuid-existing",
+      created: false,
+      implementationCandidates: [],
+    });
     expect(created).toHaveLength(0);
     expect(activities).toHaveLength(1);
     expect(activities[0]).toMatchObject({
@@ -276,5 +284,93 @@ describe("ingestBacklogItem", () => {
       ),
     ).rejects.toThrow(/triageOutcome is required/);
     expect(created).toHaveLength(0);
+  });
+
+  // ─── Implementation scan at filing time (BI-1A1EC5EC) ──────────────────────
+  describe("implementation scan", () => {
+    const REPO = ["scripts/build-docs-staleness.mjs", "apps/web/lib/finance/po-match.ts"];
+
+    it("returns candidates and records them as an activity row", async () => {
+      const { store, activities } = makeStore();
+
+      const result = await ingestBacklogItem(
+        {
+          title: "Detect semantic doc staleness",
+          workType: "feature",
+          source: "user-request",
+        },
+        { store, indexKnowledge: () => {}, listRepoFiles: async () => REPO },
+      );
+
+      expect(result.implementationCandidates.map((c) => c.path)).toEqual([
+        "scripts/build-docs-staleness.mjs",
+      ]);
+      // The advice must OUTLIVE the tool response. The failure being fixed is a
+      // check whose output vanished when the call returned.
+      const advisory = activities.find(
+        (a) => (a.payload as { createdBy?: string } | undefined)?.createdBy === "implementation-scan",
+      );
+      expect(advisory).toBeDefined();
+      expect(advisory?.summary).toContain("scripts/build-docs-staleness.mjs");
+    });
+
+    it("still files the item — the scan is advisory, never a block", async () => {
+      const { store, created } = makeStore();
+
+      const result = await ingestBacklogItem(
+        { title: "Detect semantic doc staleness", workType: "feature", source: "user-request" },
+        { store, indexKnowledge: () => {}, listRepoFiles: async () => REPO },
+      );
+
+      expect(result.created).toBe(true);
+      expect(created).toHaveLength(1);
+    });
+
+    it("files normally when the inventory is unavailable", async () => {
+      // A customer install ships no source checkout. Filing must not depend on it.
+      const { store, created } = makeStore();
+
+      const result = await ingestBacklogItem(
+        { title: "Detect semantic doc staleness", workType: "feature", source: "user-request" },
+        { store, indexKnowledge: () => {}, listRepoFiles: async () => [] },
+      );
+
+      expect(result.implementationCandidates).toEqual([]);
+      expect(created).toHaveLength(1);
+    });
+
+    it("swallows a scan failure rather than failing the filing", async () => {
+      const { store, created } = makeStore();
+
+      const result = await ingestBacklogItem(
+        { title: "Detect semantic doc staleness", workType: "feature", source: "user-request" },
+        {
+          store,
+          indexKnowledge: () => {},
+          listRepoFiles: async () => {
+            throw new Error("disk gone");
+          },
+        },
+      );
+
+      expect(result.created).toBe(true);
+      expect(result.implementationCandidates).toEqual([]);
+      expect(created).toHaveLength(1);
+    });
+
+    it("writes no advisory row when nothing matches", async () => {
+      const { store, activities } = makeStore();
+
+      await ingestBacklogItem(
+        { title: "Add a payroll remittance ledger", workType: "feature", source: "user-request" },
+        { store, indexKnowledge: () => {}, listRepoFiles: async () => REPO },
+      );
+
+      expect(
+        activities.filter(
+          (a) => (a.payload as { createdBy?: string } | undefined)?.createdBy === "implementation-scan",
+        ),
+      ).toHaveLength(0);
+    });
   });
 });

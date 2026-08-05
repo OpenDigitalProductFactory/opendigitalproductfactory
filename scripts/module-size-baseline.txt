@@ -11,7 +11,7 @@ apps/web/components/ops/SelfUpgradeClient.tsx	1124
 apps/web/components/platform/EffectivePermissionsPanel.tsx	844
 apps/web/components/platform/edge-nodes/EdgeNodesAdminClient.tsx	985
 apps/web/components/storefront/SlotBookingFlow.tsx	1015
-apps/web/components/workbooks/Grid.tsx	1845
+apps/web/components/workbooks/Grid.tsx	1830
 apps/web/instrumentation.test.ts	945
 apps/web/instrumentation.ts	1524
 apps/web/lib/actions/agent-coworker-external.test.ts	867
@@ -21,7 +21,7 @@ apps/web/lib/actions/ai-providers.ts	914
 apps/web/lib/actions/build-governed.test.ts	1149
 apps/web/lib/actions/build.ts	1744
 apps/web/lib/actions/compliance.ts	867
-apps/web/lib/actions/crm.ts	1090
+apps/web/lib/actions/crm.ts	1062
 apps/web/lib/actions/ea.ts	918
 apps/web/lib/actions/mcp-tokens.test.ts	1254
 apps/web/lib/actions/platform-dev-config.ts	1254
@@ -41,7 +41,7 @@ apps/web/lib/integrate/sandbox/build-branch.ts	949
 apps/web/lib/marketing.ts	1369
 apps/web/lib/mcp-tools-backlog.test.ts	874
 apps/web/lib/mcp-tools.ts	1947
-apps/web/lib/mcp/packs/backlog-pack.ts	855
+apps/web/lib/mcp/packs/backlog-pack.ts	858
 apps/web/lib/mcp/packs/contribution-hive-pack.ts	854
 apps/web/lib/mcp/packs/sandbox-pack.ts	920
 apps/web/lib/navigation/portal-navigation-model.ts	933
