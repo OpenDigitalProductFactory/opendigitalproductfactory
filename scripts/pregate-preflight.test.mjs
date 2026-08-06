@@ -17,8 +17,10 @@ import {
   PREFLIGHT_SKIP_ENV,
   buildPreflightPlan,
   isEnvironmentFailureOutput,
+  isRunnerFailureResult,
   runPreflight,
 } from "./lib/pregate-preflight.mjs";
+import { RUNNER_FAILURE_EXIT_CODE } from "./check-guards.mjs";
 import { loadPinnedGuardTypeScript } from "./lib/load-pinned-guard-typescript.mjs";
 import { shouldRunPreflight } from "./pregate.mjs";
 
@@ -204,6 +206,88 @@ test("wrong-graph guard runtime resolution carries the same stable environment s
   });
   assert.match(output, /GuardRuntimeEnvironmentError/);
   assert.ok(isEnvironmentFailureOutput(output));
+});
+
+test("runPreflight reclassifies a killed spawn as runner_failed, not a violation (BI-AA2EE621)", async () => {
+  // The executor signals a spawn the host killed/refused via runnerFailure.
+  const result = await runPreflight({
+    plan: PLAN.filter((entry) => entry.id === "clean" || entry.id === "violating"),
+    execute: (command, args) => {
+      const script = args[args.length - 1];
+      if (script.includes("violating")) return { exitCode: 1, output: "", runnerFailure: true };
+      return { exitCode: 0, output: "", runnerFailure: false };
+    },
+    env: {},
+  });
+  // A host that could not run a guard must not hard-fail the preflight...
+  assert.equal(result.ok, true);
+  const entry = result.entries.find((e) => e.id === "violating");
+  // ...and must be distinguishable from both a real violation and an env skip.
+  assert.equal(entry.status, "runner_failed");
+});
+
+test("runPreflight reclassifies the guard-loop runner's reserved exit code as runner_failed", async () => {
+  // defaultExecute maps check-guards' RUNNER_FAILURE_EXIT_CODE to runnerFailure;
+  // this simulates that executor output for the guard-loop command.
+  const result = await runPreflight({
+    plan: PLAN.filter((entry) => entry.id === "clean" || entry.id === "violating"),
+    execute: (command, args) => {
+      const script = args[args.length - 1];
+      if (script.includes("violating")) {
+        return { exitCode: RUNNER_FAILURE_EXIT_CODE, output: "could not RUN 1/24 guard(s)", runnerFailure: true };
+      }
+      return { exitCode: 0, output: "", runnerFailure: false };
+    },
+    env: {},
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.entries.find((e) => e.id === "violating").status, "runner_failed");
+});
+
+test("a genuine violation is still failed even though the runner path exists", async () => {
+  const result = await runPreflight({ plan: PLAN, execute: fakeExecute, env: {} });
+  assert.equal(result.ok, false);
+  assert.equal(result.entries.find((e) => e.id === "violating").status, "failed");
+});
+
+test("REGRESSION (BI-AA2EE621): exit 1 whose output mentions a killed sub-guard stays a violation", async () => {
+  // The dangerous case: check-guards found a REAL violation (exit 1) while a
+  // DIFFERENT sub-guard was evicted, so its output contains both blocks. Keying
+  // on output text would downgrade this to a warning and let a doomed tree pass.
+  const result = await runPreflight({
+    plan: PLAN.filter((entry) => entry.id === "clean" || entry.id === "violating"),
+    execute: (command, args) => {
+      const script = args[args.length - 1];
+      if (script.includes("violating")) {
+        return {
+          exitCode: 1,
+          output:
+            "1/24 guard(s) FAILED (found violations)\n" +
+            "could not RUN 1/24 guard(s) — RUNNER failures — killed by SIGKILL",
+          runnerFailure: false,
+        };
+      }
+      return { exitCode: 0, output: "", runnerFailure: false };
+    },
+    env: {},
+  });
+  assert.equal(result.ok, false, "a real violation must hard-fail even when a sibling spawn was killed");
+  assert.equal(result.entries.find((e) => e.id === "violating").status, "failed");
+});
+
+test("isRunnerFailureResult keys on exit code and spawn signals, never on guard output", () => {
+  // Killed / refused spawns → runner, for any command.
+  assert.ok(isRunnerFailureResult({ args: ["scripts/check-module-size.mjs"], status: null, error: null }));
+  assert.ok(isRunnerFailureResult({ args: ["scripts/x.mjs"], error: Object.assign(new Error("spawn ENOMEM"), { code: "ENOMEM" }) }));
+  // The guard-loop runner's reserved runner code → runner.
+  assert.ok(isRunnerFailureResult({ args: ["scripts/check-guards.mjs"], status: RUNNER_FAILURE_EXIT_CODE }));
+  // The SAME reserved code from a DIFFERENT command is NOT a runner failure.
+  assert.ok(!isRunnerFailureResult({ args: ["scripts/check-module-size.mjs"], status: RUNNER_FAILURE_EXIT_CODE }));
+  // A real violation (exit 1) is NEVER a runner failure — the load-bearing property.
+  assert.ok(!isRunnerFailureResult({ args: ["scripts/check-guards.mjs"], status: 1 }));
+  assert.ok(!isRunnerFailureResult({ args: ["scripts/check-module-size.mjs"], status: 1 }));
+  // Clean is not a runner failure.
+  assert.ok(!isRunnerFailureResult({ args: ["scripts/check-guards.mjs"], status: 0 }));
 });
 
 test("runPreflight honors the recorded emergency skip", async () => {

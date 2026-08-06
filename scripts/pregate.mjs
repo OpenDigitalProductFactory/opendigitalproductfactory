@@ -501,8 +501,15 @@ async function main() {
         process.stderr.write(String(preflight.stdout || ""));
         process.stderr.write(String(preflight.stderr || ""));
       }
+      // BI-AA2EE621: the preflight process itself being killed or failing to
+      // spawn (taskkill /T during an eviction leaves status === null) is a
+      // runner failure, not a deterministic guard violation — say so, or the
+      // reader audits an innocent guard the loop never even reported on.
+      const preflightKilled = Boolean(preflight.error) || preflight.status === null;
       process.stderr.write(
-        "pregate: guard parity preflight failed — fix the deterministic guard failures above before the sandbox gate runs (no lease was claimed).\n",
+        preflightKilled
+          ? "pregate: guard parity preflight could not RUN on this host (killed or failed to spawn — host under pressure, not a guard violation) — retry on a quieter host (no lease was claimed).\n"
+          : "pregate: guard parity preflight failed — fix the deterministic guard failures above before the sandbox gate runs (no lease was claimed).\n",
       );
       process.exit(preflight.status ?? 1);
     }

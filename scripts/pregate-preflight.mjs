@@ -67,11 +67,23 @@ export async function main() {
   const environmentSkipped = result.entries.filter(
     (entry) => entry.status === "skipped_environment",
   );
+  const runnerFailed = result.entries.filter(
+    (entry) => entry.status === "runner_failed",
+  );
   const elapsed = ((Date.now() - startedAt) / 1000).toFixed(1);
 
   for (const entry of environmentSkipped) {
     process.stderr.write(
       `[pregate-preflight] WARN ${entry.name} could not run on this host (missing runtime) — CI will still enforce it. Remedy: pnpm install --frozen-lockfile --ignore-scripts --filter @dpf/repo-guard-runtime\n`,
+    );
+  }
+
+  // BI-AA2EE621: a spawn the host killed or refused is NOT a deterministic guard
+  // violation. Report it honestly (host contention, retry) and let CI/the
+  // sandbox enforce — never send the reader to audit an innocent guard.
+  for (const entry of runnerFailed) {
+    process.stderr.write(
+      `[pregate-preflight] WARN ${entry.name} could not RUN on this host (spawn killed or refused — host under pressure, not a guard violation) — retry on a quieter host; CI will still enforce it.\n`,
     );
   }
 
@@ -90,11 +102,13 @@ export async function main() {
     return;
   }
 
+  const caveats = [
+    environmentSkipped.length > 0 ? `${environmentSkipped.length} environment-skipped` : null,
+    runnerFailed.length > 0 ? `${runnerFailed.length} host-could-not-run` : null,
+  ].filter(Boolean);
   process.stdout.write(
     `[pregate-preflight] OK — ${result.entries.length} guards clean in ${elapsed}s` +
-      (environmentSkipped.length > 0
-        ? ` (${environmentSkipped.length} environment-skipped, see warnings)`
-        : "") +
+      (caveats.length > 0 ? ` (${caveats.join(", ")}, see warnings)` : "") +
       "\n",
   );
 }

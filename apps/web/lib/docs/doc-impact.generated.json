@@ -1336,7 +1336,8 @@
       "docs/architecture/enforced-ci-gates.md"
     ],
     "scripts/check-guards.mjs": [
-      "docs/architecture/theme-aware-styling-runbook.md"
+      "docs/architecture/theme-aware-styling-runbook.md",
+      "docs/testing/pre-pr-gate.md"
     ],
     "scripts/check-host-port-range.test.mjs": [
       "docs/operations/local-ci-sandbox-slots.md"
@@ -2532,6 +2533,7 @@
       ".github/workflows/policy-guards-recheck.yml",
       "docker-compose.local-ci.yml",
       "packages/dpf-skill-pack/hooks/pregate-evidence-guard.mjs",
+      "scripts/check-guards.mjs",
       "scripts/check-mobile-jest-pin.mjs",
       "scripts/ci-policy-guards.test.mjs",
       "scripts/gate-worktree.mjs",

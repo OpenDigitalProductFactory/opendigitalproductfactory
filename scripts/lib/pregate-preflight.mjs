@@ -39,6 +39,7 @@ import {
   runPolicyProfile,
 } from "./ci-policy-guards.mjs";
 import { GUARD_RUNTIME_ENVIRONMENT_ERROR_NAME } from "./load-pinned-guard-typescript.mjs";
+import { RUNNER_FAILURE_EXIT_CODE } from "../check-guards.mjs";
 
 export const PREFLIGHT_SKIP_ENV = "DPF_SKIP_PREGATE_PREFLIGHT_REASON";
 
@@ -66,6 +67,23 @@ export function isEnvironmentFailureOutput(output) {
   const text = String(output ?? "");
   return text.includes(`${GUARD_RUNTIME_ENVIRONMENT_ERROR_NAME}:`)
     || ENVIRONMENT_FAILURE_RE.test(text);
+}
+
+// A guard command is a RUNNER failure — "the host could not run the guard", NOT
+// a deterministic tree violation (BI-AA2EE621) — when the host refused or killed
+// its spawn (`error`, or a signal/`taskkill /T` that leaves spawnSync
+// `status: null`), or when the Repo Guard Loop runner itself exits with its
+// reserved runner-failure code. Keyed on the EXIT CODE and spawn signals, never
+// on guard OUTPUT text: a real violation (exit 1) whose output happens to
+// mention a killed sub-guard must never be downgraded to a non-blocking warning.
+// `check-guards.mjs` emits RUNNER_FAILURE_EXIT_CODE only when it found zero
+// violations, so honouring that code (for the guard-loop runner alone) cannot
+// mask a violation; every guard's own contract stays exit 1 = violation.
+export function isRunnerFailureResult({ args = [], status, error } = {}) {
+  if (error) return true;
+  if (status === null || status === undefined) return true;
+  const isGuardLoopRunner = args.some((a) => String(a).includes("check-guards.mjs"));
+  return isGuardLoopRunner && status === RUNNER_FAILURE_EXIT_CODE;
 }
 
 function stripSelfTests(entries) {
@@ -100,14 +118,24 @@ function defaultExecute(command, args) {
   });
   const output = `${result.stdout ?? ""}${result.stderr ?? ""}${result.error?.message ?? ""}`;
   if (result.status !== 0) process.stderr.write(output);
-  return { exitCode: result.status ?? 1, output };
+  // A guard command the host refused to launch, killed by a signal, or the
+  // guard-loop runner's reserved runner-failure exit code — keyed on exit code,
+  // never on output text — so runPreflight never mislabels an evicted spawn as
+  // deterministic, nor downgrades a real violation that merely mentions one.
+  const runnerFailure = isRunnerFailureResult({ args, status: result.status, error: result.error });
+  return { exitCode: result.status ?? 1, output, runnerFailure };
 }
 
 /**
  * Runs the preflight plan. Unlike runPolicyProfile, the executor returns
- * `{ exitCode, output }` so a non-zero exit whose output matches
- * ENVIRONMENT_FAILURE_RE can be reclassified as `skipped_environment` instead
- * of `failed`. `ok` is false only for genuine guard failures.
+ * `{ exitCode, output, runnerFailure }` so a non-zero exit can be reclassified:
+ * output matching ENVIRONMENT_FAILURE_RE becomes `skipped_environment`, and a
+ * spawn the host refused or killed (the `runnerFailure` flag, keyed on exit code
+ * and spawn signals) becomes `runner_failed` (BI-AA2EE621). Both mean "this host
+ * could not run the
+ * guard", so — like the environment skip this file already documents — they
+ * WARN and let CI/the sandbox enforce rather than mislabelling an evicted spawn
+ * as a deterministic violation. `ok` is false only for genuine guard failures.
  */
 export async function runPreflight({
   plan = buildPreflightPlan(),
@@ -125,12 +153,18 @@ export async function runPreflight({
   const result = await runPolicyProfile({
     entries: plan,
     execute: (command, args) => {
-      const { exitCode, output } = execute(command, args);
+      const { exitCode, output, runnerFailure } = execute(command, args);
       if (exitCode !== 0) {
-        wrapped.set(
-          [command, ...args].join(" "),
-          isEnvironmentFailureOutput(output) ? "environment" : "violation",
-        );
+        // Precedence: a stable missing-runtime signal (environment) wins over a
+        // transient host-pressure signal (runner) wins over a real violation.
+        // `runnerFailure` is keyed on exit code / spawn signals, not output
+        // text, so a real violation is never downgraded to a warning.
+        const kind = isEnvironmentFailureOutput(output)
+          ? "environment"
+          : runnerFailure
+            ? "runner"
+            : "violation";
+        wrapped.set([command, ...args].join(" "), kind);
       }
       return exitCode;
     },
@@ -141,9 +175,9 @@ export async function runPreflight({
   const entries = result.entries.map((entry) => {
     if (entry.status !== "failed") return entry;
     const kind = wrapped.get(entry.failedCommand);
-    return kind === "environment"
-      ? { ...entry, status: "skipped_environment" }
-      : entry;
+    if (kind === "environment") return { ...entry, status: "skipped_environment" };
+    if (kind === "runner") return { ...entry, status: "runner_failed" };
+    return entry;
   });
 
   return {

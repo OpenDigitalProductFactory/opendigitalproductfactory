@@ -216,7 +216,16 @@ aborts in well under a minute **before any lease is claimed**, so a doomed run
 never occupies the contended sandbox slot. A guard this host cannot execute
 (missing isolated or workspace runtime) is reported as
 `environment-skipped` with its remedy — a warning, never a false red; CI
-remains the enforcer. Run it standalone with `pnpm run pregate:preflight`
+remains the enforcer. A guard the host *killed or refused to spawn* — an
+OS-refused launch, or a signal/`taskkill /T` during a local-CI eviction, which
+leaves `spawnSync` `status: null` — is reported as a **runner failure**, not a
+guard violation (BI-AA2EE621): a transient host-pressure condition, retried
+before it is believed, warned rather than mislabelled "deterministic", and left
+to CI/the sandbox to enforce. The Repo Guard Loop runner
+(`scripts/check-guards.mjs`) applies the same distinction to its own child
+guards and exits with a dedicated runner-failure code so a killed spawn never
+prints `N/24 guard(s) FAILED` naming an innocent guard that had, in fact, run.
+Run it standalone with `pnpm run pregate:preflight`
 (`--plan` prints the guard plan without running it). Emergency skip:
 `DPF_SKIP_PREGATE_PREFLIGHT_REASON="<why>"` — printed on the gate run, and CI
 still enforces every guard. Routing probes (`--dry-run`) and evidence replays
