@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { prisma } from "@dpf/db";
+import { apiErrorResponse } from "@/lib/api/error";
 import { handleGreenhouseWebhook } from "@/lib/integrate/greenhouse/greenhouse-webhook";
 import { readGreenhouseWebhookSecret } from "@/lib/integrate/greenhouse/import-greenhouse";
 import type { HireLandingClient } from "@/lib/integrate/greenhouse/land-hire";
@@ -14,7 +15,7 @@ export async function POST(req: NextRequest): Promise<Response> {
 
   const secret = await readGreenhouseWebhookSecret();
   if (!secret) {
-    return NextResponse.json({ error: "webhook_secret_missing" }, { status: 503 });
+    return apiErrorResponse("WEBHOOK_SECRET_MISSING", "webhook secret is not configured", 503);
   }
 
   const result = await handleGreenhouseWebhook({
@@ -23,6 +24,11 @@ export async function POST(req: NextRequest): Promise<Response> {
     secret,
     db: prisma as unknown as HireLandingClient,
   });
+
+  if (result.status >= 400) {
+    const code = typeof result.body.error === "string" ? result.body.error : "webhook_error";
+    return apiErrorResponse(code.toUpperCase(), code.replaceAll("_", " "), result.status);
+  }
 
   return NextResponse.json(result.body, { status: result.status });
 }

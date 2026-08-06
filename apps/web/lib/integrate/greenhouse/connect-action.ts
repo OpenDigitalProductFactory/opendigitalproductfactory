@@ -44,74 +44,62 @@ export async function connectGreenhouse(
     ...(input.webhookSecret ? { webhookSecret: input.webhookSecret } : {}),
   });
 
-  try {
-    const check = await verifyHarvestCredential(input.apiToken, deps.fetchImpl);
-
-    if (!check.ok) {
-      const message =
-        check.status === 401 || check.status === 403
-          ? "invalid Harvest API key — check the key and its permissions in Greenhouse"
-          : `Greenhouse Harvest API returned ${check.status}`;
-
-      // Persist the error state so the UI can show it — never store the token or
-      // the raw upstream body.
-      await prisma.integrationCredential.upsert({
-        where: { integrationId: GREENHOUSE_INTEGRATION_ID },
-        create: {
-          integrationId: GREENHOUSE_INTEGRATION_ID,
-          provider: PROVIDER,
-          status: "error",
-          fieldsEnc: encFields,
-          lastErrorAt: new Date(),
-          lastErrorMsg: message,
-        },
-        update: {
-          status: "error",
-          lastErrorAt: new Date(),
-          lastErrorMsg: message,
-        },
-      });
-
-      return { ok: false, status: "error", error: message, statusCode: 400 };
-    }
-
-    await prisma.integrationCredential.upsert({
+  // Single error-persistence path (never stores the raw upstream body / token
+  // beyond the encrypted fields), reused by both the auth-fail and network-fail
+  // branches so credential mutations stay centralized.
+  const persistError = (message: string): Promise<unknown> =>
+    prisma.integrationCredential.upsert({
       where: { integrationId: GREENHOUSE_INTEGRATION_ID },
       create: {
         integrationId: GREENHOUSE_INTEGRATION_ID,
         provider: PROVIDER,
-        status: "connected",
+        status: "error",
         fieldsEnc: encFields,
-        lastTestedAt: new Date(),
+        lastErrorAt: new Date(),
+        lastErrorMsg: message,
       },
       update: {
-        status: "connected",
-        fieldsEnc: encFields,
-        lastTestedAt: new Date(),
-        lastErrorAt: null,
-        lastErrorMsg: null,
+        status: "error",
+        lastErrorAt: new Date(),
+        lastErrorMsg: message,
       },
     });
 
-    return { ok: true, status: "connected" };
+  let check: Awaited<ReturnType<typeof verifyHarvestCredential>>;
+  try {
+    check = await verifyHarvestCredential(input.apiToken, deps.fetchImpl);
   } catch {
     const message = "unable to reach the Greenhouse Harvest API — try again";
-    await prisma.integrationCredential.upsert({
-      where: { integrationId: GREENHOUSE_INTEGRATION_ID },
-      create: {
-        integrationId: GREENHOUSE_INTEGRATION_ID,
-        provider: PROVIDER,
-        status: "error",
-        fieldsEnc: encFields,
-        lastErrorAt: new Date(),
-        lastErrorMsg: message,
-      },
-      update: {
-        status: "error",
-        lastErrorAt: new Date(),
-        lastErrorMsg: message,
-      },
-    });
+    await persistError(message);
     return { ok: false, status: "error", error: message, statusCode: 400 };
   }
+
+  if (!check.ok) {
+    const message =
+      check.status === 401 || check.status === 403
+        ? "invalid Harvest API key — check the key and its permissions in Greenhouse"
+        : `Greenhouse Harvest API returned ${check.status}`;
+    await persistError(message);
+    return { ok: false, status: "error", error: message, statusCode: 400 };
+  }
+
+  await prisma.integrationCredential.upsert({
+    where: { integrationId: GREENHOUSE_INTEGRATION_ID },
+    create: {
+      integrationId: GREENHOUSE_INTEGRATION_ID,
+      provider: PROVIDER,
+      status: "connected",
+      fieldsEnc: encFields,
+      lastTestedAt: new Date(),
+    },
+    update: {
+      status: "connected",
+      fieldsEnc: encFields,
+      lastTestedAt: new Date(),
+      lastErrorAt: null,
+      lastErrorMsg: null,
+    },
+  });
+
+  return { ok: true, status: "connected" };
 }

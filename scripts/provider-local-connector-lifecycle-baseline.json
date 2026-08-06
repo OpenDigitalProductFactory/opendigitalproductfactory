@@ -29,6 +29,7 @@
     { "file": "apps/web/lib/integrate/google-marketing-intelligence/connect-action.ts", "kind": "integration-credential-mutation", "count": 2 },
     { "file": "apps/web/lib/integrate/google-marketing-intelligence/preview.ts", "kind": "integration-credential-mutation", "count": 2 },
     { "file": "apps/web/lib/integrate/google-marketing-intelligence/preview.ts", "kind": "provider-refresh-orchestration", "count": 1 },
+    { "file": "apps/web/lib/integrate/greenhouse/connect-action.ts", "kind": "integration-credential-mutation", "count": 2 },
     { "file": "apps/web/lib/integrate/grok-dispatch.ts", "kind": "provider-refresh-orchestration", "count": 1 },
     { "file": "apps/web/lib/integrate/hubspot/connect-action.ts", "kind": "integration-credential-mutation", "count": 2 },
     { "file": "apps/web/lib/integrate/hubspot/preview.ts", "kind": "integration-credential-mutation", "count": 2 },

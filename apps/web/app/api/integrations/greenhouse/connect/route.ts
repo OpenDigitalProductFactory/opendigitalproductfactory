@@ -1,12 +1,13 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
+import { apiErrorResponse } from "@/lib/api/error";
 import { connectGreenhouse } from "@/lib/integrate/greenhouse/connect-action";
 
 export async function POST(request: Request) {
   const session = await auth();
   if (!session?.user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    return apiErrorResponse("UNAUTHORIZED", "Unauthorized", 401);
   }
   if (
     !can(
@@ -14,14 +15,14 @@ export async function POST(request: Request) {
       "manage_provider_connections",
     )
   ) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    return apiErrorResponse("FORBIDDEN", "Forbidden", 403);
   }
 
   let body: unknown;
   try {
     body = await request.json();
   } catch {
-    return NextResponse.json({ error: "invalid JSON body" }, { status: 400 });
+    return apiErrorResponse("INVALID_BODY", "invalid JSON body", 400);
   }
 
   const result = await connectGreenhouse(body);
@@ -30,5 +31,5 @@ export async function POST(request: Request) {
     return NextResponse.json({ status: result.status }, { status: 200 });
   }
 
-  return NextResponse.json({ error: result.error, status: result.status }, { status: result.statusCode });
+  return apiErrorResponse("CONNECT_FAILED", result.error, result.statusCode);
 }
