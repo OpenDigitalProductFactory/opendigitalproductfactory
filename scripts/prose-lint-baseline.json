@@ -3238,7 +3238,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 93
+    "textMass": 92
   },
   "apps/web/components/admin/HiveContributionsPanel.tsx": {
     "vocabulary": 0,
