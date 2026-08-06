@@ -805,6 +805,30 @@
       "file": "apps/web/app/api/integrations/google-marketing-intelligence/connect/route.ts"
     },
     {
+      "routePath": "/api/integrations/greenhouse/connect",
+      "kind": "route",
+      "segments": [
+        "api",
+        "integrations",
+        "greenhouse",
+        "connect"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/integrations/greenhouse/connect/route.ts"
+    },
+    {
+      "routePath": "/api/integrations/greenhouse/inbound",
+      "kind": "route",
+      "segments": [
+        "api",
+        "integrations",
+        "greenhouse",
+        "inbound"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/integrations/greenhouse/inbound/route.ts"
+    },
+    {
       "routePath": "/api/integrations/hubspot/connect",
       "kind": "route",
       "segments": [
