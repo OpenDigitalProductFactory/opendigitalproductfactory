@@ -852,6 +852,12 @@
       "docs/architecture/2026-06-14-odysseus-review-depth-pass.md",
       "docs/strategy/2026-09-cada-architects-forum-deck.md"
     ],
+    "apps/web/lib/routing/provider-suitability/provider-compliance-advisory.ts": [
+      "docs/operations/ai-provider-compliance-source-renewal-runbook.md"
+    ],
+    "apps/web/lib/routing/provider-suitability/source-freshness.ts": [
+      "docs/operations/ai-provider-compliance-source-renewal-runbook.md"
+    ],
     "apps/web/lib/routing/provider-suitability/workload-profile.ts": [
       "docs/user-guide/ai-workforce/sensitive-data-policy-packs.md"
     ],
@@ -1172,6 +1178,9 @@
     ],
     "packages/db/src/profession-local-axes.ts": [
       "docs/architecture/decision-vectors.md"
+    ],
+    "packages/db/src/provider-compliance-source-registry.ts": [
+      "docs/operations/ai-provider-compliance-source-renewal-runbook.md"
     ],
     "packages/db/src/regulation-applicability.ts": [
       "docs/strategy/2026-09-cada-architects-forum-deck.md"
@@ -2280,6 +2289,11 @@
     "docs/maintenance/staleness-report.md": [
       "scripts/build-docs-staleness.mjs",
       "scripts/lib/ci-policy-guards.mjs"
+    ],
+    "docs/operations/ai-provider-compliance-source-renewal-runbook.md": [
+      "apps/web/lib/routing/provider-suitability/provider-compliance-advisory.ts",
+      "apps/web/lib/routing/provider-suitability/source-freshness.ts",
+      "packages/db/src/provider-compliance-source-registry.ts"
     ],
     "docs/operations/build-cost-flags-activation-runbook.md": [
       "apps/web/lib/integrate/build-studio-config.ts"

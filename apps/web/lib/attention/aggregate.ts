@@ -17,6 +17,7 @@ import {
   type CoworkerMemoryAttentionDb,
 } from "./sources/coworker-memory";
 import { loadProviderCredentialItems, loadProviderSuitabilityDriftItems } from "./sources/provider-credential";
+import { loadComplianceSourceFreshnessItems } from "./sources/compliance-source-freshness";
 import { loadReservationExceptionItems } from "./sources/reservation-exception";
 import { loadHospitalityCapacityAttentionItems } from "./sources/hospitality-capacity";
 import { loadStorefrontInquiryItems } from "./sources/storefront-inquiry";
@@ -106,6 +107,11 @@ export async function loadAttentionItems(
       load: () => loadHospitalityCapacityAttentionItems(db),
     },
     { source: "storefront-inquiry", load: () => loadStorefrontInquiryItems(db) },
+    {
+      // Pure registry arithmetic — no query, so it costs nothing per load.
+      source: "compliance-source-freshness",
+      load: async () => loadComplianceSourceFreshnessItems(),
+    },
     {
       source: "provider-credential",
       load: async () => [

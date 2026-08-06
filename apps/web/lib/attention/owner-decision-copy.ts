@@ -19,6 +19,7 @@ const HEADLINE: Record<AttentionSource, string> = {
   "hospitality-capacity": "Resolve this capacity issue?",
   "storefront-inquiry": "Reply to this enquiry?",
   "business-journey": "Choose how to fix this for customers?",
+  "compliance-source-freshness": "Renew this compliance evidence?",
 };
 
 const SPECIALIST: Record<AttentionSource, string> = {
@@ -40,6 +41,7 @@ const SPECIALIST: Record<AttentionSource, string> = {
   "hospitality-capacity": "Hospitality operations",
   "storefront-inquiry": "Front of house",
   "business-journey": "Front of house",
+  "compliance-source-freshness": "Legal and compliance",
 };
 
 export function specialistFor(source: AttentionSource): string {

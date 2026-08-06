@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 625,
+  "pageCount": 626,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -4742,6 +4742,26 @@
         "8-message-house",
         "9-backlog-anchors",
         "10-sources-and-market-signals"
+      ]
+    },
+    "docs/operations/ai-provider-compliance-source-renewal-runbook.md": {
+      "publicHref": "/operations/ai-provider-compliance-source-renewal-runbook/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "runbook-renewing-the-ai-provider-compliance-sources",
+        "why-this-exists",
+        "this-is-a-review-not-a-scrape",
+        "procedure",
+        "1-identify-what-is-lapsing",
+        "2-read-the-current-source",
+        "3-re-attest-each-claim",
+        "4-update-the-registry",
+        "5-verify",
+        "6-ship-it",
+        "deliberately-not-a-ci-gate",
+        "if-it-has-already-lapsed"
       ]
     },
     "docs/operations/antigravity-cli-onboarding.md": {
