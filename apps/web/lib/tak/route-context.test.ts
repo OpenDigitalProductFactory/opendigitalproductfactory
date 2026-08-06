@@ -513,6 +513,29 @@ describe("getRouteDataContext", () => {
     expect(context).toContain("PAGE DATA — Some › Unmapped › Detail:");
   });
 
+  it("does NOT leak an exact provider's data to a descendant route (Phase 2 no-inheritance)", async () => {
+    // /ops is `exact` (the Operations Backlog). Every sibling ops page must fall
+    // to the page-identity label instead of inheriting the backlog — the
+    // generalized /ops/self-upgrade fix (PR #4048). getOpsContext must not even
+    // be consulted, so no epic/backlogItem prisma mocks are needed here.
+    for (const sub of ["/ops/patches", "/ops/journeys", "/ops/changes", "/ops/promotions", "/ops/security"]) {
+      const context = await getRouteDataContext(sub, "user-1");
+      expect(context).not.toContain("PAGE DATA — Operations Backlog:");
+      expect(context).toContain("PAGE DATA — Ops ›");
+      expect(context).toMatch(/rather than asking the user to paste/i);
+    }
+  });
+
+  it("a descendant of an exact dashboard route falls to the page label, not the aggregate", async () => {
+    const context = await getRouteDataContext("/customer/funnel/segment-a", "user-1");
+    expect(context).not.toContain("PAGE DATA — Conversion Funnel");
+    expect(context).toContain("PAGE DATA — Customer › Funnel › Segment A:");
+  });
+
+  // Prefix-serving (a `prefix` provider still reaches its descendants) is covered
+  // by the "/finance/settings/tax" test above, which resolves to the /finance
+  // provider through the prefix match.
+
   it("never leaves a coworker fully blind — returns page identity even with no business context", async () => {
     mockPrisma.businessContext.findFirst.mockResolvedValue(null);
     const context = await getRouteDataContext("/admin/scheduled-jobs", "user-1");

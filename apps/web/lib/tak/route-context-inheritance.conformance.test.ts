@@ -110,7 +110,7 @@ describe("coworker route-context inheritance guard", () => {
       violations.push(
         `${route} silently inherits ${prefix}'s page identity (a mislabel). ` +
           `Give it its own entry in ROUTE_CONTEXT_MAP (route-context-map.ts) — ` +
-          `and, for the PAGE DATA injector, a provider in ROUTE_CONTEXT_PROVIDERS ` +
+          `and, for the PAGE DATA injector, a provider in PAGE_CONTEXT_PROVIDERS ` +
           `(route-context.ts) — or add it to ACKNOWLEDGED_IDENTITY_INHERITORS with a reason.`,
       );
     }
