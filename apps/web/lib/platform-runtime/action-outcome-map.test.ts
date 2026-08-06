@@ -22,6 +22,13 @@ describe("summarizeOutcomes", () => {
     expect(hasOutcomes({ get_backlog_item: 9 })).toBe(false);
   });
 
+  it("excludes synthetic access-audit executions — not accomplishments (BI-A1B4BE05)", () => {
+    expect(
+      summarizeOutcomes({ external_access_permission_approval: 5, external_access_permission_request: 3 }),
+    ).toEqual([]);
+    expect(hasOutcomes({ external_access_permission_request: 3 })).toBe(false);
+  });
+
   it("folds unmapped write tools into a single 'other actions' bucket", () => {
     const out = summarizeOutcomes({ create_backlog_item: 2, some_unmapped_write: 5 });
     expect(out).toContainEqual({ label: "other actions", count: 5, sensitive: false });

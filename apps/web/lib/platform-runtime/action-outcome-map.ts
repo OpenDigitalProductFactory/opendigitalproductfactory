@@ -76,10 +76,19 @@ const TOOL_OUTCOMES: Record<string, { one: string; many: string }> = {
 /** Prefixes that mark a read/lookup tool — never an accomplishment. */
 const READ_PREFIXES = ["get_", "list_", "search_", "query_", "read_", "describe_", "find_", "doc_search", "wiki_query", "assess_", "check_", "trace_"];
 
+// Synthetic / system-audit tool executions that are not accomplishments even
+// though they are not reads — belt-and-suspenders alongside the loader's
+// executionMode filter, in case such a row reaches this map (BI-A1B4BE05).
+const NON_OUTCOME_TOOLS = new Set<string>([
+  "external_access_permission_approval",
+  "external_access_permission_request",
+]);
+
 export type Outcome = { label: string; count: number; sensitive: boolean };
 
-function isReadTool(toolName: string): boolean {
-  return READ_PREFIXES.some((p) => toolName.startsWith(p));
+/** A tool call that never counts as an accomplishment (a lookup or a system/audit event). */
+function isNonOutcomeTool(toolName: string): boolean {
+  return NON_OUTCOME_TOOLS.has(toolName) || READ_PREFIXES.some((p) => toolName.startsWith(p));
 }
 
 function pluralize(label: { one: string; many: string }, count: number): string {
@@ -103,7 +112,7 @@ export function summarizeOutcomes(
   let otherSensitive = false;
 
   for (const [toolName, count] of Object.entries(toolCounts)) {
-    if (count <= 0 || isReadTool(toolName)) continue;
+    if (count <= 0 || isNonOutcomeTool(toolName)) continue;
     const sensitive = SENSITIVE_DATA_TOOLS.has(toolName);
     const label = TOOL_OUTCOMES[toolName];
     if (label) {
@@ -133,6 +142,6 @@ export function summarizeOutcomes(
 /** Whether a set of tool counts contains any real accomplishment. */
 export function hasOutcomes(toolCounts: Record<string, number>): boolean {
   return Object.entries(toolCounts).some(
-    ([toolName, count]) => count > 0 && !isReadTool(toolName),
+    ([toolName, count]) => count > 0 && !isNonOutcomeTool(toolName),
   );
 }

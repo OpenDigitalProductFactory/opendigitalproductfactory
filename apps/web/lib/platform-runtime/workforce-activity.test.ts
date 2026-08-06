@@ -104,6 +104,25 @@ describe("loadWorkforceActivity", () => {
     expect(wf.quiet.find((c) => c.agentId === "orphan")?.humanSupervisorId).toBeNull();
   });
 
+  it("excludes background/permission executionModes from the outcome query (BI-A1B4BE05)", async () => {
+    const wheres: Array<Record<string, unknown>> = [];
+    const prisma = {
+      agent: { findMany: async () => [agent({ agentId: "a" })] },
+      taskRun: { findMany: async () => [] },
+      toolExecution: {
+        groupBy: async (args: { where: Record<string, unknown> }) => {
+          wheres.push(args.where);
+          return [];
+        },
+      },
+      tokenUsage: { groupBy: async () => [] },
+    } as never;
+    await loadWorkforceActivity({ prisma, now: () => NOW });
+    // the tool-by-tool outcome query is the one filtered to success:true
+    const outcomeWhere = wheres.find((w) => w.success === true);
+    expect(outcomeWhere?.executionMode).toEqual({ notIn: ["background", "permission"] });
+  });
+
   it("orders working by tokens spent today, busiest first", async () => {
     const prisma = fakePrisma({
       agents: [agent({ agentId: "a1", displayName: "A1" }), agent({ agentId: "a2", displayName: "A2" })],
