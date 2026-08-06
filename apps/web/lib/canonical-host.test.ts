@@ -182,12 +182,26 @@ describe("isCanonicalRedirectExempt", () => {
   );
 
   it.each([
+    "/api/v1/federation",
+    "/api/v1/federation/enroll",
+    "/api/v1/federation/approval-relay",
+    "/api/v1/federation/demand",
+    "/api/v1/federation/demand/reconcile",
+    "/api/v1/federation/incident",
+    "/api/v1/federation/proposal",
+  ])("exempts remote federation peer callback %s", (p) =>
+    expect(isCanonicalRedirectExempt(p)).toBe(true),
+  );
+
+  it.each([
     "/",
     "/ops/demand",
-    "/api/v1/federation/demand",
     "/api/inngestx",
     "/api/mcpx",
     "/api/health/extra",
+    "/api/v1/federationx",
+    "/api/v1/federation-summary",
+    "/platform/federation-links",
   ])("does NOT exempt browser/other route %s", (p) =>
     expect(isCanonicalRedirectExempt(p)).toBe(false),
   );
@@ -317,4 +331,40 @@ describe("enforceCanonicalHost (Next.js wrapper)", () => {
       expect(enforceCanonicalHost(req)).toBeNull();
     },
   );
+
+  // Regression (extends BI-A5842B04): a remote federation peer dials us at a LAN
+  // address whose host form differs from PUBLIC_URL (here the operator set a
+  // hostname canonical, but the peer reaches us by IP). A 301 would turn the
+  // peer's signed Bearer POST into a GET — dropping the token + enrollment body
+  // and failing the pairing handshake. These machine callbacks must pass through.
+  it.each([
+    "/api/v1/federation/enroll",
+    "/api/v1/federation/approval-relay",
+    "/api/v1/federation/demand",
+  ])("never redirects federation peer callback %s even with PUBLIC_URL set", (peerPath) => {
+    process.env.PUBLIC_URL = "http://portal.example.com:3000";
+    delete process.env.PUBLIC_URL_ALIASES;
+    const req = buildRequest({
+      url: `http://192.168.0.200:3000${peerPath}`,
+      host: "192.168.0.200:3000",
+    });
+    expect(enforceCanonicalHost(req)).toBeNull();
+  });
+
+  // The browser pairing UI itself is NOT exempt — an operator landing on the
+  // federation-links admin page at a non-canonical host is still canonicalized.
+  it("still redirects the browser federation-links page at a non-canonical host", () => {
+    process.env.PUBLIC_URL = "https://portal.example.com";
+    delete process.env.PUBLIC_URL_ALIASES;
+    const req = buildRequest({
+      url: "http://192.168.0.200:3000/platform/federation-links",
+      host: "192.168.0.200:3000",
+    });
+    const res = enforceCanonicalHost(req);
+    expect(res).not.toBeNull();
+    expect(res!.status).toBe(301);
+    expect(res!.headers.get("location")).toBe(
+      "https://portal.example.com/platform/federation-links",
+    );
+  });
 });
