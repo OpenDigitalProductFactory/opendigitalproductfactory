@@ -71,4 +71,10 @@ which work is silently duplicated. This is root-cause E (no observability) made 
 
 ## Backlog coverage
 
-- **BI-CBAAEA94 (WS9)** — Task 9.1 (reap-by-lease candidate set, recommend-only) → `list_work_capsules staleOnly` + reaper dry-run. Task 9.2 (board tells the truth; stop the 14:00 heartbeat masking) → classifier + presenter/tool + reaper.
+- Decision: atomic
+- Parent: BI-CBAAEA94
+- Receipt: cmsgy9bof045t01nviamzpgje
+- Rationale: One coherent PR by explicit design — WS10 (BI-71991853) names the 1-BI-per-PR-per-lease pattern as the cause of this sprawl. The classifier, the tool/board surfacing that consumes it, the governed reaper, and the build-reap-to-capsule coupling are mutually dependent; no phase ships independently, and tests land with the code.
+- Dependencies: none
+
+Covers BI-CBAAEA94 (WS9): Task 9.1 (recommend-only reap set via list_work_capsules staleOnly + reaper dry-run) and Task 9.2 (board tells the truth; stop the 14:00 heartbeat masking).
