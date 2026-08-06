@@ -50,6 +50,7 @@ const EXPECTED_LEGACY_JOBS = [
   "spec-plan-doc-gate",
   "stewardship-scope-guard",
   "style-drift-guard",
+  "test-clock-bomb-guard",
   "tool-surface-guard",
   "ux-fit-gate",
 ];
