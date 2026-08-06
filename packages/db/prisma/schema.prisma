@@ -16309,3 +16309,240 @@ model WorkforceCandidateFact {
   @@index([subjectEmployeeProfileId])
   @@index([kind])
 }
+
+// ─── Recruiting / ATS (BI-F3AEBF68) ───────────────────────────────────────────
+// Native requisition→hire model — the convergence target for the Greenhouse
+// absorption (BI-E5561DC9). Additive-only: links to existing People-Core
+// entities (Position/Department/WorkLocation/EmploymentType/EmployeeProfile) are
+// soft scalar FKs (indexed, no @relation) so this migration creates only new
+// tables; typed relations + the candidate→worker crosswalk are follow-on
+// hardening. Design: docs/superpowers/specs/2026-08-05-greenhouse-ats-absorption-design.md §3.
+
+model JobRequisition {
+  id               String    @id @default(cuid())
+  reqId            String    @unique
+  title            String
+  status           String    @default("draft") // draft|pending_approval|open|on_hold|closed|filled
+  headcount        Int       @default(1)
+  positionId       String?
+  departmentId     String?
+  workLocationId   String?
+  employmentTypeId String?
+  hiringManagerId  String?
+  recruiterId      String?
+  openedAt         DateTime?
+  closedAt         DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  openings     RequisitionOpening[]
+  postings     JobPosting[]
+  stages       PipelineStage[]
+  applications Application[]
+
+  @@index([status])
+  @@index([positionId])
+  @@index([departmentId])
+}
+
+model RequisitionOpening {
+  id                    String   @id @default(cuid())
+  requisitionId         String
+  openingRef            String?
+  status                String   @default("open") // open|closed|filled
+  filledByApplicationId String?
+  closeReason           String?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  requisition JobRequisition @relation(fields: [requisitionId], references: [id], onDelete: Cascade)
+
+  @@index([requisitionId])
+  @@index([status])
+}
+
+model JobPosting {
+  id             String    @id @default(cuid())
+  requisitionId  String
+  title          String
+  description    String?
+  locationText   String?
+  employmentType String?
+  remote         Boolean   @default(false)
+  compCurrency   String?
+  compMin        Decimal?
+  compMax        Decimal?
+  live           Boolean   @default(false)
+  locale         String    @default("en-US")
+  channels       String[]  @default([])
+  datePosted     DateTime?
+  validThrough   DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  requisition JobRequisition @relation(fields: [requisitionId], references: [id], onDelete: Cascade)
+
+  @@index([requisitionId])
+  @@index([live])
+}
+
+model RecruitingSource {
+  id        String   @id @default(cuid())
+  name      String
+  type      String   @default("other") // referral|job-board|agency|internal|other
+  createdAt DateTime @default(now())
+
+  candidates   Candidate[]
+  applications Application[]
+
+  @@index([type])
+}
+
+model Candidate {
+  id          String   @id @default(cuid())
+  candidateId String   @unique
+  kind        String   @default("candidate") // prospect|candidate
+  firstName   String?
+  lastName    String?
+  displayName String
+  email       String?
+  phone       String?
+  title       String?
+  company     String?
+  sourceId    String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  source       RecruitingSource? @relation(fields: [sourceId], references: [id])
+  applications Application[]
+
+  @@index([kind])
+  @@index([email])
+}
+
+model PipelineStage {
+  id            String   @id @default(cuid())
+  requisitionId String?
+  name          String
+  orderIndex    Int      @default(0)
+  kind          String   @default("interview") // application_review|screen|interview|offer|hired
+  createdAt     DateTime @default(now())
+
+  requisition         JobRequisition?      @relation(fields: [requisitionId], references: [id], onDelete: SetNull)
+  currentApplications Application[]         @relation("ApplicationCurrentStage")
+  interviews          ScheduledInterview[]
+
+  @@index([requisitionId])
+}
+
+model Application {
+  id                  String    @id @default(cuid())
+  applicationId       String    @unique
+  candidateId         String
+  requisitionId       String?
+  status              String    @default("active") // active|rejected|hired|withdrawn|converted
+  currentStageId      String?
+  sourceId            String?
+  dispositionReasonId String?
+  appliedAt           DateTime?
+  rejectedAt          DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  candidate            Candidate            @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  requisition          JobRequisition?      @relation(fields: [requisitionId], references: [id], onDelete: SetNull)
+  currentStage         PipelineStage?       @relation("ApplicationCurrentStage", fields: [currentStageId], references: [id], onDelete: SetNull)
+  source               RecruitingSource?    @relation(fields: [sourceId], references: [id])
+  dispositionReason    DispositionReason?   @relation(fields: [dispositionReasonId], references: [id])
+  interviews           ScheduledInterview[]
+  scorecards           Scorecard[]
+  offers               Offer[]
+  demographicResponses DemographicResponse[]
+
+  @@index([candidateId])
+  @@index([requisitionId])
+  @@index([status])
+}
+
+model ScheduledInterview {
+  id            String    @id @default(cuid())
+  applicationId String
+  stageId       String?
+  startsAt      DateTime?
+  endsAt        DateTime?
+  location      String?
+  videoUrl      String?
+  status        String    @default("scheduled") // scheduled|completed|cancelled
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  application Application    @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  stage       PipelineStage? @relation(fields: [stageId], references: [id], onDelete: SetNull)
+  scorecards  Scorecard[]
+
+  @@index([applicationId])
+}
+
+model Scorecard {
+  id                    String    @id @default(cuid())
+  applicationId         String
+  interviewId           String?
+  submittedById         String?
+  overallRecommendation String?
+  attributes            Json?
+  submittedAt           DateTime?
+  createdAt             DateTime  @default(now())
+
+  application Application         @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  interview   ScheduledInterview? @relation(fields: [interviewId], references: [id], onDelete: SetNull)
+
+  @@index([applicationId])
+}
+
+model Offer {
+  id            String    @id @default(cuid())
+  offerRef      String    @unique
+  applicationId String
+  version       Int       @default(1)
+  status        String    @default("draft") // draft|approved|sent|accepted|declined|rescinded
+  startDate     DateTime?
+  compensation  Json?
+  sentAt        DateTime?
+  resolvedAt    DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  application Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  @@index([applicationId])
+  @@index([status])
+}
+
+model DispositionReason {
+  id        String   @id @default(cuid())
+  code      String   @unique
+  label     String
+  category  String   @default("rejected") // rejected|withdrawn|hired
+  createdAt DateTime @default(now())
+
+  applications Application[]
+}
+
+model DemographicResponse {
+  id               String    @id @default(cuid())
+  applicationId    String
+  jurisdiction     String    @default("US") // jurisdiction-gated (design §6): US OFCCP solicits; MX restricts
+  race             String?
+  ethnicity        String?
+  gender           String?
+  veteranStatus    String?
+  disabilityStatus String?
+  consentGiven     Boolean   @default(false)
+  collectedAt      DateTime?
+  createdAt        DateTime  @default(now())
+
+  application Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  @@index([applicationId])
+  @@index([jurisdiction])
+}
