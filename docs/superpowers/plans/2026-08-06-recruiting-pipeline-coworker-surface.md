@@ -14,6 +14,11 @@ Surface the unified recruiting funnel to the **AI workforce**: an HR-coworker MC
 
 Extends the Absorb spec (§4 Phase 2) — the read-model was #4067; this is its coworker surface. Reuses the tool-pack registry + `agent-grants` gating source (grants mirror `TOOL_TO_GRANTS`, enforced by the drift test). No new contract; the AI-workforce surface is the platform-native way to expose a read model.
 
+- **Existing specs/plans reviewed:** `docs/superpowers/specs/2026-08-05-greenhouse-ats-absorption-design.md` §4 Phase 2 (Absorb) — the read-model + surfacing sequence this tool implements.
+- **Current code substrate reviewed:** `apps/web/lib/recruiting/pipeline-read-model.ts` (the `getRecruitingPipeline` port this tool calls), `apps/web/lib/mcp/pack-registry.ts` (the one-import-one-entry union-mergeable registry), and `apps/web/lib/tak/agent-grants.ts` (`TOOL_TO_GRANTS`, the drift-enforced gating source the pack's grant mirrors).
+- **Source of truth:** the shared read-model — the tool and any future UI read one `getRecruitingPipeline`, so they never drift.
+- **Decision:** coworker/MCP surface, not a UI route — a read-only lens earns the AI-workforce surface without the disproportionate ratified-page-purpose + ux-fit gauntlet a bespoke page carries.
+
 ## Phases (atomic — one tool, one pack)
 
 1. **`recruiting-pipeline-pack.ts`** — `get_recruiting_pipeline` (read-only, `view_employee`, grants `consumer_read`+`registry_read`) calling `getRecruitingPipeline`. *Verify:* definition shape + grant mirror, funnel-count summary, requisition filter, absent-arg default.
