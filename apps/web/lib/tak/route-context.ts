@@ -12,6 +12,7 @@ import {
 import { getDiscoveryOperationsContext } from "@/lib/tak/discovery-operations-route-context";
 import { getProductEstateContext } from "@/lib/tak/product-estate-route-context";
 import { getWikiGovernanceContext } from "@/lib/tak/decision-governance-route-context";
+import { getSelfUpgradeContext } from "@/lib/tak/self-upgrade-route-context";
 
 type RouteContextResult = string | null;
 
@@ -24,6 +25,13 @@ const ROUTE_CONTEXT_PROVIDERS: Record<string, (userId: string, routeContext: str
   // and the coworker only saw backlog items + epics (BI-FD7E4D72). More-specific
   // prefix wins via longest-match below, so this must precede "/ops".
   "/ops/dev-loop": getDevLoopContext,
+  // /ops/self-upgrade renders platform-update status + the background-job
+  // (Inngest) engine health, NOT the backlog. Without its own provider it fell
+  // back to /ops → getOpsContext, so a coworker asked "what's this background
+  // job issue?" answered with backlog items + epics instead of the on-screen
+  // job-engine alert. Same class as the /ops/dev-loop fix (BI-FD7E4D72). Must
+  // precede "/ops"; longest-prefix match below also guarantees it wins.
+  "/ops/self-upgrade": getSelfUpgradeContext,
   "/ops": getOpsContext,
   "/compliance/licensing": getLicensingReadinessContext,
   "/compliance": getComplianceContext,
