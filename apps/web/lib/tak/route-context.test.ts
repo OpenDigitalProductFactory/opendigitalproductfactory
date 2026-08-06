@@ -5,6 +5,7 @@ const {
   mockGetPlaybook,
   mockGetVocabulary,
   mockResolveOrgProfileId,
+  mockGetSelfUpgradeConfig,
 } = vi.hoisted(() => ({
   mockPrisma: {
     organization: { findFirst: vi.fn() },
@@ -35,16 +36,23 @@ const {
     taxJurisdictionReference: { findMany: vi.fn() },
     runtimeTarget: { findMany: vi.fn() },
     nonProductionEnvironmentLease: { findMany: vi.fn() },
+    platformConfig: { findUnique: vi.fn() },
+    selfUpgradeRun: { findFirst: vi.fn() },
   },
   mockGetPlaybook: vi.fn(),
   mockGetVocabulary: vi.fn(),
   mockResolveOrgProfileId: vi.fn(),
+  mockGetSelfUpgradeConfig: vi.fn(),
 }));
 
 vi.mock("@dpf/db", () => ({ Prisma: { DbNull: "DbNull" }, prisma: mockPrisma }));
 vi.mock("@/lib/tak/marketing-playbooks", () => ({ getPlaybook: mockGetPlaybook }));
 vi.mock("@/lib/storefront/archetype-vocabulary", () => ({ getVocabulary: mockGetVocabulary }));
 vi.mock("@/lib/decision-perspective/material", () => ({ resolveOrgProfileId: mockResolveOrgProfileId }));
+// getSelfUpgradeContext reads self-upgrade config directly (boundary-legal;
+// tak may not import the actions/queue contexts). Mock the config loader; the
+// job-engine + run signals come from the mocked prisma above.
+vi.mock("@/lib/self-upgrade/config", () => ({ getSelfUpgradeConfig: mockGetSelfUpgradeConfig }));
 
 import { getRouteDataContext } from "./route-context";
 
@@ -165,6 +173,12 @@ beforeEach(() => {
   mockPrisma.nonProductionEnvironmentLease.findMany.mockReset();
   mockPrisma.runtimeTarget.findMany.mockResolvedValue([]);
   mockPrisma.nonProductionEnvironmentLease.findMany.mockResolvedValue([]);
+  mockPrisma.platformConfig.findUnique.mockReset();
+  mockPrisma.selfUpgradeRun.findFirst.mockReset();
+  mockPrisma.platformConfig.findUnique.mockResolvedValue(null);
+  mockPrisma.selfUpgradeRun.findFirst.mockResolvedValue(null);
+  mockGetSelfUpgradeConfig.mockReset();
+  mockGetSelfUpgradeConfig.mockResolvedValue({ enabled: true, channel: "stable" });
 
   mockGetPlaybook.mockReturnValue({
     primaryGoal: "Build authority pipeline through expertise demonstration and client nurture",
@@ -355,6 +369,63 @@ describe("getRouteDataContext", () => {
     // It must NOT have fallen back to the /ops backlog provider.
     expect(context).not.toContain("PAGE DATA — Operations Backlog:");
     expect(mockPrisma.runtimeTarget.findMany).toHaveBeenCalled();
+  });
+
+  it("gives /ops/self-upgrade its own self-upgrade + job-engine page data, not the backlog", async () => {
+    // Reproduces the reported incident: on /ops/self-upgrade a coworker asked
+    // "what's this background job issue?" and answered with backlog items +
+    // epics because the route fell through to the /ops backlog provider.
+    const now = Date.now();
+    mockGetSelfUpgradeConfig.mockResolvedValue({ enabled: true, channel: "stable" });
+    mockPrisma.selfUpgradeRun.findFirst.mockResolvedValue({
+      runId: "SU-af60461f8",
+      status: "succeeded",
+      trigger: "scheduled",
+      targetSha: "af60461f8abc1234",
+      deployedSha: "af60461f8abc1234",
+      createdAt: new Date(now - 3 * 3_600_000),
+      completedAt: new Date(now - 3 * 3_600_000 + 5 * 60_000),
+    });
+    mockPrisma.platformConfig.findUnique.mockImplementation(async (args: { where: { key: string } }) => {
+      if (args.where.key === "ops.jobEngine.inngestRegistration") {
+        return {
+          key: args.where.key,
+          value: { ok: true, at: new Date(now - 80 * 60_000).toISOString(), error: null },
+        };
+      }
+      if (args.where.key === "ops.jobEngine.inngestWatchdog") {
+        return {
+          key: args.where.key,
+          value: {
+            // Healthy registration but no POST execution for ~72 min = starved.
+            lastInvocationAt: new Date(now - 72 * 60_000).toISOString(),
+            lastGatewayHitAt: new Date(now - 72 * 60_000).toISOString(),
+            lastRecoveryAttemptAt: new Date(now - 25 * 60_000).toISOString(),
+            lastRecoverySummary: "retention sweep ran, orphansReaped=0, historyTrimmed=1899, errors=0",
+          },
+        };
+      }
+      return null;
+    });
+
+    const context = await getRouteDataContext("/ops/self-upgrade", "user-1");
+
+    expect(context).toContain("PAGE DATA — Self-Upgrade (platform update status):");
+    // The on-screen "Background jobs need attention" alert is the operator's question.
+    expect(context).toContain("BACKGROUND JOBS");
+    expect(context).toContain("Inngest registration: ok");
+    expect(context).toContain("Last background-job execution (POST /api/inngest):");
+    // Healthy registration + long execution gap must surface as degraded/starved.
+    expect(context).toContain("LIKELY DEGRADED");
+    expect(context).toContain("starved or wedged");
+    expect(context).toContain("orphansReaped=0, historyTrimmed=1899");
+    // Self-upgrade release status is present too.
+    expect(context).toContain("Self-upgrade: enabled (channel: stable)");
+    expect(context).toContain("SU-af60461f8");
+    // It must NOT have fallen back to the /ops backlog provider.
+    expect(context).not.toContain("PAGE DATA — Operations Backlog:");
+    expect(mockGetSelfUpgradeConfig).toHaveBeenCalled();
+    expect(mockPrisma.selfUpgradeRun.findFirst).toHaveBeenCalled();
   });
 
   it("gives /coworker-decisions the decision-governance open-review counts + named reviews, not a generic blurb (BI-C888E1B6)", async () => {
