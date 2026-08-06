@@ -134,6 +134,14 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
     guard("module-size-guard", "Module Size Guard", [
       node("scripts/check-module-size.mjs"),
     ]),
+    // Diff-scoped by design: repo-wide, the pattern matches 255 fixtures across 125
+    // files, nearly all legitimate (far-future sentinels, deliberately-expired rows).
+    // Gating on that would need a 125-file baseline — the silent allowlist this is
+    // meant to replace. It stops NEW bombs; the audit cleared the planted ones.
+    guard("test-clock-bomb-guard", "Test Clock Bomb Guard", [
+      node("--test", "scripts/check-test-clock-bombs.test.mjs"),
+      node("scripts/check-test-clock-bombs.mjs"),
+    ]),
     guard("instruction-plane-guard", "Instruction Plane Guard", [
       node("--test", "scripts/check-instruction-plane-size.test.mjs"),
       node("scripts/check-instruction-plane-size.mjs"),
