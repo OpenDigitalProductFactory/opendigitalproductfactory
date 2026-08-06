@@ -16,6 +16,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { RelationshipGraph, type GraphLegendEntry } from "@/components/inventory/RelationshipGraph";
 import {
   findGraphNodes,
+  loadGraphDefaultView,
   loadGraphNeighbourhood,
   loadGraphNodeDetail,
 } from "@/lib/actions/graph-explorer";
@@ -33,6 +34,7 @@ import {
   type GraphDomainKey,
 } from "@/lib/graph/explorer-vocabulary";
 import type { GraphData } from "@/lib/actions/graph";
+import type { DefaultViewSlice } from "@/lib/graph/explorer-default-view";
 
 type Props = {
   census: GraphCensus;
@@ -53,6 +55,7 @@ export function GraphExplorer({ census }: Props) {
   const [showAdvanced, setShowAdvanced] = useState(false);
 
   const [subgraph, setSubgraph] = useState<GraphSubgraph>(EMPTY_SUBGRAPH);
+  const [defaultSlices, setDefaultSlices] = useState<DefaultViewSlice[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -133,11 +136,44 @@ export function GraphExplorer({ census }: Props) {
 
   // ─── Data loading ───────────────────────────────────────────────────────────
 
+  // With no seed picked the canvas used to stay blank, so the operator had to
+  // already know a search term to see anything at all (BI-F9AA0872). Arrival now
+  // draws a curated slice of a few domains instead; picking a starting point
+  // replaces it, and Reset returns to it.
   useEffect(() => {
-    if (seedKeys.length === 0) {
-      setSubgraph(EMPTY_SUBGRAPH);
-      return;
-    }
+    if (seedKeys.length !== 0) return;
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+    loadGraphDefaultView()
+      .then((result) => {
+        if (cancelled) return;
+        setSubgraph({
+          nodes: result.nodes,
+          edges: result.edges,
+          truncated: result.truncated,
+          notice: result.notice,
+        });
+        setDefaultSlices(result.slices);
+      })
+      .catch(() => {
+        // A missing arrival picture is not an error the operator needs to act on —
+        // the surface still works by search, which is what it was built around.
+        if (!cancelled) {
+          setSubgraph(EMPTY_SUBGRAPH);
+          setDefaultSlices([]);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [seedKeys]);
+
+  useEffect(() => {
+    if (seedKeys.length === 0) return;
     let cancelled = false;
     setLoading(true);
     setError(null);
@@ -465,7 +501,15 @@ export function GraphExplorer({ census }: Props) {
       {/* Canvas + inspector */}
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-4 items-start">
         <div>
-          {loading && seedKeys.length > 0 && subgraph.nodes.length === 0 ? (
+          {/* One line, only on arrival: the picture below is a sample, not the
+              whole graph, and the operator should not mistake it for one. */}
+          {seedKeys.length === 0 && defaultSlices.length > 0 && (
+            <p className="mb-2 text-xs text-[var(--dpf-muted)]">
+              A sample across {defaultSlices.map((s) => s.label).join(", ")}. Search to explore
+              anything else.
+            </p>
+          )}
+          {loading && subgraph.nodes.length === 0 ? (
             <div className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-8 text-center text-sm text-[var(--dpf-muted)]">
               Loading…
             </div>
