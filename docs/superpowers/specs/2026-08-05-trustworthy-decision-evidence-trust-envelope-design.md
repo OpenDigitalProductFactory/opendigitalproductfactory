@@ -2,8 +2,9 @@
 
 - **Status:** proposed (research + design; no customer-data implementation in this branch)
 - **Date:** 2026-08-05
-- **Epic:** `EP-VERIFICATION-INTEGRITY` — **does not yet exist; must be created** (see §11 ID Reconciliation)
-- **Anchor BI:** cited as `BI-63811996` in the tasking, **not found in the live backlog**; the umbrella BI is filed fresh and takes a new auto-assigned id (see §11)
+- **Epic:** `EP-VERIFICATION-INTEGRITY` — **does not yet exist; must be created** (see §11). Filed interim under the closest adjacent open epic `EP-DECISION-TIER-REBALANCE`.
+- **Anchor / umbrella BI:** `BI-2CDF01A3` (filed fresh; cited `BI-63811996` was **not found in the live backlog**)
+- **Phase children:** `BI-EA97E5CD` (A evidence-grounding) · `BI-81CC5D8E` (B immutable record) · `BI-70FF9114` (C external verifier) · `BI-B84CD2D3` (D jurisdiction criteria) · `BI-A59CB2EA` (E candidate-eval instance)
 - **Kernel decisions:** Fork A → `DI` recorded via `principle_decide` (composite 14.229, high); Fork B → near-tie recorded (composite 12.643, low) — see §7
 - **Surface:** WWMD (platform-development) for the envelope architecture; the candidate-eval instance is a WSID profession decision (`evaluate_profession_decision`)
 - **Author population:** external coding agent (Claude), worktree `doc/decision-trust-envelope`
