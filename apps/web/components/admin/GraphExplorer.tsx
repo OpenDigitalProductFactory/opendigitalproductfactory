@@ -27,6 +27,7 @@ import type {
   GraphSubgraph,
 } from "@/lib/graph/explorer-queries";
 import {
+  ADDITIVE_MARKER_LABELS,
   GRAPH_DOMAINS,
   describeLabel,
   describeNodeLabels,
@@ -67,9 +68,11 @@ export function GraphExplorer({ census }: Props) {
     const counts = new Map<GraphDomainKey, number>();
     for (const row of census.labels) {
       const { domain } = describeLabel(row.label);
-      // `EaElement` and its concrete `ArchiMate__*` type both count the same node;
-      // the generic marker is the one that double-counts, so it is skipped.
-      if (row.label === "EaElement") continue;
+      // An additive marker shares a node with the projection that owns it — e.g.
+      // `EaElement` beside a concrete `ArchiMate__*` type, or `DocImpactSource`
+      // stamped on a `CodeFile`. Counting both inflates the tile, so markers are
+      // skipped (BI-0E019B95 generalised the former hard-coded EaElement check).
+      if (ADDITIVE_MARKER_LABELS.has(row.label)) continue;
       counts.set(domain, (counts.get(domain) ?? 0) + row.count);
     }
     return counts;

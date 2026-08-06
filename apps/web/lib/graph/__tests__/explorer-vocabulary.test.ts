@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  ADDITIVE_MARKER_LABELS,
   GRAPH_DOMAINS,
   describeLabel,
   describeNodeLabels,
@@ -39,6 +40,37 @@ describe("describeLabel", () => {
     const descriptor = describeLabel("Wiki__Principle");
     expect(descriptor.label).toBe("Principle");
     expect(descriptor.domain).toBe("knowledge");
+  });
+
+  it("enumerates every additive marker so the census cannot double-count", () => {
+    // The census sums per-label counts, so a node carrying an additive marker plus
+    // the kind that owns it is counted twice and its tile overstates. Both known
+    // markers must be declared; a new one added without landing here silently
+    // inflates a domain (BI-0E019B95 generalised the hard-coded EaElement skip).
+    expect(ADDITIVE_MARKER_LABELS.has("EaElement")).toBe(true);
+    expect(ADDITIVE_MARKER_LABELS.has("DocImpactSource")).toBe(true);
+    // A concrete kind must never be treated as a marker, or its nodes vanish
+    // from the census entirely.
+    expect(ADDITIVE_MARKER_LABELS.has("CodeFile")).toBe(false);
+    expect(ADDITIVE_MARKER_LABELS.has("DocPage")).toBe(false);
+  });
+
+  it("groups repo documentation with the knowledge domain", () => {
+    const descriptor = describeLabel("DocPage");
+    expect(descriptor.label).toBe("Doc page");
+    expect(descriptor.domain).toBe("knowledge");
+  });
+
+  it("describes a shared doc-impact node by the kind that owns it, not the marker", () => {
+    // The doc-impact projection stamps DocImpactSource onto CodeFile nodes it shares
+    // with the code graph. The node must still read as a source file (BI-0E019B95).
+    const shared = describeNodeLabels(["DocImpactSource", "CodeFile"]);
+    expect(shared.key).toBe("CodeFile");
+
+    // A cited path the code graph does not index carries the marker alone, and must
+    // still land in `code` rather than the architecture-flavoured unknown bucket.
+    const leftover = describeNodeLabels(["DocImpactSource"]);
+    expect(leftover.domain).toBe("code");
   });
 
   it("keeps an uncurated wiki page kind inside the knowledge domain", () => {

@@ -37,6 +37,10 @@ export const NODE_CATEGORY_COLORS = {
   Wiki__Summary: "#fecdd3",
   Wiki__Runbook: "#f5d0fe",
   Wiki__Index: "#c026d3",
+  // Repo documentation (BI-0E019B95). Same knowledge family as the wiki kinds, one
+  // step cooler so a doc page is separable from a wiki page at a glance without
+  // reading the label.
+  DocPage: "#ec4899",
 } as const satisfies Record<string, string>;
 
 /** Any ArchiMate type without a curated entry of its own. */
@@ -69,4 +73,5 @@ export const REL_TYPE_COLORS: Record<string, string> = {
   ROUTES_THROUGH: "#f472b6",
   LINKS_TO: "#f0abfc",
   OVERRIDES: "#d946ef",
+  IMPACTS: "#ec4899",
 };
