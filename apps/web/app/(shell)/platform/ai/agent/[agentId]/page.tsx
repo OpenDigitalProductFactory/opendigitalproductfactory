@@ -22,6 +22,7 @@ import {
 } from "@/lib/coworker-record/load-record";
 import { safeRosterReturnTo } from "@/lib/coworker-record/roster-filter";
 import { loadFamilyCorpusSignals } from "@/lib/coworker-record/corpus-signals";
+import { getCoworkerBacklogSlice } from "@/lib/coworker-record/surface-backlog";
 import {
   getCoworkerCapabilityNeedReview,
   type CoworkerCapabilityNeedReview,
@@ -55,6 +56,7 @@ import {
   DecisionsPanel,
 } from "@/components/platform/coworker-record/panels";
 import { NeedsAndPlaybooksPanel } from "@/components/platform/coworker-record/NeedsAndPlaybooksPanel";
+import { MySurfaceBacklogPanel } from "@/components/platform/coworker-record/MySurfaceBacklogPanel";
 import { CooConversationalNameCard } from "@/components/platform/coworker-record/CooConversationalNameCard";
 import { isStandingCooAgentId } from "@/lib/coworker-presentation/coo-name";
 import { AskCoworkerButton } from "@/components/agent/AskCoworkerButton";
@@ -210,6 +212,11 @@ export default async function AgentDetailPage({
       getCoworkerCapabilityNeedReview({ agentId: record.runtime.agentId }).catch(() => emptyNeedReview()),
       getWorkPatternReadModel({ agentId: record.runtime.agentId }).catch(() => emptyWorkPatternReadModel()),
     ]);
+
+  // BI-012C0B58: the coworker's own identity-scoped backlog slice (surface +
+  // occupation + owned), shared with the list_my_backlog tool. Fail-open so a
+  // read hiccup renders an empty-state panel rather than 500-ing the record.
+  const backlogSlice = await getCoworkerBacklogSlice(record.runtime.agentId).catch(() => null);
 
   const canWrite = !!session?.user && can(
     { platformRole: session.user.platformRole, isSuperuser: session.user.isSuperuser },
@@ -420,6 +427,14 @@ export default async function AgentDetailPage({
           ? String(decisions.total + needsAndPlaybooksCount)
           : null,
     },
+    {
+      id: "backlog",
+      label: "Backlog",
+      badge:
+        backlogSlice && backlogSlice.summary.open > 0
+          ? String(backlogSlice.summary.open)
+          : null,
+    },
   ];
 
   return (
@@ -606,6 +621,7 @@ export default async function AgentDetailPage({
           <PerformancePanel record={record} />
           <DecisionsPanel record={record} />
         </div>
+        <MySurfaceBacklogPanel slice={backlogSlice} displayName={agent.displayName} />
       </CoworkerRecordTabs>
     </div>
   );

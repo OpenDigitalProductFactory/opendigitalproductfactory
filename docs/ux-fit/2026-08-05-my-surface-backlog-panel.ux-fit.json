@@ -1,0 +1,18 @@
+{
+  "version": "1",
+  "decidedOption": "record-tab-scoped-list",
+  "decisionInteractionId": "DI-FC0621051019",
+  "scope": {
+    "files": [
+      "apps/web/components/platform/coworker-record/MySurfaceBacklogPanel.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "record-tab-scoped-list",
+      "chat-side-popover",
+      "standalone-my-backlog-route"
+    ]
+  }
+}

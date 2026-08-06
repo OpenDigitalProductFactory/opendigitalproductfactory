@@ -10,16 +10,11 @@
 // unchanged; this pack adds only the missing read lens.
 
 import { BACKLOG_STATUS_VALUES, BACKLOG_WORK_TYPE_VALUES } from "@/lib/explore/backlog";
+import { getCoworkerBacklogSlice } from "@/lib/coworker-record/surface-backlog";
 import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
 
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
-import { backlogScopeSelect, scopeData } from "./backlog-scope-metadata";
-import { requireCurrentCoworker, resolveCoworkerBacklogScope } from "./coworker-scope";
-
-function clampLimit(raw: unknown): number {
-  const n = typeof raw === "number" && Number.isFinite(raw) ? Math.floor(raw) : 50;
-  return Math.max(1, Math.min(200, n));
-}
+import { requireCurrentCoworker } from "./coworker-scope";
 
 const definitions: ToolDefinition[] = [
   {
@@ -58,68 +53,19 @@ async function listMyBacklogHandler(
   context: Parameters<ToolPackHandler>[2],
 ): Promise<ToolResult> {
   const agentId = requireCurrentCoworker(context);
-  const scope = await resolveCoworkerBacklogScope(agentId, context?.routeContext ?? null);
-  const { prisma } = await import("@dpf/db");
-
-  const scopeWhere = { OR: scope.orClauses };
-  const filters: Record<string, unknown> = { ...scopeWhere };
-  if (typeof params["status"] === "string") filters["status"] = params["status"];
-  if (typeof params["workType"] === "string") filters["workType"] = params["workType"];
-
-  const limit = clampLimit(params["limit"]);
-
-  const [items, matching, open, inProgress, done] = await Promise.all([
-    prisma.backlogItem.findMany({
-      where: filters,
-      orderBy: [{ priority: "asc" }, { updatedAt: "desc" }],
-      take: limit,
-      select: {
-        itemId: true,
-        title: true,
-        status: true,
-        type: true,
-        workType: true,
-        priority: true,
-        effortSize: true,
-        updatedAt: true,
-        triageOutcome: true,
-        ...backlogScopeSelect,
-        epic: { select: { epicId: true } },
-      },
-    }),
-    prisma.backlogItem.count({ where: filters }),
-    prisma.backlogItem.count({ where: { AND: [scopeWhere, { status: "open" }] } }),
-    prisma.backlogItem.count({ where: { AND: [scopeWhere, { status: "in-progress" }] } }),
-    prisma.backlogItem.count({ where: { AND: [scopeWhere, { status: "done" }] } }),
-  ]);
+  // The slice query is shared with the coworker-record "Backlog" panel
+  // (lib/coworker-record/surface-backlog) so the tool and the UI never drift.
+  const slice = await getCoworkerBacklogSlice(agentId, {
+    status: typeof params["status"] === "string" ? params["status"] : undefined,
+    workType: typeof params["workType"] === "string" ? params["workType"] : undefined,
+    limit: typeof params["limit"] === "number" ? params["limit"] : undefined,
+    routeContext: context?.routeContext ?? null,
+  });
 
   return {
     success: true,
-    message: `Your backlog: ${open} open, ${inProgress} in-progress, ${done} done. Showing ${items.length} of ${matching} in-scope item(s).`,
-    data: {
-      scope: {
-        portfolioId: scope.portfolioId,
-        valueStream: scope.valueStream,
-        professionKey: scope.professionKey,
-        occupationArmApplied: scope.occupationArmApplied,
-      },
-      summary: { open, inProgress, done },
-      total: matching,
-      truncated: items.length < matching,
-      items: items.map((i) => ({
-        itemId: i.itemId,
-        title: i.title,
-        status: i.status,
-        type: i.type,
-        workType: i.workType,
-        priority: i.priority,
-        effortSize: i.effortSize,
-        triageOutcome: i.triageOutcome,
-        ...scopeData(i),
-        epicId: i.epic?.epicId ?? null,
-        updatedAt: i.updatedAt.toISOString(),
-      })),
-    },
+    message: `Your backlog: ${slice.summary.open} open, ${slice.summary.inProgress} in-progress, ${slice.summary.done} done. Showing ${slice.items.length} of ${slice.total} in-scope item(s).`,
+    data: { ...slice },
   };
 }
 
