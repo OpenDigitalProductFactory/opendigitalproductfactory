@@ -10,6 +10,8 @@
 
 Phase 1 is the precondition for Phase 2 (observability) and Phase 3 (enforcement): you cannot enforce a process built on flaky tools, nor measure what you cannot observe.
 
+**Delivery shape (founder directive, spec §2.2):** Phase 1 ships as **ONE batched capsule (WC-3B8A9E08) → ONE PR** covering WS1+WS3+WS9(+WS10 scaffolding), **not four lease-consuming BI→PR cycles**. The 1-BI→1-PR→1-sandbox-lease pattern is exactly what saturated the shared sandbox; this plan dogfoods the batching rule. Work-type here is feature/tool/chore (not break-fix, not doc-only), so it takes the batched-sandbox + scoped-test profile — not the full estate suite, and not the no-PR hotfix path (spec §2.1).
+
 ## Grounding — the real seams (and two corrections a naïve plan would get wrong)
 
 **WS1 anchor:** `packages/dpf-skill-pack/hooks/process-spine-health-check.mjs` (+ `.test.mjs`), contract `packages/dpf-skill-pack/process-spine-replacements.json`, Grok wiring `grok-session-start.mjs` + `grok-skill-exposure-adapter.mjs`.
@@ -35,6 +37,11 @@ Enforcement contract is already resolved by WWMD (DI-F32A8BC90372): **hard-refus
 - **Task 3.2 — Auto-claim nonprod lease on session start (ADOPT `WC-009156D6`, TDD).** This work already exists as a stale-but-`working` capsule (`WC-009156D6` = FB-AD29AC0C) — **adopt/revive it, do not open a duplicate** (overlap surfaced by the 2026-08-05 sprawl triage below). Wire `claim_nonprod_environment_lease` into the session-start seam (`grok-session-start.mjs` and the Claude/Codex equivalents), fail-open so SessionStart never wedges. Removes the "churn waiting on shared sandbox" by making the lease automatic rather than a remembered manual step.
 - **Task 3.3 — Readiness truth in session context (TDD).** Ensure the SessionStart "Worktree verification-readiness" block reflects post-bootstrap state so an agent never claims a gate it cannot run (source-only) nor misses one it can (compile-ready).
 
+## WS10 — Batch BIs into one sandbox lease / one PR (BI-71991853, founder directive §2.2)
+
+- **Task 10.1 — Batching orchestrator (TDD).** Given a set of ready BIs, group compatible ones (same/adjacent work-type, non-overlapping capsule scope claims — reuse `claim_capsule_scope` conflict detection) into ONE sandbox run + ONE coherent PR; reserve a dedicated lease only for independent/conflicting work. Emit the batch plan as evidence on the capsule.
+- **Task 10.2 — Wire batching ahead of the lease request (TDD).** The lease/pregate step consumes a *batch*, not a single BI, so a scarce shared lease is never spent on one small item. Composes with WS3's auto-lease (WS3 makes the lease automatic; WS10 makes it economical) and WS6 (work-type/scope decide batch membership).
+
 ## Sandbox / WIP-sprawl triage findings (2026-08-05)
 
 `promote_to_build_studio` refused Phase 1 with `wip_cap_reached` (15 FeatureBuilds vs limit 3). A `list_work_capsules` sweep found the problem is deeper than the build cap:
@@ -54,7 +61,8 @@ Enforcement contract is already resolved by WWMD (DI-F32A8BC90372): **hard-refus
 
 - **BI-9FD287EC (WS1)** → Tasks 1.1–1.4 (coordinates with the hook-plane bundle).
 - **BI-FEE737CD (WS3)** → Tasks 3.1, 3.3 fresh; **Task 3.2 adopts `WC-009156D6`**.
-- **WS9 (reap stale WIP + liveness fix)** → filed as a new BI under EP-PROCESS-SPINE (Task 9.1 recommend-not-auto; Task 9.2 feeds WS4/WS5).
+- **WS9 (reap stale WIP + liveness fix)** → `BI-CBAAEA94` (Task 9.1 recommend-not-auto; Task 9.2 feeds WS4/WS5).
+- **WS10 (batch BIs into one lease/PR)** → `BI-71991853` (Tasks 10.1–10.2; the rule this plan itself follows).
 
 ## Verification (Phase-1 done criteria)
 
@@ -65,4 +73,4 @@ Enforcement contract is already resolved by WWMD (DI-F32A8BC90372): **hard-refus
 
 ## Sequencing
 
-WS3 Task 3.1/3.2 first (unblocks local gating and removes sandbox churn — highest immediate relief), then WS1 1.1→1.2→1.3→1.4. WS1 hard-refuse (1.3) ships only after the proof channel (1.1/1.2) is reliable — never enforce before the mechanism is trustworthy.
+WS3 Task 3.1/3.2 first (unblocks local gating and removes sandbox churn — highest immediate relief), then WS10 batching (so the very next sandbox use is economical), then WS1 1.1→1.2→1.3→1.4. WS1 hard-refuse (1.3) ships only after the proof channel (1.1/1.2) is reliable — never enforce before the mechanism is trustworthy. All of it lands in **one batched PR**, not per-task cycles.

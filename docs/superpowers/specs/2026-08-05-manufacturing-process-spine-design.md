@@ -49,6 +49,23 @@ The ordering is load-bearing, not cosmetic:
 
 Therefore the intervention proceeds in three phases. **Phase 3 (enforcement) must not begin for a given control until Phases 1–2 prove that control's tool is reliable and its conformance is measured.** The strategic reframe: *stop trying to make agents comply, and make the compliant path the cheapest path (Reduction Gear); then measure the residual gap; then gate only that.*
 
+### 2.1 Work is not one-size-fits-all — work-type shapes the process (founder, 2026-08-05)
+
+The process must never apply one gate profile to every change. **Work-type is a first-class input**, alongside diff-shape:
+
+| Work-type | PR? | Test depth | Sandbox |
+|---|---|---|---|
+| **break-fix / hotfix** | **usually NO PR** — the targeted hotfix path | the regression test that proves the fix, not the full suite | only if runtime-bound |
+| **doc-only** | PR, but **minimal** — no code tests | link/doc gates only | none |
+| **small / chore** | PR | minimal, scoped to the change | batched (see §2.2) |
+| **feature / schema / cross-cutting** | PR | full four-gate (§4) | batched sandbox run |
+
+When the work-type is **ambiguous, classify it *with the person who gave the instruction* before acting** (AGENTS.md §1, classify-ambiguous-requests) — never silently default to the heaviest or lightest profile. WS6 is therefore keyed on **work-type as well as diff-shape**, and its output includes *whether a PR is even required* and *how deep the tests go*, not just *which checks run*.
+
+### 2.2 Batch before the sandbox — end the 1-BI→1-PR bottleneck (founder, 2026-08-05)
+
+The observed saturation (15 builds vs a 3 cap; ~100 stale capsules) was **made worse by a 1-BI → 1-PR → 1-sandbox-lease pattern**: every small item consumed a scarce shared lease. The spine **batches compatible, non-conflicting BIs into ONE sandbox run and ONE PR** (a single coherent concern), reserving a dedicated lease only for genuinely independent or conflicting work. Batching is a **Phase-1 throughput lever (WS10)**, not a Phase-3 nicety — it directly relieves the same contention WS3 targets. This spec applies its own rule: Phase 1's WS1+WS3+WS9 ship as **one batched capsule (WC-3B8A9E08) → one PR**, not three lease-consuming cycles.
+
 ---
 
 ## 3. Research & Benchmarking (per AGENTS.md §7)
@@ -84,6 +101,7 @@ Both `FB-*` items are `ideate`-context, "absent on this install at ingest" — g
 - **WS1 — Provable spine load.** Turn §11's advisory "repair or restart before project work" into a machine signal: every session emits a **spine-loaded receipt** (which DPF process skills + MCP connector are actually exposed). Where the host supports hooks, project-work tools *refuse* when the spine is unproven; where it does not, the coordination plane records `spine-unproven` on any resulting work. Removes root cause B (the live `UNKNOWN`).
 - **WS2 — Process-tool reliability SLOs + health probes.** Give the inspection tools (doc blast-radius, `trace_code_surface`, code-graph, search) health probes and per-tool success-rate SLOs. A tool below SLO is *auto-flagged and its finding is marked low-confidence*, not silently trusted. Breaks the trust death-spiral ("found broken → never used → never fixed").
 - **WS3 — Remove sandbox contention + make source-only worktrees pre-gateable.** Land `FB-AD29AC0C` (auto-lease on session start) and make `bootstrap-worktree-deps` run by default so a worktree is compile-ready — so the CI-failure loop happens once, locally, not 3× remotely. Fixes root cause C's precondition and root cause D.
+- **WS10 — Batch BIs into one sandbox lease / one PR (founder directive, §2.2).** Replace the 1-BI→1-PR→1-lease pattern with a batching orchestrator: group compatible, non-conflicting BIs (by work-type and claimed scope) into a single sandbox run and a single coherent PR; reserve a dedicated lease only for independent/conflicting work. Directly relieves the shared-lease saturation. Composes with WS6 (work-type/scope decide what may batch) and WS3 (the lease it economizes).
 
 ### Phase 2 — Conformance observability (fixes E). *Turn suspicion into data.*
 
@@ -92,7 +110,7 @@ Both `FB-*` items are `ideate`-context, "absent on this install at ingest" — g
 
 ### Phase 3 — Enforce-by-construction (fixes A, C). *Ratchet advisory → gated, per control, only after its Phase 1–2 are green.*
 
-- **WS6 — Deterministic change-class → required-checks matrix (single authority).** Extend `FB-3D0A5095`: the diff determines the required checks (doc-only *provably* skips code tests; a UI route *provably* requires UX-fit), computed identically for Claude/Codex/Grok/Build Studio. Kills per-thread and per-client test variance.
+- **WS6 — Deterministic work-type + change-class → required-process matrix (single authority).** Extend `FB-3D0A5095`: **work-type AND diff-shape** together determine the required process — *whether a PR is required at all* (break-fix usually none — §2.1), *how deep the tests go* (doc-only/small → minimal), and *which checks run* (a UI route provably requires UX-fit) — computed identically for Claude/Codex/Grok/Build Studio. Kills per-thread and per-client variance in both test depth and PR discipline. Ambiguous work-type routes to the instruction-giver, never a silent default.
 - **WS7 — Evidence-gated process receipts.** Make research / spec / UX-fit *required evidence fields* on the change classes that need them (per §12 keystone). The webhook becomes the *backstop* for a now-unambiguous requirement, not the primary mechanism. Coordinates with EP-AGENT-INSTRUCTION-PLANE so each required step is unambiguously stated before it is gated.
 - **WS8 — Local-and-early gate as the default.** With WS3 done, pregate runs locally by default and blocks a red push; the reconciliation loop that currently costs 3 CI rounds costs one local round.
 
@@ -113,6 +131,7 @@ Baseline first (Phase 2 produces it), then targets:
 ## 7. Sequencing & guardrails
 
 - **Do not start Phase 3 enforcement for a control whose Phase 1 tool is not at SLO and whose Phase 2 conformance is not yet measured.** Enforcing an unreliable, unmeasured step is the failure mode this spec exists to prevent.
+- **Never apply one gate profile to every work-type (§2.1), and never spend a sandbox lease on a single small BI when it can be batched (§2.2).** One-size-fits-all gating and 1:1 lease consumption are the two founder-named anti-patterns this spine must not reintroduce.
 - **One concern per PR / child BI** (AGENTS.md §3). Each WS decomposes into small landable items.
 - **This spec is a WWMD/platform decision surface** — the ordering above is the recommendation; a per-control go/no-go on enforcement routes through `principle_decide` at the time each control reaches Phase 3.
 
