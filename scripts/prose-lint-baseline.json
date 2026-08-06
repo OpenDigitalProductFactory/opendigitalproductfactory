@@ -2246,6 +2246,13 @@
     "longSentences": 0,
     "textMass": 2
   },
+  "apps/web/app/api/storefront/[slug]/menu/route.ts": {
+    "vocabulary": 1,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 10
+  },
   "apps/web/app/api/storefront/[slug]/slots/route.ts": {
     "vocabulary": 0,
     "genericLabels": 0,
@@ -2322,6 +2329,13 @@
     "readability": 1,
     "longSentences": 0,
     "textMass": 9
+  },
+  "apps/web/app/api/storefront/nearby/route.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 4
   },
   "apps/web/app/api/test/codex-responses/route.ts": {
     "vocabulary": 0,
@@ -6500,7 +6514,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 77
+    "textMass": 75
   },
   "apps/web/components/platform/a2a-interaction-graph.ts": {
     "vocabulary": 0,
