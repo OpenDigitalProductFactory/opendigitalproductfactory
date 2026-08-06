@@ -92,14 +92,14 @@ test("child local-integration invocation uses only the runner-owned test databas
 
   const withOwnedDb = createLocalIntegrationChildInvocation({
     ...base,
-    testDatabaseUrl: "postgresql://dpf:dpf_dev@127.0.0.1:54329/dpf_local_ci_slot_0",
+    testDatabaseUrl: "postgresql://dpf:dpf_dev@127.0.0.1:15432/dpf_local_ci_slot_0",
     env: { DATABASE_URL: "postgresql://dpf:dpf_dev@127.0.0.1:5432/root" },
   });
 
   assert.ok(withOwnedDb.args.includes("--migrate-deploy"));
   assert.equal(
     withOwnedDb.env.DATABASE_URL,
-    "postgresql://dpf:dpf_dev@127.0.0.1:54329/dpf_local_ci_slot_0",
+    "postgresql://dpf:dpf_dev@127.0.0.1:15432/dpf_local_ci_slot_0",
   );
 
   const withoutOwnedDb = createLocalIntegrationChildInvocation({

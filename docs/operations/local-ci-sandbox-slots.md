@@ -56,13 +56,22 @@ fence remains fail-closed.
 Slot 0 preserves the established external endpoints:
 
 - portal: `http://localhost:3010`
-- PostgreSQL host port: `54329`
+- PostgreSQL host port: `15432`
 - scratch checkout: `D:/DPF-worktrees/.local-ci-runner` on the canonical
   Windows host layout
 
 The versioned public slot resources (slot keys, ordinals, portal ports, and
 PostgreSQL ports) live once in
-`apps/web/lib/nonprod/local-ci-slot-resources.json`. Both the server-side lease
+`apps/web/lib/nonprod/local-ci-slot-resources.json`. Host ports there **must
+stay below 49152**: the `49152–65535` ephemeral range is where Windows
+Hyper-V/WinNAT dynamically reserves 100-port blocks on every boot, so a host
+port in that range binds fine one boot and fails the next with
+`bind: An attempt was made to access a socket in a way forbidden by its access
+permissions` (WSAEACCES). The earlier `54329`/`54330` pair lived in that range
+and broke after a reboot; `15432`/`15433` are permanently out of WinNAT's reach.
+This is enforced fleet-wide by the Host Port Range Guard
+(`scripts/check-host-port-range.test.mjs`), which fails the gate if any Compose
+or slot host port is declared in `49152–65535`. Both the server-side lease
 binding and `scripts/lib/local-ci-slot-manifest.mjs` consume that contract.
 The manifest derives every remaining mutable identity—including the process
 fence, Compose project, PostgreSQL container/database/volume, integration

@@ -829,7 +829,7 @@ test("slot-1 metadata is bound through renewal before the canonical gate runs", 
       manifestVersion: 1,
       slotKey: "slot-1",
       url: "http://localhost:3011",
-      ports: [3011, 54330],
+      ports: [3011, 15433],
       cleanupCommand: "node scripts/local-ci-slot-cleanup.mjs --slot-key slot-1",
     });
   } finally {
