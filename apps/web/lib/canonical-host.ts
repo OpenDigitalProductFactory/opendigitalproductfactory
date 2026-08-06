@@ -96,15 +96,36 @@ import { NextResponse, type NextRequest } from "next/server";
 
 const HEALTH_PROBE_PATHS = new Set(["/api/health", "/api/healthz", "/api/ready"]);
 
+// Internal service-to-service callbacks arrive on the internal Docker hostname
+// (INNGEST_SERVE_ORIGIN=http://portal:3000) or loopback — hosts that never match
+// a public PUBLIC_URL. A 301 corrupts these machine payloads: the Inngest
+// executor's signed function-run POSTs then fail signature validation, killing
+// ALL background jobs (self-upgrade, backups, watchdogs, evals, the federation
+// reconciliation), and the MCP tool surface / local-CI gate get a redirect
+// instead of JSON. These are machine callbacks, not browser navigation, so
+// canonicalization must not apply. See BI-A5842B04.
+const INTERNAL_SERVICE_CALLBACK_PREFIXES = ["/api/inngest", "/api/mcp"];
+
+/** Paths exempt from canonical-host redirection: health probes that load
+ *  balancers hit on the raw LAN IP, plus internal service callbacks that arrive
+ *  on the Docker service hostname / loopback and must never be redirected. Pure
+ *  and exported for direct unit testing. */
+export function isCanonicalRedirectExempt(pathname: string): boolean {
+  if (HEALTH_PROBE_PATHS.has(pathname)) return true;
+  return INTERNAL_SERVICE_CALLBACK_PREFIXES.some(
+    (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
+  );
+}
+
 /** Enforce canonical-host policy on an incoming Next request.
  *
  *  Returns a 301 redirect response (with `Clear-Site-Data: "storage"`) when
  *  the request host does not match PUBLIC_URL or PUBLIC_URL_ALIASES, and
  *  `null` when the request should pass through unchanged.
  *
- *  Health-probe paths (`/api/health`, `/api/healthz`, `/api/ready`) are
- *  always excluded — load balancers hit these on the LAN IP and a redirect
- *  would fail the probe.
+ *  Exempt paths (`isCanonicalRedirectExempt`) always pass through: health probes
+ *  (a redirect would fail the LAN-IP probe) and internal service callbacks
+ *  (`/api/inngest`, `/api/mcp/*`) whose signed/JSON payloads a 301 would corrupt.
  *
  *  Header is set on the response object after construction (not via init
  *  options) — Next can strip headers during redirect normalization, and
@@ -115,7 +136,7 @@ export function enforceCanonicalHost(
 ): NextResponse | null {
   const { pathname, search } = req.nextUrl;
 
-  if (HEALTH_PROBE_PATHS.has(pathname)) return null;
+  if (isCanonicalRedirectExempt(pathname)) return null;
 
   const host =
     req.headers.get("x-forwarded-host") ?? req.headers.get("host") ?? null;

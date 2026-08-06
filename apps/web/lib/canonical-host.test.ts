@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { NextRequest } from "next/server";
-import { decideHostMatch, enforceCanonicalHost } from "./canonical-host";
+import { decideHostMatch, enforceCanonicalHost, isCanonicalRedirectExempt } from "./canonical-host";
 
 const path = "/foo";
 const search = "?bar=1";
@@ -165,6 +165,34 @@ describe("decideHostMatch", () => {
   });
 });
 
+describe("isCanonicalRedirectExempt", () => {
+  it.each(["/api/health", "/api/healthz", "/api/ready"])(
+    "exempts health-probe path %s",
+    (p) => expect(isCanonicalRedirectExempt(p)).toBe(true),
+  );
+
+  it.each([
+    "/api/inngest",
+    "/api/inngest/",
+    "/api/mcp",
+    "/api/mcp/v1",
+    "/api/mcp/v1/anything",
+  ])("exempts internal service callback %s", (p) =>
+    expect(isCanonicalRedirectExempt(p)).toBe(true),
+  );
+
+  it.each([
+    "/",
+    "/ops/demand",
+    "/api/v1/federation/demand",
+    "/api/inngestx",
+    "/api/mcpx",
+    "/api/health/extra",
+  ])("does NOT exempt browser/other route %s", (p) =>
+    expect(isCanonicalRedirectExempt(p)).toBe(false),
+  );
+});
+
 // Helper: build a NextRequest with optional host / x-forwarded-host headers.
 function buildRequest(opts: {
   url: string;
@@ -268,6 +296,23 @@ describe("enforceCanonicalHost (Next.js wrapper)", () => {
       const req = buildRequest({
         url: `http://192.168.1.10:3000${probePath}`,
         host: "192.168.1.10:3000",
+      });
+      expect(enforceCanonicalHost(req)).toBeNull();
+    },
+  );
+
+  // Regression (BI-A5842B04): setting PUBLIC_URL must never 301 the internal
+  // service callbacks that arrive on the Docker service host / loopback — a
+  // redirect there corrupts Inngest's signed POSTs (background jobs die) and the
+  // MCP/CI JSON. Even with PUBLIC_URL set and a non-canonical host, pass through.
+  it.each(["/api/inngest", "/api/mcp/v1"])(
+    "never redirects internal service callback %s even with PUBLIC_URL set",
+    (internalPath) => {
+      process.env.PUBLIC_URL = "https://portal.example.com";
+      delete process.env.PUBLIC_URL_ALIASES;
+      const req = buildRequest({
+        url: `http://portal:3000${internalPath}`,
+        host: "portal:3000",
       });
       expect(enforceCanonicalHost(req)).toBeNull();
     },
