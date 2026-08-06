@@ -15,6 +15,7 @@ import {
 import { useRouter } from "expo-router";
 import { useTheme } from "@/src/lib/theme";
 import { useGeolocation } from "@/src/hooks/useGeolocation";
+import { useAuthStore } from "@/src/features/auth/auth.store";
 import { orderForDisplay, useVisitorStore } from "@/src/features/visitor/visitor.store";
 import type { NearbyBusiness } from "@dpf/types";
 
@@ -32,6 +33,7 @@ export default function NearbyScreen(): React.JSX.Element {
     useGeolocation();
   const { businesses, isLoadingNearby, nearbyError, fetchNearby } =
     useVisitorStore();
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
 
   useEffect(() => {
     if (latitude !== null && longitude !== null) {
@@ -72,7 +74,22 @@ export default function NearbyScreen(): React.JSX.Element {
       keyExtractor={(b) => b.slug}
       ListHeaderComponent={
         <View>
-          <Text style={styles.h1}>Right here</Text>
+          <View style={styles.headerRow}>
+            <Text style={styles.h1}>Right here</Text>
+            {/* Sign in stays reachable but is never required to browse. Only an
+                anonymous visitor sees it; pushed (not replaced) so they can
+                back out and keep looking. */}
+            {!isAuthenticated ? (
+              <Pressable
+                onPress={() => router.push("/login")}
+                accessibilityRole="button"
+                testID="nearby-signin"
+                hitSlop={8}
+              >
+                <Text style={styles.signIn}>Sign in</Text>
+              </Pressable>
+            ) : null}
+          </View>
           {err ? (
             <Text style={styles.error} testID="nearby-error">
               {err}
@@ -125,7 +142,14 @@ function makeStyles({ colors, spacing, borderRadius }: ReturnType<typeof useThem
     screen: { flex: 1, backgroundColor: colors.surface1 },
     content: { padding: spacing.md, paddingBottom: spacing.xl },
     centre: { flex: 1, alignItems: "center", justifyContent: "center", padding: spacing.lg, gap: spacing.md, backgroundColor: colors.surface1 },
-    h1: { color: colors.text, fontSize: 22, fontWeight: "700", marginBottom: spacing.sm },
+    headerRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      marginBottom: spacing.sm,
+    },
+    h1: { color: colors.text, fontSize: 22, fontWeight: "700" },
+    signIn: { color: colors.primary, fontSize: 15, fontWeight: "600" },
     row: {
       flexDirection: "row",
       alignItems: "center",
