@@ -424,6 +424,16 @@ export const RETAINED_DATASETS: readonly RetainedDataset[] = [
 
   // Consent.
   { model: "voiceConsentRecord", label: "Voice consent records", regulatoryBasis: "Consent provenance (GDPR/biometric)", minRetentionYears: 7 },
+
+  // Recruiting / ATS applicant records (BI-F3AEBF68). Federal-contractor
+  // applicant-flow recordkeeping — the platform must not auto-purge within the
+  // statutory window (OFCCP 2y floor; EEOC 1y).
+  { model: "candidate", label: "Candidates", regulatoryBasis: "EEOC/OFCCP applicant recordkeeping (41 CFR 60-1.12 / 29 CFR 1602)", minRetentionYears: 2 },
+  { model: "application", label: "Applications", regulatoryBasis: "EEOC/OFCCP applicant-flow recordkeeping (41 CFR 60-1.12 / 29 CFR 1602)", minRetentionYears: 2 },
+  { model: "scheduledInterview", label: "Scheduled interviews", regulatoryBasis: "EEOC/OFCCP selection-procedure recordkeeping", minRetentionYears: 2 },
+  { model: "scorecard", label: "Interview scorecards", regulatoryBasis: "EEOC/OFCCP selection-procedure recordkeeping (adverse-impact basis)", minRetentionYears: 2 },
+  { model: "offer", label: "Offers", regulatoryBasis: "EEOC/OFCCP applicant-flow recordkeeping", minRetentionYears: 2 },
+  { model: "demographicResponse", label: "EEO demographic responses", regulatoryBasis: "EEOC/OFCCP demographic recordkeeping (kept separate from selection)", minRetentionYears: 2 },
 ] as const;
 
 /** Models the engine will purge (for guard tests + reporting). */

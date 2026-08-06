@@ -56,6 +56,16 @@ export const SUPPORTED_INTEGRATIONS: readonly SupportedIntegration[] = [
     pricingModel: "paid",
     credentialProvider: "adp",
   },
+  // Recruiting / ATS → For Employees. First ATS connector; bridge toward native
+  // recruiting (BI-E5561DC9 / BI-F3AEBF68). Harvest API, token (Basic) auth.
+  {
+    slug: "greenhouse",
+    name: "Greenhouse Recruiting",
+    description: "Applicant tracking — jobs, candidates, applications, and hires.",
+    portfolioSlug: "for_employees",
+    pricingModel: "paid",
+    credentialProvider: "greenhouse",
+  },
   // CRM / sales → For Employees.
   {
     slug: "hubspot",

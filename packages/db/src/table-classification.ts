@@ -301,6 +301,19 @@ export const TABLE_CLASSIFICATION: Record<string, TableSensitivity> = {
   RouteOutcome: "restricted",
   RecipePerformance: "restricted",
   ApiToken: "restricted",
+  // -- recruiting / ATS (BI-F3AEBF68) --
+  JobRequisition: "internal",
+  RequisitionOpening: "internal",
+  JobPosting: "internal",
+  RecruitingSource: "internal",
+  PipelineStage: "internal",
+  DispositionReason: "internal",
+  Candidate: "confidential",
+  Application: "confidential",
+  ScheduledInterview: "confidential",
+  Scorecard: "confidential",
+  Offer: "confidential",
+  DemographicResponse: "restricted",
 };
 
 /** Fallback for tables not yet classified — defaults to confidential (obfuscate). */

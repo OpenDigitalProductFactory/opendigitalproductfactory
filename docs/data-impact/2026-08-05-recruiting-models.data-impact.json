@@ -1,0 +1,103 @@
+{
+  "version": "1",
+  "accountableOwner": "platform-architecture",
+  "affectedCopies": [
+    "Greenhouse import staging (IntegrationImportStagedRecord): candidate/application/offer/scorecard records land here as read-only review rows before any native conversion",
+    "EmployeeProfile: a hired candidate converts to an onboarding worker via the MasterDataSourceRef worker crosswalk (no direct FK from these models)"
+  ],
+  "migration": {
+    "name": "20260805110000_add_recruiting_models",
+    "backfill": "none — additive: 12 new tables only, no existing table altered, no data backfilled"
+  },
+  "tests": [
+    "apps/web/lib/govern/data/coverage.live.test.ts",
+    "apps/web/lib/operate/retention/retention.test.ts",
+    "apps/web/lib/integrate/greenhouse/harvest-to-staging.test.ts"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:job-requisition",
+      "prismaModel": "JobRequisition",
+      "lifecycleDisposition": "business-record; closed/filled through the requisition status lifecycle, not time-aged (stewardship exemption: domain-lifecycle-managed)",
+      "fields": []
+    },
+    {
+      "kind": "model",
+      "assetId": "data:requisition-opening",
+      "prismaModel": "RequisitionOpening",
+      "lifecycleDisposition": "business-record; cascade of its parent requisition, never independently aged (domain-lifecycle-managed)",
+      "fields": []
+    },
+    {
+      "kind": "model",
+      "assetId": "data:job-posting",
+      "prismaModel": "JobPosting",
+      "lifecycleDisposition": "business-record; unpublished/closed by requisition lifecycle and cascade (domain-lifecycle-managed)",
+      "fields": []
+    },
+    {
+      "kind": "model",
+      "assetId": "data:recruiting-source",
+      "prismaModel": "RecruitingSource",
+      "lifecycleDisposition": "reference-data lookup; superseded by operator edits, never aged out",
+      "fields": []
+    },
+    {
+      "kind": "model",
+      "assetId": "data:pipeline-stage",
+      "prismaModel": "PipelineStage",
+      "lifecycleDisposition": "operational; stage definitions cascade with their requisition, not independently aged",
+      "fields": []
+    },
+    {
+      "kind": "model",
+      "assetId": "data:disposition-reason",
+      "prismaModel": "DispositionReason",
+      "lifecycleDisposition": "reference-data lookup; superseded, never time-aged",
+      "fields": []
+    },
+    {
+      "kind": "model",
+      "assetId": "data:candidate",
+      "prismaModel": "Candidate",
+      "lifecycleDisposition": "regulated-record; retained min 2y (EEOC/OFCCP applicant recordkeeping); platform must not auto-purge within the statutory window",
+      "fields": []
+    },
+    {
+      "kind": "model",
+      "assetId": "data:application",
+      "prismaModel": "Application",
+      "lifecycleDisposition": "regulated-record; retained min 2y (EEOC/OFCCP applicant-flow recordkeeping)",
+      "fields": []
+    },
+    {
+      "kind": "model",
+      "assetId": "data:scheduled-interview",
+      "prismaModel": "ScheduledInterview",
+      "lifecycleDisposition": "regulated-record; retained min 2y (selection-procedure recordkeeping)",
+      "fields": []
+    },
+    {
+      "kind": "model",
+      "assetId": "data:scorecard",
+      "prismaModel": "Scorecard",
+      "lifecycleDisposition": "regulated-record; retained min 2y (adverse-impact selection-procedure basis)",
+      "fields": []
+    },
+    {
+      "kind": "model",
+      "assetId": "data:offer",
+      "prismaModel": "Offer",
+      "lifecycleDisposition": "regulated-record; retained min 2y (applicant-flow recordkeeping)",
+      "fields": []
+    },
+    {
+      "kind": "model",
+      "assetId": "data:demographic-response",
+      "prismaModel": "DemographicResponse",
+      "lifecycleDisposition": "regulated-record; retained min 2y (EEO demographic recordkeeping), jurisdiction-gated and kept separate from selection decisions",
+      "fields": []
+    }
+  ]
+}

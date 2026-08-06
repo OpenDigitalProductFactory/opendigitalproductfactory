@@ -81,8 +81,8 @@ describe("getConnectionCatalog", () => {
   it("aggregates MCP, native, and built-in entries into separate sections", async () => {
     const result = await getConnectionCatalog({ query: "" });
 
-    expect(result.totalCount).toBe(17);
-    expect(result.counts).toEqual({ mcp: 1, native: 15, builtIn: 1 });
+    expect(result.totalCount).toBe(18);
+    expect(result.counts).toEqual({ mcp: 1, native: 16, builtIn: 1 });
     expect(result.sections.map((section) => section.title)).toEqual([
       "MCP Catalog",
       "Native Integrations",
