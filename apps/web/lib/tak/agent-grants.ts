@@ -188,6 +188,8 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   record_local_integration_result: ["backlog_write"],
   record_functional_failure_evidence: ["backlog_write"],
   get_next_recommended_work: ["backlog_read"],
+  // Coworker self-scoped backlog lens (BI-474A1F55) — read-only, identity-scoped.
+  list_my_backlog: ["backlog_read"],
   // Work Capsule control harness (spec 2026-05-14)
   list_work_capsules: ["work_capsule_read"],
   get_work_capsule: ["work_capsule_read"],
