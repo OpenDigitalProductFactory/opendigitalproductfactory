@@ -568,6 +568,12 @@ export const ROUTE_CONTEXT_MAP: Record<string, RouteContextDef> = {
 
   "/ops": {
     routePrefix: "/ops",
+    // `exact`: this entry asserts a SPECIFIC page identity ("the delivery
+    // backlog"), which is wrong for sibling ops pages (/ops/patches,
+    // /ops/journeys, ...). Marking it exact stops those descendants inheriting
+    // the backlog identity — the runtime fix for BI-5457E216 / the /ops/* debt
+    // that route-context-inheritance.conformance.test.ts had been tracking.
+    match: "exact",
     domain: "Operations",
     sensitivity: "internal",
     domainContext:
@@ -1230,14 +1236,21 @@ export const FALLBACK_ROUTE_CONTEXT: RouteContextDef =
 
 /**
  * Resolve which route context applies for a given pathname.
- * Uses longest prefix match; falls back to workspace.
- * Merges universal skills into every route's skills array.
+ * Longest prefix match, EXCEPT `exact` entries match only their own route (their
+ * identity never leaks to a descendant — design spec 2026-08-05 §6.2/§8, the
+ * runtime generalization of the BI-5457E216 inheritance guard). Falls back to
+ * workspace. Merges universal skills into every route's skills array.
  */
 export function resolveRouteContext(pathname: string): RouteContextDef {
   let best: RouteContextDef = FALLBACK_ROUTE_CONTEXT;
   let bestLen = 0;
 
   for (const [prefix, def] of Object.entries(ROUTE_CONTEXT_MAP)) {
+    // An `exact` entry (e.g. /ops = "the delivery backlog") must NOT be
+    // inherited by a descendant route; it only matches its own pathname. So
+    // /ops/patches falls through to the next match instead of claiming to be
+    // the backlog.
+    if (def.match === "exact" && prefix !== pathname) continue;
     if (pathname === prefix || pathname.startsWith(prefix + "/")) {
       if (prefix.length > bestLen) {
         bestLen = prefix.length;
