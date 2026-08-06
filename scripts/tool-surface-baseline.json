@@ -3,14 +3,14 @@
   "selectionCliff": 15,
   "entries": {
     "registry.toolDefinitions": {
-      "value": 361,
-      "reason": "Adds list_my_backlog (BI-474A1F55): a coworker's identity-scoped read lens over the backlog for its own surface + occupation. No existing tool carries it — query_backlog/list_backlog_items filter only by scopeKind/archetype/status and cannot scope by portfolio/occupation/owner, and get_next_recommended_work's forAgentId is grant-claimability, not surface. It is the missing read side of the coworker capability-evolution loop; open and file reuse get_backlog_item/create_backlog_item, so this is +1, under the 15-tool selection cliff.",
-      "recordedAt": "2026-08-05"
+      "value": 362,
+      "reason": "Adds get_recruiting_pipeline (BI-E64D11AE): the HR-coworker read lens over the unified recruiting funnel — native Applications plus Greenhouse-sourced staged rows, deduped by crosswalk — so a coworker sees one pipeline across native and absorbed work. No existing tool carries it: query_employees is People-Core directory, and the backlog/estate read lenses do not touch recruiting entities. It is the coworker surface of the merged dual-read read-model (getRecruitingPipeline, #4067); read-only, +1, under the 15-tool selection cliff.",
+      "recordedAt": "2026-08-06"
     },
     "registry.packFiles": {
-      "value": 86,
-      "reason": "Adds coworker-backlog-lens-pack.ts (the list_my_backlog pack) and coworker-scope.ts (shared identity-scope resolver, extracted from coworker-capability-pack so both packs share one requireCurrentCoworker + resolveCoworkerBacklogScope path). BI-474A1F55.",
-      "recordedAt": "2026-08-05"
+      "value": 87,
+      "reason": "Adds recruiting-pipeline-pack.ts (the get_recruiting_pipeline pack) — the Absorb coworker surface over the shared recruiting read-model. One pack, one tool; reuses lib/recruiting/pipeline-read-model.ts rather than adding read logic. BI-E64D11AE.",
+      "recordedAt": "2026-08-06"
     },
     "tier.coreToolNames": {
       "value": 29,
