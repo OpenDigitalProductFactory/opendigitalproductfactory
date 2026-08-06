@@ -194,7 +194,7 @@ profile. A versioned slot manifest owns every mutable identity: scratch
 checkout, process fence, Compose project, portal and PostgreSQL ports,
 container/database/volume, dependency convergence state, output, and evidence.
 Slot 0 preserves the singleton portal on `http://localhost:3010` and uses its
-dedicated PostgreSQL endpoint on port `54329`; it may still consume shared,
+dedicated PostgreSQL endpoint on port `15432`; it may still consume shared,
 read-only or concurrency-safe development services such as Qdrant and Neo4j.
 Slot 1 is declared and testable, but automatic admission remains fixed at one
 until BI-A4427AB8 runs the separately governed capacity pilot.

@@ -580,7 +580,7 @@ describe("lease liveness windows", () => {
       manifestVersion: 1 as const,
       slotKey: "slot-1" as const,
       url: "http://localhost:3011",
-      ports: [3011, 54330],
+      ports: [3011, 15433],
       cleanupCommand: "node scripts/local-ci-slot-cleanup.mjs --slot-key slot-1",
     };
 
@@ -631,7 +631,7 @@ describe("lease liveness windows", () => {
         manifestVersion: 1,
         slotKey: "slot-0",
         url: "http://localhost:3010",
-        ports: [3010, 54329],
+        ports: [3010, 15432],
         cleanupCommand: "node scripts/local-ci-slot-cleanup.mjs --slot-key slot-0",
       },
       now: NOW,
@@ -645,7 +645,7 @@ describe("lease liveness windows", () => {
         manifestVersion: 1,
         slotKey: "slot-1",
         url: "http://localhost:3010",
-        ports: [3010, 54329],
+        ports: [3010, 15432],
         cleanupCommand: "node scripts/local-ci-slot-cleanup.mjs --slot-key slot-1",
       },
       now: NOW,

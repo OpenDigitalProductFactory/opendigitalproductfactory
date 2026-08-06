@@ -175,7 +175,7 @@ describe("nonprod-lease pack — handler behavior (delegation preserved)", () =>
       ownerSessionId: "s2",
       purpose: "pilot",
       url: "http://localhost:3010",
-      ports: [3010, 54329],
+      ports: [3010, 15432],
       expiresAt: new Date("2026-07-30T05:02:00Z").toISOString(),
       slotManifestVersion: 1,
       hostPressure,
@@ -195,7 +195,7 @@ describe("nonprod-lease pack — handler behavior (delegation preserved)", () =>
       manifestVersion: 1,
       slotKey: "slot-1",
       url: "http://localhost:3011",
-      ports: [3011, 54330],
+      ports: [3011, 15433],
       cleanupCommand: "node scripts/local-ci-slot-cleanup.mjs --slot-key slot-1",
     };
 

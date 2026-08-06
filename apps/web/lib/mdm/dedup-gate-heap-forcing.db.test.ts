@@ -13,7 +13,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import pg from "pg";
 
-const DATABASE_URL = process.env.DATABASE_URL ?? "postgresql://dpf:dpf_dev@localhost:54329/dpf";
+const DATABASE_URL = process.env.DATABASE_URL ?? "postgresql://dpf:dpf_dev@localhost:15432/dpf";
 const SCHEMA = "dedup_heap_forcing_test";
 
 let client: pg.Client | undefined;

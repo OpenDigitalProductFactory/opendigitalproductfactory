@@ -11,7 +11,7 @@ import pg from "pg";
 
 import { buildExactKeyRepairSql } from "./exact-key-repair";
 
-const DATABASE_URL = process.env.DATABASE_URL ?? "postgresql://dpf:dpf_dev@localhost:54329/dpf";
+const DATABASE_URL = process.env.DATABASE_URL ?? "postgresql://dpf:dpf_dev@localhost:15432/dpf";
 const SCHEMA = "exact_key_repair_test";
 
 let client: pg.Client | undefined;

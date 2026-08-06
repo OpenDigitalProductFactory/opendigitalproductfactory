@@ -78,7 +78,7 @@ test("slot-0 preserves the proven singleton external ports", () => {
 
   assert.equal(manifest.portal.port, 3010);
   assert.equal(manifest.portal.url, "http://localhost:3010");
-  assert.equal(manifest.postgres.hostPort, 54329);
+  assert.equal(manifest.postgres.hostPort, 15432);
 });
 
 test("the shared resource contract drives the server-visible slot binding", () => {
@@ -97,7 +97,7 @@ test("the shared resource contract drives the server-visible slot binding", () =
       manifestVersion: 1,
       slotKey: "slot-1",
       url: "http://localhost:3011",
-      ports: [3011, 54330],
+      ports: [3011, 15433],
       cleanupCommand:
         "node scripts/local-ci-slot-cleanup.mjs --slot-key slot-1",
     },

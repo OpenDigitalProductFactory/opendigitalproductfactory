@@ -1329,6 +1329,9 @@
     "scripts/check-guards.mjs": [
       "docs/architecture/theme-aware-styling-runbook.md"
     ],
+    "scripts/check-host-port-range.test.mjs": [
+      "docs/operations/local-ci-sandbox-slots.md"
+    ],
     "scripts/check-instruction-plane-size.mjs": [
       "docs/architecture/context-engineering-standards.md"
     ],
@@ -2296,6 +2299,7 @@
       "scripts/lib/resolve-capability-compose-profiles.mjs"
     ],
     "docs/operations/local-ci-sandbox-slots.md": [
+      "scripts/check-host-port-range.test.mjs",
       "scripts/lib/local-ci-slot-manifest.mjs",
       "scripts/local-ci-pilot-report.mjs"
     ],

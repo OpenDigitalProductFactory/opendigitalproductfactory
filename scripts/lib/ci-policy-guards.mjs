@@ -56,6 +56,9 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       node("--test", "scripts/check-capability-compose-profiles.test.mjs"),
       node("scripts/check-capability-compose-profiles.mjs"),
     ]),
+    guard("host-port-range-guard", "Host Port Range Guard", [
+      node("--test", "scripts/check-host-port-range.test.mjs"),
+    ]),
     guard("docs-link-integrity", "Docs Link Integrity", [
       node("scripts/gen-doc-index.mjs", "--check"),
       node(
