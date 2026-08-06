@@ -100,14 +100,19 @@ function pluralize(label: { one: string; many: string }, count: number): string 
  * Curated action tools become named outcomes; unmapped write tools fold into a
  * single "other actions" bucket; read tools are dropped. Exported for tests.
  *
- * @param toolCounts  toolName → number of successful calls today
- * @param limit       max named outcomes before the "other" bucket
+ * @param toolCounts     toolName → number of successful calls today
+ * @param limit          max named outcomes before the "other" bucket
+ * @param extraOutcomes  pre-labeled non-tool outcomes (A2A delegations/handoffs,
+ *                       backlog/build evidence) — ranked and capped alongside the
+ *                       tool-derived ones so a coworker's delegated/lifecycle work
+ *                       shows too, not just its tool calls (BI-3D37CE9D).
  */
 export function summarizeOutcomes(
   toolCounts: Record<string, number>,
   limit = 4,
+  extraOutcomes: readonly Outcome[] = [],
 ): Outcome[] {
-  const named: Outcome[] = [];
+  const named: Outcome[] = extraOutcomes.filter((o) => o.count > 0).map((o) => ({ ...o }));
   let otherCount = 0;
   let otherSensitive = false;
 

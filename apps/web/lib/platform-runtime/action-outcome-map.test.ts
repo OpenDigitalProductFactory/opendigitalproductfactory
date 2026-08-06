@@ -49,6 +49,17 @@ describe("summarizeOutcomes", () => {
     expect(out[2]).toEqual({ label: "other actions", count: 6, sensitive: false });
   });
 
+  it("folds pre-labeled extra (non-tool) outcomes into the ranking (BI-3D37CE9D)", () => {
+    const out = summarizeOutcomes(
+      { create_backlog_item: 2 },
+      4,
+      [{ label: "handoffs", count: 5, sensitive: false }],
+    );
+    // the extra outcome ranks by count alongside the tool-derived ones
+    expect(out[0]).toEqual({ label: "handoffs", count: 5, sensitive: false });
+    expect(out.map((o) => o.label)).toContain("backlog items filed");
+  });
+
   it("flags outcomes that touch sensitive data", () => {
     const out = summarizeOutcomes({ update_employee: 3, create_backlog_item: 2 });
     const hr = out.find((o) => o.label === "employee records updated");

@@ -56,6 +56,15 @@ type WorkforcePrisma = {
   taskRun: { findMany: (args: unknown) => Promise<TaskRunRow[]> };
   toolExecution: { groupBy: (args: unknown) => Promise<GroupRow[]> };
   tokenUsage: { groupBy: (args: unknown) => Promise<GroupRow[]> };
+  delegationChain: { groupBy: (args: unknown) => Promise<ActorCountRow[]> };
+  phaseHandoff: { groupBy: (args: unknown) => Promise<ActorCountRow[]> };
+  backlogItemActivity: { groupBy: (args: unknown) => Promise<ActorCountRow[]> };
+};
+/** A groupBy row keyed on the ACTING coworker for a non-tool source. */
+type ActorCountRow = {
+  fromAgentId?: string | null;
+  recordedByAgentId?: string | null;
+  _count?: { _all: number };
 };
 type AgentRow = {
   agentId: string;
@@ -90,7 +99,16 @@ export async function loadWorkforceActivity(
   startOfDay.setUTCHours(0, 0, 0, 0);
   const lookbackFloor = new Date(nowMs - LAST_ACTED_LOOKBACK_DAYS * 86_400_000);
 
-  const [agents, liveRuns, toolByAgentTool, lastActedByAgent, tokensByAgent] = await Promise.all([
+  const [
+    agents,
+    liveRuns,
+    toolByAgentTool,
+    lastActedByAgent,
+    tokensByAgent,
+    delegatedRows,
+    handoffRows,
+    evidenceRows,
+  ] = await Promise.all([
     prisma.agent.findMany({
       where: { archived: false, type: "coworker" },
       select: {
@@ -131,6 +149,25 @@ export async function loadWorkforceActivity(
       where: { createdAt: { gte: startOfDay } },
       _sum: { inputTokens: true, outputTokens: true, costUsd: true },
     }),
+    // Non-tool accomplishments so a coworker deep in delegation/lifecycle work
+    // doesn't read as under-busy (BI-3D37CE9D): A2A delegations it initiated,
+    // phase handoffs it made, and backlog evidence it logged — all keyed on the
+    // ACTING coworker (fromAgentId / recordedByAgentId), today.
+    prisma.delegationChain.groupBy({
+      by: ["fromAgentId"],
+      where: { startedAt: { gte: startOfDay } },
+      _count: { _all: true },
+    }),
+    prisma.phaseHandoff.groupBy({
+      by: ["fromAgentId"],
+      where: { createdAt: { gte: startOfDay } },
+      _count: { _all: true },
+    }),
+    prisma.backlogItemActivity.groupBy({
+      by: ["recordedByAgentId"],
+      where: { kind: "evidence", recordedAt: { gte: startOfDay } },
+      _count: { _all: true },
+    }),
   ]);
 
   // First live task per agent (rows are newest-first).
@@ -163,6 +200,10 @@ export async function loadWorkforceActivity(
     ]),
   );
 
+  const delegatedByAgent = countByActor(delegatedRows, "fromAgentId");
+  const handoffsByAgent = countByActor(handoffRows, "fromAgentId");
+  const evidenceByAgent = countByActor(evidenceRows, "recordedByAgentId");
+
   const working: WorkforceCoworker[] = [];
   const quiet: WorkforceCoworker[] = [];
   let actionsToday = 0;
@@ -174,7 +215,11 @@ export async function loadWorkforceActivity(
 
   for (const agent of agents) {
     const toolCounts = toolCountsByAgent.get(agent.agentId) ?? {};
-    const didToday = summarizeOutcomes(toolCounts);
+    const didToday = summarizeOutcomes(
+      toolCounts,
+      4,
+      activityOutcomes(agent.agentId, delegatedByAgent, handoffsByAgent, evidenceByAgent),
+    );
     const tok = tokensMap.get(agent.agentId) ?? { tokens: 0, cost: 0 };
     const live = liveByAgent.get(agent.agentId);
     const lastActed = live
@@ -232,4 +277,40 @@ export async function loadWorkforceActivity(
       coworkersWithoutOwnerCount: withoutOwner,
     },
   };
+}
+
+/** Count grouped rows by the acting-coworker field into a per-agent map. */
+function countByActor(
+  rows: ActorCountRow[],
+  key: "fromAgentId" | "recordedByAgentId",
+): Map<string, number> {
+  const map = new Map<string, number>();
+  for (const row of rows) {
+    const id = row[key];
+    if (id) map.set(id, row._count?._all ?? 0);
+  }
+  return map;
+}
+
+/** A coworker's non-tool accomplishments today, as ranked-in outcome chips. */
+function activityOutcomes(
+  agentId: string,
+  delegatedByAgent: Map<string, number>,
+  handoffsByAgent: Map<string, number>,
+  evidenceByAgent: Map<string, number>,
+): Outcome[] {
+  const out: Outcome[] = [];
+  const delegated = delegatedByAgent.get(agentId) ?? 0;
+  const handoffs = handoffsByAgent.get(agentId) ?? 0;
+  const evidence = evidenceByAgent.get(agentId) ?? 0;
+  if (delegated > 0) {
+    out.push({ label: delegated === 1 ? "delegation" : "delegations", count: delegated, sensitive: false });
+  }
+  if (handoffs > 0) {
+    out.push({ label: handoffs === 1 ? "handoff" : "handoffs", count: handoffs, sensitive: false });
+  }
+  if (evidence > 0) {
+    out.push({ label: "evidence logged", count: evidence, sensitive: false });
+  }
+  return out;
 }

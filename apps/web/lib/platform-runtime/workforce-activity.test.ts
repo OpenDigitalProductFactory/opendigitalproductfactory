@@ -15,13 +15,16 @@ function agent(over: Partial<Record<string, unknown>>) {
   };
 }
 
-/** A Prisma double that answers the five reads the loader makes. */
+/** A Prisma double that answers the reads the loader makes. */
 function fakePrisma(data: {
   agents: unknown[];
   liveRuns?: unknown[];
   toolByAgentTool?: unknown[];
   lastActed?: unknown[];
   tokens?: unknown[];
+  delegated?: unknown[];
+  handoffs?: unknown[];
+  evidence?: unknown[];
 }) {
   return {
     agent: { findMany: async () => data.agents },
@@ -31,6 +34,9 @@ function fakePrisma(data: {
         args.by.includes("toolName") ? (data.toolByAgentTool ?? []) : (data.lastActed ?? []),
     },
     tokenUsage: { groupBy: async () => data.tokens ?? [] },
+    delegationChain: { groupBy: async () => data.delegated ?? [] },
+    phaseHandoff: { groupBy: async () => data.handoffs ?? [] },
+    backlogItemActivity: { groupBy: async () => data.evidence ?? [] },
   } as never;
 }
 
@@ -116,11 +122,36 @@ describe("loadWorkforceActivity", () => {
         },
       },
       tokenUsage: { groupBy: async () => [] },
+      delegationChain: { groupBy: async () => [] },
+      phaseHandoff: { groupBy: async () => [] },
+      backlogItemActivity: { groupBy: async () => [] },
     } as never;
     await loadWorkforceActivity({ prisma, now: () => NOW });
     // the tool-by-tool outcome query is the one filtered to success:true
     const outcomeWhere = wheres.find((w) => w.success === true);
     expect(outcomeWhere?.executionMode).toEqual({ notIn: ["background", "permission"] });
+  });
+
+  it("folds A2A delegations, handoffs, and backlog evidence into 'did today' (BI-3D37CE9D)", async () => {
+    const prisma = fakePrisma({
+      agents: [agent({ agentId: "orch", displayName: "Orchestrator" })],
+      liveRuns: [
+        { taskRunId: "t", status: "active", title: "coordinating", currentAgentId: "orch", startedAt: new Date(NOW), lastHeartbeatAt: new Date(NOW) },
+      ],
+      toolByAgentTool: [{ agentId: "orch", toolName: "create_backlog_item", _count: { _all: 1 } }],
+      delegated: [{ fromAgentId: "orch", _count: { _all: 3 } }],
+      handoffs: [{ fromAgentId: "orch", _count: { _all: 2 } }],
+      evidence: [{ recordedByAgentId: "orch", _count: { _all: 4 } }],
+    });
+    const wf = await loadWorkforceActivity({ prisma, now: () => NOW });
+    const labels = wf.working[0].didToday.map((o) => o.label);
+    expect(labels).toContain("delegations");
+    expect(labels).toContain("handoffs");
+    expect(labels).toContain("evidence logged");
+    // the tool-derived outcome is still present alongside the folded-in ones
+    expect(labels).toContain("backlog item filed");
+    // and the non-tool outcomes are ranked in (evidence:4 is the top count)
+    expect(wf.working[0].didToday[0].label).toBe("evidence logged");
   });
 
   it("orders working by tokens spent today, busiest first", async () => {
