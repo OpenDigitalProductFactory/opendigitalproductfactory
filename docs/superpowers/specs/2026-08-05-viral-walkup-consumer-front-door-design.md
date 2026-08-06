@@ -25,7 +25,7 @@ Observed defect that motivated the restatement: connecting the running app to a 
 ## 2. Product narrative (the diner's 60 seconds)
 
 1. Diner walks toward / into a restaurant that runs DPF.
-2. The DPF app (already on their phone from any prior business) shows a **"Right here"** card: *"You're at Vesuvio's — see the menu"* — surfaced by matching the phone's coarse geo to the restaurant's published address geofence. No typing, no QR required (QR is a fallback / accelerant, not the primary path).
+2. The DPF app (already on their phone from any prior business) shows a **"Right here"** card: *"You're at &lt;the restaurant&gt; — see the menu"* — surfaced by matching the phone's coarse geo to the restaurant's published address geofence. No typing, no QR required (QR is a fallback / accelerant, not the primary path).
 3. Tap → the **menu loads instantly, anonymously**. Full catalog, prices, photos, availability. No account.
 4. Diner builds an order. Still anonymous.
 5. At **"Place order,"** the app asks for the *minimum* identity the action needs — a name + phone for a takeaway/pickup, or a table number for dine-in — as a **guest**. Payment via the device wallet (each business's own processor; DPF is conduit not broker; physical-service IAP-exempt per Apple 3.1.3(e)).
@@ -51,7 +51,7 @@ Observed defect that motivated the restatement: connecting the running app to a 
 
 - **A · Anonymous identity model.** Guest = ephemeral `Principal` + weak `PrincipalAlias`, upgraded on opt-in? Or a cookie/device-token cart with no Principal until checkout? *Rec: device-token cart pre-checkout; mint a guest Principal at order submit; offer alias-strengthening after.* Needs the Decision Perspective Gate (customer-business decision, not platform WWMD).
 - **B · Geofence trust & privacy.** How coarse is the geo match; is presence ever shared with the business pre-order; how does a business claim/verify its address geofence to prevent spoofing a competitor's location. *Rec: client-side coarse match against publicly-published geofence; nothing sent to the business until the diner acts.*
-- **C · Discovery host.** Same Arcamanus-hosted opt-in directory as Town M5, extended with geo + public menu descriptor — or separate. *Rec: extend the M5 directory; single federation surface.*
+- **C · Discovery host.** Same OSS-supporting-company-hosted opt-in directory as Town M5, extended with geo + public menu descriptor — or separate. *Rec: extend the M5 directory; single federation surface.*
 - **D · Payment at guest checkout.** Device wallet → each business's own processor (no central broker), IAP-exempt physical service. Confirm the guest-payment path doesn't require an account. *Rec: yes, guest pay via wallet; account optional.*
 
 ## 6. Research & benchmarking (design-research-required)
