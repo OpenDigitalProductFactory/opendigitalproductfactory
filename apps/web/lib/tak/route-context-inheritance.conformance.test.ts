@@ -44,22 +44,15 @@ const IDENTITY_ASSERTING_PARENTS: readonly string[] = [
 // Children that inherit an identity-asserting parent and have been reviewed.
 //   OK             — inheriting the parent's identity is genuinely correct here.
 //   NEEDS-PROVIDER — known mislabel debt: this route should get its own entry.
-//                    Tracked under BI-5457E216 / the page-perception epic. Listed
-//                    here so the guard stays green while blocking NEW drift, and
-//                    so the debt is counted and visible rather than silent.
-const ACKNOWLEDGED_IDENTITY_INHERITORS: Record<string, string> = {
-  // NEEDS-PROVIDER: the /ops/* orphans that inherit the "delivery backlog"
-  // identity today. Design doc §3 / §7 Phase 1 calls for carving each out like
-  // /ops/dev-loop and /ops/self-upgrade already were. Until then, known debt.
-  "/ops/changes": "NEEDS-PROVIDER: inherits Operations/backlog identity; needs own entry (BI-5457E216)",
-  "/ops/demand": "NEEDS-PROVIDER: inherits Operations/backlog identity; needs own entry (BI-5457E216)",
-  "/ops/health": "NEEDS-PROVIDER: inherits Operations/backlog identity; needs own entry (BI-5457E216)",
-  "/ops/improvements": "NEEDS-PROVIDER: inherits Operations/backlog identity; needs own entry (BI-5457E216)",
-  "/ops/journeys": "NEEDS-PROVIDER: inherits Operations/backlog identity; needs own entry (BI-5457E216)",
-  "/ops/patches": "NEEDS-PROVIDER: inherits Operations/backlog identity; needs own entry (BI-5457E216)",
-  "/ops/promotions": "NEEDS-PROVIDER: inherits Operations/backlog identity; needs own entry (BI-5457E216)",
-  "/ops/security": "NEEDS-PROVIDER: inherits Operations/backlog identity; needs own entry (BI-5457E216)",
-};
+//
+// EMPTY as of the Phase 3 runtime fix: `/ops` is now marked `match: "exact"` in
+// ROUTE_CONTEXT_MAP, so resolveRouteContext no longer lets /ops/* descendants
+// inherit the "delivery backlog" identity — they fall through to the broad
+// workspace fallback instead of being mislabeled. The 8 /ops/* NEEDS-PROVIDER
+// entries this map used to carry are therefore resolved, not merely acknowledged.
+// The guard below still blocks any NEW identity-asserting parent that is added as
+// a prefix entry (not exact) and left with orphan children.
+const ACKNOWLEDGED_IDENTITY_INHERITORS: Record<string, string> = {};
 
 type ManifestRow = {
   routePath: string;
@@ -152,9 +145,22 @@ describe("coworker route-context inheritance guard", () => {
           `entry's page identity and need their own entry:\n  ${needsProvider.join("\n  ")}`,
       );
     }
-    // The count is expected to only ever go DOWN. Pinning the known ceiling makes
-    // adding a new NEEDS-PROVIDER a conscious, reviewed act rather than silent
-    // accretion.
-    expect(needsProvider.length).toBeLessThanOrEqual(8);
+    // The /ops/* debt is resolved by the Phase 3 exact-match fix, so the ceiling
+    // is pinned at 0: any NEW NEEDS-PROVIDER acknowledgement is now a conscious,
+    // reviewed act (and the right fix is usually `match: "exact"` on the parent,
+    // not an acknowledgement).
+    expect(needsProvider.length).toBeLessThanOrEqual(0);
+  });
+
+  it("an exact parent's identity does not leak to its descendants (Phase 3 runtime fix)", () => {
+    // /ops is `match: "exact"`: its own route still resolves to it, and its
+    // carved-out leaves keep their own entries, but sibling orphans no longer
+    // inherit the "delivery backlog" identity.
+    expect(resolvedPrefix("/ops")).toBe("/ops");
+    expect(resolvedPrefix("/ops/dev-loop")).toBe("/ops/dev-loop");
+    expect(resolvedPrefix("/ops/self-upgrade")).toBe("/ops/self-upgrade");
+    for (const orphan of ["/ops/changes", "/ops/patches", "/ops/journeys", "/ops/promotions", "/ops/security"]) {
+      expect(resolvedPrefix(orphan), `${orphan} must not inherit /ops`).not.toBe("/ops");
+    }
   });
 });

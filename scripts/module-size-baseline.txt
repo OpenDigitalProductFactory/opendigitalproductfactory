@@ -57,8 +57,8 @@ apps/web/lib/tak/agent-grants.ts	915
 apps/web/lib/tak/agent-routing.ts	1027
 apps/web/lib/tak/agentic-loop.test.ts	2387
 apps/web/lib/tak/agentic-loop.ts	2737
-apps/web/lib/tak/route-context-map.ts	1260
-apps/web/lib/work-capsules/mcp-handlers.ts	884
+apps/web/lib/tak/route-context-map.ts	1273
+apps/web/lib/work-capsules/mcp-handlers.ts	869
 apps/web/lib/work-capsules/work-capsule-store.test.ts	1103
 apps/web/lib/work-capsules/work-capsule-store.ts	1056
 apps/web/lib/workbooks/platform-tables.ts	938
