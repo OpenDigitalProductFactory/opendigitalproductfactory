@@ -110,7 +110,15 @@ export async function loadWorkforceActivity(
     }),
     prisma.toolExecution.groupBy({
       by: ["agentId", "toolName"],
-      where: { createdAt: { gte: startOfDay }, success: true },
+      // ToolExecution is a general governed-tool ledger: it also records background
+      // system jobs (executionMode "background") and permission/access AUDIT events
+      // (executionMode "permission"). Those are not coworker accomplishments, so
+      // they never count toward "did today" / "actions today" (BI-A1B4BE05).
+      where: {
+        createdAt: { gte: startOfDay },
+        success: true,
+        executionMode: { notIn: ["background", "permission"] },
+      },
       _count: { _all: true },
     }),
     prisma.toolExecution.groupBy({
