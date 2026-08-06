@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-08-01T21:39:49.088Z",
-  "gitSha": "c564834ed35e145107d3cb5206260507e18cadea",
+  "generatedAt": "2026-08-06T02:42:42.750Z",
+  "gitSha": "b37cec734bc2608639babe47e9115a646c3933e9",
   "manifestVersion": 2,
   "metrics": {
     "defaultRequiredServiceCount": {
@@ -13,7 +13,7 @@
     },
     "integrationConnectRouteCount": {
       "direction": "non-increasing",
-      "value": 12
+      "value": 13
     },
     "prismaModelCount": {
       "direction": "non-increasing",
@@ -21,7 +21,7 @@
     },
     "prismaSchemaLines": {
       "direction": "informational",
-      "value": 16298
+      "value": 16312
     },
     "productionModuleHotspotCount": {
       "direction": "non-increasing",
@@ -33,7 +33,7 @@
     },
     "seedCoordinatorLines": {
       "direction": "informational",
-      "value": 2787
+      "value": 2810
     },
     "serviceCount": {
       "direction": "non-increasing",
