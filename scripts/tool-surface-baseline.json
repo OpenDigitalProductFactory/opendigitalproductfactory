@@ -3,10 +3,14 @@
   "selectionCliff": 15,
   "entries": {
     "registry.toolDefinitions": {
-      "value": 361
+      "value": 361,
+      "reason": "Adds list_my_backlog (BI-474A1F55): a coworker's identity-scoped read lens over the backlog for its own surface + occupation. No existing tool carries it — query_backlog/list_backlog_items filter only by scopeKind/archetype/status and cannot scope by portfolio/occupation/owner, and get_next_recommended_work's forAgentId is grant-claimability, not surface. It is the missing read side of the coworker capability-evolution loop; open and file reuse get_backlog_item/create_backlog_item, so this is +1, under the 15-tool selection cliff.",
+      "recordedAt": "2026-08-05"
     },
     "registry.packFiles": {
-      "value": 86
+      "value": 86,
+      "reason": "Adds coworker-backlog-lens-pack.ts (the list_my_backlog pack) and coworker-scope.ts (shared identity-scope resolver, extracted from coworker-capability-pack so both packs share one requireCurrentCoworker + resolveCoworkerBacklogScope path). BI-474A1F55.",
+      "recordedAt": "2026-08-05"
     },
     "tier.coreToolNames": {
       "value": 29,
