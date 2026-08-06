@@ -50,10 +50,14 @@ move are separated so each is independently reviewable:
   longest-prefix resolver (no data inheritance), and the no-inheritance +
   parity tests. Provider bodies stay in `route-context.ts` for now; the registry
   is the self-registration point. **This is the systemic fix for the flaw class.**
-- **PR 2 (fast-follow) — page-owned modules.** Extract the ~15 inline providers
-  into `route-context/providers/*.ts` (golden-test-protected pure move), shrinking
-  `route-context.ts` back under the ratchet. Optional stretch: filesystem
-  auto-discovery of co-located `app/**` context modules.
+- **PR 2 (DONE) — page-owned modules.** Extracted the ~15 inline providers into 7
+  domain modules under `route-context/providers/` (compliance, platform, ops,
+  workspace, build, finance, commerce) via byte-exact slicing; golden parity tests
+  stayed green (16/16). `route-context.ts` shrank 1117 → 175 LOC (out of the >800
+  ratchet set). The registry in `route-context.ts` imports each provider — pages
+  self-register there. Optional stretch (NOT done): filesystem auto-discovery of
+  co-located `app/**` context modules; and Phase 3 — unify the second injector
+  (`route-context-map.ts`, guarded by #4051) under the same contract.
 
 ## Steps
 1. `types.ts` (the contract). ✔
