@@ -87,6 +87,17 @@ export default function LoginScreen() {
             <Text style={styles.buttonText}>Sign In</Text>
           )}
         </Pressable>
+
+        {/* Signing in is never required: a walk-up visitor can dismiss the gate
+            and return to browsing the anonymous Nearby surface. */}
+        <Pressable
+          onPress={() => router.replace("/(tabs)/nearby")}
+          disabled={submitting}
+          testID="login-keep-browsing"
+          hitSlop={8}
+        >
+          <Text style={styles.keepBrowsing}>Not now — keep browsing</Text>
+        </Pressable>
       </View>
     </KeyboardAvoidingView>
   );
@@ -146,5 +157,11 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 16,
     fontWeight: "600",
+  },
+  keepBrowsing: {
+    color: "#9ca3af",
+    fontSize: 14,
+    textAlign: "center",
+    marginTop: 20,
   },
 });

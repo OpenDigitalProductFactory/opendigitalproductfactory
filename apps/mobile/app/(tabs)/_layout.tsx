@@ -1,14 +1,24 @@
 import { Tabs } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
+import type { AppPersona } from "@dpf/types";
 import { useTheme } from "@/src/lib/theme";
 import { useAppConfigStore } from "@/src/lib/appConfig";
+import { useAuthStore } from "@/src/features/auth/auth.store";
 import { resolveDefaultTab, resolveVisibleTabs } from "@/src/lib/navigation";
 
 export default function TabsLayout() {
   const { colors } = useTheme();
-  const persona = useAppConfigStore((s) => s.persona);
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const manifestPersona = useAppConfigStore((s) => s.persona);
   const capabilities = useAppConfigStore((s) => s.capabilities);
   const navigation = useAppConfigStore((s) => s.navigation);
+
+  // An unauthenticated open is a walk-up visitor: force the visitor persona so
+  // the tab bar shows only the anonymous Nearby front door, even before any
+  // install manifest has loaded. Signed-in users keep the manifest persona.
+  const persona: AppPersona | null = isAuthenticated
+    ? manifestPersona
+    : { kind: "visitor" };
 
   // Which tabs the connected install exposes for this persona. With no manifest
   // loaded this returns the full operator set, so the default app is unchanged.

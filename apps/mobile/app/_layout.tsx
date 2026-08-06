@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { ActivityIndicator, View, StyleSheet } from "react-native";
 import { Stack, useRouter, useSegments } from "expo-router";
 import { useAuthStore } from "@/src/features/auth/auth.store";
+import { resolveAuthRedirect } from "@/src/lib/authRouting";
 import { useDeepLink } from "@/src/hooks/useDeepLink";
 import { AgentFAB } from "@/src/components/AgentFAB";
 import { loadServerUrl } from "@/src/lib/serverConfig";
@@ -19,16 +20,13 @@ function useProtectedRoute() {
   useEffect(() => {
     if (isLoading) return;
 
-    // `connect` is reachable from both states — first-run join AND adding
-    // another business from the in-app switcher — so it bypasses the
-    // protected-route redirects.
-    const inAuthRoute = segments[0] === "login" || segments[0] === "connect";
-
-    if (!isAuthenticated && !inAuthRoute) {
-      router.replace("/login");
-    } else if (isAuthenticated && segments[0] === "login") {
-      router.replace("/(tabs)");
-    }
+    // An unauthenticated open lands on the visitor Nearby front door, not the
+    // login gate — a walk-up customer with no account sees the menu, and Sign
+    // in stays reachable but optional. `connect` (first-run join + in-app
+    // switcher) and `login` are left reachable in both states. See
+    // resolveAuthRedirect for the full rule set.
+    const target = resolveAuthRedirect({ segments, isAuthenticated });
+    if (target) router.replace(target);
   }, [isAuthenticated, isLoading, segments, router]);
 }
 
