@@ -98,20 +98,26 @@ The founder framed the target as "the way you look at a person or a customer." W
 
 ## 4. Design
 
-### 4.1 The Coworker Identity 360 (one page, the customer-360 idiom)
+### 4.1 The Coworker Identity 360 (one page, summary-first, drill-in-place)
+
+**Governing principle (founder, 2026-08-06): one summary page + progressive disclosure that stays *in this view*.** The default is a compact summary; every facet drills in *in place* (expand / inline peek) rather than navigating to a separate admin page. Jumping "into entirely different views" is the anti-pattern to avoid — the overarching identity view is where the drill-in happens. A handful of deep, rarely-used editors (e.g. the full model-routing grid) may still open the admin record, but that is the exception, not the pattern.
 
 A single identity surface per coworker, composed from the existing read-model (`loadCoworkerRecord`) plus two new projections (cost, engagements):
 
-- **Identity header.** `displayName` + `kind` chip + `family`/area + supervisor + lifecycle/health dot; raw `agentId`/GAID/slug behind a "technical identity" disclosure (already the record's pattern). Primary action: **Ask <name>**. Secondary: **Manage** (deep-links to the admin record for edits).
-- **Summary band (at-a-glance).** Model tier · effective priority (Cost/Quality/Time) · # skills · # tools · autonomy (HITL) tier · **30-day cost** · **active/likely engagements** · availability. One row answers "who is this and what is it set to."
-- **Body — activity timeline + stacked drill-in facets** (customer-360 layout):
+- **Identity header.** `displayName` + `kind` chip + `family`/area + supervisor + lifecycle/health dot; raw `agentId`/GAID/slug behind a "technical identity" disclosure (already the record's pattern). Primary action: **Ask <name>**. Secondary: **Share** (see §4.3). Advanced/admin edits are a quiet link, not a prominent CTA.
+- **Summary band (at-a-glance).** Model tier · **priority (Cost/Quality/Time)** · **proactivity** · # skills · # tools · autonomy (HITL) tier · **30-day cost** · **engagements** · **teams/rooms** · availability. One row answers "who is this and what is it set to." Priority and proactivity chips are the *entry points* to their inline controls below.
+- **Behaviour dials — set here, inline (NEW on the identity).** Two controls the founder wants settable on this page, reusing the components the admin record already mounts:
+  - **Priority (Golden Triangle).** `CoworkerPriorityControl` — the Cost/Quality/Time dial with its inheritance shown (*"inherited from Platform default · override for this coworker"*), i.e. the central default **and** the per-coworker override, set from the identity itself (platform → org → coworker cascade, `getCoworkerPostureInheritance`).
+  - **Proactivity.** `CoworkerProactivitySetting` — the Quiet / Balanced / Assertive dial, **with its meaning exposed inline**: each level's plain-language stance (`getProactivityLevelCopy`: Quiet = "wait for me unless urgent/approved"; Balanced = "follow up when timing/commitments/risk make it useful"; Assertive = "stay on it, warn earlier, escalate sooner when allowed") **and** the concrete runtime effects for *this* coworker (`describeProactivityEffects` — self-task cadence, follow-up behaviour; no unenforced promises). Note it is a *per-viewer* preference ("your setting"), surfaced as such.
+- **Body — activity timeline + stacked drill-in facets** (each expands in place):
   - **Definition** — plain-language job (persona `# Role` / `# Accountable For` / `# Out of scope`), value stream, governance/authority boundary. *"What it is defined as."*
   - **What it does** — services/offers (`CoworkerService`/`CoworkerOffer`), recurring `WorkEngagement`, scheduled tasks, its backlog slice. *"What it does."*
-  - **Engagements & relationships (NEW)** — counterparties who have engaged it: humans (`CoworkerEngagement.requestedByUserId`, `DelegationGrant.grantorUserId`, thread users) and **other agents** (`requestedByAgentId`, A2A tasks), with recency, outcome, and a link to each engagement. *"Who engages / has engaged it."*
+  - **Teams & collaboration ("work rooms") (NEW)** — the collaborative spaces the coworker is part of: value-stream team memberships (`ValueStreamTeamRole`), team responsibilities (`AgentOwnership` → `Team`), and its **live A2A collaborations** — who it hands work to / receives from (`DelegationChain`, `PhaseHandoff`, `TaskRun` lineage). Summary = the rooms/teams it's in + current collaborators; drill-in = an inline peek of a room's members and recent activity, with an *optional* link to the full `/platform/ai/operations-map` graph for those who want the whole topology. *"What work rooms are they part of."*
+  - **Engagements & relationships (NEW)** — counterparties who have engaged it: humans (`CoworkerEngagement.requestedByUserId`, `DelegationGrant.grantorUserId`, thread users) and **other agents** (`requestedByAgentId`, A2A tasks), with recency, outcome, and an in-place expand per engagement. *"Who engages / has engaged it."*
   - **Cost (NEW)** — 30/90-day spend from `TokenUsage`/`AgentBudgetEvent`, trend sparkline, top cost drivers (by model/route/engagement), budget posture vs `AgentExecutionConfig` limits, and rejections. *"The costs."*
-  - **Skills & capabilities** — assigned `SkillAssignment` + `AgentToolGrant` (read view; edit deep-links to the record). *"The skills."*
+  - **Skills & capabilities** — assigned `SkillAssignment` + `AgentToolGrant` (read summary; grant/revoke expands in place, reusing the record's `CapabilitiesEditor` rather than sending the user to `/platform/ai/skills`). *"The skills."*
   - **Behaviour & health** — `AgentPerformance`, self-assessments, capability needs, readiness/regression signals.
-- **Activity timeline** (left/primary column, icon-typed like customer): engagements, conversations, decisions/defers, cost spikes, grant changes, self-assessments — the union of the facet edges as a chronological stream.
+- **Activity timeline** (icon-typed like customer): engagements, conversations, decisions/defers, cost spikes, grant changes, self-assessments — the union of the facet edges as a chronological stream.
 
 ### 4.2 Positioning & IA
 
@@ -119,13 +125,14 @@ A single identity surface per coworker, composed from the existing read-model (`
 - The existing `/platform/ai/agent/[agentId]` **admin record** stays for configuration and is reachable via **Manage**; the 360 is the identity/inspection front door. (No hard 308 on the admin record — it is not moving; a new identity surface is added.)
 - The **directory** (`/platform/ai/overview` roster) gains an "open identity" affordance; longer term the roster is the identity directory (peer to People directory).
 
-### 4.3 One read-model, two projections (the "other AI" pillar)
+### 4.3 Share the identity (not the guts) — one read-model, two projections
 
-Define a single `CoworkerIdentity` read-model (extend `loadCoworkerRecord`) that projects to:
-1. **Human page** — the 360 above.
-2. **`GET /api/a2a/coworkers/[agentId]`** → `application/agent-card+json`: a **whole-coworker** identity card (identity, capabilities/skills summary, available offers, authority + data boundary, engagement entry-points) — the identity-level complement to today's per-offer card. Access-profile gated exactly like the offer card (`internal-a2a` vs public), reusing `projectCoworkerOfferAgentCard`'s access model.
+Founder note (2026-08-06): *"We don't want to see the guts of the machine identity, but may want to share this identity in some way."* So the machine projection is **not** surfaced as raw JSON on the page. Instead the identity page carries a **Share** affordance whose *default* face is human-useful, with the technical endpoint behind disclosure:
 
-This closes "even other AI use-cases that need to interact with them": an external agent resolves the **same identity** a human sees, at a stable identity URL, in the A2A-standard media type.
+- **Share (default).** A shareable identity card — `displayName`, kind, plain-language job, what it does, how to engage it — copyable as a link to this identity page (and, later, an export the way a contact/vCard is shared). This is what a person hands to a colleague to say "here is this coworker."
+- **For other agents/developers (disclosure).** Behind a "for agents / developers" reveal: the resolvable A2A endpoint `GET /api/a2a/coworkers/[agentId]` → `application/agent-card+json` — a **whole-coworker** identity card (identity, capabilities/skills summary, available offers, authority + data boundary, engagement entry-points), the identity-level complement to today's per-offer card. Access-profile gated exactly like the offer card (`internal-a2a` vs public), reusing `projectCoworkerOfferAgentCard`'s access model. The raw payload is a copy-target inside the disclosure, never the page's front face.
+
+Both the human page and the shared/machine card render from **one** `CoworkerIdentity` read-model (extend `loadCoworkerRecord`), so "even other AI use-cases that need to interact with them" resolve the **same identity** a human sees — at a stable identity URL, in the A2A-standard media type — without the page ever exposing the machine guts by default.
 
 ### 4.4 Data-model impact
 
@@ -155,8 +162,8 @@ A change is "done" only when its row hits target, evidenced by a live click-thro
 
 **Sequencing decision (founder, 2026-08-06): build the full 360 page first** — do not ship an interim record-only pass. The Cost and Engagements facets are built *as part of* the new Identity 360 page, in the peer identity position, rather than first bolted onto the existing admin record.
 
-- **Phase 1 — The Coworker Identity 360 page (peer position) + the Cost & Engagements facets.** Compose the customer-360-idiom identity page at the new canonical peer URL (beside People/Customers), carrying all facets. The two founder-named facets that exist on the identity nowhere today — **Cost** (per-coworker read-projection over `TokenUsage` + `AgentBudgetEvent`; reuse `AgentBudgetEventsPanel` + a per-agent `budget-events-data` query) and **Engagements** (`CoworkerEngagement` + `DelegationGrant` + thread counterparties, Person vs AI) — ship on this page from day one. **Manage** deep-links to the existing `/platform/ai/agent/[agentId]` admin record for edits. Zero schema.
-- **Phase 2 — One read-model, two projections.** Refactor to a single `CoworkerIdentity` read-model behind the page; add `GET /api/a2a/coworkers/[agentId]` whole-coworker `agent-card+json` with the existing access-profile gate, so other AI resolves the same identity.
+- **Phase 1 — The Coworker Identity 360 page (peer position), summary-first with in-place drill-in.** Compose the identity page at the new canonical peer URL (beside People/Customers), carrying all facets as expand-in-place sections. Includes: the two new facets that exist on the identity nowhere today — **Cost** (per-coworker read-projection over `TokenUsage` + `AgentBudgetEvent`; reuse `AgentBudgetEventsPanel` + a per-agent `budget-events-data` query) and **Engagements** (`CoworkerEngagement` + `DelegationGrant` + thread counterparties, Person vs AI); the **Teams & collaboration ("work rooms")** facet (`ValueStreamTeamRole` + `AgentOwnership` + A2A collaboration edges); the **inline behaviour dials** — Priority (`CoworkerPriorityControl` with inheritance) and Proactivity (`CoworkerProactivitySetting` with the level meanings + concrete effects exposed); and skills/tools grant-in-place (`CapabilitiesEditor`). Advanced/admin-only editors remain a quiet deep-link to `/platform/ai/agent/[agentId]`. Zero schema.
+- **Phase 2 — Share + one read-model, two projections.** Add the **Share** affordance (human identity card by default), and behind its "for agents / developers" disclosure the `GET /api/a2a/coworkers/[agentId]` whole-coworker `agent-card+json` with the existing access-profile gate. Refactor the page onto a single `CoworkerIdentity` read-model so the human page and the shared/machine card render from one source — other AI resolves the same identity, guts never on the front face.
 - **Phase 3 — Consolidation & directory.** Re-point facet deep-links; make the roster the identity directory (peer to the People directory); demote standalone facet pages to catalogs/observatories (continues `EP-COWORKER-RT` WS3).
 
 ---
