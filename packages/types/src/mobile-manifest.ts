@@ -39,7 +39,12 @@ export interface DualBrandingThemeTokens {
   dark?: BrandingThemeTokens;
 }
 
-export type AppPersonaKind = "customer" | "employee" | "operator" | "admin";
+export type AppPersonaKind =
+  | "visitor"
+  | "customer"
+  | "employee"
+  | "operator"
+  | "admin";
 
 export interface AppPersona {
   kind: AppPersonaKind;
