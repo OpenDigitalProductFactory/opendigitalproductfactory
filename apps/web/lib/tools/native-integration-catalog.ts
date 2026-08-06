@@ -2,6 +2,7 @@ import { QUICKBOOKS_READINESS_ENTITY_FAMILIES } from "@/lib/integrate/quickbooks
 
 export type NativeIntegrationId =
   | "adp"
+  | "greenhouse"
   | "quickbooks"
   | "stripe"
   | "microsoft365"
@@ -50,6 +51,29 @@ export const NATIVE_INTEGRATIONS: NativeIntegrationDescriptor[] = [
     tags: ["hr", "payroll", "workforce", "workers", "pay statements"],
     enables: ["Worker lookup", "Pay statement context", "Time card context", "Deduction questions", "Payroll guidance"],
     relevantAgentIds: ["finance-controller", "hr-specialist", "coo"],
+    requiredGrantKeys: ["consumer_read"],
+  },
+  {
+    id: "greenhouse",
+    integrationId: "greenhouse-recruiting",
+    provider: "greenhouse",
+    name: "Greenhouse Recruiting",
+    description:
+      "Applicant-tracking anchor for jobs, candidates, applications, stages, scorecards, offers, and hires via the Greenhouse Harvest API. Bridges toward native recruiting (requisition-to-hire) on the ecosystem-absorption path.",
+    href: "/platform/tools/integrations/greenhouse",
+    category: "hr",
+    pricingModel: "paid",
+    model: "native",
+    tags: ["hr", "recruiting", "ats", "candidates", "applications", "offers", "hiring"],
+    enables: [
+      "Requisition context",
+      "Candidate context",
+      "Application/pipeline context",
+      "Scorecard context",
+      "Offer context",
+      "Hire import into onboarding",
+    ],
+    relevantAgentIds: ["hr-specialist", "coo"],
     requiredGrantKeys: ["consumer_read"],
   },
   {
