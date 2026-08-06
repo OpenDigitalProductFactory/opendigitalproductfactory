@@ -14185,6 +14185,17 @@ model DecisionInteraction {
   // True when the gate ran but doctrine fell back off the gate's own profile
   // kind (e.g. profession gate resolving to MARK_DPF_PLATFORM_PROFILE).
   gateFallbackUsed    Boolean                           @default(false)
+  // Trust-envelope immutability (BI-81CC5D8E, EP-VERIFICATION-INTEGRITY).
+  // A recorded decision is sealed into an append-only per-(chainId) hash chain:
+  // chainEntryHash = H(canonical{criteria, evidence-digests, weights, composite}
+  // || prevHash). `sealedAt` marks the row immutable; a write guard forbids
+  // mutating any sealed field afterward (see apps/web/lib/decision/decision-chain.ts).
+  // Nullable + additive: rows written before sealing (and the fail-open path)
+  // carry NULL and are simply "unsealed", never invalid.
+  chainId             String?
+  prevHash            String?
+  chainEntryHash      String?                           @unique
+  sealedAt            DateTime?
   createdAt           DateTime                          @default(now())
   updatedAt           DateTime                          @updatedAt
   profile             DecisionPerspectiveProfile        @relation("DecisionInteractionProfile", fields: [profileId], references: [profileId], onDelete: Cascade)
@@ -14197,6 +14208,7 @@ model DecisionInteraction {
   escalationCapture   EscalationCapture?
   deferralCapture     DeferralCapture?
   voiceOutput         DecisionInteractionVoiceOutput?
+  evidenceReverifications EvidenceReVerification[]
 
   @@index([profileId, createdAt])
   @@index([profileVersionId])
@@ -14211,6 +14223,8 @@ model DecisionInteraction {
   @@index([gateKey, createdAt])
   @@index([principleConflict, createdAt])
   @@index([riskTier, createdAt])
+  // Trust-envelope chain lookups (find the head of a chain to link the next entry).
+  @@index([chainId, sealedAt])
 }
 
 model EscalationCapture {
@@ -14253,6 +14267,100 @@ model DeferralCapture {
   @@index([domain, createdAt])
   @@index([gapReason])
   @@index([candidateMaterial])
+}
+
+// Trust-envelope external verifier (BI-70FF9114, EP-VERIFICATION-INTEGRITY).
+// Separation-of-duties re-check of one cited evidence item on a sealed decision,
+// reusing the verified-finding-review pattern (apps/web/lib/build/verified-finding-
+// review.ts): an independent pass re-resolves the recorded locator against the live
+// source and compares excerpts. A mismatch/unresolved locator degrades the affected
+// dimension to unevidenced. Append-only (no updatedAt); each verdict is its own row.
+model EvidenceReVerification {
+  id               String              @id @default(cuid())
+  reverificationId String              @unique
+  interactionId    String
+  chainEntryHash   String? // the sealed entry re-checked (audit correlation)
+  optionId         String
+  dimensionKey     String
+  evidenceLocator  Json // the recorded StructuredLocator being re-resolved
+  recordedExcerpt  String?             @db.Text
+  liveExcerpt      String?             @db.Text
+  resolved         Boolean             @default(false) // did the locator resolve at all
+  excerptMatch     Boolean             @default(false) // does the live source still support the recorded excerpt
+  verdict          String              @default("pending") // pending | confirmed | degraded | unresolved
+  verifierRunId    String? // the independent verifier pass id (separation of duties)
+  checkedAt        DateTime?
+  createdAt        DateTime            @default(now())
+  interaction      DecisionInteraction @relation(fields: [interactionId], references: [interactionId], onDelete: Cascade)
+
+  @@index([interactionId])
+  @@index([verdict])
+  @@index([chainEntryHash])
+  @@index([optionId, dimensionKey])
+}
+
+// Trust-envelope jurisdiction criteria (BI-B84CD2D3, EP-VERIFICATION-INTEGRITY).
+// Sibling projection of RegulatoryAutonomyPolicy keyed on the SAME
+// (industry, jurisdiction, jurisdictionBasis, activityClass) tuple, so the
+// autonomy ceiling and the axis profile can never disagree about which regime
+// applies. Where RegulatoryAutonomyPolicy caps AUTONOMY, this selects the
+// scoring VECTOR: which axes are required, which are forbidden, which are
+// monitoring-only (never a scoring input), plus a per-axis weight overlay.
+// Axis keys are validated at the app layer against PRINCIPLE_DIMENSIONS.
+model JurisdictionCriteriaProfile {
+  id                 String    @id @default(cuid())
+  profileKey         String
+  version            Int       @default(1)
+  industry           String?
+  jurisdiction       String    @default("global")
+  jurisdictionBasis  String    @default("global")
+  activityClass      String
+  requiredAxes       String[]  @default([])
+  forbiddenAxes      String[]  @default([])
+  monitoringOnlyAxes String[]  @default([])
+  weightOverlay      Json      @default("{}") // { dimensionKey: multiplier }
+  regulationId       String?
+  packVersion        String? // provenance of the jurisdiction pack, recorded on decisions
+  rationale          String?   @db.Text
+  sourceKind         String    @default("operator") // operator | pack | learned
+  status             String    @default("active")
+  effectiveFrom      DateTime  @default(now())
+  effectiveUntil     DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  @@unique([profileKey, version])
+  @@index([industry, jurisdiction, activityClass])
+  @@index([jurisdiction, jurisdictionBasis])
+  @@index([activityClass])
+  @@index([status, effectiveFrom, effectiveUntil])
+  @@index([regulationId])
+}
+
+// Trust-envelope MONITORING-ONLY demographic rail (BI-A59CB2EA,
+// EP-VERIFICATION-INTEGRITY). Deliberately STRUCTURALLY SEPARATE from the
+// scoring path: it has NO relation to DecisionInteraction or any candidate/
+// scoring model, and is joined to an evaluation only by the opaque string
+// `evaluationRef`. Collected (where lawful + consented) SOLELY to compute
+// NYC LL144 / four-fifths adverse-impact ratios; the scoring path holds no
+// read access to this table. The one guardrail that matters most: the thing
+// you must measure for a bias audit is the thing you must never let touch the
+// score, so it does not share a foreign key with the score.
+model ProtectedMonitoringObservation {
+  id               String   @id @default(cuid())
+  observationId    String   @unique
+  evaluationRef    String // opaque correlation to a candidate evaluation — NOT a scoring FK
+  jurisdiction     String   @default("global")
+  activityClass    String   @default("hiring")
+  protectedClass   String // race | sex | age-band | disability | ... (jurisdiction-resolved)
+  classValue       String // bucketed value used only for impact-ratio aggregation
+  selectionOutcome String? // advanced | rejected | hired (post-decision label)
+  consentBasis     String   @default("none")
+  createdAt        DateTime @default(now())
+
+  @@index([evaluationRef])
+  @@index([jurisdiction, activityClass, protectedClass])
+  @@index([activityClass, protectedClass, classValue])
 }
 
 // BI-D88DFEEA Phase 3. A weight-adjustment PROPOSAL — never a silent

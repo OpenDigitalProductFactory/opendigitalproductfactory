@@ -20,6 +20,11 @@ import {
   featureErrorRemedy,
   type FeatureValidationError,
 } from "@/lib/decision/dimension-catalog";
+import {
+  groundOptionsFromParams,
+  buildScoredDecisionOptions,
+  PRINCIPLE_DECIDE_EVIDENCE_SCHEMA,
+} from "@/lib/decision/evidence-grounding";
 
 const definitions: ToolDefinition[] = [
   {
@@ -56,6 +61,9 @@ const definitions: ToolDefinition[] = [
           },
           description: "The candidate options to score. Must be a non-empty array.",
         },
+        // Trust-envelope evidence grounding params (spec §2 Axis 1) — defined in
+        // evidence-grounding.ts so this pack stays under the module-size ceiling.
+        ...PRINCIPLE_DECIDE_EVIDENCE_SCHEMA,
         callingPopulation: {
           type: "string",
           enum: ["in_platform_coworker", "external_coding_agent", "human"],
@@ -610,38 +618,16 @@ async function principleDecide(
       .slice(0, maxPrinciples),
   ];
 
-  // Mirror treatment for options: when the caller passes empty features
-  // and no explicit embedding, embed the description so the semantic
-  // path can actually fire. Caller-supplied embeddings (the rare
-  // sophisticated path) win. Per BI-3C1A6451 acceptance criterion.
-  type DecisionOption = Parameters<typeof decide>[0][number];
-  const decisionOptions: DecisionOption[] = await Promise.all(
-    optionsParam
-      .filter(
-        (o): o is Record<string, unknown> =>
-          typeof o === "object" && o !== null,
-      )
-      .map(async (o): Promise<DecisionOption> => {
-        const features =
-          typeof o["features"] === "object" && o["features"] !== null
-            ? (o["features"] as Record<string, number>)
-            : {};
-        const description = String(o["description"] ?? "");
-        let embedding: number[] | undefined;
-        if (Array.isArray(o["embedding"])) {
-          embedding = (o["embedding"] as unknown[]).map((n) => Number(n));
-        } else if (Object.keys(features).length === 0 && description) {
-          const e = await generateEmbedding(description);
-          if (e) embedding = e;
-        }
-        return {
-          id: String(o["id"] ?? ""),
-          description,
-          features,
-          embedding,
-        };
-      }),
-  );
+  // Trust-envelope evidence grounding (BI-EA97E5CD, spec §2 Axis 1): bind each
+  // score to a cited source; when `requireEvidence` is set, drop features lacking
+  // admissible evidence before scoring. Options are then embedded for the semantic
+  // path (BI-3C1A6451). Both helpers live in evidence-grounding.ts (module-size).
+  const { groundedFeaturesById, ledgerArgs } = groundOptionsFromParams(params);
+  const decisionOptions = await buildScoredDecisionOptions({
+    optionsParam,
+    groundedFeaturesById,
+    generateEmbedding,
+  });
 
   const result = decide(decisionOptions, cappedPrinciples, {
     tieMargin,
@@ -761,6 +747,9 @@ async function principleDecide(
       optionsWithFeatures: signalQuality.optionsWithFeatures,
       optionCount: signalQuality.optionCount,
     },
+    // Trust-envelope: persist evidence citations onto the ledger row and seal
+    // the decision into the append-only hash chain (BI-EA97E5CD / BI-81CC5D8E).
+    ...ledgerArgs,
   });
 
   return {

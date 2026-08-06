@@ -208,6 +208,17 @@ export async function persistDecisionInteraction(input: {
   gateKey?: DecisionGateKey;
   /** True when doctrine fell back off the gate's own profile kind. */
   gateFallbackUsed?: boolean;
+  /**
+   * Trust-envelope immutability seal (BI-81CC5D8E). When present, the row is
+   * written as the next append-only entry in a hash chain. Omitted for callers
+   * that do not seal (behavior unchanged — all chain columns stay NULL).
+   */
+  chain?: {
+    chainId: string;
+    prevHash: string | null;
+    chainEntryHash: string;
+    sealedAt: Date;
+  } | null;
 }): Promise<{ interactionId: string; row: Record<string, unknown> }> {
   const interactionId = input.interactionId ?? createDecisionInteractionId();
   const row = await input.db.decisionInteraction.create({
@@ -242,6 +253,10 @@ export async function persistDecisionInteraction(input: {
       principleConflict: input.evaluation.principleConflict,
       gateKey: input.gateKey ?? null,
       gateFallbackUsed: input.gateFallbackUsed ?? false,
+      chainId: input.chain?.chainId ?? null,
+      prevHash: input.chain?.prevHash ?? null,
+      chainEntryHash: input.chain?.chainEntryHash ?? null,
+      sealedAt: input.chain?.sealedAt ?? null,
       outcomePayload: {
         outcomeType: input.evaluation.outcomeType,
         domainClass: input.evaluation.domainClass,

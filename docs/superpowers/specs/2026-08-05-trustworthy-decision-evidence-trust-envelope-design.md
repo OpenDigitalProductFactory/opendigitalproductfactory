@@ -1,6 +1,6 @@
 # Trustworthy Decision Evidence — the Trust Envelope over the DPF Decision Kernel
 
-- **Status:** proposed (research + design; no customer-data implementation in this branch)
+- **Status:** implemented — phases A–E batched (2026-08-06); B2/B3 immutability tiers + full ATS deferred (§10). Plan: [`2026-08-06-trust-envelope-implementation-plan.md`](../plans/2026-08-06-trust-envelope-implementation-plan.md)
 - **Date:** 2026-08-05
 - **Epic:** `EP-VERIFICATION-INTEGRITY` — **does not yet exist; must be created** (see §11). Filed interim under the closest adjacent open epic `EP-DECISION-TIER-REBALANCE`.
 - **Anchor / umbrella BI:** `BI-2CDF01A3` (filed fresh; cited `BI-63811996` was **not found in the live backlog**)

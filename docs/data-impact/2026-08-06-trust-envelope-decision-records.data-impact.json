@@ -1,0 +1,92 @@
+{
+  "version": "1",
+  "accountableOwner": "data-steward",
+  "affectedCopies": [
+    "Prisma-to-EA current-state data-model mirror",
+    "Decision log / decision record drill-in read model (DecisionInteraction sources + chain columns)",
+    "Contributor sanitized-clone source and destination"
+  ],
+  "migration": {
+    "name": "20260806021500_trust_envelope_decision_records",
+    "backfill": "additive only, no backfill required. Four NEW nullable columns on DecisionInteraction (chainId, prevHash, chainEntryHash, sealedAt): every pre-existing row is left with NULL and reads as 'unsealed', which is a valid state, never invalid. The UNIQUE index on chainEntryHash is data-safe because Postgres treats NULLs as distinct, so existing all-NULL rows cannot collide (attested in the migration with @migration-safety: data-safe). Three NEW tables (EvidenceReVerification, JurisdictionCriteriaProfile, ProtectedMonitoringObservation) hold no rows at migration time. No rows deleted, no column dropped, no value overwritten. Applies cleanly against any existing data state."
+  },
+  "tests": [
+    "apps/web/lib/decision/decision-chain.test.ts",
+    "apps/web/lib/decision/evidence-grounding.test.ts",
+    "apps/web/lib/decision/evidence-reverifier.test.ts",
+    "apps/web/lib/decision/jurisdiction-criteria.test.ts",
+    "apps/web/lib/decision/candidate-evaluation.test.ts",
+    "apps/web/lib/decision/kernel-consult-ledger.test.ts",
+    "apps/web/lib/operate/retention/retention.test.ts"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:decision-interaction#immutability-seal",
+      "prismaModel": "DecisionInteraction",
+      "lifecycleDisposition": "every existing DecisionInteraction row is retained unchanged; sealed rows become append-only (a write guard forbids mutating sealed fields once sealedAt is set). Sealing is fail-open, so a row that cannot be sealed is simply left unsealed, never lost.",
+      "fields": [
+        {
+          "fieldId": "data:decision-interaction#chainEntryHash",
+          "resolution": "governed",
+          "reason": "tamper-evidence: a recorded decision is sealed into an append-only per-(profile) hash chain so any post-hoc edit is detectable (BI-81CC5D8E, spec §2 Axis 3). Nullable + unique; NULL on legacy rows, distinct sha256 on sealed rows.",
+          "provenance": "spec docs/superpowers/specs/2026-08-05-trustworthy-decision-evidence-trust-envelope-design.md §2/§4; decision-chain.test.ts"
+        },
+        {
+          "fieldId": "data:decision-interaction#prevHash",
+          "resolution": "governed",
+          "reason": "links each sealed decision to the prior chain entry so the chain can be verified end-to-end and a broken link is detectable.",
+          "provenance": "BI-81CC5D8E; decision-chain.test.ts verifyChain cases"
+        },
+        {
+          "fieldId": "data:decision-interaction#sources",
+          "resolution": "governed",
+          "reason": "evidence grounding (BI-EA97E5CD, spec §2 Axis 1): the previously-empty sources column now carries the admissible per-(option,dimension) citations that back the scored features. Populated only on the kernel-consult path going forward; legacy rows keep their existing (empty) value.",
+          "provenance": "spec §2 Axis 1; kernel-consult-ledger.test.ts; evidence-grounding.test.ts"
+        }
+      ]
+    },
+    {
+      "kind": "model",
+      "assetId": "data:evidence-reverification#external-recheck",
+      "prismaModel": "EvidenceReVerification",
+      "lifecycleDisposition": "new table; rows are created and removed with their parent DecisionInteraction via cascade (domain-lifecycle-managed exemption). Append-only by convention (no updatedAt).",
+      "fields": [
+        {
+          "fieldId": "data:evidence-reverification#verdict",
+          "resolution": "governed",
+          "reason": "records an independent re-check verdict (confirmed | degraded | unresolved) of one cited evidence item against its live source (BI-70FF9114, spec §2 Axis 4).",
+          "provenance": "spec §2 Axis 4; evidence-reverifier.test.ts. Classification: confidential (may quote decision/candidate source text)."
+        }
+      ]
+    },
+    {
+      "kind": "model",
+      "assetId": "data:jurisdiction-criteria-profile#axis-selection",
+      "prismaModel": "JurisdictionCriteriaProfile",
+      "lifecycleDisposition": "new table; operator-authored jurisdiction criteria packs, versioned and superseded (reference-data exemption). Classification: internal (config, no PII).",
+      "fields": [
+        {
+          "fieldId": "data:jurisdiction-criteria-profile#requiredAxes",
+          "resolution": "governed",
+          "reason": "selects which scoring axes apply and how they are weighted per (industry, jurisdiction, activityClass) regime (BI-B84CD2D3, spec §2 Axis 2). Keyed on the same tuple as RegulatoryAutonomyPolicy so the autonomy ceiling and axis profile never disagree.",
+          "provenance": "spec §2 Axis 2; jurisdiction-criteria.test.ts"
+        }
+      ]
+    },
+    {
+      "kind": "model",
+      "assetId": "data:protected-monitoring-observation#bias-audit-rail",
+      "prismaModel": "ProtectedMonitoringObservation",
+      "lifecycleDisposition": "new table; MONITORING-ONLY demographic rail, structurally separate from the scoring path (no scoring foreign key — joined only by an opaque evaluationRef). Retained as LL144/EEOC bias-audit evidence (RETAINED_DATASETS, min 1 year), never auto-purged within the audit window. Classification: confidential (protected-class PII — obfuscate before any copy).",
+      "fields": [
+        {
+          "fieldId": "data:protected-monitoring-observation#protectedClass",
+          "resolution": "governed",
+          "reason": "protected-class observations collected (where lawful + consented) SOLELY to compute NYC LL144 / four-fifths adverse-impact ratios; the scoring path holds no read access to this table (BI-A59CB2EA, spec §6.3). The thing measured for a bias audit is the thing that must never touch the score, so it shares no FK with the score.",
+          "provenance": "spec §6.3; candidate-evaluation.test.ts computeAdverseImpact"
+        }
+      ]
+    }
+  ]
+}
