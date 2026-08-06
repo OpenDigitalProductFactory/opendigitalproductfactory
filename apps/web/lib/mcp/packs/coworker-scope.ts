@@ -5,8 +5,13 @@
 // BacklogItems for its surface (portfolio / taxonomy area), its occupation
 // (capabilities in its IT4IT value stream) and anything it owns or claimed.
 // The union is expressed as Prisma where-OR clauses; the handler ANDs its
-// status / workType narrowing on top. Enforcement is by identity: there is no
-// scope argument to widen, so a coworker cannot enumerate another portfolio.
+// status / workType narrowing on top. Enforcement is by identity: the tool
+// takes no scope argument, so the slice is fixed by the authenticated caller's
+// agentId. On the coworker token path that agentId is server-derived (the token
+// is the identity), so a coworker cannot widen to another portfolio. (On the
+// internal REST /call surface agentId is caller-asserted, exactly as for the
+// sibling coworker-capability tools — and there backlog_read already exposes
+// the whole backlog via query_backlog, so this lens is strictly less powerful.)
 
 import { professionKeyFromRole } from "@/lib/decision-perspective/resolve-profession-profile";
 
