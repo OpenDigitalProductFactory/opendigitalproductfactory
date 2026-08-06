@@ -101,6 +101,10 @@ export interface FallbackResult {
   content: string;
   toolCalls: Array<{ id: string; name: string; arguments: Record<string, unknown> }>;
   tokenUsage?: { inputTokens: number; outputTokens: number };
+  // BI-105E8A1E: the adapter's measured wall-clock latency, carried through to
+  // metering so the `compute` cost model (watts × time) can price local
+  // inference. Optional because a screened/stub path may not measure it.
+  inferenceMs?: number;
   downgraded: boolean;
   downgradeMessage: string | null;
   responseId?: string;
@@ -363,6 +367,7 @@ export async function callWithFallbackChain(
           result.inputTokens !== undefined || result.outputTokens !== undefined
             ? { inputTokens: result.inputTokens, outputTokens: result.outputTokens }
             : undefined,
+        inferenceMs: result.inferenceMs,
         downgraded,
         downgradeMessage: downgraded
           ? preferenceMiss

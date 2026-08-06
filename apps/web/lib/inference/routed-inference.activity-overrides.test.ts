@@ -158,6 +158,7 @@ describe("routeAndCall activity harness overrides", () => {
       content: "ok",
       toolCalls: [],
       tokenUsage: { inputTokens: 12, outputTokens: 4 },
+      inferenceMs: 1234,
       downgraded: false,
       downgradeMessage: null,
     });
@@ -265,6 +266,11 @@ describe("routeAndCall activity harness overrides", () => {
           }),
         ],
       }),
+    );
+    // BI-105E8A1E: the adapter's measured latency must reach the metering row so
+    // the `compute` cost model can price local inference; it was dropped before.
+    expect(mocks.logTokenUsage).toHaveBeenCalledWith(
+      expect.objectContaining({ inferenceMs: 1234 }),
     );
   });
 

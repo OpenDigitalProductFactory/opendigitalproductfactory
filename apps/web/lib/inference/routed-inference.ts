@@ -629,6 +629,7 @@ export async function routeAndCall(
       contextKey: options?.threadId ?? options?.taskType ?? "routed-call",
       inputTokens: result.tokenUsage?.inputTokens ?? 0,
       outputTokens: result.tokenUsage?.outputTokens ?? 0,
+      inferenceMs: result.inferenceMs,
     });
 
     return {
@@ -709,6 +710,7 @@ export async function routeAndCall(
     contextKey: options?.threadId ?? options?.taskType ?? "routed-call",
     inputTokens: result.tokenUsage?.inputTokens ?? 0,
     outputTokens: result.tokenUsage?.outputTokens ?? 0,
+    inferenceMs: result.inferenceMs,
   });
 
   // 7. Normalize result to RoutedInferenceResult
@@ -757,6 +759,10 @@ async function persistRoutedTokenUsage(input: {
   contextKey: string;
   inputTokens: number;
   outputTokens: number;
+  // BI-105E8A1E: carry the adapter's measured latency so logTokenUsage's
+  // `compute` cost model can fire — it is the cost signal for a fully-local
+  // install, and was previously dropped here, leaving inferenceMs ~99% empty.
+  inferenceMs?: number;
 }): Promise<void> {
   // Skip rows with zero tokens both ways. A successful call always reports at
   // least the input prompt tokens; zero/zero usually means the adapter
