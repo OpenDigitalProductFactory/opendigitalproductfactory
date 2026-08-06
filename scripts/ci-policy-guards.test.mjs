@@ -28,6 +28,7 @@ const EXPECTED_LEGACY_JOBS = [
   "docs-staleness-detector",
   "finding-substrate-guard",
   "fpaw-standard-guard",
+  "host-port-range-guard",
   "instruction-plane-guard",
   "instruction-plane-rule-coverage",
   "janitor-tests",
