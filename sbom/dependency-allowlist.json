@@ -975,6 +975,16 @@
       ],
       "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
     },
+    "react-native-reanimated": {
+      "added": "2026-08-06",
+      "workspaces": [
+        "apps/mobile"
+      ],
+      "kinds": [
+        "prod"
+      ],
+      "note": "Software Mansion (swmansion), MIT. Canonical RN animation lib, already present transitively (via nativewind/expo-router/react-native-screens/gesture-handler/drawer-layout) — promoted to direct + pinned to 4.3.1, the version Expo SDK 56 declares in bundledNativeModules.json. No new supply-chain surface; pin unblocks the native iOS build (BI-3C588501)."
+    },
     "react-native-safe-area-context": {
       "added": "2026-06-21",
       "workspaces": [
@@ -1004,6 +1014,16 @@
         "prod"
       ],
       "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+    },
+    "react-native-worklets": {
+      "added": "2026-08-06",
+      "workspaces": [
+        "apps/mobile"
+      ],
+      "kinds": [
+        "prod"
+      ],
+      "note": "Software Mansion (swmansion), MIT. Reanimated 4's worklets runtime companion, already present transitively — promoted to direct + pinned to 0.8.3, the version Expo SDK 56 declares in bundledNativeModules.json (ships worklets/Compat/StableApi.h that expo-modules-core requires). No new supply-chain surface; pin unblocks the native iOS build (BI-3C588501)."
     },
     "react-test-renderer": {
       "added": "2026-06-21",
