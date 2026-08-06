@@ -41,22 +41,68 @@ describe("presentCapsuleRow", () => {
     expect(row.branch).toBe("no branch");
   });
 
-  it("marks a working capsule that has not advanced as stalled, not ok", () => {
+  it("WS9: a null-lease capsule idle past the floor reads stalled, not ok", () => {
+    // The frozen-14:00 Build Studio shape: no lease, no sync, no build signal,
+    // updatedAt stuck at birth. Liveness must come from that idle age, not the
+    // presence of a recent updatedAt.
     const row = presentCapsuleRow({
       capsuleId: "WC-STALL",
-      title: "Add timestamps",
+      title: "Frozen build-studio capsule",
       status: "working",
-      source: "manual",
+      source: "build-studio",
       executorKind: "build-studio",
       headBranch: null,
       worktreePath: null,
       pullRequestUrl: null,
-      leaseExpiresAt: new Date("2026-05-14T05:00:00.000Z"), // lease still valid
-      lastSyncedAt: new Date("2026-05-14T01:00:00.000Z"), // freshly synced (not stale-cache)
-      updatedAt: new Date("2026-05-14T00:30:00.000Z"), // no progress for 30 min
+      leaseExpiresAt: null,
+      lastSyncedAt: null,
+      updatedAt: new Date("2026-05-12T14:00:00.000Z"), // born two days ago at 14:00
     }, new Date("2026-05-14T01:00:00.000Z"));
 
     expect(row.health).toBe("stalled");
+    expect(row.isLive).toBe(false);
+    expect(row.liveness).toBe("idle-stale");
+  });
+
+  it("WS9: a valid lease reads live even when updatedAt is old (updatedAt is not liveness)", () => {
+    const row = presentCapsuleRow({
+      capsuleId: "WC-LIVE-LEASE",
+      title: "Actively leased work",
+      status: "working",
+      source: "external-adoption",
+      executorKind: "codex-desktop",
+      headBranch: "feat/x",
+      worktreePath: "D:/DPF-x",
+      pullRequestUrl: null,
+      leaseExpiresAt: new Date("2026-05-14T05:00:00.000Z"), // lease still valid
+      lastSyncedAt: new Date("2026-05-14T01:00:00.000Z"),
+      updatedAt: new Date("2026-05-14T00:30:00.000Z"), // old — must NOT flag stalled
+    }, new Date("2026-05-14T01:00:00.000Z"));
+
+    expect(row.health).toBe("ok");
+    expect(row.isLive).toBe(true);
+    expect(row.liveness).toBe("live");
+  });
+
+  it("WS9: a capsule whose linked build is abandoned reads abandoned-build, not working-healthy", () => {
+    const row = presentCapsuleRow({
+      capsuleId: "WC-ZOMBIE",
+      title: "Build died, capsule stuck working",
+      status: "working",
+      source: "build-studio",
+      executorKind: "build-studio",
+      headBranch: null,
+      worktreePath: null,
+      pullRequestUrl: null,
+      leaseExpiresAt: null,
+      lastSyncedAt: null,
+      updatedAt: new Date("2026-05-14T00:50:00.000Z"), // recently born — updatedAt looks fresh
+      featureBuild: { phase: "abandoned", lastActivityAt: new Date("2026-05-13T09:00:00.000Z") },
+    }, new Date("2026-05-14T01:00:00.000Z"));
+
+    expect(row.health).toBe("abandoned-build");
+    expect(row.isLive).toBe(false);
+    expect(row.liveness).toBe("build-terminal");
   });
 
   it("keeps a freshly-advanced working capsule healthy", () => {

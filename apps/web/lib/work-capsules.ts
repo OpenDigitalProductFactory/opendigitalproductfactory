@@ -160,6 +160,16 @@ export const LEASE_TTL_MS = 30 * 60 * 1000;
 export const STALE_CACHE_MS = 30 * 60 * 1000;
 export const STATUS_OVERRIDE_TTL_MS = 24 * 60 * 60 * 1000;
 
+// WS9 (BI-CBAAEA94): how long a NON-lease-backed capsule (e.g. a Build Studio
+// capsule, whose leaseExpiresAt is null by construction) may sit with no fresh
+// liveness signal — no open PR, no live linked build, no recent sync — before it
+// is treated as idle/stale rather than "working". This is the liveness floor for
+// the surface a null lease cannot cover; lease-backed capsules use their exact
+// leaseExpiresAt, not this. Deliberately generous (6h) so a genuinely-long build
+// phase is never mistaken for abandonment. Override with WORK_CAPSULE_IDLE_MS.
+export const WORK_CAPSULE_IDLE_STALE_MS =
+  Number(process.env.WORK_CAPSULE_IDLE_MS) || 6 * 60 * 60 * 1000;
+
 export const RELEASE_WORKTREE_DEFAULTS = {
   win32: "D:\\DPF",
   darwin: "{home}/dpf",

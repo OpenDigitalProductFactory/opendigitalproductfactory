@@ -231,6 +231,17 @@ export async function reapInertStuckBuilds(
         "@/lib/integrate/sandbox/sandbox-build-gc"
       );
       await releaseSandboxForTerminalBuild(c.buildId, { deleteBranch: false }).catch(() => {});
+      // WS9 (BI-CBAAEA94): a terminal build must not leave a zombie "working"
+      // WorkCapsule behind — that is the surface that reads as active and gets
+      // silently duplicated. Transition the attached capsule in the same tick.
+      const { transitionCapsuleForTerminalBuild } = await import(
+        "@/lib/work-capsules/work-capsule-reaper"
+      );
+      await transitionCapsuleForTerminalBuild(
+        c.buildId,
+        inert ? `inert — no activity in ${c.phase}.` : `stalled — no activity in ${c.phase}.`,
+        now,
+      ).catch(() => {});
     } catch (err) {
       console.warn(`[inert-build-reaper] failed to reap build ${c.buildId}:`, err);
     }

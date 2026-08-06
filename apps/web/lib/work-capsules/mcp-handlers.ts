@@ -211,12 +211,16 @@ export async function listWorkCapsulesTool(params: Record<string, unknown>): Pro
   }
 
   const limit = numberParam(params, "limit");
+  // WS9 (BI-CBAAEA94): `staleOnly` returns only capsules that are NOT truly live
+  // — the reap-candidate lens a sprawl triage needs. Defaults to false so the
+  // tool stays a full inventory.
+  const staleOnly = params["staleOnly"] === true;
   const where = {
     ...(status ? { status } : {}),
     ...(decisionScope ? { decisionScope } : {}),
     ...(portfolioRole ? { portfolioRole } : {}),
   };
-  const capsules = await prisma.workCapsule.findMany({
+  const rows = await prisma.workCapsule.findMany({
     where,
     orderBy: { updatedAt: "desc" },
     take: limit === null ? 50 : Math.min(Math.max(Math.trunc(limit), 1), 100),
@@ -236,16 +240,64 @@ export async function listWorkCapsulesTool(params: Record<string, unknown>): Pro
       headBranch: true,
       worktreePath: true,
       pullRequestUrl: true,
+      pullRequestNumber: true,
       leaseExpiresAt: true,
       lastSyncedAt: true,
       updatedAt: true,
+      featureBuildId: true,
     },
   });
 
+  // Join the linked Build Studio build so a null-lease capsule's liveness reads
+  // from real build progress (phase + updatedAt), not its frozen-at-14:00
+  // updatedAt. FeatureBuild.updatedAt advances only on genuine phase progress.
+  const { classifyWorkCapsuleLiveness } = await import("@/lib/work-capsules/liveness");
+  const buildIds = rows
+    .map((r) => r.featureBuildId)
+    .filter((id): id is string => Boolean(id));
+  const buildsById = new Map<string, { phase: string | null; lastActivityAt: Date | null }>();
+  if (buildIds.length > 0) {
+    const builds = await prisma.featureBuild.findMany({
+      where: { id: { in: [...new Set(buildIds)] } },
+      select: { id: true, phase: true, updatedAt: true },
+    });
+    for (const b of builds) {
+      buildsById.set(b.id, { phase: b.phase ?? null, lastActivityAt: b.updatedAt ?? null });
+    }
+  }
+
+  const now = new Date();
+  const capsulesAll = rows.map((row) => {
+    const featureBuild = row.featureBuildId ? buildsById.get(row.featureBuildId) ?? null : null;
+    const verdict = classifyWorkCapsuleLiveness({ ...row, featureBuild }, now);
+    const { featureBuildId: _omit, ...rest } = row;
+    return {
+      ...rest,
+      liveness: verdict.liveness,
+      isLive: verdict.isLive,
+      isReapable: verdict.isReapable,
+      livenessReason: verdict.reason,
+      // The timestamp that PROVES liveness (lease / build activity / sync) — not
+      // updatedAt, which is a daily-heartbeat artifact for Build Studio capsules.
+      trueLivenessAt: verdict.trueLivenessAt ? verdict.trueLivenessAt.toISOString() : null,
+    };
+  });
+  const capsules = staleOnly ? capsulesAll.filter((c) => !c.isLive) : capsulesAll;
+
+  const liveCount = capsulesAll.filter((c) => c.isLive).length;
+  const reapableCount = capsulesAll.filter((c) => c.isReapable).length;
+  const byLiveness: Record<string, number> = {};
+  for (const c of capsulesAll) byLiveness[c.liveness] = (byLiveness[c.liveness] ?? 0) + 1;
+
   return {
     success: true,
-    message: `Listed ${capsules.length} work capsule(s).`,
-    data: { capsules },
+    message:
+      `Listed ${capsules.length} work capsule(s). True liveness (updatedAt is NOT a liveness signal): ` +
+      `${liveCount} live, ${reapableCount} reap-candidate of ${capsulesAll.length} scanned.`,
+    data: {
+      capsules,
+      livenessSummary: { scanned: capsulesAll.length, live: liveCount, reapable: reapableCount, byLiveness },
+    },
   };
 }
 
