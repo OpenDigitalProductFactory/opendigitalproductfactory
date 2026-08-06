@@ -13,45 +13,72 @@ import { getDiscoveryOperationsContext } from "@/lib/tak/discovery-operations-ro
 import { getProductEstateContext } from "@/lib/tak/product-estate-route-context";
 import { getWikiGovernanceContext } from "@/lib/tak/decision-governance-route-context";
 import { getSelfUpgradeContext } from "@/lib/tak/self-upgrade-route-context";
+import type { PageContextProvider } from "@/lib/tak/route-context/types";
 
 type RouteContextResult = string | null;
 
-const ROUTE_CONTEXT_PROVIDERS: Record<string, (userId: string, routeContext: string) => Promise<RouteContextResult>> = {
-  "/platform/ai": getAiWorkforceContext,
-  "/platform/ai/providers": getProvidersContext,
-  "/platform/tools/discovery": getDiscoveryOperationsContext,
-  // /ops/dev-loop renders the runtime coordination map (targets + leases), NOT
-  // the backlog. Without its own provider it fell back to /ops → getOpsContext
-  // and the coworker only saw backlog items + epics (BI-FD7E4D72). More-specific
-  // prefix wins via longest-match below, so this must precede "/ops".
-  "/ops/dev-loop": getDevLoopContext,
-  // /ops/self-upgrade renders platform-update status + the background-job
-  // (Inngest) engine health, NOT the backlog. Without its own provider it fell
-  // back to /ops → getOpsContext, so a coworker asked "what's this background
-  // job issue?" answered with backlog items + epics instead of the on-screen
-  // job-engine alert. Same class as the /ops/dev-loop fix (BI-FD7E4D72). Must
-  // precede "/ops"; longest-prefix match below also guarantees it wins.
-  "/ops/self-upgrade": getSelfUpgradeContext,
-  "/ops": getOpsContext,
-  "/compliance/licensing": getLicensingReadinessContext,
-  "/compliance": getComplianceContext,
-  "/workspace": getWorkspaceContext,
-  "/finance": getFinanceContext,
-  "/portfolio/product": getProductEstateContext,
-  "/portfolio": getPortfolioContext,
-  "/inventory": getDiscoveryOperationsContext,
-  "/employee": getEmployeeContext,
-  "/build/work": getCapsuleBuildContext,
-  "/build": getBuildContext,
-  "/storefront": getStorefrontMarketingContext,
-  "/customer/funnel": getCustomerFunnelContext,
+// The page-owned context registry (design spec 2026-08-05, Phase 2). Each entry
+// declares the route it owns and its `match` mode; a page "self-registers" by
+// adding an entry here. Order is irrelevant — resolution is exact-first, then
+// longest matching prefix (see resolveProvider). `exact` routes never leak their
+// data to a descendant, which is the generalized fix for the /ops/self-upgrade →
+// /ops backlog mislabel (PR #4048): every /ops/* sibling now falls to the
+// page-identity label instead of inheriting the backlog.
+const PAGE_CONTEXT_PROVIDERS: PageContextProvider[] = [
+  { route: "/platform/ai/providers", match: "prefix", build: () => getProvidersContext() },
+  { route: "/platform/ai", match: "prefix", build: () => getAiWorkforceContext() },
+  { route: "/platform/tools/discovery", match: "prefix", build: () => getDiscoveryOperationsContext()},
+  // /ops is the Operations Backlog — `exact` so its backlog+epics data can never
+  // leak to a sibling ops page. This is the generalized /ops/self-upgrade fix
+  // (BI-FD7E4D72 / PR #4048): /ops/patches, /ops/journeys, /ops/changes,
+  // /ops/promotions, /ops/security get the page-identity label, not the backlog.
+  { route: "/ops", match: "exact", build: () => getOpsContext() },
+  { route: "/ops/dev-loop", match: "exact", build: () => getDevLoopContext() },
+  { route: "/ops/self-upgrade", match: "exact", build: () => getSelfUpgradeContext() },
+  { route: "/compliance/licensing", match: "prefix", build: () => getLicensingReadinessContext() },
+  // /compliance parses a regulation/obligation/control id out of the route, so it
+  // genuinely serves its subtree → `prefix`.
+  { route: "/compliance", match: "prefix", build: (i) => getComplianceContext(i.userId, i.route) },
+  // /workspace is the top-level overview — `exact` so a child page never claims
+  // to be the workspace overview.
+  { route: "/workspace", match: "exact", build: () => getWorkspaceContext() },
+  { route: "/finance", match: "prefix", build: () => getFinanceContext() },
+  { route: "/portfolio/product", match: "prefix", build: (i) => getProductEstateContext(i.userId, i.route) },
+  { route: "/portfolio", match: "prefix", build: () => getPortfolioContext() },
+  { route: "/inventory", match: "prefix", build: () => getDiscoveryOperationsContext()},
+  { route: "/employee", match: "prefix", build: () => getEmployeeContext() },
+  // /build/work parses the capsule id from the route → `prefix`.
+  { route: "/build/work", match: "prefix", build: (i) => getCapsuleBuildContext(i.userId, i.route) },
+  { route: "/build", match: "prefix", build: (i) => getBuildContext(i.userId) },
+  { route: "/storefront", match: "prefix", build: () => getStorefrontMarketingContext() },
+  // /customer/funnel is a 30-day funnel dashboard — `exact`; a child does not
+  // share that aggregate.
+  { route: "/customer/funnel", match: "exact", build: () => getCustomerFunnelContext() },
   // /coworker-decisions is the Decision Governance hub (WWMD/WWWD/WSID).
-  // Without its own provider the coworker fell outside this allow-list and saw
-  // only the generic business blurb — so asked "what should we do about these
-  // open reviews?" it had no idea the page even showed reviews and told the user
-  // to paste the screen (BI-C888E1B6 / EP-0AF96937).
-  "/coworker-decisions": getWikiGovernanceContext,
-};
+  { route: "/coworker-decisions", match: "prefix", build: () => getWikiGovernanceContext()},
+];
+
+/**
+ * Resolve the owning provider for a route: an `exact` provider whose route
+ * equals the pathname wins outright; otherwise the longest `prefix` provider
+ * that is a path-prefix of the route. An `exact` provider is NEVER returned for
+ * a descendant route, so a page can never be mislabeled with a sibling's PAGE
+ * DATA (design spec 2026-08-05, Phase 2 — no data inheritance).
+ */
+function resolveProvider(routeContext: string): PageContextProvider | null {
+  const exact = PAGE_CONTEXT_PROVIDERS.find(
+    (p) => p.match === "exact" && p.route === routeContext,
+  );
+  if (exact) return exact;
+  let best: PageContextProvider | null = null;
+  for (const p of PAGE_CONTEXT_PROVIDERS) {
+    if (p.match !== "prefix") continue;
+    if (routeContext === p.route || routeContext.startsWith(p.route + "/")) {
+      if (!best || p.route.length > best.route.length) best = p;
+    }
+  }
+  return best;
+}
 
 export async function getRouteDataContext(routeContext: string, userId: string): Promise<RouteContextResult> {
   // Universal business context — injected on every route so the coworker
@@ -63,34 +90,20 @@ export async function getRouteDataContext(routeContext: string, userId: string):
     // Non-fatal — proceed without business context
   }
 
-  // Find the most specific matching route
-  let bestMatch: string | null = null;
-  let bestLen = 0;
-  for (const prefix of Object.keys(ROUTE_CONTEXT_PROVIDERS)) {
-    if ((routeContext === prefix || routeContext.startsWith(prefix + "/")) && prefix.length > bestLen) {
-      bestLen = prefix.length;
-      bestMatch = prefix;
-    }
-  }
-
   let routeSpecific: string | null = null;
-  if (bestMatch) {
-    const provider = ROUTE_CONTEXT_PROVIDERS[bestMatch];
-    if (provider) {
-      try {
-        routeSpecific = await provider(userId, routeContext);
-      } catch {
-        // Non-fatal
-      }
+  const provider = resolveProvider(routeContext);
+  if (provider) {
+    try {
+      routeSpecific = await provider.build({ userId, route: routeContext });
+    } catch {
+      // Non-fatal
     }
   }
 
-  // Default provider: any route with no bespoke provider (the vast majority —
-  // only ~18 of ~286 shell routes are enrolled above) would otherwise leave the
-  // coworker with just the generic business blurb, so it could not even name the
-  // page the user is on. This guarantees perception by construction: the coworker
-  // always knows which page the user is viewing and is steered to read via tools
-  // rather than ask the user to paste the screen. BI-F2AFD796 / EP-8C706944.
+  // Perception by construction: a route with no owning provider still names the
+  // page and steers the coworker to its read tools rather than asking the user to
+  // paste the screen (BI-F2AFD796 / EP-8C706944). An `exact` provider never leaks
+  // here — an unowned descendant gets this label, not a sibling's data.
   if (!routeSpecific && routeContext) {
     routeSpecific = buildDefaultRouteContext(routeContext);
   }
