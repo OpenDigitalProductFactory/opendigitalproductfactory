@@ -5,6 +5,9 @@ import { verifyHarvestCredential, type HarvestFetch } from "./harvest-client";
 
 export const GreenhouseConnectInputSchema = z.object({
   apiToken: z.string().trim().min(1, "Harvest API key required").max(1024),
+  // Optional: the shared secret Greenhouse signs inbound webhooks with. Stored
+  // encrypted so the inbound route can verify signatures (BI-7FBE28A6).
+  webhookSecret: z.string().trim().min(1).max(1024).optional(),
 });
 
 export type GreenhouseConnectInput = z.infer<typeof GreenhouseConnectInputSchema>;
@@ -36,6 +39,10 @@ export async function connectGreenhouse(
     };
   }
   const input = parseResult.data;
+  const encFields = encryptJson({
+    apiToken: input.apiToken,
+    ...(input.webhookSecret ? { webhookSecret: input.webhookSecret } : {}),
+  });
 
   try {
     const check = await verifyHarvestCredential(input.apiToken, deps.fetchImpl);
@@ -54,7 +61,7 @@ export async function connectGreenhouse(
           integrationId: GREENHOUSE_INTEGRATION_ID,
           provider: PROVIDER,
           status: "error",
-          fieldsEnc: encryptJson({ apiToken: input.apiToken }),
+          fieldsEnc: encFields,
           lastErrorAt: new Date(),
           lastErrorMsg: message,
         },
@@ -74,12 +81,12 @@ export async function connectGreenhouse(
         integrationId: GREENHOUSE_INTEGRATION_ID,
         provider: PROVIDER,
         status: "connected",
-        fieldsEnc: encryptJson({ apiToken: input.apiToken }),
+        fieldsEnc: encFields,
         lastTestedAt: new Date(),
       },
       update: {
         status: "connected",
-        fieldsEnc: encryptJson({ apiToken: input.apiToken }),
+        fieldsEnc: encFields,
         lastTestedAt: new Date(),
         lastErrorAt: null,
         lastErrorMsg: null,
@@ -95,7 +102,7 @@ export async function connectGreenhouse(
         integrationId: GREENHOUSE_INTEGRATION_ID,
         provider: PROVIDER,
         status: "error",
-        fieldsEnc: encryptJson({ apiToken: input.apiToken }),
+        fieldsEnc: encFields,
         lastErrorAt: new Date(),
         lastErrorMsg: message,
       },

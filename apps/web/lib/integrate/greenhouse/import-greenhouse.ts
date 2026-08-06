@@ -110,6 +110,16 @@ export async function readGreenhouseApiToken(): Promise<string | null> {
   return decoded?.apiToken ?? null;
 }
 
+/** Read + decrypt the stored inbound-webhook signing secret, if configured. */
+export async function readGreenhouseWebhookSecret(): Promise<string | null> {
+  const record = await prisma.integrationCredential.findUnique({
+    where: { integrationId: GREENHOUSE_INTEGRATION_ID },
+  });
+  if (!record) return null;
+  const decoded = decryptJson<{ webhookSecret?: string }>(record.fieldsEnc);
+  return decoded?.webhookSecret ?? null;
+}
+
 /** Production entry point: read the stored key and import into a named batch. */
 export async function runGreenhouseImport(batchId: string): Promise<GreenhouseImportCounts> {
   const apiToken = await readGreenhouseApiToken();
