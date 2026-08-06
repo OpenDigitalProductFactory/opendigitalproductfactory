@@ -30,6 +30,7 @@ const ALLOWED_EMBEDDING_CALLERS: ReadonlySet<string> = new Set([
   "apps/web/lib/wiki/lint.ts", // corpus dedup similarity
   "apps/web/lib/wiki/principle-similarity.ts", // principle-vector similarity
   "apps/web/lib/mcp/packs/principle-decide-pack.ts", // principle-direction + semantic-decision knowledge
+  "apps/web/lib/decision/evidence-grounding.ts", // embeds the option DESCRIPTION (transient decision input) for principle_decide's semantic fallback — same purpose as the pack entry, extracted here for module size; embeds no operational record (EP-VERIFICATION-INTEGRITY)
 ]);
 
 function repoRoot(): string {

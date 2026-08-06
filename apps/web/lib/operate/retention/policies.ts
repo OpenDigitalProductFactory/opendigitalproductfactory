@@ -434,6 +434,12 @@ export const RETAINED_DATASETS: readonly RetainedDataset[] = [
   { model: "scorecard", label: "Interview scorecards", regulatoryBasis: "EEOC/OFCCP selection-procedure recordkeeping (adverse-impact basis)", minRetentionYears: 2 },
   { model: "offer", label: "Offers", regulatoryBasis: "EEOC/OFCCP applicant-flow recordkeeping", minRetentionYears: 2 },
   { model: "demographicResponse", label: "EEO demographic responses", regulatoryBasis: "EEOC/OFCCP demographic recordkeeping (kept separate from selection)", minRetentionYears: 2 },
+  // Trust-envelope bias-audit evidence (BI-A59CB2EA). Monitoring-only demographic
+  // observations are the substrate for NYC LL144 bias audits + EEOC/Title VII
+  // adverse-impact records, so they must NOT be auto-purged within the audit
+  // window. (A privacy-minimization purge BEYOND the statutory floor is an
+  // operator policy decision — see spec §10; not a fabricated window here.)
+  { model: "protectedMonitoringObservation", label: "Protected-class monitoring observations", regulatoryBasis: "NYC LL144 bias-audit / EEOC Title VII adverse-impact record retention", minRetentionYears: 1 },
 ] as const;
 
 /** Models the engine will purge (for guard tests + reporting). */

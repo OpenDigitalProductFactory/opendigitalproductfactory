@@ -160,7 +160,17 @@ export const TABLE_CLASSIFICATION: Record<string, TableSensitivity> = {
   ApprovalRule: "internal",
   BusinessProfile: "internal",
 
+  // Trust-envelope jurisdiction criteria packs — operator-authored config
+  // (required/forbidden/monitoring-only axes + weight overlay per regime). No PII.
+  JurisdictionCriteriaProfile: "internal",
+
   // -- confidential --
+  // Trust-envelope evidence re-verification (BI-70FF9114): holds recorded/live
+  // excerpts of cited evidence, which may quote decision or candidate source text.
+  EvidenceReVerification: "confidential",
+  // Trust-envelope MONITORING-ONLY demographic rail (BI-A59CB2EA): protected-class
+  // observations for LL144/four-fifths bias audit. PII — obfuscate before any copy.
+  ProtectedMonitoringObservation: "confidential",
   User: "confidential",
   UserGroup: "confidential",
   CustomerContact: "confidential",

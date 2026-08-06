@@ -106,3 +106,7 @@ JobPosting  domain-lifecycle-managed  # Postings are unpublished/closed by requi
 PipelineStage  domain-lifecycle-managed  # Stage definitions follow their requisition via cascade; not independently aged.
 RecruitingSource  reference-data  # Source lookup superseded by operator edits, never aged out.
 DispositionReason  reference-data  # Disposition-reason lookup table; superseded, never time-aged.
+
+# ── Trust envelope over the decision kernel (EP-VERIFICATION-INTEGRITY) ───────
+EvidenceReVerification  domain-lifecycle-managed  # Re-checks of a decision's cited evidence (BI-70FF9114); created and removed with their parent DecisionInteraction via cascade, never independently aged.
+JurisdictionCriteriaProfile  reference-data  # Operator-authored jurisdiction criteria packs (BI-B84CD2D3); versioned and superseded by a newer version, never aged out.

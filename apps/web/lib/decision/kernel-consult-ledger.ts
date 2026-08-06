@@ -20,6 +20,11 @@ import type {
   DecisionPerspectiveEvaluationResult,
   DecisionRiskTier,
 } from "@/lib/decision-perspective/types";
+import { sealDecision, type SealablePayload } from "@/lib/decision/decision-chain";
+import type { AdmissibleCitation } from "@/lib/decision/evidence-grounding";
+
+/** Grade → effective weight for the persisted source row. A most conclusive. */
+const GRADE_WEIGHT: Record<string, number> = { A: 1, B: 0.75, C: 0.5, D: 0.25 };
 
 type ProfileResolverDb = {
   decisionPerspectiveProfile: {
@@ -35,7 +40,36 @@ type ProfileResolverDb = {
       select: { versionId: true };
     }): Promise<{ versionId: string } | null>;
   };
+  /**
+   * Optional chain-head lookup (BI-81CC5D8E). When present, used to find the
+   * previous sealed entry so the new decision links to it. Optional so existing
+   * callers/mocks that only provide `create` still work — a missing finder just
+   * means prevHash=null (a fresh chain).
+   */
+  decisionInteraction?: {
+    findFirst?(args: {
+      where: { chainId: string; sealedAt: { not: null } };
+      orderBy: { sealedAt: "desc" };
+      select: { chainEntryHash: true };
+    }): Promise<{ chainEntryHash: string | null } | null>;
+  };
 } & Parameters<typeof persistDecisionInteraction>[0]["db"];
+
+/** Look up the current head hash of a chain, defensively (fail-open to null). */
+async function resolveChainHead(db: ProfileResolverDb, chainId: string): Promise<string | null> {
+  try {
+    const finder = db.decisionInteraction?.findFirst;
+    if (typeof finder !== "function") return null;
+    const head = await finder({
+      where: { chainId, sealedAt: { not: null } },
+      orderBy: { sealedAt: "desc" },
+      select: { chainEntryHash: true },
+    });
+    return head?.chainEntryHash ?? null;
+  } catch {
+    return null;
+  }
+}
 
 export type KernelConsultLedgerOutcome = {
   recorded: boolean;
@@ -114,6 +148,23 @@ export async function recordKernelConsultInteraction(input: {
     optionsWithFeatures: number;
     optionCount: number;
   } | null;
+  /**
+   * Trust-envelope evidence grounding (BI-EA97E5CD). Admissible per-(option,
+   * dimension) citations that back the scored features. Persisted into
+   * DecisionInteraction.sources (previously always empty on the kernel path).
+   */
+  citations?: AdmissibleCitation[] | null;
+  /** Scored criteria per option (optionId -> dimension -> magnitude) for the seal. */
+  scoredCriteria?: Record<string, Record<string, number>> | null;
+  /** Per-(option,dimension) evidence digest for the immutable chain payload. */
+  evidenceDigests?: Record<string, Record<string, string>> | null;
+  /**
+   * Whether to seal this decision into the append-only hash chain (BI-81CC5D8E).
+   * Defaults to true; the seal is fail-open (a failure never blocks the record).
+   * `now` is injected for determinism in tests.
+   */
+  seal?: boolean;
+  now?: Date;
 }): Promise<KernelConsultLedgerOutcome> {
   try {
     const profileId = input.callerContext.governingProfileId;
@@ -156,6 +207,17 @@ export async function recordKernelConsultInteraction(input: {
         }))
       : [];
 
+    // Trust-envelope evidence grounding: bind each cited source onto the ledger
+    // row's `sources` column (was always empty on the kernel path).
+    const sources: DecisionPerspectiveEvaluationResult["sources"] = (input.citations ?? []).map(
+      (c) => ({
+        materialId: `${c.optionId}:${c.dimensionKey}`,
+        sourceType: c.locator.sourceType,
+        summary: c.excerpt ?? `${c.dimensionKey} cited from ${c.locator.sourceType}`,
+        effectiveWeight: GRADE_WEIGHT[c.grade] ?? 0.5,
+      }),
+    );
+
     const evaluation: DecisionPerspectiveEvaluationResult = {
       outcomeType,
       selectedProfileId: profile.profileId,
@@ -175,8 +237,31 @@ export async function recordKernelConsultInteraction(input: {
       options: input.optionIds,
       rationale: input.result.reasoning,
       materialScores: [],
-      sources: [],
+      sources,
     };
+
+    // Trust-envelope immutability: seal the decision as the next entry in the
+    // per-profile append-only hash chain. Fail-open — if anything goes wrong the
+    // decision still records, just unsealed (chain columns NULL).
+    let chain: Parameters<typeof persistDecisionInteraction>[0]["chain"] = null;
+    if (input.seal !== false) {
+      try {
+        const chainId = `kernel-consult:${profile.profileId}`;
+        const prevHash = await resolveChainHead(input.db, chainId);
+        const payload: SealablePayload = {
+          question: input.question,
+          optionIds: input.optionIds,
+          criteria: input.scoredCriteria ?? {},
+          evidenceDigests: input.evidenceDigests ?? {},
+          recommendedOptionId: input.result.recommendation?.optionId ?? null,
+          composite: input.result.recommendation?.composite ?? null,
+        };
+        chain = sealDecision({ chainId, prevHash, payload, now: input.now ?? new Date() });
+      } catch (sealErr) {
+        console.warn("[kernel-consult-ledger] seal failed (fail-open, unsealed):", sealErr);
+        chain = null;
+      }
+    }
 
     const { interactionId } = await persistDecisionInteraction({
       db: input.db,
@@ -187,6 +272,7 @@ export async function recordKernelConsultInteraction(input: {
       routeContext: input.routeContext ?? input.callingSurface ?? "mcp:principle_decide",
       phaseFrom: null,
       phaseTo: null,
+      chain,
       outcomePayloadExtra: {
         tool: "principle_decide",
         callingPopulation: input.callerContext.callingPopulation,
