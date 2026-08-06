@@ -1752,7 +1752,7 @@
       "ariaSnapshot": "- link\n- banner\n  - link\n    - text\n    - paragraph\n      - text\n  - link\n  - button\n  - text\n  - button\n- complementary\n  - navigation\n    - group\n      - button\n      - button [pressed]\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n- main\n  - navigation\n    - link\n    - text\n  - link\n  - paragraph\n    - text\n  - link\n  - heading [level=1]\n  - paragraph\n    - text\n  - heading [level=2]\n  - paragraph\n    - text\n  - text\n  - paragraph\n    - text\n  - heading [level=2]\n  - paragraph\n    - text\n  - text\n  - paragraph\n    - text\n  - heading [level=2]\n  - paragraph\n    - text\n  - text\n  - paragraph\n    - text\n  - region\n    - heading [level=2]\n    - paragraph\n      - text\n    - group\n      - button\n      - paragraph\n        - text\n      - list\n        - listitem\n          - text\n          - paragraph\n            - text\n    - paragraph\n      - text\n      - link\n      - text\n      - link\n  - heading [level=2]\n  - paragraph\n    - text\n  - text\n  - paragraph\n    - text\n  - textbox\n  - button [disabled]"
     },
     "/platform/tools/catalog": {
-      "defaultVisibleWords": 908,
+      "defaultVisibleWords": 938,
       "leadBandWords": 0,
       "primaryActions": 1,
       "visibleFields": 5,
@@ -1796,7 +1796,7 @@
       "ariaSnapshot": "- link\n- banner\n  - link\n    - text\n    - paragraph\n      - text\n  - link\n  - button\n  - text\n  - button\n- complementary\n  - navigation\n    - group\n      - button\n      - button [pressed]\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n- main\n  - navigation\n    - link\n    - text\n  - link\n  - paragraph\n    - text\n  - link\n  - heading [level=1]\n  - paragraph\n    - text\n  - main"
     },
     "/platform/tools/integrations": {
-      "defaultVisibleWords": 1870,
+      "defaultVisibleWords": 1920,
       "leadBandWords": 0,
       "primaryActions": 1,
       "visibleFields": 0,
