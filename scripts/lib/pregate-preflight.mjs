@@ -68,6 +68,19 @@ export function isEnvironmentFailureOutput(output) {
     || ENVIRONMENT_FAILURE_RE.test(text);
 }
 
+// Output signatures that mean "the host could not RUN the guard" — an OS-refused
+// or signal-killed spawn (a local-CI eviction issues `taskkill /T /F`), NOT a
+// deterministic tree violation (BI-AA2EE621). Distinct from an ENVIRONMENT
+// failure, which is a stable missing-runtime condition rather than transient
+// host pressure. The first alternate is the marker the Repo Guard Loop runner
+// prints when it exits with its distinct runner code (scripts/check-guards.mjs).
+export const RUNNER_FAILURE_RE =
+  /could not RUN \d+\/\d+ guard\(s\)|RUNNER failures|spawn (?:ENOMEM|EAGAIN|ENOENT)|killed by SIG/i;
+
+export function isRunnerFailureOutput(output) {
+  return RUNNER_FAILURE_RE.test(String(output ?? ""));
+}
+
 function stripSelfTests(entries) {
   return entries
     .map((entry) => ({
@@ -100,14 +113,22 @@ function defaultExecute(command, args) {
   });
   const output = `${result.stdout ?? ""}${result.stderr ?? ""}${result.error?.message ?? ""}`;
   if (result.status !== 0) process.stderr.write(output);
-  return { exitCode: result.status ?? 1, output };
+  // A guard command the host refused to launch (result.error) or killed by a
+  // signal (result.status === null) is a runner failure, not a violation —
+  // surfaced so runPreflight never mislabels an evicted spawn as deterministic.
+  const runnerFailure = Boolean(result.error) || result.status === null;
+  return { exitCode: result.status ?? 1, output, runnerFailure };
 }
 
 /**
  * Runs the preflight plan. Unlike runPolicyProfile, the executor returns
- * `{ exitCode, output }` so a non-zero exit whose output matches
- * ENVIRONMENT_FAILURE_RE can be reclassified as `skipped_environment` instead
- * of `failed`. `ok` is false only for genuine guard failures.
+ * `{ exitCode, output, runnerFailure }` so a non-zero exit can be reclassified:
+ * output matching ENVIRONMENT_FAILURE_RE becomes `skipped_environment`, and a
+ * spawn the host refused or killed (runnerFailure, or RUNNER_FAILURE_RE output)
+ * becomes `runner_failed` (BI-AA2EE621). Both mean "this host could not run the
+ * guard", so — like the environment skip this file already documents — they
+ * WARN and let CI/the sandbox enforce rather than mislabelling an evicted spawn
+ * as a deterministic violation. `ok` is false only for genuine guard failures.
  */
 export async function runPreflight({
   plan = buildPreflightPlan(),
@@ -125,12 +146,16 @@ export async function runPreflight({
   const result = await runPolicyProfile({
     entries: plan,
     execute: (command, args) => {
-      const { exitCode, output } = execute(command, args);
+      const { exitCode, output, runnerFailure } = execute(command, args);
       if (exitCode !== 0) {
-        wrapped.set(
-          [command, ...args].join(" "),
-          isEnvironmentFailureOutput(output) ? "environment" : "violation",
-        );
+        // Precedence: a stable missing-runtime signal (environment) wins over a
+        // transient host-pressure signal (runner) wins over a real violation.
+        const kind = isEnvironmentFailureOutput(output)
+          ? "environment"
+          : (runnerFailure || isRunnerFailureOutput(output))
+            ? "runner"
+            : "violation";
+        wrapped.set([command, ...args].join(" "), kind);
       }
       return exitCode;
     },
@@ -141,9 +166,9 @@ export async function runPreflight({
   const entries = result.entries.map((entry) => {
     if (entry.status !== "failed") return entry;
     const kind = wrapped.get(entry.failedCommand);
-    return kind === "environment"
-      ? { ...entry, status: "skipped_environment" }
-      : entry;
+    if (kind === "environment") return { ...entry, status: "skipped_environment" };
+    if (kind === "runner") return { ...entry, status: "runner_failed" };
+    return entry;
   });
 
   return {

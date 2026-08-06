@@ -15,8 +15,10 @@ import {
   ENVIRONMENT_FAILURE_RE,
   LOCAL_SAFE_PR_GUARD_IDS,
   PREFLIGHT_SKIP_ENV,
+  RUNNER_FAILURE_RE,
   buildPreflightPlan,
   isEnvironmentFailureOutput,
+  isRunnerFailureOutput,
   runPreflight,
 } from "./lib/pregate-preflight.mjs";
 import { loadPinnedGuardTypeScript } from "./lib/load-pinned-guard-typescript.mjs";
@@ -204,6 +206,58 @@ test("wrong-graph guard runtime resolution carries the same stable environment s
   });
   assert.match(output, /GuardRuntimeEnvironmentError/);
   assert.ok(isEnvironmentFailureOutput(output));
+});
+
+test("runPreflight reclassifies a killed spawn as runner_failed, not a violation (BI-AA2EE621)", async () => {
+  // The executor signals a spawn the host killed/refused via runnerFailure.
+  const result = await runPreflight({
+    plan: PLAN.filter((entry) => entry.id === "clean" || entry.id === "violating"),
+    execute: (command, args) => {
+      const script = args[args.length - 1];
+      if (script.includes("violating")) return { exitCode: 1, output: "", runnerFailure: true };
+      return { exitCode: 0, output: "", runnerFailure: false };
+    },
+    env: {},
+  });
+  // A host that could not run a guard must not hard-fail the preflight...
+  assert.equal(result.ok, true);
+  const entry = result.entries.find((e) => e.id === "violating");
+  // ...and must be distinguishable from both a real violation and an env skip.
+  assert.equal(entry.status, "runner_failed");
+});
+
+test("runPreflight reclassifies the guard-loop runner marker in output as runner_failed", async () => {
+  const result = await runPreflight({
+    plan: PLAN.filter((entry) => entry.id === "clean" || entry.id === "violating"),
+    execute: (command, args) => {
+      const script = args[args.length - 1];
+      if (script.includes("violating")) {
+        return { exitCode: 3, output: "Guard loop: could not RUN 1/24 guard(s) — RUNNER failures" };
+      }
+      return { exitCode: 0, output: "" };
+    },
+    env: {},
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.entries.find((e) => e.id === "violating").status, "runner_failed");
+});
+
+test("a genuine violation is still failed even though the runner path exists", async () => {
+  const result = await runPreflight({ plan: PLAN, execute: fakeExecute, env: {} });
+  assert.equal(result.ok, false);
+  assert.equal(result.entries.find((e) => e.id === "violating").status, "failed");
+});
+
+test("runner-failure classification uses transient host signals, not guard verdicts", () => {
+  assert.ok(isRunnerFailureOutput("Guard loop: could not RUN 2/24 guard(s) — the host killed them"));
+  assert.ok(isRunnerFailureOutput("child process error: spawn ENOMEM"));
+  assert.ok(isRunnerFailureOutput("check-no-native-dialogs.mjs — killed by SIGKILL"));
+  assert.ok(RUNNER_FAILURE_RE.test("These are RUNNER failures (transient host pressure)"));
+  // A real ratchet violation must NOT read as a runner failure.
+  assert.ok(!isRunnerFailureOutput("module exceeds ratchet baseline: 1050 > 1047 lines"));
+  assert.ok(!isRunnerFailureOutput("Missing UX-Fit-Decision trailer"));
+  // An environment failure is its own class, not a runner failure.
+  assert.ok(!isRunnerFailureOutput("GuardRuntimeEnvironmentError: runtime unavailable"));
 });
 
 test("runPreflight honors the recorded emergency skip", async () => {
