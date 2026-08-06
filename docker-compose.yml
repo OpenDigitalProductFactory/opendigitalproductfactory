@@ -224,6 +224,12 @@ services:
       # on every self-upgrade). See BI-8C1F0A2E.
       DPF_FEDERATION_EXCHANGE_ENABLED: ${DPF_FEDERATION_EXCHANGE_ENABLED:-0}
       DPF_EDGE_INCIDENT_CORRELATION_ENABLED: ${DPF_EDGE_INCIDENT_CORRELATION_ENABLED:-0}
+      # Allow outbound federation enroll/exchange to http:// and private/LAN-IP
+      # peers (default OFF = https-only + SSRF block). Same-organization installs
+      # on a plain-HTTP LAN need this to pair; must be a base passthrough for the
+      # same base-only-recreate durability reason as the flags above. See
+      # BI-CC8021CE.
+      DPF_FEDERATION_ALLOW_INSECURE_PEERS: ${DPF_FEDERATION_ALLOW_INSECURE_PEERS:-0}
       # Multi-client governance soak (BI-42FA7DD8): observe-only fleet
       # backstops for leftover worktrees and Build Studio sandbox builds.
       # Primary reaping stays session-lifecycle (worktree-session-hygiene on
@@ -867,7 +873,7 @@ services:
   dpf-stt:
     profiles: ["runtime-local-speech", "tts"]
     # Pinned to the multi-arch index digest for hwdsl2/whisper-server:latest
-    # resolved on 2026-07-17 (the prior 3ee18f84… digest was deleted from the
+    # resolved on 2026-08-06 (the prior 120e4b78… digest was deleted from the
     # registry — Release Image Manifest Guard caught it again). The registry
     # owner re-pushes :latest periodically and prunes the previous index, so
     # this digest must be re-resolved every time the guard fails. Bump
@@ -877,7 +883,7 @@ services:
     # the sidecar won't start, set DPF_STT_IMAGE in .env to a reachable ref
     # (e.g. hwdsl2/whisper-server:latest) then `docker compose up -d dpf-stt`,
     # and open a PR re-resolving the digest here (this is that PR's pattern).
-    image: ${DPF_STT_IMAGE:-hwdsl2/whisper-server@sha256:120e4b7835898715d97b16e54e991e5226535fdfad506863a3b9cd4dd6d6377f}
+    image: ${DPF_STT_IMAGE:-hwdsl2/whisper-server@sha256:0b03ecb54c8247cd4fe42e808746f36f44eff7998dc45018554c50252975e29f}
     restart: unless-stopped
     logging: *default-logging
     environment:
