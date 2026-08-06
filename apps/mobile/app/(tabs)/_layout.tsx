@@ -52,6 +52,17 @@ export default function TabsLayout() {
         }}
       />
       <Tabs.Screen
+        name="nearby"
+        options={{
+          title: "Nearby",
+          headerShown: false,
+          href: hiddenHref("nearby"),
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="location" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
         name="ops"
         options={{
           title: "Ops",

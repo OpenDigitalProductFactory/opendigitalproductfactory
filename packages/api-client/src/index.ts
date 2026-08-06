@@ -14,6 +14,7 @@ import { uploadEndpoints } from "./endpoints/upload";
 import { workItemsEndpoints } from "./endpoints/work-items";
 import { financeEndpoints } from "./endpoints/finance";
 import { directoryEndpoints } from "./endpoints/directory";
+import { storefrontEndpoints } from "./endpoints/storefront";
 
 export function createApiClient(config: ApiClientConfig) {
   const client = new DpfClient(config);
@@ -32,6 +33,7 @@ export function createApiClient(config: ApiClientConfig) {
     workItems: workItemsEndpoints(client),
     finance: financeEndpoints(client),
     directory: directoryEndpoints(client),
+    storefront: storefrontEndpoints(client),
   };
 }
 

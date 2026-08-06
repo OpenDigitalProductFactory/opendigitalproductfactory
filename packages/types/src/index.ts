@@ -7,3 +7,4 @@ export * from "./customer-visits";
 export * from "./finance";
 export * from "./work-item-evidence";
 export * from "./nearby";
+export * from "./storefront-discovery";

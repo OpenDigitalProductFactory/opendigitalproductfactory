@@ -21,11 +21,18 @@ describe("resolveVisibleTabs", () => {
     ]);
   });
 
-  it("customer persona sees a reduced tab set (no ops / portfolio)", () => {
+  it("customer persona sees a reduced tab set (no ops / portfolio) plus Nearby", () => {
     expect(resolveVisibleTabs({ persona: { kind: "customer" } })).toEqual([
       "index",
+      "nearby",
       "customers",
       "more",
+    ]);
+  });
+
+  it("visitor persona sees only the anonymous walk-up surface", () => {
+    expect(resolveVisibleTabs({ persona: { kind: "visitor" } })).toEqual([
+      "nearby",
     ]);
   });
 

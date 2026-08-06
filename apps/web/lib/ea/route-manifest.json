@@ -1,6 +1,6 @@
 {
   "generator": "apps/web/scripts/build-route-manifest.ts",
-  "routeCount": 605,
+  "routeCount": 607,
   "routes": [
     {
       "routePath": "/",
@@ -1341,6 +1341,20 @@
       "file": "apps/web/app/api/storefront/[slug]/hold/route.ts"
     },
     {
+      "routePath": "/api/storefront/[slug]/menu",
+      "kind": "route",
+      "segments": [
+        "api",
+        "storefront",
+        "[slug]",
+        "menu"
+      ],
+      "dynamicParams": [
+        "slug"
+      ],
+      "file": "apps/web/app/api/storefront/[slug]/menu/route.ts"
+    },
+    {
       "routePath": "/api/storefront/[slug]/slots",
       "kind": "route",
       "segments": [
@@ -1690,6 +1704,17 @@
         "id"
       ],
       "file": "apps/web/app/api/storefront/bookings/[id]/confirm/route.ts"
+    },
+    {
+      "routePath": "/api/storefront/nearby",
+      "kind": "route",
+      "segments": [
+        "api",
+        "storefront",
+        "nearby"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/storefront/nearby/route.ts"
     },
     {
       "routePath": "/api/storefront/orders/[id]/status",

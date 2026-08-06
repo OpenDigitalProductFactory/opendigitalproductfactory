@@ -18,6 +18,9 @@ export interface TabSpec {
  */
 export const TAB_REGISTRY: TabSpec[] = [
   { key: "index", personas: ["operator", "employee", "customer", "admin"] },
+  // Anonymous walk-up consumer surface (first cut, BI-9FEB61B8): the default
+  // home for a visitor with no account, also available to signed-in customers.
+  { key: "nearby", personas: ["visitor", "customer"] },
   { key: "ops", personas: ["operator", "employee", "admin"] },
   { key: "jobs", personas: ["operator", "employee", "admin"], capability: "work-items" },
   { key: "portfolio", personas: ["operator", "admin"] },
