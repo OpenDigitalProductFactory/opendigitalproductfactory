@@ -31,6 +31,7 @@ import { BEAUTY_CAPACITY_ASSETS } from "./beauty-capacity-assets";
 import { LIFECYCLE_GOVERNANCE_ASSETS } from "./lifecycle-governance-assets";
 import { STOCK_COVERAGE_ASSETS } from "./stock-coverage-assets";
 import { FINANCE_INVOICE_DOCUMENT_ASSETS } from "./finance-invoice-document-assets";
+import { RECRUITING_ASSETS } from "./recruiting-assets";
 
 // ─── Definitions (spec §6.1) ─────────────────────────────────────────────────
 
@@ -682,6 +683,7 @@ const SEED_ASSETS: readonly DataAssetDefinition[] = [
   ...STOCK_COVERAGE_ASSETS,
   ...FINANCE_INVOICE_DOCUMENT_ASSETS,
   ...PROCESSING_GOVERNANCE_ASSETS,
+  ...RECRUITING_ASSETS,
    {
     id: "data:agent-conversation",
     physical: { prismaModel: "AgentMessage" },
