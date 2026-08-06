@@ -205,6 +205,25 @@ Anchor **BI-E5561DC9** decomposes into the following. Adapter-side children link
 
 ---
 
-## 9. Sources
+## 9. Coordination with the Workday / HCM parity build
+
+**Principle:** absorbing adjacent functionality is the platform's compounding benefit (BI-COP-007). The Greenhouse adapter must therefore build its ingest seams as **shared HCM primitives** that the next connector (Fountain, ADP, Workday) reuses — never Greenhouse-specific one-offs. This is the recruiting-domain instance of BI-ECO-005 (shared company primitive refactor). The recruiting/ATS work is a live **Workday-parity capability (13)** under EP-PEOPLE-HCM-CORE, and the parity scorecard **BI-COP-001 was reopened 2026-08-05** for full-parity tracking — so this initiative must register as evidence there, not run parallel to it.
+
+**Touchpoints — build against the shared owner, do not fork:**
+
+| Greenhouse seam / model | Shared HCM owner (epic) | Coordination rule |
+|---|---|---|
+| Seam A — external worker crosswalk | BI-HCM-001 worker model (done) + BI-ECO-003 crosswalk registry | Build **one** "external worker-source ref" (PrincipalAlias-based) consumed by every HRIS/ATS connector; no `greenhouse`-specific table. |
+| Seam B — idempotent hire landing | BI-HCM-003 onboarding/offboarding lifecycle | The hire lands via the **shared onboarding-intake path** and triggers the HCM-003 workflow — not a parallel onboarding. |
+| `JobRequisition` → `RequisitionOpening` | BI-41901810 position/headcount/vacancy | A recruiting **opening = a Position vacancy**. The requisition consumes Position + headcount from HCM position management; no parallel vacancy concept. |
+| `Candidate` → `EmployeeProfile` conversion | BI-36FEECC4 effective-dated worker spine | The conversion writes an **effective-dated hire event** into the dated spine; effective date = offer `starts_at`. |
+| `DemographicResponse` (jurisdiction-gated) | BI-390B2EBB statutory identity + EP-MULTICOUNTRY-HR | Mexico hires: RFC/CURP/NSS come from BI-390B2EBB's fields; demographic capture gated per jurisdiction (US OFCCP requires vs MX restricts). |
+| `Offer` compensation | BI-6770ADCD per-entity currency | Mexico offers denominated in **MXN** via per-entity currency, not the single base currency. |
+| `JobPosting` locale | BI-7E54AA3A i18n / es-MX | Mexico postings render **es-MX** via the i18n framework (also gates the Fountain SMS/WhatsApp Spanish apply flow). |
+| Native recruiting models (§3) | BI-F3AEBF68 (priority 7) | Design §3 defines them; sequenced **after** the worker spine / onboarding / position work. |
+
+**Sequencing consequence:** the **BRIDGE** phase (Harvest client + staging + land into the *existing* `EmployeeProfile`) can start **now** — it does not depend on the native recruiting models. The **ABSORB** phase does depend on BI-F3AEBF68. The two shared ingest seams (A/B) should be **co-designed with the HCM owners before coding** so they land as reusable primitives, not retrofitted later. The Fountain connector (§7) then reuses seams A/B verbatim, proving the absorption pattern compounds.
+
+## 10. Sources
 
 Greenhouse: developers.greenhouse.io (Harvest, Job Board, Webhooks), support.greenhouse.io (candidate-hired webhook documents, bulk import, HRIS integrations), github.com/grnhse/greenhouse-api-docs. Landscape: merge.dev, kombo.dev, tryfinch.com, apideck.com, fountain.com, icims.com, paradox docs, hropenstandards.org, developers.google.com/search (JobPosting), OFCCP/EEOC guidance, leglobal.law (Mexico anti-discrimination / personal-data). Substrate: verified in-repo 2026-08-05 (paths in §2).
