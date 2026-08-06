@@ -298,6 +298,23 @@ export async function collectUnifiDiscovery(
       attributes: {
         mac: device.mac,
         address: device.ip,
+        // A device the UniFi controller ADOPTED is Ubiquiti by construction — the
+        // controller only manages Ubiquiti hardware. Stating it here is what lets
+        // `deriveInventoryEnrichment` populate `manufacturer`, which reads
+        // `properties.vendor` (then `vendorShort`, then container image) and has no
+        // other source on this path.
+        //
+        // Without it the whole managed network stack sat permanently unidentified:
+        // 4 APs, the gateway and the switch each raising catalog_match_ambiguous AND
+        // lifecycle_unverified — 12 of the 22 rows left after BI-A3D12F85, all of
+        // them asking an operator to hand-identify gear the platform already knew.
+        //
+        // The vendor was never unknown, only unstated: the firmware software-evidence
+        // record below already carries `rawVendor: "Ubiquiti"`. That path cannot be
+        // relied on — it is emitted only `if (device.version)`, and on the live
+        // install all six devices had ZERO persisted DiscoveredSoftwareEvidence rows.
+        // The device attribute is the durable place for it.
+        vendor: "Ubiquiti",
         model: device.model,
         firmware: device.version,
         deviceType: device.type,

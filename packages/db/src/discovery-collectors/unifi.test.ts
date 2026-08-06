@@ -176,6 +176,13 @@ describe("collectUnifiDiscovery", () => {
     expect(router!.attributes?.osiLayer).toBe(3);
     // Serial captured under the canonical key the estate bridges read (BI-828998DC).
     expect(router!.attributes?.serialNumber).toBe("UDMPRO-SN-001");
+    // Vendor is stated on EVERY adopted device (BI-9632B15B). The controller only
+    // manages Ubiquiti hardware, and `deriveInventoryEnrichment` reads
+    // `properties.vendor` — with nothing there, the entire managed network stack
+    // (4 APs, gateway, switch on the live install) sat permanently unidentified and
+    // raised lifecycle_unverified forever. Asserted per-device, not once, because a
+    // device without a serial or without firmware must still carry it.
+    expect(router!.attributes?.vendor).toBe("Ubiquiti");
 
     const sw = result.items.find((i) => i.itemType === "switch");
     expect(sw).toBeDefined();
@@ -183,6 +190,9 @@ describe("collectUnifiDiscovery", () => {
     expect(sw!.attributes?.osiLayer).toBe(2);
     // A device with no serial in the API carries no serialNumber key (not an empty string).
     expect(sw!.attributes && "serialNumber" in sw!.attributes).toBe(false);
+    // ...but vendor is unconditional — it comes from controller provenance, not from
+    // any optional field the API may omit.
+    expect(sw!.attributes?.vendor).toBe("Ubiquiti");
 
     const ap = result.items.find((i) => i.itemType === "access_point");
     expect(ap).toBeDefined();
