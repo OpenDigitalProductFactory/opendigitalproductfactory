@@ -12,6 +12,7 @@ import {
   RUNNER_FAILURE_EXIT_CODE,
   SPAWN_OUTCOME,
   classifySpawnResult,
+  coerceRetryCount,
   spawnWithRunnerRetry,
   runGuards,
   summarizeGuardRun,
@@ -81,6 +82,24 @@ test("spawnWithRunnerRetry never retries a real violation", () => {
   });
   assert.equal(result.outcome, SPAWN_OUTCOME.VIOLATION);
   assert.equal(attempts, 1);
+});
+
+test("coerceRetryCount rejects NaN so a persistent runner failure cannot loop forever", () => {
+  assert.equal(coerceRetryCount("off"), 2); // non-numeric env → fallback, not NaN
+  assert.equal(coerceRetryCount(undefined), 2);
+  assert.equal(coerceRetryCount(-1), 2); // negative → fallback
+  assert.equal(coerceRetryCount(0), 0);
+  assert.equal(coerceRetryCount("3"), 3);
+});
+
+test("spawnWithRunnerRetry with a NaN maxRetries terminates (uses the safe default)", () => {
+  let attempts = 0;
+  const result = spawnWithRunnerRetry(["x"], {
+    maxRetries: Number("off"), // NaN — must not loop forever
+    spawn: () => (attempts++, { status: null, signal: "SIGKILL" }),
+  });
+  assert.equal(result.outcome, SPAWN_OUTCOME.RUNNER_FAILURE);
+  assert.equal(attempts, 3); // initial + default 2 retries
 });
 
 // ── runGuards — killed guards land in runnerFailures, not violations ─────────

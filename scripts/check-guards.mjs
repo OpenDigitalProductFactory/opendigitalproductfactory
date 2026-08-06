@@ -53,10 +53,19 @@ export const SPAWN_OUTCOME = Object.freeze({
   RUNNER_FAILURE: "runner-failure",
 });
 
+// Coerce a retry count to a safe non-negative integer. A non-numeric env value
+// (e.g. DPF_GUARD_SPAWN_RETRIES=off) must NOT yield NaN — `attempt >= NaN` is
+// always false, which would loop forever under a persistent runner failure,
+// exactly the host-pressure condition this path exists for.
+export function coerceRetryCount(value, fallback = 2) {
+  const n = Number(value);
+  return Number.isFinite(n) && n >= 0 ? Math.floor(n) : fallback;
+}
+
 // How many times to re-spawn a guard whose spawn was killed/refused before
 // believing the host genuinely cannot run it. A runner failure is transient by
 // definition; a real violation is deterministic and never reaches this path.
-export const DEFAULT_SPAWN_RETRIES = Number(process.env.DPF_GUARD_SPAWN_RETRIES ?? 2);
+export const DEFAULT_SPAWN_RETRIES = coerceRetryCount(process.env.DPF_GUARD_SPAWN_RETRIES, 2);
 
 // Classify a spawnSync result WITHOUT collapsing "the spawn never ran / was
 // killed" into "the guard found a violation". The order matters:
@@ -85,10 +94,11 @@ export function classifySpawnResult(result) {
 // Spawn `argv`, retrying only while the outcome is a RUNNER failure. `spawn` is
 // injectable so the loop is unit-testable without touching the OS.
 export function spawnWithRunnerRetry(argv, { spawn, maxRetries = DEFAULT_SPAWN_RETRIES } = {}) {
+  const cap = coerceRetryCount(maxRetries, DEFAULT_SPAWN_RETRIES);
   let classified;
   for (let attempt = 0; ; attempt += 1) {
     classified = classifySpawnResult(spawn(argv, attempt));
-    if (classified.outcome !== SPAWN_OUTCOME.RUNNER_FAILURE || attempt >= maxRetries) {
+    if (classified.outcome !== SPAWN_OUTCOME.RUNNER_FAILURE || attempt >= cap) {
       return { ...classified, attempts: attempt + 1 };
     }
   }
