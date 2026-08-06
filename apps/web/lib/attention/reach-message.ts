@@ -53,6 +53,7 @@ const OUTCOME_CLASS: Record<AttentionSource, string> = {
   "ai-readiness-blocker": "Your AI setup is not finished",
   "platform-health": "A platform service is having trouble",
   "provider-credential": "A connection needs reconnecting",
+  "compliance-source-freshness": "Compliance evidence is going out of date",
 };
 
 const URGENCY_LINE: Record<ReachDecision["urgency"], string> = {

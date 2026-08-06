@@ -27,7 +27,8 @@ export type AttentionSource =
   | "reservation-exception" // a public StorefrontBooking awaiting owner action — confirm / reschedule / overlap (BI-3DA1DFDC)
   | "hospitality-capacity" // blocked, quarantined, over-capacity, or idle Food & Hospitality capacity
   | "storefront-inquiry" // a new public StorefrontInquiry awaiting the owner's first response (BI-348766E5)
-  | "business-journey"; // PortfolioQualityIssue issueType=journey_failure — a critical business journey failed its watchdog run (BI-E105303D)
+  | "business-journey" // PortfolioQualityIssue issueType=journey_failure — a critical business journey failed its watchdog run (BI-E105303D)
+  | "compliance-source-freshness"; // governed AI-provider compliance evidence lapsing or lapsed (BI-68D44727)
 
 /** Risk vocabulary aligned with the paused-work plan (a2aMetadata.riskClass). */
 export type AttentionRiskClass = "read" | "bounded-write" | "high-risk" | "unknown";
