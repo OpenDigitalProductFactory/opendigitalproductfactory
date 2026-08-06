@@ -64,4 +64,75 @@ describe("resolveDecisionCallerContext (BI-E1FB2307)", () => {
     expect(ctx.principalId).toBeNull();
     expect(ctx.governingProfileKind).toBe("organization");
   });
+
+  // BI-HDLEMP-01 — route on decision DOMAIN, not solely caller population.
+  // Kernel-ratified route-on-domain (WWMD, DI-58E1256CD8B4): a business-class
+  // decision resolves to the org WWWD profile regardless of who calls, and a
+  // platform-development decision resolves to WWMD. When decisionDomain is
+  // absent the legacy callingPopulation heuristic still governs (backward-compat).
+  describe("decisionDomain axis (BI-HDLEMP-01)", () => {
+    it("routes an external agent's business decision to the org (WWWD) profile", async () => {
+      const ctx = await resolveDecisionCallerContext(
+        {
+          callingPopulation: "external_coding_agent",
+          decisionDomain: "org-business",
+          userId: "user-42",
+        },
+        mockDb({ user: { "user-42": "PRIN-USER-42" } }),
+      );
+      expect(ctx.governingProfileId).toBe(WWWD_ORGANIZATION_PROFILE_ID);
+      expect(ctx.governingProfileKind).toBe("organization");
+      expect(ctx.resolvedVia).toBe("decision-domain");
+    });
+
+    it("routes an external agent's platform decision to the WWMD profile", async () => {
+      const ctx = await resolveDecisionCallerContext(
+        {
+          callingPopulation: "external_coding_agent",
+          decisionDomain: "platform-development",
+          userId: "user-42",
+        },
+        mockDb({ user: { "user-42": "PRIN-USER-42" } }),
+      );
+      expect(ctx.governingProfileId).toBe(WWMD_PLATFORM_PROFILE_ID);
+      expect(ctx.governingProfileKind).toBe("platform");
+      expect(ctx.resolvedVia).toBe("decision-domain");
+    });
+
+    it("lets domain override population: a coworker's platform decision routes to WWMD", async () => {
+      const ctx = await resolveDecisionCallerContext(
+        {
+          callingPopulation: "in_platform_coworker",
+          decisionDomain: "platform-development",
+          agentId: "build-specialist",
+        },
+        mockDb({ agent: { "build-specialist": "PRIN-AGENT-1" } }),
+      );
+      expect(ctx.governingProfileKind).toBe("platform");
+      expect(ctx.governingProfileId).toBe(WWMD_PLATFORM_PROFILE_ID);
+      expect(ctx.resolvedVia).toBe("decision-domain");
+    });
+
+    it("routes a human contributor's business decision to the org (WWWD) profile", async () => {
+      const ctx = await resolveDecisionCallerContext(
+        {
+          callingPopulation: "human",
+          decisionDomain: "org-business",
+          userId: "user-7",
+        },
+        mockDb({ user: { "user-7": "PRIN-7" } }),
+      );
+      expect(ctx.governingProfileKind).toBe("organization");
+      expect(ctx.governingProfileId).toBe(WWWD_ORGANIZATION_PROFILE_ID);
+    });
+
+    it("falls back to calling-population routing when decisionDomain is absent", async () => {
+      const ctx = await resolveDecisionCallerContext(
+        { callingPopulation: "external_coding_agent", userId: "user-42" },
+        mockDb({ user: { "user-42": "PRIN-USER-42" } }),
+      );
+      expect(ctx.governingProfileKind).toBe("platform");
+      expect(ctx.resolvedVia).toBe("calling-population");
+    });
+  });
 });
