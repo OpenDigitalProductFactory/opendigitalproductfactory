@@ -1,7 +1,7 @@
 # Platform Localization Infrastructure — Design & Research
 
 - **Status:** Draft (research + planning) — 2026-08-06
-- **Epic:** `EP-LOCALIZATION-INFRA` — *Platform Localization Infrastructure — language-agnostic surfaces, an all-surface localization process, and incremental locale migration*
+- **Epic:** `EP-6B33A840` — *Platform Localization Infrastructure — language-agnostic surfaces, an all-surface localization process, and incremental locale migration*
 - **Scope:** `platform`
 - **Kernel decision ledger:** `DI-B1874796EB16` (epic/altitude structure → new platform epic, high confidence)
 - **Predecessor work absorbed / consolidated:** `EP-ORG-LOCALE-CURRENCY` (`BI-0530BB74`), the i18n-framework half of `EP-MULTICOUNTRY-HR` (`BI-7E54AA3A`), and `docs/superpowers/plans/2026-07-18-org-locale-currency-spine.md` (currency/locale spine, kernel ledger `DI-92BCDA20FB94`).
@@ -103,18 +103,18 @@ Phases 1–2 are the big upfront cost; they are paid once. Phase 3 is repeatable
 
 ## 6. Backlog decomposition
 
-Epic `EP-LOCALIZATION-INFRA` (platform). Two BIs are consolidated in (repointed/narrowed), six are net-new. Mexico packs stay in `EP-MULTICOUNTRY-HR` and depend on this epic.
+Epic `EP-6B33A840` (platform). Two BIs are consolidated in (repointed/narrowed), six are net-new. Mexico packs stay in `EP-MULTICOUNTRY-HR` and depend on this epic.
 
-| # | BI | Phase | Disposition |
+| BI | Title | Phase | Disposition |
 |---|---|---|---|
-| 1 | i18n framework + locale-resolution plumbing (next-intl, ICU, per-user + request negotiation) | 1 | **narrow + repoint** `BI-7E54AA3A` |
-| 2 | String externalization sweep across all existing surfaces into the `en` base catalog | 1 | net-new |
-| 3 | Derive all money/date/number formatting from the resolved locale (finish spine adoption, thread `datetime.ts`, central number formatter, re-denomination) | 1 | **repoint** `BI-0530BB74` |
-| 4 | CI guard against new hardcoded user-facing strings (dry-run first, baseline-allow) | 2 | net-new |
-| 5 | Translation coverage + missing-key reporting + pseudo-locale QA | 2 | net-new |
-| 6 | Localization dev-process step: feature-ships-English → externalize → queue-for-translation | 2 | net-new |
-| 7 | "Add a locale" paved road / migration engine | 3 | net-new |
-| 8 | `es-MX` Spanish catalog authoring (first migrated locale) | 3 | net-new (split from `BI-7E54AA3A`) |
+| `BI-7E54AA3A` | i18n framework + locale-resolution plumbing (next-intl, ICU, per-user + request negotiation) | 1 | **narrowed + repointed** (Spanish split off) |
+| `BI-156058AA` | Externalize all hardcoded UI copy into the `en` base catalog across every surface | 1 | net-new (xlarge) |
+| `BI-0530BB74` | Derive all money/date/number formatting from the resolved locale (finish spine adoption, thread `datetime.ts`, central number formatter, re-denomination) | 1 | **repointed** |
+| `BI-520958A8` | CI guard against new hardcoded user-facing strings (dry-run first, baseline-allow) | 2 | net-new |
+| `BI-90813F65` | Translation coverage + missing-key reporting + pseudo-locale QA | 2 | net-new |
+| `BI-5DEAC272` | Localization dev-process step: feature-ships-English → externalize → queue-for-translation | 2 | net-new |
+| `BI-AC01D10D` | "Add a locale" paved road / migration engine | 3 | net-new |
+| `BI-F05DD74D` | `es-MX` Spanish catalog authoring (first migrated locale) | 3 | net-new (split from `BI-7E54AA3A`) |
 
 `EP-ORG-LOCALE-CURRENCY` is absorbed (its sole BI repointed); the epic is closed/superseded with a pointer here.
 
