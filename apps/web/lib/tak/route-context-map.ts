@@ -518,6 +518,54 @@ export const ROUTE_CONTEXT_MAP: Record<string, RouteContextDef> = {
     ],
   },
 
+  // /ops/self-upgrade governs how the portal updates ITSELF (image/source
+  // deploy), not the delivery backlog. Same class of bug as /ops/dev-loop
+  // (BI-FD7E4D72): without its own entry, longest-prefix match falls to "/ops"
+  // and the coworker describes the delivery backlog on an upgrade page. This is
+  // the DOMAIN-CONTEXT map (injector #2); PR #4048 fixes the PAGE DATA provider
+  // (injector #1) for the same route. Guarded by
+  // route-context-inheritance.conformance.test.ts (BI-5457E216).
+  "/ops/self-upgrade": {
+    routePrefix: "/ops/self-upgrade",
+    domain: "Self-Upgrade — Portal Release Status",
+    sensitivity: "internal",
+    domainContext:
+      "This page is the governed portal self-upgrade console: whether upgrade automation is enabled and on which channel, the running platform version, the latest and last-successful upgrade runs, whether an update is available, whether it is safe to apply now (maintenance window / quiescence blockers), whether the operator can keep working during it, and whether it can be rolled back. It is NOT the delivery backlog — do not answer questions here with backlog items or epics. Use the PAGE DATA block as ground truth for the running version and run history. In merge mode the deployed identity is a local merge commit that CONTAINS but never equals the upstream target, so a raw SHA comparison can read 'update available' forever — the build is fresh when the upstream lineage it already absorbed equals the target. For the live 'is a batch pending / is an upgrade eligible' answer prefer get_self_upgrade_queue_status; for what is holding an in-flight upgrade use get_quiescence_status.",
+    domainTools: [
+      "get_self_upgrade_queue_status",
+      "get_quiescence_status",
+      "request_self_upgrade",
+      "repair_promoter_image",
+      "search_code_graph",
+      "trace_code_surface",
+      "doc_search",
+      "search_knowledge",
+    ],
+    docsPath: "/docs/operations/index",
+    skills: [
+      {
+        label: "Is an update available?",
+        description: "Explain the current upgrade status and whether one is pending",
+        capability: "view_operations",
+        taskType: "analysis",
+        prompt: "Look at the PAGE DATA for this Self-Upgrade page. In plain language tell me: is upgrade automation on, what version is running, and whether an update is available or a release batch is still accumulating. If the page data doesn't settle it, call get_self_upgrade_queue_status for the live batch/eligibility tally. Don't describe the delivery backlog — this page is about portal updates.",
+      },
+      {
+        label: "What's holding the upgrade?",
+        description: "Explain blockers on an in-flight or pending upgrade",
+        capability: "view_operations",
+        taskType: "analysis",
+        prompt: "Explain what, if anything, is blocking a self-upgrade right now — maintenance window, quiescence drain, cooldown, or job-engine health. Use get_quiescence_status and get_self_upgrade_queue_status for live state, then summarize whether it's safe to keep working and what would let the upgrade proceed.",
+      },
+      {
+        label: "Report an issue",
+        description: "Report a bug or give feedback",
+        capability: null,
+        prompt: "I'd like to report an issue or give feedback about this page.",
+      },
+    ],
+  },
+
   "/ops": {
     routePrefix: "/ops",
     domain: "Operations",
