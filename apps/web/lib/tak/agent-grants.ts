@@ -715,6 +715,9 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   // HR — query
   query_employees: ["consumer_read", "registry_read"],
 
+  // Recruiting pipeline lens (BI-E64D11AE) — unified native + Greenhouse funnel.
+  get_recruiting_pipeline: ["consumer_read", "registry_read"],
+
   // Workforce staffing (EP-WORKFORCE-OPS / BI-4AD09A35) read surface.
   list_staffing_demand: ["registry_read"],
   get_staffing_coverage: ["registry_read"],
