@@ -46,13 +46,15 @@ const scopeProperties = {
 const definitions: ToolDefinition[] = [
   {
     name: "list_work_capsules",
-    description: "List Work Capsule coordination records for active portal, Build Studio, and external agent work. Read-only.",
+    description:
+      "List Work Capsule coordination records for active portal, Build Studio, and external agent work, each annotated with its TRUE liveness (live | lease-expired | build-terminal | idle-stale | no-signal). Liveness is derived from lease expiry, the linked build's phase, an open PR, and last sync — NOT from updatedAt, which a daily heartbeat freezes for Build Studio capsules, so a `working` status is not proof of life. Includes a livenessSummary (live vs reap-candidate counts). Pass staleOnly=true for just the not-live reap candidates. Read-only.",
     inputSchema: {
       type: "object",
       properties: {
         status: { type: "string", enum: ENUMS.statuses, description: "Filter by Work Capsule status." },
         decisionScope: { type: "string", enum: ENUMS.decisionScopes, description: "Filter by WWMD, WWWD, or WSID scope." },
         portfolioRole: { type: "string", enum: ENUMS.portfolioRoles, description: "Filter by primary portfolio role." },
+        staleOnly: { type: "boolean", description: "Return only capsules that are NOT truly live (reap candidates). Default false." },
         limit: { type: "number", description: "Max results (default 50, max 100)." },
       },
       required: [],

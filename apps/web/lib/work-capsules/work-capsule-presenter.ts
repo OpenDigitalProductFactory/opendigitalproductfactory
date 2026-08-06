@@ -1,10 +1,5 @@
 import { STALE_CACHE_MS } from "@/lib/work-capsules";
-
-// A capsule that claims to be "working" but has not changed in this long is
-// almost certainly stalled (e.g. its build died in ideate). Surface that as a
-// degraded health signal instead of a misleading "ok" — Work Control must not
-// report a dead capsule as healthy.
-const WORKING_STALL_MS = 15 * 60 * 1000;
+import { classifyWorkCapsuleLiveness } from "./liveness";
 
 type CapsuleRowInput = {
   capsuleId: string;
@@ -22,9 +17,14 @@ type CapsuleRowInput = {
   headBranch: string | null;
   worktreePath: string | null;
   pullRequestUrl: string | null;
+  pullRequestNumber?: number | null;
   leaseExpiresAt: Date | null;
   lastSyncedAt: Date | null;
   updatedAt: Date;
+  // WS9 (BI-CBAAEA94): the linked Build Studio build snapshot, when loaded, so a
+  // null-lease capsule's liveness reads from real build progress instead of its
+  // frozen-at-14:00 updatedAt. Optional — absent falls back to lease/sync/idle.
+  featureBuild?: { phase: string | null; lastActivityAt: Date | null } | null;
 };
 
 export type PresentedCapsuleRow = ReturnType<typeof presentCapsuleRow>;
@@ -72,10 +72,25 @@ function outcomeAnchorLabel(value: unknown): string | null {
 }
 
 export function presentCapsuleRow(row: CapsuleRowInput, now = new Date()) {
-  const leaseExpired = row.leaseExpiresAt != null && row.leaseExpiresAt.getTime() < now.getTime();
+  // WS9: liveness is derived from lease / linked-build / sync — NOT updatedAt,
+  // which the 14:00 governed-backlog tee-up freezes at capsule birth. The
+  // classifier is the single source of truth shared with the tool and reaper.
+  const verdict = classifyWorkCapsuleLiveness(row, now);
+  // Stale scanner cache is an orthogonal, still-useful nuance: the lease is live
+  // but the cached worktree data is old. Only surfaced when the capsule is not
+  // already dead by a stronger signal.
   const staleCache = row.lastSyncedAt != null && now.getTime() - row.lastSyncedAt.getTime() > STALE_CACHE_MS;
-  const stalledWorking =
-    row.status === "working" && now.getTime() - row.updatedAt.getTime() > WORKING_STALL_MS;
+
+  const health =
+    verdict.liveness === "lease-expired"
+      ? "lease-expired"
+      : verdict.liveness === "build-terminal"
+        ? "abandoned-build"
+        : verdict.liveness === "idle-stale"
+          ? "stalled"
+          : staleCache
+            ? "stale-cache"
+            : "ok";
 
   return {
     capsuleId: row.capsuleId,
@@ -98,13 +113,16 @@ export function presentCapsuleRow(row: CapsuleRowInput, now = new Date()) {
     },
     worktreePath: row.worktreePath,
     pullRequestUrl: row.pullRequestUrl,
-    health: leaseExpired
-      ? "lease-expired"
-      : stalledWorking
-        ? "stalled"
-        : staleCache
-          ? "stale-cache"
-          : "ok",
+    health,
+    // WS9 true-liveness surface: `liveness`/`isLive`/`livenessReason` say whether
+    // the work is actually alive, and `trueLivenessAt` is the timestamp that
+    // proves it (lease expiry / build activity / sync) — never the frozen
+    // updatedAt. `updatedAt` is retained for continuity but is not a liveness
+    // signal.
+    liveness: verdict.liveness,
+    isLive: verdict.isLive,
+    livenessReason: verdict.reason,
+    trueLivenessAt: verdict.trueLivenessAt ? verdict.trueLivenessAt.toISOString() : null,
     updatedAt: row.updatedAt.toISOString(),
   };
 }

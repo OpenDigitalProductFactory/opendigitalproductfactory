@@ -112,11 +112,31 @@ export async function getWorkControlData() {
       headBranch: true,
       worktreePath: true,
       pullRequestUrl: true,
+      pullRequestNumber: true,
       leaseExpiresAt: true,
       lastSyncedAt: true,
       updatedAt: true,
+      featureBuildId: true,
     },
   });
+
+  // WS9 (BI-CBAAEA94): join the linked Build Studio build so a null-lease
+  // capsule's liveness on the board reads from real build progress, not its
+  // frozen-at-14:00 updatedAt. A terminal build now surfaces the capsule as
+  // abandoned-build instead of a healthy-looking "working" row.
+  const buildIds = capsules
+    .map((capsule) => capsule.featureBuildId)
+    .filter((id): id is string => Boolean(id));
+  const buildsById = new Map<string, { phase: string | null; lastActivityAt: Date | null }>();
+  if (buildIds.length > 0) {
+    const builds = await prisma.featureBuild.findMany({
+      where: { id: { in: [...new Set(buildIds)] } },
+      select: { id: true, phase: true, updatedAt: true },
+    });
+    for (const build of builds) {
+      buildsById.set(build.id, { phase: build.phase ?? null, lastActivityAt: build.updatedAt ?? null });
+    }
+  }
 
   const adoptedBranches = new Set(
     capsules.map((capsule) => capsule.headBranch).filter((branch): branch is string => Boolean(branch)),
@@ -124,7 +144,12 @@ export async function getWorkControlData() {
   const adoptable = await loadAdoptableRows(resolveRepoRoot(), adoptedBranches);
 
   return {
-    capsules: capsules.map((row) => presentCapsuleRow(row)),
+    capsules: capsules.map(({ featureBuildId, ...row }) =>
+      presentCapsuleRow({
+        ...row,
+        featureBuild: featureBuildId ? buildsById.get(featureBuildId) ?? null : null,
+      }),
+    ),
     adoptable,
   };
 }

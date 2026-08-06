@@ -268,6 +268,39 @@ export const taskrunWatchdog = inngest.createFunction(
       console.warn("[taskrun-watchdog] inert-build reaper failed:", err);
     }
 
+    // WS9 (BI-CBAAEA94): governed WorkCapsule reaper — transition capsules whose
+    // TRUE liveness is dead (lease expired, linked build terminal, or idle past
+    // the floor) out of "working" so abandoned work stops reading as active and
+    // jamming the WIP cap. GOVERNED: observe-only (dry-run) unless
+    // DPF_WORKCAPSULE_REAPER_ENABLED=1, and live actuation only when additionally
+    // DPF_WORKCAPSULE_REAPER_AUTO_REAP=1 (mirrors the runtime-artifact / worktree
+    // janitors). Best-effort. DB-only (junction-safe: never touches worktrees).
+    let workCapsulesReapCandidates = 0;
+    let workCapsulesReaped = 0;
+    try {
+      const reaperEnabled = process.env.DPF_WORKCAPSULE_REAPER_ENABLED === "1";
+      if (reaperEnabled) {
+        const autoReap = process.env.DPF_WORKCAPSULE_REAPER_AUTO_REAP === "1";
+        const { reapStaleWorkCapsules } = await import("@/lib/work-capsules/work-capsule-reaper");
+        const { prisma: capsuleDb } = await import("@dpf/db");
+        const result = await reapStaleWorkCapsules({
+          db: capsuleDb as never,
+          now: new Date(),
+          dryRun: !autoReap,
+        });
+        workCapsulesReapCandidates = result.candidates.length;
+        workCapsulesReaped = result.reaped;
+        if (!autoReap && result.candidates.length > 0) {
+          console.warn(
+            `[work-capsule-reaper] observe-only: ${result.candidates.length} reap candidate(s) — ` +
+              "set DPF_WORKCAPSULE_REAPER_AUTO_REAP=1 to actuate.",
+          );
+        }
+      }
+    } catch (err) {
+      console.warn("[taskrun-watchdog] work-capsule reaper failed:", err);
+    }
+
     // BI-B62B9F1E: release stale BacklogItem claims (dead sessions) so they do
     // not linger as "active" operator noise. Complements the atomic reclaim path.
     let staleBacklogClaimsReaped = 0;
@@ -280,14 +313,14 @@ export const taskrunWatchdog = inngest.createFunction(
     }
 
     if (!(await isStallWatchdogEnabled())) {
-      return { skipped: true, reason: "flag-off", quiescenceRecovered, quiescingTaskRunsRecovered, inertBuildsReaped, staleBacklogClaimsReaped };
+      return { skipped: true, reason: "flag-off", quiescenceRecovered, quiescingTaskRunsRecovered, inertBuildsReaped, workCapsulesReapCandidates, workCapsulesReaped, staleBacklogClaimsReaped };
     }
 
     const { prisma } = await import("@dpf/db");
 
     const thresholds = await prisma.buildStudioStallThreshold.findMany();
     if (thresholds.length === 0) {
-      return { skipped: true, reason: "no-thresholds-seeded", quiescenceRecovered, quiescingTaskRunsRecovered, inertBuildsReaped, staleBacklogClaimsReaped };
+      return { skipped: true, reason: "no-thresholds-seeded", quiescenceRecovered, quiescingTaskRunsRecovered, inertBuildsReaped, workCapsulesReapCandidates, workCapsulesReaped, staleBacklogClaimsReaped };
     }
 
     // Coarse SQL filter using the smallest applicable thresholds across all
@@ -339,7 +372,7 @@ export const taskrunWatchdog = inngest.createFunction(
     }
 
     if (decisions.length === 0) {
-      return { processed: 0, quiescenceRecovered, quiescingTaskRunsRecovered, inertBuildsReaped };
+      return { processed: 0, quiescenceRecovered, quiescingTaskRunsRecovered, inertBuildsReaped, workCapsulesReapCandidates, workCapsulesReaped };
     }
 
     // Batch id-resolution: business taskRunId → cuid id for FK writes.
@@ -499,6 +532,6 @@ export const taskrunWatchdog = inngest.createFunction(
       processed += 1;
     }
 
-    return { processed, quiescenceRecovered, quiescingTaskRunsRecovered, inertBuildsReaped };
+    return { processed, quiescenceRecovered, quiescingTaskRunsRecovered, inertBuildsReaped, workCapsulesReapCandidates, workCapsulesReaped };
   },
 );

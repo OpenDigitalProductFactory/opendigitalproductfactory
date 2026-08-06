@@ -211,41 +211,26 @@ export async function listWorkCapsulesTool(params: Record<string, unknown>): Pro
   }
 
   const limit = numberParam(params, "limit");
+  // WS9 (BI-CBAAEA94): `staleOnly` returns only NOT-truly-live capsules (the reap
+  // lens); default false keeps the tool a full inventory. Liveness is derived
+  // from lease/build/sync — never updatedAt (a daily-heartbeat artifact).
+  const staleOnly = params["staleOnly"] === true;
   const where = {
     ...(status ? { status } : {}),
     ...(decisionScope ? { decisionScope } : {}),
     ...(portfolioRole ? { portfolioRole } : {}),
   };
-  const capsules = await prisma.workCapsule.findMany({
-    where,
-    orderBy: { updatedAt: "desc" },
-    take: limit === null ? 50 : Math.min(Math.max(Math.trunc(limit), 1), 100),
-    select: {
-      capsuleId: true,
-      title: true,
-      status: true,
-      source: true,
-      executorKind: true,
-      decisionScope: true,
-      portfolioRole: true,
-      servedPersona: true,
-      activityKind: true,
-      outcomeAnchor: true,
-      servesPortfolioRoles: true,
-      dependsOnPortfolioRoles: true,
-      headBranch: true,
-      worktreePath: true,
-      pullRequestUrl: true,
-      leaseExpiresAt: true,
-      lastSyncedAt: true,
-      updatedAt: true,
-    },
-  });
+  const take = limit === null ? 50 : Math.min(Math.max(Math.trunc(limit), 1), 100);
+  const { loadCapsuleLivenessInventory } = await import("@/lib/work-capsules/liveness-inventory");
+  const { capsulesAll, livenessSummary } = await loadCapsuleLivenessInventory(prisma as never, { where, take });
+  const capsules = staleOnly ? capsulesAll.filter((c) => !c.isLive) : capsulesAll;
 
   return {
     success: true,
-    message: `Listed ${capsules.length} work capsule(s).`,
-    data: { capsules },
+    message:
+      `Listed ${capsules.length} work capsule(s). Liveness (updatedAt is NOT a liveness signal): ` +
+      `${livenessSummary.live} live, ${livenessSummary.reapable} reap-candidate of ${livenessSummary.scanned} scanned.`,
+    data: { capsules, livenessSummary },
   };
 }
 
