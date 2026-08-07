@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { postToPeer, sendDemandDigestToPeer, sendDemandToPeer, sendIncidentToPeer } from "./client";
+import { isPrivateOrLoopbackFederationHost, postToPeer, sendDemandDigestToPeer, sendDemandToPeer, sendIncidentToPeer } from "./client";
 
 function mockFetch(res: { ok?: boolean; status?: number; json?: unknown } = {}) {
   return vi.fn().mockResolvedValue({
@@ -123,5 +123,86 @@ describe("sendDemandDigestToPeer", () => {
     const [url, init] = (f as unknown as { mock: { calls: [string, RequestInit][] } }).mock.calls[0];
     expect(url).toBe("https://peer.example/api/v1/federation/demand/reconcile");
     expect(JSON.parse(init.body as string)).toMatchObject({ id: "evt_digest", type: "dpf.demand.reconcile" });
+  });
+});
+
+describe("isPrivateOrLoopbackFederationHost", () => {
+  it.each([
+    "http://192.168.0.152:3000",
+    "http://10.1.2.3:3000",
+    "http://172.16.0.9:3000",
+    "http://172.31.255.1",
+    "http://127.0.0.1:3000",
+    "http://localhost:3000",
+    "http://[::1]:3000",
+    "https://box.local:3000",
+  ])("is true for private/loopback/link-local host %s", (u) => {
+    expect(isPrivateOrLoopbackFederationHost(u)).toBe(true);
+  });
+
+  it.each([
+    "https://peer.example.com",
+    "http://203.0.113.10:3000",
+    "http://172.15.0.1", // just below the 172.16-31 private block
+    "http://172.32.0.1", // just above
+    "https://federation.acme.io",
+    "not a url",
+  ])("is false for public/DNS/out-of-range host %s", (u) => {
+    expect(isPrivateOrLoopbackFederationHost(u)).toBe(false);
+  });
+});
+
+describe("safePeerRequestUrl scoped same-org LAN allowance (via postToPeer)", () => {
+  const base = {
+    linkToken: "dpflink_secret",
+    path: "/api/v1/federation/enroll",
+    cloudEvent: {},
+  };
+
+  it("same-org LAN: dials a private http peer WITHOUT the global flag", async () => {
+    const f = mockFetch({ ok: true, status: 200 });
+    const result = await postToPeer({
+      ...base,
+      peerAuthorityUrl: "http://192.168.0.200:3000",
+      sameOrgLan: true,
+      fetchImpl: f,
+    });
+    expect(result.ok).toBe(true);
+    expect((f as unknown as { mock: { calls: unknown[] } }).mock.calls.length).toBe(1);
+  });
+
+  it("NOT same-org: a private http peer is still SSRF-blocked and never dialed", async () => {
+    const f = mockFetch();
+    const result = await postToPeer({
+      ...base,
+      peerAuthorityUrl: "http://192.168.0.200:3000",
+      sameOrgLan: false,
+      fetchImpl: f,
+    });
+    expect(result.ok).toBe(false);
+    expect((f as unknown as { mock: { calls: unknown[] } }).mock.calls.length).toBe(0);
+  });
+
+  it("same-org but PUBLIC http peer: still requires HTTPS (public http never auto-allowed)", async () => {
+    const f = mockFetch();
+    const result = await postToPeer({
+      ...base,
+      peerAuthorityUrl: "http://peer.example.com",
+      sameOrgLan: true,
+      fetchImpl: f,
+    });
+    expect(result.ok).toBe(false);
+    expect((f as unknown as { mock: { calls: unknown[] } }).mock.calls.length).toBe(0);
+  });
+
+  it("same-org + private HTTPS peer: dialed", async () => {
+    const f = mockFetch({ ok: true, status: 200 });
+    const result = await postToPeer({
+      ...base,
+      peerAuthorityUrl: "https://192.168.0.200:3000",
+      sameOrgLan: true,
+      fetchImpl: f,
+    });
+    expect(result.ok).toBe(true);
   });
 });

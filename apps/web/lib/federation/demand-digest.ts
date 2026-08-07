@@ -17,7 +17,7 @@ interface DigestMirrorRow {
 
 export interface DemandDigestDb {
   federationLink?: {
-    findMany(args: unknown): Promise<Array<{ linkId: string; peerAuthorityUrl: string; peerTokenEnc: string | null }>>;
+    findMany(args: unknown): Promise<Array<{ linkId: string; peerAuthorityUrl: string; peerTokenEnc: string | null; role: string }>>;
   };
   federatedRecordMirror: {
     findMany(args: unknown): Promise<DigestMirrorRow[]>;
@@ -82,7 +82,7 @@ export async function reconcileDemandDigests(
   const now = options.now ?? new Date();
   const links = await db.federationLink.findMany({
     where: { linkState: "trusted", revokedAt: null, quarantinedAt: null },
-    select: { linkId: true, peerAuthorityUrl: true, peerTokenEnc: true },
+    select: { linkId: true, peerAuthorityUrl: true, peerTokenEnc: true, role: true },
   });
   let linksChecked = 0;
   let requeued = 0;
@@ -121,7 +121,12 @@ export async function reconcileDemandDigests(
       records,
     };
     const result: PeerPostResult = await (options.send ?? sendDemandDigestToPeer)(
-      { peerAuthorityUrl: link.peerAuthorityUrl, linkToken: token, linkId: link.linkId },
+      {
+        peerAuthorityUrl: link.peerAuthorityUrl,
+        linkToken: token,
+        linkId: link.linkId,
+        sameOrgLan: link.role === "same-org-peer",
+      },
       digest,
       { now },
     );

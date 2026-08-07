@@ -161,7 +161,7 @@ export async function approveFederationLinkAction(linkId: string): Promise<LinkL
     if (envFlagEnabled(process.env, "DPF_FEDERATION_EXCHANGE_ENABLED")) {
       const full = await prisma.federationLink.findUnique({
         where: { linkId },
-        select: { linkId: true, peerAuthorityUrl: true, peerTokenEnc: true },
+        select: { linkId: true, peerAuthorityUrl: true, peerTokenEnc: true, role: true },
       });
       if (full?.peerTokenEnc) {
         try {

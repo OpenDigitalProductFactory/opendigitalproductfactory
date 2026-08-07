@@ -43,6 +43,7 @@ export interface DemandDeliveryDb {
       linkId: string;
       peerAuthorityUrl: string;
       peerTokenEnc: string | null;
+      role: string;
     }>>;
   };
   federatedRecordMirror: {
@@ -245,7 +246,7 @@ export async function dispatchDueDemand(db: DemandDeliveryDb, options: {
       linkId: { in: [...new Set(rows.map((row) => row.federationLinkId))] },
       linkState: "trusted", revokedAt: null, quarantinedAt: null,
     },
-    select: { linkId: true, peerAuthorityUrl: true, peerTokenEnc: true },
+    select: { linkId: true, peerAuthorityUrl: true, peerTokenEnc: true, role: true },
   });
   const linkById = new Map(links.map((link) => [link.linkId, link]));
   const deliverableRows = rows.filter((row) => linkById.has(row.federationLinkId));
@@ -260,7 +261,12 @@ export async function dispatchDueDemand(db: DemandDeliveryDb, options: {
     if (!payload) result = { ok: false, status: 0, error: "invalid outbox payload" };
     else if (!token) result = { ok: false, status: 0, error: "missing peer token" };
     else result = await (options.send ?? sendDemandToPeer)(
-      { peerAuthorityUrl: link.peerAuthorityUrl, linkToken: token, linkId: link.linkId },
+      {
+        peerAuthorityUrl: link.peerAuthorityUrl,
+        linkToken: token,
+        linkId: link.linkId,
+        sameOrgLan: link.role === "same-org-peer",
+      },
       payload.activity,
       payload.envelope,
       { eventId: payload.eventId, now },

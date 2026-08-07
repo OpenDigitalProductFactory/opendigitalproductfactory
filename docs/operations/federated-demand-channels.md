@@ -23,6 +23,21 @@ does not type it:
 So a same-organization LAN pairing needs no typed URL — open the Connections
 page at the installation's LAN address and pair.
 
+## Local-network peers over http
+
+Outbound calls to a peer default to HTTPS-only with private/loopback networks
+blocked (SSRF protection). Two things relax that for on-premises LAN federation:
+
+- `DPF_FEDERATION_ALLOW_INSECURE_PEERS=1` — a global operator flag (all peers).
+- **Automatically, with no flag, for a same-organization peer whose address is a
+  private/loopback host** (for example `http://192.168.0.200:3000`). This scoped
+  allowance is narrower than the global flag: a public or DNS-named peer still
+  requires HTTPS even when it is a same-organization link, so channel/reseller
+  connections to public hosts are unaffected.
+
+Combined with automatic address resolution above, a same-organization LAN
+pairing needs no typed URL and no typed flag — install, then Connect and Approve.
+
 ## Same-company installations
 
 Approved `same-organization` connections synchronize share-safe platform demand

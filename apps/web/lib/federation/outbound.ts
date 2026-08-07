@@ -63,6 +63,11 @@ export async function enrollWithPeer(input: EnrollWithPeerInput): Promise<Enroll
       displayName: input.displayName,
       ...(input.localOrganizationId ? { peerOrganizationRef: input.localOrganizationId } : {}),
     },
+    // Operator-initiated connect: allow a private-LAN peer over http without the
+    // global flag. The role is not known until the peer responds, so this is
+    // scoped by the private-host check in safePeerRequestUrl — a public peer URL
+    // still requires HTTPS here.
+    sameOrgLan: true,
     ...(input.fetchImpl ? { fetchImpl: input.fetchImpl } : {}),
   });
 
@@ -121,7 +126,7 @@ export function decryptPeerToken(peerTokenEnc: string | null | undefined): strin
  * whether the peer accepted. Needs the peer-issued token (from outbound enroll).
  */
 export async function relayApprovalToPeer(
-  link: { linkId: string; peerAuthorityUrl: string; peerTokenEnc: string | null },
+  link: { linkId: string; peerAuthorityUrl: string; peerTokenEnc: string | null; role?: string },
   fetchImpl?: typeof fetch,
 ): Promise<{ ok: boolean; reason?: string }> {
   const token = decryptPeerToken(link.peerTokenEnc);
@@ -131,6 +136,7 @@ export async function relayApprovalToPeer(
     linkToken: token,
     path: "/api/v1/federation/approval-relay",
     cloudEvent: { type: "dpf.federation.approval", linkId: link.linkId },
+    sameOrgLan: link.role === "same-org-peer",
     ...(fetchImpl ? { fetchImpl } : {}),
   });
   return res.ok ? { ok: true } : { ok: false, reason: `peer responded ${res.status}` };
