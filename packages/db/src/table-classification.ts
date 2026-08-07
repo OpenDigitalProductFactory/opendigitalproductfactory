@@ -15,6 +15,10 @@ export type TableSensitivity = "public" | "internal" | "confidential" | "restric
 export const TABLE_CLASSIFICATION: Record<string, TableSensitivity> = {
   // -- public --
   TaxonomyNode: "public",
+  // Published IEEE registry of manufacturer MAC prefixes (BI-9632B15B). Contains no
+  // customer, estate or personal data — an OUI identifies a manufacturer, never a
+  // device owner. Same class as the other shipped lookup tables above.
+  MacVendorOui: "public",
   EaElementType: "public",
   EaRelationshipType: "public",
   EaRelationshipRule: "public",

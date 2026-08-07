@@ -176,6 +176,12 @@ describe("collectUnifiDiscovery", () => {
     expect(router!.attributes?.osiLayer).toBe(3);
     // Serial captured under the canonical key the estate bridges read (BI-828998DC).
     expect(router!.attributes?.serialNumber).toBe("UDMPRO-SN-001");
+    // The collector deliberately does NOT hardcode a vendor. It reports the MAC;
+    // discovery-sync resolves the manufacturer from the IEEE OUI registry, which
+    // generalises to every collector instead of one vendor's happy path
+    // (BI-9632B15B). Pinned so a future "just set it here" does not creep back.
+    expect(router!.attributes && "vendor" in router!.attributes).toBe(false);
+    expect(router!.attributes?.mac).toBe("aa:bb:cc:dd:ee:01");
 
     const sw = result.items.find((i) => i.itemType === "switch");
     expect(sw).toBeDefined();
@@ -183,6 +189,8 @@ describe("collectUnifiDiscovery", () => {
     expect(sw!.attributes?.osiLayer).toBe(2);
     // A device with no serial in the API carries no serialNumber key (not an empty string).
     expect(sw!.attributes && "serialNumber" in sw!.attributes).toBe(false);
+    // The MAC is what the collector owes; the vendor is derived downstream.
+    expect(sw!.attributes?.mac).toBe("aa:bb:cc:dd:ee:02");
 
     const ap = result.items.find((i) => i.itemType === "access_point");
     expect(ap).toBeDefined();

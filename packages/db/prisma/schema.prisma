@@ -16680,3 +16680,26 @@ model DemographicResponse {
   @@index([applicationId])
   @@index([jurisdiction])
 }
+
+/// IEEE OUI registry: the first 24 bits of a burned-in MAC identify its manufacturer.
+///
+/// Reference data, not estate data — global, unscoped, and seeded from
+/// `packages/db/data/oui.tsv` rather than written by discovery.
+///
+/// Why this is a table and not a file read: discovery-sync resolves vendors inside
+/// its transaction on the server, and a 1.2MB TSV read from a bundled workspace
+/// package is not reliable at runtime. Seeding happens in Node context where the
+/// file definitely exists, and the sweep then does one batched query.
+///
+/// Why it exists at all: nothing in the platform resolved a MAC to a vendor. The
+/// vendors that DID appear came from the UniFi controller's own lookup, supplied
+/// per-client — so anything the controller did not hand us stayed unidentified,
+/// including every UniFi device itself (BI-9632B15B).
+model MacVendorOui {
+  /// Upper-case 24-bit prefix, no separators (e.g. "AC8BA9").
+  oui       String   @id
+  vendor    String
+  updatedAt DateTime @updatedAt
+
+  @@index([vendor])
+}
