@@ -417,7 +417,10 @@ describe("generated route-shell registry", () => {
     // above — it re-fetches live-edge-windowed orchestration state on a 45s timer, so
     // its frozen ariaSnapshot flips on untouched code (measured across six sweep runs
     // two days apart; see ROUTE_SWEEP_EXCLUSIONS for the run ids).
-    expect(registry.routes.filter((route) => route.sweepEligible)).toHaveLength(197);
+    // 197 -> 198: /employee/recruiting (BI-9CC44DC7) is sweep-eligible — a read-only
+    // recruiting funnel over getRecruitingPipeline with a requisition filter; it renders
+    // no wall-clock or live-orchestration state, only the deduped pipeline read model.
+    expect(registry.routes.filter((route) => route.sweepEligible)).toHaveLength(198);
     // 110 -> 113: the three exclusions above. Product Direction then adds seven
     // explicitly classified dynamic routes, bringing the combined total to 120.
     // 120 -> 121: /platform/ai/operations-map.

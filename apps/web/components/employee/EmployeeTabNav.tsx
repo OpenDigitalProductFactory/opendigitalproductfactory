@@ -13,7 +13,14 @@ const TABS = [
   { label: "Org Chart", value: "orgchart" },
   { label: "Timesheets", value: "timesheets" },
   { label: "My Policies", value: "mypolicies" },
+  // Recruiting is its own route (/employee/recruiting), not a ?view= mode — a
+  // jump-off to the unified recruiting funnel (BI-9CC44DC7).
+  { label: "Recruiting", value: "recruiting" },
 ] as const;
+
+const ROUTE_TABS: Partial<Record<string, string>> = {
+  recruiting: "/employee/recruiting",
+};
 
 export type EmployeeTab = (typeof TABS)[number]["value"];
 
@@ -31,6 +38,11 @@ export function EmployeeTabNav() {
     rawView === null || rawView === "grid" || rawView === "board" ? "directory" : rawView;
 
   function handleClick(value: string) {
+    const routeTarget = ROUTE_TABS[value];
+    if (routeTarget) {
+      router.push(routeTarget);
+      return;
+    }
     const params = new URLSearchParams(searchParams.toString());
     if (value === "directory") {
       params.delete("view");
