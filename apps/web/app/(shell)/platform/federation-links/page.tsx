@@ -20,6 +20,8 @@ import {
   type PartnerBusinessRow,
 } from "@/components/platform/federation-links/PartnerBusinessPanel";
 import { OrganizationJoinPanel } from "@/components/platform/federation-links/OrganizationJoinPanel";
+import { ConnectionReadinessCard } from "@/components/platform/federation-links/ConnectionReadinessCard";
+import { computeConnectionReadiness } from "@/lib/federation/connection-readiness";
 import { getOrganizationJoinNodeSummariesAction } from "@/lib/actions/organization-join";
 
 export const dynamic = "force-dynamic";
@@ -179,6 +181,7 @@ export default async function FederationLinksPage() {
           both sides approve; either side can pause or revoke the connection.
         </p>
       </div>
+      <ConnectionReadinessCard readiness={computeConnectionReadiness(process.env)} />
       <OrganizationJoinPanel nodes={organizationJoinNodes.ok ? organizationJoinNodes.nodes : []} />
       <FederationLinksAdminClient
         rows={rows}

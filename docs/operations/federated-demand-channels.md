@@ -5,6 +5,26 @@ shares a deliberately minimized demand envelope; it never exposes or co-writes
 the source backlog. The source installation decides which item can travel over
 which connection and may withdraw that projection independently.
 
+## Preparing an installation to connect
+
+Before two installations can pair, each one needs three install-local settings.
+**Platform → Connections** shows a **Connection readiness** checklist at the top
+of the page that reports which of the three is missing and the exact line to add,
+so a missed value surfaces as a fixable step instead of an opaque pairing error:
+
+- **Exchange enabled** — `DPF_FEDERATION_EXCHANGE_ENABLED=1`. Turns on the
+  demand-exchange surface; without it nothing crosses a connection.
+- **This installation's address** — `PUBLIC_URL=http://<this installation's LAN
+  address>:3000` (for example `http://192.168.0.152:3000`). The address a peer is
+  told to reach this installation at during pairing.
+- **Local-network peers** — `DPF_FEDERATION_ALLOW_INSECURE_PEERS=1`. Required only
+  when the address above is plain `http` or a private-LAN host; an HTTPS public
+  address does not need it, and the checklist marks it *Not needed* in that case.
+
+These are added to the installation's `.env` and take effect on the next
+`/ops/self-upgrade`. The application never edits these itself — the live install
+advances only through the governed self-upgrade path.
+
 ## Same-company installations
 
 Approved `same-organization` connections synchronize share-safe platform demand
