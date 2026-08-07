@@ -21,7 +21,10 @@ import {
 } from "@dpf/db/federation-link-types";
 import { isPartnerStanding, type PartnerStanding } from "@dpf/db/federated-channel";
 
-import { resolveLocalFederationAuthorityUrl } from "@/lib/federation/self-authority";
+import {
+  resolveLocalFederationAuthorityUrl,
+  selfAuthorityUnreachableReason,
+} from "@/lib/federation/self-authority";
 import { auth } from "@/lib/auth";
 import { resolveFederationIdentity } from "@/lib/federation/demand-identity";
 import {
@@ -363,6 +366,13 @@ export async function enrollWithPeerAction(input: {
   if (!localAuthorityUrl) {
     return { ok: false, error: "internal_error", message: "could not determine this installation's address to advertise to the peer" };
   }
+  const unreachable = selfAuthorityUnreachableReason({
+    selfAuthorityUrl: localAuthorityUrl,
+    peerAuthorityUrl: input.peerAuthorityUrl.trim(),
+  });
+  if (unreachable) {
+    return { ok: false, error: "invalid_input", message: unreachable };
+  }
   try {
     const result = await enrollWithPeer({
       peerAuthorityUrl: input.peerAuthorityUrl.trim(),
@@ -413,6 +423,13 @@ export async function startNearbyPairingAction(input: {
   const localAuthorityUrl = await resolveLocalFederationAuthorityUrl();
   if (!localAuthorityUrl) {
     return { ok: false, error: "internal_error", message: "could not determine this installation's address to advertise to the peer" };
+  }
+  const unreachable = selfAuthorityUnreachableReason({
+    selfAuthorityUrl: localAuthorityUrl,
+    peerAuthorityUrl: candidate.endpoint,
+  });
+  if (unreachable) {
+    return { ok: false, error: "invalid_input", message: unreachable };
   }
   try {
     await assertEncryptionReadyForCredentialWrite();

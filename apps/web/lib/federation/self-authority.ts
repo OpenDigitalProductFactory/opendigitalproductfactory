@@ -45,6 +45,42 @@ export function deriveFederationAuthorityUrl(args: {
   return null;
 }
 
+/** True for a loopback host — localhost, 127.0.0.0/8, or ::1. A private LAN
+ *  address (192.168.x, 10.x, 172.16-31.x) is NOT loopback: it is reachable by a
+ *  peer on the same network, so it is a valid self-address to advertise. */
+export function isLoopbackAuthorityHost(url: string): boolean {
+  let host: string;
+  try {
+    host = new URL(url).hostname.toLowerCase();
+  } catch {
+    return false;
+  }
+  if (host === "localhost") return true;
+  if (host.replace(/^\[|\]$/g, "") === "::1") return true;
+  return host.startsWith("127.");
+}
+
+/** Guard the self-address we are about to advertise to a peer. A loopback
+ *  self-URL is unreachable from any OTHER host, so advertising it to a remote
+ *  (non-loopback) peer silently breaks the link — the peer records our address
+ *  as its own localhost. We allow a loopback self-URL only when the peer is also
+ *  loopback (both instances on one host — legitimate dev). Returns an operator-
+ *  facing reason string when the pairing must be refused, else null. */
+export function selfAuthorityUnreachableReason(args: {
+  selfAuthorityUrl: string;
+  peerAuthorityUrl: string;
+}): string | null {
+  const { selfAuthorityUrl, peerAuthorityUrl } = args;
+  if (!isLoopbackAuthorityHost(selfAuthorityUrl)) return null;
+  if (isLoopbackAuthorityHost(peerAuthorityUrl)) return null; // both on one host
+  return (
+    `This installation resolved its own address as ${selfAuthorityUrl}, which the ` +
+    `peer at ${peerAuthorityUrl} cannot reach. Open this page at this installation's ` +
+    `LAN address (for example http://192.168.x.x:3000) — the address you view it at ` +
+    `is what the peer is told to use — or set PUBLIC_URL, then reconnect.`
+  );
+}
+
 /** Resolve this install's federation Authority URL for enroll/invite/connect.
  *  Must be called from a request scope (server action / route) so the Host
  *  header is available. Returns null only when neither config nor a Host header
