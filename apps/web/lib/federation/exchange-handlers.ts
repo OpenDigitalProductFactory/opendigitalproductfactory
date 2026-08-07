@@ -41,7 +41,7 @@ export interface IncomingIncident {
 
 export interface IncidentExchangeDb {
   federatedRecordMirror: {
-    findFirst(args: unknown): Promise<{ version: number; syncStatus: string; payloadHash?: string | null } | null>;
+    findFirst(args: unknown): Promise<{ version: bigint; syncStatus: string; payloadHash?: string | null } | null>;
     upsert(args: unknown): Promise<unknown>;
   };
   serviceTicket: { upsert(args: unknown): Promise<unknown> };
@@ -70,7 +70,7 @@ export async function handleIncomingIncident(
   const decision = reconcileMirror(
     existing
       ? {
-          version: existing.version,
+          version: Number(existing.version),
           syncStatus: existing.syncStatus as MirrorSyncStatus,
           canonicalSide: "peer",
           payloadHash: existing.payloadHash ?? null,
@@ -78,7 +78,7 @@ export async function handleIncomingIncident(
       : null,
     {
       fromSide: "peer",
-      baseVersion: incident.baseVersion ?? existing?.version ?? 1,
+      baseVersion: incident.baseVersion ?? (existing ? Number(existing.version) : 1),
       payloadHash: incident.payloadHash,
     },
   );

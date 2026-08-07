@@ -41,7 +41,7 @@ describe("mapNetworkDemandRows", () => {
     const rows = mapNetworkDemandRows([{
       mirrorId: "fdm_1",
       syncStatus: "synced",
-      version: 2,
+      version: 2n,
       localRecordRef: null,
       lastSyncedAt: new Date("2026-07-20T05:10:00.000Z"),
       payload: {
@@ -93,7 +93,7 @@ describe("mapNetworkDemandRows", () => {
     expect(mapNetworkDemandRows([{
       mirrorId: "bad",
       syncStatus: "conflict",
-      version: 1,
+      version: 1n,
       localRecordRef: null,
       lastSyncedAt: null,
       payload: { nope: true },

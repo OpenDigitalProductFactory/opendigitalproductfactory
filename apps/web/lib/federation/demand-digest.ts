@@ -10,7 +10,7 @@ interface DigestMirrorRow {
   mirrorId?: string;
   federationLinkId?: string;
   peerRecordRef?: string | null;
-  version: number;
+  version: bigint;
   syncStatus: string;
   payload: unknown;
 }
@@ -52,13 +52,13 @@ export async function compareIncomingDemandDigest(
       needs.push({ originRecordRef: record.originRecordRef, reason: "missing" });
       continue;
     }
-    if (row.version < record.originVersion) {
-      needs.push({ originRecordRef: record.originRecordRef, reason: "stale", haveVersion: row.version });
+    if (Number(row.version) < record.originVersion) {
+      needs.push({ originRecordRef: record.originRecordRef, reason: "stale", haveVersion: Number(row.version) });
       continue;
     }
     const payload = decodeDemandMirrorPayload(row.payload);
-    if (row.version === record.originVersion && payload?.envelope.payloadDigest !== record.payloadDigest) {
-      needs.push({ originRecordRef: record.originRecordRef, reason: "digest-mismatch", haveVersion: row.version });
+    if (Number(row.version) === record.originVersion && payload?.envelope.payloadDigest !== record.payloadDigest) {
+      needs.push({ originRecordRef: record.originRecordRef, reason: "digest-mismatch", haveVersion: Number(row.version) });
     }
   }
   return { checked: digest.records.length, needs };

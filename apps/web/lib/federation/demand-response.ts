@@ -22,7 +22,7 @@ interface ResponseMirrorRow {
   localRecordRef: string | null;
   peerRecordRef: string | null;
   syncStatus: string;
-  version: number;
+  version: bigint;
   payload: unknown;
 }
 

@@ -31,7 +31,7 @@ interface DemandOutboxRow {
   mirrorId: string;
   federationLinkId: string;
   canonicalSide?: string;
-  version: number;
+  version: bigint;
   syncStatus: string;
   deliveryAttempts: number;
   payload: unknown;
@@ -47,7 +47,7 @@ export interface DemandDeliveryDb {
     }>>;
   };
   federatedRecordMirror: {
-    findUnique(args: unknown): Promise<Partial<DemandOutboxRow> & { mirrorId: string; version: number; syncStatus: string; payload: unknown } | null>;
+    findUnique(args: unknown): Promise<Partial<DemandOutboxRow> & { mirrorId: string; version: bigint; syncStatus: string; payload: unknown } | null>;
     findMany(args: unknown): Promise<DemandOutboxRow[]>;
     create(args: unknown): Promise<unknown>;
     update(args: unknown): Promise<unknown>;
@@ -98,7 +98,7 @@ export async function queueDemandProjection(db: DemandDeliveryDb, input: {
   const existing = await db.federatedRecordMirror.findUnique({ where });
   const prior = decodeDemandOutboxPayload(existing?.payload);
   if (existing && prior?.envelope.payloadDigest === built.envelope.payloadDigest) {
-    return { action: "noop", mirrorId: existing.mirrorId, originVersion: existing.version };
+    return { action: "noop", mirrorId: existing.mirrorId, originVersion: Number(existing.version) };
   }
 
   const activity: OutboundDemandActivity = existing ? "dpf.demand.updated" : "dpf.demand.proposed";
@@ -147,7 +147,7 @@ export async function queueForwardedDemand(db: DemandDeliveryDb, input: {
   const existing = await db.federatedRecordMirror.findUnique({ where });
   const prior = decodeDemandOutboxPayload(existing?.payload);
   if (existing && prior?.envelope.payloadDigest === input.envelope.payloadDigest) {
-    return { action: "noop", mirrorId: existing.mirrorId, originVersion: existing.version };
+    return { action: "noop", mirrorId: existing.mirrorId, originVersion: Number(existing.version) };
   }
   const activity: OutboundDemandActivity = existing ? "dpf.demand.updated" : "dpf.demand.proposed";
   const payload: DemandOutboxPayload = {
@@ -197,7 +197,7 @@ export async function queueDemandWithdrawal(
   }
   const envelope: DemandEnvelopeV1 = {
     ...prior.envelope,
-    originVersion: Math.max(existing.version + 1, now.getTime()),
+    originVersion: Math.max(Number(existing.version) + 1, now.getTime()),
     updatedAt: now.toISOString(),
     payloadDigest: "sha256:pending",
   };
@@ -284,7 +284,7 @@ export async function dispatchDueDemand(db: DemandDeliveryDb, options: {
         ? (result.body as { noticeId?: unknown }).noticeId === noticeId
         : responseId
         ? (result.body as { responseId?: unknown }).responseId === responseId
-        : Number((result.body as { originVersion?: unknown }).originVersion) === row.version);
+        : Number((result.body as { originVersion?: unknown }).originVersion) === Number(row.version));
     if (acknowledged) {
       delivered++;
       await db.federatedRecordMirror.update({ where: { mirrorId: row.mirrorId }, data: {
