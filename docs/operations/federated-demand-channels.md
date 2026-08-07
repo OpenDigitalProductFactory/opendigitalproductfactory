@@ -23,6 +23,13 @@ does not type it:
 So a same-organization LAN pairing needs no typed URL — open the Connections
 page at the installation's LAN address and pair.
 
+Because the address is taken from how you reached the page, **open it at the LAN
+address, not `localhost`** — the address you view it at is exactly what the peer
+is told to use. As a safety net, connecting is refused with a clear message if
+this installation would advertise a loopback address (`localhost` / `127.x` /
+`::1`) to a peer on a different host, since the peer could never reach it. Two
+instances on one host may still pair over loopback.
+
 ## Local-network peers over http
 
 Outbound calls to a peer default to HTTPS-only with private/loopback networks
