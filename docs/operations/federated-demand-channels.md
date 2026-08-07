@@ -5,6 +5,24 @@ shares a deliberately minimized demand envelope; it never exposes or co-writes
 the source backlog. The source installation decides which item can travel over
 which connection and may withdraw that projection independently.
 
+## How an installation advertises its own address
+
+When you invite or connect to a peer, this installation tells the peer the
+address to reach it at. That address is resolved automatically — the operator
+does not type it:
+
+1. If `PUBLIC_URL` (or `NEXT_PUBLIC_*`) is configured it is used — the correct
+   choice for a reverse-proxy or public deployment.
+2. Otherwise the address is taken from the **request host** — the address you
+   used to open the Connections page. Opening
+   `http://192.168.0.152:3000/platform/federation-links` advertises
+   `http://192.168.0.152:3000`, which is exactly what a same-network peer can
+   reach. (The container's own network address cannot be used: inside the portal
+   container it is the Docker bridge address, not the reachable LAN address.)
+
+So a same-organization LAN pairing needs no typed URL — open the Connections
+page at the installation's LAN address and pair.
+
 ## Same-company installations
 
 Approved `same-organization` connections synchronize share-safe platform demand
