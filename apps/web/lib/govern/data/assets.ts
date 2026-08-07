@@ -199,42 +199,25 @@ const SEED_ASSETS: readonly DataAssetDefinition[] = [
     residencyClass: "local-only",
     projectionClass: "structure",
     classification: { state: "confirmed", source: "manual", effectiveFrom: "2026-08-06" },
-    fields: [
-      {
-        id: "data:mac-vendor-oui#oui",
-        physicalName: "oui",
-        resolution: "governed",
-        resolutionReason:
-          "Upper-case 24-bit MAC prefix as published by IEEE. Identifies a manufacturer, not a device or its owner, and is public registry data.",
-        categories: ["configuration"],
-        sensitivity: "public",
-        collectionRule: "allowed",
-        protection: "none",
-        provenance: {
-          source: "manual",
-          state: "confirmed",
-          assertedBy: "data-steward",
-          effectiveFrom: "2026-08-06",
-        },
+    // Identical governance on both columns, so one definition. An OUI identifies a
+    // MANUFACTURER, never an owner: no subject to locate, nothing to mask.
+    fields: (["oui", "vendor"] as const).map((physicalName) => ({
+      id: `data:mac-vendor-oui#${physicalName}` as DataFieldId,
+      physicalName,
+      resolution: "governed" as const,
+      resolutionReason:
+        "Published IEEE registry data: a manufacturer prefix and its name. No tenant scope, no subject.",
+      categories: ["configuration"] as DataCategory[],
+      sensitivity: "public" as DataSensitivity,
+      collectionRule: "allowed" as const,
+      protection: "none" as ProtectionProfileKey,
+      provenance: {
+        source: "manual" as const,
+        state: "confirmed" as const,
+        assertedBy: "data-steward",
+        effectiveFrom: "2026-08-06",
       },
-      {
-        id: "data:mac-vendor-oui#vendor",
-        physicalName: "vendor",
-        resolution: "governed",
-        resolutionReason:
-          "Manufacturer name as published by IEEE; read by discovery to fill a missing vendor. Public registry data with no tenant scope.",
-        categories: ["configuration"],
-        sensitivity: "public",
-        collectionRule: "allowed",
-        protection: "none",
-        provenance: {
-          source: "manual",
-          state: "confirmed",
-          assertedBy: "data-steward",
-          effectiveFrom: "2026-08-06",
-        },
-      },
-    ],
+    })),
   },
   {
     id: "data:operational-scene-layout",
