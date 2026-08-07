@@ -79,11 +79,12 @@ The Greenhouse effort (`EP-ECOSYSTEM-ABSORPTION-ARCH`: `BI-E5561DC9` bridge→ab
 
 ## 4. Phased deliverables
 
-### D1 — Governed leave actions *(prerequisite · size small · independently shippable)*
-**Deliverable.** `approveLeaveRequest`/`rejectLeaveRequest` (and `submitLeaveRequest` where appropriate) wrapped in `withGovernedWorkforceAction`, writing an `AuthorizationDecisionLog` on deny and on completion.
-**Touched files.** `lib/actions/leave.ts` (wrap the two actions), reuse `lib/actions/workforce.ts` wrapper + `lib/govern/governance-data.ts`. No schema change.
-**Verification (functional).** `dpf-tdd`: red test asserts an `AuthorizationDecisionLog` row with `actionKey:"leave.approve"`/`"leave.reject"`, `objectRef=requestId`, correct `decision` after each action; deny path logs `deny`. Then verify on the live install that approving a request writes the ledger row.
-**Why first.** No boundary issue; closes a real audit gap; D2's agent-actor audit path reuses the same wrapper.
+### D1 — Governed leave actions *(prerequisite · size small · independently shippable · ✅ IMPLEMENTED)*
+**Deliverable.** `approveLeaveRequest`/`rejectLeaveRequest` write an `AuthorizationDecisionLog` — `allow` on a completed decision, `deny` when approval authority refuses.
+**Design correction (found during build).** `withGovernedWorkforceAction` (workforce.ts) enforces the platform-capability model (`manage_user_lifecycle`/`manage_users`); leave uses a **different** authority model — org-chart manager authority via `authorizeApprovalDecision`. So D1 does **not** reuse that wrapper; it calls `createAuthorizationDecisionLog` (`@/lib/governance-data`) **directly around the existing `authorizeApprovalDecision` check** — deny-log on authority refusal (before any state change), allow-log after the state change. This preserves leave's correct authority model while adding the audit trail.
+**Touched files.** `lib/actions/leave.ts` (audit calls in both actions; import `createAuthorizationDecisionLog` + `type Prisma`). New `lib/actions/leave.test.ts` (mocked-prisma pattern mirroring `workforce.test.ts`). No schema change.
+**Verification (functional).** ✅ `dpf-tdd` red→green run in the compile-ready worktree: 4 tests (allow + deny × approve/reject) failed 0-calls against the unmodified code, pass after the change. Live-install ledger check remains for pre-merge verification.
+**Why first.** No boundary issue; closes a real audit gap; D2's agent-actor audit path (`actorType:"agent"`) reuses the same `createAuthorizationDecisionLog` writer.
 
 ### D2 — Propose-only leave-decisioning coworker *(core · this is `BI-4D030159` · independently shippable)*
 **Deliverable.** A coworker + MCP surface that, on an eligible `LeaveRequest`, (a) reads `getLeaveRequests` + `getLeaveBalances` + `getTeamLeaveCalendar` + `get_staffing_coverage`, (b) builds `DecisionOption`s (approve / deny) with features on the existing dimension axes, (c) calls `principle_decide` (`callingPopulation:"in_platform_coworker"`), (d) records the rationale via `recordKernelConsultInteraction` and classifies with `mapConsultOutcome`, (e) writes an `AgentActionProposal(actionType:"leave.decide", status:"proposed")` linking the `interactionId`, (f) escalates by exception (`escalate|defer`, or coverage-breach/negative-balance) to the `resolveAccountableApprover` human, and (g) surfaces the recommendation + sealed rationale on `LeavePanel` and the request history. The actual state change stays on the governed `approveLeaveRequest`/`rejectLeaveRequest` path (D1).
