@@ -1,11 +1,11 @@
 {
   "generator": "apps/web/scripts/build-route-shells.ts",
-  "pageRouteCount": 319,
+  "pageRouteCount": 320,
   "migratedCount": 1,
   "summary": {
     "cockpit": 16,
     "list": 6,
-    "detail": 246,
+    "detail": 247,
     "settings": 12,
     "form": 18,
     "public": 21,
@@ -1133,6 +1133,18 @@
     {
       "routePath": "/employee",
       "shell": "cockpit",
+      "audience": "owner",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "sweepEligible": true,
+      "confidence": "high"
+    },
+    {
+      "routePath": "/employee/recruiting",
+      "shell": "detail",
       "audience": "owner",
       "migrated": false,
       "exemptChecks": [

@@ -1,6 +1,6 @@
 {
   "generator": "apps/web/scripts/build-route-manifest.ts",
-  "routeCount": 609,
+  "routeCount": 610,
   "routes": [
     {
       "routePath": "/",
@@ -4481,6 +4481,16 @@
       ],
       "dynamicParams": [],
       "file": "apps/web/app/(shell)/employee/page.tsx"
+    },
+    {
+      "routePath": "/employee/recruiting",
+      "kind": "page",
+      "segments": [
+        "employee",
+        "recruiting"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/employee/recruiting/page.tsx"
     },
     {
       "routePath": "/finance",

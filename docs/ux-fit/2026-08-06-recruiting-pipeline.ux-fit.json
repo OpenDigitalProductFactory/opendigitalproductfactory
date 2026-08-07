@@ -1,0 +1,19 @@
+{
+  "version": "1",
+  "decidedOption": "requisition-select",
+  "decisionInteractionId": "DI-25736FDBB34B",
+  "scope": {
+    "files": [
+      "apps/web/app/(shell)/employee/recruiting/page.tsx",
+      "apps/web/components/recruiting/RecruitingPipelinePanel.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "requisition-select",
+      "freetext-search",
+      "no-filter"
+    ]
+  }
+}
