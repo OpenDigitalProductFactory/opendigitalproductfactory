@@ -1,0 +1,53 @@
+{
+  "version": "1",
+  "accountableOwner": "data-steward",
+  "affectedCopies": [
+    "MacVendorOui (new global reference table, seeded from packages/db/data/oui.tsv)",
+    "InventoryEntity.properties.vendor (gap-fill only, never overwrite)",
+    "Prisma-to-EA current-state data-model mirror"
+  ],
+  "migration": {
+    "name": "20260806220000_add_mac_vendor_oui",
+    "backfill": "No backfill. Purely additive: CREATE TABLE plus one index on vendor; no existing table, column, row or constraint is touched. The table is EMPTY until `pnpm --filter @dpf/db seed` loads the IEEE registry, and an empty table degrades to today's behaviour (no vendor resolved) rather than to an error, so applying the migration without seeding is safe. Seeding is replace-then-insert in 5,000-row chunks: this is published reference data with no local edits to preserve, and a prefix IEEE reassigns must not linger as a stale row."
+  },
+  "tests": [
+    "packages/db/src/mac-oui.test.ts",
+    "packages/db/src/discovery-collectors/unifi.test.ts"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:mac-vendor-oui#registry",
+      "prismaModel": "MacVendorOui",
+      "lifecycleDisposition": "New global reference table holding the IEEE OUI registry (~39,452 prefix→manufacturer rows). Not estate data and not customer-scoped: it is a published external dataset, written only by the seed and read only by discovery-sync. No lifecycle transitions, no retention concern, no PII — an OUI prefix identifies a manufacturer, never a person or a device owner.",
+      "fields": [
+        {
+          "fieldId": "data:mac-vendor-oui#oui",
+          "resolution": "governed",
+          "reason": "primary key; upper-case 24-bit MAC prefix with separators stripped, the canonical form produced by normalizeMac()",
+          "provenance": "IEEE OUI registry as shipped in packages/db/data/oui.tsv, copied from the existing services/edge-node/data/oui.tsv already in this repo"
+        },
+        {
+          "fieldId": "data:mac-vendor-oui#vendor",
+          "resolution": "governed",
+          "reason": "manufacturer string as published by IEEE; read by discovery-sync to fill InventoryEntity.properties.vendor when a collector supplied none",
+          "provenance": "Verified against the live estate before adoption: AC8BA9/D8B370/FCECDA/9C05D6/D021F9 all resolve to 'Ubiquiti Inc', and 588C81 returns 'Espressif Inc.' — independently reproducing the value the UniFi controller itself supplied for that client"
+        }
+      ]
+    },
+    {
+      "kind": "model",
+      "assetId": "data:inventory-entity#properties-vendor-gapfill",
+      "prismaModel": "InventoryEntity",
+      "lifecycleDisposition": "No schema change. discovery-sync now writes `properties.vendor` for entities that report a MAC and carry no vendor or vendorShort. Strictly gap-fill — a collector-supplied vendor always wins, since a collector that genuinely knows the manufacturer outranks a 24-bit prefix. No existing value is overwritten and no other property is touched.",
+      "fields": [
+        {
+          "fieldId": "data:inventory-entity#properties.vendor",
+          "resolution": "governed",
+          "reason": "populate the manufacturer signal that deriveInventoryEnrichment already reads, so it reaches the InventoryEntity.manufacturer column by the same route a UniFi-controller-supplied vendor does today",
+          "provenance": "Nothing in the platform resolved a MAC to a vendor; all observed vendors came from the UniFi controller's own lookup, which covers clients but not devices. Six managed devices (4 APs, gateway, switch) therefore held manufacturer=NULL and raised 12 of the 22 quality rows remaining after BI-A3D12F85. Randomised MACs are reported as `randomised-mac` and deliberately resolve to no vendor — they carry no OUI by construction (0 of 119 resolved vs 65 of 65 burned-in)."
+        }
+      ]
+    }
+  ]
+}
