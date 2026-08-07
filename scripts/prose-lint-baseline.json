@@ -1959,6 +1959,13 @@
     "longSentences": 0,
     "textMass": 5
   },
+  "apps/web/app/(shell)/workforce/[agentId]/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 42
+  },
   "apps/web/app/(shell)/workspace/calendar/page.tsx": {
     "vocabulary": 0,
     "genericLabels": 0,
@@ -6599,6 +6606,20 @@
     "readability": 0,
     "longSentences": 0,
     "textMass": 22
+  },
+  "apps/web/components/platform/coworker-identity/CostFacetPanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 16
+  },
+  "apps/web/components/platform/coworker-identity/EngagementsFacetPanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 20
   },
   "apps/web/components/platform/coworker-record/CapabilitiesEditor.tsx": {
     "vocabulary": 0,
