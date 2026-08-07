@@ -426,7 +426,11 @@ describe("generated route-shell registry", () => {
     // 120 -> 121: /platform/ai/operations-map.
     // 121 -> 122: /platform/ai/right-now (BI-1A68257F) joins the same wall-clock /
     // live-orchestration exclusion — it polls the live workforce set on a 12s timer.
-    expect(registry.routes.filter((route) => !route.sweepEligible)).toHaveLength(122);
+    // 122 -> 123: /workforce/[agentId] (EP-COWORKER-IDENTITY-360) — the Coworker Identity
+    // 360 detail page is a dynamic ([agentId]) route the generator auto-excludes with
+    // reason "dynamic-fixture-required": the sweep cannot render it without a per-coworker
+    // fixture, so it is not measured (not a live-state exclusion, a fixture one).
+    expect(registry.routes.filter((route) => !route.sweepEligible)).toHaveLength(123);
   });
 
   it("keeps contextual sweep exclusions explicit, valid, and non-stale", () => {

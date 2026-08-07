@@ -8,11 +8,13 @@ export type PurposeContractModule = readonly PurposeContractSource[];
 import { GRAPH_EXPLORER_PURPOSE_CONTRACTS } from "./graph-explorer";
 import { RIGHT_NOW_PURPOSE_CONTRACTS } from "./right-now";
 import { RECRUITING_PIPELINE_PURPOSE_CONTRACTS } from "./recruiting-pipeline";
+import { COWORKER_IDENTITY_PURPOSE_CONTRACTS } from "./coworker-identity";
 
 const CONTRACT_MODULES: readonly PurposeContractModule[] = [
   GRAPH_EXPLORER_PURPOSE_CONTRACTS,
   RIGHT_NOW_PURPOSE_CONTRACTS,
   RECRUITING_PIPELINE_PURPOSE_CONTRACTS,
+  COWORKER_IDENTITY_PURPOSE_CONTRACTS,
 ];
 
 export function buildPurposeContractSourceIndex(
