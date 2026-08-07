@@ -408,8 +408,14 @@ function RosterRowCard({
   returnHref: string;
   grantedCapabilities: ReadonlySet<CapabilityKey>;
 }) {
-  const detailRoute = `/platform/ai/agent/${encodeURIComponent(row.agentId)}`;
-  const detailHref = `${detailRoute}?returnTo=${encodeURIComponent(returnHref)}`;
+  // EP-COWORKER-IDENTITY-360: the roster is the directory; a row opens the
+  // coworker's IDENTITY (peer to People/Customers), which deep-links to the admin
+  // record via "Manage". Setup/recovery still targets the admin record, where the
+  // configuration affordances live.
+  const identityRoute = `/workforce/${encodeURIComponent(row.agentId)}`;
+  const adminRoute = `/platform/ai/agent/${encodeURIComponent(row.agentId)}`;
+  const identityHref = `${identityRoute}?returnTo=${encodeURIComponent(returnHref)}`;
+  const adminHref = `${adminRoute}?returnTo=${encodeURIComponent(returnHref)}`;
   const canStartConversation = row.canStartConversation;
   const attention = needsAttention(row);
   const availabilityOwnsAttention =
@@ -417,7 +423,7 @@ function RosterRowCard({
     row.availability.state === "needs-attention";
   const recovery = availabilityRecoveryTarget(
     row.availability,
-    detailHref,
+    adminHref,
     grantedCapabilities,
   );
 
@@ -471,7 +477,7 @@ function RosterRowCard({
       <div className="flex min-w-0 flex-wrap items-center gap-2 sm:justify-end">
         {canStartConversation && (
           <AskCoworkerButton
-            routeContext={detailRoute}
+            routeContext={identityRoute}
             label={`Ask ${row.displayName}`}
             className="inline-flex min-h-11 items-center gap-2 rounded-md bg-[var(--dpf-accent)] px-3 text-sm font-semibold text-[var(--dpf-on-accent,var(--dpf-surface-1))] hover:opacity-90"
           >
@@ -489,7 +495,7 @@ function RosterRowCard({
           </Link>
         )}
         <Link
-          href={detailHref}
+          href={identityHref}
           className="inline-flex min-h-11 items-center gap-1 rounded-md px-2 text-sm font-medium text-[var(--dpf-text)] hover:bg-[var(--dpf-surface-2)]"
         >
           View coworker

@@ -187,7 +187,8 @@ describe("RosterView", () => {
     );
     document.removeEventListener("open-agent-panel", handler);
     expect(events[0]?.detail).toEqual({
-      routeContext: "/platform/ai/agent/marketing-specialist",
+      // EP-COWORKER-IDENTITY-360: Ask context is the coworker's identity route.
+      routeContext: "/workforce/marketing-specialist",
     });
   });
 

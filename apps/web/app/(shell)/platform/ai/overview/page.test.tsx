@@ -102,7 +102,10 @@ describe("PlatformAiOverviewPage", () => {
     expect(html).toContain("Your team");
     expect(html).toContain("Supports the employee lifecycle.");
     expect(html).toContain("Acts with review");
-    expect(html).toContain("/platform/ai/agent/hr-specialist");
+    // EP-COWORKER-IDENTITY-360: a roster row now opens the coworker IDENTITY
+    // (/workforce/[agentId]) as its front door; the admin record is reached from
+    // there via "Manage".
+    expect(html).toContain("/workforce/hr-specialist");
   });
 
   it("describes an empty selectable roster honestly and offers a recovery path", async () => {
