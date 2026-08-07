@@ -21,7 +21,7 @@ import {
 } from "@dpf/db/federation-link-types";
 import { isPartnerStanding, type PartnerStanding } from "@dpf/db/federated-channel";
 
-import { resolveAppBaseUrl } from "@/lib/app-url";
+import { resolveLocalFederationAuthorityUrl } from "@/lib/federation/self-authority";
 import { auth } from "@/lib/auth";
 import { resolveFederationIdentity } from "@/lib/federation/demand-identity";
 import {
@@ -359,9 +359,9 @@ export async function enrollWithPeerAction(input: {
   if (!input.peerAuthorityUrl?.trim() || !input.bootstrapToken?.trim() || !input.displayName?.trim()) {
     return { ok: false, error: "invalid_input", message: "peer URL, invitation token, and a name are required" };
   }
-  const localAuthorityUrl = resolveAppBaseUrl();
+  const localAuthorityUrl = await resolveLocalFederationAuthorityUrl();
   if (!localAuthorityUrl) {
-    return { ok: false, error: "internal_error", message: "this deployment's base URL is not configured (set APP_URL)" };
+    return { ok: false, error: "internal_error", message: "could not determine this installation's address to advertise to the peer" };
   }
   try {
     const result = await enrollWithPeer({
@@ -410,9 +410,9 @@ export async function startNearbyPairingAction(input: {
   if (candidate.automaticPairing === "blocked-insecure-transport") {
     return { ok: false, error: "invalid_input", message: "Automatic pairing requires HTTPS. Use a manual invitation until this installation has a trusted certificate." };
   }
-  const localAuthorityUrl = resolveAppBaseUrl();
+  const localAuthorityUrl = await resolveLocalFederationAuthorityUrl();
   if (!localAuthorityUrl) {
-    return { ok: false, error: "internal_error", message: "This installation's base URL is not configured." };
+    return { ok: false, error: "internal_error", message: "could not determine this installation's address to advertise to the peer" };
   }
   try {
     await assertEncryptionReadyForCredentialWrite();
@@ -541,7 +541,7 @@ export async function pollNearbyPairingAction(pairingId: string): Promise<Nearby
     return { ok: true, ...baseResult, status: peer.status };
   }
   const [localAuthorityUrl, organization] = await Promise.all([
-    Promise.resolve(resolveAppBaseUrl()),
+    resolveLocalFederationAuthorityUrl(),
     prisma.organization.findFirst({ orderBy: { createdAt: "asc" }, select: { id: true, name: true } }),
   ]);
   if (!localAuthorityUrl) {
