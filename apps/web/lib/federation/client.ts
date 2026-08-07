@@ -11,15 +11,56 @@ import type { DemandActivity } from "@dpf/db/federated-demand-contract";
 import { envFlagEnabled } from "@/lib/runtime/env-flags";
 import { assertSafeOutboundUrl } from "@/lib/security/safe-fetch";
 
+// True only for an IP-LITERAL private/loopback/link-local host, or localhost /
+// *.local. Arbitrary DNS hostnames return false on purpose: we must not relax the
+// SSRF guard for a name an attacker could rebind to an internal address. Used to
+// scope the same-org LAN allowance below to addresses that are unambiguously LAN.
+export function isPrivateOrLoopbackFederationHost(peerAuthorityUrl: string): boolean {
+  let host: string;
+  try {
+    host = new URL(peerAuthorityUrl).hostname.toLowerCase();
+  } catch {
+    return false;
+  }
+  if (host === "localhost" || host.endsWith(".local")) return true;
+  const v6 = host.replace(/^\[|\]$/g, "");
+  if (v6 === "::1") return true;
+  if (host.startsWith("127.")) return true;
+  if (host.startsWith("10.") || host.startsWith("192.168.")) return true;
+  const m = /^172\.(\d{1,3})\./.exec(host);
+  if (m) {
+    const octet = Number(m[1]);
+    if (octet >= 16 && octet <= 31) return true;
+  }
+  return false;
+}
+
 // peerAuthorityUrl is operator-supplied → an SSRF sink (CWE-918). Validate it at
 // this single chokepoint that every outbound federation call funnels through
 // (incident / proposal / enroll / approval-relay). Safe-by-default: https +
-// public hosts only. Local/LAN federation — two on-prem DPF instances or dev —
-// opts in explicitly via DPF_FEDERATION_ALLOW_INSECURE_PEERS (permits http +
-// private/loopback networks). The peer route `path` is our own constant, not
-// user input, so it is appended to the validated origin.
-function safePeerRequestUrl(peerAuthorityUrl: string, path: string): string {
-  const allowInsecure = envFlagEnabled(process.env, "DPF_FEDERATION_ALLOW_INSECURE_PEERS");
+// public hosts only.
+//
+// Two opt-ins permit http + private/loopback networks for on-prem LAN federation:
+//   1. DPF_FEDERATION_ALLOW_INSECURE_PEERS=1 — global operator flag (unchanged).
+//   2. `sameOrgLan` — a SCOPED, per-call allowance for same-organization LAN
+//      pairing that needs no typed flag. It permits http/private ONLY when the
+//      peer address is itself an IP-literal private/loopback host
+//      (isPrivateOrLoopbackFederationHost). This is strictly NARROWER than the
+//      global flag: public and DNS-named peers still require HTTPS even when
+//      sameOrgLan is set, so a same-org channel/reseller on a public host is
+//      unaffected. Callers set sameOrgLan from an operator-declared same-org
+//      link (role "same-org-peer") or an operator-initiated same-org connect.
+//
+// The peer route `path` is our own constant, not user input, so it is appended
+// to the validated origin.
+function safePeerRequestUrl(
+  peerAuthorityUrl: string,
+  path: string,
+  sameOrgLan = false,
+): string {
+  const globalFlag = envFlagEnabled(process.env, "DPF_FEDERATION_ALLOW_INSECURE_PEERS");
+  const scopedLan = sameOrgLan && isPrivateOrLoopbackFederationHost(peerAuthorityUrl);
+  const allowInsecure = globalFlag || scopedLan;
   const validated = assertSafeOutboundUrl(peerAuthorityUrl, {
     allowedSchemes: allowInsecure ? ["https:", "http:"] : ["https:"],
     blockPrivateNetworks: !allowInsecure,
@@ -40,11 +81,13 @@ export async function postToPeer(input: {
   path: string;
   cloudEvent: unknown;
   fetchImpl?: typeof fetch;
+  /** Scoped same-org LAN allowance — see safePeerRequestUrl. Default false. */
+  sameOrgLan?: boolean;
 }): Promise<PeerPostResult> {
   const f = input.fetchImpl ?? fetch;
   let url: string;
   try {
-    url = safePeerRequestUrl(input.peerAuthorityUrl, input.path);
+    url = safePeerRequestUrl(input.peerAuthorityUrl, input.path, input.sameOrgLan ?? false);
   } catch (err) {
     // A peer URL that fails the SSRF guard is never dialed.
     return { ok: false, status: 0, error: err instanceof Error ? err.message : "unsafe peer url" };
@@ -76,6 +119,10 @@ export interface PeerLinkTarget {
   linkToken: string;
   linkId: string;
   fetchImpl?: typeof fetch;
+  /** Set when this link is a same-organization peer, so a private-LAN address is
+   *  reachable over http without the global insecure-peers flag. See
+   *  safePeerRequestUrl. Default false. */
+  sameOrgLan?: boolean;
 }
 
 function envelope(linkId: string, type: string, data: unknown) {
@@ -96,6 +143,7 @@ export async function sendIncidentToPeer(target: PeerLinkTarget, incident: unkno
     linkToken: target.linkToken,
     path: "/api/v1/federation/incident",
     cloudEvent: envelope(target.linkId, "dpf.federation.incident", incident),
+    sameOrgLan: target.sameOrgLan ?? false,
     ...(target.fetchImpl ? { fetchImpl: target.fetchImpl } : {}),
   });
 }
@@ -107,6 +155,7 @@ export async function sendProposalToPeer(target: PeerLinkTarget, proposal: unkno
     linkToken: target.linkToken,
     path: "/api/v1/federation/proposal",
     cloudEvent: envelope(target.linkId, "dpf.federation.proposal", proposal),
+    sameOrgLan: target.sameOrgLan ?? false,
     ...(target.fetchImpl ? { fetchImpl: target.fetchImpl } : {}),
   });
 }
@@ -130,6 +179,7 @@ export async function sendDemandToPeer(
       linkId: target.linkId,
       data: demandEnvelope,
     }),
+    sameOrgLan: target.sameOrgLan ?? false,
     ...(target.fetchImpl ? { fetchImpl: target.fetchImpl } : {}),
   });
 }
@@ -152,6 +202,7 @@ export async function sendDemandDigestToPeer(
       linkId: target.linkId,
       data: digest,
     }),
+    sameOrgLan: target.sameOrgLan ?? false,
     ...(target.fetchImpl ? { fetchImpl: target.fetchImpl } : {}),
   });
 }

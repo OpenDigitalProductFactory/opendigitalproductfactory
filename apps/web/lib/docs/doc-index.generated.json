@@ -4878,6 +4878,7 @@
       "anchors": [
         "federated-demand-channels",
         "how-an-installation-advertises-its-own-address",
+        "local-network-peers-over-http",
         "same-company-installations",
         "customer-and-reseller-operation",
         "founder-hub-business-management",
