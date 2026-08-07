@@ -630,6 +630,7 @@ export const PORTAL_NAV_ROUTES: readonly PortalNavRecord[] = [
       "/platform/tools/built-ins",
       "/platform/tools/discovery",
       "/platform/tools/inventory",
+      "/platform/federation-links",
     ],
   },
   {
@@ -686,6 +687,18 @@ export const PORTAL_NAV_ROUTES: readonly PortalNavRecord[] = [
     key: "platform-tools-inventory",
     label: "Capability Inventory",
     path: "/platform/tools/inventory",
+    parentPath: "/platform/tools",
+    domain: "platform",
+    audienceModes: ["operator"],
+    destinationKind: "section-page",
+    capabilityKey: "view_platform",
+  },
+  {
+    // Peer-deployment federation ("Connections" page). Distinct from Identity
+    // Federation (SSO) under /platform/identity/federation.
+    key: "platform-federation-links",
+    label: "Connections",
+    path: "/platform/federation-links",
     parentPath: "/platform/tools",
     domain: "platform",
     audienceModes: ["operator"],
