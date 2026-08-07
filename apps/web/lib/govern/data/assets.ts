@@ -181,6 +181,62 @@ const SEED_ASSETS: readonly DataAssetDefinition[] = [
     // BI-CD99DC3F: operator-authored physical geometry is durable business
     // configuration. It can expose room, equipment, table, or site structure and
     // typed pointers to operational entities, so it stays confidential and local.
+    // Published IEEE OUI registry: MAC prefix -> manufacturer (BI-9632B15B).
+    // Reference data, not tenant data. An OUI identifies a HARDWARE MAKER, never a
+    // device owner or a person, so there is no subject to locate and nothing to
+    // mask — it is the same class of shipped lookup as the taxonomy tables.
+    id: "data:mac-vendor-oui",
+    physical: { prismaModel: "MacVendorOui" },
+    domain: "platform-operations",
+    ownerRole: "platform-operator",
+    stewardRole: "data-steward",
+    categories: ["configuration"],
+    sensitivity: "public",
+    criticality: "low",
+    subjectLocators: [],
+    lifecycleClass: "ephemeral",
+    purposeCapabilities: ["platform-operations"],
+    residencyClass: "local-only",
+    projectionClass: "structure",
+    classification: { state: "confirmed", source: "manual", effectiveFrom: "2026-08-06" },
+    fields: [
+      {
+        id: "data:mac-vendor-oui#oui",
+        physicalName: "oui",
+        resolution: "governed",
+        resolutionReason:
+          "Upper-case 24-bit MAC prefix as published by IEEE. Identifies a manufacturer, not a device or its owner, and is public registry data.",
+        categories: ["configuration"],
+        sensitivity: "public",
+        collectionRule: "allowed",
+        protection: "none",
+        provenance: {
+          source: "manual",
+          state: "confirmed",
+          assertedBy: "data-steward",
+          effectiveFrom: "2026-08-06",
+        },
+      },
+      {
+        id: "data:mac-vendor-oui#vendor",
+        physicalName: "vendor",
+        resolution: "governed",
+        resolutionReason:
+          "Manufacturer name as published by IEEE; read by discovery to fill a missing vendor. Public registry data with no tenant scope.",
+        categories: ["configuration"],
+        sensitivity: "public",
+        collectionRule: "allowed",
+        protection: "none",
+        provenance: {
+          source: "manual",
+          state: "confirmed",
+          assertedBy: "data-steward",
+          effectiveFrom: "2026-08-06",
+        },
+      },
+    ],
+  },
+  {
     id: "data:operational-scene-layout",
     physical: { prismaModel: "OperationalSceneLayout" },
     domain: "business-operations",
