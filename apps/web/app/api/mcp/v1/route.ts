@@ -388,9 +388,33 @@ async function handleTasksSubmit(
   return jsonRpcOk(id, outcome.result);
 }
 
+const BASE_MCP_INSTRUCTIONS =
+  "Domain-level MCP surface for the Digital Product Factory. Use tools/list to discover the backlog and planning tools available to your token.";
+
 async function handleInitialize(id: JsonRpcId, params?: Record<string, unknown>): Promise<Response> {
   const requested = typeof params?.["protocolVersion"] === "string" ? params["protocolVersion"] : null;
   const negotiated = SUPPORTED_PROTOCOL_VERSIONS.find((v) => v === requested) ?? FALLBACK_PROTOCOL_VERSION;
+
+  // BI-HDLEMP-02 (Seam 2): compose the org-identity context for external callers
+  // so an agent carries the org's mission / archetype / locale / stance — and the
+  // decisionDomain routing directive that activates BI-HDLEMP-01 — from connect,
+  // instead of only a bare tool list. Fail-open: any compose error falls back to
+  // the base note; initialize must never break.
+  let instructions = BASE_MCP_INSTRUCTIONS;
+  try {
+    const [{ buildOrgContextBundle, formatOrgContextInstructions }, { prisma }] =
+      await Promise.all([
+        import("@/lib/mcp/org-context-bundle"),
+        import("@dpf/db"),
+      ]);
+    const bundle = await buildOrgContextBundle(
+      prisma as unknown as Parameters<typeof buildOrgContextBundle>[0],
+    );
+    instructions = formatOrgContextInstructions(BASE_MCP_INSTRUCTIONS, bundle);
+  } catch (err) {
+    console.warn("[mcp/initialize] org-context compose failed (fail-open):", err);
+  }
+
   return jsonRpcOk(id, {
     protocolVersion: negotiated,
     capabilities: {
@@ -400,8 +424,7 @@ async function handleInitialize(id: JsonRpcId, params?: Record<string, unknown>)
       name: SERVER_NAME,
       version: SERVER_VERSION,
     },
-    instructions:
-      "Domain-level MCP surface for the Digital Product Factory. Use tools/list to discover the backlog and planning tools available to your token.",
+    instructions,
   });
 }
 
