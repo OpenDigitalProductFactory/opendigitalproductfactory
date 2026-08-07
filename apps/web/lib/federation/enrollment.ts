@@ -24,6 +24,8 @@ import {
   type FederationRole,
 } from "@dpf/db/federation-link-types";
 
+import { encryptSecret } from "@/lib/govern/credential-crypto";
+
 import {
   classifyFederationToken,
   computeFederationBootstrapExpiry,
@@ -77,6 +79,10 @@ export interface EnrollFederationInput {
   peerOrganizationRef?: string | null;
   localOrganizationId?: string | null;
   displayName: string;
+  /** The connecting peer's inbound link token. When present we store it as our
+   *  outbound token (peerTokenEnc) so we can relay our approval and push demand
+   *  back to them — the mutual half of the handshake. */
+  callbackToken?: string | null;
   metadata?: Record<string, unknown>;
 }
 
@@ -165,6 +171,10 @@ export async function enrollFederationLink(
         tokenHash: linkToken.hash,
         tokenPrefix: linkToken.prefix,
         tokenRotatedAt: now,
+        // Mutual handshake: the connector's inbound token becomes OUR outbound
+        // token, so the inviter can relay its approval and push demand back.
+        // Absent (older connector) → one-directional link, as before.
+        peerTokenEnc: input.callbackToken ? encryptSecret(input.callbackToken) : null,
         enrolledAt: now,
         metadata: {
           ...(input.metadata ?? {}),

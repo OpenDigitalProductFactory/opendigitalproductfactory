@@ -104,4 +104,14 @@ describe("enrollWithPeer (error paths, no prisma)", () => {
     expect(res.ok).toBe(false);
     if (!res.ok) expect(res.error).toBe("invalid_peer_response");
   });
+
+  it("sends its own callbackToken in the enroll body (mutual handshake)", async () => {
+    // Peer rejects → returns before prisma, but the body was still sent.
+    const f = mockFetch({ ok: false, status: 401, json: { ok: false } });
+    await enrollWithPeer({ ...base, fetchImpl: f });
+    const [, init] = (f as unknown as { mock: { calls: [string, RequestInit][] } }).mock.calls[0];
+    const sent = JSON.parse(init.body as string) as { callbackToken?: string };
+    expect(typeof sent.callbackToken).toBe("string");
+    expect(sent.callbackToken!.length).toBeGreaterThan(0);
+  });
 });
