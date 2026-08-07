@@ -762,6 +762,13 @@
     "longSentences": 0,
     "textMass": 98
   },
+  "apps/web/app/(shell)/employee/recruiting/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 27
+  },
   "apps/web/app/(shell)/error.tsx": {
     "vocabulary": 0,
     "genericLabels": 0,
@@ -7201,6 +7208,13 @@
     "readability": 0,
     "longSentences": 0,
     "textMass": 28
+  },
+  "apps/web/components/recruiting/RecruitingPipelinePanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 30
   },
   "apps/web/components/rental/RentalDeskPanel.tsx": {
     "vocabulary": 0,
