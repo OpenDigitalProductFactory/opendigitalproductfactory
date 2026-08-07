@@ -1,0 +1,77 @@
+{
+  "version": "1",
+  "accountableOwner": "platform-architecture",
+  "affectedCopies": [
+    "No data copies change: this hardens pre-existing nullable scalar FK columns into typed Prisma relations (FK constraints + indexes). No column is added, dropped, or backfilled; no new subject data is introduced.",
+    "People-Core (Position/Department/WorkLocation/EmploymentType/EmployeeProfile): gains virtual back-relations only (no table change) so a requisition/scorecard can be traversed from the worker/position side."
+  ],
+  "migration": {
+    "name": "20260806234500_add_recruiting_people_core_relations",
+    "backfill": "none — additive constraint/index only (5 CREATE INDEX + 7 ADD FOREIGN KEY). Every FK column is a pre-existing nullable column populated only by native authoring (not yet built), never by absorption, so every existing row holds NULL and no row can violate the new FK (attested data-safe in the migration)."
+  },
+  "tests": [
+    "apps/web/lib/recruiting/typed-people-core-relations.test.ts",
+    "apps/web/lib/recruiting/pipeline-read-model.test.ts",
+    "apps/web/lib/govern/data/coverage.live.test.ts"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:job-requisition",
+      "prismaModel": "JobRequisition",
+      "lifecycleDisposition": "business-record; unchanged — closed/filled through the requisition status lifecycle (domain-lifecycle-managed). This change only adds typed FK relations to canonical People-Core models.",
+      "fields": [
+        {
+          "name": "positionId",
+          "resolution": "inherited",
+          "reason": "Typed FK to Position (BI-41901810 convergence — a requisition hangs off a position). No new subject data: the FK links to an already-governed People-Core record.",
+          "provenance": "Native recruiting authoring (not yet built); never populated by the Greenhouse absorption flow, which holds external refs in StagedRecord + MasterDataSourceRef."
+        },
+        {
+          "name": "departmentId",
+          "resolution": "inherited",
+          "reason": "Typed FK to Department; links to an existing governed org record, introduces no new subject data.",
+          "provenance": "Native recruiting authoring; never populated by absorption."
+        },
+        {
+          "name": "workLocationId",
+          "resolution": "inherited",
+          "reason": "Typed FK to WorkLocation reference-data; no new subject data.",
+          "provenance": "Native recruiting authoring; never populated by absorption."
+        },
+        {
+          "name": "employmentTypeId",
+          "resolution": "inherited",
+          "reason": "Typed FK to EmploymentType reference-data; no new subject data.",
+          "provenance": "Native recruiting authoring; never populated by absorption."
+        },
+        {
+          "name": "hiringManagerId",
+          "resolution": "inherited",
+          "reason": "Typed FK to EmployeeProfile (the worker canonical model, BI-HCM-001). The employee's own governance governs; the FK introduces no new subject data and targets the stable id PK (unaffected by the BI-36FEECC4 effective-dating spine).",
+          "provenance": "Native recruiting authoring; never populated by absorption."
+        },
+        {
+          "name": "recruiterId",
+          "resolution": "inherited",
+          "reason": "Typed FK to EmployeeProfile; governed by the worker record, no new subject data.",
+          "provenance": "Native recruiting authoring; never populated by absorption."
+        }
+      ]
+    },
+    {
+      "kind": "model",
+      "assetId": "data:scorecard",
+      "prismaModel": "Scorecard",
+      "lifecycleDisposition": "regulated-record; unchanged — retained min 2y (adverse-impact selection-procedure basis). This change only types the submitter link.",
+      "fields": [
+        {
+          "name": "submittedById",
+          "resolution": "inherited",
+          "reason": "Typed FK to EmployeeProfile (the interviewer/submitter is a native worker). Governed by the worker record; no new subject data; targets the stable id PK.",
+          "provenance": "Native recruiting authoring; never populated by absorption."
+        }
+      ]
+    }
+  ]
+}

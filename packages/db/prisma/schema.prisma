@@ -438,6 +438,9 @@ model EmployeeProfile {
   annualSalary                 Decimal?
   standardAnnualHours          Int?
   accountableItems             BacklogItem[]                 @relation("ItemAccountable")
+  requisitionsAsHiringManager  JobRequisition[]              @relation("ReqHiringManager") // BI-7ACC38CE
+  requisitionsAsRecruiter      JobRequisition[]              @relation("ReqRecruiter") // BI-7ACC38CE
+  scorecardsSubmitted          Scorecard[]                   @relation("ScorecardSubmitter") // BI-7ACC38CE
   calendarEvents               CalendarEvent[]
   calendarSyncs                CalendarSync[]
   communicationChannelBindings CommunicationChannelBinding[]
@@ -514,6 +517,7 @@ model Department {
   parentDepartment   Department?       @relation("DepartmentTree", fields: [parentDepartmentId], references: [id])
   childDepartments   Department[]      @relation("DepartmentTree")
   employees          EmployeeProfile[] @relation("DepartmentEmployees")
+  requisitions       JobRequisition[] // BI-7ACC38CE
 
   @@index([parentDepartmentId])
   @@index([headEmployeeId])
@@ -535,6 +539,7 @@ model Position {
   createdAt     DateTime          @default(now())
   updatedAt     DateTime          @updatedAt
   employees     EmployeeProfile[]
+  requisitions  JobRequisition[] // BI-7ACC38CE
 
   @@index([status])
   @@index([occupationKey])
@@ -584,6 +589,7 @@ model EmploymentType {
   createdAt        DateTime          @default(now())
   updatedAt        DateTime          @updatedAt
   employees        EmployeeProfile[]
+  requisitions     JobRequisition[] // BI-7ACC38CE
 
   @@index([status])
 }
@@ -600,6 +606,7 @@ model WorkLocation {
   addressId    String?
   employees    EmployeeProfile[]
   address      Address?          @relation(fields: [addressId], references: [id])
+  requisitions JobRequisition[] // BI-7ACC38CE
 
   @@index([status])
   @@index([addressId])
@@ -16448,9 +16455,25 @@ model JobRequisition {
   stages       PipelineStage[]
   applications Application[]
 
+  // Typed People-Core relations (BI-7ACC38CE, kernel DI-A114C610DFD9). All
+  // nullable + onDelete SetNull: a requisition survives the removal of a
+  // position/department/location/type/employee. Populated only by native
+  // authoring (never by absorption, which holds external refs in
+  // StagedRecord + MasterDataSourceRef).
+  position       Position?        @relation(fields: [positionId], references: [id], onDelete: SetNull)
+  department     Department?      @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  workLocation   WorkLocation?    @relation(fields: [workLocationId], references: [id], onDelete: SetNull)
+  employmentType EmploymentType?  @relation(fields: [employmentTypeId], references: [id], onDelete: SetNull)
+  hiringManager  EmployeeProfile? @relation("ReqHiringManager", fields: [hiringManagerId], references: [id], onDelete: SetNull)
+  recruiter      EmployeeProfile? @relation("ReqRecruiter", fields: [recruiterId], references: [id], onDelete: SetNull)
+
   @@index([status])
   @@index([positionId])
   @@index([departmentId])
+  @@index([workLocationId])
+  @@index([employmentTypeId])
+  @@index([hiringManagerId])
+  @@index([recruiterId])
 }
 
 model RequisitionOpening {
@@ -16603,8 +16626,11 @@ model Scorecard {
 
   application Application         @relation(fields: [applicationId], references: [id], onDelete: Cascade)
   interview   ScheduledInterview? @relation(fields: [interviewId], references: [id], onDelete: SetNull)
+  // BI-7ACC38CE: the interviewer/submitter is a native worker.
+  submittedBy EmployeeProfile?    @relation("ScorecardSubmitter", fields: [submittedById], references: [id], onDelete: SetNull)
 
   @@index([applicationId])
+  @@index([submittedById])
 }
 
 model Offer {
