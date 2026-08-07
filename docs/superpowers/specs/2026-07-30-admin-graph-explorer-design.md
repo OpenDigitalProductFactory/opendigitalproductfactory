@@ -366,6 +366,66 @@ canvas was already a `default-visible` region in the ratified contract, so no ne
 region appears; the route keeps wide headroom against the `detail` shell's 450-word
 cap and the 300-word `deferred-detail` threshold.
 
+## Cross-domain edges: the doc-impact projection (BI-0E019B95, 2026-08-06)
+
+The corpus was in the mirror but disconnected. This closes the first real bridge, and
+the substrate audit that preceded it corrected three assumptions worth recording,
+because two of them were written into the backlog item by me and were wrong.
+
+### What the audit actually found
+
+The item proposed three "cheap" derivations. Measured against the live install:
+
+| Proposed | Reality |
+| --- | --- |
+| `principleConsumerContexts` → governed route | **Not a route link.** The values are open-ended *domain* slugs (`engineering-flow`, `data-model`, `ui`), and `PRINCIPLE_CONSUMER_CONTEXT_EXAMPLES` is an authoring vocabulary — "new contexts are added by authoring without a schema change". There is no slug→route registry to mirror. |
+| `WikiPageSource` → code | **Not code.** `RawSource` is external bibliographic provenance — `web-article`, `standard`, `framework`, with `url` / `doi` / `license`. Not repo paths. |
+| doc-impact derivation | **Real, and already committed.** |
+
+So the item's premise — that knowledge→code link data already exists and is merely
+unmirrored — is **false for the wiki corpus**. No structural link exists from `WikiPage`
+to code, and inventing one is a separate, genuinely-inferential piece of work.
+
+### What was real
+
+`apps/web/lib/docs/doc-impact.generated.json` is a committed, guard-regenerated manifest
+holding 529 doc→code and 87 doc→route links. `doc-impact-graph.ts`,
+`doc-impact-graph-sync.ts` and `rebuild-doc-impact-graph.ts` already project it into the
+mirror — and `graph:rebuild-doc-impact` had **exactly one reference in the repository: its
+own definition**. Nothing ever called it, so the mirror held zero `DocPage` nodes.
+
+That is the same failure mode BI-3045CC18 found in the portfolio spine: a complete writer
+with no caller. The fix is again a backfill, not a design.
+
+Projected on the live install: **183 `DocPage` nodes, 616 `IMPACTS` edges** —
+464 `CodeFile → DocPage` and 85 `CodeRoute → DocPage`.
+
+### The traversal now works
+
+Seeding `/admin/storefront/inbox` draws Route → Source file → Doc page across `Implements
+route` and `impacts`. "A route → the file that implements it → the documentation that
+governs it" is traversable in the UI.
+
+### Two vocabulary decisions
+
+**Doc pages join the `knowledge` domain rather than getting a seventh tile.** An operator
+asking "what explains this?" does not care which store it came from. They keep a distinct
+label and colour because the substrates genuinely differ — wiki pages are rows, doc pages
+are files the code cites.
+
+**`DocImpactSource` is an additive marker and must not be counted.** The projection stamps
+it onto `CodeFile` nodes it shares with the code graph, and the census sums per-label
+counts — the same double-count that forced a hard-coded `EaElement` skip. That skip is now
+`ADDITIVE_MARKER_LABELS`, enumerated and tested, so the next additive marker cannot
+silently inflate a tile. Verified live: Knowledge reads 542 (358 wiki + 183 doc) while Code
+stays 39,380, with the 504 markers excluded.
+
+### Still open
+
+`Wiki__*` nodes remain at **zero** cross-domain edges, and no route reaches a
+`PrismaModel` — `schema.prisma` still has no inbound edges. The route→file→**model** hop
+and the wiki→code hop are both unbuilt, and both need derivation rather than backfill.
+
 ## Follow-ups
 
 - Derive knowledge → code/data edges so the "decision that governed this route"

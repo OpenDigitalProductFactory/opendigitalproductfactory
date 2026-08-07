@@ -48,7 +48,7 @@ export const GRAPH_DOMAINS: GraphDomain[] = [
     key: "knowledge",
     label: "Knowledge",
     description:
-      "Wiki pages and the links between them: decision rules, organizational stances, profession corpora, and the founder kernel.",
+      "Two corpora the operator reads as one: wiki pages and the links between them (decision rules, organizational stances, profession corpora, the founder kernel), and the repository documentation that the code itself cites.",
   },
   {
     key: "architecture",
@@ -97,6 +97,18 @@ const LABEL_DESCRIPTORS: LabelDescriptor[] = [
     domain: "code",
     color: NODE_CATEGORY_COLORS.ExternalModule,
     size: 3,
+  },
+
+  // Listed AFTER the concrete code kinds on purpose: it is an additive marker, so a
+  // node that is also a `CodeFile` must describe as one. This entry only catches the
+  // honest leftover — a cited path the code graph does not index — which would
+  // otherwise degrade into the architecture-flavoured unknown bucket (BI-0E019B95).
+  {
+    key: "DocImpactSource",
+    label: "Cited source file",
+    domain: "code",
+    color: NODE_CATEGORY_COLORS.CodeFile,
+    size: 4,
   },
 
   // ── Data model ──────────────────────────────────────────────────────────────
@@ -153,6 +165,14 @@ const LABEL_DESCRIPTORS: LabelDescriptor[] = [
   { key: "Wiki__Summary", label: "Summary", domain: "knowledge", color: NODE_CATEGORY_COLORS.Wiki__Summary, size: 4 },
   { key: "Wiki__Runbook", label: "Runbook", domain: "knowledge", color: NODE_CATEGORY_COLORS.Wiki__Runbook, size: 5 },
   { key: "Wiki__Index", label: "Index page", domain: "knowledge", color: NODE_CATEGORY_COLORS.Wiki__Index, size: 7 },
+  //
+  // Repo documentation, projected from the committed doc-impact manifest
+  // (BI-0E019B95). Grouped with the wiki kinds because an operator asking "what
+  // explains this?" does not care which store it came from — but kept a distinct
+  // label and colour, because the substrates genuinely differ: wiki pages are rows,
+  // doc pages are files the code cites. This is also the only knowledge node that
+  // carries cross-domain edges today: `CodeFile`/`CodeRoute --IMPACTS--> DocPage`.
+  { key: "DocPage", label: "Doc page", domain: "knowledge", color: NODE_CATEGORY_COLORS.DocPage, size: 5 },
 
   // ── Portfolio ───────────────────────────────────────────────────────────────
   { key: "Portfolio", label: "Portfolio", domain: "portfolio", color: NODE_CATEGORY_COLORS.Portfolio, size: 8 },
@@ -173,6 +193,22 @@ const LABEL_DESCRIPTORS: LabelDescriptor[] = [
 ];
 
 const DESCRIPTOR_BY_KEY = new Map(LABEL_DESCRIPTORS.map((d) => [d.key, d]));
+
+/**
+ * Labels that are ADDITIVE markers on a node that another projection already owns,
+ * rather than a node's own kind.
+ *
+ * The corpus census sums per-label counts, so a node carrying two labels is counted
+ * twice and its domain tile overstates. `EaElement` (paired with a concrete
+ * `ArchiMate__*` type) needed a hard-coded skip for exactly this; `DocImpactSource`
+ * is the same shape — the doc-impact projection stamps it onto `CodeFile` nodes it
+ * shares with the code graph. Enumerating them here keeps the next additive marker
+ * from silently inflating a tile, which a second hard-coded string would not.
+ */
+export const ADDITIVE_MARKER_LABELS: ReadonlySet<string> = new Set([
+  "EaElement",
+  "DocImpactSource",
+]);
 
 /** The `ArchiMate__<Type>` family is open-ended — one rule covers every member. */
 const ARCHIMATE_PREFIX = "ArchiMate__";
