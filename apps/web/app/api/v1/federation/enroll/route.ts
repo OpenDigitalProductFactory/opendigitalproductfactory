@@ -56,6 +56,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     ...(parsed.data.localOrganizationId !== undefined
       ? { localOrganizationId: parsed.data.localOrganizationId }
       : {}),
+    ...(parsed.data.callbackToken !== undefined
+      ? { callbackToken: parsed.data.callbackToken }
+      : {}),
     ...(parsed.data.metadata !== undefined ? { metadata: parsed.data.metadata } : {}),
   });
 

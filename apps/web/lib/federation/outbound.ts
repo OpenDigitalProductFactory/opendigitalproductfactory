@@ -22,6 +22,7 @@ import {
 import { decryptSecret, encryptSecret } from "@/lib/govern/credential-crypto";
 
 import { postToPeer } from "./client";
+import { generateLinkToken } from "./tokens";
 
 export interface EnrollWithPeerInput {
   /** The peer Authority Core base URL. */
@@ -52,6 +53,12 @@ interface PeerEnrollResponse {
 }
 
 export async function enrollWithPeer(input: EnrollWithPeerInput): Promise<EnrollWithPeerResult> {
+  // Our own inbound token, minted here and sent to the inviter as the callback
+  // token. The inviter stores it as ITS outbound token, so it can relay approval
+  // and push demand back to us — the mutual half of the handshake. We keep its
+  // hash to authenticate the inviter's inbound calls.
+  const callback = generateLinkToken();
+
   // Reuse the generic peer-POST. The enroll body fields are from the RECEIVER's
   // POV, so we send OUR url/org as the "peer" the receiver records.
   const res = await postToPeer({
@@ -61,6 +68,7 @@ export async function enrollWithPeer(input: EnrollWithPeerInput): Promise<Enroll
     cloudEvent: {
       peerAuthorityUrl: input.localAuthorityUrl,
       displayName: input.displayName,
+      callbackToken: callback.plaintext,
       ...(input.localOrganizationId ? { peerOrganizationRef: input.localOrganizationId } : {}),
     },
     // Operator-initiated connect: allow a private-LAN peer over http without the
@@ -104,8 +112,13 @@ export async function enrollWithPeer(input: EnrollWithPeerInput): Promise<Enroll
         peerOrganizationRef: input.peerOrganizationRef ?? null,
         localOrganizationId: input.localOrganizationId ?? null,
         linkState: "pending",
-        // Outbound token (peer-issued) encrypted at rest; no inbound token here.
+        // Outbound token (peer-issued) encrypted at rest, so we can call them.
         peerTokenEnc: encryptSecret(body.linkToken!),
+        // Our inbound token (the callback we sent): authenticates the inviter's
+        // calls back to us (approval relay + demand push).
+        tokenHash: callback.hash,
+        tokenPrefix: callback.prefix,
+        tokenRotatedAt: now,
         enrolledAt: now,
       },
     });

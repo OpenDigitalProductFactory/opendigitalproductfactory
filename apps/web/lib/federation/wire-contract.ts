@@ -12,6 +12,10 @@ export const FederationEnrollBody = z.object({
   localOrganizationId: z.string().min(1).max(200).optional(),
   /** Operator-set display name for the peer (shown in the links admin). */
   displayName: z.string().min(1).max(200),
+  /** The connecting peer's OWN inbound link token, so the inviter can call it
+   *  back (approval relay + demand push). Optional for backward compatibility:
+   *  an older connector omits it and the link stays one-directional. */
+  callbackToken: z.string().min(1).max(400).optional(),
   metadata: z.record(z.string(), z.unknown()).optional(),
 });
 

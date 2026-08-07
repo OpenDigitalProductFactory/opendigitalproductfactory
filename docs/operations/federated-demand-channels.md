@@ -53,6 +53,12 @@ new eligible work and later source updates become visible to the other internal
 installations without another sharing click. This is the normal pattern for a
 company operating separate Mac, Windows, development, or test installations.
 
+Both directions work because enrollment is a **mutual** exchange: each side issues
+the other an inbound link token, so either box can relay its approval and push
+demand to the other. This is what lets a link reach `trusted` on **both** sides
+(not just the inviter) and demand flow each way — a one-directional token exchange
+would leave the connecting side stuck at `pending`.
+
 This is not multi-master backlog replication. Each source backlog item remains
 single-writer authoritative. A peer receives a versioned mirror that it can
 follow, respond to, or adopt as separately owned local work. Status, priority,
