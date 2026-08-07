@@ -15025,7 +15025,10 @@ model FederatedRecordMirror {
   peerRecordRef       String?
   // pending | synced | conflict | withdrawn | dead-letter | revoked
   syncStatus          String    @default("pending")
-  version             Int       @default(1)
+  // BigInt: demand originVersion is derived from the source record's updatedAt
+  // epoch (ms) so re-projecting an unchanged record is idempotent. A ms epoch
+  // (~1.7e12) overflows Int (int4, max ~2.1e9) — see BI-CC8021CE.
+  version             BigInt    @default(1)
   conflictReason      String?
   lastSyncedAt        DateTime?
   // Durable delivery state for local-canonical outbox records. Peer-canonical
@@ -15034,7 +15037,7 @@ model FederatedRecordMirror {
   nextDeliveryAt      DateTime?
   lastDeliveryAt      DateTime?
   lastDeliveryError   String?
-  acknowledgedVersion Int?
+  acknowledgedVersion BigInt?
   deadLetteredAt      DateTime?
   // Last projected (already minimized) payload that crossed — never raw data.
   payload             Json?

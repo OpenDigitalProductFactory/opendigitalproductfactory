@@ -70,7 +70,7 @@ export interface ChannelDemandDb extends FederationIdentityDb, DemandDeliveryDb 
     upsert(args: unknown): Promise<unknown>;
   };
   federatedRecordMirror: DemandDeliveryDb["federatedRecordMirror"] & {
-    findUnique(args: unknown): Promise<(ChannelMirror & { version: number }) | null>;
+    findUnique(args: unknown): Promise<(ChannelMirror & { version: bigint }) | null>;
   };
 }
 

@@ -76,8 +76,8 @@ export async function queueFounderDispositionNotices(
       localRecordRef,
     } };
     const existing = await db.federatedRecordMirror.findUnique({ where });
-    const version = existing ? existing.version + 1 : 1;
-    if (version > 2_147_483_647) throw new Error("Demand disposition version is exhausted.");
+    const version = existing ? Number(existing.version) + 1 : 1;
+    if (version > Number.MAX_SAFE_INTEGER) throw new Error("Demand disposition version is exhausted.");
     const data = {
       syncStatus: "pending",
       version,

@@ -192,6 +192,15 @@ export const INTENTIONAL_FIELD_REMOVALS = new Set([
   // every environment. (This guard keys the skip by field name; the field itself
   // is not dropped, so no other line for it can regress.)
   "InventoryRelationship.relationshipKey",
+  // 2026-08-07 BI-CC8021CE: FederatedRecordMirror.version / acknowledgedVersion
+  // WIDEN Int -> BigInt (the field is KEPT, only its storage type grows). A demand
+  // originVersion is a millisecond epoch (~1.7e12) that overflows int4, so demand
+  // mirrors never wrote (P2020). The guard keys removals by field name+type, so a
+  // type change reads as a removal of the Int-typed signature. Migration:
+  // 20260807220000_federated_record_mirror_version_bigint. Prune once shipped
+  // fleet-wide.
+  "FederatedRecordMirror.version",
+  "FederatedRecordMirror.acknowledgedVersion",
 ]);
 
 export function diffSchemas(base, head, allowlist = INTENTIONAL_FIELD_REMOVALS) {

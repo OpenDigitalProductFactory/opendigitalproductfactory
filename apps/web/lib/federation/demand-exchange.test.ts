@@ -76,11 +76,33 @@ describe("handleIncomingDemand", () => {
     });
   });
 
+  it("passes a millisecond-epoch originVersion through without truncation (BigInt column — BI-CC8021CE)", async () => {
+    // originVersion derives from the source updatedAt epoch in ms (~1.7e12), which
+    // exceeds Int (int4, max 2,147,483,647). The mirror.version column is BigInt;
+    // create must receive the value unchanged. Before the fix this overflowed with
+    // P2020 and NO demand mirror was ever written across a link.
+    const msEpochVersion = 1_784_544_648_695;
+    expect(msEpochVersion).toBeGreaterThan(2_147_483_647);
+    const { db, create } = demandDb(null);
+
+    const result = await handleIncomingDemand(
+      db,
+      "link_1",
+      "dpf.demand.proposed",
+      envelope({ originVersion: msEpochVersion }),
+    );
+
+    expect(result).toMatchObject({ action: "created", originVersion: msEpochVersion });
+    expect(create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ version: msEpochVersion }) }),
+    );
+  });
+
   it("noops an exact retry without writing again", async () => {
     const current = envelope();
     const { db, create, updateMany } = demandDb({
       mirrorId: "fdm_1",
-      version: 1,
+      version: 1n,
       syncStatus: "synced",
       payload: { envelope: current, activity: "dpf.demand.proposed", disposition: "observed" },
     });
@@ -97,7 +119,7 @@ describe("handleIncomingDemand", () => {
     const current = envelope();
     const { db, updateMany } = demandDb({
       mirrorId: "fdm_1",
-      version: 1,
+      version: 1n,
       syncStatus: "synced",
       payload: { envelope: current, activity: "dpf.demand.proposed", disposition: "observed" },
     });
@@ -117,7 +139,7 @@ describe("handleIncomingDemand", () => {
     const current = envelope({ originVersion: 3 });
     const { db, updateMany } = demandDb({
       mirrorId: "fdm_1",
-      version: 3,
+      version: 3n,
       syncStatus: "synced",
       payload: { envelope: current, activity: "dpf.demand.updated", disposition: "followed" },
     });
@@ -133,7 +155,7 @@ describe("handleIncomingDemand", () => {
     const current = envelope();
     const { db, updateMany } = demandDb({
       mirrorId: "fdm_1",
-      version: 1,
+      version: 1n,
       syncStatus: "synced",
       payload: { envelope: current, activity: "dpf.demand.proposed", disposition: "observed" },
     });
@@ -171,7 +193,7 @@ describe("received-demand decisions", () => {
       federationLinkId: "link_1",
       peerRecordRef: "inst_origin:ref_01",
       localRecordRef: null,
-      version: 1,
+      version: 1n,
       syncStatus: "synced",
       payload: {
         envelope: envelope(),

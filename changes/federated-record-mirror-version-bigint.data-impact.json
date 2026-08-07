@@ -1,0 +1,28 @@
+{
+  "version": "1",
+  "accountableOwner": "Mark Bodman (markdbodman@gmail.com)",
+  "summary": "BI-CC8021CE. Widen FederatedRecordMirror.version and acknowledgedVersion from Int (int4) to BigInt (int8). A demand envelope's originVersion is derived from the source record's updatedAt epoch in milliseconds (~1.7e12) so re-projecting an unchanged record is idempotent; that value overflows int4 (max 2,147,483,647), so every federatedRecordMirror.create() failed with P2020 and NO demand mirror was ever written across a federation link. This is a storage-type widening only: the fields are kept, no new persistent data is introduced, and existing rows are cast in place (int4->int8 is a safe non-destructive widening). Migration: 20260807220000_federated_record_mirror_version_bigint.",
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "FederatedRecordMirror",
+      "lifecycleDisposition": "retain-for-link-lifetime",
+      "fields": [
+        {
+          "name": "version",
+          "resolution": "not-applicable",
+          "reason": "Operational sync-versioning counter for a federated record mirror (monotonic per link/record for conflict resolution). Not personal data and not tied to a data subject; only its storage type widens Int->BigInt.",
+          "provenance": "Derived from the origin demand envelope's originVersion (source record updatedAt epoch, ms) on the receiving side, or existing.version+1 on event-driven counter paths. No new source of data.",
+          "flags": []
+        },
+        {
+          "name": "acknowledgedVersion",
+          "resolution": "not-applicable",
+          "reason": "Operational delivery-acknowledgement watermark (the peer-confirmed version of an outbox record). Not personal data; only its storage type widens Int->BigInt to match version.",
+          "provenance": "Set from the mirror's own version when a peer acknowledges delivery. No new source of data.",
+          "flags": []
+        }
+      ]
+    }
+  ]
+}

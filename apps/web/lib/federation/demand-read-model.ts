@@ -67,7 +67,7 @@ export interface DemandShareContext {
 interface DemandReadRow {
   mirrorId: string;
   syncStatus: string;
-  version: number;
+  version: bigint;
   localRecordRef: string | null;
   lastSyncedAt: Date | null;
   payload: unknown;
@@ -88,7 +88,7 @@ export function mapNetworkDemandRows(rows: DemandReadRow[]): NetworkDemandView[]
       affectedOrganizations: envelope.signal.affectedOrganizations ?? null,
       disposition: payload.disposition,
       syncStatus: row.syncStatus,
-      originVersion: row.version,
+      originVersion: Number(row.version),
       updatedAt: (row.lastSyncedAt ?? new Date(payload.receivedAt)).toISOString(),
       localItemId: row.localRecordRef,
       forwardingToFounderPermitted:

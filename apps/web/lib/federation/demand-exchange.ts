@@ -28,7 +28,7 @@ export interface DemandMirrorRow {
   federationLinkId: string;
   peerRecordRef: string | null;
   localRecordRef: string | null;
-  version: number;
+  version: bigint;
   syncStatus: string;
   payload: unknown;
 }
@@ -143,22 +143,22 @@ export async function handleIncomingDemand(
 
   const current = decodeDemandMirrorPayload(existing.payload);
   if (
-    existing.version === envelope.originVersion
+    Number(existing.version) === envelope.originVersion
     && current?.envelope.payloadDigest === envelope.payloadDigest
     && current.activity === activity
   ) {
     return {
       action: "noop",
       mirrorId: existing.mirrorId,
-      originVersion: existing.version,
+      originVersion: Number(existing.version),
       disposition: current.disposition,
     };
   }
-  if (envelope.originVersion <= existing.version) {
+  if (envelope.originVersion <= Number(existing.version)) {
     return {
       action: "conflict",
       mirrorId: existing.mirrorId,
-      originVersion: existing.version,
+      originVersion: Number(existing.version),
       reason: "origin-version-not-advancing",
     };
   }
@@ -182,7 +182,7 @@ export async function handleIncomingDemand(
     return {
       action: "conflict",
       mirrorId: existing.mirrorId,
-      originVersion: existing.version,
+      originVersion: Number(existing.version),
       reason: "concurrent-update",
     };
   }
