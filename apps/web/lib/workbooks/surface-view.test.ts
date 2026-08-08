@@ -46,6 +46,6 @@ describe("page-to-grid data scope (BI-9DB20C39)", () => {
     expect(buildSurfaceViewHref("/ops", "list", "default")).toBe("/ops");
     expect(buildSurfaceViewHref("/ops", "grid", "default")).toBe("/ops?view=grid");
     expect(buildSurfaceViewHref("/ops", "board", "default")).toBe("/ops?view=board");
-    expect(buildSurfaceViewHref("/ops", "grid", "all")).toBe("/ops?view=grid&scope=all");
+    expect(buildSurfaceViewHref("/ops", "grid", "all")).toBe("/ops?view=grid&dataScope=all");
   });
 });

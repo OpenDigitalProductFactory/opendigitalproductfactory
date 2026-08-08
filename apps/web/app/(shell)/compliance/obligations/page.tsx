@@ -2,7 +2,11 @@ import { prisma } from "@dpf/db";
 import { CreateObligationForm } from "@/components/compliance/CreateObligationForm";
 import { ComplianceLibraryScopeNav } from "@/components/compliance/ComplianceLibraryScopeNav";
 import { ObligationLibraryPanel } from "@/components/compliance/ObligationLibraryPanel";
-import { PlatformGridSection, parseSurfaceView } from "@/components/workbooks/PlatformGridSection";
+import {
+  PlatformGridSection,
+  parseSurfaceDataScope,
+  parseSurfaceView,
+} from "@/components/workbooks/PlatformGridSection";
 import Link from "next/link";
 import {
   DEFAULT_COMPLIANCE_LIBRARY_SCOPE,
@@ -15,12 +19,13 @@ import {
 } from "@/lib/compliance-library";
 
 type Props = {
-  searchParams: Promise<{ regulation?: string; category?: string; status?: string; scope?: string; view?: string }>;
+  searchParams: Promise<{ regulation?: string; category?: string; status?: string; scope?: string; view?: string; dataScope?: string }>;
 };
 
 export default async function ObligationsPage({ searchParams }: Props) {
   const filters = await searchParams;
   const view = parseSurfaceView(filters.view);
+  const dataScope = parseSurfaceDataScope(filters.dataScope);
   const scope = parseComplianceLibraryScope(filters.scope);
 
   const [context, obligations, regulations, categories] = await Promise.all([
@@ -222,7 +227,11 @@ export default async function ObligationsPage({ searchParams }: Props) {
         )}
       </div>
 
-      <PlatformGridSection entityType="compliance_obligation" view={view} />
+      <PlatformGridSection
+        entityType="compliance_obligation"
+        view={view}
+        dataScope={dataScope}
+      />
 
       {!view && (
         <ObligationLibraryPanel

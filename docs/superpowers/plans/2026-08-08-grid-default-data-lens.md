@@ -7,7 +7,7 @@
 
 ## Outcome
 
-Switching a domain page from List to Grid or Board keeps the domain's default dataset. Operations therefore opens Grid and Board on active backlog work (`triaging`, `open`, and `in-progress`) instead of materializing done and deferred history. Historical rows remain deliberately reachable through an all-records scope.
+Switching a domain page from List to Grid or Board keeps the domain's default dataset. Operations therefore opens Grid and Board on active backlog work (`triaging`, `open`, and `in-progress`) instead of materializing done and deferred history. Compliance controls, obligations, and risks likewise retain their existing active-only List defaults; Opportunities keeps its open pipeline stages; and Customers continues to exclude superseded merge tombstones. Historical rows remain deliberately reachable through an all-records scope.
 
 This corrects the implementation gap in the existing Universal Grid design. That design already specifies pre-configured platform grids with sensible defaults and one shared `DataSourceFilter` shape for source and view filters; this plan makes the page-to-grid boundary honor that contract.
 
@@ -44,11 +44,11 @@ Extend `PlatformTableHomeSurface` with an optional typed `defaultDataLens`:
 - a plain-language all-records label;
 - a `DataSourceFilter` applied before eager materialization.
 
-Backlog declares one lens using the same active lifecycle vocabulary as the List page. Tables without a declared lens continue to show all rows, which is their current List behavior.
+Each surface whose List already has an implicit default declares that same lens: active backlog work, active compliance controls/obligations/risks, open opportunities, and current (non-superseded) customers. Tables without a declared lens continue to show all rows, which is their current List behavior.
 
 ### Page-to-grid request state
 
-Extend the pure surface-view helper with a closed `default | all` data-scope parser and a stable URL builder. `SurfaceViewSwitcher` renders the scope choice only for Grid/Board surfaces whose registry entry declares a lens. The default URL omits the scope parameter; `scope=all` is the deliberate historical-data override.
+Extend the pure surface-view helper with a closed `default | all` data-scope parser and a stable URL builder. `SurfaceViewSwitcher` renders the scope choice only for Grid/Board surfaces whose registry entry declares a lens. The default URL omits the scope parameter; `dataScope=all` is the deliberate historical-data override. The namespaced key does not collide with domain filters such as Compliance's existing `scope`.
 
 ### Read path
 
@@ -58,7 +58,7 @@ Extend the pure surface-view helper with a closed `default | all` data-scope par
 
 - Domain data lens: server-readable, registry-owned, shared across List/Grid/Board meaning.
 - Personal saved view: browser/user-owned presentation state (sort, group, columns, secondary filters).
-- Explicit `scope=all`: URL-owned override, useful for deep links and no-JS navigation.
+- Explicit `dataScope=all`: URL-owned override, useful for deep links and no-JS navigation.
 
 ## Implementation phases
 
@@ -67,7 +67,7 @@ Extend the pure surface-view helper with a closed `default | all` data-scope par
 Add failing tests that prove:
 
 - unknown or absent scope resolves to the default lens;
-- `scope=all` bypasses the default lens;
+- `dataScope=all` bypasses the default lens;
 - the backlog active status set excludes `done` and `deferred` and is shared by List and Grid semantics;
 - the eager loader invokes its adapter once for a bounded all-row request;
 - the backlog adapter translates the active status filter into a Prisma `where` clause.
@@ -89,7 +89,7 @@ Add failing tests that prove:
 
 - Run the targeted Vitest files and the affected web suite.
 - Run `pnpm --filter web build` in the proper compile-ready/local-CI environment.
-- Exercise `/ops`, `/ops?view=grid`, `/ops?view=board`, and the `scope=all` override against the governed canonical/shared runtime.
+- Exercise `/ops`, `/ops?view=grid`, `/ops?view=board`, and the `dataScope=all` override against the governed canonical/shared runtime.
 - Confirm the default grid excludes done/deferred rows, the all-records view includes them, the scope control is keyboard reachable, and light/dark styling remains token-based.
 - Record a measured UX-fit manifest and runtime/capsule evidence.
 
@@ -110,7 +110,7 @@ Add failing tests that prove:
 - Alignment summary: aligned with important guardrails.
 - `[important]` A page-local prop would make the same rule live once per route. Suggestion: declare the lens on `PlatformTableHomeSurface` and resolve it in the shared page-to-grid components.
 - `[important]` A personal saved view is not a reliable business default and cannot prevent the first unbounded read. Suggestion: keep saved views presentation-only and apply the domain lens server-side.
-- `[important]` Server filtering without a visible escape would make historical records appear missing. Suggestion: add the stable `scope=all` URL and a shared, plain-language scope control.
+- `[important]` Server filtering without a visible escape would make historical records appear missing. Suggestion: add the stable `dataScope=all` URL and a shared, plain-language scope control.
 - `[minor]` Ops lifecycle semantics currently live under `components/`. Suggestion: move them to `lib` and have both List and Grid use the same active/terminal constants.
 - Standards adopted: existing Universal Grid `DataSourceFilter`, cursor/bounded-query contract, stable query parameters, token-aware shared controls. No new external dependency or standard is required.
 - Escalated decision: `DI-93238917B4E0`; high-confidence `registry-data-lens` recommendation.
@@ -126,7 +126,7 @@ Add failing tests that prove:
 - Source truth: live `BacklogItem.status` plus registry-owned `DataSourceFilter`
 - Empty/failure behavior: an empty active lens remains an honest zero-row grid; adapter permission/errors retain the existing plain-language message
 - AI boundary: no prompt send
-- Required guardrails: scope choice must be visible on Grid/Board, `scope=all` must be stable and server-readable, saved presentation state must not silently redefine domain scope
+- Required guardrails: scope choice must be visible on Grid/Board, `dataScope=all` must be stable and server-readable, saved presentation state must not silently redefine domain scope
 - Evidence before merge: pure resolver tests, adapter/filter tests, one-call eager-loader test, theme scan, UX budget measurement, and browser proof for default/all Grid and Board paths
 - Captured in: this plan and the branch UX-fit manifest
 

@@ -8,7 +8,13 @@
 
 import { can } from "@/lib/permissions";
 import type { CapabilityKey } from "@/lib/govern/permissions";
-import { gridRegistry, type AdapterContext } from "./adapter";
+import { ACTIVE_BACKLOG_STATUSES } from "@/lib/backlog-visibility";
+import { OPEN_OPPORTUNITY_STAGES } from "@/lib/crm/presentation";
+import {
+  gridRegistry,
+  queryBoundedRowsOnce,
+  type AdapterContext,
+} from "./adapter";
 import "./backlog-adapter"; // self-register the backlog adapter
 import "./invoice-adapter"; // self-register the invoice adapter
 import "./risk-adapter"; // self-register the risk-assessment adapter
@@ -45,6 +51,12 @@ export interface PlatformTableHomeSurface {
   path: string;
   label: string;
   board: boolean;
+  /** Domain-owned dataset shown before a user applies presentation filters. */
+  defaultDataLens?: {
+    defaultLabel: string;
+    allLabel: string;
+    filter: DataSourceFilter;
+  };
 }
 
 export interface PlatformTableDef {
@@ -177,6 +189,7 @@ const COMPLIANCE_CONTROL_TABLE: GenericTableConfig = {
       ],
     },
     { field: "nextReviewDate", name: "Next review", fieldType: "date", width: 130 },
+    { field: "status", name: "Lifecycle", fieldType: "text", width: 110 },
     { field: "updatedAt", name: "Updated", fieldType: "datetime", width: 170 },
   ],
 };
@@ -553,7 +566,25 @@ export const PLATFORM_TABLES: PlatformTableDef[] = [
     description: "Every backlog item as an editable spreadsheet — same records as the backlog forms.",
     viewCapability: "view_operations",
     manageCapability: "manage_backlog",
-    homeSurface: { path: "/ops", label: "Operations", board: true },
+    homeSurface: {
+      path: "/ops",
+      label: "Operations",
+      board: true,
+      defaultDataLens: {
+        defaultLabel: "Active only",
+        allLabel: "All items",
+        filter: {
+          conditions: [
+            {
+              field: "status",
+              operator: "in",
+              value: [...ACTIVE_BACKLOG_STATUSES],
+            },
+          ],
+          logic: "and",
+        },
+      },
+    },
   },
   {
     entityType: "invoice",
@@ -569,7 +600,19 @@ export const PLATFORM_TABLES: PlatformTableDef[] = [
     description: "Compliance risk register as an editable spreadsheet — same records as the risk forms.",
     viewCapability: "view_compliance",
     manageCapability: "manage_compliance",
-    homeSurface: { path: "/compliance/risks", label: "Risk assessments", board: true },
+    homeSurface: {
+      path: "/compliance/risks",
+      label: "Risk assessments",
+      board: true,
+      defaultDataLens: {
+        defaultLabel: "Active only",
+        allLabel: "All assessments",
+        filter: {
+          conditions: [{ field: "status", operator: "eq", value: "active" }],
+          logic: "and",
+        },
+      },
+    },
   },
   {
     entityType: "compliance_control",
@@ -577,7 +620,19 @@ export const PLATFORM_TABLES: PlatformTableDef[] = [
     description: "Compliance controls as a read-only grid — sort, filter, and board by status.",
     viewCapability: "view_compliance",
     manageCapability: "view_compliance", // read-only grid; adapter performs no writes
-    homeSurface: { path: "/compliance/controls", label: "Controls", board: true },
+    homeSurface: {
+      path: "/compliance/controls",
+      label: "Controls",
+      board: true,
+      defaultDataLens: {
+        defaultLabel: "Active only",
+        allLabel: "All controls",
+        filter: {
+          conditions: [{ field: "status", operator: "eq", value: "active" }],
+          logic: "and",
+        },
+      },
+    },
   },
   {
     entityType: "compliance_obligation",
@@ -585,7 +640,19 @@ export const PLATFORM_TABLES: PlatformTableDef[] = [
     description: "Regulatory obligations as a read-only grid — sort and filter.",
     viewCapability: "view_compliance",
     manageCapability: "view_compliance", // read-only grid; adapter performs no writes
-    homeSurface: { path: "/compliance/obligations", label: "Obligations", board: false },
+    homeSurface: {
+      path: "/compliance/obligations",
+      label: "Obligations",
+      board: false,
+      defaultDataLens: {
+        defaultLabel: "Active only",
+        allLabel: "All obligations",
+        filter: {
+          conditions: [{ field: "status", operator: "eq", value: "active" }],
+          logic: "and",
+        },
+      },
+    },
   },
   {
     entityType: "compliance_incident",
@@ -601,7 +668,25 @@ export const PLATFORM_TABLES: PlatformTableDef[] = [
     description: "Sales opportunities as a read-only grid — sort, filter, and board by stage.",
     viewCapability: "view_customer",
     manageCapability: "view_customer", // read-only grid; adapter performs no writes
-    homeSurface: { path: "/customer/opportunities", label: "Opportunities", board: true },
+    homeSurface: {
+      path: "/customer/opportunities",
+      label: "Opportunities",
+      board: true,
+      defaultDataLens: {
+        defaultLabel: "Open only",
+        allLabel: "All opportunities",
+        filter: {
+          conditions: [
+            {
+              field: "stage",
+              operator: "in",
+              value: [...OPEN_OPPORTUNITY_STAGES],
+            },
+          ],
+          logic: "and",
+        },
+      },
+    },
   },
   {
     entityType: "quote",
@@ -713,7 +798,19 @@ export const PLATFORM_TABLES: PlatformTableDef[] = [
     description: "Customer accounts as a read-only grid — sort, filter, and board by status.",
     viewCapability: "view_customer",
     manageCapability: "view_customer", // read-only grid; adapter performs no writes
-    homeSurface: { path: "/customer", label: "Customers", board: true },
+    homeSurface: {
+      path: "/customer",
+      label: "Customers",
+      board: true,
+      defaultDataLens: {
+        defaultLabel: "Current only",
+        allLabel: "All customers",
+        filter: {
+          conditions: [{ field: "status", operator: "neq", value: "superseded" }],
+          logic: "and",
+        },
+      },
+    },
   },
   {
     entityType: "employee_profile",
@@ -807,10 +904,9 @@ export async function getPlatformTableGridData(
 }
 
 /**
- * Like getPlatformTableGridData but loads EVERY row (paginating through the
- * adapter's cursors, capped at MAX_GRID_ROWS) so the client grid — which filters,
- * sorts, groups and exports over the rows it holds — reflects the whole table, not
- * just the first page. `nextCursor` is non-null only if the cap was hit.
+ * Like getPlatformTableGridData but asks the adapter once for the bounded eager
+ * dataset the client grid filters, sorts, groups, and exports. `nextCursor` is
+ * non-null only if the MAX_GRID_ROWS safety ceiling was hit.
  */
 export async function getAllPlatformTableRows(
   user: PlatformUser,
@@ -824,19 +920,24 @@ export async function getAllPlatformTableRows(
     canManage: can(userCtx(user), def.manageCapability),
   };
   const columns = await adapter.getColumns(entityType);
-  const rows: GridRow[] = [];
-  let cursor: string | null = null;
-  do {
-    const { data, nextCursor } = await adapter.queryRows(entityType, {
-      filters: opts.filters ?? { conditions: [], logic: "and" },
+  const filters = opts.filters ?? { conditions: [], logic: "and" };
+  const columnIds = new Set(columns.map((column) => column.columnId));
+  const unknownField = filters.conditions.find((condition) => !columnIds.has(condition.field));
+  if (unknownField) {
+    throw new WorkbookError(
+      `The ${def.label} data lens references an unknown field: ${unknownField.field}`,
+      400,
+    );
+  }
+  const { data: rows, nextCursor } = await queryBoundedRowsOnce(
+    adapter,
+    entityType,
+    {
+      filters,
       sort: opts.sort ?? [],
-      pagination: { cursor, limit: MAX_PAGE_SIZE },
-    });
-    rows.push(...data);
-    cursor = nextCursor;
-    // Guard against a stuck cursor that never returns rows or never clears.
-    if (data.length === 0) break;
-  } while (cursor && rows.length < MAX_GRID_ROWS);
+      limit: MAX_GRID_ROWS,
+    },
+  );
   return {
     schema: {
       tableId: entityType,
@@ -846,7 +947,7 @@ export async function getAllPlatformTableRows(
       capabilities: adapter.getCapabilities(ctx),
     },
     rows,
-    nextCursor: cursor,
+    nextCursor,
     view: emptyViewConfig(columns),
   };
 }

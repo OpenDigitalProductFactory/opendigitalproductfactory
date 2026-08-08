@@ -6,8 +6,13 @@
 import { auth } from "@/lib/auth";
 import {
   getAllPlatformTableRows,
+  getHomeSurfaceForEntity,
   type PlatformUser,
 } from "@/lib/workbooks/platform-tables";
+import {
+  resolveSurfaceDataFilter,
+  type SurfaceDataScope,
+} from "@/lib/workbooks/surface-view";
 import { WorkbookError } from "@/lib/workbooks/workbook-service";
 import { defaultGroupByColumn } from "@/lib/workbooks/kanban-grouping";
 import { WorkbookGrid } from "@/components/workbooks/Grid";
@@ -16,9 +21,11 @@ import { KanbanBoard } from "@/components/workbooks/KanbanBoard";
 export async function SurfacePlatformGrid({
   entityType,
   view,
+  dataScope = "default",
 }: {
   entityType: string;
   view: "grid" | "board";
+  dataScope?: SurfaceDataScope;
 }) {
   const session = await auth();
   if (!session?.user) return null;
@@ -31,7 +38,10 @@ export async function SurfacePlatformGrid({
 
   let grid;
   try {
-    grid = await getAllPlatformTableRows(svcUser, entityType);
+    const defaultFilter = getHomeSurfaceForEntity(entityType)?.defaultDataLens?.filter;
+    grid = await getAllPlatformTableRows(svcUser, entityType, {
+      filters: resolveSurfaceDataFilter(defaultFilter, dataScope),
+    });
   } catch (e) {
     if (e instanceof WorkbookError) {
       return <p className="text-sm text-[var(--dpf-muted)]">{e.message}</p>;

@@ -345,6 +345,15 @@ Each platform entity gets a thin adapter that maps its Prisma fields to the grid
 
 Domain area pages (Ops, CRM, etc.) embed grid instances using pre-configured `WorkbookTable` records with platform data sources and sensible default columns. Users can customize their view (hide/show columns, reorder, filter) and save it. The grid renders inline, with a toggle between the legacy layout and grid view during migration.
 
+The page-to-grid boundary also preserves the domain's default **data lens**. A
+domain that defaults its List view to current/actionable records declares the
+same `DataSourceFilter` on its canonical platform-table home-surface registry
+entry; Grid and Board apply that filter on the server before materializing rows.
+An explicit, server-readable all-records scope provides access to history. This
+domain lens is not personal presentation state: saved views may add sorting,
+grouping, columns, and secondary filters, but they do not redefine which dataset
+the domain means by default.
+
 ## Adapter Framework
 
 ### Adapter Interface
@@ -456,6 +465,8 @@ When an agent is working in a context that involves workbook data, it can surfac
 **Embedded grid views in domain areas:**
 - Each domain area (Ops, CRM, Compliance, etc.) gets grid views of its data inline
 - Pre-configured WorkbookTable records with platform data sources
+- Registry-owned default data lenses stay consistent across List, Grid, and Board
+- Default lenses apply before eager materialization; all-records history remains an explicit URL scope
 - Users customize and save their own view configs
 - Grid appears alongside (and eventually replaces) the current custom layouts
 
