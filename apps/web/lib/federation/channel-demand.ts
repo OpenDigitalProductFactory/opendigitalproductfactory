@@ -129,13 +129,15 @@ function assertTrustedPartnerLink(link: ChannelLink | null): asserts link is Cha
   }
 }
 
-function safeSummary(body: string | null, title: string): string {
-  const value = (body ?? "")
-    .split("\n")
-    .filter((line) => !line.trim().startsWith("[origin:"))
-    .join("\n")
-    .trim();
-  return value || title;
+// Cross-org content redaction (BI-DC4E526E). The raw backlog BODY may hold a
+// customer's internal detail, so it must NEVER cross an organization boundary —
+// even for platform demand. The projected cross-org summary is the operator's
+// concise TITLE only (bounded), automatically; the body stays local. No operator
+// step is required (cognitive-load aversion): the safe minimum is the default, and
+// an operator-authored shareable summary can be layered on later if richer upstream
+// context is ever wanted.
+function redactedCrossOrgSummary(title: string): string {
+  return (title.trim() || "Shared demand").slice(0, 240);
 }
 
 export function decodeChannelDemandPolicy(value: unknown): ChannelDemandPolicy {
@@ -295,7 +297,8 @@ export async function selectLocalDemandForLink(
     source: {
       localRecordRef: item.itemId,
       title: item.title,
-      summary: safeSummary(item.body, item.title),
+      // Cross-org: title-only, never the raw body (see redactedCrossOrgSummary).
+      summary: redactedCrossOrgSummary(item.title),
       workType: item.workType,
       occurrenceCount: item.occurrenceCount,
       product: item.digitalProduct?.productId ?? null,

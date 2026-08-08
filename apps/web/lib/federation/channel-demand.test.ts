@@ -176,6 +176,47 @@ describe("selectLocalDemandForLink direction", () => {
   });
 });
 
+describe("selectLocalDemandForLink — cross-org content redaction (BI-DC4E526E)", () => {
+  it("projects TITLE-only as the summary; the raw body never crosses", async () => {
+    const queueProjection = vi.fn().mockResolvedValue({ action: "queued", mirrorId: "m", originVersion: 1 });
+    const resolveIdentity = vi.fn().mockResolvedValue({ installationId: "inst_self", projectionSecret: "s".repeat(64) });
+    const db = {
+      federationLink: {
+        findUnique: vi.fn().mockResolvedValue({
+          linkId: "FL-CH", role: "channel-downstream", linkState: "trusted",
+          peerAuthorityUrl: "https://distributor.example", peerTokenEnc: "token",
+          peerInstallationId: "inst_dist", projectionContractId: null,
+          revokedAt: null, quarantinedAt: null,
+        }),
+        update: vi.fn(),
+      },
+      backlogItem: { findUnique: vi.fn().mockResolvedValue({
+        itemId: "BI-PLAT",
+        title: "Platform sync bug",
+        sensitivity: "internal",
+        scopeKind: "platform",
+        body: "SECRET customer infra detail: 10.0.0.5 admin creds",
+        status: "open",
+        workType: "bug",
+        occurrenceCount: 1,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        digitalProduct: { productId: "dpf-portal" },
+      }) },
+      projectionContract: { findFirst: vi.fn().mockResolvedValue(null), upsert: vi.fn() },
+    };
+
+    await selectLocalDemandForLink(db as never, { linkId: "FL-CH", itemId: "BI-PLAT" }, {
+      queueProjection, resolveIdentity,
+    });
+
+    const source = queueProjection.mock.calls[0][1].source;
+    expect(source.summary).toBe("Platform sync bug");
+    expect(JSON.stringify(source)).not.toContain("SECRET");
+    expect(JSON.stringify(source)).not.toContain("10.0.0.5");
+  });
+});
+
 describe("decodeChannelDemandPolicy", () => {
   it("defaults partner exchange to explicit selection and pseudonymous attribution", () => {
     expect(decodeChannelDemandPolicy(null)).toEqual({
