@@ -2101,6 +2101,11 @@ model BacklogItem {
   title                   String
   status                  String
   type                    String
+  // Cross-org sharing classification (BI-DC4E526E): public | internal |
+  // confidential | restricted. Deny-by-default — only `public` may cross an
+  // organization boundary in federated demand (kernel DI-3E77E48D5710). Default
+  // `internal` so unclassified proprietary demand never leaks upstream.
+  sensitivity             String                        @default("internal")
   body                    String?
   createdAt               DateTime                      @default(now())
   updatedAt               DateTime                      @updatedAt

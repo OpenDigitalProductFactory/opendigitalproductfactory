@@ -1,0 +1,21 @@
+{
+  "version": "1",
+  "accountableOwner": "Mark Bodman (markdbodman@gmail.com)",
+  "summary": "BI-DC4E526E. Add BacklogItem.sensitivity (public|internal|confidential|restricted, default internal) to gate cross-organization federated-demand sharing deny-by-default (kernel DI-3E77E48D5710). Only `public` items may cross an org boundary; unclassified items default to internal and never leak upstream. Additive, non-destructive; existing rows default to the safe `internal`. Migration: 20260807234500_backlog_item_sensitivity.",
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "BacklogItem",
+      "lifecycleDisposition": "retain-with-item",
+      "fields": [
+        {
+          "name": "sensitivity",
+          "resolution": "governed",
+          "reason": "Governs whether the item's demand projection may cross an organization boundary. Not itself personal data; it is the operator's confidentiality classification of the work item, enforced at the cross-org egress chokepoint.",
+          "provenance": "Operator-set (default internal). Read by assertMayCrossOrgBoundary at the channel/service-provider egress point; no external source.",
+          "flags": []
+        }
+      ]
+    }
+  ]
+}
