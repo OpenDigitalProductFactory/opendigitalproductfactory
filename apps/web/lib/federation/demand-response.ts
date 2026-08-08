@@ -143,17 +143,19 @@ export async function handleIncomingDemandResponse(
   if (violations.length > 0) return { action: "rejected", violations };
   const shared = await db.federatedRecordMirror.findMany({
     where: { federationLinkId: linkId, recordType: "demand-envelope", canonicalSide: "local" },
-    select: { payload: true },
+    select: { payload: true, localRecordRef: true },
     take: 1_000,
   });
-  const matchesSharedEnvelope = shared.some((row) => {
+  // Correlate the incoming response to the exact demand WE projected, and keep the
+  // matched row so we can bind the response to the ORIGINATOR's local item below.
+  const matchedEnvelope = shared.find((row) => {
     const payload = decodeDemandOutboxPayload(row.payload);
     return payload?.envelope.specVersion === "dpf.demand/1"
       && payload.envelope.envelopeId === response.envelopeId
       && payload.envelope.originInstallationId === response.originInstallationId
       && payload.envelope.originRecordRef === response.originRecordRef;
   });
-  if (!matchesSharedEnvelope) return { action: "rejected", violations: ["response:unknown-envelope"] };
+  if (!matchedEnvelope) return { action: "rejected", violations: ["response:unknown-envelope"] };
   const where = {
     federationLinkId_recordType_peerRecordRef: {
       federationLinkId: linkId,
@@ -168,7 +170,10 @@ export async function handleIncomingDemandResponse(
     federationLinkId: linkId,
     recordType: "demand-response",
     canonicalSide: "peer",
-    localRecordRef: null,
+    // Bind the response to the originator's local backlog item (the outbound
+    // mirror's localRecordRef is the BacklogItem id) so it is no longer orphaned
+    // and a read model can surface "who responded" on the item itself.
+    localRecordRef: matchedEnvelope.localRecordRef,
     peerRecordRef: response.responseId,
     syncStatus: "synced",
     version: 1,
