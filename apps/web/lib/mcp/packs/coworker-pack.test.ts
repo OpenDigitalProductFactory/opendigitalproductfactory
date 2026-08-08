@@ -12,14 +12,14 @@ vi.mock("@/lib/tak/coworker-collaboration", () => ({
 import { coworkerPack } from "./coworker-pack";
 import { TOOL_TO_GRANTS } from "@/lib/tak/agent-grants";
 
-const EXPECTED_TOOLS = ["request_coworker", "summon_coworker"];
+const EXPECTED_TOOLS = ["request_coworker", "summon_coworker", "find_coworker"];
 
 beforeEach(() => {
   vi.clearAllMocks();
 });
 
 describe("coworker pack — registration", () => {
-  it("exposes exactly the two collaboration tools with a handler each", () => {
+  it("exposes exactly the collaboration + discovery tools with a handler each", () => {
     expect(coworkerPack.definitions.map((d) => d.name).sort()).toEqual([...EXPECTED_TOOLS].sort());
     expect(Object.keys(coworkerPack.handlers).sort()).toEqual([...EXPECTED_TOOLS].sort());
   });
@@ -31,12 +31,15 @@ describe("coworker pack — registration", () => {
   });
 
   it("mirrors the agent-grant gating source exactly (R3 no-drift)", () => {
-    // These tools are advise-safe coordination, ungated in TOOL_TO_GRANTS —
-    // grants is empty, so there is nothing to drift against.
+    // request_coworker/summon_coworker are advise-safe coordination, ungated in
+    // TOOL_TO_GRANTS — pack.grants is empty, so there is nothing to drift against.
     expect(coworkerPack.grants).toEqual({});
     for (const [name, grants] of Object.entries(coworkerPack.grants)) {
       expect(TOOL_TO_GRANTS[name], name).toEqual(grants);
     }
+    // find_coworker is a real read-only discovery tool, gated centrally so it is
+    // discoverable/callable over MCP (BI-5FB59BC6).
+    expect(TOOL_TO_GRANTS["find_coworker"]).toEqual(["backlog_read"]);
   });
 });
 

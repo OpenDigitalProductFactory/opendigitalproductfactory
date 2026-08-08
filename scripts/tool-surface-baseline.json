@@ -3,9 +3,9 @@
   "selectionCliff": 15,
   "entries": {
     "registry.toolDefinitions": {
-      "value": 362,
-      "reason": "Adds get_recruiting_pipeline (BI-E64D11AE): the HR-coworker read lens over the unified recruiting funnel — native Applications plus Greenhouse-sourced staged rows, deduped by crosswalk — so a coworker sees one pipeline across native and absorbed work. No existing tool carries it: query_employees is People-Core directory, and the backlog/estate read lenses do not touch recruiting entities. It is the coworker surface of the merged dual-read read-model (getRecruitingPipeline, #4067); read-only, +1, under the 15-tool selection cliff.",
-      "recordedAt": "2026-08-06"
+      "value": 363,
+      "reason": "Adds find_coworker — read-only coworker-roster discovery-by-intent (the A2A-plane twin of load_tools). No existing tool carries it: request_coworker/summon_coworker are ACTION verbs that require an exact agentId/slug, so a model that doesn't already know the roster cannot route work. find_coworker returns the matching coworkers' ids so those action tools become usable. BI-5FB59BC6.",
+      "recordedAt": "2026-08-08"
     },
     "registry.packFiles": {
       "value": 87,
@@ -13,9 +13,9 @@
       "recordedAt": "2026-08-06"
     },
     "tier.coreToolNames": {
-      "value": 29,
-      "reason": "Adds WWMD kernel discovery to core for peer CLIs (Grok/Codex): principle_decide + wiki_query. Those clients have no ToolSearch, so a lean core that omitted WWMD blocked AGENTS-required kernel consults even when the token already granted registry_read. Still lean vs full catalogue; authority stays grant/scope gated.",
-      "recordedAt": "2026-08-03"
+      "value": 30,
+      "reason": "Promotes find_coworker into the lean core tier so peer CLIs without client-side ToolSearch (Grok, Codex) can discover the coworker roster to route A2A handoffs — same rationale that keeps principle_decide/wiki_query core. Discovery-only; execution still gates on grants. BI-5FB59BC6.",
+      "recordedAt": "2026-08-08"
     },
     "dispatch.maxAttachedTools": {
       "value": 48
