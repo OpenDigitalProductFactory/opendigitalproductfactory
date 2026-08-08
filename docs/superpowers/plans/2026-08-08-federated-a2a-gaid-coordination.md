@@ -2,8 +2,8 @@
 
 **Date:** 2026-08-08  
 **Status:** Ready for a build thread; no implementation started  
-**Backlog item:** `BI-BE0E14E0`  
-**Epic:** `EP-MSP-FEDERATION`  
+**Backlog item:** `BI-BE0E14E0` (MSP-federation install) — identical slice anchors under `EP-E1F1DB58` on the A2A-adoption install; see design §3  
+**Epic:** `EP-MSP-FEDERATION` here / `EP-E1F1DB58` on the A2A-adoption install (two sovereign backlogs, same work)  
 **Design WorkCapsule:** `WC-647895E9`  
 **Design:** [`docs/superpowers/specs/2026-08-08-federated-a2a-gaid-coordination-design.md`](../specs/2026-08-08-federated-a2a-gaid-coordination-design.md)  
 **Kernel decision:** `DI-B726A1900E7C`  
@@ -36,7 +36,7 @@ Live coverage was recorded against parent `BI-BE0E14E0` for this exact plan path
 - Decision: atomic
 - Parent: `BI-BE0E14E0`
 - Receipt: `cmskls1vz03qi01mu59s9tn3o`
-- Dependencies: `BI-COWORKER-360-AGENTCARD` coordination; all delivery phases remain internal to the parent BI
+- Dependencies: `BI-COWORKER-360-AGENTCARD` coordination; all delivery phases remain internal to the parent BI. Cross-install coordination references (not local mapped BIs — they live on the A2A-adoption install under `EP-E1F1DB58`): Slice 6 `BI-40648BBF` (agent-card export — consumed by Phase 3), Slice 4 `BI-06B66FFD` (standard MCP Tasks → `TaskRun` convergence — must land as one convergence with Phase 1), Slice 10 `BI-5FB59BC6` (`find_coworker`, shipped #4121 — extended by Phase 3 discovery)
 - Mapped child BIs: none; all phases are internal sequencing under `BI-BE0E14E0`
 - Rationale: the security property exists only as the composed same-organization vertical slice. Device pinning, GAID issuer/card projection, task ingress/ownership, policy, and operator readiness are mutually dependent and stay feature-gated until end-to-end acceptance. Shipping any phase alone either exposes unusable metadata/UI or creates the unauthenticated or under-authorized boundary the BI is meant to eliminate. Cross-organization enablement is excluded and will require a separate future BI.
 
@@ -114,7 +114,8 @@ Live coverage was recorded against parent `BI-BE0E14E0` for this exact plan path
    - make `TaskRun.userId` nullable only after existing read paths are audited and the migration remains safe for rows without a principal mapping;
    - add nullable typed/indexed `TaskRun` fields for federation link ownership, origin event ID, acting/delegating/target GAIDs, origin installation/environment, card/AIDoc digests, and verification receipt reference;
    - add unique idempotency on `(federationLinkId, originEventId)` when both are present;
-   - add nullable unique `CoworkerEngagement.taskRunId` relation.
+   - add nullable unique `CoworkerEngagement.taskRunId` relation;
+   - **coordinate this with Slice 4 (`BI-06B66FFD`, standard MCP Tasks lifecycle over `TaskRun` via `apps/web/lib/mcp/tasks-lifecycle.ts`)** where the installs share it: both converge the same `TaskRun` rows, so they must land as one convergence and one migration, not two competing ones.
 6. Keep `a2aMetadata` for non-authoritative protocol extensions only; new authorization and uniqueness checks must use typed columns.
 7. Make every migration data-state agnostic: no assumption that every User already has a Principal, every link already has metadata, or every engagement already has a task.
 
@@ -179,9 +180,9 @@ Live coverage was recorded against parent `BI-BE0E14E0` for this exact plan path
 
 ### Tasks
 
-1. Replace federation advertisement of `gaid:priv:dpf.internal:*` with a GAID-standard-conformant issuer namespace configuration. Preserve legacy GAID aliases for local lookup/history; do not infer identity continuity from matching `agentId` strings.
+1. Replace federation advertisement of `gaid:priv:dpf.internal:*` with a GAID-standard-conformant issuer namespace configuration. Preserve legacy GAID aliases for local lookup/history; do not infer identity continuity from matching `agentId` strings. **Also fix the latent scope-token split first:** `buildPrivateAgentGaid` emits `gaid:priv:…` while `apps/web/lib/coworker-service-catalog/agent-card.ts:105` emits `gaid:private:…`; converge them (add a red test asserting a single canonical scope token) before any cross-install GAID comparison, or matching silently fails on the scope segment.
 2. Represent approved peer GAID issuer namespaces through the link's existing `AuthorityBinding`; validate that every advertised GAID belongs to an approved prefix.
-3. Produce standard A2A v1.0 Agent Cards from the canonical CoworkerIdentity/AIDoc projection. Reuse the existing card builder; do not fork card construction inside federation.
+3. Produce standard A2A v1.0 Agent Cards from the canonical CoworkerIdentity/AIDoc projection. Reuse the existing card builder; do not fork card construction inside federation. The public export builder already exists at `apps/web/lib/a2a/agent-card.ts` (Slice 6 / `BI-40648BBF`) but currently emits `provenance.signed: false` and no `gaid` field — the delta is adding the device-key JWS signature and the GAID `extensions`, projecting the link-scoped extended card from this same builder. Remote-coworker discovery (Phase 6 catalog) extends `find_coworker` (`apps/web/lib/mcp/packs/coworker-pack.ts`, Slice 10 / `BI-5FB59BC6`) with a link-scoped, projection-gated result set rather than a parallel discovery path.
 4. Add the GAID A2A extension metadata, AIDoc reference/digest, exact service-offer capability, and authenticated federation interface.
 5. Canonicalize cards with RFC 8785 and JWS-sign them using the pinned device key. Separately validate AIDoc issuer status/binding; device possession is not issuer authority.
 6. Project only explicitly allowed cards through `ProjectionContract`, persist them as link-scoped `FederatedRecordMirror` rows, and implement expiry, refresh, withdrawal, revocation, and key-rotation invalidation.
@@ -214,7 +215,7 @@ Live coverage was recorded against parent `BI-BE0E14E0` for this exact plan path
 
 ### Tasks
 
-1. Add the versioned DPF federation A2A contract as A2A payload + GAID extension inside the existing CloudEvents transport.
+1. Add the versioned DPF federation A2A contract as A2A payload + GAID extension inside the existing CloudEvents transport. Reuse `cloud-event-guard.ts`'s existing `dpflinkid` link-binding (`=== authenticated linkId`, else `link:mismatch`) and ±15-minute replay window verbatim; the new layer is the RFC 9421 signature over them, not a second envelope validator. Gate the receiving route with a `DPF_FEDERATION_A2A_ENABLED` flag sibling to the existing `DPF_FEDERATION_EXCHANGE_ENABLED`, or a per-link A2A capability bit, so demand and A2A enable independently.
 2. Implement the fixed ingress chain from the spec: link token → device signature/digest → replay/idempotency → link installation/org/environment → issuer/card/AIDoc → target GAID → TAK/delegation/offer/projection/consent → task.
 3. Make the receiver generate `TaskRun.taskRunId`; create/link `CoworkerEngagement` for the accepted offer and persist messages/artifacts through `TaskMessage`/`TaskArtifact`.
 4. Implement non-streaming A2A v1.0 operation semantics needed by the slice: send message/create or continue task, get/list task, additional input, cancel, and retrieve artifact/task snapshot.
