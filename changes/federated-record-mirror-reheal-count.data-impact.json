@@ -1,0 +1,21 @@
+{
+  "version": "1",
+  "accountableOwner": "Mark Bodman (markdbodman@gmail.com)",
+  "summary": "BI-8A7E3E56. Add FederatedRecordMirror.rehealCount (INTEGER NOT NULL DEFAULT 0): a bounded counter of how many times digest reconciliation has resurrected this outbox record after it dead-lettered. Dead-letter was terminal, permanently stranding demand that failed during a peer's upgrade window; reconcileDemandDigests now re-heals a dead-letter the peer still needs, capped by MAX_DEMAND_REHEALS so a genuinely-poison record eventually stays dead. Additive, non-destructive: no existing row is rewritten; defaults to 0 so every existing row reads as never-resurrected, applies cleanly against any existing data state. No personal data — an operational retry/resurrection counter, not tied to a data subject. Migration: 20260808160000_federated_record_mirror_reheal_count.",
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "FederatedRecordMirror",
+      "lifecycleDisposition": "retain-for-link-lifetime",
+      "fields": [
+        {
+          "name": "rehealCount",
+          "resolution": "not-applicable",
+          "reason": "Operational delivery-recovery metadata: the number of times digest reconciliation has resurrected this dead-lettered record. Not personal data and not tied to a data subject.",
+          "provenance": "Authored locally by reconcileDemandDigests, incremented only when a dead-lettered local outbox row is resurrected because the peer reports it missing. No new source of data.",
+          "flags": []
+        }
+      ]
+    }
+  ]
+}

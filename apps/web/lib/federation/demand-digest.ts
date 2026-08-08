@@ -12,8 +12,14 @@ interface DigestMirrorRow {
   peerRecordRef?: string | null;
   version: bigint;
   syncStatus: string;
+  rehealCount?: number;
   payload: unknown;
 }
+
+/** How many times digest reconciliation may resurrect a dead-lettered record the
+ *  peer still needs. A transient/upgrade window recovers in one resurrection; a
+ *  genuinely-poison record stops thrashing once it has exhausted the cap. */
+export const MAX_DEMAND_REHEALS = 3;
 
 export interface DemandDigestDb {
   federationLink?: {
@@ -93,7 +99,7 @@ export async function reconcileDemandDigests(
       where: { federationLinkId: link.linkId, recordType: "demand-envelope", canonicalSide: "local" },
       orderBy: { updatedAt: "asc" },
       take: 1_000,
-      select: { mirrorId: true, federationLinkId: true, version: true, syncStatus: true, payload: true },
+      select: { mirrorId: true, federationLinkId: true, version: true, syncStatus: true, rehealCount: true, payload: true },
     });
     if (rows.length === 0) continue;
     const usable = rows.flatMap((row) => {
@@ -147,11 +153,18 @@ export async function reconcileDemandDigests(
     for (const { row, payload } of usable) {
       const need = needs.get(payload.envelope.originRecordRef);
       if (need) {
-        if (row.syncStatus === "dead-letter") continue;
+        // Dead-letter is recoverable, not terminal: if the peer still needs a
+        // record we gave up on (e.g. it 422'd during the other side's upgrade
+        // window and the producer bug is since fixed), resurrect it — but cap the
+        // resurrections so a genuinely-poison record eventually stays dead instead
+        // of re-sending on every digest cycle forever (BI-8A7E3E56).
+        const wasDeadLettered = row.syncStatus === "dead-letter";
+        if (wasDeadLettered && (row.rehealCount ?? 0) >= MAX_DEMAND_REHEALS) continue;
         requeued++;
         await db.federatedRecordMirror.update!({ where: { mirrorId: row.mirrorId }, data: {
           syncStatus: "pending", deliveryAttempts: 0, nextDeliveryAt: now,
           lastDeliveryError: `reconciliation:${need.reason}`, deadLetteredAt: null,
+          ...(wasDeadLettered ? { rehealCount: (row.rehealCount ?? 0) + 1 } : {}),
         } });
       } else {
         confirmed++;

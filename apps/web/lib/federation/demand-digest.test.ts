@@ -77,4 +77,46 @@ describe("reconcileDemandDigests", () => {
       syncStatus: "synced", acknowledgedVersion: 5, nextDeliveryAt: null,
     }) });
   });
+
+  it("bounded-re-heals a dead-lettered record the peer still needs, but leaves a poison record dead past the cap (BI-8A7E3E56)", async () => {
+    const update = vi.fn().mockResolvedValue({});
+    const db = {
+      federationLink: { findMany: vi.fn().mockResolvedValue([
+        { linkId: "link_1", peerAuthorityUrl: "https://peer.example", peerTokenEnc: "encrypted" },
+      ]) },
+      federatedRecordMirror: {
+        findMany: vi.fn().mockResolvedValue([
+          // Stranded by a transient/upgrade window — the producer bug is fixed, so this recovers.
+          { mirrorId: "dl_recoverable", federationLinkId: "link_1", version: 1, syncStatus: "dead-letter", rehealCount: 0, payload: {
+            activity: "dpf.demand.proposed", eventId: "evt_a", queuedAt: digest.generatedAt,
+            envelope: { ...digest.records[0], specVersion: "dpf.demand/1", originInstallationId: "inst_origin" }, // ref_missing
+          } },
+          // Genuinely poison — already resurrected to the cap; must NOT thrash forever.
+          { mirrorId: "dl_poison", federationLinkId: "link_1", version: 3, syncStatus: "dead-letter", rehealCount: 3, payload: {
+            activity: "dpf.demand.proposed", eventId: "evt_b", queuedAt: digest.generatedAt,
+            envelope: { ...digest.records[1], specVersion: "dpf.demand/1", originInstallationId: "inst_origin" }, // ref_stale
+          } },
+        ]),
+        update,
+      },
+    } as unknown as DemandDigestDb;
+    const send = vi.fn().mockResolvedValue({
+      ok: true, status: 200, body: { ok: true, checked: 2, needs: [
+        { originRecordRef: "ref_missing", reason: "missing" },
+        { originRecordRef: "ref_stale", reason: "missing" },
+      ] },
+    });
+
+    const result = await reconcileDemandDigests(db, {
+      installationId: "inst_origin", projectionSecret: "a".repeat(64),
+    }, { now: new Date("2026-07-20T06:10:00Z"), decryptToken: () => "dpflink_token", send });
+
+    // Only the recoverable dead-letter is requeued; the poison one is left dead.
+    expect(result.requeued).toBe(1);
+    expect(update).toHaveBeenCalledWith({ where: { mirrorId: "dl_recoverable" }, data: expect.objectContaining({
+      syncStatus: "pending", deliveryAttempts: 0, deadLetteredAt: null, rehealCount: 1,
+      nextDeliveryAt: new Date("2026-07-20T06:10:00Z"),
+    }) });
+    expect(update).not.toHaveBeenCalledWith(expect.objectContaining({ where: { mirrorId: "dl_poison" } }));
+  });
 });
