@@ -11,8 +11,8 @@
 
 import { prisma as realPrisma } from "@dpf/db";
 import { summarizeOutcomes, type Outcome } from "./action-outcome-map";
+import { isLiveStatus, TASK_LIVE_STATES } from "@/lib/tak/task-states";
 
-const LIVE_TASK_STATUSES = ["working", "active", "input-required", "auth-required", "stalled"];
 const QUIET_SIGNAL_DAYS = 5;
 const LAST_ACTED_LOOKBACK_DAYS = 30;
 
@@ -122,7 +122,7 @@ export async function loadWorkforceActivity(
       orderBy: [{ tier: "asc" }, { name: "asc" }],
     }),
     prisma.taskRun.findMany({
-      where: { archivedAt: null, status: { in: LIVE_TASK_STATUSES } },
+      where: { archivedAt: null, status: { in: [...TASK_LIVE_STATES] } },
       orderBy: { startedAt: "desc" },
       select: { taskRunId: true, status: true, title: true, currentAgentId: true, startedAt: true, lastHeartbeatAt: true },
     }),
@@ -173,6 +173,9 @@ export async function loadWorkforceActivity(
   // First live task per agent (rows are newest-first).
   const liveByAgent = new Map<string, TaskRunRow>();
   for (const run of liveRuns) {
+    // Keep the projection fail-closed if an injected adapter or future query
+    // returns a non-live row despite the canonical DB filter.
+    if (!isLiveStatus(run.status)) continue;
     if (run.currentAgentId && !liveByAgent.has(run.currentAgentId)) {
       liveByAgent.set(run.currentAgentId, run);
     }
