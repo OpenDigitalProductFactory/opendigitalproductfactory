@@ -1,6 +1,6 @@
 {
   "generator": "apps/web/scripts/build-route-manifest.ts",
-  "routeCount": 611,
+  "routeCount": 613,
   "routes": [
     {
       "routePath": "/",
@@ -9,6 +9,29 @@
       "dynamicParams": [],
       "file": "apps/web/app/page.tsx",
       "redirectTo": "/welcome"
+    },
+    {
+      "routePath": "/.well-known/agent-card.json",
+      "kind": "route",
+      "segments": [
+        ".well-known",
+        "agent-card.json"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/.well-known/agent-card.json/route.ts"
+    },
+    {
+      "routePath": "/.well-known/agent-card/[agentId]",
+      "kind": "route",
+      "segments": [
+        ".well-known",
+        "agent-card",
+        "[agentId]"
+      ],
+      "dynamicParams": [
+        "agentId"
+      ],
+      "file": "apps/web/app/.well-known/agent-card/[agentId]/route.ts"
     },
     {
       "routePath": "/.well-known/dpf-instance.json",
