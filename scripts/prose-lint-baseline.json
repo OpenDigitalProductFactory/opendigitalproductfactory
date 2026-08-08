@@ -5844,6 +5844,13 @@
     "longSentences": 0,
     "textMass": 55
   },
+  "apps/web/components/ops/CoworkerActivityInspectionLink.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 4
+  },
   "apps/web/components/ops/DemandBoard.tsx": {
     "vocabulary": 0,
     "genericLabels": 0,
