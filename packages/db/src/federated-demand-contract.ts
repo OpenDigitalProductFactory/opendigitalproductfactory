@@ -37,6 +37,12 @@ export interface DemandEnvelopeV1 {
   originInstallationId: string;
   originRecordRef: string;
   originVersion: number;
+  /** Per-installation causal-ordering vector (BI-67315C4A). Optional for
+   *  back-compat; when present, the receiver uses it (not the scalar
+   *  originVersion) to detect clean-newer vs a concurrent conflict. Deliberately
+   *  EXCLUDED from payloadDigest so re-projecting an unchanged record stays
+   *  idempotent while the vector still advances on real changes. */
+  versionVector?: Record<string, number>;
   route: DemandRouteHopV1[];
   audience: DemandAudience;
   title: string;
@@ -131,6 +137,7 @@ const COLLABORATIVE_FIELDS = [
   "applicability",
   "evidence",
   "forwarding",
+  "versionVector",
 ];
 
 const PARTNER_FIELDS = [
@@ -194,6 +201,10 @@ function stableJson(value: unknown): string {
 export function computeDemandPayloadDigest(value: Omit<DemandEnvelopeV1, "payloadDigest"> | DemandEnvelopeV1): string {
   const content = { ...(value as DemandEnvelopeV1) } as Record<string, unknown>;
   delete content.payloadDigest;
+  // The version vector is causal-ordering metadata, not content: excluding it
+  // keeps an unchanged re-projection digest-identical (idempotent noop) while the
+  // vector still advances on real content changes. See DemandEnvelopeV1.
+  delete content.versionVector;
   return `sha256:${createHash("sha256").update(stableJson(content)).digest("hex")}`;
 }
 
@@ -299,6 +310,24 @@ export function validateDemandEnvelopeV1(
     && Number(value.originVersion) <= context.previousOriginVersion
   ) {
     violations.push("originVersion:not-advancing");
+  }
+  if (value.versionVector !== undefined) {
+    if (!isRecord(value.versionVector)) {
+      violations.push("versionVector:invalid");
+    } else {
+      for (const [installationId, counter] of Object.entries(value.versionVector)) {
+        if (
+          installationId.length === 0 ||
+          installationId.length > 160 ||
+          typeof counter !== "number" ||
+          !Number.isSafeInteger(counter) ||
+          counter < 0
+        ) {
+          violations.push("versionVector:invalid");
+          break;
+        }
+      }
+    }
   }
   if (!(DEMAND_AUDIENCES as readonly unknown[]).includes(value.audience)) violations.push("audience:unsupported");
   if (!isNonEmptyString(value.title, 240)) {

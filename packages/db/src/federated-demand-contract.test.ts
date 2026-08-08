@@ -205,3 +205,32 @@ describe("validateDemandResponseV1", () => {
     ]));
   });
 });
+
+describe("versionVector (BI-67315C4A)", () => {
+  it("accepts an envelope carrying a valid version vector", () => {
+    expect(validateDemandEnvelopeV1(envelope({ versionVector: { inst_a: 2, inst_b: 0 } }))).toEqual([]);
+  });
+
+  it("treats versionVector as an allowed field", () => {
+    expect(validateDemandEnvelopeV1(envelope({ versionVector: { inst_a: 1 } }))).not.toContain(
+      "field:not-allowed:versionVector",
+    );
+  });
+
+  it.each([
+    { inst_a: -1 },
+    { inst_a: 1.5 },
+    { "": 1 },
+    { inst_a: "3" },
+  ])("rejects a malformed version vector %o", (bad) => {
+    expect(
+      validateDemandEnvelopeV1(envelope({ versionVector: bad as unknown as Record<string, number> })),
+    ).toEqual(expect.arrayContaining(["versionVector:invalid"]));
+  });
+
+  it("EXCLUDES the version vector from the payload digest (idempotent re-projection)", () => {
+    const base = envelope({ versionVector: { inst_a: 1 } });
+    const reprojected = { ...base, versionVector: { inst_a: 2, inst_b: 5 } };
+    expect(computeDemandPayloadDigest(reprojected)).toBe(computeDemandPayloadDigest(base));
+  });
+});
