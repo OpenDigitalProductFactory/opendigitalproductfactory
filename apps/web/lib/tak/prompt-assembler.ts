@@ -138,7 +138,10 @@ const ACT_MODE_BLOCK = `Mode: ACT. You may execute any tool the employee's role 
 //
 // The marker itself is invisible to the model — it's consumed by the caller
 // (routing/anthropic-cache.ts, used by chat-adapter) to split the prompt into cacheable and non-cacheable
-// segments when the provider supports prompt caching.
+// segments when the provider supports prompt caching. That splitter caches the
+// stable prefix with a 1-hour TTL by default (BI-4761F54E / context-engineering
+// R6/P8) so this assembler's static Identity/Mode blocks survive inter-turn
+// gaps > 5 min in a long agentic loop instead of being re-billed at full rate.
 
 // Single source of truth lives in ./prompt-boundary (dependency-free so the
 // routing layer can split on it without importing this DB-coupled assembler).
