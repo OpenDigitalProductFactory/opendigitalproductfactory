@@ -86,6 +86,20 @@ Cross-organization nodes/edges show **only what the deny-by-default sharing gate
 - **Extend, don't fork** (`architecture-over-shortcuts`): reuse `operations-topology-layout` + `OperationsTopologyCanvas` + dagre/elk; the engine generalizes the existing `A2aArcLayout`/`CoworkerSpineRow` rather than adding a second canvas.
 - **Escalate to kernel** (when MCP reconnects): the layout-arrangement choice per archetype shape, and whether the collapse/expand state is per-viewer ephemeral or persisted, are 2–4-option decisions for `dpf-decision-via-kernel`.
 
+### 6.1 Scalability (required review dimension)
+
+DPF targets an eventual federation of many thousands→millions of sovereign installs; the engine is reviewed against that, not the two-install case:
+
+- **No unbounded assembly.** The engine never loads "the whole world." It assembles only the **viewer-scoped** subgraph (the operator's own org/estate + its direct links), bounded and **paged/cursored** over `FederationLink` / `FederatedRecordMirror` (reusing the same cursor discipline that fixed the digest's silent `take: 1_000` truncation) — never a silent cap.
+- **Summarize-first, expand-on-demand.** The default view is the **org/install rollup** (aggregated counts, computed server-side); agent- and flow-level detail loads only when a node is expanded. Layout cost is O(visible), not O(total).
+- **No O(N²) rendering.** A dense estate collapses to hub/rollup nodes rather than drawing every pairwise edge; the `archetypeShape` classifier drives hub/introducer arrangements where a naive mesh would explode.
+- **Scale ceiling + epic.** This spec holds to *viewer-scoped, paged, summarize-first* assembly; the cross-federation aggregate view (a hub rolling up many installs) and delta/streaming updates are the **deferred scale epic** (the same one that lifts the digest to delta-sync/hub topology), named here so it is not rediscovered as a cliff.
+
+### 6.2 Data architecture / normal form (required review dimension)
+
+- The topology is a **read model** — `derivedHealth`, `layerOfFault`, `rootCausePath`, `impactSet`, and node/edge rollups are **computed**, never stored, so there is **one authoritative home** per fact (the underlying `FederationLink` / `FederatedRecordMirror` / GAID projection rows). No duplicated or denormalized topology table.
+- Node identity reuses **canonical keys** (`Organization`, `inst_…`, GAID via `PrincipalAlias`) rather than minting a parallel identifier — the same single-source-of-truth the A2A design §4.1 enforces for GAID.
+
 ## 7. UX-fit review (advisory, inline)
 
 - **Owning area:** Platform (Connections + Operations map). **Personas:** operator/founder.
