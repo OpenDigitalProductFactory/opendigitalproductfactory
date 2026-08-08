@@ -91,6 +91,8 @@ For normal feature/fix work: commit from the worktree, then route runtime-bound 
 
 4. **Restart your agent in the worktree.** Claude Code / Codex need a fresh session to pick up the new `.mcp.json` — the `dpf` MCP connector won't appear in `/mcp` otherwise.
 
+   If the connector is healthy but a named DPF tool is absent from the attached set, use the always-listed `load_tools` meta-tool with an exact `names` entry or a natural-language `query`, then honor `notifications/tools/list_changed` or re-fetch `tools/list`. In Codex, a stale top-level registry is not final: inspect `ALL_TOOLS` inside `functions.exec` and, when present, invoke the loaded governed call through `tools.mcp__dpf__<tool_name>(arguments)`. Do not infer tool absence from MCP resources and do not install a plugin to recover a tool from an already-connected DPF server. An authorization refusal and a disconnected server are different failures; follow the structured error or connection diagnosis respectively.
+
 5. **Verify compose isolation.** Before running any `docker compose` command in the worktree:
    ```
    grep COMPOSE_PROJECT_NAME .env

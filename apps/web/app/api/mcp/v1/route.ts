@@ -43,7 +43,7 @@ import {
   handleTasksCancel,
   type TaskLifecycleResult,
 } from "@/lib/mcp/tasks-lifecycle";
-import { LOAD_TOOLS_LISTED, buildLoadToolsResult, loadToolsSseResponse } from "@/lib/mcp/load-tools";
+import { LOAD_TOOLS_LISTED, MCP_PROGRESSIVE_DISCLOSURE_INSTRUCTIONS, buildLoadToolsResult, buildUnknownToolResult, loadToolsSseResponse } from "@/lib/mcp/load-tools";
 import { can, type CapabilityKey, type UserContext } from "@/lib/permissions";
 import { prisma } from "@dpf/db";
 
@@ -474,9 +474,6 @@ async function handleTasksSubmit(
   return jsonRpcOk(id, outcome.result);
 }
 
-const BASE_MCP_INSTRUCTIONS =
-  "Domain-level MCP surface for the Digital Product Factory. Use tools/list to discover the backlog and planning tools available to your token.";
-
 async function handleInitialize(id: JsonRpcId, params?: Record<string, unknown>): Promise<Response> {
   const requested = typeof params?.["protocolVersion"] === "string" ? params["protocolVersion"] : null;
   const negotiated = SUPPORTED_PROTOCOL_VERSIONS.find((v) => v === requested) ?? FALLBACK_PROTOCOL_VERSION;
@@ -486,7 +483,7 @@ async function handleInitialize(id: JsonRpcId, params?: Record<string, unknown>)
   // decisionDomain routing directive that activates BI-HDLEMP-01 — from connect,
   // instead of only a bare tool list. Fail-open: any compose error falls back to
   // the base note; initialize must never break.
-  let instructions = BASE_MCP_INSTRUCTIONS;
+  let instructions = MCP_PROGRESSIVE_DISCLOSURE_INSTRUCTIONS;
   try {
     const [{ buildOrgContextBundle, formatOrgContextInstructions }, { prisma }] =
       await Promise.all([
@@ -496,7 +493,7 @@ async function handleInitialize(id: JsonRpcId, params?: Record<string, unknown>)
     const bundle = await buildOrgContextBundle(
       prisma as unknown as Parameters<typeof buildOrgContextBundle>[0],
     );
-    instructions = formatOrgContextInstructions(BASE_MCP_INSTRUCTIONS, bundle);
+    instructions = formatOrgContextInstructions(MCP_PROGRESSIVE_DISCLOSURE_INSTRUCTIONS, bundle);
   } catch (err) {
     console.warn("[mcp/initialize] org-context compose failed (fail-open):", err);
   }
@@ -573,10 +570,7 @@ async function handleToolsCall(
   const grantMap = getToolGrantMapping();
   const required = grantMap[toolName];
   if (!required) {
-    return jsonRpcOk(id, {
-      content: [{ type: "text", text: `Unknown tool: ${toolName}` }],
-      isError: true,
-    });
+    return jsonRpcOk(id, buildUnknownToolResult(toolName));
   }
   const toolDef = PLATFORM_TOOLS.find((t) => t.name === toolName);
   const tokenScope = normalizeTokenScope(token);

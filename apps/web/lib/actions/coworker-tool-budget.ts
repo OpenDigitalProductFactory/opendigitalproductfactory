@@ -23,6 +23,16 @@ import type { ToolDefinition } from "@/lib/mcp-tools";
 import { isToolAllowedByGrants } from "@/lib/tak/agent-grants";
 import { CORE_MCP_TOOL_NAMES } from "@/lib/mcp/tool-tier";
 import { LOCAL_TOOL_SELECTION_CLIFF } from "@/lib/tak/context-economy-metrics";
+import {
+  LOAD_TOOLS_TOOL_NAME,
+  scoreToolIntentRelevance,
+  tokenizeIntent,
+} from "@/lib/tak/tool-intent";
+export {
+  LOAD_TOOLS_BATCH_MAX,
+  LOAD_TOOLS_TOOL_NAME,
+  selectLoadableTools,
+} from "@/lib/tak/tool-intent";
 
 /**
  * Default ceiling on the TOTAL tool schemas attached per coworker turn —
@@ -169,13 +179,6 @@ export function capSkillCatalog<T extends { skillId: string }>(
   return kept;
 }
 
-/** Name of the meta-tool that lets a coworker pull deferred tools back on demand. */
-export const LOAD_TOOLS_TOOL_NAME = "load_tools";
-
-/** Max tools a single load_tools call may attach — prevents re-overflow when a
- *  broad query matches a large slice of the deferred pool. */
-export const LOAD_TOOLS_BATCH_MAX = 16;
-
 /**
  * The load_tools meta-tool. Intercepted inside the agentic loop (it never reaches
  * governedExecuteTool); calling it moves matching deferred tools into the active
@@ -189,7 +192,7 @@ export const LOAD_TOOLS_TOOL: ToolDefinition = {
     "Attach additional tools you are authorized to use but that are not in your current set. " +
     "Your everyday tools are already attached; specialised or rarely-used ones (e.g. reading " +
     "source code, the code graph, the wiki, portfolio or estate data) are available on demand to " +
-    "keep each turn small. Call this with a keyword `query` (e.g. \"code graph\", \"wiki\", " +
+    "keep each turn small. Call this with a natural-language capability `query` (e.g. \"code graph\", \"wiki\", " +
     "\"source file\") or exact `names` when you need a capability you don't currently see, then " +
     "call the newly-loaded tool on the next step.",
   inputSchema: {
@@ -220,43 +223,6 @@ export interface ToolBudgetResult {
   /** Authorized tools held back from this turn's schema payload; still callable
    *  via load_tools and still authorized by governedExecuteTool. */
   deferred: ToolDefinition[];
-}
-
-// EP-27FD96BC · P3 (BI-ACE1EBA4) — cheap task-intent relevance for tool ranking.
-// Token overlap between the turn and a tool's name+description; no embedding call
-// on the hot path. Used only to order tools WITHIN a priority tier so the cap
-// keeps the most relevant ones.
-
-const INTENT_STOPWORDS: ReadonlySet<string> = new Set([
-  "the", "and", "for", "you", "your", "with", "this", "that", "can", "will",
-  "please", "how", "what", "when", "get", "let", "are", "from", "about", "need",
-  "want", "help", "into", "have",
-]);
-
-export function tokenizeIntent(text: string): Set<string> {
-  return new Set(
-    text
-      .toLowerCase()
-      .split(/[^a-z0-9]+/)
-      .filter((t) => t.length >= 3 && !INTENT_STOPWORDS.has(t)),
-  );
-}
-
-/** Distinct intent tokens found in the tool's name + description. Pure. */
-export function scoreToolIntentRelevance(
-  tool: ToolDefinition,
-  intentTokens: ReadonlySet<string>,
-): number {
-  if (intentTokens.size === 0) return 0;
-  const haystack = new Set(
-    `${tool.name} ${tool.description ?? ""}`
-      .toLowerCase()
-      .split(/[^a-z0-9]+/)
-      .filter(Boolean),
-  );
-  let score = 0;
-  for (const token of intentTokens) if (haystack.has(token)) score += 1;
-  return score;
 }
 
 /**
@@ -339,37 +305,4 @@ export function selectCoworkerToolBudget(params: {
   attached.sort((a, b) => a.i - b.i);
   deferred.sort((a, b) => a.i - b.i);
   return { attached: attached.map((e) => e.t), deferred: deferred.map((e) => e.t) };
-}
-
-/**
- * Select which deferred tools a load_tools({ names?, query? }) call should attach.
- * Matches exact names first, then keyword-matches name/description, dedupes by
- * name, and caps the batch so one broad query cannot re-overflow the context.
- */
-export function selectLoadableTools(
-  deferred: ToolDefinition[],
-  request: { names?: string[]; query?: string },
-  batchMax: number = LOAD_TOOLS_BATCH_MAX,
-): ToolDefinition[] {
-  const picked = new Map<string, ToolDefinition>();
-
-  const wantNames = new Set((request.names ?? []).map((n) => n.trim()).filter(Boolean));
-  if (wantNames.size > 0) {
-    for (const t of deferred) {
-      if (wantNames.has(t.name) && !picked.has(t.name)) picked.set(t.name, t);
-    }
-  }
-
-  const q = (request.query ?? "").trim().toLowerCase();
-  if (q.length > 0) {
-    for (const t of deferred) {
-      if (picked.size >= batchMax) break;
-      if (picked.has(t.name)) continue;
-      if (t.name.toLowerCase().includes(q) || t.description.toLowerCase().includes(q)) {
-        picked.set(t.name, t);
-      }
-    }
-  }
-
-  return Array.from(picked.values()).slice(0, batchMax);
 }

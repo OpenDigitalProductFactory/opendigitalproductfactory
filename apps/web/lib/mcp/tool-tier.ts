@@ -10,7 +10,7 @@
  * Important property: tiering affects ONLY discovery (`tools/list`), never
  * execution (`tools/call`). A granted tool can still be called by name even in
  * core tier — so this is a pure context-economy lever with no loss of
- * capability, and the staged model-driven deferral (load_tools + list_changed,
+ * capability, and shipped model-driven deferral (load_tools + list_changed,
  * spec Phase 2) is purely additive on top of it.
  *
  * Server-authoritative default (BI-88681BE0): when a caller passes no explicit
@@ -25,6 +25,11 @@
  * kernel even when the token grants them. That is discovery only; execution
  * already allowed by-name before this expansion.
  */
+
+import {
+  selectLoadableTools,
+} from "@/lib/tak/tool-intent";
+export { LOAD_TOOLS_TOOL_NAME } from "@/lib/tak/tool-intent";
 
 export type McpToolTier = "core" | "full";
 
@@ -135,9 +140,6 @@ export function selectToolsByTier<T extends { name: string }>(tools: T[], tier: 
 // present for clients that don't honor list_changed, and the cached prompt
 // prefix survives because tools are appended, never removed/reordered.
 
-/** The synthetic meta-tool name a model calls to pull deferred tools into scope. */
-export const LOAD_TOOLS_TOOL_NAME = "load_tools";
-
 /**
  * The append-not-swap listing set: the tier floor (core|full) UNION any
  * session-loaded tools not already in the floor. Preserves floor order, then
@@ -159,30 +161,15 @@ export function selectToolsForListing<T extends { name: string }>(
 
 /**
  * Resolve which already-grant-filtered tools a `load_tools({query?,names?})`
- * call selects. Exact `names` match plus case-insensitive substring `query`
- * match over name and description, de-duplicated, original order preserved.
+ * call selects. Exact `names` take precedence; natural-language `query` intent
+ * is ranked by token overlap over name and description and capped at 16.
  * Pure — the caller persists the resulting names to the session store.
  */
 export function resolveLoadToolsSelection<T extends { name: string; description?: string }>(
   granted: T[],
   args: { names?: unknown; query?: unknown },
 ): T[] {
-  const names = Array.isArray(args.names)
-    ? (args.names.filter((n) => typeof n === "string") as string[])
-    : [];
-  const nameSet = new Set(names);
-  const query = typeof args.query === "string" ? args.query.trim().toLowerCase() : "";
-
-  const selected = new Map<string, T>();
-  for (const t of granted) {
-    const matchesName = nameSet.has(t.name);
-    const matchesQuery =
-      query.length > 0 &&
-      (t.name.toLowerCase().includes(query) ||
-        (t.description ?? "").toLowerCase().includes(query));
-    if (matchesName || matchesQuery) selected.set(t.name, t);
-  }
-  return [...selected.values()];
+  return selectLoadableTools(granted, args);
 }
 
 // ─── Session-store pure helpers (DB wrapper lives in tool-session-store.ts) ──
