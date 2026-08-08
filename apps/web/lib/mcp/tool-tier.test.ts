@@ -5,6 +5,11 @@ import {
   defaultTierForClient,
   resolveEffectiveTier,
   selectToolsByTier,
+  selectToolsForListing,
+  resolveLoadToolsSelection,
+  mergeLoadedToolNames,
+  isToolSessionExpired,
+  LOAD_TOOLS_TOOL_NAME,
   CORE_MCP_TOOL_NAMES,
 } from "./tool-tier";
 import { PLATFORM_TOOLS } from "@/lib/mcp-tools";
@@ -118,5 +123,90 @@ describe("CORE_MCP_TOOL_NAMES drift guard", () => {
     // multi-option platform menus. Discovery-only gap was blocking Grok WWMD.
     expect(CORE_MCP_TOOL_NAMES.has("principle_decide")).toBe(true);
     expect(CORE_MCP_TOOL_NAMES.has("wiki_query")).toBe(true);
+  });
+});
+
+describe("Phase 2 — deferred loading (selectToolsForListing / append-not-swap)", () => {
+  const GRANTED = [
+    { name: "query_backlog" }, // in core
+    { name: "search_knowledge" }, // in core
+    { name: "deploy_feature" }, // NOT in core
+    { name: "create_quote" }, // NOT in core
+  ];
+
+  it("core tier with no loaded tools returns exactly the core floor", () => {
+    const listed = selectToolsForListing(GRANTED, "core", new Set());
+    expect(listed.map((t) => t.name)).toEqual(["query_backlog", "search_knowledge"]);
+  });
+
+  it("APPENDS session-loaded tools to the core floor (never swaps it)", () => {
+    const listed = selectToolsForListing(GRANTED, "core", new Set(["deploy_feature"]));
+    // Floor stays first and intact; the loaded tool is appended after it.
+    expect(listed.map((t) => t.name)).toEqual([
+      "query_backlog",
+      "search_knowledge",
+      "deploy_feature",
+    ]);
+  });
+
+  it("never double-lists a loaded tool already in the floor", () => {
+    const listed = selectToolsForListing(GRANTED, "core", new Set(["query_backlog"]));
+    expect(listed.map((t) => t.name)).toEqual(["query_backlog", "search_knowledge"]);
+  });
+
+  it("full tier is unchanged by loaded state (whole granted surface already shown)", () => {
+    const listed = selectToolsForListing(GRANTED, "full", new Set(["deploy_feature"]));
+    expect(listed.map((t) => t.name)).toEqual(GRANTED.map((t) => t.name));
+  });
+});
+
+describe("Phase 2 — resolveLoadToolsSelection", () => {
+  const GRANTED = [
+    { name: "deploy_feature", description: "Deploy a built feature to the live install." },
+    { name: "create_quote", description: "Create a customer quote document." },
+    { name: "list_quotes", description: "List existing customer quotes." },
+  ];
+
+  it("selects by exact names", () => {
+    const sel = resolveLoadToolsSelection(GRANTED, { names: ["deploy_feature"] });
+    expect(sel.map((t) => t.name)).toEqual(["deploy_feature"]);
+  });
+
+  it("selects by case-insensitive query over name and description", () => {
+    const sel = resolveLoadToolsSelection(GRANTED, { query: "QUOTE" });
+    expect(sel.map((t) => t.name).sort()).toEqual(["create_quote", "list_quotes"]);
+  });
+
+  it("de-duplicates when names and query overlap, preserving grant order", () => {
+    const sel = resolveLoadToolsSelection(GRANTED, { names: ["create_quote"], query: "quote" });
+    expect(sel.map((t) => t.name)).toEqual(["create_quote", "list_quotes"]);
+  });
+
+  it("returns nothing for an empty request or non-matching input", () => {
+    expect(resolveLoadToolsSelection(GRANTED, {})).toEqual([]);
+    expect(resolveLoadToolsSelection(GRANTED, { names: ["nope"], query: "zzz" })).toEqual([]);
+  });
+
+  it("ignores non-string names in the array", () => {
+    const sel = resolveLoadToolsSelection(GRANTED, { names: ["deploy_feature", 42, null] as unknown[] });
+    expect(sel.map((t) => t.name)).toEqual(["deploy_feature"]);
+  });
+});
+
+describe("Phase 2 — session-store pure helpers", () => {
+  it("merges loaded names de-duplicated and sorted", () => {
+    expect(mergeLoadedToolNames(["b", "a"], ["a", "c"])).toEqual(["a", "b", "c"]);
+    expect(mergeLoadedToolNames([], [])).toEqual([]);
+  });
+
+  it("treats a session as expired only once expiry has passed", () => {
+    const now = new Date("2026-08-07T12:00:00Z");
+    expect(isToolSessionExpired(new Date("2026-08-07T11:59:59Z"), now)).toBe(true);
+    expect(isToolSessionExpired(new Date("2026-08-07T12:00:00Z"), now)).toBe(true); // boundary = expired
+    expect(isToolSessionExpired(new Date("2026-08-07T12:00:01Z"), now)).toBe(false);
+  });
+
+  it("exposes the load_tools meta-tool name", () => {
+    expect(LOAD_TOOLS_TOOL_NAME).toBe("load_tools");
   });
 });

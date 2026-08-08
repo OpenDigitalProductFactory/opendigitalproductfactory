@@ -125,3 +125,76 @@ export function selectToolsByTier<T extends { name: string }>(tools: T[], tier: 
   if (tier === "full") return tools;
   return tools.filter((t) => CORE_MCP_TOOL_NAMES.has(t.name));
 }
+
+// ─── Phase 2: model-driven deferral (load_tools + list_changed) ──────────────
+// Spec: docs/superpowers/specs/2026-06-20-mcp-tool-tier-deferred-loading-design.md §4.
+// This is PURELY ADDITIVE on top of the Phase-1 tier: `tools/list` returns the
+// tier surface (the floor) UNION any tools a model has pulled in via load_tools,
+// plus the load_tools meta-tool itself. Append-not-swap: the lean core stays
+// present for clients that don't honor list_changed, and the cached prompt
+// prefix survives because tools are appended, never removed/reordered.
+
+/** The synthetic meta-tool name a model calls to pull deferred tools into scope. */
+export const LOAD_TOOLS_TOOL_NAME = "load_tools";
+
+/**
+ * The append-not-swap listing set: the tier floor (core|full) UNION any
+ * session-loaded tools not already in the floor. Preserves floor order, then
+ * appends newly-loaded tools in their original grant order. Pure. The caller
+ * appends the `load_tools` meta-tool separately (it is not a granted domain
+ * tool). `loadedNames` is the set of tool names this token has loaded.
+ */
+export function selectToolsForListing<T extends { name: string }>(
+  granted: T[],
+  tier: McpToolTier,
+  loadedNames: ReadonlySet<string>,
+): T[] {
+  const floor = selectToolsByTier(granted, tier);
+  if (loadedNames.size === 0) return floor;
+  const floorNames = new Set(floor.map((t) => t.name));
+  const appended = granted.filter((t) => loadedNames.has(t.name) && !floorNames.has(t.name));
+  return [...floor, ...appended];
+}
+
+/**
+ * Resolve which already-grant-filtered tools a `load_tools({query?,names?})`
+ * call selects. Exact `names` match plus case-insensitive substring `query`
+ * match over name and description, de-duplicated, original order preserved.
+ * Pure — the caller persists the resulting names to the session store.
+ */
+export function resolveLoadToolsSelection<T extends { name: string; description?: string }>(
+  granted: T[],
+  args: { names?: unknown; query?: unknown },
+): T[] {
+  const names = Array.isArray(args.names)
+    ? (args.names.filter((n) => typeof n === "string") as string[])
+    : [];
+  const nameSet = new Set(names);
+  const query = typeof args.query === "string" ? args.query.trim().toLowerCase() : "";
+
+  const selected = new Map<string, T>();
+  for (const t of granted) {
+    const matchesName = nameSet.has(t.name);
+    const matchesQuery =
+      query.length > 0 &&
+      (t.name.toLowerCase().includes(query) ||
+        (t.description ?? "").toLowerCase().includes(query));
+    if (matchesName || matchesQuery) selected.set(t.name, t);
+  }
+  return [...selected.values()];
+}
+
+// ─── Session-store pure helpers (DB wrapper lives in tool-session-store.ts) ──
+
+/** Merge newly-loaded names into an existing set, de-duplicated and sorted. */
+export function mergeLoadedToolNames(
+  existing: readonly string[],
+  incoming: readonly string[],
+): string[] {
+  return [...new Set([...existing, ...incoming])].sort();
+}
+
+/** True when a session's expiry has passed — expired sessions read as empty. */
+export function isToolSessionExpired(expiresAt: Date, now: Date): boolean {
+  return expiresAt.getTime() <= now.getTime();
+}
