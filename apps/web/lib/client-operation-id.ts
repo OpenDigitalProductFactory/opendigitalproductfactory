@@ -23,5 +23,5 @@ export function createClientOperationId(): string {
     return uuidFromRandomBytes(bytes);
   }
 
-  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+  throw new Error("Web Crypto is required to create client operation identifiers");
 }

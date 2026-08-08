@@ -20,4 +20,12 @@ describe("createClientOperationId", () => {
 
     expect(createClientOperationId()).toBe("07070707-0707-4707-8707-070707070707");
   });
+
+  it("fails explicitly rather than creating a collision-prone identifier without Web Crypto", () => {
+    vi.stubGlobal("crypto", undefined);
+
+    expect(() => createClientOperationId()).toThrow(
+      "Web Crypto is required to create client operation identifiers",
+    );
+  });
 });
