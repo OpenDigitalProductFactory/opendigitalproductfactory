@@ -29,12 +29,14 @@ This plan is **atomic at product-release level** even though it has internal pha
 
 Every phase stays behind `FederationLink` A2A readiness/capability negotiation. The single BI remains correct because the only shippable outcome is the composed same-org vertical slice. The live coverage receipt in §3 is mandatory before implementation.
 
-## 3. Backlog coverage
+## Backlog coverage
 
 Live coverage was recorded against parent `BI-BE0E14E0` for this exact plan path.
 
-- Decision: `atomic`
+- Decision: atomic
+- Parent: `BI-BE0E14E0`
 - Receipt: `cmskls1vz03qi01mu59s9tn3o`
+- Dependencies: `BI-COWORKER-360-AGENTCARD` coordination; all delivery phases remain internal to the parent BI
 - Mapped child BIs: none; all phases are internal sequencing under `BI-BE0E14E0`
 - Rationale: the security property exists only as the composed same-organization vertical slice. Device pinning, GAID issuer/card projection, task ingress/ownership, policy, and operator readiness are mutually dependent and stay feature-gated until end-to-end acceptance. Shipping any phase alone either exposes unusable metadata/UI or creates the unauthenticated or under-authorized boundary the BI is meant to eliminate. Cross-organization enablement is excluded and will require a separate future BI.
 
