@@ -154,6 +154,24 @@ const COMMUNITY_FIELDS = [
 
 const DEMAND_ENVELOPE_V1_FIELDS = new Set(COLLABORATIVE_FIELDS);
 
+// Fields that must NEVER cross a federation boundary — source-local planning/context
+// that a minimization leak would expose. These are rejected on receive as a defensive
+// double-check of the sender's egress projection. Everything NOT on this denylist is
+// tolerated (forward-compatible: a newer peer's additive fields — e.g. versionVector —
+// must not 422 an older receiver during a rolling upgrade; only known fields are
+// processed). Kernel DI-71DEBCC9C45E. Keep in sync with the excludeSlices in
+// DEMAND_PROJECTION_TEMPLATES.
+const FORBIDDEN_FEDERATION_FIELDS = new Set([
+  "backlogItemId",
+  "workCapsule",
+  "workCapsuleId",
+  "priority",
+  "localBacklog",
+  "privatePlanning",
+  "attachments",
+  "customerContext",
+]);
+
 function projection(fields: string[], retentionClass: ProjectionContractSpec["retentionClass"]): ProjectionContractSpec {
   return {
     includeSlices: ["demand"],
@@ -226,12 +244,12 @@ export function computeDemandDispositionDigest(
 
 export function validateDemandDispositionNoticeV1(value: unknown): string[] {
   if (!isRecord(value)) return ["notice:invalid"];
-  const allowed = new Set([
-    "specVersion", "noticeId", "envelopeId", "originInstallationId", "decision",
-    "message", "releaseApplicability", "createdAt", "payloadDigest",
-  ]);
   const violations: string[] = [];
-  for (const key of Object.keys(value)) if (!allowed.has(key)) violations.push(`field:not-allowed:${key}`);
+  // Reject only source-local leak fields; tolerate other unknown/additive fields
+  // (forward-compat rolling upgrades). See FORBIDDEN_FEDERATION_FIELDS.
+  for (const key of Object.keys(value)) {
+    if (FORBIDDEN_FEDERATION_FIELDS.has(key)) violations.push(`field:not-allowed:${key}`);
+  }
   if (value.specVersion !== "dpf.demand-disposition/1") violations.push("specVersion:unsupported");
   if (!isNonEmptyString(value.noticeId, 160)) violations.push("noticeId:invalid");
   if (!isNonEmptyString(value.envelopeId, 160)) violations.push("envelopeId:invalid");
@@ -256,14 +274,11 @@ export function validateDemandDispositionNoticeV1(value: unknown): string[] {
 
 export function validateDemandResponseV1(value: unknown): string[] {
   if (!isRecord(value)) return ["response:invalid"];
-  const allowed = new Set([
-    "specVersion", "responseId", "envelopeId", "originInstallationId",
-    "originRecordRef", "responseKind", "message", "responderAttribution",
-    "createdAt", "payloadDigest",
-  ]);
   const violations: string[] = [];
+  // Reject only source-local leak fields; tolerate other unknown/additive fields
+  // (forward-compat rolling upgrades). See FORBIDDEN_FEDERATION_FIELDS.
   for (const key of Object.keys(value)) {
-    if (!allowed.has(key)) violations.push(`field:not-allowed:${key}`);
+    if (FORBIDDEN_FEDERATION_FIELDS.has(key)) violations.push(`field:not-allowed:${key}`);
   }
   if (value.specVersion !== "dpf.demand-response/1") violations.push("specVersion:unsupported");
   if (!isNonEmptyString(value.responseId, 160)) violations.push("responseId:invalid");
@@ -296,8 +311,11 @@ export function validateDemandEnvelopeV1(
   if (!isRecord(value)) return ["envelope:invalid"];
 
   const violations: string[] = [];
+  // Reject only source-local leak fields (minimization double-check); tolerate any
+  // other unknown/additive field so a newer peer doesn't 422 an older receiver during
+  // a rolling upgrade (e.g. versionVector). See FORBIDDEN_FEDERATION_FIELDS.
   for (const key of Object.keys(value)) {
-    if (!DEMAND_ENVELOPE_V1_FIELDS.has(key)) violations.push(`field:not-allowed:${key}`);
+    if (FORBIDDEN_FEDERATION_FIELDS.has(key)) violations.push(`field:not-allowed:${key}`);
   }
   if (value.specVersion !== "dpf.demand/1") violations.push("specVersion:unsupported");
   if (!isNonEmptyString(value.envelopeId, 160)) violations.push("envelopeId:invalid");
