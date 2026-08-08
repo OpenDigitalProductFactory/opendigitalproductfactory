@@ -107,9 +107,11 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
     guard("diagram-dependency-pin-guard", "Diagram Dependency Pin Guard", [
       node("scripts/check-diagram-dependency-pins.mjs"),
     ]),
-    guard("override-provenance-guard", "Override Provenance Guard", [
+    guard("override-provenance-guard", "Workspace Supply-Chain Policy", [
       node("scripts/check-override-comments.mjs"),
       node("--test", "scripts/check-override-comments.test.mjs"),
+      node("scripts/check-build-script-policy.mjs"),
+      node("--test", "scripts/check-build-script-policy.test.mjs"),
     ]),
     guard("bundle-boundary-guard", "Bundle Boundary Guard", [
       node("scripts/check-bundle-boundaries.mjs"),
