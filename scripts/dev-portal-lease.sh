@@ -34,6 +34,7 @@ ENVIRONMENT_KEY="${DPF_DEV_PORTAL_ENVIRONMENT_KEY:-local-integration-ci}"
 OWNER_PROVIDER="${DPF_DEV_PORTAL_OWNER_PROVIDER:-claude}"
 OWNER_SESSION_ID="${DPF_DEV_PORTAL_OWNER_SESSION_ID:-}"
 EXPIRES_MINUTES="${DPF_DEV_PORTAL_EXPIRES_MINUTES:-120}"
+MAX_TERMINAL_CLAIM_ATTEMPTS="${DPF_DEV_PORTAL_MAX_TERMINAL_CLAIM_ATTEMPTS:-64}"
 URL="${DPF_DEV_PORTAL_URL:-http://localhost:3001}"
 PORTS="${DPF_DEV_PORTAL_PORTS:-3001}"
 WORKTREE_PATH="${DPF_DEV_WORKTREE:-}"
@@ -72,6 +73,8 @@ Options:
 Environment:
   DPF_MCP_BEARER_TOKEN    Required for claim/status/release (MCP auth).
   DPF_DEV_WORKTREE        Absolute worktree path (forward slashes).
+  DPF_DEV_PORTAL_MAX_TERMINAL_CLAIM_ATTEMPTS
+                          Bounded historical terminal-key scan (default: 64).
 EOF
 }
 
@@ -180,11 +183,11 @@ done
 
 [ -n "$COMMAND" ] || { usage; exit 2; }
 [ -n "${DPF_MCP_BEARER_TOKEN:-}" ] || die "DPF_MCP_BEARER_TOKEN is required to talk to the DPF MCP lease tools"
+case "$MAX_TERMINAL_CLAIM_ATTEMPTS" in
+  ''|*[!0-9]*) die "DPF_DEV_PORTAL_MAX_TERMINAL_CLAIM_ATTEMPTS must be a non-negative integer" ;;
+esac
 
 [ -n "$OWNER_SESSION_ID" ] || OWNER_SESSION_ID="dev-portal-$$"
-if [ -z "$BRANCH" ]; then
-  BRANCH="$("$GIT_BIN" rev-parse --abbrev-ref HEAD 2>/dev/null || printf 'unknown')"
-fi
 
 release_lease() {
   lease_id_to_release="$1"
@@ -196,13 +199,22 @@ release_lease() {
 
 claim_lease() {
   [ -n "$WORKTREE_PATH" ] || die "DPF_DEV_WORKTREE (or --worktree) must be set so the lease records which worktree :3001 is bound to"
+  if [ -z "$BRANCH" ]; then
+    BRANCH="$("$GIT_BIN" -C "$WORKTREE_PATH" rev-parse --abbrev-ref HEAD 2>/dev/null)" \
+      || die "could not resolve the branch for contributor-preview worktree $WORKTREE_PATH"
+    [ -n "$BRANCH" ] || die "resolved an empty branch for contributor-preview worktree $WORKTREE_PATH"
+  fi
   expires_at="$(node -e 'process.stdout.write(new Date(Date.now() + Number(process.argv[1]) * 60000).toISOString())' "$EXPIRES_MINUTES")"
-  claim_args="$(node -e '
+  base_claim_key="dev-portal:${OWNER_SESSION_ID}:${BRANCH}"
+  claim_key="$base_claim_key"
+  terminal_claim_attempt_sequence=0
+  while :; do
+    claim_args="$(node -e '
 const args = {
   environmentKey: process.argv[1],
   ownerProvider: process.argv[2],
   ownerSessionId: process.argv[3],
-  claimKey: `dev-portal:${process.argv[3]}:${process.argv[5]}`,
+  claimKey: process.argv[9],
   purpose: `Contributor preview (:3001) bound to ${process.argv[4]} @ ${process.argv[5]}`,
   url: process.argv[6],
   ports: JSON.parse(process.argv[7]),
@@ -212,31 +224,31 @@ const args = {
   cleanupCommand: "docker compose -p dpf --profile dev rm -sf dev-portal"
 };
 process.stdout.write(JSON.stringify(args));
-' "$ENVIRONMENT_KEY" "$OWNER_PROVIDER" "$OWNER_SESSION_ID" "$WORKTREE_PATH" "$BRANCH" "$URL" "$(json_array_numbers "$PORTS")" "$expires_at")"
-  claim_response="$(mcp_call claim_nonprod_environment_lease "$claim_args" | extract_tool_result)"
-  claim_success="$(printf '%s' "$claim_response" | field success)"
-  claim_error="$(printf '%s' "$claim_response" | field error)"
-  if [ "$claim_success" = "true" ]; then
-    CLAIMED_LEASE_ID="$(printf '%s' "$claim_response" | field entityId)"
-    [ -n "$CLAIMED_LEASE_ID" ] \
-      || CLAIMED_LEASE_ID="$(printf '%s' "$claim_response" | field data.lease.leaseId)"
-    [ -n "$CLAIMED_LEASE_ID" ] \
-      || die "lease claim succeeded without returning a lease id"
-    admission_status="$(printf '%s' "$claim_response" | field data.admission.status)"
-    if [ "$admission_status" = "queued" ]; then
-      queue_position="$(printf '%s' "$claim_response" | field data.admission.queuePosition)"
-      printf '%s\n' "WAITING lease ${CLAIMED_LEASE_ID} is queued at position ${queue_position:-unknown}; :3001 is not owned yet." >&2
-      printf '%s\n' "Retry this same claim after the admitted holder releases; the stable claim key preserves FIFO position." >&2
-      return 3
+' "$ENVIRONMENT_KEY" "$OWNER_PROVIDER" "$OWNER_SESSION_ID" "$WORKTREE_PATH" "$BRANCH" "$URL" "$(json_array_numbers "$PORTS")" "$expires_at" "$claim_key")"
+    claim_response="$(mcp_call claim_nonprod_environment_lease "$claim_args" | extract_tool_result)"
+    claim_success="$(printf '%s' "$claim_response" | field success)"
+    claim_error="$(printf '%s' "$claim_response" | field error)"
+    if [ "$claim_success" = "true" ]; then
+      CLAIMED_LEASE_ID="$(printf '%s' "$claim_response" | field entityId)"
+      [ -n "$CLAIMED_LEASE_ID" ] \
+        || CLAIMED_LEASE_ID="$(printf '%s' "$claim_response" | field data.lease.leaseId)"
+      [ -n "$CLAIMED_LEASE_ID" ] \
+        || die "lease claim succeeded without returning a lease id"
+      admission_status="$(printf '%s' "$claim_response" | field data.admission.status)"
+      if [ "$admission_status" = "queued" ]; then
+        queue_position="$(printf '%s' "$claim_response" | field data.admission.queuePosition)"
+        printf '%s\n' "WAITING lease ${CLAIMED_LEASE_ID} is queued at position ${queue_position:-unknown}; :3001 is not owned yet." >&2
+        printf '%s\n' "Retry this same claim after the admitted holder releases; the stable claim key preserves FIFO position." >&2
+        return 3
+      fi
+      printf 'LEASE_ID=%s\n' "$CLAIMED_LEASE_ID"
+      printf 'admitted %s for :3001 -> %s (%s)\n' "$ENVIRONMENT_KEY" "$WORKTREE_PATH" "$BRANCH"
+      return 0
     fi
-    printf 'LEASE_ID=%s\n' "$CLAIMED_LEASE_ID"
-    printf 'admitted %s for :3001 -> %s (%s)\n' "$ENVIRONMENT_KEY" "$WORKTREE_PATH" "$BRANCH"
-    return 0
-  fi
-  if [ "$claim_error" = "lease_conflict" ]; then
-    holder="$(printf '%s' "$claim_response" | field data.active)"
-    # data.active is an object; re-extract it as JSON for describe_holder.
-    holder_json="$(node -e '
+    if [ "$claim_error" = "lease_conflict" ]; then
+      holder="$(printf '%s' "$claim_response" | field data.active)"
+      # data.active is an object; re-extract it as JSON for describe_holder.
+      holder_json="$(node -e '
 const fs = require("node:fs");
 const resp = JSON.parse(fs.readFileSync(0, "utf8") || "{}");
 const active = resp && resp.data && resp.data.active ? resp.data.active : null;
@@ -245,13 +257,30 @@ process.stdout.write(active ? JSON.stringify(active) : "");
 $claim_response
 EOF
 )"
-    holder_line="$(printf '%s' "$holder_json" | describe_holder)"
-    printf '%s\n' "REFUSING to silently re-bind :3001." >&2
-    printf '%s\n' "The shared ${ENVIRONMENT_KEY} lease is already held by: ${holder_line:-$holder}" >&2
-    printf '%s\n' "Coordinate explicitly: ask that holder to release, or take over only after they release their lease (scripts/dev-portal-lease.sh release --lease-id <id>)." >&2
-    return 3
-  fi
-  die "failed to claim ${ENVIRONMENT_KEY} lease for :3001: $claim_response"
+      holder_line="$(printf '%s' "$holder_json" | describe_holder)"
+      printf '%s\n' "REFUSING to silently re-bind :3001." >&2
+      printf '%s\n' "The shared ${ENVIRONMENT_KEY} lease is already held by: ${holder_line:-$holder}" >&2
+      printf '%s\n' "Coordinate explicitly: ask that holder to release, or take over only after they release their lease (scripts/dev-portal-lease.sh release --lease-id <id>)." >&2
+      return 3
+    fi
+    terminal_reason="$(printf '%s' "$claim_response" | field data.reason)"
+    [ -n "$terminal_reason" ] \
+      || terminal_reason="$(printf '%s' "$claim_response" | field data.lease.status)"
+    if [ "$claim_error" = "lease_terminal" ]; then
+      case "$terminal_reason" in
+        released|cancelled|expired)
+          if [ "$terminal_claim_attempt_sequence" -ge "$MAX_TERMINAL_CLAIM_ATTEMPTS" ]; then
+            die "terminal claim retry budget exhausted after ${terminal_claim_attempt_sequence} replacement attempt(s); last claim was ${terminal_reason}"
+          fi
+          terminal_claim_attempt_sequence=$((terminal_claim_attempt_sequence + 1))
+          claim_key="${base_claim_key}:rerun-${terminal_claim_attempt_sequence}"
+          printf '%s\n' "previous contributor-preview claim was ${terminal_reason}; creating terminal attempt ${terminal_claim_attempt_sequence}..."
+          continue
+          ;;
+      esac
+    fi
+    die "failed to claim ${ENVIRONMENT_KEY} lease for :3001: $claim_response"
+  done
 }
 
 case "$COMMAND" in
