@@ -415,6 +415,9 @@
     "apps/web/components/monitoring/prometheus-config.test.ts": [
       "docs/install/platform-support-watchlist.md"
     ],
+    "apps/web/components/ops/SelfUpgradeLiveProvider.tsx": [
+      "docs/architecture/background-operation-observation-contract.md"
+    ],
     "apps/web/components/platform/AgentCardSupervisorPanel.tsx": [
       "docs/architecture/agent-standards-dpf-conformance.md"
     ],
@@ -423,6 +426,9 @@
     ],
     "apps/web/components/platform/StalledTaskRecoveryActions.tsx": [
       "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md"
+    ],
+    "apps/web/components/platform/SystemEventProvider.tsx": [
+      "docs/architecture/background-operation-observation-contract.md"
     ],
     "apps/web/components/proactivity/ProactivityRosterList.tsx": [
       "docs/user-guide/ai-workforce/coworker-proactivity.md"
@@ -516,6 +522,9 @@
     ],
     "apps/web/lib/ai-operations-map/project-routing-topology.ts": [
       "docs/specs/routing-resilience-and-failure-observability-spec.md"
+    ],
+    "apps/web/lib/architecture/background-operation-observation-contract.test.ts": [
+      "docs/architecture/background-operation-observation-contract.md"
     ],
     "apps/web/lib/assurance/cyclonedx-generator.ts": [
       "docs/architecture/dependency-reduction-routine.md"
@@ -662,6 +671,12 @@
     ],
     "apps/web/lib/govern/permissions.ts": [
       "docs/architecture/delivery-ia.md"
+    ],
+    "apps/web/lib/hooks/useBackgroundOperationObserver.ts": [
+      "docs/architecture/background-operation-observation-contract.md"
+    ],
+    "apps/web/lib/hooks/useResilientEventSource.ts": [
+      "docs/architecture/background-operation-observation-contract.md"
     ],
     "apps/web/lib/identity/aidoc-resolver.ts": [
       "docs/architecture/agent-standards-dpf-conformance.md",
@@ -918,6 +933,9 @@
     "apps/web/lib/self-upgrade/prepare-source.ts": [
       "docs/dev/collision-free-dev-workflow.md"
     ],
+    "apps/web/lib/self-upgrade/status-snapshot.ts": [
+      "docs/architecture/background-operation-observation-contract.md"
+    ],
     "apps/web/lib/shared/action-result.ts": [
       "docs/architecture/data-model-stewardship-runbook.md"
     ],
@@ -950,6 +968,7 @@
       "docs/architecture/agent-standards-dpf-conformance.md"
     ],
     "apps/web/lib/tak/agent-event-bus.ts": [
+      "docs/architecture/background-operation-observation-contract.md",
       "docs/prompts/a2a-coworker-substrate-prompt.md"
     ],
     "apps/web/lib/tak/agent-grants.ts": [
@@ -2010,6 +2029,15 @@
     ],
     "docs/architecture/archetype-business-value-streams.md": [
       "packages/storefront-templates/src/types.ts"
+    ],
+    "docs/architecture/background-operation-observation-contract.md": [
+      "apps/web/components/ops/SelfUpgradeLiveProvider.tsx",
+      "apps/web/components/platform/SystemEventProvider.tsx",
+      "apps/web/lib/architecture/background-operation-observation-contract.test.ts",
+      "apps/web/lib/hooks/useBackgroundOperationObserver.ts",
+      "apps/web/lib/hooks/useResilientEventSource.ts",
+      "apps/web/lib/self-upgrade/status-snapshot.ts",
+      "apps/web/lib/tak/agent-event-bus.ts"
     ],
     "docs/architecture/backlog-and-planning-runbook.md": [
       "apps/web/lib/govern/data/field-classification.ts",
