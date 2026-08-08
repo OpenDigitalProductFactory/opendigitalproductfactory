@@ -121,7 +121,8 @@ to each external work is maintained in the informative
 | [Model Context Protocol specification](https://modelcontextprotocol.io/specification/2025-11-25/basic) | Tool and context interoperability |
 | [Model Context Protocol authorization specification](https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization) | OAuth-based authorization profile for protected MCP deployments |
 | [Anthropic: Introducing the Model Context Protocol](https://www.anthropic.com/news/model-context-protocol) | Background on MCP as an open protocol |
-| [Agent2Agent Protocol specification](https://google-a2a.github.io/A2A/specification/) | Agent-to-agent interoperability and discovery |
+| [Agent2Agent Protocol v1.0 specification](https://a2a-protocol.org/latest/specification/) | Agent-to-agent interoperability, discovery, task lifecycle, extension points, and implementation-defined identity/authorization boundaries |
+| [A2A enterprise implementation guidance](https://a2a-protocol.org/latest/topics/enterprise-ready/) | Enterprise transport security, authorization, minimization, observability, and auditing guidance; does not define agent-subject identity or cross-organization participation disclosure |
 | [Google: Announcing the Agent2Agent Protocol](https://developers.googleblog.com/en/a2a-a-new-era-of-agent-interoperability/) | Background on A2A as an open protocol |
 | [Linux Foundation: Agentic AI Foundation announcement](https://www.linuxfoundation.org/press/linux-foundation-announces-the-formation-of-the-agentic-ai-foundation?hs_amp=true) | Neutral governance venue for MCP and `AGENTS.md` stewardship |
 | [RFC 4512 Lightweight Directory Access Protocol (LDAP): Directory Information Models](https://www.rfc-editor.org/rfc/rfc4512.html) | Enterprise directory modeling relevant to internal agent identity projection |
@@ -196,6 +197,9 @@ For the purposes of this standard:
 | `public namespace` | The globally resolvable identifier space intended for cross-organizational or public consumption |
 | `private namespace` | An internally governed identifier space intended for local or intra-organizational use |
 | `boundary mapping` | The governed relationship between an internal private identifier and an externally exposed public identifier |
+| `agent participation graph` | The receipt-linked, acyclic record of every materially participating agent subject and its delegation or contribution relationship in an interaction |
+| `boundary projection` | A policy-derived external view of an agent participation graph that exposes only approved identifiers and claims for the relying-party boundary |
+| `participation commitment` | A signed, privacy-preserving cryptographic commitment that binds an external receipt to a fuller protected participation graph without disclosing that graph |
 | `receipt` | A signed record describing a specific agent action, delegation, or decision event |
 | `chain-of-custody` | The traceable sequence linking a principal, agent, delegate, action, evidence, and resulting state transition |
 | `transparency log` | An append-oriented record of public issuance, status change, revocation, or other identity-relevant events |
@@ -213,6 +217,7 @@ An implementation of `GAID`:
 - `MUST NOT` treat a qualification badge as live authorization
 - `MUST` distinguish local authorization from portable authorization class
 - `MUST` preserve chain-of-custody for consequential actions
+- `MUST` distinguish complete internal chain-of-custody from the minimized identity view disclosed across an administrative boundary
 - `SHOULD` support both private and public operation without forcing them to share a single namespace
 - `SHOULD` expose enough structured metadata that relying parties do not need trial-and-error to determine whether an agent is fit for purpose
 - `MAY` support additional badge vocabularies, sectors, or regulatory overlays so long as the core identity and receipt semantics are preserved
@@ -296,6 +301,32 @@ Where a private agent is exposed publicly:
 - the relationship between the private and public identifiers `MUST` be recorded
 - the mapping `MUST` be visible to authorized auditors
 - the mapping `SHOULD NOT` disclose internal-only identifiers to general public consumers unless policy requires it
+
+A boundary mapping is an alias relationship for one enduring agent subject. It is not a second
+agent, a temporary network identity, or permission to derive a public identifier from a private
+identifier without issuer governance.
+
+When an interaction crosses an organization boundary:
+
+- every disclosed agent identifier `MUST` be a `GAID-Public` identifier, unless a stricter
+  bilateral profile explicitly defines another boundary-conformant public assurance class
+- a private `GAID`, private issuer prefix, internal principal identifier, internal installation
+  identifier, or undisclosed agent-topology reference `MUST NOT` appear in the external payload,
+  card, artifact, error, receipt view, or peer-visible telemetry
+- an approved boundary endpoint, installation, or signing-device identifier already required to
+  authenticate the inter-organizational relationship `MAY` remain visible as transport evidence;
+  this exception does not expose internal routing or participant topology
+- the issuer `MUST` resolve each disclosed public identifier through the governed boundary mapping
+  for the same canonical agent subject
+- lack of a required public mapping `MUST` fail closed; an implementation `MUST NOT` fall back to
+  exposing the private identifier
+- the relying-party view `MUST` indicate when material participation details were withheld and
+  `MUST NOT` falsely represent the externally accountable agent as the only agent that performed
+  the work
+
+Same-organization federation `MAY` disclose private or federated identifiers only where the
+relationship policy explicitly allows them. Administrative affinity alone is not disclosure
+authority.
 
 ### 6.6 Delegation, Accreditation, and Root Governance
 
@@ -957,7 +988,8 @@ For multi-step or multi-agent flows:
 - the initiating trace context `SHOULD` be preserved end to end
 - delegated actions `MUST` retain a parent-child receipt relationship
 - the delegated agent's `GAID` `MUST` be recorded
-- the delegating agent's `GAID` `MUST` remain visible in the chain
+- the delegating agent's `GAID` `MUST` remain visible in the protected custody chain and to
+  authorized auditors; an external boundary projection applies Section 10.6
 
 ### 10.4 Integrity and Non-Repudiation
 
@@ -981,6 +1013,49 @@ Accordingly:
 - internal-only context `MAY` be redacted in public-facing receipts while remaining available to authorized auditors
 
 Implementations handling identifiable human context `SHOULD` align receipt and `AIDoc` retention with applicable privacy controls such as `GDPR` and `ISO/IEC 27701`, including minimization, retention, and accountability expectations.
+
+### 10.6 Enterprise Identity-Boundary Projection
+
+An implementation that coordinates more than one agent `MUST` maintain a protected agent
+participation graph for every consequential interaction. The graph `MUST` include each agent
+subject that materially originated, delegated, authorized, approved, transformed, executed, or
+published part of the interaction. Deterministic tools and transport processes are not agent hops
+unless they are themselves governed as agent subjects.
+
+The graph:
+
+- `MUST` identify every participating agent by its canonical GAID in the source administrative
+  boundary
+- `MUST` record delegation and contribution edges using stable hop identifiers and parent
+  references so fan-out and fan-in are not falsely flattened into a linear chain
+- `MUST` bind each material hop to its receipt, trace context, role, time, and originating
+  installation/device evidence where applicable
+- `MUST` be retained in an access-controlled evidence store under the applicable retention policy
+- `MUST NOT` be copied wholesale across an organization boundary merely to satisfy traceability
+
+For an external boundary, the implementation `MUST` derive a separate boundary projection from
+the governing disclosure contract. That projection:
+
+- `MUST` expose only approved `GAID-Public` aliases for externally accountable participants
+- `MUST` state whether participation was minimized
+- `MUST` include a participation commitment when one or more material hops are withheld
+- `MUST NOT` disclose the number, names, private GAIDs, topology, installation identifiers, device
+  identifiers, prompts, or internal roles of withheld participants unless the disclosure contract
+  expressly allows that field
+- `MUST` be integrity-bound to the task, message, artifact, decision, or receipt it accompanies
+
+The participation commitment `MUST` be computed over a deterministic canonical representation of
+the complete protected graph, the interaction context, and the applied projection-policy version.
+It `MUST` use a high-entropy private nonce or an equivalently hiding construction so predictable
+private identifiers cannot be tested by dictionary attack. The commitment and projection `MUST`
+be signed by the boundary's approved signing authority. The nonce and protected graph `MUST`
+remain available for an authorized audit opening, subject to retention and legal policy.
+
+This dual-view model is analogous to an enterprise network boundary: the organization preserves
+its complete internal route and accountability record, while the external party sees only the
+governed public identities and a verifiable commitment that the protected record was not silently
+rewritten. It does not create a new agent-identity scheme; public and private GAIDs remain governed
+aliases of the same canonical subject.
 
 ![Receipt chain](gaid-diagrams/png/03-receipt-chain.png)
 
@@ -1038,6 +1113,12 @@ For `A2A` environments:
 - task and artifact events `SHOULD` preserve chain-of-custody identifiers
 - public agents `SHOULD` bind `Agent Card` metadata to issuer-controlled verification material
 - where `A2A` agent cards advertise `securitySchemes` or authenticated extended cards, the published `GAID` projection `SHOULD` remain consistent across both public and authenticated card variants
+- implementations `SHOULD` carry the GAID identity and participation projection as a versioned,
+  strongly typed A2A extension rather than ungoverned metadata keys
+- a cross-organization A2A response `MUST` apply Sections 6.5 and 10.6 before serialization; A2A
+  transport authentication or tenant routing is not authority to disclose private GAIDs
+- an A2A Agent Card intended for an external organization `MUST NOT` enumerate private agents or
+  internal topology and `MUST` use the public GAID view for every disclosed agent subject
 
 ### 11.6 HTTP and API Profile
 
@@ -1122,6 +1203,8 @@ An implementation conforming to this standard:
 - `SHOULD` bind public agent identity to organizational certificates or equivalent verification material
 - `SHOULD` use transparency logging for public issuance and revocation events
 - `SHOULD` minimize personally identifiable information in public identity documents and receipts
+- `MUST` treat internal agent identity, delegation topology, installation topology, and private
+  namespace structure as protected metadata at an organization boundary
 - `SHOULD` align threat analysis and control mapping with public catalogs such as `OWASP` Top 10 for Agentic Applications, `CSA MAESTRO`, and `MITRE ATLAS`
 - `SHOULD` consider applicable privacy and transparency obligations under frameworks such as the `EU` GPAI Code of Practice, enterprise privacy programs, and sector-specific disclosure rules
 - `MAY` support selective disclosure for regulated or classified environments
@@ -1152,6 +1235,8 @@ A `GAID-Federated` implementation:
 - `MUST` support delegated issuer governance
 - `MUST` support signed `AIDoc` publication
 - `MUST` support receipt integrity and status checking
+- `MUST` support policy-derived boundary projections and protected participation graphs for
+  consequential cross-boundary multi-agent interactions
 - `SHOULD` maintain a transparency log
 - `SHOULD` support organization-attested, independently-assessed, and accredited-certified badges
 - `SHOULD` support verifier-facing trust-list or federation publication
@@ -1164,6 +1249,7 @@ A `GAID-Public` implementation:
 - `MUST` use an accredited issuer model or recognized federated equivalent
 - `MUST` expose public verification material
 - `MUST` support public revocation and status checks
+- `MUST` support governed private-to-public boundary mappings without disclosing private aliases
 - `MUST` provide public-facing badge and assurance disclosures appropriate to relying-party trust
 - `SHOULD` support certificate-backed identity binding for public endpoints and organizational ownership
 - `SHOULD` support hybrid verification in which domain or certificate control, issuer status, and optional decentralized portability can coexist without fragmenting the canonical subject identity

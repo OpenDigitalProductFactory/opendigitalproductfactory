@@ -327,7 +327,7 @@ tokens, proof-of-possession, or enterprise identity policy.
 | External specification | Adopted or profiled use |
 |---|---|
 | Model Context Protocol | Tool discovery and invocation carrier; `TAK` supplies tool policy, approval, data, and evidence controls behind the transport |
-| Agent2Agent Protocol | Agent discovery and communication carrier; `GAID` supplies identity/assurance references and `TAK` supplies delegation narrowing |
+| [Agent2Agent Protocol v1.0](https://a2a-protocol.org/latest/specification/) | Agent discovery, task, artifact, security-scheme, signed-card, multi-tenancy, and extension carrier; `GAID` supplies the agent-subject identity, private/public boundary mapping, protected participation graph, and minimized external identity view that A2A deliberately leaves to the implementation, while `TAK` supplies delegation narrowing |
 | W3C Trace Context | Correlation identifiers across agent, tool, model, queue, and delegate boundaries |
 | RFC 9421 HTTP Message Signatures | Message integrity and signer binding for cross-boundary evidence |
 | RFC 9449 DPoP | Sender-constrained OAuth token use where bearer-token replay is unacceptable |
@@ -338,6 +338,15 @@ tokens, proof-of-possession, or enterprise identity policy.
 The family defines the semantics that these carriers transport. Implementations should preserve
 the native identifiers and verification material of adopted protocols instead of translating them
 into opaque, unverifiable prose.
+
+A2A's enterprise guidance covers transport security, standard web authentication, authorization,
+data minimization, observability, audit, and API management. Its core leaves identity outside A2A
+payload semantics and leaves authorization boundaries implementation-defined; its multi-tenancy
+identifier is opaque routing, not agent identity. Consequently, `GAID` profiles A2A through its
+standard extension points rather than changing the A2A task or transport model. The profile adds
+the enterprise identity concerns A2A does not normatively define: canonical agent subjects,
+private-to-public aliases, full source-side multi-agent custody, public-only boundary projection,
+and signed commitments to withheld participation.
 
 ## 10. Distinctive Augmentation
 

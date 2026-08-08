@@ -392,6 +392,7 @@
         "103-trace-context-and-delegation",
         "104-integrity-and-non-repudiation",
         "105-privacy-and-minimization",
+        "106-enterprise-identity-boundary-projection",
         "11-protocol-profiles-and-interoperability",
         "111-general-rule",
         "112-core-extensions-and-profile-pattern",
