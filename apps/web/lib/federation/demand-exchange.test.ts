@@ -284,3 +284,38 @@ describe("received-demand decisions", () => {
     expect(ingest).not.toHaveBeenCalled();
   });
 });
+
+describe("handleIncomingDemand — version-vector conflict (BI-67315C4A)", () => {
+  it("flags a genuinely concurrent version-vector edit as a conflict (the scalar can't)", async () => {
+    const current = envelope({ versionVector: { origin: 1, peerY: 1 } });
+    const { db, updateMany } = demandDb({
+      mirrorId: "fdm_1",
+      version: 1n,
+      versionVector: { origin: 1, peerY: 1 },
+      syncStatus: "synced",
+      payload: { envelope: current, activity: "dpf.demand.proposed", disposition: "observed" },
+    });
+    // Incoming leads on origin+peerX; stored leads on peerY → concurrent.
+    const incoming = envelope({ originVersion: 2, versionVector: { origin: 2, peerX: 1 } });
+    await expect(handleIncomingDemand(db, "link_1", "dpf.demand.updated", incoming)).resolves.toMatchObject({
+      action: "conflict",
+      reason: "concurrent-update",
+    });
+    expect(updateMany).not.toHaveBeenCalled();
+  });
+
+  it("accepts a cleanly-newer version vector (dominates) — no false conflict", async () => {
+    const current = envelope({ versionVector: { origin: 1 } });
+    const { db } = demandDb({
+      mirrorId: "fdm_1",
+      version: 1n,
+      versionVector: { origin: 1 },
+      syncStatus: "synced",
+      payload: { envelope: current, activity: "dpf.demand.proposed", disposition: "observed" },
+    });
+    const incoming = envelope({ originVersion: 2, versionVector: { origin: 2 } });
+    await expect(handleIncomingDemand(db, "link_1", "dpf.demand.updated", incoming)).resolves.toMatchObject({
+      action: "updated",
+    });
+  });
+});

@@ -15029,6 +15029,11 @@ model FederatedRecordMirror {
   // epoch (ms) so re-projecting an unchanged record is idempotent. A ms epoch
   // (~1.7e12) overflows Int (int4, max ~2.1e9) — see BI-CC8021CE.
   version             BigInt    @default(1)
+  // Per-installation causal-ordering vector (BI-67315C4A). When present on both
+  // sides, the exchange uses it (not the scalar `version`) to distinguish a clean
+  // newer-than from a genuine concurrent conflict. Null on legacy rows / peers
+  // that predate the vector — the exchange falls back to the scalar then.
+  versionVector       Json?
   conflictReason      String?
   lastSyncedAt        DateTime?
   // Durable delivery state for local-canonical outbox records. Peer-canonical
