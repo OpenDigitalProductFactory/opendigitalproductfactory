@@ -430,7 +430,22 @@ evidence rather than a product test failure. Local-CI writes its main metadata
 on failure as well as success so this diagnostic survives lease release.
 If the supervisor host itself disappears, the next exact-tree run recognizes
 the stale running receipt and starts directly at the two-worker differentiated
-profile; it does not repeat the already disproven four-worker profile.
+profile; it does not repeat the already disproven four-worker profile. The
+selected execution profile is persisted before the child launches. If a later
+host also disappears during that same differentiated profile, the receipt is
+terminal retry-exhaustion evidence: the wrapper exits 86 without spawning an
+unchanged third attempt. Another run requires a materially changed runner or
+integration identity.
+
+With a valid sandbox-pool policy, admission is capacity zero whenever current
+memory, CPU, disk, Docker, dependency-convergence, slot-fence, or evidence-
+isolation input is unsafe or unmeasurable. The lease supervisor continues
+sampling after admission and fences the active stage child for hard memory,
+disk, Docker, slot-fence, or evidence-integrity loss. CPU pressure blocks new
+admission but does not kill an active stage, and dependency convergence keeps
+its separate quiescence fence. A release or expiry preserves the queue without
+blind promotion; the FIFO head is admitted only after its next poll supplies
+fresh safe host evidence.
 
 Typecheck writes a separate `web-typecheck` receipt before `next typegen &&
 tsc --noEmit` starts, heartbeats the compiler descendant tree, memory, and a

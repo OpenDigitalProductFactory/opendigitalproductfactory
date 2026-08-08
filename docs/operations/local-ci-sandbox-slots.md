@@ -8,8 +8,10 @@ safety layers.
 ## Current operating mode
 
 Capacity is governed by the versioned
-`PlatformConfig["local_ci.sandbox_pool"]` policy. An absent, malformed,
-unsupported, stale, unmeasurable, or unsafe policy resolves to **one**.
+`PlatformConfig["local_ci.sandbox_pool"]` policy. An absent or malformed policy
+preserves the rolling-upgrade compatibility capacity of **one**. Once a valid
+policy is configured, stale, unmeasurable, or unsafe host evidence resolves to
+**zero**: queued intent remains FIFO, but no new stage host is admitted.
 `slot-1` is never permission to bypass durable FIFO admission or run two gates
 manually.
 
@@ -24,9 +26,14 @@ disk headroom; Docker health; dependency-convergence quiescence; valid slot
 fences; and evidence isolation. The broker pessimistically merges those
 observations: minimum free resources, maximum load, and any unhealthy signal
 win. Client evidence can therefore contract capacity but can never grant
-`slot-1` by itself. The runner continues sampling while work is active. A
-breached or unmeasurable ceiling stops new `slot-1` admissions but does not
-evict a healthy current owner merely to contract the pool.
+`slot-1` by itself. The runner continues sampling while work is active. Memory,
+disk, Docker, slot-fence, or evidence-integrity loss is a hard active execution
+fence: the wrapper stops its stage child and releases authority. High CPU
+remains an admission throttle because stopping an already-running stage would
+usually worsen contention; dependency convergence keeps its separate
+quiescence fence. Release and expiry never promote a local-CI waiter from old
+pressure evidence; the FIFO head's next claim poll must supply a fresh
+observation before admission.
 
 ### Peer-slot host fencing
 

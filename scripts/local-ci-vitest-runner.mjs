@@ -11,6 +11,7 @@ import {
   markStageReceiptReused,
   readStageReceipt,
   reusablePassedStage,
+  stageIdentityMatches,
 } from "./lib/local-ci-stage-receipt.mjs";
 
 function valueAfter(flag, fallback) {
@@ -51,16 +52,48 @@ export function lastCompletedTestLine(outputTail) {
 
 export function selectVitestRecoveryPlan({
   priorDisposition,
+  priorExecutionProfile = null,
   initialWorkers,
   retryWorkers,
 }) {
-  const recoveringPriorTermination = priorDisposition === "externally-terminated";
+  const recoveringPriorTermination = priorDisposition === "externally-terminated"
+    || priorDisposition === "retry-exhausted";
+  const exhausted = priorDisposition === "retry-exhausted"
+    || (
+      recoveringPriorTermination
+      && priorExecutionProfile?.mode === "differentiated-recovery"
+      && priorExecutionProfile?.workers === retryWorkers
+    );
+  const executionProfile = recoveringPriorTermination
+    ? { mode: "differentiated-recovery", workers: retryWorkers }
+    : { mode: "initial", workers: initialWorkers };
   return {
     initialWorkers: recoveringPriorTermination ? retryWorkers : initialWorkers,
     retryWorkers,
     allowRetry: !recoveringPriorTermination,
     recoveringPriorTermination,
+    exhausted,
+    executionProfile,
   };
+}
+
+function latestExecutionProfile(receipt) {
+  const observations = Array.isArray(receipt?.observations)
+    ? receipt.observations
+    : [];
+  for (let index = observations.length - 1; index >= 0; index -= 1) {
+    if (observations[index]?.executionProfile) {
+      return observations[index].executionProfile;
+    }
+  }
+  return receipt?.executionProfile ?? null;
+}
+
+export function recoveryReceiptForIdentity({ receipt, identity }) {
+  return receipt?.stage === "exhaustive-vitest"
+    && stageIdentityMatches(receipt.identity, identity)
+    ? receipt
+    : null;
 }
 
 export function createAttemptRunner({
@@ -125,9 +158,21 @@ async function main() {
     );
     return;
   }
-  const priorDisposition = classifyPriorStage({
+  const matchingPriorReceipt = recoveryReceiptForIdentity({
     receipt: priorReceipt,
-    isProcessAlive: processAlive,
+    identity,
+  });
+  const priorDisposition = matchingPriorReceipt?.retryExhausted === true
+    ? "retry-exhausted"
+    : classifyPriorStage({
+        receipt: matchingPriorReceipt,
+        isProcessAlive: processAlive,
+      });
+  const recoveryPlan = selectVitestRecoveryPlan({
+    priorDisposition,
+    priorExecutionProfile: latestExecutionProfile(matchingPriorReceipt),
+    initialWorkers,
+    retryWorkers,
   });
   const receipt = createStageReceiptWriter({
     path: diagnosticsPath,
@@ -136,27 +181,53 @@ async function main() {
   });
   receipt.start({
     bi: "BI-872CB1BF",
-    recoveredFrom: priorDisposition === "externally-terminated"
+    executionProfile: recoveryPlan.executionProfile,
+    recoveredFrom: recoveryPlan.recoveringPriorTermination
       ? {
-          hostPid: priorReceipt.hostPid ?? null,
-          lastHeartbeatAt: priorReceipt.lastHeartbeatAt ?? null,
+          hostPid: matchingPriorReceipt.hostPid ?? null,
+          lastHeartbeatAt: matchingPriorReceipt.lastHeartbeatAt ?? null,
+          executionProfile: latestExecutionProfile(matchingPriorReceipt),
         }
       : null,
   });
 
-  const recoveryPlan = selectVitestRecoveryPlan({
-    priorDisposition,
-    initialWorkers,
-    retryWorkers,
+  if (recoveryPlan.exhausted) {
+    receipt.complete("runner-termination", {
+      retryExhausted: true,
+      recoveryPlan,
+      priorTermination: {
+        hostPid: matchingPriorReceipt.hostPid ?? null,
+        lastHeartbeatAt: matchingPriorReceipt.lastHeartbeatAt ?? null,
+        executionProfile: latestExecutionProfile(matchingPriorReceipt),
+      },
+    });
+    process.stderr.write(
+      "[local-ci-vitest] differentiated recovery already terminated; recording terminal runner evidence without another child\n",
+    );
+    process.exit(86);
+  }
+
+  const observedAttempt = createAttemptRunner({
+    onProgress: (progress) => receipt.heartbeat(progress),
   });
 
   const result = await runVitestWithRecovery({
     initialWorkers: recoveryPlan.initialWorkers,
     retryWorkers: recoveryPlan.retryWorkers,
     allowRetry: recoveryPlan.allowRetry,
-    runAttempt: createAttemptRunner({
-      onProgress: (progress) => receipt.heartbeat(progress),
-    }),
+    runAttempt: ({ workers, attempt }) => {
+      receipt.heartbeat({
+        attempt,
+        workers,
+        executionProfile: {
+          mode: workers === retryWorkers && (attempt > 1 || recoveryPlan.recoveringPriorTermination)
+            ? "differentiated-recovery"
+            : "initial",
+          workers,
+        },
+      });
+      return observedAttempt({ workers, attempt });
+    },
     onAttempt: async (attempt) => {
       latestAttempts = [...latestAttempts, attempt];
       receipt.heartbeat({
@@ -178,6 +249,8 @@ async function main() {
 
   receipt.complete(result.classification, {
     recovered,
+    retryExhausted: result.classification === "runner-termination"
+      && result.attempts.some((attempt) => attempt.workers === retryWorkers),
     recoveryPlan,
     startedAt,
     attempts: result.attempts,

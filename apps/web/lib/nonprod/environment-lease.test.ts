@@ -231,7 +231,7 @@ describe("durable nonproduction admission", () => {
     expect(mockDb.nonProductionEnvironmentLease.create).toHaveBeenCalledOnce();
   });
 
-  it("cancels a queued lease and promotes the next FIFO waiter", async () => {
+  it("cancels a queued local-CI lease without promoting from stale pressure", async () => {
     const mockDb = db();
     const current = lease();
     const next = lease({
@@ -244,19 +244,11 @@ describe("durable nonproduction admission", () => {
     mockDb.nonProductionEnvironmentLease.findUnique
       .mockResolvedValueOnce(current)
       .mockResolvedValueOnce(current);
-    mockDb.nonProductionEnvironmentLease.update
-      .mockResolvedValueOnce(lease({
-        status: "cancelled",
-        cancelledAt: NOW,
-        releasedAt: NOW,
-      }))
-      .mockResolvedValueOnce(admitted({
-        ...next,
-        status: "active",
-        slotKey: "slot-0",
-        activeKey: "local-integration-ci:slot-0",
-        admittedAt: NOW,
-      }));
+    mockDb.nonProductionEnvironmentLease.update.mockResolvedValueOnce(lease({
+      status: "cancelled",
+      cancelledAt: NOW,
+      releasedAt: NOW,
+    }));
     mockDb.nonProductionEnvironmentLease.findMany.mockResolvedValueOnce([next]);
 
     const released = await releaseNonprodEnvironmentLease({
@@ -274,16 +266,10 @@ describe("durable nonproduction admission", () => {
         activeKey: null,
       }),
     });
-    expect(mockDb.nonProductionEnvironmentLease.update).toHaveBeenNthCalledWith(2, {
-      where: { id: "row-2" },
-      data: expect.objectContaining({
-        status: "active",
-        slotKey: "slot-0",
-      }),
-    });
+    expect(mockDb.nonProductionEnvironmentLease.update).toHaveBeenCalledTimes(1);
   });
 
-  it("expires lapsed owners and promotes a live waiter", async () => {
+  it("expires lapsed local-CI owners without promoting from stale pressure", async () => {
     const mockDb = db();
     const lapsed = admitted({
       expiresAt: new Date(NOW.getTime() - 1),
@@ -306,10 +292,7 @@ describe("durable nonproduction admission", () => {
         activeKey: null,
       }),
     });
-    expect(mockDb.nonProductionEnvironmentLease.update).toHaveBeenCalledWith({
-      where: { id: "row-2" },
-      data: expect.objectContaining({ status: "active", slotKey: "slot-0" }),
-    });
+    expect(mockDb.nonProductionEnvironmentLease.update).not.toHaveBeenCalled();
   });
 
   it("admits a slot-aware FIFO waiter to slot-1 only under a safe capacity-two policy", async () => {
@@ -404,13 +387,13 @@ describe("durable nonproduction admission", () => {
     });
   });
 
-  it("lets canonical server pressure contract but never expand client capacity", async () => {
+  it("lets canonical server pressure contract a configured singleton to zero", async () => {
     const mockDb = db();
     const waiting = lease({ slotManifestVersion: 1 });
     mockDb.platformConfig.findUnique.mockResolvedValue({
       value: {
         version: 1,
-        requestedCapacity: 2,
+        requestedCapacity: 1,
         ceilings: {
           minAvailableMemoryBytes: 8 * 1024 ** 3,
           maxSustainedCpuPercent: 75,
@@ -458,7 +441,7 @@ describe("durable nonproduction admission", () => {
     expect(result).toMatchObject({
       status: "queued",
       poolPolicy: {
-        effectiveCapacity: 1,
+        effectiveCapacity: 0,
         rollbackReason: "host-memory-low",
       },
     });
