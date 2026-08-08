@@ -2209,7 +2209,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 15
+    "textMass": 24
   },
   "apps/web/app/api/onboarding/business-document/route.ts": {
     "vocabulary": 0,

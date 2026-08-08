@@ -38,6 +38,9 @@ export const TABLE_CLASSIFICATION: Record<string, TableSensitivity> = {
   AbsorptionPosture: "public",
 
   // -- internal --
+  // Per-token deferred-tool-loading discovery state: tool names + token id, no
+  // PII. Short-TTL, swept by its own expiry (see stewardship-exemptions.txt).
+  McpToolSession: "internal",
   Portfolio: "internal",
   DigitalProduct: "internal",
   ProductLine: "internal",

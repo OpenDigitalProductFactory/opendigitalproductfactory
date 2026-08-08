@@ -1,0 +1,49 @@
+{
+  "version": "1",
+  "accountableOwner": "Mark Bodman (markdbodman@gmail.com)",
+  "summary": "BI-D8101329 (MCP tool-tier Phase 2). Add McpToolSession, a per-token short-TTL store of which extra MCP tool names a token pulled into scope via load_tools, so tools/list can append them to the lean core tier (append-not-swap). Discovery-only state with no authorization meaning — tools/call still gates on grants. No PII: the row is keyed by an opaque MCP token id (not a person) and holds tool names + TTL timestamps. Additive, non-destructive: a new table only, no changes to existing rows, applies cleanly against any existing data state. Rows are removed by their own expiresAt sweep (sweepExpiredToolSessions + lazy delete on read), so the model is retention-exempt as domain-lifecycle-managed. Migration: 20260808000000_add_mcp_tool_session.",
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "McpToolSession",
+      "lifecycleDisposition": "domain-lifecycle-managed",
+      "fields": [
+        {
+          "name": "tokenId",
+          "resolution": "governed",
+          "reason": "Opaque MCP token id (PAT id or session id). Scopes the deferred-tool session, not a person; no data subject to locate or mask.",
+          "provenance": "Derived from the authenticated MCP token on the tools/call load_tools request; no external source.",
+          "flags": []
+        },
+        {
+          "name": "loadedToolNames",
+          "resolution": "governed",
+          "reason": "The tool names this token loaded into discovery scope. Platform tool identifiers, not tenant or personal data.",
+          "provenance": "Set by load_tools from the token's own grant-filtered tool surface.",
+          "flags": []
+        },
+        {
+          "name": "expiresAt",
+          "resolution": "governed",
+          "reason": "Short TTL after which the session reads as empty and is swept. Operational timestamp.",
+          "provenance": "Computed at load_tools time (now + MCP_TOOL_SESSION_TTL_MS).",
+          "flags": []
+        },
+        {
+          "name": "createdAt",
+          "resolution": "governed",
+          "reason": "Row creation timestamp. Operational metadata.",
+          "provenance": "Prisma @default(now()).",
+          "flags": []
+        },
+        {
+          "name": "updatedAt",
+          "resolution": "governed",
+          "reason": "Row update timestamp. Operational metadata.",
+          "provenance": "Prisma @updatedAt.",
+          "flags": []
+        }
+      ]
+    }
+  ]
+}

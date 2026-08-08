@@ -16716,3 +16716,19 @@ model MacVendorOui {
 
   @@index([vendor])
 }
+
+/// Per-token deferred-tool-loading session (BI-D8101329, MCP tool-tier Phase 2).
+/// Keyed by the MCP token id (PAT id or `session:*` id). Records which
+/// additional tool names a model has pulled into scope via `load_tools`, so
+/// `tools/list` can APPEND them to the lean core tier (never swap it) on the
+/// next fetch. Short-TTL and swept on expiry — discovery-only state, no
+/// authorization meaning (execution still gates on grants at tools/call).
+model McpToolSession {
+  tokenId         String   @id
+  loadedToolNames String[] @default([])
+  expiresAt       DateTime
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @default(now()) @updatedAt
+
+  @@index([expiresAt])
+}

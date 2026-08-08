@@ -27,7 +27,15 @@ import { submitRemoteCoworkerTask } from "@/lib/mcp-task-submit";
 import { getQuiescenceConfig } from "@/lib/self-upgrade/quiescence";
 import { getToolGrantMapping, expandGrants } from "@/lib/tak/agent-grants";
 import { MCP_ROUTE_TOOL_RESULT_CHAR_CAP } from "@/lib/tak/tool-result-budget";
-import { resolveEffectiveTier, selectToolsByTier, type McpToolTier } from "@/lib/mcp/tool-tier";
+import {
+  resolveEffectiveTier,
+  selectToolsForListing,
+  resolveLoadToolsSelection,
+  LOAD_TOOLS_TOOL_NAME,
+  type McpToolTier,
+} from "@/lib/mcp/tool-tier";
+import { getLoadedToolNames, loadToolsForSession } from "@/lib/mcp/tool-session-store";
+import { LOAD_TOOLS_LISTED, buildLoadToolsResult, loadToolsSseResponse } from "@/lib/mcp/load-tools";
 import { can, type CapabilityKey, type UserContext } from "@/lib/permissions";
 import { prisma } from "@dpf/db";
 
@@ -366,6 +374,34 @@ function annotateTool(tool: ToolDefinition) {
   };
 }
 
+// load_tools: mark the requested GRANTED tools loaded for this token's session
+// so the next tools/list appends them (append-not-swap). Candidates come from
+// the SAME grant filter as tools/list, so a model can never load a tool it isn't
+// granted; execution still gates on grants at tools/call. Presentation + SSE
+// framing live in lib/mcp/load-tools.ts to keep this transport module lean.
+async function handleLoadTools(
+  id: JsonRpcId,
+  token: ResolvedAuth,
+  args: Record<string, unknown>,
+  acceptsEventStream: boolean,
+): Promise<Response> {
+  const userContext = await loadUserContext(token.userId);
+  const grantMap = getToolGrantMapping();
+  const granted = PLATFORM_TOOLS.filter((t) => tokenCanUseTool(t, token, userContext, grantMap));
+  const selected = resolveLoadToolsSelection(granted, args);
+  const loadedToolNames = await loadToolsForSession(
+    token.tokenId,
+    selected.map((t) => t.name),
+  );
+  const result = buildLoadToolsResult(
+    selected.map((t) => ({ name: t.name, description: t.description })),
+    loadedToolNames,
+  );
+  return acceptsEventStream && selected.length > 0
+    ? loadToolsSseResponse(id, result)
+    : jsonRpcOk(id, result);
+}
+
 async function handleTasksSubmit(
   id: JsonRpcId,
   token: ResolvedAuth,
@@ -418,7 +454,10 @@ async function handleInitialize(id: JsonRpcId, params?: Record<string, unknown>)
   return jsonRpcOk(id, {
     protocolVersion: negotiated,
     capabilities: {
-      tools: { listChanged: false },
+      // listChanged: load_tools emits notifications/tools/list_changed (over an
+      // SSE response on the load_tools POST for clients that Accept it); clients
+      // that ignore it still work — the lean core tier is always the floor.
+      tools: { listChanged: true },
     },
     serverInfo: {
       name: SERVER_NAME,
@@ -442,8 +481,14 @@ async function handleToolsList(
   const granted = PLATFORM_TOOLS.filter((t) =>
     tokenCanUseTool(t, token, userContext, grantMap),
   );
-  const tools = selectToolsByTier(granted, tier).map(annotateTool);
-  return jsonRpcOk(id, { tools });
+  // Phase 2 (deferred loading): the tier surface is the FLOOR; append any tools
+  // this token pulled in via load_tools, then the load_tools meta-tool itself.
+  // Append-not-swap keeps the lean core for clients that ignore list_changed and
+  // preserves the cached prompt prefix (tools are only ever added, never
+  // removed/reordered).
+  const loadedNames = new Set(await getLoadedToolNames(token.tokenId));
+  const listed = selectToolsForListing(granted, tier, loadedNames).map(annotateTool);
+  return jsonRpcOk(id, { tools: [...listed, LOAD_TOOLS_LISTED] });
 }
 
 async function handleToolsCall(
@@ -451,12 +496,20 @@ async function handleToolsCall(
   token: ResolvedAuth,
   params: Record<string, unknown> | undefined,
   callerClient?: string,
+  acceptsEventStream: boolean = false,
 ): Promise<Response> {
   if (!params || typeof params["name"] !== "string") {
     return jsonRpcError(id, JSONRPC_INVALID_PARAMS, "tools/call requires params.name (string)");
   }
   const toolName = params["name"];
   const args = (params["arguments"] as Record<string, unknown> | undefined) ?? {};
+
+  // load_tools is a transport-level meta-tool, not a governed domain tool:
+  // handle it inline (it manages per-token discovery state) and never route it
+  // to governedExecuteTool.
+  if (toolName === LOAD_TOOLS_TOOL_NAME) {
+    return await handleLoadTools(id, token, args, acceptsEventStream);
+  }
 
   // Token-scope gate. The wrapper also rejects on grant mismatch when an
   // agentId is in context, but we want a fast pre-check here so an external
@@ -682,6 +735,7 @@ export async function POST(request: Request): Promise<Response> {
           token,
           body.params,
           deriveCallerClient(request.headers.get("user-agent")),
+          (request.headers.get("accept") ?? "").includes("text/event-stream"),
         );
 
       case "tasks/submit":

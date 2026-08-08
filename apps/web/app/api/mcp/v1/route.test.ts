@@ -37,6 +37,7 @@ vi.mock("@dpf/db", () => ({
     taskRun: { findFirst: vi.fn(), update: vi.fn() },
     agentThread: { upsert: vi.fn() },
     taskMessage: { create: vi.fn() },
+    mcpToolSession: { findUnique: vi.fn(), deleteMany: vi.fn(), upsert: vi.fn() },
   },
 }));
 
@@ -615,6 +616,31 @@ describe("POST — tools/list", () => {
       expect(typeof tool.annotations.readOnlyHint).toBe("boolean");
       expect(typeof tool.annotations.destructiveHint).toBe("boolean");
     }
+  });
+
+  it("appends the load_tools meta-tool to every tools/list (Phase 2 deferred loading, BI-D8101329)", async () => {
+    resolveMock.mockResolvedValue({
+      tokenId: "tok_lt",
+      userId: "u1",
+      agentId: null,
+      scopes: ["backlog_read"],
+      capability: "read",
+    });
+    const res = await POST(
+      makeRequest({
+        bearer: "dpfmcp_X",
+        userAgent: "codex/1.0", // lean core tier — load_tools must still be present
+        body: { jsonrpc: "2.0", id: 42, method: "tools/list" },
+      }),
+    );
+    const body = await res.json();
+    const names = (body.result.tools as { name: string }[]).map((t) => t.name);
+    expect(names).toContain("load_tools");
+    const loadTools = (body.result.tools as { name: string; inputSchema: { properties: Record<string, unknown> } }[]).find(
+      (t) => t.name === "load_tools",
+    );
+    expect(loadTools?.inputSchema.properties).toHaveProperty("query");
+    expect(loadTools?.inputSchema.properties).toHaveProperty("names");
   });
 
   it("defaults a non-Claude-Code client to the lean core tier; ?tier=full opts back in (BI-88681BE0)", async () => {
