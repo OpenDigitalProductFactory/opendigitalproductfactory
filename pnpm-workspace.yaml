@@ -183,6 +183,9 @@ minimumReleaseAge: 1440
 allowBuilds:
   '@prisma/client': true
   '@prisma/engines': true
+  # Telemetry-only postinstall: report.js sends install/dependency/platform data
+  # to scarf.sh. Stoplight Prism has no runtime import or generated artifact need.
+  '@scarf/scarf': false
   esbuild: true
   msw: true
   prisma: true
