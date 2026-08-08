@@ -105,6 +105,7 @@ export const CORE_MCP_TOOL_NAMES: ReadonlySet<string> = new Set([
   "link_backlog_item_to_epic",
   // work / coworker / build visibility
   "get_my_coworker_profile",
+  "find_coworker",
   "get_next_recommended_work",
   "list_work_capsules",
   "get_work_capsule",
