@@ -6878,7 +6878,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 101
+    "textMass": 104
   },
   "apps/web/components/platform/service-desk/ServiceTicketsTable.tsx": {
     "vocabulary": 0,

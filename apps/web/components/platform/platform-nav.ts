@@ -40,7 +40,7 @@ export const PLATFORM_FAMILIES: PlatformFamily[] = [
       { label: "Principals", href: "/platform/identity/principals" },
       { label: "Groups", href: "/platform/identity/groups" },
       { label: "Directory", href: "/platform/identity/directory" },
-      { label: "Federation", href: "/platform/identity/federation" },
+      { label: "Identity Federation (SSO)", href: "/platform/identity/federation" },
       { label: "Applications", href: "/platform/identity/applications" },
       { label: "Authorization", href: "/platform/identity/authorization" },
       { label: "AI Coworkers", href: "/platform/identity/agents" },
@@ -93,6 +93,7 @@ export const PLATFORM_FAMILIES: PlatformFamily[] = [
       "/platform/tools",
       "/platform/integrations",
       "/platform/services",
+      "/platform/federation-links",
     ],
     subItems: [
       { label: "Hub", href: "/platform/tools" },
@@ -102,6 +103,9 @@ export const PLATFORM_FAMILIES: PlatformFamily[] = [
       { label: "Built-in Tools", href: "/platform/tools/built-ins" },
       { label: "Estate Discovery", href: "/platform/tools/discovery" },
       { label: "Capability Inventory", href: "/platform/tools/inventory" },
+      // Peer-deployment federation ("Connections" page). Distinct from Identity
+      // Federation (SSO); lives here because it is connection-lifecycle work.
+      { label: "Connections", href: "/platform/federation-links" },
     ],
   },
   {
