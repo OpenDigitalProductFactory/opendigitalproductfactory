@@ -2,9 +2,11 @@
 
 **Date:** 2026-08-08
 
-**Status:** Architecture-reviewed; implementation scope decomposed and governed
+**Status:** Architecture-reviewed; enterprise identity-boundary amendment governed; implementation scope decomposed
 
 **Decision:** `DI-B726A1900E7C` — link-bound signed GAID claim
+
+**Identity-boundary decision:** `DI-6FE234A7399E` — protected full participation graph plus public boundary projection and signed commitment
 
 **Implementation-scope decision:** `DI-61395D1B7A6D` — six independently reviewable, feature-gated slices under one same-org umbrella
 
@@ -27,6 +29,14 @@ The selected design carries a typed GAID claim and standard A2A data model insid
 
 This extends the federation substrate. It does not introduce a second transport, a new agent-identity scheme, a remote-agent table, or per-agent credentials.
 
+Enterprise identity is deliberately two-view. Each sovereign source retains a complete,
+receipt-linked graph of every materially participating agent by canonical GAID. Before an event,
+card, artifact, receipt, error, or response crosses an organization boundary, the existing
+`ProjectionContract` derives a boundary view containing only approved `gaid:pub` aliases. When
+internal participants are withheld, the signed response says so and carries a privacy-preserving
+commitment to the protected graph. The public boundary agent remains accountable without exposing
+the company's private agent inventory or topology.
+
 ## 2. Problem and first slice
 
 The organization's production and development installations already exchange federated demand as sovereign peers. The next layer is a coworker on one installation delegating a task to a coworker on the other while an operator can prove:
@@ -45,6 +55,8 @@ The first product slice is same-organization, two-install coordination over an a
 - link-scoped discovery of eligible remote coworkers using A2A v1.0 Agent Cards;
 - authenticated A2A task initiation, status retrieval, additional input, cancellation, and artifact return;
 - device-signed binding of acting/delegating GAIDs to the existing federation request;
+- complete source-side multi-agent participation custody and policy-derived same-org/cross-org
+  identity projection;
 - receiver-side target resolution, TAK authority checks, projection minimization, replay protection, task ownership, and audit receipts;
 - an operator-facing A2A readiness and provenance view on the existing federation-link and engagement surfaces;
 - a compatibility path from the current DPF A2A-shaped service-offer/task implementation to the standard A2A data model.
@@ -108,6 +120,11 @@ The canonical runtime projection is not an `Agent.gaid` column. [`apps/web/lib/i
 
 `buildPrivateAgentGaid` currently emits `gaid:priv:dpf.internal:<agent-id>`. The GAID standard requires a private issuer prefix to include a stable installation, domain, or equivalent namespace discriminator. `dpf.internal` alone cannot guarantee uniqueness across sovereign installations. Therefore, a current private GAID string must not be promoted to “globally verified” merely because it parses.
 
+The GAID standard's enterprise identity-boundary contract is now normative in
+[`docs/architecture/GAID.md`](../../architecture/GAID.md) §§6.5 and 10.6. It distinguishes the
+complete protected participation graph from the public boundary projection. This specification
+profiles that rule for A2A; it does not restate GAID subject semantics or mint a boundary-only ID.
+
 The build slice must first converge issuer configuration and alias continuity using the existing GAID/PrincipalAlias model:
 
 - use a stable, governed issuer namespace shared by the administrative authority for an enduring agent subject;
@@ -126,8 +143,19 @@ For the same-organization slice, the link's approved `AuthorityBinding` names th
 - [`apps/web/lib/tak/coworker-collaboration.ts`](../../../apps/web/lib/tak/coworker-collaboration.ts) already creates local delegation chains through the canonical work-thread path.
 - [`apps/web/lib/tak/agent-card-service.ts`](../../../apps/web/lib/tak/agent-card-service.ts) projects `dpf.agent-card.v1` with GAID/AIDoc and effective tool authority.
 - [`apps/web/lib/coworker-service-catalog/a2a-tasks.ts`](../../../apps/web/lib/coworker-service-catalog/a2a-tasks.ts) already persists A2A-shaped task status, messages, artifacts, GAIDs, call chains, and receipts.
+- `TaskRun` already owns `TaskNode`/`TaskNodeEdge`, which represent parent relationships,
+  fan-out/fan-in dependencies, worker roles, authority/evidence contracts, and influence. `TaskArtifact`
+  already carries producer agent/node references. This is the canonical graph substrate for the
+  participation view; no `AgentParticipationGraph` table is authorized.
 
 The current cross-boundary service-offer POST requires `actingAgentGaid` and `delegatingAgentGaid`, but accepts them as caller-supplied strings. The current delegation receipt is a local HMAC. Neither proves to another sovereign installation that the authenticated peer device vouched for those GAIDs. That is the gap this design closes.
+
+The current A2A task metadata is also scalar: it records acting, delegating, and delegated GAID
+strings, then returns acting/delegating values unchanged in the external task projection. It does
+not model an arbitrary number of participating agents, fan-out/fan-in, GAID scope validation,
+private-to-public boundary mapping, or egress redaction. A build must replace that scalar seam with
+the canonical participation-graph projection in §8.2; it must not bolt redaction onto individual
+routes.
 
 ### 4.3 Federation transport and trust
 
@@ -163,6 +191,11 @@ An independent substrate sweep (2026-08-08, against `origin/main` at `bc5a0debd`
 4. **Fix the `priv`/`private` GAID scope-token split as part of §4.1 conformance.** `buildPrivateAgentGaid` (`apps/web/lib/identity/principal-linking.ts`) emits `gaid:priv:…`, but the catalog fallback at `apps/web/lib/coworker-service-catalog/agent-card.ts:105` emits `gaid:private:…`. Left unfixed, two installs comparing GAID strings will silently mismatch on the scope token before the namespace question is even reached. This is a latent cross-install bug, not cosmetic.
 5. **Name the feature flag on the existing pattern.** Federation receiving routes are gated by `DPF_FEDERATION_EXCHANGE_ENABLED` (`apps/web/app/api/v1/federation/**`). A2A adds a sibling `DPF_FEDERATION_A2A_ENABLED` (or a per-link A2A capability bit) so demand and A2A gate independently — the plan's "feature-gated" phrasing resolves to this concrete flag.
 6. **Reuse the CloudEvent link-binding and replay primitives verbatim.** `cloud-event-guard.ts` already enforces the `dpflinkid` extension (`=== authenticated linkId`, else `link:mismatch`) and a ±15-minute replay window. The A2A event types (§8.3) ride these unchanged; the new work is the RFC 9421 signature layer over them (§9), not a second envelope validator.
+7. **Project participation from the canonical task graph.** `TaskRun` already owns
+   `TaskNode`/`TaskNodeEdge`; `TaskArtifact` already records producer agent/node references. S4 adds
+   the minimum canonical Principal/GAID and receipt bindings those nodes require, then derives the
+   protected participation graph from them. It does not add an A2A participation or receipt graph
+   table.
 
 ## 5. Research and benchmarking
 
@@ -181,6 +214,27 @@ The [A2A v1.0 specification](https://a2a-protocol.org/latest/specification/) def
 - the standard rule that every incoming request is authenticated and authorized by the receiving server.
 
 A2A explicitly leaves identity at the protocol layer. DPF therefore adds a GAID extension profile and uses the federation trust envelope as that protocol-layer identity mechanism. This is an extension, not a competing A2A identity proposal.
+
+The official [enterprise implementation guidance](https://a2a-protocol.org/latest/topics/enterprise-ready/)
+adds useful expectations for TLS, standard web authentication, least privilege, data minimization,
+distributed tracing, audit, and API management. The core specification also requires authorization
+scoping on every operation, permits authenticated extended Agent Cards, supports signed cards, and
+provides negotiated strongly typed extensions. DPF adopts all of those mechanisms.
+
+The enterprise gap is explicit rather than rhetorical:
+
+| Enterprise concern | A2A v1.0 position | DPF GAID profile |
+| --- | --- | --- |
+| Enduring agent-subject identity | identity is handled outside A2A payload semantics | canonical GAID/AIDoc through `Principal` + `PrincipalAlias` |
+| Internal versus external agent identity | no private/public agent alias or boundary-mapping contract | GAID §§6.5 and 10.6 |
+| Multi-agent delegation/contribution custody | task history and trace hooks, but no normative participant graph | receipt-linked acyclic participation graph |
+| Cross-org topology minimization | general data-minimization guidance; authorization model is implementation-defined | `ProjectionContract`-derived public view, no private GAIDs |
+| Proof that withheld lineage was not rewritten | no normative selective-disclosure or commitment object | signed, nonce-hiding participation commitment |
+| Multi-tenancy | opaque routing by URL, credentials, or `tenant` | retained as routing only; never treated as GAID or disclosure authority |
+
+The DPF profile uses A2A's extension negotiation and metadata points. It does not modify standard
+Task, Message, Artifact, Agent Card, authentication, or routing semantics. A peer that does not
+understand the required GAID boundary extension cannot participate in cross-organization DPF A2A.
 
 DPF does **not** declare the CloudEvent carrier itself to be an A2A-compliant custom binding in the first slice. A2A requires a custom binding to implement every core operation and preserve the complete data model and semantics. Instead, DPF treats the CloudEvent as its authenticated federation delivery envelope; the typed payload and adapter implement the A2A operation/data semantics. Public custom-binding conformance is a later standards decision.
 
@@ -239,6 +293,23 @@ The largest positive pulls were Ship Real Functionality, Never Assume — Verify
 
 **Per-agent credential.** Rejected for this layer because it creates a second credential lifecycle, turns every coworker into a remote security principal at transport level, and duplicates the install trust already established by `FederationLink`. A future high-assurance profile may add agent-held proof as an additional factor, but it cannot replace or bypass the link.
 
+### 6.4 Enterprise identity-boundary decision
+
+`principle_decide` recorded `DI-6FE234A7399E` against the platform profile for the second core
+question: how a complete multi-agent GAID chain crosses an organization boundary.
+
+| Option | Composite | Disposition |
+| --- | ---: | --- |
+| Full private/internal chain disclosure | `4.529` | rejected: exposes protected identity and topology |
+| Public alias for every internal hop | `6.975` | rejected: forces unnecessary public issuance and still exposes topology |
+| **Protected full graph + minimized public view + signed commitment** | **`10.673`** | **selected** |
+| Boundary agent only, with no commitment | `6.529` | rejected: loses verifiable custody and can falsely imply sole performance |
+
+Margin over the runner-up was `3.698`; confidence was high; structured coverage was strong; no
+commandment conflict was found. The strongest positive contributions were Ship Real Functionality
+and Research and Use Standards. The selected option also best fits principal convergence,
+projection-contract reuse, data privacy, and evidence density.
+
 ## 7. Target architecture
 
 ```mermaid
@@ -277,6 +348,33 @@ The proof is intentionally layered:
 | Environment | closed installation classification | production, development, staging, or other governed class | identity |
 | Authority | local TAK, delegation, offer, projection, and consent rules | may this action occur here? | transport authenticity |
 
+The enterprise identity boundary is a projection boundary, analogous to network address/topology
+screening but without creating translated agent identities:
+
+```mermaid
+flowchart LR
+    subgraph S["Source organization — protected view"]
+      A1["GAID private — originator"]
+      A2["GAID private — specialists"]
+      A3["GAID public/private — accountable boundary agent"]
+      TG["TaskRun + TaskNode/TaskNodeEdge + receipts"]
+      A1 --> TG
+      A2 --> TG
+      A3 --> TG
+    end
+
+    PC["ProjectionContract\nrelationship + field policy"]
+    BP["Boundary projection\npublic GAIDs + minimized marker"]
+    CM["Signed hiding commitment\nto protected graph"]
+
+    TG --> PC --> BP
+    TG --> CM --> BP
+    BP --> R["External relying party"]
+```
+
+The relying party can verify the boundary signature and later request an authorized commitment
+opening, but cannot enumerate the protected agents or topology from the ordinary response.
+
 ## 8. Canonical contracts
 
 ### 8.1 Federation link identity extension
@@ -307,7 +405,23 @@ type DpfFederatedAgentContextV1 = {
   gaidIssuerBindingRef: string;
   aidocDigest: string;
   agentCardDigest: string;
-  delegationChainRef?: string;
+  boundaryProjection: {
+    mode: "full" | "boundary-minimized";
+    policyRef: string;
+    publicParticipants: Array<{
+      publicHopId: string;
+      agentGaid: string;
+      role: "originator" | "delegator" | "actor" | "contributor" | "approver" | "executor" | "publisher";
+      visibleParentHopIds: string[];
+    }>;
+    participationMinimized: boolean;
+    commitment?: {
+      algorithm: "sha-256";
+      canonicalization: "RFC8785";
+      digest: string;
+      receiptRef: string;
+    };
+  };
   organizationRef: string;
   installationId: string;
   environmentClass: "production" | "development" | "test";
@@ -316,6 +430,43 @@ type DpfFederatedAgentContextV1 = {
 ```
 
 The final field names must be generated from or directly mapped to the A2A extension contract. `organizationRef` resolves to canonical Organization identity; no organization name, logo, or contact duplicate is stored here. Environment remains alongside GAID and never becomes part of GAID.
+
+The source-side task/evidence record holds a `participationGraphRef` that resolves to an immutable
+versioned projection of `TaskRun` + `TaskNode` + `TaskNodeEdge`, joined to canonical Principal/GAID
+and existing receipt/evidence records. A hop is material when an agent originates, delegates, authorizes,
+approves, transforms, executes, or publishes part of the interaction. Stable `hopId` and
+`parentHopIds` fields preserve fan-out/fan-in; this is not limited to a three-scalar call chain.
+Tools, queues, and deterministic infrastructure are not agent hops unless they are independently
+governed agent subjects.
+
+Projection is performed once, before signing and serialization, and the resulting object is reused
+by CloudEvents, A2A Task/Message/Artifact responses, Agent Cards, receipts, errors, and peer-visible
+operational views. Route-local projection logic is forbidden.
+
+For same-org links, `mode="full"` may carry private or federated GAIDs only when the
+`ProjectionContract` explicitly allows every field. For cross-org links:
+
+- `mode` must be `boundary-minimized`;
+- every disclosed participant GAID must be `gaid:pub` and resolve through a governed
+  `PrincipalAlias` boundary mapping for the same canonical Principal;
+- undisclosed participants, their count, roles, edges, installation/device IDs, and private GAIDs
+  are hidden by default;
+- the enrolled boundary installation/device identifiers already disclosed by `FederationLink` may
+  remain as transport evidence, but identifiers for other internal installations/devices are hidden;
+- public hop identifiers and `visibleParentHopIds` are projection-local and never encode or point
+  to a withheld hop;
+- `participationMinimized=true` and `commitment` are mandatory when any material hop is hidden;
+- a public accountable agent must be named, but the projection must not claim that agent was the
+  sole performer;
+- failure to resolve a required public alias or create the commitment denies egress.
+
+The source-local `participationGraphRef` is never serialized across the organization boundary.
+The commitment is a SHA-256 digest over the RFC 8785 canonical form of the full protected graph,
+task/event context, and projection-policy version plus a high-entropy private nonce. The device
+signature covers the public projection and commitment. The nonce and protected graph stay in the
+source evidence store and are disclosed only through an authorized audit opening. A raw unsalted
+hash is forbidden because predictable identifiers would permit dictionary testing. Hidden-hop
+count is not disclosed unless the `ProjectionContract` expressly permits it.
 
 ### 8.3 CloudEvent carrier
 
@@ -354,8 +505,10 @@ The existing implementation currently treats `CoworkerEngagement.engagementId` a
 - `CoworkerEngagement` remains the accepted service offer, contract, funding, approval, and provider relationship.
 - `TaskRun` becomes the canonical A2A task lifecycle and receiver-generated A2A task ID.
 - `TaskMessage` and `TaskArtifact` remain the canonical history and result records.
+- `TaskNode` and `TaskNodeEdge` remain the canonical execution/contribution topology; S4 adds only
+  the minimum agent-Principal/GAID and receipt bindings needed to derive the participation graph.
 - `CoworkerEngagement` gains a nullable unique relation to its `TaskRun`; the existing adapter continues to accept engagement IDs during migration but returns the canonical task ID.
-- `TaskRun` gains typed/indexed federation ownership, origin event/idempotency, GAID, installation/environment, card/AIDoc digest, and receipt-reference fields. Security and uniqueness do not depend on querying `a2aMetadata` JSON.
+- `TaskRun` gains typed/indexed federation ownership, origin event/idempotency, GAID, installation/environment, card/AIDoc digest, protected participation-graph reference, boundary-projection policy/version, commitment, and receipt-reference fields where query or integrity requirements justify them. Security and uniqueness do not depend on querying `a2aMetadata` JSON.
 
 `TaskRun.userId` is currently mandatory, which would tempt a remote GAID to be represented as a fabricated local user. The sound refactor is principal convergence: add `initiatingPrincipalId`, backfill it from each existing user's canonical Principal, make `userId` nullable only after the dual-read/backfill gate, and use the `FederationLink` peer Principal as the transport initiator for federated tasks. The verified acting GAID stays a separate typed claim; the peer-install principal and speaking agent are never collapsed.
 
@@ -368,8 +521,30 @@ At minimum, the receiver can query and index:
 - current A2A task state and context ID;
 - card/AIDoc digest used at acceptance;
 - delegation/authority receipt reference.
+- protected participation-graph/evidence reference and the exact boundary projection/commitment used for each egress.
 
 Task reads, cancellation, and additional messages authorize against this stored link ownership and GAID context, never against possession of a task ID alone. This consolidation is the planned refactoring allocation for the slice; no cosmetic refactor displaces it.
+
+### 8.6 Enterprise scale and topology privacy
+
+The participation graph is a bounded contract, not an unbounded metadata bag:
+
+- graph nodes, edges, depth, serialized bytes, and public participant count have versioned limits;
+  over-limit work is rejected or split into linked tasks before federation egress
+- hop and receipt identifiers are stable within the task but are not metric labels
+- repeated status/artifact events reference an immutable graph version and commitment rather than
+  retransmitting the full protected graph
+- material graph changes create a new immutable version, commitment, and receipt; prior evidence is
+  never overwritten
+- each sovereign install stores its own protected graph and can operate without a global online
+  resolver on the task hot path; public GAID/AIDoc status is cached under bounded freshness rules
+- an organization does not have to publish a GAID for every internal helper; only agents exposed as
+  externally accountable participants require public boundary mappings
+- retry, fan-out, fan-in, partial failure, cancellation, and revocation preserve parent receipt and
+  graph-version links without copying another organization's protected topology
+
+This keeps external evidence size predictable while preserving full source-side accountability for
+large enterprises with many internal agents and installations.
 
 ## 9. Ingress verification and authorization
 
@@ -382,12 +557,18 @@ The receiver processes every cross-install A2A request in this fixed order:
 5. Validate CloudEvents 1.0, time window, event ID uniqueness, event type, payload size, and closed contract version.
 6. Derive the authoritative organization/environment from the link and its explicit `organization-crosswalk`; require body claims to match, never use them as authority.
 7. Require the event's installation ID and device key ID to match the link's approved peer projection.
-8. Validate each GAID syntactically; verify its issuer prefix against the link's approved AuthorityBinding; then require the acting/delegating GAIDs to match a current, non-withdrawn, device-signed Agent Card and issuer-verifiable AIDoc mirror on this link.
+8. Validate each disclosed GAID syntactically and for the relationship scope; cross-org payloads may contain only approved `gaid:pub` aliases. Verify its issuer prefix against the link's approved AuthorityBinding; then require the acting/delegating GAIDs to match a current, non-withdrawn, device-signed Agent Card and issuer-verifiable AIDoc mirror on this link.
 9. Resolve the target GAID locally through `PrincipalAlias`; reject unknown, disabled, revoked, or non-federation-eligible targets.
 10. Evaluate source delegation, target service offer, effective TAK grants, authority band, projection contract, relationship preset, data classification, rate/size/concurrency limits, and any human consent gate.
 11. Create or idempotently return the receiver-owned task and persist a verification receipt containing link, device, installation, GAIDs, organization/environment, card/AIDoc digests, event ID, decision, and trace context.
 
 Any failure is deny-by-default. Error responses reveal the minimum necessary category and correlation ID, not internal agent existence, policies, prompts, or grant details.
+
+Every outbound response follows a corresponding fixed egress order: load the protected graph and
+current relationship → evaluate `ProjectionContract` → resolve public boundary aliases where
+required → build the boundary view → create and persist the nonce-hiding commitment when material
+hops are withheld → scan every output surface for private identifiers → sign → serialize → send.
+Projection failure occurs before signing or outbox persistence as a deliverable event.
 
 ### 9.1 Sender authority is an attestation, not a grant
 
@@ -398,7 +579,12 @@ The peer device signature means “this enrolled installation attests that GAID 
 - `actingAgentGaid` is the agent presently issuing the request.
 - `delegatingAgentGaid` is the accountable upstream agent that delegated this hop; it equals acting GAID when there is no upstream delegation.
 - `targetAgentGaid` is the intended receiver and must resolve locally.
-- multi-hop chains preserve every hop's installation, device, GAID, and receipt; a peer may not collapse the chain to the last speaker.
+- the source-side protected participation graph preserves every material hop's installation,
+  device evidence, GAID, role, edges, and receipt;
+- a peer may not collapse its custody record to the last speaker, but it must apply the GAID
+  boundary projection before disclosure; complete custody does not imply complete peer visibility;
+- the public view names the externally accountable public GAID(s), marks minimized participation,
+  and carries the signed commitment without implying that a boundary agent performed all hidden work;
 - a link may forward only if its projection/authority contract allows forwarding and loop/hop guards pass.
 
 ## 10. A2A operation and lifecycle mapping
@@ -435,6 +621,10 @@ Same-organization does not mean unrestricted. The link may project:
 
 It must not project raw prompts, private memory, hidden instructions, unrestricted tool manifests, secrets, internal model routing, unrelated customer data, or full authority configuration.
 
+Same-org full participation disclosure is allowed only when the link's `ProjectionContract`
+explicitly permits the private/federated GAID fields and topology. Otherwise the same boundary
+projection machinery produces a minimized view; “same organization” is not a bypass.
+
 Production-to-development traffic is visually and programmatically distinct. A development agent cannot act in production merely because both installations share an organization. The production receiver's local policy is authoritative, and consequential or irreversible actions retain their existing human-approval boundaries.
 
 ### 11.2 Cross organization — deny by default
@@ -446,10 +636,19 @@ Cross-org A2A remains disabled unless a future slice adds all of:
 - approved cross-org authority band and data-processing/retention terms;
 - public or otherwise boundary-conformant GAID/AIDoc assurance;
 - authenticated extended-card disclosure policy;
+- public GAID boundary mappings for every externally named agent and a required GAID A2A boundary
+  extension negotiated by both peers;
+- full protected participation custody plus signed, nonce-hiding commitments for every minimized
+  response, artifact, receipt, and task-history view;
 - artifact classification and egress tests;
 - local human approval for every consequential action unless a narrower standing authority is explicitly granted.
 
 The existing demand cross-org rules are the floor, not an alternate policy. Confidential/restricted and customer-domain material does not cross simply because the A2A task requests it.
+
+Cross-org egress is denied if any private GAID, internal Principal ID, hidden hop/edge, internal
+installation/device identifier, or source-local evidence reference remains after projection. This
+applies to ordinary payloads and to less obvious side channels: errors, task history, artifact
+metadata, Agent Cards, receipts, traces, logs exported to the peer, and operator downloads.
 
 ## 12. Operator experience
 
@@ -484,6 +683,12 @@ Before dispatch, the confirmation summarizes:
 
 The existing engagement/task surface shows messages, state changes, artifacts, and receipts in one timeline. Each cross-install event carries a readable provenance chip with accessible text, not color alone. Technical identifiers sit behind disclosure. Verification failure states explain the next safe operator action without exposing secrets.
 
+Authorized source-side operators can inspect the complete participation graph. Peer-facing and
+ordinary external-client views show the public accountable agents, “internal participation
+protected” status, commitment verification state, and audit-request path. They never show private
+GAIDs or a hidden-hop count by default. The interface must not imply that a public boundary agent
+was the sole performer when participation was minimized.
+
 All implementation uses shared UI primitives and `--dpf-*` theme tokens. Keyboard access, semantic headings, focus order, text alternatives, narrow layouts, light/dark themes, and reduced-motion behavior are acceptance criteria.
 
 ## 13. Failure, threat, and recovery model
@@ -500,6 +705,10 @@ All implementation uses shared UI primitives and `--dpf-*` theme tokens. Keyboar
 | device key rotation | dual-approved re-pin; invalidate old signature key at cutover; each immutable receipt snapshots the verified key/fingerprint so historic evidence remains independently checkable |
 | GAID continuity/mint collision | block federation advertisement; resolve through canonical issuer/alias migration |
 | cross-org payload exceeds projection | reject before task creation; log minimized violation metadata |
+| private GAID/topology appears in cross-org egress | reject before signing/outbox persistence; record field-class violation without the leaked value |
+| required public boundary mapping missing | deny egress; do not substitute or expose the private GAID |
+| protected graph changed after public commitment | create a new immutable graph version, commitment, and receipt; never overwrite the prior evidence |
+| commitment cannot be opened during authorized audit | treat as evidence-integrity failure; quarantine affected evidence and investigate signer/storage state |
 | peer asks for consequential action | route through local authority/consent gate; remote assertion cannot approve it |
 | task/status delivery outage | durable outbox retry with backoff/dead-letter; polling recovers current task snapshot |
 
@@ -515,6 +724,10 @@ Metrics and logs are keyed by non-secret identifiers and bounded labels:
 
 Distributed traces preserve W3C `traceparent` across federation while each install controls its own detailed spans. Audit receipts persist exact GAIDs and digests in governed records, not metric labels. Logs never contain bearer tokens, private keys, raw prompts, or unminimized artifacts.
 
+Cross-org metrics distinguish full versus minimized projection and commitment verification using
+bounded labels. They never label by GAID, hidden-hop count, graph topology, or source-local graph
+reference. Authorized audit opening is itself a consequential, receipted event.
+
 ## 15. Migration and compatibility
 
 1. Add peer device fields and nullable task ownership fields with forward-only migrations and backfills that tolerate every existing state.
@@ -526,6 +739,11 @@ Distributed traces preserve W3C `traceparent` across federation while each insta
 7. Put cross-install submission/retrieval behind federation ingress; preserve internal `/api/a2a/*` callers through the shared service layer.
 8. Never share or reuse the current local HMAC receipt secret across installations. Federated receipts use device-verifiable evidence; historic local receipts remain locally valid.
 9. Rollout is capability-negotiated per link and can be disabled without affecting federated demand.
+10. Replace the scalar acting/delegating/delegated metadata seam with a versioned protected
+    participation graph in the existing task/evidence substrate; dual-read legacy scalar records
+    until their graph projection is backfilled or explicitly classified as legacy-incomplete.
+11. Cross-org enablement remains blocked until public alias mapping, public-card projection,
+    commitment creation/opening, and whole-response private-identifier scanning are proven.
 
 ## 16. Acceptance criteria
 
@@ -535,6 +753,8 @@ Distributed traces preserve W3C `traceparent` across federation while each insta
 - A valid link token plus invalid/missing signature is rejected.
 - A valid device signature plus unprojected, expired, withdrawn, malformed, or wrong-link GAID is rejected.
 - the receiver can prove link, device, installation, organization, environment, acting/delegating/target GAIDs, card/AIDoc digests, and decision receipt for every accepted task.
+- the source can prove every materially participating agent and parent relationship in the
+  protected participation graph without requiring the peer to possess private identities;
 - no new agent identity or credential store exists.
 
 ### 16.2 Authority and privacy
@@ -545,6 +765,13 @@ Distributed traces preserve W3C `traceparent` across federation while each insta
 - same-org prod/dev is the only enabled relationship preset;
 - cross-org A2A is negative-tested and denied;
 - forbidden fields and classified artifacts cannot escape through messages, artifacts, errors, or cards.
+- a cross-org fixture containing five internal agents emits only approved `gaid:pub` participants,
+  `participationMinimized=true`, and a signed commitment; no private GAID, hidden hop/edge,
+  internal Principal/install/device ID, or graph reference appears anywhere in the peer response;
+- the commitment opens against the retained source graph for an authorized auditor, and any graph,
+  task-context, policy-version, or nonce mutation fails verification;
+- missing public mapping, unsalted commitment, projection failure, or legacy scalar-only custody
+  denies cross-org egress;
 
 ### 16.3 Protocol behavior
 
@@ -560,6 +787,8 @@ Distributed traces preserve W3C `traceparent` across federation while each insta
 - readiness, rotation, quarantine, and verification failure have clear safe next actions;
 - the dispatch confirmation states outcome, data boundary, and authority consequence;
 - task provenance is accessible, theme-aware, responsive, and keyboard operable;
+- source operators can inspect complete custody while peer/external views show only public
+  accountable identities, protected-participation status, and commitment verification;
 - demand federation continues to work when A2A is disabled or fails.
 
 ## 17. Documentation impact
@@ -585,6 +814,12 @@ The build must update:
 8. Cross-install A2A has no public or unauthenticated shortcut.
 9. Cross-org is deny-by-default and cannot inherit same-org readiness.
 10. No claim of A2A conformance is made unless the exposed binding implements the standard's required operations and semantics.
+11. Complete custody and external disclosure are separate views: a requirement to preserve every
+    hop never authorizes disclosure of every hop.
+12. Cross-org identity projection uses governed GAID public aliases plus `ProjectionContract`; no
+    NAT-style ephemeral identifier, route-local redactor, or second identity table is allowed.
+13. The signed participation commitment binds minimized external evidence to the protected graph
+    without revealing private identifiers or topology.
 
 ## 19. Architecture review (advisory)
 
@@ -597,6 +832,35 @@ The `dpf-architecture-review` pass produced four important findings, all folded 
 3. **The task substrate was ambiguous.** `CoworkerEngagement`, `TaskRun`, `TaskMessage`, and `TaskArtifact` already divide service acceptance from execution history. The spec now names that split and refactors the partial engagement-only A2A adapter onto it instead of creating A2A task/message tables.
 4. **Organization claims cannot be self-asserted.** The spec now derives organization/environment from `FederationLink` and the explicit `organization-crosswalk`, treating matching body fields as signed evidence but never as authority.
 
-Standards checked: A2A v1.0, MCP 2025-11-25 Tasks and 2026-07-28 release-candidate direction, CloudEvents 1.0, RFC 9421, and RFC 8785. No reference-doc improvement is filed: GAID already contains the missing A2A/HTTP binding doctrine, and the gap is implementation conformance rather than absent doctrine.
+The enterprise identity-boundary amendment added five reviewed findings:
+
+5. **Custody is not disclosure.** The former “preserve every hop” wording was valid for the source
+   evidence store but unsafe as a wire rule. The spec now preserves the full graph locally and
+   derives the external view through `ProjectionContract`.
+6. **A scalar call chain is not enterprise lineage.** The current acting/delegating/delegated
+   fields cannot represent parallel contribution, approval, fan-out, or fan-in. The protected
+   participation view is derived from canonical `TaskRun`/`TaskNode`/`TaskNodeEdge` plus receipts;
+   no A2A-only graph or task table is added.
+7. **Public aliases remain one subject.** Private and public GAIDs resolve through
+   `PrincipalAlias` to the same Principal. No ephemeral NAT identifier or per-peer agent identity
+   is introduced.
+8. **Minimization remains auditable.** A signed, nonce-hiding commitment binds the public response
+   to the source graph. A public boundary agent is accountable, but the response explicitly avoids
+   the false claim that it was the sole performer.
+9. **Projection is one pre-signing service.** Cards, events, tasks, artifacts, receipts, errors,
+   and peer-visible operations views consume the same derived boundary object. Route-local
+   redaction would violate canonical-contract and single-source-of-truth requirements.
+
+Standards checked: A2A v1.0 core, enterprise guidance, multi-tenancy and extension model; MCP
+2025-11-25 Tasks and 2026-07-28 release-candidate direction; CloudEvents 1.0; RFC 9421; RFC 9530;
+and RFC 8785. A2A supplies the extension and authorization mechanisms but does not normatively
+define agent-subject identity, private/public boundary mapping, participant topology disclosure,
+or a minimized-lineage commitment. That is a real enterprise profile gap, so the normative GAID
+reference was amended in the same branch and this A2A design now maps to it.
+
+`DI-6FE234A7399E` selected the dual-view commitment model with high confidence (composite `10.673`,
+margin `3.698`, no commandment conflict). This does not enable cross-org A2A in the current release;
+it defines the contract that the same-org implementation must be capable of enforcing and that a
+future cross-org activation must prove.
 
 The implementation-scope review supersedes the former atomic build shape while preserving the single same-org product outcome. `DI-61395D1B7A6D` selected decomposed convergence with high confidence (composite `15.417`, margin `11.220`, no commandment conflict): six feature-gated sibling BIs now own GAID conformance, device signing, signed-card discovery, canonical task ingress, policy/evidence, and operator readiness. The plan's parity preflight coordinates those local records with the A2A-adoption install without making backlog synchronization part of A2A or creating multi-writer authority. Cross-org enablement remains a separate future slice.
