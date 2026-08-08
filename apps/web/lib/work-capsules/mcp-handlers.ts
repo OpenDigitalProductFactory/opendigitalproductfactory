@@ -1,5 +1,5 @@
 import { prisma } from "@dpf/db";
-
+import { computeChangeImpactContract } from "@/lib/integrate/gate-context-bridge";
 import type { ToolResult } from "@/lib/mcp-tools";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 import {
@@ -28,7 +28,6 @@ import {
   type WorkCapsuleEvidenceKind,
   type WorkCapsuleScopeInput,
 } from "@/lib/work-capsules";
-
 import {
   adoptWorktreeCapsule,
   claimBacklogItemWorkspace,
@@ -433,6 +432,7 @@ export async function claimCapsuleScopeTool(
         claims,
         actor: currentActor,
         force,
+        buildChangeImpactContract: computeChangeImpactContract,
       }),
     });
   } catch (error) {
@@ -455,7 +455,7 @@ export async function claimCapsuleScopeTool(
     message: force
       ? `Force-claimed ${claims.length} scope item(s) for ${renewedCapsule.capsuleId} despite active conflicts.`
       : `Claimed ${claims.length} scope item(s) for ${renewedCapsule.capsuleId}.`,
-    data: { capsule: renewedCapsule },
+    data: { capsule: renewedCapsule, changeImpactContract: renewedCapsule.verificationState?.changeImpactContract },
   };
 }
 

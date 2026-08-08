@@ -144,6 +144,26 @@ cross-platform implementation.
 
 ## Impact planner (shadow mode)
 
+### Work-start impact contract
+
+Before implementation, every `claim_capsule_scope` call containing edit-path
+claims now runs the prospective gate-context generator against the capsule's
+complete edit-path set. The response and
+`WorkCapsule.verificationState.changeImpactContract` name:
+
+- production files whose graph-linked and colocated tests must be resolved
+  before Red;
+- prose/style guards that scan planned files even when those files have no
+  existing baseline entry; and
+- the existing attestations, ratchets, derived artifacts, routes, migrations,
+  and always-on verification path.
+
+Repeated edit claims refresh the contract. Read-only claims do not. A missing
+generator or invalid output is persisted as `status: unresolved` with an
+exhaustive-verification instruction; it is never interpreted as an empty
+impact set. This contract is advisory prevention evidence. The exhaustive CI
+and merge-group gates below remain authoritative.
+
 `scripts/ci-evidence-plan.mjs` is the shared planner for GitHub CI and the
 governed local-integration runner. It emits a canonical schema-versioned JSON
 document and SHA-256 digest for the base/head commits and trees, changed files,

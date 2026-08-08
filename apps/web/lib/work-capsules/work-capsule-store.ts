@@ -27,32 +27,10 @@ import {
 import { revalidatePortalContext } from "@/lib/portal-context/invalidation";
 import { publishRecordedWorkCapsuleActivity } from "@/lib/work-capsules/activity-events";
 import { admitRuntimeGuardedWork } from "@/lib/platform-runtime/work-admission";
-export type WorkCapsuleActor = {
-  userId: string;
-  agentId: string | null;
-  principalId: string | null;
-};
+import { planCapsuleChangeImpact, type CapsuleChangeImpactContract } from "./change-impact-contract";
+import type { CapsuleDb, WorkCapsuleActor } from "./work-capsule-store-types";
 
-export type CapsuleDb = {
-  workCapsule: {
-    create(args: unknown): Promise<any>;
-    findFirst(args: unknown): Promise<any>;
-    findUnique(args: unknown): Promise<any>;
-    findMany(args: unknown): Promise<any[]>;
-    update(args: unknown): Promise<any>;
-  };
-  workCapsuleActivity: {
-    create(args: unknown): Promise<any>;
-  };
-  backlogItem?: {
-    findFirst(args: unknown): Promise<any>;
-    update(args: unknown): Promise<any>;
-  };
-  $transaction?<T>(fn: (tx: CapsuleDb) => Promise<T>): Promise<T>;
-  $queryRaw?(strings: TemplateStringsArray, ...values: unknown[]): Promise<unknown>;
-  platformCapability?: { findMany(args: unknown): Promise<any[]> };
-  runtimeCapabilityTransition?: { findFirst(args: unknown): Promise<any> };
-};
+export type { CapsuleDb, WorkCapsuleActor } from "./work-capsule-store-types";
 
 type CapsuleCreateInput = {
   title: string;
@@ -910,6 +888,8 @@ export async function claimWorkCapsuleScope(args: {
   now?: Date;
   /** Deliberately co-claim despite an overlap with another active capsule. */
   force?: boolean;
+  /** Prospective, advisory impact derived before the scope write. */
+  buildChangeImpactContract?: (paths: string[]) => Promise<CapsuleChangeImpactContract>;
 }) {
   const capsule = await args.db.workCapsule.findUnique({
     where: { capsuleId: args.capsuleId },
@@ -952,10 +932,19 @@ export async function claimWorkCapsuleScope(args: {
   }
 
   const scopeClaims = Array.from(nextClaims.values());
+  const impact = await planCapsuleChangeImpact({
+    scopeClaims,
+    incomingClaims: args.claims,
+    verificationState: capsule.verificationState,
+    build: args.buildChangeImpactContract,
+  });
   return inTransaction(args.db, async (tx) => {
     const updated = await tx.workCapsule.update({
       where: { capsuleId: args.capsuleId },
-      data: { scopeClaims },
+      data: {
+        scopeClaims,
+        ...(impact.verificationState ? { verificationState: impact.verificationState } : {}),
+      },
     });
     await recordActivity(tx, {
       workCapsuleId: capsule.id,
@@ -971,7 +960,14 @@ export async function claimWorkCapsuleScope(args: {
       },
       actor: args.actor,
     });
-    return updated;
+    if (impact.activity) {
+      await recordActivity(tx, {
+        workCapsuleId: capsule.id,
+        ...impact.activity,
+        actor: args.actor,
+      });
+    }
+    return { ...updated, changeImpactContract: impact.contract };
   });
 }
 
