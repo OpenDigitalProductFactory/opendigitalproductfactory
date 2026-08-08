@@ -57,3 +57,56 @@ export function assertMayCrossOrgBoundary(sensitivity: unknown): void {
     );
   }
 }
+
+// ─── Context-derived eligibility (BI-DC4E526E) ──────────────────────────────
+//
+// The PRIMARY cross-org gate is the BI's context, not a hand-set flag: demand for
+// the DPF PLATFORM ITSELF legitimately flows upstream to the vendor (that IS the
+// federated-demand network's purpose), while a customer's OWN business/domain work
+// — their internal infrastructure, operations, proprietary product backlog — must
+// never auto-leave. Sensitivity is only an override on top of that context.
+
+/** The DigitalProduct id that denotes the DPF platform itself. */
+export const PLATFORM_DIGITAL_PRODUCT_ID = "dpf-portal";
+
+export interface DemandShareContext {
+  /** BacklogItem.sensitivity (public|internal|confidential|restricted). */
+  sensitivity?: unknown;
+  /** The item's DigitalProduct productId, if any (dpf-portal ⇒ platform demand). */
+  digitalProductId?: string | null;
+  /** The item's planning scope (scopeKind="platform" ⇒ platform demand). */
+  scopeKind?: string | null;
+}
+
+/** True when the item is demand for the DPF platform itself (vs. a customer's own
+ *  business domain). Platform demand is what may flow upstream to the vendor. */
+export function isPlatformScopedDemand(ctx: DemandShareContext): boolean {
+  return ctx.digitalProductId === PLATFORM_DIGITAL_PRODUCT_ID || ctx.scopeKind === "platform";
+}
+
+/** Context-derived cross-org eligibility (deny-by-default):
+ *   - `confidential` / `restricted` sensitivity is a HARD block, even for platform demand.
+ *   - otherwise PLATFORM-scoped demand is eligible (auto-flows upstream to the vendor).
+ *   - otherwise (customer-domain) it is denied unless explicitly marked `public`.
+ *  So a customer's internal infrastructure BI never leaves by default; a platform
+ *  feature/bug BI does; and either can be overridden by an explicit sensitivity. */
+export function mayShareDemandCrossOrg(ctx: DemandShareContext): boolean {
+  const s = normalizeSensitivity(ctx.sensitivity);
+  if (s === "confidential" || s === "restricted") return false;
+  if (isPlatformScopedDemand(ctx)) return true;
+  return s === "public";
+}
+
+/** Operator-facing refusal for a context-gated cross-org share. */
+export function assertMayShareDemandCrossOrg(ctx: DemandShareContext): void {
+  if (mayShareDemandCrossOrg(ctx)) return;
+  const s = normalizeSensitivity(ctx.sensitivity);
+  const reason =
+    s === "confidential" || s === "restricted"
+      ? `it is classified "${s}"`
+      : `it is customer-domain demand (not platform demand) and is not marked "public"`;
+  throw new Error(
+    `This item cannot be shared across an organization boundary: ${reason}. ` +
+      `Platform demand flows upstream automatically; customer-domain demand must be marked "public" to share.`,
+  );
+}

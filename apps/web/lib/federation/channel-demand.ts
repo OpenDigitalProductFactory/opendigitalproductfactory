@@ -21,7 +21,7 @@ import {
   queueForwardedDemand,
   type DemandDeliveryDb,
 } from "./demand-delivery";
-import { assertMayCrossOrgBoundary } from "./cross-org-sharing";
+import { assertMayShareDemandCrossOrg } from "./cross-org-sharing";
 import { decodeDemandMirrorPayload } from "./demand-exchange";
 import { resolveFederationIdentity, type FederationIdentityDb } from "./demand-identity";
 import { relationshipPresetForRole } from "./demand-reconciliation";
@@ -44,6 +44,7 @@ interface ChannelBacklogItem {
   body: string | null;
   status: string;
   sensitivity: string;
+  scopeKind: string | null;
   workType: string | null;
   occurrenceCount: number;
   createdAt: Date;
@@ -235,6 +236,7 @@ export async function selectLocalDemandForLink(
         body: true,
         status: true,
         sensitivity: true,
+        scopeKind: true,
         workType: true,
         occurrenceCount: true,
         createdAt: true,
@@ -260,11 +262,16 @@ export async function selectLocalDemandForLink(
   if ((item.body ?? "").includes("[origin:federatedDemand:")) {
     throw new Error("Adopted demand must use governed forwarding so original provenance is preserved.");
   }
-  // Cross-org deny-by-default (BI-DC4E526E, kernel DI-3E77E48D5710): this link
-  // crosses an organization boundary (channel / service-provider), so the item may
-  // leave only if its sensitivity explicitly permits it. Unclassified ("internal")
-  // proprietary demand never leaks upstream.
-  assertMayCrossOrgBoundary(item.sensitivity);
+  // Cross-org gate (BI-DC4E526E, kernel DI-3E77E48D5710) — CONTEXT-DERIVED, so no
+  // manual per-item classification is required for correct behavior (cognitive-load
+  // aversion): PLATFORM demand (dpf-portal / scopeKind=platform) auto-flows upstream
+  // to the vendor; a customer's OWN domain work (their internal infrastructure /
+  // operations) never leaves by default. Sensitivity is only a rare override.
+  assertMayShareDemandCrossOrg({
+    sensitivity: item.sensitivity,
+    digitalProductId: item.digitalProduct?.productId ?? null,
+    scopeKind: item.scopeKind,
+  });
   const preset = relationshipPresetForRole(link.role);
   if (preset !== "channel" && preset !== "service-provider") {
     throw new Error("This relationship cannot receive explicitly shared demand.");

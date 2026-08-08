@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import {
   assertMayCrossOrgBoundary,
+  isPlatformScopedDemand,
+  mayShareDemandCrossOrg,
   DEFAULT_BACKLOG_SENSITIVITY,
   isBacklogSensitivity,
   mayCrossOrgBoundary,
@@ -49,5 +51,34 @@ describe("isBacklogSensitivity", () => {
     [3, false],
   ])("isBacklogSensitivity(%s) === %s", (value, expected) => {
     expect(isBacklogSensitivity(value)).toBe(expected);
+  });
+});
+
+describe("isPlatformScopedDemand", () => {
+  it("is true for dpf-portal digitalProduct or scopeKind platform", () => {
+    expect(isPlatformScopedDemand({ digitalProductId: "dpf-portal" })).toBe(true);
+    expect(isPlatformScopedDemand({ scopeKind: "platform" })).toBe(true);
+  });
+  it("is false for a customer's own business domain", () => {
+    expect(isPlatformScopedDemand({ digitalProductId: "acme-widgets", scopeKind: "archetype-leaf" })).toBe(false);
+    expect(isPlatformScopedDemand({})).toBe(false);
+  });
+});
+
+describe("mayShareDemandCrossOrg — context-derived, automatic (BI-DC4E526E)", () => {
+  it("auto-permits PLATFORM demand upstream with no manual flag (default internal)", () => {
+    expect(mayShareDemandCrossOrg({ digitalProductId: "dpf-portal" })).toBe(true);
+    expect(mayShareDemandCrossOrg({ scopeKind: "platform", sensitivity: "internal" })).toBe(true);
+  });
+  it("auto-denies customer-domain demand by default (no manual step to stay private)", () => {
+    expect(mayShareDemandCrossOrg({ digitalProductId: "acme-widgets", sensitivity: "internal" })).toBe(false);
+    expect(mayShareDemandCrossOrg({})).toBe(false);
+  });
+  it("lets an explicit public release a customer-domain item (rare override)", () => {
+    expect(mayShareDemandCrossOrg({ digitalProductId: "acme-widgets", sensitivity: "public" })).toBe(true);
+  });
+  it("hard-blocks confidential/restricted even for platform demand", () => {
+    expect(mayShareDemandCrossOrg({ digitalProductId: "dpf-portal", sensitivity: "confidential" })).toBe(false);
+    expect(mayShareDemandCrossOrg({ scopeKind: "platform", sensitivity: "restricted" })).toBe(false);
   });
 });
