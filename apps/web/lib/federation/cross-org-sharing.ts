@@ -58,6 +58,28 @@ export function assertMayCrossOrgBoundary(sensitivity: unknown): void {
   }
 }
 
+// ─── Same-organization sharing policy (BI-8A7E3E56 follow-up) ────────────────
+//
+// Sovereign installs of ONE organization (e.g. the operator's prod <-> dev) are
+// trust-by-default: "for the same org, all is OK." So same-org federation shares
+// ALL backlog EXCEPT the genuinely-sensitive tier the operator marks to keep off
+// the network entirely (HR, confidential ops). This is deliberately BROADER than
+// the cross-org gate (isPlatformScopedDemand / public-only): same-org is
+// trust-by-default, cross-org is deny-by-default. The prior same-org filter keyed
+// on the `dpf-portal` product tag alone, which most platform BIs never carry, so
+// it silently shared almost nothing — this replaces that proxy with the sensitivity
+// boundary the operator actually reasons about.
+
+/** Sensitivities that stay LOCAL even within one organization (single source of
+ *  truth — the projection query filters on this same list). */
+export const SAME_ORG_LOCAL_ONLY_SENSITIVITIES = ["confidential", "restricted"] as const satisfies readonly BacklogSensitivity[];
+const SAME_ORG_LOCAL_ONLY: ReadonlySet<BacklogSensitivity> = new Set(SAME_ORG_LOCAL_ONLY_SENSITIVITIES);
+
+/** Same-org sharing eligibility: everything except the genuinely-sensitive tier. */
+export function mayShareSameOrgDemand(sensitivity: unknown): boolean {
+  return !SAME_ORG_LOCAL_ONLY.has(normalizeSensitivity(sensitivity));
+}
+
 // ─── Context-derived eligibility (BI-DC4E526E) ──────────────────────────────
 //
 // The PRIMARY cross-org gate is the BI's context, not a hand-set flag: demand for

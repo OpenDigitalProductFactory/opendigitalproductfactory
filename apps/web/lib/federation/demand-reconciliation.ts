@@ -12,6 +12,7 @@ import {
 } from "./demand-delivery";
 import { resolveFederationIdentity, type FederationIdentityDb } from "./demand-identity";
 import { reconcileDemandDigests } from "./demand-digest";
+import { SAME_ORG_LOCAL_ONLY_SENSITIVITIES } from "./cross-org-sharing";
 
 interface ReconciliationLink {
   linkId: string;
@@ -93,7 +94,12 @@ export async function runDemandReconciliation(
   if (automaticLinks.length > 0) {
     const items = await db.backlogItem.findMany({
       where: {
-        digitalProduct: { productId: "dpf-portal" },
+        // Same-org is trust-by-default ("for the same org, all is OK"): share ALL
+        // non-sensitive backlog, not just the `dpf-portal`-tagged subset (which
+        // most platform BIs never carry, so the old filter shared almost nothing).
+        // The genuinely-sensitive tier (HR/confidential) stays local. Cross-org
+        // links keep the deny-by-default gate elsewhere. See mayShareSameOrgDemand.
+        sensitivity: { notIn: [...SAME_ORG_LOCAL_ONLY_SENSITIVITIES] },
         // Open work only. A closed item is excluded here, drops out of
         // eligibleIds below, and is withdrawn from the peer. See BI-8A8C1D3A.
         status: { in: [...FEDERATION_SYNCABLE_BACKLOG_STATUSES] },
