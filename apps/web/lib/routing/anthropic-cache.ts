@@ -14,16 +14,36 @@
  * cache_control), because without the boundary we cannot prove which content is
  * dynamic and must never risk caching volatile content.
  *
- * Note: cache_control:{type:"ephemeral"} is the 5-minute TTL (GA, no beta
- * header). A 1-hour TTL (ttl:"1h") is a follow-up: it needs the extended-cache
- * beta header to be confirmed against the live Anthropic API version.
+ * TTL (BI-4761F54E, context-engineering R6/P8): cache_control:{type:"ephemeral"}
+ * is the 5-minute TTL; adding ttl:"1h" extends it to one hour. Both are GA on
+ * the first-party Anthropic API with NO beta header (the older extended-cache
+ * beta requirement is retired). The Anthropic default silently reverted 1h→5m,
+ * so long agentic loops whose inter-turn gaps exceed five minutes lose the
+ * cached prefix and re-pay it at full input rate. We therefore default the
+ * stable prefix to a 1-hour TTL. The 1h write premium (2x vs 1.25x) is scoped
+ * to the genuinely-stable prefix (everything before SYSTEM_PROMPT_DYNAMIC_
+ * BOUNDARY), never volatile content, and only ever reaches the real Anthropic
+ * API — local served models (DMR/llama.cpp) go through the OpenAI-compatible
+ * path and never see cache_control. Callers that know a request is a true
+ * one-shot with no reuse can pass cachePrefixTtl:"5m" to avoid the premium.
  */
 import { SYSTEM_PROMPT_DYNAMIC_BOUNDARY } from "../tak/prompt-boundary";
+
+export type AnthropicCachePrefixTtl = "5m" | "1h";
 
 export type AnthropicTextBlock = {
   type: "text";
   text: string;
-  cache_control?: { type: "ephemeral" };
+  cache_control?: { type: "ephemeral"; ttl?: "1h" };
+};
+
+export type BuildAnthropicSystemOptions = {
+  /**
+   * TTL for the stable-prefix cache breakpoint. Defaults to "1h" so long
+   * agentic loops keep the cached prefix across inter-turn gaps > 5 min.
+   * "5m" omits the ttl field (Anthropic's 5-minute default) for one-shots.
+   */
+  cachePrefixTtl?: AnthropicCachePrefixTtl;
 };
 
 /**
@@ -33,6 +53,7 @@ export type AnthropicTextBlock = {
  */
 export function buildAnthropicSystem(
   systemPrompt: string | undefined | null,
+  options: BuildAnthropicSystemOptions = {},
 ): string | AnthropicTextBlock[] {
   if (!systemPrompt) return "";
 
@@ -45,8 +66,13 @@ export function buildAnthropicSystem(
   // Boundary at the very start — nothing stable to cache. Leave unchanged.
   if (stablePrefix.trim().length === 0) return systemPrompt;
 
+  const cacheControl: { type: "ephemeral"; ttl?: "1h" } =
+    (options.cachePrefixTtl ?? "1h") === "1h"
+      ? { type: "ephemeral", ttl: "1h" }
+      : { type: "ephemeral" };
+
   const blocks: AnthropicTextBlock[] = [
-    { type: "text", text: stablePrefix, cache_control: { type: "ephemeral" } },
+    { type: "text", text: stablePrefix, cache_control: cacheControl },
   ];
   if (dynamicTail.length > 0) {
     blocks.push({ type: "text", text: dynamicTail });
