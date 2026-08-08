@@ -79,6 +79,27 @@ describe("runDemandReconciliation", () => {
     }));
   });
 
+  it("shares ALL non-sensitive same-org backlog, not just the dpf-portal-tagged subset (BI-8A7E3E56 follow-up)", async () => {
+    const db = {
+      federationLink: { findMany: vi.fn().mockResolvedValue(links) },
+      backlogItem: { findMany: vi.fn().mockResolvedValue([]) },
+      federatedRecordMirror: { findMany: vi.fn().mockResolvedValue([]) },
+    } as unknown as DemandReconciliationDb;
+
+    await runDemandReconciliation(db, {
+      resolveIdentity: vi.fn().mockResolvedValue({ installationId: `inst_${"a".repeat(32)}`, projectionSecret: "b".repeat(64) }),
+      queueProjection: vi.fn(),
+      queueWithdrawal: vi.fn(),
+      reconcileDigests: vi.fn().mockResolvedValue({ linksChecked: 0, requeued: 0, confirmed: 0, failedLinks: 0 }),
+      dispatch: vi.fn().mockResolvedValue({ attempted: 0, delivered: 0, deferred: 0, deadLettered: 0 }),
+    });
+
+    const where = (db.backlogItem.findMany as unknown as { mock: { calls: Array<[{ where: Record<string, unknown> }]> } }).mock.calls[0][0].where;
+    // Same-org is trust-by-default: gate on sensitivity, NOT on the dpf-portal product tag.
+    expect(where.sensitivity).toEqual({ notIn: ["confidential", "restricted"] });
+    expect(where).not.toHaveProperty("digitalProduct");
+  });
+
   it("never re-egresses a locally adopted peer envelope", async () => {
     const queueProjection = vi.fn();
     const db = {

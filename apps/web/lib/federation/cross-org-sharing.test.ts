@@ -4,6 +4,7 @@ import {
   assertMayCrossOrgBoundary,
   isPlatformScopedDemand,
   mayShareDemandCrossOrg,
+  mayShareSameOrgDemand,
   DEFAULT_BACKLOG_SENSITIVITY,
   isBacklogSensitivity,
   mayCrossOrgBoundary,
@@ -80,5 +81,18 @@ describe("mayShareDemandCrossOrg — context-derived, automatic (BI-DC4E526E)", 
   it("hard-blocks confidential/restricted even for platform demand", () => {
     expect(mayShareDemandCrossOrg({ digitalProductId: "dpf-portal", sensitivity: "confidential" })).toBe(false);
     expect(mayShareDemandCrossOrg({ scopeKind: "platform", sensitivity: "restricted" })).toBe(false);
+  });
+});
+
+describe("mayShareSameOrgDemand — trust-by-default within one org (BI-8A7E3E56 follow-up)", () => {
+  it("shares all non-sensitive backlog regardless of product/scope tag", () => {
+    expect(mayShareSameOrgDemand("internal")).toBe(true);   // the default — shares same-org
+    expect(mayShareSameOrgDemand("public")).toBe(true);
+    expect(mayShareSameOrgDemand(undefined)).toBe(true);    // untagged defaults to internal → shares
+    expect(mayShareSameOrgDemand(null)).toBe(true);
+  });
+  it("keeps the genuinely-sensitive tier local even same-org (HR/confidential)", () => {
+    expect(mayShareSameOrgDemand("confidential")).toBe(false);
+    expect(mayShareSameOrgDemand("restricted")).toBe(false);
   });
 });
