@@ -47,6 +47,7 @@ describe("selectLocalDemandForLink direction", () => {
           itemId: "BI-LOCAL",
           title: "Local need",
           sensitivity: "public",
+          scopeKind: null,
           body: null,
           status: "open",
           workType: "feature",
@@ -84,6 +85,7 @@ describe("selectLocalDemandForLink direction", () => {
           itemId: "BI-CLOSED",
           title: "Resolved need",
           sensitivity: "public",
+          scopeKind: null,
           body: null,
           status,
           workType: "feature",
@@ -118,14 +120,15 @@ describe("selectLocalDemandForLink direction", () => {
       backlogItem: { findUnique: vi.fn().mockResolvedValue({
         itemId: "BI-LOCAL",
         title: "Distributor need",
-        sensitivity: "public",
+        sensitivity: "internal",
+        scopeKind: "platform",
         body: null,
         status: "open",
         workType: "feature",
         occurrenceCount: 1,
         createdAt: new Date(),
         updatedAt: new Date(),
-        digitalProduct: null,
+        digitalProduct: { productId: "dpf-portal" },
       }) },
       projectionContract: { findFirst: vi.fn().mockResolvedValue(null) },
     };
@@ -153,7 +156,8 @@ describe("selectLocalDemandForLink direction", () => {
       backlogItem: { findUnique: vi.fn().mockResolvedValue({
         itemId: "BI-PROPRIETARY",
         title: "Proprietary need",
-        sensitivity: "internal", // the default — not cleared to leave the org
+        sensitivity: "internal",
+        scopeKind: null, // the default — not cleared to leave the org
         body: null,
         status: "open",
         workType: "feature",
@@ -168,7 +172,7 @@ describe("selectLocalDemandForLink direction", () => {
     await expect(selectLocalDemandForLink(db as never, {
       linkId: "FL-CHANNEL",
       itemId: "BI-PROPRIETARY",
-    })).rejects.toThrow(/does not permit cross-organization sharing/);
+    })).rejects.toThrow(/cannot be shared across an organization boundary/);
   });
 });
 
