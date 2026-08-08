@@ -20,4 +20,5 @@ export * from "./demo-flavor";
 export * from "./processing-activity-templates";
 export * from "./product-mix";
 export * from "./archetype-readiness";
+export * from "./manufacturing-reference";
 export * from "./sections/schemas";
