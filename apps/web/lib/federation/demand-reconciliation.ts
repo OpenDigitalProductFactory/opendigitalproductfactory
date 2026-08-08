@@ -13,6 +13,7 @@ import {
 import { resolveFederationIdentity, type FederationIdentityDb } from "./demand-identity";
 import { reconcileDemandDigests } from "./demand-digest";
 import { SAME_ORG_LOCAL_ONLY_SENSITIVITIES } from "./cross-org-sharing";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 interface ReconciliationLink {
   linkId: string;
@@ -87,6 +88,7 @@ export async function runDemandReconciliation(
   let projected = 0;
   let unchanged = 0;
   let withdrawn = 0;
+  let failed = 0;
   const identity = links.length > 0
     ? await (deps.resolveIdentity ?? resolveFederationIdentity)(db)
     : null;
@@ -113,26 +115,38 @@ export async function runDemandReconciliation(
     const eligibleIds = new Set(items.map((item) => item.itemId));
     for (const link of automaticLinks) {
       for (const item of items) {
-        const result = await (deps.queueProjection ?? queueDemandProjection)(db, {
-          link,
-          source: {
-            localRecordRef: item.itemId,
-            title: item.title,
-            summary: shareSafeSummary(item.body, item.title),
-            workType: item.workType,
-            occurrenceCount: item.occurrenceCount,
-            product: item.digitalProduct?.productId ?? null,
-            createdAt: item.createdAt,
-            updatedAt: item.updatedAt,
-          },
-          identity: identity!,
-          contract: DEMAND_PROJECTION_TEMPLATES["same-organization"],
-          audience: "internal",
-          attribution: "organization",
-          now,
-        });
-        if (result.action === "queued") projected++;
-        else unchanged++;
+        // Fault-isolate each item: a single item that throws (envelope violation,
+        // transient DB error) must NOT abort the whole cycle and strand every item
+        // after it — the same "one bad record can't strand the batch" lesson as the
+        // dead-letter fix (BI-8A7E3E56). Skip + log the offender by id and reason so
+        // the exact cause is visible; keep projecting the rest.
+        try {
+          const result = await (deps.queueProjection ?? queueDemandProjection)(db, {
+            link,
+            source: {
+              localRecordRef: item.itemId,
+              title: item.title,
+              summary: shareSafeSummary(item.body, item.title),
+              workType: item.workType,
+              occurrenceCount: item.occurrenceCount,
+              product: item.digitalProduct?.productId ?? null,
+              createdAt: item.createdAt,
+              updatedAt: item.updatedAt,
+            },
+            identity: identity!,
+            contract: DEMAND_PROJECTION_TEMPLATES["same-organization"],
+            audience: "internal",
+            attribution: "organization",
+            now,
+          });
+          if (result.action === "queued") projected++;
+          else unchanged++;
+        } catch (err) {
+          failed++;
+          console.warn(
+            `[demand-reconciliation] projection skipped ${item.itemId} on ${link.linkId}: ${getErrorMessage(err)}`,
+          );
+        }
       }
       const existing = await db.federatedRecordMirror.findMany({
         where: {
@@ -156,5 +170,5 @@ export async function runDemandReconciliation(
     ? await (deps.reconcileDigests ?? reconcileDemandDigests)(db, identity, { now })
     : { linksChecked: 0, requeued: 0, confirmed: 0, failedLinks: 0 };
   const delivery = await (deps.dispatch ?? dispatchDueDemand)(db, { now });
-  return { links: links.length, projected, unchanged, withdrawn, digest, delivery };
+  return { links: links.length, projected, unchanged, withdrawn, failed, digest, delivery };
 }
