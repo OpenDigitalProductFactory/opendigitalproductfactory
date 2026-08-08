@@ -31,7 +31,7 @@ describe("restaurant demo floor migration", () => {
     expect(sql).toContain("'Window room'");
     expect(sql).toContain("'Patio'");
     expect(sql).toContain("INTERVAL '-14 minutes'");
-    expect(sql).toContain("demo-restaurant-assignment-2");
+    expect(sql).toContain("'demo-restaurant-assignment-' || turn.section_index");
     expect(sql).toContain('"actorRef", "occurredAt"');
     expect(sql).toContain("'stage-transition'");
     expect(sql).toContain("(4, 'demo-restaurant-table-5')");
