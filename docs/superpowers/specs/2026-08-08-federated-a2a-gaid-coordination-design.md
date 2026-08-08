@@ -2,13 +2,15 @@
 
 **Date:** 2026-08-08
 
-**Status:** Architecture-reviewed; enterprise identity-boundary amendment governed; implementation scope decomposed
+**Status:** Architecture-reviewed; enterprise identity-boundary and execution-surface amendments governed; implementation scope decomposed
 
 **Decision:** `DI-B726A1900E7C` — link-bound signed GAID claim
 
 **Identity-boundary decision:** `DI-6FE234A7399E` — protected full participation graph plus public boundary projection and signed commitment
 
 **Implementation-scope decision:** `DI-61395D1B7A6D` — six independently reviewable, feature-gated slices under one same-org umbrella
+
+**Execution-surface decision:** `DI-0171FE184F71` — three thin entry adapters over the existing discovery/task/authority/UX slices; no seventh BI or surface-specific A2A substrate
 
 **Delivery shape:** one same-organization product outcome, decomposed into governed implementation BIs; no implementation code in this document branch
 
@@ -28,6 +30,13 @@ Two sovereign DPF installations coordinate through one composed identity and tru
 The selected design carries a typed GAID claim and standard A2A data model inside the existing federation CloudEvent path. The receiver first authenticates the mutual `dpflink_…` token, then verifies an RFC 9421 HTTP Message Signature and `Content-Digest` with the peer Ed25519 key pinned to the same `FederationLink`. It accepts the GAID only when the claim matches a signed, link-scoped Agent Card/AIDoc projection previously received through that link. The receiving install resolves the local target by GAID and applies its own TAK/delegation and data-boundary policy. No peer can confer authority on itself.
 
 This extends the federation substrate. It does not introduce a second transport, a new agent-identity scheme, a remote-agent table, or per-agent credentials.
+
+The initiation surface is not another identity or trust dimension. External MCP clients (including
+Claude, Codex, and Grok), embedded Build Studio agents, and in-platform AI coworkers all resolve an
+authenticated local Principal and, when acting as an agent, its canonical GAID before calling one
+surface-neutral A2A coordination service. That service alone may emit federation traffic. The
+surface is retained as local provenance; it never substitutes for GAID, grants authority, or
+changes cross-organization projection.
 
 Enterprise identity is deliberately two-view. Each sovereign source retains a complete,
 receipt-linked graph of every materially participating agent by canonical GAID. Before an event,
@@ -59,6 +68,9 @@ The first product slice is same-organization, two-install coordination over an a
   identity projection;
 - receiver-side target resolution, TAK authority checks, projection minimization, replay protection, task ownership, and audit receipts;
 - an operator-facing A2A readiness and provenance view on the existing federation-link and engagement surfaces;
+- equivalent discovery, initiation, additional-input, status/result, cancellation, artifact, and
+  receipt access from governed external MCP clients, Build Studio, and in-platform AI coworkers
+  through thin adapters over the same service and `TaskRun`;
 - a compatibility path from the current DPF A2A-shaped service-offer/task implementation to the standard A2A data model.
 
 ### 2.2 Out of scope
@@ -68,6 +80,7 @@ The first product slice is same-organization, two-install coordination over an a
 - independent per-agent keypairs or OAuth clients;
 - cross-organization execution authority;
 - arbitrary remote MCP proxying;
+- a surface-specific A2A transport, task store, identity mapping, or authorization path;
 - changing the canonical federation transport or replacing `FederationLink`;
 - copying private prompt, memory, tool configuration, or unrestricted agent metadata across the link;
 - implementation code in this design thread.
@@ -196,6 +209,21 @@ An independent substrate sweep (2026-08-08, against `origin/main` at `bc5a0debd`
    the minimum canonical Principal/GAID and receipt bindings those nodes require, then derives the
    protected participation graph from them. It does not add an A2A participation or receipt graph
    table.
+8. **Converge the external MCP path rather than adding an A2A client transport.**
+   `/api/mcp/v1` already exposes `tasks/submit` plus authorization-bound `tasks/get`,
+   `tasks/result`, `tasks/list`, and `tasks/cancel` over `TaskRun`. S4 moves the submission path and
+   any required additional-input adapter behind the canonical A2A coordination service while
+   preserving the MCP wire compatibility owned by peer Slice 4.
+9. **Extend the existing coworker doors.** `request_coworker`, `summon_coworker`, and
+   `find_coworker` already share coworker resolution, delegation, thread, and `TaskRun` substrate.
+   A verified remote-card target routes through the canonical A2A service; a local target keeps the
+   current local path. Remote summon semantics remain unsupported until the A2A interaction model
+   can preserve visible conversation participation without pretending a remote task is a local
+   thread participant.
+10. **Treat Build Studio as a caller, not a second orchestrator.** Build Studio already associates
+    its work with `TaskRun`, `FeatureBuild`, and `WorkCapsule`. Its agents invoke the same governed
+    tool/service adapter and attach the returned task/receipt to that work context; they do not call
+    a federation route directly or own a Build-Studio-specific A2A state machine.
 
 ## 5. Research and benchmarking
 
@@ -245,8 +273,17 @@ The [A2A/MCP comparison](https://a2a-protocol.org/latest/topics/a2a-and-mcp/) se
 - A2A coordinates sovereign agents and their shared task lifecycle.
 - MCP remains the local tool plane used by each agent under its own install's grants.
 - an A2A peer never acquires raw MCP credentials or direct access to another install's MCP server.
+- an external MCP client may initiate and observe A2A work only through a local DPF adapter that
+  resolves the authenticated caller to canonical Principal/GAID context and then calls the same A2A
+  coordination service as Build Studio and in-platform coworkers.
 
 MCP 2025-11-25 Tasks are useful precedent for receiver-owned task IDs, explicit authorization-context binding, polling, cancellation, TTLs, and audit. They remain experimental in that version, and the [2026-07-28 release candidate](https://blog.modelcontextprotocol.io/posts/2026-07-28-release-candidate/) moves long-running Tasks to an extension while making the core stateless. Therefore, this design does not make DPF A2A task state depend on MCP Tasks or copy a version-specific MCP state machine. It preserves a mapping adapter only.
+
+The adapter boundary is deliberate: A2A v1.0's `Send Message` operation creates or continues a
+remote task, while MCP Tasks describe durable execution around a client/server request. DPF maps
+those contracts at the local edge without claiming they are the same protocol. The current bespoke
+`tasks/submit` remains a bounded compatibility door until peer Slice 4 completes its MCP Tasks
+convergence; it must not remain an alternate task implementation.
 
 #### CloudEvents and HTTP signing
 
@@ -310,15 +347,39 @@ commandment conflict was found. The strongest positive contributions were Ship R
 and Research and Use Standards. The selected option also best fits principal convergence,
 projection-contract reuse, data privacy, and evidence density.
 
+### 6.5 Execution-surface parity decision
+
+`principle_decide` recorded `DI-0171FE184F71` for how external MCP clients, Build Studio, and
+in-platform AI coworkers enter the A2A capability:
+
+| Option | Composite | Disposition |
+| --- | ---: | --- |
+| **Thin adapters inside existing S3/S4/S5/S6 slices** | **`6.589`** | **selected** |
+| New seventh surface-adapter slice | `5.362` | rejected: separates adapters from their canonical owners |
+| One BI and implementation per surface | `1.387` | rejected: fragments identity, lifecycle, and policy |
+
+The margin was `1.228`, confidence was high, structured coverage was strong, and no commandment
+conflict was found. The strongest pulls were Never Assume — Verify, Research and Use Standards,
+Single Source of Truth, and Architecture Over Shortcuts. Surface access is therefore acceptance
+scope on the existing canonical slices, not a new product substrate or backlog program.
+
 ## 7. Target architecture
 
 ```mermaid
 flowchart LR
     subgraph A["Sovereign install A"]
+      AM["External MCP client"]
+      AB["Build Studio agent"]
+      AC["In-platform AI coworker"]
+      AR["Canonical caller resolution\nPrincipal + acting GAID + grants"]
       AA["Acting coworker\nGAID + local TAK"]
-      AO["A2A adapter"]
+      AO["Surface-neutral A2A\ncoordination service"]
       AF["Federation outbox\nCloudEvent + projection gate"]
       AK["Ed25519 device key\ndid_A"]
+      AM --> AR
+      AB --> AR
+      AC --> AR
+      AR --> AA
       AA --> AO --> AF
       AK -->|"RFC 9421 sign"| AF
     end
@@ -545,6 +606,42 @@ The participation graph is a bounded contract, not an unbounded metadata bag:
 
 This keeps external evidence size predictable while preserving full source-side accountability for
 large enterprises with many internal agents and installations.
+
+### 8.7 Surface-neutral coordination service and thin adapters
+
+The canonical application service owns remote discovery selection, task initiation, additional
+input, get/list/status/result, cancellation, artifact retrieval, and receipt projection. It returns
+the same `TaskRun` identity and typed outcome regardless of caller. Only its federation adapter may
+serialize an A2A request onto `/api/v1/federation/*`.
+
+| Entry surface | Local authentication and acting-agent resolution | Adapter contract | Local context retained |
+| --- | --- | --- | --- |
+| External MCP client (Claude, Codex, Grok, or another governed client) | MCP token/session → user/service Principal; then an authorized canonical agent Principal + GAID, or an explicit delegation to one | extend `find_coworker`; converge `tasks/submit` and MCP task lifecycle onto the canonical service; expose additional input through the same task-message owner | MCP token/source, caller client kind, local thread/session, authorization context |
+| Build Studio | current build/phase agent → canonical agent Principal + GAID; employee/operator approval remains separate | invoke the same governed tool/service handler in process; attach returned `TaskRun` and receipts to existing `FeatureBuild`/`WorkCapsule` evidence | build, phase, WorkCapsule, execution profile, approval evidence |
+| In-platform AI coworker | active coworker → canonical Principal + GAID under local TAK/delegation | extend `find_coworker` and `request_coworker` target resolution; reuse task-chat projection for follow-up and existing engagement/timeline reads | conversation/thread, delegation chain, engagement, visible handoff provenance |
+
+Rules common to every adapter:
+
+1. A caller-supplied GAID is never authority. The server resolves the acting GAID from the
+   authenticated local Principal and verifies it through the canonical alias/AIDoc path.
+2. An MCP token authenticates a client/user context; it does not automatically turn Codex, Claude,
+   Grok, or another program into an agent subject. A2A initiation is denied unless the request
+   resolves to a governed Agent Principal with GAID or carries an explicit, authorized delegation
+   to one. No fabricated local `User` or synthetic GAID is permitted.
+3. Build Studio and in-platform coworker agents obey the same rule. A phase label, model profile,
+   tool invocation, or WorkCapsule is provenance, not agent identity.
+4. Surface provenance is local evidence. If persistence needs a closed origin value, the build
+   extends the existing canonical task trigger/source vocabulary rather than placing an untyped
+   surface string in an A2A-only metadata bag.
+5. A task created on one surface is visible or mutable from another only when both resolve to an
+   authorization context permitted to access that same `TaskRun`. Surface equality never widens
+   access.
+6. The same S5 boundary projector and whole-response scanner process results for all three surfaces.
+   A client-specific serializer cannot reintroduce protected GAIDs, topology, device/install IDs,
+   or source-local evidence references.
+7. `summon_coworker` remains local in the first slice. Remote coordination uses a task/handoff;
+   remote conversational presence is not claimed until its participant, visibility, cancellation,
+   and disconnection semantics are designed and tested.
 
 ## 9. Ingress verification and authorization
 
@@ -791,6 +888,23 @@ reference. Authorized audit opening is itself a consequential, receipted event.
   accountable identities, protected-participation status, and commitment verification;
 - demand federation continues to work when A2A is disabled or fails.
 
+### 16.5 Execution-surface parity
+
+- a governed external MCP client, a Build Studio agent, and an in-platform AI coworker can each
+  discover the same eligible remote coworker and initiate the same bounded A2A outcome;
+- each surface can supply required additional input, retrieve status/result/artifacts/receipts, and
+  request cancellation through the same `TaskRun` lifecycle and authorization rules;
+- equivalent requests resolve the same target GAID/card and produce the same federation envelope,
+  projection policy, receiver-local authority decision, and receipt shape irrespective of surface;
+- an external MCP caller with no governed acting-agent GAID or explicit delegation is denied before
+  federation egress, and a caller-supplied GAID cannot spoof that resolution;
+- a task can cross from one local surface to another only when the new caller's canonical Principal
+  context is authorized for that task; changing surfaces neither grants access nor loses custody;
+- Build Studio links the remote task/receipt to its existing `FeatureBuild`/`WorkCapsule` evidence,
+  while the coworker and MCP views project that same task without copying it;
+- surface provenance remains local unless the `ProjectionContract` explicitly allows a minimized
+  value, and the cross-org identity scan is identical for every adapter.
+
 ## 17. Documentation impact
 
 The build must update:
@@ -798,6 +912,7 @@ The build must update:
 - GAID implementation/conformance notes for issuer namespace and federation binding;
 - federation architecture and operator pairing/key-rotation guidance;
 - A2A endpoint and extension-profile documentation;
+- MCP client, Build Studio, and in-platform coworker guidance for the shared A2A entry contract;
 - coworker/service-catalog help for remote-agent provenance;
 - platform support watchlist if any host-specific crypto/key-store behavior is discovered;
 - the generated route map if federation endpoints change.
@@ -820,6 +935,9 @@ The build must update:
     NAT-style ephemeral identifier, route-local redactor, or second identity table is allowed.
 13. The signed participation commitment binds minimized external evidence to the protected graph
     without revealing private identifiers or topology.
+14. External MCP clients, Build Studio, and in-platform coworkers are thin callers of one canonical
+    A2A coordination service; surface provenance never becomes identity, authority, transport, or a
+    second task lifecycle.
 
 ## 19. Architecture review (advisory)
 
@@ -850,6 +968,10 @@ The enterprise identity-boundary amendment added five reviewed findings:
 9. **Projection is one pre-signing service.** Cards, events, tasks, artifacts, receipts, errors,
    and peer-visible operations views consume the same derived boundary object. Route-local
    redaction would violate canonical-contract and single-source-of-truth requirements.
+10. **Surface parity belongs with canonical owners.** External MCP, Build Studio, and in-platform
+    coworker access is distributed across the existing discovery/task/authority/UX slices and must
+    converge on one service. Kernel decision `DI-0171FE184F71` rejected a seventh adapter slice and
+    separate per-surface implementations.
 
 Standards checked: A2A v1.0 core, enterprise guidance, multi-tenancy and extension model; MCP
 2025-11-25 Tasks and 2026-07-28 release-candidate direction; CloudEvents 1.0; RFC 9421; RFC 9530;
@@ -864,3 +986,8 @@ it defines the contract that the same-org implementation must be capable of enfo
 future cross-org activation must prove.
 
 The implementation-scope review supersedes the former atomic build shape while preserving the single same-org product outcome. `DI-61395D1B7A6D` selected decomposed convergence with high confidence (composite `15.417`, margin `11.220`, no commandment conflict): six feature-gated sibling BIs now own GAID conformance, device signing, signed-card discovery, canonical task ingress, policy/evidence, and operator readiness. The plan's parity preflight coordinates those local records with the A2A-adoption install without making backlog synchronization part of A2A or creating multi-writer authority. Cross-org enablement remains a separate future slice.
+
+The execution-surface review added no new substrate or BI. `DI-0171FE184F71` selected thin
+adapters within S3/S4/S5/S6 with high confidence (composite `6.589`, margin `1.228`, no commandment
+conflict). The external MCP client, Build Studio, and in-platform coworker paths now share one
+caller-resolution, A2A service, `TaskRun`, authority, projection, and receipt contract.

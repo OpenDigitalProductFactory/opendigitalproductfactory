@@ -2,7 +2,7 @@
 
 **Date:** 2026-08-08
 
-**Status:** Governed implementation scope; ready to execute one slice at a time
+**Status:** Governed implementation scope with execution-surface parity; ready to execute one slice at a time
 
 **Umbrella backlog item:** `BI-BE0E14E0` under `EP-MSP-FEDERATION`
 
@@ -14,15 +14,22 @@
 
 **Decomposition decision:** `DI-61395D1B7A6D`
 
+**Execution-surface decision:** `DI-0171FE184F71`
+
 **Planning WorkCapsule:** `WC-7528A06C`
 
-**Backlog coverage receipt:** `cmskqtmc6062001qpizirypwd` (`decomposed`)
+**Backlog coverage receipt:** `cmskyxnu305rc01o1ftmh6v1i` (`decomposed`; execution-surface parity refresh)
 
 > **For build threads:** claim exactly one mapped BI, use one worktree/branch/PR, run `dpf-verify-substrate-first` again against current `origin/main`, and keep `DPF_FEDERATION_A2A_ENABLED` off unless the slice explicitly owns activation. Use `dpf-tdd`, the local merged-code CI gate, independent semantic review, and the DPF DCO PR path.
 
 ## 1. Outcome
 
 Deliver a feature-gated, same-organization A2A loop between two already trusted sovereign DPF installations. The loop discovers a projected coworker, proves both the source installation/device and the speaking GAID, creates a receiver-owned task, exchanges additional input/status/artifacts, applies receiver-local TAK and data boundaries, and presents readable provenance to operators.
+
+The same outcome must be operable from a governed external MCP client such as Codex/Claude/Grok,
+an embedded Build Studio agent, and an in-platform AI coworker. These are thin local entry adapters:
+all three resolve canonical Principal/GAID context and call one A2A coordination service, which
+alone emits federation traffic and returns one `TaskRun`/receipt lineage.
 
 The implementation also establishes the enterprise identity-boundary contract needed before any
 future cross-org activation: complete source-side custody of every materially participating agent,
@@ -48,6 +55,13 @@ The original plan treated the complete vertical slice as one atomic BI. The 2026
 
 Decision ledger: `DI-61395D1B7A6D`; margin `11.220`; strong structured coverage; no commandment conflict. The strongest positive pulls were Research and Use Standards, Ship Real Functionality, Ground New Work in Existing Platform, Single Source of Truth, and one concern per PR. This supersedes the earlier atomic coverage decision for implementation planning; it does not change the reviewed GAID-binding decision.
 
+The execution-surface follow-up compared adding parity to the existing slices, creating a seventh
+adapter slice, and creating one implementation per surface. `principle_decide` selected the
+existing-slices option with high confidence: `DI-0171FE184F71`, composite `6.589`, margin `1.228`,
+strong structured coverage, and no commandment conflict. S3 owns discovery, S4 owns the service and
+task adapters, S5 owns authorization/privacy equivalence, and S6 owns human-facing projections.
+No additional BI is needed.
+
 ## 3. BI parity and sovereignty boundary
 
 BI synchronization between the two installations is an operational coordination prerequisite, not part of the A2A protocol and not a new transport.
@@ -69,7 +83,7 @@ This boundary preserves the existing federation rule: raw `BacklogItem` is not t
 Live coverage was recorded against umbrella `BI-BE0E14E0` for this exact plan path.
 
 - Decision: `decomposed`
-- Receipt: `cmskqtmc6062001qpizirypwd`
+- Receipt: `cmskyxnu305rc01o1ftmh6v1i`
 - Independently shippable mappings: six live sibling BIs under `EP-MSP-FEDERATION`
 - Sequencing-only gates: parity/overlap preflight and final two-install umbrella acceptance
 
@@ -113,6 +127,11 @@ Cross-install reuse/coordination references:
     peer-visible operations; route-local redaction is forbidden.
 14. Minimized participation is explicit and bound to the protected graph by a signed,
     nonce-hiding commitment that can be opened only through authorized audit.
+15. External MCP clients, Build Studio, and in-platform coworkers resolve through one canonical
+    caller/GAID and A2A service contract; surface provenance is evidence, never identity or
+    authority.
+16. A caller-supplied GAID is not trusted. A surface without a governed Agent Principal/GAID or an
+    explicit authorized delegation is denied before federation egress.
 
 ## 5. P0 — Parity, overlap, and build preflight
 
@@ -220,12 +239,16 @@ Mutation, wrong path/link/device, expired signature, nonce replay, unapproved ro
 7. Implement expiry, refresh, withdrawal, revocation, and key-rotation invalidation.
 8. Extend `find_coworker` and the existing coworker/service catalog with verified, link-scoped remote results.
 9. Fail closed for the authenticated federated card path when identity/signing is unavailable. Do not inherit the current public read-only card's fail-open provenance fallback.
+10. Return one canonical remote-coworker discovery shape to external MCP clients, Build Studio tool
+    calls, and in-platform coworker/catalog consumers. Presentation may differ; target GAID/card,
+    offer, link, environment, freshness, and boundary evidence may not.
 
 ### Done
 
 Valid cards verify against the pinned link/device and GAID issuer; stale, withdrawn, wrong-link/key,
 mismatched-GAID, unapproved-offer, private-GAID, topology, and forbidden-field cases fail without
-enumerating private coworkers.
+enumerating private coworkers. All three entry surfaces discover the same eligible target set from
+the same mirrored cards and projection policy.
 
 ## 9. S4 — Federated A2A task ingress over canonical TaskRun
 
@@ -239,29 +262,51 @@ enumerating private coworkers.
 - new canonical A2A contract module under `packages/db/src/`
 - new `/api/v1/federation/a2a` route and tests
 - federation A2A exchange/delivery modules following the demand patterns
-- `apps/web/lib/mcp/tasks-lifecycle.ts`
+- `apps/web/app/api/mcp/v1/route.ts`, `apps/web/lib/mcp-task-submit.ts`, and
+  `apps/web/lib/mcp/tasks-lifecycle.ts`
+- `apps/web/lib/mcp/packs/coworker-pack.ts`, `apps/web/lib/tak/coworker-collaboration.ts`, and
+  task-chat projection adapters
 - `apps/web/lib/coworker-service-catalog/a2a-tasks.ts`, `engagements.ts`, and tests
 - existing `/api/a2a/*` routes as internal adapters only
+- Build Studio task/WorkCapsule linkage and tool-dispatch tests only where the shared handler is not
+  already inherited
 
 ### Tasks
 
 1. Reconcile current main with peer Slice 4 `BI-06B66FFD`; complete one `TaskRun` convergence rather than competing migrations or task models.
-2. Add closed, versioned A2A CloudEvent payload contracts with size, version, extension, and idempotency validation.
-3. Replace the scalar acting/delegating/delegated call-chain metadata with a versioned, receipt-linked
+2. Define one surface-neutral application service over the existing A2A task/engagement modules for
+   discovery selection, initiate/message-send, additional input, get/list/status/result, cancel,
+   artifact retrieval, and receipt projection. Only its federation adapter may emit cross-install
+   traffic.
+3. Add closed, versioned A2A CloudEvent payload contracts with size, version, extension, and idempotency validation.
+4. Replace the scalar acting/delegating/delegated call-chain metadata with a versioned, receipt-linked
    participation view derived from canonical `TaskRun`/`TaskNode`/`TaskNodeEdge`, Principal/GAID,
    artifact producer, and receipt/evidence records. Add only the minimum agent-Principal/GAID and
    receipt bindings to canonical nodes; do not add an A2A participation-graph table.
-4. Define bounded node, edge, depth, serialized-size, and graph-version rules; support fan-out and
+5. Define bounded node, edge, depth, serialized-size, and graph-version rules; support fan-out and
    fan-in without flattening. Legacy scalar records dual-read as `legacy-incomplete` until migrated.
-5. Store federation/link ownership, origin event, acting/delegating/target GAIDs, origin
+6. Store federation/link ownership, origin event, acting/delegating/target GAIDs, origin
    install/environment, card/AIDoc digests, protected graph reference, applied projection version,
    commitment, and verification receipt as typed/indexed ownership where query/integrity needs
    justify it.
-6. Implement the non-streaming v1.0 operations required by the first slice: message/send, get/list, additional input, cancel, status/history, and artifact retrieval.
-7. Generate the task ID on the receiver and use `TaskRun` as authority; link `CoworkerEngagement` for service/approval context and persist `TaskMessage`/`TaskArtifact` history.
-8. Bind every operation to the authenticated `FederationLink`, verified agent context, and local target. Task-ID possession is never authorization.
-9. Reuse federation delivery/idempotency/loop patterns. Keep `/api/a2a/*` as internal compatibility adapters, not external trust paths.
-10. Claim A2A binding conformance only if all required operations and semantics are implemented; otherwise label the surface as the DPF federation A2A profile.
+7. Implement the non-streaming v1.0 operations required by the first slice: message/send, get/list, additional input, cancel, status/history, and artifact retrieval.
+8. Generate the task ID on the receiver and use `TaskRun` as authority; link `CoworkerEngagement` for service/approval context and persist `TaskMessage`/`TaskArtifact` history.
+9. Bind every operation to the authenticated `FederationLink`, verified agent context, and local target. Task-ID possession is never authorization.
+10. Converge the external MCP path: `find_coworker` selects verified remote cards;
+    `tasks/submit` remains a bounded compatibility door while peer Slice 4 converges task-augmented
+    requests; `tasks/get|result|list|cancel` and the additional-input adapter call the same service
+    and return the same receiver-owned `TaskRun`.
+11. Resolve an external MCP request through its authenticated user/service Principal to a governed
+    acting Agent Principal + GAID, or require an explicit authorized delegation to one. Reject raw
+    caller-supplied GAID selection and never fabricate a local user/agent identity.
+12. Route `request_coworker` to the same service when target resolution returns a verified remote
+    card; preserve its current local thread path for local targets. Keep `summon_coworker` local in
+    this slice.
+13. Let Build Studio invoke the same governed tool/service handler and attach the returned remote
+    `TaskRun`/receipt to existing `FeatureBuild`/`WorkCapsule` evidence. Do not add a Build Studio
+    A2A state machine or direct federation-route call.
+14. Reuse federation delivery/idempotency/loop patterns. Keep `/api/a2a/*` as internal compatibility adapters, not external trust paths.
+15. Claim A2A binding conformance only if all required operations and semantics are implemented; otherwise label the surface as the DPF federation A2A profile.
 
 ### Done
 
@@ -269,6 +314,9 @@ Lifecycle/concurrency tests pass; a multi-agent fan-out/fan-in fixture preserves
 and receipt; graph limits and immutable versioning pass; duplicate creates converge; conflicting
 idempotency payloads fail; guessed/cross-link task IDs, token-only/signature-only calls, replay, and
 body mutation are denied; existing internal A2A and demand paths remain green.
+The external MCP, Build Studio, and in-platform coworker adapters all exercise the same service
+contract and produce one receiver-owned task/receipt shape; an unmapped or spoofed acting GAID is
+denied before egress.
 
 ## 10. S5 — Authority, privacy, receipts, and operations
 
@@ -303,13 +351,20 @@ body mutation are denied; existing internal A2A and demand paths remain green.
 9. Persist immutable chain-of-custody and authorization receipts without tokens, private keys, raw prompts, or unminimized payloads.
 10. Add bounded-cardinality metrics, structured failure reasons, retry/stuck state, quarantine/revocation behavior, and existing operations-map projection. Metrics never label hidden participant identity or count.
 11. Define one fail-closed readiness predicate used by S6 and rollout.
+12. Apply the same caller-resolution, TAK/tool-grant intersection, task-ownership check, boundary
+    projection, egress scan, and receipt policy to MCP, Build Studio, and in-platform coworker
+    adapters. A surface-specific serializer or handler cannot weaken them.
+13. Retain caller surface only as bounded local provenance using the existing task trigger/source
+    vocabulary. Do not serialize it across the peer boundary unless the `ProjectionContract`
+    explicitly allows a minimized value.
 
 ### Done
 
 Negative-egress, missing-public-alias, private-ID side-channel, commitment mutation/opening,
 revocation-mid-task, cross-org, over-classification, authority-denial, and demand-isolation tests
 pass; accepted and denied work is legible through existing evidence/operations surfaces. Cross-org
-remains disabled after the tests.
+remains disabled after the tests. Cross-surface authorization tests prove that switching clients
+cannot gain task access, spoof a GAID, or bypass the boundary projector.
 
 ## 11. S6 — Operator readiness UX and activation controls
 
@@ -322,6 +377,7 @@ remains disabled after the tests.
 - existing federation-link detail/admin components and page
 - existing coworker/service-catalog components
 - existing engagement/task/A2A interaction timeline
+- existing Build Studio activity/evidence timeline and WorkCapsule task linkage
 - shared status, disclosure, confirmation, and report primitives
 - required UX-fit evidence
 
@@ -337,12 +393,20 @@ remains disabled after the tests.
 6. Make unready states actionable: device confirmation, issuer verification, expired card, missing
    public mapping, commitment failure, quarantine, unsupported extension/version, and cross-org disabled.
 7. Use shared primitives and `--dpf-*` tokens; verify keyboard use, ≥44px targets, text status, visible focus, narrow layouts, reduced motion, light/dark themes, and organization branding.
+8. Show a Build Studio-originated remote task in the existing build activity/evidence timeline using
+   the same task status, target provenance, protected-participation state, artifact, and receipt read
+   models. Do not create a Build Studio A2A page or duplicate controls already available through the
+   agent/tool interaction.
+9. Ensure the in-platform coworker panel and service catalog render the same canonical task and
+   remote-agent provenance as the external MCP and Build Studio projections, translated to the
+   audience rather than exposing protocol plumbing.
 
 ### Done
 
 Component, accessibility, and measured UX-fit evidence pass; the UI never implies A2A readiness
 unless S5's canonical predicate is true and never leaks or falsely attributes protected internal
-participation.
+participation. Build Studio and coworker views point to the same `TaskRun`/receipt evidence rather
+than copied surface-local records.
 
 ## 12. Acceptance and rollout
 
@@ -368,22 +432,28 @@ After S1–S6 merge:
 2. Use the governed nonproduction environment/lease and canonical self-upgrade path; never rebuild the live portal from a worktree.
 3. Upgrade both designated same-org installs and explicitly approve device pins and issuer bindings.
 4. Happy path: discover a projected remote coworker; inspect GAID/AIDoc and install/environment provenance; submit a bounded task; receive working/input-required; add input; receive a minimized artifact; complete; retrieve the task and receipt from the initiating side.
-5. Multi-agent custody path: run a five-agent fixture with delegation plus fan-out/fan-in; prove the
+5. Surface-parity matrix: run that discovery/initiate/input/status/result/cancel/artifact/receipt
+   contract independently from (a) a governed external MCP client, (b) a Build Studio agent with a
+   linked `FeatureBuild`/`WorkCapsule`, and (c) an in-platform AI coworker. Prove all three resolve
+   the same remote GAID/card and use the same service, `TaskRun`, authority, projection, and receipt
+   contracts. Negative-test a missing acting-agent mapping, a caller-supplied spoofed GAID, and a
+   cross-surface task read/cancel from an unauthorized Principal.
+6. Multi-agent custody path: run a five-agent fixture with delegation plus fan-out/fan-in; prove the
    source view contains every material GAID/edge/receipt and the allowed same-org projection matches
    its explicit `ProjectionContract`.
-6. Enterprise boundary dry-run while execution remains disabled: generate the cross-org projection
+7. Enterprise boundary dry-run while execution remains disabled: generate the cross-org projection
    and prove it contains only approved `gaid:pub` participants, minimized-participation state, and a
    signed commitment. Search payload, history, artifacts, cards, receipts, errors, traces, logs, and
    operator exports for every seeded private identifier. Open the commitment through the authorized
    audit path; mutations to graph, context, policy version, or nonce must fail.
-7. Negative paths: wrong/rotated device key, token-only request, replay, stale/withdrawn card,
+8. Negative paths: wrong/rotated device key, token-only request, replay, stale/withdrawn card,
    unprojected GAID, missing public mapping, private-ID/topology leak, unsalted/invalid commitment,
    legacy scalar-only custody, graph-limit breach, task ID from another link, revoked/quarantined
    link, unsupported extension/version, cross-org preset, and development-to-production
    consequential work without local approval.
-8. Prove demand federation still functions when A2A is off and when A2A authentication fails.
-9. Run live UX-fit review and record screenshots/evidence against the umbrella WorkCapsule.
-10. Enable `DPF_FEDERATION_A2A_ENABLED` only for the approved same-org link after every positive and negative case passes.
+9. Prove demand federation still functions when A2A is off and when A2A authentication fails.
+10. Run live UX-fit review and record screenshots/evidence against the umbrella WorkCapsule.
+11. Enable `DPF_FEDERATION_A2A_ENABLED` only for the approved same-org link after every positive and negative case passes.
 
 ### Umbrella done
 
@@ -394,6 +464,8 @@ After S1–S6 merge:
 - enterprise boundary projection and authorized commitment opening are proven without leaking the
   protected graph;
 - demand regression evidence is green;
+- MCP client, Build Studio, and in-platform coworker parity evidence is green, including identity
+  spoofing and unauthorized cross-surface negatives;
 - the spec, plan, route/architecture docs, and operator guidance match shipped behavior.
 
 ## 13. Architecture review
@@ -409,6 +481,7 @@ After S1–S6 merge:
 | Data-model stewardship | aligned with slice separation | link/device fields in S2; task ownership in S4 only when query/integrity requires typed columns |
 | Task source of truth | aligned | `TaskRun` owns lifecycle; `CoworkerEngagement` owns service/authority context |
 | Discovery source of truth | aligned | extend the existing Agent Card builder and `find_coworker` |
+| Entry-surface parity | aligned | MCP clients, Build Studio, and in-platform coworkers are thin adapters over one service; `DI-0171FE184F71` |
 | Backlog sovereignty | aligned with guardrail | BI sync provides mirrored/crosswalk coordination; local `BacklogItem` remains authoritative |
 | Privacy | aligned | one pre-signing `ProjectionContract` projector; same-org explicit disclosure; public-only cross-org dry-run; cross-org execution disabled |
 | Enterprise scale | aligned with bounded contract | DAG node/edge/depth/bytes limits, immutable versions, constant-size commitments, no GAID metric labels |
@@ -428,6 +501,8 @@ Review corrections carried into the plan:
    `ProjectionContract` service prevents route-by-route redaction drift.
 9. A2A's standard extension points carry the GAID enterprise profile; standard task/card/auth
    semantics and the federation transport remain unchanged.
+10. Execution-surface parity is owned inside S3/S4/S5/S6. No seventh BI, surface-specific task
+    model, client-supplied GAID authority, or Build Studio federation path is introduced.
 
 ## 14. Rollback and recovery
 
@@ -438,3 +513,6 @@ Review corrections carried into the plan:
 5. On device compromise, quarantine the link, rotate by dual approval, invalidate current card bindings, and require reprojection.
 6. On issuer error, withdraw affected cards and block new tasks while preserving alias/history continuity.
 7. Recovery is complete only after demand regression, A2A negative tests, and one fresh signed same-org task pass in the canonical runtime.
+8. Disable or roll back a local surface adapter without altering stored remote tasks or the
+   federation link; remaining surfaces continue to resolve the canonical task according to their
+   authorization context.
