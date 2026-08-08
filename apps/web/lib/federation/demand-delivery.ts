@@ -15,6 +15,12 @@ import { sendDemandToPeer, type PeerPostResult } from "./client";
 import { buildDemandEnvelope, type ProjectableDemandSource } from "./demand-projection";
 import type { FederationIdentity } from "./demand-identity";
 import { decryptPeerToken } from "./outbound";
+import { incrementVersionVector, isVersionVector, type VersionVector } from "./version-vector";
+
+/** Parse a stored JSON version vector, defaulting to empty when absent/legacy. */
+function readStoredVector(value: unknown): VersionVector {
+  return isVersionVector(value) ? value : {};
+}
 
 type OutboundDemandActivity = Extract<DemandActivity, "dpf.demand.proposed" | "dpf.demand.updated" | "dpf.demand.withdrawn">;
 type OutboundResponseActivity = Extract<DemandActivity, "dpf.demand.interest-recorded" | "dpf.demand.help-offered">;
@@ -47,7 +53,7 @@ export interface DemandDeliveryDb {
     }>>;
   };
   federatedRecordMirror: {
-    findUnique(args: unknown): Promise<Partial<DemandOutboxRow> & { mirrorId: string; version: bigint; syncStatus: string; payload: unknown } | null>;
+    findUnique(args: unknown): Promise<Partial<DemandOutboxRow> & { mirrorId: string; version: bigint; syncStatus: string; payload: unknown; versionVector?: unknown } | null>;
     findMany(args: unknown): Promise<DemandOutboxRow[]>;
     create(args: unknown): Promise<unknown>;
     update(args: unknown): Promise<unknown>;
@@ -101,6 +107,15 @@ export async function queueDemandProjection(db: DemandDeliveryDb, input: {
     return { action: "noop", mirrorId: existing.mirrorId, originVersion: Number(existing.version) };
   }
 
+  // Real content change → advance THIS installation's counter in the causal vector,
+  // carried forward from the record's prior vector. Set after the noop check and
+  // (harmlessly) after digest computation, since the vector is digest-excluded.
+  const versionVector = incrementVersionVector(
+    readStoredVector(existing?.versionVector),
+    input.identity.installationId,
+  );
+  built.envelope.versionVector = versionVector;
+
   const activity: OutboundDemandActivity = existing ? "dpf.demand.updated" : "dpf.demand.proposed";
   const payload: DemandOutboxPayload = {
     envelope: built.envelope,
@@ -111,6 +126,7 @@ export async function queueDemandProjection(db: DemandDeliveryDb, input: {
   const data = {
     syncStatus: "pending",
     version: built.envelope.originVersion,
+    versionVector,
     payload,
     deliveryAttempts: 0,
     nextDeliveryAt: input.now ?? new Date(),
