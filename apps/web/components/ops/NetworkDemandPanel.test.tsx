@@ -74,6 +74,7 @@ describe("NetworkDemandPanel", () => {
         founderTargets: [{ linkId: "FL-FOUNDER", displayName: "Central Founder Hub" }],
         responses: [{
           responseId: "rsp_opaque",
+          localItemId: "BI-LOCAL",
           sourceName: "Reseller One",
           responseKind: "help-offer",
           message: "We can validate this.",
