@@ -1,4 +1,5 @@
-apps/web/app/api/mcp/v1/route.test.ts	1315
+apps/web/app/api/mcp/v1/route.test.ts	1376
+apps/web/app/api/mcp/v1/route.ts	862
 apps/web/app/api/v1/edge/discovery-runs/route.test.ts	982
 apps/web/components/admin/BusinessModelBuilder.tsx	821
 apps/web/components/admin/McpTokenManager.tsx	1326
@@ -40,7 +41,7 @@ apps/web/lib/integrate/build-orchestrator.ts	1800
 apps/web/lib/integrate/sandbox/build-branch.ts	949
 apps/web/lib/marketing.ts	1369
 apps/web/lib/mcp-tools-backlog.test.ts	874
-apps/web/lib/mcp-tools.ts	1947
+apps/web/lib/mcp-tools.ts	1953
 apps/web/lib/mcp/packs/backlog-pack.ts	858
 apps/web/lib/mcp/packs/contribution-hive-pack.ts	854
 apps/web/lib/mcp/packs/sandbox-pack.ts	920

@@ -99,6 +99,12 @@ export type ToolDefinition = {
   name: string;
   description: string;
   inputSchema: Record<string, unknown>;
+  /** MCP 2025-11-25 optional metadata. `title` is a human-facing label (falls
+   *  back to a de-underscored name); `icons` are display hints; `outputSchema`
+   *  declares the structured-result shape as JSON Schema (2020-12 dialect). */
+  title?: string;
+  icons?: Array<{ src: string; mimeType?: string; sizes?: string }>;
+  outputSchema?: Record<string, unknown>;
   requiredCapability: CapabilityKey | null;
   requiresExternalAccess?: boolean;
   executionMode?: "proposal" | "immediate";

@@ -2,7 +2,7 @@
 
 | Field | Value |
 |-------|-------|
-| **Status** | **DRAFT design — pre-filing, pre-implementation.** Carries unresolved decisions that MUST be kernel-routed (`dpf-decision-via-kernel`) before an implementation plan is written. |
+| **Status** | **Phase 0 SHIPPED (BI-06B66FFD).** The read-only standard surface — `tasks` capability + `tasks/get\|result\|list\|cancel` over the existing `TaskRun` substrate, with the A2A state adapter and auth-context binding (`apps/web/lib/mcp/tasks-lifecycle.ts`) — is implemented behind the `MCP_TASKS_LIFECYCLE` flag (default on). This increment changes NO execution semantics: task-augmented `tools/call` (Phase 1) and `tasks/submit` convergence (Phase 2) remain deferred and still require the kernel-routed decisions D1–D3 below. The kernel's LATER ruling for the full Slice 4 (`DI-A573E0551352`) was **operator-overridden** to ship Phase 0 in the conformance bundle; the HIGH-blast execution phases stay gated. |
 | **Date** | 2026-08-06 |
 | **Author** | Claude Code for Mark Bodman |
 | **Parent** | [MCP `2025-11-25` + A2A adoption assessment](2026-08-06-mcp-2025-11-25-and-a2a-feature-adoption-design.md) · [phased plan](../plans/2026-08-06-mcp-2025-11-25-a2a-adoption.md) Slice 4 |

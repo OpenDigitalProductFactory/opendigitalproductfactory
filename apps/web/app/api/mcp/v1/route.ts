@@ -35,6 +35,14 @@ import {
   type McpToolTier,
 } from "@/lib/mcp/tool-tier";
 import { getLoadedToolNames, loadToolsForSession } from "@/lib/mcp/tool-session-store";
+import {
+  tasksLifecycleEnabled,
+  handleTasksGet,
+  handleTasksResult,
+  handleTasksList,
+  handleTasksCancel,
+  type TaskLifecycleResult,
+} from "@/lib/mcp/tasks-lifecycle";
 import { LOAD_TOOLS_LISTED, buildLoadToolsResult, loadToolsSseResponse } from "@/lib/mcp/load-tools";
 import { can, type CapabilityKey, type UserContext } from "@/lib/permissions";
 import { prisma } from "@dpf/db";
@@ -360,12 +368,21 @@ function insufficientScopeResult(
 
 function annotateTool(tool: ToolDefinition) {
   const ann = resolveAnnotations(tool);
+  // MCP 2025-11-25 optional metadata: emit top-level title/icons/outputSchema
+  // only when the tool defines them. outputSchema is stamped with the 2020-12
+  // dialect ($schema) unless the tool already declared one.
+  const outputSchema = tool.outputSchema
+    ? { $schema: "https://json-schema.org/draft/2020-12/schema", ...tool.outputSchema }
+    : undefined;
   return {
     name: tool.name,
+    ...(tool.title ? { title: tool.title } : {}),
     description: tool.description,
     inputSchema: tool.inputSchema,
+    ...(outputSchema ? { outputSchema } : {}),
+    ...(tool.icons ? { icons: tool.icons } : {}),
     annotations: {
-      title: tool.name.replace(/_/g, " "),
+      title: tool.title ?? tool.name.replace(/_/g, " "),
       readOnlyHint: ann.readOnlyHint,
       destructiveHint: ann.destructiveHint,
       idempotentHint: ann.idempotentHint,
@@ -400,6 +417,39 @@ async function handleLoadTools(
   return acceptsEventStream && selected.length > 0
     ? loadToolsSseResponse(id, result)
     : jsonRpcOk(id, result);
+}
+
+// Standard MCP Tasks Phase-0 read surface: route tasks/get|result|list|cancel to
+// the tasks-lifecycle module (auth-context bound over the TaskRun substrate) and
+// map its typed result to a JSON-RPC response. Cross-context / bad-id → -32602.
+async function handleTasksLifecycle(
+  method: string,
+  id: JsonRpcId,
+  token: ResolvedAuth,
+  params: Record<string, unknown> | undefined,
+): Promise<Response> {
+  if (!tasksLifecycleEnabled()) {
+    return jsonRpcError(id, JSONRPC_METHOD_NOT_FOUND, `unknown method: ${method}`);
+  }
+  let result: TaskLifecycleResult;
+  switch (method) {
+    case "tasks/get":
+      result = await handleTasksGet(token.userId, params);
+      break;
+    case "tasks/result":
+      result = await handleTasksResult(token.userId, params);
+      break;
+    case "tasks/list":
+      result = await handleTasksList(token.userId, params);
+      break;
+    case "tasks/cancel":
+      result = await handleTasksCancel(token.userId, params);
+      break;
+    default:
+      return jsonRpcError(id, JSONRPC_METHOD_NOT_FOUND, `unknown method: ${method}`);
+  }
+  if (result.kind === "ok") return jsonRpcOk(id, result.value);
+  return jsonRpcError(id, JSONRPC_INVALID_PARAMS, result.message);
 }
 
 async function handleTasksSubmit(
@@ -458,10 +508,15 @@ async function handleInitialize(id: JsonRpcId, params?: Record<string, unknown>)
       // SSE response on the load_tools POST for clients that Accept it); clients
       // that ignore it still work — the lean core tier is always the floor.
       tools: { listChanged: true },
+      // Standard MCP Tasks (Phase 0, read-only): tasks/get|result|list|cancel
+      // over the durable TaskRun substrate. Advertised only while enabled.
+      ...(tasksLifecycleEnabled() ? { tasks: { list: true, cancel: true } } : {}),
     },
     serverInfo: {
       name: SERVER_NAME,
       version: SERVER_VERSION,
+      description:
+        "Digital Product Factory MCP transport — governed backlog, planning, coworker, and build tools for external coding agents.",
     },
     instructions,
   });
@@ -702,6 +757,25 @@ export async function POST(request: Request): Promise<Response> {
   // Notifications (no id) — return 202 Accepted, no body, per spec.
   const isNotification = body.id === undefined;
 
+  // MCP 2025-11-25 protocol negotiation: a non-initialize request MAY carry an
+  // MCP-Protocol-Version header. When present it must be a version we speak;
+  // when absent the caller inherits the version negotiated at initialize. An
+  // explicit unsupported value is a 400 (lenient on absence, strict on mismatch).
+  const protocolHeader = request.headers.get("mcp-protocol-version");
+  if (
+    protocolHeader &&
+    body.method !== "initialize" &&
+    !(SUPPORTED_PROTOCOL_VERSIONS as readonly string[]).includes(protocolHeader)
+  ) {
+    return jsonRpcError(
+      body.id ?? null,
+      JSONRPC_INVALID_REQUEST,
+      `unsupported MCP-Protocol-Version: ${protocolHeader}; supported: ${SUPPORTED_PROTOCOL_VERSIONS.join(", ")}`,
+      undefined,
+      400,
+    );
+  }
+
   try {
     switch (body.method) {
       case "initialize":
@@ -743,6 +817,15 @@ export async function POST(request: Request): Promise<Response> {
           return new Response(null, { status: 202 });
         }
         return await handleTasksSubmit(body.id ?? null, token, body.params);
+
+      case "tasks/get":
+      case "tasks/result":
+      case "tasks/list":
+      case "tasks/cancel":
+        if (isNotification) {
+          return new Response(null, { status: 202 });
+        }
+        return await handleTasksLifecycle(body.method, body.id ?? null, token, body.params);
 
       case "ping":
         if (isNotification) {
