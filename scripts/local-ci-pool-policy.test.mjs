@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   LOCAL_CI_POOL_CONFIG_KEY,
+  localCiBuildHeadroomCapacity,
   loadLocalCiPoolConfig,
   resolveLocalCiPoolPolicy,
 } from "../apps/web/lib/nonprod/local-ci-pool-policy.ts";
@@ -83,6 +84,95 @@ test("enables slot 1 only when requested, declared, and all host evidence is saf
   assert.equal(resolved.effectiveCapacity, 2);
   assert.equal(resolved.rollbackReason, null);
   assert.deepEqual(resolved.slotKeys, ["slot-0", "slot-1"]);
+});
+
+test("admission reserves the canonical bounded-build memory above the host safety floor", () => {
+  const resolved = resolveLocalCiPoolPolicy({
+    configValue: {
+      ...PILOT_CONFIG,
+      ceilings: {
+        ...PILOT_CONFIG.ceilings,
+        minAvailableMemoryBytes: 8 * 1024 ** 3,
+      },
+    },
+    host: {
+      ...SAFE_HOST,
+      availableMemoryBytes: 11 * 1024 ** 3,
+      dockerAvailableMemoryBytes: 11 * 1024 ** 3,
+      builderMemoryUsageBytes: [0, 0],
+    },
+    manifestSlotCount: 2,
+    reserveBuildHeadroom: true,
+  });
+
+  assert.equal(resolved.hostSafeCapacity, 0);
+  assert.equal(resolved.effectiveCapacity, 0);
+  assert.equal(resolved.rollbackReason, "host-build-headroom-low");
+  assert.deepEqual(resolved.slotKeys, []);
+});
+
+test("admission contracts to one slot when headroom covers only one bounded build", () => {
+  const resolved = resolveLocalCiPoolPolicy({
+    configValue: PILOT_CONFIG,
+    host: {
+      ...SAFE_HOST,
+      availableMemoryBytes: 28 * 1024 ** 3,
+      dockerAvailableMemoryBytes: 16 * 1024 ** 3,
+      builderMemoryUsageBytes: [1.5 * 1024 ** 3, 0],
+    },
+    manifestSlotCount: 2,
+    reserveBuildHeadroom: true,
+  });
+
+  assert.equal(resolved.hostSafeCapacity, 1);
+  assert.equal(resolved.effectiveCapacity, 1);
+  assert.equal(resolved.rollbackReason, "host-build-capacity-one");
+  assert.deepEqual(resolved.slotKeys, ["slot-0"]);
+});
+
+test("execution pressure does not reserve bounded-build memory a second time", () => {
+  const resolved = resolveLocalCiPoolPolicy({
+    configValue: {
+      ...PILOT_CONFIG,
+      ceilings: {
+        ...PILOT_CONFIG.ceilings,
+        minAvailableMemoryBytes: 8 * 1024 ** 3,
+      },
+    },
+    host: {
+      ...SAFE_HOST,
+      availableMemoryBytes: 11 * 1024 ** 3,
+      dockerAvailableMemoryBytes: 5 * 1024 ** 3,
+    },
+    manifestSlotCount: 2,
+    reserveBuildHeadroom: false,
+  });
+
+  assert.equal(resolved.hostSafeCapacity, 2);
+  assert.equal(resolved.effectiveCapacity, 2);
+  assert.equal(resolved.rollbackReason, null);
+});
+
+test("bounded-build headroom arithmetic fails closed for invalid resource policy", () => {
+  const valid = {
+    dockerAvailableMemoryBytes: 30.5 * 1024 ** 3,
+    builderMemoryBytes: 16 * 1024 ** 3,
+    builderMemoryUsageBytes: [1.5 * 1024 ** 3, 0],
+    manifestCapacity: 2,
+  };
+
+  assert.equal(localCiBuildHeadroomCapacity(valid), 2);
+  for (const builderMemoryBytes of [0, -1, Number.NaN, Number.POSITIVE_INFINITY]) {
+    assert.equal(localCiBuildHeadroomCapacity({
+      ...valid,
+      builderMemoryBytes,
+    }), 0);
+  }
+  assert.equal(localCiBuildHeadroomCapacity({
+    ...valid,
+    dockerAvailableMemoryBytes: 11 * 1024 ** 3,
+    builderMemoryUsageBytes: [0, 0],
+  }), 0);
 });
 
 test("unmeasurable or unsafe configured host evidence contracts admission to zero", () => {

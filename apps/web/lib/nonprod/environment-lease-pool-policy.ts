@@ -20,6 +20,7 @@ export async function resolveNonprodPoolPolicy(input: {
   hostPressure?: LocalCiHostPressure;
   capacityBroker?: LocalCiCapacityBroker;
   manifestSlotCount: number;
+  reserveBuildHeadroom?: boolean;
   now: Date;
 }): Promise<ResolvedLocalCiPoolPolicy> {
   if (input.environmentKey !== "local-integration-ci") {
@@ -43,6 +44,7 @@ export async function resolveNonprodPoolPolicy(input: {
     configValue,
     host: clientPressure,
     manifestSlotCount: input.manifestSlotCount,
+    reserveBuildHeadroom: input.reserveBuildHeadroom,
     env: process.env,
     now: input.now,
   });
@@ -73,6 +75,7 @@ export async function resolveNonprodPoolPolicy(input: {
       server: serverPressure,
     }),
     manifestSlotCount: input.manifestSlotCount,
+    reserveBuildHeadroom: input.reserveBuildHeadroom,
     env: process.env,
     now: input.now,
   });

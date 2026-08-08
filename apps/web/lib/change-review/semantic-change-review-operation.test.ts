@@ -101,6 +101,31 @@ describe("semantic change-review operation", () => {
     expect(stale.reusedFreshReceipt).toBe(false);
   });
 
+  it("retries a fresh infrastructure-inconclusive receipt for the same immutable identity", async () => {
+    const first = await runSemanticChangeReview(input(), {
+      dispatch: vi.fn().mockResolvedValue({
+        decision: "inconclusive",
+        issues: [],
+        summary: "One required review branch did not complete.",
+        inconclusiveReason: "review-branch-capacity-or-transport-failure",
+      }),
+    });
+    const retryDispatch = vi.fn().mockResolvedValue({
+      decision: "pass",
+      issues: [],
+      summary: "The retry completed with no semantic findings.",
+    });
+
+    const retried = await runSemanticChangeReview(
+      input({ priorReceipt: first.receipt }),
+      { dispatch: retryDispatch },
+    );
+
+    expect(retryDispatch).toHaveBeenCalledOnce();
+    expect(retried.reusedFreshReceipt).toBe(false);
+    expect(retried.receipt.result.decision).toBe("pass");
+  });
+
   it("stops the repair loop after two failed repair rounds", async () => {
     const dispatch = vi.fn().mockResolvedValue({
       decision: "fail",
