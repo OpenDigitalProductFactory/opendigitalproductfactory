@@ -132,6 +132,7 @@ const VERTICAL_CATEGORIES = [
   { value: "warehousing-fulfilment", label: "Warehousing & Fulfilment", keywords: ["warehouse", "warehousing", "3pl", "fulfilment", "fulfillment", "pick and pack", "pallet", "inventory", "stock", "putaway", "cross-dock", "cold storage", "sscc", "asn", "wms", "despatch"] },
   { value: "fabric-care-services", label: "Fabric Care Services", keywords: ["dry cleaning", "dry cleaner", "laundry", "wash and fold", "alterations", "tailoring", "claim ticket", "garment", "pressing", "pickup and delivery"] },
   { value: "agriculture-ranching", label: "Agriculture & Ranching", keywords: ["farm", "ranch", "cattle", "livestock", "hay", "forage", "pasture", "crop", "tractor", "farrier", "fertilizer", "pesticide"] },
+  { value: "manufacturing", label: "Manufacturing & Industrial OEM", keywords: ["manufacturer", "manufacturing", "factory", "production line", "industrial oem", "bom", "routing", "work order", "wip", "quality", "npi"] },
 ];
 
 // CTA type to vertical affinity — features using booking, purchase, etc.
@@ -139,7 +140,7 @@ const VERTICAL_CATEGORIES = [
 const CTA_VERTICAL_MAP: Record<string, string[]> = {
   booking: ["healthcare-wellness", "beauty-personal-care", "pet-services", "fitness-recreation", "professional-services"],
   purchase: ["retail-goods", "food-hospitality", "live-events-venues"],
-  inquiry: ["trades-maintenance", "professional-services", "media-production", "fabric-care-services", "agriculture-ranching"],
+  inquiry: ["trades-maintenance", "professional-services", "media-production", "fabric-care-services", "agriculture-ranching", "manufacturing"],
   donation: ["nonprofit-community"],
 };
 

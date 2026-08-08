@@ -132,6 +132,17 @@ const TRUST_BY_CATEGORY: Record<string, TrustProfile> = {
       "No payment is taken to send this request. Price, delivery, pickup, and any deposit are agreed directly with the farm.",
     accountPurpose: "manage your farm product, livestock, and service requests",
   },
+  "manufacturing": {
+    bookingNoun: "engineering request",
+    bookingPolicy:
+      "Sending a request shares your application and commercial requirements with the manufacturer; configuration, feasibility, lead time, acceptance criteria, and terms are confirmed before anything is committed.",
+    cancellationPolicy:
+      "Contact the manufacturer promptly when requirements or timing change. Engineering release, committed materials, and work already performed may affect what can be changed or cancelled.",
+    dietaryNote: null,
+    paymentNote:
+      "No payment is taken to send this request. Price, deposit, milestones, freight, and payment terms are agreed in the formal quotation or order acknowledgement.",
+    accountPurpose: "manage your product enquiries, quotations, orders, documentation, and lifecycle-support requests",
+  },
 };
 
 /** Resolve the trust profile for an archetype category (falls back to generic). */

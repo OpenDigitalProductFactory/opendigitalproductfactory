@@ -3288,5 +3288,37 @@ exports[`deriveDemoBusiness > matches the golden digest across all archetypes 1`
       "humans": 3,
     },
   },
+  {
+    "archetypeId": "industrial-equipment-oem",
+    "cogProposal": "Allocate the next work order to the best bay by labor-hours",
+    "companyName": "Riverside Industrial Equipment OEM",
+    "currency": "GBP",
+    "customers": 10,
+    "demand": {
+      "byStage": {
+        "capture": 2,
+        "deliver": 5,
+        "qualify": 3,
+        "settle": 3,
+      },
+      "inFlight": 8,
+      "primaryQueue": "intake",
+      "queued": 5,
+      "total": 13,
+    },
+    "finance": {
+      "bills": 3,
+      "hasTaxPeriod": true,
+      "invoices": 3,
+      "obligations": 1,
+      "paidInvoices": 1,
+    },
+    "resources": 11,
+    "template": "BAYS",
+    "workforce": {
+      "ai": 1,
+      "humans": 4,
+    },
+  },
 ]
 `;

@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 626,
+  "pageCount": 627,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -1457,6 +1457,7 @@
         "522-warehousing-and-fulfilment-4",
         "523-fabric-care-services-3",
         "524-agriculture-and-ranching-3",
+        "525-manufacturing-1",
         "6-shared-and-specialized-ai-coworker-families",
         "61-controlled-activity-applicability-and-ai-realization-states",
         "62-category-applicability-matrix",
@@ -6565,6 +6566,17 @@
         "the-structural-fact",
         "coppa-the-cleanly-sourced-example",
         "see-also"
+      ]
+    },
+    "docs/professions/manufacturing-operations/wiki/production-flow-and-quality-holds.md": {
+      "publicHref": "/professions/manufacturing-operations/wiki/production-flow-and-quality-holds/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "heuristic",
+        "human-authority",
+        "sources"
       ]
     },
     "docs/professions/marketing/wiki/agriculture-evidence-led-market-positioning.md": {

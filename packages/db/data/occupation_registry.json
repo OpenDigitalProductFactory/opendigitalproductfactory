@@ -126,6 +126,120 @@
       ],
       "onboardingCurriculumId": "occ-intro-farm-ranch-hand",
       "moverCurriculumId": null
+    },
+    {
+      "occupationKey": "manufacturing-assembler",
+      "label": "Manufacturing Assembler",
+      "summary": "Executes assigned assembly operations, records quantities and observations, and escalates material, equipment, or quality constraints.",
+      "archetypeCategories": ["manufacturing"],
+      "archetypeIds": [],
+      "baseAccessProfile": "workforce-member",
+      "wsidProfessionFamily": "manufacturing-operations",
+      "featureSurface": { "tileAllowlist": ["today-schedule", "needs-you"], "navEmphasis": ["/workspace", "/workspace/my-queue"], "workspaceHomeOccupationId": null },
+      "coworkerRoster": [
+        { "agentSlug": "ops-coordinator", "interaction": "summon", "governanceProfileRef": null },
+        { "agentSlug": "compliance-officer", "interaction": "read-only", "governanceProfileRef": null }
+      ],
+      "onboardingCurriculumId": "occ-intro-manufacturing-assembler",
+      "moverCurriculumId": null
+    },
+    {
+      "occupationKey": "winding-technician",
+      "label": "Winding Technician",
+      "summary": "Builds controlled winding operations to the released specification and records material, process, and in-process quality evidence.",
+      "archetypeCategories": ["manufacturing"],
+      "archetypeIds": ["industrial-equipment-oem"],
+      "baseAccessProfile": "workforce-member",
+      "wsidProfessionFamily": "manufacturing-operations",
+      "featureSurface": { "tileAllowlist": ["today-schedule", "needs-you"], "navEmphasis": ["/workspace", "/workspace/my-queue"], "workspaceHomeOccupationId": null },
+      "coworkerRoster": [
+        { "agentSlug": "ops-coordinator", "interaction": "summon", "governanceProfileRef": null },
+        { "agentSlug": "compliance-officer", "interaction": "read-only", "governanceProfileRef": null }
+      ],
+      "onboardingCurriculumId": "occ-intro-winding-technician",
+      "moverCurriculumId": null
+    },
+    {
+      "occupationKey": "manufacturing-test-technician",
+      "label": "Manufacturing Test Technician",
+      "summary": "Runs released test procedures, preserves measurements and equipment identity, and routes failures into an explicit quality hold.",
+      "archetypeCategories": ["manufacturing"],
+      "archetypeIds": [],
+      "baseAccessProfile": "workforce-member",
+      "wsidProfessionFamily": "manufacturing-operations",
+      "featureSurface": { "tileAllowlist": ["today-schedule", "needs-you"], "navEmphasis": ["/workspace", "/workspace/my-queue"], "workspaceHomeOccupationId": null },
+      "coworkerRoster": [
+        { "agentSlug": "compliance-officer", "interaction": "summon", "governanceProfileRef": null },
+        { "agentSlug": "data-steward", "interaction": "read-only", "governanceProfileRef": null }
+      ],
+      "onboardingCurriculumId": "occ-intro-manufacturing-test-technician",
+      "moverCurriculumId": null
+    },
+    {
+      "occupationKey": "manufacturing-engineer",
+      "label": "Manufacturing Engineer",
+      "summary": "Owns process definition, work-center capability, routings, work instructions, and evidence-backed production improvement.",
+      "archetypeCategories": ["manufacturing"],
+      "archetypeIds": [],
+      "baseAccessProfile": "workforce-member",
+      "wsidProfessionFamily": "manufacturing-operations",
+      "featureSurface": { "tileAllowlist": ["today-schedule", "needs-you", "unassigned-work"], "navEmphasis": ["/workspace", "/workspace/my-queue", "/workspace/calendar"], "workspaceHomeOccupationId": null },
+      "coworkerRoster": [
+        { "agentSlug": "ops-coordinator", "interaction": "summon", "governanceProfileRef": null },
+        { "agentSlug": "data-steward", "interaction": "summon", "governanceProfileRef": null },
+        { "agentSlug": "compliance-officer", "interaction": "summon", "governanceProfileRef": null }
+      ],
+      "onboardingCurriculumId": "occ-intro-manufacturing-engineer",
+      "moverCurriculumId": null
+    },
+    {
+      "occupationKey": "npi-engineer",
+      "label": "New Product Introduction Engineer",
+      "summary": "Coordinates design transfer, prototype builds, qualification evidence, revision readiness, and controlled release into production.",
+      "archetypeCategories": ["manufacturing"],
+      "archetypeIds": [],
+      "baseAccessProfile": "workforce-member",
+      "wsidProfessionFamily": "manufacturing-operations",
+      "featureSurface": { "tileAllowlist": ["today-schedule", "needs-you", "unassigned-work"], "navEmphasis": ["/workspace", "/workspace/my-queue", "/workspace/calendar"], "workspaceHomeOccupationId": null },
+      "coworkerRoster": [
+        { "agentSlug": "ops-coordinator", "interaction": "summon", "governanceProfileRef": null },
+        { "agentSlug": "data-steward", "interaction": "summon", "governanceProfileRef": null }
+      ],
+      "onboardingCurriculumId": "occ-intro-npi-engineer",
+      "moverCurriculumId": null
+    },
+    {
+      "occupationKey": "manufacturing-quality-inspector",
+      "label": "Manufacturing Quality Inspector",
+      "summary": "Performs controlled inspections, records objective evidence, places nonconforming work on hold, and preserves independent disposition authority.",
+      "archetypeCategories": ["manufacturing"],
+      "archetypeIds": [],
+      "baseAccessProfile": "workforce-member",
+      "wsidProfessionFamily": "manufacturing-operations",
+      "featureSurface": { "tileAllowlist": ["today-schedule", "needs-you"], "navEmphasis": ["/workspace", "/workspace/my-queue"], "workspaceHomeOccupationId": null },
+      "coworkerRoster": [
+        { "agentSlug": "compliance-officer", "interaction": "summon", "governanceProfileRef": null },
+        { "agentSlug": "data-steward", "interaction": "summon", "governanceProfileRef": null }
+      ],
+      "onboardingCurriculumId": "occ-intro-manufacturing-quality-inspector",
+      "moverCurriculumId": null
+    },
+    {
+      "occupationKey": "manufacturing-supply-planner",
+      "label": "Manufacturing Supply Planner",
+      "summary": "Balances released demand with material availability, supplier commitments, inventory risk, and production constraints.",
+      "archetypeCategories": ["manufacturing"],
+      "archetypeIds": [],
+      "baseAccessProfile": "workforce-member",
+      "wsidProfessionFamily": "manufacturing-operations",
+      "featureSurface": { "tileAllowlist": ["today-schedule", "needs-you", "calendar"], "navEmphasis": ["/workspace", "/workspace/my-queue", "/workspace/calendar"], "workspaceHomeOccupationId": null },
+      "coworkerRoster": [
+        { "agentSlug": "ops-coordinator", "interaction": "summon", "governanceProfileRef": null },
+        { "agentSlug": "finance-controller", "interaction": "summon", "governanceProfileRef": null },
+        { "agentSlug": "data-steward", "interaction": "read-only", "governanceProfileRef": null }
+      ],
+      "onboardingCurriculumId": "occ-intro-manufacturing-supply-planner",
+      "moverCurriculumId": null
     }
   ]
 }

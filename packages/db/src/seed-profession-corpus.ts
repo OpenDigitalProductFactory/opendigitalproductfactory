@@ -1459,6 +1459,24 @@ const PROFESSION_EXTERNAL_SOURCES: Record<string, ExternalSourceEntry> = {
       "expertise, and strategic control. Licensed; cited by reference.",
     retrievedAt: "2026-06-13",
   },
+  "isa/isa-95-overview": {
+    sourceType: "standard",
+    title: "ISA-95 Standard — Enterprise-Control System Integration overview",
+    url: "https://www.isa.org/standards-and-publications/isa-standards/isa-95-standard",
+    license: "ISA-copyright-cite-by-reference",
+    abstract:
+      "Public ISA overview of IEC 62264 / ISA-95 terminology, hierarchy, and the Level 3 manufacturing-operations to Level 4 business-planning boundary.",
+    retrievedAt: "2026-08-08",
+  },
+  "nist/sp-800-82r3": {
+    sourceType: "standard",
+    title: "NIST SP 800-82 Rev. 3 — Guide to Operational Technology Security",
+    url: "https://csrc.nist.gov/pubs/sp/800/82/r3/final",
+    license: "US-government-publication",
+    abstract:
+      "NIST guidance for securing operational technology while accounting for performance, reliability, and safety requirements distinct from ordinary IT systems.",
+    retrievedAt: "2026-08-08",
+  },
 };
 
 // ─── Merge-gated families' source registry (WSID wave 10) ──────────────────────

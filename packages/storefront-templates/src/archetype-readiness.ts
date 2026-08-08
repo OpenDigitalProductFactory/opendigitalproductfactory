@@ -314,6 +314,12 @@ const VERTICAL_READINESS_EPICS_BY_CATEGORY: Partial<
     title: "Industry Vertical Readiness - Warehousing and fulfilment",
     status: "open",
   },
+  "manufacturing": {
+    kind: "epic",
+    id: "EP-VERTICAL-MANUFACTURING",
+    title: "Industry Vertical Readiness - Manufacturing and industrial OEM",
+    status: "open",
+  },
 };
 
 const TIER_RANK = ARCHETYPE_READINESS_TIERS.reduce(

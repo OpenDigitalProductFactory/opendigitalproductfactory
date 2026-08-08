@@ -20,6 +20,14 @@ describe("getPlaybook", () => {
     const pb = getPlaybook(null, null);
     expect(pb.ctaLanguage).toContain("Get a quote");
   });
+
+  it("uses an evidence-led industrial account playbook for manufacturing", () => {
+    const pb = getPlaybook("manufacturing", "inquiry");
+
+    expect(pb.primaryGoal).toContain("industrial accounts");
+    expect(pb.keyMetrics).toContain("Request-for-quote response and win rate");
+    expect(pb.ctaLanguage).toContain("Talk with an engineer");
+  });
 });
 
 describe("getCompositePlaybook", () => {

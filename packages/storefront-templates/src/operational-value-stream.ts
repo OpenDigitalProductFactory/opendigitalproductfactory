@@ -173,6 +173,7 @@ const CATEGORY_DEFAULT_COMMERCIAL_MODEL: Partial<Record<ArchetypeCategory, Comme
   "warehousing-fulfilment": "account-based-fees",
   "fabric-care-services": "point-of-sale",
   "agriculture-ranching": "hybrid",
+  "manufacturing": "transactional",
 };
 
 function resolveCommercialModel(a: ArchetypeDefinition): CommercialModel {
@@ -217,6 +218,7 @@ const CATEGORY_DEFAULT_DEMAND: Partial<Record<ArchetypeCategory, DemandSignature
   "warehousing-fulfilment": "steady",
   "fabric-care-services": "weekly",
   "agriculture-ranching": "seasonal",
+  "manufacturing": "steady",
 };
 
 const CATEGORY_DEFAULT_CAPACITY: Partial<Record<ArchetypeCategory, CapacityUnitType>> = {
@@ -244,6 +246,7 @@ const CATEGORY_DEFAULT_CAPACITY: Partial<Record<ArchetypeCategory, CapacityUnitT
   "warehousing-fulfilment": "custodial-space",
   "fabric-care-services": "service-throughput",
   "agriculture-ranching": "physical-hard-cap",
+  "manufacturing": "service-throughput",
 };
 
 // ── Derivation ───────────────────────────────────────────────────────────────
