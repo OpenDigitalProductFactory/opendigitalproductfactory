@@ -39,6 +39,14 @@ overrides:
   node-forge: '1.4.0'
   postcss: '^8.5.18'
   uuid: '^14.0.0'
+  # nanoid < 3.3.17: GHSA-2v37-7h3g-55p8 (Dependabot #152, high) — predictable
+  # output when given a non-integer size. Only the 3.x line resolved vulnerable
+  # (3.3.16); the 5.x line is unaffected, so scope the floor to 3.x.
+  'nanoid@<3.3.17': '^3.3.17'
+  # dompurify <= 3.4.12: GHSA-55q2-fjhq-7xh7 (Dependabot #148, medium) — mXSS via
+  # nesting-depth handling. Transitive (mermaid pulls dompurify ^3.3.3). Floor to
+  # the patched 3.4.13.
+  dompurify: '^3.4.13'
   '@opentelemetry/otlp-transformer>protobufjs': '^8.3.0'
   # protobufjs <= 7.6.4: GHSA-j3f2-48v5-ccww DoS via infinite loop in .proto option
   # parsing (Dependabot #101, medium), on top of the earlier < 7.6.3 cluster
