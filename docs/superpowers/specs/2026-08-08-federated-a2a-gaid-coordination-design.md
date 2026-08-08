@@ -4,7 +4,7 @@
 **Status:** Architecture-reviewed; ready for implementation planning  
 **Decision:** `DI-B726A1900E7C` — link-bound signed GAID claim  
 **Delivery shape:** one same-organization product slice; no implementation in this document branch  
-**Backlog:** `BI-BE0E14E0`, filed under `EP-MSP-FEDERATION` (live, in progress)
+**Backlog:** `BI-BE0E14E0` under `EP-MSP-FEDERATION` on this install; the same slice is `EP-E1F1DB58`'s A2A-coordination sibling on the A2A-adoption install (see §3 — the two anchors are the same work on two sovereign backlogs, not a contradiction)
 **Design WorkCapsule:** `WC-647895E9`
 
 ## 1. Executive decision
@@ -53,20 +53,24 @@ The first product slice is same-organization, two-install coordination over an a
 - copying private prompt, memory, tool configuration, or unrestricted agent metadata across the link;
 - implementation code in this design thread.
 
-## 3. Backlog integrity correction
+## 3. Backlog anchoring across two sovereign backlogs
 
-Live backlog queries on 2026-08-08 returned `epic_not_found` for `EP-E1F1DB58` and `not_found` for `BI-1F4A4861`. The ten slice IDs asserted by the earlier adoption plan were also absent. Those identifiers are therefore not authoritative and this specification does not cite them as live coverage.
+This is not a backlog-integrity error; it is the first live proof of the problem this spec exists to solve. Two independent design threads verified backlog anchors against **two different sovereign installs**, and each install's backlog is missing the other's identifiers:
 
-Relevant verified live programs are:
-
-| Program | Live status | Relevance | Disposition |
+| Anchor | This-install (MSP-federation) backlog | A2A-adoption-program backlog | Verified |
 | --- | --- | --- | --- |
-| `EP-MSP-FEDERATION` | in progress | owns `FederationLink`, projection contracts, federated record mirrors, sovereign-peer identity, and governed cross-boundary sharing | **Parent for this slice** |
-| `EP-A2A` | done | owns earlier internal handoff/summon design work; contains one unrelated open WWMD surface and one deferred deliberation item | referenced precedent, not reopened |
-| `EP-TAK-3F9A21` | done | delivered GAID-Private/AIDoc projection and TAK/MCP alignment | dependency, not reopened |
-| `EP-COWORKER-IDENTITY-360` | open | owns the unified coworker read model and whole-coworker Agent Card | dependency/coordination seam |
+| `EP-MSP-FEDERATION`, `EP-A2A`, `EP-TAK-3F9A21`, `EP-COWORKER-IDENTITY-360`, `BI-BE0E14E0` | present | **absent** | 2026-08-08 |
+| `EP-E1F1DB58` (open), umbrella `BI-1F4A4861`, its 10 slice BIs (`BI-DA53D067` … `BI-5FB59BC6`) | **absent** | present | 2026-08-08, live MCP |
 
-`EP-MSP-FEDERATION` is the closest verified in-progress parent because the increment changes how a sovereign peer proves an agent claim at the federation boundary. Filing it there preserves the requested slice-not-epic shape. The slice body must cross-reference `BI-COWORKER-360-AGENTCARD` so that Agent Card projection has one source of truth.
+Neither anchor set is fictional. A thread that runs `get_backlog_item("EP-E1F1DB58")` on the MSP-federation install correctly gets `not_found`, while a thread on the A2A-adoption install correctly retrieves `BI-1F4A4861` ("Umbrella — MCP 2025-11-25 + A2A feature adoption"). (Note also that `get_backlog_item` returns `not_found` for *any* epic ID even on the install where it exists — epics resolve through `list_epics`, not `get_backlog_item`; do not read that as absence.) The divergence is exactly an **install-agnostic-identifier collision across sovereign installs** — the same failure mode §4.1 describes for `gaid:priv:dpf.internal:*`, here applied to backlog IDs. It validates the design rather than undermining it.
+
+**Anchoring rule (act on this):**
+
+- On the **MSP-federation install**, this slice is `BI-BE0E14E0` under `EP-MSP-FEDERATION` (the parent that owns `FederationLink`, projection contracts, federated record mirrors, and sovereign-peer identity), cross-referencing `BI-COWORKER-360-AGENTCARD` for the single Agent Card source of truth.
+- On the **A2A-adoption install**, the identical work is a new slice under `EP-E1F1DB58` (the "MCP 2025-11-25 + A2A feature adoption" program, umbrella `BI-1F4A4861`), sitting after its already-filed siblings — most directly **Slice 6 `BI-40648BBF`** (A2A signed agent-card export), **Slice 4 `BI-06B66FFD`** (standard MCP Tasks lifecycle → `TaskRun` convergence), and **Slice 10 `BI-5FB59BC6`** (`find_coworker`, shipped as #4121). See §4.5 for the concrete reuse those siblings force.
+- Whichever backlog the build thread runs against, it files/claims the slice there and records the other install's anchor as the cross-reference. The two records converge only when a federation link carries them — which is the capability this slice ships.
+
+Other verified live programs on the MSP-federation install remain: `EP-A2A` (done — earlier internal handoff/summon precedent, not reopened), `EP-TAK-3F9A21` (done — delivered GAID-Private/AIDoc projection, a dependency), `EP-COWORKER-IDENTITY-360` (open — unified coworker read model and whole-coworker Agent Card, a coordination seam).
 
 ## 4. Verified substrate ledger
 
@@ -130,6 +134,17 @@ The current `/api/a2a/coworkers/{agentId}/offers/{offerId}` and `/api/a2a/tasks/
 - cross-boundary GAID strings are not cryptographically linked to the peer device or a signed card.
 
 The implementation must keep internal consumers working, but all cross-install traffic moves behind `/api/v1/federation/*`. The existing `/api/a2a/*` code becomes an internal adapter to the canonical task service, not a second external trust path.
+
+### 4.5 Cross-install verification addendum — reuse targets and concrete primitives
+
+An independent substrate sweep (2026-08-08, against `origin/main` at `bc5a0debd`, not the stale root clone) confirmed the substrate above and surfaced six concrete, actionable items the build must honor so it reuses rather than re-invents:
+
+1. **Consume Slice 6, do not rebuild it.** `apps/web/lib/a2a/agent-card.ts` already serves the A2A v0.3.0 card at `/.well-known/agent-card.json` and `/.well-known/agent-card/{agentId}`, gated `EXPORT_GATE` to `active/production/public` only. But today it emits `provenance.signed: false` and carries **no `gaid` field**. The §8.4 target (JWS-signed, GAID-in-`extensions`) is precisely the delta to add onto this existing builder — the link-scoped extended card projects from it, it is not a fork.
+2. **Coordinate `TaskRun` convergence with Slice 4.** `BI-06B66FFD` (standard MCP Tasks lifecycle over `TaskRun`, via `apps/web/lib/mcp/tasks-lifecycle.ts`) converges the bespoke `tasks/submit` onto standard `tasks`. §8.5's `TaskRun`/`CoworkerEngagement` consolidation touches the same rows; the two must land as one convergence, or the second one fights the first. Treat Slice 4 as a hard sequencing dependency where the installs share it.
+3. **Make cross-install discovery the federated twin of `find_coworker`.** `find_coworker` (Slice 10, shipped #4121, `apps/web/lib/mcp/packs/coworker-pack.ts`) is the *local* intent-based discovery meta-tool. §12.2 remote-coworker discovery should extend it with a link-scoped, projection-gated result set — not a parallel discovery path. This was Slice 10's own framing ("A2A-plane twin of `load_tools`").
+4. **Fix the `priv`/`private` GAID scope-token split as part of §4.1 conformance.** `buildPrivateAgentGaid` (`apps/web/lib/identity/principal-linking.ts`) emits `gaid:priv:…`, but the catalog fallback at `apps/web/lib/coworker-service-catalog/agent-card.ts:105` emits `gaid:private:…`. Left unfixed, two installs comparing GAID strings will silently mismatch on the scope token before the namespace question is even reached. This is a latent cross-install bug, not cosmetic.
+5. **Name the feature flag on the existing pattern.** Federation receiving routes are gated by `DPF_FEDERATION_EXCHANGE_ENABLED` (`apps/web/app/api/v1/federation/**`). A2A adds a sibling `DPF_FEDERATION_A2A_ENABLED` (or a per-link A2A capability bit) so demand and A2A gate independently — the plan's "feature-gated" phrasing resolves to this concrete flag.
+6. **Reuse the CloudEvent link-binding and replay primitives verbatim.** `cloud-event-guard.ts` already enforces the `dpflinkid` extension (`=== authenticated linkId`, else `link:mismatch`) and a ±15-minute replay window. The A2A event types (§8.3) ride these unchanged; the new work is the RFC 9421 signature layer over them (§9), not a second envelope validator.
 
 ## 5. Research and benchmarking
 
@@ -566,4 +581,4 @@ The `dpf-architecture-review` pass produced four important findings, all folded 
 
 Standards checked: A2A v1.0, MCP 2025-11-25 Tasks and 2026-07-28 release-candidate direction, CloudEvents 1.0, RFC 9421, and RFC 8785. No reference-doc improvement is filed: GAID already contains the missing A2A/HTTP binding doctrine, and the gap is implementation conformance rather than absent doctrine.
 
-The reviewed recommendation is to file the single same-org slice under the verified in-progress `EP-MSP-FEDERATION`, then execute the phased plan. Cross-org enablement remains a separate future slice.
+The reviewed recommendation is to file the single same-org slice under the anchor that exists on the build install — `EP-MSP-FEDERATION` here, `EP-E1F1DB58` on the A2A-adoption install (§3 anchoring rule) — then execute the phased plan. Cross-org enablement remains a separate future slice.
