@@ -1,10 +1,17 @@
 # Federated A2A Coordination with GAID — Design Specification
 
-**Date:** 2026-08-08  
-**Status:** Architecture-reviewed; ready for implementation planning  
-**Decision:** `DI-B726A1900E7C` — link-bound signed GAID claim  
-**Delivery shape:** one same-organization product slice; no implementation in this document branch  
-**Backlog:** `BI-BE0E14E0` under `EP-MSP-FEDERATION` on this install; the same slice is `EP-E1F1DB58`'s A2A-coordination sibling on the A2A-adoption install (see §3 — the two anchors are the same work on two sovereign backlogs, not a contradiction)
+**Date:** 2026-08-08
+
+**Status:** Architecture-reviewed; implementation scope decomposed and governed
+
+**Decision:** `DI-B726A1900E7C` — link-bound signed GAID claim
+
+**Implementation-scope decision:** `DI-61395D1B7A6D` — six independently reviewable, feature-gated slices under one same-org umbrella
+
+**Delivery shape:** one same-organization product outcome, decomposed into governed implementation BIs; no implementation code in this document branch
+
+**Backlog:** umbrella `BI-BE0E14E0` and six mapped siblings under `EP-MSP-FEDERATION` on this install; `EP-E1F1DB58` remains the A2A-adoption install's program anchor (see §3)
+
 **Design WorkCapsule:** `WC-647895E9`
 
 ## 1. Executive decision
@@ -71,6 +78,17 @@ Neither anchor set is fictional. A thread that runs `get_backlog_item("EP-E1F1DB
 - Whichever backlog the build thread runs against, it files/claims the slice there and records the other install's anchor as the cross-reference. The two records converge only when a federation link carries them — which is the capability this slice ships.
 
 Other verified live programs on the MSP-federation install remain: `EP-A2A` (done — earlier internal handoff/summon precedent, not reopened), `EP-TAK-3F9A21` (done — delivered GAID-Private/AIDoc projection, a dependency), `EP-COWORKER-IDENTITY-360` (open — unified coworker read model and whole-coworker Agent Card, a coordination seam).
+
+### 3.1 BI synchronization addendum
+
+The two installations are beginning to synchronize BI visibility. That improves operational coordination but does not collapse sovereignty or become part of the A2A protocol:
+
+- synchronized peer work is a mirror/crosswalk unless the governed backlog-sync contract explicitly adopts it into local authority;
+- a bare `BI-…` remains install-local and must be interpreted with source-install provenance;
+- synchronization must converge counterpart references and prevent duplicate filing; it must not create two writers for one canonical `BacklogItem`;
+- A2A consumes the resulting work identity and coordination context later, after link/device/GAID authority is established. It does not transport or reconcile backlog state.
+
+The implementation plan therefore begins with a live parity/overlap preflight. Current live MCP on the MSP-federation install still does not expose `EP-E1F1DB58` or its slice BIs, so this document does not claim parity is already complete. Once the sync view is available, build threads reuse its canonical crosswalk and explicit counterpart records rather than inventing a second mapping scheme.
 
 ## 4. Verified substrate ledger
 
@@ -581,4 +599,4 @@ The `dpf-architecture-review` pass produced four important findings, all folded 
 
 Standards checked: A2A v1.0, MCP 2025-11-25 Tasks and 2026-07-28 release-candidate direction, CloudEvents 1.0, RFC 9421, and RFC 8785. No reference-doc improvement is filed: GAID already contains the missing A2A/HTTP binding doctrine, and the gap is implementation conformance rather than absent doctrine.
 
-The reviewed recommendation is to file the single same-org slice under the anchor that exists on the build install — `EP-MSP-FEDERATION` here, `EP-E1F1DB58` on the A2A-adoption install (§3 anchoring rule) — then execute the phased plan. Cross-org enablement remains a separate future slice.
+The implementation-scope review supersedes the former atomic build shape while preserving the single same-org product outcome. `DI-61395D1B7A6D` selected decomposed convergence with high confidence (composite `15.417`, margin `11.220`, no commandment conflict): six feature-gated sibling BIs now own GAID conformance, device signing, signed-card discovery, canonical task ingress, policy/evidence, and operator readiness. The plan's parity preflight coordinates those local records with the A2A-adoption install without making backlog synchronization part of A2A or creating multi-writer authority. Cross-org enablement remains a separate future slice.
