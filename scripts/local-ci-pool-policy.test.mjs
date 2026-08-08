@@ -85,12 +85,15 @@ test("enables slot 1 only when requested, declared, and all host evidence is saf
   assert.deepEqual(resolved.slotKeys, ["slot-0", "slot-1"]);
 });
 
-test("unmeasurable or unsafe host evidence contracts admission to singleton with one reason", () => {
+test("unmeasurable or unsafe configured host evidence contracts admission to zero", () => {
   const scenarios = [
+    [{ ...SAFE_HOST, observedAt: undefined }, "host-observation-unmeasurable"],
     [{ ...SAFE_HOST, availableMemoryBytes: undefined }, "host-memory-unmeasurable"],
     [{ ...SAFE_HOST, observedAt: "2026-01-01T00:00:00.000Z" }, "host-observation-stale"],
     [{ ...SAFE_HOST, availableMemoryBytes: 4 * 1024 ** 3 }, "host-memory-low"],
+    [{ ...SAFE_HOST, sustainedCpuPercent: undefined }, "host-cpu-unmeasurable"],
     [{ ...SAFE_HOST, sustainedCpuPercent: 88 }, "host-cpu-high"],
+    [{ ...SAFE_HOST, diskFreeBytes: undefined }, "host-disk-unmeasurable"],
     [{ ...SAFE_HOST, diskFreeBytes: 20 * 1024 ** 3 }, "host-disk-low"],
     [{ ...SAFE_HOST, dockerHealthy: false }, "docker-unhealthy"],
     [{ ...SAFE_HOST, convergenceActive: true }, "dependency-convergence-active"],
@@ -104,10 +107,25 @@ test("unmeasurable or unsafe host evidence contracts admission to singleton with
       host,
       manifestSlotCount: 2,
     });
-    assert.equal(resolved.effectiveCapacity, 1);
+    assert.equal(resolved.hostSafeCapacity, 0);
+    assert.equal(resolved.effectiveCapacity, 0);
     assert.equal(resolved.rollbackReason, rollbackReason);
-    assert.deepEqual(resolved.slotKeys, ["slot-0"]);
+    assert.deepEqual(resolved.slotKeys, []);
   }
+});
+
+test("a valid requested-singleton policy still defers all work under unsafe pressure", () => {
+  const resolved = resolveLocalCiPoolPolicy({
+    configValue: { ...PILOT_CONFIG, requestedCapacity: 1 },
+    host: { ...SAFE_HOST, availableMemoryBytes: 2 * 1024 ** 3 },
+    manifestSlotCount: 2,
+  });
+
+  assert.equal(resolved.requestedCapacity, 1);
+  assert.equal(resolved.hostSafeCapacity, 0);
+  assert.equal(resolved.effectiveCapacity, 0);
+  assert.equal(resolved.rollbackReason, "host-memory-low");
+  assert.deepEqual(resolved.slotKeys, []);
 });
 
 test("manifest capacity and requested singleton are hard upper bounds", () => {

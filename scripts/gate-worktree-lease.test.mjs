@@ -14,6 +14,7 @@ import {
   defaultProcessScanMs,
   findConflictingLocalCiMutatorPids,
   findLiveLocalCiMutatorPids,
+  executionPressureFenceReason,
 } from "./gate-worktree.mjs";
 import { readProcessIdentity } from "./lib/local-sandbox-fence.mjs";
 
@@ -27,6 +28,26 @@ const TEST_HOST_PRESSURE = {
   fencesHealthy: true,
   evidenceIsolationHealthy: true,
 };
+
+test("active pressure fencing reacts only to hard execution-safety losses", () => {
+  for (const reason of [
+    "host-memory-low",
+    "host-memory-unmeasurable",
+    "host-disk-low",
+    "host-disk-unmeasurable",
+    "docker-unhealthy",
+    "slot-fence-unhealthy",
+    "evidence-isolation-unproven",
+  ]) {
+    assert.equal(
+      executionPressureFenceReason({ rollbackReason: reason }),
+      `host-capacity-lost:${reason}`,
+    );
+  }
+  assert.equal(executionPressureFenceReason({ rollbackReason: "host-cpu-high" }), null);
+  assert.equal(executionPressureFenceReason({ rollbackReason: "requested-singleton" }), null);
+  assert.equal(executionPressureFenceReason(null), null);
+});
 
 function run(command, args, options) {
   return new Promise((resolve, reject) => {
@@ -1309,7 +1330,7 @@ test(
   },
 );
 
-test("renewal loss kills the real child process tree before later mutation", async () => {
+test("hard host-pressure loss kills the real child process tree before later mutation", async () => {
   const temp = mkdtempSync(join(tmpdir(), "dpf-lease-fence-"));
   const lateWrite = join(temp, "must-not-exist.txt");
   const calls = [];
@@ -1333,7 +1354,19 @@ test("renewal loss kills the real child process tree before later mutation", asy
                 },
               },
             }
-            : { success: false, error: "lease_lost" }
+            : {
+              success: true,
+              data: {
+                lease: {
+                  leaseId: "NPEL-FENCE-TEST",
+                  expiresAt: new Date(Date.now() + 3_000).toISOString(),
+                },
+                poolPolicy: {
+                  effectiveCapacity: 0,
+                  rollbackReason: "host-memory-low",
+                },
+              },
+            }
           : tool === "record_local_integration_result"
             ? { success: true, entityId: "EVIDENCE-FENCE-TEST" }
             : { success: true };

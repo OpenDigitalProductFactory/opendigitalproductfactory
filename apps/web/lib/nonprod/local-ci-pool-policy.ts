@@ -45,8 +45,8 @@ export type ResolvedLocalCiPoolPolicy = {
   source: LocalCiPoolPolicySource;
   requestedCapacity: 1 | 2;
   manifestCapacity: number;
-  hostSafeCapacity: 1 | 2;
-  effectiveCapacity: 1 | 2;
+  hostSafeCapacity: 0 | 1 | 2;
+  effectiveCapacity: 0 | 1 | 2;
   slotKeys: Array<"slot-0" | "slot-1">;
   rollbackReason: string | null;
   config: LocalCiPoolConfig | null;
@@ -168,6 +168,26 @@ function singleton(input: {
   };
 }
 
+function unavailable(input: {
+  source: LocalCiPoolPolicySource;
+  requestedCapacity: 1 | 2;
+  manifestCapacity: number;
+  reason: string;
+  config: LocalCiPoolConfig;
+}): ResolvedLocalCiPoolPolicy {
+  return {
+    policyVersion: LOCAL_CI_POOL_POLICY_VERSION,
+    source: input.source,
+    requestedCapacity: input.requestedCapacity,
+    manifestCapacity: input.manifestCapacity,
+    hostSafeCapacity: 0,
+    effectiveCapacity: 0,
+    slotKeys: [],
+    rollbackReason: input.reason,
+    config: input.config,
+  };
+}
+
 function hostRollbackReason(
   host: LocalCiHostPressure,
   config: LocalCiPoolConfig,
@@ -209,8 +229,8 @@ function hostRollbackReason(
 
 /**
  * Resolve the one capacity decision consumed by both durable admission and
- * shared-lease WIP reporting. Any missing or ambiguous safety input contracts
- * to the proven singleton.
+ * shared-lease WIP reporting. Missing configuration preserves the compatibility
+ * singleton; ambiguous host safety under a valid policy contracts to zero.
  */
 export function resolveLocalCiPoolPolicy(input: {
   configValue: unknown;
@@ -237,6 +257,21 @@ export function resolveLocalCiPoolPolicy(input: {
   const requestedCapacity = override?.capacity ?? config.requestedCapacity;
   const source: LocalCiPoolPolicySource = override?.source ?? "platform-config";
 
+  const rollbackReason = hostRollbackReason(
+    input.host,
+    config,
+    input.now ?? new Date(),
+  );
+  if (rollbackReason) {
+    return unavailable({
+      source,
+      requestedCapacity,
+      manifestCapacity,
+      reason: rollbackReason,
+      config,
+    });
+  }
+
   if (requestedCapacity === 1) {
     return singleton({
       source,
@@ -252,21 +287,6 @@ export function resolveLocalCiPoolPolicy(input: {
       requestedCapacity,
       manifestCapacity,
       reason: "manifest-capacity-one",
-      config,
-    });
-  }
-
-  const rollbackReason = hostRollbackReason(
-    input.host,
-    config,
-    input.now ?? new Date(),
-  );
-  if (rollbackReason) {
-    return singleton({
-      source,
-      requestedCapacity,
-      manifestCapacity,
-      reason: rollbackReason,
       config,
     });
   }

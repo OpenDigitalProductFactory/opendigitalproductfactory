@@ -5,16 +5,11 @@ import {
   type AdmissionLease,
 } from "./environment-lease-admission";
 import {
-  loadLocalCiPoolConfig,
-  resolveLocalCiPoolPolicy,
   type LocalCiHostPressure,
   type ResolvedLocalCiPoolPolicy,
 } from "./local-ci-pool-policy";
-import {
-  mergeLocalCiHostPressure,
-  observeLocalCiServerPressure,
-  type LocalCiCapacityBroker,
-} from "./local-ci-capacity-broker";
+import type { LocalCiCapacityBroker } from "./local-ci-capacity-broker";
+import { resolveNonprodPoolPolicy } from "./environment-lease-pool-policy";
 import localCiSlotResources from "./local-ci-slot-resources.json";
 import { recordQueueTransition } from "@/lib/queue/queue-telemetry";
 import type { NonprodOwnerProvider } from "./nonprod-owner-provider";
@@ -71,67 +66,6 @@ export function admittedLeaseTtlMs(
   return environmentKey === "local-integration-ci"
     ? Math.min(LOCAL_CI_ACTIVE_LEASE_TTL_MS, boundedRequest)
     : boundedRequest;
-}
-
-async function resolveNonprodPoolPolicy(input: {
-  db: LeaseDb;
-  environmentKey: string;
-  hostPressure?: LocalCiHostPressure;
-  capacityBroker?: LocalCiCapacityBroker;
-  now: Date;
-}): Promise<ResolvedLocalCiPoolPolicy> {
-  if (input.environmentKey !== "local-integration-ci") {
-    return {
-      policyVersion: 1,
-      source: "default",
-      requestedCapacity: 1,
-      manifestCapacity: 1,
-      hostSafeCapacity: 1,
-      effectiveCapacity: 1,
-      slotKeys: ["slot-0"],
-      rollbackReason: "environment-singleton",
-      config: null,
-    };
-  }
-  const configValue = input.db.platformConfig
-    ? await loadLocalCiPoolConfig({
-      platformConfig: input.db.platformConfig,
-    })
-    : null;
-  const clientPressure = input.hostPressure ?? {};
-  const preliminary = resolveLocalCiPoolPolicy({
-    configValue,
-    host: clientPressure,
-    manifestSlotCount: NONPROD_SLOT_KEYS.length,
-    env: process.env,
-    now: input.now,
-  });
-  if (preliminary.requestedCapacity === 1) return preliminary;
-
-  let serverPressure: LocalCiHostPressure;
-  try {
-    serverPressure = await (
-      input.capacityBroker ?? observeLocalCiServerPressure
-    )();
-  } catch {
-    serverPressure = {
-      observedAt: input.now.toISOString(),
-      dockerHealthy: false,
-      convergenceActive: true,
-      fencesHealthy: false,
-      evidenceIsolationHealthy: false,
-    };
-  }
-  return resolveLocalCiPoolPolicy({
-    configValue,
-    host: mergeLocalCiHostPressure({
-      client: clientPressure,
-      server: serverPressure,
-    }),
-    manifestSlotCount: NONPROD_SLOT_KEYS.length,
-    env: process.env,
-    now: input.now,
-  });
 }
 
 export function clampLeaseExpiry(
@@ -386,10 +320,11 @@ export async function claimNonprodEnvironmentLease(input: {
   const db = input.db ?? prisma;
   const now = input.now ?? new Date();
   const poolPolicy = await resolveNonprodPoolPolicy({
-    db,
+    platformConfig: db.platformConfig,
     environmentKey: input.environmentKey,
     hostPressure: input.hostPressure,
     capacityBroker: input.capacityBroker,
+    manifestSlotCount: NONPROD_SLOT_KEYS.length,
     now,
   });
   const ttlMs = requestedTtlMs(now, input.expiresAt);
@@ -589,7 +524,12 @@ export async function releaseNonprodEnvironmentLease(input: {
       tx,
       environmentKey: current.environmentKey,
       now,
-      slotKeys: ["slot-0"],
+      // A local-CI waiter carries the fresh client-side host observation needed
+      // to prove capacity. Preserve FIFO here and let its next claim poll admit
+      // it; a release must not promote from server-only or stale pressure.
+      slotKeys: current.environmentKey === "local-integration-ci"
+        ? []
+        : ["slot-0"],
     });
     return {
       lease,
@@ -722,10 +662,11 @@ export async function renewNonprodEnvironmentLease(input: {
     },
   });
   const poolPolicy = await resolveNonprodPoolPolicy({
-    db,
+    platformConfig: db.platformConfig,
     environmentKey: lease.environmentKey,
     hostPressure: input.hostPressure,
     capacityBroker: input.capacityBroker,
+    manifestSlotCount: NONPROD_SLOT_KEYS.length,
     now,
   });
   return { status: "renewed", lease: updated, poolPolicy };
@@ -755,7 +696,9 @@ export async function reapExpiredNonprodEnvironmentLeases(input: {
         tx,
         environmentKey,
         now,
-        slotKeys: ["slot-0"],
+        slotKeys: environmentKey === "local-integration-ci"
+          ? []
+          : ["slot-0"],
       });
       promotedLeaseIds.push(...result.admittedLeaseIds);
     });
