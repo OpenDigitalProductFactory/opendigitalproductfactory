@@ -18,6 +18,8 @@
 import { prisma } from "@dpf/db";
 import { resolveAgentRoleLabel } from "@dpf/db/agent-identity";
 
+import { coworkerIdentityForms } from "./identity-forms";
+
 export type EngagerKind = "person" | "agent";
 
 /** One raw engagement touch, already name-resolved, before aggregation. */
@@ -128,16 +130,21 @@ export function aggregateEngagers(
 export async function loadCoworkerEngagements(
   agentId: string,
   agentCuid: string,
-  opts?: { now?: Date; windowDays?: number },
+  opts?: { now?: Date; windowDays?: number; slugId?: string | null },
 ): Promise<CoworkerEngagementsSummary> {
   const now = opts?.now ?? new Date();
   const windowDays = opts?.windowDays ?? 90;
   const since = new Date(now.getTime() - windowDays * 86_400_000);
+  // CoworkerEngagement.providerAgentId is keyed by the SLUG form for many
+  // coworkers, so match every id form (the id seam — coworkerIdentityForms).
+  // DelegationGrant.granteeAgentId keys on the Agent.id cuid, so it stays a
+  // single-id match.
+  const providerForms = coworkerIdentityForms(agentId, opts?.slugId);
 
   try {
     const [engagements, grants] = await Promise.all([
       prisma.coworkerEngagement.findMany({
-        where: { providerAgentId: agentId, createdAt: { gte: since } },
+        where: { providerAgentId: { in: providerForms }, createdAt: { gte: since } },
         select: {
           requestedByUserId: true,
           requestedByAgentId: true,

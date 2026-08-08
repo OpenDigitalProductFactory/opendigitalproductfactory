@@ -17,6 +17,8 @@
 
 import { prisma } from "@dpf/db";
 
+import { coworkerIdentityForms } from "./identity-forms";
+
 /** One row of per-inference metering, trimmed to what the summary needs. */
 export type CostUsageRow = {
   costUsd: number;
@@ -169,28 +171,34 @@ export function summarizeCoworkerCost(input: SummarizeCoworkerCostInput): Cowork
 }
 
 /**
- * Fetch + summarize per-coworker cost. `agentId` is the BUSINESS id (AGT-*).
+ * Fetch + summarize per-coworker cost. `agentId` is the BUSINESS id (AGT-*);
+ * `slugId` is the loaded row's slug when present. Metering rows (TokenUsage,
+ * AgentBudgetEvent) are keyed by the SLUG form for many coworkers, so we query
+ * every id form the coworker's activity may be filed under (see
+ * coworkerIdentityForms — the id seam). AgentExecutionConfig is a 1:1 config row
+ * keyed by the loaded agentId, so it stays a single-id lookup.
  * Fail-open: a read hiccup returns a zeroed summary so the identity page renders
  * an empty-state facet rather than 500-ing (the record-page convention).
  */
 export async function loadCoworkerCostProjection(
   agentId: string,
-  opts?: { now?: Date; windowDays?: number },
+  opts?: { now?: Date; windowDays?: number; slugId?: string | null },
 ): Promise<CoworkerCostSummary> {
   const now = opts?.now ?? new Date();
   const windowDays = opts?.windowDays ?? 30;
   const priorSince = new Date(now.getTime() - 2 * windowDays * 86_400_000);
+  const idForms = coworkerIdentityForms(agentId, opts?.slugId);
 
   try {
     const [usage, budgetEvents, executionConfig] = await Promise.all([
       prisma.tokenUsage.findMany({
-        where: { agentId, createdAt: { gte: priorSince } },
+        where: { agentId: { in: idForms }, createdAt: { gte: priorSince } },
         select: { costUsd: true, inputTokens: true, outputTokens: true, contextKey: true, createdAt: true },
         orderBy: { createdAt: "desc" },
         take: 5000,
       }),
       prisma.agentBudgetEvent.findMany({
-        where: { agentId, createdAt: { gte: new Date(now.getTime() - 86_400_000) } },
+        where: { agentId: { in: idForms }, createdAt: { gte: new Date(now.getTime() - 86_400_000) } },
         select: { eventKind: true, createdAt: true },
         take: 200,
       }),

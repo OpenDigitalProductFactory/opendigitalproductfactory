@@ -97,8 +97,8 @@ export default async function CoworkerIdentityPage({
   const [session, inheritance, cost, engagements] = await Promise.all([
     auth(),
     getCoworkerPostureInheritance(agent.agentId),
-    loadCoworkerCostProjection(runtime.agentId),
-    loadCoworkerEngagements(runtime.agentId, runtime.id),
+    loadCoworkerCostProjection(runtime.agentId, { slugId: runtime.slugId }),
+    loadCoworkerEngagements(runtime.agentId, runtime.id, { slugId: runtime.slugId }),
   ]);
 
   const canWrite =
