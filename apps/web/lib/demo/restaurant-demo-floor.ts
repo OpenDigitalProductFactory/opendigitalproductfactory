@@ -84,10 +84,10 @@ export function buildRestaurantDemoFloorPlan(input: {
     throw new Error("restaurant demo floor requires at least seven demand rows");
   }
   const servers = input.employees.filter((employee) =>
-    /server|floor manager/i.test(employee.role),
+    /\bserver\b/i.test(employee.role),
   );
   if (servers.length < 2) {
-    throw new Error("restaurant demo floor requires two server-capable employees");
+    throw new Error("restaurant demo floor requires two server employees");
   }
 
   const tables: RestaurantDemoTablePlan[] = TABLES.map((table) => ({
