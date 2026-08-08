@@ -178,7 +178,7 @@ export async function runSemanticChangeReview(
 
   if (input.priorReceipt) {
     const freshness = assessSemanticReviewReceiptFreshness(input.priorReceipt, identity);
-    if (freshness.fresh) {
+    if (freshness.fresh && input.priorReceipt.result.decision !== "inconclusive") {
       return resultForReceipt({
         receipt: input.priorReceipt,
         activation,
