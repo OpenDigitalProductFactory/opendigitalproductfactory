@@ -22,7 +22,7 @@ This extends the federation substrate. It does not introduce a second transport,
 
 ## 2. Problem and first slice
 
-Arcamanus production and the Arcamanus+DPF development system already exchange federated demand as sovereign peers. The next layer is a coworker on one installation delegating a task to a coworker on the other while an operator can prove:
+The organization's production and development installations already exchange federated demand as sovereign peers. The next layer is a coworker on one installation delegating a task to a coworker on the other while an operator can prove:
 
 1. which trusted installation sent the request;
 2. which GAID claimed the acting and delegating roles;
@@ -437,7 +437,7 @@ Never display GAID as a substitute for install or environment. The hierarchy in 
 
 ### 12.2 Coworker discovery and task initiation
 
-Remote coworkers appear in the existing coworker/service catalog with a peer badge, organization, environment, verified-card state, last refresh, offered outcome, and data boundary. The primary action states its consequence, for example “Ask Arcamanus Dev / Research coworker,” not an opaque “Connect” button.
+Remote coworkers appear in the existing coworker/service catalog with a peer badge, organization, environment, verified-card state, last refresh, offered outcome, and data boundary. The primary action states its consequence, for example “Ask development / Research coworker,” not an opaque “Connect” button.
 
 Before dispatch, the confirmation summarizes:
 

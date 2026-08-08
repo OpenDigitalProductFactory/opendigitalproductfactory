@@ -15,7 +15,7 @@
 
 Deliver one feature-gated, same-organization A2A loop between two already trusted sovereign DPF installations. The loop discovers a projected coworker, proves the source install/device and speaking GAID, creates a receiver-owned task, exchanges additional input/status/artifacts, enforces local TAK and data boundaries, and exposes readable provenance to operators.
 
-The release is successful only when Arcamanus production and the Arcamanus+DPF development installation complete the happy path through the canonical runtime while cross-org, wrong-link, wrong-device, stale-card, and guessed-task paths remain denied.
+The release is successful only when the organization's production and development installations complete the happy path through the canonical runtime while cross-org, wrong-link, wrong-device, stale-card, and guessed-task paths remain denied.
 
 ## 2. Delivery boundary
 
