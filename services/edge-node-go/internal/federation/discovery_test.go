@@ -4,7 +4,22 @@ import (
 	"context"
 	"testing"
 	"time"
+
+	"github.com/betamos/zeroconf"
 )
+
+func TestServiceTypeUsesZeroconfTypeInputWithoutDomainSuffix(t *testing.T) {
+	typeDef := zeroconf.NewType(ServiceType)
+	if ServiceType != "_dpf-federation._tcp" {
+		t.Fatalf("ServiceType = %q; zeroconf.NewType requires the service type without .local.", ServiceType)
+	}
+	if typeDef.Domain != "local" {
+		t.Fatalf("zeroconf domain = %q, want local", typeDef.Domain)
+	}
+	if typeDef.String() != "_dpf-federation._tcp.local" {
+		t.Fatalf("resolved service type = %q", typeDef.String())
+	}
+}
 
 func TestAdvertisementTXTContainsOnlyPrivacySafeAllowList(t *testing.T) {
 	txt := AdvertisementTXT("ephemeral-123", "8f31c9a2", "https")
