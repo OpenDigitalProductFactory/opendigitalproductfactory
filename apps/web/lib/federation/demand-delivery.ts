@@ -308,7 +308,7 @@ export async function dispatchDueDemand(db: DemandDeliveryDb, options: {
         syncStatus: payload?.activity === "dpf.demand.withdrawn" ? "withdrawn" : "synced",
         acknowledgedVersion: row.version, deliveryAttempts: row.deliveryAttempts + 1,
         lastDeliveryAt: now, lastSyncedAt: now, nextDeliveryAt: null,
-        lastDeliveryError: null, deadLetteredAt: null,
+        lastDeliveryError: null, deadLetteredAt: null, rehealCount: 0,
       } });
       continue;
     }

@@ -15049,6 +15049,10 @@ model FederatedRecordMirror {
   lastDeliveryError   String?
   acknowledgedVersion BigInt?
   deadLetteredAt      DateTime?
+  // How many times digest reconciliation has resurrected this record after it
+  // dead-lettered. Bounded by MAX_DEMAND_REHEALS so a transient/upgrade-window
+  // stranding recovers while a genuinely-poison record eventually stays dead.
+  rehealCount         Int       @default(0)
   // Last projected (already minimized) payload that crossed — never raw data.
   payload             Json?
   createdAt           DateTime  @default(now())
