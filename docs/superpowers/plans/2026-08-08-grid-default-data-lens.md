@@ -24,6 +24,20 @@ This corrects the implementation gap in the existing Universal Grid design. That
 
 No database model, enum, migration, route family, or new grid primitive is needed.
 
+## Design grounding
+
+- Existing specs/plans reviewed:
+  - `docs/superpowers/specs/2026-03-23-universal-grid-workbooks-design.md`
+  - `docs/superpowers/plans/2026-05-26-portal-ux-simplification-spine.md`
+- Current code substrate reviewed:
+  - platform-table home-surface registry and adapter framework
+  - shared `PlatformGridSection`, `SurfaceViewSwitcher`, and `SurfacePlatformGrid`
+  - each embedded domain List read path with an implicit default dataset
+- Source of truth:
+  - live domain status/stage fields plus the registry-owned `DataSourceFilter`
+- Decision:
+  - use the kernel-recommended `registry-data-lens` contract (`DI-93238917B4E0`), not page-local filters or personal saved-view state
+
 ## Architecture decision
 
 Three grounded options were scored by the platform kernel:

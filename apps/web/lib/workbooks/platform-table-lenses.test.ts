@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { getHomeSurfaceForEntity } from "./platform-tables";
+import { platformTableHomeSurface } from "./platform-table-surfaces";
+
+function getHomeSurfaceForEntity(entityType: string) {
+  return platformTableHomeSurface(entityType, "/test", "Test", false);
+}
 
 describe("platform table default data lenses (BI-9DB20C39)", () => {
   it.each([
