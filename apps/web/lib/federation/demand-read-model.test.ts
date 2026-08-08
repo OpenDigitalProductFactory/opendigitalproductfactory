@@ -2,7 +2,49 @@ import { describe, expect, it, vi } from "vitest";
 
 vi.mock("@dpf/db", () => ({ prisma: {} }));
 
-import { mapDemandShareTargets, mapNetworkDemandRows } from "./demand-read-model";
+// The mapper's job is correlation, not response-envelope validation (that is
+// covered by demand-response.test.ts). Decode = "has a response object → keep".
+vi.mock("./demand-response", () => ({
+  decodeDemandResponseMirrorPayload: (p: unknown) =>
+    p && typeof p === "object" && (p as { response?: unknown }).response ? p : null,
+}));
+
+import { mapDemandResponses, mapDemandShareTargets, mapNetworkDemandRows } from "./demand-read-model";
+
+describe("mapDemandResponses", () => {
+  const links = [{ linkId: "FL-1", principal: { displayName: "Windows workshop" } }];
+  const payload = {
+    response: { responseId: "rsp_1", responseKind: "interest", message: null },
+    receivedAt: "2026-08-08T00:00:00.000Z",
+  };
+
+  it("attributes each response to the local item it is about, and to the source connection", () => {
+    const rows = mapDemandResponses(
+      [{ federationLinkId: "FL-1", localRecordRef: "BI-LOCAL-1", payload }],
+      links,
+    );
+    expect(rows).toEqual([{
+      responseId: "rsp_1",
+      localItemId: "BI-LOCAL-1",
+      sourceName: "Windows workshop",
+      responseKind: "interest",
+      message: null,
+      receivedAt: "2026-08-08T00:00:00.000Z",
+    }]);
+  });
+
+  it("keeps a legacy unlinked response (null item) and drops malformed payloads", () => {
+    const rows = mapDemandResponses(
+      [
+        { federationLinkId: "FL-1", localRecordRef: null, payload },
+        { federationLinkId: "FL-1", localRecordRef: "BI-X", payload: { bogus: true } },
+      ],
+      links,
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ localItemId: null, sourceName: "Windows workshop" });
+  });
+});
 
 describe("mapDemandShareTargets", () => {
   it("offers only cross-company upstream destinations and leaves same-company peers on automatic sync", () => {
