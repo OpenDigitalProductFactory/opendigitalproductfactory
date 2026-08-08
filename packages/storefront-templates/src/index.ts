@@ -13,6 +13,7 @@ export * from "./resource-capacity-profile";
 export * from "./scene-layout";
 export * from "./business-view-profile";
 export * from "./performance-metric-catalog";
+export * from "./business-analysis-plan";
 export * from "./twin-value-stream";
 export * from "./demo-business";
 export * from "./demo-business-load";

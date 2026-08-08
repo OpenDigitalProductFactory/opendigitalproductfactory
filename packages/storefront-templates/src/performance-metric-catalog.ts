@@ -1,8 +1,85 @@
 import type {
+  BusinessAnalysisDimensionKey,
+  PerformanceMetricCalculation,
   PerformanceMetricDefinition,
   PerformanceMetricPack,
 } from "./business-view-profile";
 import type { TwinTemplate } from "./twin-profile";
+
+export const PERFORMANCE_METRIC_DEFINITION_VERSION = "2026-08-01.2";
+
+const calculation = (
+  kind: PerformanceMetricCalculation["kind"],
+  ...inputs: string[]
+): PerformanceMetricCalculation => ({ kind, inputs });
+
+const CALCULATIONS: Readonly<Record<string, PerformanceMetricCalculation>> = {
+  sales: calculation("sum", "recognized-sales"),
+  revenue: calculation("sum", "recognized-revenue"),
+  "gross-margin": calculation("ratio", "gross-profit", "revenue"),
+  "cash-position": calculation("closing-balance", "available-cash"),
+  demand: calculation("count", "accepted-demand"),
+  throughput: calculation("count", "completed-work"),
+  "cycle-time": calculation("median", "accepted-at", "completed-at"),
+  covers: calculation("count", "seated-guests"),
+  "average-check": calculation("ratio", "net-sales", "closed-checks"),
+  "table-utilization": calculation("ratio", "occupied-table-minutes", "available-table-minutes"),
+  "turn-time": calculation("median", "seated-at", "available-at"),
+  "wait-no-show-rate": calculation("ratio", "unseated-or-no-show-parties", "expected-parties"),
+  "labor-percentage": calculation("ratio", "labor-cost", "sales"),
+  appointments: calculation("count", "completed-appointments"),
+  occupancy: calculation("ratio", "booked-resource-minutes", "available-resource-minutes"),
+  "rebooking-retention": calculation("ratio", "returning-clients", "eligible-clients"),
+  "no-show-rate": calculation("ratio", "no-shows", "scheduled-appointments"),
+  "staff-utilization": calculation("ratio", "productive-minutes", "available-minutes"),
+  "retail-mix": calculation("ratio", "retail-sales", "total-sales"),
+  adr: calculation("ratio", "room-revenue", "occupied-rooms"),
+  revpar: calculation("ratio", "room-revenue", "available-rooms"),
+  "booking-pace": calculation("grouped-sum", "net-rooms-booked", "stay-date", "lead-time"),
+  "channel-mix": calculation("grouped-sum", "booked-rooms", "acquisition-channel"),
+  "room-turnaround": calculation("median", "checkout-at", "ready-at"),
+  "out-of-service-nights": calculation("sum", "unavailable-room-nights"),
+  "fleet-utilization": calculation("ratio", "committed-rentable-time", "available-rentable-time"),
+  "rental-revenue": calculation("sum", "recognized-rental-revenue"),
+  "asset-roi": calculation("ratio", "asset-operating-return", "invested-cost"),
+  "asset-downtime": calculation("sum", "unavailable-asset-time"),
+  "late-return-rate": calculation("ratio", "late-returns", "due-returns"),
+  "lost-demand-substitution": calculation("ratio", "unfilled-or-substituted-requests", "accepted-requests"),
+  "open-aging-actions": calculation("count", "open-actions", "aging-band"),
+  "sla-attainment": calculation("ratio", "within-commitment-work", "completed-work"),
+  "work-order-cost": calculation("sum", "approved-work-order-cost"),
+  "vendor-cycle-time": calculation("median", "assigned-at", "completed-at"),
+  collections: calculation("sum", "applied-payments"),
+  "authorized-violations": calculation("count", "role-visible-open-cases"),
+  jobs: calculation("count", "completed-jobs"),
+  conversion: calculation("ratio", "sold-opportunities", "presented-opportunities"),
+  "technician-utilization": calculation("ratio", "productive-technician-time", "available-technician-time"),
+  "drive-time": calculation("sum", "technician-travel-duration"),
+  "first-time-fix-rate": calculation("ratio", "first-visit-completions", "completed-jobs"),
+  "capacity-leakage": calculation("sum", "avoidable-lost-capacity-time"),
+};
+
+const calculationFor = (key: string): PerformanceMetricCalculation => {
+  const configured = CALCULATIONS[key];
+  if (!configured) throw new Error(`Missing typed calculation for metric ${key}`);
+  return configured;
+};
+
+const DEFAULT_DIMENSIONS = ["organization"] as const;
+const LOCATION_DIMENSIONS = ["organization", "location"] as const;
+const CUSTOMER_DIMENSIONS = ["organization", "location", "customer"] as const;
+const PRODUCT_DIMENSIONS = ["organization", "location", "product"] as const;
+const WORKFORCE_DIMENSIONS = ["organization", "location", "worker"] as const;
+const CHANNEL_DIMENSIONS = ["organization", "location", "channel"] as const;
+
+const dimensionsFor = (key: string): readonly BusinessAnalysisDimensionKey[] => {
+  if (["channel-mix", "booking-pace"].includes(key)) return CHANNEL_DIMENSIONS;
+  if (["sales", "revenue", "gross-margin", "average-check", "retail-mix", "rental-revenue", "asset-roi"].includes(key)) return PRODUCT_DIMENSIONS;
+  if (["covers", "wait-no-show-rate", "appointments", "rebooking-retention", "no-show-rate", "late-return-rate", "lost-demand-substitution", "first-time-fix-rate"].includes(key)) return CUSTOMER_DIMENSIONS;
+  if (["labor-percentage", "staff-utilization", "technician-utilization", "drive-time", "capacity-leakage"].includes(key)) return WORKFORCE_DIMENSIONS;
+  if (["table-utilization", "turn-time", "occupancy", "adr", "revpar", "room-turnaround", "out-of-service-nights", "fleet-utilization", "asset-downtime", "open-aging-actions", "sla-attainment", "work-order-cost", "vendor-cycle-time", "collections", "authorized-violations", "jobs", "conversion"].includes(key)) return LOCATION_DIMENSIONS;
+  return DEFAULT_DIMENSIONS;
+};
 
 export interface PriorityPhysicalViewPack {
   archetypeId: string;
@@ -28,6 +105,10 @@ const metric = (
   unit,
   sourceOwner,
   grain,
+  definition: aggregation,
+  calculation: calculationFor(key),
+  allowedDimensions: dimensionsFor(key),
+  supportedComparisons: comparison === "none" ? ["none"] : [comparison, "none"],
   aggregation,
   comparison,
   sensitivity,

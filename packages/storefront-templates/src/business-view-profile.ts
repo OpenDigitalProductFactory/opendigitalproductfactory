@@ -8,16 +8,74 @@ import { resolvePerformanceMetricPack } from "./performance-metric-catalog";
 
 export type OperationsTextAlternative = "list" | "table";
 
+export const PERFORMANCE_METRIC_UNITS = [
+  "count",
+  "currency",
+  "percent",
+  "duration",
+  "rate",
+] as const;
+export type PerformanceMetricUnit = (typeof PERFORMANCE_METRIC_UNITS)[number];
+
+export const PERFORMANCE_METRIC_GRAINS = ["day", "week", "month"] as const;
+export type PerformanceMetricGrain = (typeof PERFORMANCE_METRIC_GRAINS)[number];
+
+export const PERFORMANCE_METRIC_COMPARISONS = [
+  "prior-period",
+  "prior-year",
+  "target",
+  "none",
+] as const;
+export type PerformanceMetricComparison = (typeof PERFORMANCE_METRIC_COMPARISONS)[number];
+
+export const PERFORMANCE_METRIC_SENSITIVITIES = [
+  "business",
+  "financial",
+  "workforce",
+  "customer",
+] as const;
+export type PerformanceMetricSensitivity = (typeof PERFORMANCE_METRIC_SENSITIVITIES)[number];
+
+export const PERFORMANCE_CALCULATION_KINDS = [
+  "sum",
+  "count",
+  "ratio",
+  "median",
+  "closing-balance",
+  "grouped-sum",
+] as const;
+export type PerformanceCalculationKind = (typeof PERFORMANCE_CALCULATION_KINDS)[number];
+
+export const BUSINESS_ANALYSIS_DIMENSIONS = [
+  "organization",
+  "location",
+  "customer",
+  "product",
+  "worker",
+  "channel",
+] as const;
+export type BusinessAnalysisDimensionKey = (typeof BUSINESS_ANALYSIS_DIMENSIONS)[number];
+
+export interface PerformanceMetricCalculation {
+  kind: PerformanceCalculationKind;
+  inputs: readonly string[];
+}
+
 export interface PerformanceMetricDefinition {
   key: string;
   label: string;
-  unit: "count" | "currency" | "percent" | "duration" | "rate";
+  unit: PerformanceMetricUnit;
   sourceOwner: string;
-  grain: "day" | "week" | "month";
+  grain: PerformanceMetricGrain;
+  definition: string;
+  calculation: PerformanceMetricCalculation;
+  allowedDimensions: readonly BusinessAnalysisDimensionKey[];
+  supportedComparisons: readonly PerformanceMetricComparison[];
+  /** @deprecated Compatibility alias derived from definition; use definition for copy and calculation for semantics. */
   aggregation: string;
-  comparison: "prior-period" | "prior-year" | "target" | "none";
+  comparison: PerformanceMetricComparison;
   drilldownRoute?: string;
-  sensitivity: "business" | "financial" | "workforce" | "customer";
+  sensitivity: PerformanceMetricSensitivity;
 }
 
 export interface PerformanceMetricPack {
