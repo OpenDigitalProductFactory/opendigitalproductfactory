@@ -4,6 +4,7 @@ import {
   adpMcpRequests,
   adpToolCallDuration,
   adpToolCallErrors,
+  handleMcp,
   handleRequest,
   metricsRegistry,
 } from "./server.js";
@@ -90,5 +91,34 @@ describe("ADP server metric registry shape", () => {
     adpMcpRequests.inc({ method: "tools/call" });
     const text = await metricsRegistry.metrics();
     expect(text).toMatch(/dpf_adp_mcp_requests_total\{[^}]*method="tools\/call"[^}]*\} \d+/);
+  });
+});
+
+describe("ADP MCP initialize handshake (Slice 5)", () => {
+  it("returns a conformant initialize result echoing a supported protocol version", async () => {
+    const res = await handleMcp({
+      jsonrpc: "2.0",
+      id: 1,
+      method: "initialize",
+      params: { protocolVersion: "2025-11-25" },
+    });
+    expect("result" in res).toBe(true);
+    const result = (res as { result: Record<string, unknown> }).result;
+    expect(result.protocolVersion).toBe("2025-11-25");
+    expect(result.capabilities).toEqual({ tools: {} });
+    const serverInfo = result.serverInfo as { name: string; description?: string };
+    expect(serverInfo.name).toBe("dpf-adp");
+    expect(typeof serverInfo.description).toBe("string");
+  });
+
+  it("falls back to a supported version when the client requests an unknown one", async () => {
+    const res = await handleMcp({
+      jsonrpc: "2.0",
+      id: 2,
+      method: "initialize",
+      params: { protocolVersion: "1999-01-01" },
+    });
+    const result = (res as { result: Record<string, unknown> }).result;
+    expect(result.protocolVersion).toBe("2024-11-05");
   });
 });

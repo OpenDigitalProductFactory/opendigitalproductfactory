@@ -118,8 +118,38 @@ function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.end(payload);
 }
 
-async function handleMcp(request: JsonRpcRequest): Promise<JsonRpcResponse> {
+const ADP_SUPPORTED_PROTOCOL_VERSIONS = ["2025-11-25", "2025-03-26", "2024-11-05"];
+const ADP_FALLBACK_PROTOCOL_VERSION = "2024-11-05";
+
+export async function handleMcp(request: JsonRpcRequest): Promise<JsonRpcResponse> {
   switch (request.method) {
+    case "initialize": {
+      // Conformant MCP handshake: echo the highest protocol version we both
+      // speak (fallback when the client's is unknown), and declare the tools
+      // capability so clients don't have to probe tools/list blind.
+      const params = request.params as { protocolVersion?: string } | undefined;
+      const requested = typeof params?.protocolVersion === "string" ? params.protocolVersion : null;
+      const negotiated =
+        requested && ADP_SUPPORTED_PROTOCOL_VERSIONS.includes(requested)
+          ? requested
+          : ADP_FALLBACK_PROTOCOL_VERSION;
+      return {
+        jsonrpc: "2.0",
+        id: request.id,
+        result: {
+          protocolVersion: negotiated,
+          capabilities: { tools: {} },
+          serverInfo: {
+            name: "dpf-adp",
+            version: "1.0.0",
+            description: "DPF ADP (agent data plane) MCP service — worker/data tools for coworkers.",
+          },
+        },
+      };
+    }
+    case "notifications/initialized":
+      // Notifications carry no id and expect no result; acknowledge quietly.
+      return { jsonrpc: "2.0", id: request.id, result: {} };
     case "tools/list":
       return {
         jsonrpc: "2.0",

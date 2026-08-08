@@ -596,6 +596,67 @@ describe("POST — tools/list", () => {
     expect(toolNames).not.toContain("update_backlog_item_status");
   });
 
+  it("initialize returns serverInfo.description and advertises the tasks capability (Slices 1/4)", async () => {
+    resolveMock.mockResolvedValue({
+      tokenId: "tok_i",
+      userId: "u1",
+      agentId: null,
+      scopes: ["backlog_read"],
+      capability: "read",
+    });
+    const res = await POST(
+      makeRequest({
+        bearer: "dpfmcp_X",
+        body: { jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-11-25" } },
+      }),
+    );
+    const body = await res.json();
+    expect(typeof body.result.serverInfo.description).toBe("string");
+    expect(body.result.serverInfo.description.length).toBeGreaterThan(0);
+    expect(body.result.capabilities.tasks).toEqual({ list: true, cancel: true });
+  });
+
+  it("rejects an unsupported MCP-Protocol-Version header with 400 (Slice 1)", async () => {
+    resolveMock.mockResolvedValue({
+      tokenId: "tok_p",
+      userId: "u1",
+      agentId: null,
+      scopes: ["backlog_read"],
+      capability: "read",
+    });
+    const req = new Request("https://localhost/api/mcp/v1", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: "Bearer dpfmcp_X",
+        "User-Agent": "codex/1.0",
+        "MCP-Protocol-Version": "1999-01-01",
+      },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 2, method: "tools/list" }),
+    });
+    const res = await POST(req);
+    expect(res.status).toBe(400);
+  });
+
+  it("emits outputSchema (2020-12) + title on query_backlog (Slice 2)", async () => {
+    resolveMock.mockResolvedValue({
+      tokenId: "tok_m",
+      userId: "u1",
+      agentId: null,
+      scopes: ["backlog_read"],
+      capability: "read",
+    });
+    const res = await POST(
+      makeRequest({ bearer: "dpfmcp_X", body: { jsonrpc: "2.0", id: 3, method: "tools/list" } }),
+    );
+    const body = await res.json();
+    const qb = (body.result.tools as Array<{ name: string; title?: string; outputSchema?: { $schema?: string } }>).find(
+      (t) => t.name === "query_backlog",
+    );
+    expect(qb?.title).toBe("Query backlog");
+    expect(qb?.outputSchema?.$schema).toContain("2020-12");
+  });
+
   it("includes annotations on every returned tool", async () => {
     resolveMock.mockResolvedValue({
       tokenId: "tok_x",

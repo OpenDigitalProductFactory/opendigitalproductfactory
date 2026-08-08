@@ -140,6 +140,18 @@ export const backlogPackDefinitions: ToolDefinition[] = [
       },
       required: [],
     },
+    title: "Query backlog",
+    outputSchema: {
+      type: "object",
+      properties: {
+        items: { type: "array", items: { type: "object" } },
+        epics: { type: "array", items: { type: "object" } },
+        total: { type: "number" },
+        truncated: { type: "boolean" },
+      },
+      required: ["items", "total", "truncated"],
+      additionalProperties: true,
+    },
     requiredCapability: "view_operations",
     executionMode: "immediate",
     sideEffect: false,
