@@ -82,8 +82,7 @@ Tooling detail, hygiene cadence and the enforced-gate list: [backlog & planning 
 
 ## 6. Tool Authorization
 
-Transport, token issuance/rotation, worktree MCP sync, grant-intersection mechanics and the advise-safe BI trail: [MCP tool authorization runbook](docs/architecture/mcp-tool-authorization-runbook.md) and [contributor procedure runbook](docs/architecture/contributor-procedure-runbook.md).
-
+- **Discover MCP tools before fallback.** Codex/Grok start with a lean `tools/list`; call `load_tools` by name/query (`search_tool_marketplace` if needed), refresh the list, then declare it absent. → [MCP authorization runbook](docs/architecture/mcp-tool-authorization-runbook.md)
 - **External coding agents use the MCP JSON-RPC transport at `/api/mcp/v1`.** Bearer tokens follow the `dpfmcp_...` pattern, are issued from Admin > Platform Development > MCP, and live only in local credential files — never commit them.
 - **Tokens carry a coarse scope (`read`/`write`/`admin`) plus granular per-tool grants; default tokens are `read` and cannot call side-effecting tools.** Agent `tool_grants` in `agent_registry.json` are enforced at runtime, intersected with the user's role capabilities. `insufficient_token_scope` is a §1 refusal.
 - **A side-effect tool may stay visible in advise mode only if it is advise-safe** — read-shaped, reversible, and non-committing. Anything else is hidden, not merely warned about.
@@ -150,4 +149,3 @@ Guard implementations, the BI trail and the full §7 decision text: [delivery su
 - **Tooling upgrade = operator-triggered quiesce → reap → upgrade → resume.** Orphaned sidecars must never pin a tool against update. → [kernel principle](docs/founder-kernel/wiki/principles/reap-sidecars-to-upgrade-tools.md)
 - **`:3001` and every shared singleton are lease-gated** ⟦runtime: install-local port — the lease rule is doctrine, the number is not⟧ via `claim_nonprod_environment_lease`. No per-branch CI images, no silent re-bind, no ad-hoc `docker run`/`compose up` from a surface. Hook-refused, so §1's refusal rule governs what to do when one fires.
 - **A built image carries the identity of its bytes** — stamp == built HEAD == target, asserted pre-swap.
-
