@@ -325,6 +325,7 @@ export async function claimNonprodEnvironmentLease(input: {
     hostPressure: input.hostPressure,
     capacityBroker: input.capacityBroker,
     manifestSlotCount: NONPROD_SLOT_KEYS.length,
+    reserveBuildHeadroom: true,
     now,
   });
   const ttlMs = requestedTtlMs(now, input.expiresAt);
@@ -667,6 +668,7 @@ export async function renewNonprodEnvironmentLease(input: {
     hostPressure: input.hostPressure,
     capacityBroker: input.capacityBroker,
     manifestSlotCount: NONPROD_SLOT_KEYS.length,
+    reserveBuildHeadroom: false,
     now,
   });
   return { status: "renewed", lease: updated, poolPolicy };

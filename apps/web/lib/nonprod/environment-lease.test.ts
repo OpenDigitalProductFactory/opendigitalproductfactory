@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import localCiSlotResources from "./local-ci-slot-resources.json";
 
 const recordQueueTransition = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/queue/queue-telemetry", () => ({ recordQueueTransition }));
@@ -333,7 +334,8 @@ describe("durable nonproduction admission", () => {
 
     const hostPressure = {
       observedAt: NOW.toISOString(),
-      availableMemoryBytes: 12 * 1024 ** 3,
+      availableMemoryBytes: 8 * 1024 ** 3
+        + 2 * localCiSlotResources.builderPolicy.memoryBytes,
       sustainedCpuPercent: 20,
       diskFreeBytes: 500 * 1024 ** 3,
       dockerHealthy: true,
@@ -344,7 +346,11 @@ describe("durable nonproduction admission", () => {
     const result = await claim(mockDb, {
       slotManifestVersion: 1,
       hostPressure,
-      capacityBroker: async () => hostPressure,
+      capacityBroker: async () => ({
+        ...hostPressure,
+        dockerAvailableMemoryBytes: 32 * 1024 ** 3,
+        builderMemoryUsageBytes: [0, 0],
+      }),
     });
 
     expect(result).toMatchObject({
@@ -442,7 +448,7 @@ describe("durable nonproduction admission", () => {
       status: "queued",
       poolPolicy: {
         effectiveCapacity: 0,
-        rollbackReason: "host-memory-low",
+        rollbackReason: "host-build-headroom-low",
       },
     });
   });
