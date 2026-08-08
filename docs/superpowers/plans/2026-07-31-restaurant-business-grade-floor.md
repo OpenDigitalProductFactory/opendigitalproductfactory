@@ -4,13 +4,39 @@
 | --- | --- |
 | Backlog item | `BI-287AA5F7` |
 | Epic | `EP-SPATIAL-OPERATIONAL-VIEWS` |
-| Status | Active implementation plan |
-| Delivery branch | `feat/restaurant-floor` |
+| Status | Active — source increments merged; installed busy-shift acceptance remains |
+| Delivered increments | PR #3825 (`681bb8cd2b69`) and PR #3932 (`f1bc205bffef`) |
+| Next delivery branch | New branch from current `origin/main`; both earlier feature branches are merged |
 | Foundational dependency | `BI-57F34A00`, merged in PR #3796 at `99d7061d68c8ab2380fea4d1cf4010a15137d498` |
 | Parent design | `docs/superpowers/specs/2026-07-21-spatial-operational-views-design.md` |
 | Umbrella plan | `docs/superpowers/plans/2026-07-28-business-operations-and-performance-views-plan.md` |
 | Operational precedent | `restaurant-floor` (Toast and OpenTable, accessed 2026-07-28) |
 | Coverage receipt | `cms89c2jv031001qo7gezoyzm` (`atomic`) |
+
+## Current delivery truth — 2026-08-08
+
+This section is the status authority for resuming the plan. Historical
+checkpoints below describe what was true when recorded; they do not override
+this reconciliation.
+
+| Capability | Source / merge truth | Canonical-install truth | Disposition |
+| --- | --- | --- | --- |
+| Shared scene, restaurant projection, table structure, service turns, seating/move commands, and customer-safe availability | Merged in PR #3825 at `681bb8cd2b695cd3cdbabe9170f524a737394f34` | The current install contains the code, but its restaurant records do not exercise the joined busy-shift path | Source delivered; functional acceptance open |
+| First-viewport Host stand, ranked queue, floor/list parity, explicit AI recommendation confirmation, turn actions, and server-load panel | Merged in PR #3932 at `f1bc205bffef259fb96b8a0a6624eb042f9b40f4`; merge CI passed policy guards, typecheck, all test shards, production build, and UX route sweep | Preflight `CAN-TEST` on served `60b18de67dfe`; `/workspace` renders the Host stand first | Delivered and live-observed |
+| Authored restaurant geometry | Persistence/configuration code exists | Live restaurant falls back to one `Unassigned area` with a generated 3×3 circle grid | Not accepted |
+| Business-realistic table and shift data | Busy-shift fixture exists in tests | Live restaurant has nine one-seat, blocked tables; no server assignment and no waiting party | Not accepted; the fixture is not installed/provisioned |
+| Host decision happy path | Command and interaction contracts exist and are tested | No compatible waiting party/table/server data exists, so seating, movement, conflict alternatives, and forward-availability reconciliation cannot be exercised | Not accepted |
+| Customer-safe availability | Projector and UI merged | Available/limited/unavailable/degraded cases have not been functionally exercised against the same installed shift state | Functional acceptance open |
+| Coworker-panel coexistence | Host console remains operable at the observed desktop viewport | The 380px coworker panel compresses the floor and clips the rightmost table content in the current generated layout | UX acceptance open |
+| Compatibility/refactor closure | Shared `CartesianSceneCanvas` and reusable selectors are in use | `FloorPlanCanvas` remains as a compatibility adapter | Phase 6 partial |
+| Work coordination | `WC-8550281A` records the merged Host-stand effort and its historical evidence | The capsule was stale-WIP reaped as `abandoned` on 2026-08-06 | Provenance only; claim a fresh capsule before remaining implementation |
+
+The remaining delivery is intentionally one acceptance slice, not a new
+parallel restaurant feature: provision or configure a credible authored dining
+room and busy shift through the canonical install path, close the responsive
+coexistence defect, then drive the complete host and customer journeys. Keep
+`BI-287AA5F7` in progress until every definition-of-done item below is observed
+on the canonical runtime.
 
 ## Pressure-mode refinement — 2026-08-01
 
@@ -366,9 +392,9 @@ The already-completed scene-layout and hospitality-resource BIs are dependencies
 
 ## Phase 7 — Governed completion evidence
 
-### Implementation checkpoint — 2026-07-31
+### Historical source checkpoint — 2026-07-31 (superseded for current status)
 
-- Phases 1–5 are implemented on `feat/restaurant-floor`: authored table
+- Phases 1–5 were implemented in source on `feat/restaurant-floor`: authored table
   structure and geometry, the joined live host stand, combined-table seating,
   service-turn lifecycle controls, atomic party movement, actionable conflict
   alternatives, and the public privacy-allowlisted forward-availability view.
@@ -393,26 +419,30 @@ The already-completed scene-layout and hospitality-resource BIs are dependencies
   central status-intent registry, customer allow-list projector, reusable
   seating/alternative evaluator, and separated service-turn/seat/move command
   modules. Compatibility deletion remains contingent on governed route evidence.
-- The following evidence remains required before completion: canonical
-  dependency convergence and full typecheck, exhaustive tests, migration apply,
-  production Docker build, served desktop/tablet/keyboard/200% UX exercise,
-  privacy inspection, measured latency/UX manifest, signed commit/PR, and merge
-  queue result.
+- Subsequent merges closed the source publication gates. The current status and
+  remaining functional evidence are listed in `Current delivery truth` above.
 
-1. Run targeted Vitest suites for all changed contracts and components.
-2. Run affected package tests and typecheck.
-3. Use the governed `local-integration-ci` FIFO lane for freshness, exhaustive tests, migration checks, and production Docker build. A runner-worker crash after passing assertions is runner evidence, not a product diagnosis; preserve diagnostics and rerun only through FIFO.
-4. Drive the busy-shift host task on the served candidate:
+1. Provision or configure the canonical restaurant install with an authored,
+   recognizable dining-room layout: named service areas, varied table shapes
+   and capacities, combinable tables, and complete server sections.
+2. Provision the canonical busy-shift acceptance state through its owning seed
+   or setup path: reservation, 14-minute walk-in, combined tables, server
+   imbalance, dirty and blocked tables, late turn, and a privacy-boundary note.
+3. Drive the busy-shift host task on the served candidate:
    - choose the 14-minute walk-in;
    - inspect compatible tables and the server imbalance warning;
    - preview and confirm the recommended assignment;
    - observe the table, waitlist, capacity, and forward-availability update;
    - repeat the task by keyboard through the list alternative;
    - force a stale conflict and confirm that nothing changes and alternatives remain actionable.
-5. Drive the customer availability cases and inspect the serialized payload for privacy.
-6. Measure desktop and tablet viewports, 200% zoom, touch targets, no overlap, UX-budget axes, decision-ready latency, selection latency, assignment latency, query count, and payload bytes.
-7. Commit the measured UX-fit manifest and record test/build/migration/UX evidence on `BI-287AA5F7` and `WC-065EB427`.
-8. Push the signed branch, open a ready PR, run `pnpm pr:health`, enqueue through the merge queue, and verify the merge-group result.
+4. Drive the customer availability cases and inspect the serialized payload for privacy.
+5. Measure desktop and tablet viewports, 200% zoom, touch targets, coworker-panel coexistence, no clipping/overlap, UX-budget axes, decision-ready latency, selection latency, assignment latency, query count, and payload bytes.
+6. Retire the restaurant compatibility renderer only after route evidence proves all callers use the shared scene path.
+7. Run the governed exact-tree gate for any corrective source change and merge it through the protected queue.
+8. Before implementation resumes, claim a fresh capsule for `BI-287AA5F7` and
+   the remaining scope. Record final runtime evidence on that capsule and the
+   BI; only then mark the BI done and release the new capsule. Keep
+   `WC-8550281A` as historical provenance for the merged Host-stand increment.
 
 ## Risks and rollback
 
