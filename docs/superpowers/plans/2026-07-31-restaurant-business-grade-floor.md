@@ -169,6 +169,8 @@ The code graph did not yet return the newly merged scene/resource symbols, so th
 
 ## Design grounding
 
+Operational-Precedent: restaurant-floor
+
 - **Existing specs/plans reviewed:** `docs/superpowers/specs/2026-07-21-spatial-operational-views-design.md`, `docs/superpowers/plans/2026-07-28-business-operations-and-performance-views-plan.md`, `docs/platform-usability-standards.md`, and `docs/superpowers/plans/2026-05-26-portal-ux-simplification-spine.md`.
 - **Current code substrate reviewed:** the `/workspace` and `/storefront/tables` route composition; `TwinView`; `CartesianSceneCanvas`; report-kit status, notice, and table primitives; hospitality resource/capacity repositories; workforce staffing assignments/resource links; `OperationalSceneLayout`; and the versioned operational-command contract.
 - **Source of truth:** hospitality resources and allocations own physical capacity, bookings and holds own demand, staffing owns server coverage, `OperationalSceneLayout` owns geometry, and the restaurant operating projection joins those authorities without copying them.
@@ -392,6 +394,26 @@ The already-completed scene-layout and hospitality-resource BIs are dependencies
 
 ## Phase 7 — Governed completion evidence
 
+## Design grounding
+
+- Existing specs/plans reviewed:
+  - this business-grade floor plan, the operational scene persistence plan,
+    and the Cartesian scene renderer plan.
+- Current code substrate reviewed:
+  - `RestaurantFloorOperations`, the restaurant floor
+    loader/projection/command seams, `CartesianSceneCanvas`, the canonical demo
+    loader, hospitality resources, staffing assignments, service turns, and
+    capacity allocations.
+- Source of truth:
+  - persisted `OperationalScene` geometry plus the existing
+    hospitality/staffing aggregates; the reversible demo loader provisions
+    those authorities and does not create a fixture-only floor model.
+- Decision:
+  - converge the restaurant route on the shared Cartesian renderer, repair only
+    the exact canonical restaurant demo corpus, retain floor/list task parity,
+    and derive responsive columns from the available host-workspace container
+    so the coworker panel does not obscure the floor.
+
 ### Historical source checkpoint — 2026-07-31 (superseded for current status)
 
 - Phases 1–5 were implemented in source on `feat/restaurant-floor`: authored table
@@ -427,7 +449,9 @@ The already-completed scene-layout and hospitality-resource BIs are dependencies
    and capacities, combinable tables, and complete server sections.
 2. Provision the canonical busy-shift acceptance state through its owning seed
    or setup path: reservation, 14-minute walk-in, combined tables, server
-   imbalance, dirty and blocked tables, late turn, and a privacy-boundary note.
+   imbalance, dirty and blocked tables, and a late turn. Prove the privacy
+   boundary through the absence of sensitive guest notes from the demo and the
+   allow-listed customer projection rather than by manufacturing sensitive text.
 3. Drive the busy-shift host task on the served candidate:
    - choose the 14-minute walk-in;
    - inspect compatible tables and the server imbalance warning;
@@ -464,7 +488,7 @@ No rollback path deletes bookings, allocations, resources, layouts, or staffing 
 - A host can assign and move parties with preview, explicit confirmation, idempotency, version conflicts, and alternatives.
 - The same task is fully operable through the list alternative and keyboard.
 - The customer explanation comes from the same projection and passes the privacy allow-list tests.
-- Busy-shift data includes reservation, walk-in, combined tables, server imbalance, dirty, blocked, late turn, and a VIP/allergy-note boundary.
+- Busy-shift data includes reservation, walk-in, combined tables, server imbalance, dirty, blocked, and a late turn; customer and floor projections prove the guest-note privacy boundary without seeded sensitive text.
 - Measured performance, accessibility, privacy, UX-fit, exhaustive test, production build, and functional browser evidence are attached to the BI/Work Capsule.
 - Approximately 20% of the implementation removes the restaurant compatibility renderer and extracts reusable physical-operation seams.
 - The ready PR is merged through the governed queue.

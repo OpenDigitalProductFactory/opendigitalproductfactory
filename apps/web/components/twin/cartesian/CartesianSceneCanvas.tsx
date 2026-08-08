@@ -128,6 +128,32 @@ function modeLabel(mode: CartesianSceneMode): string {
   return "Availability view";
 }
 
+function ScenePlacementList({
+  ariaLabel,
+  descriptors,
+  className,
+}: {
+  ariaLabel: string;
+  descriptors: readonly Extract<
+    CartesianSceneNodeDescriptor,
+    { kind: "placement" }
+  >[];
+  className: string;
+}) {
+  return (
+    <ul aria-label={`${ariaLabel} details`} className={className}>
+      {descriptors.map((descriptor) => (
+        <li key={descriptor.id}>
+          <span className="font-dpf-semibold">{descriptor.data.label}:</span>{" "}
+          {descriptor.data.statusLabel}
+          {descriptor.data.sublabel ? ` — ${descriptor.data.sublabel}` : ""}
+          {descriptor.data.cogSuggested ? " — Recommended" : ""}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 export function CartesianSceneCanvas({
   scene,
   mode,
@@ -334,25 +360,19 @@ export function CartesianSceneCanvas({
         <summary className="dpf-tap-target cursor-pointer px-dpf-md py-dpf-xs text-dpf-body font-dpf-medium text-dpf-text">
           View layout as a list
         </summary>
-        <ul
-          aria-label={`${ariaLabel} details`}
+        <ScenePlacementList
+          ariaLabel={ariaLabel}
+          descriptors={placementDescriptors}
           className="grid gap-dpf-xs border-t border-dpf-border p-dpf-md text-dpf-body text-dpf-text"
-        >
-          {placementDescriptors.map((descriptor) => (
-            <li key={descriptor.id}>
-              <span className="font-dpf-semibold">
-                {descriptor.data.label}:
-              </span>{" "}
-              {descriptor.data.statusLabel}
-              {descriptor.data.sublabel
-                ? ` — ${descriptor.data.sublabel}`
-                : ""}
-              {descriptor.data.cogSuggested ? " — Recommended" : ""}
-            </li>
-          ))}
-        </ul>
+        />
       </details>
-      ) : null}
+      ) : (
+        <ScenePlacementList
+          ariaLabel={ariaLabel}
+          descriptors={placementDescriptors}
+          className="sr-only"
+        />
+      )}
     </section>
   );
 }

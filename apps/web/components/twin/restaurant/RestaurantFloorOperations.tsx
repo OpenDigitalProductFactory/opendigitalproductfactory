@@ -195,13 +195,7 @@ export function RestaurantFloorOperations({
       {
         label: table.label,
         statusLabel: table.statusLabel,
-        sublabel: [
-          `${table.capacity} seats`,
-          table.server?.name ?? "No server",
-          table.availability.minutes != null
-            ? `${table.availability.minutes} min`
-            : null,
-        ].filter((value): value is string => value !== null).join(" · "),
+        sublabel: `${table.capacity} seats · ${table.server?.name ?? "Unassigned"}`,
         intent: resolveIntent("restaurantFloor", table.state),
         cogSuggested: selectedOption?.resourceIds.includes(table.id) ?? false,
       },
@@ -380,7 +374,14 @@ export function RestaurantFloorOperations({
 
       {resultNotice(result)}
 
-      <div className="grid min-h-0 gap-dpf-sm lg:flex-1 lg:grid-cols-[minmax(15rem,0.72fr)_minmax(28rem,1.65fr)_minmax(18rem,0.9fr)]">
+      <div
+        className="grid min-h-0 gap-dpf-sm lg:flex-1"
+        data-testid="restaurant-host-workspace"
+        style={{
+          gridTemplateColumns:
+            "repeat(auto-fit, minmax(min(100%, 28rem), 1fr))",
+        }}
+      >
         <section aria-labelledby="waiting-now-heading" className="flex min-h-[18rem] max-h-[28rem] flex-col overflow-hidden rounded-dpf-lg border border-dpf-border bg-dpf-surface-1 lg:min-h-0 lg:max-h-none">
           <div className="shrink-0 border-b border-dpf-border p-dpf-sm">
             <div className="flex items-center justify-between gap-dpf-sm">
