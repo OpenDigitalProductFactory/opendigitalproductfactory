@@ -225,8 +225,8 @@ describe("CartesianSceneCanvas", () => {
     expect(screen.queryByText("Live operation")).not.toBeInTheDocument();
     expect(screen.queryByTestId("controls")).not.toBeInTheDocument();
     expect(
-      screen.queryByRole("list", { name: "Host stand floor details" }),
-    ).not.toBeInTheDocument();
+      screen.getByRole("list", { name: "Host stand floor details" }),
+    ).toHaveTextContent("Table 1: Available");
 
     fireEvent.click(screen.getByRole("button", { name: /Table 1.*Available/i }));
     expect(onActivate).toHaveBeenCalledWith("table-1", {

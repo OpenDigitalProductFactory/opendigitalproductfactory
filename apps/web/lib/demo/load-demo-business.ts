@@ -14,6 +14,11 @@ import { resetStorefrontArchetype } from "@/lib/storefront/archetype-reset";
 import { runSetupCompletionSeeds } from "@/lib/onboarding/setup-completion-seeds";
 import { getPlaybook } from "@/lib/tak/marketing-playbooks";
 import { resolveBusinessProfile } from "@/lib/onboarding/archetype-business-context";
+import {
+  persistRestaurantDemoFloor,
+  removeRestaurantDemoFloor,
+  type RestaurantDemoFloorDatabase,
+} from "./persist-restaurant-demo-floor";
 
 /**
  * Archetype Demo Factory — the load path (EP-ARCHETYPE-DEMO A·P1).
@@ -129,11 +134,32 @@ export async function loadDemoBusiness(
   const plan: DemoLoadPlan = planDemoLoad(demo, { storefrontId, itemIds });
 
   // 3. Upsert the plan (parents first so FK targets exist; demo-tagged, idempotent).
-  await upsertEmployees(db, plan);
+  const employees = await upsertEmployees(db, plan);
   const supplierIdByRef = await upsertSuppliers(db, plan);
   const providerIdByRef = await upsertProviders(db, plan, storefrontId);
   await upsertBills(db, plan, supplierIdByRef, now);
-  await upsertBookings(db, plan, org.id, storefrontId, providerIdByRef, now);
+  const bookings = await upsertBookings(
+    db,
+    plan,
+    org.id,
+    storefrontId,
+    providerIdByRef,
+    now,
+  );
+  if (archetypeId === "restaurant") {
+    await persistRestaurantDemoFloor({
+      database: db as unknown as RestaurantDemoFloorDatabase,
+      organizationId: org.id,
+      storefrontId,
+      providerIds: plan.providers.map((provider) =>
+        providerIdByRef.get(provider.providerId)!,
+      ),
+      bookings,
+      employees,
+      now,
+      timezone: demo.timezone,
+    });
+  }
 
   // 4. Setup-completion seeds (WWWD priming corpus etc.) — best-effort. The demo's
   //    operational-twin data (steps 1–3) is the deliverable; priming is enrichment,
@@ -161,9 +187,13 @@ export async function loadDemoBusiness(
   };
 }
 
-async function upsertEmployees(db: Db, plan: DemoLoadPlan): Promise<void> {
+async function upsertEmployees(
+  db: Db,
+  plan: DemoLoadPlan,
+): Promise<Array<{ id: string; displayName: string; role: string }>> {
+  const employees: Array<{ id: string; displayName: string; role: string }> = [];
   for (const e of plan.employees) {
-    await db.employeeProfile.upsert({
+    const row = await db.employeeProfile.upsert({
       where: { employeeId: e.employeeRef },
       create: {
         employeeId: e.employeeRef,
@@ -172,8 +202,11 @@ async function upsertEmployees(db: Db, plan: DemoLoadPlan): Promise<void> {
         displayName: e.displayName,
       },
       update: { firstName: e.firstName, lastName: e.lastName, displayName: e.displayName },
+      select: { id: true },
     });
+    employees.push({ id: row.id, displayName: e.displayName, role: e.role });
   }
+  return employees;
 }
 
 async function upsertSuppliers(db: Db, plan: DemoLoadPlan): Promise<Map<string, string>> {
@@ -243,12 +276,13 @@ async function upsertBookings(
   storefrontId: string,
   providerIdByRef: Map<string, string>,
   now: Date,
-): Promise<void> {
+): Promise<Array<{ id: string; bookingRef: string }>> {
+  const bookings: Array<{ id: string; bookingRef: string }> = [];
   for (const bk of plan.bookings) {
     const providerId = bk.providerId ? providerIdByRef.get(bk.providerId) ?? null : null;
     const scheduledAt = new Date(now.getTime() + bk.scheduledInMinutes * MIN);
     const createdAt = new Date(now.getTime() - bk.createdMinutesAgo * MIN);
-    await db.storefrontBooking.upsert({
+    const row = await db.storefrontBooking.upsert({
       where: { bookingRef: bk.bookingRef },
       create: {
         bookingRef: bk.bookingRef,
@@ -270,8 +304,11 @@ async function upsertBookings(
         customerName: bk.customerName,
         customerEmail: bk.customerEmail,
       },
+      select: { id: true },
     });
+    bookings.push({ id: row.id, bookingRef: bk.bookingRef });
   }
+  return bookings;
 }
 
 export interface UnloadDemoBusinessResult {
@@ -293,6 +330,17 @@ export async function unloadDemoBusiness(
 ): Promise<UnloadDemoBusinessResult> {
   const db = options.db ?? prisma;
   const spec = demoTeardownSpec(options.archetypeId);
+
+  if (!options.archetypeId || options.archetypeId === "restaurant") {
+    const restaurantStorefronts = await db.storefrontConfig.findMany({
+      where: { archetype: { archetypeId: "restaurant" } },
+      select: { id: true },
+    });
+    await removeRestaurantDemoFloor(
+      db as unknown as RestaurantDemoFloorDatabase,
+      { storefrontIds: restaurantStorefronts.map((storefront) => storefront.id) },
+    );
+  }
 
   const bookings = await db.storefrontBooking.deleteMany({
     where: { bookingRef: { startsWith: spec.bookingRefPrefix } },

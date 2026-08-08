@@ -105,24 +105,41 @@ export function buildRestaurantStarterScene(
     byArea.set(area, group);
   }
 
-  const zones: CartesianSceneLayout["zones"][number][] = [];
-  const placements: CartesianSceneLayout["placements"][number][] = [];
-  let zoneY = 0;
-  for (const [areaIndex, [area, group]] of [...byArea.entries()].entries()) {
+  const areas = [...byArea.entries()].sort(
+    ([leftArea, left], [rightArea, right]) =>
+      right.length - left.length || leftArea.localeCompare(rightArea),
+  );
+  const zoneDrafts = areas.map(([area, group], areaIndex) => {
     const columns = Math.min(4, Math.max(1, group.length));
     const rows = Math.ceil(group.length / columns);
-    const zoneWidth = Math.max(320, columns * 168 + 64);
-    const zoneHeight = Math.max(220, rows * 136 + 84);
+    return {
+      area,
+      group,
+      areaIndex,
+      columns,
+      width: Math.max(320, columns * 168 + 64),
+      height: Math.max(220, rows * 136 + 84),
+    };
+  });
+  const primaryWidth = zoneDrafts[0]?.width ?? 320;
+  let adjacentY = 0;
+  const zones: CartesianSceneLayout["zones"][number][] = [];
+  const placements: CartesianSceneLayout["placements"][number][] = [];
+  for (const draft of zoneDrafts) {
+    const { area, group, areaIndex, columns, width, height } = draft;
+    const x = areaIndex === 0 ? 0 : primaryWidth + 32;
+    const y = areaIndex === 0 ? 0 : adjacentY;
+    if (areaIndex > 0) adjacentY += height + 32;
     const zoneId = `${slug(area)}-${areaIndex + 1}`;
     zones.push({
       id: zoneId,
       label: area,
       geometry: {
         kind: "rectangle",
-        x: 0,
-        y: zoneY,
-        width: zoneWidth,
-        height: zoneHeight,
+        x,
+        y,
+        width,
+        height,
       },
     });
     group.forEach((table, index) => {
@@ -138,8 +155,8 @@ export function buildRestaurantStarterScene(
         label: table.label,
         entityRef: { kind: "table", id: table.id },
         geometry: {
-          x: 32 + column * 168,
-          y: zoneY + 52 + row * 136,
+          x: x + 32 + column * 168,
+          y: y + 52 + row * 136,
           width,
           height,
           rotation: 0,
@@ -147,16 +164,33 @@ export function buildRestaurantStarterScene(
         },
       });
     });
-    zoneY += zoneHeight + 32;
   }
 
   return {
     schemaVersion: 1,
     spaceKind: "cartesian-interior",
-    viewport: { x: 24, y: 24, zoom: 0.9 },
+    viewport: { x: 24, y: 24, zoom: areas.length > 1 ? 0.78 : 0.9 },
     zones,
     placements,
   };
+}
+
+function isLegacyUnassignedStarter(
+  layout: CartesianSceneLayout,
+  tables: readonly RestaurantSceneTable[],
+): boolean {
+  if (
+    layout.zones.length !== 1 ||
+    layout.zones[0]?.label.trim().toLowerCase() !== "unassigned area" ||
+    !tables.some((table) => Boolean(table.serviceArea?.trim()))
+  ) {
+    return false;
+  }
+  const expected = new Set(tables.map((table) => table.id));
+  const placed = layout.placements
+    .filter((placement) => placement.entityRef.kind === "table")
+    .map((placement) => placement.entityRef.id);
+  return placed.length === expected.size && placed.every((id) => expected.has(id));
 }
 
 function parseScene(row: SceneRow, createdFromStarter: boolean) {
@@ -276,7 +310,9 @@ export async function loadOrCreateRestaurantScene(input: {
   });
   if (existing) {
     const parsed = parseScene(existing, false);
-    const reconciled = appendMissingTables(parsed.layout, input.tables);
+    const reconciled = isLegacyUnassignedStarter(parsed.layout, input.tables)
+      ? buildRestaurantStarterScene(input.tables)
+      : appendMissingTables(parsed.layout, input.tables);
     if (reconciled === parsed.layout) return parsed;
     const update =
       await input.database.operationalSceneLayout.updateMany({

@@ -208,6 +208,10 @@ describe("RestaurantFloorOperations", () => {
     expect(console).toHaveAttribute("data-dpf-density", "compact");
     expect(console.className).toContain("overflow-visible");
     expect(console.className).toContain("lg:overflow-hidden");
+    expect(screen.getByTestId("restaurant-host-workspace")).toHaveStyle({
+      gridTemplateColumns:
+        "repeat(auto-fit, minmax(min(100%, 28rem), 1fr))",
+    });
     expect(screen.getByRole("heading", { name: "Host stand" })).toBeTruthy();
     expect(screen.getByRole("heading", { name: "Waiting now" })).toBeTruthy();
     expect(screen.getByRole("heading", { name: "AI host recommends" })).toBeTruthy();
@@ -236,6 +240,13 @@ describe("RestaurantFloorOperations", () => {
     expect(screen.getByTestId("restaurant-floor-canvas")).toHaveAttribute(
       "data-navigation",
       "locked",
+    );
+    const bindings = mocks.canvasProps?.bindings as Record<
+      string,
+      { sublabel?: string }
+    >;
+    expect(bindings["table:table-1"]?.sublabel).toBe(
+      "2 seats · Jordan Rivera",
     );
   });
 

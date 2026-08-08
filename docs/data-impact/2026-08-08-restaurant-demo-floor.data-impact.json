@@ -1,0 +1,58 @@
+{
+  "version": "1",
+  "accountableOwner": "data-steward",
+  "affectedCopies": [
+    "The reversible restaurant demo loader now writes the existing HospitalityResource, StaffingShift, StaffingAssignment, StaffingResourceLink, HospitalityServiceTurn, HospitalityServiceTurnEvent, HospitalityCapacityAllocation, and StorefrontBooking authorities instead of a parallel fixture store.",
+    "The Workspace host stand and customer-safe availability projection continue to read the canonical restaurant floor projection; no new projection copy is persisted.",
+    "Existing real restaurant rows are excluded. The fleet backfill matches only platform-owned demo-restaurant provider and booking references.",
+    "No schema field or relationship is added: serviceArea, blockedReason, attributes, staffingAssignmentId, demandRef, and dietaryNotes are pre-existing Prisma authorities. The migration contains data repair only.",
+    "Demo identifiers are already globally unique in the canonical schema (ServiceProvider.providerId, StorefrontBooking.bookingRef, StaffingShift.shiftId, StaffingAssignment.assignmentId, HospitalityServiceTurn.turnId, and allocationId). That invariant admits at most one matching canonical restaurant demo corpus and prevents cross-organization conflict fall-through."
+  ],
+  "migration": {
+    "name": "20260808183000_repair_restaurant_demo_floor + 20260808184500_minimize_restaurant_demo_guest_data",
+    "backfill": "Data-only and demo-scoped. The first migration converts the existing reversible demo-restaurant legacy table rows into named service areas with realistic capacities and validated shapes, refreshes seven demo bookings into a bounded busy shift, publishes two demo staffing sections, and creates stable service turns/allocations. The immediately following corrective migration clears dietaryNotes on those exact demo bookings, and the final loader code seeds no guest-sensitive note text. Prior active demo allocations transition to released with a reason; no capacity history is deleted. Real resources, bookings, staffing, layouts, and customer data are untouched. Demo rows remain removable through the existing reversible demo teardown; retained allocation history is demo-only operational evidence with no guest note payload."
+  },
+  "tests": [
+    "packages/db/src/restaurant-demo-floor-migration.test.ts",
+    "apps/web/lib/demo/restaurant-demo-floor.test.ts",
+    "apps/web/lib/demo/load-demo-business.test.ts",
+    "apps/web/lib/twin/restaurant-scene-layout.test.ts",
+    "apps/web/lib/twin/restaurant-floor-loader.server.test.ts"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:hospitality-resource#restaurant-demo-structure",
+      "prismaModel": "HospitalityResource",
+      "lifecycleDisposition": "Existing domain lifecycle; only reversible demo rows are updated. Stable demo refs make reload and teardown deterministic, while operator rows remain outside the selector.",
+      "fields": [
+        {
+          "fieldId": "data:hospitality-resource#restaurant-demo-layout-facts",
+          "resolution": "inherited",
+          "reason": "label, capacity, serviceArea, status, blockedReason, attributes, and version already belong to the hospitality resource authority",
+          "provenance": "authored restaurant demo plan or the exact demo-only migration backfill"
+        }
+      ]
+    },
+    {
+      "kind": "model",
+      "assetId": "data:hospitality-service-turn#restaurant-demo-busy-shift",
+      "prismaModel": "HospitalityServiceTurn",
+      "lifecycleDisposition": "Existing service-turn lifecycle; demo turns use stable ids and append an initial event. Reload advances versions and preserves prior allocation disposition rather than deleting history.",
+      "fields": [
+        {
+          "fieldId": "data:hospitality-service-turn#demo-stage-and-assignment",
+          "resolution": "inherited",
+          "reason": "party stage, expected turn, staffing assignment, and related allocations remain in their established canonical models",
+          "provenance": "authored restaurant demo busy-shift plan"
+        }
+      ]
+    },
+    {
+      "kind": "projection",
+      "derivedContractId": "projection:restaurant-demo-live-floor",
+      "cleanupTest": "load-demo-business.test.ts exercises reversible demo cleanup; only demo-restaurant refs are eligible.",
+      "reconciliationTest": "restaurant-demo-floor.test.ts and restaurant-scene-layout.test.ts prove the same authored table facts feed the live floor, server sections, busy-shift turns, and persisted-scene reconciliation."
+    }
+  ]
+}

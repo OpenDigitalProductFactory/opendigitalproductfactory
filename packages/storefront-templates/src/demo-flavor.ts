@@ -35,10 +35,10 @@ export const DEMO_FLAVORS: Record<string, DemoFlavor> = {
   restaurant: {
     companyName: "The Copper Fork",
     staff: [
-      { name: "Nadia Alvarez", role: "Head Chef" },
-      { name: "Ben Okafor", role: "Sous Chef" },
       { name: "Chloe Tan", role: "Floor Manager" },
       { name: "Leo Marchetti", role: "Server" },
+      { name: "Maya Okafor", role: "Server" },
+      { name: "Nadia Alvarez", role: "Head Chef" },
     ],
     customers: ["The Harpers (party of 4)", "Aisha & Rowan", "Table for two — anniversary", "Walk-in, bar", "Priya's birthday, 8"],
     signatureOfferings: ["Chef's tasting menu", "Wood-fired flatbreads", "Sunday roast"],

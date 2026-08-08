@@ -47,6 +47,7 @@ function makeFakeDb(opts: { nonDemoBookings?: number; nonDemoInvoices?: number }
   });
   const db: any = {
     organization: { findFirst: vi.fn(async () => ({ id: "org-1" })) },
+    storefrontConfig: { findMany: vi.fn(async () => [{ id: "sf-1" }]) },
     storefrontItem: { findMany: vi.fn(async () => [{ itemId: "item-a" }, { itemId: "item-b" }]) },
     invoice: { count: vi.fn(async () => opts.nonDemoInvoices ?? 0) },
     serviceProvider: model("provider", "providerId"),
@@ -56,6 +57,37 @@ function makeFakeDb(opts: { nonDemoBookings?: number; nonDemoInvoices?: number }
     storefrontBooking: {
       ...model("booking", "bookingRef"),
       count: vi.fn(async () => opts.nonDemoBookings ?? 0),
+      update: vi.fn(async () => ({})),
+    },
+    hospitalityResource: {
+      upsert: vi.fn(async () => ({ id: `table-${seq++}` })),
+      deleteMany: vi.fn(async () => ({ count: 0 })),
+    },
+    staffingShift: {
+      upsert: vi.fn(async () => ({ id: `shift-${seq++}` })),
+      deleteMany: vi.fn(async () => ({ count: 0 })),
+    },
+    staffingAssignment: {
+      upsert: vi.fn(async () => ({ id: `assignment-${seq++}` })),
+    },
+    staffingResourceLink: {
+      deleteMany: vi.fn(async () => ({ count: 0 })),
+      createMany: vi.fn(async ({ data }: any) => ({ count: data.length })),
+    },
+    hospitalityServiceTurn: {
+      upsert: vi.fn(async () => ({ id: `turn-${seq++}` })),
+      deleteMany: vi.fn(async () => ({ count: 0 })),
+    },
+    hospitalityServiceTurnEvent: {
+      upsert: vi.fn(async () => ({})),
+    },
+    hospitalityCapacityAllocation: {
+      updateMany: vi.fn(async () => ({ count: 0 })),
+      upsert: vi.fn(async () => ({})),
+      deleteMany: vi.fn(async () => ({ count: 0 })),
+    },
+    operationalSceneLayout: {
+      deleteMany: vi.fn(async () => ({ count: 0 })),
     },
   };
   return { db, created };
@@ -99,6 +131,30 @@ describe("loadDemoBusiness", () => {
   it("throws on an unknown archetype", async () => {
     const { db } = makeFakeDb();
     await expect(loadDemoBusiness("not-a-real-archetype", { db })).rejects.toThrow(/unknown archetype/);
+  });
+
+  it("loads a recognizable restaurant floor and a full busy shift", async () => {
+    const { db } = makeFakeDb();
+    await loadDemoBusiness("restaurant", {
+      db,
+      now: new Date("2026-08-08T18:00:00.000Z"),
+    });
+
+    expect(db.hospitalityResource.upsert).toHaveBeenCalledTimes(9);
+    expect(db.hospitalityResource.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        create: expect.objectContaining({
+          label: "Aster 1",
+          capacity: 4,
+          serviceArea: "Main dining",
+          status: "active",
+        }),
+      }),
+    );
+    expect(db.storefrontBooking.update).toHaveBeenCalledTimes(7);
+    expect(db.staffingResourceLink.createMany).toHaveBeenCalledTimes(2);
+    expect(db.hospitalityServiceTurn.upsert).toHaveBeenCalledTimes(5);
+    expect(db.hospitalityCapacityAllocation.upsert).toHaveBeenCalledTimes(7);
   });
 });
 
