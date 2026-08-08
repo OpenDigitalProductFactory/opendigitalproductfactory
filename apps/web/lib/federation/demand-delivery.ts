@@ -37,6 +37,7 @@ interface DemandOutboxRow {
   mirrorId: string;
   federationLinkId: string;
   canonicalSide?: string;
+  localRecordRef?: string | null;
   version: bigint;
   syncStatus: string;
   deliveryAttempts: number;

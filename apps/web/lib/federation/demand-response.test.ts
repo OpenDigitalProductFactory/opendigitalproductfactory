@@ -115,13 +115,17 @@ describe("queueDemandResponse", () => {
 describe("handleIncomingDemandResponse", () => {
   it("persists an idempotent response only for an envelope shared on the same link", async () => {
     const demand = envelope();
-    const shared = [{ payload: {
+    const shared = [{ localRecordRef: "BI-LOCAL-1", payload: {
       envelope: demand, activity: "dpf.demand.proposed", eventId: "evt", queuedAt: demand.createdAt,
     } }];
     const first = db({ shared });
     await expect(handleIncomingDemandResponse(first.value, "link_1", response()))
       .resolves.toMatchObject({ action: "created", responseId: "rsp_opaque" });
     expect(first.create).toHaveBeenCalledTimes(1);
+    // The incoming response is bound to the originator's local item (no longer orphaned).
+    expect(first.create.mock.calls[0][0].data).toMatchObject({
+      recordType: "demand-response", canonicalSide: "peer", localRecordRef: "BI-LOCAL-1",
+    });
 
     const second = db({ shared, existingResponse: { mirrorId: "fdri_existing" } });
     await expect(handleIncomingDemandResponse(second.value, "link_1", response()))
