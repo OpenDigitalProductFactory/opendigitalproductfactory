@@ -46,6 +46,7 @@ describe("selectLocalDemandForLink direction", () => {
         backlogItem: { findUnique: vi.fn().mockResolvedValue({
           itemId: "BI-LOCAL",
           title: "Local need",
+          sensitivity: "public",
           body: null,
           status: "open",
           workType: "feature",
@@ -82,6 +83,7 @@ describe("selectLocalDemandForLink direction", () => {
         backlogItem: { findUnique: vi.fn().mockResolvedValue({
           itemId: "BI-CLOSED",
           title: "Resolved need",
+          sensitivity: "public",
           body: null,
           status,
           workType: "feature",
@@ -116,6 +118,7 @@ describe("selectLocalDemandForLink direction", () => {
       backlogItem: { findUnique: vi.fn().mockResolvedValue({
         itemId: "BI-LOCAL",
         title: "Distributor need",
+        sensitivity: "public",
         body: null,
         status: "open",
         workType: "feature",
@@ -132,6 +135,40 @@ describe("selectLocalDemandForLink direction", () => {
       itemId: "BI-LOCAL",
       allowForwardToFounder: true,
     })).rejects.toThrow("Founder forwarding consent applies only when sharing with a distributor.");
+  });
+
+  it("denies cross-org sharing of an item that is not marked public (BI-DC4E526E deny-by-default)", async () => {
+    const db = {
+      federationLink: { findUnique: vi.fn().mockResolvedValue({
+        linkId: "FL-CHANNEL",
+        role: "channel-downstream",
+        linkState: "trusted",
+        peerAuthorityUrl: "https://distributor.example",
+        peerTokenEnc: "token",
+        peerInstallationId: "inst_dist",
+        projectionContractId: null,
+        revokedAt: null,
+        quarantinedAt: null,
+      }) },
+      backlogItem: { findUnique: vi.fn().mockResolvedValue({
+        itemId: "BI-PROPRIETARY",
+        title: "Proprietary need",
+        sensitivity: "internal", // the default — not cleared to leave the org
+        body: null,
+        status: "open",
+        workType: "feature",
+        occurrenceCount: 1,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        digitalProduct: null,
+      }) },
+      projectionContract: { findFirst: vi.fn().mockResolvedValue(null) },
+    };
+
+    await expect(selectLocalDemandForLink(db as never, {
+      linkId: "FL-CHANNEL",
+      itemId: "BI-PROPRIETARY",
+    })).rejects.toThrow(/does not permit cross-organization sharing/);
   });
 });
 
