@@ -34,6 +34,7 @@ import { FINANCE_INVOICE_DOCUMENT_ASSETS } from "./finance-invoice-document-asse
 import { RECRUITING_ASSETS } from "./recruiting-assets";
 import { DECISION_TRUST_ENVELOPE_ASSETS } from "./decision-trust-envelope-assets";
 import { MCP_ASSETS } from "./mcp-assets";
+import { INITIATIVE_GOVERNANCE_ASSETS } from "./initiative-governance-assets";
 
 // ─── Definitions (spec §6.1) ─────────────────────────────────────────────────
 export type FieldResolution = "inherited" | "governed" | "not-applicable";
@@ -724,7 +725,9 @@ const SEED_ASSETS: readonly DataAssetDefinition[] = [
   ...FINANCE_INVOICE_DOCUMENT_ASSETS,
   ...PROCESSING_GOVERNANCE_ASSETS,
   ...RECRUITING_ASSETS,
-  ...DECISION_TRUST_ENVELOPE_ASSETS, ...MCP_ASSETS,
+  ...DECISION_TRUST_ENVELOPE_ASSETS,
+  ...MCP_ASSETS,
+  ...INITIATIVE_GOVERNANCE_ASSETS,
    {
     id: "data:agent-conversation",
     physical: { prismaModel: "AgentMessage" },
@@ -766,32 +769,6 @@ const SEED_ASSETS: readonly DataAssetDefinition[] = [
         },
       },
     ],
-  },
-  {
-    // BI-D88DFEEA: an inferred weight-adjustment proposal (JSI/decision-tier-
-    // rebalance §2.4) — statistical evidence that an org's recorded decisions
-    // systematically separate from the kernel's recommendation on one axis.
-    // Aggregated across >=8 observations (weight-inference.ts's sample floor);
-    // no field describes an individual decision or person. ruledByUserId is
-    // the one accountable-actor reference — the same pattern
-    // EscalationCapture.resolverUserId already establishes on this ledger.
-    id: "data:weight-adjustment-proposal",
-    physical: { prismaModel: "WeightAdjustmentProposal" },
-    domain: "decision-governance",
-    ownerRole: "platform-owner",
-    stewardRole: "data-steward",
-    categories: ["derived-analytic", "security-audit"],
-    sensitivity: "internal",
-    criticality: "standard",
-    subjectLocators: [
-      { role: "user", fieldPath: "ruledByUser" },
-    ],
-    lifecycleClass: "operational",
-    purposeCapabilities: ["platform-operations"],
-    residencyClass: "local-only",
-    projectionClass: "metadata",
-    classification: { state: "confirmed", source: "manual", effectiveFrom: "2026-07-24" },
-    fields: [],
   },
 ];
 

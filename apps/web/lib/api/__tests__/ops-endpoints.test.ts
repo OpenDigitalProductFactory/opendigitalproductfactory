@@ -22,6 +22,9 @@ vi.mock("@dpf/db", () => ({
       update: vi.fn(),
       delete: vi.fn(),
     },
+    backlogItemActivity: {
+      count: vi.fn(),
+    },
     $transaction: vi.fn(),
   },
 }));
@@ -122,6 +125,7 @@ function deleteRequest(path: string): Request {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  (prisma.backlogItemActivity.count as ReturnType<typeof vi.fn>).mockResolvedValue(0);
 });
 
 // ===========================================================================

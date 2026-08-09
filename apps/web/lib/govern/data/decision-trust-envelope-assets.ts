@@ -131,4 +131,23 @@ export const DECISION_TRUST_ENVELOPE_ASSETS: readonly DataAssetDefinition[] = [
       },
     ],
   },
+  {
+    // BI-D88DFEEA: aggregated evidence that an organization's recorded
+    // decisions systematically separate from the kernel recommendation.
+    id: "data:weight-adjustment-proposal",
+    physical: { prismaModel: "WeightAdjustmentProposal" },
+    domain: "decision-governance",
+    ownerRole: "platform-owner",
+    stewardRole: "data-steward",
+    categories: ["derived-analytic", "security-audit"],
+    sensitivity: "internal",
+    criticality: "standard",
+    subjectLocators: [{ role: "user", fieldPath: "ruledByUser" }],
+    lifecycleClass: "operational",
+    purposeCapabilities: ["platform-operations"],
+    residencyClass: "local-only",
+    projectionClass: "metadata",
+    classification: { state: "confirmed", source: "manual", effectiveFrom: "2026-07-24" },
+    fields: [],
+  },
 ];
