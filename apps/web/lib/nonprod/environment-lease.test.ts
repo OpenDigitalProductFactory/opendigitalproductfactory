@@ -452,6 +452,65 @@ describe("durable nonproduction admission", () => {
       },
     });
   });
+
+  it("keeps a claimant queued when the next host-native stage would spend the continuation floor", async () => {
+    const gib = 1024 ** 3;
+    const mockDb = db();
+    const waiting = lease({ slotManifestVersion: 1 });
+    mockDb.platformConfig.findUnique.mockResolvedValue({
+      value: {
+        version: 1,
+        requestedCapacity: 1,
+        ceilings: {
+          minAvailableMemoryBytes: 8 * gib,
+          maxSustainedCpuPercent: 75,
+          minDiskFreeBytes: 100 * gib,
+        },
+        rollback: {
+          maxServiceDurationRegressionPercent: 15,
+          maxInfrastructureFailureRatePercent: 5,
+          evidenceMismatchTolerance: 0,
+        },
+      },
+    });
+    mockDb.nonProductionEnvironmentLease.findUnique
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(waiting);
+    mockDb.nonProductionEnvironmentLease.create.mockResolvedValue(waiting);
+    mockDb.nonProductionEnvironmentLease.findMany
+      .mockResolvedValueOnce([waiting])
+      .mockResolvedValueOnce([{ id: "row-1" }]);
+
+    const hostPressure = {
+      observedAt: NOW.toISOString(),
+      availableMemoryBytes: 14 * gib,
+      sustainedCpuPercent: 20,
+      diskFreeBytes: 500 * gib,
+      dockerHealthy: true,
+      convergenceActive: false,
+      fencesHealthy: true,
+      evidenceIsolationHealthy: true,
+    };
+    const result = await claim(mockDb, {
+      slotManifestVersion: 1,
+      hostPressure,
+      capacityBroker: async () => ({
+        ...hostPressure,
+        availableMemoryBytes: 40 * gib,
+        dockerAvailableMemoryBytes: 40 * gib,
+        builderMemoryUsageBytes: [0, 0],
+      }),
+    });
+
+    expect(result).toMatchObject({
+      status: "queued",
+      queuePosition: 1,
+      poolPolicy: {
+        effectiveCapacity: 0,
+        rollbackReason: "host-stage-headroom-low",
+      },
+    });
+  });
 });
 
 describe("lease liveness windows", () => {

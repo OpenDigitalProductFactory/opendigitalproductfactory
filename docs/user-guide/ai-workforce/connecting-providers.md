@@ -40,6 +40,27 @@ Used for local providers that run on your machine or local network. No credentia
 
 Supported providers: Docker Model Runner, Ollama.
 
+### Local capacity during platform verification
+
+A local provider shares the installation's finite execution capacity with
+governed platform verification. While an exact local-CI run owns that capacity,
+DPF defers new local completion and embedding requests. If the request has an
+eligible cloud fallback, routing can use it; a local-only request waits or
+returns a capacity deferral rather than reporting the local provider as broken.
+DPF does not terminate a model that was already running before verification
+began.
+
+The guard uses the Windows host free-physical-memory measurement for CI
+admission and renewal. Docker's displayed model residency, GPU VRAM, possible
+shared or unified memory, WSL accounting, and Windows physical memory are
+different measurements. DPF does not infer that a model's displayed size is
+ordinary RAM consumption or assign a causal mechanism without corresponding
+telemetry.
+
+This behavior is automatic. If local work is temporarily deferred, let the
+active verification finish and retry; do not disable, reconnect, or re-profile
+the local provider unless its status remains unhealthy after the gate releases.
+
 ## How OAuth Works
 
 1. Go to the provider's detail page (External Services > click the provider).

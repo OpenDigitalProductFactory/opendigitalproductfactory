@@ -1,4 +1,5 @@
 import { getErrorMessage } from "@/lib/shared/get-error-message";
+import { assertLocalProviderCapacityAvailable } from "@/lib/routing/local-provider-capacity";
 // apps/web/lib/embedding.ts
 // Generate text embeddings via local LLM inference (Docker Model Runner or compatible).
 // Uses OpenAI-compatible /v1/embeddings endpoint.
@@ -29,6 +30,7 @@ function getLlmBaseUrl(): string {
  */
 export async function generateEmbedding(text: string): Promise<number[] | null> {
   try {
+    await assertLocalProviderCapacityAvailable();
     const truncated = text.slice(0, MAX_INPUT_LENGTH);
     const baseUrl = getLlmBaseUrl();
 
