@@ -13,6 +13,7 @@ DPF is **local-first by founder strategy**: cloud frontier models are disabled b
 
 - **The local-window contract.** One DMR llama-server, one generation model, ~24,576 tokens. Anything that silently consumes that budget (an unbounded tool result, 50K of tool definitions, a forgotten plan) is an *existential* failure mode, not an inefficiency.
 - **The tool-count cliff.** Tool-selection accuracy collapses past ~15 tools on small local models — encoded as `LOCAL_FALLBACK_MAX_TOOLS = 15` (`apps/web/lib/routing/fallback.ts`). Above it, local fallback is skipped entirely.
+- **The host-capacity boundary.** While governed local CI owns the installation host, the common provider adapter defers new local completion/embedding dispatch and `fallback.ts` may continue to an eligible cloud route. This policy is grounded in the observed overlap between provider/model residency and the Windows free-memory fence; Docker model residency, GPU VRAM, WSL/shared memory, and Windows physical memory remain separate measurements.
 - **The cheapest token is the one we never process.** Every reduction (just-in-time loading, in-environment filtering, concise results) compounds with caching and tiering.
 
 ## The three laws

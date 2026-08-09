@@ -1,6 +1,6 @@
 {
   "generator": "apps/web/scripts/build-route-manifest.ts",
-  "routeCount": 617,
+  "routeCount": 619,
   "routes": [
     {
       "routePath": "/",
@@ -2548,6 +2548,18 @@
       "file": "apps/web/app/api/v1/federation/enroll/route.ts"
     },
     {
+      "routePath": "/api/v1/federation/inbox",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "federation",
+        "inbox"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/v1/federation/inbox/route.ts"
+    },
+    {
       "routePath": "/api/v1/federation/incident",
       "kind": "route",
       "segments": [
@@ -2558,6 +2570,18 @@
       ],
       "dynamicParams": [],
       "file": "apps/web/app/api/v1/federation/incident/route.ts"
+    },
+    {
+      "routePath": "/api/v1/federation/introductions",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "federation",
+        "introductions"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/v1/federation/introductions/route.ts"
     },
     {
       "routePath": "/api/v1/federation/proposal",

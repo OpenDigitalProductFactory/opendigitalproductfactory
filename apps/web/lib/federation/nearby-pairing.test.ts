@@ -37,7 +37,9 @@ function validParsedRequest(overrides: Record<string, unknown> = {}) {
   const nonce = generatePairingNonce();
   const commitment = computeCommitment(ephemeral.publicKey, nonce);
   const candidateDiscoveryId = "rotating-b-123456";
-  const requesterAuthorityUrl = "https://dpf-a.local";
+  const requesterAuthorityUrl = typeof overrides.requesterAuthorityUrl === "string"
+    ? overrides.requesterAuthorityUrl
+    : "https://dpf-a.local";
   return {
     requesterAuthorityUrl,
     displayName: "Mac development installation",
@@ -72,19 +74,28 @@ describe("nearby federation pairing contract", () => {
     expect(pairingSecretMatches(`${material.plaintextSecret}x`, material.secretHash)).toBe(false);
   });
 
-  it("accepts only bounded same-organization requests with link-local HTTPS authorities", () => {
+  it("accepts bounded relationship-aware requests with HTTPS origin authorities", () => {
     const valid = validParsedRequest();
     expect(parseNearbyPairingRequest(valid)).toEqual({
       ...valid,
       relationshipPreset: "same-organization",
+      offeredRole: "same-org-peer",
     });
+
+    expect(parseNearbyPairingRequest(validParsedRequest({
+      relationshipPreset: "channel",
+      offeredRole: "channel-upstream",
+    }))).toMatchObject({ relationshipPreset: "channel", offeredRole: "channel-upstream" });
+    expect(() => parseNearbyPairingRequest(validParsedRequest({
+      relationshipPreset: "channel",
+      offeredRole: "same-org-peer",
+    }))).toThrow(/relationship.*role/i);
 
     expect(() =>
       parseNearbyPairingRequest(validParsedRequest({ requesterAuthorityUrl: "http://dpf-a.local" })),
     ).toThrow(/certificate-valid HTTPS/i);
-    expect(() =>
-      parseNearbyPairingRequest(validParsedRequest({ requesterAuthorityUrl: "https://example.com" })),
-    ).toThrow(/nearby private or local endpoint/i);
+    expect(parseNearbyPairingRequest(validParsedRequest({ requesterAuthorityUrl: "https://example.com" })))
+      .toMatchObject({ requesterAuthorityUrl: "https://example.com" });
     for (const requesterAuthorityUrl of [
       "https://dpf-a.local/connect/pair",
       "https://operator:secret@dpf-a.local",
@@ -121,6 +132,13 @@ describe("nearby federation pairing contract", () => {
         "attachments",
         "customer context",
       ],
+    });
+  });
+
+  it("derives the operator summary from the reviewed relationship projection", () => {
+    expect(summarizeNearbyPairingProjection("channel")).toMatchObject({
+      relationshipLabel: "Channel",
+      sharedSlices: ["demand"],
     });
   });
 
@@ -186,6 +204,8 @@ describe("nearby federation pairing contract", () => {
         requesterInstallationId: `inst_${"a".repeat(32)}`,
         candidateDiscoveryId: "rotating-b-123456",
         requesterIdentity,
+        relationshipPreset: "same-organization",
+        offeredRole: "same-org-peer",
         fetchImpl,
       }),
     ).resolves.toMatchObject({
@@ -231,6 +251,8 @@ describe("nearby federation pairing contract", () => {
         requesterInstallationId: `inst_${"a".repeat(32)}`,
         candidateDiscoveryId: "rotating-b-123456",
         requesterIdentity,
+        relationshipPreset: "same-organization",
+        offeredRole: "same-org-peer",
         fetchImpl: invalidProjectionFetch,
       }),
     ).resolves.toMatchObject({ ok: false, error: "invalid_peer_response" });
@@ -244,6 +266,8 @@ describe("nearby federation pairing contract", () => {
         requesterInstallationId: `inst_${"a".repeat(32)}`,
         candidateDiscoveryId: "rotating-b-123456",
         requesterIdentity,
+        relationshipPreset: "same-organization",
+        offeredRole: "same-org-peer",
         fetchImpl,
       }),
     ).resolves.toMatchObject({ ok: false, error: "tls_required" });

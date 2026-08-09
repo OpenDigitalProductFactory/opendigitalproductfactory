@@ -1,5 +1,16 @@
-import { describe, it, expect } from "vitest";
-import { classifyHttpError, InferenceError } from "./ai-inference";
+import { beforeEach, describe, it, expect, vi } from "vitest";
+
+vi.mock("@/lib/routing/local-provider-capacity", () => ({
+  assertProviderDispatchCapacity: vi.fn(),
+}));
+
+import { callProvider, classifyHttpError, InferenceError } from "./ai-inference";
+import { assertProviderDispatchCapacity } from "@/lib/routing/local-provider-capacity";
+
+beforeEach(() => {
+  vi.mocked(assertProviderDispatchCapacity).mockReset();
+  vi.mocked(assertProviderDispatchCapacity).mockResolvedValue(undefined);
+});
 
 describe("InferenceError", () => {
   it("has correct code and providerId", () => {
@@ -23,6 +34,21 @@ describe("InferenceError", () => {
       isHumanActionRequired: true,
     });
     expect(err.capacity?.action).toBe("add_credits_or_plan");
+  });
+});
+
+describe("callProvider host-capacity boundary", () => {
+  it("stops before provider setup when local capacity is reserved", async () => {
+    const deferred = Object.assign(new Error("local capacity reserved"), {
+      name: "LocalProviderCapacityDeferredError",
+      reason: "local-ci-active-capacity-reservation",
+    });
+    vi.mocked(assertProviderDispatchCapacity).mockRejectedValueOnce(deferred);
+
+    await expect(
+      callProvider("local", "qwen3-coder", [{ role: "user", content: "triage" }], "system"),
+    ).rejects.toBe(deferred);
+    expect(assertProviderDispatchCapacity).toHaveBeenCalledWith("local");
   });
 });
 
@@ -72,7 +98,8 @@ describe("classifyHttpError", () => {
   });
 });
 
-// Note: callProvider itself requires DB + HTTP mocking which is complex.
-// The core logic is tested via ai-provider-priority.test.ts integration tests.
+// Full callProvider execution requires DB + HTTP mocking and is covered through
+// ai-provider-priority integration tests. The host-capacity boundary is tested
+// here because it intentionally runs before provider setup.
 // Format construction correctness is verified by the existing profiling tests
 // (same provider-specific branching logic was extracted from callProviderForProfiling).

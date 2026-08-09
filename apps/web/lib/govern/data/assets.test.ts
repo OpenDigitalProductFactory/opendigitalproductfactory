@@ -296,6 +296,18 @@ describe("seeded registry", () => {
     });
   });
 
+  it("governs introduced candidates as confidential local-only review projections", () => {
+    expect(lookupAsset(DATA_ASSET_REGISTRY, "data:federation-introduction-candidate")).toMatchObject({
+      physical: { prismaModel: "FederationIntroductionCandidate" },
+      sensitivity: "confidential",
+      residencyClass: "local-only",
+      projectionClass: "masked-content",
+    });
+    expect(
+      resolveField(DATA_ASSET_REGISTRY, "data:federation-introduction-candidate#authorityUrl"),
+    ).toMatchObject({ collectionRule: "minimize", protection: "mask-on-read" });
+  });
+
   it("governs Edge Node certificate identity and lifecycle as restricted security evidence", () => {
     const certificate = lookupAsset(DATA_ASSET_REGISTRY, "data:edge-node-certificate");
     expect(certificate).toMatchObject({

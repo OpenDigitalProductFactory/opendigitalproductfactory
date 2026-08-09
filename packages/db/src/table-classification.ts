@@ -41,6 +41,9 @@ export const TABLE_CLASSIFICATION: Record<string, TableSensitivity> = {
   // Per-token deferred-tool-loading discovery state: tool names + token id, no
   // PII. Short-TTL, swept by its own expiry (see stewardship-exemptions.txt).
   McpToolSession: "internal",
+  // Candidate company/device coordinates learned from trusted introducers are
+  // operator-only until independent SAS pairing establishes a relationship.
+  FederationIntroductionCandidate: "confidential",
   Portfolio: "internal",
   DigitalProduct: "internal",
   ProductLine: "internal",
