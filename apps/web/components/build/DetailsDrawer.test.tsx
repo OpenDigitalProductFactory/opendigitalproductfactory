@@ -30,6 +30,18 @@ function sampleSections(): DetailsDrawerSection[] {
 }
 
 describe("DetailsDrawer", () => {
+  it("keeps the closed drawer out of keyboard navigation", () => {
+    render(
+      <DetailsDrawer
+        isOpen={false}
+        onClose={() => undefined}
+        sections={[{ id: "proof", title: "Proof", content: <button type="button">Hidden action</button> }]}
+      />,
+    );
+
+    expect(screen.getByTestId(BUILD_STUDIO_TEST_IDS.detailsDrawer)).toHaveAttribute("inert");
+  });
+
   it("renders role=region with aria-label='Build details'", () => {
     render(
       <DetailsDrawer isOpen onClose={vi.fn()} sections={sampleSections()} />,

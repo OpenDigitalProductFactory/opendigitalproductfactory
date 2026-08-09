@@ -100,6 +100,10 @@ describe("projectOwnerChangeView", () => {
   it("distinguishes passed, failed, not-applicable, not-recorded, and stale proof", () => {
     const passed = projectOwnerChangeView({
       build: build({
+        evidenceObservedAt: {
+          acceptance: "2026-07-30T12:00:00.000Z",
+          ux: "2026-07-30T12:00:00.000Z",
+        },
         verificationOut: {
           testsPassed: 12,
           testsFailed: 0,
@@ -196,6 +200,50 @@ describe("projectOwnerChangeView", () => {
     });
   });
 
+  it("does not claim automated checks passed without a dated observation", () => {
+    const view = projectOwnerChangeView({
+      build: build({
+        verificationOut: {
+          testsPassed: 12,
+          testsFailed: 0,
+          typecheckPassed: true,
+          fullOutput: "ok",
+        } as FeatureBuildRow["verificationOut"],
+      }),
+    });
+
+    expect(view.proof.checks.find((check) => check.key === "automated")).toMatchObject({
+      state: "not-recorded",
+      summary: "The automated result has no observation time.",
+    });
+  });
+
+  it("requires dated accepted artifacts before presenting outcome or experience checks as passed", () => {
+    const undated = projectOwnerChangeView({
+      build: build({
+        acceptanceMet: [{ criterion: "Customer can reschedule", met: true, evidence: "Verified" }],
+        uxVerificationStatus: "complete",
+      }),
+    });
+
+    expect(undated.proof.checks.find((check) => check.key === "acceptance")?.state).toBe("not-recorded");
+    expect(undated.proof.checks.find((check) => check.key === "ux")?.state).toBe("not-recorded");
+
+    const stale = projectOwnerChangeView({
+      build: build({
+        evidenceObservedAt: {
+          acceptance: "2026-07-30T11:49:59.000Z",
+          ux: "2026-07-30T11:49:59.000Z",
+        },
+        acceptanceMet: [{ criterion: "Customer can reschedule", met: true, evidence: "Verified" }],
+        uxVerificationStatus: "complete",
+      }),
+    });
+
+    expect(stale.proof.checks.find((check) => check.key === "acceptance")?.state).toBe("stale");
+    expect(stale.proof.checks.find((check) => check.key === "ux")?.state).toBe("stale");
+  });
+
   it("projects plain-language status, Needs You, and pending decision identity", () => {
     const view = projectOwnerChangeView({
       build: build({
@@ -249,5 +297,18 @@ describe("projectOwnerChangeView", () => {
     expect(view.health).toBe("needs-you");
     expect(view.now).toBe("Waiting for your decision");
     expect(view.next).toBe("Choose the preferred approach.");
+  });
+
+  it("distinguishes system waiting from a Needs You decision", () => {
+    const view = projectOwnerChangeView({
+      build: build({ phase: "ship" }),
+      status: {
+        lifecyclePosition: "Waiting for governed release",
+        nextAction: "Wait for governed release and live-version evidence.",
+        needsYou: false,
+      },
+    });
+
+    expect(view.health).toBe("waiting");
   });
 });

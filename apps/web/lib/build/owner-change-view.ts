@@ -69,7 +69,7 @@ export function projectOwnerChangeView(input: {
     outcome,
     now: status?.lifecyclePosition ?? fallbackNow(build.phase),
     next: status?.nextAction ?? fallbackNext(build.phase),
-    health: projectHealth(build.phase, status?.needsYou === true),
+    health: projectHealth(build.phase, status),
     brief: build.businessBuildBrief ?? null,
     proof: {
       requestedOutcome: outcome,
@@ -103,9 +103,17 @@ function acceptanceCheck(build: FeatureBuildRow): OwnerProofCheck {
     return proof("acceptance", "Outcome checks", "not-recorded", "No outcome-check result is recorded.");
   }
   const failed = criteria.filter((criterion) => !criterion.met).length;
-  return failed > 0
-    ? proof("acceptance", "Outcome checks", "failed", `${failed} outcome check${failed === 1 ? "" : "s"} did not pass.`)
-    : proof("acceptance", "Outcome checks", "passed", `${criteria.length} outcome check${criteria.length === 1 ? "" : "s"} passed.`);
+  const observedAt = build.evidenceObservedAt?.acceptance ?? null;
+  if (failed > 0) {
+    return proof("acceptance", "Outcome checks", "failed", `${failed} outcome check${failed === 1 ? "" : "s"} did not pass.`, observedAt);
+  }
+  if (!observedAt) {
+    return proof("acceptance", "Outcome checks", "not-recorded", "The outcome-check result has no accepted evidence receipt.");
+  }
+  if (isOlderThanBuild(observedAt, build.updatedAt)) {
+    return proof("acceptance", "Outcome checks", "stale", "The Change was updated after these outcome checks ran.", observedAt);
+  }
+  return proof("acceptance", "Outcome checks", "passed", `${criteria.length} outcome check${criteria.length === 1 ? "" : "s"} passed.`, observedAt);
 }
 
 function automatedCheck(build: FeatureBuildRow): OwnerProofCheck {
@@ -131,6 +139,9 @@ function automatedCheck(build: FeatureBuildRow): OwnerProofCheck {
       verification.observedAt,
     );
   }
+  if (!verification.observedAt) {
+    return proof("automated", "Automated checks", "not-recorded", "The automated result has no observation time.");
+  }
   if (isOlderThanBuild(verification.observedAt, build.updatedAt)) {
     return proof("automated", "Automated checks", "stale", "The Change was updated after these checks ran.", verification.observedAt);
   }
@@ -154,10 +165,17 @@ function uxCheck(build: FeatureBuildRow): OwnerProofCheck {
     return proof("ux", "Experience review", "not-recorded", "No completed experience-review result is recorded.");
   }
   const failed = build.uxTestResults?.filter((result) => !result.passed).length ?? 0;
+  const observedAt = build.evidenceObservedAt?.ux ?? null;
   if (build.uxVerificationStatus === "failed" || failed > 0) {
-    return proof("ux", "Experience review", "failed", failed > 0 ? `${failed} experience check${failed === 1 ? "" : "s"} failed.` : "Experience review failed.");
+    return proof("ux", "Experience review", "failed", failed > 0 ? `${failed} experience check${failed === 1 ? "" : "s"} failed.` : "Experience review failed.", observedAt);
   }
-  return proof("ux", "Experience review", "passed", "The recorded experience review passed.");
+  if (!observedAt) {
+    return proof("ux", "Experience review", "not-recorded", "The experience-review result has no accepted evidence receipt.");
+  }
+  if (isOlderThanBuild(observedAt, build.updatedAt)) {
+    return proof("ux", "Experience review", "stale", "The Change was updated after the experience review ran.", observedAt);
+  }
+  return proof("ux", "Experience review", "passed", "The recorded experience review passed.", observedAt);
 }
 
 function proof(
@@ -177,8 +195,14 @@ function isOlderThanBuild(observedAt: string | null, updatedAt: Date): boolean {
     && observedTime + EVIDENCE_WRITE_GRACE_MS < updatedAt.getTime();
 }
 
-function projectHealth(phase: BuildPhase, needsYou: boolean): OwnerChangeView["health"] {
-  if (needsYou) return "needs-you";
+function projectHealth(phase: BuildPhase, status?: OwnerStatus | null): OwnerChangeView["health"] {
+  if (status?.needsYou) return "needs-you";
+  if (
+    status
+    && (/\b(waiting|queued)\b/i.test(status.lifecyclePosition) || /^wait\b/i.test(status.nextAction))
+  ) {
+    return "waiting";
+  }
   if (phase === "complete") return "live";
   if (phase === "ship") return "ready";
   if (phase === "failed" || phase === "abandoned") return "blocked";
