@@ -3,7 +3,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   create: vi.fn(),
+  confirm: vi.fn(),
   poll: vi.fn(),
+  reveal: vi.fn(),
   identity: vi.fn(),
   organization: vi.fn(),
 }));
@@ -12,11 +14,13 @@ vi.mock("@dpf/db", () => ({
   prisma: { organization: { findFirst: mocks.organization } },
 }));
 vi.mock("@/lib/federation/demand-identity", () => ({
-  resolveFederationIdentity: mocks.identity,
+  resolveFederationSigningIdentity: mocks.identity,
 }));
 vi.mock("@/lib/federation/nearby-pairing-service", () => ({
   createIncomingNearbyPairing: mocks.create,
+  confirmIncomingNearbyPairing: mocks.confirm,
   pollIncomingNearbyPairing: mocks.poll,
+  revealIncomingNearbyPairing: mocks.reveal,
 }));
 
 import { _resetNearbyPairingRateLimits } from "@/lib/federation/nearby-pairing-rate-limit";
@@ -38,7 +42,14 @@ describe("POST /connect/pair", () => {
     mocks.identity.mockResolvedValue({ installationId: `inst_${"b".repeat(32)}`, projectionSecret: "c".repeat(64) });
     mocks.organization.mockResolvedValue({ name: "Windows development installation" });
     mocks.create.mockResolvedValue({ ok: true, pairingId: "pair_123" });
+    mocks.confirm.mockResolvedValue({ ok: true, status: "pending-confirmation" });
     mocks.poll.mockResolvedValue({ ok: true, status: "pending" });
+    mocks.reveal.mockResolvedValue({
+      ok: true,
+      matchingCode: "123456",
+      receiverEphemeralPublicKey: "receiver-public-key",
+      receiverNonce: "receiver-nonce",
+    });
   });
 
   it("creates a bounded incoming session without requiring an existing federation credential", async () => {
@@ -63,8 +74,40 @@ describe("POST /connect/pair", () => {
       expect.objectContaining({
         localDisplayName: "Windows development installation",
         localInstallationId: `inst_${"b".repeat(32)}`,
+        localAuthorityUrl: "https://dpf-b.local",
+        localSigningIdentity: expect.any(Object),
       }),
     );
+  });
+
+  it("accepts a bounded authenticated commit reveal", async () => {
+    const response = await POST(request({
+      operation: "reveal",
+      pairingId: "pair_123",
+      pairingSecret: `dpffpair_${"a".repeat(43)}`,
+      requesterEphemeralPublicKey: "requester-public-key",
+      requesterNonce: "requester-nonce",
+    }));
+    expect(response.status).toBe(200);
+    expect(mocks.reveal).toHaveBeenCalledWith({
+      pairingId: "pair_123",
+      pairingSecret: `dpffpair_${"a".repeat(43)}`,
+      requesterEphemeralPublicKey: "requester-public-key",
+      requesterNonce: "requester-nonce",
+    });
+  });
+
+  it("records the requester's explicit matching-code confirmation", async () => {
+    const response = await POST(request({
+      operation: "confirm",
+      pairingId: "pair_123",
+      pairingSecret: `dpffpair_${"a".repeat(43)}`,
+    }));
+    expect(response.status).toBe(200);
+    expect(mocks.confirm).toHaveBeenCalledWith({
+      pairingId: "pair_123",
+      pairingSecret: `dpffpair_${"a".repeat(43)}`,
+    });
   });
 
   it("polls only with the pairing id and high-entropy bearer secret", async () => {

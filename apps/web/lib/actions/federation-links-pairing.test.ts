@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   resolveIdentity: vi.fn(),
   requestPairing: vi.fn(),
   pollPairing: vi.fn(),
+  confirmPairing: vi.fn(),
   enrollWithPeer: vi.fn(),
   assertEncryption: vi.fn(),
   encryptSecret: vi.fn(),
@@ -38,7 +39,7 @@ vi.mock("@/lib/permissions", () => ({ can: () => true }));
 vi.mock("@/lib/app-url", () => ({ resolveAppBaseUrl: mocks.resolveAppBaseUrl }));
 vi.mock("@/lib/identity/principal-linking", () => ({ syncUserPrincipal: vi.fn() }));
 vi.mock("@/lib/federation/demand-identity", () => ({
-  resolveFederationIdentity: mocks.resolveIdentity,
+  resolveFederationSigningIdentity: mocks.resolveIdentity,
 }));
 vi.mock("@/lib/federation/nearby-candidates", () => ({
   listNearbyFederationCandidates: mocks.listCandidates,
@@ -49,6 +50,7 @@ vi.mock("@/lib/federation/nearby-pairing", async (importOriginal) => {
     ...original,
     requestNearbyPairing: mocks.requestPairing,
     pollNearbyPairingPeer: mocks.pollPairing,
+    confirmNearbyPairingPeer: mocks.confirmPairing,
   };
 });
 vi.mock("@/lib/federation/nearby-pairing-service", () => ({
@@ -72,6 +74,7 @@ vi.mock("@/lib/govern/credential-crypto", () => ({
 }));
 
 import {
+  confirmNearbyPairingAction,
   pollNearbyPairingAction,
   startNearbyPairingAction,
 } from "./federation-links";
@@ -97,7 +100,12 @@ describe("nearby federation pairing actions", () => {
     mocks.resolveAppBaseUrl.mockReturnValue("https://local-dpf.local:3443");
     mocks.listCandidates.mockReturnValue([candidate]);
     mocks.assertEncryption.mockResolvedValue(undefined);
-    mocks.resolveIdentity.mockResolvedValue({ installationId: `inst_${"a".repeat(32)}` });
+    mocks.resolveIdentity.mockResolvedValue({
+      installationId: `inst_${"a".repeat(32)}`,
+      deviceId: `did_${"a".repeat(64)}`,
+      signingPublicKey: "requester-public-key",
+      signingPrivateKey: "requester-private-key",
+    });
     mocks.findOrganization.mockResolvedValue({ id: "org_1", name: "Mac development installation" });
     mocks.findPairing.mockResolvedValue(null);
     mocks.encryptSecret.mockReturnValue("encrypted-pairing-secret");
@@ -109,9 +117,11 @@ describe("nearby federation pairing actions", () => {
       ok: true,
       pairingId: "pair_123",
       pairingSecret: `dpffpair_${"a".repeat(43)}`,
-      matchingCode: "ABCD-EFGH",
+      matchingCode: "123456",
       peerDisplayName: "Windows development installation",
       peerInstallationId: `inst_${"b".repeat(32)}`,
+      peerDeviceId: `did_${"b".repeat(64)}`,
+      peerSigningPublicKey: "receiver-public-key",
       expiresAt: new Date(Date.now() + 10 * 60_000).toISOString(),
       projectionSummary: {
         relationshipLabel: "Same organization",
@@ -130,11 +140,16 @@ describe("nearby federation pairing actions", () => {
       candidateEndpoint: candidate.endpoint,
       requesterAuthorityUrl: "https://local-dpf.local:3443",
       requesterInstallationId: `inst_${"a".repeat(32)}`,
+      requesterIdentity: expect.objectContaining({ deviceId: `did_${"a".repeat(64)}` }),
     }));
     expect(mocks.createPairing).toHaveBeenCalledWith({
       data: expect.objectContaining({
         direction: "outgoing",
         pairingSecretEnc: "encrypted-pairing-secret",
+        sasState: expect.objectContaining({
+          localDeviceId: `did_${"a".repeat(64)}`,
+          remoteDeviceId: `did_${"b".repeat(64)}`,
+        }),
         peerAuthorityUrl: candidate.endpoint,
       }),
     });
@@ -148,7 +163,7 @@ describe("nearby federation pairing actions", () => {
       pairingId: "pair_123",
       direction: "outgoing",
       status: "pending",
-      matchingCode: "ABCD-EFGH",
+      matchingCode: "123456",
       pairingSecretEnc: "encrypted-pairing-secret",
       peerDisplayName: "Windows development installation",
       peerAuthorityUrl: candidate.endpoint,
@@ -182,6 +197,37 @@ describe("nearby federation pairing actions", () => {
     expect(mocks.updatePairing).toHaveBeenLastCalledWith({
       where: { id: "session_1" },
       data: expect.objectContaining({ status: "consumed", pairingSecretEnc: null }),
+    });
+  });
+
+  it("records outgoing SAS confirmation only after the peer accepts it", async () => {
+    const expiresAt = new Date(Date.now() + 10 * 60_000);
+    mocks.findPairingById.mockResolvedValue({
+      id: "session_1",
+      pairingId: "pair_123",
+      direction: "outgoing",
+      status: "pending",
+      matchingCode: "123456",
+      pairingSecretEnc: "encrypted-pairing-secret",
+      peerDisplayName: "Windows development installation",
+      peerAuthorityUrl: candidate.endpoint,
+      expiresAt,
+    });
+    mocks.decryptSecret.mockReturnValue(`dpffpair_${"a".repeat(43)}`);
+    mocks.confirmPairing.mockResolvedValue({ ok: true, status: "pending-confirmation" });
+    mocks.updatePairing.mockResolvedValue({ id: "session_1" });
+
+    await expect(confirmNearbyPairingAction("pair_123")).resolves.toEqual({
+      ok: true,
+      status: "pending-confirmation",
+    });
+    expect(mocks.confirmPairing).toHaveBeenCalledWith(expect.objectContaining({
+      candidateEndpoint: candidate.endpoint,
+      pairingId: "pair_123",
+    }));
+    expect(mocks.updatePairing).toHaveBeenCalledWith({
+      where: { id: "session_1" },
+      data: { sasConfirmedAtLocal: expect.any(Date) },
     });
   });
 });

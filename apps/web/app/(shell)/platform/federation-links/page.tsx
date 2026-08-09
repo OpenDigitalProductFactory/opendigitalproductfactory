@@ -162,6 +162,8 @@ export default async function FederationLinksPage() {
           sharedSlices: nearbyProjection.sharedSlices,
           retentionClass: nearbyProjection.retentionClass,
           staysLocal: nearbyProjection.staysLocal,
+          sasConfirmedAtLocal: pairing.sasConfirmedAtLocal != null,
+          sasConfirmedAtPeer: pairing.sasConfirmedAtPeer != null,
         }]
       : [],
   );

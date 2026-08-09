@@ -1,8 +1,13 @@
 import { createHmac, randomBytes, randomUUID } from "node:crypto";
 
-import { encryptSecret } from "@/lib/govern/credential-crypto";
+import { decryptSecret, encryptSecret } from "@/lib/govern/credential-crypto";
 
-import { deriveDeviceId, generateInstanceSigningKeypair, isDeviceId } from "./instance-identity";
+import {
+  deriveDeviceId,
+  generateInstanceSigningKeypair,
+  isDeviceId,
+  keypairMatches,
+} from "./instance-identity";
 
 const FEDERATION_IDENTITY_KEY = "federation.identity";
 
@@ -15,6 +20,13 @@ export interface FederationIdentity {
   deviceId?: string;
   /** Ed25519 signing public key (SPKI DER, base64). Safe to publish to peers. */
   signingPublicKey?: string;
+}
+
+export interface FederationSigningIdentity extends FederationIdentity {
+  deviceId: string;
+  signingPublicKey: string;
+  /** Decrypted only for the duration of a signing operation; never persist or return to UI. */
+  signingPrivateKey: string;
 }
 
 export interface FederationIdentityDb {
@@ -80,7 +92,7 @@ function toPublicIdentity(stored: StoredFederationIdentity): FederationIdentity 
 /** Resolve stable, local-only identity material without relying on hostnames.
  *  A pre-increment-1 identity (no keypair) is upgraded in place on first read,
  *  so every install gains a device ID exactly once with no operator action. */
-export async function resolveFederationIdentity(db: FederationIdentityDb): Promise<FederationIdentity> {
+async function resolveStoredFederationIdentity(db: FederationIdentityDb): Promise<StoredFederationIdentity> {
   const generated = generateIdentity();
   const row = await db.platformConfig.upsert({
     where: { key: FEDERATION_IDENTITY_KEY },
@@ -90,7 +102,7 @@ export async function resolveFederationIdentity(db: FederationIdentityDb): Promi
   });
   const stored = decodeIdentity(row.value);
   if (!stored) throw new Error("Stored federation identity is invalid and requires operator repair.");
-  if (hasKeypair(stored)) return toPublicIdentity(stored);
+  if (hasKeypair(stored)) return stored;
 
   // Legacy identity created before increment 1 — mint and persist a keypair once.
   const upgraded: StoredFederationIdentity = { ...stored, ...keypairFields() };
@@ -99,8 +111,39 @@ export async function resolveFederationIdentity(db: FederationIdentityDb): Promi
     data: { value: upgraded },
     select: { value: true },
   });
-  const reread = decodeIdentity(updated.value) ?? upgraded;
-  return toPublicIdentity(reread);
+  return decodeIdentity(updated.value) ?? upgraded;
+}
+
+export async function resolveFederationIdentity(db: FederationIdentityDb): Promise<FederationIdentity> {
+  return toPublicIdentity(await resolveStoredFederationIdentity(db));
+}
+
+/** Resolve and validate private identity material for a bounded signing operation. */
+export async function resolveFederationSigningIdentity(
+  db: FederationIdentityDb,
+  options: { decryptSecret?: (value: string) => string | null } = {},
+): Promise<FederationSigningIdentity> {
+  const stored = await resolveStoredFederationIdentity(db);
+  if (!hasKeypair(stored)) {
+    throw new Error("Stored federation identity has no signing keypair.");
+  }
+  const signingPrivateKey = (options.decryptSecret ?? decryptSecret)(stored.signingPrivateKeyEnc!);
+  if (!signingPrivateKey) {
+    throw new Error("Stored federation identity signing key could not be decrypted.");
+  }
+  const keypair = { signingPublicKey: stored.signingPublicKey!, signingPrivateKey };
+  if (
+    !keypairMatches(keypair) ||
+    deriveDeviceId(stored.signingPublicKey!) !== stored.deviceId
+  ) {
+    throw new Error("Stored federation identity signing key does not match its public identity.");
+  }
+  return {
+    ...toPublicIdentity(stored),
+    deviceId: stored.deviceId!,
+    signingPublicKey: stored.signingPublicKey!,
+    signingPrivateKey,
+  };
 }
 
 function opaqueRef(secret: string, purpose: string, localRecordRef: string): string {

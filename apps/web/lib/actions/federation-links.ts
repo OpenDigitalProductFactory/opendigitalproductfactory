@@ -26,7 +26,7 @@ import {
   selfAuthorityUnreachableReason,
 } from "@/lib/federation/self-authority";
 import { auth } from "@/lib/auth";
-import { resolveFederationIdentity } from "@/lib/federation/demand-identity";
+import { resolveFederationSigningIdentity } from "@/lib/federation/demand-identity";
 import {
   approveFederationLinkLocal,
   issueFederationBootstrap,
@@ -35,6 +35,7 @@ import {
 } from "@/lib/federation/enrollment";
 import { enrollWithPeer, relayApprovalToPeer } from "@/lib/federation/outbound";
 import {
+  confirmNearbyPairingPeer,
   pollNearbyPairingPeer,
   requestNearbyPairing,
   summarizeNearbyPairingProjection,
@@ -457,7 +458,7 @@ export async function startNearbyPairingAction(input: {
       };
     }
     const [identity, organization] = await Promise.all([
-      resolveFederationIdentity(prisma),
+      resolveFederationSigningIdentity(prisma),
       prisma.organization.findFirst({ orderBy: { createdAt: "asc" }, select: { id: true, name: true } }),
     ]);
     const displayName = organization?.name?.trim() || "Nearby DPF installation";
@@ -467,6 +468,7 @@ export async function startNearbyPairingAction(input: {
       displayName,
       requesterInstallationId: identity.installationId,
       candidateDiscoveryId: candidate.discoveryId,
+      requesterIdentity: identity,
     });
     if (!requested.ok) {
       return { ok: false, error: "internal_error", message: requested.message };
@@ -481,6 +483,13 @@ export async function startNearbyPairingAction(input: {
         relationshipPreset: "same-organization",
         projectionTemplateKey: "same-organization",
         matchingCode: requested.matchingCode,
+        sasState: {
+          protocolVersion: 1,
+          localDeviceId: identity.deviceId,
+          localSigningPublicKey: identity.signingPublicKey,
+          remoteDeviceId: requested.peerDeviceId,
+          remoteSigningPublicKey: requested.peerSigningPublicKey,
+        },
         pairingSecretEnc: encryptSecret(requested.pairingSecret),
         peerAuthorityUrl: candidate.endpoint,
         peerDisplayName: requested.peerDisplayName,
@@ -591,7 +600,7 @@ export async function pollNearbyPairingAction(pairingId: string): Promise<Nearby
 }
 
 export async function approveNearbyPairingAction(pairingId: string): Promise<
-  { ok: true; status: "approved" } | ActionFailure
+  { ok: true; status: "approved" | "pending-confirmation" } | ActionFailure
 > {
   const gate = await assertManagePlatform();
   if (!gate.ok) return gate;
@@ -605,6 +614,40 @@ export async function approveNearbyPairingAction(pairingId: string): Promise<
   }
   revalidatePath(ADMIN_PATH);
   return result;
+}
+
+export async function confirmNearbyPairingAction(pairingId: string): Promise<
+  { ok: true; status: "approved" | "pending-confirmation" } | ActionFailure
+> {
+  const gate = await assertManagePlatform();
+  if (!gate.ok) return gate;
+  const row = await prisma.federationPairingSession.findUnique({ where: { pairingId } });
+  if (
+    !row ||
+    row.direction !== "outgoing" ||
+    row.status !== "pending" ||
+    !/^\d{6}$/.test(row.matchingCode) ||
+    row.expiresAt.getTime() <= Date.now()
+  ) return { ok: false, error: "invalid_transition", message: "Pairing code cannot be confirmed." };
+  if (!row.pairingSecretEnc) {
+    return { ok: false, error: "internal_error", message: "Stored pairing credential is unavailable." };
+  }
+  const pairingSecret = decryptSecret(row.pairingSecretEnc);
+  if (!pairingSecret) {
+    return { ok: false, error: "internal_error", message: "Stored pairing credential could not be decrypted." };
+  }
+  const peer = await confirmNearbyPairingPeer({
+    candidateEndpoint: row.peerAuthorityUrl,
+    pairingId: row.pairingId,
+    pairingSecret,
+  });
+  if (!peer.ok) return { ok: false, error: "internal_error", message: peer.message };
+  await prisma.federationPairingSession.update({
+    where: { id: row.id },
+    data: { sasConfirmedAtLocal: new Date() },
+  });
+  revalidatePath(ADMIN_PATH);
+  return { ok: true, status: peer.status };
 }
 
 export async function denyNearbyPairingAction(pairingId: string, reason: string): Promise<

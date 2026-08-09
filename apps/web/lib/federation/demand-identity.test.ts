@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   deriveDemandNetworkRefs,
   resolveFederationIdentity,
+  resolveFederationSigningIdentity,
   type FederationIdentityDb,
 } from "./demand-identity";
 import {
@@ -77,6 +78,57 @@ describe("resolveFederationIdentity", () => {
     expect(identity.deviceId).toMatch(DEVICE_ID_RE);
     expect(identity.signingPublicKey).toBeTruthy();
     expect(update).not.toHaveBeenCalled();
+  });
+});
+
+describe("resolveFederationSigningIdentity", () => {
+  it("returns a validated private signing identity only through the guarded accessor", async () => {
+    const kp = generateInstanceSigningKeypair();
+    const existing = {
+      installationId: `inst_${"c".repeat(32)}`,
+      projectionSecret: "a".repeat(64),
+      deviceId: deriveDeviceId(kp.signingPublicKey),
+      signingPublicKey: kp.signingPublicKey,
+      signingPrivateKeyEnc: "encrypted-private-key",
+    };
+    const db = {
+      platformConfig: {
+        upsert: vi.fn().mockResolvedValue({ value: existing }),
+        update: vi.fn(),
+      },
+    } as FederationIdentityDb;
+
+    await expect(resolveFederationSigningIdentity(db, {
+      decryptSecret: () => kp.signingPrivateKey,
+    })).resolves.toEqual({
+      installationId: existing.installationId,
+      projectionSecret: existing.projectionSecret,
+      deviceId: existing.deviceId,
+      signingPublicKey: existing.signingPublicKey,
+      signingPrivateKey: kp.signingPrivateKey,
+    });
+  });
+
+  it("fails closed when encrypted identity material does not match the public identity", async () => {
+    const publicPair = generateInstanceSigningKeypair();
+    const wrongPrivatePair = generateInstanceSigningKeypair();
+    const existing = {
+      installationId: `inst_${"c".repeat(32)}`,
+      projectionSecret: "a".repeat(64),
+      deviceId: deriveDeviceId(publicPair.signingPublicKey),
+      signingPublicKey: publicPair.signingPublicKey,
+      signingPrivateKeyEnc: "encrypted-private-key",
+    };
+    const db = {
+      platformConfig: {
+        upsert: vi.fn().mockResolvedValue({ value: existing }),
+        update: vi.fn(),
+      },
+    } as FederationIdentityDb;
+
+    await expect(resolveFederationSigningIdentity(db, {
+      decryptSecret: () => wrongPrivatePair.signingPrivateKey,
+    })).rejects.toThrow("does not match");
   });
 });
 

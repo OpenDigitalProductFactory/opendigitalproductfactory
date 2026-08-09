@@ -27,7 +27,7 @@ remaining work are visible outside this document.
 | --- | --- | --- |
 | 1. Instance identity | BI-62DE5912 | Done; merged in PR #4097 |
 | 2. mDNS/DNS-SD discovery | BI-52D34506 | Source merged in PR #3308; Windows native-host and real add/remove acceptance remain |
-| 3. SAS pairing | BI-7432348C | Crypto core merged in PR #4098; identity-bound transport and numeric-comparison workflow remain |
+| 3. SAS pairing | BI-7432348C | Identity-bound transport and explicit 6-digit numeric-comparison workflow implemented; physical two-instance acceptance remains under BI-05EB708F |
 | 4. Introducer / hub | BI-6EF4288A | Open |
 | 5. Queue-based inbox delivery | BI-42617832 | Open |
 | 6. Version-vector conflict model | BI-51FD61F1 | Done; merged in PRs #4099 and #4102 |
@@ -46,7 +46,7 @@ Each is an independent PR; later increments depend on earlier ones as noted.
    place on first read. Pure crypto in `lib/federation/instance-identity.ts`.
 2. **mDNS/DNS-SD discovery (BI-52D34506; acceptance incomplete).** Advertise `_dpf-federation._tcp.local.` (device ID + address);
    browse and list nearby installs. Extends `nearby-candidates` / `nearby-pairing-service`.
-3. **SAS pairing (BI-7432348C; transport wiring incomplete).** ECDH ephemeral exchange + 6-digit Short Authentication String numeric
+3. **SAS pairing (BI-7432348C; implemented, acceptance pending).** ECDH ephemeral exchange + 6-digit Short Authentication String numeric
    comparison, authenticated against the increment-1 identity keys. Replaces invite-token /
    pasted URL / bare dual-approve (which has zero MITM protection).
 4. **Introducer / hub (BI-6EF4288A).** One trusted peer introduces others (customer→reseller→hub), the
@@ -58,6 +58,13 @@ Each is an independent PR; later increments depend on earlier ones as noted.
    (DI-1BC547243903). Supersedes the wall-clock scalar (interim BigInt fix #4092).
 7. **SAS-first Connections UX; manual recovery only (BI-51F5229B).** Nav entry landed in #4094;
    this retires the invite/paste/approve flow to recovery-only and fixes the scope/env labels.
+
+## Design grounding
+
+- Existing specs/plans reviewed: the federation zero-shell autodiscovery increment and this robust-design build plan.
+- Current code substrate reviewed: the existing nearby-candidate, pairing-session, connection-action, and Connections-card implementations.
+- Source of truth: FederationPairingSession owns the transient commit/reveal transcript and confirmation state; FederationLink remains the durable trust relationship.
+- Decision: extend the existing pairing route, service, action, and card with identity-authenticated six-digit SAS comparison; do not add a parallel route, trust model, or UI family.
 
 ## Acceptance gate (was missing the first time)
 

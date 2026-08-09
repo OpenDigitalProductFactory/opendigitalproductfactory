@@ -2,10 +2,12 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import { prisma } from "@dpf/db";
 
-import { resolveFederationIdentity } from "@/lib/federation/demand-identity";
+import { resolveFederationSigningIdentity } from "@/lib/federation/demand-identity";
 import {
   createIncomingNearbyPairing,
+  confirmIncomingNearbyPairing,
   pollIncomingNearbyPairing,
+  revealIncomingNearbyPairing,
 } from "@/lib/federation/nearby-pairing-service";
 import { checkNearbyPairingRateLimit } from "@/lib/federation/nearby-pairing-rate-limit";
 
@@ -46,7 +48,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return error(400, "invalid_request", "Pairing request must be an object.");
   }
   const { operation, ...payload } = decoded as Record<string, unknown>;
-  const rateClass = operation === "poll" ? "poll" : "request";
+  const rateClass = ["poll", "reveal", "confirm"].includes(String(operation)) ? "poll" : "request";
   const perRequesterLimit = rateClass === "poll" ? 60 : 10;
   const globalLimit = rateClass === "poll" ? 600 : 100;
   const globalRateLimit = checkNearbyPairingRateLimit(`global:${rateClass}`, {
@@ -67,12 +69,14 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   if (operation === "request") {
     try {
       const [identity, organization] = await Promise.all([
-        resolveFederationIdentity(prisma),
+        resolveFederationSigningIdentity(prisma),
         prisma.organization.findFirst({ orderBy: { createdAt: "asc" }, select: { name: true } }),
       ]);
       const result = await createIncomingNearbyPairing(payload, {
         localDisplayName: organization?.name?.trim() || "Nearby DPF installation",
         localInstallationId: identity.installationId,
+        localAuthorityUrl: request.nextUrl.origin,
+        localSigningIdentity: identity,
       });
       return NextResponse.json(result, { status: 201 });
     } catch (caught) {
@@ -82,6 +86,60 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         caught instanceof Error ? caught.message : "Pairing request is invalid.",
       );
     }
+  }
+
+  if (operation === "reveal") {
+    const pairingId = payload.pairingId;
+    const pairingSecret = payload.pairingSecret;
+    const requesterEphemeralPublicKey = payload.requesterEphemeralPublicKey;
+    const requesterNonce = payload.requesterNonce;
+    if (
+      Object.keys(payload).some((key) => ![
+        "pairingId",
+        "pairingSecret",
+        "requesterEphemeralPublicKey",
+        "requesterNonce",
+      ].includes(key)) ||
+      typeof pairingId !== "string" ||
+      !/^pair_[A-Za-z0-9_-]{3,160}$/.test(pairingId) ||
+      typeof pairingSecret !== "string" ||
+      !/^dpffpair_[A-Za-z0-9_-]{40,80}$/.test(pairingSecret) ||
+      typeof requesterEphemeralPublicKey !== "string" ||
+      requesterEphemeralPublicKey.length > 256 ||
+      typeof requesterNonce !== "string" ||
+      requesterNonce.length > 128
+    ) return error(400, "invalid_request", "Pairing reveal is invalid.");
+    const result = await revealIncomingNearbyPairing({
+      pairingId,
+      pairingSecret,
+      requesterEphemeralPublicKey,
+      requesterNonce,
+    });
+    if (!result.ok) {
+      return result.error === "not_found"
+        ? error(404, result.error, "Pairing session was not found.")
+        : error(409, result.error, "Pairing reveal could not be accepted.");
+    }
+    return NextResponse.json(result);
+  }
+
+  if (operation === "confirm") {
+    const pairingId = payload.pairingId;
+    const pairingSecret = payload.pairingSecret;
+    if (
+      Object.keys(payload).some((key) => key !== "pairingId" && key !== "pairingSecret") ||
+      typeof pairingId !== "string" ||
+      !/^pair_[A-Za-z0-9_-]{3,160}$/.test(pairingId) ||
+      typeof pairingSecret !== "string" ||
+      !/^dpffpair_[A-Za-z0-9_-]{40,80}$/.test(pairingSecret)
+    ) return error(400, "invalid_request", "Pairing confirmation is invalid.");
+    const result = await confirmIncomingNearbyPairing({ pairingId, pairingSecret });
+    if (!result.ok) {
+      return result.error === "not_found"
+        ? error(404, result.error, "Pairing session was not found.")
+        : error(409, result.error, "Pairing confirmation could not be accepted.");
+    }
+    return NextResponse.json(result);
   }
 
   if (operation === "poll") {
@@ -105,5 +163,5 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json(result);
   }
 
-  return error(400, "unsupported_operation", "Use request or poll.");
+  return error(400, "unsupported_operation", "Use request, reveal, confirm, or poll.");
 }

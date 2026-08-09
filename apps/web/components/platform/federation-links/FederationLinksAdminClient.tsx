@@ -10,6 +10,7 @@ import { StatusBadge } from "@/components/ui/report-kit";
 import {
   approveFederationLinkAction,
   approveNearbyPairingAction,
+  confirmNearbyPairingAction,
   denyNearbyPairingAction,
   enrollWithPeerAction,
   issueFederationBootstrapAction,
@@ -56,8 +57,9 @@ export interface NearbyPairingRow {
   sharedSlices: string[];
   retentionClass: string;
   staysLocal: string[];
+  sasConfirmedAtLocal?: boolean;
+  sasConfirmedAtPeer?: boolean;
 }
-
 type Flash = { kind: "success" | "error"; text: string } | null;
 
 export function FederationLinksAdminClient({
@@ -110,6 +112,8 @@ export function FederationLinksAdminClient({
       sharedSlices: result.projectionSummary.sharedSlices,
       retentionClass: result.projectionSummary.retentionClass,
       staysLocal: result.projectionSummary.staysLocal,
+      sasConfirmedAtLocal: false,
+      sasConfirmedAtPeer: false,
     };
   }
 
@@ -137,7 +141,6 @@ export function FederationLinksAdminClient({
     }, 3_000);
     return () => window.clearTimeout(timer);
   }, [isPending, pairingRows, router]);
-
   async function selectNearbyCandidate(candidate: NearbyFederationCandidate) {
     if (candidate.automaticPairing === "blocked-insecure-transport") return;
     const confirmed = await confirmDialog({
@@ -160,12 +163,11 @@ export function FederationLinksAdminClient({
       setFlash({ kind: "success", text: "Secure setup started. Confirm the same code on both installations." });
     });
   }
-
   async function onApprovePairing(row: NearbyPairingRow) {
     const confirmed = await confirmDialog({
-      title: "Approve this installation",
-      message: `Approve ${row.peerDisplayName} only if it shows the same code ${row.matchingCode} and you accept the sharing summary. The connection still remains pending until both installations approve it.`,
-      confirmLabel: "Approve this installation",
+      title: "Confirm the codes match",
+      message: `Continue with ${row.peerDisplayName} only if its screen shows ${row.matchingCode} and you accept the sharing summary. Trust is not granted until both installations confirm.`,
+      confirmLabel: "Codes match — approve",
     });
     if (!confirmed) return;
     startTransition(async () => {
@@ -176,7 +178,24 @@ export function FederationLinksAdminClient({
       if (result.ok) router.refresh();
     });
   }
-
+  async function onConfirmOutgoingPairing(row: NearbyPairingRow) {
+    const confirmed = await confirmDialog({
+      title: "Confirm the codes match",
+      message: `Continue only if ${row.peerDisplayName} also shows ${row.matchingCode}. A different code means the connection may be intercepted.`,
+      confirmLabel: "Codes match — continue",
+    });
+    if (!confirmed) return;
+    startTransition(async () => {
+      const result = await confirmNearbyPairingAction(row.pairingId);
+      if (!result.ok) {
+        setFlash({ kind: "error", text: `Code confirmation failed: ${result.message}` });
+        return;
+      }
+      setActivePairing({ ...row, sasConfirmedAtLocal: true, status: result.status === "approved" ? "approved" : row.status });
+      setFlash({ kind: "success", text: "Code confirmed here. Waiting for the other installation to confirm." });
+      router.refresh();
+    });
+  }
   async function onDenyPairing(row: NearbyPairingRow) {
     const reason = await promptDialog({
       title: "Deny this installation",
@@ -193,7 +212,6 @@ export function FederationLinksAdminClient({
       if (result.ok) router.refresh();
     });
   }
-
   function setNearbyDiscovery(enabled: boolean) {
     setFlash(null);
     startTransition(async () => {
@@ -460,7 +478,7 @@ export function FederationLinksAdminClient({
                   <p><span className="font-medium text-[var(--dpf-text)]">Shares:</span> {pairing.sharedSlices.join(", ")} · retain: {pairing.retentionClass}</p>
                   <p className="mt-1"><span className="font-medium text-[var(--dpf-text)]">Stays here:</span> {pairing.staysLocal.join(", ")}</p>
                 </div>
-                {pairing.direction === "incoming" && pairing.status === "pending" && (
+                {pairing.direction === "incoming" && pairing.status === "pending" && !pairing.sasConfirmedAtLocal && (
                   <div className="mt-3 flex flex-wrap gap-2">
                     <button
                       type="button"
@@ -469,7 +487,7 @@ export function FederationLinksAdminClient({
                       className="rounded px-3 py-1.5 text-sm font-medium text-[var(--dpf-bg)] disabled:opacity-50"
                       style={{ backgroundColor: "var(--dpf-accent)" }}
                     >
-                      {isPending ? <InlineBusy label="Approving…" tone="current" /> : "Approve this installation"}
+                      {isPending ? <InlineBusy label="Confirming…" tone="current" /> : "Codes match — approve"}
                     </button>
                     <button
                       type="button"
@@ -482,9 +500,22 @@ export function FederationLinksAdminClient({
                     </button>
                   </div>
                 )}
-                {pairing.direction === "outgoing" && (pairing.status === "pending" || pairing.status === "approved") && (
-                  <div className="mt-3"><InlineBusy label="Checking for approval…" /></div>
+                {pairing.direction === "incoming" && pairing.status === "pending" && pairing.sasConfirmedAtLocal &&
+                  <div className="mt-3"><InlineBusy label="Waiting for the other installation…" /></div>}
+                {pairing.direction === "outgoing" && pairing.status === "pending" && !pairing.sasConfirmedAtLocal && (
+                  <button
+                    type="button"
+                    data-dpf-primary-action
+                    disabled={isPending}
+                    onClick={() => onConfirmOutgoingPairing(pairing)}
+                    className="mt-3 rounded px-3 py-1.5 text-sm font-medium text-[var(--dpf-bg)] disabled:opacity-50"
+                    style={{ backgroundColor: "var(--dpf-accent)" }}
+                  >
+                    {isPending ? <InlineBusy label="Confirming…" tone="current" /> : "Codes match — continue"}
+                  </button>
                 )}
+                {pairing.direction === "outgoing" && (pairing.status === "approved" || pairing.sasConfirmedAtLocal) &&
+                  <div className="mt-3"><InlineBusy label="Waiting for the other installation…" /></div>}
               </div>
             ))}
           </div>
