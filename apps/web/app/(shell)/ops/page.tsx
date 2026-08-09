@@ -19,6 +19,22 @@ type Props = {
   searchParams?: Promise<{ itemId?: string; view?: string; dataScope?: string; origin?: string }>;
 };
 
+function ignoreReadFailure(): undefined {
+  return undefined;
+}
+
+function emptyReadResult(): never[] {
+  return [];
+}
+
+function zeroReadResult(): number {
+  return 0;
+}
+
+function nullReadResult(): null {
+  return null;
+}
+
 export default async function OpsPage({ searchParams }: Props) {
   const sp = await searchParams;
   const view = parseSurfaceView(sp?.view);
@@ -30,13 +46,13 @@ export default async function OpsPage({ searchParams }: Props) {
   // capability need is guaranteed in the backlog. Non-fatal; zero-write once
   // converged.
   await Promise.all([
-    reconcileImprovementBacklog().catch(() => {}),
-    reconcileCapabilityNeedBacklog().catch(() => {}),
+    reconcileImprovementBacklog().catch(ignoreReadFailure),
+    reconcileCapabilityNeedBacklog().catch(ignoreReadFailure),
     // BI-467E8F8D: clear stale build-stall escalations so the queue stays trustworthy
     // without waiting for the 15-min cron. The escalation BAND moved to the /workspace
     // "Needs you" inbox (EP-ATTENTION-SURFACE: attention ≠ backlog); the hygiene stays
     // here too since /ops still reconciles work. Non-fatal; zero-write once converged.
-    runEscalationHygiene().catch(() => {}),
+    runEscalationHygiene().catch(ignoreReadFailure),
   ]);
 
   // Do not build the hidden List read model for Grid/Board requests. Those
@@ -46,19 +62,19 @@ export default async function OpsPage({ searchParams }: Props) {
     view
       ? Promise.resolve(null)
       : Promise.all([
-          getBacklogItems().catch(() => []),
-          getDigitalProductsForSelect().catch(() => []),
-          getTaxonomyNodesFlat().catch(() => []),
-          getEpics().catch(() => []),
-          getPortfoliosForSelect().catch(() => []),
+          getBacklogItems().catch(emptyReadResult),
+          getDigitalProductsForSelect().catch(emptyReadResult),
+          getTaxonomyNodesFlat().catch(emptyReadResult),
+          getEpics().catch(emptyReadResult),
+          getPortfoliosForSelect().catch(emptyReadResult),
         ]),
     view
       ? Promise.all([
-          prisma.epic.count().catch(() => 0),
-          prisma.backlogItem.count().catch(() => 0),
+          prisma.epic.count().catch(zeroReadResult),
+          prisma.backlogItem.count().catch(zeroReadResult),
         ])
       : Promise.resolve(null),
-    auth().catch(() => null),
+    auth().catch(nullReadResult),
   ]);
   const items = listData?.[0] ?? [];
   const digitalProducts = listData?.[1] ?? [];
