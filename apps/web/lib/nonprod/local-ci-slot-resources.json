@@ -7,6 +7,10 @@
     "cpuPeriod": 100000,
     "maxParallelism": 4
   },
+  "hostStagePolicy": {
+    "version": 1,
+    "memoryBytes": 8589934592
+  },
   "slots": {
     "slot-0": {
       "ordinal": 0,
