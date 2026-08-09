@@ -459,6 +459,23 @@ its separate quiescence fence. A release or expiry preserves the queue without
 blind promotion; the FIFO head is admitted only after its next poll supplies
 fresh safe host evidence.
 
+A live queued `local-integration-ci` claim also reserves the next safe host
+window against **new** local-provider dispatch. Active local inference is never
+terminated: it finishes normally, while completions, embeddings, semantic
+review, background triage, and future local routes receive the same typed
+queued-capacity deferral until the FIFO head can admit. The reservation is
+bounded by the queue claim's existing heartbeat and expiry, so an abandoned
+waiter cannot suppress local inference indefinitely. Cloud providers do not
+consume this host reservation.
+
+Every queued observation persists its queue position, wait age, resolved pool
+policy (including `rollbackReason` and effective slot capacity), and paired
+host-pressure sample in the candidate's SHA-bound gate state. Later recovery or
+terminal writes retain the latest admission record. Diagnose a timeout from
+that durable record; do not infer the refusal from process residency, cancel
+and recreate a healthy FIFO claim, or conflate Docker model residency and GPU
+VRAM with Windows physical-memory telemetry.
+
 Typecheck writes a separate `web-typecheck` receipt before `next typegen &&
 tsc --noEmit` starts, heartbeats the compiler descendant tree, memory, and a
 bounded output tail, and records real compiler exits separately from opaque

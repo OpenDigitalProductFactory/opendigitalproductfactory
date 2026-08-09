@@ -49,7 +49,14 @@ export function writeLocalCiGateState(stateFile, {
   quiescence = null,
   recovery = null,
   queueObserver = null,
+  admission = null,
 }) {
+  const previous = readLocalCiGateState(stateFile);
+  const retainedAdmission = admission ?? (
+    previous?.branch === branch && previous?.sha === sha
+      ? previous.admission ?? null
+      : null
+  );
   mkdirSync(dirname(stateFile), { recursive: true });
   const payload = {
     branch,
@@ -68,6 +75,7 @@ export function writeLocalCiGateState(stateFile, {
   if (quiescence) payload.quiescence = quiescence;
   if (recovery) payload.recovery = recovery;
   if (queueObserver) payload.queueObserver = queueObserver;
+  if (retainedAdmission) payload.admission = retainedAdmission;
   writeGateStateAtomically(stateFile, `${JSON.stringify(payload, null, 2)}\n`);
 }
 

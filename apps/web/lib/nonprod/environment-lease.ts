@@ -275,6 +275,27 @@ export async function listQueuedNonprodEnvironmentLeases(input: {
   });
 }
 
+/**
+ * One registry snapshot for host-capacity arbitration. Active leases own the
+ * host now; queued leases reserve the next safe admission window. Keeping both
+ * states in one query prevents a provider from slipping between separate
+ * active/queued reads.
+ */
+export async function listCapacityReservingNonprodEnvironmentLeases(input: {
+  db?: LeaseDb;
+  now?: Date;
+}) {
+  const db = input.db ?? prisma;
+  const now = input.now ?? new Date();
+  return db.nonProductionEnvironmentLease.findMany({
+    where: {
+      status: { in: ["active", "queued"] },
+      expiresAt: { gt: now },
+    },
+    orderBy: [{ queuedAt: "asc" }, { id: "asc" }],
+  });
+}
+
 export type ClaimNonprodEnvironmentLeaseResult =
   | {
     status: "admitted";
