@@ -355,12 +355,16 @@ describe("work capsule MCP tools", () => {
   });
 
   it("claim_capsule_scope stores typed scope claims", async () => {
-    mockPrisma.workCapsule.findUnique.mockResolvedValue({
+    let capsule = {
       id: "row-1",
       capsuleId: "WC-SCOPE",
       scopeClaims: [],
+    } as Record<string, unknown>;
+    mockPrisma.workCapsule.findUnique.mockImplementation(async () => capsule);
+    mockPrisma.workCapsule.update.mockImplementation(async ({ data }) => {
+      capsule = { ...capsule, ...data };
+      return capsule;
     });
-    mockPrisma.workCapsule.update.mockResolvedValue({ id: "row-1", capsuleId: "WC-SCOPE" });
     mockPrisma.workCapsuleActivity.create.mockResolvedValue({ id: "activity-1" });
 
     const { executeTool } = await import("./mcp-tools");
@@ -389,6 +393,22 @@ describe("work capsule MCP tools", () => {
     }));
     expect(mockPrisma.workCapsuleActivity.create).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({ kind: "lease-renewed", recordedByAgentId: "codex" }),
+    }));
+    expect(result.data).toEqual(expect.objectContaining({
+      changeImpactContract: expect.objectContaining({
+        status: "resolved",
+        paths: ["apps/web/lib/work-capsules.ts"],
+      }),
+    }));
+    expect(mockPrisma.workCapsule.update).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        verificationState: expect.objectContaining({
+          changeImpactContract: expect.objectContaining({ status: "resolved" }),
+        }),
+      }),
+    }));
+    expect(mockPrisma.workCapsuleActivity.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ kind: "change-impact-planned" }),
     }));
   });
 

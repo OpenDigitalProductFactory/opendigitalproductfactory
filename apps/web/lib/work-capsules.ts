@@ -90,6 +90,7 @@ export const WORK_CAPSULE_ACTIVITY_KINDS = [
   "scope-claimed",
   "scope-released",
   "work-intent-declared",
+  "change-impact-planned",
   "evidence-recorded",
   "runtime-target-registered",
   "runtime-target-released",

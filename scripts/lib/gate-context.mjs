@@ -44,6 +44,8 @@ import {
   UI_CONTROL_DESCRIPTION,
   UX_EXCLUDE_RE,
   UX_ROUTE_FILE_RE,
+  isProseLintSource,
+  isStyleDriftSource,
 } from "./gate-sensitivity.mjs";
 import { findCanonicalSeedContentPaths } from "./seed-fit-gate.mjs";
 import { PR_TRAILER_NAMES } from "./pr-trailer-contract.mjs";
@@ -52,8 +54,9 @@ import {
   MODULE_SIZE_SOFT_CEILING,
   isModuleSizeSource,
 } from "./module-size-scope.mjs";
+import { POLICY_GUARD_PROFILES } from "./ci-policy-guards.mjs";
 
-export const GATE_CONTEXT_SCHEMA_VERSION = 1;
+export const GATE_CONTEXT_SCHEMA_VERSION = 2;
 
 const MIGRATION_FILE_RE = /^packages\/db\/prisma\/migrations\/[^/]+\/migration\.sql$/;
 const PRISMA_SCHEMA_PATH = "packages/db/prisma/schema.prisma";
@@ -85,6 +88,48 @@ function loadModuleSizeBaseline(repoRoot) {
   } catch {
     return new Map();
   }
+}
+
+function policyGuard(id) {
+  for (const guards of Object.values(POLICY_GUARD_PROFILES)) {
+    const found = guards.find((entry) => entry.id === id);
+    if (found) return found;
+  }
+  return null;
+}
+
+function guardObligations(paths) {
+  const selected = [];
+  const add = (id, because) => {
+    const guard = policyGuard(id);
+    if (guard && !selected.some((entry) => entry.id === id)) {
+      selected.push({ id: guard.id, name: guard.name, commands: guard.commands, because });
+    }
+  };
+  if (paths.some(isProseLintSource)) {
+    add("prose-lint-guard", "planned source is scanned for UI-copy vocabulary, readability, sentence length, and text mass");
+  }
+  if (paths.some(isStyleDriftSource)) {
+    add("style-drift-guard", "planned source is scanned for hardcoded colors and off-scale style tokens");
+  }
+  return selected;
+}
+
+function testImpact(files, repoRoot) {
+  const policy = loadJson(repoRoot, "config/ci-evidence-policy.json");
+  const production = (policy?.patterns?.production ?? []).map((pattern) => new RegExp(pattern));
+  const tests = (policy?.patterns?.tests ?? []).map((pattern) => new RegExp(pattern));
+  if (production.length === 0) return [];
+  return files
+    .filter((file) => file.status !== "D")
+    .filter((file) => production.some((pattern) => pattern.test(file.path)))
+    .filter((file) => !tests.some((pattern) => pattern.test(file.path)))
+    .map((file) => ({
+      path: file.path,
+      action: "find-related-tests",
+      tool: "find_related_tests",
+      rule: "resolve graph-linked and colocated tests before Red; missing or stale advice expands verification",
+    }));
 }
 
 function trailerConstraints(files, addedLinesByFile) {
@@ -281,6 +326,12 @@ export function buildGateContext({
     });
   }
 
+  // 7. Work-start obligations: unlike shrink-only ratchets, these name guards
+  // that scan a planned file even when it has no baseline entry yet, plus the
+  // related-test lookup each production file needs before Red.
+  const guards = guardObligations(paths);
+  const tests = testImpact(files, repoRoot);
+
   return {
     schemaVersion: GATE_CONTEXT_SCHEMA_VERSION,
     changedFileCount: files.length,
@@ -290,6 +341,8 @@ export function buildGateContext({
     derivedArtifacts: derived,
     routes,
     migrations,
+    guardObligations: guards,
+    testImpact: tests,
     verification: [
       "quick host-side guard check before the sandbox gate: pnpm run pregate:preflight (~1 min, no lease)",
       "runtime-code pushes need a passing exact-tree gate for this branch+SHA: pnpm run pregate",
@@ -331,10 +384,19 @@ export function formatGateContextMarkdown(context) {
     "Migrations",
     context.migrations.map((m) => `- [${m.severity}] ${m.rule}`),
   ));
+  out.push(...formatSection(
+    "Guards to exercise before implementation is considered complete",
+    context.guardObligations.map((g) => `- **${g.name}** (\`${g.id}\`) — ${g.because}`),
+  ));
+  out.push(...formatSection(
+    "Tests to resolve before implementation",
+    context.testImpact.map((entry) => `- \`${entry.path}\`: call \`${entry.tool}\` — ${entry.rule}`),
+  ));
   out.push(...formatSection("Verification path", context.verification.map((v) => `- ${v}`)));
   if (
     context.trailers.length + context.moduleSize.length + context.ratchets.length +
-    context.derivedArtifacts.length + context.routes.length + context.migrations.length === 0
+    context.derivedArtifacts.length + context.routes.length + context.migrations.length +
+    context.guardObligations.length + context.testImpact.length === 0
   ) {
     out.splice(2, 0, "_No gate-sensitive surfaces detected in this diff — the always-on verification path still applies._", "");
   }

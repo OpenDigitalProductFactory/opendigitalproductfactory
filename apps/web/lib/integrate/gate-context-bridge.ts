@@ -12,9 +12,30 @@
 
 import { execFile } from "node:child_process";
 import { existsSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
 export type PlannedChange = { path: string; status: "A" | "M" | "D" };
+type GateContextInputChange = { path: string; status: PlannedChange["status"] | "P" };
+
+export type GateContextJson = {
+  schemaVersion: number;
+  changedFileCount: number;
+  guardObligations: Array<{ id: string; name: string; commands: unknown[]; because: string }>;
+  testImpact: Array<{ path: string; action: string; tool: string; rule: string }>;
+  unresolvedPaths?: string[];
+  [key: string]: unknown;
+};
+
+export type ChangeImpactContract = {
+  schemaVersion: 1;
+  source: "gate-context";
+  status: "resolved" | "unresolved";
+  paths: string[];
+  instructions: string[];
+  gateContext?: GateContextJson;
+  reason?: string;
+  unresolvedPaths?: string[];
+};
 
 type PlanFileEntry = { path?: unknown; action?: unknown };
 
@@ -35,7 +56,17 @@ export function plannedChangesFromPlan(plan: Record<string, unknown> | null | un
 export function resolveGateContextRepoRoot(
   env: Record<string, string | undefined> = process.env,
 ): string | null {
-  for (const candidate of [env.DPF_REPO_ROOT, env.PROJECT_ROOT, process.cwd()]) {
+  const candidates = [env.DPF_REPO_ROOT, env.PROJECT_ROOT].filter(
+    (candidate): candidate is string => Boolean(candidate),
+  );
+  let ancestor = process.cwd();
+  for (;;) {
+    candidates.push(ancestor);
+    const parent = dirname(ancestor);
+    if (parent === ancestor) break;
+    ancestor = parent;
+  }
+  for (const candidate of candidates) {
     if (candidate && existsSync(join(candidate, "scripts", "gate-context.mjs"))) {
       return candidate;
     }
@@ -48,7 +79,7 @@ export function resolveGateContextRepoRoot(
  * pack, or null when the generator is unavailable/failed (advisory contract).
  */
 export async function computeGateContextMarkdown(
-  changedFiles: PlannedChange[],
+  changedFiles: GateContextInputChange[],
   options: { repoRoot?: string | null; timeoutMs?: number; json?: boolean } = {},
 ): Promise<string | null> {
   if (changedFiles.length === 0) return null;
@@ -73,4 +104,64 @@ export async function computeGateContextMarkdown(
     );
     child.stdin?.end(JSON.stringify({ changedFiles }));
   });
+}
+
+/** Return the generator's typed JSON form, or null on any unavailable/invalid result. */
+export async function computeGateContextJson(
+  changedFiles: GateContextInputChange[],
+  options: { repoRoot?: string | null; timeoutMs?: number } = {},
+): Promise<GateContextJson | null> {
+  const raw = await computeGateContextMarkdown(changedFiles, { ...options, json: true });
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as Partial<GateContextJson>;
+    if (
+      typeof parsed.schemaVersion !== "number" ||
+      typeof parsed.changedFileCount !== "number" ||
+      !Array.isArray(parsed.guardObligations) ||
+      !Array.isArray(parsed.testImpact)
+    ) return null;
+    return parsed as GateContextJson;
+  } catch {
+    return null;
+  }
+}
+
+/** Build the fail-safe contract persisted when a capsule claims edit paths. */
+export async function computeChangeImpactContract(
+  paths: string[],
+  options: { repoRoot?: string | null; timeoutMs?: number } = {},
+): Promise<ChangeImpactContract> {
+  const normalized = [...new Set(paths.map((path) => path.trim().replace(/\\/g, "/")).filter(Boolean))].sort();
+  const gateContext = await computeGateContextJson(
+    normalized.map((path) => ({ path, status: "P" as const })),
+    options,
+  );
+  const instructions = [
+    "Resolve every testImpact entry before Red and include the affected tests in the implementation loop.",
+    "Exercise every guardObligation before treating the change as complete.",
+    "CI remains authoritative; missing, stale, or unresolved advice expands to exhaustive verification.",
+  ];
+  const unresolvedPaths = gateContext?.unresolvedPaths ?? [];
+  if (!gateContext || unresolvedPaths.length > 0) {
+    return {
+      schemaVersion: 1,
+      source: "gate-context",
+      status: "unresolved",
+      paths: normalized,
+      instructions,
+      reason: !gateContext
+        ? "gate-context generator unavailable or returned invalid JSON"
+        : "scope contains directories; claim concrete files to resolve tests and guards",
+      ...(unresolvedPaths.length > 0 ? { unresolvedPaths } : {}),
+    };
+  }
+  return {
+    schemaVersion: 1,
+    source: "gate-context",
+    status: "resolved",
+    paths: normalized,
+    instructions,
+    gateContext,
+  };
 }

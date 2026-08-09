@@ -295,7 +295,7 @@ func federationCapabilityReports() []api.CapabilityReport {
 		Capability: "federation.discovery",
 		Status:     status,
 		Evidence: map[string]any{
-			"serviceType": federation.ServiceType,
+			"serviceType": federation.ServiceFQDN,
 			"transport":   "dns-sd-mdns",
 		},
 	}}

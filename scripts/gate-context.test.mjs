@@ -14,6 +14,8 @@ import { join } from "node:path";
 import { test } from "node:test";
 
 import { buildGateContext, formatGateContextMarkdown } from "./lib/gate-context.mjs";
+import { parseStdinChanges } from "./gate-context.mjs";
+import { POLICY_GUARD_PROFILES } from "./lib/ci-policy-guards.mjs";
 import {
   NEW_SOURCE_FILE_RE,
   UI_CONTROL_RE,
@@ -134,6 +136,41 @@ test("editing a committed migration is flagged blocking; a new migration gets th
   assert.ok(added.migrations.some((m) => m.rule.includes("migration-safety guard")));
 });
 
+// BI-A7407F49: impact guidance has to name deterministic obligations before
+// implementation, including guards that apply to a clean/new file with no
+// ratchet baseline entry yet.
+test("a planned UI source edit names its applicable guard commands before generation", () => {
+  const path = "apps/web/components/ops/NewActivityPanel.tsx";
+  const ctx = build([{ path, status: "A" }]);
+
+  const prose = ctx.guardObligations.find((entry) => entry.id === "prose-lint-guard");
+  const style = ctx.guardObligations.find((entry) => entry.id === "style-drift-guard");
+  assert.ok(prose, JSON.stringify(ctx.guardObligations));
+  assert.ok(style, JSON.stringify(ctx.guardObligations));
+  assert.deepEqual(
+    prose.commands,
+    POLICY_GUARD_PROFILES.workspace.find((entry) => entry.id === "prose-lint-guard").commands,
+  );
+  assert.deepEqual(
+    style.commands,
+    POLICY_GUARD_PROFILES.source.find((entry) => entry.id === "style-drift-guard").commands,
+  );
+});
+
+test("planned production source carries an explicit related-test discovery action", () => {
+  const path = "apps/web/lib/work-capsules/work-capsule-store.ts";
+  const ctx = build([{ path, status: "M" }]);
+
+  assert.deepEqual(ctx.testImpact, [{
+    path,
+    action: "find-related-tests",
+    tool: "find_related_tests",
+    rule: "resolve graph-linked and colocated tests before Red; missing or stale advice expands verification",
+  }]);
+  assert.match(formatGateContextMarkdown(ctx), /Tests to resolve before implementation/);
+  assert.match(formatGateContextMarkdown(ctx), /find_related_tests/);
+});
+
 // ── determinism + formatting ─────────────────────────────────────────────────
 
 test("identical inputs produce byte-identical packs (no timestamps, no environment)", () => {
@@ -209,6 +246,14 @@ test("gate-context CLI emits valid JSON for the live worktree", () => {
   });
   assert.equal(result.status, 0, result.stderr);
   const pack = JSON.parse(result.stdout);
-  assert.equal(pack.schemaVersion, 1);
+  assert.equal(pack.schemaVersion, 2);
   assert.ok(Array.isArray(pack.trailers));
+});
+
+test("planned-scope stdin keeps P status and refuses paths outside the repository", () => {
+  assert.deepEqual(parseStdinChanges(JSON.stringify({ changedFiles: [
+    { path: "apps/web/lib/new.ts", status: "P" },
+    { path: "../../outside.ts", status: "P" },
+    { path: "/tmp/outside.ts", status: "P" },
+  ] })), [{ path: "apps/web/lib/new.ts", status: "P" }]);
 });
