@@ -4,6 +4,11 @@ import type { DemandTransitionDb } from "@/lib/demand/transition-repository";
 import { fundingRiskTier } from "@/lib/demand/funding-risk";
 import type { ToolResult } from "@/lib/mcp-tools";
 import { queueProductManagementPlaybookRefreshForBacklogItem } from "@/lib/product-management/product-management-playbook-refresh";
+import { createAuthorizationDecisionLog } from "@/lib/governance-data";
+import {
+  loadInstallationOperatingIntent,
+  resolveInvestmentFundingAuthority,
+} from "@/lib/installation-journey/operating-intent";
 
 function mergeBucketTargets(current: unknown, incoming: unknown): Record<string, number> {
   const merged: Record<string, number> =
@@ -298,6 +303,30 @@ export async function approveDemandForFundingHandler(
       error: "organization_required",
       message:
         "Classify this demand to an organization before requesting funding.",
+    };
+  }
+
+  const loadedInstallationIntent = await loadInstallationOperatingIntent(prisma);
+  const installationAuthority = resolveInvestmentFundingAuthority(loadedInstallationIntent);
+  if (!installationAuthority.allowed) {
+    await createAuthorizationDecisionLog({
+      actorType: context?.agentId ? "agent" : "user",
+      actorRef: context?.agentId ?? userId,
+      humanContextRef: userId,
+      agentContextRef: context?.agentId ?? null,
+      actionKey: "approve_demand_for_funding",
+      objectRef: item.itemId,
+      routeContext: context?.routeContext ?? "/ops/demand",
+      decision: "deny",
+      rationale: {
+        code: installationAuthority.error,
+        installationIntentStatus: loadedInstallationIntent.status,
+      },
+    });
+    return {
+      success: false,
+      error: installationAuthority.error,
+      message: installationAuthority.message,
     };
   }
 

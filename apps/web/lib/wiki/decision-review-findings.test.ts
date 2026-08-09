@@ -35,6 +35,12 @@ const conflict: ConflictRow = {
   question: "Should refunds over $500 need a manager sign-off?",
   riskTier: "high",
   createdAt: new Date("2026-07-01T00:00:00Z"),
+  humanOutcome: null,
+  buildId: "FB-1",
+  taskRunId: null,
+  routeContext: "/build",
+  domainClass: "risk-assessment",
+  gateKey: "founder",
 };
 
 const gap: GapCluster = {
@@ -45,13 +51,34 @@ const gap: GapCluster = {
 };
 
 describe("buildConflictFindings", () => {
-  it("maps each conflicted decision to a canvas-linked finding with risk posture", () => {
+  it("maps an open, actionable conflict to the canonical decision record", () => {
     const [f] = buildConflictFindings([conflict]);
     expect(f.findingClass).toBe("conflict");
     expect(f.postureLabel).toBe("risk: high");
-    expect(f.href).toBe("/platform/ai/decisions/DI-ABC123");
-    expect(f.actionLabel).toBe("De-conflict");
+    expect(f.detailHref).toBe("/coworker-decisions/decisions/DI-ABC123");
+    expect(f.action).toEqual({
+      kind: "navigate",
+      label: "Review blocked decision",
+      href: "/coworker-decisions/decisions/DI-ABC123",
+      outcome: "Understand the rule conflict and continue in the workflow that owns the decision.",
+    });
     expect(f.count).toBe(1);
+  });
+
+  it("does not manufacture operator work from resolved or context-free audit rows", () => {
+    const findings = buildConflictFindings([
+      { ...conflict, interactionId: "DI-RESOLVED", humanOutcome: { answer: "done" } },
+      { ...conflict, interactionId: "DI-BLANK", question: "   " },
+      {
+        ...conflict,
+        interactionId: "DI-INTERNAL",
+        buildId: null,
+        routeContext: "mcp:principle_decide",
+        domainClass: "kernel-consult",
+      },
+      conflict,
+    ]);
+    expect(findings.map((finding) => finding.id)).toEqual(["conflict:DI-ABC123"]);
   });
 
   it("omits posture when the risk tier is unknown", () => {
@@ -65,8 +92,9 @@ describe("buildGapFindings", () => {
     const [f] = buildGapFindings([gap]);
     expect(f.title).toBe("No settled answer for vendor selection");
     expect(f.postureLabel).toBe("9 unresolved");
-    expect(f.actionLabel).toBe("Add a stance");
-    expect(f.actionHref).toBe("/coworker-decisions/stance");
+    expect(f.action?.label).toBe("Add a stance");
+    expect(f.action?.href).toBe("/coworker-decisions/stance");
+    expect(f.action?.outcome).toContain("settled guidance");
   });
 
   it("drops empty clusters and singularizes a lone unresolved", () => {
@@ -88,19 +116,17 @@ describe("buildGapFindings", () => {
       },
     ]);
     expect(f.title).toBe("Your business hasn't weighed in on risk assessment");
-    expect(f.actionLabel).toBe("Answer this once");
+    expect(f.action).toBeUndefined();
     expect(f.answer).toEqual({
       domainClass: "risk-assessment",
       question: "Should we waive a lapsed fee after our own billing error?",
     });
-    // Answerable findings carry no stance-editor link.
-    expect(f.actionHref).toBe("");
   });
 
   it("leaves kernel/WWMD gaps pointing at the manual stance editor", () => {
     const [f] = buildGapFindings([gap]);
     expect(f.answer).toBeUndefined();
-    expect(f.actionHref).toBe("/coworker-decisions/stance");
+    expect(f.action?.href).toBe("/coworker-decisions/stance");
   });
 });
 
@@ -135,7 +161,7 @@ describe("buildReviewFindings", () => {
     expect(f.title).toContain("flipped");
     expect(f.detail).toContain("proper seed fix");
     expect(f.detail).toContain("quick runtime patch");
-    expect(f.actionHref).toBe("/coworker-decisions/matrix");
+    expect(f.action?.href).toBe("/coworker-decisions/matrix");
     expect(f.postureLabel).toBe("margin 0.42");
   });
 

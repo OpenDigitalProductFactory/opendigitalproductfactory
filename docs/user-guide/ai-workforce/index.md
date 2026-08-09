@@ -61,6 +61,7 @@ Model assignments explicitly saved by an operator remain unchanged during upgrad
 - Review available models per provider and configure their routing profiles
 - Set up failover chains to ensure continuity when a provider is degraded
 - Monitor token spend and usage patterns across all active providers
+- Open a decision record from AI Operations when investigating a gate result; legacy `/platform/ai/decisions/[interactionId]` links lead to the canonical Decision Log detail where the evidence and available owner action are shown
 - Hand off configured providers into Finance so supplier ownership and committed spend stay visible
 - Manage agent-to-provider assignments for specific platform capabilities
 - Optionally give the standing COO a conversational name from its coworker record; DPF always keeps the `AI COO` role visible and does not change the coworker's identity, authority, or audit attribution

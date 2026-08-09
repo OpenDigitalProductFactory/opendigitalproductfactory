@@ -72,6 +72,7 @@ export default async function DecisionRecordPage({ params }: { params: Params })
   const options = Array.isArray(row.options)
     ? row.options.filter((o): o is string => typeof o === "string")
     : [];
+  const contextMissing = row.question.trim().length === 0;
   // Insufficient-signal consults (every contribution zero) carry no real
   // recommendation. New records set the explicit payload flag; records from
   // before the guard existed are recognised by their all-zero composite +
@@ -120,7 +121,7 @@ export default async function DecisionRecordPage({ params }: { params: Params })
           ) : null}
         </div>
         <h1 className="mt-3 text-xl font-semibold text-[var(--dpf-text)]">
-          {row.question || "(no question text)"}
+          {row.question || "Incomplete record"}
         </h1>
         <p className="mt-1 text-xs text-[var(--dpf-muted)]">
           <LocalTime value={row.createdAt} /> · {row.profile?.name ?? row.profileId} ·{" "}
@@ -252,6 +253,7 @@ export default async function DecisionRecordPage({ params }: { params: Params })
               insufficientSignal,
               hasBuild: Boolean(row.buildId),
               resolved: row.humanOutcome !== null,
+              contextMissing,
               withdrawn: isWithdrawnHumanOutcome(row.humanOutcome),
             });
             const needsAction = help.steps.length > 0;

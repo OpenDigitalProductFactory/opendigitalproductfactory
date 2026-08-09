@@ -5,7 +5,7 @@
 // Server component; queries Prisma directly (same pattern as the decision-governance hub).
 
 import Link from "next/link";
-import { prisma } from "@dpf/db";
+import { prisma, Prisma } from "@dpf/db";
 
 import { StatCard } from "@/components/ui/report-kit";
 import { LocalTime } from "@/components/ui/LocalTime";
@@ -63,7 +63,11 @@ export default async function DecisionLogPage({
             where: { ...where, createdAt: { gte: d30 } },
           }),
           prisma.decisionInteraction.count({
-            where: { ...where, outcomeType: { in: UNRESOLVED }, escalationCapture: null },
+            where: {
+              ...where,
+              outcomeType: { in: UNRESOLVED },
+              humanOutcome: { equals: Prisma.DbNull },
+            },
           }),
           prisma.decisionInteraction.findFirst({
             where,

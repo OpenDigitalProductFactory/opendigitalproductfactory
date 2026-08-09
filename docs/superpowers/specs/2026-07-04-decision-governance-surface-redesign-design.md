@@ -296,3 +296,114 @@ Resolution — a deterministic guidance layer (`apps/web/lib/wiki/decision-help.
 
 A follow-up (separate BI) may add an AI-coworker-narrated summary of the unresolved cluster; it
 layers on top of — and must never replace — this deterministic floor.
+
+---
+
+## 10. Addendum (2026-08-08, BI-76EEDEE8): findings must carry an achievable outcome
+
+### 10.1 Reproduced failure
+
+`/coworker-decisions/review` rendered seven identical conflict findings with a **De-conflict**
+action. The linked Decision Canvas showed no question, no option descriptions, no sources, no
+named conflict pair, and no control that could change the decision. Live-state inspection found:
+
+- six findings already had a `humanOutcome`, but the conflict query did not filter them out;
+- the remaining row (`DI-8BA5F423591B`) was an unlinked, already-executed
+  `mcp:principle_decide` audit record with blank decision context; and
+- useful rationale and contributor data existed only inside `outcomePayload`, while the canvas
+  projected only the empty `sources` column.
+
+This is a contract failure across detection, lifecycle projection, detail, and disposition. A
+different button label would not fix it.
+
+### 10.2 Research and benchmarking
+
+Three open-source-adjacent issue/finding leaders converge on the same workflow shape:
+
+| Leader | Pattern adopted | Pattern rejected |
+|---|---|---|
+| [GitHub code scanning](https://docs.github.com/en/code-security/how-tos/manage-security-alerts/manage-code-scanning-alerts/resolve-alerts) | Put evidence, affected context, fix/dismiss choices, dismissal reason, and reopenability in one alert lifecycle. | A warning that links to an audit-only page. |
+| [SonarQube issue management](https://docs.sonarsource.com/sonarqube-server/user-guide/issues/managing) | Make status, assignee, why/location, comments, accept/false-positive, and automatic re-detection explicit. | Leaving resolved findings in the open queue or treating “reviewed” as “fixed”. |
+| [Sentry issue details](https://docs.sentry.io/product/issues/issue-details/) and [status lifecycle](https://docs.sentry.io/product/issues/states-triage/) | Pair the best available event evidence with assign/resolve/archive actions; regress resolved issues when evidence recurs. | Showing every historical event as current work. |
+
+[WCAG 2.2 SC 3.3.1 and 3.3.3](https://www.w3.org/TR/WCAG22/#input-assistance) provide the
+accessibility floor: identify what is wrong in text and provide known correction suggestions. The
+same standard applies here even though the “error” is a governance finding rather than a form
+field.
+
+### 10.3 Decided approach
+
+WWMD interaction `DI-259D90CF912B` compared a narrow display patch, route-only convergence, and an
+end-to-end actionability contract. It recommended **actionability-contract** (composite 7.097,
+margin 1.850, high confidence, no commandment conflict). The strongest contributors were Research
+and Use Standards and Never Assume — Verify.
+
+### 10.4 Actionability contract
+
+A finding is allowed to enter an operator action queue only when all of the following are true:
+
+1. **Open:** its source lifecycle says it is unresolved and not withdrawn.
+2. **Specific:** it identifies the affected decision/object in human-readable text.
+3. **Evidenced:** it carries the evidence needed to choose, or names the missing evidence and offers
+   a way to supply it.
+4. **Owned:** it names the workflow or accountable role that can dispose it.
+5. **Executable:** the primary action reaches a control or owning workflow capable of completing
+   the named disposition.
+6. **Verifiable:** the system can observe the source signal clear or recur after disposition.
+
+If any condition is false, the record remains available in audit history but MUST NOT appear as
+open operator work. The UI may show an honest historical-context-unavailable state; it may not
+invent missing context or advertise a resolution action.
+
+### 10.5 Decision-review application
+
+- Conflict findings reuse the founder-actionability predicate already shared by Founder Review and
+  the coworker-readable open-review tool. Unlinked internal kernel consults are audit records, not
+  operator residue.
+- The query excludes non-null `humanOutcome`; the pure builder also rejects blank questions as a
+  defense in depth.
+- The canonical decision detail is `/coworker-decisions/decisions/[interactionId]`, which already
+  carries the richer evidence and plain-language next-action projection. Legacy Decision Canvas
+  links converge there rather than maintaining two operator-detail dialects.
+- A conflict CTA is **Review blocked decision**, not **De-conflict**. The detail page explains whether a
+  build is actually waiting and links to the owning workflow. The action never claims a mutation it
+  cannot perform.
+- Historical sealed decision fields are never rewritten. Lifecycle cleanup appends a human or
+  machine-withdrawal outcome with a reason when an owning workflow actually disposes a record.
+
+### 10.6 Process prevention
+
+The shared `GovernanceFinding` read contract distinguishes a navigational detail link from an
+executable action. An executable action is valid only as a complete label+destination pair and
+must declare its outcome semantics. Contract tests cover missing targets, blank context, resolved
+source rows, and recurrence. UX-fit review treats a dead-end action as a failed empty/failure state,
+not as a cosmetic issue.
+
+### 10.7 Repeated asks and disposition lifecycle
+
+Follow-up live-state inspection found a second breach of the same contract. The decision ledger
+correctly retained multiple consultations, but **Waiting on your call** projected each unresolved
+row as separate work. Capturing an answer updated only the selected row, so an older identical row
+immediately replaced it and appeared to the operator as though the review had not worked. The
+Decision log also counted unresolved work by absence of an escalation capture while Review used
+absence of `humanOutcome`, giving two surfaces different meanings of “awaiting review.”
+
+The lifecycle contract is therefore:
+
+- audit occurrences remain append-only and individually inspectable;
+- the work queue groups unresolved occurrences by a deterministic identity of profile + decision
+  domain + normalized question and shows the represented occurrence count;
+- one owner ruling atomically disposes every still-open occurrence with that exact identity, with
+  non-representative outcomes linking back to the source interaction that carried the ruling;
+- lexical identity is intentionally conservative: wording the system cannot prove identical is
+  not silently merged or assigned the same business answer; and
+- every queue and count uses non-null `humanOutcome` as the canonical disposition signal.
+
+Existing installs receive a forward data repair under the same exact identity. It carries the most
+recent explicit escalation/deferral ruling (preferred over administrative acknowledgement) to an
+open historical twin and records `resolvedVia=review-cluster-backfill` plus the source interaction.
+It neither deletes the occurrence nor changes its sealed decision evidence.
+
+This preserves audit fidelity while enforcing one cognitive unit per owner decision. Future
+semantic clustering may suggest near-matches, but must keep the operator in control of merging
+them; similarity alone cannot propagate a business ruling.

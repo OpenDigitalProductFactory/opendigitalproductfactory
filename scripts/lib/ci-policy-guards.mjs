@@ -112,6 +112,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       node("--test", "scripts/check-override-comments.test.mjs"),
       node("scripts/check-build-script-policy.mjs"),
       node("--test", "scripts/check-build-script-policy.test.mjs"),
+      node("--test", "scripts/check-root-script-runtime.test.mjs"),
     ]),
     guard("bundle-boundary-guard", "Bundle Boundary Guard", [
       node("scripts/check-bundle-boundaries.mjs"),
