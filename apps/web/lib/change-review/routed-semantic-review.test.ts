@@ -3,17 +3,17 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("@/lib/inference/routed-inference", () => ({
   routeAndCall: vi.fn(),
 }));
-vi.mock("@/lib/nonprod/environment-lease", () => ({
-  listActiveNonprodEnvironmentLeases: vi.fn(),
+vi.mock("@/lib/routing/local-provider-capacity", () => ({
+  inspectLocalProviderCapacity: vi.fn(),
 }));
 
 import { routeAndCall } from "@/lib/inference/routed-inference";
-import { listActiveNonprodEnvironmentLeases } from "@/lib/nonprod/environment-lease";
+import { inspectLocalProviderCapacity } from "@/lib/routing/local-provider-capacity";
 import { dispatchRoutedSemanticReview } from "./routed-semantic-review";
 
 beforeEach(() => {
   vi.clearAllMocks();
-  vi.mocked(listActiveNonprodEnvironmentLeases).mockResolvedValue([] as never);
+  vi.mocked(inspectLocalProviderCapacity).mockResolvedValue({ available: true, reason: null });
 });
 
 describe("routed semantic review", () => {
@@ -53,9 +53,10 @@ describe("routed semantic review", () => {
   });
 
   it("defers review while local CI owns host capacity", async () => {
-    vi.mocked(listActiveNonprodEnvironmentLeases).mockResolvedValue([
-      { environmentKey: "local-integration-ci" },
-    ] as never);
+    vi.mocked(inspectLocalProviderCapacity).mockResolvedValue({
+      available: false,
+      reason: "local-ci-active-capacity-reservation",
+    });
 
     const result = await dispatchRoutedSemanticReview("review this", {
       strategyProfile: "high-assurance",
@@ -74,7 +75,10 @@ describe("routed semantic review", () => {
   });
 
   it("fails closed when the host-capacity registry cannot be read", async () => {
-    vi.mocked(listActiveNonprodEnvironmentLeases).mockRejectedValue(new Error("registry unavailable"));
+    vi.mocked(inspectLocalProviderCapacity).mockResolvedValue({
+      available: false,
+      reason: "local-ci-capacity-reservation-unavailable",
+    });
 
     const result = await dispatchRoutedSemanticReview("review this", {
       strategyProfile: "high-assurance",
@@ -89,9 +93,7 @@ describe("routed semantic review", () => {
   });
 
   it("does not defer review for an unrelated nonproduction lease", async () => {
-    vi.mocked(listActiveNonprodEnvironmentLeases).mockResolvedValue([
-      { environmentKey: "dev-portal" },
-    ] as never);
+    vi.mocked(inspectLocalProviderCapacity).mockResolvedValue({ available: true, reason: null });
     vi.mocked(routeAndCall).mockResolvedValue({
       content: JSON.stringify({ decision: "pass", issues: [], summary: "Pass." }),
     } as never);

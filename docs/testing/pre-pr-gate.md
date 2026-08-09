@@ -291,6 +291,15 @@ intentionally sampled more slowly because each WMI/CIM process-table read is
 itself a heavyweight host operation; `DPF_GATE_PROCESS_SCAN_MS` and
 `DPF_GATE_DESCENDANT_POLL_MS` remain explicit debugging overrides.
 
+While a `local-integration-ci` lease is active, the portal reserves the shared
+host against new local inference dispatch. The common completion adapter and
+embedding choke point consult the same lease registry immediately before local
+provider contact; a local-only request receives a typed capacity deferral,
+while an eligible cloud fallback remains available. Registry uncertainty fails
+closed for local inference only. This exclusion prevents a post-admission local
+model load from consuming the memory envelope that the exact-tree gate owns;
+it does not terminate a model that was already resident before admission.
+
 **Fail-fast command order (BI-7BCCDE3D).** Inside an admitted runtime-code
 gate, freshness, Prisma generation, migrations, and the cheap doc/repository
 guards run first. Web typecheck then runs before exhaustive Vitest, followed by

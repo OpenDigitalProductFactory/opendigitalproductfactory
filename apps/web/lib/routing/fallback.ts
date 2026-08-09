@@ -20,6 +20,9 @@ import {
 } from "./rate-tracker";
 import { scheduleRecovery } from "./rate-recovery";
 import { isLocalProviderId } from "./provider-locality";
+import {
+  LocalProviderCapacityDeferredError,
+} from "./local-provider-capacity";
 import { invalidateRoutingLoaderCache } from "./loader";
 import { recordRouteOutcome } from "./route-outcome";
 import { autoDiscoverAndProfile } from "@/lib/ai-provider-internals";
@@ -244,6 +247,7 @@ export async function callWithFallbackChain(
   });
 
   const attempts: Array<{ endpointId: string; error: string }> = [];
+  const capacityDeferrals: LocalProviderCapacityDeferredError[] = [];
   let rateLimitRetried = false;
   let overloadRetried = false;
   let transientRetried = false;
@@ -382,6 +386,11 @@ export async function callWithFallbackChain(
           : {}),
       };
     } catch (e) {
+      if (e instanceof LocalProviderCapacityDeferredError) {
+        capacityDeferrals.push(e);
+        attempts.push({ endpointId: entry.providerId, error: e.reason });
+        continue;
+      }
       const errMsg = e instanceof Error ? e.message : String(e);
       attempts.push({ endpointId: entry.providerId, error: errMsg });
       console.warn(`[callWithFallbackChain] ${entry.providerId} failed: ${errMsg}`);
@@ -612,6 +621,10 @@ export async function callWithFallbackChain(
         }).catch((err) => console.error("[outcome] Failed to record error:", err));
       }
     }
+  }
+
+  if (capacityDeferrals.length === chain.length) {
+    throw capacityDeferrals.at(-1)!;
   }
 
   throw new Error(
