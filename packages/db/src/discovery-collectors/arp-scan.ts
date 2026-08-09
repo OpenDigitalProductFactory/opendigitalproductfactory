@@ -226,7 +226,9 @@ function parseSubnet(value: string): ParsedSubnet | null {
   if (extra !== undefined || addressNumber == null || !Number.isInteger(prefix) || prefix < 16 || prefix > 30) {
     return null;
   }
-  const mask = prefix === 0 ? 0 : (0xffffffff << (32 - prefix)) >>> 0;
+  // prefix is guaranteed 16..30 by the guard above, so (32 - prefix) is 2..16 —
+  // never a 32-bit no-op shift, and never 0. Compute the mask directly.
+  const mask = (0xffffffff << (32 - prefix)) >>> 0;
   const network = (addressNumber & mask) >>> 0;
   const broadcast = (network | (~mask >>> 0)) >>> 0;
   return {
