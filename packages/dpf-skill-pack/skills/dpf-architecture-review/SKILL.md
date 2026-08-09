@@ -67,6 +67,8 @@ Measure the spec against these reference standards. They are the curated DPF set
 - `kernel/principles/single-source-of-truth` — each rule, fact, or model lives in exactly one place; flag any duplication of an existing model or rule.
 - `kernel/principles/research-and-use-standards` — cite the standard; recommend it unless there is a project-specific reason to deviate. Research the topic when the curated refs don't cover it.
 - `kernel/principles/schema-audit-before-features` — before any new model, audit the existing schema for a model to extend (Organization for identity, Principal/PrincipalAlias for identity-bearing entities).
+- **Scalability is a standing review dimension** (facet of `architecture-over-shortcuts`) — a design is not sound merely because it works at demo scale. Unbounded queries, silent caps/truncation, O(N²) mesh fan-out, and full-inventory-per-cycle work are findings; every design names the scale ceiling it holds and the epic that lifts it. (A real cliff this exists to catch: a federated-demand digest shipped with `take: 1_000` and no cursor, silently dropping records past the first batch — invisible at two installs, fatal at scale.)
+- **Data architecture / normal form is a standing review dimension** — proper normalization, one authoritative home per fact, canonical-model extension over parallel tables; any denormalization must be explicit and justified.
 
 ## Steps
 
@@ -76,6 +78,8 @@ Measure the spec against these reference standards. They are the curated DPF set
 
 3. **Run the alignment checks.**
    - **Data model**: does it EXTEND a canonical model or create a parallel table? (`schema-audit-before-features`, `organization-canonical-identity`, `principal-convergence`.)
+   - **Data architecture / normal form** (REQUIRED): is state properly normalized — one authoritative home per fact, no duplicated/denormalized source of truth? Are keys, foreign keys, and cardinality right? Does any denormalization carry an explicit, justified reason (e.g. a read model), or is it accidental? A parallel table where a canonical model should be extended is a finding.
+   - **Scalability** (REQUIRED — this dimension is not optional; a design that works at small N but not at the platform's intended scale is a finding, not a pass): is every query/collection bounded (NO unbounded `take`/`findMany`, no silent caps/truncation — page or cursor large sets, or warn)? Does it avoid O(N²) fan-out (a mesh that should be a hub/introducer) and full-inventory-per-cycle work (prefer delta/incremental)? Name the **scale ceiling** the design holds to and the **epic** that lifts it. DPF targets an eventual future of many thousands→millions of sovereign installs; review against that, not the two-install demo.
    - **Single source of truth**: is any rule/fact/decision duplicated from somewhere it already lives?
    - **Substrate fit**: does it sit on the right route/lib/tool, or invent a bespoke parallel one?
    - **Enums & contracts**: do string-enum columns match the canonical registry (hyphens, not underscores)? Does it wrap the deployment contracts?
