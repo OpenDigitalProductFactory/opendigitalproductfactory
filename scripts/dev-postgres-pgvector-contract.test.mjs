@@ -51,3 +51,19 @@ test("Contributor preview receives a separate local-only login credential", asyn
     "the preview credential must not reuse the live administrator password",
   );
 });
+
+test("Contributor preview keeps authentication redirects on the preview origin", async () => {
+  const compose = await readFile(new URL("../docker-compose.yml", import.meta.url), "utf8");
+  const portal = composeService(compose, "dev-portal");
+
+  assert.match(
+    portal,
+    /^      PUBLIC_URL: http:\/\/localhost:3001$/m,
+    "dev-portal sign-in must return contributors to the leased preview instead of the live portal",
+  );
+  assert.match(
+    portal,
+    /^      AUTH_URL: http:\/\/localhost:3001$/m,
+    "dev-portal credential errors must remain on the leased preview origin",
+  );
+});

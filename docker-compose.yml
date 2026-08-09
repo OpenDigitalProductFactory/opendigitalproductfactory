@@ -597,6 +597,8 @@ services:
       DPF_DEV_PORTAL_WORKSPACE_ROOT: /workspace
       AUTH_SECRET: dev_secret_change_me
       AUTH_TRUST_HOST: "true"
+      AUTH_URL: http://localhost:3001
+      PUBLIC_URL: http://localhost:3001
       CREDENTIAL_ENCRYPTION_KEY: dev_only_key_not_for_production_0000
       UPLOAD_STORAGE_PATH: /workspace/data/uploads
     depends_on:
