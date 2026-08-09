@@ -7,6 +7,8 @@
 **Linked backlog items:** 9 BIs filed 2026-05-31 (5 Phase 1 substrate + 4 Phase 2 Build Studio vertical) — see §16 Phased Rollout for the semantic→cuid mapping table.
 **Kernel principles invoked:** `architecture-over-shortcuts`, `single-source-of-truth`, `governance-approves-evidence-not-provenance`, `state-results-directly`, `never-fabricate`, `principal-convergence`
 
+> **2026-08-08 architecture note:** The delegation, dual-principal authority, governed-envelope, and audit decisions remain authoritative. The browser-shaped `ScreenManifest` is no longer the canonical interface: [`2026-08-08-authorized-surface-contract-design.md`](2026-08-08-authorized-surface-contract-design.md) makes it a compatibility projection of the render-independent Authorized Surface Contract.
+
 ---
 
 ## 1. Context
