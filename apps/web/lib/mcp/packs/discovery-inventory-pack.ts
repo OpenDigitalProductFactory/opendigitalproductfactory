@@ -180,15 +180,24 @@ const definitions: ToolDefinition[] = [
     sideEffect: true,
   },
   {
+    name: "list_discovery_connections",
+    description: "List authorized Estate Discovery connections and their non-secret status/configuration summary. Credentials are never returned.",
+    inputSchema: { type: "object", properties: {}, required: [] },
+    requiredCapability: "manage_provider_connections",
+    executionMode: "immediate",
+    sideEffect: false,
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  },
+  {
     name: "configure_gateway_scan",
-    description: "Create or update a DiscoveryConnection for an ARP/subnet gateway scan so physical LAN segments (e.g. 192.168.x) become visible. Use to resolve gateway_connection_needed issues.",
+    description: "Create or update an ARP, UniFi, or SNMP discovery connection. This saves configuration but does not test it; prefer configure_and_test_discovery_connection when reproducing the page's Save & Test outcome.",
     inputSchema: {
       type: "object",
       properties: {
         name:             { type: "string", description: "Human label for the connection (e.g. 'Home LAN 192.168.0.0/24')" },
         endpointUrl:      { type: "string", description: "Gateway URL or scan endpoint (e.g. http://192.168.0.1 or arp://192.168.0.0/24)" },
-        apiKey:           { type: "string", description: "Optional API key (encrypted at rest)" },
-        collectorType:    { type: "string", enum: ["arp_scan", "unifi"], description: "Defaults to 'arp_scan' for generic subnet discovery" },
+        apiKey:           { type: "string", writeOnly: true, description: "Optional API key (encrypted at rest)" },
+        collectorType:    { type: "string", enum: ["arp_scan", "unifi", "snmp"], description: "Defaults to 'arp_scan'; use 'snmp' for SNMP network discovery (not SMTP email)." },
         gatewayEntityId:  { type: "string", description: "Optional InventoryEntity cuid of the gateway device" },
         configuration:    { type: "object", description: "Collector-specific configuration JSON (e.g. { subnet: '192.168.0.0/24' })" },
       },
@@ -196,6 +205,27 @@ const definitions: ToolDefinition[] = [
     },
     requiredCapability: "manage_provider_connections",
     sideEffect: true,
+  },
+  {
+    name: "configure_and_test_discovery_connection",
+    description: "Perform the Estate Discovery page's Save & Test outcome without a browser: save an ARP, UniFi, or SNMP connection, immediately test it, and return the real connection status/device count. SNMP is network discovery; SMTP is outbound email and is not configured here.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        id:               { type: "string", description: "Existing DiscoveryConnection id when editing" },
+        name:             { type: "string", description: "Human label for the connection" },
+        endpointUrl:      { type: "string", description: "UniFi controller URL, SNMP target IP/hostname, or ARP CIDR subnet" },
+        apiKey:           { type: "string", writeOnly: true, description: "Write-only UniFi API key or SNMP community string; encrypted at rest and never returned" },
+        collectorType:    { type: "string", enum: ["arp_scan", "unifi", "snmp"], description: "Discovery Method shown by the page" },
+        gatewayEntityId:  { type: "string", description: "Optional InventoryEntity id of the detected gateway" },
+        configuration:    { type: "object", description: "Collector configuration: UniFi site/tlsInsecure, SNMP community, or ARP subnet" },
+      },
+      required: ["name", "endpointUrl", "collectorType"],
+    },
+    requiredCapability: "manage_provider_connections",
+    executionMode: "immediate",
+    sideEffect: true,
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   },
 ];
 
@@ -424,7 +454,75 @@ async function configureGatewayScanHandler(params: Record<string, unknown>): Pro
   };
 }
 
+async function configureAndTestDiscoveryConnectionHandler(
+  params: Record<string, unknown>,
+): Promise<ToolResult> {
+  const name = String(params["name"] ?? "").trim();
+  const endpointUrl = String(params["endpointUrl"] ?? "").trim();
+  const collectorType = String(params["collectorType"] ?? "").trim();
+  if (!name) return { success: false, message: "name is required", error: "missing_name" };
+  if (!endpointUrl) return { success: false, message: "endpointUrl is required", error: "missing_endpoint_url" };
+  if (!["arp_scan", "unifi", "snmp"].includes(collectorType)) {
+    return { success: false, message: "collectorType must be arp_scan, unifi, or snmp", error: "invalid_collector_type" };
+  }
+
+  const { configureDiscoveryConnection, testDiscoveryConnection } = await import("@/lib/actions/discovery");
+  const configured = await configureDiscoveryConnection({
+    ...(typeof params["id"] === "string" && params["id"].trim() ? { id: params["id"].trim() } : {}),
+    ...(typeof params["gatewayEntityId"] === "string" && params["gatewayEntityId"].trim()
+      ? { gatewayEntityId: params["gatewayEntityId"].trim() }
+      : {}),
+    name,
+    endpointUrl,
+    collectorType,
+    ...(typeof params["apiKey"] === "string" && params["apiKey"].length > 0 ? { apiKey: params["apiKey"] } : {}),
+    ...(params["configuration"] && typeof params["configuration"] === "object" && !Array.isArray(params["configuration"])
+      ? { configuration: params["configuration"] as Record<string, unknown> }
+      : {}),
+  });
+  if (!configured.ok) {
+    return { success: false, message: configured.error, error: configured.error };
+  }
+
+  const tested = await testDiscoveryConnection(configured.connectionId);
+  if (!tested.ok) {
+    return {
+      success: false,
+      entityId: configured.connectionId,
+      message: `Discovery connection saved, but its test failed: ${tested.error}`,
+      error: tested.error,
+      data: { connectionId: configured.connectionId, saved: true, tested: false },
+    };
+  }
+
+  const method = collectorType === "snmp" ? "SNMP" : collectorType === "unifi" ? "UniFi" : "ARP";
+  return {
+    success: tested.status === "ok",
+    entityId: configured.connectionId,
+    message: tested.status === "ok"
+      ? `${method} discovery connection saved and tested successfully. ${tested.message ?? `Discovered ${tested.deviceCount ?? 0} items.`}`
+      : `${method} discovery connection saved, but the test reported ${tested.status}: ${tested.message ?? "Connection test failed."}`,
+    ...(tested.status === "ok" ? {} : { error: tested.status }),
+    data: {
+      connectionId: configured.connectionId,
+      collectorType,
+      status: tested.status,
+      deviceCount: tested.deviceCount ?? 0,
+      message: tested.message ?? null,
+    },
+  };
+}
+
 const handlers: Record<string, ToolPackHandler> = {
+  list_discovery_connections: async () => {
+    const { getDiscoveryOperationsViewModel } = await import("@/lib/discovery-operations-view-model");
+    const model = await getDiscoveryOperationsViewModel({ includeConnections: true });
+    return {
+      success: true,
+      message: `${model.connections.length} discovery connection(s).`,
+      data: { connections: model.connections },
+    };
+  },
   discovery_sweep: () => discoverySweepHandler(),
   run_discovery_triage: (params, _userId, context) => runDiscoveryTriageHandler(params, context),
   run_hive_scout_ingest: (_params, _userId, context) => runHiveScoutIngestHandler(context),
@@ -434,6 +532,7 @@ const handlers: Record<string, ToolPackHandler> = {
   enrich_digital_product: (params) => enrichDigitalProductHandler(params),
   request_re_enrichment: (params) => requestReEnrichmentHandler(params),
   configure_gateway_scan: (params) => configureGatewayScanHandler(params),
+  configure_and_test_discovery_connection: (params) => configureAndTestDiscoveryConnectionHandler(params),
 };
 
 export const discoveryInventoryPack: ToolPack = {
@@ -441,6 +540,7 @@ export const discoveryInventoryPack: ToolPack = {
   definitions,
   handlers,
   grants: {
+    list_discovery_connections: ["agent_control_read"],
     discovery_sweep: ["telemetry_read"],
     run_discovery_triage: ["registry_write"],
     run_hive_scout_ingest: ["backlog_write"],
@@ -450,5 +550,6 @@ export const discoveryInventoryPack: ToolPack = {
     enrich_digital_product: ["enrichment_write"],
     request_re_enrichment: ["enrichment_write"],
     configure_gateway_scan: ["agent_control_read"],
+    configure_and_test_discovery_connection: ["agent_control_read"],
   },
 };

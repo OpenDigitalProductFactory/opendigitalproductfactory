@@ -12,7 +12,7 @@
 // still resolves through agent-grants.ts `TOOL_TO_GRANTS`; the pack mirrors it so
 // a test can assert the two never drift (the R3 authority-control safeguard).
 
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
+import type { ToolDefinition, ToolExecutionContext, ToolResult } from "@/lib/mcp-tools";
 
 /**
  * A tool handler, with the context fields the dispatch site (executeTool) passes
@@ -23,18 +23,7 @@ import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
 export type ToolPackHandler = (
   params: Record<string, unknown>,
   userId: string,
-  context?: {
-    routeContext?: string;
-    threadId?: string;
-    agentId?: string;
-    /** Owning TaskRun id, forwarded for handlers that attribute background work. */
-    taskRunId?: string;
-    /** Caller attribution from the MCP route (client UA token + auth identity)
-     *  for decision-ledger writers. */
-    callerClient?: string;
-    apiTokenId?: string;
-    authSource?: string;
-  },
+  context?: ToolExecutionContext,
 ) => Promise<ToolResult>;
 
 export type ToolPack = {

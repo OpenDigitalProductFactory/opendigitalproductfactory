@@ -1,0 +1,38 @@
+{
+  "version": "1",
+  "decidedOption": "authorized-live-semantic-contract",
+  "decisionInteractionId": "DI-204400DDA2A5",
+  "scope": {
+    "files": [
+      "apps/web/components/inventory/ConfigureConnectionInline.tsx",
+      "apps/web/components/inventory/DiscoveryOperationsPage.tsx",
+      "apps/web/components/inventory/SavedConnectionsPanel.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "authorized-live-semantic-contract",
+      "dom-accessibility-scrape-as-truth",
+      "handwritten-page-context-manifests",
+      "server-only-generated-page-contract"
+    ],
+    "fitDecision": "fits-with-guardrails",
+    "owningArea": "Platform",
+    "routeFamily": "/platform/tools/discovery with /inventory retained as a legacy alias",
+    "primaryPersona": "platform operator configuring discovery and an authorized AI coworker helping with the same work without requiring route or form recall",
+    "navigationLayer": "contextual action",
+    "reuseConvergence": "keeps the existing Discovery Operations route and connection components while converging the rendered page and coworker projection on one read model; no new dashboard or navigation layer",
+    "sourceTruth": "getDiscoveryOperationsViewModel plus existing discovery domain actions, projected through the Authorized Surface Contract",
+    "emptyFailureBehavior": "the existing first-run connection path remains visible; missing permission is enforced by the existing domain action and the coworker receives a truthful refusal rather than inferred page guidance",
+    "aiBoundary": "surface actions do not send prompts; Save and Test remains explicit and executes only through the existing governed discovery action under the delegated user's authority",
+    "accessibility": "stable semantic node identifiers supplement rather than replace native labels and controls; the community string is write-only in the coworker projection and rendered as a password control",
+    "responsive": "no route or layout structure changes; the compact existing connection form gains one short explanatory line and retains its wrapping layout",
+    "evidenceBeforeMerge": [
+      "component and route tests",
+      "theme and UX-fit guards",
+      "production build",
+      "governed local-integration UX exercise of the Discovery Operations happy path"
+    ]
+  }
+}

@@ -8,16 +8,20 @@
 // Server component on purpose: row interactivity lives in SavedConnectionRow
 // (client) but the data fetch + permission check stay server-side.
 
-import { listDiscoveryConnections } from "@/lib/actions/discovery";
+import { listDiscoveryConnections, type DiscoveryConnectionSummary } from "@/lib/actions/discovery";
 import { AddDiscoveryConnection } from "./AddDiscoveryConnection";
 import { SavedConnectionRow } from "./SavedConnectionRow";
 
 type Props = {
   detectedGateway: string | null;
+  /** Shared page/surface read model; omitted only by legacy callers. */
+  connections?: DiscoveryConnectionSummary[];
 };
 
-export async function SavedConnectionsPanel({ detectedGateway }: Props) {
-  const result = await listDiscoveryConnections();
+export async function SavedConnectionsPanel({ detectedGateway, connections: projectedConnections }: Props) {
+  const result = projectedConnections
+    ? { ok: true as const, connections: projectedConnections }
+    : await listDiscoveryConnections();
 
   // Auth failure — fall back to the first-run hero so the page still renders.
   // The CTA itself is gated by the same permission server-side, so the

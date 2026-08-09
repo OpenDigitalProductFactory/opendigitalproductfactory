@@ -12,7 +12,6 @@
 // server discovery (the GitHub-PAT pattern, intentionally) but we still
 // return a WWW-Authenticate header on 401 so clients that perform
 // discovery don't fail mysteriously.
-
 import {
   resolveMcpApiToken,
   type McpTokenCapability,
@@ -625,6 +624,7 @@ async function handleToolsCall(
       routeContext: token.routeContext ?? undefined,
       callerClient,
       authSource: token.source,
+      tokenScope, tokenGrantScopes: expandedScopes,
     },
     source: token.source === "session-jwt" ? "internal-mcp-session" : "external-jsonrpc",
   });

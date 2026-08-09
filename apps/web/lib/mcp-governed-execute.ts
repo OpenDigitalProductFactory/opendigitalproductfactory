@@ -37,6 +37,7 @@ import { coerceMcpToolArgs } from "./mcp-arg-coercion";
 import { deriveAuditClassForTool, deriveCapabilityId } from "./tool-audit-helpers";
 import { getWorkCaseAction } from "./work-management/action-registry";
 import type { WorkCaseExecutionContext } from "./work-management/work-case-governance-hook";
+import type { AuthorizedSurfaceContext, AuthorizedSurfaceInvocation } from "@/lib/coworker/authorized-surface-execution-types";
 
 export type GovernedExecuteSource =
   | "rest"
@@ -86,6 +87,10 @@ export type GovernedExecuteContext = {
    * gate, so honouring it here never escalates beyond what the operator may see.
    */
   coworkerReadBaseline?: boolean;
+  /** All coworker runtimes receive the ASC transport baseline. Domain actions
+   * still re-enter this governed executor and retain their ordinary authority. */
+  coworkerAuthorizedSurfaceBaseline?: boolean;
+  authorizedSurfaceContext?: AuthorizedSurfaceContext;
   /**
    * Server-owned session permission for tools that cross the platform
    * boundary. Callers may set this only after the tool registry has admitted
@@ -107,6 +112,12 @@ export type GovernedExecuteContext = {
    * §10). Omitted for direct human→coworker calls (human still on userId).
    */
   delegationChainId?: string;
+  /** Server-resolved MCP token limits, forwarded only so a compiled surface
+   * action can re-check the original token before nested governed dispatch. */
+  tokenScope?: "read" | "write" | "admin";
+  tokenGrantScopes?: string[];
+  /** Server-authored correlation for a domain tool reached through ASC. */
+  surfaceInvocation?: AuthorizedSurfaceInvocation;
 };
 
 export type GovernedExecuteArgs = {
@@ -266,6 +277,16 @@ async function callExecuteTool(
     callerClient?: string;
     apiTokenId?: string;
     authSource?: string;
+    userContext?: UserContext;
+    governedSource?: GovernedExecuteSource;
+    tokenScope?: "read" | "write" | "admin";
+    tokenGrantScopes?: string[];
+    authorizedSurfaceContext?: GovernedExecuteContext["authorizedSurfaceContext"];
+    governedDispatch?: (
+      toolName: string,
+      params: Record<string, unknown>,
+      invocation?: { surfaceId: string; sessionId: string; revision: string; actionId: string },
+    ) => Promise<ToolResult>;
   },
 ): Promise<ToolResult> {
   if (_executeToolOverride) return _executeToolOverride(toolName, params, userId, ctx);
@@ -284,13 +305,18 @@ async function writeAudit(data: {
   const auditClass = deriveAuditClassForTool(data.toolName);
   const capabilityId = deriveCapabilityId(data.toolName);
   const isMetricsOnly = auditClass === "metrics_only";
+  const tool = findTool(data.toolName);
+  const auditedParams = redactWriteOnlyParameters(data.rawParams, tool?.inputSchema);
   const row = {
     threadId: data.context?.threadId ?? "",
     agentId: data.context?.agentId ?? "unknown",
     userId: data.userId,
     taskRunId: data.context?.taskRunId ?? null,
     toolName: data.toolName,
-    parameters: isMetricsOnly ? {} : (data.rawParams as object),
+    parameters: isMetricsOnly ? {} : ({
+      ...auditedParams,
+      ...(data.context?.surfaceInvocation ? { _surface: data.context.surfaceInvocation } : {}),
+    } as object),
     result: isMetricsOnly ? {} : (data.result as unknown as object),
     success: data.result.success,
     executionMode: data.source,
@@ -333,6 +359,25 @@ async function writeAudit(data: {
     );
     return null;
   }
+}
+
+function redactWriteOnlyParameters(
+  value: Record<string, unknown>,
+  schema: Record<string, unknown> | undefined,
+): Record<string, unknown> {
+  const properties = schema?.properties && typeof schema.properties === "object"
+    ? schema.properties as Record<string, unknown>
+    : {};
+  return Object.fromEntries(Object.entries(value).map(([key, entry]) => {
+    const property = properties[key] && typeof properties[key] === "object"
+      ? properties[key] as Record<string, unknown>
+      : undefined;
+    if (property?.writeOnly === true) return [key, "[REDACTED]"];
+    if (entry && typeof entry === "object" && !Array.isArray(entry) && property?.properties) {
+      return [key, redactWriteOnlyParameters(entry as Record<string, unknown>, property)];
+    }
+    return [key, entry];
+  }));
 }
 
 function deriveReceiptKind(
@@ -534,6 +579,10 @@ export async function governedExecuteTool(
       const { COWORKER_READ_BASELINE_GRANTS } = await import("./tak/agent-grants");
       grants = Array.from(new Set([...grants, ...COWORKER_READ_BASELINE_GRANTS]));
     }
+    if (args.context.coworkerAuthorizedSurfaceBaseline) {
+      const { COWORKER_AUTHORIZED_SURFACE_BASELINE_GRANTS } = await import("@/lib/coworker/authorized-surface-coworker-contract");
+      grants = Array.from(new Set([...grants, ...COWORKER_AUTHORIZED_SURFACE_BASELINE_GRANTS]));
+    }
     const agentGrantAllowed = await isAllowedByGrants(args.toolName, grants);
 
     const authorityGate = await enforceCoworkerToolAuthority(
@@ -612,6 +661,45 @@ export async function governedExecuteTool(
       callerClient: args.context?.callerClient,
       apiTokenId: args.context?.apiTokenId,
       authSource: args.context?.authSource,
+      userContext: args.userContext,
+      governedSource: args.source,
+      tokenScope: args.context?.tokenScope,
+      tokenGrantScopes: args.context?.tokenGrantScopes,
+      authorizedSurfaceContext: args.context?.authorizedSurfaceContext,
+      governedDispatch: async (nestedToolName, nestedParams, surfaceInvocation) => {
+        const nestedTool = findTool(nestedToolName);
+        if (!nestedTool) {
+          return { success: false, error: "unknown_tool", message: `Unknown tool: ${nestedToolName}` };
+        }
+        if (args.context?.apiTokenId) {
+          const requiredGrants = (await import("./tak/agent-grants")).TOOL_TO_GRANTS[nestedToolName];
+          const expanded = (await import("./tak/agent-grants")).expandGrants(args.context.tokenGrantScopes ?? []);
+          const grantAllowed = !!requiredGrants?.some((grant) => expanded.includes(grant));
+          const requiredScope = requiredGrants?.some((grant) => grant.startsWith("admin_"))
+            ? "admin"
+            : nestedTool.sideEffect ? "write" : "read";
+          const actualScope = args.context.tokenScope;
+          const scopeAllowed = requiredScope === "read"
+            || (requiredScope === "write" && (actualScope === "write" || actualScope === "admin"))
+            || (requiredScope === "admin" && actualScope === "admin");
+          if (!grantAllowed || !scopeAllowed) {
+            return {
+              success: false,
+              error: "insufficient_token_scope",
+              message: `The originating MCP token is not authorized for nested surface action '${nestedToolName}'.`,
+            };
+          }
+        }
+        return governedExecuteTool({
+          ...args,
+          toolName: nestedToolName,
+          rawParams: nestedParams,
+          context: {
+            ...args.context,
+            ...(surfaceInvocation ? { surfaceInvocation } : {}),
+          },
+        });
+      },
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown tool error";

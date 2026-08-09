@@ -565,6 +565,9 @@
     "apps/web/lib/coworker-lifecycle/lifecycle-gate.ts": [
       "docs/architecture/mcp-tool-authorization-runbook.md"
     ],
+    "apps/web/lib/coworker/authorized-surface-registry.ts": [
+      "docs/architecture/orientation.md"
+    ],
     "apps/web/lib/decision-perspective/build-studio-gate.ts": [
       "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md"
     ],
@@ -1275,6 +1278,9 @@
     "packages/storefront-templates/src/types.ts": [
       "docs/architecture/archetype-business-value-streams.md"
     ],
+    "packages/types/src/authorized-surface.ts": [
+      "docs/architecture/orientation.md"
+    ],
     "packages/types/src/entities.ts": [
       "docs/architecture/package-boundaries.md"
     ],
@@ -1357,6 +1363,9 @@
     ],
     "scripts/check-no-dialog-in-transition.mjs": [
       "docs/architecture/theme-aware-styling-runbook.md"
+    ],
+    "scripts/check-no-governed-surface-without-mcp-tool.mjs": [
+      "docs/architecture/orientation.md"
     ],
     "scripts/check-no-hand-rolled-loading.mjs": [
       "docs/platform-usability-standards.md"
@@ -2106,7 +2115,10 @@
     ],
     "docs/architecture/orientation.md": [
       ".github/workflows/migration-safety-guard.yml",
-      "apps/web/lib/ai-inference.ts"
+      "apps/web/lib/ai-inference.ts",
+      "apps/web/lib/coworker/authorized-surface-registry.ts",
+      "packages/types/src/authorized-surface.ts",
+      "scripts/check-no-governed-surface-without-mcp-tool.mjs"
     ],
     "docs/architecture/package-boundaries.md": [
       "apps/web/lib/contracts/entity-contract-drift.ts",

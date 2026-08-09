@@ -1,5 +1,4 @@
 "use server";
-
 import { randomUUID } from "node:crypto";
 import { prisma } from "@dpf/db";
 import { validateMessageInput, type AgentMessageRow } from "@/lib/agent-coworker-types";
@@ -107,8 +106,8 @@ import {
   resolveBuildIdFromRouteContext,
   resolveCapsuleIdFromPathname,
 } from "@/lib/coworker/agent-coworker-core";
+import { AUTHORIZED_SURFACE_PROMPT, AUTHORIZED_SURFACE_TOOL_NAMES, COWORKER_AUTHORIZED_SURFACE_BASELINE_GRANTS } from "@/lib/coworker/authorized-surface-coworker-contract";
 export { filterToolsForCoworkerRuntime };
-
 
 async function buildPortalContextPromptSection(input: {
   routeContext: string;
@@ -839,7 +838,7 @@ export async function sendMessage(input: {
     professionInjectedIntoPrompt = selectedProfessionContext !== null;
 
     // Merge knowledge and semantic memory into domain context if they made the budget
-    let finalDomainContext = selectedDomain;
+    let finalDomainContext = `${selectedDomain}\n\n${AUTHORIZED_SURFACE_PROMPT}`;
     if (selectedKnowledge) finalDomainContext += "\n\n" + selectedKnowledge;
     if (selectedMemory) finalDomainContext += "\n\n" + selectedMemory;
 
@@ -1020,7 +1019,7 @@ export async function sendMessage(input: {
       "",
       // BI-E35A8AA4: Proactivity → in-task initiative — surface-uniform with the
       // unified path, which injects the same block via assembleSystemPrompt.
-      buildInitiativeBlock(proactivityLevel),
+      buildInitiativeBlock(proactivityLevel), "", AUTHORIZED_SURFACE_PROMPT,
       "",
       "Current context:",
       `- Route: ${input.routeContext}`,
@@ -1231,6 +1230,7 @@ export async function sendMessage(input: {
   // Every coworker holds a read-only baseline (page coordination data, docs,
   // source, code graph) on top of its agent-specific grants — BI-FD7E4D72.
   const { COWORKER_READ_BASELINE_GRANTS } = await import("@/lib/tak/agent-grants");
+  const coworkerDefaultGrants = [...COWORKER_READ_BASELINE_GRANTS, ...COWORKER_AUTHORIZED_SURFACE_BASELINE_GRANTS];
   const toolUserContext = {
     platformRole: user.platformRole,
     isSuperuser: user.isSuperuser,
@@ -1240,7 +1240,7 @@ export async function sendMessage(input: {
     // Skip mode filtering here — applied to merged set
     unifiedMode: useUnified,
     agentId: agent.agentId,
-    additionalGrants: COWORKER_READ_BASELINE_GRANTS,
+    additionalGrants: coworkerDefaultGrants,
   });
 
   // Get page-specific actions
@@ -1372,7 +1372,7 @@ export async function sendMessage(input: {
     tools: availableTools,
     roleGrants,
     pageActionNames: new Set([...pageActions.map((t) => t.name), ...routeDomainToolNames, ...brokeredToolNames]),
-    alwaysIncludeNames: new Set([LOAD_TOOLS_TOOL_NAME]),
+    alwaysIncludeNames: new Set([LOAD_TOOLS_TOOL_NAME, ...AUTHORIZED_SURFACE_TOOL_NAMES]),
     cap: availableTools.length > toolCap ? Math.max(1, toolCap - 1) : toolCap,
     // BI-ACE1EBA4 — when the cap forces deferral, keep the tools most relevant to
     // this turn's intent within each priority tier.
@@ -1387,7 +1387,7 @@ export async function sendMessage(input: {
       externalAccessEnabled: true,
       unifiedMode: useUnified,
       agentId: agent.agentId,
-      additionalGrants: COWORKER_READ_BASELINE_GRANTS,
+      additionalGrants: coworkerDefaultGrants,
     });
     disabledExternalTools = getExternalAccessToolSummaries(
       filterToolsForCoworkerRuntime(externalEnabledPlatformTools, {

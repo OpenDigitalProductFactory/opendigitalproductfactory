@@ -1,6 +1,6 @@
 # Authorized Surface Contract — Implementation Plan
 
-> **For agentic workers:** execute this plan one independently reviewable backlog item at a time — one BI, one branch, one PR. Use `dpf-tdd` for red-green implementation, `dpf-local-merge-ci-before-push` plus the plan's completion gate before any success claim, and `dpf-pr-with-dco` for handoff.
+> **For agentic workers:** execute this plan as one integrated platform change on the existing Authorized Surface Contract branch and PR. Preserve independent tests, evidence, and completion accounting for every mapped BI inside that PR. This delivery shape is the founder/operator direction recorded on 2026-08-08 and supersedes the earlier one-BI-per-PR sequencing. Use `dpf-tdd` for red-green implementation, `dpf-local-merge-ci-before-push` plus the plan's completion gate before any success claim, and `dpf-pr-with-dco` for handoff.
 
 **Umbrella BI:** BI-3E872DFB
 
@@ -18,7 +18,7 @@ Ship a versioned, render-independent Authorized Surface Contract so every AI cow
 
 ## Backlog coverage
 
-Coverage decision: **decomposed**. The live backlog receipt `cmsl4bb400ik501o2arpsw3ru` validates six independently shippable mappings for umbrella BI-3E872DFB.
+Coverage decision: **decomposed for scope and evidence; integrated for delivery**. The live backlog receipt `cmsl4bb400ik501o2arpsw3ru` validates six independently testable mappings for umbrella BI-3E872DFB. All mappings land together in one PR because they form one platform primitive whose security, compatibility, and conformance guarantees are only complete when evaluated end to end.
 
 | Key | Backlog item | Deliverable | Depends on |
 |---|---|---|---|
@@ -41,7 +41,7 @@ Before starting or resuming implementation, call `check_plan_backlog_coverage` w
 
 ## Delivery 0 — Existing governed read/act parity
 
-**BI:** BI-F9204A97 · independently shippable
+**BI:** BI-F9204A97 · independently evidenced in the integrated PR
 
 Complete the existing plan for the invariant that a governed data surface has matching authorized read/act MCP operations. Extend its output so the later ASC compiler can consume stable tool/action annotations rather than rebuilding a second registry.
 
@@ -62,7 +62,7 @@ Rollback: keep the metadata additive until consumers land; disabling the new gua
 
 ## Delivery 1 — Core semantic contract and runtime
 
-**BI:** BI-3A70F86B · independently shippable
+**BI:** BI-3A70F86B · independently evidenced in the integrated PR
 
 ### 1.1 Define schemas and stable identity
 
@@ -104,7 +104,7 @@ Rollback: the core is additive and read-only for its first reference surface; ol
 
 ## Delivery 2 — Governed action security
 
-**BI:** BI-E9018F3B · depends on BI-3A70F86B · independently shippable
+**BI:** BI-E9018F3B · depends on BI-3A70F86B · independently evidenced in the integrated PR
 
 ### 2.1 Bind actions to existing execution
 
@@ -133,7 +133,7 @@ Rollback: action bindings are feature-flagged per compiled surface during rollou
 
 ## Delivery 3 — Browser, accessibility, mobile, and legacy projections
 
-**BI:** BI-8B15C210 · depends on BI-3A70F86B · independently shippable
+**BI:** BI-8B15C210 · depends on BI-3A70F86B · independently evidenced in the integrated PR
 
 ### 3.1 Drive the reference UI from shared semantics
 
@@ -167,7 +167,7 @@ Rollback: switch individual surfaces back to legacy projection while preserving 
 
 ## Delivery 4 — Headless, workroom, scheduled, and external sessions
 
-**BI:** BI-1BEF3F52 · depends on BI-3A70F86B and BI-E9018F3B · independently shippable
+**BI:** BI-1BEF3F52 · depends on BI-3A70F86B and BI-E9018F3B · independently evidenced in the integrated PR
 
 ### 4.1 Expose the generic surface protocol
 
@@ -194,7 +194,7 @@ Rollback: disable headless entry points by mode while leaving browser projection
 
 ## Delivery 5 — Conformance, migration, telemetry, and enforcement
 
-**BI:** BI-008E7969 · depends on all preceding deliverables · independently shippable
+**BI:** BI-008E7969 · depends on all preceding deliverables · independently evidenced in the integrated PR
 
 ### 5.1 Add parity and security harnesses
 
@@ -202,7 +202,7 @@ Create fixtures that render and project the same principal/data/locale/surface, 
 
 ### 5.2 Migrate incident and high-value surfaces
 
-First migrate Discovery SMTP setup end to end, proving that the coworker knows required gateways, fields, state, help, validation, and can populate/test/save when authorized. Then migrate high-value workroom/operational surfaces based on observed usage and risk. Convert old route providers/manifests; do not preserve duplicate fetch/context logic.
+First migrate the Discovery **SNMP** setup journey end to end. The originating user called it “SMTP discovery”; the product surface actually offers SNMP. Conformance therefore proves that the coworker corrects the protocol distinction, knows the real Discovery Method, Target IP or Hostname, Community String, validation, current gateway/connection state, and Save & Test outcome, and can populate/test/save when authorized. It must not invent a gateway panel or conflate outbound-email SMTP with network discovery SNMP. Then migrate high-value workroom/operational surfaces based on observed usage and risk. Convert old route providers/manifests; do not preserve duplicate fetch/context logic.
 
 ### 5.3 Instrument the fleet
 
@@ -237,11 +237,11 @@ Rollback: ratchets advance independently and can return one stage while a defect
 
 ## Completion gate
 
-Each BI completes only through its own branch/PR and documentation-impact decision. The umbrella completes when:
+Each BI completes through explicit tests, evidence, and documentation-impact accounting within the single integrated branch/PR. The umbrella completes when:
 
 1. affected unit/contract/render/security tests pass;
 2. `pnpm --filter web build` passes with zero errors;
-3. browser and headless golden journeys pass against the canonical runtime/shared nonproduction lease, including Discovery SMTP setup;
+3. browser and headless golden journeys pass in the governed local-integration/pregate environment before merge, including the Discovery SNMP setup and SMTP/SNMP disambiguation case; the live-install journey is post-merge release validation because an unmerged worktree is not canonical runtime truth;
 4. any migration applies cleanly against existing data states (none is assumed by this design);
 5. plan backlog coverage revalidates against receipt `cmsl4bb400ik501o2arpsw3ru`;
 6. all six mapped BIs are done with canonical evidence;

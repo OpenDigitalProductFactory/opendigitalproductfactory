@@ -14,6 +14,14 @@ vi.mock("@/lib/actions/discovery", () => ({
 }));
 
 import { ConfigureConnectionInline } from "./ConfigureConnectionInline";
+import { compareAuthorizedSurfaceToDom } from "@/lib/coworker/authorized-surface-dom-conformance";
+import { compileSurfaceDefinitions } from "@/lib/coworker/authorized-surface-compiler";
+import { createAuthorizedSurfaceRuntime } from "@/lib/coworker/authorized-surface-runtime";
+import {
+  DISCOVERY_OPERATIONS_LOADER_ID,
+  DISCOVERY_OPERATIONS_SURFACE,
+  projectDiscoveryOperationsSurface,
+} from "@/lib/coworker/surfaces/discovery-operations-surface";
 
 describe("ConfigureConnectionInline", () => {
   afterEach(() => {
@@ -101,6 +109,76 @@ describe("ConfigureConnectionInline", () => {
       collectorType: "arp_scan",
       endpointUrl: "192.168.0.0/24",
       configuration: { subnet: "192.168.0.0/24" },
+    });
+  });
+
+  it("projects stable ASC node ids and explains SNMP versus SMTP in the rendered UX", () => {
+    const { container } = render(
+      <ConfigureConnectionInline
+        gatewayName="Network Gateway"
+        gatewayAddress="192.168.0.1"
+        onComplete={vi.fn()}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText(/discovery method/i), {
+      target: { value: "snmp" },
+    });
+
+    expect(screen.getByText(/SNMP discovers network devices.*SMTP sends outbound email/i)).toBeTruthy();
+    for (const nodeId of [
+      "connection.form",
+      "connection.method",
+      "connection.target",
+      "connection.community",
+      "connection.save-and-test",
+    ]) {
+      expect(container.querySelector(`[data-surface-node-id="${nodeId}"]`)).toBeTruthy();
+    }
+  });
+
+  it("matches the compiled browser graph with no unmapped interactive control", async () => {
+    const { container } = render(
+      <ConfigureConnectionInline
+        gatewayName="Network Gateway"
+        gatewayAddress="192.168.0.1"
+        onComplete={vi.fn()}
+      />,
+    );
+    const catalog = compileSurfaceDefinitions([DISCOVERY_OPERATIONS_SURFACE], {
+      toolNames: new Set(["configure_and_test_discovery_connection"]),
+      loaderIds: new Set([DISCOVERY_OPERATIONS_LOADER_ID]),
+    });
+    const runtime = createAuthorizedSurfaceRuntime({
+      catalog,
+      loaders: new Map([[DISCOVERY_OPERATIONS_LOADER_ID, async () => projectDiscoveryOperationsSurface({
+        productsLinked: 0,
+        needsReview: 0,
+        latestRun: null,
+        openIssues: [],
+        detectedGateway: "192.168.0.1",
+        connections: [],
+      })]]),
+      authorizeSurface: async () => true,
+      authorizeAction: async () => true,
+      authorityDigest: async () => "authority",
+      executeDomainAction: async () => ({ success: true, message: "ok" }),
+    });
+    const context = {
+      delegatingUserId: "user-1", actingAgentId: "agent-1", mode: "browser" as const,
+      locale: "en-US", timezone: "America/Chicago", route: "/platform/tools/discovery",
+    };
+    const opened = await runtime.open({ context, selector: { surfaceId: DISCOVERY_OPERATIONS_SURFACE.surfaceId } });
+    if (!opened.ok) throw new Error(opened.message);
+    const snapshot = await runtime.snapshot({ sessionId: opened.session.sessionId, caller: context });
+    if (!snapshot.ok || !("graph" in snapshot)) throw new Error("snapshot unavailable");
+
+    expect(compareAuthorizedSurfaceToDom({
+      definition: DISCOVERY_OPERATIONS_SURFACE,
+      graph: snapshot.graph,
+      root: container,
+    })).toEqual({
+      ok: true, missingRenderedNodeIds: [], duplicateNodeIds: [], unmappedControlDescriptions: [], inaccessibleNodeIds: [],
     });
   });
 });

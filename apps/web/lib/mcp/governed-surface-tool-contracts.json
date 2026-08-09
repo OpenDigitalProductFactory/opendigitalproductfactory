@@ -1,0 +1,30 @@
+[
+  {
+    "surfaceId": "decision-governance.open-reviews",
+    "routes": ["/platform/ai/founder-review", "/coworker-decisions"],
+    "readModel": "apps/web/lib/founder-review/queue.ts",
+    "requiredReadTools": ["list_open_decision_reviews"],
+    "requiredActTools": [],
+    "exemption": {
+      "rationale": "Resolution remains a human HITL action after reviewing the Decision Canvas; coworker agency is read and recommend, not unilateral resolution.",
+      "owner": "Founder Review"
+    }
+  },
+  {
+    "surfaceId": "platform.estate-discovery",
+    "routes": ["/platform/tools/discovery", "/inventory"],
+    "readModel": "apps/web/lib/discovery-operations-view-model.ts",
+    "uiFiles": ["apps/web/components/inventory/ConfigureConnectionInline.tsx"],
+    "requiredNodeIds": [
+      "connection.form",
+      "connection.method",
+      "connection.site",
+      "connection.community",
+      "connection.target",
+      "connection.tls-insecure",
+      "connection.save-and-test"
+    ],
+    "requiredReadTools": ["surface_list", "surface_open", "surface_snapshot", "surface_query", "list_discovery_connections"],
+    "requiredActTools": ["surface_act", "configure_and_test_discovery_connection"]
+  }
+]

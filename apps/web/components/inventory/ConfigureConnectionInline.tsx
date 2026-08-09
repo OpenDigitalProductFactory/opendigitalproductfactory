@@ -214,7 +214,10 @@ export function ConfigureConnectionInline({
   };
 
   return (
-    <div className="mt-4 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-4 space-y-3">
+    <div
+      className="mt-4 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-4 space-y-3"
+      data-surface-node-id="connection.form"
+    >
       <p className="text-xs font-medium uppercase tracking-[0.16em] text-[var(--dpf-muted)]">
         Configure Discovery Connection
       </p>
@@ -223,6 +226,7 @@ export function ConfigureConnectionInline({
         <label className="block">
           <span className="text-xs text-[var(--dpf-muted)]">Discovery Method</span>
           <select
+            data-surface-node-id="connection.method"
             value={collectorType}
             onChange={(e) => {
               const nextCollectorType = e.target.value;
@@ -245,6 +249,7 @@ export function ConfigureConnectionInline({
           <label className="block">
             <span className="text-xs text-[var(--dpf-muted)]">Site</span>
             <input
+              data-surface-node-id="connection.site"
               type="text"
               value={site}
               onChange={(e) => setSite(e.target.value)}
@@ -258,7 +263,9 @@ export function ConfigureConnectionInline({
           <label className="block">
             <span className="text-xs text-[var(--dpf-muted)]">Community String</span>
             <input
-              type="text"
+              type="password"
+              autoComplete="new-password"
+              data-surface-node-id="connection.community"
               value={apiKey}
               onChange={(e) => setApiKey(e.target.value)}
               placeholder="public"
@@ -268,11 +275,18 @@ export function ConfigureConnectionInline({
         )}
       </div>
 
+      {isSnmp && (
+        <p className="text-xs leading-5 text-[var(--dpf-muted)]">
+          SNMP discovers network devices. SMTP sends outbound email and is configured elsewhere.
+        </p>
+      )}
+
       <label className="block">
         <span className="text-xs text-[var(--dpf-muted)]">
           {isUnifi ? "Controller URL" : isSnmp ? "Target IP or Hostname" : "Subnet to scan"}
         </span>
         <input
+          data-surface-node-id="connection.target"
           type={isUnifi ? "url" : "text"}
           value={endpointUrl}
           onChange={(e) => setEndpointUrl(e.target.value)}
@@ -287,7 +301,9 @@ export function ConfigureConnectionInline({
             API Key{!keyRequired && <span className="ml-1 text-[10px]">(leave blank to keep existing)</span>}
           </span>
           <input
+            data-surface-node-id="connection.community"
             type="password"
+            autoComplete="new-password"
             value={apiKey}
             onChange={(e) => setApiKey(e.target.value)}
             placeholder={keyRequired ? "Paste your UniFi OS API key" : "•••••••••••••••• (stored)"}
@@ -299,6 +315,7 @@ export function ConfigureConnectionInline({
       {isUnifi && (
         <label className="flex items-start gap-3 rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-3">
           <input
+            data-surface-node-id="connection.tls-insecure"
             type="checkbox"
             checked={tlsInsecure}
             onChange={(e) => setTlsInsecure(e.target.checked)}
@@ -317,9 +334,10 @@ export function ConfigureConnectionInline({
 
       <div className="flex items-center gap-3">
         <button
+          data-surface-node-id="connection.save-and-test"
           onClick={handleSave}
           disabled={isPending}
-          className="rounded-md bg-[var(--dpf-accent)] px-4 py-1.5 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+          className="rounded-md bg-[var(--dpf-accent)] px-4 py-1.5 text-sm font-medium text-[var(--dpf-on-accent,var(--dpf-surface-1))] transition-opacity hover:opacity-90 disabled:opacity-50"
         >
           {isPending ? "Connecting..." : "Save & Test"}
         </button>
