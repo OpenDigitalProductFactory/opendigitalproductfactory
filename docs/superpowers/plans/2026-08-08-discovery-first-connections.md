@@ -52,11 +52,11 @@ This plan extends `InventoryEntity`, `DiscoveryConnection`, and `gatewayEntityId
 
 ## Backlog coverage
 
-- **Decision:** atomic
-- **Receipt:** `cmsl2mixv0dh601o20yh2yef0`
-- **Parent BI:** `BI-E9F5B1E6`
-- **Deliverable:** `gateway-discovery-first-setup` — sequencing-only inside this BI
-- **Rationale:** candidate resolution, shared normalization/validation, and discovery-first form behavior must ship together. A partial release either preserves raw URL entry as the primary contract or creates a client/server validation split.
+- Decision: atomic
+- Parent: `BI-E9F5B1E6`
+- Receipt: `cmsl9c0da00lt01nxhz1tybe2`
+- Dependencies: none
+- Rationale: Gateway candidate resolution, shared endpoint normalization, server persistence, and the selection-first form are one release contract. A partial release either preserves raw URL entry as the primary contract or creates a client/server validation split.
 
 ## Implementation phases
 
