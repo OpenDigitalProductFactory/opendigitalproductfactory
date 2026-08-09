@@ -10,6 +10,9 @@ import { WorkspaceStorefrontAttention } from "@/components/owner-first/Workspace
 import { WorkspaceTwinHero } from "@/components/workspace-home/WorkspaceTwinHero";
 import { LocalOnlyProviderNotice } from "@/components/workspace-home/LocalOnlyProviderNotice";
 import { UnconfiguredWorkspaceHomeNotice } from "@/components/workspace-home/UnconfiguredWorkspaceHomeNotice";
+import { InstallationPurposePanel } from "@/components/workspace/InstallationPurposePanel";
+import { can } from "@/lib/permissions";
+import { loadInstallationOperatingIntent } from "@/lib/installation-journey/operating-intent";
 import { loadPlatformWorkspaceHomeData } from "@/lib/workspace-home/platform-loader";
 import { resolveWorkspaceHomeContribution } from "@/lib/workspace-home/registry";
 import { loadWorkspaceTwinPresentation } from "@/lib/workspace-home/twin-panel-data";
@@ -27,6 +30,10 @@ export default async function WorkspacePage() {
   // BI-655418A7: Simple mode must condense the home body, not only the rail.
   const navMode = resolveNavModeFromCookie((await cookies()).get(NAV_MODE_COOKIE)?.value);
   const simpleHome = isSimpleNavMode(navMode);
+  const canManageInstallation = can(
+    { platformRole: session.user.platformRole, isSuperuser: session.user.isSuperuser },
+    "manage_platform",
+  );
 
   const platformHomeData = await loadPlatformWorkspaceHomeData({
     prismaClient: prisma,
@@ -84,6 +91,9 @@ export default async function WorkspacePage() {
 
   return (
     <div data-nav-mode={navMode}>
+      {canManageInstallation ? (
+        <InstallationPurposePanel loaded={await loadInstallationOperatingIntent(prisma)} />
+      ) : null}
       {workspaceHomeResolution.mode === "unconfigured" && <UnconfiguredWorkspaceHomeNotice />}
       {workspaceHomeResolution.mode !== "unconfigured" && !hasCloudProvider && (
         <LocalOnlyProviderNotice />

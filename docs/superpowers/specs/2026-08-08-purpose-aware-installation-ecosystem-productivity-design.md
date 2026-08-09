@@ -696,6 +696,36 @@ Implementation adds one Purpose-Aware Installation Lifecycle block/package to th
 
 **Exit:** a profile can be stored, decoded, derived, confirmed, and changed without affecting trust or capability activation.
 
+**Implemented boundary slice (BI-50136281):** the shared V1 decoder and the
+`installation.operating-intent.v1` repository are mounted as the first milestone
+of the Workspace journey.
+Investment funding now requires a human-confirmed `operate-organization` primary
+purpose before the existing organization WWWD gate runs. Missing, malformed,
+suggested, and development-companion intent fails closed and is audit logged.
+This check is a prerequisite only: user capabilities, MCP grants, TAK, and
+`AuthorityBinding` remain the canonical permission authorities, and confirming a
+purpose neither creates nor widens a grant.
+
+## Design grounding
+
+- Existing specs/plans reviewed:
+  - this purpose-aware installation design and its implementation plan;
+  - the unified delivery-surfaces execution-alignment design;
+  - the coworker authority-binding design and implementation plan.
+- Current code substrate reviewed:
+  - the canonical `PlatformConfig` repository;
+  - Workspace home composition and platform capability checks;
+  - `AuthorityBinding` effective-authority resolution;
+  - the existing investment-funding WWWD gate and authorization audit log.
+- Source of truth:
+  - `installation.operating-intent.v1` owns confirmed installation intent;
+  - user capabilities, MCP grants, TAK, and `AuthorityBinding` continue to own
+    permission; the organization WWWD profile owns the funding judgment.
+- Decision:
+  - mount owner confirmation as the first Workspace journey milestone and use
+    confirmed `operate-organization` intent as a fail-closed prerequisite before
+    the existing funding gate, without creating another authority system.
+
 ### Phase 1 — compiler and evidence model
 
 - pure journey compiler;
