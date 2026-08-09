@@ -1,4 +1,5 @@
 import { routeAndCall } from "@/lib/inference/routed-inference";
+import { listActiveNonprodEnvironmentLeases } from "@/lib/nonprod/environment-lease";
 import { CHANGE_REVIEWER_ROUTE_AGENT } from "@/lib/tak/change-reviewer-route";
 import { parseSemanticReviewResponse, type SemanticReviewResult } from "./semantic-change-review";
 import type { SemanticChangeReviewDispatchContext } from "./semantic-change-review-operation";
@@ -29,11 +30,42 @@ function mergeReviewResults(results: SemanticReviewResult[]): SemanticReviewResu
   };
 }
 
+async function localCiCapacityGuard(): Promise<SemanticReviewResult | null> {
+  try {
+    const activeLeases = await listActiveNonprodEnvironmentLeases({});
+    if (!activeLeases.some((lease) => lease.environmentKey === "local-integration-ci")) {
+      return null;
+    }
+    return {
+      decision: "inconclusive",
+      issues: [],
+      summary: "Semantic review deferred while governed local CI owns host capacity.",
+      inconclusiveReason: "local-ci-active-capacity-reservation",
+    };
+  } catch {
+    return {
+      decision: "inconclusive",
+      issues: [],
+      summary: "Semantic review deferred because host-capacity ownership could not be verified.",
+      inconclusiveReason: "local-ci-capacity-reservation-unavailable",
+    };
+  }
+}
+
 /** Execute the governed Change Reviewer plus content-scoped specialist branches. */
 export async function dispatchRoutedSemanticReview(
   prompt: string,
   context: SemanticChangeReviewDispatchContext,
 ): Promise<SemanticReviewResult> {
+  // Local-CI admission already accounts for a model that is resident before
+  // the lease is bound. Protect the opposite ordering too: once local CI owns
+  // the host, no semantic-review route may begin because a remote route can
+  // still fall back to the bundled 32k-context model after dispatch. Returning
+  // an infrastructure-inconclusive result keeps the immutable review identity
+  // retryable without misclassifying capacity as a code finding.
+  const capacityGuard = await localCiCapacityGuard();
+  if (capacityGuard) return capacityGuard;
+
   const branches = [
     {
       agentId: "change-reviewer",
