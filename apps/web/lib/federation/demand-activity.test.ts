@@ -88,6 +88,27 @@ describe("toDemandSyncActivityRow provenance", () => {
     expect(row.detail).toBe("peer responded 422");
     expect(row.attempts).toBe(5);
   });
+  it("uses the canonical queue job for outbound retry and dead-letter telemetry", () => {
+    const row = toDemandSyncActivityRow(
+      mirror({ syncStatus: "pending", deliveryAttempts: 0 }),
+      names,
+      {
+        sourceId: "FRM-1",
+        status: "failed",
+        attemptCount: 8,
+        nextAttemptAt: null,
+        lastAttemptAt: new Date("2026-08-08T12:00:00.000Z"),
+        lastError: "peer remained unavailable",
+        completedAt: null,
+      },
+    );
+    expect(row).toMatchObject({
+      status: "dead-lettered",
+      attempts: 8,
+      detail: "peer remained unavailable",
+      lastActivityISO: "2026-08-08T12:00:00.000Z",
+    });
+  });
 });
 
 describe("mapDemandSyncActivity", () => {

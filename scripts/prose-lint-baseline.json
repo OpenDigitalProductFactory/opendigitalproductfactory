@@ -6787,7 +6787,14 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 326
+    "textMass": 309
+  },
+  "apps/web/components/platform/federation-links/FederationLinksTable.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 24
   },
   "apps/web/components/platform/federation-links/OrganizationJoinPanel.tsx": {
     "vocabulary": 0,

@@ -14,6 +14,7 @@ import {
 } from "./demand-delivery";
 import { decodeDemandMirrorPayload } from "./demand-exchange";
 import type { FederationIdentity } from "./demand-identity";
+import { scheduleFederationDeliveryJob } from "./delivery-queue";
 
 interface ResponseMirrorRow {
   mirrorId: string;
@@ -112,16 +113,14 @@ export async function queueDemandResponse(
     syncStatus: "pending",
     version: (input.now ?? new Date()).getTime(),
     payload: { envelope: response, activity, eventId: id, queuedAt: createdAt },
-    deliveryAttempts: 0,
-    nextDeliveryAt: input.now ?? new Date(),
-    lastDeliveryError: null,
     deadLetteredAt: null,
   };
+  const mirrorId = existing?.mirrorId ?? `fdr_${id.slice(4, 28)}`;
   if (existing) {
-    await db.federatedRecordMirror.update({ where: { mirrorId: existing.mirrorId }, data });
+    await db.federatedRecordMirror.update({ where: { mirrorId }, data });
   } else {
     await db.federatedRecordMirror.create({ data: {
-      mirrorId: `fdr_${id.slice(4, 28)}`,
+      mirrorId,
       federationLinkId: link.linkId,
       recordType: "demand-response",
       canonicalSide: "local",
@@ -130,6 +129,7 @@ export async function queueDemandResponse(
       ...data,
     } });
   }
+  await scheduleFederationDeliveryJob(db, mirrorId, input.now ?? new Date());
   return { action: "queued", responseId: id };
 }
 

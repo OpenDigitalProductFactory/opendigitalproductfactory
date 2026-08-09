@@ -7,6 +7,7 @@ import {
 } from "@dpf/db/federated-demand-contract";
 
 import { decodeDemandOutboxPayload, type DemandDeliveryDb } from "./demand-delivery";
+import { scheduleFederationDeliveryJob } from "./delivery-queue";
 
 interface DispositionDb extends DemandDeliveryDb {
   federatedRecordMirror: DemandDeliveryDb["federatedRecordMirror"] & {
@@ -82,14 +83,12 @@ export async function queueFounderDispositionNotices(
       syncStatus: "pending",
       version,
       payload: { envelope: notice, activity: "dpf.demand.dispositioned", eventId: id, queuedAt: now.toISOString() },
-      deliveryAttempts: 0,
-      nextDeliveryAt: now,
-      lastDeliveryError: null,
       deadLetteredAt: null,
     };
-    if (existing) await db.federatedRecordMirror.update({ where: { mirrorId: existing.mirrorId }, data });
+    const mirrorId = existing?.mirrorId ?? `fdno_${id.slice(4)}`;
+    if (existing) await db.federatedRecordMirror.update({ where: { mirrorId }, data });
     else await db.federatedRecordMirror.create({ data: {
-      mirrorId: `fdno_${id.slice(4)}`,
+      mirrorId,
       federationLinkId: route.federationLinkId,
       recordType: "demand-disposition",
       canonicalSide: "local",
@@ -97,6 +96,7 @@ export async function queueFounderDispositionNotices(
       peerRecordRef: null,
       ...data,
     } });
+    await scheduleFederationDeliveryJob(db, mirrorId, now);
     queued++;
   }
   return { queued };

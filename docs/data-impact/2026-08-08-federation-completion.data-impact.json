@@ -1,0 +1,81 @@
+{
+  "version": "1",
+  "accountableOwner": "platform-architecture",
+  "affectedCopies": [
+    "Prisma-to-EA current-state data-model mirror",
+    "federation delivery WorkItem queue read model",
+    "trusted-introducer candidate projection"
+  ],
+  "migration": {
+    "name": "20260809030000_federation_completion",
+    "backfill": "none — existing WorkItem rows receive nullable source keys and zero attempts; existing links opt out of introductions; candidates are populated only by authenticated reconciliation"
+  },
+  "tests": [
+    "apps/web/lib/federation/delivery-queue.test.ts",
+    "apps/web/lib/federation/introduction-exchange.test.ts",
+    "apps/web/lib/federation/introductions.test.ts",
+    "apps/web/lib/govern/data/assets.test.ts",
+    "apps/web/lib/govern/data/coverage.live.test.ts"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:federation-introduction-candidate",
+      "prismaModel": "FederationIntroductionCandidate",
+      "lifecycleDisposition": "derived projection reconciled and withdrawn by the authenticated introducer exchange, expired after ten minutes, marked paired after enrollment, and cascade-removed with the introducer link",
+      "fields": [
+        {
+          "fieldId": "data:federation-introduction-candidate#authorityUrl",
+          "resolution": "governed",
+          "reason": "minimum operator-reviewed peer coordinate; it cannot create trust or bypass the federation SSRF and TLS gates",
+          "provenance": "BI-6EF4288A introducer topology contract",
+          "flags": ["sensitive"],
+          "fieldPolicy": "store only an HTTPS origin received over an authenticated trusted link; mask outside platform-operator views"
+        },
+        {
+          "fieldId": "data:federation-introduction-candidate#displayName",
+          "resolution": "governed",
+          "reason": "bounded peer-supplied organization label used only to support operator review",
+          "provenance": "BI-6EF4288A minimum introduction envelope",
+          "flags": ["sensitive"],
+          "fieldPolicy": "limit to 120 characters and keep local to the Connections operator surface"
+        },
+        {
+          "fieldId": "data:federation-introduction-candidate#relationshipHint",
+          "resolution": "governed",
+          "reason": "policy-bounded suggestion used to choose the SAS projection, never relationship authority",
+          "provenance": "BI-6EF4288A relationship-path policy"
+        }
+      ]
+    },
+    {
+      "kind": "model",
+      "assetId": "data:work-item#federation-delivery",
+      "prismaModel": "WorkItem",
+      "lifecycleDisposition": "canonical queue lifecycle; jobs are requeued, completed, or failed with bounded error text while the linked mirror remains the domain record",
+      "fields": [
+        {
+          "fieldId": "data:work-item#sourceKey",
+          "resolution": "governed",
+          "reason": "adapter-owned idempotency key ensures one delivery job per mirror",
+          "provenance": "BI-42617832 queue-backed delivery contract"
+        },
+        {
+          "fieldId": "data:work-item#lastError",
+          "resolution": "governed",
+          "reason": "bounded transport diagnostic with no demand payload or peer credential",
+          "provenance": "BI-42617832 delivery observability contract",
+          "flags": ["sensitive"],
+          "fieldPolicy": "truncate to 1000 characters and never include link tokens or backlog payloads"
+        }
+      ]
+    },
+    {
+      "kind": "projection",
+      "store": "postgres:FederationIntroductionCandidate",
+      "derivedContractId": "trusted-federation-link->introduction-candidate",
+      "cleanupTest": "apps/web/lib/federation/introduction-exchange.test.ts",
+      "reconciliationTest": "apps/web/lib/federation/introduction-exchange.test.ts"
+    }
+  ]
+}

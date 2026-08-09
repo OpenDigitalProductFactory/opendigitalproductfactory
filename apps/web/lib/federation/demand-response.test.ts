@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
+vi.mock("@/lib/queue/queue-telemetry", () => ({ recordQueueTransition: vi.fn().mockResolvedValue(undefined) }));
+
 import {
   computeDemandPayloadDigest,
   computeDemandResponseDigest,
@@ -60,6 +62,11 @@ function db(overrides: {
   });
   return {
     value: {
+      workQueue: { upsert: vi.fn().mockResolvedValue({ id: "queue-db-id" }) },
+      workItem: {
+        upsert: vi.fn().mockResolvedValue({ itemId: "job-1" }),
+        update: vi.fn(), updateMany: vi.fn(), findMany: vi.fn(),
+      },
       federationLink: {
         findUnique: vi.fn().mockResolvedValue({
           linkId: "link_1", peerAuthorityUrl: "https://peer.example", peerTokenEnc: "enc",

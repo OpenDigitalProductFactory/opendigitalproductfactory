@@ -3,6 +3,11 @@ import { randomUUID } from "node:crypto";
 import { prisma } from "@dpf/db";
 import { DEMAND_PROJECTION_TEMPLATES } from "@dpf/db/federated-demand-contract";
 import {
+  isFederationRelationshipPreset,
+  isFederationRole,
+  isRoleAllowedForRelationship,
+} from "@dpf/db/federation-link-types";
+import {
   isFederationPairingStatus,
   resolveFederationPairingStatus,
 } from "@dpf/db/federation-pairing-types";
@@ -51,6 +56,8 @@ interface ApprovalSessionRow {
   sasConfirmedAtLocal?: Date | null;
   sasConfirmedAtPeer?: Date | null;
   approvedByPrincipalId?: string | null;
+  relationshipPreset: string;
+  offeredRole: string;
   expiresAt: Date;
 }
 
@@ -152,6 +159,18 @@ function parseSasState(value: unknown): SasSessionState | null {
   return state as SasSessionState;
 }
 
+function pairingPolicy(row: Pick<ApprovalSessionRow, "relationshipPreset" | "offeredRole">) {
+  if (
+    !isFederationRelationshipPreset(row.relationshipPreset) ||
+    !isFederationRole(row.offeredRole) ||
+    !isRoleAllowedForRelationship(row.relationshipPreset, row.offeredRole)
+  ) return null;
+  return {
+    offeredRole: row.offeredRole,
+    projection: DEMAND_PROJECTION_TEMPLATES[row.relationshipPreset],
+  };
+}
+
 export async function createIncomingNearbyPairing(
   input: unknown,
   options: {
@@ -194,8 +213,9 @@ export async function createIncomingNearbyPairing(
       pairingId,
       direction: "incoming",
       status: "pending",
-      relationshipPreset: "same-organization",
-      projectionTemplateKey: "same-organization",
+      relationshipPreset: request.relationshipPreset,
+      projectionTemplateKey: request.relationshipPreset,
+      offeredRole: request.offeredRole,
       matchingCode: "",
       sasState: {
         protocolVersion: 1,
@@ -231,7 +251,7 @@ export async function createIncomingNearbyPairing(
     peerDisplayName: options.localDisplayName,
     peerInstallationId: options.localInstallationId,
     expiresAt: expiresAt.toISOString(),
-    projectionSummary: summarizeNearbyPairingProjection(),
+    projectionSummary: summarizeNearbyPairingProjection(request.relationshipPreset),
   };
 }
 
@@ -370,6 +390,8 @@ export async function approveIncomingNearbyPairing(
     if (effectiveStatus !== "pending" || !/^\d{6}$/.test(row.matchingCode)) {
       return { ok: false, error: "invalid_transition" };
     }
+    const policy = pairingPolicy(row);
+    if (!policy) return { ok: false, error: "invalid_transition" };
     const claimed = await tx.federationPairingSession.updateMany({
       where: { id: row.id, status: "pending", expiresAt: { gt: now } },
       data: {
@@ -396,8 +418,8 @@ export async function approveIncomingNearbyPairing(
       data: {
         tokenHash: bootstrap.hash,
         prefix: bootstrap.prefix,
-        offeredRole: "same-org-peer",
-        proposedProjection: DEMAND_PROJECTION_TEMPLATES["same-organization"],
+        offeredRole: policy.offeredRole,
+        proposedProjection: policy.projection,
         issuedByPrincipalId: input.approverPrincipalId,
         expiresAt: row.expiresAt,
       },
@@ -451,6 +473,8 @@ export async function confirmIncomingNearbyPairing(
     if (effectiveStatus !== "pending" || !/^\d{6}$/.test(row.matchingCode)) {
       return { ok: false, error: "invalid_transition" };
     }
+    const policy = pairingPolicy(row);
+    if (!policy) return { ok: false, error: "invalid_transition" };
     const confirmed = await tx.federationPairingSession.updateMany({
       where: { id: row.id, status: "pending", expiresAt: { gt: now } },
       data: { sasConfirmedAtPeer: now },
@@ -473,8 +497,8 @@ export async function confirmIncomingNearbyPairing(
       data: {
         tokenHash: bootstrap.hash,
         prefix: bootstrap.prefix,
-        offeredRole: "same-org-peer",
-        proposedProjection: DEMAND_PROJECTION_TEMPLATES["same-organization"],
+        offeredRole: policy.offeredRole,
+        proposedProjection: policy.projection,
         issuedByPrincipalId: row.approvedByPrincipalId,
         expiresAt: row.expiresAt,
       },

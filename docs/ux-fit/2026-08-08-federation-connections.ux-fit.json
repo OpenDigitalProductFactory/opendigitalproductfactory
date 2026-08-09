@@ -1,0 +1,38 @@
+{
+  "version": "1",
+  "decidedOption": "sas-first-progressive-disclosure",
+  "scope": {
+    "files": [
+      "apps/web/components/platform/federation-links/FederationLinksAdminClient.tsx",
+      "apps/web/components/platform/federation-links/FederationLinksTable.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "sweep-measurement",
+    "baselineComparison": "improved",
+    "measurementRun": "https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/actions/runs/31292796733",
+    "measured": {
+      "/platform/federation-links": {
+        "defaultVisibleWords": 333,
+        "leadBandWords": 0,
+        "primaryActions": 1,
+        "visibleFields": 0,
+        "maxChoicesPerControl": 0,
+        "subLegibleControls": 0,
+        "buriedPrimaryAction": 0,
+        "axeViolations": 2
+      }
+    },
+    "fitDecision": "fits-with-guardrails",
+    "owningArea": "Platform",
+    "routeFamily": "/platform/federation-links",
+    "primaryPersona": "founder or platform operator connecting installations without reconstructing URLs or understanding federation protocol details",
+    "navigationLayer": "local task within the existing Connections route",
+    "reuseConvergence": "reuses the existing Connections page, pairing cards, StatusBadge, InlineBusy, native details disclosure, and theme tokens; no new route or component family",
+    "sourceTruth": "privacy-safe LAN candidate cache plus active FederationIntroductionCandidate rows admitted only through trusted introducer links; trust remains FederationPairingSession plus FederationLink",
+    "emptyFailureBehavior": "discovery health and the empty candidate state remain visible; insecure, expired, unreachable, and invalid candidates explain why they cannot proceed; recovery input remains on the same page with field-specific correction guidance",
+    "aiBoundary": "no coworker action or AI-generated decision",
+    "accessibility": "named native controls, an explicit recovery summary, polite pairing status feedback, and no color-only transport or trust state",
+    "responsive": "candidate and pairing cards use the established wrapping grid; recovery controls remain collapsed by default and stack without a fixed-width surface on mobile"
+  }
+}

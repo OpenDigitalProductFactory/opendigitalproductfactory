@@ -1,8 +1,20 @@
 import { describe, expect, it, vi } from "vitest";
 
+vi.mock("@/lib/queue/queue-telemetry", () => ({ recordQueueTransition: vi.fn().mockResolvedValue(undefined) }));
+
 import { computeDemandPayloadDigest, type DemandEnvelopeV1 } from "@dpf/db/federated-demand-contract";
 
 import { handleIncomingDemandDisposition, queueFounderDispositionNotices } from "./demand-disposition";
+
+function queueDelegates() {
+  return {
+    workQueue: { upsert: vi.fn().mockResolvedValue({ id: "queue-db-id" }) },
+    workItem: {
+      upsert: vi.fn().mockResolvedValue({ itemId: "job-1" }),
+      update: vi.fn(), updateMany: vi.fn(), findMany: vi.fn(),
+    },
+  };
+}
 
 function envelope(): DemandEnvelopeV1 {
   const value: DemandEnvelopeV1 = {
@@ -28,7 +40,7 @@ function envelope(): DemandEnvelopeV1 {
 describe("founder disposition return path", () => {
   it("queues one durable notice on every observed ingress route", async () => {
     const create = vi.fn().mockResolvedValue({});
-    const db = { federatedRecordMirror: {
+    const db = { ...queueDelegates(), federatedRecordMirror: {
       findMany: vi.fn().mockResolvedValue([
         { mirrorId: "direct", federationLinkId: "link_direct", payload: {} },
         { mirrorId: "reseller", federationLinkId: "link_reseller", payload: {} },
@@ -63,7 +75,7 @@ describe("founder disposition return path", () => {
       create,
       update: vi.fn(),
     }, federationLink: { findMany: vi.fn() } };
-    const queuedDb = { federatedRecordMirror: {
+    const queuedDb = { ...queueDelegates(), federatedRecordMirror: {
       findMany: vi.fn().mockResolvedValue([{ mirrorId: "incoming", federationLinkId: "link_1", payload: {} }]),
       findUnique: vi.fn().mockResolvedValue(null), create: vi.fn(), update: vi.fn(),
     }, federationLink: { findMany: vi.fn() } };
