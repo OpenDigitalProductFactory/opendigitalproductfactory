@@ -4,6 +4,8 @@
 **Backlog:** BI-5FE9DF99 / EP-COWORKER-INTERACTIVITY  
 **Related:** [mcp-tool-authorization-runbook](mcp-tool-authorization-runbook.md), [mcp-tool-packs](mcp-tool-packs.md), [claude-inside-out agent-harness parity spec](../superpowers/specs/2026-07-07-claude-inside-out-agent-harness-parity-spec.md) (§2 Tool plane), `scripts/check-tool-surface.mjs`
 
+The Authorized Surface Contract is the default pattern for page expertise: six stable `surface_*` protocol tools expose any registered surface, while domain meaning stays in compiled surface definitions. A new page must not add one tool per field or control; register the surface and keep action execution behind the governed executor. The coworker budget treats the complete six-tool protocol as an indivisible set.
+
 ## Purpose
 
 Agents fail when the tool surface is large, inconsistently named, poorly described, or grant-opaque. This audit is the **ergonomics gate** for changes that add, rename, split, or pack MCP tools — aligned to the agent-harness construction checklist (tool plane: MCP server exposure, deferred loading, permission planes).
