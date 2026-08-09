@@ -19,7 +19,16 @@
 //     recommendation on one axis. Never auto-applied; a human accepts (→
 //     ruled) or rejects it here.
 
+import { isFounderActionable } from "../founder-review/queue";
+
 export type FindingClass = "conflict" | "gap" | "staleness" | "drift" | "weight-proposal";
+
+export type FindingAction = {
+  kind: "navigate" | "execute";
+  label: string;
+  href: string;
+  outcome: string;
+};
 
 export type ReviewFinding = {
   id: string;
@@ -30,12 +39,10 @@ export type ReviewFinding = {
   postureLabel: string | null;
   /** How many decisions this finding rolls up (gap clusters); 1 for a single conflict. */
   count: number;
-  /** Deep-link to the Decision Canvas for a single decision, when applicable. */
-  href: string | null;
-  /** The plain-language action this finding invites. */
-  actionLabel: string;
-  /** Where the action goes (e.g. the review queue, the stance editor). */
-  actionHref: string;
+  /** Read-only detail destination, distinct from the resolution action. */
+  detailHref: string | null;
+  /** Complete action contract. Absent when the finding is handled inline. */
+  action?: FindingAction;
   /**
    * When set, the finding is answerable inline: the operator answers the
    * representative question once on /coworker-decisions/review and it flows through the qa
@@ -48,7 +55,7 @@ export type ReviewFinding = {
   /**
    * When set, the finding is a weight-adjustment proposal (BI-D88DFEEA):
    * rule on it inline via ruleWeightProposal (accept → ruled, reject →
-   * rejected) instead of navigating to actionHref.
+   * rejected) instead of navigating away.
    */
   weightProposal?: {
     proposalId: string;
@@ -66,6 +73,12 @@ export type ConflictRow = {
   question: string;
   riskTier: string | null;
   createdAt: Date;
+  humanOutcome: unknown;
+  buildId: string | null;
+  taskRunId: string | null;
+  routeContext: string | null;
+  domainClass: string | null;
+  gateKey: string | null;
 };
 
 /** A rolled-up cluster of unresolved (defer/escalate) decisions in one domain. */
@@ -128,9 +141,7 @@ export function buildWeightProposalFindings(rows: WeightProposalRow[]): ReviewFi
       + `(mean separation ${row.meanSeparation.toFixed(2)}). Never auto-applied — rule on it to promote or reject.`,
     postureLabel: `${row.sampleSize} decisions`,
     count: row.sampleSize,
-    href: null,
-    actionLabel: "Rule on this",
-    actionHref: "",
+    detailHref: null,
     weightProposal: {
       proposalId: row.proposalId,
       axis: row.axis,
@@ -160,17 +171,28 @@ function humanDomain(domainClass: string): string {
 }
 
 export function buildConflictFindings(rows: ConflictRow[]): ReviewFinding[] {
-  return rows.map((row) => ({
-    id: `conflict:${row.interactionId}`,
-    findingClass: "conflict",
-    title: "Two principles pull opposite ways",
-    detail: truncate(row.question),
-    postureLabel: riskPosture(row.riskTier),
-    count: 1,
-    href: `/platform/ai/decisions/${encodeURIComponent(row.interactionId)}`,
-    actionLabel: "De-conflict",
-    actionHref: `/platform/ai/decisions/${encodeURIComponent(row.interactionId)}`,
-  }));
+  return rows
+    .filter((row) => row.humanOutcome === null)
+    .filter((row) => row.question.trim().length > 0)
+    .filter(isFounderActionable)
+    .map((row) => {
+      const href = `/coworker-decisions/decisions/${encodeURIComponent(row.interactionId)}`;
+      return {
+        id: `conflict:${row.interactionId}`,
+        findingClass: "conflict" as const,
+        title: "Decision is blocked by recorded rules",
+        detail: truncate(row.question),
+        postureLabel: riskPosture(row.riskTier),
+        count: 1,
+        detailHref: href,
+        action: {
+          kind: "navigate" as const,
+          label: "Review blocked decision",
+          href,
+          outcome: "Understand the rule conflict and continue in the workflow that owns the decision.",
+        },
+      };
+    });
 }
 
 export function buildGapFindings(clusters: GapCluster[]): ReviewFinding[] {
@@ -184,7 +206,7 @@ export function buildGapFindings(clusters: GapCluster[]): ReviewFinding[] {
         postureLabel:
           cluster.count === 1 ? "1 unresolved" : `${cluster.count} unresolved`,
         count: cluster.count,
-        href: null,
+        detailHref: null,
       };
       if (cluster.scope === "org") {
         // The org itself is silent here — invite a one-time answer that feeds
@@ -193,8 +215,6 @@ export function buildGapFindings(clusters: GapCluster[]): ReviewFinding[] {
         return {
           ...base,
           title: `Your business hasn't weighed in on ${humanDomain(cluster.domainClass)}`,
-          actionLabel: "Answer this once",
-          actionHref: "",
           answer: {
             domainClass: cluster.domainClass,
             question: cluster.sampleQuestion,
@@ -204,8 +224,12 @@ export function buildGapFindings(clusters: GapCluster[]): ReviewFinding[] {
       return {
         ...base,
         title: `No settled answer for ${humanDomain(cluster.domainClass)}`,
-        actionLabel: "Add a stance",
-        actionHref: "/coworker-decisions/stance",
+        action: {
+          kind: "navigate" as const,
+          label: "Add a stance",
+          href: "/coworker-decisions/stance",
+          outcome: "Record settled guidance so future decisions in this domain do not stop here.",
+        },
       };
     });
 }
@@ -226,9 +250,13 @@ export function buildStalenessFindings(
         "Aged past its freshness window and down-weighted, but still cited when your AI decides. Re-validate or retire it.",
       postureLabel: null,
       count: summary.count,
-      href: null,
-      actionLabel: "Review material",
-      actionHref: "/coworker-decisions/perspectives",
+      detailHref: null,
+      action: {
+        kind: "navigate",
+        label: "Review material",
+        href: "/coworker-decisions/perspectives",
+        outcome: "Revalidate or retire the stale material.",
+      },
     },
   ];
 }
@@ -252,11 +280,15 @@ export function buildDriftFindings(rows: DriftRow[]): ReviewFinding[] {
       detail: truncate(detail, 200),
       postureLabel: `margin ${row.margin.toFixed(2)}`,
       count: 1,
-      href: null,
+      detailHref: null,
       // The fix is to revisit a dimension or the principle aggregate, not to
       // hand-edit one decision — send the operator to the criteria (matrix).
-      actionLabel: "Review the criteria",
-      actionHref: "/coworker-decisions/matrix",
+      action: {
+        kind: "navigate" as const,
+        label: "Review the criteria",
+        href: "/coworker-decisions/matrix",
+        outcome: "Confirm or correct the criteria that changed the canonical result.",
+      },
     };
   });
 }

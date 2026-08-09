@@ -1,0 +1,35 @@
+{
+  "version": "1",
+  "accountableOwner": "platform-architecture",
+  "affectedCopies": [
+    "Decision Review actionable queue",
+    "Coworker Decision Log awaiting-review counts"
+  ],
+  "migration": {
+    "name": "20260808235500_backfill_decision_review_cluster_dispositions",
+    "backfill": "For exact profile + domain + normalized-question twins only, copy an existing explicit owner disposition to still-open historical rows and record the source interaction as provenance. Preserve every DecisionInteraction row, sealed evidence field, and near match."
+  },
+  "tests": [
+    "apps/web/lib/actions/org-decision-capture.test.ts",
+    "apps/web/lib/decision/review-identity.test.ts",
+    "apps/web/lib/wiki/decision-review-findings.test.ts",
+    "packages/db/scripts/migration-safety-guard.test.ts",
+    "scripts/check-data-impact.test.mjs"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:decision-interaction#review-cluster-disposition",
+      "prismaModel": "DecisionInteraction",
+      "lifecycleDisposition": "Every interaction remains in the immutable audit history; exact repeated open asks inherit the owner's already-recorded lifecycle disposition so they stop projecting as duplicate work.",
+      "fields": [
+        {
+          "fieldId": "data:decision-interaction#humanOutcome",
+          "resolution": "governed",
+          "reason": "The owner should resolve one exact repeated business question once, while provenance identifies which explicit ruling supplied the inherited disposition.",
+          "provenance": "BI-76EEDEE8; DI-259D90CF912B; decision-governance actionability contract §10.7"
+        }
+      ]
+    }
+  ]
+}
