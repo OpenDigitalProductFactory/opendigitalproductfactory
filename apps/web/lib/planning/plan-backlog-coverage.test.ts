@@ -38,6 +38,8 @@ const planText = [
 ].join("\n");
 const traceabilityContext = {
   planText,
+  baselineId: "baseline-1",
+  baselineArtifactDigest: "sha256:design",
   objectiveIds: ["OBJ-1", "OBJ-2"],
   acceptanceIds: ["AC-1", "AC-2"],
 };
@@ -147,6 +149,8 @@ describe("validatePlanBacklogCoverageReceipt v2", () => {
       providerBlobId: "blob-1",
     },
     planArtifactDigest: "sha256:plan",
+    scopeBaselineId: "baseline-1",
+    scopeBaselineArtifactDigest: "sha256:design",
     decision: "decomposed" as const,
     deliverables: [
       {
@@ -222,6 +226,11 @@ describe("validatePlanBacklogCoverageReceipt v2", () => {
 
   it.each([
     ["stale digest", { currentPlanDigest: "sha256:new" }, "stale-plan-artifact"],
+    ["non-canonical plan path", { receipt: {
+      ...v2,
+      planPath: "docs/superpowers/specs/not-a-plan.md",
+      planArtifactRef: { ...v2.planArtifactRef, path: "docs/superpowers/specs/not-a-plan.md" },
+    } }, "stale-plan-artifact"],
     ["missing traceability", { receipt: { ...v2, deliverables: [{ ...v2.deliverables[0], verificationRefs: [] }] } }, "traceability-incomplete"],
     ["cycle", { receipt: { ...v2, deliverables: v2.deliverables.map((item, index) => ({ ...item, dependsOn: [v2.deliverables[1 - index]!.key] })) } }, "invalid-deliverable-graph"],
   ])("rejects %s", (_label, overrides, code) => {
@@ -250,6 +259,23 @@ describe("validatePlanBacklogCoverageReceipt v2", () => {
       traceabilityContext,
     })).toMatchObject({ ok: false, code: "traceability-incomplete" });
   });
+
+  it("rejects a receipt after semantic scope changes even when statement IDs are reused", () => {
+    expect(validatePlanBacklogCoverageReceipt({
+      receipt: v2,
+      mappedBacklogItems: [
+        { itemId: "BI-EXISTING-1", status: "open" },
+        { itemId: "BI-EXISTING-2", status: "open" },
+      ],
+      requireGovernedImplementation: true,
+      currentPlanDigest: "sha256:plan",
+      traceabilityContext: {
+        ...traceabilityContext,
+        baselineId: "baseline-2",
+        baselineArtifactDigest: "sha256:changed-design",
+      },
+    })).toMatchObject({ ok: false, code: "stale-scope-baseline" });
+  });
 });
 
 function fakeDb(): {
@@ -257,22 +283,24 @@ function fakeDb(): {
   activityCreate: ReturnType<typeof vi.fn>;
 } {
   const activityCreate = vi.fn(async () => ({ id: "activity-receipt-1" }));
+  const tx = {
+    $queryRaw: async <T>(_strings: TemplateStringsArray, ..._values: unknown[]) => [{ id: "parent-row" }] as unknown as T,
+    backlogItem: {
+      findUnique: vi.fn(async ({ where }: { where: { itemId: string } }) =>
+        where.itemId === "BI-PARENT"
+          ? { id: "parent-row", itemId: "BI-PARENT", effortSize: "xlarge" }
+          : null,
+      ),
+      findMany: vi.fn(async () => [
+        { itemId: "BI-EXISTING-1", status: "open" },
+        { itemId: "BI-EXISTING-2", status: "deferred" },
+      ]),
+    },
+    backlogItemActivity: { create: activityCreate, findMany: vi.fn(async () => baselineRows) },
+  };
   return {
     activityCreate,
-    db: {
-      backlogItem: {
-        findUnique: vi.fn(async ({ where }: { where: { itemId: string } }) =>
-          where.itemId === "BI-PARENT"
-            ? { id: "parent-row", itemId: "BI-PARENT", effortSize: "xlarge" }
-            : null,
-        ),
-        findMany: vi.fn(async () => [
-          { itemId: "BI-EXISTING-1", status: "open" },
-          { itemId: "BI-EXISTING-2", status: "deferred" },
-        ]),
-      },
-      backlogItemActivity: { create: activityCreate, findMany: vi.fn(async () => baselineRows) },
-    },
+    db: { ...tx, $transaction: vi.fn(async (work) => work(tx)) },
   };
 }
 
@@ -411,6 +439,8 @@ describe("checkBranchPlanBacklogGate", () => {
             planPath: planArtifactRef.path,
             planArtifactRef,
             planArtifactDigest: "sha256:plan",
+            scopeBaselineId: "baseline-1",
+            scopeBaselineArtifactDigest: "sha256:design",
             decision: "decomposed",
             deliverables: [{
               key: "slice",
@@ -471,6 +501,8 @@ describe("recordPlanBacklogCoverage", () => {
         recordedByAgentId: "agent-1",
         payload: {
           planPath: "docs/superpowers/plans/example.md",
+          scopeBaselineId: "baseline-1",
+          scopeBaselineArtifactDigest: "sha256:design",
           decision: "decomposed",
           mappedItemIds: ["BI-EXISTING-1", "BI-EXISTING-2"],
         },
@@ -501,6 +533,29 @@ describe("recordPlanBacklogCoverage", () => {
     });
 
     expect(result).toMatchObject({ ok: false, code: "decomposition-required" });
+    expect(activityCreate).not.toHaveBeenCalled();
+  });
+
+  it("rejects a non-canonical plan path before provider access", async () => {
+    const { db, activityCreate } = fakeDb();
+    const resolveArtifact = vi.fn(async () => ({
+      ok: true as const,
+      artifact: { digest: "sha256:plan", bytes: Buffer.from(planText), authorPrincipalId: "p", authorAgentId: "a" },
+    }));
+    const result = await recordPlanBacklogCoverage({
+      itemId: "BI-PARENT",
+      planPath: "docs/superpowers/specs/not-a-plan.md",
+      planArtifactRef: { ...planArtifactRef, path: "docs/superpowers/specs/not-a-plan.md" },
+      decision: "atomic",
+      rationale: "This is intentionally atomic for a fully documented compatibility boundary.",
+      deliverables: [],
+      userId: "user-1",
+      db,
+      resolveArtifact,
+    });
+
+    expect(result).toMatchObject({ ok: false, code: "plan-artifact-invalid" });
+    expect(resolveArtifact).not.toHaveBeenCalled();
     expect(activityCreate).not.toHaveBeenCalled();
   });
 });

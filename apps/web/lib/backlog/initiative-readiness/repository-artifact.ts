@@ -109,7 +109,6 @@ export async function resolveRepositoryArtifact(args: {
       activities: {
         where: { recordedByAgentId: { not: null } },
         orderBy: [{ recordedAt: "asc" }, { id: "asc" }],
-        take: 1,
         select: { recordedByAgentId: true },
       },
     },
@@ -159,7 +158,10 @@ export async function resolveRepositoryArtifact(args: {
   });
   const principalId = principals.length === 1 ? principals[0]?.principalId : null;
   const capsule = capsules[0];
-  const agentId = capsule?.activities[0]?.recordedByAgentId;
+  const participatingAgentIds = new Set(
+    capsule?.activities.map((activity) => activity.recordedByAgentId).filter((id): id is string => Boolean(id)) ?? [],
+  );
+  const agentId = participatingAgentIds.size === 1 ? [...participatingAgentIds][0]! : null;
   const agentAliases = principalId && agentId
     ? await db.principalAlias.findMany({
       where: { principalId, aliasType: "agent", aliasValue: agentId, issuer: "" },
@@ -169,7 +171,6 @@ export async function resolveRepositoryArtifact(args: {
     : [];
   if (!principalId || !agentId
     || capsule?.createdByPrincipalId !== principalId
-    || capsule.activities.length !== 1
     || agentAliases.length !== 1) {
     return { ok: false, code: "ARTIFACT_AUTHOR_REQUIRED", error: "Repository DCO author cannot be mapped unambiguously through capsule provenance." };
   }

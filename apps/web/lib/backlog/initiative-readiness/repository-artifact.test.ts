@@ -13,12 +13,12 @@ const locator = {
   providerBlobId: "b".repeat(40),
 };
 
-function db(capsuleCount = 1) {
+function db(capsuleCount = 1, agentIds = ["agent-author"]) {
   return {
     workCapsule: {
       findMany: vi.fn(async () => Array.from({ length: capsuleCount }, () => ({
         createdByPrincipalId: "principal-author",
-        activities: [{ recordedByAgentId: "agent-author" }],
+        activities: agentIds.map((recordedByAgentId) => ({ recordedByAgentId })),
       }))),
     },
     principalAlias: {
@@ -83,6 +83,23 @@ describe("resolveRepositoryArtifact", () => {
       fetchImpl: fetchImpl as typeof fetch,
     })).resolves.toMatchObject({ ok: false, code: "CANONICAL_DESIGN_AMBIGUOUS" });
     expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it("rejects exact-head capsule provenance when multiple agents participated", async () => {
+    const fetchImpl = vi.fn(async (url: string | URL | Request) => String(url).includes("/commits/")
+      ? new Response(JSON.stringify({ commit: { message: "docs: canonical\n\nSigned-off-by: Author <author@example.com>" } }), { status: 200 })
+      : new Response(JSON.stringify({
+        type: "file",
+        sha: locator.providerBlobId,
+        encoding: "base64",
+        content: bytes.toString("base64"),
+      }), { status: 200 }));
+    await expect(resolveRepositoryArtifact({
+      locator,
+      subject: { kind: "backlog-item", id: "BI-TEST" },
+      db: db(1, ["agent-author", "review-agent"]) as never,
+      fetchImpl: fetchImpl as typeof fetch,
+    })).resolves.toMatchObject({ ok: false, code: "ARTIFACT_AUTHOR_REQUIRED" });
   });
 
   it("returns a stable input-required result when the provider request throws", async () => {

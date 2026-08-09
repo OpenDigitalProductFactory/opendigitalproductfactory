@@ -255,4 +255,14 @@ describe("selectStrongestReadinessProfile", () => {
       recordedProfiles: ["feature"],
     })).toBe("feature");
   });
+
+  it.each([
+    ["archetype-category", "archetype"],
+    ["archetype-leaf", "archetype"],
+    ["multi-archetype", "archetype"],
+    ["common", "cross-domain"],
+    ["platform", "cross-domain"],
+  ] as const)("maps canonical scopeKind %s to %s", (scopeKind, expected) => {
+    expect(deriveAuthoritativeReadinessProfile({ type: "feature", scopeKind })).toBe(expected);
+  });
 });

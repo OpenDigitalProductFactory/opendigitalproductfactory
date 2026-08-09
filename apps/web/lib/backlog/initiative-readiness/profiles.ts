@@ -41,13 +41,22 @@ function profileFromString(value: string | null | undefined): ReadinessProfile |
   return null;
 }
 
+function profileFromScopeKind(value: string | null | undefined): ReadinessProfile | null {
+  const normalized = value?.trim().toLocaleLowerCase("en-US").replaceAll("_", "-");
+  if (["archetype", "archetype-category", "archetype-leaf", "multi-archetype"].includes(normalized ?? "")) {
+    return "archetype";
+  }
+  if (["common", "platform", "cross-domain"].includes(normalized ?? "")) return "cross-domain";
+  return profileFromString(value);
+}
+
 /** Monotonic profile projection from immutable history and current structured substrate. */
 export function deriveAuthoritativeReadinessProfile(signals: InitiativeProfileSignals): ReadinessProfile | null {
   const candidates = [
     profileFromString(signals.type),
     profileFromString(signals.source),
     profileFromString(signals.workType),
-    profileFromString(signals.scopeKind),
+    profileFromScopeKind(signals.scopeKind),
     profileFromString(signals.activeBuildKind),
     ...(signals.recordedProfiles ?? []),
   ].filter((profile): profile is ReadinessProfile => Boolean(profile));
