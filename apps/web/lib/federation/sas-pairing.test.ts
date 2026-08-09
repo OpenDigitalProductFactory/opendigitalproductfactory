@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  buildSasCommitmentStatement,
   computeCommitment,
   deriveSas,
   deriveSharedSecret,
@@ -10,6 +11,12 @@ import {
   verifyCommitment,
   type SasTranscript,
 } from "./sas-pairing";
+import {
+  deriveDeviceId,
+  generateInstanceSigningKeypair,
+  signIdentityStatement,
+  verifyIdentityStatement,
+} from "./instance-identity";
 
 // A minimal honest party in a pairing session.
 function party(deviceId: string) {
@@ -32,6 +39,28 @@ describe("commitment", () => {
     expect(verifyCommitment(other.publicKey, p.nonce, p.commitment)).toBe(false);
     // Tampered nonce is rejected.
     expect(verifyCommitment(p.keypair.publicKey, generatePairingNonce(), p.commitment)).toBe(false);
+  });
+});
+
+describe("identity-bound commitment transcript", () => {
+  it("binds the commitment to the device, peer, pairing context, and authority URL", () => {
+    const identity = generateInstanceSigningKeypair();
+    const deviceId = deriveDeviceId(identity.signingPublicKey);
+    const statement = buildSasCommitmentStatement({
+      deviceId,
+      peerBinding: "did_" + "b".repeat(64),
+      authorityUrl: "https://dpf-a.local:3443",
+      pairingContext: "rotating-discovery-id",
+      commitment: "a".repeat(64),
+    });
+    const signature = signIdentityStatement(identity.signingPrivateKey, statement);
+
+    expect(verifyIdentityStatement(identity.signingPublicKey, statement, signature)).toBe(true);
+    expect(verifyIdentityStatement(
+      identity.signingPublicKey,
+      statement.replace("rotating-discovery-id", "attacker-context"),
+      signature,
+    )).toBe(false);
   });
 });
 

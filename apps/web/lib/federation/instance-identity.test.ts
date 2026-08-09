@@ -6,7 +6,9 @@ import {
   generateInstanceSigningKeypair,
   isDeviceId,
   keypairMatches,
+  signIdentityStatement,
   shortDeviceId,
+  verifyIdentityStatement,
 } from "./instance-identity";
 
 describe("generateInstanceSigningKeypair", () => {
@@ -82,5 +84,22 @@ describe("keypairMatches", () => {
   it("is false on a garbage private key rather than throwing", () => {
     const a = generateInstanceSigningKeypair();
     expect(keypairMatches({ signingPublicKey: a.signingPublicKey, signingPrivateKey: "garbage" })).toBe(false);
+  });
+});
+
+describe("identity-bound statements", () => {
+  it("verifies only the exact statement signed by the matching device key", () => {
+    const signer = generateInstanceSigningKeypair();
+    const other = generateInstanceSigningKeypair();
+    const statement = "dpf-federation-sas-v1\u0000pair_123\u0000commitment";
+    const signature = signIdentityStatement(signer.signingPrivateKey, statement);
+
+    expect(verifyIdentityStatement(signer.signingPublicKey, statement, signature)).toBe(true);
+    expect(verifyIdentityStatement(signer.signingPublicKey, `${statement}-tampered`, signature)).toBe(false);
+    expect(verifyIdentityStatement(other.signingPublicKey, statement, signature)).toBe(false);
+  });
+
+  it("rejects malformed keys and signatures without throwing", () => {
+    expect(verifyIdentityStatement("garbage", "statement", "garbage")).toBe(false);
   });
 });

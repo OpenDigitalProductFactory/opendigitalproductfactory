@@ -14958,6 +14958,12 @@ model FederationPairingSession {
   relationshipPreset    String    @default("same-organization")
   projectionTemplateKey String    @default("same-organization")
   matchingCode          String
+  // Versioned SAS commit/reveal transcript. Ephemeral private material and
+  // nonces are encrypted while the exchange is in flight and cleared after
+  // reveal; public identity/reveal facts remain for auditability.
+  sasState              Json?
+  sasConfirmedAtLocal   DateTime?
+  sasConfirmedAtPeer    DateTime?
   pairingSecretHash     String?   @unique
   pairingSecretEnc      String?
   peerAuthorityUrl      String

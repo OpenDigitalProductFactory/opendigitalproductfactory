@@ -15,7 +15,14 @@
 // Persistence + key-at-rest encryption live in demand-identity.ts, which composes
 // these functions and stores the private key via the existing credential-crypto.
 
-import { createHash, createPrivateKey, createPublicKey, generateKeyPairSync } from "node:crypto";
+import {
+  createHash,
+  createPrivateKey,
+  createPublicKey,
+  generateKeyPairSync,
+  sign,
+  verify,
+} from "node:crypto";
 
 /** A device ID: `did_` + the lowercase hex SHA-256 of the SPKI-DER public key. */
 export const DEVICE_ID_RE = /^did_[a-f0-9]{64}$/;
@@ -75,6 +82,43 @@ export function keypairMatches(keypair: InstanceSigningKeypair): boolean {
     });
     const derivedPub = createPublicKey(priv).export({ type: "spki", format: "der" }).toString("base64");
     return deriveDeviceId(derivedPub) === deriveDeviceId(keypair.signingPublicKey);
+  } catch {
+    return false;
+  }
+}
+
+/** Sign a canonical protocol statement with this installation's Ed25519 key. */
+export function signIdentityStatement(signingPrivateKey: string, statement: string): string {
+  const privateKey = createPrivateKey({
+    key: Buffer.from(signingPrivateKey, "base64"),
+    format: "der",
+    type: "pkcs8",
+  });
+  if (privateKey.asymmetricKeyType !== "ed25519") {
+    throw new Error(`expected an ed25519 private key, got ${privateKey.asymmetricKeyType}`);
+  }
+  return sign(null, Buffer.from(statement, "utf8"), privateKey).toString("base64");
+}
+
+/** Verify an Ed25519 protocol statement. Malformed peer material fails closed. */
+export function verifyIdentityStatement(
+  signingPublicKey: string,
+  statement: string,
+  signature: string,
+): boolean {
+  try {
+    const publicKey = createPublicKey({
+      key: Buffer.from(signingPublicKey, "base64"),
+      format: "der",
+      type: "spki",
+    });
+    if (publicKey.asymmetricKeyType !== "ed25519") return false;
+    return verify(
+      null,
+      Buffer.from(statement, "utf8"),
+      publicKey,
+      Buffer.from(signature, "base64"),
+    );
   } catch {
     return false;
   }
