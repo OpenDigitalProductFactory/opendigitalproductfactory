@@ -61,8 +61,8 @@ describe("DecisionRecordPage", () => {
       }),
     );
 
-    expect(html).toContain("Incomplete historical decision record");
-    expect(html).toContain("Resolution context was never captured");
+    expect(html).toContain("Incomplete record");
+    expect(html).toContain("does not contain enough context to resolve safely");
     expect(html).toContain("excluded from action queues");
     expect(html).not.toContain("De-conflict");
   });

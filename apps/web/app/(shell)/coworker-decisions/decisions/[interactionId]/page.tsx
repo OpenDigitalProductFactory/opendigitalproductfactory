@@ -121,7 +121,7 @@ export default async function DecisionRecordPage({ params }: { params: Params })
           ) : null}
         </div>
         <h1 className="mt-3 text-xl font-semibold text-[var(--dpf-text)]">
-          {row.question || "Incomplete historical decision record"}
+          {row.question || "Incomplete record"}
         </h1>
         <p className="mt-1 text-xs text-[var(--dpf-muted)]">
           <LocalTime value={row.createdAt} /> · {row.profile?.name ?? row.profileId} ·{" "}
@@ -133,19 +133,6 @@ export default async function DecisionRecordPage({ params }: { params: Params })
           </p>
         ) : null}
       </header>
-
-      {contextMissing ? (
-        <section className="mb-6 rounded-lg border border-[var(--dpf-warning)] bg-[var(--dpf-surface-1)] p-4">
-          <h2 className="text-sm font-semibold text-[var(--dpf-text)]">
-            Resolution context was never captured
-          </h2>
-          <p className="mt-1 text-sm text-[var(--dpf-muted)]">
-            This audit record is retained, but it is not open operator work and cannot be safely
-            re-decided from this page. A workflow must capture the question and resolution context
-            before it can place work in a review queue.
-          </p>
-        </section>
-      ) : null}
 
       {/* Options weighed */}
       <section className="mb-6">
