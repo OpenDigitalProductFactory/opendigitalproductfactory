@@ -14,6 +14,8 @@ import { resolveFederationIdentity, type FederationIdentityDb } from "./demand-i
 import { reconcileDemandDigests } from "./demand-digest";
 import { SAME_ORG_LOCAL_ONLY_SENSITIVITIES } from "./cross-org-sharing";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
+import { syncFederationIntroductions, type IntroductionExchangeDb } from "./introduction-exchange";
+import type { FederationDeliveryQueueDb } from "./delivery-queue";
 
 interface ReconciliationLink {
   linkId: string;
@@ -34,7 +36,7 @@ interface ReconciliationBacklogItem {
   digitalProduct: { productId: string } | null;
 }
 
-export interface DemandReconciliationDb extends FederationIdentityDb {
+export interface DemandReconciliationDb extends FederationIdentityDb, FederationDeliveryQueueDb {
   federationLink: {
     findMany(args: unknown): Promise<ReconciliationLink[]>;
   };
@@ -76,6 +78,7 @@ export async function runDemandReconciliation(
     queueWithdrawal?: typeof queueDemandWithdrawal;
     reconcileDigests?: typeof reconcileDemandDigests;
     dispatch?: typeof dispatchDueDemand;
+    syncIntroductions?: typeof syncFederationIntroductions;
     now?: Date;
   } = {},
 ) {
@@ -170,5 +173,10 @@ export async function runDemandReconciliation(
     ? await (deps.reconcileDigests ?? reconcileDemandDigests)(db, identity, { now })
     : { linksChecked: 0, requeued: 0, confirmed: 0, failedLinks: 0 };
   const delivery = await (deps.dispatch ?? dispatchDueDemand)(db, { now });
-  return { links: links.length, projected, unchanged, withdrawn, failed, digest, delivery };
+  const introductions = deps.syncIntroductions
+    ? await deps.syncIntroductions(db as unknown as IntroductionExchangeDb, { now })
+    : "federationIntroductionCandidate" in (db as object)
+      ? await syncFederationIntroductions(db as unknown as IntroductionExchangeDb, { now })
+      : { linksChecked: 0, candidates: 0, rejected: 0, failed: 0 };
+  return { links: links.length, projected, unchanged, withdrawn, failed, digest, delivery, introductions };
 }

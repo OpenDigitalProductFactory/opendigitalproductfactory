@@ -100,7 +100,7 @@ describe("sendDemandToPeer", () => {
 
     expect(result).toMatchObject({ ok: true, status: 202 });
     const [url, init] = (f as unknown as { mock: { calls: [string, RequestInit][] } }).mock.calls[0];
-    expect(url).toBe("https://peer.example/api/v1/federation/demand");
+    expect(url).toBe("https://peer.example/api/v1/federation/inbox");
     const sent = JSON.parse(init.body as string);
     expect(sent).toMatchObject({
       id: "evt_stable",
@@ -109,6 +109,25 @@ describe("sendDemandToPeer", () => {
       dpflinkid: "link_1",
       data: { envelopeId: "dem_1", originVersion: 7 },
     });
+  });
+
+  it("falls back once to the legacy demand route for a rolling-upgrade peer", async () => {
+    const f = vi.fn()
+      .mockResolvedValueOnce({ ok: false, status: 404, json: async () => ({ error: "not_found" }) })
+      .mockResolvedValueOnce({ ok: true, status: 202, json: async () => ({ ok: true, originVersion: 7 }) });
+
+    const result = await sendDemandToPeer(
+      { peerAuthorityUrl: "https://peer.example", linkToken: "dpflink_x", linkId: "link_1", fetchImpl: f },
+      "dpf.demand.updated",
+      { envelopeId: "dem_1", originVersion: 7 },
+      { eventId: "evt_stable" },
+    );
+
+    expect(result.ok).toBe(true);
+    expect(f.mock.calls.map(([url]) => url)).toEqual([
+      "https://peer.example/api/v1/federation/inbox",
+      "https://peer.example/api/v1/federation/demand",
+    ]);
   });
 });
 

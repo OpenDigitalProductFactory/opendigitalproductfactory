@@ -5,8 +5,14 @@ import {
 } from "node:crypto";
 
 import { DEMAND_PROJECTION_TEMPLATES } from "@dpf/db/federated-demand-contract";
+import {
+  isFederationRelationshipPreset,
+  isFederationRole,
+  isRoleAllowedForRelationship,
+  type FederationRelationshipPreset,
+  type FederationRole,
+} from "@dpf/db/federation-link-types";
 
-import { isLinkLocalFederationEndpoint } from "./nearby-candidates";
 import {
   deriveDeviceId,
   isDeviceId,
@@ -38,11 +44,12 @@ export interface NearbyPairingRequest {
   requesterSigningPublicKey: string;
   requesterCommitment: string;
   requesterCommitmentSignature: string;
-  relationshipPreset: "same-organization";
+  relationshipPreset: FederationRelationshipPreset;
+  offeredRole: FederationRole;
 }
 
 export interface NearbyPairingProjectionSummary {
-  relationshipLabel: "Same organization";
+  relationshipLabel: string;
   retentionClass: string;
   sharedSlices: string[];
   staysLocal: string[];
@@ -120,14 +127,22 @@ export function parseNearbyPairingRequest(value: unknown): NearbyPairingRequest 
     "requesterCommitment",
     "requesterCommitmentSignature",
     "relationshipPreset",
+    "offeredRole",
   ]);
   const unknownField = Object.keys(input).find((key) => !allowedFields.has(key));
   if (unknownField) throw new Error(`unknown pairing field: ${unknownField}`);
+  const relationshipPreset = typeof input.relationshipPreset === "string"
+    ? input.relationshipPreset
+    : "same-organization";
+  const offeredRole = typeof input.offeredRole === "string"
+    ? input.offeredRole
+    : "same-org-peer";
   if (
-    input.relationshipPreset !== undefined &&
-    input.relationshipPreset !== "same-organization"
+    !isFederationRelationshipPreset(relationshipPreset) ||
+    !isFederationRole(offeredRole) ||
+    !isRoleAllowedForRelationship(relationshipPreset, offeredRole)
   ) {
-    throw new Error("automatic nearby pairing supports only same-organization relationships");
+    throw new Error("pairing relationship preset and offered role do not match");
   }
   const requesterAuthorityUrl = boundedString(
     input.requesterAuthorityUrl,
@@ -151,9 +166,6 @@ export function parseNearbyPairingRequest(value: unknown): NearbyPairingRequest 
     url.hash
   ) {
     throw new Error("requester authority URL must be an origin");
-  }
-  if (!isLinkLocalFederationEndpoint(url.origin)) {
-    throw new Error("automatic pairing requires a nearby private or local endpoint");
   }
 
   const requesterInstallationId = boundedString(
@@ -223,14 +235,24 @@ export function parseNearbyPairingRequest(value: unknown): NearbyPairingRequest 
     requesterSigningPublicKey,
     requesterCommitment,
     requesterCommitmentSignature,
-    relationshipPreset: "same-organization",
+    relationshipPreset,
+    offeredRole,
   };
 }
 
-export function summarizeNearbyPairingProjection(): NearbyPairingProjectionSummary {
-  const projection = DEMAND_PROJECTION_TEMPLATES["same-organization"];
+const RELATIONSHIP_LABELS: Record<FederationRelationshipPreset, string> = {
+  "same-organization": "Same organization",
+  "service-provider": "Service provider",
+  channel: "Channel",
+  "community-peer": "Community peer",
+};
+
+export function summarizeNearbyPairingProjection(
+  preset: FederationRelationshipPreset = "same-organization",
+): NearbyPairingProjectionSummary {
+  const projection = DEMAND_PROJECTION_TEMPLATES[preset];
   return {
-    relationshipLabel: "Same organization",
+    relationshipLabel: RELATIONSHIP_LABELS[preset],
     retentionClass: projection.retentionClass ?? "standard",
     sharedSlices: [...projection.includeSlices],
     staysLocal: [
@@ -258,11 +280,14 @@ interface PairingCommitResponse {
   projectionSummary: NearbyPairingProjectionSummary;
 }
 
-function isPairingStartResponse(value: unknown): value is PairingCommitResponse {
+function isPairingStartResponse(
+  value: unknown,
+  relationshipPreset: FederationRelationshipPreset,
+): value is PairingCommitResponse {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const row = value as Record<string, unknown>;
   const projection = row.projectionSummary as Record<string, unknown> | null;
-  const canonicalProjection = summarizeNearbyPairingProjection();
+  const canonicalProjection = summarizeNearbyPairingProjection(relationshipPreset);
   const matchesCanonicalList = (actual: unknown, expected: string[]) =>
     Array.isArray(actual) &&
     actual.length === expected.length &&
@@ -302,6 +327,8 @@ export async function requestNearbyPairing(input: {
   requesterInstallationId: string;
   candidateDiscoveryId: string;
   requesterIdentity: FederationSigningIdentity;
+  relationshipPreset: FederationRelationshipPreset;
+  offeredRole: FederationRole;
   fetchImpl?: typeof fetch;
 }): Promise<RequestNearbyPairingResult> {
   let candidate: URL;
@@ -315,13 +342,6 @@ export async function requestNearbyPairing(input: {
       ok: false,
       error: "tls_required",
       message: "Automatic pairing requires a certificate-valid HTTPS endpoint.",
-    };
-  }
-  if (!isLinkLocalFederationEndpoint(input.candidateEndpoint)) {
-    return {
-      ok: false,
-      error: "not_nearby",
-      message: "Automatic nearby pairing is limited to private or local-network endpoints.",
     };
   }
 
@@ -349,6 +369,8 @@ export async function requestNearbyPairing(input: {
       requesterSigningPublicKey: input.requesterIdentity.signingPublicKey,
       requesterCommitment,
       requesterCommitmentSignature,
+      relationshipPreset: input.relationshipPreset,
+      offeredRole: input.offeredRole,
     });
   } catch (error) {
     return {
@@ -393,7 +415,7 @@ export async function requestNearbyPairing(input: {
       message: typeof peerMessage === "string" ? peerMessage : `Nearby DPF responded ${response.status}.`,
     };
   }
-  if (!isPairingStartResponse(body)) {
+  if (!isPairingStartResponse(body, input.relationshipPreset)) {
     return {
       ok: false,
       error: "invalid_peer_response",
@@ -515,9 +537,6 @@ export async function confirmNearbyPairingPeer(input: {
   if (candidate.protocol !== "https:") {
     return { ok: false, error: "tls_required", message: "Automatic pairing requires certificate-valid HTTPS." };
   }
-  if (!isLinkLocalFederationEndpoint(input.candidateEndpoint)) {
-    return { ok: false, error: "not_nearby", message: "Pairing endpoint is not on the nearby private network." };
-  }
   if (
     !/^pair_[A-Za-z0-9_-]{3,160}$/.test(input.pairingId) ||
     !/^dpffpair_[A-Za-z0-9_-]{40,80}$/.test(input.pairingSecret)
@@ -571,9 +590,6 @@ export async function pollNearbyPairingPeer(input: {
   }
   if (candidate.protocol !== "https:") {
     return { ok: false, error: "tls_required", message: "Automatic pairing requires certificate-valid HTTPS." };
-  }
-  if (!isLinkLocalFederationEndpoint(input.candidateEndpoint)) {
-    return { ok: false, error: "not_nearby", message: "Pairing endpoint is not on the nearby private network." };
   }
   if (
     !/^pair_[A-Za-z0-9_-]{3,160}$/.test(input.pairingId) ||

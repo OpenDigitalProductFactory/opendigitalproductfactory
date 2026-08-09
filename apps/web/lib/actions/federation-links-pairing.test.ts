@@ -19,11 +19,14 @@ const mocks = vi.hoisted(() => ({
   findPairingById: vi.fn(),
   createPairing: vi.fn(),
   updatePairing: vi.fn(),
+  updateIntroductionCandidates: vi.fn(),
+  transaction: vi.fn(),
 }));
 
 vi.mock("next/cache", () => ({ revalidatePath: mocks.revalidatePath }));
 vi.mock("@dpf/db", () => ({
   prisma: {
+    $transaction: mocks.transaction,
     principalAlias: { findFirst: mocks.findPrincipalAlias },
     organization: { findFirst: mocks.findOrganization },
     federationPairingSession: {
@@ -32,6 +35,7 @@ vi.mock("@dpf/db", () => ({
       create: mocks.createPairing,
       update: mocks.updatePairing,
     },
+    federationIntroductionCandidate: { updateMany: mocks.updateIntroductionCandidates },
   },
 }));
 vi.mock("@/lib/auth", () => ({ auth: mocks.auth }));
@@ -110,6 +114,11 @@ describe("nearby federation pairing actions", () => {
     mocks.findPairing.mockResolvedValue(null);
     mocks.encryptSecret.mockReturnValue("encrypted-pairing-secret");
     mocks.createPairing.mockResolvedValue({ id: "session_1" });
+    mocks.updateIntroductionCandidates.mockResolvedValue({ count: 0 });
+    mocks.transaction.mockImplementation(async (run) => run({
+      federationPairingSession: { update: mocks.updatePairing },
+      federationIntroductionCandidate: { updateMany: mocks.updateIntroductionCandidates },
+    }));
   });
 
   it("persists an encrypted outgoing session only for a currently discovered HTTPS peer", async () => {
@@ -197,6 +206,13 @@ describe("nearby federation pairing actions", () => {
     expect(mocks.updatePairing).toHaveBeenLastCalledWith({
       where: { id: "session_1" },
       data: expect.objectContaining({ status: "consumed", pairingSecretEnc: null }),
+    });
+    expect(mocks.updateIntroductionCandidates).toHaveBeenCalledWith({
+      where: {
+        OR: [{ installationId: `inst_${"b".repeat(32)}` }],
+        pairedFederationLinkId: null,
+      },
+      data: { pairedFederationLinkId: "FL-1" },
     });
   });
 

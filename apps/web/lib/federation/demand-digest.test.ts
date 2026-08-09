@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
+vi.mock("@/lib/queue/queue-telemetry", () => ({ recordQueueTransition: vi.fn().mockResolvedValue(undefined) }));
+
 import type { DemandDigestV1 } from "@dpf/db/federated-demand-contract";
 
 import {
@@ -19,6 +21,16 @@ const digest: DemandDigestV1 = {
     { originRecordRef: "ref_current", originVersion: 5, payloadDigest: "sha256:five", withdrawn: false },
   ],
 };
+
+function queueDelegates() {
+  return {
+    workQueue: { upsert: vi.fn().mockResolvedValue({ id: "queue-db-id" }) },
+    workItem: {
+      upsert: vi.fn().mockResolvedValue({ itemId: "job-1" }),
+      update: vi.fn(), updateMany: vi.fn(), findMany: vi.fn(),
+    },
+  };
+}
 
 describe("compareIncomingDemandDigest", () => {
   it("requests only missing, stale, or same-version divergent envelopes", async () => {
@@ -42,6 +54,7 @@ describe("reconcileDemandDigests", () => {
   it("requeues peer-requested records and acknowledges records the peer already has", async () => {
     const update = vi.fn().mockResolvedValue({});
     const db = {
+      ...queueDelegates(),
       federationLink: { findMany: vi.fn().mockResolvedValue([
         { linkId: "link_1", peerAuthorityUrl: "https://peer.example", peerTokenEnc: "encrypted" },
       ]) },
@@ -71,16 +84,17 @@ describe("reconcileDemandDigests", () => {
 
     expect(result).toEqual({ linksChecked: 1, requeued: 1, confirmed: 1, failedLinks: 0 });
     expect(update).toHaveBeenCalledWith({ where: { mirrorId: "out_1" }, data: expect.objectContaining({
-      syncStatus: "pending", deliveryAttempts: 0, nextDeliveryAt: new Date("2026-07-20T06:10:00Z"),
+      syncStatus: "pending", deadLetteredAt: null,
     }) });
     expect(update).toHaveBeenCalledWith({ where: { mirrorId: "out_2" }, data: expect.objectContaining({
-      syncStatus: "synced", acknowledgedVersion: 5, nextDeliveryAt: null,
+      syncStatus: "synced", acknowledgedVersion: 5,
     }) });
   });
 
   it("bounded-re-heals a dead-lettered record the peer still needs, but leaves a poison record dead past the cap (BI-8A7E3E56)", async () => {
     const update = vi.fn().mockResolvedValue({});
     const db = {
+      ...queueDelegates(),
       federationLink: { findMany: vi.fn().mockResolvedValue([
         { linkId: "link_1", peerAuthorityUrl: "https://peer.example", peerTokenEnc: "encrypted" },
       ]) },
@@ -114,8 +128,7 @@ describe("reconcileDemandDigests", () => {
     // Only the recoverable dead-letter is requeued; the poison one is left dead.
     expect(result.requeued).toBe(1);
     expect(update).toHaveBeenCalledWith({ where: { mirrorId: "dl_recoverable" }, data: expect.objectContaining({
-      syncStatus: "pending", deliveryAttempts: 0, deadLetteredAt: null, rehealCount: 1,
-      nextDeliveryAt: new Date("2026-07-20T06:10:00Z"),
+      syncStatus: "pending", deadLetteredAt: null, rehealCount: 1,
     }) });
     expect(update).not.toHaveBeenCalledWith(expect.objectContaining({ where: { mirrorId: "dl_poison" } }));
   });
@@ -141,6 +154,7 @@ describe("reconcileDemandDigests", () => {
       return Promise.resolve(all.slice(start, start + args.take));
     });
     const db = {
+      ...queueDelegates(),
       federationLink: { findMany: vi.fn().mockResolvedValue([
         { linkId: "link_1", peerAuthorityUrl: "https://peer.example", peerTokenEnc: "encrypted", role: "same-org-peer" },
       ]) },

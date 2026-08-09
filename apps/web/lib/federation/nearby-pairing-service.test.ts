@@ -189,6 +189,8 @@ describe("nearby pairing persistence service", () => {
       sasConfirmedAtLocal: Date | null;
       sasConfirmedAtPeer: Date | null;
       approvedByPrincipalId: string | null;
+      relationshipPreset: string;
+      offeredRole: string;
       expiresAt: Date;
     } = {
       id: "row_1",
@@ -200,6 +202,8 @@ describe("nearby pairing persistence service", () => {
       sasConfirmedAtLocal: null,
       sasConfirmedAtPeer: now,
       approvedByPrincipalId: null,
+      relationshipPreset: "channel",
+      offeredRole: "channel-upstream",
       expiresAt: new Date(Date.now() + 15 * 60_000),
     };
     const tx = {
@@ -237,7 +241,8 @@ describe("nearby pairing persistence service", () => {
     expect(tx.federationBootstrapToken.create).toHaveBeenCalledWith({
       data: expect.objectContaining({
         tokenHash: "c".repeat(64),
-        offeredRole: "same-org-peer",
+        offeredRole: "channel-upstream",
+        proposedProjection: expect.objectContaining({ retentionClass: "standard" }),
         issuedByPrincipalId: "principal_1",
       }),
     });
@@ -264,6 +269,8 @@ describe("nearby pairing persistence service", () => {
       sasConfirmedAtLocal: Date | null;
       sasConfirmedAtPeer: Date | null;
       approvedByPrincipalId: string | null;
+      relationshipPreset: string;
+      offeredRole: string;
       expiresAt: Date;
     } = {
       id: "row_1",
@@ -275,6 +282,8 @@ describe("nearby pairing persistence service", () => {
       sasConfirmedAtLocal: null,
       sasConfirmedAtPeer: null,
       approvedByPrincipalId: null,
+      relationshipPreset: "same-organization",
+      offeredRole: "same-org-peer",
       expiresAt: new Date(Date.now() + 15 * 60_000),
     };
     const tx = {

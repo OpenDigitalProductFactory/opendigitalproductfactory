@@ -13605,6 +13605,9 @@ model WorkItem {
   itemId                        String                 @unique @default(cuid())
   sourceType                    String
   sourceId                      String?
+  // Idempotent adapter-owned identity for queue jobs whose source must have at
+  // most one live WorkItem (for example federation-demand:<mirrorId>).
+  sourceKey                     String?                @unique
   title                         String
   description                   String                 @db.Text
   urgency                       String                 @default("routine")
@@ -13634,6 +13637,12 @@ model WorkItem {
   presence                      WorkItemPresence[]
   governedDataControlOperations DataControlOperation[] @relation("DataControlOperationGovernedCase")
   routingDecision               Json?
+  // Generic retry scheduling owned by the canonical queue. Domain mirrors keep
+  // domain/version state; they do not grow their own transport scheduler.
+  attemptCount                  Int                    @default(0)
+  nextAttemptAt                 DateTime?
+  lastAttemptAt                 DateTime?
+  lastError                     String?                @db.Text
   completedAt                   DateTime?
   createdAt                     DateTime               @default(now())
   updatedAt                     DateTime               @updatedAt
@@ -13644,6 +13653,7 @@ model WorkItem {
   @@index([teamId, status])
   @@index([parentItemId])
   @@index([sourceType, sourceId])
+  @@index([status, nextAttemptAt])
   @@index([urgency, status])
   @@index([dueAt])
 }
@@ -14879,6 +14889,7 @@ model FederationLink {
   // Stable pseudonymous installation identity learned from an authenticated
   // digest exchange. Used for route-loop checks; never derived from hostname.
   peerInstallationId    String?
+  peerDeviceId          String?
   localOrganizationId   String?
   // Trust state — derived from the approval/revoke/quarantine timestamps below.
   linkState             String    @default("pending")
@@ -14905,18 +14916,54 @@ model FederationLink {
   authorityBindingId    String?
   metadata              Json?
   enrolledAt            DateTime?
+  // Introductions exchange candidate coordinates only over an already-trusted
+  // link. Each direction is explicit; neither flag transfers trust.
+  offersIntroductions   Boolean   @default(false)
+  acceptsIntroductions  Boolean   @default(false)
   createdAt             DateTime  @default(now())
   updatedAt             DateTime  @updatedAt
 
-  principal       Principal                  @relation("FederationLinkIdentity", fields: [principalId], references: [id], onDelete: Cascade)
-  bootstrapTokens FederationBootstrapToken[] @relation("FederationBootstrapConsumer")
-  partnerAccount  PartnerAccount?
+  principal              Principal                         @relation("FederationLinkIdentity", fields: [principalId], references: [id], onDelete: Cascade)
+  bootstrapTokens        FederationBootstrapToken[]        @relation("FederationBootstrapConsumer")
+  partnerAccount         PartnerAccount?
+  introductionCandidates FederationIntroductionCandidate[] @relation("FederationIntroducerLink")
 
   @@index([linkState])
   @@index([role])
   @@index([tokenHash])
   @@index([peerOrganizationRef])
   @@index([peerInstallationId])
+  @@index([peerDeviceId])
+}
+
+// Durable review candidates learned from one trusted introducer. This is not a
+// trust table: pairing still runs through FederationPairingSession and the only
+// durable relationship authority is FederationLink.
+model FederationIntroductionCandidate {
+  id                     String    @id @default(cuid())
+  introductionId         String    @unique
+  introducerLinkId       String
+  installationId         String
+  deviceId               String
+  displayName            String
+  authorityUrl           String
+  relationshipHint       String
+  introducedByPath       String[]
+  hopCount               Int
+  firstSeenAt            DateTime  @default(now())
+  lastSeenAt             DateTime  @default(now())
+  expiresAt              DateTime
+  withdrawnAt            DateTime?
+  dismissedAt            DateTime?
+  pairedFederationLinkId String?
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
+
+  introducerLink FederationLink @relation("FederationIntroducerLink", fields: [introducerLinkId], references: [linkId], onDelete: Cascade)
+
+  @@unique([introducerLinkId, installationId])
+  @@index([expiresAt, withdrawnAt, dismissedAt])
+  @@index([installationId])
 }
 
 // Single-use invitation, mirrors BootstrapToken. The inviting peer issues a
@@ -14957,6 +15004,7 @@ model FederationPairingSession {
   status                String    @default("pending")
   relationshipPreset    String    @default("same-organization")
   projectionTemplateKey String    @default("same-organization")
+  offeredRole            String    @default("same-org-peer")
   matchingCode          String
   // Versioned SAS commit/reveal transcript. Ephemeral private material and
   // nonces are encrypted while the exchange is in flight and cleared after

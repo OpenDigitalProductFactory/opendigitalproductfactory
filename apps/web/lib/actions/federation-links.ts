@@ -45,6 +45,11 @@ import {
   denyIncomingNearbyPairing,
 } from "@/lib/federation/nearby-pairing-service";
 import { listNearbyFederationCandidates } from "@/lib/federation/nearby-candidates";
+import { relationshipPresetForRole } from "@/lib/federation/demand-reconciliation";
+import {
+  findActiveIntroducedCandidate,
+  type IntroductionExchangeDb,
+} from "@/lib/federation/introduction-exchange";
 import {
   assertEncryptionReadyForCredentialWrite,
   decryptSecret,
@@ -412,14 +417,29 @@ export async function startNearbyPairingAction(input: {
 }): Promise<NearbyPairingActionResult> {
   const gate = await assertManagePlatform();
   if (!gate.ok) return gate;
-  const candidate = listNearbyFederationCandidates().find(
+  let candidate = listNearbyFederationCandidates().find(
     (row) => row.discoveryId === input.discoveryId && row.endpoint === input.endpoint,
   );
   if (!candidate) {
-    return { ok: false, error: "not_found", message: "That nearby DPF is no longer visible. Wait for discovery to refresh." };
+    candidate = await findActiveIntroducedCandidate(
+      prisma as unknown as IntroductionExchangeDb,
+      { introductionId: input.discoveryId, authorityUrl: input.endpoint },
+    ) ?? undefined;
+  }
+  if (!candidate) {
+    return { ok: false, error: "not_found", message: "That DPF candidate is no longer available. Wait for discovery or introductions to refresh." };
   }
   if (candidate.automaticPairing === "blocked-insecure-transport") {
     return { ok: false, error: "invalid_input", message: "Automatic pairing requires HTTPS. Use a manual invitation until this installation has a trusted certificate." };
+  }
+  const offeredRole: FederationRole = candidate.source === "introducer"
+    && candidate.relationshipHint
+    && isFederationRole(candidate.relationshipHint)
+    ? candidate.relationshipHint
+    : "same-org-peer";
+  const relationshipPreset = relationshipPresetForRole(offeredRole);
+  if (!relationshipPreset || !isRoleAllowedForRelationship(relationshipPreset, offeredRole)) {
+    return { ok: false, error: "invalid_input", message: "The introduced relationship policy is not supported for pairing." };
   }
   const localAuthorityUrl = await resolveLocalFederationAuthorityUrl();
   if (!localAuthorityUrl) {
@@ -454,7 +474,11 @@ export async function startNearbyPairingAction(input: {
         peerDisplayName: existing.peerDisplayName,
         peerAuthorityUrl: existing.peerAuthorityUrl,
         expiresAt: existing.expiresAt.toISOString(),
-        projectionSummary: summarizeNearbyPairingProjection(),
+        projectionSummary: summarizeNearbyPairingProjection(
+          isFederationRelationshipPreset(existing.relationshipPreset)
+            ? existing.relationshipPreset
+            : "same-organization",
+        ),
       };
     }
     const [identity, organization] = await Promise.all([
@@ -469,6 +493,8 @@ export async function startNearbyPairingAction(input: {
       requesterInstallationId: identity.installationId,
       candidateDiscoveryId: candidate.discoveryId,
       requesterIdentity: identity,
+      relationshipPreset,
+      offeredRole,
     });
     if (!requested.ok) {
       return { ok: false, error: "internal_error", message: requested.message };
@@ -480,8 +506,9 @@ export async function startNearbyPairingAction(input: {
         pairingId: requested.pairingId,
         direction: "outgoing",
         status: "pending",
-        relationshipPreset: "same-organization",
-        projectionTemplateKey: "same-organization",
+        relationshipPreset,
+        projectionTemplateKey: relationshipPreset,
+        offeredRole,
         matchingCode: requested.matchingCode,
         sasState: {
           protocolVersion: 1,
@@ -528,7 +555,11 @@ export async function pollNearbyPairingAction(pairingId: string): Promise<Nearby
     peerDisplayName: row.peerDisplayName,
     peerAuthorityUrl: row.peerAuthorityUrl,
     expiresAt: row.expiresAt.toISOString(),
-    projectionSummary: summarizeNearbyPairingProjection(),
+    projectionSummary: summarizeNearbyPairingProjection(
+      isFederationRelationshipPreset(row.relationshipPreset)
+        ? row.relationshipPreset
+        : "same-organization",
+    ),
   };
   if (row.status === "consumed" || row.status === "denied" || row.status === "expired") {
     return { ok: true, ...baseResult, status: row.status };
@@ -580,20 +611,34 @@ export async function pollNearbyPairingAction(pairingId: string): Promise<Nearby
     displayName: organization?.name?.trim() || "Nearby DPF installation",
     localOrganizationId: organization?.id ?? null,
     peerOrganizationRef: row.peerInstallationId,
+    localDeviceId: ((row.sasState ?? {}) as { localDeviceId?: string }).localDeviceId ?? null,
+    peerDeviceId: ((row.sasState ?? {}) as { remoteDeviceId?: string }).remoteDeviceId ?? null,
   });
   if (!enrolled.ok) {
     return { ok: false, error: "internal_error", message: enrolled.message };
   }
   const consumedAt = new Date();
-  await prisma.federationPairingSession.update({
-    where: { id: row.id },
-    data: {
-      status: "consumed",
-      consumedAt,
-      pairingSecretEnc: null,
-      lastPolledAt: consumedAt,
-      pollCount: { increment: 1 },
-    },
+  const candidateSelectors = [
+    ...(row.candidateDiscoveryId ? [{ introductionId: row.candidateDiscoveryId }] : []),
+    ...(row.peerInstallationId ? [{ installationId: row.peerInstallationId }] : []),
+  ];
+  await prisma.$transaction(async (tx) => {
+    await tx.federationPairingSession.update({
+      where: { id: row.id },
+      data: {
+        status: "consumed",
+        consumedAt,
+        pairingSecretEnc: null,
+        lastPolledAt: consumedAt,
+        pollCount: { increment: 1 },
+      },
+    });
+    if (candidateSelectors.length > 0) {
+      await tx.federationIntroductionCandidate.updateMany({
+        where: { OR: candidateSelectors, pairedFederationLinkId: null },
+        data: { pairedFederationLinkId: enrolled.linkId },
+      });
+    }
   });
   revalidatePath(ADMIN_PATH);
   return { ok: true, ...baseResult, status: "consumed", linkId: enrolled.linkId };
@@ -727,4 +772,23 @@ export async function setFederationLinkEnvironmentAction(
   revalidatePath(ADMIN_PATH);
   revalidatePath("/ops/demand");
   return { ok: true, environmentClass };
+}
+
+export async function setFederationIntroducerPolicyAction(
+  linkId: string,
+  policy: { offersIntroductions: boolean; acceptsIntroductions: boolean },
+): Promise<{ ok: true; offersIntroductions: boolean; acceptsIntroductions: boolean } | ActionFailure> {
+  const gate = await assertManagePlatform();
+  if (!gate.ok) return gate;
+  const link = await prisma.federationLink.findUnique({ where: { linkId: linkId.trim() } });
+  if (!link) return { ok: false, error: "not_found", message: "Federation link not found." };
+  if (link.linkState !== "trusted" || link.revokedAt || link.quarantinedAt) {
+    return { ok: false, error: "invalid_transition", message: "Introductions require an active trusted connection." };
+  }
+  await prisma.federationLink.update({
+    where: { linkId: link.linkId },
+    data: policy,
+  });
+  revalidatePath(ADMIN_PATH);
+  return { ok: true, ...policy };
 }
