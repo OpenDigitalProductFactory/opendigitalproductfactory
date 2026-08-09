@@ -99,6 +99,7 @@
     "@axe-core/playwright": "^4.12.1",
     "@mermaid-js/mermaid-cli": "11.15.0",
     "@playwright/test": "^1.62.0",
-    "docx": "^9.7.1"
+    "docx": "^9.7.1",
+    "tsx": "^4.23.1"
   }
 }
