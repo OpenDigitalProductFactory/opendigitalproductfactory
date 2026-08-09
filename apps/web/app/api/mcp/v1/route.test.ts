@@ -543,10 +543,12 @@ describe("POST — initialize", () => {
     expect(body.result.protocolVersion).toBe("2024-11-05");
     expect(body.result.serverInfo.name).toBe("dpf-platform");
     expect(body.result.capabilities.tools).toBeDefined();
+    // Pre-Tasks fallback must NOT advertise tasks (breaks Grok Build 1.0.0 etc.).
+    expect(body.result.capabilities.tasks).toBeUndefined();
   });
 
   it("negotiates protocol version — echoes client version when supported", async () => {
-    for (const version of ["2024-11-05", "2025-03-26", "2025-11-25"]) {
+    for (const version of ["2024-11-05", "2025-03-26", "2025-06-18", "2025-11-25"]) {
       const res = await POST(
         makeRequest({
           bearer: "dpfmcp_X",
@@ -558,6 +560,51 @@ describe("POST — initialize", () => {
     }
   });
 
+  it("omits capabilities.tasks on pre-Tasks protocol versions (client-compat)", async () => {
+    // Includes Grok Build 1.0.0's negotiated version (2025-06-18).
+    for (const version of ["2024-11-05", "2025-03-26", "2025-06-18"]) {
+      const res = await POST(
+        makeRequest({
+          bearer: "dpfmcp_X",
+          body: {
+            jsonrpc: "2.0",
+            id: 1,
+            method: "initialize",
+            params: { protocolVersion: version },
+          },
+        }),
+      );
+      const body = await res.json();
+      expect(body.result.protocolVersion).toBe(version);
+      expect(body.result.capabilities.tools).toEqual({ listChanged: true });
+      expect(body.result.capabilities.tasks).toBeUndefined();
+    }
+  });
+
+  it("accepts MCP-Protocol-Version: 2025-06-18 on post-initialize calls (Grok)", async () => {
+    resolveMock.mockResolvedValue({
+      tokenId: "tok_grok",
+      userId: "u1",
+      agentId: null,
+      scopes: ["backlog_read"],
+      capability: "read",
+    });
+    const req = new Request("https://localhost/api/mcp/v1", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: "Bearer dpfmcp_X",
+        "User-Agent": "grok/1.0.0",
+        "MCP-Protocol-Version": "2025-06-18",
+      },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 2, method: "tools/list" }),
+    });
+    const res = await POST(req);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(Array.isArray(body.result.tools)).toBe(true);
+  });
+
   it("negotiates protocol version — falls back when client version is unknown", async () => {
     const res = await POST(
       makeRequest({
@@ -567,6 +614,8 @@ describe("POST — initialize", () => {
     );
     const body = await res.json();
     expect(body.result.protocolVersion).toBe("2024-11-05");
+    // Fallback is pre-Tasks — do not advertise tasks on the safe floor.
+    expect(body.result.capabilities.tasks).toBeUndefined();
   });
 });
 

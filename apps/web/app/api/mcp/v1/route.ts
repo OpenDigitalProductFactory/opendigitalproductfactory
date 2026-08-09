@@ -35,6 +35,7 @@ import {
 } from "@/lib/mcp/tool-tier";
 import { getLoadedToolNames, loadToolsForSession } from "@/lib/mcp/tool-session-store";
 import {
+  shouldAdvertiseTasksCapability,
   tasksLifecycleEnabled,
   handleTasksGet,
   handleTasksResult,
@@ -57,9 +58,18 @@ type ResolvedAuth = ResolvedMcpToken & {
   source: "pat" | "session-jwt";
 };
 
-// Versions we can speak, newest first. We echo back the highest version the
-// client supports so older clients (e.g. Claude Code pre-2025-11-25) connect.
-const SUPPORTED_PROTOCOL_VERSIONS = ["2025-11-25", "2025-03-26", "2024-11-05"] as const;
+// Versions we can speak, newest first. We echo back the version the client
+// requested when it is in this list so older clients connect. Include every
+// wire revision clients actually send — Grok Build 1.0.0 negotiates
+// `2025-06-18` and re-sends it as `MCP-Protocol-Version` on tools/list; omitting
+// it made initialize fall back but then 400'd subsequent calls.
+// Tasks capability is ONLY advertised on 2025-11-25 (see shouldAdvertiseTasksCapability).
+const SUPPORTED_PROTOCOL_VERSIONS = [
+  "2025-11-25",
+  "2025-06-18",
+  "2025-03-26",
+  "2024-11-05",
+] as const;
 const FALLBACK_PROTOCOL_VERSION = "2024-11-05";
 const SERVER_NAME = "dpf-platform";
 const SERVER_VERSION = "1.0.0";
@@ -505,8 +515,14 @@ async function handleInitialize(id: JsonRpcId, params?: Record<string, unknown>)
       // that ignore it still work — the lean core tier is always the floor.
       tools: { listChanged: true },
       // Standard MCP Tasks (Phase 0, read-only): tasks/get|result|list|cancel
-      // over the durable TaskRun substrate. Advertised only while enabled.
-      ...(tasksLifecycleEnabled() ? { tasks: { list: true, cancel: true } } : {}),
+      // over the durable TaskRun substrate. Advertise ONLY when the negotiated
+      // protocol is Tasks-aware (2025-11-25+) AND the feature flag is on.
+      // Advertising on 2024-11-05 / 2025-03-26 breaks clients that reject
+      // unknown capability keys at initialize (Grok Build 1.0.0 → CustomResult
+      // handshake failure). Methods remain routable; discovery is gated.
+      ...(shouldAdvertiseTasksCapability(negotiated)
+        ? { tasks: { list: true, cancel: true } }
+        : {}),
     },
     serverInfo: {
       name: SERVER_NAME,

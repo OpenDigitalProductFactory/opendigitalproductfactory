@@ -1,6 +1,11 @@
 // apps/web/lib/mcp/tasks-lifecycle.test.ts
 import { describe, it, expect } from "vitest";
-import { mcpTaskStateForWire, isTerminalTaskStatus, tasksLifecycleEnabled } from "./tasks-lifecycle";
+import {
+  mcpTaskStateForWire,
+  isTerminalTaskStatus,
+  shouldAdvertiseTasksCapability,
+  tasksLifecycleEnabled,
+} from "./tasks-lifecycle";
 
 describe("tasks-lifecycle state adapter (Slice 4 Phase 0)", () => {
   it("maps DPF/A2A statuses to MCP-spec wire states", () => {
@@ -34,6 +39,21 @@ describe("tasks-lifecycle state adapter (Slice 4 Phase 0)", () => {
     expect(tasksLifecycleEnabled()).toBe(true);
     process.env.MCP_TASKS_LIFECYCLE = "off";
     expect(tasksLifecycleEnabled()).toBe(false);
+    if (prev === undefined) delete process.env.MCP_TASKS_LIFECYCLE;
+    else process.env.MCP_TASKS_LIFECYCLE = prev;
+  });
+
+  it("advertises tasks only on Tasks-aware protocol versions when the flag is on", () => {
+    const prev = process.env.MCP_TASKS_LIFECYCLE;
+    delete process.env.MCP_TASKS_LIFECYCLE;
+    // Pre-Tasks clients (Grok Build 1.0.0 → 2025-06-18, older SDKs) — never advertise.
+    expect(shouldAdvertiseTasksCapability("2024-11-05")).toBe(false);
+    expect(shouldAdvertiseTasksCapability("2025-03-26")).toBe(false);
+    expect(shouldAdvertiseTasksCapability("2025-06-18")).toBe(false);
+    // Tasks-aware negotiation may advertise.
+    expect(shouldAdvertiseTasksCapability("2025-11-25")).toBe(true);
+    process.env.MCP_TASKS_LIFECYCLE = "off";
+    expect(shouldAdvertiseTasksCapability("2025-11-25")).toBe(false);
     if (prev === undefined) delete process.env.MCP_TASKS_LIFECYCLE;
     else process.env.MCP_TASKS_LIFECYCLE = prev;
   });
