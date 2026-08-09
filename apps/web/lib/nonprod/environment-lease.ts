@@ -346,7 +346,11 @@ export async function claimNonprodEnvironmentLease(input: {
     hostPressure: input.hostPressure,
     capacityBroker: input.capacityBroker,
     manifestSlotCount: NONPROD_SLOT_KEYS.length,
-    reserveAdmissionHeadroom: true,
+    // Only an exact local-CI runner claim consumes the declared builder and
+    // host-stage envelopes. Contributor previews share this FIFO/provider
+    // exclusion pool, but do not request a runner slot and must not reserve a
+    // build stage they never execute.
+    reserveAdmissionHeadroom: input.slotManifestVersion === 1,
     now,
   });
   const ttlMs = requestedTtlMs(now, input.expiresAt);
