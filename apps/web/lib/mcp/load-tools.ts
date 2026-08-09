@@ -6,10 +6,17 @@
 // (build the result, then SSE-or-JSON it). Grant filtering and the session-store
 // write stay in the route/store — this module is presentation + payload shaping.
 
-import { LOAD_TOOLS_TOOL_NAME } from "./tool-tier";
+import { LOAD_TOOLS_TOOL_NAME } from "@/lib/tak/tool-intent";
 import { MCP_ROUTE_TOOL_RESULT_CHAR_CAP } from "@/lib/tak/tool-result-budget";
 
 type JsonRpcId = string | number | null;
+
+/**
+ * Keep the cross-client recovery contract inside Codex's documented 512-char
+ * initialize-instruction budget; org context may be appended after this.
+ */
+export const MCP_PROGRESSIVE_DISCLOSURE_INSTRUCTIONS =
+  "DPF discloses MCP tools progressively. If absent, call load_tools with {names:[\"exact_tool_name\"]} or {query:\"capability intent\"}. Honor notifications/tools/list_changed or re-fetch tools/list. If the host top-level registry stays stale, invoke the loaded tool through its programmatic tool catalog; this remains governed MCP. Resources are not tools; plugins cannot recover connected-server tools. Missing grant means authorization failure; connection error means server unavailable. DPF domain MCP.";
 
 // The synthetic load_tools tool as it appears on tools/list. Not a granted
 // domain tool — the route handles it inline in tools/call. Description is
@@ -17,13 +24,14 @@ type JsonRpcId = string | number | null;
 export const LOAD_TOOLS_LISTED = {
   name: LOAD_TOOLS_TOOL_NAME,
   description:
-    "Load additional MCP tools into this session so they appear on the next tools/list. Use it when the current tool set does not contain a tool you need: pass {names:[\"exact_tool_name\"]} to load specific tools, or {query:\"keyword\"} to search names and descriptions. Discovery-only — it never executes a tool, and loaded tools are appended to (not swapped for) the current set, so the cached prompt prefix is preserved. Call search_tool_marketplace first if you don't know a tool's name.",
+    "Load additional authorized MCP tools into this session so they appear on the next tools/list. Use it when the current tool set does not contain a capability you need: pass {names:[\"exact_tool_name\"]} to load specific tools, or {query:\"natural-language capability intent\"} to rank matching names and descriptions. Discovery-only — it never executes a tool, and loaded tools are appended to (not swapped for) the current set. Call search_tool_marketplace if you do not know a tool's name.",
   inputSchema: {
     type: "object",
     properties: {
       query: {
         type: "string",
-        description: "Case-insensitive keyword matched against tool name and description.",
+        description:
+          "Natural-language capability intent ranked against authorized tool names and descriptions.",
       },
       names: {
         type: "array",
@@ -64,9 +72,13 @@ export function buildLoadToolsResult(
     loadedToolNames,
     count: selected.length,
     listChanged: selected.length > 0,
+    recovery:
+      selected.length > 0
+        ? { reListTools: true, programmaticCatalogFallback: true }
+        : undefined,
     note:
       selected.length > 0
-        ? "Tools loaded for this session — re-fetch tools/list to use them (a notifications/tools/list_changed was emitted for list_changed-aware clients)."
+        ? "Tools loaded for this session. Honor notifications/tools/list_changed or re-fetch tools/list. If the host top-level registry remains unchanged, invoke the loaded tool through its programmatic tool catalog; this remains governed MCP."
         : "No granted tools matched. Pass exact names or a broader query, or call search_tool_marketplace to find tool names.",
   };
   if (JSON.stringify(data).length > MCP_ROUTE_TOOL_RESULT_CHAR_CAP) {
@@ -79,6 +91,32 @@ export function buildLoadToolsResult(
   return {
     content: [{ type: "text", text: JSON.stringify({ success: true, ...data }, null, 2) }],
     structuredContent: data,
+  };
+}
+
+/** Machine-readable recovery for a tool name that is absent from the grant map. */
+export function buildUnknownToolResult(toolName: string): {
+  content: Array<{ type: "text"; text: string }>;
+  structuredContent: Record<string, unknown>;
+  isError: true;
+} {
+  const recovery = {
+    tool: LOAD_TOOLS_TOOL_NAME,
+    exactName: { names: [toolName] },
+    intentQuery: { query: "describe the capability you need" },
+    nextStep:
+      "Call load_tools, then honor notifications/tools/list_changed or re-fetch tools/list. If the host top-level registry stays stale, use its programmatic tool catalog. Exact-name loading requires a correctly spelled authorized deferred tool; use an intent query or search_tool_marketplace otherwise.",
+  };
+  const structuredContent = { error: "unknown_tool", toolName, recovery };
+  return {
+    content: [
+      {
+        type: "text",
+        text: `Unknown tool: ${toolName}. Use load_tools by exact name or capability intent, then re-fetch tools/list.`,
+      },
+    ],
+    structuredContent,
+    isError: true,
   };
 }
 

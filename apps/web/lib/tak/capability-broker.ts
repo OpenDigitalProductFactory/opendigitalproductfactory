@@ -18,7 +18,7 @@
 
 import type { ToolDefinition } from "@/lib/mcp-tools";
 import { classifyTaskClass } from "./intent-taxonomy";
-import { tokenizeIntent, scoreToolIntentRelevance } from "@/lib/actions/coworker-tool-budget";
+import { tokenizeIntent, scoreToolIntentRelevance } from "@/lib/tak/tool-intent";
 
 /** Default ceiling on how many tools the broker proactively surfaces — small, so
  *  it front-loads the intent's capabilities without re-flooding the surface. */

@@ -177,6 +177,24 @@ describe("Phase 2 — resolveLoadToolsSelection", () => {
     expect(sel.map((t) => t.name).sort()).toEqual(["create_quote", "list_quotes"]);
   });
 
+  it("selects by natural-language intent instead of requiring one contiguous substring", () => {
+    const granted = [
+      ...GRANTED,
+      {
+        name: "claim_backlog_item_for_work",
+        description:
+          "Claim a backlog item for work by binding it to the current branch, worktree, and session.",
+      },
+    ];
+
+    const sel = resolveLoadToolsSelection(granted, {
+      query: "claim a backlog item and bind it to my worktree",
+    });
+
+    expect(sel.map((t) => t.name)).toContain("claim_backlog_item_for_work");
+    expect(sel.map((t) => t.name)).not.toContain("create_quote");
+  });
+
   it("de-duplicates when names and query overlap, preserving grant order", () => {
     const sel = resolveLoadToolsSelection(GRANTED, { names: ["create_quote"], query: "quote" });
     expect(sel.map((t) => t.name)).toEqual(["create_quote", "list_quotes"]);

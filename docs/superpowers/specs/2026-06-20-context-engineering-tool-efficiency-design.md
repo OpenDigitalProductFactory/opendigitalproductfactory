@@ -1,8 +1,8 @@
 # Context Engineering & Tool Efficiency — Design & Research
 
-**Status:** VALIDATED — founder greenlit 2026-06-20. The **P0 trio (R1 result-cap, R2 description-lint, R3-adjacent enforcement)** and the **keep-fresh / apply-criteria mechanism** are implemented as permanent guards; see the implementation plan `docs/superpowers/plans/2026-06-20-context-engineering-tool-efficiency-implementation.md` and the canonical standard `docs/architecture/context-engineering-standards.md`. Remaining recommendations (R3 deferred-CLI-tools, R4 code-exec spike, R6, R7, R8, R9) are staged follow-ups. The §10 decisions below are resolved as recommended.
+**Status:** VALIDATED — founder greenlit 2026-06-20. The **P0 trio (R1 result-cap, R2 description-lint, R3 deferred external-CLI tools)** and the **keep-fresh / apply-criteria mechanism** are implemented; R3 Phase 2 shipped in PR #4112 and its bootstrap/conformance contract was hardened on 2026-08-08. See the implementation plan `docs/superpowers/plans/2026-06-20-context-engineering-tool-efficiency-implementation.md` and the canonical standard `docs/architecture/context-engineering-standards.md`. Remaining recommendations (R4 code-exec spike, R6, R7, R8, R9) are staged follow-ups. The §10 decisions below are resolved as recommended.
 
-> Note: "R3" in this spec covers two parts — the *enforcement* of the description/result criteria (shipped) and the *deferred tool loading on the external-CLI MCP path* (staged). The §7 R3 entry refers to the latter.
+> Note: "R3" in this spec covers two parts — the *enforcement* of the description/result criteria and *deferred tool loading on the external-CLI MCP path*. Both are shipped; the §7 entry is retained as historical design rationale.
 **Date:** 2026-06-20
 **Author:** Claude (operator `/goal`)
 **Seed:** r/ClaudeCode — *"can someone explain the real difference between [Skills vs MCP vs Subagents vs Slash Commands]"* (Reddit blocks automated fetch; thread question confirmed via web search + official sources below).
@@ -25,7 +25,7 @@
 | # | Gap | Why it matters **for our local-first / budget-GPU strategy** |
 |---|-----|--------------------------------------------------------------|
 | G1 | **No global tool-*result* size cap.** A single tool can dump unbounded JSON into context. | On a 24,576-token local build window, one fat result blows the budget. Claude Code caps results at 25K tokens; we cap nothing. |
-| G2 | **External-CLI MCP path (`/api/mcp/v1`) has no deferred-tool loading.** Native loop subsets to ~15–36 tools; external clients can pull the full JWT-scoped surface (~50K tokens for 242 tools). | Claude Code/Codex/Grok driving DPF pay a context tax we already know how to avoid — and this is the surface that *changes weekly*. |
+| G2 | **CLOSED.** External-CLI MCP path (`/api/mcp/v1`) now has a client-default lean floor plus per-token `load_tools` exact/intent expansion, append-not-swap, and notification/re-list refresh. | The original context tax motivated R3; current host behavior must still be re-verified as clients change weekly. |
 | G3 | **No code-execution / programmatic tool calling in the native loop.** Every tool result round-trips through the model. | Anthropic measures 37–98% token cuts from this. We already have a sandbox to host it. On a small local window this is the single biggest lever. |
 | G4 | **242-tool registry / 16K-line switch carries convergence debt + description bloat** (BI-IDs, "Phase 4b/7", file paths leak into model-facing text). | Every leaked token is paid on every `tools/list`. 12 overlapping `search_*` tools and a 7-way `record_*_evidence` family also degrade tool-selection accuracy (which collapses past ~15 tools locally). |
 | G5 | **No standing "client capability parity" mechanism.** Clients change weekly; we track them ad hoc. | We will silently fall behind on new token-savers (deferred tools, code-exec) and silently break on deprecations. |

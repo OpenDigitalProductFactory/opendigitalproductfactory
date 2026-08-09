@@ -11,7 +11,7 @@ import {
 } from "@/lib/tak/runtime-issues";
 import { isRedundantReaskQuestion } from "@/lib/tak/conversation-intent";
 import { PLATFORM_TOOLS, toolsToOpenAIFormat, type ToolDefinition, type ToolResult } from "@/lib/mcp-tools";
-import { LOAD_TOOLS_TOOL_NAME, selectLoadableTools } from "@/lib/actions/coworker-tool-budget";
+import { LOAD_TOOLS_TOOL_NAME, selectLoadableTools } from "@/lib/tak/tool-intent";
 import {
   classifyEvidenceRequirement,
   resolveEvidenceRecovery,
@@ -2733,4 +2733,3 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
     executionPlan,
   };
 }
-
