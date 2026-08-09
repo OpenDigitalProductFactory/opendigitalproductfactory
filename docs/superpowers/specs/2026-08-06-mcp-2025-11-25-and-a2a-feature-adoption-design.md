@@ -1,9 +1,11 @@
 # MCP `2025-11-25` and A2A Feature Adoption — Assessment & Phased Plan
 
+> **Standards correction (2026-08-08):** This assessment is retained as the historical basis for the 2025-11-25 adoption bundle. Its claim that DPF was current is no longer applicable: the [final MCP 2026-07-28 release](https://blog.modelcontextprotocol.io/posts/2026-07-28/) is stateless and moves long-running work to the official Tasks extension. The current design is [MCP 2026-07-28 stateless core and Tasks convergence](2026-08-06-mcp-standard-tasks-lifecycle-convergence-design.md), governed by umbrella `BI-AF9F9729` and decision `DI-1C305D329ECE`.
+
 | Field | Value |
 |-------|-------|
 | **Epic** | Platform Infrastructure / EP-A2A / EP-COWORKER-INTERACTIVITY |
-| **Status** | Design (assessment + plan) — NOT yet implemented |
+| **Status** | Historical assessment — superseded for current MCP conformance |
 | **Date** | 2026-08-06 |
 | **Author** | Claude Code for Mark Bodman |
 | **Scope (read)** | `apps/web/app/api/mcp/v1/route.ts`, `apps/web/lib/mcp-tools.ts`, `apps/web/lib/mcp-task-submit.ts`, `services/adp/src/server.ts`, `docs/Reference/mcp/spec/` (snapshot `2025-11-25`) |
@@ -16,7 +18,7 @@
 
 The request was "MCP 2 is out; upgrade our use of it and any other standard like A2A, and take advantage of new features." Verification of the live substrate changes the shape of that work:
 
-- **The protocol version is already current.** `apps/web/app/api/mcp/v1/route.ts:47` declares `SUPPORTED_PROTOCOL_VERSIONS = ["2025-11-25", "2025-03-26", "2024-11-05"]` and negotiates down per client (`:392-393`), with a test asserting `2025-11-25` round-trips (`route.test.ts:548-556`). "MCP 2" is the **`2025-11-25` spec revision** (successor to `2025-06-18`); DPF is not behind on the version string.
+- **Historical finding at the time:** the implementation already selected the then-targeted `2025-11-25` version. `apps/web/app/api/mcp/v1/route.ts:47` declares `SUPPORTED_PROTOCOL_VERSIONS = ["2025-11-25", "2025-03-26", "2024-11-05"]` and negotiates down per client (`:392-393`), with a test asserting `2025-11-25` round-trips (`route.test.ts:548-556`). This must not be read as current conformance after the final 2026-07-28 release.
 - **Several `2025-11-25`-aligned features are already implemented:** `structuredContent` on tool results (`route.ts:507,552-554`), tool annotation hints — `readOnlyHint`/`destructiveHint`/`idempotentHint`/`openWorldHint` (`:353-367`), and HTTP **403** on invalid `Origin` (`:567-568`), which is exactly minor-change #3 of the revision.
 - **So the real work is feature *adoption*, not a version bump** — which of the `2025-11-25` capabilities DPF has not yet taken advantage of, plus the one A2A gap the existing inventory already flagged (signed agent-card export). This document is that gap analysis and a prioritized, one-concern-per-PR plan.
 

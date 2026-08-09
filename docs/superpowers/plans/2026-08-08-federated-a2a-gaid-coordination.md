@@ -16,9 +16,11 @@
 
 **Execution-surface decision:** `DI-0171FE184F71`
 
+**MCP standards correction:** `DI-1C305D329ECE`; [MCP 2026-07-28 migration plan](2026-08-08-mcp-2026-07-28-stateless-tasks-migration.md)
+
 **Planning WorkCapsule:** `WC-7528A06C`
 
-**Backlog coverage receipt:** `cmskyxnu305rc01o1ftmh6v1i` (`decomposed`; execution-surface parity refresh)
+**Backlog coverage receipt:** `cmsl168wl01ig01qq5utrc8gu` (`decomposed`; MCP 2026 dependency refresh)
 
 > **For build threads:** claim exactly one mapped BI, use one worktree/branch/PR, run `dpf-verify-substrate-first` again against current `origin/main`, and keep `DPF_FEDERATION_A2A_ENABLED` off unless the slice explicitly owns activation. Use `dpf-tdd`, the local merged-code CI gate, independent semantic review, and the DPF DCO PR path.
 
@@ -83,7 +85,7 @@ This boundary preserves the existing federation rule: raw `BacklogItem` is not t
 Live coverage was recorded against umbrella `BI-BE0E14E0` for this exact plan path.
 
 - Decision: `decomposed`
-- Receipt: `cmskyxnu305rc01o1ftmh6v1i`
+- Receipt: `cmsl168wl01ig01qq5utrc8gu`
 - Independently shippable mappings: six live sibling BIs under `EP-MSP-FEDERATION`
 - Sequencing-only gates: parity/overlap preflight and final two-install umbrella acceptance
 
@@ -93,14 +95,15 @@ Live coverage was recorded against umbrella `BI-BE0E14E0` for this exact plan pa
 | S1 | GAID issuer namespace and identity continuity | `BI-F51DC0D3` | P0 | independent correctness slice |
 | S2 | Peer-device pinning and signed federation events | `BI-51FA49EB` | P0 | independent, A2A disabled |
 | S3 | Signed GAID Agent Cards and remote discovery | `BI-B280E853` | S1, S2 | independent, discovery gated |
-| S4 | Federated A2A task ingress over `TaskRun` | `BI-90E338D8` | S1–S3 | independent, ingress disabled |
+| S4 | Federated A2A task ingress over `TaskRun` | `BI-90E338D8` | S1–S3; MCP entry also requires `BI-B6F8BFF4` | independent, ingress disabled |
 | S5 | Local authority, privacy, receipts, and operations | `BI-0E61A6A7` | S2, S4 | independent safety/readiness slice |
 | S6 | Operator readiness UX and activation controls | `BI-68AF8D86` | S3, S5 | independent UI slice |
 | A | Canonical-runtime two-install acceptance | umbrella closeout | S1–S6 | not a separate product deliverable |
 
 Cross-install reuse/coordination references:
 
-- `BI-06B66FFD`: MCP Tasks lifecycle over canonical `TaskRun`; S4 must consume its completed convergence rather than create competing task state.
+- `BI-06B66FFD` / PR #4119: historical 2025 Tasks projection over canonical `TaskRun`; useful substrate, but not current-standard completion.
+- `BI-B6F8BFF4`: official MCP 2026-07-28 Tasks extension over canonical `TaskRun`; hard dependency for S4's external MCP entry adapter. It owns MCP wire migration while S4 owns the A2A application/federation service.
 - `BI-40648BBF`: existing A2A Agent Card exporter; S3 extends its builder.
 - `BI-5FB59BC6` / PR #4121: shipped `find_coworker`; S3 adds its link-scoped federated result source.
 - `BI-COWORKER-360-AGENTCARD`: current-install whole-coworker Agent Card/read-model coordination seam.
@@ -262,8 +265,8 @@ the same mirrored cards and projection policy.
 - new canonical A2A contract module under `packages/db/src/`
 - new `/api/v1/federation/a2a` route and tests
 - federation A2A exchange/delivery modules following the demand patterns
-- `apps/web/app/api/mcp/v1/route.ts`, `apps/web/lib/mcp-task-submit.ts`, and
-  `apps/web/lib/mcp/tasks-lifecycle.ts`
+- the stable task/application-service contract delivered by `BI-B6F8BFF4`; MCP route, version
+  adapter, and legacy lifecycle files remain owned by that BI rather than this S4 PR
 - `apps/web/lib/mcp/packs/coworker-pack.ts`, `apps/web/lib/tak/coworker-collaboration.ts`, and
   task-chat projection adapters
 - `apps/web/lib/coworker-service-catalog/a2a-tasks.ts`, `engagements.ts`, and tests
@@ -273,7 +276,7 @@ the same mirrored cards and projection policy.
 
 ### Tasks
 
-1. Reconcile current main with peer Slice 4 `BI-06B66FFD`; complete one `TaskRun` convergence rather than competing migrations or task models.
+1. Reconcile current main with legacy peer Slice 4 `BI-06B66FFD`/PR #4119 and current `BI-B6F8BFF4`. Preserve one `TaskRun` convergence. S4 may build the core A2A service first, but its external MCP adapter remains disabled until the official 2026 Tasks service contract is complete.
 2. Define one surface-neutral application service over the existing A2A task/engagement modules for
    discovery selection, initiate/message-send, additional input, get/list/status/result, cancel,
    artifact retrieval, and receipt projection. Only its federation adapter may emit cross-install
@@ -292,10 +295,11 @@ the same mirrored cards and projection policy.
 7. Implement the non-streaming v1.0 operations required by the first slice: message/send, get/list, additional input, cancel, status/history, and artifact retrieval.
 8. Generate the task ID on the receiver and use `TaskRun` as authority; link `CoworkerEngagement` for service/approval context and persist `TaskMessage`/`TaskArtifact` history.
 9. Bind every operation to the authenticated `FederationLink`, verified agent context, and local target. Task-ID possession is never authorization.
-10. Converge the external MCP path: `find_coworker` selects verified remote cards;
-    `tasks/submit` remains a bounded compatibility door while peer Slice 4 converges task-augmented
-    requests; `tasks/get|result|list|cancel` and the additional-input adapter call the same service
-    and return the same receiver-owned `TaskRun`.
+10. Converge the external MCP path without editing the wire protocol in this slice: `find_coworker`
+    selects verified remote cards; final MCP 2026-07-28 server-directed task creation and official
+    `tasks/get|update|cancel` reach the A2A service through `BI-B6F8BFF4`'s stable task contract. The
+    legacy `tasks/submit|get|result|list|cancel` adapter may call that same service until its governed
+    retirement, but never defines S4's internal API.
 11. Resolve an external MCP request through its authenticated user/service Principal to a governed
     acting Agent Principal + GAID, or require an explicit authorized delegation to one. Reject raw
     caller-supplied GAID selection and never fabricate a local user/agent identity.
@@ -316,7 +320,9 @@ idempotency payloads fail; guessed/cross-link task IDs, token-only/signature-onl
 body mutation are denied; existing internal A2A and demand paths remain green.
 The external MCP, Build Studio, and in-platform coworker adapters all exercise the same service
 contract and produce one receiver-owned task/receipt shape; an unmapped or spoofed acting GAID is
-denied before egress.
+denied before egress. The MCP parity case uses the final 2026-07-28 request envelope and official
+Tasks extension; the legacy adapter is tested only for compatibility and may not be required for
+S4 activation.
 
 ## 10. S5 — Authority, privacy, receipts, and operations
 

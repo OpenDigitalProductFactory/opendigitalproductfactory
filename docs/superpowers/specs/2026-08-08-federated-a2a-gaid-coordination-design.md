@@ -12,6 +12,8 @@
 
 **Execution-surface decision:** `DI-0171FE184F71` — three thin entry adapters over the existing discovery/task/authority/UX slices; no seventh BI or surface-specific A2A substrate
 
+**MCP standards correction:** `DI-1C305D329ECE` — final MCP 2026-07-28 through dual wire adapters on the canonical `/api/mcp/v1` route; official Tasks migration `BI-B6F8BFF4` gates S4's MCP entry surface
+
 **Delivery shape:** one same-organization product outcome, decomposed into governed implementation BIs; no implementation code in this document branch
 
 **Backlog:** umbrella `BI-BE0E14E0` and six mapped siblings under `EP-MSP-FEDERATION` on this install; `EP-E1F1DB58` remains the A2A-adoption install's program anchor (see §3)
@@ -99,7 +101,7 @@ Neither anchor set is fictional. A thread that runs `get_backlog_item("EP-E1F1DB
 **Anchoring rule (act on this):**
 
 - On the **MSP-federation install**, this slice is `BI-BE0E14E0` under `EP-MSP-FEDERATION` (the parent that owns `FederationLink`, projection contracts, federated record mirrors, and sovereign-peer identity), cross-referencing `BI-COWORKER-360-AGENTCARD` for the single Agent Card source of truth.
-- On the **A2A-adoption install**, the identical work is a new slice under `EP-E1F1DB58` (the "MCP 2025-11-25 + A2A feature adoption" program, umbrella `BI-1F4A4861`), sitting after its already-filed siblings — most directly **Slice 6 `BI-40648BBF`** (A2A signed agent-card export), **Slice 4 `BI-06B66FFD`** (standard MCP Tasks lifecycle → `TaskRun` convergence), and **Slice 10 `BI-5FB59BC6`** (`find_coworker`, shipped as #4121). See §4.5 for the concrete reuse those siblings force.
+- On the **A2A-adoption install**, the identical work is a new slice under `EP-E1F1DB58` (the historical "MCP 2025-11-25 + A2A feature adoption" program, umbrella `BI-1F4A4861`), sitting after its already-filed siblings — most directly **Slice 6 `BI-40648BBF`** (A2A signed agent-card export), legacy **Slice 4 `BI-06B66FFD`** (the 2025 Tasks projection shipped in PR #4119), and **Slice 10 `BI-5FB59BC6`** (`find_coworker`, shipped as #4121). Current-standard MCP work is now governed locally by `BI-AF9F9729` and may arrive through BI synchronization; counterpart mapping must preserve each install's provenance rather than treating a bare BI ID as global. See §4.5 for the concrete reuse those siblings force.
 - Whichever backlog the build thread runs against, it files/claims the slice there and records the other install's anchor as the cross-reference. The two records converge only when a federation link carries them — which is the capability this slice ships.
 
 Other verified live programs on the MSP-federation install remain: `EP-A2A` (done — earlier internal handoff/summon precedent, not reopened), `EP-TAK-3F9A21` (done — delivered GAID-Private/AIDoc projection, a dependency), `EP-COWORKER-IDENTITY-360` (open — unified coworker read model and whole-coworker Agent Card, a coordination seam).
@@ -199,7 +201,7 @@ The implementation must keep internal consumers working, but all cross-install t
 An independent substrate sweep (2026-08-08, against `origin/main` at `bc5a0debd`, not the stale root clone) confirmed the substrate above and surfaced six concrete, actionable items the build must honor so it reuses rather than re-invents:
 
 1. **Consume Slice 6, do not rebuild it.** `apps/web/lib/a2a/agent-card.ts` already serves the A2A v0.3.0 card at `/.well-known/agent-card.json` and `/.well-known/agent-card/{agentId}`, gated `EXPORT_GATE` to `active/production/public` only. But today it emits `provenance.signed: false` and carries **no `gaid` field**. The §8.4 target (JWS-signed, GAID-in-`extensions`) is precisely the delta to add onto this existing builder — the link-scoped extended card projects from it, it is not a fork.
-2. **Coordinate `TaskRun` convergence with Slice 4.** `BI-06B66FFD` (standard MCP Tasks lifecycle over `TaskRun`, via `apps/web/lib/mcp/tasks-lifecycle.ts`) converges the bespoke `tasks/submit` onto standard `tasks`. §8.5's `TaskRun`/`CoworkerEngagement` consolidation touches the same rows; the two must land as one convergence, or the second one fights the first. Treat Slice 4 as a hard sequencing dependency where the installs share it.
+2. **Coordinate `TaskRun` convergence with the final MCP migration.** Remote-install `BI-06B66FFD`/PR #4119 supplied a useful legacy 2025 projection through `apps/web/lib/mcp/tasks-lifecycle.ts`, but it did not converge asynchronous submission and it is not the final 2026 Tasks contract. Current `BI-B6F8BFF4` owns the official extension over `TaskRun`. §8.5's `TaskRun`/`CoworkerEngagement` consolidation and S4's external MCP entry must call that same task service. Core A2A work may proceed first; the MCP adapter stays disabled until `BI-B6F8BFF4` completes.
 3. **Make cross-install discovery the federated twin of `find_coworker`.** `find_coworker` (Slice 10, shipped #4121, `apps/web/lib/mcp/packs/coworker-pack.ts`) is the *local* intent-based discovery meta-tool. §12.2 remote-coworker discovery should extend it with a link-scoped, projection-gated result set — not a parallel discovery path. This was Slice 10's own framing ("A2A-plane twin of `load_tools`").
 4. **Fix the `priv`/`private` GAID scope-token split as part of §4.1 conformance.** `buildPrivateAgentGaid` (`apps/web/lib/identity/principal-linking.ts`) emits `gaid:priv:…`, but the catalog fallback at `apps/web/lib/coworker-service-catalog/agent-card.ts:105` emits `gaid:private:…`. Left unfixed, two installs comparing GAID strings will silently mismatch on the scope token before the namespace question is even reached. This is a latent cross-install bug, not cosmetic.
 5. **Name the feature flag on the existing pattern.** Federation receiving routes are gated by `DPF_FEDERATION_EXCHANGE_ENABLED` (`apps/web/app/api/v1/federation/**`). A2A adds a sibling `DPF_FEDERATION_A2A_ENABLED` (or a per-link A2A capability bit) so demand and A2A gate independently — the plan's "feature-gated" phrasing resolves to this concrete flag.
@@ -210,10 +212,11 @@ An independent substrate sweep (2026-08-08, against `origin/main` at `bc5a0debd`
    protected participation graph from them. It does not add an A2A participation or receipt graph
    table.
 8. **Converge the external MCP path rather than adding an A2A client transport.**
-   `/api/mcp/v1` already exposes `tasks/submit` plus authorization-bound `tasks/get`,
-   `tasks/result`, `tasks/list`, and `tasks/cancel` over `TaskRun`. S4 moves the submission path and
-   any required additional-input adapter behind the canonical A2A coordination service while
-   preserving the MCP wire compatibility owned by peer Slice 4.
+   `/api/mcp/v1` currently exposes the legacy `tasks/submit` plus authorization-bound
+   `tasks/get|result|list|cancel` over `TaskRun`. The preferred final MCP 2026-07-28 adapter uses
+   server-directed task creation and official `tasks/get|update|cancel`. Both adapters call the
+   canonical A2A coordination/task service; legacy methods remain compatibility only and never
+   become application-service names or an alternate transport.
 9. **Extend the existing coworker doors.** `request_coworker`, `summon_coworker`, and
    `find_coworker` already share coworker resolution, delegation, thread, and `TaskRun` substrate.
    A verified remote-card target routes through the canonical A2A service; a local target keeps the
@@ -277,13 +280,14 @@ The [A2A/MCP comparison](https://a2a-protocol.org/latest/topics/a2a-and-mcp/) se
   resolves the authenticated caller to canonical Principal/GAID context and then calls the same A2A
   coordination service as Build Studio and in-platform coworkers.
 
-MCP 2025-11-25 Tasks are useful precedent for receiver-owned task IDs, explicit authorization-context binding, polling, cancellation, TTLs, and audit. They remain experimental in that version, and the [2026-07-28 release candidate](https://blog.modelcontextprotocol.io/posts/2026-07-28-release-candidate/) moves long-running Tasks to an extension while making the core stateless. Therefore, this design does not make DPF A2A task state depend on MCP Tasks or copy a version-specific MCP state machine. It preserves a mapping adapter only.
+MCP 2025-11-25 Tasks remain useful historical precedent for receiver-owned task IDs, authorization-context binding, polling, cancellation, TTLs, and audit. The [final MCP 2026-07-28 release](https://blog.modelcontextprotocol.io/posts/2026-07-28/) makes the core stateless and moves long-running work to the separately negotiated [`io.modelcontextprotocol/tasks` extension](https://modelcontextprotocol.io/extensions/tasks/overview). The official lifecycle is server-directed creation plus `tasks/get|update|cancel`; it has no standard `tasks/list` or `tasks/result`. Therefore, this design does not make DPF A2A task state depend on MCP Tasks or copy either MCP state machine. It preserves versioned mapping adapters over one application service and one `TaskRun` aggregate.
 
 The adapter boundary is deliberate: A2A v1.0's `Send Message` operation creates or continues a
 remote task, while MCP Tasks describe durable execution around a client/server request. DPF maps
 those contracts at the local edge without claiming they are the same protocol. The current bespoke
-`tasks/submit` remains a bounded compatibility door until peer Slice 4 completes its MCP Tasks
-convergence; it must not remain an alternate task implementation.
+`tasks/submit` remains a bounded 2025 compatibility door until `BI-B6F8BFF4` completes the official
+Tasks convergence and `BI-106E1DEC` proves the retirement gate; it must not remain an alternate task
+implementation.
 
 #### CloudEvents and HTTP signing
 
@@ -616,7 +620,7 @@ serialize an A2A request onto `/api/v1/federation/*`.
 
 | Entry surface | Local authentication and acting-agent resolution | Adapter contract | Local context retained |
 | --- | --- | --- | --- |
-| External MCP client (Claude, Codex, Grok, or another governed client) | MCP token/session → user/service Principal; then an authorized canonical agent Principal + GAID, or an explicit delegation to one | extend `find_coworker`; converge `tasks/submit` and MCP task lifecycle onto the canonical service; expose additional input through the same task-message owner | MCP token/source, caller client kind, local thread/session, authorization context |
+| External MCP client (Claude, Codex, Grok, or another governed client) | bearer token plus 2026 per-request client/protocol/capability metadata → user/service Principal; then an authorized canonical agent Principal + GAID, or an explicit delegation to one. Legacy session context is accepted only inside the temporary 2025 adapter and is never authority for a 2026 request. | extend `find_coworker`; use server-directed official Tasks creation plus `tasks/get|update|cancel`; route legacy `tasks/submit|get|result|list|cancel` through the same service until retirement | token source (not secret), client kind/version, protocol version, local thread/correlation identifier, authorization context |
 | Build Studio | current build/phase agent → canonical agent Principal + GAID; employee/operator approval remains separate | invoke the same governed tool/service handler in process; attach returned `TaskRun` and receipts to existing `FeatureBuild`/`WorkCapsule` evidence | build, phase, WorkCapsule, execution profile, approval evidence |
 | In-platform AI coworker | active coworker → canonical Principal + GAID under local TAK/delegation | extend `find_coworker` and `request_coworker` target resolution; reuse task-chat projection for follow-up and existing engagement/timeline reads | conversation/thread, delegation chain, engagement, visible handoff provenance |
 
@@ -973,8 +977,9 @@ The enterprise identity-boundary amendment added five reviewed findings:
     converge on one service. Kernel decision `DI-0171FE184F71` rejected a seventh adapter slice and
     separate per-surface implementations.
 
-Standards checked: A2A v1.0 core, enterprise guidance, multi-tenancy and extension model; MCP
-2025-11-25 Tasks and 2026-07-28 release-candidate direction; CloudEvents 1.0; RFC 9421; RFC 9530;
+Standards checked: A2A v1.0 core, enterprise guidance, multi-tenancy and extension model; historical
+MCP 2025-11-25 Tasks, final MCP 2026-07-28 stateless core, and the official Tasks extension;
+CloudEvents 1.0; RFC 9421; RFC 9530;
 and RFC 8785. A2A supplies the extension and authorization mechanisms but does not normatively
 define agent-subject identity, private/public boundary mapping, participant topology disclosure,
 or a minimized-lineage commitment. That is a real enterprise profile gap, so the normative GAID

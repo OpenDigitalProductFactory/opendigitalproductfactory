@@ -1,81 +1,210 @@
-# MCP standard Tasks lifecycle — convergence design (Slice 4 / BI-4)
+# MCP 2026-07-28 stateless core and Tasks extension convergence design
 
 | Field | Value |
 |-------|-------|
-| **Status** | **Phase 0 SHIPPED (BI-06B66FFD).** The read-only standard surface — `tasks` capability + `tasks/get\|result\|list\|cancel` over the existing `TaskRun` substrate, with the A2A state adapter and auth-context binding (`apps/web/lib/mcp/tasks-lifecycle.ts`) — is implemented behind the `MCP_TASKS_LIFECYCLE` flag (default on). This increment changes NO execution semantics: task-augmented `tools/call` (Phase 1) and `tasks/submit` convergence (Phase 2) remain deferred and still require the kernel-routed decisions D1–D3 below. The kernel's LATER ruling for the full Slice 4 (`DI-A573E0551352`) was **operator-overridden** to ship Phase 0 in the conformance bundle; the HIGH-blast execution phases stay gated. |
-| **Date** | 2026-08-06 |
-| **Author** | Claude Code for Mark Bodman |
-| **Parent** | [MCP `2025-11-25` + A2A adoption assessment](2026-08-06-mcp-2025-11-25-and-a2a-feature-adoption-design.md) · [phased plan](../plans/2026-08-06-mcp-2025-11-25-a2a-adoption.md) Slice 4 |
-| **Backlog** | **Unfiled** (backlog MCP unreachable in this web session). This design precedes the BI; once BI-4 is filed, its implementation plan hangs off it. |
-| **Blast radius** | **HIGH** — the MCP transport is the coordination plane (AGENTS.md §12) and this changes long-running task execution semantics. Why this is a design, not a same-session patch. |
+| **Status** | **REVISED FOR FINAL MCP 2026-07-28.** PR #4119 / remote-install BI-06B66FFD shipped a useful `TaskRun` projection for the older 2025-11-25 experimental Tasks contract. It is now explicitly a legacy compatibility increment, not current-standard completion. |
+| **Dates** | Original 2026-08-06 · standards correction 2026-08-08 |
+| **Backlog** | Umbrella `BI-AF9F9729`; core `BI-214CB18D`; official Tasks `BI-B6F8BFF4`; ADP `BI-A712B61F`; retirement `BI-106E1DEC` under live epic `EP-HEADLESS-EMPLOYEE` |
+| **Decision** | `DI-1C305D329ECE` — **dual wire, one route**; high confidence; no commandment conflict |
+| **Plan** | [MCP 2026-07-28 stateless and Tasks migration](../plans/2026-08-08-mcp-2026-07-28-stateless-tasks-migration.md) |
+| **Blast radius** | **HIGH** — this changes the external coordination protocol and long-running execution semantics while preserving the route, authorization pipeline, and durable task substrate. |
 
-## 1. Problem & current state (verified substrate)
+## 1. Correction and verified current state
 
-DPF exposes a **bespoke, non-standard** `tasks/submit` JSON-RPC method (`apps/web/app/api/mcp/v1/route.ts:664` → `handleTasksSubmit` `:369` → `submitRemoteCoworkerTask`, `apps/web/lib/mcp-task-submit.ts`). Verified behavior:
+The final MCP 2026-07-28 release was published on 2026-07-28. PR #4119 merged on 2026-08-08 but intentionally conformed to 2025-11-25. That implementation is therefore not the latest MCP protocol.
 
-- **Execution is synchronous for `read` / `bounded-write`** — `submitRemoteCoworkerTask` runs `executeAutonomousAgenticLoop` inline and returns `completed`/`failed` in the same HTTP response (`mcp-task-submit.ts:228-282`). Only `high-risk` returns early as `input-required` for approval (`:184-208`). A long autonomous run therefore blocks the request instead of being polled.
-- **No standard task surface** — there is no `tasks/get`, `tasks/result`, `tasks/list`, or `tasks/cancel`; no `tasks` capability is declared (`route.ts:396-398` advertises only `tools`); `tools/call` cannot be task-augmented.
-- **The durable substrate already exists and is A2A-aligned.** `TaskRun` (`packages/db/prisma/schema.prisma:7708`) has a unique `taskRunId`, `userId` (auth-context binding), A2A-aligned `status` (`submitted|working|input-required|auth-required|completed|failed|canceled|rejected|archived`), `a2aMetadata` (JSON; already stores `idempotencyKey`), `progressPayload`, `completedAt`, `lastHeartbeatAt`, and relations `artifacts`/`messages`. Idempotent replay is keyed on `a2aMetadata.idempotencyKey` (`mcp-task-submit.ts:110-139`).
-- **Background execution infra exists** — `apps/web/lib/queue/functions/` (queue functions) and `createAutonomousWorkRun` already separate run *creation* from *execution*; exact wiring for a background executor is a substrate item to confirm at implementation.
+The code is still valuable substrate:
 
-So the opportunity is not net-new plumbing — it is to **project the standard MCP Tasks lifecycle onto the existing `TaskRun` substrate** and converge the bespoke method, so any MCP client can create, poll, retrieve, list, and cancel durable DPF work.
+- `apps/web/app/api/mcp/v1/route.ts` negotiates `2025-11-25`, `2025-03-26`, and `2024-11-05`, requires `initialize`/`notifications/initialized`, and advertises the legacy `tasks` capability.
+- `apps/web/lib/mcp/tasks-lifecycle.ts` projects `tasks/get|result|list|cancel` onto `TaskRun` but explicitly does not implement task-augmented execution or submission convergence.
+- `apps/web/lib/mcp-task-submit.ts` normally awaits `executeAutonomousAgenticLoop`; only approval-required work returns before execution. It is not a general asynchronous task-creation path.
+- `services/adp/src/server.ts` also implements the stateful initialize handshake.
+- `TaskRun`, auth-context binding, state mapping, idempotency support, cancellation hooks, messages, artifacts, and audit evidence already exist. They remain the canonical application substrate.
 
-## 2. Research & Benchmarking (AGENTS.md §7)
+The correction is a wire-protocol and execution convergence, not a new task system.
 
-**Standard MCP Tasks (`2025-11-25`, experimental — `docs/Reference/mcp/spec/basic/utilities/tasks.mdx`).** Requestor-driven, receiver-executed. Receiver declares a `tasks` capability (`list`, `cancel`, `requests.tools.call`). A task-augmented `tools/call` (request carries `params.task.ttl`) returns a `CreateTaskResult` immediately (`taskId`, `status:working`, `createdAt`, `lastUpdatedAt`, `ttl`, `pollInterval`); the real result comes later via `tasks/result` (blocks to terminal). Poll via `tasks/get`; enumerate via paginated `tasks/list`; stop via `tasks/cancel`. Per-tool opt-in via `execution.taskSupport` (`required|optional|forbidden`). Task states: `working → input_required|completed|failed|cancelled`. Security MUSTs: bind tasks to auth context; reject cross-context `get`/`result`/`cancel`; `tasks/list` returns only the requestor's tasks; enforce TTL, rate limits, cleanup.
+## 2. Research & benchmarking
 
-**Benchmarks / verdicts:**
+### 2.1 Final MCP 2026-07-28
 
-| Option | Verdict | Why |
-|--------|---------|-----|
-| Adopt the standard `tasks` surface over `TaskRun` | **Adopt** | The substrate is already durable and A2A-aligned; this is a projection, matching the assessment's Slice 4 and the adopt-standards kernel principle. |
-| Swap in `@modelcontextprotocol/sdk` task machinery | **Reject** | DPF's transport is hand-rolled through `governedExecuteTool`; the SDK would fork governance and the frozen tool-name contract (parent spec §1.2). Adopt the wire shape, not the library. |
-| Delete `tasks/submit` and replace outright | **Reject (now)** | External callers depend on it; converge behind a flag and deprecate on a timeline (§5). |
-| Treat MCP tasks as ephemeral (delete on TTL) | **Defer to kernel** | Collides with DPF's audit doctrine that `TaskRun` is a durable business/BI record — Decision D1. |
+The [final release announcement](https://blog.modelcontextprotocol.io/posts/2026-07-28/) makes the core protocol stateless:
 
-**A2A alignment.** `TaskRun.status` already uses A2A task vocabulary; the ops-map projects these as edges. The only mismatch is spelling (`input-required`/`canceled` in DPF vs `input_required`/`cancelled` in the MCP spec) — handled by a boundary adapter (§3), leaving the internal enum (which the ops map and other consumers read) untouched.
+- no `initialize` or `notifications/initialized` lifecycle;
+- no protocol session identifier;
+- protocol version, client identity, and capabilities travel per request;
+- `server/discover` is the standard discovery door;
+- Streamable HTTP requests carry `MCP-Protocol-Version` plus `Mcp-Method`, and `Mcp-Name` where the method defines a name/URI/task routing key; mirrored values must match body `_meta`/params;
+- tool parameters annotated with `x-mcp-header` are mirrored as validated `Mcp-Param-*` headers for gateway routing and policy;
+- server identity moves to response `_meta`;
+- list responses publish `ttlMs` and `cacheScope` cache directives;
+- multi-round-trip tool responses use the standard input-required mechanism.
 
-## 3. Target design
+Streamable HTTP remains one POST endpoint. Standalone GET/DELETE session endpoints and resumable streams are gone; a POST may return request-scoped SSE, and optional long-lived change notifications use `subscriptions/listen`.
 
-- **Capability:** advertise `tasks: { list: {}, cancel: {}, requests: { tools: { call: {} } } }` in `initialize` (only when negotiated version ≥ `2025-11-25`).
-- **taskId = `TaskRun.taskRunId`** (already unique, receiver-generated). No new id space.
-- **Auth-context binding (security MUST):** every `tasks/get|result|cancel` verifies `TaskRun.userId` == the token/session user; `tasks/list` filters on `userId` (index `@@index([userId, status])`). Cross-context access → `-32602`.
-- **Task-augmented `tools/call`:** when `params.task` is present and the target tool opts in, create the `TaskRun`, enqueue background execution, and return `CreateTaskResult` immediately instead of running the loop inline. Non-augmented calls behave exactly as today.
-- **Per-tool opt-in:** add `execution.taskSupport` to `tools/list` output — `optional` for long-running autonomous/coworker tools, absent (`forbidden`) for quick backlog reads. Enforce `-32601` on augmentation of a forbidden tool.
-- **State adapter (boundary only):** map DPF→MCP at the wire — `working→working`, `input-required→input_required`, `completed→completed`, `failed→failed`, `canceled→cancelled`; collapse `submitted→working`, `auth-required→input_required`, `rejected→failed`, `archived→`(expired). Do **not** change the internal enum.
-- **`tasks/result`:** for terminal tasks return the underlying `CallToolResult` (reuse the existing `structuredContent`/`isError` shaping in `handleToolsCall`); for non-terminal, block to terminal (bounded). Include `_meta["io.modelcontextprotocol/related-task"] = { taskId }`.
-- **Timestamps/TTL/poll:** map `createdAt`/`updatedAt` → `createdAt`/`lastUpdatedAt`; surface `ttl` and `pollInterval` per Decision D1.
-- **Optional:** `notifications/tasks/status` on transitions (nice-to-have, not required by spec).
-- **Errors:** `-32602` for unknown/terminal-cancel/bad cursor; `-32603` internal — per spec §Error Handling.
+Normative detail is in the official [Discovery](https://modelcontextprotocol.io/specification/draft/server/discover), [Caching](https://modelcontextprotocol.io/specification/draft/server/utilities/caching), and [Streamable HTTP](https://modelcontextprotocol.io/specification/draft/basic/transports/streamable-http) sections.
 
-## 4. Decisions to route through the kernel FIRST (`dpf-decision-via-kernel`)
+DPF adopts these semantics at its existing external MCP route. Stateless means there is no connection-scoped protocol authority; it does **not** mean durable application work disappears.
 
-1. **D1 — TTL & retention.** The spec expects a `ttl` after which results may be deleted; DPF keeps `TaskRun` as a durable audit/BI record. Options: (a) add a nullable `ttl` column + a "results-served-until" window that stops serving `tasks/result` after expiry but **never deletes** the row; (b) advertise `ttl: null` (unlimited) for governed tasks; (c) store MCP ttl in `a2aMetadata` only. Cost axis: external resource-management conformance vs. audit/provenance permanence.
-2. **D2 — Cancellation authority & mechanism.** Who may `tasks/cancel`, and how is a mid-flight autonomous loop stopped? Options: cooperative cancel via the existing heartbeat/stall infra (`lastHeartbeatAt`, `StallEvent`) + quiescence, gated on token scope + agent grants + `CoworkerActionEnvelope`. Verify (do not assume) which identities may cancel a running side-effecting task; best-effort stop then force `cancelled`.
-3. **D3 — Back-compat & deprecation of `tasks/submit`.** Options: (a) keep `tasks/submit` as a thin shim over the new path (recommended), (b) run both independently with a deprecation notice, (c) hard-cut (rejected). Decide the deprecation window and the migration message for external callers.
-4. **D4 — Async execution model.** Moving read/bounded-write off synchronous inline execution onto the background queue is the core architectural change. Confirm the executor (`apps/web/lib/queue/functions/` + `createAutonomousWorkRun`), idempotency under enqueue, and the concurrency cap per requestor (spec §Resource Management).
+### 2.2 Official Tasks extension
 
-## 5. Phased implementation (behind a flag; each independently verifiable)
+Long-running work moved from the 2025 core experiment into the separately negotiated [`io.modelcontextprotocol/tasks` extension](https://modelcontextprotocol.io/extensions/tasks/overview), standardized by [SEP-2663](https://modelcontextprotocol.io/seps/2663-tasks-extension). The current [Tasks specification](https://tasks.extensions.modelcontextprotocol.io/specification/draft/tasks) is server-directed:
 
-- **Phase 0 — read-only surface (no execution change).** Add the `tasks` capability + `tasks/get`, `tasks/result`, `tasks/list`, `tasks/cancel` reading/writing existing `TaskRun` rows (including those created today by `tasks/submit`), with the state adapter and auth-context binding. No change to how tasks execute. *Verify:* a client polls a `high-risk` (already-async) submission to terminal and retrieves its result; cross-user access rejected.
-- **Phase 1 — task-augmented `tools/call` (flagged).** Honor `params.task` on opted-in tools: create `TaskRun`, enqueue background execution, return `CreateTaskResult`. *Verify:* a real long-running coworker tool call returns immediately, executes in the background, and is retrievable via `tasks/result`.
-- **Phase 2 — converge `tasks/submit`.** Reimplement the bespoke method as a shim over the standard path (per D3), preserving idempotency and current response fields for existing callers; emit a deprecation notice. *Verify:* existing `tasks/submit` callers get identical outcomes; output parity on read/bounded-write/high-risk.
-- **Phase 3 — polish.** `notifications/tasks/status`, `pollInterval` tuning, per-requestor concurrency cap + rate limiting, audit logging (spec §Security).
+- an eligible request may return `resultType: "task"`;
+- the durable task must exist before its handle is returned;
+- clients poll with `tasks/get`, supply requested input with `tasks/update`, and request cooperative cancellation with `tasks/cancel`;
+- the terminal result or error is part of terminal task state;
+- there is no standard `tasks/list` or `tasks/result` method in this extension.
 
-## 6. Risks & rollback
+DPF adopts that wire lifecycle and maps it to `TaskRun`. It does not copy the extension into another table.
 
-- **Blast radius:** changes execution semantics on the coordination plane. Mitigate: capability + per-phase flags; Phase 0 is read-only; the synchronous path stays default until Phase 1's flag is enabled. Rollback = disable the flag (capability stops being advertised; `tasks/submit` unchanged).
-- **State-mapping drift:** keep the adapter at the wire boundary only; a unit test pins every DPF↔MCP state pair so the internal enum and ops-map consumers are never touched.
-- **Security:** auth-context binding and `tasks/list` scoping are MUSTs — cover with tests for cross-user rejection before Phase 0 ships.
-- **Back-compat:** parity tests for `tasks/submit` before it becomes a shim (Phase 2).
+### 2.3 Adjacent standards and implementation guidance
 
-## 7. Non-goals
+- The official [TypeScript SDK migration guide](https://ts.sdk.modelcontextprotocol.io/v2/migration/support-2026-07-28) is an implementation reference for per-response server metadata, client metadata, and multi-round-trip responses. DPF adopts the contract, not an SDK-owned governance pipeline.
+- A2A remains the sovereign peer-to-peer task protocol over the existing federation trust envelope. Its receiver-owned task lifecycle maps to the same `TaskRun`, but A2A is not tunneled through MCP and MCP is not used as federation transport.
+- The 2025-11-25 task methods remain a bounded compatibility benchmark only. They do not define the target architecture.
 
-- Client-side tasks (DPF is the server/receiver; `sampling`/`elicitation` task-augmentation is out of scope).
-- Deleting `TaskRun` rows on TTL (subject to D1; default is retain-and-stop-serving).
-- Changing the internal `TaskRun.status` enum or the ops-map A2A edge model.
-- SSE streaming for `tasks/result` (single-POST + blocking-to-terminal is sufficient; streaming is a separate design if adopted).
+| Candidate | Verdict | Reason |
+|-----------|---------|--------|
+| Hard cut from 2025 to 2026 | Reject for first release | Correct end state, but unnecessarily disrupts existing clients before readiness is measured. |
+| Dual wire adapters on `/api/mcp/v1` | **Adopt** | One route and one governed service, with explicit version dispatch and observable retirement. |
+| Parallel `/api/mcp/v2` stack | Reject | Creates a second route, duplicated governance risk, and an avoidable long-lived migration surface. |
+| New MCP task store | Reject | `TaskRun` already owns durable execution, messages, artifacts, identity binding, and audit. |
 
-## Backlog coverage (pending — file in a runtime session)
+## 3. Decision record: how to migrate the wire contract
 
-Not yet in the live backlog. Before implementation, in a runtime-capable session: file **BI-4** (child of the umbrella from the parent plan) via `dpf-file-backlog-item`; route **D1–D4** through `dpf-decision-via-kernel` and record outcomes; then write the BI-4 implementation plan under `docs/superpowers/plans/` and call `record_plan_backlog_coverage`, copying the live receipt into that plan. Until then this is a pre-filing design, not a governed plan.
+`principle_decide` selected **dual wire, one route** in `DI-1C305D329ECE` (composite `7.0710`, margin `1.7375`, high confidence, strong structured coverage, no commandment conflict). The strongest contributors were Never Assume—Verify and Research and Use Standards. A hard cut lost on business disruption; a parallel route lost on single-source-of-truth and maintainability.
+
+Consequences:
+
+1. `/api/mcp/v1` remains the canonical external MCP endpoint.
+2. A narrow protocol-envelope adapter selects 2026-07-28 or legacy 2025-11-25 behavior from explicit request metadata.
+3. Both adapters call the same authentication, Principal and GAID resolution, capability intersection, tool registry, governed execution, audit, and `TaskRun` services.
+4. No `/api/mcp/v2`, second registry, second authorization path, or second task state is permitted.
+5. 2026-07-28 is preferred for capable clients. Legacy support is retired only through the evidence gate in §8.
+
+## 4. Target architecture
+
+```mermaid
+flowchart LR
+    C["External MCP client"] --> R["/api/mcp/v1"]
+    R --> D{"Explicit protocol metadata"}
+    D --> N["2026-07-28 stateless adapter"]
+    D --> L["2025-11-25 legacy adapter"]
+    N --> G["Canonical auth, grants, registry and execution service"]
+    L --> G
+    G --> T["TaskRun + messages + artifacts + evidence"]
+```
+
+### 4.1 Stateless request envelope
+
+For every 2026 request:
+
+- authenticate the bearer token anew;
+- resolve the human/service Principal, authorized agent Principal, GAID, delegation, organization, environment, tool grants, and policy context anew;
+- reject caller-supplied GAID as authority; it may be a request assertion only and must match canonical resolution;
+- require `MCP-Protocol-Version` and validate it against body `_meta`; validate `Mcp-Method` on every Streamable HTTP request and `Mcp-Name` for the methods that define it, including task methods where the name is `taskId`;
+- validate any schema-declared `Mcp-Param-*` headers against the corresponding tool arguments, including the standard safe/base64 encoding rules, before dispatch;
+- consume protocol version, client identity, and client capabilities from request metadata;
+- return server identity and negotiated extension metadata in response `_meta`;
+- never infer identity, authority, GAID, or organization from a connection or former session.
+
+Legacy initialize/session state remains inside the legacy adapter and cannot become an authorization source for the 2026 path.
+
+### 4.2 Discovery, caching, and multi-round trips
+
+- `server/discover` returns supported protocol versions, authorized capability declarations, server identity, and optional usage instructions. It does not become another catalog implementation; clients use the existing list methods for actual tool/resource/prompt entries.
+- `server/discover`, `tools/list`, `prompts/list`, `resources/list`, `resources/templates/list`, and `resources/read` complete results carry explicit `ttlMs` and `cacheScope`; private and authority-sensitive results must never be marked publicly shareable.
+- input-required tool interactions use the 2026 multi-round-trip result contract. Durable input-required tasks use `tasks/update`; neither path relies on a protocol session.
+- request-scoped SSE is permitted only as the response to its originating POST. Optional change/task notifications use `subscriptions/listen`; no standalone GET stream, `Last-Event-ID` resume, or server-initiated JSON-RPC request is reintroduced.
+
+### 4.3 Official Tasks over `TaskRun`
+
+- `taskId = TaskRun.taskRunId`, receiver-generated and durable before the task handle is returned.
+- Eligible requests opt into or are directed to task execution according to official extension negotiation and server policy.
+- `tasks/get` reads only a task authorized for the current request's Principal/GAID/link context.
+- `tasks/update` appends validated input through the canonical task-message owner and resumes eligible work.
+- `tasks/cancel` is cooperative, capability-gated, and records the actor and outcome. Its acknowledgement records cancellation intent; it does not falsely promise that work stopped or that the terminal state will be `cancelled`.
+- Terminal success or failure is shaped from canonical task result/artifact evidence and returned with terminal state.
+- TTL controls external serviceability and cleanup of extension projections, not deletion of governed `TaskRun` audit history.
+- DPF↔MCP state spelling remains a boundary adapter; the internal enum is not rewritten merely to match a wire spelling.
+
+The legacy `tasks/get|result|list|cancel` and bespoke `tasks/submit` methods may call these same services during migration. They are not independent execution paths.
+
+For `tasks/get|update|cancel`, Streamable HTTP sets `Mcp-Name` to `taskId`. Requests without the negotiated Tasks extension capability fail with the standard missing-capability error. Task status notifications are optional in the first migration slice; if adopted, they use `notifications/tasks` only through `subscriptions/listen`.
+
+### 4.4 Asynchronous execution
+
+Returning a task handle requires real asynchronous execution:
+
+1. validate and authorize the initiating request;
+2. create and commit the canonical `TaskRun` plus idempotency and actor bindings;
+3. enqueue through the verified shared executor;
+4. return the handle without awaiting the autonomous loop;
+5. persist heartbeats, requested input, cancellation observation, artifacts, result, and terminal error through the same task service.
+
+The build must verify the existing queue/executor ownership before choosing wiring. It must not create a route-local worker.
+
+## 5. Surface contract
+
+| Surface | Required behavior |
+|---------|-------------------|
+| External MCP client | 2026 stateless request metadata, per-request authority, official Tasks extension; legacy adapter only while measured. |
+| Build Studio | Calls the same governed application service and attaches `TaskRun`/receipt evidence to its existing build/capsule record; no direct MCP loop or task model. |
+| In-platform AI coworker | Calls the same service with canonical agent Principal/GAID or explicit delegation; local work stays local unless the federation adapter is selected. |
+| Federated A2A | Uses A2A over the trusted federation route and maps lifecycle to the same `TaskRun`; MCP is an entry adapter, not cross-install transport. |
+| ADP | Uses shared envelope/discovery primitives where genuinely common, with its domain adapter preserved and no duplicate protocol stack. |
+
+## 6. Enterprise identity and privacy
+
+The 2026 stateless model strengthens the existing rule: authority is a property of each authenticated request, not a connection. Internal call-chain participation remains source-side protected evidence. When a response crosses an organization boundary, the boundary projection exposes only authorized global GAIDs and approved public agent-card data; private/internal aliases, local topology, delegation detail, hidden participants, prompts, and policy internals remain screened. The same projection applies regardless of MCP, Build Studio, coworker, or A2A entry surface.
+
+This is analogous to network address translation only as a privacy-boundary metaphor. GAIDs are not translated identifiers: a public GAID stays globally stable, while private participation detail is withheld or represented by an authorized aggregate commitment.
+
+DPF's current external MCP authority remains its governed bearer-token issuance and grant intersection; this migration does not invent an OAuth flow. If a client-facing OAuth authorization-code path is added, it must adopt the 2026 authorization hardening (RFC 9207 issuer validation, credential-to-issuer binding, and Client ID Metadata Documents rather than new Dynamic Client Registration dependence) through a separately governed security slice.
+
+## 7. Data-model stewardship
+
+- `TaskRun` remains the sole durable task aggregate; `TaskMessage`, `TaskArtifact`, task graph/evidence, Principal/GAID, and existing audit records retain their owners.
+- No MCP session, MCP task, discovery, or A2A task table is introduced by default.
+- Protocol metadata and telemetry use existing structured audit/metadata owners unless implementation evidence proves query or integrity requirements need a typed field.
+- Any new closed state, capability, cache scope, or protocol-version axis must use the canonical typed contract and migration path rather than free-form strings.
+- Retention expires an external projection; it does not erase canonical evidence needed for governance.
+
+## 8. Compatibility, telemetry, and retirement
+
+The legacy adapter records, without secrets or private payloads:
+
+- selected protocol version and client identity/version;
+- initialize/session use;
+- legacy task-method use;
+- discovery and header-validation failures;
+- successful 2026 requests and official Tasks lifecycles;
+- rollback and compatibility-test evidence.
+
+Legacy support may be removed only when all are true:
+
+1. every known DPF MCP client and adapter has a passing 2026 conformance receipt;
+2. legacy traffic is zero for an operator-approved observation window;
+3. the retirement and rollback drill has passed on the canonical nonproduction runtime;
+4. MCP, Build Studio, AI coworker, ADP, and A2A entry adapters remain green;
+5. the operator explicitly approves the cutover.
+
+Rollback disables preferred 2026 task creation or restores legacy selection at the adapter boundary. It never swaps routes or data stores.
+
+## 9. Verification contract
+
+- Contract tests pin protocol/method/name/parameter header-body matching and `-32020` failures, per-request metadata, response `_meta`, discovery semantics, all cacheable result directives, POST/SSE behavior, and absence of initialize/session dependence.
+- Security tests prove every request reauthenticates, GAID cannot be spoofed, token scope and grants intersect, cross-user/cross-org task lookup is denied, and cache scope cannot leak private discovery.
+- Lifecycle tests prove durable-before-handle, non-blocking creation, idempotent replay, polling, input-required/update, cooperative cancel, terminal result/error, expiry projection, and recovery after process restart.
+- Compatibility tests run the same governed tool through the 2026 and legacy adapters and prove one `TaskRun`, one receipt contract, and equivalent authorized outcomes.
+- Surface-parity tests cover external MCP, Build Studio, in-platform coworker, ADP where applicable, and the A2A MCP entry adapter.
+- Runtime claims require the canonical shared nonproduction lease and exact-image evidence; source-local unit/build checks alone do not prove asynchronous behavior.
+
+## 10. Non-goals
+
+- A new agent identity, task store, tool registry, governance pipeline, MCP route, or federation transport.
+- Treating protocol statelessness as application state deletion.
+- Exposing internal participant topology or private GAIDs to an external organization.
+- Implementing A2A as an MCP extension or proxy.
+- Removing 2025 compatibility before the evidence gate.
+- Shipping implementation code in this design thread.
