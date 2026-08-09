@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   evaluateInitiativeReadiness,
+  deriveAuthoritativeReadinessProfile,
   selectStrongestReadinessProfile,
   type InitiativeReadinessFacts,
   type ReadinessCode,
@@ -203,6 +204,32 @@ describe("evaluateInitiativeReadiness", () => {
     ]));
   });
 
+  it("requires the exact active capsule identity before implementation begins", () => {
+    const decision = evaluateInitiativeReadiness(facts({
+      canonicalDesign: "pass",
+      research: "pass",
+      specApproval: "pass",
+      specialistReviews: {
+        architecture: "pass",
+        data: "pass",
+        ux: "pass",
+        security: "pass",
+        compliance: "pass",
+        domain: "not-applicable",
+      },
+      plan: "pass",
+      planReview: "pass",
+      planCoverage: "pass",
+      traceability: "pass",
+      dependencies: "pass",
+      objectiveBaseline: "pass",
+      capsuleIdentity: "missing",
+    }), "implementation");
+
+    expect(decision.verdict).toBe("input-required");
+    expect(codes(decision)).toContain("CAPSULE_IDENTITY_MISMATCH");
+  });
+
   it("returns denied rather than allowed when the fact projection failed", () => {
     const decision = evaluateInitiativeReadiness(facts({ projectionError: true }), "design");
 
@@ -215,5 +242,17 @@ describe("selectStrongestReadinessProfile", () => {
   it("is monotonic and cannot downgrade structured archetype evidence", () => {
     expect(selectStrongestReadinessProfile(["fix", "feature", "archetype"])).toBe("archetype");
     expect(selectStrongestReadinessProfile(["archetype", "doc-only"])).toBe("archetype");
+  });
+
+  it("derives the strongest structured or historical profile without permitting downgrade", () => {
+    expect(deriveAuthoritativeReadinessProfile({
+      type: "feature",
+      scopeKind: "archetype",
+      recordedProfiles: ["doc-only", "cross-domain"],
+    })).toBe("archetype");
+    expect(deriveAuthoritativeReadinessProfile({
+      type: "bug",
+      recordedProfiles: ["feature"],
+    })).toBe("feature");
   });
 });

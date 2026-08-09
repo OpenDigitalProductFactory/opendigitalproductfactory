@@ -21,6 +21,7 @@ type BuildRevisionRecord = {
     originator?: { itemId: string } | null;
     parentEpicId?: string | null;
     abandonedAt: Date | null;
+    artifactRevisions?: Array<{ id: string }>;
   };
 };
 
@@ -129,6 +130,12 @@ export async function resolveInitiativeArtifact(args: {
             originator: { select: { itemId: true } },
             parentEpicId: true,
             abandonedAt: true,
+            artifactRevisions: {
+              where: { field: "designDoc", status: "accepted" },
+              orderBy: [{ revisionNumber: "desc" }, { createdAt: "desc" }],
+              take: 1,
+              select: { id: true },
+            },
           },
         },
       },
@@ -148,6 +155,9 @@ export async function resolveInitiativeArtifact(args: {
     }
     if (!subjectOwnsBuild(args.subject, revision.build)) {
       return { ok: false, code: "CANONICAL_DESIGN_AMBIGUOUS", error: "Build artifact does not belong to the governed subject." };
+    }
+    if (revision.build.artifactRevisions?.[0]?.id !== revision.id) {
+      return { ok: false, code: "CANONICAL_DESIGN_AMBIGUOUS", error: "Build artifact revision is not the current accepted design revision." };
     }
     return {
       ok: true,
@@ -241,7 +251,7 @@ export async function resolveInitiativeArtifact(args: {
     if (args.resolveRepositoryBlob) {
       providerBlob = await args.resolveRepositoryBlob(args.locator);
     } else {
-      const resolved = await resolveRepositoryArtifact({ locator: args.locator, subject: args.subject });
+      const resolved = await resolveRepositoryArtifact({ locator: args.locator, subject: args.subject, db: db as never });
       if (!resolved.ok) return resolved;
       providerBlob = resolved.artifact;
     }

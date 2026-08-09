@@ -66,7 +66,17 @@ const definitions: ToolDefinition[] = Object.entries(LANES).map(([name, lane]) =
       profile: { type: "string", enum: ["doc-only", "fix", "feature", "cross-domain", "archetype"] },
       artifactRole: { type: "string", enum: ["design-spec", "problem-statement", "documentation-scope"] },
       expectedCurrentBaselineId: { type: ["string", "null"] },
-      supersessionDispositionIds: { type: "array", items: { type: "string" } },
+      supersessionDispositions: {
+        type: "array",
+        items: {
+          type: "object",
+          properties: {
+            statementId: { type: "string" },
+            reason: { type: "string" },
+          },
+          required: ["statementId", "reason"],
+        },
+      },
       ...(name === "record_initiative_evidence" ? {
         operation: { type: "string", enum: ["gate-receipt", "objective-mapping"] },
         baselineId: { type: "string" },
@@ -165,6 +175,11 @@ function handlerFor(actionKey: string, lane: Lane): ToolPackHandler {
     if (!findings || !resolvedFindingRefs) {
       return { success: false, error: "malformed-receipt", message: "findings and resolvedFindingRefs must match the governed receipt schema." };
     }
+    const selectedProfile = params.profile;
+    if (gate === "classification" && decision === "pass"
+      && !(selectedProfile === "doc-only" || selectedProfile === "fix" || selectedProfile === "feature" || selectedProfile === "cross-domain" || selectedProfile === "archetype")) {
+      return { success: false, error: "malformed-receipt", message: "Passing classification requires a governed profile." };
+    }
     if (gate === "spec-approval" && decision === "pass") {
       const profile = params.profile;
       const artifactRole = params.artifactRole;
@@ -181,8 +196,15 @@ function handlerFor(actionKey: string, lane: Lane): ToolPackHandler {
         artifactRole,
         artifactRef: params.artifactRef as InitiativeArtifactRef,
         expectedCurrentBaselineId: typeof params.expectedCurrentBaselineId === "string" ? params.expectedCurrentBaselineId : null,
-        supersessionDispositionIds: Array.isArray(params.supersessionDispositionIds)
-          ? params.supersessionDispositionIds.filter((value): value is string => typeof value === "string")
+        supersessionDispositions: Array.isArray(params.supersessionDispositions)
+          ? params.supersessionDispositions.flatMap((value) => value && typeof value === "object" && !Array.isArray(value)
+            && typeof (value as Record<string, unknown>).statementId === "string"
+            && typeof (value as Record<string, unknown>).reason === "string"
+            ? [{
+              statementId: (value as Record<string, string>).statementId,
+              reason: (value as Record<string, string>).reason,
+            }]
+            : [])
           : [],
         resolvedFindingRefs,
         reason: String(params.reason ?? ""),
@@ -212,6 +234,7 @@ function handlerFor(actionKey: string, lane: Lane): ToolPackHandler {
       authorityDecisionId: context?.authorityDecisionId ?? null,
       tokenScope: context?.tokenScope ?? null,
       requiresIndependentReviewer: lane.independent,
+      selectedProfile: gate === "classification" && decision === "pass" ? selectedProfile as never : undefined,
     });
     return result.ok
       ? { success: true, entityId: result.receiptId, message: `${gate} receipt recorded for ${String(params.itemId)}.`, data: { receiptId: result.receiptId } }

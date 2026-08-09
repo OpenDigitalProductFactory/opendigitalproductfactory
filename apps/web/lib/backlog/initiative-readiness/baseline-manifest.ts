@@ -113,7 +113,11 @@ export function diffInitiativeScopeManifests(
   const changed = <T extends { statementDigest: string }>(
     prior: Map<string, T>,
     current: Map<string, T>,
-  ) => [...prior].filter(([id, value]) => current.get(id)?.statementDigest !== value.statementDigest).map(([id]) => id);
+    equivalent: (left: T, right: T) => boolean = (left, right) => left.statementDigest === right.statementDigest,
+  ) => [...prior].filter(([id, value]) => {
+    const nextValue = current.get(id);
+    return !nextValue || !equivalent(value, nextValue);
+  }).map(([id]) => id);
   const added = <T>(prior: Map<string, T>, current: Map<string, T>) => [...current.keys()].filter((id) => !prior.has(id));
   const priorObjectives = new Map(previous.objectives.map((entry) => [entry.objectiveId, entry]));
   const nextObjectives = new Map(next.objectives.map((entry) => [entry.objectiveId, entry]));
@@ -121,7 +125,12 @@ export function diffInitiativeScopeManifests(
   const nextAcceptance = new Map(next.acceptance.map((entry) => [entry.acceptanceId, entry]));
   return {
     removedOrChangedObjectiveIds: changed(priorObjectives, nextObjectives),
-    removedOrChangedAcceptanceIds: changed(priorAcceptance, nextAcceptance),
+    removedOrChangedAcceptanceIds: changed(
+      priorAcceptance,
+      nextAcceptance,
+      (left, right) => left.statementDigest === right.statementDigest
+        && [...left.objectiveIds].sort().join("\0") === [...right.objectiveIds].sort().join("\0"),
+    ),
     addedObjectiveIds: added(priorObjectives, nextObjectives),
     addedAcceptanceIds: added(priorAcceptance, nextAcceptance),
   };

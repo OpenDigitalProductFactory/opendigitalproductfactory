@@ -31,9 +31,26 @@ const traceability = {
   flowRefs: ["flow:test"],
   verificationRefs: ["AC-TEST-001"],
 };
+const planText = [
+  "OBJ-1", "OBJ-2", "OBJ-TEST-001", "AC-1", "AC-2", "AC-TEST-001",
+  "contract:receipt-v1", "contract:transition", "contract:test",
+  "flow:claim-to-complete", "flow:completion", "flow:test",
+].join("\n");
+const traceabilityContext = {
+  planText,
+  objectiveIds: ["OBJ-1", "OBJ-2"],
+  acceptanceIds: ["AC-1", "AC-2"],
+};
+const baselineRows = [{ payload: {
+  baselineId: "baseline-1",
+  supersedesBaselineId: null,
+  artifactDigest: "sha256:design",
+  objectiveStatements: [{ objectiveId: "OBJ-TEST-001" }],
+  acceptanceStatements: [{ acceptanceId: "AC-TEST-001" }],
+} }];
 const resolvePlan = vi.fn(async () => ({
   ok: true as const,
-  artifact: { digest: "sha256:plan", bytes: new Uint8Array(), authorPrincipalId: "p", authorAgentId: "a" },
+  artifact: { digest: "sha256:plan", bytes: Buffer.from(planText), authorPrincipalId: "p", authorAgentId: "a" },
 }));
 
 describe("validatePlanBacklogCoverage", () => {
@@ -163,6 +180,7 @@ describe("validatePlanBacklogCoverageReceipt v2", () => {
       mappedBacklogItems: [],
       requireGovernedImplementation: true,
       currentPlanDigest: "sha256:plan",
+      traceabilityContext,
     })).toMatchObject({ ok: false, code: "coverage-v2-required" });
   });
 
@@ -175,6 +193,7 @@ describe("validatePlanBacklogCoverageReceipt v2", () => {
       ],
       requireGovernedImplementation: true,
       currentPlanDigest: "sha256:plan",
+      traceabilityContext,
     })).toMatchObject({ ok: true, schemaVersion: 2 });
   });
 
@@ -214,8 +233,22 @@ describe("validatePlanBacklogCoverageReceipt v2", () => {
       ],
       requireGovernedImplementation: true,
       currentPlanDigest: "sha256:plan",
+      traceabilityContext,
       ...overrides,
     })).toMatchObject({ ok: false, code });
+  });
+
+  it("rejects arbitrary non-empty refs and requires every current acceptance criterion to be covered", () => {
+    expect(validatePlanBacklogCoverageReceipt({
+      receipt: {
+        ...v2,
+        deliverables: [{ ...v2.deliverables[0], requirementRefs: ["x"], verificationRefs: ["AC-1"] }],
+      },
+      mappedBacklogItems: [{ itemId: "BI-EXISTING-1", status: "open" }],
+      requireGovernedImplementation: true,
+      currentPlanDigest: "sha256:plan",
+      traceabilityContext,
+    })).toMatchObject({ ok: false, code: "traceability-incomplete" });
   });
 });
 
@@ -238,7 +271,7 @@ function fakeDb(): {
           { itemId: "BI-EXISTING-2", status: "deferred" },
         ]),
       },
-      backlogItemActivity: { create: activityCreate },
+      backlogItemActivity: { create: activityCreate, findMany: vi.fn(async () => baselineRows) },
     },
   };
 }
@@ -265,7 +298,7 @@ describe("checkPlanBacklogCoverage", () => {
       planPath: "docs/superpowers/plans/example.md",
       receiptId: "activity-receipt-1",
       db,
-    })).resolves.toMatchObject({ ok: true, valid: true, decision: "decomposed" });
+    })).resolves.toMatchObject({ ok: false, valid: false, code: "receipt-invalid" });
   });
 
   it("rejects a receipt for a different plan", async () => {
@@ -308,7 +341,7 @@ describe("checkPlanBacklogCoverage", () => {
       planPath: "docs/superpowers/plans/example.md",
       receiptId: "bootstrap-receipt-1",
       db,
-    })).resolves.toMatchObject({ ok: true, valid: true, decision: "atomic" });
+    })).resolves.toMatchObject({ ok: false, valid: false, code: "receipt-invalid" });
   });
 });
 
@@ -322,7 +355,7 @@ describe("checkBranchPlanBacklogGate", () => {
           findUnique: vi.fn(async () => ({ id: "parent-row", itemId: "BI-PARENT", effortSize: "xlarge" })),
           findMany: vi.fn(async () => []),
         },
-        backlogItemActivity: { findFirst: vi.fn(async () => null) },
+        backlogItemActivity: { findFirst: vi.fn(async () => null), findMany: vi.fn(async () => baselineRows) },
       },
     });
     expect(result).toMatchObject({ ok: false, required: true, code: "decomposition-decision-required" });
@@ -337,7 +370,7 @@ describe("checkBranchPlanBacklogGate", () => {
           findUnique: vi.fn(async () => ({ id: "parent-row", itemId: "BI-PARENT", effortSize: "large" })),
           findMany: vi.fn(async () => []),
         },
-        backlogItemActivity: { findFirst: vi.fn(async () => null) },
+        backlogItemActivity: { findFirst: vi.fn(async () => null), findMany: vi.fn(async () => baselineRows) },
       },
     });
     expect(result).toEqual({ ok: true, required: false, itemId: "BI-PARENT" });
@@ -352,7 +385,7 @@ describe("checkBranchPlanBacklogGate", () => {
           findUnique: vi.fn(async () => ({ id: "parent-row", itemId: "BI-PARENT", effortSize: "xlarge" })),
           findMany: vi.fn(async () => []),
         },
-        backlogItemActivity: { findFirst: vi.fn(async () => ({
+        backlogItemActivity: { findMany: vi.fn(async () => baselineRows), findFirst: vi.fn(async () => ({
           id: "legacy",
           payload: { decision: "atomic", rationale: "One indivisible change with no independent slices.", deliverables: [] },
         })) },
@@ -371,7 +404,7 @@ describe("checkBranchPlanBacklogGate", () => {
           findUnique: vi.fn(async () => ({ id: "parent-row", itemId: "BI-PARENT", effortSize: "xlarge" })),
           findMany: vi.fn(async () => [{ itemId: "BI-CHILD", status: "open" }]),
         },
-        backlogItemActivity: { findFirst: vi.fn(async () => ({
+        backlogItemActivity: { findMany: vi.fn(async () => baselineRows), findFirst: vi.fn(async () => ({
           id: "coverage-v2",
           payload: {
             schemaVersion: 2,

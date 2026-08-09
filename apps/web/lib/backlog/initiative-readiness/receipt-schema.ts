@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 
 import type { InitiativeSubject } from "./types";
+import type { ReadinessProfile } from "./types";
 
 export const INITIATIVE_GATE_KEYS = [
   "classification",
@@ -69,6 +70,7 @@ export type InitiativeGateReceiptContext = {
   openFindingRefs: readonly string[];
   resolvedFindings: readonly InitiativeFinding[];
   requiresIndependentReviewer?: boolean;
+  authoritativeProfile?: ReadinessProfile | null;
 };
 
 export type InitiativeGateReceiptDraft = {
@@ -78,6 +80,7 @@ export type InitiativeGateReceiptDraft = {
   reason: string;
   findingRefs: string[];
   resolvedFindingRefs: string[];
+  selectedProfile?: ReadinessProfile;
 };
 
 export type InitiativeGateReceipt = {
@@ -96,8 +99,8 @@ export type InitiativeGateReceipt = {
   authoritySnapshot: InitiativeAuthoritySnapshot;
   reason: string;
   findingRefs: string[];
-  findings: InitiativeFinding[];
   resolvedFindingRefs: string[];
+  selectedProfile?: ReadinessProfile;
 };
 
 export type InitiativeGateReceiptValidationResult =
@@ -183,6 +186,13 @@ export function validateInitiativeGateReceiptDraft(
   if (!context.allowedGates.includes(draft.gate)) {
     return reject("gate-not-authorized", `This reviewer tool cannot record the ${draft.gate} lane.`);
   }
+  if (draft.gate === "classification" && draft.decision === "pass") {
+    if (!draft.selectedProfile || draft.selectedProfile !== context.authoritativeProfile) {
+      return reject("malformed-receipt", "Classification must record the server-reconciled authoritative profile.");
+    }
+  } else if (draft.selectedProfile !== undefined) {
+    return reject("malformed-receipt", "Only a passing classification receipt can select a profile.");
+  }
   if (!draft.reason.trim()) {
     return reject("reason-required", "A review reason is required.");
   }
@@ -202,6 +212,9 @@ export function validateInitiativeGateReceiptDraft(
   const openFindings = new Set(context.openFindingRefs);
   if (draft.resolvedFindingRefs.some((finding) => !openFindings.has(finding))) {
     return reject("finding-resolution-invalid", "A resolution can name only a currently open finding.");
+  }
+  if (draft.findingRefs.some((finding) => draft.resolvedFindingRefs.includes(finding))) {
+    return reject("finding-resolution-invalid", "A receipt cannot introduce and resolve the same finding.");
   }
   if (draft.decision !== "fail" && draft.findingRefs.length > 0) {
     return reject("malformed-receipt", "Only a failing receipt can introduce findings.");
@@ -229,8 +242,8 @@ export function validateInitiativeGateReceiptDraft(
       authoritySnapshot: context.authoritySnapshot,
       reason: draft.reason.trim(),
       findingRefs: [...draft.findingRefs],
-      findings: [...context.resolvedFindings],
       resolvedFindingRefs: [...draft.resolvedFindingRefs],
+      ...(draft.selectedProfile ? { selectedProfile: draft.selectedProfile } : {}),
     },
   };
 }

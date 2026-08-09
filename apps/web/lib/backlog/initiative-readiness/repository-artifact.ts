@@ -19,7 +19,7 @@ type RepositoryArtifactDb = {
     }>>;
   };
   principalAlias: {
-    findFirst: (args: Record<string, unknown>) => Promise<{ principalId: string } | null>;
+    findMany: (args: Record<string, unknown>) => Promise<Array<{ principalId?: string; aliasValue?: string }>>;
   };
   credentialEntry: typeof prisma.credentialEntry;
   platformDevConfig: typeof prisma.platformDevConfig;
@@ -50,6 +50,17 @@ function decodeGithubContent(payload: unknown, expectedBlobId: string): Uint8Arr
     return null;
   }
   return Buffer.from(row.content.replace(/\s/g, ""), "base64");
+}
+
+function dcoEmail(payload: unknown): string | null {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) return null;
+  const commit = (payload as Record<string, unknown>).commit;
+  if (!commit || typeof commit !== "object" || Array.isArray(commit)) return null;
+  const message = (commit as Record<string, unknown>).message;
+  if (typeof message !== "string") return null;
+  const matches = [...message.matchAll(/^Signed-off-by:\s+.+?\s+<([^<>\s@]+@[^<>\s@]+)>\s*$/gim)];
+  const emails = [...new Set(matches.map((match) => match[1]!.toLocaleLowerCase("en-US")))];
+  return emails.length === 1 ? emails[0]! : null;
 }
 
 export async function resolveRepositoryArtifact(args: {
@@ -106,21 +117,63 @@ export async function resolveRepositoryArtifact(args: {
   if (capsules.length !== 1) {
     return { ok: false, code: "CANONICAL_DESIGN_AMBIGUOUS", error: "Repository artifact ownership is missing or ambiguous for this subject." };
   }
-  const principalId = capsules[0]?.createdByPrincipalId;
-  const agentId = capsules[0]?.activities[0]?.recordedByAgentId;
-  const agentAlias = principalId && agentId
-    ? await db.principalAlias.findFirst({ where: { principalId, aliasType: "agent", aliasValue: agentId, issuer: "" }, select: { principalId: true } })
-    : null;
-  if (!principalId || !agentId || !agentAlias) {
-    return { ok: false, code: "ARTIFACT_AUTHOR_REQUIRED", error: "Repository artifact author cannot be mapped to one capsule principal and agent." };
-  }
-
   let token: string | null;
   try {
     token = await resolveGithubToken(db);
   } catch {
     return { ok: false, code: "CANONICAL_DESIGN_REQUIRED", error: "Repository provider credentials are unavailable." };
   }
+  let commitResponse: Response;
+  try {
+    commitResponse = await (args.fetchImpl ?? fetch)(
+      `https://api.github.com/repos/${encodeURIComponent(expectedRepo.owner)}/${encodeURIComponent(expectedRepo.name)}/commits/${encodeURIComponent(args.locator.commitSha)}`,
+      {
+        headers: {
+          Accept: "application/vnd.github+json",
+          "X-GitHub-Api-Version": "2022-11-28",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        cache: "no-store",
+      },
+    );
+  } catch {
+    return { ok: false, code: "CANONICAL_DESIGN_REQUIRED", error: "Repository provider could not resolve immutable commit provenance." };
+  }
+  if (!commitResponse.ok) {
+    return { ok: false, code: "CANONICAL_DESIGN_REQUIRED", error: "Repository provider could not resolve immutable commit provenance." };
+  }
+  let commitPayload: unknown;
+  try {
+    commitPayload = await commitResponse.json();
+  } catch {
+    return { ok: false, code: "ARTIFACT_AUTHOR_REQUIRED", error: "Repository commit provenance is unreadable." };
+  }
+  const email = dcoEmail(commitPayload);
+  if (!email) {
+    return { ok: false, code: "ARTIFACT_AUTHOR_REQUIRED", error: "Repository commit has no single DCO sign-off identity." };
+  }
+  const principals = await db.principalAlias.findMany({
+    where: { aliasType: "email", aliasValue: email, issuer: "" },
+    select: { principalId: true },
+    take: 2,
+  });
+  const principalId = principals.length === 1 ? principals[0]?.principalId : null;
+  const capsule = capsules[0];
+  const agentId = capsule?.activities[0]?.recordedByAgentId;
+  const agentAliases = principalId && agentId
+    ? await db.principalAlias.findMany({
+      where: { principalId, aliasType: "agent", aliasValue: agentId, issuer: "" },
+      select: { aliasValue: true },
+      take: 2,
+    })
+    : [];
+  if (!principalId || !agentId
+    || capsule?.createdByPrincipalId !== principalId
+    || capsule.activities.length !== 1
+    || agentAliases.length !== 1) {
+    return { ok: false, code: "ARTIFACT_AUTHOR_REQUIRED", error: "Repository DCO author cannot be mapped unambiguously through capsule provenance." };
+  }
+
   let response: Response;
   try {
     response = await (args.fetchImpl ?? fetch)(

@@ -9,6 +9,7 @@ import {
   claimBacklogItemWorkspace,
   claimWorkCapsuleScope,
   createWorkCapsule,
+  declareWorkCapsuleIntent,
   detectScopeConflicts,
   heartbeatWorkCapsule,
   reassignWorkCapsuleExecutor,
@@ -59,6 +60,26 @@ function capsuleDb(): CapsuleDb {
 
 describe("work capsule store", () => {
   beforeEach(() => resetDbMocks());
+
+  it("rejects a work-intent subject that does not match the capsule binding", async () => {
+    db.workCapsule.findUnique.mockResolvedValueOnce({
+      id: "row-1",
+      backlogItemId: "BI-ACTUAL",
+      epicId: null,
+      featureBuildId: null,
+      taskRunId: null,
+    });
+
+    await expect(declareWorkCapsuleIntent({
+      db: capsuleDb(),
+      capsuleId: "WC-BOUND",
+      intent: "implementation",
+      policyVersion: "initiative-readiness.v1",
+      subject: { kind: "backlog-item", id: "BI-SPOOFED" },
+      actor: { userId: "user-1", agentId: "agent-1", principalId: "principal-1" },
+    })).rejects.toThrow(/does not match/i);
+    expect(db.workCapsuleActivity.create).not.toHaveBeenCalled();
+  });
 
   it("creates a capsule on first call and writes a single created activity", async () => {
     db.workCapsule.findUnique.mockResolvedValueOnce(null);

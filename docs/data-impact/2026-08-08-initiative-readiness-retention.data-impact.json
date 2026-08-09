@@ -8,8 +8,8 @@
     "Managed-document blob retention and storage-GC path"
   ],
   "migration": {
-    "name": "20260808235000_initiative_readiness_receipts",
-    "backfill": "Additive and existing-data compatible. BacklogItemActivity.gateKey is nullable, so all legacy activities remain valid. InitiativeArtifactRetentionPin starts empty and is populated only atomically with new approved baselines. The new WorkCapsuleActivity and BacklogItemActivity indexes cover existing rows without rewriting their meaning. No existing row, column, or enum value is removed or overwritten. Conditional triggers affect only newly governed activity kinds, work-intent activities, and artifacts referenced by a retention pin; ordinary backlog activity and unpinned artifacts retain their existing lifecycle."
+    "name": "20260809023000_initiative_gate_activity_shape",
+    "backfill": "Additive and existing-data compatible. BacklogItemActivity.gateKey is nullable for ordinary legacy activities, while a database shape constraint requires every new initiative_gate_receipt to carry a gate and prohibits gate keys on other activity kinds. InitiativeArtifactRetentionPin starts empty and is populated only atomically with new approved baselines. The new WorkCapsuleActivity and BacklogItemActivity indexes cover existing rows without rewriting their meaning. No existing row, column, or enum value is removed or overwritten. Conditional triggers affect only newly governed activity kinds, work-intent activities, and artifacts referenced by a retention pin; ordinary backlog activity and unpinned artifacts retain their existing lifecycle."
   },
   "tests": [
     "packages/db/src/initiative-readiness-schema.test.ts",
@@ -25,7 +25,7 @@
       "kind": "model",
       "assetId": "data:backlog-item-activity#initiative-gate-lane",
       "prismaModel": "BacklogItemActivity",
-      "lifecycleDisposition": "Legacy activity rows remain unchanged with a null gateKey. New initiative governance rows are append-only and permanently retained; ordinary activity kinds retain their existing delete behavior.",
+      "lifecycleDisposition": "Legacy ordinary activity rows remain unchanged with a null gateKey. A database shape constraint makes gate identity exclusive and mandatory for initiative_gate_receipt rows. New initiative governance rows are append-only and permanently retained; ordinary activity kinds retain their existing delete behavior.",
       "fields": [
         {
           "fieldId": "data:backlog-item-activity#gateKey",
@@ -39,7 +39,7 @@
       "kind": "model",
       "assetId": "data:initiative-artifact-retention-pin#permanent-baseline-evidence",
       "prismaModel": "InitiativeArtifactRetentionPin",
-      "lifecycleDisposition": "New append-only permanent control-plane evidence. Every row pins exactly one approved artifact branch and has no automated purge or release path. Restrictive foreign keys and conditional database triggers prevent direct, cascade, cleanup, document/blob GC, or retention-sweep deletion of the pinned artifact bytes.",
+      "lifecycleDisposition": "New append-only permanent control-plane evidence. Every row pins exactly one approved artifact branch and has no automated purge or release path. Restrictive foreign keys, conditional database triggers, transaction-locked artifact re-resolution, and blob-row-locked storage GC prevent direct, cascade, cleanup, document/blob GC, retention-sweep, or check/delete race removal of pinned artifact bytes.",
       "fields": [
         {
           "fieldId": "data:initiative-artifact-retention-pin#artifactDigest",

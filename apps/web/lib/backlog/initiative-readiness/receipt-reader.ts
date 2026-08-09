@@ -44,6 +44,7 @@ export async function readLatestInitiativeGateRows(
       "id", "backlogItemId", "gateKey", "recordedAt", "payload"
     FROM "BacklogItemActivity"
     WHERE "backlogItemId" IN (${Prisma.join(itemIds)})
+      AND "kind" = 'initiative_gate_receipt'
       AND "gateKey" IS NOT NULL
     ORDER BY "backlogItemId", "gateKey", "recordedAt" DESC, "id" DESC
   `);

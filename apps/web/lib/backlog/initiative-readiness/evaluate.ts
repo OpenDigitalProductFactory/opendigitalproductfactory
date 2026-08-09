@@ -60,6 +60,7 @@ function implementationRequirements(facts: InitiativeReadinessFacts): Requiremen
     requirement("PLAN_COVERAGE_REQUIRED", facts.planCoverage, "portfolio-management"),
     requirement("TRACEABILITY_INCOMPLETE", facts.traceability ?? facts.planCoverage, "portfolio-management"),
     requirement("DEPENDENCY_UNRESOLVED", facts.dependencies, "portfolio-management", undefined, true),
+    requirement("CAPSULE_IDENTITY_MISMATCH", facts.capsuleIdentity, "delivery-coordinator"),
   ];
   if (facts.profile === "archetype") {
     const provisioningStates = Object.values(facts.archetypeProvisioning);
@@ -86,7 +87,6 @@ function implementationRequirements(facts: InitiativeReadinessFacts): Requiremen
 function completionRequirements(facts: InitiativeReadinessFacts): Requirement[] {
   return [
     ...implementationRequirements(facts),
-    requirement("CAPSULE_IDENTITY_MISMATCH", facts.capsuleIdentity, "delivery-coordinator"),
     requirement("DELIVERY_EVIDENCE_REQUIRED", facts.deliveryEvidence, "delivery-coordinator"),
     requirement("ACCEPTANCE_EVIDENCE_REQUIRED", facts.acceptanceEvidence, "acceptance-reviewer"),
     requirement("OBJECTIVE_BASELINE_REQUIRED", facts.objectiveBaseline, "design-checklist-reviewer"),

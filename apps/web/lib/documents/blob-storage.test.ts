@@ -62,13 +62,20 @@ describe("document blob storage", () => {
 
   it("refuses storage GC for a blob retained by an initiative baseline", async () => {
     const written = await writeDocumentBlob({ content: "permanent design", storageRoot: tmpRoot });
+    const events: string[] = [];
     await expect(deleteDocumentBlob({
       documentBlobId: "blob-1",
       storageKey: written.storageKey,
       expectedSha256: written.sha256,
       storageRoot: tmpRoot,
-      db: { initiativeArtifactRetentionPin: { count: async () => 1 } },
+      db: {
+        $transaction: async (work) => work({
+          $queryRaw: async <T>() => { events.push("lock"); return [{ id: "blob-1" }] as unknown as T; },
+          initiativeArtifactRetentionPin: { count: async () => { events.push("count"); return 1; } },
+        }),
+      },
     })).rejects.toMatchObject({ code: "INITIATIVE_GOVERNANCE_RETENTION" });
+    expect(events).toEqual(["lock", "count"]);
     await expect(fs.readFile(path.join(tmpRoot, written.storageKey), "utf8")).resolves.toBe("permanent design");
   });
 
@@ -79,7 +86,12 @@ describe("document blob storage", () => {
       storageKey: written.storageKey,
       expectedSha256: written.sha256,
       storageRoot: tmpRoot,
-      db: { initiativeArtifactRetentionPin: { count: async () => 0 } },
+      db: {
+        $transaction: async (work) => work({
+          $queryRaw: async <T>() => [{ id: "blob-2" }] as unknown as T,
+          initiativeArtifactRetentionPin: { count: async () => 0 },
+        }),
+      },
     });
     await expect(fs.access(path.join(tmpRoot, written.storageKey))).rejects.toBeDefined();
   });

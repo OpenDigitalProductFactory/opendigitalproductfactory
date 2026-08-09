@@ -39,7 +39,7 @@ type BaselinePayload = {
   baselineId: string;
   supersedesBaselineId: string | null;
   artifactDigest: string;
-  objectiveStatements: Array<{ id: string }>;
+  objectiveStatements: Array<{ objectiveId: string }>;
 };
 
 function parseBaseline(value: unknown): BaselinePayload | null {
@@ -49,7 +49,7 @@ function parseBaseline(value: unknown): BaselinePayload | null {
     || (row.supersedesBaselineId !== null && typeof row.supersedesBaselineId !== "string")
     || typeof row.artifactDigest !== "string"
     || !Array.isArray(row.objectiveStatements)
-    || !row.objectiveStatements.every((entry) => entry && typeof entry === "object" && typeof (entry as Record<string, unknown>).id === "string")) {
+    || !row.objectiveStatements.every((entry) => entry && typeof entry === "object" && typeof (entry as Record<string, unknown>).objectiveId === "string")) {
     return null;
   }
   return row as unknown as BaselinePayload;
@@ -124,7 +124,7 @@ export async function recordInitiativeObjectiveMappingProposal(args: {
     if (!chain.ok) return { ok: false, code: "OBJECTIVE_BASELINE_CONFLICT", error: chain.error };
     const baseline = parsed.find((entry) => entry.baselineId === args.baselineId);
     if (!baseline) return { ok: false, code: "OBJECTIVE_BASELINE_REQUIRED", error: "The current objective baseline was not found." };
-    const mappings = normalizeMappings(args.mappings, new Set(baseline.objectiveStatements.map((entry) => entry.id)));
+    const mappings = normalizeMappings(args.mappings, new Set(baseline.objectiveStatements.map((entry) => entry.objectiveId)));
     if (!mappings) return { ok: false, code: "OBJECTIVE_RECONCILIATION_REQUIRED", error: "Every proposal mapping must name one current objective and at least one evidence reference." };
 
     const proposalId = `initiative-${randomUUID()}`;

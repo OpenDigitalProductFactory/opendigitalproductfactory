@@ -9,6 +9,10 @@ const migration = readFileSync(
   new URL("../prisma/migrations/20260808235000_initiative_readiness_receipts/migration.sql", import.meta.url),
   "utf8",
 );
+const shapeMigration = readFileSync(
+  new URL("../prisma/migrations/20260809023000_initiative_gate_activity_shape/migration.sql", import.meta.url),
+  "utf8",
+);
 
 function productionTypeScriptFiles(root: string): string[] {
   const files: string[] = [];
@@ -28,6 +32,8 @@ describe("initiative readiness persistence", () => {
     expect(schema).toContain("enum InitiativeGateKey");
     expect(schema).toMatch(/gateKey\s+InitiativeGateKey\?/);
     expect(schema).toContain("@@index([backlogItemId, gateKey, recordedAt(sort: Desc), id(sort: Desc)])");
+    expect(shapeMigration).toContain("initiative_gate_activity_shape");
+    expect(shapeMigration).toContain("\"kind\" = 'initiative_gate_receipt' AND \"gateKey\" IS NOT NULL");
   });
 
   it("pins exactly one immutable artifact branch with restrictive foreign keys", () => {

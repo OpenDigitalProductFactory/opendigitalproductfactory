@@ -19,6 +19,37 @@ function stringArray(value: unknown): value is string[] {
   return Array.isArray(value) && value.every(nonEmptyString);
 }
 
+function validSubject(value: unknown): boolean {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const subject = value as Record<string, unknown>;
+  return (["backlog-item", "epic", "feature-build", "task-run"] as const).includes(subject.kind as never)
+    && nonEmptyString(subject.id);
+}
+
+function validArtifactRef(value: unknown): boolean {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const ref = value as Record<string, unknown>;
+  if (ref.kind === "feature-build-revision") return nonEmptyString(ref.revisionId);
+  if (ref.kind === "document-version") return nonEmptyString(ref.versionId);
+  return ref.kind === "repo-blob-at-commit"
+    && nonEmptyString(ref.repositoryFullName)
+    && nonEmptyString(ref.commitSha)
+    && nonEmptyString(ref.path)
+    && nonEmptyString(ref.providerBlobId);
+}
+
+function validAuthoritySnapshot(value: unknown): boolean {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const authority = value as Record<string, unknown>;
+  return authority.decision === "allow"
+    && nonEmptyString(authority.effectiveHumanCapability)
+    && nonEmptyString(authority.effectiveAgentGrant)
+    && nonEmptyString(authority.tokenScope)
+    && nonEmptyString(authority.organizationId)
+    && nonEmptyString(authority.actionKey)
+    && nonEmptyString(authority.policyVersion);
+}
+
 function projectPayload(
   payload: unknown,
   row: InitiativeGateActivityRow,
@@ -26,6 +57,7 @@ function projectPayload(
 ): ReadinessEvidenceState {
   if (!payload || typeof payload !== "object") return "malformed";
   const candidate = payload as Record<string, unknown>;
+  const validProfiles = ["doc-only", "fix", "feature", "cross-domain", "archetype"] as const;
   if (candidate.schemaVersion !== 1
     || !(["pass", "fail", "not-applicable"] as const).includes(candidate.decision as never)
     || candidate.receiptId !== row.id
@@ -36,11 +68,13 @@ function projectPayload(
     || !nonEmptyString(candidate.reviewerAgentId)
     || !nonEmptyString(candidate.authorityDecisionId)
     || !nonEmptyString(candidate.reason)
+    || !validSubject(candidate.subject)
+    || !validArtifactRef(candidate.artifactRef)
     || !stringArray(candidate.findingRefs)
     || !stringArray(candidate.resolvedFindingRefs)
-    || !candidate.authoritySnapshot
-    || typeof candidate.authoritySnapshot !== "object"
-    || (candidate.authoritySnapshot as Record<string, unknown>).decision !== "allow"
+    || !validAuthoritySnapshot(candidate.authoritySnapshot)
+    || (row.gateKey === "classification" && candidate.decision === "pass" && !validProfiles.includes(candidate.selectedProfile as never))
+    || (row.gateKey !== "classification" && candidate.selectedProfile !== undefined)
     || (candidate.decision !== "fail" && candidate.findingRefs.length > 0)) {
     return "malformed";
   }

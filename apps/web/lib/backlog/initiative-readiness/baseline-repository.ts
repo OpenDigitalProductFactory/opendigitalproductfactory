@@ -6,6 +6,7 @@ import { writeDocumentBlob } from "@/lib/documents/blob-storage";
 import { resolveInitiativeArtifact } from "./artifact-resolver";
 import type { InitiativeScopeManifestResult } from "./baseline-manifest";
 import { diffInitiativeScopeManifests, parseInitiativeScopeManifest } from "./baseline-manifest";
+import { deriveAuthoritativeReadinessProfile } from "./profiles";
 import type {
   InitiativeArtifactRef,
   InitiativeAuthoritySnapshot,
@@ -71,6 +72,7 @@ export type InitiativeScopeBaseline = {
   objectiveStatements: Extract<InitiativeScopeManifestResult, { ok: true }>["objectives"];
   acceptanceStatements: Extract<InitiativeScopeManifestResult, { ok: true }>["acceptance"];
   supersedesBaselineId: string | null;
+  supersessionDispositions?: Array<{ statementId: string; reason: string }>;
   approvalReceiptId: string;
   authoritySnapshot: InitiativeAuthoritySnapshot;
 };
@@ -108,6 +110,7 @@ export function buildInitiativeBaselineAndPin(args: {
   artifactDigest: string;
   manifest: Extract<InitiativeScopeManifestResult, { ok: true }>;
   supersedesBaselineId: string | null;
+  supersessionDispositions?: Array<{ statementId: string; reason: string }>;
   approvalReceipt: InitiativeApprovalReceiptBinding;
   retainedArtifact: RetainedInitiativeArtifact;
 }):
@@ -146,6 +149,7 @@ export function buildInitiativeBaselineAndPin(args: {
       objectiveStatements: args.manifest.objectives,
       acceptanceStatements: args.manifest.acceptance,
       supersedesBaselineId: args.supersedesBaselineId,
+      supersessionDispositions: args.supersessionDispositions ?? [],
       approvalReceiptId: approval.receiptId,
       authoritySnapshot: approval.authoritySnapshot,
     },
@@ -188,6 +192,18 @@ function manifestFromBaseline(payload: unknown): Extract<InitiativeScopeManifest
   return { ok: true, artifactDigest: row.artifactDigest, objectives: row.objectiveStatements, acceptance: row.acceptanceStatements };
 }
 
+export function validateInitiativeSupersessionDispositions(
+  requiredStatementIds: readonly string[],
+  dispositions: readonly { statementId: string; reason: string }[],
+): Array<{ statementId: string; reason: string }> | null {
+  const normalized = dispositions.map((entry) => ({ statementId: entry.statementId, reason: entry.reason.trim() }));
+  const byId = new Map(normalized.map((entry) => [entry.statementId, entry.reason]));
+  if (byId.size !== normalized.length
+    || normalized.some(({ statementId, reason }) => !requiredStatementIds.includes(statementId) || reason.length < 20)
+    || requiredStatementIds.some((id) => !byId.has(id))) return null;
+  return normalized;
+}
+
 export type RecordInitiativeSpecApprovalResult =
   | { ok: true; receiptId: string; baselineId: string; artifactDigest: string }
   | { ok: false; code: string; error: string };
@@ -204,7 +220,7 @@ export async function recordInitiativeSpecApproval(args: {
   artifactRole: InitiativeScopeBaseline["artifactRole"];
   artifactRef: InitiativeArtifactRef;
   expectedCurrentBaselineId: string | null;
-  supersessionDispositionIds: string[];
+  supersessionDispositions: Array<{ statementId: string; reason: string }>;
   resolvedFindingRefs: string[];
   reason: string;
   reviewerUserId: string;
@@ -218,7 +234,19 @@ export async function recordInitiativeSpecApproval(args: {
   const tokenScope = args.tokenScope;
   const item = await prisma.backlogItem.findUnique({
     where: { itemId: args.itemId },
-    select: { id: true, itemId: true, title: true, organizationId: true },
+    select: {
+      id: true,
+      itemId: true,
+      title: true,
+      organizationId: true,
+      type: true,
+      source: true,
+      workType: true,
+      scopeKind: true,
+      archetypeCategories: true,
+      archetypeIds: true,
+      activeBuild: { select: { kind: true } },
+    },
   });
   if (!item) return { ok: false, code: "CANONICAL_DESIGN_REQUIRED", error: `BacklogItem ${args.itemId} was not found.` };
   const authority = await prisma.authorizationDecisionLog.findUnique({
@@ -245,6 +273,10 @@ export async function recordInitiativeSpecApproval(args: {
     return { ok: false, code: "ARTIFACT_AUTHOR_REQUIRED", error: "Reviewer principal identity is unavailable." };
   }
   const subject: InitiativeSubject = { kind: "backlog-item", id: item.itemId };
+  if (args.artifactRef.kind === "repo-blob-at-commit"
+    && !/^docs\/superpowers\/specs\/[^/]+\.md$/.test(args.artifactRef.path)) {
+    return { ok: false, code: "CANONICAL_DESIGN_REQUIRED", error: "Repository scope approval requires a canonical design under docs/superpowers/specs/." };
+  }
   const artifact = await resolveInitiativeArtifact({ locator: args.artifactRef, subject, organizationId });
   if (!artifact.ok) return artifact;
   const content = decodeUtf8(artifact.artifact.bytes);
@@ -267,6 +299,42 @@ export async function recordInitiativeSpecApproval(args: {
   try {
     return await prisma.$transaction(async (tx) => {
     await tx.$queryRaw`SELECT "id" FROM "BacklogItem" WHERE "id" = ${item.id} FOR UPDATE`;
+    if (args.artifactRef.kind === "feature-build-revision") {
+      await tx.$queryRaw`SELECT "id" FROM "BuildArtifactRevision" WHERE "id" = ${args.artifactRef.revisionId} FOR SHARE`;
+      await tx.$queryRaw`SELECT b."id" FROM "FeatureBuild" b JOIN "BuildArtifactRevision" r ON r."buildId" = b."buildId" WHERE r."id" = ${args.artifactRef.revisionId} FOR UPDATE OF b`;
+    } else if (args.artifactRef.kind === "document-version") {
+      await tx.$queryRaw`SELECT d."id" FROM "Document" d JOIN "DocumentVersion" v ON v."documentId" = d."id" WHERE v."id" = ${args.artifactRef.versionId} FOR SHARE OF d, v`;
+      await tx.$queryRaw`SELECT b."id" FROM "DocumentBlob" b JOIN "DocumentVersion" v ON v."contentBlobId" = b."id" WHERE v."id" = ${args.artifactRef.versionId} FOR SHARE OF b`;
+    } else {
+      await tx.$queryRaw`SELECT "id" FROM "WorkCapsule" WHERE "backlogItemId" = ${item.itemId} AND "repositoryFullName" = ${args.artifactRef.repositoryFullName} AND "headSha" = ${args.artifactRef.commitSha} FOR SHARE`;
+    }
+    const lockedItem = await tx.backlogItem.findUnique({
+      where: { id: item.id },
+      select: {
+        type: true,
+        source: true,
+        workType: true,
+        scopeKind: true,
+        archetypeCategories: true,
+        archetypeIds: true,
+        activeBuild: { select: { kind: true } },
+        featureBuilds: { select: { kind: true } },
+      },
+    });
+    if (!lockedItem) return { ok: false, code: "CANONICAL_DESIGN_REQUIRED", error: "The governed initiative no longer exists." };
+    const lockedArtifact = await resolveInitiativeArtifact({
+      locator: args.artifactRef,
+      subject,
+      organizationId,
+      db: tx as never,
+    });
+    if (!lockedArtifact.ok) return lockedArtifact;
+    if (lockedArtifact.artifact.digest !== artifact.artifact.digest
+      || lockedArtifact.artifact.authorPrincipalId !== artifact.artifact.authorPrincipalId
+      || lockedArtifact.artifact.authorAgentId !== artifact.artifact.authorAgentId
+      || lockedArtifact.artifact.documentBlobId !== artifact.artifact.documentBlobId) {
+      return { ok: false, code: "CANONICAL_DESIGN_AMBIGUOUS", error: "Canonical artifact identity changed before approval could be pinned." };
+    }
     const priorRows = await tx.backlogItemActivity.findMany({
       where: { backlogItemId: item.id, kind: "initiative_scope_baseline" },
       orderBy: [{ recordedAt: "asc" }, { id: "asc" }],
@@ -277,16 +345,42 @@ export async function recordInitiativeSpecApproval(args: {
     const chain = validateInitiativeBaselineChainHead(entries, args.expectedCurrentBaselineId);
     if (!chain.ok) return chain;
 
+    const classificationRows = await tx.backlogItemActivity.findMany({
+      where: { backlogItemId: item.id, kind: "initiative_gate_receipt", gateKey: "classification" },
+      orderBy: [{ recordedAt: "asc" }, { id: "asc" }],
+      select: { payload: true },
+    });
+    const recordedProfiles = [...priorRows, ...classificationRows].flatMap(({ payload }) => {
+      if (!payload || typeof payload !== "object" || Array.isArray(payload)) return [];
+      const row = payload as Record<string, unknown>;
+      const profile = row.profile ?? row.selectedProfile;
+      return (["doc-only", "fix", "feature", "cross-domain", "archetype"] as const).includes(profile as never)
+        ? [profile as ReadinessProfile]
+        : [];
+    });
+    const authoritativeProfile = deriveAuthoritativeReadinessProfile({
+      ...lockedItem,
+      activeBuildKind: lockedItem.activeBuild?.kind,
+      recordedProfiles: [
+        ...recordedProfiles,
+        ...lockedItem.featureBuilds.flatMap((build) => build.kind === "fix" ? ["fix" as const] : build.kind === "feature" ? ["feature" as const] : []),
+      ],
+    });
+    if (!authoritativeProfile || authoritativeProfile !== args.profile) {
+      return { ok: false, code: "CLASSIFICATION_REQUIRED", error: "Requested profile does not match the strongest authoritative classification signal." };
+    }
+
     if (args.expectedCurrentBaselineId) {
       const current = priorRows.find((row) => (row.payload as Record<string, unknown>)?.baselineId === args.expectedCurrentBaselineId);
       const previousManifest = manifestFromBaseline(current?.payload);
       if (!previousManifest) return { ok: false, code: "CANONICAL_DESIGN_AMBIGUOUS", error: "The current baseline manifest is unavailable." };
       const semanticDiff = diffInitiativeScopeManifests(previousManifest, manifest);
       const required = [...semanticDiff.removedOrChangedObjectiveIds, ...semanticDiff.removedOrChangedAcceptanceIds];
-      const dispositions = new Set(args.supersessionDispositionIds);
-      if (required.some((id) => !dispositions.has(id))) {
+      if (!validateInitiativeSupersessionDispositions(required, args.supersessionDispositions)) {
         return { ok: false, code: "CANONICAL_DESIGN_AMBIGUOUS", error: "Scope-reducing supersession requires an explicit disposition for every removed or changed statement." };
       }
+    } else if (args.supersessionDispositions.length > 0) {
+      return { ok: false, code: "CANONICAL_DESIGN_AMBIGUOUS", error: "An initial baseline cannot carry supersession dispositions." };
     }
 
     const history = await tx.backlogItemActivity.findMany({
@@ -401,6 +495,7 @@ export async function recordInitiativeSpecApproval(args: {
       artifactDigest: artifact.artifact.digest,
       manifest,
       supersedesBaselineId: args.expectedCurrentBaselineId,
+      supersessionDispositions: args.supersessionDispositions.map((entry) => ({ statementId: entry.statementId, reason: entry.reason.trim() })),
       approvalReceipt: {
         receiptId,
         gate: "spec-approval",

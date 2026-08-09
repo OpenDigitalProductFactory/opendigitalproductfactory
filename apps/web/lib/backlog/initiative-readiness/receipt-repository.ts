@@ -3,12 +3,14 @@ import { randomUUID } from "node:crypto";
 import { Prisma, prisma } from "@dpf/db";
 
 import { resolveInitiativeArtifact } from "./artifact-resolver";
+import { deriveAuthoritativeReadinessProfile } from "./profiles";
 import {
   buildStableInitiativeFindingId,
   validateInitiativeGateReceiptDraft,
   type InitiativeArtifactRef,
   type InitiativeGateKey,
 } from "./receipt-schema";
+import type { ReadinessProfile } from "./types";
 
 type ReceiptHistoryRow = { payload: unknown };
 
@@ -49,6 +51,7 @@ export async function recordInitiativeGateReceipt(args: {
   authorityDecisionId: string | null;
   tokenScope: string | null;
   requiresIndependentReviewer?: boolean;
+  selectedProfile?: ReadinessProfile;
 }): Promise<RecordInitiativeGateReceiptResult> {
   if (args.gate === "spec-approval" && args.decision === "pass") {
     return {
@@ -63,7 +66,19 @@ export async function recordInitiativeGateReceipt(args: {
   const tokenScope = args.tokenScope;
   const item = await prisma.backlogItem.findUnique({
     where: { itemId: args.itemId },
-    select: { id: true, itemId: true, organizationId: true },
+    select: {
+      id: true,
+      itemId: true,
+      organizationId: true,
+      type: true,
+      source: true,
+      workType: true,
+      scopeKind: true,
+      archetypeCategories: true,
+      archetypeIds: true,
+      activeBuild: { select: { kind: true } },
+      featureBuilds: { select: { kind: true } },
+    },
   });
   if (!item) return { ok: false, code: "CANONICAL_DESIGN_REQUIRED", error: `BacklogItem ${args.itemId} was not found.` };
 
@@ -107,11 +122,51 @@ export async function recordInitiativeGateReceipt(args: {
     // this seam, a concurrent fail could introduce a blocker after a pass had
     // read history but before either append committed.
     await tx.$queryRaw`SELECT "id" FROM "BacklogItem" WHERE "id" = ${item.id} FOR UPDATE`;
+    const lockedItem = await tx.backlogItem.findUnique({
+      where: { id: item.id },
+      select: {
+        type: true,
+        source: true,
+        workType: true,
+        scopeKind: true,
+        archetypeCategories: true,
+        archetypeIds: true,
+        activeBuild: { select: { kind: true } },
+        featureBuilds: { select: { kind: true } },
+      },
+    });
+    if (!lockedItem) return { ok: false, code: "CANONICAL_DESIGN_REQUIRED", error: "The governed initiative no longer exists." };
     const history = await tx.backlogItemActivity.findMany({
       where: { backlogItemId: item.id, kind: "initiative_gate_receipt", gateKey },
       orderBy: [{ recordedAt: "asc" }, { id: "asc" }],
       select: { payload: true },
     });
+    const recordedProfileRows = args.gate === "classification"
+      ? await tx.backlogItemActivity.findMany({
+        where: { backlogItemId: item.id, kind: { in: ["initiative_gate_receipt", "initiative_scope_baseline"] } },
+        orderBy: [{ recordedAt: "asc" }, { id: "asc" }],
+        select: { payload: true },
+      })
+      : [];
+    const recordedProfiles = recordedProfileRows.flatMap(({ payload }) => {
+      if (!payload || typeof payload !== "object" || Array.isArray(payload)) return [];
+      const row = payload as Record<string, unknown>;
+      const profile = row.selectedProfile ?? row.profile;
+      return (["doc-only", "fix", "feature", "cross-domain", "archetype"] as const).includes(profile as never)
+        ? [profile as ReadinessProfile]
+        : [];
+    });
+    const authoritativeProfile = args.gate === "classification" && args.decision === "pass"
+      ? deriveAuthoritativeReadinessProfile({
+        ...lockedItem,
+        activeBuildKind: lockedItem.activeBuild?.kind,
+        recordedProfiles: [
+          ...recordedProfiles,
+          ...lockedItem.featureBuilds.flatMap((build) => build.kind === "fix" ? ["fix" as const] : build.kind === "feature" ? ["feature" as const] : []),
+          ...(args.selectedProfile ? [args.selectedProfile] : []),
+        ],
+      })
+      : null;
     const receiptId = `initiative-${randomUUID()}`;
     const validated = validateInitiativeGateReceiptDraft({
       gate: args.gate,
@@ -120,6 +175,7 @@ export async function recordInitiativeGateReceipt(args: {
       reason: args.reason,
       findingRefs,
       resolvedFindingRefs: args.resolvedFindingRefs,
+      selectedProfile: args.selectedProfile,
     }, {
       receiptId,
       policyVersion: "initiative-readiness.v1",
@@ -145,6 +201,7 @@ export async function recordInitiativeGateReceipt(args: {
         issue: finding.issue.trim(),
       })),
       requiresIndependentReviewer: args.requiresIndependentReviewer,
+      authoritativeProfile,
     });
     if (!validated.ok) return { ok: false, code: validated.code, error: validated.error };
 

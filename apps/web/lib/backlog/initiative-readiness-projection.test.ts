@@ -22,7 +22,16 @@ function row(overrides: Partial<InitiativeGateActivityRow> = {}): InitiativeGate
       reviewerPrincipalId: "reviewer",
       reviewerAgentId: "reviewer-agent",
       authorityDecisionId: "decision-1",
-      authoritySnapshot: { decision: "allow" },
+      authoritySnapshot: {
+        decision: "allow",
+        effectiveHumanCapability: "manage_ea_model",
+        effectiveAgentGrant: "initiative_architecture_review",
+        tokenScope: "write",
+        organizationId: "org-1",
+        actionKey: "record_initiative_architecture_review",
+        policyVersion: "authority.v1",
+      },
+      subject: { kind: "backlog-item", id: "BI-1" },
       reason: "Independent review passed.",
       findingRefs: [],
       resolvedFindingRefs: [],
@@ -72,5 +81,14 @@ describe("initiative readiness projection", () => {
       } }),
     ], { itemIds: ["item-1"], expectedArtifactDigest: "sha256:current" });
     expect(projected[0]?.state).toBe("malformed");
+  });
+
+  it("fails closed when a receipt omits full subject, locator, or authority shape", () => {
+    const malformed = row();
+    const payload = { ...(malformed.payload as Record<string, unknown>), authoritySnapshot: { decision: "allow" } };
+    expect(projectInitiativeGateEvidence([{ ...malformed, payload }], {
+      itemIds: ["item-1"],
+      expectedArtifactDigest: "sha256:current",
+    })[0]?.state).toBe("malformed");
   });
 });

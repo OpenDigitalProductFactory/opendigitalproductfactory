@@ -19,6 +19,11 @@ export type DocumentBlobWriteResult = {
 };
 
 type DocumentBlobRetentionDb = {
+  $transaction: <T>(work: (tx: DocumentBlobRetentionTx) => Promise<T>) => Promise<T>;
+};
+
+type DocumentBlobRetentionTx = {
+  $queryRaw: <T>(strings: TemplateStringsArray, ...values: unknown[]) => Promise<T>;
   initiativeArtifactRetentionPin: {
     count: (args: { where: { documentBlobId: string } }) => Promise<number>;
   };
@@ -142,10 +147,19 @@ export async function deleteDocumentBlob(input: {
   if (input.storageKey !== expectedStorageKey) {
     throw new Error("Document blob storage key does not match its content digest.");
   }
-  const db = input.db ?? prisma;
-  if (await db.initiativeArtifactRetentionPin.count({ where: { documentBlobId: input.documentBlobId } }) > 0) {
-    throw new DocumentBlobRetentionError("Pinned initiative document bytes are permanently retained.");
-  }
   const storageRoot = input.storageRoot ?? await getDocumentBlobStorageRoot();
-  await lazyFsPromises().unlink(lazyPath().join(storageRoot, expectedStorageKey));
+  const db = input.db ?? (prisma as unknown as DocumentBlobRetentionDb);
+  await db.$transaction(async (tx) => {
+    // Hold the blob row through the filesystem unlink. A concurrent retention
+    // pin needs a foreign-key key-share lock and therefore cannot commit in the
+    // gap between the pin check and deletion.
+    const rows = await tx.$queryRaw<Array<{ id: string }>>`
+      SELECT "id" FROM "DocumentBlob" WHERE "id" = ${input.documentBlobId} FOR UPDATE
+    `;
+    if (rows.length !== 1) throw new Error("Document blob metadata was not found.");
+    if (await tx.initiativeArtifactRetentionPin.count({ where: { documentBlobId: input.documentBlobId } }) > 0) {
+      throw new DocumentBlobRetentionError("Pinned initiative document bytes are permanently retained.");
+    }
+    await lazyFsPromises().unlink(lazyPath().join(storageRoot, expectedStorageKey));
+  });
 }

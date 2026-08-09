@@ -21,7 +21,11 @@ function db(capsuleCount = 1) {
         activities: [{ recordedByAgentId: "agent-author" }],
       }))),
     },
-    principalAlias: { findFirst: vi.fn(async () => ({ principalId: "principal-author" })) },
+    principalAlias: {
+      findMany: vi.fn(async ({ where }: { where: { aliasType: string } }) => where.aliasType === "email"
+        ? [{ principalId: "principal-author" }]
+        : [{ aliasValue: "agent-author" }]),
+    },
     credentialEntry: { findUnique: vi.fn(async () => null) },
     platformDevConfig: {
       findUnique: vi.fn(async () => ({ upstreamRemoteUrl: "https://github.com/OpenDigitalProductFactory/opendigitalproductfactory.git" })),
@@ -32,12 +36,14 @@ function db(capsuleCount = 1) {
 
 describe("resolveRepositoryArtifact", () => {
   it("derives bytes and SHA-256 from the exact provider blob bound to one subject capsule", async () => {
-    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({
-      type: "file",
-      sha: locator.providerBlobId,
-      encoding: "base64",
-      content: bytes.toString("base64"),
-    }), { status: 200, headers: { "content-type": "application/json" } }));
+    const fetchImpl = vi.fn(async (url: string | URL | Request) => String(url).includes("/commits/")
+      ? new Response(JSON.stringify({ commit: { message: "docs: canonical\n\nSigned-off-by: Author <author@example.com>" } }), { status: 200 })
+      : new Response(JSON.stringify({
+        type: "file",
+        sha: locator.providerBlobId,
+        encoding: "base64",
+        content: bytes.toString("base64"),
+      }), { status: 200, headers: { "content-type": "application/json" } }));
 
     const result = await resolveRepositoryArtifact({
       locator,
@@ -54,10 +60,18 @@ describe("resolveRepositoryArtifact", () => {
         authorAgentId: "agent-author",
       },
     });
-    expect(fetchImpl).toHaveBeenCalledWith(
-      expect.stringContaining(`/contents/docs/superpowers/plans/test.md?ref=${locator.commitSha}`),
-      expect.objectContaining({ cache: "no-store" }),
-    );
+    expect(fetchImpl).toHaveBeenCalledWith(expect.stringContaining(`/commits/${locator.commitSha}`), expect.any(Object));
+    expect(fetchImpl).toHaveBeenCalledWith(expect.stringContaining(`/contents/docs/superpowers/plans/test.md?ref=${locator.commitSha}`), expect.objectContaining({ cache: "no-store" }));
+  });
+
+  it("rejects commit provenance without one DCO email mapped to the capsule principal", async () => {
+    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({ commit: { message: "docs: unsigned" } }), { status: 200 }));
+    await expect(resolveRepositoryArtifact({
+      locator,
+      subject: { kind: "backlog-item", id: "BI-TEST" },
+      db: db() as never,
+      fetchImpl: fetchImpl as typeof fetch,
+    })).resolves.toMatchObject({ ok: false, code: "ARTIFACT_AUTHOR_REQUIRED" });
   });
 
   it("fails closed before provider access when capsule ownership is ambiguous", async () => {

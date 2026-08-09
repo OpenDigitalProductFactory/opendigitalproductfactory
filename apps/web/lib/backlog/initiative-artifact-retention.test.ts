@@ -13,7 +13,7 @@ describe("resolveInitiativeArtifact", () => {
         status: "accepted",
         savedByUserId: "principal-author",
         savedByAgentId: "agent-author",
-        build: { originatingBacklogItemId: "backlog-row-1", abandonedAt: null },
+        build: { originatingBacklogItemId: "backlog-row-1", abandonedAt: null, artifactRevisions: [{ id: "rev-1" }] },
       })) },
       documentVersion: { findUnique: vi.fn() },
       principalAlias: { findMany: vi.fn(async () => [{ principal: { principalId: "principal-author" } }]) },
@@ -23,6 +23,28 @@ describe("resolveInitiativeArtifact", () => {
       subject: { kind: "backlog-item", id: "backlog-row-1" },
       db,
     })).resolves.toMatchObject({ ok: true, artifact: { digest: "sha256:server", authorPrincipalId: "principal-author", authorAgentId: "agent-author" } });
+  });
+
+  it("rejects a historical accepted design revision when a newer accepted revision exists", async () => {
+    const db: InitiativeArtifactResolverDb = {
+      buildArtifactRevision: { findUnique: vi.fn(async () => ({
+        id: "rev-old",
+        valueDigest: "server",
+        value: "**OBJ-TEST-001:** Preserve scope.\n| AC-TEST-001 | OBJ-TEST-001 | Scope is preserved. | test |",
+        field: "designDoc",
+        status: "accepted",
+        savedByUserId: "principal-author",
+        savedByAgentId: "agent-author",
+        build: { originatingBacklogItemId: "backlog-row-1", abandonedAt: null, artifactRevisions: [{ id: "rev-new" }] },
+      })) },
+      documentVersion: { findUnique: vi.fn() },
+      principalAlias: { findMany: vi.fn(async () => [{ principal: { principalId: "principal-author" } }]) },
+    };
+    await expect(resolveInitiativeArtifact({
+      locator: { kind: "feature-build-revision", revisionId: "rev-old" },
+      subject: { kind: "backlog-item", id: "backlog-row-1" },
+      db,
+    })).resolves.toMatchObject({ ok: false, code: "CANONICAL_DESIGN_AMBIGUOUS" });
   });
 
   it("fails closed for unrelated builds and incomplete author provenance", async () => {
@@ -35,7 +57,7 @@ describe("resolveInitiativeArtifact", () => {
         status: "accepted",
         savedByUserId: "principal-author",
         savedByAgentId: null,
-        build: { originatingBacklogItemId: "other", abandonedAt: null },
+        build: { originatingBacklogItemId: "other", abandonedAt: null, artifactRevisions: [{ id: "rev-1" }] },
       })) },
       documentVersion: { findUnique: vi.fn() },
       principalAlias: { findMany: vi.fn(async () => [{ principal: { principalId: "principal-author" } }]) },
@@ -57,7 +79,7 @@ describe("resolveInitiativeArtifact", () => {
         status: "accepted",
         savedByUserId: "ambiguous-user",
         savedByAgentId: "agent-author",
-        build: { originatingBacklogItemId: "backlog-row-1", abandonedAt: null },
+        build: { originatingBacklogItemId: "backlog-row-1", abandonedAt: null, artifactRevisions: [{ id: "rev-1" }] },
       })) },
       documentVersion: { findUnique: vi.fn() },
       principalAlias: { findMany: vi.fn(async () => [

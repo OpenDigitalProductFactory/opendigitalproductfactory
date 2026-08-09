@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest";
 
 import {
   buildInitiativeBaselineAndPin,
+  diffInitiativeScopeManifests,
   parseInitiativeScopeManifest,
   validateInitiativeBaselineChainHead,
+  validateInitiativeSupersessionDispositions,
 } from "./initiative-readiness";
 
 const artifact = `# Canonical scope
@@ -36,6 +38,17 @@ describe("parseInitiativeScopeManifest", () => {
     expect(result.objectives[0]?.statementDigest).toMatch(/^sha256:[a-f0-9]{64}$/);
   });
 
+  it("treats acceptance-to-objective retargeting as a semantic change", () => {
+    const previous = parseInitiativeScopeManifest(artifact);
+    const next = parseInitiativeScopeManifest(artifact.replace(
+      "AC-ORDER-001 | OBJ-ORDER-001 |",
+      "AC-ORDER-001 | OBJ-ORDER-002 |",
+    ));
+    if (!previous.ok || !next.ok) throw new Error("fixtures must parse");
+    expect(diffInitiativeScopeManifests(previous, next).removedOrChangedAcceptanceIds)
+      .toContain("AC-ORDER-001");
+  });
+
   it.each([
     ["duplicate objective", `${artifact}\n3. **OBJ-ORDER-001:** Duplicate.`],
     ["unknown objective link", artifact.replace("OBJ-ORDER-002 | Missing", "OBJ-UNKNOWN | Missing")],
@@ -58,6 +71,20 @@ describe("initiative baseline chain", () => {
     ], "stale")).toMatchObject({ ok: false, code: "CANONICAL_DESIGN_AMBIGUOUS" });
   });
 
+  it("requires one durable reasoned independent disposition per changed statement", () => {
+    expect(validateInitiativeSupersessionDispositions(
+      ["OBJ-ORDER-001", "AC-ORDER-002"],
+      [
+        { statementId: "OBJ-ORDER-001", reason: "The objective is replaced by the independently approved successor." },
+        { statementId: "AC-ORDER-002", reason: "The acceptance rule is no longer applicable after contract removal." },
+      ],
+    )).toHaveLength(2);
+    expect(validateInitiativeSupersessionDispositions(
+      ["OBJ-ORDER-001"],
+      [{ statementId: "OBJ-ORDER-001", reason: "too short" }],
+    )).toBeNull();
+  });
+
   it("binds approval receipt and retention pin to the same exact artifact", () => {
     const manifest = parseInitiativeScopeManifest(artifact);
     if (!manifest.ok) throw new Error("fixture must parse");
@@ -71,6 +98,7 @@ describe("initiative baseline chain", () => {
       artifactDigest: manifest.artifactDigest,
       manifest,
       supersedesBaselineId: null,
+      supersessionDispositions: [],
       approvalReceipt: {
         receiptId: "activity-approval",
         gate: "spec-approval",

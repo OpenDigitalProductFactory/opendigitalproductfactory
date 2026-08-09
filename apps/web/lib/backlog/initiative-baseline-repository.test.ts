@@ -14,7 +14,20 @@ vi.mock("@dpf/db", () => ({
   Prisma: { TransactionIsolationLevel: { Serializable: "Serializable" } },
   prisma: {
     backlogItem: {
-      findUnique: vi.fn(async () => ({ id: "bi-row", itemId: "BI-TEST", title: "Test initiative", organizationId: null })),
+      findUnique: vi.fn(async () => ({
+        id: "bi-row",
+        itemId: "BI-TEST",
+        title: "Test initiative",
+        organizationId: null,
+        type: "feature",
+        source: null,
+        workType: null,
+        scopeKind: null,
+        archetypeCategories: [],
+        archetypeIds: [],
+        activeBuild: null,
+        featureBuilds: [],
+      })),
     },
     authorizationDecisionLog: {
       findUnique: vi.fn(async () => ({
@@ -48,10 +61,20 @@ const locator = {
 function tx() {
   return {
     $queryRaw: vi.fn(async () => []),
+    backlogItem: {
+      findUnique: vi.fn(async () => ({
+        type: "feature",
+        source: null,
+        workType: null,
+        scopeKind: null,
+        archetypeCategories: [],
+      archetypeIds: [],
+      activeBuild: null,
+      featureBuilds: [],
+      })),
+    },
     backlogItemActivity: {
-      findMany: vi.fn()
-        .mockResolvedValueOnce([])
-        .mockResolvedValueOnce([]),
+      findMany: vi.fn(async () => []),
       create: mocks.activityCreate.mockImplementation(async ({ data }) => data),
     },
     documentBlob: { upsert: vi.fn(async () => ({ id: "blob-1", storageKey: "documents/sha256/provider", sizeBytes: canonical.length })) },
@@ -90,7 +113,7 @@ describe("recordInitiativeSpecApproval", () => {
       artifactRole: "design-spec",
       artifactRef: locator,
       expectedCurrentBaselineId: null,
-      supersessionDispositionIds: [],
+      supersessionDispositions: [],
       resolvedFindingRefs: [],
       reason: "Independent checklist review passed.",
       reviewerUserId: "user-reviewer",
@@ -100,6 +123,7 @@ describe("recordInitiativeSpecApproval", () => {
     });
 
     expect(result).toMatchObject({ ok: true, artifactDigest: "sha256:provider" });
+    expect(mocks.resolveArtifact).toHaveBeenCalledTimes(2);
     expect(mocks.transaction).toHaveBeenCalledOnce();
     expect(mocks.transaction.mock.calls[0]![1]).toEqual({ isolationLevel: "Serializable" });
     expect(mocks.activityCreate).toHaveBeenCalledTimes(2);
@@ -116,6 +140,33 @@ describe("recordInitiativeSpecApproval", () => {
     });
   });
 
+  it("rolls back when the canonical artifact changes between resolution and the locked transaction", async () => {
+    mocks.resolveArtifact
+      .mockResolvedValueOnce({
+        ok: true,
+        artifact: { ref: locator, digest: "sha256:provider", authorPrincipalId: "principal-author", authorAgentId: "agent-author", bytes: Buffer.from(canonical) },
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        artifact: { ref: locator, digest: "sha256:changed", authorPrincipalId: "principal-author", authorAgentId: "agent-author", bytes: Buffer.from(canonical) },
+      });
+    await expect(recordInitiativeSpecApproval({
+      itemId: "BI-TEST",
+      profile: "feature",
+      artifactRole: "design-spec",
+      artifactRef: locator,
+      expectedCurrentBaselineId: null,
+      supersessionDispositions: [],
+      resolvedFindingRefs: [],
+      reason: "Independent checklist review passed.",
+      reviewerUserId: "user-reviewer",
+      reviewerAgentId: "agent-reviewer",
+      authorityDecisionId: "decision-1",
+      tokenScope: "write",
+    })).resolves.toMatchObject({ ok: false, code: "CANONICAL_DESIGN_AMBIGUOUS" });
+    expect(mocks.pinCreate).not.toHaveBeenCalled();
+  });
+
   it("does not enter the approval transaction when archived bytes disagree with the provider digest", async () => {
     mocks.writeBlob.mockResolvedValue({ sha256: "different", storageKey: "documents/sha256/different", sizeBytes: canonical.length });
     await expect(recordInitiativeSpecApproval({
@@ -124,7 +175,7 @@ describe("recordInitiativeSpecApproval", () => {
       artifactRole: "design-spec",
       artifactRef: locator,
       expectedCurrentBaselineId: null,
-      supersessionDispositionIds: [],
+      supersessionDispositions: [],
       resolvedFindingRefs: [],
       reason: "Independent checklist review passed.",
       reviewerUserId: "user-reviewer",
@@ -143,7 +194,7 @@ describe("recordInitiativeSpecApproval", () => {
       artifactRole: "design-spec",
       artifactRef: locator,
       expectedCurrentBaselineId: null,
-      supersessionDispositionIds: [],
+      supersessionDispositions: [],
       resolvedFindingRefs: [],
       reason: "Independent checklist review passed.",
       reviewerUserId: "user-reviewer",
@@ -152,5 +203,53 @@ describe("recordInitiativeSpecApproval", () => {
       tokenScope: "write",
     })).resolves.toMatchObject({ ok: false, code: "CANONICAL_DESIGN_REQUIRED" });
     expect(mocks.transaction).not.toHaveBeenCalled();
+  });
+
+  it("rejects a plan or arbitrary repository file as the canonical scope baseline", async () => {
+    await expect(recordInitiativeSpecApproval({
+      itemId: "BI-TEST",
+      profile: "feature",
+      artifactRole: "design-spec",
+      artifactRef: { ...locator, path: "docs/superpowers/plans/test.md" },
+      expectedCurrentBaselineId: null,
+      supersessionDispositions: [],
+      resolvedFindingRefs: [],
+      reason: "Independent checklist review passed.",
+      reviewerUserId: "user-reviewer",
+      reviewerAgentId: "agent-reviewer",
+      authorityDecisionId: "decision-1",
+      tokenScope: "write",
+    })).resolves.toMatchObject({ ok: false, code: "CANONICAL_DESIGN_REQUIRED" });
+    expect(mocks.resolveArtifact).not.toHaveBeenCalled();
+  });
+
+  it("rejects a caller-selected profile below the strongest structured signal", async () => {
+    const currentTx = tx();
+    (currentTx.backlogItem as { findUnique: ReturnType<typeof vi.fn> }).findUnique = vi.fn(async () => ({
+      type: "feature",
+      source: null,
+      workType: null,
+      scopeKind: "archetype",
+      archetypeCategories: ["pet-services"],
+      archetypeIds: ["veterinary-clinic"],
+      activeBuild: null,
+      featureBuilds: [],
+    }));
+    mocks.transaction.mockImplementationOnce(async (work) => work(currentTx));
+    await expect(recordInitiativeSpecApproval({
+      itemId: "BI-TEST",
+      profile: "doc-only",
+      artifactRole: "design-spec",
+      artifactRef: locator,
+      expectedCurrentBaselineId: null,
+      supersessionDispositions: [],
+      resolvedFindingRefs: [],
+      reason: "Independent checklist review passed.",
+      reviewerUserId: "user-reviewer",
+      reviewerAgentId: "agent-reviewer",
+      authorityDecisionId: "decision-1",
+      tokenScope: "write",
+    })).resolves.toMatchObject({ ok: false, code: "CLASSIFICATION_REQUIRED" });
+    expect(mocks.activityCreate).not.toHaveBeenCalled();
   });
 });

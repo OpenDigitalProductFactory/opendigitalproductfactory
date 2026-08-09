@@ -77,6 +77,27 @@ describe("validateInitiativeGateReceiptDraft", () => {
     });
   });
 
+  it("binds a passing classification receipt to the server-reconciled profile", () => {
+    expect(validateInitiativeGateReceiptDraft({
+      ...draft,
+      gate: "classification",
+      selectedProfile: "doc-only",
+    }, {
+      ...context,
+      allowedGates: ["classification"],
+      authoritativeProfile: "archetype",
+    })).toMatchObject({ ok: false, code: "malformed-receipt" });
+    expect(validateInitiativeGateReceiptDraft({
+      ...draft,
+      gate: "classification",
+      selectedProfile: "archetype",
+    }, {
+      ...context,
+      allowedGates: ["classification"],
+      authoritativeProfile: "archetype",
+    })).toMatchObject({ ok: true, receipt: { selectedProfile: "archetype" } });
+  });
+
   it("rejects a caller locator that differs from the server-resolved immutable artifact", () => {
     expect(validateInitiativeGateReceiptDraft({
       ...draft,
@@ -134,6 +155,32 @@ describe("validateInitiativeGateReceiptDraft", () => {
       ok: true,
       receipt: { resolvedFindingRefs: ["finding-1"] },
     });
+  });
+
+  it("rejects a receipt that introduces and resolves the same finding", () => {
+    expect(validateInitiativeGateReceiptDraft({
+      ...draft,
+      decision: "fail",
+      findingRefs: ["finding-1"],
+      resolvedFindingRefs: ["finding-1"],
+    }, {
+      ...context,
+      openFindingRefs: ["finding-1"],
+      resolvedFindings: [{ findingRef: "finding-1", severity: "critical", issue: "Still broken." }],
+    })).toMatchObject({ ok: false, code: "finding-resolution-invalid" });
+  });
+
+  it("persists only opaque finding references, never restricted issue text", () => {
+    const result = validateInitiativeGateReceiptDraft({
+      ...draft,
+      decision: "fail",
+      findingRefs: ["finding-1"],
+    }, {
+      ...context,
+      resolvedFindings: [{ findingRef: "finding-1", severity: "critical", issue: "Restricted implementation detail." }],
+    });
+    expect(result).toMatchObject({ ok: true, receipt: { findingRefs: ["finding-1"] } });
+    expect(JSON.stringify(result)).not.toContain("Restricted implementation detail");
   });
 });
 
