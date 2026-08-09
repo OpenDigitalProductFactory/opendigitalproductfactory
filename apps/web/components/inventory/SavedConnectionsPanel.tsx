@@ -11,25 +11,27 @@
 import { listDiscoveryConnections } from "@/lib/actions/discovery";
 import { AddDiscoveryConnection } from "./AddDiscoveryConnection";
 import { SavedConnectionRow } from "./SavedConnectionRow";
+import type { GatewayCandidate } from "@/lib/discovery-connection/gateway-candidate";
 
 type Props = {
   detectedGateway: string | null;
+  gatewayCandidates?: GatewayCandidate[];
 };
 
-export async function SavedConnectionsPanel({ detectedGateway }: Props) {
+export async function SavedConnectionsPanel({ detectedGateway, gatewayCandidates = [] }: Props) {
   const result = await listDiscoveryConnections();
 
   // Auth failure — fall back to the first-run hero so the page still renders.
   // The CTA itself is gated by the same permission server-side, so the
   // operator just gets the same "Unauthorized" if they try to save.
   if (!result.ok) {
-    return <AddDiscoveryConnection detectedGateway={detectedGateway} />;
+    return <AddDiscoveryConnection detectedGateway={detectedGateway} gatewayCandidates={gatewayCandidates} />;
   }
 
   const { connections } = result;
 
   if (connections.length === 0) {
-    return <AddDiscoveryConnection detectedGateway={detectedGateway} />;
+    return <AddDiscoveryConnection detectedGateway={detectedGateway} gatewayCandidates={gatewayCandidates} />;
   }
 
   return (
@@ -49,6 +51,7 @@ export async function SavedConnectionsPanel({ detectedGateway }: Props) {
       </div>
       <AddDiscoveryConnection
         detectedGateway={detectedGateway}
+        gatewayCandidates={gatewayCandidates}
         variant="compact"
       />
     </div>

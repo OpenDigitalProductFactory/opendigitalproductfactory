@@ -508,6 +508,7 @@ export * from "./inventory-asset-bridge";
 export * from "./inventory-entity-lifecycle";
 export * from "./inventory-entity-heap-integrity";
 export * from "./inventory-entity-merge-references";
+export * from "./docker-origin";
 export * from "./device-placement";
 export * from "./portfolio-sources";
 export * from "./backlog-portfolio";

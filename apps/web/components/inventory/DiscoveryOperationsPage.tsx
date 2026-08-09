@@ -1,5 +1,9 @@
 import Link from "next/link";
-import { INVENTORY_ENTITY_CANONICAL_WHERE, prisma } from "@dpf/db";
+import {
+  INVENTORY_ENTITY_CANONICAL_WHERE,
+  isDockerOriginEntityKey,
+  prisma,
+} from "@dpf/db";
 
 import { PORTFOLIO_COLOURS } from "@/lib/portfolio";
 
@@ -21,6 +25,7 @@ import { SubnetGroupedInventoryPanel } from "@/components/inventory/SubnetGroupe
 import { TopologyGraph } from "@/components/inventory/TopologyGraph";
 import { CustomerTopologyScopeBar } from "@/components/inventory/CustomerTopologyScopeBar";
 import { CollapsibleList } from "@/components/ui/report-kit/CollapsibleList";
+import { buildGatewayCandidates } from "@/lib/discovery-connection/gateway-candidate";
 
 const STATUS_COLOURS: Record<string, string> = {
   active: "var(--dpf-success)",
@@ -73,18 +78,32 @@ export async function DiscoveryOperationsPage({
     prisma.inventoryEntity.findMany({
       where: {
         ...INVENTORY_ENTITY_CANONICAL_WHERE,
-        entityType: "gateway",
+        entityType: { in: ["gateway", "router"] },
         NOT: { name: { contains: "Docker" } },
       },
-      select: { properties: true },
-      take: 5,
+      select: {
+        id: true,
+        entityKey: true,
+        name: true,
+        manufacturer: true,
+        productModel: true,
+        confidence: true,
+        properties: true,
+      },
+      orderBy: [{ confidence: "desc" }, { name: "asc" }],
+      take: 50,
     }),
   ]);
 
-  const realGatewayIp = detectedGateways
+  const physicalGateways = detectedGateways.filter(
+    (gateway) => !isDockerOriginEntityKey(gateway.entityKey, gateway.name),
+  );
+  const defaultGatewayIp = physicalGateways
+    .filter((gateway) => gateway.entityKey.toLowerCase().startsWith("gateway:"))
     .map((gateway) => (gateway.properties as Record<string, unknown>)?.address as string | undefined)
     .find((address) => address && !address.startsWith("172."))
     ?? null;
+  const gatewayCandidates = buildGatewayCandidates(physicalGateways, defaultGatewayIp);
 
   const staleEntities = await countStaleEntitiesSince(latestRun?.startedAt ?? null);
 
@@ -156,7 +175,10 @@ export async function DiscoveryOperationsPage({
 
       <div className="space-y-4">
         <DiscoveryRunSummary run={latestRun} health={health} />
-        <SavedConnectionsPanel detectedGateway={realGatewayIp} />
+        <SavedConnectionsPanel
+          detectedGateway={defaultGatewayIp}
+          gatewayCandidates={gatewayCandidates}
+        />
         <InventoryExceptionQueue queues={triageQueues} />
         <SubnetGroupedInventoryPanel groups={groupedInventory} />
         <PortfolioQualityIssuesPanel issues={openIssues} />

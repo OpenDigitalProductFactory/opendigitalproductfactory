@@ -8,8 +8,11 @@ vi.mock("@/lib/actions/discovery", () => ({
   listDiscoveryConnections: vi.fn(),
 }));
 vi.mock("./AddDiscoveryConnection", () => ({
-  AddDiscoveryConnection: ({ variant = "hero" }: { variant?: string }) => (
-    <div data-add-cta data-variant={variant} />
+  AddDiscoveryConnection: ({ variant = "hero", gatewayCandidates = [] }: {
+    variant?: string;
+    gatewayCandidates?: unknown[];
+  }) => (
+    <div data-add-cta data-variant={variant} data-gateway-count={gatewayCandidates.length} />
   ),
 }));
 vi.mock("./SavedConnectionRow", () => ({
@@ -26,9 +29,13 @@ const mockList = listDiscoveryConnections as ReturnType<typeof vi.fn>;
 describe("SavedConnectionsPanel", () => {
   it("renders hero CTA when no connections exist", async () => {
     mockList.mockResolvedValue({ ok: true, connections: [] });
-    const html = renderToStaticMarkup(await SavedConnectionsPanel({ detectedGateway: "192.168.0.1" }));
+    const html = renderToStaticMarkup(await SavedConnectionsPanel({
+      detectedGateway: "192.168.0.1",
+      gatewayCandidates: [{ entityId: "gw-1" } as never],
+    }));
     expect(html).toContain('data-add-cta');
     expect(html).toContain('data-variant="hero"');
+    expect(html).toContain('data-gateway-count="1"');
     expect(html).not.toContain('data-row-id');
   });
 
