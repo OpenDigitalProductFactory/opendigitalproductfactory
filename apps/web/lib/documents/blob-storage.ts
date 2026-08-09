@@ -178,10 +178,16 @@ export async function deleteDocumentBlob(input: {
       // The row lock serializes a concurrent pin. Renaming first preserves
       // recoverability, while deleting the row in this same transaction makes
       // every waiting FK insert fail after commit instead of pinning lost bytes.
-      const rows = await tx.$queryRaw<Array<{ id: string }>>`
-        SELECT "id" FROM "DocumentBlob" WHERE "id" = ${input.documentBlobId} FOR UPDATE
+      const rows = await tx.$queryRaw<Array<{ id: string; storageKey: string; sha256: string }>>`
+        SELECT "id", "storageKey", "sha256"
+        FROM "DocumentBlob"
+        WHERE "id" = ${input.documentBlobId}
+        FOR UPDATE
       `;
       if (rows.length !== 1) throw new Error("Document blob metadata was not found.");
+      if (rows[0]!.storageKey !== input.storageKey || rows[0]!.sha256 !== input.expectedSha256) {
+        throw new Error("Document blob metadata does not match the requested storage identity.");
+      }
       if (await tx.initiativeArtifactRetentionPin.count({ where: { documentBlobId: input.documentBlobId } }) > 0) {
         throw new DocumentBlobRetentionError("Pinned initiative document bytes are permanently retained.");
       }

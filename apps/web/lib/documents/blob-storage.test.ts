@@ -1,7 +1,7 @@
 import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   DOCUMENT_TEXT_INLINE_LIMIT_BYTES,
   buildDocumentBlobStorageKey,
@@ -80,7 +80,7 @@ describe("document blob storage", () => {
       storageRoot: tmpRoot,
       db: {
         $transaction: async (work) => work({
-          $queryRaw: async <T>() => { events.push("lock"); return [{ id: "blob-1" }] as unknown as T; },
+          $queryRaw: async <T>() => { events.push("lock"); return [{ id: "blob-1", storageKey: written.storageKey, sha256: written.sha256 }] as unknown as T; },
           initiativeArtifactRetentionPin: { count: async () => { events.push("count"); return 1; } },
           documentBlob: { delete: async () => { events.push("delete"); return { id: "blob-1" }; } },
         }),
@@ -100,7 +100,7 @@ describe("document blob storage", () => {
       storageRoot: tmpRoot,
       db: {
         $transaction: async (work) => work({
-          $queryRaw: async <T>() => { events.push("lock"); return [{ id: "blob-2" }] as unknown as T; },
+          $queryRaw: async <T>() => { events.push("lock"); return [{ id: "blob-2", storageKey: written.storageKey, sha256: written.sha256 }] as unknown as T; },
           initiativeArtifactRetentionPin: { count: async () => { events.push("count"); return 0; } },
           documentBlob: { delete: async () => { events.push("delete"); return { id: "blob-2" }; } },
         }),
@@ -108,6 +108,33 @@ describe("document blob storage", () => {
     });
     expect(events).toEqual(["lock", "count", "delete"]);
     await expect(fs.access(path.join(tmpRoot, written.storageKey))).rejects.toBeDefined();
+  });
+
+  it("rejects cross-identity GC inputs before touching either blob", async () => {
+    const unpinned = await writeDocumentBlob({ content: "unpinned metadata row", storageRoot: tmpRoot });
+    const pinned = await writeDocumentBlob({ content: "pinned evidence bytes", storageRoot: tmpRoot });
+    const deleteMetadata = vi.fn(async () => ({ id: "blob-unpinned" }));
+
+    await expect(deleteDocumentBlob({
+      documentBlobId: "blob-unpinned",
+      storageKey: pinned.storageKey,
+      expectedSha256: pinned.sha256,
+      storageRoot: tmpRoot,
+      db: {
+        $transaction: async (work) => work({
+          $queryRaw: async <T>() => [{
+            id: "blob-unpinned",
+            storageKey: unpinned.storageKey,
+            sha256: unpinned.sha256,
+          }] as unknown as T,
+          initiativeArtifactRetentionPin: { count: async () => 0 },
+          documentBlob: { delete: deleteMetadata },
+        }),
+      },
+    })).rejects.toThrow(/metadata does not match/i);
+    expect(deleteMetadata).not.toHaveBeenCalled();
+    await expect(fs.readFile(path.join(tmpRoot, unpinned.storageKey), "utf8")).resolves.toBe("unpinned metadata row");
+    await expect(fs.readFile(path.join(tmpRoot, pinned.storageKey), "utf8")).resolves.toBe("pinned evidence bytes");
   });
 
   it("restores quarantined bytes when the metadata transaction cannot delete the blob", async () => {
@@ -119,7 +146,7 @@ describe("document blob storage", () => {
       storageRoot: tmpRoot,
       db: {
         $transaction: async (work) => work({
-          $queryRaw: async <T>() => [{ id: "blob-3" }] as unknown as T,
+          $queryRaw: async <T>() => [{ id: "blob-3", storageKey: written.storageKey, sha256: written.sha256 }] as unknown as T,
           initiativeArtifactRetentionPin: { count: async () => 0 },
           documentBlob: { delete: async () => { throw new Error("foreign key restrict"); } },
         }),
