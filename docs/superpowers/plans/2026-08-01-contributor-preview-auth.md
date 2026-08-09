@@ -18,8 +18,11 @@ This is one atomic repair: the clone sanitization, preview-only credential boots
 
 ## Backlog coverage
 
-- Atomic delivery: `BI-1F6C9BE6` covers the full repair.
-- Coverage receipt: unavailable in this session because the active DPF MCP token exposes `search_specs_and_plans` but not `record_plan_backlog_coverage` or `check_plan_backlog_coverage`. This limitation is recorded explicitly rather than represented as a completed live receipt.
+- Decision: atomic
+- Parent: `BI-1F6C9BE6`
+- Receipt: `cmsl5j1gz02ms01l83buj3lvp`
+- Rationale: Credential invalidation, development-only admin provisioning, null-safe authorization, preview-origin redirects, and runtime acceptance form one security boundary; shipping a subset leaves the preview unsafe or unusable.
+- Dependencies: none
 
 ## Risks and rollback
 
