@@ -728,6 +728,9 @@
       "docs/architecture/ai-agent-meta-model.md",
       "docs/architecture/mcp-tool-surface-ergonomics-audit.md"
     ],
+    "apps/web/lib/mcp/load-tools.ts": [
+      "docs/architecture/agent-standards-dpf-conformance.md"
+    ],
     "apps/web/lib/mcp/packs/backlog-pack.ts": [
       "docs/architecture/backlog-archetype-scope.md"
     ],
@@ -968,6 +971,9 @@
     ],
     "apps/web/lib/tak/route-context.ts": [
       "docs/user-guide/ai-workforce/decision-perspective.md"
+    ],
+    "apps/web/lib/tak/tool-intent.ts": [
+      "docs/architecture/agent-standards-dpf-conformance.md"
     ],
     "apps/web/lib/tak/tool-result-budget.ts": [
       "docs/architecture/agent-standards-dpf-conformance.md",
@@ -1921,6 +1927,7 @@
       "apps/web/lib/autonomy/trust-graduation.ts",
       "apps/web/lib/coworker/authorized-surface-runtime.ts",
       "apps/web/lib/identity/aidoc-resolver.ts",
+      "apps/web/lib/mcp/load-tools.ts",
       "apps/web/lib/mcp/tool-tier.ts",
       "apps/web/lib/tak/agent-card-service.ts",
       "apps/web/lib/tak/agent-grants.ts",
@@ -1928,6 +1935,7 @@
       "apps/web/lib/tak/context-arbitrator.ts",
       "apps/web/lib/tak/context-economy-metrics.ts",
       "apps/web/lib/tak/prompt-assembler.ts",
+      "apps/web/lib/tak/tool-intent.ts",
       "apps/web/lib/tak/tool-result-budget.ts",
       "apps/web/lib/tak/tool-script.ts",
       "apps/web/lib/tool-description-hygiene.test.ts",

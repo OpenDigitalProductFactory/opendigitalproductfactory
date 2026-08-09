@@ -1,13 +1,15 @@
 import { describe, it, expect } from "vitest";
 import type { ToolDefinition } from "@/lib/mcp-tools";
 import {
-  selectCoworkerToolBudget,
+  scoreToolIntentRelevance,
   selectLoadableTools,
+  tokenizeIntent,
+} from "@/lib/tak/tool-intent";
+import {
+  selectCoworkerToolBudget,
   deriveCoworkerToolCap,
   deriveSkillCatalogCap,
   capSkillCatalog,
-  scoreToolIntentRelevance,
-  tokenizeIntent,
   LOAD_TOOLS_TOOL,
   LOAD_TOOLS_TOOL_NAME,
   MAX_COWORKER_ATTACHED_TOOLS,

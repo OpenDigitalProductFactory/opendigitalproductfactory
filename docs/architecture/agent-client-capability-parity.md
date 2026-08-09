@@ -19,7 +19,7 @@ Adoption status legend: ✅ adopted · ◐ partial/planned · ⬜ not adopted ·
 | **Compaction style** | summarize + tool-result clearing | encrypted latent-state | `/compress` (lossy) | window scale-out | auto/`/smol` | window-aware `compactAgenticMessages`. ✅ |
 | **Out-of-window instruction retention** | system reminders | — | `/memory add` pin | — | Focus-Chain-like | `withPlanReminder` re-injects plan every iteration. ✅ (ahead) |
 | **Prompt caching / cache boundary** | static/dynamic boundary; ⚠️ TTL 1h→5m (2026-03) | prefix cache | prefix cache | n/a (beta) | provider-dependent | `SYSTEM_PROMPT_DYNAMIC_BOUNDARY` mirrored; local prefix-KV ◐ (R6 verify). ⚠️ track TTL. |
-| **Deferred / search-based tool loading** | Tool Search Tool (`defer_loading`, ~85% list cut) | all tools presented | all enabled | discovers MCP | per-tool wildcard perms | native loop subsets via grants+phase; external CLI path **defaults non-Claude-Code clients to core tier** ● (`?tier=full` opts back in; R3 Phase 1); model-driven deferral staged (Phase 2). |
+| **Deferred / search-based tool loading** | Tool Search Tool (`defer_loading`, ~85% list cut) | host-deferred catalog observed in Desktop; exact host refresh semantics not documented | all enabled | discovers MCP | per-tool wildcard perms | native and external paths share intent matching; external CLI path **defaults non-Claude-Code clients to core tier** and ships `load_tools` exact/intent expansion with append-not-swap, SSE `list_changed`, and re-list fallback. ✅ server contract; ◐ per-host live refresh proof. |
 | **Code execution / programmatic tool calling** | code-exec w/ MCP (37–98% cut) | sandboxed shell | — | — | — | `run_tool_script` shipped dark ◐ (R4; governed read-only, flag+grant gated, live-verify pending). |
 | **Tool-result cap** | ~25K-token default | — | — | — | — | `tool-result-budget.ts` (native + MCP route). ✅ |
 | **Subagents / context isolation** | Task subagents | subagents | subagents (tool allowlist) | up to 8 parallel | primary+sub | Build Studio specialists; A2A. ✅ |
@@ -107,7 +107,7 @@ Source checklist also lives in `packages/dpf-skill-pack/README.md` (adapter chec
 ## What this currently tells us (the open adoption gaps)
 
 - **Governance parity (2026-07-26):** Waves 1–3 closed Grok host/BS seed, competitive disable on Codex/Grok/Claude, worktree Tier-A, and BS sandbox GC. Remaining: Antigravity disable+hooks proof, OpenCode/Gemini/Cursor product pull, Docker image reap (separate). Token economy rows below remain separate.
-- **R3 — deferred tools on `/api/mcp/v1`** (⬜): external CLIs pull the full JWT-scoped surface; adopt the Tool Search pattern.
+- **R3 — deferred tools on `/api/mcp/v1`** (✅ server / ◐ host proof): Phase 2 shipped in PR #4112 and the 2026-08-08 conformance hardening adds initialize bootstrap guidance, shared natural-language intent resolution, structured recovery, and a four-profile protocol probe. Do not infer that a host honors `list_changed`; record that separately when observed live.
 - **R4 — code execution in the native loop** (⬜): the single biggest local-window token lever; sandbox already exists.
 - **R6 — local prefix-KV cache** (◐): confirm DMR/llama.cpp reuses the static prefix.
 - **⚠️ prompt-cache TTL**: re-confirm each refresh; the 5-minute default changes the break-even math for long sessions.

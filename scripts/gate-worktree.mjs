@@ -1112,6 +1112,12 @@ async function main() {
         leaseEvents,
         evidencePending: false,
         queueObserver: queueObserverState(),
+        admission: {
+          queuePosition: admission?.queuePosition ?? null,
+          waitAgeMs: admission?.waitAgeMs ?? null,
+          poolPolicy: claimResponse?.data?.poolPolicy ?? null,
+          hostPressure,
+        },
       });
       break;
     }
@@ -1136,6 +1142,12 @@ async function main() {
         leaseEvents,
         evidencePending: false,
         queueObserver: queueObserverState(),
+        admission: {
+          queuePosition: admission.queuePosition ?? null,
+          waitAgeMs: admission.waitAgeMs ?? null,
+          poolPolicy: claimResponse?.data?.poolPolicy ?? null,
+          hostPressure,
+        },
       });
       if (Date.now() >= deadline) {
         await releaseLeaseOnce();
@@ -1757,6 +1769,9 @@ function writeState(stateFile, {
   evidencePending = false,
   evidencePendingReason = "",
   quiescence = null,
+  recovery = null,
+  queueObserver = null,
+  admission = null,
 }) {
   writeLocalCiGateState(stateFile, {
     branch,
@@ -1771,6 +1786,9 @@ function writeState(stateFile, {
     evidencePending,
     evidencePendingReason,
     quiescence,
+    recovery,
+    queueObserver,
+    admission,
   });
 }
 

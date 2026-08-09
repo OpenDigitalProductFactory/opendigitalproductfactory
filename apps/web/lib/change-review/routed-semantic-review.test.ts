@@ -92,6 +92,28 @@ describe("routed semantic review", () => {
     expect(routeAndCall).not.toHaveBeenCalled();
   });
 
+  it("defers review so an established local-CI queue can take the next safe window", async () => {
+    vi.mocked(inspectLocalProviderCapacity).mockResolvedValue({
+      available: false,
+      reason: "local-ci-queued-capacity-reservation",
+    });
+
+    const result = await dispatchRoutedSemanticReview("review this", {
+      strategyProfile: "high-assurance",
+      reviewerId: "change-reviewer",
+      specialistIds: [],
+      surface: "external",
+    });
+
+    expect(result).toEqual({
+      decision: "inconclusive",
+      issues: [],
+      summary: "Semantic review deferred so the established local-CI queue can claim the next safe host window.",
+      inconclusiveReason: "local-ci-queued-capacity-reservation",
+    });
+    expect(routeAndCall).not.toHaveBeenCalled();
+  });
+
   it("does not defer review for an unrelated nonproduction lease", async () => {
     vi.mocked(inspectLocalProviderCapacity).mockResolvedValue({ available: true, reason: null });
     vi.mocked(routeAndCall).mockResolvedValue({

@@ -14,6 +14,7 @@ import {
   type Intent,
 } from "@/components/ui/report-kit/statusColors";
 import { CartesianSceneCanvas } from "@/components/twin/cartesian/CartesianSceneCanvas";
+import { createClientOperationId } from "@/lib/client-operation-id";
 import type { HospitalityServiceTurnStage } from "@/lib/storefront/hospitality-service-turn";
 import {
   advanceRestaurantServiceTurn,
@@ -267,7 +268,7 @@ export function RestaurantFloorOperations({
     startTransition(async () => {
       const next = await executeRestaurantFloorCommand({
         kind: "assign",
-        idempotencyKey: `seat:${selectedDemand.id}:${Date.now()}:${crypto.randomUUID()}`,
+        idempotencyKey: `seat:${selectedDemand.id}:${Date.now()}:${createClientOperationId()}`,
         expectedVersion: selectedOption.expectedVersion,
         interval: selectedOption.interval,
         entityRefs: {
@@ -290,7 +291,7 @@ export function RestaurantFloorOperations({
   ) => {
     startTransition(async () => {
       const nextResult = await advanceRestaurantServiceTurn({
-        idempotencyKey: `turn:${turn.id}:${next.stage}:${turn.version}:${crypto.randomUUID()}`,
+        idempotencyKey: `turn:${turn.id}:${next.stage}:${turn.version}:${createClientOperationId()}`,
         serviceTurnId: turn.id,
         expectedVersion: turn.version,
         stage: next.stage,
@@ -304,7 +305,7 @@ export function RestaurantFloorOperations({
     if (!selectedMoveCommand || !selectedMoveOption) return;
     startTransition(async () => {
       const nextResult = await moveRestaurantParty({
-        idempotencyKey: `move:${selectedMoveCommand.serviceTurnId}:${selectedMoveCommand.expectedTurnVersion}:${crypto.randomUUID()}`,
+        idempotencyKey: `move:${selectedMoveCommand.serviceTurnId}:${selectedMoveCommand.expectedTurnVersion}:${createClientOperationId()}`,
         serviceTurnId: selectedMoveCommand.serviceTurnId,
         expectedTurnVersion: selectedMoveCommand.expectedTurnVersion,
         expectedSeatingVersion: selectedMoveOption.expectedVersion,
