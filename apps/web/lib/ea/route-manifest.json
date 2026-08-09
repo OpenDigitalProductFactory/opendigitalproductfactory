@@ -1,6 +1,6 @@
 {
   "generator": "apps/web/scripts/build-route-manifest.ts",
-  "routeCount": 615,
+  "routeCount": 619,
   "routes": [
     {
       "routePath": "/",
@@ -3507,6 +3507,61 @@
       ],
       "dynamicParams": [],
       "file": "apps/web/app/api/v1/portfolio/tree/route.ts"
+    },
+    {
+      "routePath": "/api/v1/surfaces",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "surfaces"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/v1/surfaces/route.ts"
+    },
+    {
+      "routePath": "/api/v1/surfaces/[sessionId]",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "surfaces",
+        "[sessionId]"
+      ],
+      "dynamicParams": [
+        "sessionId"
+      ],
+      "file": "apps/web/app/api/v1/surfaces/[sessionId]/route.ts"
+    },
+    {
+      "routePath": "/api/v1/surfaces/[sessionId]/act",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "surfaces",
+        "[sessionId]",
+        "act"
+      ],
+      "dynamicParams": [
+        "sessionId"
+      ],
+      "file": "apps/web/app/api/v1/surfaces/[sessionId]/act/route.ts"
+    },
+    {
+      "routePath": "/api/v1/surfaces/[sessionId]/client-state",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "surfaces",
+        "[sessionId]",
+        "client-state"
+      ],
+      "dynamicParams": [
+        "sessionId"
+      ],
+      "file": "apps/web/app/api/v1/surfaces/[sessionId]/client-state/route.ts"
     },
     {
       "routePath": "/api/v1/upload",

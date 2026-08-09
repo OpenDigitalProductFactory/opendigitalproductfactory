@@ -241,6 +241,7 @@ consequence banner; a form that re-implements these is a defect (BI-8E74C749).
 3. **Required/optional state** — exposed visibly (`*` / `(optional)`) **and** to AT (`aria-required`, the native `required` attribute, and an SR-only "(required)").
 4. **Correct `autocomplete`** — `username`/`email` for identifiers, `current-password` for sign-in, `new-password` for set/confirm/temporary passwords, `name`/`tel`, and the `address-line1`/`address-level1`/`address-level2`/`postal-code`/`country` tokens for addresses. Use `off` only for admin-entered credentials for *another* user, and one-off date/time pickers.
 5. **Inline validation** — field-level errors set `aria-invalid` and render through `FormField`'s described `role="alert"` region, not only a form-level banner.
+6. **Semantic projection attributes** — typed primitives forward applicable native control attributes, including `data-surface-node-id`, to the actual `<input>` or `<select>`. Put Authorized Surface identifiers on the interactive control—not a wrapper—so DOM/accessibility conformance can prove that the rendered UX is a projection of the governed semantic contract.
 
 **Mutating submits** show pending → success/failure through `SubmitButton` + `FormStatus` (never a silent recolor or a bare text swap).
 

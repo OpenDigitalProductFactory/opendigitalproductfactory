@@ -1,5 +1,6 @@
 // Direct JSON import — bundler resolves this at build time, works in both dev and Docker standalone
 import agentRegistryData from "../../../../packages/db/data/agent_registry.json";
+import { AUTHORIZED_SURFACE_TOOL_GRANTS } from "@/lib/coworker/authorized-surface-coworker-contract";
 import { PRODUCT_MANAGEMENT_TOOL_GRANTS } from "./product-management-tool-grants";
 const agentRegistry = agentRegistryData as { agents: Array<Record<string, unknown>> };
 /**
@@ -64,7 +65,6 @@ export function expandGrants(grants: readonly string[]): string[] {
   }
   return Array.from(expanded);
 }
-
 /**
  * Read-only baseline every coworker holds, regardless of its agent-specific
  * grants. Encodes the platform design criterion (operator, 2026-06-06,
@@ -97,7 +97,6 @@ export const COWORKER_READ_BASELINE_GRANTS: readonly string[] = [
   "code_graph_read",
   "work_capsule_read",
 ];
-
 /**
  * Maps platform tool names to agent grant categories.
  * A tool is allowed if the agent has ANY of the grants it maps to —
@@ -743,6 +742,7 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   screen_propose_action:   ["coworker_screen_drive"],
   screen_dispatch_action:  ["coworker_screen_drive"],
   screen_set_input:        ["coworker_screen_fill"],
+  ...AUTHORIZED_SURFACE_TOOL_GRANTS,
 };
 
 /**

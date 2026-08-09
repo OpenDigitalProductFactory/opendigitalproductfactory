@@ -18,7 +18,7 @@
 
 import { prisma } from "@dpf/db";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
+import type { ToolDefinition, ToolExecutionContext, ToolResult } from "@/lib/mcp-tools";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
 
 const definitions: ToolDefinition[] = [
@@ -206,10 +206,18 @@ const definitions: ToolDefinition[] = [
 
 async function screenDescribe(
   _params: Record<string, unknown>,
-  _userId: string,
-  context?: { routeContext?: string },
+  userId: string,
+  context?: ToolExecutionContext,
 ): Promise<ToolResult> {
   const routeContext = context?.routeContext;
+  const { surfacePack } = await import("./surface-pack");
+  const surface = routeContext
+    ? await surfacePack.handlers.surface_open({ route: routeContext, mode: "browser" }, userId, context)
+    : null;
+  if (surface && !surface.success) {
+    const { observeSurfaceCompatibilityFallback } = await import("@/lib/coworker/authorized-surface-observability");
+    observeSurfaceCompatibilityFallback({ adapter: "screen", reason: surface.error ?? "surface_unavailable", route: routeContext });
+  }
   return {
     success: true,
     message: routeContext
@@ -220,20 +228,35 @@ async function screenDescribe(
         type: "screen:describe_requested",
         payload: { routeContext: routeContext ?? null },
       },
-      // The actual manifest summary will be returned by the chat handler
-      // once it plumbs the active manifest into the executeTool context
-      // (tracked in BI-DF6079E9 follow-on). Returning the request shape
-      // here makes the tool callable and grant-checked today.
-      note: "Manifest summary plumbing lands in BI-DF6079E9 follow-on.",
+      ...(surface?.success ? { authorizedSurface: surface.data } : {}),
+      ...(surface && !surface.success ? { compatibilityFallback: surface.error ?? "surface_unavailable" } : {}),
     },
   };
 }
 
 async function screenGetState(
   _params: Record<string, unknown>,
-  _userId: string,
-  context?: { routeContext?: string },
+  userId: string,
+  context?: ToolExecutionContext,
 ): Promise<ToolResult> {
+  const { surfacePack } = await import("./surface-pack");
+  const opened = context?.routeContext
+    ? await surfacePack.handlers.surface_open({ route: context.routeContext, mode: "browser" }, userId, context)
+    : null;
+  const sessionId = opened?.success
+    ? ((opened.data?.session as { sessionId?: string } | undefined)?.sessionId ?? null)
+    : null;
+  const snapshot = sessionId
+    ? await surfacePack.handlers.surface_snapshot({ sessionId }, userId, context)
+    : null;
+  if ((opened && !opened.success) || (snapshot && !snapshot.success)) {
+    const { observeSurfaceCompatibilityFallback } = await import("@/lib/coworker/authorized-surface-observability");
+    observeSurfaceCompatibilityFallback({
+      adapter: "screen",
+      reason: snapshot?.error ?? opened?.error ?? "surface_unavailable",
+      route: context?.routeContext,
+    });
+  }
   return {
     success: true,
     message: "Screen state snapshot requested.",
@@ -242,7 +265,10 @@ async function screenGetState(
         type: "screen:state_requested",
         payload: { routeContext: context?.routeContext ?? null },
       },
-      note: "Screen state plumbing lands in BI-DF6079E9 follow-on.",
+      ...(snapshot?.success ? { authorizedSurface: snapshot.data } : {}),
+      ...((opened && !opened.success) || (snapshot && !snapshot.success)
+        ? { compatibilityFallback: snapshot?.error ?? opened?.error ?? "surface_unavailable" }
+        : {}),
     },
   };
 }

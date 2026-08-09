@@ -8,7 +8,6 @@ import {
   knownGrantKeys,
   COWORKER_READ_BASELINE_GRANTS,
 } from "./agent-grants";
-
 describe("TOOL_TO_GRANTS — Build / Sandbox entries", () => {
   it("write_sandbox_file requires sandbox_execute", () => {
     expect(isToolAllowedByGrants("write_sandbox_file", ["sandbox_execute"])).toBe(true);

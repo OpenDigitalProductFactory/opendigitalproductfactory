@@ -565,6 +565,13 @@
     "apps/web/lib/coworker-lifecycle/lifecycle-gate.ts": [
       "docs/architecture/mcp-tool-authorization-runbook.md"
     ],
+    "apps/web/lib/coworker/authorized-surface-registry.ts": [
+      "docs/architecture/orientation.md"
+    ],
+    "apps/web/lib/coworker/authorized-surface-runtime.ts": [
+      "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md",
+      "docs/architecture/agent-standards-dpf-conformance.md"
+    ],
     "apps/web/lib/decision-perspective/build-studio-gate.ts": [
       "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md"
     ],
@@ -735,6 +742,9 @@
     ],
     "apps/web/lib/mcp/packs/runtime-coordination-pack.ts": [
       "docs/architecture/mcp-tool-packs.md"
+    ],
+    "apps/web/lib/mcp/packs/surface-pack.ts": [
+      "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md"
     ],
     "apps/web/lib/mcp/packs/work-capsules-pack.ts": [
       "docs/architecture/mcp-tool-packs.md"
@@ -1281,6 +1291,9 @@
     "packages/storefront-templates/src/types.ts": [
       "docs/architecture/archetype-business-value-streams.md"
     ],
+    "packages/types/src/authorized-surface.ts": [
+      "docs/architecture/orientation.md"
+    ],
     "packages/types/src/entities.ts": [
       "docs/architecture/package-boundaries.md"
     ],
@@ -1363,6 +1376,9 @@
     ],
     "scripts/check-no-dialog-in-transition.mjs": [
       "docs/architecture/theme-aware-styling-runbook.md"
+    ],
+    "scripts/check-no-governed-surface-without-mcp-tool.mjs": [
+      "docs/architecture/orientation.md"
     ],
     "scripts/check-no-hand-rolled-loading.mjs": [
       "docs/platform-usability-standards.md"
@@ -1831,6 +1847,7 @@
       "apps/web/lib/actions/build.ts",
       "apps/web/lib/build-pipeline.ts",
       "apps/web/lib/build/progress-visibility.ts",
+      "apps/web/lib/coworker/authorized-surface-runtime.ts",
       "apps/web/lib/decision-perspective/build-studio-gate.ts",
       "apps/web/lib/explore/feature-build-types.ts",
       "apps/web/lib/integrate/build-orchestrator.ts",
@@ -1838,6 +1855,7 @@
       "apps/web/lib/integrate/build-studio-config.ts",
       "apps/web/lib/integrate/claude-dispatch.ts",
       "apps/web/lib/marketing/scheduler.ts",
+      "apps/web/lib/mcp/packs/surface-pack.ts",
       "apps/web/lib/queue/functions/deliberation-run.ts",
       "apps/web/lib/queue/functions/index.ts",
       "apps/web/lib/queue/functions/quiescence-run.ts",
@@ -1907,6 +1925,7 @@
       "apps/web/lib/actions/golden-triangle.ts",
       "apps/web/lib/autonomy/regulatory-ceiling.ts",
       "apps/web/lib/autonomy/trust-graduation.ts",
+      "apps/web/lib/coworker/authorized-surface-runtime.ts",
       "apps/web/lib/identity/aidoc-resolver.ts",
       "apps/web/lib/mcp/load-tools.ts",
       "apps/web/lib/mcp/tool-tier.ts",
@@ -2114,7 +2133,10 @@
     ],
     "docs/architecture/orientation.md": [
       ".github/workflows/migration-safety-guard.yml",
-      "apps/web/lib/ai-inference.ts"
+      "apps/web/lib/ai-inference.ts",
+      "apps/web/lib/coworker/authorized-surface-registry.ts",
+      "packages/types/src/authorized-surface.ts",
+      "scripts/check-no-governed-surface-without-mcp-tool.mjs"
     ],
     "docs/architecture/package-boundaries.md": [
       "apps/web/lib/contracts/entity-contract-drift.ts",

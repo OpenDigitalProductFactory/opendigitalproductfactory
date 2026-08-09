@@ -1,7 +1,6 @@
 // apps/web/lib/agentic-loop.ts
 // Agentic execution loop: LLM calls tools iteratively until it responds with text only.
 // This is the core behavioral difference between a chatbot and an agent.
-
 import { routeAndCall, type RoutedInferenceResult } from "@/lib/routed-inference";
 import {
   detectRepeatedToolCall,
@@ -11,6 +10,7 @@ import {
 } from "@/lib/tak/runtime-issues";
 import { isRedundantReaskQuestion } from "@/lib/tak/conversation-intent";
 import { PLATFORM_TOOLS, toolsToOpenAIFormat, type ToolDefinition, type ToolResult } from "@/lib/mcp-tools";
+import { createAuthorizedSurfaceTurnGovernance } from "@/lib/coworker/authorized-surface-execution-context";
 import { LOAD_TOOLS_TOOL_NAME, selectLoadableTools } from "@/lib/tak/tool-intent";
 import {
   classifyEvidenceRequirement,
@@ -1288,7 +1288,6 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
   let hasResolvedSkillInvocation = false;
   const interactionMode: "chat" | "autonomous" = params.interactionMode ?? "autonomous";
   const proposeSideEffects = params.proposeSideEffects ?? false;
-
   const userContext = await resolveUserContext(userId);
 
   // EP-INF-012: Load admin-configured model assignment for this agent.
@@ -2596,7 +2595,9 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
             // time (BI-FD7E4D72) — otherwise a coworker whose own grants lack a
             // baseline read grant gets the tool attached but rejected on call.
             // Autonomous turns leave this false, so their authority is unchanged.
-            coworkerReadBaseline: interactionMode === "chat", externalAccessEnabled: toolDef.requiresExternalAccess || undefined,
+            coworkerReadBaseline: interactionMode === "chat",
+            ...createAuthorizedSurfaceTurnGovernance({ interactionMode, apiTokenId, route: routeContext, chatHistory }),
+            externalAccessEnabled: toolDef.requiresExternalAccess || undefined,
             // BI-F4A30FCB (Dale dogfood 2026-05-24): plumb the build the
             // user is messaging from into tool context so phase-scoped
             // tools (start_ideate_research, start_scout_research) can

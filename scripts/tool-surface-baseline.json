@@ -3,14 +3,14 @@
   "selectionCliff": 15,
   "entries": {
     "registry.toolDefinitions": {
-      "value": 363,
-      "reason": "Adds find_coworker — read-only coworker-roster discovery-by-intent (the A2A-plane twin of load_tools). No existing tool carries it: request_coworker/summon_coworker are ACTION verbs that require an exact agentId/slug, so a model that doesn't already know the roster cannot route work. find_coworker returns the matching coworkers' ids so those action tools become usable. BI-5FB59BC6.",
+      "value": 371,
+      "reason": "Adds the six-tool Authorized Surface Contract protocol (surface_list/open/snapshot/query/act/close) plus read and atomic configure/test tools for the Discovery reference surface. The generic protocol replaces page-specific coworker tool growth, is force-budgeted as one universal perception/action capability, and re-enters existing governed domain tools for persistent effects. EP-F7E35344.",
       "recordedAt": "2026-08-08"
     },
     "registry.packFiles": {
-      "value": 87,
-      "reason": "Adds recruiting-pipeline-pack.ts (the get_recruiting_pipeline pack) — the Absorb coworker surface over the shared recruiting read-model. One pack, one tool; reuses lib/recruiting/pipeline-read-model.ts rather than adding read logic. BI-E64D11AE.",
-      "recordedAt": "2026-08-06"
+      "value": 88,
+      "reason": "Adds one generic surface-pack.ts for the versioned Authorized Surface Contract. It serves browser, mobile, workroom, scheduled, background, headless, and external callers through the same compact protocol instead of adding one pack per UX surface. EP-F7E35344.",
+      "recordedAt": "2026-08-08"
     },
     "tier.coreToolNames": {
       "value": 30,

@@ -46,6 +46,7 @@ import { stockCoveragePack } from "./packs/stock-coverage-pack";
 import { queueAwarenessPack } from "./packs/queue-awareness-pack";
 import { documentPack } from "./packs/document-pack";
 import { screenPack } from "./packs/screen-pack";
+import { surfacePack } from "./packs/surface-pack";
 import { nonprodLeasePack } from "./packs/nonprod-lease-pack";
 import { knowledgePack } from "./packs/knowledge-pack";
 import { demandScoringPack } from "./packs/demand-scoring-pack";
@@ -128,6 +129,7 @@ export const TOOL_PACK_REGISTRY = composeToolPacks([
   queueAwarenessPack,
   documentPack,
   screenPack,
+  surfacePack,
   nonprodLeasePack,
   knowledgePack,
   demandScoringPack,

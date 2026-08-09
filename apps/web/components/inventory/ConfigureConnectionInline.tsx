@@ -227,7 +227,10 @@ export function ConfigureConnectionInline({
   };
 
   return (
-    <div className="mt-4 space-y-4 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-4">
+    <div
+      className="mt-4 space-y-4 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-4"
+      data-surface-node-id="connection.form"
+    >
       <p className="text-xs font-medium uppercase tracking-[0.16em] text-[var(--dpf-muted)]">
         Gateway connection
       </p>
@@ -235,6 +238,7 @@ export function ConfigureConnectionInline({
       {candidates.length > 1 && (
         <SelectField
           name="gateway"
+          data-surface-node-id="connection.gateway"
           label="Gateway"
           value={selectedGatewayId}
           onValueChange={selectGateway}
@@ -273,33 +277,44 @@ export function ConfigureConnectionInline({
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
         <SelectField
           name="discovery-method"
+          data-surface-node-id="connection.method"
           label="Discovery Method"
           value={collectorType}
           onValueChange={changeCollector}
           options={COLLECTOR_TYPES}
         />
         {isUnifi && (
-          <TextField name="site" label="Site" value={site} onValueChange={setSite} placeholder="default" />
+          <TextField name="site" data-surface-node-id="connection.site" label="Site" value={site} onValueChange={setSite} placeholder="default" />
         )}
         {isSnmp && (
           <TextField
             name="community-string"
+            data-surface-node-id="connection.community"
             label="Community String"
+            type="password"
             value={apiKey}
             onValueChange={setApiKey}
+            autoComplete="new-password"
             placeholder="public"
           />
         )}
       </div>
 
+      {isSnmp && (
+        <p className="text-xs leading-5 text-[var(--dpf-muted)]">
+          SNMP discovers network devices. SMTP sends outbound email and is configured elsewhere.
+        </p>
+      )}
+
       {isUnifi ? (
         <details className="rounded-md border border-[var(--dpf-border)] px-3 py-2">
-          <summary className="cursor-pointer text-sm font-medium text-[var(--dpf-accent)]">
+          <summary data-surface-node-id="connection.manual-recovery" className="cursor-pointer text-sm font-medium text-[var(--dpf-accent)]">
             Manual gateway
           </summary>
           <div className="mt-3">
             <TextField
               name="gateway-address"
+              data-surface-node-id="connection.target"
               label="Gateway address"
               value={manualEndpoint}
               onValueChange={(value) => {
@@ -316,6 +331,7 @@ export function ConfigureConnectionInline({
       ) : (
         <TextField
           name="discovery-endpoint"
+          data-surface-node-id="connection.target"
           label={isSnmp ? "Target IP or Hostname" : "Subnet to scan"}
           value={endpointInput}
           onValueChange={(value) => {
@@ -331,6 +347,7 @@ export function ConfigureConnectionInline({
       {isUnifi && (
         <TextField
           name="api-key"
+          data-surface-node-id="connection.community"
           label={keyRequired ? "API Key" : "API Key (leave blank to keep existing)"}
           type="password"
           value={apiKey}
@@ -344,6 +361,7 @@ export function ConfigureConnectionInline({
       {isUnifi && (
         <CheckboxField
           name="tls-insecure"
+          data-surface-node-id="connection.tls-insecure"
           label="Allow self-signed certificate"
           checked={tlsInsecure}
           onCheckedChange={setTlsInsecure}
@@ -352,7 +370,7 @@ export function ConfigureConnectionInline({
       )}
 
       <div className="flex flex-wrap items-center gap-3">
-        <SubmitButton type="button" onClick={handleSave} pending={isPending} pendingLabel="Connecting…">
+        <SubmitButton data-surface-node-id="connection.save-and-test" type="button" onClick={handleSave} pending={isPending} pendingLabel="Connecting…">
           Save &amp; Test
         </SubmitButton>
         <FormStatus

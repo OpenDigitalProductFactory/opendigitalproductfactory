@@ -206,11 +206,15 @@ export async function resolveAutonomousWorkTools(input: {
   deferredTools: ToolDefinition[];
 }> {
   const { getAvailableTools, toolsToOpenAIFormat } = await import("@/lib/mcp-tools");
+  const { COWORKER_AUTHORIZED_SURFACE_BASELINE_GRANTS } = await import(
+    "@/lib/coworker/authorized-surface-coworker-contract"
+  );
   const authorized = await getAvailableTools(input.userContext, {
     mode: input.mode,
     externalAccessEnabled: input.externalAccessEnabled,
     unifiedMode: input.unifiedMode,
     agentId: input.agentId,
+    additionalGrants: COWORKER_AUTHORIZED_SURFACE_BASELINE_GRANTS,
   });
 
   // BI-CAP-F2D39F8F: right-size the ATTACHMENT for autonomous runs with the
@@ -221,8 +225,16 @@ export async function resolveAutonomousWorkTools(input: {
   // untouched: deferred tools stay authorized and loadable via load_tools.
   // Fail-open — any budget error falls back to the full authorized surface.
   try {
-    const { selectCoworkerToolBudget, deriveCoworkerToolCap, LOAD_TOOLS_TOOL, LOAD_TOOLS_TOOL_NAME } =
+    const {
+      selectCoworkerToolBudget,
+      deriveCoworkerToolCap,
+      LOAD_TOOLS_TOOL,
+      LOAD_TOOLS_TOOL_NAME,
+    } =
       await import("@/lib/actions/coworker-tool-budget");
+    const { AUTHORIZED_SURFACE_TOOL_NAMES } = await import(
+      "@/lib/coworker/authorized-surface-coworker-contract"
+    );
     const { getAgentToolGrantsAsync } = await import("@/lib/tak/agent-grants");
     const { resolveLocalServedContextTokens } = await import(
       "@/lib/inference/local-model-context-reconcile"
@@ -250,7 +262,7 @@ export async function resolveAutonomousWorkTools(input: {
       tools: authorized,
       roleGrants,
       pageActionNames: new Set(routeDomainToolNames),
-      alwaysIncludeNames: new Set([LOAD_TOOLS_TOOL_NAME]),
+      alwaysIncludeNames: new Set([LOAD_TOOLS_TOOL_NAME, ...AUTHORIZED_SURFACE_TOOL_NAMES]),
       cap: effectiveCap,
       intentQuery: input.intentQuery,
     });

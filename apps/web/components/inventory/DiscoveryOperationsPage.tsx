@@ -1,21 +1,8 @@
 import Link from "next/link";
-import {
-  INVENTORY_ENTITY_CANONICAL_WHERE,
-  isDockerOriginEntityKey,
-  prisma,
-} from "@dpf/db";
-
 import { PORTFOLIO_COLOURS } from "@/lib/portfolio";
-
-import {
-  countStaleEntitiesSince,
-  getInventoryEntitiesGroupedBySubnet,
-  getInventoryTriageQueues,
-  getLatestDiscoveryRun,
-  getOpenPortfolioQualityIssues,
-  summarizeDiscoveryHealth,
-} from "@/lib/discovery-data";
-import { getFullGraphData } from "@/lib/actions/graph";
+import { getDiscoveryOperationsViewModel } from "@/lib/discovery-operations-view-model";
+import { auth } from "@/lib/auth";
+import { can } from "@/lib/permissions";
 import { DataEnrichmentHelpNote } from "@/components/inventory/DataEnrichmentHelpNote";
 import { DiscoveryRunSummary } from "@/components/inventory/DiscoveryRunSummary";
 import { InventoryExceptionQueue } from "@/components/inventory/InventoryExceptionQueue";
@@ -25,11 +12,6 @@ import { SubnetGroupedInventoryPanel } from "@/components/inventory/SubnetGroupe
 import { TopologyGraph } from "@/components/inventory/TopologyGraph";
 import { CustomerTopologyScopeBar } from "@/components/inventory/CustomerTopologyScopeBar";
 import { CollapsibleList } from "@/components/ui/report-kit/CollapsibleList";
-import {
-  buildGatewayCandidates,
-  gatewayConnectionAddresses,
-  gatewayEvidenceWhere,
-} from "@/lib/discovery-connection/gateway-candidate";
 
 const STATUS_COLOURS: Record<string, string> = {
   active: "var(--dpf-success)",
@@ -55,80 +37,23 @@ type DiscoveryOperationsPageProps = {
 export async function DiscoveryOperationsPage({
   isLegacyAlias = false,
 }: DiscoveryOperationsPageProps) {
-  const gatewayConnectionEvidence = await prisma.discoveryConnection.findMany({
-    select: {
-      collectorType: true,
-      endpointUrl: true,
-      status: true,
-    },
-  });
-  const connectionAddresses = gatewayConnectionAddresses(gatewayConnectionEvidence);
-  const [
+  const session = await auth();
+  const includeConnections = !!session?.user && can({
+    platformRole: session.user.platformRole,
+    isSuperuser: session.user.isSuperuser,
+  }, "manage_provider_connections");
+  const {
     products,
     latestRun,
     groupedInventory,
     triageQueues,
     openIssues,
     graphData,
-    detectedGateways,
-  ] = await Promise.all([
-    prisma.digitalProduct.findMany({
-      orderBy: [{ portfolio: { name: "asc" } }, { name: "asc" }],
-      select: {
-        id: true,
-        name: true,
-        lifecycleStatus: true,
-        portfolio: { select: { slug: true, name: true } },
-        taxonomyNode: { select: { nodeId: true } },
-      },
-    }),
-    getLatestDiscoveryRun(),
-    getInventoryEntitiesGroupedBySubnet(),
-    getInventoryTriageQueues(),
-    getOpenPortfolioQualityIssues(),
-    getFullGraphData(),
-    prisma.inventoryEntity.findMany({
-      where: {
-        ...INVENTORY_ENTITY_CANONICAL_WHERE,
-        ...gatewayEvidenceWhere(connectionAddresses),
-        NOT: { name: { contains: "Docker" } },
-      },
-      select: {
-        id: true,
-        entityKey: true,
-        name: true,
-        manufacturer: true,
-        productModel: true,
-        confidence: true,
-        properties: true,
-      },
-      orderBy: [{ confidence: "desc" }, { name: "asc" }],
-      take: 50,
-    }),
-  ]);
-
-  const physicalGateways = detectedGateways.filter(
-    (gateway) => !isDockerOriginEntityKey(gateway.entityKey, gateway.name),
-  );
-  const defaultGatewayIp = physicalGateways
-    .filter((gateway) => gateway.entityKey.toLowerCase().startsWith("gateway:"))
-    .map((gateway) => (gateway.properties as Record<string, unknown>)?.address as string | undefined)
-    .find((address) => address && !address.startsWith("172."))
-    ?? connectionAddresses[0]
-    ?? null;
-  const gatewayCandidates = buildGatewayCandidates(
-    physicalGateways,
-    defaultGatewayIp,
-    gatewayConnectionEvidence,
-  );
-
-  const staleEntities = await countStaleEntitiesSince(latestRun?.startedAt ?? null);
-
-  const health = summarizeDiscoveryHealth({
-    totalEntities: groupedInventory.totalCount,
-    staleEntities,
-    openIssues: openIssues.length,
-  });
+    detectedGateway,
+    gatewayCandidates,
+    health,
+    connections,
+  } = await getDiscoveryOperationsViewModel({ includeConnections });
 
   return (
     <div className="space-y-6">
@@ -193,8 +118,9 @@ export async function DiscoveryOperationsPage({
       <div className="space-y-4">
         <DiscoveryRunSummary run={latestRun} health={health} />
         <SavedConnectionsPanel
-          detectedGateway={defaultGatewayIp}
+          detectedGateway={detectedGateway}
           gatewayCandidates={gatewayCandidates}
+          connections={connections}
         />
         <InventoryExceptionQueue queues={triageQueues} />
         <SubnetGroupedInventoryPanel groups={groupedInventory} />
