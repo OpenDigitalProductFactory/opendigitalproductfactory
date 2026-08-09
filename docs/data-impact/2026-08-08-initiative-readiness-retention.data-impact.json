@@ -1,0 +1,73 @@
+{
+  "version": "1",
+  "accountableOwner": "data-steward",
+  "affectedCopies": [
+    "Prisma-to-EA current-state data-model mirror",
+    "Backlog initiative-readiness gate projection",
+    "WorkCapsule activity projection",
+    "Managed-document blob retention and storage-GC path"
+  ],
+  "migration": {
+    "name": "20260808235000_initiative_readiness_receipts",
+    "backfill": "Additive and existing-data compatible. BacklogItemActivity.gateKey is nullable, so all legacy activities remain valid. InitiativeArtifactRetentionPin starts empty and is populated only atomically with new approved baselines. The new WorkCapsuleActivity and BacklogItemActivity indexes cover existing rows without rewriting their meaning. No existing row, column, or enum value is removed or overwritten. Conditional triggers affect only newly governed activity kinds, work-intent activities, and artifacts referenced by a retention pin; ordinary backlog activity and unpinned artifacts retain their existing lifecycle."
+  },
+  "tests": [
+    "packages/db/src/initiative-readiness-schema.test.ts",
+    "apps/web/lib/backlog/initiative-artifact-retention.test.ts",
+    "apps/web/lib/backlog/initiative-baseline-repository.test.ts",
+    "apps/web/lib/backlog/initiative-governance-deletion.test.ts",
+    "apps/web/lib/backlog/initiative-readiness-projection.test.ts",
+    "apps/web/lib/documents/blob-storage.test.ts",
+    "apps/web/lib/work-capsule-intent.test.ts"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:backlog-item-activity#initiative-gate-lane",
+      "prismaModel": "BacklogItemActivity",
+      "lifecycleDisposition": "Legacy activity rows remain unchanged with a null gateKey. New initiative governance rows are append-only and permanently retained; ordinary activity kinds retain their existing delete behavior.",
+      "fields": [
+        {
+          "fieldId": "data:backlog-item-activity#gateKey",
+          "resolution": "governed",
+          "reason": "A closed gate lane is required for deterministic newest-receipt reads without reparsing mutable summaries or introducing a second entity ledger.",
+          "provenance": "BI-64AF127B; approved spec docs/superpowers/specs/2026-08-08-initiative-readiness-and-goal-completion-reconciliation-design.md §§7-8; initiative-readiness-schema.test.ts"
+        }
+      ]
+    },
+    {
+      "kind": "model",
+      "assetId": "data:initiative-artifact-retention-pin#permanent-baseline-evidence",
+      "prismaModel": "InitiativeArtifactRetentionPin",
+      "lifecycleDisposition": "New append-only permanent control-plane evidence. Every row pins exactly one approved artifact branch and has no automated purge or release path. Restrictive foreign keys and conditional database triggers prevent direct, cascade, cleanup, document/blob GC, or retention-sweep deletion of the pinned artifact bytes.",
+      "fields": [
+        {
+          "fieldId": "data:initiative-artifact-retention-pin#artifactDigest",
+          "resolution": "governed",
+          "reason": "The permanent pin binds an approved baseline to server-derived immutable bytes while retaining only an opaque locator and digest in the control plane.",
+          "provenance": "BI-64AF127B; approved spec §§8.4 and 13; final data/design review PASS; initiative-artifact-retention.test.ts"
+        },
+        {
+          "fieldId": "data:initiative-artifact-retention-pin#artifact-branch",
+          "resolution": "governed",
+          "reason": "Exactly one restrictive BuildArtifactRevision, DocumentVersion, or repository-archive DocumentVersion/DocumentBlob branch preserves current and superseded approval evidence without copying regulated content into activity JSON.",
+          "provenance": "BI-64AF127B; approved spec §13; initiative_readiness_receipts migration shape and immutability triggers"
+        }
+      ]
+    },
+    {
+      "kind": "model",
+      "assetId": "data:work-capsule-activity#work-intent-declared",
+      "prismaModel": "WorkCapsuleActivity",
+      "lifecycleDisposition": "Work intent is appended as a versioned activity and never overwrites WorkCapsule.activityKind. Legacy capsule activities remain unchanged; work-intent-declared rows are immutable.",
+      "fields": [
+        {
+          "fieldId": "data:work-capsule-activity#kind-work-intent-declared",
+          "resolution": "governed",
+          "reason": "Lifecycle intent and delivery activity are distinct axes. An append-only subject-bound event preserves claim history and supports deterministic latest-intent readback.",
+          "provenance": "BI-64AF127B; approved spec §6.2; work-capsule-intent.test.ts"
+        }
+      ]
+    }
+  ]
+}
