@@ -1,0 +1,53 @@
+{
+  "version": "1",
+  "accountableOwner": "platform-architecture",
+  "affectedCopies": [
+    "DigitalProduct portfolio read model",
+    "ProductDependency portfolio relationship graph"
+  ],
+  "migration": {
+    "name": "20260809000500_retire_legacy_datastore_products",
+    "backfill": "Set lifecycleStage and lifecycleStatus to retired for the bounded Neo4j/Qdrant product IDs and remove only inbound ProductDependency edges to those retired products. Preserve every DigitalProduct row and its historical identity."
+  },
+  "tests": [
+    "packages/db/src/digital-product-registry.test.ts",
+    "packages/db/scripts/migration-safety-guard.test.ts",
+    "scripts/check-data-impact.test.mjs"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:digital-product#legacy-datastore-retirement",
+      "prismaModel": "DigitalProduct",
+      "lifecycleDisposition": "Neo4j and Qdrant product rows remain durable historical records with retired lifecycle state; active portfolio queries exclude them.",
+      "fields": [
+        {
+          "fieldId": "data:digital-product#lifecycleStage",
+          "resolution": "governed",
+          "reason": "The catalog must reflect the completed BET-5 runtime retirement instead of presenting removed stores as operating products.",
+          "provenance": "BI-A1E864A5; runtime cutover merged 2026-07-14"
+        },
+        {
+          "fieldId": "data:digital-product#lifecycleStatus",
+          "resolution": "governed",
+          "reason": "The active-product portfolio filter uses lifecycleStatus, so existing installs require bounded convergence to retired.",
+          "provenance": "BI-A1E864A5; packages/db/data/digital_product_registry.json"
+        }
+      ]
+    },
+    {
+      "kind": "model",
+      "assetId": "data:product-dependency#retired-datastore-edges",
+      "prismaModel": "ProductDependency",
+      "lifecycleDisposition": "Obsolete inbound edges to retired Neo4j and Qdrant products are removed; all unrelated product relationships remain unchanged.",
+      "fields": [
+        {
+          "fieldId": "data:product-dependency#toProductId",
+          "resolution": "governed",
+          "reason": "Active products must not retain dependency relationships to components removed from the canonical architecture.",
+          "provenance": "BI-A1E864A5; packages/db/data/digital_product_registry.json"
+        }
+      ]
+    }
+  ]
+}
