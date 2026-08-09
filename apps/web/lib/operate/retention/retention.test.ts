@@ -65,6 +65,15 @@ describe("retention registry invariants", () => {
     expect(chat!.timestampField).toBe("updatedAt"); // last activity, not creation
   });
 
+  it("bounds raw MCP compatibility observations through the canonical retention engine", () => {
+    const policy = PURGE_POLICIES.find((entry) => entry.model === "mcpProtocolTelemetry");
+    expect(policy).toMatchObject({
+      category: "ai-telemetry",
+      timestampField: "recordedAt",
+      baseRetentionDays: 90,
+    });
+  });
+
   it("is registered in the scheduled-jobs catalog as an editable run-now job", () => {
     const entry = SCHEDULED_JOB_CATALOG.find(
       (e) => e.jobId === "data-retention-sweep",

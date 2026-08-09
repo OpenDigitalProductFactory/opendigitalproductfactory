@@ -1,8 +1,13 @@
 import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
-import { expandEnvPlaceholders, resolveDpfMcpConfig } from "./dpf-mcp-client";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import {
+  callDpfMcpTool,
+  expandEnvPlaceholders,
+  getDpfMcpTask,
+  resolveDpfMcpConfig,
+} from "./dpf-mcp-client";
 
 const MCP_JSON = JSON.stringify({
   mcpServers: {
@@ -71,5 +76,80 @@ describe("resolveDpfMcpConfig", () => {
   it("returns null when the file is malformed and env is empty", async () => {
     const path = await writeConfig("{ not json");
     await expect(resolveDpfMcpConfig(path, {})).resolves.toBeNull();
+  });
+});
+
+describe("callDpfMcpTool", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("uses a self-contained 2026 request and releases on a durable task handle", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      jsonrpc: "2.0",
+      id: "call-1",
+      result: {
+        resultType: "task",
+        taskId: "TR-1",
+        status: "working",
+        pollIntervalMs: 2_000,
+      },
+    }), { status: 200, headers: { "Content-Type": "application/json" } }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await callDpfMcpTool(
+      { url: "http://localhost/api/mcp/v1", authorization: "Bearer secret" },
+      "spawn_work_thread",
+      { objective: "Run independently" },
+      { id: "call-1" },
+    );
+
+    expect(result).toMatchObject({
+      isError: false,
+      task: { taskId: "TR-1", status: "working", pollIntervalMs: 2_000 },
+    });
+    const request = fetchMock.mock.calls[0]?.[1] as RequestInit;
+    expect(request.headers).toMatchObject({
+      "MCP-Protocol-Version": "2026-07-28",
+      "Mcp-Method": "tools/call",
+      "Mcp-Name": "spawn_work_thread",
+    });
+    const body = JSON.parse(String(request.body)) as Record<string, unknown>;
+    expect(body).toMatchObject({
+      method: "tools/call",
+      params: {
+        _meta: {
+          "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+          "io.modelcontextprotocol/clientInfo": { name: "dpf-ux-audit", version: "1.0.0" },
+          "io.modelcontextprotocol/clientCapabilities": {
+            extensions: { "io.modelcontextprotocol/tasks": {} },
+          },
+        },
+      },
+    });
+  });
+
+  it("reauthenticates an official tasks/get poll as another stateless request", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      jsonrpc: "2.0",
+      id: "task-TR-1",
+      result: {
+        resultType: "complete",
+        taskId: "TR-1",
+        status: "working",
+        pollIntervalMs: 4_000,
+      },
+    }), { status: 200, headers: { "Content-Type": "application/json" } }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(getDpfMcpTask(
+      { url: "http://localhost/api/mcp/v1", authorization: "Bearer fresh" },
+      "TR-1",
+    )).resolves.toMatchObject({ taskId: "TR-1", status: "working", pollIntervalMs: 4_000 });
+    const request = fetchMock.mock.calls[0]?.[1] as RequestInit;
+    expect(request.headers).toMatchObject({
+      Authorization: "Bearer fresh",
+      "MCP-Protocol-Version": "2026-07-28",
+      "Mcp-Method": "tasks/get",
+      "Mcp-Name": "TR-1",
+    });
   });
 });

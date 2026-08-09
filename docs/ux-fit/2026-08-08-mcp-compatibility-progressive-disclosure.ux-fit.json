@@ -1,0 +1,18 @@
+{
+  "version": "1",
+  "decidedOption": "embedded-existing-page",
+  "decisionInteractionId": "DI-AE44D3654E8A",
+  "scope": {
+    "files": [
+      "apps/web/app/(shell)/admin/platform-development/page.tsx",
+      "apps/web/components/admin/McpCompatibilityPanel.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "embedded-existing-page",
+      "dedicated-admin-route"
+    ]
+  }
+}

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  adpMcpCompatibility,
   adpMcpRequests,
   adpToolCallDuration,
   adpToolCallErrors,
@@ -19,11 +20,32 @@ type WrittenResponse = {
   body: string;
 };
 
-function makeRequest(method: string, url: string): import("node:http").IncomingMessage {
+function makeRequest(
+  method: string,
+  url: string,
+  options: { body?: unknown; headers?: Record<string, string> } = {},
+): import("node:http").IncomingMessage {
   // We're casting through unknown because we only exercise the fields the
   // handler reads. The dispatch is purely on (method, url) for /health and
   // /metrics, so no body / event-emitter behavior is needed for those paths.
-  return { method, url, headers: {} } as unknown as import("node:http").IncomingMessage;
+  const listeners: Record<string, (value?: Buffer | Error) => void> = {};
+  const body = options.body === undefined ? "" : JSON.stringify(options.body);
+  const req = {
+    method,
+    url,
+    headers: options.headers ?? {},
+    on(event: string, listener: (value?: Buffer | Error) => void) {
+      listeners[event] = listener;
+      if (event === "error") {
+        queueMicrotask(() => {
+          if (body) listeners.data?.(Buffer.from(body));
+          listeners.end?.();
+        });
+      }
+      return req;
+    },
+  };
+  return req as unknown as import("node:http").IncomingMessage;
 }
 
 function makeResponse(): {
@@ -60,6 +82,7 @@ describe("ADP server /metrics endpoint", () => {
     expect(written.body).toContain("dpf_adp_tool_call_duration_seconds");
     expect(written.body).toContain("dpf_adp_tool_call_errors_total");
     expect(written.body).toContain("dpf_adp_mcp_requests_total");
+    expect(written.body).toContain("dpf_adp_mcp_compatibility_total");
   });
 
   it("/health still works alongside /metrics", async () => {
@@ -84,6 +107,7 @@ describe("ADP server metric registry shape", () => {
     // Quick smoke that the exports the rest of the app expects are stable.
     expect(metricsRegistry).toBeDefined();
     expect(adpMcpRequests).toBeDefined();
+    expect(adpMcpCompatibility).toBeDefined();
     expect(adpToolCallDuration).toBeDefined();
     expect(adpToolCallErrors).toBeDefined();
 
@@ -120,5 +144,98 @@ describe("ADP MCP initialize handshake (Slice 5)", () => {
     });
     const result = (res as { result: Record<string, unknown> }).result;
     expect(result.protocolVersion).toBe("2024-11-05");
+  });
+});
+
+describe("ADP MCP 2026-07-28 stateless transport", () => {
+  const meta = {
+    "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+    "io.modelcontextprotocol/clientInfo": { name: "dpf-portal", version: "1.0.0" },
+    "io.modelcontextprotocol/clientCapabilities": {},
+  };
+
+  it("supports server/discover without initialize", async () => {
+    const { res, written } = makeResponse();
+    await handleRequest(makeRequest("POST", "/mcp", {
+      headers: {
+        "mcp-protocol-version": "2026-07-28",
+        "mcp-method": "server/discover",
+      },
+      body: {
+        jsonrpc: "2.0",
+        id: "discover",
+        method: "server/discover",
+        params: { _meta: meta },
+      },
+    }), res);
+    expect(written.status).toBe(200);
+    expect(JSON.parse(written.body).result).toMatchObject({
+      resultType: "complete",
+      supportedVersions: ["2026-07-28"],
+      capabilities: { tools: {} },
+      ttlMs: 0,
+      cacheScope: "private",
+      _meta: {
+        "io.modelcontextprotocol/serverInfo": { name: "dpf-adp", version: "1.0.0" },
+      },
+    });
+    const metrics = await metricsRegistry.metrics();
+    expect(metrics).toMatch(
+      /dpf_adp_mcp_compatibility_total\{[^}]*client_kind="dpf-portal"[^}]*protocol_era="modern"[^}]*protocol_version="2026-07-28"[^}]*\}/,
+    );
+  });
+
+  it("validates mirrored routing headers before dispatch", async () => {
+    const { res, written } = makeResponse();
+    await handleRequest(makeRequest("POST", "/mcp", {
+      headers: { "mcp-protocol-version": "2026-07-28" },
+      body: {
+        jsonrpc: "2.0",
+        id: "bad-headers",
+        method: "tools/list",
+        params: { _meta: meta },
+      },
+    }), res);
+    expect(written.status).toBe(400);
+    expect(JSON.parse(written.body).error.code).toBe(-32020);
+  });
+
+  it("returns private cache directives and server identity on tools/list", async () => {
+    const { res, written } = makeResponse();
+    await handleRequest(makeRequest("POST", "/mcp", {
+      headers: {
+        "mcp-protocol-version": "2026-07-28",
+        "mcp-method": "tools/list",
+      },
+      body: {
+        jsonrpc: "2.0",
+        id: "list",
+        method: "tools/list",
+        params: { _meta: meta },
+      },
+    }), res);
+    const result = JSON.parse(written.body).result;
+    expect(result.resultType).toBe("complete");
+    expect(result.cacheScope).toBe("private");
+    expect(result.tools).toHaveLength(4);
+    expect(result._meta["io.modelcontextprotocol/serverInfo"].name).toBe("dpf-adp");
+  });
+
+  it("rejects initialize on the 2026 wire while retaining the legacy adapter", async () => {
+    const { res, written } = makeResponse();
+    await handleRequest(makeRequest("POST", "/mcp", {
+      headers: {
+        "mcp-protocol-version": "2026-07-28",
+        "mcp-method": "initialize",
+      },
+      body: {
+        jsonrpc: "2.0",
+        id: "modern-init",
+        method: "initialize",
+        params: { _meta: meta },
+      },
+    }), res);
+    expect(written.status).toBe(404);
+    expect(JSON.parse(written.body).error.code).toBe(-32601);
   });
 });

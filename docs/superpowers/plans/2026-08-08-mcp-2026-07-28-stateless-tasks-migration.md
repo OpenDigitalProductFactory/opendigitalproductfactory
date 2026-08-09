@@ -1,8 +1,8 @@
-# MCP 2026-07-28 Stateless Core and Tasks Migration — Decomposed Implementation Plan
+# MCP 2026-07-28 Stateless Core and Tasks Migration — Batched Implementation Plan
 
 **Date:** 2026-08-08
 
-**Status:** Governed implementation scope; ready for separate build threads after review
+**Status:** Governed implementation scope; approved for one coherent migration PR
 
 **Umbrella backlog item:** `BI-AF9F9729` under `EP-HEADLESS-EMPLOYEE`
 
@@ -10,11 +10,11 @@
 
 **Migration decision:** `DI-1C305D329ECE` — dual wire, one route
 
-**Planning WorkCapsule:** `WC-C7C6FEFC`
+**Planning WorkCapsule:** `WC-C7C6FEFC`; implementation `WC-6C56CA41`
 
-**Backlog coverage receipt:** `cmsl138wy01gi01qq19cg3xrf` (`decomposed`; four live product BIs)
+**Backlog coverage receipt:** `cmsl4xmgn01f101l8xxhex8tw` (`decomposed`; four live product BIs)
 
-> **For build threads:** claim one mapped BI and use one isolated worktree/branch/PR. Re-run substrate and standards verification against current `origin/main`; use test-first implementation; keep the legacy adapter until its evidence gate passes; use the canonical shared nonproduction lease for runtime and client conformance. Do not create `/api/mcp/v2`, another tool registry, another authorization pipeline, or another task store.
+> **Delivery decision:** `DI-E765EF436DDE` approves batching the four compatible slices into one coherent migration PR and one sandbox run. Implement in M1 -> M2/M3 -> M4 order, retain a separate signed commit and acceptance/evidence checkpoint for each BI, and run one final exact-tree gate only after host capacity is healthy. This follows the manufacturing-process-spine batching rule; it does not collapse the four backlog records or their acceptance criteria. Keep the legacy adapter until its evidence gate passes. Do not create `/api/mcp/v2`, another tool registry, another authorization pipeline, or another task store.
 
 ## 1. Outcome
 
@@ -33,7 +33,7 @@ The result has one canonical `/api/mcp/v1` route, one per-request identity and a
 | M4 | Compatibility telemetry and evidence-gated retirement | `BI-106E1DEC` | M1–M3 | yes |
 | M5 | Cross-surface and canonical-runtime acceptance | umbrella closeout | M1–M4 | no separate product slice |
 
-M1 and M2 are ordered because task negotiation and task responses depend on the final per-request envelope. M3 can proceed in parallel with M2 after M1's shared boundary contracts stabilize. M4 instruments both protocols and owns retirement, so it closes after M1–M3. Federated A2A `BI-90E338D8` may build its core service independently, but its external MCP adapter stays disabled until M2 is complete.
+M1 and M2 are ordered because task negotiation and task responses depend on the final per-request envelope. In this branch M3 follows M2 so the memory-bound host never runs competing verification workloads. M4 instruments both protocols and installs the retirement gate after M1–M3. Actual legacy deletion remains blocked until the deployed observation window, rollback drill, and operator approval are recorded; the PR may ship the migration and gate without falsely closing that runtime-dependent outcome. Federated A2A `BI-90E338D8` may build its core service independently, but its external MCP adapter stays disabled until M2 is complete.
 
 ## 3. Non-negotiable invariants
 
@@ -114,6 +114,7 @@ M1 and M2 are ordered because task negotiation and task responses depend on the 
 2. Refactor task initiation into one surface-neutral service used by MCP, Build Studio, in-platform coworkers, and the A2A MCP entry adapter.
 3. Validate authority and idempotency, commit the receiver-owned `TaskRun` and actor bindings, enqueue the verified shared executor, then return `resultType: "task"`. Never await the autonomous loop before returning the task handle.
 4. Preserve the existing `TaskRun.taskRunId` as `taskId`; do not add an MCP task ID or table.
+5. Persist the server-resolved PAT grants as the task's authority ceiling. On every queued resume, reload the PAT, reject revoked/expired or agent-mismatched authority, expand composite grants, and intersect them again with current user/coworker authorization before attaching tools; deny tools without a canonical mapping.
 
 ### 6.2 Implement lifecycle methods
 
@@ -124,7 +125,15 @@ M1 and M2 are ordered because task negotiation and task responses depend on the 
 5. Treat TTL as wire serviceability/cleanup policy while retaining governed `TaskRun` evidence.
 6. Set `Mcp-Name` to `taskId` for `tasks/get|update|cancel`. Return the standard missing-capability error when the client did not negotiate the extension. Defer task notifications unless needed; if enabled, use `notifications/tasks` through `subscriptions/listen`.
 
-### 6.3 Bound the legacy adapter
+### 6.3 Release client execution context while work is suspended
+
+1. After a durable task handle is received, MCP clients, Build Studio, and AI-coworker adapters must release the initiating request/stream, model turn, and route-local execution context. No client may keep an agent loop, model allocation, MCP connection, or per-task poller alive merely because the task is working.
+2. Route all pending-task observation through one shared watcher per client process. Use server-provided polling guidance where present, exponential backoff with jitter, and a bounded concurrency semaphore for resumptions.
+3. Persist only the minimal continuation reference needed to reconstruct the caller-authorized view. On restart, reload pending references, reauthenticate, and resume through `tasks/get`; never serialize bearer tokens, model context, or connection state into task metadata.
+4. Wake a model/agent turn only for terminal output, actionable input-required state, an approval boundary, or an explicit user refresh. Coalesce duplicate wakeups and make continuation delivery idempotent.
+5. Define a measurable resource envelope: suspended tasks add durable database/queue state but no dedicated process, worker, timer, stream, or model allocation. M4 records active request count, shared watcher count, queued resumptions, and active-versus-suspended memory samples without task payloads.
+
+### 6.4 Bound the legacy adapter
 
 1. Repoint `tasks/submit|get|result|list|cancel` to the same task application service.
 2. Preserve documented legacy response shapes only in the 2025 adapter.
@@ -134,9 +143,10 @@ M1 and M2 are ordered because task negotiation and task responses depend on the 
 ### M2 verification
 
 - red-first lifecycle tests: durable-before-handle, true non-blocking return, idempotent replay, process restart, get, update/input-required, cancel, terminal success/error, expiry projection, and worker failure;
-- authority tests: cross-user, cross-agent, cross-org, guessed task ID, revoked grant, stale delegation, and unauthorized cancellation;
+- authority tests: cross-user, cross-agent, cross-org, guessed task ID, revoked grant, stale delegation, caller-supplied scope widening, unmapped tools, queued PAT reauthorization, and unauthorized cancellation;
 - one-state tests: 2026 and legacy calls resolve the same `TaskRun`, messages, artifacts, receipts, and terminal result;
 - concurrency/rate-limit/backpressure tests and canonical-runtime long-running execution;
+- client resource tests: request/stream closes after handle, one shared watcher observes many tasks, restart reconstruction works, polling backs off with jitter, resumption concurrency is bounded, and suspended tasks do not retain model/agent execution contexts;
 - surface tests from external MCP, Build Studio, and an in-platform coworker; A2A MCP entry remains gated until its own slice is ready.
 
 ### M2 done
@@ -163,17 +173,18 @@ M1 and M2 are ordered because task negotiation and task responses depend on the 
 
 ## 8. M4 — Telemetry and retirement (`BI-106E1DEC`)
 
-1. Extend the existing MCP call audit/telemetry owner; verify it before adding schema. Record protocol version, client kind/version, method family, legacy session use, result class, latency, compatibility failure, and Tasks extension use. Never record bearer tokens, prompts, task payloads, private GAIDs, internal participant topology, or unrestricted metadata.
-2. Add an operator-readable compatibility view in the existing Platform Development/MCP operational surface if current telemetry cannot answer readiness. Reuse theme-aware tables, filters, status, and disclosure primitives; do not create a new navigation destination for one migration.
-3. Publish a client matrix covering external MCP clients, Build Studio, AI coworkers, ADP, scripts/tests, and the A2A entry adapter. Each row needs last-seen version, 2026 conformance evidence, owner, and blocker.
+1. Preserve `ToolExecution` as the governed tool-audit owner and `QueueTelemetryEvent` as the queue owner. Per `DI-387E95BC46AA`, add a dedicated narrow `McpProtocolTelemetry` record for protocol version, client kind/version, method family, legacy session use, result class, latency, compatibility failure, Tasks extension use, and bounded resource samples. Never record bearer tokens, prompts, task payloads/IDs, private GAIDs, internal participant topology, or unrestricted metadata. ADP records equivalent bounded labels through its existing Prometheus registry.
+2. Add the operator-readable compatibility and resource view to the existing Platform Development/MCP operational surface selected by `DI-AE44D3654E8A`. Reuse theme-aware report-kit status, table, notice, metric, and disclosure primitives; show active requests, suspended tasks, watcher/resumption pressure, and whole-process memory samples without exposing payloads. Do not create a new navigation destination for one migration.
+3. Publish an explicit known-client matrix covering Codex, Claude Code/Build Studio CLI, Grok, the DPF UX harness, AI coworkers, ADP, Build Studio's direct application-service path, and the gated A2A entry adapter. Each row carries last-seen version, conformance state, owner, and blocker; unobserved and not-applicable are honest states rather than inferred success.
 4. Run the approved observation window, then execute a canonical-runtime retirement/rollback drill.
-5. Obtain operator approval and remove the legacy adapter, initialize/initialized handling, legacy task methods, and obsolete flags/tests/docs in one bounded cleanup PR. Preserve historical audit data and the canonical route.
+5. Obtain operator approval before removing the legacy adapter, initialize/initialized handling, legacy task methods, and obsolete flags/tests/docs. If approval and observation evidence are not available before this batched PR closes, keep the compatibility code and BI open; removal is a later bounded cleanup rather than a fabricated completion. Preserve historical audit data and the canonical route.
 
 ### M4 done
 
 - all known clients have current conformance receipts;
 - legacy traffic is zero for the approved window;
 - compatibility telemetry is privacy-safe and operationally visible;
+- active-versus-suspended resource telemetry proves that pending tasks do not pin per-task client execution contexts;
 - rollback has been proven before removal;
 - the final cleanup leaves one 2026 wire adapter and one application service.
 
@@ -215,6 +226,8 @@ Architecture corrections carried into implementation:
 3. Official Tasks use `tasks/get|update|cancel`; legacy `tasks/list|result|submit` never define internal service APIs.
 4. Protocol statelessness removes connection authority but preserves durable `TaskRun` state.
 5. All caller surfaces resolve identity and grants per request and share the same task/A2A services.
+6. DPF-owned task consumers use one storage-backed watcher per process with no per-task timer; external MCP clients retain responsibility for their own conforming task watcher. Build Studio and in-platform coworkers that call the application service directly do not acquire a redundant MCP watcher.
+7. The compatibility panel is embedded on the existing Platform Development page (`DI-AE44D3654E8A`); compatibility telemetry is a dedicated payload-free model (`DI-387E95BC46AA`).
 
 ## 11. Rollback and recovery
 
@@ -229,6 +242,7 @@ Architecture corrections carried into implementation:
 Live coverage is recorded against `BI-AF9F9729` for this exact plan path.
 
 - Decision: `decomposed`
-- Receipt: `cmsl138wy01gi01qq19cg3xrf`
+- Receipt: `cmsl4xmgn01f101l8xxhex8tw`
 - Mapped product BIs: `BI-214CB18D`, `BI-B6F8BFF4`, `BI-A712B61F`, `BI-106E1DEC`
 - Sequencing-only work: M0 and M5 under umbrella coordination
+- Delivery batching decision: `DI-E765EF436DDE` (one coherent branch/PR and final sandbox run; per-BI evidence remains decomposed)

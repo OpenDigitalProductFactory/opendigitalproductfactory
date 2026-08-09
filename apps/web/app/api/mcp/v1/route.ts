@@ -37,15 +37,38 @@ import {
 import { getLoadedToolNames, loadToolsForSession } from "@/lib/mcp/tool-session-store";
 import {
   tasksLifecycleEnabled,
+  tasksExtensionNegotiated,
+  bindMcpTaskOwner,
   handleTasksGet,
+  handleTasksUpdate,
   handleTasksResult,
   handleTasksList,
   handleTasksCancel,
+  MCP_MISSING_REQUIRED_CLIENT_CAPABILITY,
+  MCP_TASKS_EXTENSION,
   type TaskLifecycleResult,
 } from "@/lib/mcp/tasks-lifecycle";
 import { LOAD_TOOLS_LISTED, buildLoadToolsResult, loadToolsSseResponse } from "@/lib/mcp/load-tools";
+import {
+  MCP_PROTOCOL_VERSION_2026,
+  MCP_UNSUPPORTED_PROTOCOL_VERSION,
+  cacheableCompleteResult,
+  isModernMcpRequest,
+  readModernRequestMetadata,
+  validateModernHttpHeaders,
+  validateToolParameterHeaders,
+  withModernServerMetadata,
+  type ModernMcpRequestMetadata,
+} from "@/lib/mcp/protocol-2026";
+import {
+  buildMcpTelemetryRecord,
+  countSuspendedMcpTasks,
+  recordMcpProtocolTelemetry,
+} from "@/lib/mcp/protocol-telemetry";
 import { can, type CapabilityKey, type UserContext } from "@/lib/permissions";
 import { prisma } from "@dpf/db";
+
+let activeMcpRequestCount = 0;
 
 /** Resolved auth — either a persistent PAT or a short-lived internal session.
  * The route-side handlers consume this single shape; the only difference is
@@ -121,8 +144,16 @@ function jsonRpcError(
   return jsonResponse(body, httpStatus);
 }
 
-function jsonRpcOk(id: JsonRpcId, result: unknown): Response {
-  return jsonResponse({ jsonrpc: "2.0", id, result } satisfies JsonRpcResponse);
+function jsonRpcOk(id: JsonRpcId, result: unknown, modern = false): Response {
+  let wireResult = result;
+  if (modern && typeof result === "object" && result !== null && !Array.isArray(result)) {
+    const record = result as Record<string, unknown>;
+    wireResult = withModernServerMetadata(
+      record["resultType"] === undefined ? { resultType: "complete", ...record } : record,
+      { name: SERVER_NAME, version: SERVER_VERSION },
+    );
+  }
+  return jsonResponse({ jsonrpc: "2.0", id, result: wireResult } satisfies JsonRpcResponse);
 }
 
 function scopeToCapability(scope: McpTokenScope): McpTokenCapability {
@@ -401,6 +432,7 @@ async function handleLoadTools(
   token: ResolvedAuth,
   args: Record<string, unknown>,
   acceptsEventStream: boolean,
+  modern = false,
 ): Promise<Response> {
   const userContext = await loadUserContext(token.userId);
   const grantMap = getToolGrantMapping();
@@ -416,7 +448,7 @@ async function handleLoadTools(
   );
   return acceptsEventStream && selected.length > 0
     ? loadToolsSseResponse(id, result)
-    : jsonRpcOk(id, result);
+    : jsonRpcOk(id, result, modern);
 }
 
 // Standard MCP Tasks Phase-0 read surface: route tasks/get|result|list|cancel to
@@ -427,28 +459,49 @@ async function handleTasksLifecycle(
   id: JsonRpcId,
   token: ResolvedAuth,
   params: Record<string, unknown> | undefined,
+  modern = false,
+  modernMetadata: ModernMcpRequestMetadata | null = null,
 ): Promise<Response> {
   if (!tasksLifecycleEnabled()) {
     return jsonRpcError(id, JSONRPC_METHOD_NOT_FOUND, `unknown method: ${method}`);
   }
+  const auth = { userId: token.userId, tokenId: token.tokenId, agentId: token.agentId };
+  const officialTaskMethod =
+    method === "tasks/get" || method === "tasks/update" || method === "tasks/cancel";
+  if (
+    modern &&
+    officialTaskMethod &&
+    !tasksExtensionNegotiated(modernMetadata?.clientCapabilities ?? {})
+  ) {
+    return jsonRpcError(
+      id,
+      MCP_MISSING_REQUIRED_CLIENT_CAPABILITY,
+      "Missing required client capability",
+      { requiredCapabilities: { extensions: { [MCP_TASKS_EXTENSION]: {} } } },
+      400,
+    );
+  }
   let result: TaskLifecycleResult;
   switch (method) {
     case "tasks/get":
-      result = await handleTasksGet(token.userId, params);
+      result = await handleTasksGet(auth, params);
+      break;
+    case "tasks/update":
+      result = await handleTasksUpdate(auth, params);
       break;
     case "tasks/result":
-      result = await handleTasksResult(token.userId, params);
+      result = await handleTasksResult(token.userId, params, token.tokenId);
       break;
     case "tasks/list":
       result = await handleTasksList(token.userId, params);
       break;
     case "tasks/cancel":
-      result = await handleTasksCancel(token.userId, params);
+      result = await handleTasksCancel(auth, params);
       break;
     default:
       return jsonRpcError(id, JSONRPC_METHOD_NOT_FOUND, `unknown method: ${method}`);
   }
-  if (result.kind === "ok") return jsonRpcOk(id, result.value);
+  if (result.kind === "ok") return jsonRpcOk(id, result.value, modern);
   return jsonRpcError(id, JSONRPC_INVALID_PARAMS, result.message);
 }
 
@@ -457,15 +510,15 @@ async function handleTasksSubmit(
   token: ResolvedAuth,
   params: Record<string, unknown> | undefined,
 ): Promise<Response> {
-  const userContext = await loadUserContext(token.userId);
   const outcome = await submitRemoteCoworkerTask({
     token: {
       tokenId: token.tokenId,
       userId: token.userId,
+      agentId: token.agentId,
+      scopes: token.scopes,
       capability: scopeToCapability(normalizeTokenScope(token)),
       source: token.source,
     },
-    userContext,
     params,
   });
   if (outcome.kind === "invalid_params") {
@@ -486,21 +539,7 @@ async function handleInitialize(id: JsonRpcId, params?: Record<string, unknown>)
   // decisionDomain routing directive that activates BI-HDLEMP-01 — from connect,
   // instead of only a bare tool list. Fail-open: any compose error falls back to
   // the base note; initialize must never break.
-  let instructions = BASE_MCP_INSTRUCTIONS;
-  try {
-    const [{ buildOrgContextBundle, formatOrgContextInstructions }, { prisma }] =
-      await Promise.all([
-        import("@/lib/mcp/org-context-bundle"),
-        import("@dpf/db"),
-      ]);
-    const bundle = await buildOrgContextBundle(
-      prisma as unknown as Parameters<typeof buildOrgContextBundle>[0],
-    );
-    instructions = formatOrgContextInstructions(BASE_MCP_INSTRUCTIONS, bundle);
-  } catch (err) {
-    console.warn("[mcp/initialize] org-context compose failed (fail-open):", err);
-  }
-
+  const instructions = await buildMcpInstructions();
   return jsonRpcOk(id, {
     protocolVersion: negotiated,
     capabilities: {
@@ -522,10 +561,51 @@ async function handleInitialize(id: JsonRpcId, params?: Record<string, unknown>)
   });
 }
 
+async function buildMcpInstructions(): Promise<string> {
+  let instructions = BASE_MCP_INSTRUCTIONS;
+  try {
+    const [{ buildOrgContextBundle, formatOrgContextInstructions }, { prisma }] =
+      await Promise.all([
+        import("@/lib/mcp/org-context-bundle"),
+        import("@dpf/db"),
+      ]);
+    const bundle = await buildOrgContextBundle(
+      prisma as unknown as Parameters<typeof buildOrgContextBundle>[0],
+    );
+    instructions = formatOrgContextInstructions(BASE_MCP_INSTRUCTIONS, bundle);
+  } catch (err) {
+    console.warn("[mcp/instructions] org-context compose failed (fail-open):", err);
+  }
+  return instructions;
+}
+
+async function handleServerDiscover(id: JsonRpcId): Promise<Response> {
+  const instructions = await buildMcpInstructions();
+  return jsonRpcOk(
+    id,
+    cacheableCompleteResult(
+      {
+        supportedVersions: [MCP_PROTOCOL_VERSION_2026],
+        capabilities: {
+          tools: { listChanged: true },
+          ...(tasksLifecycleEnabled()
+            ? { extensions: { [MCP_TASKS_EXTENSION]: {} } }
+            : {}),
+        },
+        instructions,
+      },
+      0,
+      "private",
+    ),
+    true,
+  );
+}
+
 async function handleToolsList(
   id: JsonRpcId,
   token: ResolvedAuth,
   tier: McpToolTier = "full",
+  modern = false,
 ): Promise<Response> {
   const userContext = await loadUserContext(token.userId);
   const grantMap = getToolGrantMapping();
@@ -543,7 +623,12 @@ async function handleToolsList(
   // removed/reordered).
   const loadedNames = new Set(await getLoadedToolNames(token.tokenId));
   const listed = selectToolsForListing(granted, tier, loadedNames).map(annotateTool);
-  return jsonRpcOk(id, { tools: [...listed, LOAD_TOOLS_LISTED] });
+  const result = { tools: [...listed, LOAD_TOOLS_LISTED] };
+  return jsonRpcOk(
+    id,
+    modern ? cacheableCompleteResult(result, 0, "private") : result,
+    modern,
+  );
 }
 
 async function handleToolsCall(
@@ -552,6 +637,8 @@ async function handleToolsCall(
   params: Record<string, unknown> | undefined,
   callerClient?: string,
   acceptsEventStream: boolean = false,
+  modern = false,
+  modernMetadata: ModernMcpRequestMetadata | null = null,
 ): Promise<Response> {
   if (!params || typeof params["name"] !== "string") {
     return jsonRpcError(id, JSONRPC_INVALID_PARAMS, "tools/call requires params.name (string)");
@@ -563,7 +650,7 @@ async function handleToolsCall(
   // handle it inline (it manages per-token discovery state) and never route it
   // to governedExecuteTool.
   if (toolName === LOAD_TOOLS_TOOL_NAME) {
-    return await handleLoadTools(id, token, args, acceptsEventStream);
+    return await handleLoadTools(id, token, args, acceptsEventStream, modern);
   }
 
   // Token-scope gate. The wrapper also rejects on grant mismatch when an
@@ -576,7 +663,7 @@ async function handleToolsCall(
     return jsonRpcOk(id, {
       content: [{ type: "text", text: `Unknown tool: ${toolName}` }],
       isError: true,
-    });
+    }, modern);
   }
   const toolDef = PLATFORM_TOOLS.find((t) => t.name === toolName);
   const tokenScope = normalizeTokenScope(token);
@@ -585,6 +672,7 @@ async function handleToolsCall(
     return jsonRpcOk(
       id,
       insufficientScopeResult(toolName, tokenScope, requiredScope, required),
+      modern,
     );
   }
   // Expand the token's scopes through GRANT_IMPLICATIONS before checking, so a
@@ -604,12 +692,12 @@ async function handleToolsCall(
         },
       ],
       isError: true,
-    });
+    }, modern);
   }
 
   const quiescenceRefusal = await quiescenceRefusalResult(toolName, toolDef);
   if (quiescenceRefusal) {
-    return jsonRpcOk(id, quiescenceRefusal);
+    return jsonRpcOk(id, quiescenceRefusal, modern);
   }
 
   const userContext = await loadUserContext(token.userId);
@@ -628,6 +716,24 @@ async function handleToolsCall(
     },
     source: token.source === "session-jwt" ? "internal-mcp-session" : "external-jsonrpc",
   });
+
+  if (
+    modern &&
+    result.success &&
+    toolDef?.taskAugmented &&
+    tasksExtensionNegotiated(modernMetadata?.clientCapabilities ?? {}) &&
+    typeof result.data === "object" &&
+    result.data !== null &&
+    !Array.isArray(result.data) &&
+    typeof (result.data as Record<string, unknown>)["taskRunId"] === "string"
+  ) {
+    const task = await bindMcpTaskOwner(
+      { userId: token.userId, tokenId: token.tokenId, agentId: token.agentId },
+      (result.data as Record<string, unknown>)["taskRunId"] as string,
+    );
+    if (task.kind === "ok") return jsonRpcOk(id, task.value, true);
+    return jsonRpcError(id, JSONRPC_INVALID_PARAMS, task.message);
+  }
 
   // Convert ToolResult into MCP tools/call response shape:
   //   - content[]: a single text block carrying a JSON serialization of the
@@ -683,10 +789,10 @@ async function handleToolsCall(
   if (structured !== undefined) {
     responseBody["structuredContent"] = structured;
   }
-  return jsonRpcOk(id, responseBody);
+  return jsonRpcOk(id, responseBody, modern);
 }
 
-export async function POST(request: Request): Promise<Response> {
+async function handlePost(request: Request): Promise<Response> {
   // Transport guards
   if (!isTransportAllowed(request)) {
     return forbiddenResponse(
@@ -757,12 +863,74 @@ export async function POST(request: Request): Promise<Response> {
   // Notifications (no id) — return 202 Accepted, no body, per spec.
   const isNotification = body.id === undefined;
 
-  // MCP 2025-11-25 protocol negotiation: a non-initialize request MAY carry an
-  // MCP-Protocol-Version header. When present it must be a version we speak;
-  // when absent the caller inherits the version negotiated at initialize. An
-  // explicit unsupported value is a 400 (lenient on absence, strict on mismatch).
+  // Dual-era dispatch happens at the transport boundary. A modern request is
+  // self-describing and independently validated; legacy requests retain the
+  // initialize-era compatibility behavior below.
   const protocolHeader = request.headers.get("mcp-protocol-version");
-  if (
+  const modern = isModernMcpRequest(request.headers, body);
+  let modernMetadata: ModernMcpRequestMetadata | null = null;
+  if (modern) {
+    const headerValidation = validateModernHttpHeaders(request.headers, body);
+    if (!headerValidation.ok) {
+      return jsonRpcError(
+        body.id ?? null,
+        headerValidation.code,
+        headerValidation.message,
+        undefined,
+        400,
+      );
+    }
+
+    const rawMeta = body.params?.["_meta"];
+    const requestedVersion =
+      typeof rawMeta === "object" && rawMeta !== null && !Array.isArray(rawMeta)
+        ? (rawMeta as Record<string, unknown>)["io.modelcontextprotocol/protocolVersion"]
+        : undefined;
+    if (requestedVersion !== MCP_PROTOCOL_VERSION_2026) {
+      return jsonRpcError(
+        body.id ?? null,
+        MCP_UNSUPPORTED_PROTOCOL_VERSION,
+        "Unsupported protocol version",
+        {
+          supported: [MCP_PROTOCOL_VERSION_2026],
+          requested: requestedVersion ?? protocolHeader,
+        },
+        400,
+      );
+    }
+
+    modernMetadata = readModernRequestMetadata(body.params);
+    if (!modernMetadata) {
+      return jsonRpcError(
+        body.id ?? null,
+        MCP_MISSING_REQUIRED_CLIENT_CAPABILITY,
+        "Missing or malformed per-request client capabilities",
+        undefined,
+        400,
+      );
+    }
+
+    if (body.method === "tools/call" && typeof body.params?.["name"] === "string") {
+      const tool = PLATFORM_TOOLS.find((candidate) => candidate.name === body.params?.["name"]);
+      const args = body.params["arguments"];
+      if (tool && typeof args === "object" && args !== null && !Array.isArray(args)) {
+        const parameterValidation = validateToolParameterHeaders(
+          request.headers,
+          tool.inputSchema as Record<string, unknown>,
+          args as Record<string, unknown>,
+        );
+        if (!parameterValidation.ok) {
+          return jsonRpcError(
+            body.id ?? null,
+            parameterValidation.code,
+            parameterValidation.message,
+            undefined,
+            400,
+          );
+        }
+      }
+    }
+  } else if (
     protocolHeader &&
     body.method !== "initialize" &&
     !(SUPPORTED_PROTOCOL_VERSIONS as readonly string[]).includes(protocolHeader)
@@ -776,9 +944,22 @@ export async function POST(request: Request): Promise<Response> {
     );
   }
 
+  const callerClient = modernMetadata?.clientInfo
+    ? deriveCallerClient(`${modernMetadata.clientInfo.name}/${modernMetadata.clientInfo.version}`)
+    : deriveCallerClient(request.headers.get("user-agent"));
+
   try {
     switch (body.method) {
       case "initialize":
+        if (modern) {
+          return jsonRpcError(
+            body.id ?? null,
+            JSONRPC_METHOD_NOT_FOUND,
+            "initialize is not part of MCP 2026-07-28; use server/discover or call a method directly",
+            undefined,
+            404,
+          );
+        }
         if (isNotification) {
           return new Response(null, { status: 202 });
         }
@@ -786,6 +967,13 @@ export async function POST(request: Request): Promise<Response> {
 
       case "notifications/initialized":
         return new Response(null, { status: 202 });
+
+      case "server/discover":
+        if (!modern) {
+          return jsonRpcError(body.id ?? null, JSONRPC_METHOD_NOT_FOUND, "unknown method: server/discover");
+        }
+        if (isNotification) return new Response(null, { status: 202 });
+        return await handleServerDiscover(body.id ?? null);
 
       case "tools/list":
         if (isNotification) {
@@ -796,8 +984,9 @@ export async function POST(request: Request): Promise<Response> {
           token,
           resolveEffectiveTier(
             new URL(request.url).searchParams.get("tier"),
-            deriveCallerClient(request.headers.get("user-agent")),
+            callerClient,
           ),
+          modern,
         );
 
       case "tools/call":
@@ -808,8 +997,10 @@ export async function POST(request: Request): Promise<Response> {
           body.id ?? null,
           token,
           body.params,
-          deriveCallerClient(request.headers.get("user-agent")),
+          callerClient,
           (request.headers.get("accept") ?? "").includes("text/event-stream"),
+          modern,
+          modernMetadata,
         );
 
       case "tasks/submit":
@@ -819,26 +1010,40 @@ export async function POST(request: Request): Promise<Response> {
         return await handleTasksSubmit(body.id ?? null, token, body.params);
 
       case "tasks/get":
+      case "tasks/update":
       case "tasks/result":
       case "tasks/list":
       case "tasks/cancel":
         if (isNotification) {
           return new Response(null, { status: 202 });
         }
-        return await handleTasksLifecycle(body.method, body.id ?? null, token, body.params);
+        return await handleTasksLifecycle(
+          body.method,
+          body.id ?? null,
+          token,
+          body.params,
+          modern,
+          modernMetadata,
+        );
 
       case "ping":
         if (isNotification) {
           return new Response(null, { status: 202 });
         }
-        return jsonRpcOk(body.id ?? null, {});
+        return jsonRpcOk(body.id ?? null, {}, modern);
 
       default:
         if (isNotification) {
           // Unknown notifications are silently accepted per JSON-RPC 2.0.
           return new Response(null, { status: 202 });
         }
-        return jsonRpcError(body.id ?? null, JSONRPC_METHOD_NOT_FOUND, `unknown method: ${body.method}`);
+        return jsonRpcError(
+          body.id ?? null,
+          JSONRPC_METHOD_NOT_FOUND,
+          `unknown method: ${body.method}`,
+          undefined,
+          modern ? 404 : 200,
+        );
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown internal error";
@@ -847,6 +1052,48 @@ export async function POST(request: Request): Promise<Response> {
       JSONRPC_INTERNAL_ERROR,
       `internal error: ${message}`,
     );
+  }
+}
+
+/**
+ * Privacy-safe compatibility observation wraps the canonical handler rather
+ * than leaking telemetry concerns into every dispatch branch. Request and
+ * response bodies are inspected only transiently by the bounded projector;
+ * prompts, tool arguments, auth material, task IDs, and agent identities are
+ * never persisted.
+ */
+export async function POST(request: Request): Promise<Response> {
+  const startedAt = performance.now();
+  const telemetryRequest = request.clone();
+  activeMcpRequestCount += 1;
+
+  try {
+    const response = await handlePost(request);
+    const [body, responseBody, suspendedTaskCount] = await Promise.all([
+      telemetryRequest.json().catch(() => null),
+      response.clone().json().catch(() => null),
+      countSuspendedMcpTasks(),
+    ]);
+    const rss = typeof process.memoryUsage === "function"
+      ? BigInt(process.memoryUsage().rss)
+      : null;
+
+    await recordMcpProtocolTelemetry(buildMcpTelemetryRecord({
+      headers: telemetryRequest.headers,
+      body: body && typeof body === "object" && !Array.isArray(body)
+        ? body as Record<string, unknown>
+        : null,
+      responseBody,
+      httpStatus: response.status,
+      latencyMs: performance.now() - startedAt,
+      activeRequestCount: activeMcpRequestCount,
+      suspendedTaskCount,
+      processRssBytes: rss,
+    }));
+
+    return response;
+  } finally {
+    activeMcpRequestCount = Math.max(0, activeMcpRequestCount - 1);
   }
 }
 

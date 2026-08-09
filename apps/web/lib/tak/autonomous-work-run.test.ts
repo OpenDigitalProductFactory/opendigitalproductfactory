@@ -61,6 +61,28 @@ describe("resolveAutonomousWorkTools — attachment budget (BI-CAP-F2D39F8F)", (
     vi.mocked(tools.toolsToOpenAIFormat).mockImplementation((ts: unknown[]) => ts as never);
   });
 
+  it("intersects resumable MCP tools with the PAT grant ceiling and denies unmapped tools", async () => {
+    const {
+      intersectToolsWithAuthorityGrants,
+    } = await import("./autonomous-work-run");
+    const surface = [
+      fakeTool("read_backlog"),
+      fakeTool("write_backlog"),
+      fakeTool("unmapped_internal_tool"),
+    ];
+
+    const result = intersectToolsWithAuthorityGrants(
+      surface as never,
+      ["backlog_read"],
+      {
+        read_backlog: ["backlog_read"],
+        write_backlog: ["backlog_write"],
+      },
+    );
+
+    expect(result.map((tool) => tool.name)).toEqual(["read_backlog"]);
+  });
+
   it("caps a 115-tool surface to the local selection cliff and defers the rest behind load_tools", async () => {
     const tools = await import("@/lib/mcp-tools");
     const surface = Array.from({ length: 115 }, (_, i) => fakeTool(`tool_${i}`));

@@ -155,6 +155,14 @@ export interface BuildExecuteRunEvent {
   };
 }
 
+/** MCP 2026 Tasks / legacy submit convergence. The queue payload is only the
+ * canonical TaskRun id; the worker reconstructs and reauthorizes everything
+ * else from durable server-owned state. */
+export interface McpTaskExecuteEvent {
+  name: "mcp/task.execute";
+  data: { taskRunId: string };
+}
+
 export interface BuildPreBuildReviewRepairEvent {
   name: "build/pre-build-review.repair";
   data: {

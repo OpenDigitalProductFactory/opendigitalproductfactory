@@ -110,6 +110,13 @@ export type ToolDefinition = {
   executionMode?: "proposal" | "immediate";
   sideEffect?: boolean;
   /**
+   * This tool durably creates one canonical TaskRun and may therefore return
+   * an MCP 2026 CreateTaskResult when the current request negotiated the Tasks
+   * extension. The governed handler still owns creation; the transport only
+   * binds and projects the returned taskRunId.
+   */
+  taskAugmented?: boolean;
+  /**
    * Tool captures the coworker's own recommendation or work product as a
    * structured artifact (e.g. save_marketing_review). Persistence-only; no
    * external action. Coworkers running in `advise` mode are still permitted

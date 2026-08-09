@@ -86,6 +86,15 @@ describe("wrapToolScript", () => {
     expect(wrapped).toContain(TOOL_SCRIPT_RESULT_MARKER);
   });
 
+  it("makes each AI-coworker tool call a self-contained 2026 Tasks-capable request", () => {
+    expect(wrapped).toContain('"MCP-Protocol-Version": "2026-07-28"');
+    expect(wrapped).toContain('"Mcp-Method": "tools/call"');
+    expect(wrapped).toContain('"Mcp-Name": name');
+    expect(wrapped).toContain('"io.modelcontextprotocol/protocolVersion": "2026-07-28"');
+    expect(wrapped).toContain('"io.modelcontextprotocol/tasks": {}');
+    expect(wrapped).toContain('name: "dpf-ai-coworker-tool-script"');
+  });
+
   it("uses no dynamic eval in the generated script (containment is the sandbox, not new Function)", () => {
     expect(wrapped).not.toMatch(/new\s+Function/);
     expect(wrapped).not.toMatch(/\beval\(/);

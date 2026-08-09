@@ -8,3 +8,4 @@ export * from "./credential-crypto";
 export * from "./oauth-refresh";
 export * from "./redact";
 export * from "./tool-call-audit";
+export * from "./mcp-protocol-2026";

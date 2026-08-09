@@ -195,6 +195,15 @@ export const PURGE_POLICIES: readonly PurgePolicy[] = [
       "One row per LLM inference (probes, evals, coworker reasoning, builds). Cost/quality telemetry; running aggregates live elsewhere, so raw rows are disposable past 6 months.",
   },
   {
+    model: "mcpProtocolTelemetry",
+    label: "MCP protocol compatibility telemetry",
+    category: "ai-telemetry",
+    timestampField: "recordedAt",
+    baseRetentionDays: DAYS_90,
+    rationale:
+      "Payload-free protocol/client/result/resource observations used for the bounded compatibility window. Canonical task, tool-audit, and identity evidence lives elsewhere, so raw observations are disposable after 90 days (subject to industry floors).",
+  },
+  {
     model: "tokenUsage",
     label: "Token usage accounting",
     category: "ai-telemetry",

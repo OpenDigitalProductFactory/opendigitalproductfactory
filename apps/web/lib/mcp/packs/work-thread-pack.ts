@@ -27,6 +27,7 @@ const definitions: ToolDefinition[] = [
     },
     requiredCapability: null,
     sideEffect: true,
+    taskAugmented: true,
   },
   {
     name: "cancel_thread",

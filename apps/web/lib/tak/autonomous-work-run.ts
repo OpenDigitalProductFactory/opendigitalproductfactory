@@ -185,12 +185,32 @@ export async function resolveAutonomousWorkAgent(input: {
   return resolveAgentByIdWithPrompts(input.agentId, input.userContext) as Promise<AgentPromptInfo>;
 }
 
+/** Apply an external authority ceiling after the normal user + coworker grant
+ * resolution. Tools without a canonical grant mapping are denied, matching the
+ * MCP request path's deny-by-default contract. Callers must pass expanded
+ * grants when their authority model supports composite grants. */
+export function intersectToolsWithAuthorityGrants(
+  tools: readonly ToolDefinition[],
+  authorityGrants: readonly string[],
+  toolGrantMapping: Readonly<Record<string, readonly string[]>>,
+): ToolDefinition[] {
+  const allowed = new Set(authorityGrants);
+  return tools.filter((tool) => {
+    const required = toolGrantMapping[tool.name];
+    return Boolean(required?.some((grant) => allowed.has(grant)));
+  });
+}
+
 export async function resolveAutonomousWorkTools(input: {
   userContext: AutonomousWorkUserContext;
   agentId: string;
   mode?: "advise" | "act";
   externalAccessEnabled?: boolean;
   unifiedMode?: boolean;
+  /** Optional external authority ceiling. Remote MCP workers pass the PAT's
+   * freshly reloaded granular grants so a queued resume cannot widen authority
+   * beyond the token that owns the task. */
+  authorityGrants?: readonly string[];
   /** Route the autonomous work runs under; its declared domain tools are
    *  force-attached (tier 0), mirroring the interactive path (BI-B5C358B1). */
   routeContext?: string;
@@ -206,12 +226,20 @@ export async function resolveAutonomousWorkTools(input: {
   deferredTools: ToolDefinition[];
 }> {
   const { getAvailableTools, toolsToOpenAIFormat } = await import("@/lib/mcp-tools");
-  const authorized = await getAvailableTools(input.userContext, {
+  let authorized = await getAvailableTools(input.userContext, {
     mode: input.mode,
     externalAccessEnabled: input.externalAccessEnabled,
     unifiedMode: input.unifiedMode,
     agentId: input.agentId,
   });
+  if (input.authorityGrants !== undefined) {
+    const { expandGrants, getToolGrantMapping } = await import("@/lib/tak/agent-grants");
+    authorized = intersectToolsWithAuthorityGrants(
+      authorized,
+      expandGrants(input.authorityGrants),
+      getToolGrantMapping(),
+    );
+  }
 
   // BI-CAP-F2D39F8F: right-size the ATTACHMENT for autonomous runs with the
   // SAME budget the interactive path uses (coworker-tool-budget). A scheduled

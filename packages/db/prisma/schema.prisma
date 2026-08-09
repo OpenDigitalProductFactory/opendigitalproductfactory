@@ -7736,6 +7736,16 @@ model TaskRun {
   authorityScope       Json?
   a2aMetadata          Json?
   progressPayload      Json?
+  // Optional MCP caller binding for task handles materialized through the
+  // external transport. Kept on the canonical TaskRun (not an MCP task table)
+  // so get/update/cancel authorization survives process restarts. Session-JWT
+  // identifiers are opaque audit bindings; bearer secrets are never stored.
+  mcpOwnerTokenId      String?
+  // Cooperative cancellation intent. Acknowledging tasks/cancel records these
+  // fields without claiming that already-running work has stopped; workers
+  // observe the intent at heartbeat/checkpoint boundaries.
+  cancellationRequestedAt       DateTime?
+  cancellationRequestedByUserId String?
   repeatedPatternKey   String?
   templateId           String?
   startedAt            DateTime                 @default(now())
@@ -7768,6 +7778,8 @@ model TaskRun {
   @@index([parentTaskRunId])
   @@index([buildId, status])
   @@index([routeContext, status])
+  @@index([mcpOwnerTokenId, status])
+  @@index([status, cancellationRequestedAt])
   @@index([repeatedPatternKey])
   // Watchdog query: WHERE status = 'working' AND lastHeartbeatAt < ...
   @@index([status, lastHeartbeatAt])
@@ -16741,4 +16753,57 @@ model McpToolSession {
   updatedAt       DateTime @default(now()) @updatedAt
 
   @@index([expiresAt])
+}
+
+// MCP wire-compatibility and resource-envelope observations. Deliberately
+// payload-free: this is not a second tool audit and never stores prompts,
+// arguments, bearer material, GAIDs, task ids, or participant topology.
+enum McpProtocolEra {
+  modern
+  legacy
+  unknown
+}
+
+enum McpTelemetryAuthSource {
+  bearer
+  session_jwt @map("session-jwt")
+  none
+}
+
+enum McpTelemetryResultClass {
+  success
+  task
+  input_required  @map("input-required")
+  auth_error      @map("auth-error")
+  protocol_error  @map("protocol-error")
+  internal_error  @map("internal-error")
+  http_error      @map("http-error")
+}
+
+model McpProtocolTelemetry {
+  id                     String   @id @default(cuid())
+  recordedAt             DateTime @default(now())
+  protocolVersion        String
+  protocolEra            McpProtocolEra
+  clientKind             String
+  clientVersion          String?
+  authSource             McpTelemetryAuthSource
+  method                 String
+  methodFamily           String
+  legacySessionUsed      Boolean  @default(false)
+  tasksExtensionUsed     Boolean  @default(false)
+  resultClass            McpTelemetryResultClass
+  httpStatus             Int
+  latencyMs              Int
+  compatibilityFailure   String?
+  activeRequestCount     Int
+  suspendedTaskCount     Int?
+  sharedWatcherCount     Int      @default(0)
+  queuedResumptionCount  Int      @default(0)
+  processRssBytes        BigInt?
+
+  @@index([recordedAt(sort: Desc)])
+  @@index([protocolEra, recordedAt(sort: Desc)])
+  @@index([clientKind, clientVersion, recordedAt(sort: Desc)])
+  @@index([resultClass, recordedAt(sort: Desc)])
 }

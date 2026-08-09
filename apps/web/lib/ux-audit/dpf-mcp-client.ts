@@ -11,6 +11,12 @@
 // shares this module): explicit env first, then the repo's .mcp.json.
 
 import { readFile } from "node:fs/promises";
+import {
+  SharedMcpTaskWatcher,
+  type McpTaskContinuation,
+  type McpTaskContinuationStore,
+  type McpTaskSnapshot,
+} from "@/lib/mcp/shared-task-watcher";
 
 export type DpfMcpConfig = { url: string; authorization: string };
 
@@ -75,6 +81,10 @@ export async function resolveDpfMcpConfig(
 
 type McpCallResponse = {
   result?: {
+    resultType?: string;
+    taskId?: string;
+    status?: string;
+    pollIntervalMs?: number | null;
     isError?: boolean;
     content?: Array<{ text?: string }>;
   };
@@ -90,6 +100,11 @@ export type DpfMcpToolResult = {
   isError: boolean;
   text: string;
   data: unknown;
+  task?: {
+    taskId: string;
+    status: string;
+    pollIntervalMs: number | null;
+  };
 };
 
 /**
@@ -108,12 +123,25 @@ export async function callDpfMcpTool(
     headers: {
       "Content-Type": "application/json",
       Authorization: config.authorization,
+      "MCP-Protocol-Version": "2026-07-28",
+      "Mcp-Method": "tools/call",
+      "Mcp-Name": name,
     },
     body: JSON.stringify({
       jsonrpc: "2.0",
       id: opts.id ?? `ux-audit-${name}`,
       method: "tools/call",
-      params: { name, arguments: args },
+      params: {
+        name,
+        arguments: args,
+        _meta: {
+          "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+          "io.modelcontextprotocol/clientInfo": { name: "dpf-ux-audit", version: "1.0.0" },
+          "io.modelcontextprotocol/clientCapabilities": {
+            extensions: { "io.modelcontextprotocol/tasks": {} },
+          },
+        },
+      },
     }),
     signal: AbortSignal.timeout(opts.timeoutMs ?? 180_000),
   });
@@ -125,6 +153,25 @@ export async function callDpfMcpTool(
   const payload = (await response.json()) as McpCallResponse;
   if (payload.error) {
     throw new Error(`MCP ${name} error: ${payload.error.message ?? "unknown"}`);
+  }
+
+  if (
+    payload.result?.resultType === "task" &&
+    typeof payload.result.taskId === "string" &&
+    typeof payload.result.status === "string"
+  ) {
+    return {
+      isError: false,
+      text: "",
+      data: null,
+      task: {
+        taskId: payload.result.taskId,
+        status: payload.result.status,
+        pollIntervalMs: typeof payload.result.pollIntervalMs === "number"
+          ? payload.result.pollIntervalMs
+          : null,
+      },
+    };
   }
 
   const text = payload.result?.content?.[0]?.text ?? "";
@@ -139,4 +186,73 @@ export async function callDpfMcpTool(
   }
 
   return { isError: payload.result?.isError === true, text, data };
+}
+
+export async function getDpfMcpTask(
+  config: DpfMcpConfig,
+  taskId: string,
+): Promise<McpTaskSnapshot> {
+  const response = await fetch(config.url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: config.authorization,
+      "MCP-Protocol-Version": "2026-07-28",
+      "Mcp-Method": "tasks/get",
+      "Mcp-Name": taskId,
+    },
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      id: `task-${taskId}`,
+      method: "tasks/get",
+      params: {
+        taskId,
+        _meta: {
+          "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+          "io.modelcontextprotocol/clientInfo": { name: "dpf-ux-audit", version: "1.0.0" },
+          "io.modelcontextprotocol/clientCapabilities": {
+            extensions: { "io.modelcontextprotocol/tasks": {} },
+          },
+        },
+      },
+    }),
+    signal: AbortSignal.timeout(30_000),
+  });
+  if (!response.ok) throw new Error(`MCP tasks/get failed with HTTP ${response.status}`);
+  const payload = (await response.json()) as McpCallResponse;
+  if (payload.error) {
+    throw new Error(`MCP tasks/get error: ${payload.error.message ?? "unknown"}`);
+  }
+  if (
+    typeof payload.result?.taskId !== "string" ||
+    typeof payload.result.status !== "string"
+  ) {
+    throw new Error("MCP tasks/get returned a malformed task");
+  }
+  return {
+    ...payload.result,
+    taskId: payload.result.taskId,
+    status: payload.result.status,
+  };
+}
+
+/**
+ * Bind the owned HTTP client to the shared watcher. Config is resolved again
+ * for every poll so a restart or token rotation does not reuse stale authority.
+ */
+export function createDpfMcpTaskWatcher(options: {
+  resolveConfig: () => Promise<DpfMcpConfig>;
+  store: McpTaskContinuationStore;
+  wake: (
+    reference: Pick<McpTaskContinuation, "taskId" | "continuationRef">,
+    task: McpTaskSnapshot,
+  ) => Promise<void>;
+  maxConcurrentResumptions?: number;
+}): SharedMcpTaskWatcher {
+  return new SharedMcpTaskWatcher({
+    store: options.store,
+    getTask: async (taskId) => getDpfMcpTask(await options.resolveConfig(), taskId),
+    wake: options.wake,
+    maxConcurrentResumptions: options.maxConcurrentResumptions,
+  });
 }

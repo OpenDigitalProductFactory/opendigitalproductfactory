@@ -1,12 +1,7 @@
 import { prisma } from "@dpf/db";
-import type { UserContext } from "@/lib/permissions";
-import {
-  createAutonomousWorkRun,
-  executeAutonomousAgenticLoop,
-  resolveAutonomousWorkAgent,
-  resolveAutonomousWorkTools,
-} from "@/lib/tak/autonomous-work-run";
+import { createAutonomousWorkRun } from "@/lib/tak/autonomous-work-run";
 import { createTaskMessage } from "@/lib/tak/task-records";
+import { enqueueRemoteTaskExecution } from "@/lib/mcp/remote-task-executor";
 
 export const REMOTE_RISK_CLASSES = ["read", "bounded-write", "high-risk"] as const;
 export type RemoteRiskClass = (typeof REMOTE_RISK_CLASSES)[number];
@@ -26,6 +21,8 @@ export type RemoteTaskSubmitParams = {
 export type RemoteTaskSubmitAuth = {
   tokenId: string;
   userId: string;
+  agentId?: string | null;
+  scopes: string[];
   capability: "read" | "write";
   source: "pat" | "session-jwt";
 };
@@ -79,7 +76,6 @@ export function parseRemoteTaskSubmitParams(params: Record<string, unknown> | un
 
 export async function submitRemoteCoworkerTask(input: {
   token: RemoteTaskSubmitAuth;
-  userContext: UserContext;
   params: Record<string, unknown> | undefined;
 }): Promise<RemoteTaskSubmitOutcome> {
   const parsed = parseRemoteTaskSubmitParams(input.params);
@@ -87,7 +83,36 @@ export async function submitRemoteCoworkerTask(input: {
     return { kind: "invalid_params", message: parsed };
   }
 
-  const { token, userContext } = input;
+  const { token } = input;
+  if (token.source !== "pat") {
+    return {
+      kind: "result",
+      result: {
+        content: remoteTaskContent(
+          "Asynchronous remote tasks require a durable MCP personal access token so the worker can reauthorize after the request ends.",
+        ),
+        structuredContent: {
+          error: "durable_authorization_required",
+          action: "Use a scoped dpfmcp_ personal access token for asynchronous task submission.",
+        },
+        isError: true,
+      },
+    };
+  }
+  if (token.agentId && token.agentId !== parsed.agentId) {
+    return {
+      kind: "result",
+      result: {
+        content: remoteTaskContent("This token is bound to a different coworker identity."),
+        structuredContent: {
+          error: "agent_binding_mismatch",
+          tokenAgentId: token.agentId,
+          requestedAgentId: parsed.agentId,
+        },
+        isError: true,
+      },
+    };
+  }
   if (token.capability === "read" && parsed.riskClass !== "read") {
     return {
       kind: "result",
@@ -110,6 +135,7 @@ export async function submitRemoteCoworkerTask(input: {
   const existing = await prisma.taskRun.findFirst({
     where: {
       userId: token.userId,
+      mcpOwnerTokenId: token.tokenId,
       a2aMetadata: {
         path: ["idempotencyKey"],
         equals: parsed.idempotencyKey,
@@ -146,7 +172,7 @@ export async function submitRemoteCoworkerTask(input: {
     select: { id: true },
   });
 
-  const sourceKind = token.source === "session-jwt" ? "mcp-session" : "mcp-token";
+  const sourceKind = "mcp-token";
   const run = await createAutonomousWorkRun({
     trigger: "external-mcp",
     userId: token.userId,
@@ -156,13 +182,17 @@ export async function submitRemoteCoworkerTask(input: {
     objective: parsed.objective,
     prompt: parsed.prompt,
     threadId: thread.id,
-    authorityScope: parsed.authorityScope ?? [],
+    // The server-resolved PAT grants are the durable authority record. A
+    // caller-provided authorityScope is descriptive input only and must never
+    // widen what the token can do.
+    authorityScope: token.scopes,
     sourceRef: { kind: sourceKind, id: token.tokenId },
     metadata: {
       idempotencyKey: parsed.idempotencyKey,
       riskClass: parsed.riskClass,
       apiTokenId: token.tokenId,
       tokenSource: token.source,
+      requestedAuthorityScope: parsed.authorityScope ?? null,
       requestedThreadId: parsed.threadId ?? null,
     },
   });
@@ -186,6 +216,7 @@ export async function submitRemoteCoworkerTask(input: {
       where: { taskRunId: run.taskRunId },
       data: {
         status: "input-required",
+        mcpOwnerTokenId: token.tokenId,
         progressPayload: {
           summary: "Remote submission paused for employee approval before side-effecting work can run.",
           riskClass: parsed.riskClass,
@@ -206,103 +237,20 @@ export async function submitRemoteCoworkerTask(input: {
       },
     };
   }
-
-  const agent = await resolveAutonomousWorkAgent({
-    agentId: parsed.agentId,
-    routeContext: parsed.routeContext,
-    userContext,
+  await prisma.taskRun.update({
+    where: { taskRunId: run.taskRunId },
+    data: { mcpOwnerTokenId: token.tokenId },
   });
-  const resolvedAgentId = agent.agentId ?? parsed.agentId;
-  const toolMode = parsed.riskClass === "read" ? "advise" : "act";
-  const tools = await resolveAutonomousWorkTools({
-    userContext,
-    agentId: resolvedAgentId,
-    mode: toolMode,
-    externalAccessEnabled: true,
-    // BI-CAP-F2D39F8F: budget the attachment to the serving model; the remote
-    // task prompt ranks which tools stay attached.
-    routeContext: parsed.routeContext,
-    intentQuery: parsed.prompt,
-  });
-
-  try {
-    const result = await executeAutonomousAgenticLoop({
-      systemPrompt: agent.systemPrompt,
-      chatHistory: [{ role: "user", content: parsed.prompt }],
-      sensitivity: agent.sensitivity ?? "internal",
-      tools: tools.tools,
-      toolsForProvider: tools.toolsForProvider,
-      deferredTools: tools.deferredTools,
-      userId: token.userId,
-      routeContext: parsed.routeContext,
-      agentId: resolvedAgentId,
-      threadId: thread.id,
+  await enqueueRemoteTaskExecution(run.taskRunId);
+  return {
+    kind: "result",
+    result: {
       taskRunId: run.taskRunId,
-      apiTokenId: token.tokenId,
-      taskType: "external-mcp",
-      agentDisplayName: optionalString(agent.displayName) ?? resolvedAgentId,
-    });
-
-    await createTaskMessage({
-      taskRunId: run.taskRunId,
-      taskRunRecordId: run.id,
-      contextId: run.contextId,
-      role: "assistant",
-      content: result.content,
-      metadata: {
-        source: "mcp.tasks/submit",
-        executedToolCount: result.executedTools?.length ?? 0,
-      },
-    });
-
-    await prisma.taskRun.update({
-      where: { taskRunId: run.taskRunId },
-      data: {
-        status: "completed",
-        completedAt: new Date(),
-        progressPayload: {
-          summary: result.content,
-          riskClass: parsed.riskClass,
-          executedToolCount: result.executedTools?.length ?? 0,
-        },
-      },
-    });
-
-    return {
-      kind: "result",
-      result: {
-        taskRunId: run.taskRunId,
-        status: "completed",
-        idempotentReplay: false,
-        requiresApproval: false,
-        content: remoteTaskContent(result.content),
-        executedToolCount: result.executedTools?.length ?? 0,
-        isError: false,
-      },
-    };
-  } catch (err) {
-    const message = err instanceof Error ? err.message : "Unknown remote coworker execution error";
-    await prisma.taskRun.update({
-      where: { taskRunId: run.taskRunId },
-      data: {
-        status: "failed",
-        completedAt: new Date(),
-        progressPayload: {
-          summary: message,
-          riskClass: parsed.riskClass,
-        },
-      },
-    });
-    return {
-      kind: "result",
-      result: {
-        taskRunId: run.taskRunId,
-        status: "failed",
-        idempotentReplay: false,
-        requiresApproval: false,
-        content: remoteTaskContent(message),
-        isError: true,
-      },
-    };
-  }
+      status: "working",
+      idempotentReplay: false,
+      requiresApproval: false,
+      content: remoteTaskContent("Remote task accepted for asynchronous execution."),
+      isError: false,
+    },
+  };
 }

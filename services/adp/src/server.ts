@@ -8,6 +8,16 @@ import {
   Histogram,
   Registry,
 } from "prom-client";
+import {
+  MCP_PROTOCOL_VERSION_2026,
+  MCP_UNSUPPORTED_PROTOCOL_VERSION,
+  cacheableCompleteResult,
+  isModernMcpRequest,
+  readModernRequestMetadata,
+  validateModernHttpHeaders,
+  withModernServerMetadata,
+  type ModernMcpRequestMetadata,
+} from "@dpf/integration-shared";
 import { listWorkers, TOOL_DEFINITION as LIST_WORKERS_DEF } from "./tools/list-workers.js";
 import {
   getPayStatements,
@@ -56,6 +66,20 @@ export const adpMcpRequests = new Counter({
   registers: [metricsRegistry],
 });
 
+export const adpMcpCompatibility = new Counter({
+  name: "dpf_adp_mcp_compatibility_total",
+  help: "Privacy-safe ADP MCP protocol and client compatibility observations",
+  labelNames: [
+    "client_kind",
+    "client_version",
+    "protocol_era",
+    "protocol_version",
+    "method_family",
+    "result_class",
+  ] as const,
+  registers: [metricsRegistry],
+});
+
 interface JsonRpcRequest {
   jsonrpc: "2.0";
   id: number | string;
@@ -69,6 +93,11 @@ interface JsonRpcResponse {
   result?: unknown;
   error?: { code: number; message: string };
 }
+
+type McpRequestContext = {
+  modern: boolean;
+  metadata: ModernMcpRequestMetadata | null;
+};
 
 interface ToolsCallParams {
   name: string;
@@ -121,9 +150,26 @@ function sendJson(res: ServerResponse, status: number, body: unknown): void {
 const ADP_SUPPORTED_PROTOCOL_VERSIONS = ["2025-11-25", "2025-03-26", "2024-11-05"];
 const ADP_FALLBACK_PROTOCOL_VERSION = "2024-11-05";
 
-export async function handleMcp(request: JsonRpcRequest): Promise<JsonRpcResponse> {
+function modernResult<T extends Record<string, unknown>>(result: T): T & { _meta: Record<string, unknown> } {
+  return withModernServerMetadata(
+    result["resultType"] === undefined ? { resultType: "complete", ...result } : result,
+    { name: "dpf-adp", version: "1.0.0" },
+  );
+}
+
+export async function handleMcp(
+  request: JsonRpcRequest,
+  context: McpRequestContext = { modern: false, metadata: null },
+): Promise<JsonRpcResponse> {
   switch (request.method) {
     case "initialize": {
+      if (context.modern) {
+        return {
+          jsonrpc: "2.0",
+          id: request.id,
+          error: { code: -32601, message: "initialize is not part of MCP 2026-07-28" },
+        };
+      }
       // Conformant MCP handshake: echo the highest protocol version we both
       // speak (fallback when the client's is unknown), and declare the tools
       // capability so clients don't have to probe tools/list blind.
@@ -150,11 +196,33 @@ export async function handleMcp(request: JsonRpcRequest): Promise<JsonRpcRespons
     case "notifications/initialized":
       // Notifications carry no id and expect no result; acknowledge quietly.
       return { jsonrpc: "2.0", id: request.id, result: {} };
+    case "server/discover":
+      if (!context.modern) {
+        return {
+          jsonrpc: "2.0",
+          id: request.id,
+          error: { code: -32601, message: "Method not found: server/discover" },
+        };
+      }
+      return {
+        jsonrpc: "2.0",
+        id: request.id,
+        result: modernResult(cacheableCompleteResult({
+          supportedVersions: [MCP_PROTOCOL_VERSION_2026],
+          capabilities: { tools: {} },
+        }, 0, "private")),
+      };
     case "tools/list":
       return {
         jsonrpc: "2.0",
         id: request.id,
-        result: { tools: Object.values(TOOLS).map((t) => t.definition) },
+        result: context.modern
+          ? modernResult(cacheableCompleteResult(
+              { tools: Object.values(TOOLS).map((t) => t.definition) },
+              0,
+              "private",
+            ))
+          : { tools: Object.values(TOOLS).map((t) => t.definition) },
       };
     case "tools/call": {
       const params = request.params as ToolsCallParams | undefined;
@@ -174,7 +242,18 @@ export async function handleMcp(request: JsonRpcRequest): Promise<JsonRpcRespons
       try {
         const result = await TOOLS[toolName]!.handler(params?.arguments, ctx);
         stop({ outcome: "ok" });
-        return { jsonrpc: "2.0", id: request.id, result };
+        return {
+          jsonrpc: "2.0",
+          id: request.id,
+          result: context.modern
+            ? modernResult({
+                resultType: "complete",
+                content: [{ type: "text", text: JSON.stringify(result) }],
+                structuredContent: result,
+                isError: false,
+              })
+            : result,
+        };
       } catch (err) {
         stop({ outcome: "error" });
         const message = err instanceof Error ? err.message : "unknown error";
@@ -194,6 +273,52 @@ export async function handleMcp(request: JsonRpcRequest): Promise<JsonRpcRespons
         error: { code: -32601, message: `Method not found: ${request.method}` },
       };
   }
+}
+
+function incomingHeaders(req: IncomingMessage): Headers {
+  const headers = new Headers();
+  for (const [name, value] of Object.entries(req.headers)) {
+    if (Array.isArray(value)) {
+      for (const item of value) headers.append(name, item);
+    } else if (value !== undefined) {
+      headers.set(name, value);
+    }
+  }
+  return headers;
+}
+
+function boundedMetricLabel(value: unknown, fallback: string, max = 64): string {
+  if (typeof value !== "string") return fallback;
+  const cleaned = value.trim().replace(/[^A-Za-z0-9._:/-]/g, "").slice(0, max);
+  return cleaned || fallback;
+}
+
+function recordCompatibilityObservation(input: {
+  request: JsonRpcRequest;
+  response: JsonRpcResponse;
+  headers: Headers;
+  modern: boolean;
+  metadata: ModernMcpRequestMetadata | null;
+}): void {
+  const userAgent = boundedMetricLabel(input.headers.get("user-agent"), "unknown");
+  const [uaName, uaVersion] = userAgent.split("/", 2);
+  const params = input.request.params as { protocolVersion?: unknown } | undefined;
+  const protocolVersion = input.modern
+    ? MCP_PROTOCOL_VERSION_2026
+    : boundedMetricLabel(params?.protocolVersion, "legacy-unspecified", 32);
+  const slash = input.request.method.indexOf("/");
+  adpMcpCompatibility.inc({
+    client_kind: boundedMetricLabel(input.metadata?.clientInfo?.name, uaName || "unknown"),
+    client_version: boundedMetricLabel(input.metadata?.clientInfo?.version, uaVersion || "unknown", 40),
+    protocol_era: input.modern ? "modern" : "legacy",
+    protocol_version: protocolVersion,
+    method_family: boundedMetricLabel(
+      slash < 0 ? input.request.method : input.request.method.slice(0, slash),
+      "other",
+      32,
+    ),
+    result_class: input.response.error ? "protocol-error" : "success",
+  });
 }
 
 // Exported so tests can hit it without binding the port. The production path
@@ -227,8 +352,56 @@ export async function handleRequest(
         });
         return;
       }
+      const headers = incomingHeaders(req);
+      const requestForContract = request as unknown as {
+        method: string;
+        params?: Record<string, unknown>;
+      };
+      const modern = isModernMcpRequest(headers, requestForContract);
+      let metadata: ModernMcpRequestMetadata | null = null;
+      if (modern) {
+        const validation = validateModernHttpHeaders(headers, requestForContract);
+        if (!validation.ok) {
+          sendJson(res, 400, {
+            jsonrpc: "2.0",
+            id: request.id ?? null,
+            error: { code: validation.code, message: validation.message },
+          });
+          return;
+        }
+        const params = requestForContract.params;
+        const rawMeta = params?.["_meta"];
+        const requestedVersion =
+          typeof rawMeta === "object" && rawMeta !== null && !Array.isArray(rawMeta)
+            ? (rawMeta as Record<string, unknown>)["io.modelcontextprotocol/protocolVersion"]
+            : undefined;
+        if (requestedVersion !== MCP_PROTOCOL_VERSION_2026) {
+          sendJson(res, 400, {
+            jsonrpc: "2.0",
+            id: request.id ?? null,
+            error: {
+              code: MCP_UNSUPPORTED_PROTOCOL_VERSION,
+              message: "Unsupported protocol version",
+              data: { supported: [MCP_PROTOCOL_VERSION_2026], requested: requestedVersion },
+            },
+          });
+          return;
+        }
+        metadata = readModernRequestMetadata(params);
+        if (!metadata) {
+          sendJson(res, 400, {
+            jsonrpc: "2.0",
+            id: request.id ?? null,
+            error: { code: -32003, message: "Missing required client capability metadata" },
+          });
+          return;
+        }
+      }
       adpMcpRequests.inc({ method: request.method });
-      sendJson(res, 200, await handleMcp(request));
+      const response = await handleMcp(request, { modern, metadata });
+      recordCompatibilityObservation({ request, response, headers, modern, metadata });
+      const methodNotFound = modern && "error" in response && response.error?.code === -32601;
+      sendJson(res, methodNotFound ? 404 : 200, response);
     } catch {
       sendJson(res, 400, {
         jsonrpc: "2.0",

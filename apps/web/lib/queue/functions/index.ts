@@ -18,6 +18,7 @@ import { researchExecute } from "./research-execute";
 import { researchScheduleScan } from "./research-schedule";
 import { buildReviewVerification } from "./build-review-verification";
 import { buildExecute } from "./build-execute";
+import { mcpTaskExecute } from "./mcp-task-execute";
 import { preBuildReviewRepair } from "./pre-build-review-repair";
 import { assuranceBomGenerate } from "./assurance-bom";
 import { assuranceScanRun } from "./assurance-scan";
@@ -180,6 +181,7 @@ export const eventFunctions = [
   researchExecute,
   buildReviewVerification,
   buildExecute,
+  mcpTaskExecute,
   preBuildReviewRepair,
   assuranceBomGenerate,
   assuranceScanRun,

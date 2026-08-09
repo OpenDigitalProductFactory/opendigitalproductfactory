@@ -32,7 +32,11 @@ export async function heartbeat(taskRunId: string): Promise<boolean> {
   // haven't been migrated). The watchdog uses the same dual-state filter.
   try {
     const result = await prisma.taskRun.updateMany({
-      where: { taskRunId, status: { in: [...TASK_LIVE_STATES] } },
+      where: {
+        taskRunId,
+        status: { in: [...TASK_LIVE_STATES] },
+        cancellationRequestedAt: null,
+      },
       data: { lastHeartbeatAt: new Date() },
     });
     return result.count > 0;

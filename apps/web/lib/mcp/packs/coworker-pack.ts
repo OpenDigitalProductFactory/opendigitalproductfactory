@@ -37,6 +37,7 @@ const definitions: ToolDefinition[] = [
     // mode. Kept sideEffect:true for annotations; adviseCoordination exempts it
     // from the advise-mode runtime filter (BI-7EB4AE2C).
     adviseCoordination: true,
+    taskAugmented: true,
   },
   {
     name: "summon_coworker",
@@ -58,6 +59,7 @@ const definitions: ToolDefinition[] = [
     // reversible. Kept sideEffect:true for annotations; adviseCoordination
     // exempts it from the advise-mode runtime filter (BI-7EB4AE2C).
     adviseCoordination: true,
+    taskAugmented: true,
   },
   {
     name: "find_coworker",

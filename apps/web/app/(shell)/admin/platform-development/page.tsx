@@ -3,6 +3,7 @@ import { headers } from "next/headers";
 import { AdminTabNav } from "@/components/admin/AdminTabNav";
 import { ForkSetupPanel } from "@/components/admin/ForkSetupPanel";
 import LegacyTokenOverrideBanner from "@/components/admin/LegacyTokenOverrideBanner";
+import { McpCompatibilityPanel } from "@/components/admin/McpCompatibilityPanel";
 import { McpTokenManager } from "@/components/admin/McpTokenManager";
 import { PlatformDevelopmentForm } from "@/components/admin/PlatformDevelopmentForm";
 import { PrivatePathsEditor } from "@/components/admin/PrivatePathsEditor";
@@ -17,6 +18,7 @@ import {
 } from "@/lib/actions/platform-dev-config";
 import { isContributionModelEnabled } from "@/lib/flags/contribution-model";
 import { getDisplayPseudonym } from "@/lib/integrate/identity-privacy";
+import { getMcpCompatibilityReadModel } from "@/lib/mcp/compatibility-read-model";
 import type { PlatformDevPolicyState } from "@/lib/platform-dev-policy";
 
 export default async function AdminPlatformDevelopmentPage() {
@@ -35,6 +37,7 @@ export default async function AdminPlatformDevelopmentPage() {
   // paste-mode PATs are surfaced via the Advanced disclosure but not as
   // "Connected as @user" since we don't proactively verify their owner.
   const initialConnected = await getGitHubConnectedState().catch(() => null);
+  const mcpCompatibility = await getMcpCompatibilityReadModel();
 
   // Best-effort base URL for token setup snippets shown in the UI. Prefer the
   // forwarded Host header (which respects any reverse proxy); fall back to
@@ -84,6 +87,7 @@ export default async function AdminPlatformDevelopmentPage() {
       <McpTokenManager
         baseUrl={baseUrl}
       />
+      <McpCompatibilityPanel model={mcpCompatibility} />
     </div>
   );
 }

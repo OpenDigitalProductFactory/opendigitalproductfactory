@@ -5,7 +5,7 @@
 | **Status** | **REVISED FOR FINAL MCP 2026-07-28.** PR #4119 / remote-install BI-06B66FFD shipped a useful `TaskRun` projection for the older 2025-11-25 experimental Tasks contract. It is now explicitly a legacy compatibility increment, not current-standard completion. |
 | **Dates** | Original 2026-08-06 · standards correction 2026-08-08 |
 | **Backlog** | Umbrella `BI-AF9F9729`; core `BI-214CB18D`; official Tasks `BI-B6F8BFF4`; ADP `BI-A712B61F`; retirement `BI-106E1DEC` under live epic `EP-HEADLESS-EMPLOYEE` |
-| **Decision** | `DI-1C305D329ECE` — **dual wire, one route**; high confidence; no commandment conflict |
+| **Decisions** | `DI-1C305D329ECE` dual wire/one route · `DI-E765EF436DDE` one coherent migration PR · `DI-387E95BC46AA` dedicated privacy-safe telemetry owner · `DI-AE44D3654E8A` progressively disclosed view on the existing operator page; all high confidence, no commandment conflict |
 | **Plan** | [MCP 2026-07-28 stateless and Tasks migration](../plans/2026-08-08-mcp-2026-07-28-stateless-tasks-migration.md) |
 | **Blast radius** | **HIGH** — this changes the external coordination protocol and long-running execution semantics while preserving the route, authorization pipeline, and durable task substrate. |
 
@@ -82,6 +82,12 @@ Consequences:
 4. No `/api/mcp/v2`, second registry, second authorization path, or second task state is permitted.
 5. 2026-07-28 is preferred for capable clients. Legacy support is retired only through the evidence gate in §8.
 
+### 3.1 Implementation-shape decisions
+
+- `DI-E765EF436DDE` selected one coherent, ordered migration PR over four independent PRs because the host is memory-bound and the slices share one exact-tree verification gate. The four BIs and their evidence remain distinct; batching does not collapse acceptance criteria.
+- After verifying `ToolExecution` (governed tool audit) and `QueueTelemetryEvent` (queue operations) were not protocol-compatibility owners, `DI-387E95BC46AA` selected a narrow `McpProtocolTelemetry` model over overloading either table. The record is payload-free and query-shaped for client/version/protocol/result/resource readiness only.
+- `DI-AE44D3654E8A` selected a progressively disclosed compatibility panel on Admin → Platform Development over a new route. The existing page already owns MCP tokens and client setup; the choice adds no navigation surface and reuses report-kit primitives.
+
 ## 4. Target architecture
 
 ```mermaid
@@ -142,7 +148,17 @@ Returning a task handle requires real asynchronous execution:
 4. return the handle without awaiting the autonomous loop;
 5. persist heartbeats, requested input, cancellation observation, artifacts, result, and terminal error through the same task service.
 
+The queue carries only durable references. Before allocating a coworker or model, the worker reloads the owning PAT, rejects revoked/expired or agent-mismatched authority, and re-intersects the PAT's current granular grants with the user's role capabilities and the coworker's grants. The server-resolved PAT scope—not a caller-supplied `authorityScope`—is the durable authority ceiling; unmapped tools remain denied by default.
+
 The build must verify the existing queue/executor ownership before choosing wiring. It must not create a route-local worker.
+
+### 4.5 Client suspension and resource envelope
+
+Stateless transport and asynchronous execution save client resources only when the client actually suspends. After receiving a durable task handle, every client adapter must close the initiating request/stream and release the model turn, agent loop, and route-local execution context. A pending task must not retain a dedicated MCP connection, poller, timer, process, worker, or model allocation.
+
+Each client process uses one shared task watcher with server-directed polling guidance, backoff and jitter, bounded concurrent resumptions, and idempotent wakeup delivery. Restart recovery persists only minimal continuation references, then reauthenticates and reconstructs state with `tasks/get`; bearer tokens, model context, and connection state are never serialized into task metadata. A model or coworker turn wakes only for terminal output, actionable input-required state, an approval boundary, or explicit user refresh.
+
+The resource acceptance contract is therefore observable: suspended task count may grow independently of active client execution contexts; shared watcher count remains bounded per process; resumption concurrency is capped; and M4 compares active-versus-suspended memory without recording task payloads or private identity detail.
 
 ## 5. Surface contract
 
@@ -166,7 +182,7 @@ DPF's current external MCP authority remains its governed bearer-token issuance 
 
 - `TaskRun` remains the sole durable task aggregate; `TaskMessage`, `TaskArtifact`, task graph/evidence, Principal/GAID, and existing audit records retain their owners.
 - No MCP session, MCP task, discovery, or A2A task table is introduced by default.
-- Protocol metadata and telemetry use existing structured audit/metadata owners unless implementation evidence proves query or integrity requirements need a typed field.
+- Protocol compatibility telemetry has the dedicated narrow owner approved in `DI-387E95BC46AA`. It stores only bounded client/protocol/method/result/resource dimensions; `ToolExecution` remains the tool audit owner and `QueueTelemetryEvent` remains the queue owner.
 - Any new closed state, capability, cache scope, or protocol-version axis must use the canonical typed contract and migration path rather than free-form strings.
 - Retention expires an external projection; it does not erase canonical evidence needed for governance.
 
@@ -180,6 +196,8 @@ The legacy adapter records, without secrets or private payloads:
 - discovery and header-validation failures;
 - successful 2026 requests and official Tasks lifecycles;
 - rollback and compatibility-test evidence.
+
+The known-client matrix is explicit rather than inferred from traffic. It covers Codex, Claude Code/Build Studio CLI, Grok, the DPF UX harness, the AI-coworker tool-script client, ADP, Build Studio's direct application-service path, and the gated A2A entry adapter. Unobserved, not-applicable, and gated are first-class states; absence of traffic is never presented as conformance. ADP emits the same bounded dimensions through its existing Prometheus owner, while the canonical web route persists its local compatibility observations.
 
 Legacy support may be removed only when all are true:
 
@@ -196,6 +214,7 @@ Rollback disables preferred 2026 task creation or restores legacy selection at t
 - Contract tests pin protocol/method/name/parameter header-body matching and `-32020` failures, per-request metadata, response `_meta`, discovery semantics, all cacheable result directives, POST/SSE behavior, and absence of initialize/session dependence.
 - Security tests prove every request reauthenticates, GAID cannot be spoofed, token scope and grants intersect, cross-user/cross-org task lookup is denied, and cache scope cannot leak private discovery.
 - Lifecycle tests prove durable-before-handle, non-blocking creation, idempotent replay, polling, input-required/update, cooperative cancel, terminal result/error, expiry projection, and recovery after process restart.
+- Client-resource tests prove the request/stream and model turn are released after task creation, many pending tasks share one watcher, restart recovery reauthenticates, polling backs off with jitter, resumptions are bounded, and suspended tasks do not retain per-task execution contexts.
 - Compatibility tests run the same governed tool through the 2026 and legacy adapters and prove one `TaskRun`, one receipt contract, and equivalent authorized outcomes.
 - Surface-parity tests cover external MCP, Build Studio, in-platform coworker, ADP where applicable, and the A2A MCP entry adapter.
 - Runtime claims require the canonical shared nonproduction lease and exact-image evidence; source-local unit/build checks alone do not prove asynchronous behavior.
@@ -207,4 +226,4 @@ Rollback disables preferred 2026 task creation or restores legacy selection at t
 - Exposing internal participant topology or private GAIDs to an external organization.
 - Implementing A2A as an MCP extension or proxy.
 - Removing 2025 compatibility before the evidence gate.
-- Shipping implementation code in this design thread.
+- Claiming canonical-runtime conformance, memory reduction, or legacy-retirement readiness from source-local tests alone.

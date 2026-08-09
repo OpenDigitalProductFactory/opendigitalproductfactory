@@ -89,6 +89,7 @@ const definitions: ToolDefinition[] = [
     requiresExternalAccess: true,
     executionMode: "immediate",
     sideEffect: true,
+    taskAugmented: true,
   },
   {
     name: "evaluate_page",

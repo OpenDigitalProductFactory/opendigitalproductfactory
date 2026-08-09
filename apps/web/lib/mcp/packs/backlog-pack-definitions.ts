@@ -246,7 +246,11 @@ export const backlogPackDefinitions: ToolDefinition[] = [
     inputSchema: {
       type: "object",
       properties: {
-        itemId: { type: "string", description: "Semantic backlog item id (e.g. BI-PORT-005)" },
+        itemId: {
+          type: "string",
+          description: "Semantic backlog item id (e.g. BI-PORT-005)",
+          "x-mcp-header": "Item-Id",
+        },
       },
       required: ["itemId"],
     },
