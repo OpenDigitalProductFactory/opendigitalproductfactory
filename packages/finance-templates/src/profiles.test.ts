@@ -26,6 +26,7 @@ const EXPECTED_SLUGS = [
   "warehousing_fulfilment",
   "fabric_care_services",
   "agriculture_ranching",
+  "manufacturing",
 ];
 
 describe("financial profile catalog", () => {
