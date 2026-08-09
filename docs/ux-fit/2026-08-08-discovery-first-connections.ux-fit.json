@@ -1,0 +1,17 @@
+{
+  "version": "1",
+  "decidedOption": "identified-device-first",
+  "decisionInteractionId": "DI-7CD79EFC3BA6",
+  "scope": {
+    "files": [
+      "apps/web/components/inventory/ConfigureConnectionInline.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "identified-device-first",
+      "raw-endpoint-first"
+    ]
+  }
+}

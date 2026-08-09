@@ -131,7 +131,7 @@ describe("configureDiscoveryConnection — edit path", () => {
       configuration: { subnet: "https://192.168.0.1" },
     })).resolves.toEqual({
       ok: false,
-      error: "Subnet must be CIDR notation, for example 192.168.0.0/24",
+      error: "Enter a subnet in CIDR notation, for example 192.168.0.0/24.",
     });
     expect(mockUpdate).not.toHaveBeenCalled();
   });
@@ -147,6 +147,42 @@ describe("configureDiscoveryConnection — edit path", () => {
     expect(result).toEqual({ ok: true, connectionId: "conn-fresh" });
     expect(mockUpdate).not.toHaveBeenCalled();
     expect(mockUpsert).toHaveBeenCalledTimes(1);
+  });
+
+  it("uses the shared endpoint contract before persistence", async () => {
+    const result = await configureDiscoveryConnection({
+      gatewayEntityId: "gw-1",
+      name: "Cloud Gateway",
+      collectorType: "unifi",
+      endpointUrl: "file:///etc/passwd",
+      apiKey: "fresh-key",
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      error: "Use an HTTP or HTTPS gateway address.",
+    });
+    expect(mockUpsert).not.toHaveBeenCalled();
+  });
+
+  it("canonicalizes equivalent endpoints and preserves gateway identity", async () => {
+    mockUpsert.mockResolvedValue({ id: "conn-fresh" });
+
+    await configureDiscoveryConnection({
+      gatewayEntityId: "gw-1",
+      name: "Cloud Gateway",
+      collectorType: "unifi",
+      endpointUrl: "  HTTP://192.168.0.1/  ",
+      apiKey: "fresh-key",
+    });
+
+    expect(mockUpsert).toHaveBeenCalledWith(expect.objectContaining({
+      where: { connectionKey: "unifi:192.168.0.1" },
+      create: expect.objectContaining({
+        endpointUrl: "https://192.168.0.1",
+        gatewayEntityId: "gw-1",
+      }),
+    }));
   });
 });
 

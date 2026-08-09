@@ -50,6 +50,7 @@ export async function DiscoveryOperationsPage({
     openIssues,
     graphData,
     detectedGateway,
+    gatewayCandidates,
     health,
     connections,
   } = await getDiscoveryOperationsViewModel({ includeConnections });
@@ -116,7 +117,11 @@ export async function DiscoveryOperationsPage({
 
       <div className="space-y-4">
         <DiscoveryRunSummary run={latestRun} health={health} />
-        <SavedConnectionsPanel detectedGateway={detectedGateway} connections={connections} />
+        <SavedConnectionsPanel
+          detectedGateway={detectedGateway}
+          gatewayCandidates={gatewayCandidates}
+          connections={connections}
+        />
         <InventoryExceptionQueue queues={triageQueues} />
         <SubnetGroupedInventoryPanel groups={groupedInventory} />
         <PortfolioQualityIssuesPanel issues={openIssues} />

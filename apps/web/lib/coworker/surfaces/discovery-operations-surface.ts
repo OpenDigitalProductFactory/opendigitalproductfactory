@@ -15,6 +15,14 @@ export type DiscoverySurfaceModel = {
   } | null;
   openIssues: Array<{ issueType: string; count: number }>;
   detectedGateway: string | null;
+  gatewayCandidates?: Array<{
+    entityId: string;
+    name: string;
+    address: string | null;
+    recommendation: string;
+    matchesDetectedGateway: boolean;
+    usable: boolean;
+  }>;
   connections: Array<{
     id: string;
     name: string;
@@ -26,6 +34,7 @@ export type DiscoverySurfaceModel = {
     lastTestedAt: string | null;
     lastTestStatus: string | null;
     lastTestMessage: string | null;
+    gatewayEntityId?: string | null;
   }>;
 };
 
@@ -52,15 +61,20 @@ export const DISCOVERY_OPERATIONS_SURFACE: SurfaceDefinition = {
     { nodeId: "connection.form", parentId: "surface", kind: "form", accessibleName: "Configure Discovery Connection", valuePolicy: "none", sensitivity: "internal" },
     { nodeId: "connection.id", parentId: "connection.form", kind: "record", accessibleName: "Existing Connection", valuePolicy: "read", sensitivity: "confidential", rendered: false },
     { nodeId: "connection.name", parentId: "connection.form", kind: "field", accessibleName: "Connection Name", fieldType: "text", valuePolicy: "read", sensitivity: "internal", rendered: false },
+    { nodeId: "connection.gateway-selection-required", parentId: "connection.form", kind: "record", accessibleName: "Gateway Selection Required", valuePolicy: "read", sensitivity: "internal", rendered: false },
+    { nodeId: "connection.gateway-entity-id", parentId: "connection.form", kind: "record", accessibleName: "Selected Gateway", valuePolicy: "read", sensitivity: "internal", rendered: false },
+    { nodeId: "connection.gateway", parentId: "connection.form", kind: "field", accessibleName: "Gateway", fieldType: "select", valuePolicy: "read", sensitivity: "internal", when: { nodeId: "connection.gateway-selection-required", equals: true } },
     { nodeId: "connection.method", parentId: "connection.form", kind: "field", accessibleName: "Discovery Method", fieldType: "select", valuePolicy: "read", sensitivity: "internal" },
     { nodeId: "connection.target", parentId: "connection.form", kind: "field", accessibleName: "Target IP or Hostname", fieldType: "text", valuePolicy: "read", sensitivity: "internal" },
     { nodeId: "connection.community", parentId: "connection.form", kind: "field", accessibleName: "Connection Credential", fieldType: "password", valuePolicy: "write-only", sensitivity: "secret", when: { nodeId: "connection.method", oneOf: ["unifi", "snmp"] } },
     { nodeId: "connection.site", parentId: "connection.form", kind: "field", accessibleName: "UniFi Site", fieldType: "text", valuePolicy: "read", sensitivity: "internal", when: { nodeId: "connection.method", equals: "unifi" } },
     { nodeId: "connection.tls-insecure", parentId: "connection.form", kind: "field", accessibleName: "Allow self-signed controller certificate", fieldType: "checkbox", valuePolicy: "read", sensitivity: "internal", when: { nodeId: "connection.method", equals: "unifi" } },
+    { nodeId: "connection.manual-recovery", parentId: "connection.form", kind: "action", accessibleName: "Manual gateway", valuePolicy: "none", sensitivity: "internal", when: { nodeId: "connection.method", equals: "unifi" } },
     { nodeId: "connection.save-and-test", parentId: "connection.form", kind: "action", accessibleName: "Save & Test", valuePolicy: "none", sensitivity: "internal" },
   ],
   actions: [
     { actionId: "connection.set-name", label: "Set Connection Name", actionClass: "ui-local", localEffect: { kind: "set-value", targetNodeId: "connection.name" }, risk: "low", confirmation: "none" },
+    { actionId: "connection.set-gateway", label: "Select Gateway", actionClass: "ui-local", localEffect: { kind: "set-value", targetNodeId: "connection.gateway-entity-id" }, risk: "low", confirmation: "none" },
     { actionId: "connection.set-method", label: "Set Discovery Method", actionClass: "ui-local", localEffect: { kind: "set-value", targetNodeId: "connection.method" }, risk: "low", confirmation: "none" },
     { actionId: "connection.set-target", label: "Set Target IP or Hostname", actionClass: "ui-local", localEffect: { kind: "set-value", targetNodeId: "connection.target" }, risk: "low", confirmation: "none" },
     { actionId: "connection.set-community", label: "Set Community String", actionClass: "ui-local", localEffect: { kind: "set-value", targetNodeId: "connection.community" }, risk: "low", confirmation: "none" },
@@ -78,6 +92,7 @@ export const DISCOVERY_OPERATIONS_SURFACE: SurfaceDefinition = {
       argMap: {
         id: "connection.id",
         name: "connection.name",
+        gatewayEntityId: "connection.gateway-entity-id",
         collectorType: "connection.method",
         endpointUrl: "connection.target",
         apiKey: "connection.community",
@@ -98,6 +113,11 @@ export const DISCOVERY_OPERATIONS_SURFACE: SurfaceDefinition = {
 
 export function projectDiscoveryOperationsSurface(model: DiscoverySurfaceModel): SurfaceLoaderResult {
   const selected = model.connections[0];
+  const gatewayCandidates = model.gatewayCandidates ?? [];
+  const selectedGateway = gatewayCandidates.find((candidate) => candidate.entityId === selected?.gatewayEntityId)
+    ?? gatewayCandidates.find((candidate) => candidate.matchesDetectedGateway)
+    ?? (gatewayCandidates.length === 1 ? gatewayCandidates[0] : undefined);
+  const gatewaySelectionRequired = gatewayCandidates.length > 1 && !selectedGateway;
   const gatewayConnectionIssues = model.openIssues.find((issue) => issue.issueType === "gateway_connection_needed")?.count ?? 0;
   const method = selected?.collectorType ?? "unifi";
   const target = selected?.endpointUrl ?? model.detectedGateway ?? "";
@@ -135,6 +155,9 @@ export function projectDiscoveryOperationsSurface(model: DiscoverySurfaceModel):
       "metric.needs-review": model.needsReview,
       "issues.gateway-connections": gatewayConnectionIssues,
       "connection.name": name,
+      "connection.gateway-selection-required": gatewaySelectionRequired,
+      "connection.gateway-entity-id": selectedGateway?.entityId ?? null,
+      "connection.gateway": selectedGateway?.entityId ?? "",
       "connection.id": selected?.id ?? null,
       "connection.method": method,
       "connection.target": target,
@@ -153,6 +176,10 @@ export function projectDiscoveryOperationsSurface(model: DiscoverySurfaceModel):
         choices: ["unifi", "snmp", "arp_scan"],
         labels: ["Ubiquiti UniFi", "SNMP (Generic)", "Network Scan (ARP)"],
       },
+      "connection.gateway": {
+        choices: gatewayCandidates.filter((candidate) => candidate.usable).map((candidate) => candidate.entityId),
+        labels: gatewayCandidates.filter((candidate) => candidate.usable).map((candidate) => [candidate.name, candidate.address].filter(Boolean).join(" — ")),
+      },
     },
     accessibleNames: {
       "connection.target": method === "unifi" ? "Controller URL" : method === "arp_scan" ? "Subnet to scan" : "Target IP or Hostname",
@@ -160,6 +187,8 @@ export function projectDiscoveryOperationsSurface(model: DiscoverySurfaceModel):
     },
     help: {
       "connection.method": "SNMP discovers network devices. SMTP sends outbound email and is configured on the email-provider surface, not Estate Discovery.",
+      "connection.gateway": selectedGateway?.recommendation ?? "Choose the gateway by device identity and local address; DPF does not guess from subnet position.",
+      "connection.manual-recovery": "Use manual gateway entry only when DPF cannot identify the physical gateway from inventory evidence.",
       "connection.target": "For SNMP, enter the device IP address or hostname reachable over UDP port 161.",
       "connection.community": "Enter the SNMP community string. It is write-only, encrypted at rest, and never returned to a coworker or renderer.",
       "connection.save-and-test": "Saves the connection, runs the actual collector test, and reports status and discovered item count.",

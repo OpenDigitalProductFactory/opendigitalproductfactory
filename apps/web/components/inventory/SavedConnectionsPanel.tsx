@@ -11,14 +11,20 @@
 import { listDiscoveryConnections, type DiscoveryConnectionSummary } from "@/lib/actions/discovery";
 import { AddDiscoveryConnection } from "./AddDiscoveryConnection";
 import { SavedConnectionRow } from "./SavedConnectionRow";
+import type { GatewayCandidate } from "@/lib/discovery-connection/gateway-candidate";
 
 type Props = {
   detectedGateway: string | null;
   /** Shared page/surface read model; omitted only by legacy callers. */
   connections?: DiscoveryConnectionSummary[];
+  gatewayCandidates?: GatewayCandidate[];
 };
 
-export async function SavedConnectionsPanel({ detectedGateway, connections: projectedConnections }: Props) {
+export async function SavedConnectionsPanel({
+  detectedGateway,
+  gatewayCandidates = [],
+  connections: projectedConnections,
+}: Props) {
   const result = projectedConnections
     ? { ok: true as const, connections: projectedConnections }
     : await listDiscoveryConnections();
@@ -27,13 +33,13 @@ export async function SavedConnectionsPanel({ detectedGateway, connections: proj
   // The CTA itself is gated by the same permission server-side, so the
   // operator just gets the same "Unauthorized" if they try to save.
   if (!result.ok) {
-    return <AddDiscoveryConnection detectedGateway={detectedGateway} />;
+    return <AddDiscoveryConnection detectedGateway={detectedGateway} gatewayCandidates={gatewayCandidates} />;
   }
 
   const { connections } = result;
 
   if (connections.length === 0) {
-    return <AddDiscoveryConnection detectedGateway={detectedGateway} />;
+    return <AddDiscoveryConnection detectedGateway={detectedGateway} gatewayCandidates={gatewayCandidates} />;
   }
 
   return (
@@ -53,6 +59,7 @@ export async function SavedConnectionsPanel({ detectedGateway, connections: proj
       </div>
       <AddDiscoveryConnection
         detectedGateway={detectedGateway}
+        gatewayCandidates={gatewayCandidates}
         variant="compact"
       />
     </div>
