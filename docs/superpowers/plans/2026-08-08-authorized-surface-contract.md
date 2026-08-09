@@ -12,6 +12,24 @@
 
 **Coverage receipt:** `cmsl4bb400ik501o2arpsw3ru`
 
+## Design grounding
+
+- Existing specs/plans reviewed:
+  - `docs/superpowers/specs/2026-08-08-authorized-surface-contract-design.md`
+  - `docs/superpowers/specs/2026-05-31-pseudo-user-contract-design.md`
+  - `docs/superpowers/specs/2026-08-05-headless-employee-external-agent-wwwd-exposure-design.md`
+  - `docs/superpowers/plans/2026-07-09-unified-coworker-parity-formassist-buildcontext-plan.md`
+  - `docs/superpowers/plans/2026-07-20-coworker-interaction-surface-gap-followup.md`
+- Current code substrate reviewed:
+  - `apps/web/lib/actions/agent-coworker.ts` and the TAK prompt, grant, autonomous-run, and tool-budget paths
+  - `apps/web/lib/tak/route-context/`, `apps/web/lib/tak/discovery-operations-route-context.ts`, and the Discovery operations view model/components
+  - `apps/web/lib/mcp-governed-execute.ts`, `apps/web/lib/mcp/pack-registry.ts`, the MCP tool packs, and governed-surface annotations
+  - `apps/web/lib/coworker/screen-manifest-types.ts`, `apps/web/lib/mcp/packs/screen-pack.ts`, and existing browser/mobile/workroom execution seams
+- Source of truth:
+  - Shared feature loaders/view models own application state and UX meaning; existing MCP/domain actions plus `AuthorityBinding` and coworker grants own authorization and persistent effects. The Authorized Surface Contract compiles and projects those sources for every renderer and agent mode without becoming a second state, policy, or action system.
+- Decision:
+  - Extend the existing coworker, route-context, MCP execution, and Discovery feature substrate with one render-independent ASC catalog/session/query/action protocol. Treat `PageContext`, `ScreenManifest`, DOM/accessibility inspection, and `screen_*` tools as compatibility or conformance projections, and automatically inject relevant authorized surfaces into coworker runs instead of creating page-specific coworker fixes.
+
 ## Outcome
 
 Ship a versioned, render-independent Authorized Surface Contract so every AI coworker can perceive and operate its authorized product surfaces in browser, mobile, workroom, scheduled, background, and external/headless modes. The UX and coworker contract derive from the same application semantics, and CI prevents either from drifting.
