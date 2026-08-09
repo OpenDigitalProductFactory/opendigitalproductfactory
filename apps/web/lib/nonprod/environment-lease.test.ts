@@ -7,6 +7,7 @@ vi.mock("@/lib/queue/queue-telemetry", () => ({ recordQueueTransition }));
 import {
   claimNonprodEnvironmentLease,
   clampLeaseExpiry,
+  listCapacityReservingNonprodEnvironmentLeases,
   listActiveNonprodEnvironmentLeases,
   listQueuedNonprodEnvironmentLeases,
   releaseNonprodEnvironmentLease,
@@ -136,6 +137,22 @@ describe("durable nonproduction admission", () => {
     });
     expect(mockDb.nonProductionEnvironmentLease.findMany).toHaveBeenNthCalledWith(2, {
       where: { status: "queued", expiresAt: { gt: NOW } },
+      orderBy: [{ queuedAt: "asc" }, { id: "asc" }],
+    });
+  });
+
+  it("reads active and queued capacity reservations in one FIFO snapshot", async () => {
+    const mockDb = db();
+    await listCapacityReservingNonprodEnvironmentLeases({
+      db: mockDb as never,
+      now: NOW,
+    });
+
+    expect(mockDb.nonProductionEnvironmentLease.findMany).toHaveBeenCalledWith({
+      where: {
+        status: { in: ["active", "queued"] },
+        expiresAt: { gt: NOW },
+      },
       orderBy: [{ queuedAt: "asc" }, { id: "asc" }],
     });
   });

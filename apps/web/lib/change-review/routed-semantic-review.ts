@@ -41,6 +41,14 @@ async function localCiCapacityGuard(): Promise<SemanticReviewResult | null> {
       inconclusiveReason: "local-ci-active-capacity-reservation",
     };
   }
+  if (capacity.reason === "local-ci-queued-capacity-reservation") {
+    return {
+      decision: "inconclusive",
+      issues: [],
+      summary: "Semantic review deferred so the established local-CI queue can claim the next safe host window.",
+      inconclusiveReason: "local-ci-queued-capacity-reservation",
+    };
+  }
   return {
     decision: "inconclusive",
     issues: [],
