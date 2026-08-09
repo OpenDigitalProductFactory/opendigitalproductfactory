@@ -42,6 +42,12 @@ done count.
 you expand an epic, while the row-level status mix stays visible. Turn it off to
 inspect terminal items.
 
+The same default follows you when you switch from **List** to **Grid** or
+**Board**. Grid and Board load active work first so closed history does not slow
+the initial view. Choose **All items** beside the view controls when you need
+done and deferred records; that choice remains in the page URL for sharing or
+refreshing.
+
 - **Triaging** — Waiting for an intake decision.
 - **Open** — Accepted work that has not started.
 - **In progress** — Work is actively underway.

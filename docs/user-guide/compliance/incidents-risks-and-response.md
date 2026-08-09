@@ -31,6 +31,10 @@ The platform displays linked incidents on the risk detail. A risk with no
 incidents is not automatically low risk, and an incident does not by itself
 prove the linked control failed.
 
+Risk assessment **List**, **Grid**, and **Board** views all begin with active
+assessments. In Grid or Board, choose **All assessments** beside the view
+controls to inspect inactive history. The scope is retained in the URL.
+
 ## Respond To An Incident
 
 1. Address safety, containment, service continuity, and required escalation

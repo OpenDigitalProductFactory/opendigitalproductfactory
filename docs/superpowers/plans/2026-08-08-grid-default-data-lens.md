@@ -109,10 +109,11 @@ Add failing tests that prove:
 
 ## Backlog coverage
 
-- Decision: `atomic`
-- Receipt: `cmsktm3xr01r601qlbia3oclf`
-- Parent BI: `BI-9DB20C39`
+- Decision: atomic
+- Parent: `BI-9DB20C39`
+- Receipt: `cmsl8u03o09ht01l8vyknqnzk`
 - Rationale: the registry contract, loader optimization, surface override, and verification jointly define one user-visible invariant. Shipping any phase alone would preserve either the semantic mismatch, the unbounded load, or an unrecoverable hidden-history state.
+- Dependencies: loader -> contract; surface -> contract, loader; verification -> surface
 - Internal deliverables:
   - `contract` — registry-owned default data lens and shared resolver
   - `loader` — filter-aware eager loading without repeated source materialization; depends on `contract`
@@ -155,4 +156,4 @@ Rollback is a normal code revert: remove the optional registry lens and restore 
 
 ## Documentation impact
 
-Update the Universal Grid design's embedded-domain section to state that a domain's default data lens is registry-owned, server-applied before materialization, and distinct from personal saved view state. No user-guide route changes are needed; the control is self-describing and the URLs remain under the existing home routes.
+Update the Universal Grid design's embedded-domain section to state that a domain's default data lens is registry-owned, server-applied before materialization, and distinct from personal saved view state. Update the Operations, Customer, and affected Compliance user guides so the default scope and deliberate all-records override are discoverable without relying on control labels alone.
