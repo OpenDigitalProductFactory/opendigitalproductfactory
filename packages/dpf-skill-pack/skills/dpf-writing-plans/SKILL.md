@@ -5,7 +5,7 @@ description: "Use when a filed DPF backlog item needs an implementation plan bef
 # Agent Skills standard fields (Surface A — Claude Code)
 disable-model-invocation: false
 user-invocable: true
-allowed-tools: Read Grep Glob mcp__dpf__search_specs_and_plans mcp__dpf__search_code_graph mcp__dpf__get_backlog_item mcp__dpf__query_backlog mcp__dpf__create_backlog_item mcp__dpf__record_plan_backlog_coverage mcp__dpf__check_plan_backlog_coverage
+allowed-tools: Read Grep Glob mcp__dpf__search_specs_and_plans mcp__dpf__search_code_graph mcp__dpf__get_backlog_item mcp__dpf__get_work_capsule mcp__dpf__query_backlog mcp__dpf__create_backlog_item mcp__dpf__record_plan_backlog_coverage mcp__dpf__check_plan_backlog_coverage
 
 # DPF coworker fields (Surface B — in-portal seed loader)
 category: design
@@ -15,7 +15,7 @@ taskType: workflow
 triggerPattern: "write (a |the )?plan|implementation plan|plan (out |this )?work|phased plan|how do we build|break .* into steps"
 userInvocable: true
 agentInvocable: true
-allowedTools: ["Read", "Grep", "Glob", "mcp__dpf__search_specs_and_plans", "mcp__dpf__search_code_graph", "mcp__dpf__get_backlog_item", "mcp__dpf__query_backlog", "mcp__dpf__create_backlog_item", "mcp__dpf__record_plan_backlog_coverage", "mcp__dpf__check_plan_backlog_coverage"]
+allowedTools: ["Read", "Grep", "Glob", "mcp__dpf__search_specs_and_plans", "mcp__dpf__search_code_graph", "mcp__dpf__get_backlog_item", "mcp__dpf__get_work_capsule", "mcp__dpf__query_backlog", "mcp__dpf__create_backlog_item", "mcp__dpf__record_plan_backlog_coverage", "mcp__dpf__check_plan_backlog_coverage"]
 composesFrom: ["dpf-file-backlog-item"]
 contextRequirements: []
 riskBand: low
@@ -55,21 +55,23 @@ The order is fixed: **BI first, then plan.** [`dpf-file-backlog-item`](../dpf-fi
    - `mcp__dpf__search_code_graph` — find the real files/contracts the plan will touch.
    - This is the `consult-specs-first` + `research-before-implementing` discipline applied to planning.
 
-3. **Write phased steps and classify delivery boundaries.** Each phase needs a concrete deliverable, touched files, dependencies, and functional verification. Mark whether it is independently shippable or only internal sequencing. For every independently shippable deliverable, query for an existing covering BI and reuse it when present; otherwise compose with `dpf-file-backlog-item` and file it. An `xlarge` umbrella always requires this decomposition decision before implementation.
+3. **Consume the start-of-work impact contract.** Once exact edit paths are claimed, read the Work Capsule's `verificationState.changeImpactContract` (also returned by `claim_capsule_scope`). Put every `testImpact` and `guardObligation` in the relevant phase before implementation begins. If the contract is `unresolved`, plan exhaustive verification and an explicit impact-resolution step; never translate missing advice into an exemption.
+
+4. **Write phased steps and classify delivery boundaries.** Each phase needs a concrete deliverable, touched files, dependencies, and functional verification. Mark whether it is independently shippable or only internal sequencing. For every independently shippable deliverable, query for an existing covering BI and reuse it when present; otherwise compose with `dpf-file-backlog-item` and file it. An `xlarge` umbrella always requires this decomposition decision before implementation.
 
    If the plan opens with an agent-execution preamble, use the DPF-native one — **never copy the retired `superpowers:*` boilerplate from older plans** (~280 historical plans still carry it; those skills no longer exist on any surface, and the `check-no-retired-superpowers-skills` CI ratchet fails a new reference). Canonical preamble:
 
    > **For agentic workers:** execute this plan one independently reviewable backlog item at a time — one BI, one branch, one PR. Use `dpf-tdd` for red-green implementation, `dpf-local-merge-ci-before-push` plus the plan's completion gate before any success claim, and `dpf-pr-with-dco` for handoff.
 
-4. **Record live backlog coverage.** Call `mcp__dpf__record_plan_backlog_coverage` with the umbrella BI, plan path, deliverable graph, BI mappings, and decision:
+5. **Record live backlog coverage.** Call `mcp__dpf__record_plan_backlog_coverage` with the umbrella BI, plan path, deliverable graph, BI mappings, and decision:
    - `decomposed`: every independent deliverable maps to a live new or existing BI;
    - `atomic`: no deliverable is independently shippable, with a substantive operator rationale explaining why one BI is correct.
 
    Copy the returned receipt, parent BI, deliverable-to-BI mappings, and dependencies into a `## Backlog coverage` plan section. `mcp__dpf__check_plan_backlog_coverage` is the resumability check. If MCP is unavailable, the tool is missing, or the token lacks scope, stop and report that condition; Markdown checkboxes are not a fallback and planning/backlog completeness cannot be claimed.
 
-5. **Name the risks and the rollback.** What could break (blast radius), and how to back out. A plan that only describes the happy path is half a plan.
+6. **Name the risks and the rollback.** What could break (blast radius), and how to back out. A plan that only describes the happy path is half a plan.
 
-6. **Save it.** `docs/superpowers/plans/YYYY-MM-DD-<feature-name>.md`, cross-referencing the BI id and the coverage receipt. This path is where `search_specs_and_plans` and reviewers expect plans to live. **Format is opt-in:** Markdown is the default and stays fully supported, but when the plan leans on a flow/state diagram, a multi-column table, or side-by-side option fan-out, an HTML artifact often reads better and keeps the operator in the loop — see [`html-artifacts-guide.md`](../../../../docs/superpowers/html-artifacts-guide.md) and the `_templates/spec.template.html` starting point. If you ship HTML-only, leave a short Markdown stub carrying the canonical coverage section so `search_specs_and_plans` and the guard can find it.
+7. **Save it.** `docs/superpowers/plans/YYYY-MM-DD-<feature-name>.md`, cross-referencing the BI id and the coverage receipt. This path is where `search_specs_and_plans` and reviewers expect plans to live. **Format is opt-in:** Markdown is the default and stays fully supported, but when the plan leans on a flow/state diagram, a multi-column table, or side-by-side option fan-out, an HTML artifact often reads better and keeps the operator in the loop — see [`html-artifacts-guide.md`](../../../../docs/superpowers/html-artifacts-guide.md) and the `_templates/spec.template.html` starting point. If you ship HTML-only, leave a short Markdown stub carrying the canonical coverage section so `search_specs_and_plans` and the guard can find it.
 
 ## Guardrails
 

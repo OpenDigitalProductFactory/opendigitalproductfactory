@@ -19,6 +19,7 @@
 import { readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { dirname, join, relative } from "node:path";
+import { isStyleDriftSource } from "./lib/gate-sensitivity.mjs";
 
 const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const WEB = join(REPO_ROOT, "apps", "web");
@@ -134,6 +135,7 @@ function scan() {
   for (const dir of SCAN_DIRS) {
     for (const file of listSourceFiles(dir)) {
       const rel = relative(REPO_ROOT, file).replace(/\\/g, "/");
+      if (!isStyleDriftSource(rel)) continue;
       if (isApproved(rel)) continue;
       let count = 0;
       for (const line of readFileSync(file, "utf8").split("\n")) {
@@ -152,6 +154,7 @@ function scanTokens() {
   for (const dir of SCAN_DIRS) {
     for (const file of listSourceFiles(dir)) {
       const rel = relative(REPO_ROOT, file).replace(/\\/g, "/");
+      if (!isStyleDriftSource(rel)) continue;
       if (isApproved(rel)) continue;
       const totals = { type: 0, spacing: 0, motion: 0 };
       for (const line of readFileSync(file, "utf8").split("\n")) {

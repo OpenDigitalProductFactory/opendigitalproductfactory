@@ -154,7 +154,7 @@ const definitions: ToolDefinition[] = [
   },
   {
     name: "claim_capsule_scope",
-    description: "Claim path/module/package/route/skill/prompt scope for a Work Capsule. Repeated claims refresh the existing scope entry. Rejected with error=scope_conflict if another active Work Capsule already holds an overlapping edit claim — coordinate, claim different scope, or pass force=true to deliberately co-claim.",
+    description: "Claim path/module/package/route/skill/prompt scope for a Work Capsule. Edit-path claims automatically derive, persist, and return changeImpactContract with the tests and guards to address before implementation; consume it immediately, and treat status=unresolved as requiring exhaustive verification. Repeated claims refresh both scope and the full edit-path impact contract. Rejected with error=scope_conflict if another active Work Capsule already holds an overlapping edit claim — coordinate, claim different scope, or pass force=true to deliberately co-claim.",
     inputSchema: {
       type: "object",
       properties: {
