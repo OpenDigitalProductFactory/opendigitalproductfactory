@@ -61,7 +61,7 @@ export interface NearbyPairingRow {
   sasConfirmedAtPeer?: boolean;
 }
 type Flash = { kind: "success" | "error"; text: string } | null;
-
+const PEER_CONFIRMATION_WAIT = "Waiting for the other installation…";
 export function FederationLinksAdminClient({
   rows,
   nearbyCandidates = [],
@@ -165,7 +165,7 @@ export function FederationLinksAdminClient({
   }
   async function onApprovePairing(row: NearbyPairingRow) {
     const confirmed = await confirmDialog({
-      title: "Confirm the codes match",
+      title: "Confirm codes match",
       message: `Continue with ${row.peerDisplayName} only if its screen shows ${row.matchingCode} and you accept the sharing summary. Trust is not granted until both installations confirm.`,
       confirmLabel: "Codes match — approve",
     });
@@ -180,8 +180,8 @@ export function FederationLinksAdminClient({
   }
   async function onConfirmOutgoingPairing(row: NearbyPairingRow) {
     const confirmed = await confirmDialog({
-      title: "Confirm the codes match",
-      message: `Continue only if ${row.peerDisplayName} also shows ${row.matchingCode}. A different code means the connection may be intercepted.`,
+      title: "Confirm codes match",
+      message: `Only continue if ${row.peerDisplayName} shows ${row.matchingCode}. Stop if the code differs.`,
       confirmLabel: "Codes match — continue",
     });
     if (!confirmed) return;
@@ -192,7 +192,7 @@ export function FederationLinksAdminClient({
         return;
       }
       setActivePairing({ ...row, sasConfirmedAtLocal: true, status: result.status === "approved" ? "approved" : row.status });
-      setFlash({ kind: "success", text: "Code confirmed here. Waiting for the other installation to confirm." });
+      setFlash({ kind: "success", text: "Confirmed here. Waiting for the other installation." });
       router.refresh();
     });
   }
@@ -501,7 +501,7 @@ export function FederationLinksAdminClient({
                   </div>
                 )}
                 {pairing.direction === "incoming" && pairing.status === "pending" && pairing.sasConfirmedAtLocal &&
-                  <div className="mt-3"><InlineBusy label="Waiting for the other installation…" /></div>}
+                  <div className="mt-3"><InlineBusy label={PEER_CONFIRMATION_WAIT} /></div>}
                 {pairing.direction === "outgoing" && pairing.status === "pending" && !pairing.sasConfirmedAtLocal && (
                   <button
                     type="button"
@@ -515,7 +515,7 @@ export function FederationLinksAdminClient({
                   </button>
                 )}
                 {pairing.direction === "outgoing" && (pairing.status === "approved" || pairing.sasConfirmedAtLocal) &&
-                  <div className="mt-3"><InlineBusy label="Waiting for the other installation…" /></div>}
+                  <div className="mt-3"><InlineBusy label={PEER_CONFIRMATION_WAIT} /></div>}
               </div>
             ))}
           </div>
