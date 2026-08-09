@@ -134,4 +134,23 @@ describe("recordInitiativeSpecApproval", () => {
     })).resolves.toMatchObject({ ok: false, code: "CANONICAL_DESIGN_AMBIGUOUS" });
     expect(mocks.transaction).not.toHaveBeenCalled();
   });
+
+  it("returns a stable input-required result when permanent storage is unavailable", async () => {
+    mocks.writeBlob.mockRejectedValue(new Error("storage unavailable"));
+    await expect(recordInitiativeSpecApproval({
+      itemId: "BI-TEST",
+      profile: "feature",
+      artifactRole: "design-spec",
+      artifactRef: locator,
+      expectedCurrentBaselineId: null,
+      supersessionDispositionIds: [],
+      resolvedFindingRefs: [],
+      reason: "Independent checklist review passed.",
+      reviewerUserId: "user-reviewer",
+      reviewerAgentId: "agent-reviewer",
+      authorityDecisionId: "decision-1",
+      tokenScope: "write",
+    })).resolves.toMatchObject({ ok: false, code: "CANONICAL_DESIGN_REQUIRED" });
+    expect(mocks.transaction).not.toHaveBeenCalled();
+  });
 });

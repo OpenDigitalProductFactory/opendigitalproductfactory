@@ -204,10 +204,17 @@ export async function resolveInitiativeArtifact(args: {
     if (version.contentText) {
       bytes = Buffer.from(version.contentText, "utf8");
     } else if (version.contentBlob && version.contentBlobId) {
-      bytes = await readDocumentBlob({
-        storageKey: version.contentBlob.storageKey,
-        expectedSha256: version.contentBlob.sha256,
-      });
+      try {
+        bytes = await readDocumentBlob({
+          storageKey: version.contentBlob.storageKey,
+          expectedSha256: version.contentBlob.sha256,
+        });
+      } catch (error) {
+        const missing = typeof error === "object" && error !== null && "code" in error && error.code === "ENOENT";
+        return missing
+          ? { ok: false, code: "CANONICAL_DESIGN_REQUIRED", error: "Document version bytes are unavailable." }
+          : { ok: false, code: "CANONICAL_DESIGN_AMBIGUOUS", error: "Document version bytes could not be verified against immutable storage metadata." };
+      }
     } else {
       return { ok: false, code: "CANONICAL_DESIGN_REQUIRED", error: "Document version bytes are unavailable." };
     }
@@ -230,12 +237,16 @@ export async function resolveInitiativeArtifact(args: {
   }
 
   let providerBlob: ProviderResolvedBlob | null;
-  if (args.resolveRepositoryBlob) {
-    providerBlob = await args.resolveRepositoryBlob(args.locator);
-  } else {
-    const resolved = await resolveRepositoryArtifact({ locator: args.locator, subject: args.subject });
-    if (!resolved.ok) return resolved;
-    providerBlob = resolved.artifact;
+  try {
+    if (args.resolveRepositoryBlob) {
+      providerBlob = await args.resolveRepositoryBlob(args.locator);
+    } else {
+      const resolved = await resolveRepositoryArtifact({ locator: args.locator, subject: args.subject });
+      if (!resolved.ok) return resolved;
+      providerBlob = resolved.artifact;
+    }
+  } catch {
+    return { ok: false, code: "CANONICAL_DESIGN_REQUIRED", error: "Repository provider could not resolve the immutable artifact." };
   }
   if (!providerBlob?.authorPrincipalId || !providerBlob.authorAgentId) {
     return authorRequired("Repository blob author could not be mapped unambiguously to a principal and agent.");

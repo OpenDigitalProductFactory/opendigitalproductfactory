@@ -59,7 +59,12 @@ export async function resolveRepositoryArtifact(args: {
   fetchImpl?: typeof fetch;
 }): Promise<ResolveRepositoryArtifactResult> {
   const db = args.db ?? (prisma as unknown as RepositoryArtifactDb);
-  const expectedRepo = await resolveRepoIdentity(db);
+  let expectedRepo: Awaited<ReturnType<typeof resolveRepoIdentity>>;
+  try {
+    expectedRepo = await resolveRepoIdentity(db);
+  } catch {
+    return { ok: false, code: "CANONICAL_DESIGN_REQUIRED", error: "Canonical repository identity is unavailable." };
+  }
   const expectedFullName = `${expectedRepo.owner}/${expectedRepo.name}`;
   const encodedPath = encodePath(args.locator.path);
   if (args.locator.repositoryFullName.toLocaleLowerCase("en-US") !== expectedFullName.toLocaleLowerCase("en-US")
@@ -110,22 +115,38 @@ export async function resolveRepositoryArtifact(args: {
     return { ok: false, code: "ARTIFACT_AUTHOR_REQUIRED", error: "Repository artifact author cannot be mapped to one capsule principal and agent." };
   }
 
-  const token = await resolveGithubToken(db);
-  const response = await (args.fetchImpl ?? fetch)(
-    `https://api.github.com/repos/${encodeURIComponent(expectedRepo.owner)}/${encodeURIComponent(expectedRepo.name)}/contents/${encodedPath}?ref=${encodeURIComponent(args.locator.commitSha)}`,
-    {
-      headers: {
-        Accept: "application/vnd.github+json",
-        "X-GitHub-Api-Version": "2022-11-28",
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  let token: string | null;
+  try {
+    token = await resolveGithubToken(db);
+  } catch {
+    return { ok: false, code: "CANONICAL_DESIGN_REQUIRED", error: "Repository provider credentials are unavailable." };
+  }
+  let response: Response;
+  try {
+    response = await (args.fetchImpl ?? fetch)(
+      `https://api.github.com/repos/${encodeURIComponent(expectedRepo.owner)}/${encodeURIComponent(expectedRepo.name)}/contents/${encodedPath}?ref=${encodeURIComponent(args.locator.commitSha)}`,
+      {
+        headers: {
+          Accept: "application/vnd.github+json",
+          "X-GitHub-Api-Version": "2022-11-28",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        cache: "no-store",
       },
-      cache: "no-store",
-    },
-  );
+    );
+  } catch {
+    return { ok: false, code: "CANONICAL_DESIGN_REQUIRED", error: "Repository provider could not resolve the immutable artifact." };
+  }
   if (!response.ok) {
     return { ok: false, code: "CANONICAL_DESIGN_REQUIRED", error: "Repository provider could not resolve the immutable artifact." };
   }
-  const bytes = decodeGithubContent(await response.json(), args.locator.providerBlobId);
+  let providerPayload: unknown;
+  try {
+    providerPayload = await response.json();
+  } catch {
+    return { ok: false, code: "CANONICAL_DESIGN_REQUIRED", error: "Repository provider returned unreadable artifact metadata." };
+  }
+  const bytes = decodeGithubContent(providerPayload, args.locator.providerBlobId);
   if (!bytes) {
     return { ok: false, code: "CANONICAL_DESIGN_AMBIGUOUS", error: "Repository provider blob identity does not match the requested locator." };
   }

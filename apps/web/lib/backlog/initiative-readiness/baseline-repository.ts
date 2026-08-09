@@ -252,9 +252,14 @@ export async function recordInitiativeSpecApproval(args: {
   const manifest = parseInitiativeScopeManifest(content, artifact.artifact.digest);
   if (!manifest.ok) return { ok: false, code: "CANONICAL_DESIGN_REQUIRED", error: manifest.error };
 
-  const archived = args.artifactRef.kind === "repo-blob-at-commit"
-    ? await writeDocumentBlob({ content: artifact.artifact.bytes })
-    : null;
+  let archived: Awaited<ReturnType<typeof writeDocumentBlob>> | null = null;
+  if (args.artifactRef.kind === "repo-blob-at-commit") {
+    try {
+      archived = await writeDocumentBlob({ content: artifact.artifact.bytes });
+    } catch {
+      return { ok: false, code: "CANONICAL_DESIGN_REQUIRED", error: "Repository design bytes could not be placed in permanent managed storage." };
+    }
+  }
   if (archived && `sha256:${archived.sha256}` !== artifact.artifact.digest) {
     return { ok: false, code: "CANONICAL_DESIGN_AMBIGUOUS", error: "Repository archive digest does not match the provider-resolved artifact." };
   }

@@ -70,4 +70,13 @@ describe("resolveRepositoryArtifact", () => {
     })).resolves.toMatchObject({ ok: false, code: "CANONICAL_DESIGN_AMBIGUOUS" });
     expect(fetchImpl).not.toHaveBeenCalled();
   });
+
+  it("returns a stable input-required result when the provider request throws", async () => {
+    await expect(resolveRepositoryArtifact({
+      locator,
+      subject: { kind: "backlog-item", id: "BI-TEST" },
+      db: db() as never,
+      fetchImpl: vi.fn(async () => { throw new Error("network unavailable"); }) as typeof fetch,
+    })).resolves.toMatchObject({ ok: false, code: "CANONICAL_DESIGN_REQUIRED" });
+  });
 });

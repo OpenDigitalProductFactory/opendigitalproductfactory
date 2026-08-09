@@ -71,4 +71,18 @@ describe("resolveInitiativeArtifact", () => {
       db,
     })).resolves.toMatchObject({ ok: false, code: "ARTIFACT_AUTHOR_REQUIRED" });
   });
+
+  it("normalizes a repository provider exception to a stable readiness result", async () => {
+    await expect(resolveInitiativeArtifact({
+      locator: {
+        kind: "repo-blob-at-commit",
+        repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory",
+        commitSha: "a".repeat(40),
+        path: "docs/superpowers/specs/test.md",
+        providerBlobId: "b".repeat(40),
+      },
+      subject: { kind: "backlog-item", id: "BI-TEST" },
+      resolveRepositoryBlob: vi.fn(async () => { throw new Error("provider unavailable"); }),
+    })).resolves.toMatchObject({ ok: false, code: "CANONICAL_DESIGN_REQUIRED" });
+  });
 });
