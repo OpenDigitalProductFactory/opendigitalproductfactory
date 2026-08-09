@@ -15,7 +15,14 @@ import {
   type CustomerStatusBuild,
 } from "@/lib/build/customer-status-loader";
 import type { BuildStudioCustomerStatus } from "@/lib/build/customer-status-projection";
-import { businessBuildBriefFromRecord } from "@/lib/build/business-build-brief";
+import {
+  BUSINESS_BUILD_BRIEF_RECORD_SELECT,
+  businessBuildBriefFromRecord,
+} from "@/lib/build/business-build-brief";
+import {
+  OWNER_CHANGE_EVIDENCE_REVISION_QUERY,
+  ownerEvidenceObservedAtFromRevisions,
+} from "@/lib/build/owner-change-evidence";
 
 export async function getFeatureBuildCustomerStatus(
   buildId: string,
@@ -42,7 +49,8 @@ export async function getFeatureBuild(buildId: string): Promise<FeatureBuildRow 
   const build = await prisma.featureBuild.findUnique({
     where: { buildId },
     include: {
-      businessBuildBrief: true,
+      businessBuildBrief: { select: BUSINESS_BUILD_BRIEF_RECORD_SELECT },
+      artifactRevisions: OWNER_CHANGE_EVIDENCE_REVISION_QUERY,
       digitalProduct: { select: { productId: true, version: true } },
       originator: {
         select: {
@@ -82,12 +90,14 @@ export async function getFeatureBuild(buildId: string): Promise<FeatureBuildRow 
   // same PR for the same reason.
   if (!build) return null;
 
+  const { artifactRevisions, ...buildRow } = build;
   return {
-    ...build,
+    ...buildRow,
     brief: build.brief as FeatureBuildRow["brief"],
     businessBuildBrief: build.businessBuildBrief
       ? businessBuildBriefFromRecord({ title: build.title, row: build.businessBuildBrief })
       : null,
+    evidenceObservedAt: ownerEvidenceObservedAtFromRevisions(artifactRevisions),
     plan: build.plan as FeatureBuildRow["plan"],
     phase: build.phase as FeatureBuildRow["phase"],
     draftApprovedAt: build.draftApprovedAt,

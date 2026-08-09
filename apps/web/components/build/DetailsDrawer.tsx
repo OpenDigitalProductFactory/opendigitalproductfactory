@@ -118,6 +118,7 @@ export function DetailsDrawer({ isOpen, onClose, sections, fallbackFocusRef }: D
       role="region"
       aria-label="Build details"
       aria-hidden={!isOpen}
+      inert={!isOpen}
       data-testid={BUILD_STUDIO_TEST_IDS.detailsDrawer}
       data-open={isOpen ? "true" : "false"}
       className={getDetailsDrawerClassName(isOpen)}

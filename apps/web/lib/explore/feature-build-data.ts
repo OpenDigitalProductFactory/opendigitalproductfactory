@@ -11,25 +11,14 @@ import {
   DECISION_INTERACTION_GATE_SELECT,
   decisionInteractionRowToGateView,
 } from "@/lib/decision-perspective/view-model";
-import { businessBuildBriefFromRecord } from "@/lib/build/business-build-brief";
-
-const BUSINESS_BUILD_BRIEF_SELECT = {
-  briefId: true,
-  status: true,
-  intakeSource: true,
-  capabilityPackId: true,
-  businessOutcome: true,
-  affectedPeople: true,
-  affectedWorkflow: true,
-  sourceEvidence: true,
-  successSignals: true,
-  constraints: true,
-  businessInterpretation: true,
-  technicalInterpretation: true,
-  riskProfile: true,
-  openQuestions: true,
-  confidence: true,
-} satisfies Prisma.BusinessBuildBriefSelect;
+import {
+  BUSINESS_BUILD_BRIEF_RECORD_SELECT,
+  businessBuildBriefFromRecord,
+} from "@/lib/build/business-build-brief";
+import {
+  OWNER_CHANGE_EVIDENCE_REVISION_QUERY,
+  ownerEvidenceObservedAtFromRevisions,
+} from "@/lib/build/owner-change-evidence";
 
 const EXECUTION_EPIC_ROLLUP_SELECT = {
   id: true,
@@ -109,7 +98,8 @@ export const getFeatureBuilds = cache(async (userId: string): Promise<FeatureBui
       parentEpicId: true,
       originatingBacklogItemId: true,
       brief: true,
-      businessBuildBrief: { select: BUSINESS_BUILD_BRIEF_SELECT },
+      businessBuildBrief: { select: BUSINESS_BUILD_BRIEF_RECORD_SELECT },
+      artifactRevisions: OWNER_CHANGE_EVIDENCE_REVISION_QUERY,
       plan: true,
       phase: true,
       sandboxId: true,
@@ -180,36 +170,40 @@ export const getFeatureBuilds = cache(async (userId: string): Promise<FeatureBui
     },
   });
 
-  return rows.map((r) => ({
-    ...r,
+  return rows.map((r) => {
+    const { artifactRevisions, ...row } = r;
+    return {
+      ...row,
       brief: r.brief as FeatureBrief | null,
       businessBuildBrief: r.businessBuildBrief
         ? businessBuildBriefFromRecord({ title: r.title, row: r.businessBuildBrief })
         : null,
+      evidenceObservedAt: ownerEvidenceObservedAtFromRevisions(artifactRevisions),
       plan: r.plan as Record<string, unknown> | null,
       phase: r.phase as BuildPhase,
       draftApprovedAt: r.draftApprovedAt,
       designDoc: r.designDoc as BuildDesignDoc | null,
-    designReview: r.designReview as ReviewResult | null,
-    buildPlan: r.buildPlan as BuildPlanDoc | null,
-    planReview: r.planReview as ReviewResult | null,
-    taskResults: r.taskResults as TaskResult[] | null,
-    verificationOut: r.verificationOut as VerificationOutput | null,
-    acceptanceMet: r.acceptanceMet as AcceptanceCriterion[] | null,
-    uxTestResults: r.uxTestResults as FeatureBuildRow["uxTestResults"],
-    uxVerificationStatus: r.uxVerificationStatus as FeatureBuildRow["uxVerificationStatus"],
-    buildExecState: r.buildExecState as FeatureBuildRow["buildExecState"],
-    taxonomyAttribution: r.taxonomyAttribution as FeatureBuildRow["taxonomyAttribution"],
-    scoutFindings: r.scoutFindings as FeatureBuildRow["scoutFindings"],
-    deliberationSummary: r.deliberationSummary as BuildDeliberationSummary | null,
-    happyPathState: normalizeHappyPathState((r.plan as Record<string, unknown> | null)?.happyPathState ?? null),
-    product: r.digitalProduct
-      ? { productId: r.digitalProduct.productId, version: r.digitalProduct.version, backlogCount: r.digitalProduct._count.backlogItems }
-      : null,
-    originator: r.originator,
-    phaseHandoffs: null,
-    decisionInteraction: decisionInteractionRowToGateView(r.decisionInteractions[0] ?? null),
-  }));
+      designReview: r.designReview as ReviewResult | null,
+      buildPlan: r.buildPlan as BuildPlanDoc | null,
+      planReview: r.planReview as ReviewResult | null,
+      taskResults: r.taskResults as TaskResult[] | null,
+      verificationOut: r.verificationOut as VerificationOutput | null,
+      acceptanceMet: r.acceptanceMet as AcceptanceCriterion[] | null,
+      uxTestResults: r.uxTestResults as FeatureBuildRow["uxTestResults"],
+      uxVerificationStatus: r.uxVerificationStatus as FeatureBuildRow["uxVerificationStatus"],
+      buildExecState: r.buildExecState as FeatureBuildRow["buildExecState"],
+      taxonomyAttribution: r.taxonomyAttribution as FeatureBuildRow["taxonomyAttribution"],
+      scoutFindings: r.scoutFindings as FeatureBuildRow["scoutFindings"],
+      deliberationSummary: r.deliberationSummary as BuildDeliberationSummary | null,
+      happyPathState: normalizeHappyPathState((r.plan as Record<string, unknown> | null)?.happyPathState ?? null),
+      product: r.digitalProduct
+        ? { productId: r.digitalProduct.productId, version: r.digitalProduct.version, backlogCount: r.digitalProduct._count.backlogItems }
+        : null,
+      originator: r.originator,
+      phaseHandoffs: null,
+      decisionInteraction: decisionInteractionRowToGateView(r.decisionInteractions[0] ?? null),
+    };
+  });
 });
 
 export const getExecutionEpicRollups = cache(async (userId: string): Promise<EpicRollupView[]> => {
@@ -259,7 +253,8 @@ export const getFeatureBuildById = cache(async (buildId: string): Promise<Featur
       parentEpicId: true,
       originatingBacklogItemId: true,
       brief: true,
-      businessBuildBrief: { select: BUSINESS_BUILD_BRIEF_SELECT },
+      businessBuildBrief: { select: BUSINESS_BUILD_BRIEF_RECORD_SELECT },
+      artifactRevisions: OWNER_CHANGE_EVIDENCE_REVISION_QUERY,
       plan: true,
       phase: true,
       sandboxId: true,
@@ -332,12 +327,14 @@ export const getFeatureBuildById = cache(async (buildId: string): Promise<Featur
 
   if (!r) return null;
 
+  const { artifactRevisions, ...row } = r;
   return {
-    ...r,
+    ...row,
     brief: r.brief as FeatureBrief | null,
     businessBuildBrief: r.businessBuildBrief
       ? businessBuildBriefFromRecord({ title: r.title, row: r.businessBuildBrief })
       : null,
+    evidenceObservedAt: ownerEvidenceObservedAtFromRevisions(artifactRevisions),
     plan: r.plan as Record<string, unknown> | null,
     phase: r.phase as BuildPhase,
     draftApprovedAt: r.draftApprovedAt,
