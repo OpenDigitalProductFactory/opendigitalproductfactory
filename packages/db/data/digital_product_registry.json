@@ -57,7 +57,7 @@
                                  "usage_mode":  "used",
                                  "description":  "Self-referential digital product node representing the factory as a first-class product in its own operating portfolio.",
                                  "depends_on_product_ids":  [
-                                                                "infra-neo4j-core",
+                                                                "infra-postgres-core",
                                                                 "infra-docker-runtime"
                                                             ],
                                  "is_part_of_product_ids":  [
@@ -137,9 +137,9 @@
                                                                     "fc-windows-server-neo4j-01"
                                                                 ],
                                  "lifecycle":  {
-                                                   "stage":  "operate",
-                                                   "stage_status":  "active",
-                                                   "effective_from":  "2026-02-20",
+                                                   "stage":  "retire",
+                                                   "stage_status":  "retired",
+                                                   "effective_from":  "2026-07-14",
                                                    "next_review_at":  "2026-05-15",
                                                    "owner_role":  "HR-300"
                                                },
@@ -237,8 +237,7 @@
                                  "description":  "Externally offered platform subscription for digital product portfolio and delivery governance.",
                                  "depends_on_product_ids":  [
                                                                 "dpf-meta",
-                                                                "dpf-ai-workforce",
-                                                                "infra-neo4j-core"
+                                                                "dpf-ai-workforce"
                                                             ],
                                  "realizes_model_ids":  [
                                                             "mdl-dpf-platform-standard"
@@ -421,9 +420,9 @@
                                  "depends_on_product_ids":  [],
                                  "is_part_of_product_ids":  ["dpf-meta"],
                                  "lifecycle":  {
-                                                   "stage":  "operate",
-                                                   "stage_status":  "active",
-                                                   "effective_from":  "2026-03-01",
+                                                   "stage":  "retire",
+                                                   "stage_status":  "retired",
+                                                   "effective_from":  "2026-07-14",
                                                    "next_review_at":  "2026-06-01",
                                                    "owner_role":  "HR-300"
                                                },
