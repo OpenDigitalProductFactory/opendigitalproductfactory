@@ -39,10 +39,20 @@ type Props = {
   existing?: ExistingConnection;
 };
 
+type ConnectionStatus = "idle" | "saving" | "testing" | "success" | "error";
+
+type ConnectionConfiguration = {
+  site?: string;
+  discoverClients?: boolean;
+  tlsInsecure?: boolean;
+  community?: string;
+  subnet?: string;
+};
+
 const COLLECTOR_TYPES = [
   { value: "unifi", label: "Ubiquiti UniFi" },
   { value: "snmp", label: "SNMP (Generic)" },
-  { value: "arp_scan", label: "Network Scan (ARP)" },
+  { value: "arp_scan", label: "ARP scan" },
 ];
 
 function asCollectorType(value: string): DiscoveryCollectorType {
@@ -106,7 +116,7 @@ export function ConfigureConnectionInline({
   const initialSelection = choosePreselectedGateway(candidates);
   const initialCandidate = candidates.find((candidate) => candidate.entityId === initialSelection);
   const [selectedGatewayId, setSelectedGatewayId] = useState(initialSelection ?? "");
-  const [collectorType, setCollectorType] = useState<DiscoveryCollectorType>(
+  const [collectorType, setCollectorType] = useState(
     asCollectorType(existing?.collectorType ?? initialCandidate?.recommendedCollector ?? "unifi"),
   );
   const [manualEndpoint, setManualEndpoint] = useState(gatewayAddress ?? "");
@@ -114,7 +124,7 @@ export function ConfigureConnectionInline({
   const [apiKey, setApiKey] = useState("");
   const [site, setSite] = useState(existing?.site ?? "default");
   const [tlsInsecure, setTlsInsecure] = useState(existing?.tlsInsecure ?? false);
-  const [status, setStatus] = useState<"idle" | "saving" | "testing" | "success" | "error">("idle");
+  const [status, setStatus] = useState("idle" as ConnectionStatus);
   const [message, setMessage] = useState("");
   const [fieldError, setFieldError] = useState("");
   const [isPending, startTransition] = useTransition();
@@ -174,7 +184,7 @@ export function ConfigureConnectionInline({
     startTransition(async () => {
       setStatus("saving");
       setMessage("");
-      const configuration: Record<string, unknown> = {};
+      const configuration: ConnectionConfiguration = {};
       if (isUnifi) Object.assign(configuration, { site, discoverClients: true, tlsInsecure });
       if (isSnmp) configuration.community = apiKey || "public";
       if (isArpScan) configuration.subnet = normalized.value;
@@ -218,22 +228,17 @@ export function ConfigureConnectionInline({
 
   return (
     <div className="mt-4 space-y-4 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-4">
-      <div>
-        <p className="text-xs font-medium uppercase tracking-[0.16em] text-[var(--dpf-muted)]">
-          Configure Discovery Connection
-        </p>
-        <p className="mt-1 text-sm text-[var(--dpf-text)]">
-          Select the gateway DPF identified. Its network endpoint is filled in automatically.
-        </p>
-      </div>
+      <p className="text-xs font-medium uppercase tracking-[0.16em] text-[var(--dpf-muted)]">
+        Gateway connection
+      </p>
 
-      {candidates.length > 1 ? (
+      {candidates.length > 1 && (
         <SelectField
           name="gateway"
           label="Gateway"
           value={selectedGatewayId}
           onValueChange={selectGateway}
-          placeholder="Choose an identified gateway"
+          placeholder="Choose a gateway"
           options={candidates.map((candidate) => ({
             value: candidate.entityId,
             label: gatewayOptionLabel(candidate),
@@ -242,7 +247,8 @@ export function ConfigureConnectionInline({
           hint={selectedCandidate?.recommendation ?? "Choose by device name, manufacturer, model, and local address."}
           required
         />
-      ) : selectedCandidate ? (
+      )}
+      {candidates.length <= 1 && selectedCandidate && (
         <section className="rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-3" aria-label="Selected gateway">
           <p className="font-medium text-[var(--dpf-text)]">{selectedCandidate.name}</p>
           {(selectedCandidate.manufacturer || selectedCandidate.model) && (
@@ -257,9 +263,10 @@ export function ConfigureConnectionInline({
           )}
           <p className="mt-1 text-xs text-[var(--dpf-muted)]">{selectedCandidate.recommendation}</p>
         </section>
-      ) : (
+      )}
+      {candidates.length <= 1 && !selectedCandidate && (
         <p className="rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-3 text-sm text-[var(--dpf-muted)]">
-          DPF did not find an identifiable gateway. Manual recovery is available below.
+          No gateway identified. Use manual recovery below.
         </p>
       )}
 
@@ -288,7 +295,7 @@ export function ConfigureConnectionInline({
       {isUnifi ? (
         <details className="rounded-md border border-[var(--dpf-border)] px-3 py-2">
           <summary className="cursor-pointer text-sm font-medium text-[var(--dpf-accent)]">
-            Enter a gateway manually
+            Manual gateway
           </summary>
           <div className="mt-3">
             <TextField
@@ -337,7 +344,7 @@ export function ConfigureConnectionInline({
       {isUnifi && (
         <CheckboxField
           name="tls-insecure"
-          label="Allow self-signed controller certificate"
+          label="Allow self-signed certificate"
           checked={tlsInsecure}
           onCheckedChange={setTlsInsecure}
           hint="Use only for a trusted closed-LAN UniFi appliance without a public certificate."

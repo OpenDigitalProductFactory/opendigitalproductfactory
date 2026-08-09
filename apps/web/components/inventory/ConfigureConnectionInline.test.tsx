@@ -111,7 +111,7 @@ describe("ConfigureConnectionInline", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: /save/i }));
 
-    expect(await screen.findByText(/choose a gateway/i)).toBeTruthy();
+    expect(await screen.findByText("Choose a gateway before saving this connection.")).toBeTruthy();
     expect(mockConfigureDiscoveryConnection).not.toHaveBeenCalled();
   });
 
@@ -124,7 +124,7 @@ describe("ConfigureConnectionInline", () => {
       />,
     );
 
-    fireEvent.click(screen.getByText(/enter a gateway manually/i));
+    fireEvent.click(screen.getByText(/^manual gateway$/i));
     const recoveryInput = screen.getByLabelText(/gateway address/i) as HTMLInputElement;
     fireEvent.change(recoveryInput, { target: { value: "file:///etc/passwd" } });
     fireEvent.change(screen.getByLabelText(/^API Key/i), {
@@ -149,7 +149,7 @@ describe("ConfigureConnectionInline", () => {
     fireEvent.change(screen.getByLabelText(/^API Key/i), {
       target: { value: "unifi-api-key" },
     });
-    fireEvent.click(screen.getByRole("checkbox", { name: /allow self-signed controller certificate/i }));
+    fireEvent.click(screen.getByRole("checkbox", { name: /allow self-signed certificate/i }));
     fireEvent.click(screen.getByRole("button", { name: /save/i }));
 
     await waitFor(() => expect(mockConfigureDiscoveryConnection).toHaveBeenCalledTimes(1));
