@@ -15,3 +15,4 @@
 warehousing-fulfilment	new-planned:BI-A94DA462
 fabric-care-services	extends:dispatcher
 agriculture-ranching	seeded:farm-ranch-steward
+manufacturing	extends:ops-coordinator

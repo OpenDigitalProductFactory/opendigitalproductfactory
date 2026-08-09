@@ -131,4 +131,27 @@ describe("default workspace home profiles", () => {
       "tractors, implements, parts, fuel, and maintenance readiness",
     ]));
   });
+
+  it("uses a manufacturing home organized around constrained production flow without control authority", () => {
+    const resolution = resolveWorkspaceHomeContribution({
+      storefrontConfig: {
+        archetype: {
+          archetypeId: "industrial-equipment-oem",
+          category: "manufacturing",
+          name: "Industrial Equipment OEM",
+        },
+      },
+    });
+
+    expect(resolution.match).toBe("category");
+    expect(resolution.contribution?.id).toBe("home-manufacturing");
+    expect(resolution.contribution?.topConcerns).toEqual(expect.arrayContaining([
+      "released work waiting on a line, cell, station, or operator",
+      "material, tooling, or equipment readiness constraints",
+      "quality holds, nonconformance, and inspection decisions",
+    ]));
+    expect(resolution.contribution?.components.map((component) => component.key)).toEqual(
+      expect.arrayContaining(["technician-load", "parts-watch", "unassigned-work"]),
+    );
+  });
 });

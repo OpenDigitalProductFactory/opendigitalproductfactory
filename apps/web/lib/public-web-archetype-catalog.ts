@@ -21,6 +21,7 @@ export const PUBLIC_WEB_ARCHETYPE_CATALOG: PublicWebArchetype[] = [
   { id: "mixed-farm-ranch", name: "Mixed Farm & Ranch", keywords: ["farm and ranch", "mixed farm", "cattle and hay", "pasture", "livestock", "working horses"], category: "agriculture-ranching" },
   { id: "crop-hay-farm", name: "Crop & Hay Farm", keywords: ["hay farm", "crop farm", "forage", "baling", "custom cutting", "field crops"], category: "agriculture-ranching" },
   { id: "cattle-ranch", name: "Cattle Ranch", keywords: ["cattle ranch", "cow calf", "beef cattle", "breeding stock", "grazing", "calving"], category: "agriculture-ranching" },
+  { id: "industrial-equipment-oem", name: "Industrial Equipment OEM", keywords: ["manufacturer", "industrial oem", "equipment manufacturer", "motor manufacturer", "engineered to order", "build to order", "production line"], category: "manufacturing" },
   { id: "fitness-gym", name: "Fitness Gym", keywords: ["gym", "fitness centre", "fitness center", "crossfit", "weightlifting", "personal training", "workout", "health club"] },
   { id: "yoga-pilates-studio", name: "Yoga / Pilates Studio", keywords: ["yoga", "pilates", "mindfulness", "meditation studio", "barre"] },
   { id: "restaurant", name: "Restaurant", keywords: ["restaurant", "bistro", "brasserie", "dining", "cuisine", "fine dining", "casual dining", "eatery"] },

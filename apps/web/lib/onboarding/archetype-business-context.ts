@@ -98,6 +98,18 @@ const INDUSTRY_PROFILES: Record<string, ArchetypeBusinessProfile> = {
     supplyChain:
       "We depend on feed, seed, fertilizer and crop-protection suppliers, veterinarians, farriers, equipment dealers, parts and fuel providers, laboratories, haulers, applicators, custom hay crews, and market channels. Seasonal capacity means we reserve critical services and parts before the work window opens.",
   },
+  "manufacturing": {
+    missionTheme:
+      "turn sound engineering into dependable physical products, built safely, traceably, and right the first time",
+    businessModel:
+      "A capital- and inventory-intensive industrial OEM: demand becomes engineered or configured orders, released work moves through constrained production resources, and margin depends on material, labor, quality, throughput, and warranty performance.",
+    whoWeServe:
+      "We serve business customers, channel partners, integrators, and installed-base operators who rely on our products to perform to specification and arrive with trustworthy documentation and support.",
+    howWeDecide:
+      "Safety, released engineering, quality evidence, and customer commitments govern the work. We expose constraints early, stop nonconforming work, keep revision and genealogy records intact, and never trade a hidden defect for schedule appearance.",
+    supplyChain:
+      "We depend on qualified material and component suppliers, contract processes, calibration and test services, freight partners, and equipment support. Lead time, approved source, lot identity, change notice, and incoming quality matter alongside unit price.",
+  },
   "fitness-recreation": {
     missionTheme:
       "help our members move, train, and live healthier, more active lives",
@@ -614,6 +626,35 @@ const INDUSTRY_STANCE_VECTORS: Record<string, Partial<ArchetypeStanceVectors>> =
       stance:
         "Budgeted feed, seed, consumables, routine parts, and scheduled animal or equipment care may proceed within the ceiling. New chemicals, major repairs, new vendors, capital equipment, and unbudgeted commitments go to the owner.",
       ceilingUsd: 500,
+    },
+  },
+  "manufacturing": {
+    "customer-goodwill": {
+      title: "When our product or delivery falls short",
+      stance:
+        "We contain the issue, protect the customer's operation, and preserve the evidence before debating fault. Routine freight, replacement, or rework remedies may proceed within the ceiling; safety, systemic, or material warranty exposure goes to the owner and quality authority.",
+      ceilingUsd: 500,
+    },
+    "pricing-integrity": {
+      title: "Quotes, configurations, and change control",
+      stance:
+        "A quote states configuration, quantity, lead time, validity, exclusions, and acceptance basis. Scope or revision changes become an explicit change, never a quiet reduction in what was promised.",
+    },
+    "growth-vs-stability": {
+      title: "New orders vs released capacity",
+      stance:
+        "Released customer commitments get first call on qualified material, people, equipment, and test capacity. We accept new demand at the rate the constraint and quality system can carry, not the rate the order book can hide.",
+    },
+    "quality-bar": {
+      title: "Our release standard",
+      stance:
+        "Nonconforming work is identified, contained, and dispositioned by authorized people. Missing, stale, or uncertain evidence is not a pass, and schedule pressure never authorizes an unrecorded deviation.",
+    },
+    "spend-authority": {
+      title: "Routine production spending without asking",
+      stance:
+        "Approved replenishment, ordinary consumables, calibration, and routine maintenance may proceed within budget and the ceiling. New suppliers, tooling, capital equipment, design changes, and unplanned commitments go to the owner.",
+      ceilingUsd: 1000,
     },
   },
   "automotive-services": {

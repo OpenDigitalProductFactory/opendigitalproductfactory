@@ -419,6 +419,12 @@ function chooseTemplate(
   if (category === "agriculture-ranching") {
     return { template: "TERRITORY", variant: "unit-portfolio" };
   }
+  // Interim truthful physical grammar until BI-E118D536 lands the dedicated
+  // FACTORY line/cell/station renderer. BAYS shows work-in-process at fixed
+  // work centres and avoids the materially-wrong STORE sales-floor fallback.
+  if (category === "manufacturing") {
+    return { template: "BAYS" };
+  }
   if (category === "food-hospitality") {
     return { template: "FLOOR" };
   }

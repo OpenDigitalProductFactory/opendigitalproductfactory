@@ -795,6 +795,37 @@
         "gap-detection",
         "governed-backlog-suggestion"
       ]
+    },
+    {
+      "professionKey": "manufacturing-operations",
+      "label": "Manufacturing Operations",
+      "roles": [
+        "manufacturing-ops-coordinator",
+        "manufacturing-data-steward",
+        "manufacturing-compliance-officer",
+        "manufacturing-finance-controller"
+      ],
+      "contextSlugs": ["manufacturing", "production-flow", "quality", "industrial-operations"],
+      "sources": [
+        {
+          "name": "ISA-95 Standard — Enterprise-Control System Integration overview",
+          "url": "https://www.isa.org/standards-and-publications/isa-standards/isa-95-standard",
+          "licenseClass": "licensed"
+        },
+        {
+          "name": "NIST SP 800-82 Rev. 3 — Guide to Operational Technology Security",
+          "url": "https://csrc.nist.gov/pubs/sp/800/82/r3/final",
+          "licenseClass": "open"
+        }
+      ],
+      "coverageChecklist": [
+        "isa-95-enterprise-site-area-line-cell-equipment-hierarchy",
+        "production-order-and-job-operation-state",
+        "material-equipment-and-labor-constraint-visibility",
+        "inspection-hold-rework-and-release-authority",
+        "wip-genealogy-and-observation-provenance",
+        "ot-read-only-boundary-and-stale-signal-handling"
+      ]
     }
   ]
 }

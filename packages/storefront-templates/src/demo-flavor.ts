@@ -225,6 +225,7 @@ export const CATEGORY_FLAVOR_DEFAULTS: Partial<Record<ArchetypeCategory, Pick<De
   "warehousing-fulfilment": { notes: "Goods booked in the day they land, stock counts that match the shelf, and every order out before cut-off." },
   "fabric-care-services": { notes: "Every garment tagged, every ready promise visible, and customers notified before they have to ask." },
   "agriculture-ranching": { notes: "Every field, pasture, animal, machine, input, and outside-service window visible before the season makes the decision for us." },
+  "manufacturing": { notes: "Every released job visible at its current operation, constraints surfaced early, quality holds explicit, and finished goods shipped with traceability intact." },
 };
 
 /** Resolve the default flavor for an archetype: its own entry merged over its
