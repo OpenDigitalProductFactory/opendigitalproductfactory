@@ -7,6 +7,8 @@
 - **Related epics:** EP-WWMD-MCP, EP-53A259C6 (WWWD onboarding), EP-AGENT-AUTH-VAULT, EP-COMPANY-AUTHZ-FGA, EP-COWORKER-INTERACTIVITY, EP-AGENT-INSTRUCTION-PLANE, EP-ORG-LOCALE-CURRENCY, EP-DECISION-TIER-REBALANCE, EP-EMPLOYEE-OCCUPATION, EP-A2A, EP-MCP
 - **Related specs:** `2026-03-13-unified-identity-access-agent-governance-design.md`, `2026-03-16-unified-mcp-coworker-design.md`, `2026-05-31-pseudo-user-contract-design.md`, `2026-03-16-external-services-mcp-surface-design.md`
 
+> **2026-08-08 architecture note:** Identity, decision-domain routing, organization context, and delegated-authority decisions remain valid. The derived product interface is now the render-independent Authorized Surface Contract in [`2026-08-08-authorized-surface-contract-design.md`](2026-08-08-authorized-surface-contract-design.md); generating browser `ScreenManifest`s from routes is retained only as a migration adapter.
+
 ## 1. Problem
 
 Some AI interactions with the platform from **outside** (Claude Code, Codex, Grok, or an organization's own agent) lack the organization's context: they do not take into account the **archetype**, **where the business operates** (locale / currency / jurisdiction), the org **mission**, or its **WWWD stance** when acting on the platform. Two consumer classes matter:
