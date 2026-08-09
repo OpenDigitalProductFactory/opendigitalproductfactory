@@ -1,9 +1,10 @@
 import { sha256Bytes } from "./ci-build-artifact.mjs";
+import { CI_EVIDENCE_VALIDITY_LIFETIME_MS } from "./evidence-validity-policy.mjs";
 
 export const CI_EVIDENCE_RECEIPT_SCHEMA_VERSION = 1;
 export const CI_EVIDENCE_RECEIPT_KIND = "dpf-github-ci-evidence";
 export const CI_EVIDENCE_ARTIFACT_PREFIX = "ci-evidence";
-export const CI_EVIDENCE_LIFETIME_MS = 24 * 60 * 60_000;
+export const CI_EVIDENCE_LIFETIME_MS = CI_EVIDENCE_VALIDITY_LIFETIME_MS;
 
 const TERMINAL_SUCCESS = new Set(["success", "skipped"]);
 const SHA40 = /^[a-f0-9]{40}$/;
