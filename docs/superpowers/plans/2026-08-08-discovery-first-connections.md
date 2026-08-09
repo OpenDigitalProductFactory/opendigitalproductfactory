@@ -21,7 +21,7 @@ This plan extends `InventoryEntity`, `DiscoveryConnection`, and `gatewayEntityId
 
 ## Existing substrate
 
-- `apps/web/components/inventory/DiscoveryOperationsPage.tsx` already queries canonical `InventoryEntity` gateway rows but reduces them to the first non-Docker IP; the discovery runner's broader `gateway`/`router` classification must remain aligned here.
+- `apps/web/components/inventory/DiscoveryOperationsPage.tsx` already queries canonical `InventoryEntity` gateway rows but reduces them to the first non-Docker IP; the discovery runner's broader `gateway`/`router` classification must remain aligned here. A tested `DiscoveryConnection` target is also authoritative corroboration when physical ARP evidence still classifies the same address as a generic host; exact endpoint correlation may promote that entity without guessing from address shape.
 - `apps/web/components/inventory/AddDiscoveryConnection.tsx` and `ConfigureConnectionInline.tsx` prefill that IP but expose an editable URL in the primary flow.
 - `apps/web/lib/actions/discovery.ts` already normalizes some endpoint forms and upserts `DiscoveryConnection`; its URL helper is server-local, incomplete, and does not return field-level validation.
 - `InventoryEntity` already carries stable id/entityKey, name, manufacturer, product model, confidence, observed properties, and software evidence.
@@ -73,7 +73,7 @@ TDD evidence:
 
 ### 2. Server source truth and duplicate safety — sequencing-only
 
-Update `DiscoveryOperationsPage.tsx` to query complete physical `gateway` and `router` candidate fields, reuse the canonical Docker-origin filter, and pass the typed candidate list to `SavedConnectionsPanel` / `AddDiscoveryConnection`.
+Update `DiscoveryOperationsPage.tsx` to query complete physical `gateway` and `router` candidate fields plus exact physical-host matches for canonical UniFi/SNMP connection targets, reuse the canonical Docker-origin filter, and pass the typed candidate list to `SavedConnectionsPanel` / `AddDiscoveryConnection`. Treat only an active exact-address connection as identity evidence; never infer a gateway from `.1`, inventory order, or subnet position.
 
 Update `apps/web/lib/actions/discovery.ts` to use the shared endpoint contract before any persistence or test request. Preserve edit-by-id behavior, bind `gatewayEntityId`, and make equivalent endpoint keys canonical so save/edit does not create duplicates.
 

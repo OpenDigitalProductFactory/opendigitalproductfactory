@@ -25,7 +25,11 @@ import { SubnetGroupedInventoryPanel } from "@/components/inventory/SubnetGroupe
 import { TopologyGraph } from "@/components/inventory/TopologyGraph";
 import { CustomerTopologyScopeBar } from "@/components/inventory/CustomerTopologyScopeBar";
 import { CollapsibleList } from "@/components/ui/report-kit/CollapsibleList";
-import { buildGatewayCandidates } from "@/lib/discovery-connection/gateway-candidate";
+import {
+  buildGatewayCandidates,
+  gatewayConnectionAddresses,
+  gatewayEvidenceWhere,
+} from "@/lib/discovery-connection/gateway-candidate";
 
 const STATUS_COLOURS: Record<string, string> = {
   active: "var(--dpf-success)",
@@ -51,6 +55,14 @@ type DiscoveryOperationsPageProps = {
 export async function DiscoveryOperationsPage({
   isLegacyAlias = false,
 }: DiscoveryOperationsPageProps) {
+  const gatewayConnectionEvidence = await prisma.discoveryConnection.findMany({
+    select: {
+      collectorType: true,
+      endpointUrl: true,
+      status: true,
+    },
+  });
+  const connectionAddresses = gatewayConnectionAddresses(gatewayConnectionEvidence);
   const [
     products,
     latestRun,
@@ -78,7 +90,7 @@ export async function DiscoveryOperationsPage({
     prisma.inventoryEntity.findMany({
       where: {
         ...INVENTORY_ENTITY_CANONICAL_WHERE,
-        entityType: { in: ["gateway", "router"] },
+        ...gatewayEvidenceWhere(connectionAddresses),
         NOT: { name: { contains: "Docker" } },
       },
       select: {
@@ -102,8 +114,13 @@ export async function DiscoveryOperationsPage({
     .filter((gateway) => gateway.entityKey.toLowerCase().startsWith("gateway:"))
     .map((gateway) => (gateway.properties as Record<string, unknown>)?.address as string | undefined)
     .find((address) => address && !address.startsWith("172."))
+    ?? connectionAddresses[0]
     ?? null;
-  const gatewayCandidates = buildGatewayCandidates(physicalGateways, defaultGatewayIp);
+  const gatewayCandidates = buildGatewayCandidates(
+    physicalGateways,
+    defaultGatewayIp,
+    gatewayConnectionEvidence,
+  );
 
   const staleEntities = await countStaleEntitiesSince(latestRun?.startedAt ?? null);
 

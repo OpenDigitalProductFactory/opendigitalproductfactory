@@ -3,6 +3,8 @@ import { describe, expect, it } from "vitest";
 import {
   buildGatewayCandidates,
   choosePreselectedGateway,
+  gatewayConnectionAddresses,
+  gatewayEvidenceWhere,
 } from "./gateway-candidate";
 
 const unifiGateway = {
@@ -123,6 +125,77 @@ describe("buildGatewayCandidates", () => {
       matchesDetectedGateway: true,
     });
     expect(candidates[0].evidence.join(" ")).toMatch(/default_route/i);
+  });
+
+  it("promotes a physical host when a tested UniFi connection targets the same address", () => {
+    const candidates = buildGatewayCandidates([{
+      id: "physical-host",
+      entityKey: "host:arp:192.168.0.1",
+      name: "LAN Host 192.168.0.1",
+      manufacturer: null,
+      productModel: null,
+      confidence: 0.7,
+      properties: { address: "192.168.0.1", discoveredVia: "arp_scan" },
+    }], null, [{
+      collectorType: "unifi",
+      endpointUrl: "https://192.168.0.1",
+      status: "active",
+    }]);
+
+    expect(candidates).toEqual([
+      expect.objectContaining({
+        entityId: "physical-host",
+        name: "UniFi gateway 192.168.0.1",
+        address: "192.168.0.1",
+        recommendedCollector: "unifi",
+        canonicalEndpoint: "https://192.168.0.1",
+        matchesDetectedGateway: true,
+      }),
+    ]);
+    expect(candidates[0].evidence.join(" ")).toMatch(/active UniFi connection/i);
+  });
+
+  it("does not promote unrelated hosts from connection evidence", () => {
+    const candidates = buildGatewayCandidates([{
+      id: "other-host",
+      entityKey: "host:arp:192.168.0.42",
+      name: "LAN Host 192.168.0.42",
+      manufacturer: null,
+      productModel: null,
+      confidence: 0.7,
+      properties: { address: "192.168.0.42" },
+    }], null, [{
+      collectorType: "unifi",
+      endpointUrl: "https://192.168.0.1",
+      status: "active",
+    }]);
+
+    expect(candidates[0]).toMatchObject({
+      name: "LAN Host 192.168.0.42",
+      recommendedCollector: "arp_scan",
+      matchesDetectedGateway: false,
+    });
+  });
+});
+
+describe("gateway connection evidence query", () => {
+  it("queries the physical host at an authoritative management target", () => {
+    const addresses = gatewayConnectionAddresses([
+      { collectorType: "unifi", endpointUrl: "https://192.168.0.1", status: "active" },
+      { collectorType: "snmp", endpointUrl: "192.168.0.1", status: "unreachable" },
+      { collectorType: "arp_scan", endpointUrl: "192.168.0.0/24", status: "active" },
+    ]);
+
+    expect(addresses).toEqual(["192.168.0.1"]);
+    expect(gatewayEvidenceWhere(addresses)).toEqual({
+      OR: [
+        { entityType: { in: ["gateway", "router"] } },
+        {
+          entityType: "host",
+          properties: { path: ["address"], equals: "192.168.0.1" },
+        },
+      ],
+    });
   });
 });
 
