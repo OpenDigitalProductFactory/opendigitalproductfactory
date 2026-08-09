@@ -1,17 +1,6 @@
-// Real MCP JSON-RPC 2.0 transport for external coding agents (Claude Code,
-// Codex CLI, VS Code MCP) on the user's host. Spec snapshot in
-// docs/Reference/mcp/spec/ (version 2025-11-25).
-//
-// This is the canonical MCP endpoint. The bespoke REST endpoints at
-// /api/mcp/tools and /api/mcp/call remain for in-portal coworker chat
-// (which speaks its own contract, not MCP); this route is what an MCP
-// client points at.
-//
-// Auth: Authorization: Bearer dpfmcp_<token>. Tokens are issued from
-// /admin/platform-development. We do NOT implement OAuth 2.1 resource-
-// server discovery (the GitHub-PAT pattern, intentionally) but we still
-// return a WWW-Authenticate header on 401 so clients that perform
-// discovery don't fail mysteriously.
+// Canonical MCP JSON-RPC transport for external agents. It composes the
+// governed tool/task services; the in-portal /api/mcp/* REST seam is separate.
+// Auth is a DPF PAT or a short-lived internal MCP session token.
 
 import {
   resolveMcpApiToken,
@@ -19,11 +8,9 @@ import {
   type McpTokenScope,
   type ResolvedMcpToken,
 } from "@/lib/auth/mcp-api-token";
-import { deriveCallerClient } from "@/lib/mcp/caller-client";
 import { verifyMcpSessionToken } from "@/lib/mcp/session-token";
 import { governedExecuteTool } from "@/lib/mcp-governed-execute";
 import { PLATFORM_TOOLS, resolveAnnotations, type ToolDefinition } from "@/lib/mcp-tools";
-import { submitRemoteCoworkerTask } from "@/lib/mcp-task-submit";
 import { getQuiescenceConfig } from "@/lib/self-upgrade/quiescence";
 import { getToolGrantMapping, expandGrants } from "@/lib/tak/agent-grants";
 import { MCP_ROUTE_TOOL_RESULT_CHAR_CAP } from "@/lib/tak/tool-result-budget";
@@ -39,36 +26,28 @@ import {
   tasksLifecycleEnabled,
   tasksExtensionNegotiated,
   bindMcpTaskOwner,
-  handleTasksGet,
-  handleTasksUpdate,
-  handleTasksResult,
-  handleTasksList,
-  handleTasksCancel,
-  MCP_MISSING_REQUIRED_CLIENT_CAPABILITY,
-  MCP_TASKS_EXTENSION,
-  type TaskLifecycleResult,
 } from "@/lib/mcp/tasks-lifecycle";
 import { LOAD_TOOLS_LISTED, buildLoadToolsResult, loadToolsSseResponse } from "@/lib/mcp/load-tools";
+import { cacheableCompleteResult, type ModernMcpRequestMetadata } from "@/lib/mcp/protocol-2026";
 import {
-  MCP_PROTOCOL_VERSION_2026,
-  MCP_UNSUPPORTED_PROTOCOL_VERSION,
-  cacheableCompleteResult,
-  isModernMcpRequest,
-  readModernRequestMetadata,
-  validateModernHttpHeaders,
-  validateToolParameterHeaders,
-  withModernServerMetadata,
-  type ModernMcpRequestMetadata,
-} from "@/lib/mcp/protocol-2026";
+  buildMcpInstructions,
+  buildServerDiscoveryResult,
+  validateModernRouteRequest,
+} from "@/lib/mcp/route-modern";
 import {
-  buildMcpTelemetryRecord,
-  countSuspendedMcpTasks,
-  recordMcpProtocolTelemetry,
-} from "@/lib/mcp/protocol-telemetry";
+  jsonResponse,
+  jsonRpcError,
+  jsonRpcOk,
+  type JsonRpcId,
+} from "@/lib/mcp/route-jsonrpc";
+import { withMcpRouteTelemetry } from "@/lib/mcp/route-telemetry";
+import {
+  dispatchMcpTaskLifecycle,
+  submitMcpTask,
+  type McpTaskRouteAuth,
+} from "@/lib/mcp/route-task-dispatch";
 import { can, type CapabilityKey, type UserContext } from "@/lib/permissions";
 import { prisma } from "@dpf/db";
-
-let activeMcpRequestCount = 0;
 
 /** Resolved auth — either a persistent PAT or a short-lived internal session.
  * The route-side handlers consume this single shape; the only difference is
@@ -95,8 +74,6 @@ const JSONRPC_METHOD_NOT_FOUND = -32601;
 const JSONRPC_INVALID_PARAMS = -32602;
 const JSONRPC_INTERNAL_ERROR = -32603;
 
-type JsonRpcId = string | number | null;
-
 type JsonRpcRequest = {
   jsonrpc: "2.0";
   id?: JsonRpcId;
@@ -104,57 +81,11 @@ type JsonRpcRequest = {
   params?: Record<string, unknown>;
 };
 
-type JsonRpcResponse =
-  | {
-      jsonrpc: "2.0";
-      id: JsonRpcId;
-      result: unknown;
-    }
-  | {
-      jsonrpc: "2.0";
-      id: JsonRpcId;
-      error: { code: number; message: string; data?: unknown };
-    };
-
 type McpToolsCallResult = {
   content: { type: "text"; text: string }[];
   structuredContent?: unknown;
   isError: boolean;
 };
-
-function jsonResponse(payload: unknown, status = 200): Response {
-  return new Response(JSON.stringify(payload), {
-    status,
-    headers: { "Content-Type": "application/json" },
-  });
-}
-
-function jsonRpcError(
-  id: JsonRpcId,
-  code: number,
-  message: string,
-  data?: unknown,
-  httpStatus = 200,
-): Response {
-  const body: JsonRpcResponse = {
-    jsonrpc: "2.0",
-    id,
-    error: { code, message, ...(data !== undefined ? { data } : {}) },
-  };
-  return jsonResponse(body, httpStatus);
-}
-
-function jsonRpcOk(id: JsonRpcId, result: unknown, modern = false): Response {
-  let wireResult = result;
-  if (modern && typeof result === "object" && result !== null && !Array.isArray(result)) {
-    const record = result as Record<string, unknown>;
-    wireResult = withModernServerMetadata(
-      record["resultType"] === undefined ? { resultType: "complete", ...record } : record,
-      { name: SERVER_NAME, version: SERVER_VERSION },
-    );
-  }
-  return jsonResponse({ jsonrpc: "2.0", id, result: wireResult } satisfies JsonRpcResponse);
-}
 
 function scopeToCapability(scope: McpTokenScope): McpTokenCapability {
   return scope === "read" ? "read" : "write";
@@ -165,6 +96,17 @@ function normalizeTokenScope(token: Pick<ResolvedMcpToken, "scope" | "capability
     return token.scope;
   }
   return token.capability === "write" ? "write" : "read";
+}
+
+function taskRouteAuth(token: ResolvedAuth): McpTaskRouteAuth {
+  return {
+    tokenId: token.tokenId,
+    userId: token.userId,
+    agentId: token.agentId,
+    scopes: token.scopes,
+    capability: scopeToCapability(normalizeTokenScope(token)),
+    source: token.source,
+  };
 }
 
 function unauthorizedResponse(detail: string): Response {
@@ -451,82 +393,6 @@ async function handleLoadTools(
     : jsonRpcOk(id, result, modern);
 }
 
-// Standard MCP Tasks Phase-0 read surface: route tasks/get|result|list|cancel to
-// the tasks-lifecycle module (auth-context bound over the TaskRun substrate) and
-// map its typed result to a JSON-RPC response. Cross-context / bad-id → -32602.
-async function handleTasksLifecycle(
-  method: string,
-  id: JsonRpcId,
-  token: ResolvedAuth,
-  params: Record<string, unknown> | undefined,
-  modern = false,
-  modernMetadata: ModernMcpRequestMetadata | null = null,
-): Promise<Response> {
-  if (!tasksLifecycleEnabled()) {
-    return jsonRpcError(id, JSONRPC_METHOD_NOT_FOUND, `unknown method: ${method}`);
-  }
-  const auth = { userId: token.userId, tokenId: token.tokenId, agentId: token.agentId };
-  const officialTaskMethod =
-    method === "tasks/get" || method === "tasks/update" || method === "tasks/cancel";
-  if (
-    modern &&
-    officialTaskMethod &&
-    !tasksExtensionNegotiated(modernMetadata?.clientCapabilities ?? {})
-  ) {
-    return jsonRpcError(
-      id,
-      MCP_MISSING_REQUIRED_CLIENT_CAPABILITY,
-      "Missing required client capability",
-      { requiredCapabilities: { extensions: { [MCP_TASKS_EXTENSION]: {} } } },
-      400,
-    );
-  }
-  let result: TaskLifecycleResult;
-  switch (method) {
-    case "tasks/get":
-      result = await handleTasksGet(auth, params);
-      break;
-    case "tasks/update":
-      result = await handleTasksUpdate(auth, params);
-      break;
-    case "tasks/result":
-      result = await handleTasksResult(token.userId, params, token.tokenId);
-      break;
-    case "tasks/list":
-      result = await handleTasksList(token.userId, params);
-      break;
-    case "tasks/cancel":
-      result = await handleTasksCancel(auth, params);
-      break;
-    default:
-      return jsonRpcError(id, JSONRPC_METHOD_NOT_FOUND, `unknown method: ${method}`);
-  }
-  if (result.kind === "ok") return jsonRpcOk(id, result.value, modern);
-  return jsonRpcError(id, JSONRPC_INVALID_PARAMS, result.message);
-}
-
-async function handleTasksSubmit(
-  id: JsonRpcId,
-  token: ResolvedAuth,
-  params: Record<string, unknown> | undefined,
-): Promise<Response> {
-  const outcome = await submitRemoteCoworkerTask({
-    token: {
-      tokenId: token.tokenId,
-      userId: token.userId,
-      agentId: token.agentId,
-      scopes: token.scopes,
-      capability: scopeToCapability(normalizeTokenScope(token)),
-      source: token.source,
-    },
-    params,
-  });
-  if (outcome.kind === "invalid_params") {
-    return jsonRpcError(id, JSONRPC_INVALID_PARAMS, outcome.message);
-  }
-  return jsonRpcOk(id, outcome.result);
-}
-
 const BASE_MCP_INSTRUCTIONS =
   "Domain-level MCP surface for the Digital Product Factory. Use tools/list to discover the backlog and planning tools available to your token.";
 
@@ -539,7 +405,7 @@ async function handleInitialize(id: JsonRpcId, params?: Record<string, unknown>)
   // decisionDomain routing directive that activates BI-HDLEMP-01 — from connect,
   // instead of only a bare tool list. Fail-open: any compose error falls back to
   // the base note; initialize must never break.
-  const instructions = await buildMcpInstructions();
+  const instructions = await buildMcpInstructions(BASE_MCP_INSTRUCTIONS);
   return jsonRpcOk(id, {
     protocolVersion: negotiated,
     capabilities: {
@@ -561,44 +427,8 @@ async function handleInitialize(id: JsonRpcId, params?: Record<string, unknown>)
   });
 }
 
-async function buildMcpInstructions(): Promise<string> {
-  let instructions = BASE_MCP_INSTRUCTIONS;
-  try {
-    const [{ buildOrgContextBundle, formatOrgContextInstructions }, { prisma }] =
-      await Promise.all([
-        import("@/lib/mcp/org-context-bundle"),
-        import("@dpf/db"),
-      ]);
-    const bundle = await buildOrgContextBundle(
-      prisma as unknown as Parameters<typeof buildOrgContextBundle>[0],
-    );
-    instructions = formatOrgContextInstructions(BASE_MCP_INSTRUCTIONS, bundle);
-  } catch (err) {
-    console.warn("[mcp/instructions] org-context compose failed (fail-open):", err);
-  }
-  return instructions;
-}
-
 async function handleServerDiscover(id: JsonRpcId): Promise<Response> {
-  const instructions = await buildMcpInstructions();
-  return jsonRpcOk(
-    id,
-    cacheableCompleteResult(
-      {
-        supportedVersions: [MCP_PROTOCOL_VERSION_2026],
-        capabilities: {
-          tools: { listChanged: true },
-          ...(tasksLifecycleEnabled()
-            ? { extensions: { [MCP_TASKS_EXTENSION]: {} } }
-            : {}),
-        },
-        instructions,
-      },
-      0,
-      "private",
-    ),
-    true,
-  );
+  return jsonRpcOk(id, await buildServerDiscoveryResult(BASE_MCP_INSTRUCTIONS), true);
 }
 
 async function handleToolsList(
@@ -867,70 +697,18 @@ async function handlePost(request: Request): Promise<Response> {
   // self-describing and independently validated; legacy requests retain the
   // initialize-era compatibility behavior below.
   const protocolHeader = request.headers.get("mcp-protocol-version");
-  const modern = isModernMcpRequest(request.headers, body);
-  let modernMetadata: ModernMcpRequestMetadata | null = null;
-  if (modern) {
-    const headerValidation = validateModernHttpHeaders(request.headers, body);
-    if (!headerValidation.ok) {
-      return jsonRpcError(
-        body.id ?? null,
-        headerValidation.code,
-        headerValidation.message,
-        undefined,
-        400,
-      );
-    }
-
-    const rawMeta = body.params?.["_meta"];
-    const requestedVersion =
-      typeof rawMeta === "object" && rawMeta !== null && !Array.isArray(rawMeta)
-        ? (rawMeta as Record<string, unknown>)["io.modelcontextprotocol/protocolVersion"]
-        : undefined;
-    if (requestedVersion !== MCP_PROTOCOL_VERSION_2026) {
-      return jsonRpcError(
-        body.id ?? null,
-        MCP_UNSUPPORTED_PROTOCOL_VERSION,
-        "Unsupported protocol version",
-        {
-          supported: [MCP_PROTOCOL_VERSION_2026],
-          requested: requestedVersion ?? protocolHeader,
-        },
-        400,
-      );
-    }
-
-    modernMetadata = readModernRequestMetadata(body.params);
-    if (!modernMetadata) {
-      return jsonRpcError(
-        body.id ?? null,
-        MCP_MISSING_REQUIRED_CLIENT_CAPABILITY,
-        "Missing or malformed per-request client capabilities",
-        undefined,
-        400,
-      );
-    }
-
-    if (body.method === "tools/call" && typeof body.params?.["name"] === "string") {
-      const tool = PLATFORM_TOOLS.find((candidate) => candidate.name === body.params?.["name"]);
-      const args = body.params["arguments"];
-      if (tool && typeof args === "object" && args !== null && !Array.isArray(args)) {
-        const parameterValidation = validateToolParameterHeaders(
-          request.headers,
-          tool.inputSchema as Record<string, unknown>,
-          args as Record<string, unknown>,
-        );
-        if (!parameterValidation.ok) {
-          return jsonRpcError(
-            body.id ?? null,
-            parameterValidation.code,
-            parameterValidation.message,
-            undefined,
-            400,
-          );
-        }
-      }
-    }
-  } else if (
+  const modernValidation = validateModernRouteRequest(request, body);
+  if ("error" in modernValidation) {
+    return jsonRpcError(
+      body.id ?? null,
+      modernValidation.error.code,
+      modernValidation.error.message,
+      modernValidation.error.data,
+      modernValidation.error.httpStatus,
+    );
+  }
+  const { modern, metadata: modernMetadata, callerClient } = modernValidation;
+  if (!modern &&
     protocolHeader &&
     body.method !== "initialize" &&
     !(SUPPORTED_PROTOCOL_VERSIONS as readonly string[]).includes(protocolHeader)
@@ -943,10 +721,6 @@ async function handlePost(request: Request): Promise<Response> {
       400,
     );
   }
-
-  const callerClient = modernMetadata?.clientInfo
-    ? deriveCallerClient(`${modernMetadata.clientInfo.name}/${modernMetadata.clientInfo.version}`)
-    : deriveCallerClient(request.headers.get("user-agent"));
 
   try {
     switch (body.method) {
@@ -1007,7 +781,12 @@ async function handlePost(request: Request): Promise<Response> {
         if (isNotification) {
           return new Response(null, { status: 202 });
         }
-        return await handleTasksSubmit(body.id ?? null, token, body.params);
+        {
+          const outcome = await submitMcpTask(taskRouteAuth(token), body.params);
+          return outcome.kind === "ok"
+            ? jsonRpcOk(body.id ?? null, outcome.value)
+            : jsonRpcError(body.id ?? null, outcome.code, outcome.message, outcome.data, outcome.httpStatus);
+        }
 
       case "tasks/get":
       case "tasks/update":
@@ -1017,14 +796,18 @@ async function handlePost(request: Request): Promise<Response> {
         if (isNotification) {
           return new Response(null, { status: 202 });
         }
-        return await handleTasksLifecycle(
-          body.method,
-          body.id ?? null,
-          token,
-          body.params,
-          modern,
-          modernMetadata,
-        );
+        {
+          const outcome = await dispatchMcpTaskLifecycle({
+            method: body.method,
+            token: taskRouteAuth(token),
+            params: body.params,
+            modern,
+            clientCapabilities: modernMetadata?.clientCapabilities ?? {},
+          });
+          return outcome.kind === "ok"
+            ? jsonRpcOk(body.id ?? null, outcome.value, modern)
+            : jsonRpcError(body.id ?? null, outcome.code, outcome.message, outcome.data, outcome.httpStatus);
+        }
 
       case "ping":
         if (isNotification) {
@@ -1063,38 +846,7 @@ async function handlePost(request: Request): Promise<Response> {
  * never persisted.
  */
 export async function POST(request: Request): Promise<Response> {
-  const startedAt = performance.now();
-  const telemetryRequest = request.clone();
-  activeMcpRequestCount += 1;
-
-  try {
-    const response = await handlePost(request);
-    const [body, responseBody, suspendedTaskCount] = await Promise.all([
-      telemetryRequest.json().catch(() => null),
-      response.clone().json().catch(() => null),
-      countSuspendedMcpTasks(),
-    ]);
-    const rss = typeof process.memoryUsage === "function"
-      ? BigInt(process.memoryUsage().rss)
-      : null;
-
-    await recordMcpProtocolTelemetry(buildMcpTelemetryRecord({
-      headers: telemetryRequest.headers,
-      body: body && typeof body === "object" && !Array.isArray(body)
-        ? body as Record<string, unknown>
-        : null,
-      responseBody,
-      httpStatus: response.status,
-      latencyMs: performance.now() - startedAt,
-      activeRequestCount: activeMcpRequestCount,
-      suspendedTaskCount,
-      processRssBytes: rss,
-    }));
-
-    return response;
-  } finally {
-    activeMcpRequestCount = Math.max(0, activeMcpRequestCount - 1);
-  }
+  return withMcpRouteTelemetry(request, handlePost);
 }
 
 // GET on the MCP endpoint is reserved for SSE in the Streamable HTTP spec.

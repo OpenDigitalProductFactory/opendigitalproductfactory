@@ -209,6 +209,18 @@ Legacy support may be removed only when all are true:
 
 Rollback disables preferred 2026 task creation or restores legacy selection at the adapter boundary. It never swaps routes or data stores.
 
+## Design grounding
+
+- Existing specs/plans reviewed:
+  - the MCP/A2A adoption design, the federated A2A GAID coordination design, and this convergence plan;
+  - the official MCP 2026-07-28 core and Tasks extension contracts cited in Research & benchmarking.
+- Current code substrate reviewed:
+  - the canonical `/api/mcp/v1` route, PAT/session authentication and grant mapping, `TaskRun` lifecycle, shared queue/Inngest ownership, MCP client adapters, ADP server, retention registry, and Admin Platform Development surface.
+- Source of truth:
+  - `@dpf/integration-shared` owns the wire contract; `TaskRun` owns durable work; PAT/user/coworker grant intersection owns authority; the existing queue owns execution; the compatibility telemetry model owns only bounded protocol observations.
+- Decision:
+  - extend those owners through thin route, task, queue, client, and ADP adapters; keep legacy behavior measured and reversible until its explicit retirement gates pass.
+
 ## 9. Verification contract
 
 - Contract tests pin protocol/method/name/parameter header-body matching and `-32020` failures, per-request metadata, response `_meta`, discovery semantics, all cacheable result directives, POST/SSE behavior, and absence of initialize/session dependence.

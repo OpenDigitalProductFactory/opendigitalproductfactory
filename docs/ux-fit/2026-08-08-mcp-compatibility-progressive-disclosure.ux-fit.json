@@ -4,7 +4,6 @@
   "decisionInteractionId": "DI-AE44D3654E8A",
   "scope": {
     "files": [
-      "apps/web/app/(shell)/admin/platform-development/page.tsx",
       "apps/web/components/admin/McpCompatibilityPanel.tsx"
     ]
   },

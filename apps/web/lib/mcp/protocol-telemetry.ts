@@ -1,4 +1,5 @@
 import { prisma } from "@dpf/db";
+import { isRecord } from "@/lib/shared/coerce";
 import { MCP_PROTOCOL_VERSION_2026 } from "./protocol-2026";
 import { MCP_TASKS_EXTENSION, tasksExtensionNegotiated } from "./tasks-lifecycle";
 
@@ -28,10 +29,6 @@ export type McpTelemetryRecord = {
   queuedResumptionCount: number;
   processRssBytes: bigint | null;
 };
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
 
 function boundedLabel(value: unknown, fallback: string, max = 80): string {
   if (typeof value !== "string") return fallback;

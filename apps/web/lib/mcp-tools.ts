@@ -99,9 +99,7 @@ export type ToolDefinition = {
   name: string;
   description: string;
   inputSchema: Record<string, unknown>;
-  /** MCP 2025-11-25 optional metadata. `title` is a human-facing label (falls
-   *  back to a de-underscored name); `icons` are display hints; `outputSchema`
-   *  declares the structured-result shape as JSON Schema (2020-12 dialect). */
+  /** MCP display metadata and structured-result JSON Schema. */
   title?: string;
   icons?: Array<{ src: string; mimeType?: string; sizes?: string }>;
   outputSchema?: Record<string, unknown>;
@@ -109,12 +107,7 @@ export type ToolDefinition = {
   requiresExternalAccess?: boolean;
   executionMode?: "proposal" | "immediate";
   sideEffect?: boolean;
-  /**
-   * This tool durably creates one canonical TaskRun and may therefore return
-   * an MCP 2026 CreateTaskResult when the current request negotiated the Tasks
-   * extension. The governed handler still owns creation; the transport only
-   * binds and projects the returned taskRunId.
-   */
+  /** Governed handler creates a TaskRun eligible for an MCP 2026 task handle. */
   taskAugmented?: boolean;
   /**
    * Tool captures the coworker's own recommendation or work product as a

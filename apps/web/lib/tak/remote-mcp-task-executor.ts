@@ -1,6 +1,6 @@
 import { prisma } from "@dpf/db";
-import { inngest } from "@/lib/queue/inngest-client";
 import { markTaskRunWorking } from "@/lib/observability/heartbeat";
+import { isRecord } from "@/lib/shared/coerce";
 import {
   executeAutonomousAgenticLoop,
   resolveAutonomousWorkAgent,
@@ -9,10 +9,6 @@ import {
 import { createTaskMessage } from "@/lib/tak/task-records";
 
 const TERMINAL = ["completed", "failed", "canceled", "rejected", "archived"];
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
 
 function messageText(parts: unknown): string | null {
   if (!Array.isArray(parts)) return null;
@@ -36,14 +32,6 @@ async function markTerminalFailure(taskRunId: string, message: string): Promise<
       completedAt: new Date(),
       progressPayload: { summary: message.slice(0, 4_000) },
     },
-  });
-}
-
-export async function enqueueRemoteTaskExecution(taskRunId: string): Promise<void> {
-  await inngest.send({
-    id: `mcp-task:${taskRunId}`,
-    name: "mcp/task.execute",
-    data: { taskRunId },
   });
 }
 

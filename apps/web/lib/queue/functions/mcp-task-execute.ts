@@ -33,7 +33,7 @@ export const mcpTaskExecute = inngest.createFunction(
     await gateBetweenSteps(step as unknown as GateBetweenStepsRunner, "mcp-task-entry");
     const taskRunId = event.data.taskRunId as string;
     await step.run("execute", async () => {
-      const { executeRemoteTask } = await import("@/lib/mcp/remote-task-executor");
+      const { executeRemoteTask } = await import("@/lib/tak/remote-mcp-task-executor");
       await executeRemoteTask(taskRunId);
     });
     return { taskRunId };

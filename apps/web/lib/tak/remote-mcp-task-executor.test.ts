@@ -1,7 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
-  send: vi.fn(),
   taskFind: vi.fn(),
   taskUpdate: vi.fn(),
   taskUpdateMany: vi.fn(),
@@ -14,7 +13,6 @@ const mocks = vi.hoisted(() => ({
   markWorking: vi.fn(),
 }));
 
-vi.mock("@/lib/queue/inngest-client", () => ({ inngest: { send: mocks.send } }));
 vi.mock("@dpf/db", () => ({
   prisma: {
     taskRun: {
@@ -34,7 +32,7 @@ vi.mock("@/lib/tak/autonomous-work-run", () => ({
 vi.mock("@/lib/tak/task-records", () => ({ createTaskMessage: mocks.createMessage }));
 vi.mock("@/lib/observability/heartbeat", () => ({ markTaskRunWorking: mocks.markWorking }));
 
-import { enqueueRemoteTaskExecution, executeRemoteTask } from "./remote-task-executor";
+import { executeRemoteTask } from "./remote-mcp-task-executor";
 
 const task = {
   id: "row-1",
@@ -57,7 +55,6 @@ const task = {
 
 beforeEach(() => {
   vi.resetAllMocks();
-  mocks.send.mockResolvedValue({ ids: ["evt-1"] });
   mocks.taskFind.mockResolvedValue(task);
   mocks.taskUpdate.mockResolvedValue(task);
   mocks.taskUpdateMany.mockResolvedValue({ count: 1 });
@@ -86,15 +83,6 @@ beforeEach(() => {
 });
 
 describe("remote MCP task executor", () => {
-  it("enqueues a deterministic durable event and returns immediately", async () => {
-    await enqueueRemoteTaskExecution("TR-MCP-1");
-    expect(mocks.send).toHaveBeenCalledWith({
-      id: "mcp-task:TR-MCP-1",
-      name: "mcp/task.execute",
-      data: { taskRunId: "TR-MCP-1" },
-    });
-  });
-
   it("revalidates the durable PAT before allocating an agent or model", async () => {
     mocks.tokenFind.mockResolvedValue({
       id: "tok-1",

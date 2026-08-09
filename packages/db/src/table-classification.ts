@@ -41,6 +41,10 @@ export const TABLE_CLASSIFICATION: Record<string, TableSensitivity> = {
   // Per-token deferred-tool-loading discovery state: tool names + token id, no
   // PII. Short-TTL, swept by its own expiry (see stewardship-exemptions.txt).
   McpToolSession: "internal",
+  // Payload-free MCP compatibility/resource telemetry. Bounded client and
+  // protocol dimensions only; explicitly excludes credentials, task ids,
+  // GAIDs, prompts, arguments, and internal call-chain topology.
+  McpProtocolTelemetry: "internal",
   Portfolio: "internal",
   DigitalProduct: "internal",
   ProductLine: "internal",

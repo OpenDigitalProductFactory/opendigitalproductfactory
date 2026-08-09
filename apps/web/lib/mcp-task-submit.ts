@@ -1,10 +1,11 @@
 import { prisma } from "@dpf/db";
 import { createAutonomousWorkRun } from "@/lib/tak/autonomous-work-run";
 import { createTaskMessage } from "@/lib/tak/task-records";
-import { enqueueRemoteTaskExecution } from "@/lib/mcp/remote-task-executor";
+import { enqueueRemoteTaskExecution } from "@/lib/queue/mcp-task-dispatch";
 
 export const REMOTE_RISK_CLASSES = ["read", "bounded-write", "high-risk"] as const;
 export type RemoteRiskClass = (typeof REMOTE_RISK_CLASSES)[number];
+const REMOTE_TASK_ACCEPTED_STATUS = "working" as const;
 
 export type RemoteTaskSubmitParams = {
   agentId: string;
@@ -246,7 +247,7 @@ export async function submitRemoteCoworkerTask(input: {
     kind: "result",
     result: {
       taskRunId: run.taskRunId,
-      status: "working",
+      status: REMOTE_TASK_ACCEPTED_STATUS,
       idempotentReplay: false,
       requiresApproval: false,
       content: remoteTaskContent("Remote task accepted for asynchronous execution."),

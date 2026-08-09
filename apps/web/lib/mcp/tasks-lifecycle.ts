@@ -1,4 +1,5 @@
 import { prisma, type Prisma } from "@dpf/db";
+import { isRecord } from "@/lib/shared/coerce";
 import { createTaskMessage } from "@/lib/tak/task-records";
 import { MCP_ROUTE_TOOL_RESULT_CHAR_CAP } from "@/lib/tak/tool-result-budget";
 
@@ -72,10 +73,6 @@ const DPF_TO_MCP_STATE: Record<string, string> = {
 const TERMINAL_DPF_STATES = new Set(["completed", "failed", "canceled", "rejected", "archived"]);
 const DEFAULT_POLL_INTERVAL_MS = 2_000;
 const MAX_LIST_PAGE = 50;
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
 
 function cloneJson(value: unknown): Record<string, unknown> {
   return isRecord(value) ? JSON.parse(JSON.stringify(value)) as Record<string, unknown> : {};
@@ -287,7 +284,7 @@ export async function handleTasksUpdate(
   if (remaining === 0 && isRecord(row.a2aMetadata)) {
     const trigger = row.a2aMetadata["trigger"];
     if (trigger === "external-mcp") {
-      const { enqueueRemoteTaskExecution } = await import("@/lib/mcp/remote-task-executor");
+      const { enqueueRemoteTaskExecution } = await import("@/lib/queue/mcp-task-dispatch");
       await enqueueRemoteTaskExecution(row.taskRunId);
     }
   }
