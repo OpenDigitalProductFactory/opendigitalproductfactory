@@ -4,9 +4,7 @@
   "decisionInteractionId": "DI-204400DDA2A5",
   "scope": {
     "files": [
-      "apps/web/components/inventory/ConfigureConnectionInline.tsx",
-      "apps/web/components/inventory/DiscoveryOperationsPage.tsx",
-      "apps/web/components/inventory/SavedConnectionsPanel.tsx"
+      "apps/web/components/inventory/ConfigureConnectionInline.tsx"
     ]
   },
   "evidence": {
