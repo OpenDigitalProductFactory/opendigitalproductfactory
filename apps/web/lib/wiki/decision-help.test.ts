@@ -12,6 +12,7 @@ function input(overrides: Partial<DecisionHelpInput> = {}): DecisionHelpInput {
     insufficientSignal: false,
     hasBuild: false,
     resolved: false,
+    contextMissing: false,
     ...overrides,
   };
 }
@@ -38,6 +39,13 @@ describe("buildDecisionHelp", () => {
   it("tells the reader nothing is stuck for a fire-and-forget consult", () => {
     const help = buildDecisionHelp(input());
     expect(help.urgency).toContain("Nothing is stuck");
+  });
+
+  it("identifies an incomplete historical record without pretending it can be resolved", () => {
+    const help = buildDecisionHelp(input({ contextMissing: true }));
+    expect(help.meaning).toContain("does not contain enough context");
+    expect(help.urgency).toContain("excluded from action queues");
+    expect(help.steps).toHaveLength(0);
   });
 
   it("says a build is paused — and leads with the Build Studio step — when the consult came from a build gate", () => {

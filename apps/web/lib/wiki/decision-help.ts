@@ -36,6 +36,8 @@ export type DecisionHelpInput = {
   hasBuild: boolean;
   /** True once a human answered (capture row or humanOutcome present). */
   resolved: boolean;
+  /** True when the producer omitted the question needed to resolve this safely. */
+  contextMissing: boolean;
   /**
    * True when the hygiene sweep retired the row because the build it gated is
    * gone (BI-FE034C1E). Distinct from `resolved`: the question stopped being
@@ -124,6 +126,16 @@ function unresolvedSteps(input: DecisionHelpInput): DecisionHelpStep[] {
  */
 export function buildDecisionHelp(input: DecisionHelpInput): DecisionHelp {
   const unresolvedAsk = input.outcomeType === "escalate" || input.outcomeType === "defer";
+
+  if (input.contextMissing) {
+    return {
+      meaning:
+        "This historical audit record does not contain enough context to resolve safely. The question that produced it was never captured.",
+      urgency:
+        "Nothing is waiting on you. This record is retained for audit history and excluded from action queues.",
+      steps: [],
+    };
+  }
 
   if (input.outcomeType === "recommend") {
     return {

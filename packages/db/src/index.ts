@@ -522,6 +522,7 @@ export * from "./device-catalog";
 // NFT pattern. The helper is test-only — import it directly from
 // `./discovery-fingerprint-catalog` in tests, not via the barrel.
 export * from "./discovery-fingerprint-store";
+export * from "./installation-operating-intent";
 
 // Contributor-inventory-sync ScheduledJob constants — shared between the
 // seed helper and the apps/web Inngest runner so the heartbeat row's name +

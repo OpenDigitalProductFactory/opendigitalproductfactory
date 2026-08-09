@@ -7,7 +7,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const { mockPrisma, mockRequireCapability } = vi.hoisted(() => ({
   mockRequireCapability: vi.fn(),
   mockPrisma: {
-    decisionInteraction: { findUnique: vi.fn(), update: vi.fn() },
+    decisionInteraction: {
+      findUnique: vi.fn(),
+      findMany: vi.fn(),
+      update: vi.fn(),
+      updateMany: vi.fn(),
+    },
     organization: { findFirst: vi.fn() },
     escalationCapture: { create: vi.fn() },
     deferralCapture: { create: vi.fn() },
@@ -15,7 +20,7 @@ const { mockPrisma, mockRequireCapability } = vi.hoisted(() => ({
   },
 }));
 
-vi.mock("@dpf/db", () => ({ prisma: mockPrisma }));
+vi.mock("@dpf/db", () => ({ prisma: mockPrisma, Prisma: { DbNull: Symbol("DbNull") } }));
 vi.mock("@dpf/db/wiki-store", () => ({ upsertWikiPage: vi.fn(), appendRevision: vi.fn() }));
 vi.mock("@/lib/actions/shared/guards", () => ({ requireCapability: mockRequireCapability }));
 vi.mock("@/lib/decision-perspective/stance-promotion", () => ({ promoteStanceMaterial: vi.fn() }));
@@ -23,6 +28,7 @@ vi.mock("@/lib/wiki/embeddings", () => ({ storeWikiPage: vi.fn() }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 
 import { captureOrgDecisionOutcome } from "./org-decision-capture";
+import { upsertWikiPage } from "@dpf/db/wiki-store";
 
 function row(overrides: Record<string, unknown> = {}) {
   return {
@@ -30,6 +36,7 @@ function row(overrides: Record<string, unknown> = {}) {
     interactionId: "DI-ORG-1",
     outcomeType: "escalate",
     question: "Refund this customer?",
+    profileId: "org-profile",
     domainClass: "risk-assessment",
     buildId: null,
     humanOutcome: null,
@@ -50,6 +57,10 @@ beforeEach(() => {
   mockPrisma.$transaction.mockImplementation(async (cb: (tx: typeof mockPrisma) => unknown) => cb(mockPrisma));
   mockPrisma.escalationCapture.create.mockResolvedValue({});
   mockPrisma.decisionInteraction.update.mockResolvedValue({});
+  mockPrisma.decisionInteraction.updateMany.mockResolvedValue({ count: 0 });
+  mockPrisma.decisionInteraction.findMany.mockResolvedValue([
+    { id: "row-1", profileId: "org-profile", domainClass: "risk-assessment", question: "Refund this customer?" },
+  ]);
 });
 
 describe("captureOrgDecisionOutcome — chosenOptionId (BI-6DCF772F)", () => {
@@ -67,6 +78,53 @@ describe("captureOrgDecisionOutcome — chosenOptionId (BI-6DCF772F)", () => {
     if (!res.ok) expect(res.error).toMatch(/not one of this decision's options/);
     expect(mockPrisma.$transaction).not.toHaveBeenCalled();
     expect(mockPrisma.decisionInteraction.update).not.toHaveBeenCalled();
+  });
+
+  it("closes exact matching unresolved review occurrences with the selected ruling", async () => {
+    mockPrisma.decisionInteraction.findUnique.mockResolvedValue(row({
+      profileId: "org-profile",
+      question: "Sign this contract?",
+    }));
+    mockPrisma.decisionInteraction.findMany.mockResolvedValue([
+      { id: "row-1", profileId: "org-profile", domainClass: "risk-assessment", question: "Sign this contract?" },
+      { id: "row-2", profileId: "org-profile", domainClass: "risk-assessment", question: "  SIGN this contract?  " },
+      { id: "row-3", profileId: "org-profile", domainClass: "risk-assessment", question: "Renew this contract?" },
+    ]);
+
+    const res = await captureOrgDecisionOutcome({
+      interactionId: "DI-ORG-1",
+      answer: "Do not sign until the risk review is complete.",
+      makeStanding: false,
+    });
+
+    expect(res).toMatchObject({ ok: true, status: "captured", resolvedCount: 2 });
+    expect(mockPrisma.decisionInteraction.updateMany).toHaveBeenCalledWith({
+      where: { id: { in: ["row-2"] }, humanOutcome: { equals: expect.anything() } },
+      data: {
+        humanOutcome: expect.objectContaining({
+          type: "clustered-owner-answer",
+          sourceInteractionId: "DI-ORG-1",
+        }),
+      },
+    });
+  });
+
+  it("reports standing-doctrine failure as a warning after the ruling has committed", async () => {
+    mockPrisma.decisionInteraction.findUnique.mockResolvedValue(row());
+    vi.mocked(upsertWikiPage).mockRejectedValueOnce(new Error("embedding store unavailable"));
+
+    const res = await captureOrgDecisionOutcome({
+      interactionId: "DI-ORG-1",
+      answer: "Issue store credit per policy.",
+      makeStanding: true,
+    });
+
+    expect(res).toMatchObject({
+      ok: true,
+      status: "captured",
+      resolvedCount: 1,
+      warning: expect.stringContaining("answer was recorded"),
+    });
   });
 
   it("persists a valid chosen option on the column and in humanOutcome", async () => {

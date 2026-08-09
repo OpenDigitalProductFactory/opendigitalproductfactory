@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { readFileSync } from "node:fs";
 import { getWorkspaceTiles } from "@/lib/permissions";
 import { buildWorkspaceCommandCenterView } from "@/lib/workspace/command-center";
 import { loadPlatformWorkspaceHomeData } from "@/lib/workspace-home/platform-loader";
@@ -34,5 +35,12 @@ describe("workspace tile derivation", () => {
 
   it("loads platform workspace data through the workspace-home substrate boundary", () => {
     expect(typeof loadPlatformWorkspaceHomeData).toBe("function");
+  });
+
+  it("mounts installation-purpose confirmation in Workspace behind platform authority", () => {
+    const source = readFileSync(new URL("./page.tsx", import.meta.url), "utf8");
+
+    expect(source).toContain("<InstallationPurposePanel");
+    expect(source).toContain('"manage_platform"');
   });
 });
