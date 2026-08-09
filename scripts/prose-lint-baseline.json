@@ -5653,7 +5653,14 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 161
+    "textMass": 176
+  },
+  "apps/web/components/inventory/TopologyIntegritySummary.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 6
   },
   "apps/web/components/knowledge/KnowledgeArticleActions.tsx": {
     "vocabulary": 0,

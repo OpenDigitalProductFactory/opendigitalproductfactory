@@ -38,6 +38,14 @@ function makeFetchStubByEndpoint(
   responses: { devices?: StubResp; clients?: StubResp },
 ): UnifiAdapter["fetch"] {
   return async (url) => {
+	if (url.includes("/proxy/network/integration/v1/")) {
+	  return {
+		ok: false,
+		status: 404,
+		json: async () => ({}),
+		text: async () => "not supported",
+	  };
+	}
     let r: StubResp;
     if (url.includes("/stat/device")) {
       r = responses.devices ?? {};
@@ -66,6 +74,14 @@ function makeFetchStub(
   responder: (url: string, init: { headers?: Record<string, string> }) => StubResp,
 ): UnifiAdapter["fetch"] {
   return async (url, init) => {
+	if (url.includes("/proxy/network/integration/v1/")) {
+	  return {
+		ok: false,
+		status: 404,
+		json: async () => ({}),
+		text: async () => "not supported",
+	  };
+	}
     if (!url.includes("/stat/device")) {
       return {
         ok: true,
@@ -106,6 +122,64 @@ describe("collectUnifi — no configs", () => {
     expect(result.items).toEqual([]);
     expect(result.relationships).toEqual([]);
     expect(result.warnings).toEqual([]);
+  });
+});
+
+describe("collectUnifi — official local API", () => {
+  it("resolves the configured site UUID and emits the physical device hierarchy", async () => {
+    const requests: string[] = [];
+    const adapter: UnifiAdapter = {
+      fetch: async (url) => {
+        requests.push(url);
+        const body = url.includes("/sites?")
+          ? { offset: 0, limit: 100, count: 1, totalCount: 1, data: [{ id: "site-uuid", internalReference: "default", name: "Default" }] }
+          : url.includes("/devices?")
+            ? {
+                offset: 0,
+                limit: 100,
+                count: 2,
+                totalCount: 2,
+                data: [
+                  { id: "gw", macAddress: "aa:aa:aa:aa:aa:aa", ipAddress: "192.168.0.1", name: "Cloud Gateway Ultra", model: "UCG-Ultra", state: "ONLINE", features: ["routing"] },
+                  { id: "sw", macAddress: "bb:bb:bb:bb:bb:bb", ipAddress: "192.168.0.2", name: "US 8 PoE 150W", model: "US-8-150W", state: "ONLINE", features: ["switching"] },
+                ],
+              }
+            : url.endsWith("/devices/gw")
+              ? { id: "gw", uplink: null, interfaces: { ports: [] } }
+              : url.endsWith("/devices/sw")
+                ? { id: "sw", uplink: { deviceId: "gw" }, interfaces: { ports: [] } }
+                : { offset: 0, limit: 100, count: 0, totalCount: 0, data: [] };
+        return { ok: true, status: 200, json: async () => body, text: async () => JSON.stringify(body) };
+      },
+    };
+
+    const result = await collectUnifi([VALID_CONFIG_OBJ], adapter);
+
+    expect(requests[0]).toBe("https://192.168.1.1/proxy/network/integration/v1/sites?offset=0&limit=100");
+    expect(result.items.map((item) => [item.observedKey, item.itemType])).toEqual([
+      ["unifi:aa:aa:aa:aa:aa:aa", "gateway"],
+      ["unifi:bb:bb:bb:bb:bb:bb", "switch"],
+    ]);
+    expect(result.relationships).toContainEqual(expect.objectContaining({
+      fromObservedKey: "unifi:aa:aa:aa:aa:aa:aa",
+      toObservedKey: "unifi:bb:bb:bb:bb:bb:bb",
+      relationshipType: "HOSTS",
+    }));
+    expect(result.warnings).toEqual([]);
+  });
+
+  it("classifies an authenticated zero-device result as degraded", async () => {
+    const adapter: UnifiAdapter = {
+      fetch: async (url) => {
+        const body = url.includes("/sites?")
+          ? { offset: 0, limit: 100, count: 1, totalCount: 1, data: [{ id: "site-uuid", internalReference: "default", name: "Default" }] }
+          : { offset: 0, limit: 100, count: 0, totalCount: 0, data: [] };
+        return { ok: true, status: 200, json: async () => body, text: async () => JSON.stringify(body) };
+      },
+    };
+
+    const result = await collectUnifi([VALID_CONFIG_OBJ], adapter);
+    expect(result.warnings).toContain("unifi_no_devices");
   });
 });
 
@@ -283,7 +357,7 @@ const aWiredClient = (overrides: Record<string, unknown> = {}) => ({
 });
 
 describe("collectUnifi — Slice B clients", () => {
-  it("maps a WiFi client to an arp:<ip> ObservationItem with vendor enrichment", async () => {
+  it("maps a WiFi client to a stable MAC-keyed ObservationItem with vendor enrichment", async () => {
     const adapter: UnifiAdapter = {
       fetch: makeFetchStubByEndpoint({
         clients: { body: { data: [aWifiClient()] } },
@@ -292,8 +366,8 @@ describe("collectUnifi — Slice B clients", () => {
     const result = await collectUnifi([VALID_CONFIG_OBJ], adapter);
     expect(result.items).toHaveLength(1);
     const item = result.items[0]!;
-    expect(item.observedKey).toBe("arp:192.168.0.49");
-    expect(item.itemType).toBe("host");
+    expect(item.observedKey).toBe("unifi-client:fc:a1:83:11:22:33");
+    expect(item.itemType).toBe("network_client");
     expect(item.confidence).toBe(0.9);
     // Operator-set name wins over hostname + vendor.
     expect(item.name).toBe("Echo Dot — Bedroom");
@@ -350,19 +424,19 @@ describe("collectUnifi — Slice B clients", () => {
     expect(result.items[0]?.rawData.vendor).toBeUndefined();
   });
 
-  it("emits a MEMBER_OF link from a WiFi client to its AP", async () => {
+  it("emits a physical CONNECTS_TO link from a WiFi client to its AP", async () => {
     const adapter: UnifiAdapter = {
       fetch: makeFetchStubByEndpoint({
         clients: { body: { data: [aWifiClient()] } },
       }),
     };
     const result = await collectUnifi([VALID_CONFIG_OBJ], adapter);
-    const memberOf = result.relationships.filter((r) => r.relationshipType === "MEMBER_OF");
-    expect(memberOf).toEqual([
+    const connectsTo = result.relationships.filter((r) => r.relationshipType === "CONNECTS_TO");
+    expect(connectsTo).toEqual([
       {
-        fromObservedKey: "arp:192.168.0.49",
+        fromObservedKey: "unifi-client:fc:a1:83:11:22:33",
         toObservedKey: "unifi:aa:aa:aa:aa:aa:aa",
-        relationshipType: "MEMBER_OF",
+        relationshipType: "CONNECTS_TO",
         rawData: {
           mechanism: "unifi_wifi_assoc",
           port: null,
@@ -372,19 +446,19 @@ describe("collectUnifi — Slice B clients", () => {
     ]);
   });
 
-  it("emits wired-specific MEMBER_OF link from a wired client to its switch+port", async () => {
+  it("emits wired-specific CONNECTS_TO link from a wired client to its switch+port", async () => {
     const adapter: UnifiAdapter = {
       fetch: makeFetchStubByEndpoint({
         clients: { body: { data: [aWiredClient()] } },
       }),
     };
     const result = await collectUnifi([VALID_CONFIG_OBJ], adapter);
-    const memberOf = result.relationships.filter((r) => r.relationshipType === "MEMBER_OF");
-    expect(memberOf).toEqual([
+    const connectsTo = result.relationships.filter((r) => r.relationshipType === "CONNECTS_TO");
+    expect(connectsTo).toEqual([
       {
-        fromObservedKey: "arp:192.168.0.99",
+        fromObservedKey: "unifi-client:00:1d:c0:de:fa:ce",
         toObservedKey: "unifi:bb:bb:bb:bb:bb:bb",
-        relationshipType: "MEMBER_OF",
+        relationshipType: "CONNECTS_TO",
         rawData: {
           mechanism: "unifi_switch_port",
           port: 4,
@@ -401,7 +475,7 @@ describe("collectUnifi — Slice B clients", () => {
     expect(item.rawData.essid).toBeUndefined();
   });
 
-  it("skips MEMBER_OF when ap_mac (wifi) or sw_mac (wired) is missing", async () => {
+  it("skips CONNECTS_TO when ap_mac (wifi) or sw_mac (wired) is missing", async () => {
     const adapter: UnifiAdapter = {
       fetch: makeFetchStubByEndpoint({
         clients: {
@@ -416,7 +490,7 @@ describe("collectUnifi — Slice B clients", () => {
     };
     const result = await collectUnifi([VALID_CONFIG_OBJ], adapter);
     expect(result.items).toHaveLength(2);
-    expect(result.relationships.filter((r) => r.relationshipType === "MEMBER_OF")).toEqual([]);
+    expect(result.relationships.filter((r) => r.relationshipType === "CONNECTS_TO")).toEqual([]);
   });
 
   it("drops clients with missing or invalid IP / MAC", async () => {
@@ -434,7 +508,7 @@ describe("collectUnifi — Slice B clients", () => {
       }),
     };
     const result = await collectUnifi([VALID_CONFIG_OBJ], adapter);
-    expect(result.items.map((i) => i.observedKey)).toEqual(["arp:10.0.0.42"]);
+    expect(result.items.map((i) => i.observedKey)).toEqual(["unifi-client:aa:bb:cc:dd:ee:02"]);
   });
 
   it("merges devices + clients into one envelope", async () => {
@@ -447,12 +521,12 @@ describe("collectUnifi — Slice B clients", () => {
     const result = await collectUnifi([VALID_CONFIG_OBJ], adapter);
     const keys = result.items.map((i) => i.observedKey).sort();
     expect(keys).toEqual([
-      "arp:192.168.0.49",         // the WiFi client
+      "unifi-client:fc:a1:83:11:22:33", // the WiFi client
       "unifi:aa:bb:cc:dd:ee:ff",  // the AP device
     ]);
     // Relationships from BOTH endpoints present.
     const types = result.relationships.map((r) => r.relationshipType).sort();
-    expect(types).toEqual(["MEMBER_OF", "SAME_AS"]);
+    expect(types).toEqual(["CONNECTS_TO", "SAME_AS", "SAME_AS"]);
   });
 
   it("isolates errors per endpoint — clients failure doesn't kill devices payload", async () => {
@@ -481,7 +555,7 @@ describe("collectUnifi — Slice B clients", () => {
       }),
     };
     const result = await collectUnifi([VALID_CONFIG_OBJ], adapter);
-    expect(result.items.map((i) => i.observedKey)).toEqual(["arp:192.168.0.49"]);
+    expect(result.items.map((i) => i.observedKey)).toEqual(["unifi-client:fc:a1:83:11:22:33"]);
     expect(result.warnings).toHaveLength(1);
     expect(result.warnings[0]).toMatch(/HTTP 500/);
   });
@@ -525,6 +599,9 @@ describe("collectUnifi — multiple adapters", () => {
     const adapter: UnifiAdapter = {
       fetch: async (url) => {
         visited.push(url);
+		if (url.includes("/proxy/network/integration/v1/")) {
+		  return { ok: false, status: 404, json: async () => ({}), text: async () => "not supported" };
+		}
         return {
           ok: true,
           status: 200,
@@ -550,6 +627,9 @@ describe("collectUnifi — multiple adapters", () => {
   it("one adapter failing doesn't stop the others", async () => {
     const adapter: UnifiAdapter = {
       fetch: async (url) => {
+		if (url.includes("/proxy/network/integration/v1/")) {
+		  return { ok: false, status: 404, json: async () => ({}), text: async () => "not supported" };
+		}
         if (url.startsWith("https://broken")) {
           throw new Error("ECONNREFUSED");
         }

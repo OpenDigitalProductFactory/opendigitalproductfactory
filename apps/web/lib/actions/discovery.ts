@@ -66,9 +66,63 @@ function formatConnectionTestMessage(status: string, fallback?: string): string 
       return "The UniFi controller rejected the API key. Rotate the key in UniFi OS and paste the new value here.";
     case "unifi_unreachable":
       return "The portal could not reach the UniFi controller from this host. Check the controller URL and local network reachability.";
+    case "unifi_no_devices":
+      return "The UniFi API responded, but returned no managed network devices. The connection is degraded and cannot supply a physical topology.";
+    case "unifi_no_sites":
+      return "The UniFi API responded, but returned no accessible sites for this API key.";
+    case "unifi_partial":
+      return fallback ?? "UniFi returned a partial result. The discovered topology may be incomplete.";
     default:
       return fallback ?? status;
   }
+}
+
+type UnifiHealth = {
+  testStatus: string;
+  connectionStatus: string;
+  healthy: boolean;
+  message: string;
+};
+
+function classifyUnifiHealth(warnings: string[] | undefined, deviceCount: number): UnifiHealth {
+  const values = warnings ?? [];
+  const blocking = values.find((warning) =>
+    warning.startsWith("unifi_auth")
+      || warning === "unifi_unreachable"
+      || warning === "unifi_tls_error"
+      || warning.startsWith("unifi_api_error")
+      || warning === "unifi_no_sites",
+  );
+  if (blocking) {
+    return {
+      testStatus: blocking,
+      connectionStatus: blocking === "unifi_auth_failed" ? "auth_failed" : "unreachable",
+      healthy: false,
+      message: formatConnectionTestMessage(blocking, values.join(", ")),
+    };
+  }
+  if (values.includes("unifi_no_devices") || deviceCount === 0) {
+    return {
+      testStatus: "unifi_no_devices",
+      connectionStatus: "degraded",
+      healthy: false,
+      message: formatConnectionTestMessage("unifi_no_devices"),
+    };
+  }
+  if (values.length > 0) {
+    return {
+      testStatus: "unifi_partial",
+      connectionStatus: "degraded",
+      healthy: false,
+      message: formatConnectionTestMessage("unifi_partial", values.join(", ")),
+    };
+  }
+  return {
+    testStatus: "ok",
+    connectionStatus: "active",
+    healthy: true,
+    message: `Discovered ${deviceCount} devices`,
+  };
 }
 
 async function requireManageDiscovery(): Promise<{ ok: true } | { ok: false; error: string }> {
@@ -283,18 +337,12 @@ export async function testDiscoveryConnection(connectionId: string): Promise<
     });
 
     const result = await collectUnifiDiscovery({ sourceKind: "unifi" }, deps);
-    const hasError = result.warnings?.some((w) =>
-      w.startsWith("unifi_auth") || w === "unifi_unreachable" || w === "unifi_tls_error",
-    );
-    testStatus = hasError
-      ? (result.warnings?.find((w) => w.startsWith("unifi_")) ?? "error")
-      : "ok";
     deviceCount = result.items.filter((i) =>
       ["router", "switch", "access_point"].includes(i.itemType),
     ).length;
-    testMessage = hasError
-      ? formatConnectionTestMessage(testStatus, result.warnings?.join(", "))
-      : `Discovered ${deviceCount} devices`;
+    const health = classifyUnifiHealth(result.warnings, deviceCount);
+    testStatus = health.testStatus;
+    testMessage = health.message;
   } else if (collectorType === "arp_scan") {
     const { collectArpScanDiscovery } = await import("@dpf/db/discovery-collectors-arp-scan");
     const configuration = (conn.configuration ?? {}) as Record<string, unknown>;
@@ -334,7 +382,9 @@ export async function testDiscoveryConnection(connectionId: string): Promise<
       lastTestedAt: new Date(),
       lastTestStatus: testStatus,
       lastTestMessage: testMessage,
-      status: testStatus === "ok" ? "active" : testStatus.replace("unifi_", "").replace("snmp_error", "unreachable"),
+      status: collectorType === "unifi"
+        ? classifyUnifiHealth(testStatus === "ok" ? [] : [testStatus], deviceCount).connectionStatus
+        : testStatus === "ok" ? "active" : "unreachable",
     },
   });
 
@@ -372,17 +422,35 @@ export async function rerunDiscoveryConnection(connectionId: string): Promise<Re
   if (!apiKey) return { ok: false, error: "Cannot decrypt API key" };
 
   const { collectUnifiDiscovery, buildDepsFromConnection } = await import("@dpf/db/discovery-collectors-unifi");
-  const config = (conn.configuration ?? {}) as Record<string, unknown>;
+  const config = readUnifiConfiguration(conn.configuration);
   const deps = buildDepsFromConnection({
     endpointUrl: conn.endpointUrl,
     apiKey,
     configuration: {
-      site: (config.site as string) ?? "default",
-      discoverClients: (config.discoverClients as boolean) ?? false,
+      site: config.site,
+      discoverClients: config.discoverClients,
+      tlsInsecure: config.tlsInsecure,
     },
   });
 
   const collectorOutput = await collectUnifiDiscovery({ sourceKind: conn.collectorType as never }, deps);
+  const deviceCount = collectorOutput.items.filter((item) =>
+    ["router", "switch", "access_point"].includes(item.itemType),
+  ).length;
+  const health = classifyUnifiHealth(collectorOutput.warnings, deviceCount);
+  if (deviceCount === 0) {
+    await prisma.discoveryConnection.update({
+      where: { id: connectionId },
+      data: {
+        lastTestedAt: new Date(),
+        lastTestStatus: health.testStatus,
+        lastTestMessage: health.message,
+        status: health.connectionStatus,
+      },
+    });
+    revalidateDiscoverySurfaces();
+    return { ok: false, error: health.message };
+  }
   const normalized = normalizeDiscoveredFacts(collectorOutput);
 
   const summary = await persistBootstrapDiscoveryRun(
@@ -395,13 +463,15 @@ export async function rerunDiscoveryConnection(connectionId: string): Promise<Re
     },
   );
 
-  const status = "active";
+  const status = health.connectionStatus;
   await prisma.discoveryConnection.update({
     where: { id: connectionId },
     data: {
       lastTestedAt: new Date(),
-      lastTestStatus: "ok",
-      lastTestMessage: `Discovered ${summary.createdEntities + summary.updatedEntities} items`,
+      lastTestStatus: health.testStatus,
+      lastTestMessage: health.healthy
+        ? `Discovered ${summary.createdEntities + summary.updatedEntities} items`
+        : health.message,
       status,
     },
   });

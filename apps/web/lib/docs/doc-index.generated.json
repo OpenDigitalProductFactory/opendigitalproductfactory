@@ -2400,9 +2400,9 @@
         "step-3-the-edge-node-picks-it-up-automatically",
         "editing-or-rotating-the-key",
         "what-the-adapter-emits",
-        "unifi-managed-devices-slice-a-statdevice",
-        "connected-clients-slice-b-statsta",
-        "independent-failure-handling",
+        "unifi-managed-devices-official-sitesdevicesdevice-details-routes",
+        "connected-clients-official-site-clients-route",
+        "failure-and-fallback-handling",
         "troubleshooting",
         "whats-not-in-this-slice",
         "reference"
