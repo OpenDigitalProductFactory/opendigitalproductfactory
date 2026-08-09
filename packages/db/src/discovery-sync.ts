@@ -5,18 +5,9 @@ import { persistQualityIssues } from "./discovery-quality-persistence";
 import type { NormalizedDiscoveryOutput } from "./discovery-normalize";
 import { deriveInventoryEvidenceSnapshot } from "./discovery-evidence";
 import { deriveInventoryEnrichment } from "./inventory-enrichment";
-import {
-  syncInventoryEntityAsInfraCI,
-  syncInventoryRelationship,
-} from "./graph-sync";
-import {
-  INVENTORY_ENTITY_CANONICAL_WHERE,
-  INVENTORY_RELATIONSHIP_CANONICAL_WHERE,
-} from "./inventory-entity-lifecycle";
-import {
-  assertInventoryEntityHeapIntegrity,
-  lockInventoryEntityKeys,
-} from "./inventory-entity-heap-integrity";
+import { syncInventoryEntityAsInfraCI, syncInventoryRelationship } from "./graph-sync";
+import { INVENTORY_ENTITY_CANONICAL_WHERE, INVENTORY_RELATIONSHIP_CANONICAL_WHERE } from "./inventory-entity-lifecycle";
+import { assertInventoryEntityHeapIntegrity, lockInventoryEntityKeys } from "./inventory-entity-heap-integrity";
 import type {
   DiscoveryPersistenceSummary,
   DiscoveryProjectionOptions,
@@ -126,6 +117,9 @@ export async function persistBootstrapDiscoveryRun(
 
   const projected = await db.$transaction(async (tx) => {
     const now = new Date();
+    const sourceKindByDiscoveredKey = new Map(dedupedDiscoveredItems.map(
+      (item) => [item.discoveredKey, item.sourceKind] as const,
+    ));
     const softwareEvidenceByEntityKey = new Map<string, NormalizedDiscoveryOutput["softwareEvidence"]>();
     for (const software of normalized.softwareEvidence) {
       const existing = softwareEvidenceByEntityKey.get(software.inventoryEntityKey) ?? [];
@@ -753,6 +747,9 @@ export async function persistBootstrapDiscoveryRun(
         entityType: entity.entityType,
         status: entity.attributionStatus === "stale" ? "stale" : "active",
         portfolioSlug: entity.portfolioSlug ?? null,
+        properties: { ...entity.properties,
+          sourceKind: sourceKindByDiscoveredKey.get(entity.discoveredKey) ?? runMeta.sourceSlug,
+          lastObservedAt: now.toISOString() },
       })),
       relationshipsToProject: normalized.inventoryRelationships.flatMap((relationship) => {
         const fromEntityKey = relationship.fromDiscoveredKey

@@ -1,5 +1,3 @@
-import https from "node:https";
-
 import type {
   CollectorContext,
   CollectorOutput,
@@ -7,6 +5,7 @@ import type {
   DiscoveredRelationshipInput,
   DiscoveredSoftwareInput,
 } from "../discovery-types";
+import { createUnifiFetch, type UnifiFetch } from "./unifi-fetch";
 
 // ─── UniFi API Response Types ─────────────────────────────────────────────────
 
@@ -100,6 +99,31 @@ type UnifiApiResponse<T> = {
   data: T[];
 };
 
+type OfficialSite = { id: string; name?: string };
+type OfficialDevice = {
+  id: string;
+  macAddress?: string;
+  ipAddress?: string;
+  name?: string;
+  model?: string;
+  firmwareVersion?: string;
+  features?: string[];
+};
+type OfficialDeviceDetail = OfficialDevice & {
+  uplink?: { deviceId?: string; portNumber?: number };
+};
+type OfficialClient = {
+  id?: string;
+  macAddress?: string;
+  ipAddress?: string;
+  name?: string;
+  hostname?: string;
+  connectedDeviceId?: string;
+  connectedDevice?: { id?: string };
+  type?: string;
+};
+type OfficialPage<T> = { data?: T[]; offset?: number; limit?: number; totalCount?: number };
+
 // ─── Device Type Mapping ──────────────────────────────────────────────────────
 
 const DEVICE_TYPE_MAP: Record<string, { itemType: string; osiLayer: number; osiLayerName: string }> = {
@@ -133,70 +157,13 @@ export type UnifiConnectionInput = {
 // ─── Dependency Injection ─────────────────────────────────────────────────────
 
 export type UnifiDeps = {
-  fetchFn: (url: string | URL, init?: RequestInit) => Promise<Response>;
+  fetchFn: UnifiFetch;
   unifiUrl: string;
   apiKey: string;
   site: string;
   discoverClients: boolean;
   tlsInsecure: boolean;
 };
-
-function createUnifiFetch(tlsInsecure: boolean): UnifiDeps["fetchFn"] {
-  // CodeQL #61 (js/disabling-certificate-validation): UniFi controllers
-  // ship with self-signed certificates by default. To talk to them at
-  // all we have to skip cert validation — but we make that explicit
-  // and opt-in per connection (or via the legacy env var) rather than
-  // silently disabling validation.
-  //
-  // Default: strict cert validation. Operators running standard closed-LAN
-  // UniFi appliances can opt into the self-signed flow per DiscoveryConnection.
-  const allowInsecure = tlsInsecure || process.env.UNIFI_ALLOW_INSECURE_TLS === "true";
-  const agent = new https.Agent({ rejectUnauthorized: !allowInsecure });
-  if (allowInsecure) {
-    // eslint-disable-next-line no-console
-    console.warn(
-      "[unifi] TLS cert validation disabled for this connection. " +
-        "Acceptable for self-signed UniFi controllers; rotate to a valid cert in production.",
-    );
-  }
-  return (url, init) =>
-    new Promise((resolve, reject) => {
-      const parsedUrl = new URL(String(url));
-      const headers: Record<string, string> = {};
-      if (init?.headers) {
-        const h = init.headers as Record<string, string>;
-        for (const [k, v] of Object.entries(h)) headers[k] = v;
-      }
-      const req = https.request(
-        {
-          hostname: parsedUrl.hostname,
-          port: parsedUrl.port || 443,
-          path: parsedUrl.pathname + parsedUrl.search,
-          method: init?.method ?? "GET",
-          agent,
-          headers,
-        },
-        (res) => {
-          let body = "";
-          res.on("data", (chunk) => (body += chunk));
-          res.on("end", () => {
-            resolve(new Response(body, {
-              status: res.statusCode ?? 500,
-              headers: (res.headers ?? {}) as Record<string, string>,
-            }));
-          });
-        },
-      );
-      if (init?.signal) {
-        init.signal.addEventListener("abort", () => {
-          req.destroy();
-          reject(new Error("aborted"));
-        });
-      }
-      req.on("error", reject);
-      req.end();
-    });
-}
 
 /** Build deps from a DiscoveryConnection loaded by the runner. */
 export function buildDepsFromConnection(conn: UnifiConnectionInput): UnifiDeps {
@@ -247,6 +214,211 @@ async function unifiGet<T>(
   }
 }
 
+function unifiTransportError(err: unknown): string {
+  const msg = err instanceof Error ? err.message : String(err);
+  if (msg.includes("TLS") || msg.includes("certificate") || msg.includes("self-signed") || msg.includes("CERT")) {
+    return "unifi_tls_error";
+  }
+  return "unifi_unreachable";
+}
+
+async function officialGet<T>(
+  path: string,
+  deps: UnifiDeps,
+): Promise<{ data?: T; error?: string; unsupported?: boolean }> {
+  try {
+    const response = await deps.fetchFn(`${deps.unifiUrl}/proxy/network/integration/v1${path}`, {
+      method: "GET",
+      headers: { "X-API-Key": deps.apiKey, Accept: "application/json" },
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (response.status === 401 || response.status === 403) return { error: "unifi_auth_failed" };
+    if ([404, 405, 501].includes(response.status)) return { unsupported: true };
+    if (!response.ok) return { error: `unifi_api_error:${response.status}` };
+    return { data: (await response.json()) as T };
+  } catch (err) {
+    return { error: unifiTransportError(err) };
+  }
+}
+
+async function officialGetAll<T>(
+  path: string,
+  deps: UnifiDeps,
+): Promise<{ data?: T[]; error?: string; unsupported?: boolean }> {
+  const collected: T[] = [];
+  let offset = 0;
+  for (let pageNumber = 0; pageNumber < 100; pageNumber++) {
+    const separator = path.includes("?") ? "&" : "?";
+    const result = await officialGet<OfficialPage<T>>(`${path}${separator}offset=${offset}&limit=200`, deps);
+    if (result.error || result.unsupported) {
+      return { error: result.error, unsupported: result.unsupported };
+    }
+    const page = result.data?.data ?? [];
+    collected.push(...page);
+    const total = result.data?.totalCount;
+    const pageLimit = result.data?.limit ?? 200;
+    if (page.length === 0 || total == null || collected.length >= total || page.length < pageLimit) break;
+    offset = result.data?.offset != null ? result.data.offset + page.length : offset + page.length;
+  }
+  return { data: collected };
+}
+
+function officialDeviceMapping(device: OfficialDevice) {
+  const features = (device.features ?? []).map((feature) => feature.toLowerCase());
+  if (features.some((feature) => feature.includes("gateway"))) return DEVICE_TYPE_MAP.udm;
+  if (features.some((feature) => feature.includes("switch"))) return DEVICE_TYPE_MAP.usw;
+  if (features.some((feature) => feature.includes("accesspoint") || feature.includes("access_point"))) {
+    return DEVICE_TYPE_MAP.uap;
+  }
+  return DEFAULT_DEVICE_MAPPING;
+}
+
+async function collectOfficialUnifiDiscovery(
+  ctx: CollectorContext | undefined,
+  deps: UnifiDeps,
+): Promise<{ supported: boolean; output: CollectorOutput }> {
+  const source = ctx?.sourceKind ?? "unifi";
+  const sitesResult = await officialGetAll<OfficialSite>("/sites", deps);
+  if (sitesResult.unsupported) return { supported: false, output: { items: [], relationships: [] } };
+  if (sitesResult.error) {
+    return { supported: true, output: { items: [], relationships: [], software: [], warnings: [sitesResult.error] } };
+  }
+
+  const sites = sitesResult.data ?? [];
+  const selectedSite = sites.find((site) => site.id === deps.site || site.name === deps.site) ?? sites[0];
+  if (!selectedSite) {
+    return { supported: true, output: { items: [], relationships: [], software: [], warnings: ["unifi_no_sites"] } };
+  }
+
+  const devicesResult = await officialGetAll<OfficialDevice>(`/sites/${encodeURIComponent(selectedSite.id)}/devices`, deps);
+  if (devicesResult.unsupported) return { supported: false, output: { items: [], relationships: [] } };
+  if (devicesResult.error) {
+    return { supported: true, output: { items: [], relationships: [], software: [], warnings: [devicesResult.error] } };
+  }
+
+  const devices = devicesResult.data ?? [];
+  if (devices.length === 0) {
+    return { supported: true, output: { items: [], relationships: [], software: [], warnings: ["unifi_no_devices"] } };
+  }
+
+  const items: DiscoveredItemInput[] = [];
+  const relationships: DiscoveredRelationshipInput[] = [];
+  const software: DiscoveredSoftwareInput[] = [];
+  const warnings: string[] = [];
+  const idToRef = new Map<string, string>();
+
+  for (const device of devices) {
+    const mac = device.macAddress?.toLowerCase();
+    if (!mac) {
+      warnings.push(`unifi_partial:device_missing_mac:${device.id}`);
+      continue;
+    }
+    const ref = `unifi-device:${mac}`;
+    const mapping = officialDeviceMapping(device);
+    idToRef.set(device.id, ref);
+    items.push({
+      sourceKind: source,
+      itemType: mapping.itemType,
+      name: device.name ?? device.model ?? mac,
+      externalRef: ref,
+      naturalKey: `unifi:${mac}`,
+      confidence: 0.95,
+      attributes: {
+        mac,
+        address: device.ipAddress,
+        networkAddress: device.ipAddress,
+        protocolFamily: "ipv4",
+        model: device.model,
+        firmware: device.firmwareVersion,
+        osiLayer: mapping.osiLayer,
+        osiLayerName: mapping.osiLayerName,
+        unifiDeviceId: device.id,
+        unifiSiteId: selectedSite.id,
+      },
+    });
+    if (device.firmwareVersion) {
+      software.push({
+        sourceKind: source,
+        entityExternalRef: ref,
+        evidenceSource: "unifi_firmware",
+        rawVendor: "Ubiquiti",
+        rawProductName: device.model,
+        rawVersion: device.firmwareVersion,
+      });
+    }
+  }
+
+  for (const device of devices) {
+    const deviceRef = idToRef.get(device.id);
+    if (!deviceRef) continue;
+    const detailResult = await officialGet<OfficialDeviceDetail>(
+      `/sites/${encodeURIComponent(selectedSite.id)}/devices/${encodeURIComponent(device.id)}`,
+      deps,
+    );
+    if (detailResult.error || detailResult.unsupported) {
+      warnings.push(`unifi_partial:device_detail:${device.id}`);
+      continue;
+    }
+    const upstreamRef = detailResult.data?.uplink?.deviceId
+      ? idToRef.get(detailResult.data.uplink.deviceId)
+      : undefined;
+    if (upstreamRef) {
+      relationships.push({
+        sourceKind: source,
+        relationshipType: "CONNECTS_TO",
+        fromExternalRef: deviceRef,
+        toExternalRef: upstreamRef,
+        confidence: 0.95,
+        attributes: { connectionType: "wired", remotePort: detailResult.data?.uplink?.portNumber },
+      });
+    }
+  }
+
+  if (deps.discoverClients) {
+    const clientsResult = await officialGetAll<OfficialClient>(`/sites/${encodeURIComponent(selectedSite.id)}/clients`, deps);
+    if (clientsResult.error || clientsResult.unsupported) {
+      warnings.push("unifi_partial:clients");
+    } else {
+      for (const client of clientsResult.data ?? []) {
+        const mac = client.macAddress?.toLowerCase();
+        if (!mac) continue;
+        const ref = `unifi-client:${mac}`;
+        items.push({
+          sourceKind: source,
+          itemType: "network_client",
+          name: client.name ?? client.hostname ?? `Client ${mac}`,
+          externalRef: ref,
+          naturalKey: ref,
+          confidence: 0.8,
+          attributes: {
+            mac,
+            address: client.ipAddress,
+            networkAddress: client.ipAddress,
+            protocolFamily: "ipv4",
+            connectionType: client.type,
+            osiLayer: 3,
+            osiLayerName: "network",
+          },
+        });
+        const parentId = client.connectedDeviceId ?? client.connectedDevice?.id;
+        const parentRef = parentId ? idToRef.get(parentId) : undefined;
+        if (parentRef) {
+          relationships.push({
+            sourceKind: source,
+            relationshipType: "CONNECTS_TO",
+            fromExternalRef: ref,
+            toExternalRef: parentRef,
+            confidence: 0.85,
+            attributes: { connectionType: client.type ?? "unknown" },
+          });
+        }
+      }
+    }
+  }
+
+  return { supported: true, output: { items, relationships, software, warnings } };
+}
+
 // ─── Collector ────────────────────────────────────────────────────────────────
 // Called with explicit deps (from connection data or tests).
 // When deps is null/undefined, returns empty — no env var fallback.
@@ -258,6 +430,9 @@ export async function collectUnifiDiscovery(
   if (!deps) {
     return { items: [], relationships: [] };
   }
+
+  const official = await collectOfficialUnifiDiscovery(ctx, deps);
+  if (official.supported) return official.output;
 
   const resolvedDeps = deps;
 

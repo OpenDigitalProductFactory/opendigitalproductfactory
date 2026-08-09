@@ -7,6 +7,8 @@ const mockCollectUnifiDiscovery = vi.fn();
 const mockBuildDepsFromConnection = vi.fn();
 const mockCollectArpScanDiscovery = vi.fn();
 const mockCollectSnmpDiscovery = vi.fn();
+const mockNormalizeDiscoveredFacts = vi.fn((value) => value);
+const mockPersistBootstrapDiscoveryRun = vi.fn();
 
 vi.mock("@/lib/auth", () => ({
   auth: vi.fn(),
@@ -26,7 +28,8 @@ vi.mock("@dpf/db", () => ({
     },
   },
   executeBootstrapDiscovery: vi.fn(),
-  persistBootstrapDiscoveryRun: vi.fn(),
+  normalizeDiscoveredFacts: (value: unknown) => mockNormalizeDiscoveredFacts(value),
+  persistBootstrapDiscoveryRun: (...args: unknown[]) => mockPersistBootstrapDiscoveryRun(...args),
 }));
 vi.mock("@dpf/db/discovery-collectors-unifi", () => ({
   collectUnifiDiscovery: (...args: unknown[]) => mockCollectUnifiDiscovery(...args),
@@ -47,7 +50,7 @@ import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { revalidatePath } from "next/cache";
 import { executeBootstrapDiscovery } from "@dpf/db";
-import { configureDiscoveryConnection, testDiscoveryConnection, triggerBootstrapDiscovery } from "./discovery";
+import { configureDiscoveryConnection, rerunDiscoveryConnection, testDiscoveryConnection, triggerBootstrapDiscovery } from "./discovery";
 
 const mockAuth = auth as ReturnType<typeof vi.fn>;
 const mockCan = can as ReturnType<typeof vi.fn>;
@@ -69,6 +72,13 @@ beforeEach(() => {
   mockCollectUnifiDiscovery.mockResolvedValue({ items: [], relationships: [] });
   mockCollectArpScanDiscovery.mockResolvedValue({ items: [], relationships: [] });
   mockCollectSnmpDiscovery.mockResolvedValue({ items: [], relationships: [] });
+  mockPersistBootstrapDiscoveryRun.mockResolvedValue({
+    runId: "run-1",
+    createdEntities: 1,
+    updatedEntities: 0,
+    createdRelationships: 1,
+    updatedRelationships: 0,
+  });
 });
 
 describe("configureDiscoveryConnection — edit path", () => {
@@ -252,6 +262,32 @@ describe("testDiscoveryConnection", () => {
     });
   });
 
+  it("marks a reachable UniFi connection with zero devices as degraded", async () => {
+    mockFindUnique.mockResolvedValue({
+      id: "conn-empty",
+      collectorType: "unifi",
+      endpointUrl: "https://192.168.0.1",
+      encryptedApiKey: "enc:key",
+      configuration: { site: "default" },
+    });
+    mockCollectUnifiDiscovery.mockResolvedValue({
+      items: [],
+      relationships: [],
+      warnings: ["unifi_no_devices"],
+    });
+    mockUpdate.mockResolvedValue({ id: "conn-empty" });
+
+    await expect(testDiscoveryConnection("conn-empty")).resolves.toEqual({
+      ok: true,
+      status: "unifi_no_devices",
+      message: expect.stringContaining("returned no managed network devices"),
+    });
+    expect(mockUpdate.mock.calls[0][0].data).toMatchObject({
+      lastTestStatus: "unifi_no_devices",
+      status: "degraded",
+    });
+  });
+
   it("tests ARP scan connections with the ARP collector instead of UniFi", async () => {
     mockFindUnique.mockResolvedValue({
       id: "conn-arp",
@@ -306,5 +342,64 @@ describe("testDiscoveryConnection", () => {
       { sourceKind: "snmp" },
       [{ address: "192.168.0.1", community: "public" }],
     );
+  });
+});
+
+describe("rerunDiscoveryConnection", () => {
+  it("preserves the stored TLS policy and does not persist an empty UniFi sweep", async () => {
+    mockFindUnique.mockResolvedValue({
+      id: "conn-empty",
+      connectionKey: "unifi:192.168.0.1",
+      collectorType: "unifi",
+      status: "active",
+      endpointUrl: "https://192.168.0.1",
+      encryptedApiKey: "enc:key",
+      configuration: { site: "default", discoverClients: true, tlsInsecure: true },
+    });
+    mockCollectUnifiDiscovery.mockResolvedValue({
+      items: [],
+      relationships: [],
+      warnings: ["unifi_no_devices"],
+    });
+
+    await expect(rerunDiscoveryConnection("conn-empty")).resolves.toEqual({
+      ok: false,
+      error: expect.stringContaining("returned no managed network devices"),
+    });
+    expect(mockBuildDepsFromConnection).toHaveBeenCalledWith(expect.objectContaining({
+      configuration: { site: "default", discoverClients: true, tlsInsecure: true },
+    }));
+    expect(mockPersistBootstrapDiscoveryRun).not.toHaveBeenCalled();
+    expect(mockUpdate.mock.calls[0][0].data).toMatchObject({
+      lastTestStatus: "unifi_no_devices",
+      status: "degraded",
+    });
+  });
+
+  it("persists partial physical results while keeping the connection degraded", async () => {
+    mockFindUnique.mockResolvedValue({
+      id: "conn-partial",
+      connectionKey: "unifi:192.168.0.1",
+      collectorType: "unifi",
+      status: "active",
+      endpointUrl: "https://192.168.0.1",
+      encryptedApiKey: "enc:key",
+      configuration: { site: "default" },
+    });
+    mockCollectUnifiDiscovery.mockResolvedValue({
+      items: [{ itemType: "router" }],
+      relationships: [],
+      warnings: ["unifi_partial:device_detail:gw-1"],
+    });
+
+    await expect(rerunDiscoveryConnection("conn-partial")).resolves.toMatchObject({
+      ok: true,
+      status: "degraded",
+    });
+    expect(mockPersistBootstrapDiscoveryRun).toHaveBeenCalledTimes(1);
+    expect(mockUpdate.mock.calls[0][0].data).toMatchObject({
+      lastTestStatus: "unifi_partial",
+      status: "degraded",
+    });
   });
 });

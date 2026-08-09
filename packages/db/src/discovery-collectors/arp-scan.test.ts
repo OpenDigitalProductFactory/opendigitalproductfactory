@@ -126,6 +126,43 @@ describe("collectArpScanDiscovery — ping/arp fallback", () => {
 // ─── guards ──────────────────────────────────────────────────────────────────
 
 describe("collectArpScanDiscovery — guards", () => {
+  it("canonicalizes the subnet and excludes network, broadcast, and out-of-subnet rows", async () => {
+    const output = [
+      "Host: 192.168.0.0 () Status: Up",
+      "Host: 192.168.0.1 () Status: Up",
+      "Host: 192.168.0.255 () Status: Up",
+      "Host: 192.168.1.12 () Status: Up",
+    ].join("\n");
+    const { exec } = makeExec({ nmap: () => output });
+
+    const out = await collectArpScanDiscovery(
+      { sourceKind: "arp_scan" },
+      [{ subnet: "192.168.0.1/24" }],
+      { execCommand: exec },
+    );
+
+    expect(out.items.find((item) => item.itemType === "subnet")?.externalRef).toBe("subnet:192.168.0.0/24");
+    expect(out.items.filter((item) => item.itemType === "host").map((item) => item.attributes?.address)).toEqual(["192.168.0.1"]);
+  });
+
+  it("quarantines an impossible full-subnet nmap result instead of minting fake hosts", async () => {
+    const output = Array.from({ length: 256 }, (_, host) =>
+      `Host: 192.168.0.${host} () Status: Up`,
+    ).join("\n");
+    const { exec } = makeExec({ nmap: () => output });
+
+    const out = await collectArpScanDiscovery(
+      { sourceKind: "arp_scan" },
+      [{ subnet: "192.168.0.0/24" }],
+      { execCommand: exec },
+    );
+
+    expect(out.items.filter((item) => item.itemType === "subnet")).toHaveLength(1);
+    expect(out.items.filter((item) => item.itemType === "host")).toHaveLength(0);
+    expect(out.relationships).toHaveLength(0);
+    expect(out.warnings).toContain("arp_scan_untrustworthy:192.168.0.0/24:saturated_without_mac_evidence");
+  });
+
   it("warns and does nothing when no targets are supplied", async () => {
     const out = await collectArpScanDiscovery({ sourceKind: "arp_scan" }, []);
     expect(out.items).toHaveLength(0);
@@ -139,7 +176,8 @@ describe("collectArpScanDiscovery — guards", () => {
       [{ subnet: "192.168.0.0/24" }],
       { execCommand: exec },
     );
-    expect(out.items).toHaveLength(0);
+    expect(out.items.filter((item) => item.itemType === "subnet")).toHaveLength(1);
+    expect(out.items.filter((item) => item.itemType === "host")).toHaveLength(0);
     expect(out.warnings).toContain("arp_scan_empty:192.168.0.0/24");
   });
 });

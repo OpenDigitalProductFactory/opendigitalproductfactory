@@ -319,6 +319,8 @@ export interface InfraCIExtendedProps {
   scopeKey?: string;
   customerAccountId?: string | null;
   customerSiteId?: string | null;
+  sourceKind?: string;
+  lastObservedAt?: string;
 }
 
 /** Upsert an InfraCI node. */
@@ -356,6 +358,8 @@ export async function syncInfraCI(
     if (extendedProps.scopeKey !== undefined) props.scopeKey = extendedProps.scopeKey;
     if (extendedProps.customerAccountId !== undefined) props.customerAccountId = extendedProps.customerAccountId;
     if (extendedProps.customerSiteId !== undefined) props.customerSiteId = extendedProps.customerSiteId;
+    if (extendedProps.sourceKind !== undefined) props.sourceKind = extendedProps.sourceKind;
+    if (extendedProps.lastObservedAt !== undefined) props.lastObservedAt = extendedProps.lastObservedAt;
   }
 
   await upsertGraphNode(ci.ciId, ["InfraCI"], props);
@@ -461,6 +465,8 @@ export async function syncInventoryEntityAsInfraCI(entity: {
   if (props.customerSiteId !== undefined) {
     extendedProps.customerSiteId = props.customerSiteId as string | null;
   }
+  if (props.sourceKind !== undefined) extendedProps.sourceKind = props.sourceKind as string;
+  if (props.lastObservedAt !== undefined) extendedProps.lastObservedAt = props.lastObservedAt as string;
 
   await syncInfraCI(
     {

@@ -121,7 +121,7 @@ describe("persistBootstrapDiscoveryRun", () => {
             attributionConfidence: 0.98,
             attributionEvidence: { ruleId: "foundational_host_servers" },
             providerView: "foundational",
-            properties: {},
+            properties: { osiLayer: 3 },
           },
           {
             entityKey: "runtime:socket:/var/run/docker.sock",
@@ -199,6 +199,14 @@ describe("persistBootstrapDiscoveryRun", () => {
     );
 
     expect(projectInventoryEntity).toHaveBeenCalledTimes(3);
+    expect(projectInventoryEntity).toHaveBeenCalledWith(expect.objectContaining({
+      entityKey: "host:hostname:dpf-dev",
+      properties: expect.objectContaining({
+        osiLayer: 3,
+        sourceKind: "dpf_bootstrap",
+        lastObservedAt: expect.any(String),
+      }),
+    }));
     expect(projectInventoryRelationship).toHaveBeenCalledTimes(1);
     expect(persistenceEvents.indexOf("lock")).toBeGreaterThanOrEqual(0);
     expect(persistenceEvents.indexOf("lock")).toBeLessThan(

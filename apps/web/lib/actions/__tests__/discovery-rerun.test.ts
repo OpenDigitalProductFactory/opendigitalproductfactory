@@ -127,7 +127,11 @@ describe("rerunDiscoveryConnection", () => {
     mockPrisma.discoveryConnection.findUnique.mockResolvedValue(baseConnection);
     mockDecryptSecret.mockReturnValue("plain-api-key");
     mockBuildDeps.mockReturnValue({ fetchFn: vi.fn() });
-    mockCollectUnifi.mockResolvedValue({ items: [], relationships: [], warnings: [] });
+    mockCollectUnifi.mockResolvedValue({
+      items: [{ observedKey: "unifi:aa:bb:cc:dd:ee:ff", itemType: "router" }],
+      relationships: [],
+      warnings: [],
+    });
     mockNormalize.mockReturnValue({ entities: [], relationships: [] });
     mockPersistRun.mockResolvedValue({
       runId: "run-abc",

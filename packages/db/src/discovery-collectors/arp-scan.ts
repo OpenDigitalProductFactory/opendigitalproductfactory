@@ -106,31 +106,46 @@ export async function collectArpScanDiscovery(
   }
 
   for (const target of targets) {
-    const hosts = await scanSubnet(target.subnet, deps);
-    if (hosts.length === 0) {
-      warnings.push(`arp_scan_empty:${target.subnet}`);
+    const parsedSubnet = parseSubnet(target.subnet);
+    if (!parsedSubnet) {
+      warnings.push(`arp_scan_invalid_target:${target.subnet}`);
       continue;
     }
+    const canonicalSubnet = parsedSubnet.cidr;
+    const rawHosts = await scanSubnet(canonicalSubnet, deps);
+    const hosts = filterHosts(rawHosts, parsedSubnet);
 
-    // Create subnet entity
-    const [network] = target.subnet.split("/");
-    const subnetRef = `subnet:${target.subnet}`;
+    // Always retain the target subnet as scope evidence, even when a scan is
+    // empty or quarantined. A bad host result must not erase the operator's
+    // configured network boundary.
+    const subnetRef = `subnet:${canonicalSubnet}`;
     items.push({
       sourceKind: source,
       itemType: "subnet",
-      name: target.subnet,
+      name: canonicalSubnet,
       externalRef: subnetRef,
-      naturalKey: `subnet:${target.subnet}`,
+      naturalKey: subnetRef,
       confidence: 0.95,
       attributes: {
-        network,
-        cidr: Number(target.subnet.split("/")[1]) || 24,
+        network: intToIpv4(parsedSubnet.network),
+        cidr: parsedSubnet.prefix,
         osiLayer: 3,
         osiLayerName: "network",
-        networkAddress: target.subnet,
+        networkAddress: canonicalSubnet,
         protocolFamily: "ipv4",
       },
     });
+
+    const saturatedWithoutMac = hosts.length >= parsedSubnet.usableHosts
+      && hosts.every((host) => !host.mac);
+    if (saturatedWithoutMac) {
+      warnings.push(`arp_scan_untrustworthy:${canonicalSubnet}:saturated_without_mac_evidence`);
+      continue;
+    }
+    if (hosts.length === 0) {
+      warnings.push(`arp_scan_empty:${canonicalSubnet}`);
+      continue;
+    }
 
     // Create host entities for each discovered host
     for (const host of hosts) {
@@ -178,6 +193,67 @@ type DiscoveredHost = {
   mac?: string;
   hostname?: string;
 };
+
+type ParsedSubnet = {
+  prefix: number;
+  network: number;
+  broadcast: number;
+  usableHosts: number;
+  cidr: string;
+};
+
+function ipv4ToInt(value: string): number | null {
+  const parts = value.split(".");
+  if (parts.length !== 4) return null;
+  let result = 0;
+  for (const part of parts) {
+    if (!/^\d{1,3}$/.test(part)) return null;
+    const octet = Number(part);
+    if (octet > 255) return null;
+    result = ((result << 8) | octet) >>> 0;
+  }
+  return result;
+}
+
+function intToIpv4(value: number): string {
+  return `${(value >>> 24) & 0xff}.${(value >>> 16) & 0xff}.${(value >>> 8) & 0xff}.${value & 0xff}`;
+}
+
+function parseSubnet(value: string): ParsedSubnet | null {
+  const [address, prefixText, extra] = value.trim().split("/");
+  const prefix = Number(prefixText);
+  const addressNumber = address ? ipv4ToInt(address) : null;
+  if (extra !== undefined || addressNumber == null || !Number.isInteger(prefix) || prefix < 16 || prefix > 30) {
+    return null;
+  }
+  const mask = prefix === 0 ? 0 : (0xffffffff << (32 - prefix)) >>> 0;
+  const network = (addressNumber & mask) >>> 0;
+  const broadcast = (network | (~mask >>> 0)) >>> 0;
+  return {
+    prefix,
+    network,
+    broadcast,
+    usableHosts: Math.max(0, broadcast - network - 1),
+    cidr: `${intToIpv4(network)}/${prefix}`,
+  };
+}
+
+function isUnicastMac(value: string | undefined): boolean {
+  const normalized = normalizeMac(value);
+  if (!normalized || normalized === "ff:ff:ff:ff:ff:ff" || normalized === "00:00:00:00:00:00") return false;
+  return (Number.parseInt(normalized.slice(0, 2), 16) & 1) === 0;
+}
+
+function filterHosts(hosts: DiscoveredHost[], subnet: ParsedSubnet): DiscoveredHost[] {
+  const unique = new Map<string, DiscoveredHost>();
+  for (const host of hosts) {
+    const ip = ipv4ToInt(host.ip);
+    if (ip == null || ip <= subnet.network || ip >= subnet.broadcast) continue;
+    if (host.mac && !isUnicastMac(host.mac)) continue;
+    unique.set(host.ip, host);
+  }
+  return [...unique.values()];
+}
 
 async function scanSubnet(
   subnet: string,
@@ -266,19 +342,13 @@ async function pingAndArp(
 }
 
 function generateSubnetIPs(subnet: string, maxHosts: number): string[] {
-  const [networkStr, cidrStr] = subnet.split("/");
-  const cidr = Number(cidrStr) || 24;
-  if (cidr < 16) return []; // Don't scan anything larger than /16
-
-  const parts = networkStr!.split(".").map(Number);
-  const networkNum = ((parts[0]! << 24) | (parts[1]! << 16) | (parts[2]! << 8) | parts[3]!) >>> 0;
-  const hostBits = 32 - cidr;
-  const numHosts = Math.min(maxHosts, (1 << hostBits) - 2); // Exclude network and broadcast
+  const parsed = parseSubnet(subnet);
+  if (!parsed) return [];
+  const numHosts = Math.min(maxHosts, parsed.usableHosts);
 
   const ips: string[] = [];
   for (let i = 1; i <= numHosts; i++) {
-    const ip = networkNum + i;
-    ips.push(`${(ip >>> 24) & 0xff}.${(ip >>> 16) & 0xff}.${(ip >>> 8) & 0xff}.${ip & 0xff}`);
+    ips.push(intToIpv4(parsed.network + i));
   }
   return ips;
 }
