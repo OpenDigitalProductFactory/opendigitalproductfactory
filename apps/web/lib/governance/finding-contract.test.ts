@@ -29,16 +29,20 @@ describe("GovernanceFinding adapters (EP-8DC217EB BET-12)", () => {
     expect(f.detail).toContain("line");
   });
 
-  it("fromReviewFinding maps class→severity and preserves action/href/count", () => {
+  it("fromReviewFinding maps class→severity and preserves a complete action contract", () => {
     const conflict = fromReviewFinding({
       id: "rf-1",
       findingClass: "conflict",
       title: "Two stances disagree",
       detail: "…",
       count: 2,
-      href: "/coworker-decisions/decisions/d1",
-      actionLabel: "Review",
-      actionHref: "/coworker-decisions/review",
+      detailHref: "/coworker-decisions/decisions/d1",
+      action: {
+        kind: "navigate",
+        label: "Review",
+        href: "/coworker-decisions/decisions/d1",
+        outcome: "Understand the conflict and continue in the owning workflow.",
+      },
     });
     expect(conflict).toMatchObject({
       source: "decision-review",
@@ -46,8 +50,8 @@ describe("GovernanceFinding adapters (EP-8DC217EB BET-12)", () => {
       severity: "high",
       status: "conflict",
       count: 2,
-      actionLabel: "Review",
-      actionHref: "/coworker-decisions/review",
+      detailHref: "/coworker-decisions/decisions/d1",
+      action: expect.objectContaining({ label: "Review" }),
     });
     expect(
       fromReviewFinding({
@@ -56,9 +60,7 @@ describe("GovernanceFinding adapters (EP-8DC217EB BET-12)", () => {
         title: "t",
         detail: "d",
         count: 1,
-        href: null,
-        actionLabel: "Answer",
-        actionHref: "/coworker-decisions/review",
+        detailHref: null,
       }).severity,
     ).toBe("low");
     expect(
@@ -68,11 +70,27 @@ describe("GovernanceFinding adapters (EP-8DC217EB BET-12)", () => {
         title: "t",
         detail: "d",
         count: 1,
-        href: null,
-        actionLabel: "x",
-        actionHref: "y",
+        detailHref: null,
       }).severity,
     ).toBe("medium");
+  });
+
+  it("fails closed when an action lacks a label, destination, or promised outcome", () => {
+    const finding = fromReviewFinding({
+      id: "rf-incomplete",
+      findingClass: "conflict",
+      title: "Blocked decision",
+      detail: "Missing context",
+      count: 1,
+      detailHref: "/coworker-decisions/decisions/DI-1",
+      action: {
+        kind: "navigate",
+        label: "Review",
+        href: "/coworker-decisions/decisions/DI-1",
+        outcome: "   ",
+      },
+    });
+    expect(finding.action).toBeNull();
   });
 
   it("fromAssuranceFinding passes the already-canonical policySeverity", () => {
@@ -107,7 +125,7 @@ describe("GovernanceFinding adapters (EP-8DC217EB BET-12)", () => {
       severity: "high",
       status: "new",
       count: 12,
-      href: "/ops/security",
+      detailHref: "/ops/security",
     });
   });
 

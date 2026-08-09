@@ -26,6 +26,7 @@ import {
 import { GapAnswerForm } from "./gap-answer-form";
 import { WeightProposalForm } from "./weight-proposal-form";
 import { listOpenWeightAdjustmentProposals } from "@/lib/decision-perspective/weight-proposal-store";
+import { clusterDecisionReviewRows } from "@/lib/decision/review-identity";
 
 export const dynamic = "force-dynamic";
 
@@ -34,6 +35,17 @@ export const metadata = {
 };
 
 const UNRESOLVED = ["defer", "escalate"];
+
+const OPERATOR_ACTIONABLE_WHERE: Prisma.DecisionInteractionWhereInput = {
+  question: { not: "" },
+  // DB pushdown keeps `take` meaningful. `buildConflictFindings` still applies
+  // isFounderActionable as the authoritative defense-in-depth predicate.
+  NOT: [
+    { gateKey: "profession" },
+    { buildId: null, taskRunId: null, routeContext: { startsWith: "mcp:principle_decide" } },
+    { buildId: null, taskRunId: null, domainClass: "kernel-consult" },
+  ],
+};
 
 const CLASS_LABEL: Record<ReviewFinding["findingClass"], string> = {
   conflict: "conflict",
@@ -95,7 +107,11 @@ export default async function DecisionReviewPage() {
     weightProposalRows,
   ] = await Promise.all([
       prisma.decisionInteraction.findMany({
-        where: { principleConflict: true },
+        where: {
+          principleConflict: true,
+          humanOutcome: { equals: Prisma.DbNull },
+          ...OPERATOR_ACTIONABLE_WHERE,
+        },
         orderBy: { createdAt: "desc" },
         take: 25,
         select: {
@@ -103,6 +119,12 @@ export default async function DecisionReviewPage() {
           question: true,
           riskTier: true,
           createdAt: true,
+          humanOutcome: true,
+          buildId: true,
+          taskRunId: true,
+          routeContext: true,
+          domainClass: true,
+          gateKey: true,
         },
       }),
       prisma.decisionInteraction.findMany({
@@ -111,6 +133,7 @@ export default async function DecisionReviewPage() {
         where: {
           outcomeType: { in: UNRESOLVED },
           humanOutcome: { equals: Prisma.DbNull },
+          ...OPERATOR_ACTIONABLE_WHERE,
         },
         orderBy: { createdAt: "desc" },
         take: 200,
@@ -134,6 +157,8 @@ export default async function DecisionReviewPage() {
         take: 20,
         select: {
           interactionId: true,
+          profileId: true,
+          domainClass: true,
           question: true,
           riskTier: true,
           outcomeType: true,
@@ -184,7 +209,7 @@ export default async function DecisionReviewPage() {
     driftKind: d.driftKind ?? "flip",
   }));
 
-  const openOrgDecisions: OpenOrgDecision[] = openOrgRows.map((row) => ({
+  const openOrgDecisions: OpenOrgDecision[] = clusterDecisionReviewRows(openOrgRows).map((row) => ({
     interactionId: row.interactionId,
     question: row.question,
     riskTier: row.riskTier,
@@ -196,6 +221,7 @@ export default async function DecisionReviewPage() {
         .map((option) => ({ id: option.id as string, description: option.description as string }))
       : null,
     recommendedOptionId: row.recommendedOptionId ?? null,
+    occurrenceCount: row.occurrenceCount,
   }));
 
   const findings = buildReviewFindings({
@@ -261,12 +287,13 @@ export default async function DecisionReviewPage() {
                     {f.postureLabel}
                   </span>
                 )}
-                {!f.answer && !f.weightProposal && (
+                {f.action && (
                   <Link
-                    href={f.actionHref}
+                    href={f.action.href}
+                    title={f.action.outcome}
                     className="rounded-md border border-[var(--dpf-border)] px-2.5 py-1 text-xs text-[var(--dpf-text)] hover:bg-[var(--dpf-surface-2)] shrink-0"
                   >
-                    {f.actionLabel} →
+                    {f.action.label} →
                   </Link>
                 )}
               </div>

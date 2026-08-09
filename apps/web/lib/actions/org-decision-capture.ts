@@ -15,12 +15,13 @@
 import { randomUUID } from "crypto";
 import { revalidatePath } from "next/cache";
 
-import { prisma } from "@dpf/db";
+import { prisma, Prisma } from "@dpf/db";
 import { upsertWikiPage, appendRevision } from "@dpf/db/wiki-store";
 import { requireCapability } from "@/lib/actions/shared/guards";
 import { promoteStanceMaterial } from "@/lib/decision-perspective/stance-promotion";
 import type { DecisionDomainClass } from "@/lib/decision-perspective/types";
 import { storeWikiPage } from "@/lib/wiki/embeddings";
+import { decisionReviewIdentity } from "@/lib/decision/review-identity";
 import {
   buildStandingStancePage,
   validateOrgDecisionCapture,
@@ -35,6 +36,10 @@ export type CaptureOrgDecisionResult =
       standingSlug?: string;
       /** True when the standing material is gate-live in the decision's class. */
       standingPromoted?: boolean;
+      /** Number of unresolved ledger occurrences closed by this one ruling. */
+      resolvedCount: number;
+      /** Non-fatal follow-on failure after the ruling itself was recorded. */
+      warning?: string;
     }
   | { ok: false; error: string };
 
@@ -79,7 +84,7 @@ export async function captureOrgDecisionOutcome(
     return { ok: false, error: "This decision was resolved by the gate and needs no answer." };
   }
   if (row.humanOutcome !== null || row.escalationCapture || row.deferralCapture) {
-    return { ok: true, status: "already-captured" };
+    return { ok: true, status: "already-captured", resolvedCount: 0 };
   }
 
   // BI-6DCF772F: a structured option pick must be one of the options this gate
@@ -101,6 +106,26 @@ export async function captureOrgDecisionOutcome(
 
   const capturedAt = new Date().toISOString();
   const rationale = v.rationale ?? v.answer;
+  const clusterCandidates = await prisma.decisionInteraction.findMany({
+    where: {
+      profileId: row.profileId,
+      domainClass: row.domainClass,
+      outcomeType: { in: ["defer", "escalate"] },
+      buildId: null,
+      routeContext: "/coworker-business",
+      humanOutcome: { equals: Prisma.DbNull },
+    },
+    select: { id: true, profileId: true, domainClass: true, question: true },
+  });
+  const selectedReviewIdentity = decisionReviewIdentity(row);
+  const clusterIds = clusterCandidates
+    .filter((candidate) => decisionReviewIdentity(candidate) === selectedReviewIdentity)
+    .map((candidate) => candidate.id);
+  // The selected row came from the same unresolved query shape. Keep the
+  // operation safe under a concurrent reviewer even if it disappeared between
+  // reads: the selected id remains the capture target and update predicates
+  // below still require an unresolved row.
+  if (!clusterIds.includes(row.id)) clusterIds.push(row.id);
 
   try {
     await prisma.$transaction(async (tx) => {
@@ -144,9 +169,32 @@ export async function captureOrgDecisionOutcome(
             capturedAt,
             clearsGate: row.outcomeType === "escalate",
             chosenOptionId: v.chosenOptionId,
+            sourceInteractionId: row.interactionId,
           },
         },
       });
+      const matchingIds = clusterIds.filter((id) => id !== row.id);
+      if (matchingIds.length > 0) {
+        await tx.decisionInteraction.updateMany({
+          where: {
+            id: { in: matchingIds },
+            humanOutcome: { equals: Prisma.DbNull },
+          },
+          data: {
+            humanOutcome: {
+              type: "clustered-owner-answer",
+              answer: v.answer,
+              rationale,
+              candidateMaterial: v.makeStanding,
+              resolverUserId: userId,
+              capturedAt,
+              clearsGate: row.outcomeType === "escalate",
+              chosenOptionId: null,
+              sourceInteractionId: row.interactionId,
+            },
+          },
+        });
+      }
     });
   } catch (err) {
     return { ok: false, error: (err as Error).message || "Could not record the answer." };
@@ -154,6 +202,7 @@ export async function captureOrgDecisionOutcome(
 
   let standingSlug: string | undefined;
   let standingPromoted: boolean | undefined;
+  let warning: string | undefined;
 
   if (v.makeStanding) {
     const page = buildStandingStancePage({
@@ -215,16 +264,21 @@ export async function captureOrgDecisionOutcome(
       standingSlug = page.slug;
       standingPromoted = promoted.ok;
     } catch (err) {
-      // The answer is recorded either way; report the standing-write failure
-      // as a value so the owner knows doctrine did not update.
-      return {
-        ok: false,
-        error: `Your answer was recorded, but saving it as a standing stance failed: ${(err as Error).message}`,
-      };
+      // The primary disposition already committed. Report the follow-on
+      // failure as a warning, not a false failure that leaves the completed
+      // card on screen and invites the owner to submit the same ruling again.
+      warning = `Your answer was recorded, but saving it as a standing stance failed: ${(err as Error).message}`;
     }
   }
 
   revalidatePath("/coworker-decisions/review");
   revalidatePath("/coworker-decisions");
-  return { ok: true, status: "captured", standingSlug, standingPromoted };
+  return {
+    ok: true,
+    status: "captured",
+    standingSlug,
+    standingPromoted,
+    resolvedCount: clusterIds.length,
+    warning,
+  };
 }
