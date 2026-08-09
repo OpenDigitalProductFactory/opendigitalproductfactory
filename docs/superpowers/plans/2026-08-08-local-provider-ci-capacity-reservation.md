@@ -1,6 +1,6 @@
 # Local Provider / Local-CI Capacity Reservation Plan
 
-**Backlog:** `BI-8E2E8BAE`  
+**Backlog:** `BI-8E2E8BAE`
 **Work capsule:** `WC-0E7D2D46`
 
 ## Goal
@@ -25,4 +25,15 @@ Prevent any portal-owned local completion or embedding dispatch from starting a 
 
 ## Documentation impact
 
-This is an operator/runtime contract, not a customer-facing feature. The pre-PR gate runbook records the exclusion behavior and recovery semantics; no user-guide change is required.
+This is primarily an operator/runtime contract. The pre-PR gate runbook records
+the exclusion and recovery semantics, and the provider user guide explains the
+temporary local-capacity deferral without presenting it as provider failure.
+
+## Evidence boundary
+
+The motivating evidence is temporal: local-provider dispatch and model
+residency coincided with the Windows free-physical-memory metric crossing the
+CI fence. Docker's displayed model residency, GPU VRAM, WSL/shared-memory
+accounting, and Windows physical memory remain separate measurements. This plan
+does not infer that displayed model size is ordinary RAM or name a causal
+mechanism without telemetry.

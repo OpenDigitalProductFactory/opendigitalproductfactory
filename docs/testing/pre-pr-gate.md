@@ -296,9 +296,12 @@ host against new local inference dispatch. The common completion adapter and
 embedding choke point consult the same lease registry immediately before local
 provider contact; a local-only request receives a typed capacity deferral,
 while an eligible cloud fallback remains available. Registry uncertainty fails
-closed for local inference only. This exclusion prevents a post-admission local
-model load from consuming the memory envelope that the exact-tree gate owns;
-it does not terminate a model that was already resident before admission.
+closed for local inference only. This exclusion addresses the observed temporal
+overlap between post-admission local-provider/model residency and the Windows
+host free-memory metric crossing the CI fence; it does not claim that Docker's
+displayed model size is ordinary RAM, conflate GPU VRAM with physical memory,
+or infer the Docker/WSL/shared-memory mechanism. It also does not terminate a
+model that was already resident before admission.
 
 **Fail-fast command order (BI-7BCCDE3D).** Inside an admitted runtime-code
 gate, freshness, Prisma generation, migrations, and the cheap doc/repository
