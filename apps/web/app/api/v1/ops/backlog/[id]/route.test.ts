@@ -1,0 +1,46 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const mocks = vi.hoisted(() => ({
+  findUnique: vi.fn(),
+  deleteItem: vi.fn(),
+  assertDeletable: vi.fn(),
+}));
+
+vi.mock("@dpf/db", () => ({
+  prisma: {
+    backlogItem: { findUnique: mocks.findUnique, delete: mocks.deleteItem },
+  },
+}));
+vi.mock("@/lib/api/auth-middleware", () => ({ authenticateRequest: vi.fn(async () => ({ user: { id: "user-1" } })) }));
+vi.mock("@/lib/backlog/initiative-governance-deletion", () => ({
+  assertBacklogItemGovernanceDeletable: mocks.assertDeletable,
+}));
+
+import { DELETE } from "./route";
+
+describe("DELETE /api/v1/ops/backlog/:id initiative retention", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.findUnique.mockResolvedValue({ id: "bi-row" });
+    mocks.deleteItem.mockResolvedValue({ id: "bi-row" });
+  });
+
+  it("returns a stable conflict and does not delete permanent governance evidence", async () => {
+    mocks.assertDeletable.mockRejectedValue(Object.assign(new Error("retained"), { code: "INITIATIVE_GOVERNANCE_RETENTION" }));
+    const response = await DELETE(new Request("http://localhost/api/v1/ops/backlog/bi-row", { method: "DELETE" }), {
+      params: Promise.resolve({ id: "bi-row" }),
+    });
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toMatchObject({ code: "INITIATIVE_GOVERNANCE_RETENTION" });
+    expect(mocks.deleteItem).not.toHaveBeenCalled();
+  });
+
+  it("preserves ordinary deletion when no governance evidence exists", async () => {
+    mocks.assertDeletable.mockResolvedValue(undefined);
+    const response = await DELETE(new Request("http://localhost/api/v1/ops/backlog/bi-row", { method: "DELETE" }), {
+      params: Promise.resolve({ id: "bi-row" }),
+    });
+    expect(response.status).toBe(200);
+    expect(mocks.deleteItem).toHaveBeenCalledWith({ where: { id: "bi-row" } });
+  });
+});

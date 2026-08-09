@@ -57,6 +57,8 @@ export type GovernedExecuteContext = {
   callerClient?: string;
   /** How the caller authenticated ("pat" | "session-jwt"), from the MCP route. */
   authSource?: string;
+  /** Coarse MCP token scope (read/write/admin), resolved by the transport. */
+  tokenScope?: string;
   /**
    * Build the user is currently messaging from. Plumbed by runAgenticLoop
    * (via its `featureBuildId` param) so phase-scoped tools like
@@ -266,6 +268,8 @@ async function callExecuteTool(
     callerClient?: string;
     apiTokenId?: string;
     authSource?: string;
+    tokenScope?: string;
+    authorityDecisionId?: string;
   },
 ): Promise<ToolResult> {
   if (_executeToolOverride) return _executeToolOverride(toolName, params, userId, ctx);
@@ -472,6 +476,7 @@ export async function governedExecuteTool(
   args: GovernedExecuteArgs,
 ): Promise<GovernedExecuteResult> {
   let approvedAuthorityEnvelopeId: string | null = null;
+  let authorityDecisionId: string | undefined;
   const tool = findTool(args.toolName);
   if (!tool) {
     return {
@@ -573,6 +578,7 @@ export async function governedExecuteTool(
       return result;
     }
     approvedAuthorityEnvelopeId = authorityGate.approvedEnvelopeId;
+    authorityDecisionId = authorityGate.authorityDecisionId;
   }
 
   const hookRejection = await runPreToolHooks({
@@ -612,6 +618,8 @@ export async function governedExecuteTool(
       callerClient: args.context?.callerClient,
       apiTokenId: args.context?.apiTokenId,
       authSource: args.context?.authSource,
+      tokenScope: args.context?.tokenScope ?? "session",
+      authorityDecisionId,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown tool error";

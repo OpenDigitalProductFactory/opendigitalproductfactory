@@ -18,6 +18,16 @@ export type DocumentBlobWriteResult = {
   sizeBytes: number;
 };
 
+type DocumentBlobRetentionDb = {
+  initiativeArtifactRetentionPin: {
+    count: (args: { where: { documentBlobId: string } }) => Promise<number>;
+  };
+};
+
+export class DocumentBlobRetentionError extends Error {
+  readonly code = "INITIATIVE_GOVERNANCE_RETENTION";
+}
+
 function toBuffer(content: DocumentBlobContent): Buffer {
   if (Buffer.isBuffer(content)) return content;
   if (typeof content === "string") return Buffer.from(content, "utf-8");
@@ -99,4 +109,43 @@ export async function writeDocumentBlob(input: {
   }
 
   return result;
+}
+
+export async function readDocumentBlob(input: {
+  storageKey: string;
+  expectedSha256: string;
+  storageRoot?: string;
+}): Promise<Buffer> {
+  const expectedStorageKey = buildDocumentBlobStorageKey(input.expectedSha256);
+  if (input.storageKey !== expectedStorageKey) {
+    throw new Error("Document blob storage key does not match its content digest.");
+  }
+
+  const storageRoot = input.storageRoot ?? await getDocumentBlobStorageRoot();
+  const path = lazyPath();
+  const bytes = await lazyFsPromises().readFile(path.join(storageRoot, expectedStorageKey));
+  if (hashDocumentBlobContent(bytes) !== input.expectedSha256) {
+    throw new Error("Document blob bytes do not match their content digest.");
+  }
+  return bytes;
+}
+
+/** Canonical storage-GC door. Pinned initiative evidence is never removable. */
+export async function deleteDocumentBlob(input: {
+  documentBlobId: string;
+  storageKey: string;
+  expectedSha256: string;
+  storageRoot?: string;
+  db?: DocumentBlobRetentionDb;
+}): Promise<void> {
+  const expectedStorageKey = buildDocumentBlobStorageKey(input.expectedSha256);
+  if (input.storageKey !== expectedStorageKey) {
+    throw new Error("Document blob storage key does not match its content digest.");
+  }
+  const db = input.db ?? prisma;
+  if (await db.initiativeArtifactRetentionPin.count({ where: { documentBlobId: input.documentBlobId } }) > 0) {
+    throw new DocumentBlobRetentionError("Pinned initiative document bytes are permanently retained.");
+  }
+  const storageRoot = input.storageRoot ?? await getDocumentBlobStorageRoot();
+  await lazyFsPromises().unlink(lazyPath().join(storageRoot, expectedStorageKey));
 }

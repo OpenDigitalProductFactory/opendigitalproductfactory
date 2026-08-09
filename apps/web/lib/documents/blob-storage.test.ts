@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   DOCUMENT_TEXT_INLINE_LIMIT_BYTES,
   buildDocumentBlobStorageKey,
+  deleteDocumentBlob,
   hashDocumentBlobContent,
   resolveDocumentBlobStorageRoot,
   writeDocumentBlob,
@@ -57,5 +58,29 @@ describe("document blob storage", () => {
     expect(resolveDocumentBlobStorageRoot({ configuredPath: null, cwd, env: {} })).toBe(
       path.resolve(cwd, "./data/uploads"),
     );
+  });
+
+  it("refuses storage GC for a blob retained by an initiative baseline", async () => {
+    const written = await writeDocumentBlob({ content: "permanent design", storageRoot: tmpRoot });
+    await expect(deleteDocumentBlob({
+      documentBlobId: "blob-1",
+      storageKey: written.storageKey,
+      expectedSha256: written.sha256,
+      storageRoot: tmpRoot,
+      db: { initiativeArtifactRetentionPin: { count: async () => 1 } },
+    })).rejects.toMatchObject({ code: "INITIATIVE_GOVERNANCE_RETENTION" });
+    await expect(fs.readFile(path.join(tmpRoot, written.storageKey), "utf8")).resolves.toBe("permanent design");
+  });
+
+  it("allows the canonical GC door to delete an unpinned blob", async () => {
+    const written = await writeDocumentBlob({ content: "disposable design", storageRoot: tmpRoot });
+    await deleteDocumentBlob({
+      documentBlobId: "blob-2",
+      storageKey: written.storageKey,
+      expectedSha256: written.sha256,
+      storageRoot: tmpRoot,
+      db: { initiativeArtifactRetentionPin: { count: async () => 0 } },
+    });
+    await expect(fs.access(path.join(tmpRoot, written.storageKey))).rejects.toBeDefined();
   });
 });

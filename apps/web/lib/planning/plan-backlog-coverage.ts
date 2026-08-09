@@ -1,5 +1,7 @@
 import { prisma } from "@dpf/db";
 
+import { resolveRepositoryArtifact, type InitiativeArtifactRef } from "@/lib/backlog/initiative-readiness";
+
 export type PlanBacklogCoverageDecision = "decomposed" | "atomic";
 
 export type PlanBacklogDeliverable = {
@@ -10,7 +12,68 @@ export type PlanBacklogDeliverable = {
   dependsOn?: string[];
 };
 
+export type PlanBacklogDeliverableV2 = PlanBacklogDeliverable & {
+  requirementRefs: string[];
+  contractRefs: string[];
+  flowRefs: string[];
+  verificationRefs: string[];
+  disposition?: { decision: "deferred" | "not-applicable"; reason: string };
+};
+
+export type PlanBacklogCoverageReceipt = {
+  schemaVersion?: 1 | 2;
+  planPath: string;
+  planArtifactRef?: {
+    kind: "repo-blob-at-commit";
+    repositoryFullName: string;
+    commitSha: string;
+    path: string;
+    providerBlobId: string;
+  };
+  planArtifactDigest?: string;
+  decision: PlanBacklogCoverageDecision;
+  rationale?: string;
+  deliverables: PlanBacklogDeliverable[] | PlanBacklogDeliverableV2[];
+};
+
 type MappedBacklogItem = { itemId: string; status: string };
+
+export type PlanDependencyProjection = {
+  state: "pass" | "missing" | "fail";
+  unresolvedDeliverableKeys: string[];
+};
+
+/** Project live dependency readiness without treating a bare deferred status as success. */
+export function projectPlanBacklogDependencies(
+  receipt: PlanBacklogCoverageReceipt,
+  mappedBacklogItems: MappedBacklogItem[],
+): PlanDependencyProjection {
+  const byKey = new Map(receipt.deliverables.map((deliverable) => [deliverable.key, deliverable]));
+  const statusByItem = new Map(mappedBacklogItems.map((item) => [item.itemId, item.status]));
+  const unresolved = new Set<string>();
+  let hasExplicitFailure = false;
+  for (const deliverable of receipt.deliverables) {
+    for (const dependencyKey of deliverable.dependsOn ?? []) {
+      const dependency = byKey.get(dependencyKey) as PlanBacklogDeliverableV2 | undefined;
+      if (!dependency) {
+        unresolved.add(dependencyKey);
+        hasExplicitFailure = true;
+        continue;
+      }
+      const status = dependency.backlogItemId ? statusByItem.get(dependency.backlogItemId) : undefined;
+      if (status === "done") continue;
+      const disposition = dependency.disposition;
+      if (disposition && (disposition.decision === "deferred" || disposition.decision === "not-applicable")
+        && disposition.reason.trim().length >= 20) continue;
+      unresolved.add(dependency.key);
+      if (status === "deferred" || (disposition && !disposition.reason.trim())) hasExplicitFailure = true;
+    }
+  }
+  return {
+    state: unresolved.size === 0 ? "pass" : hasExplicitFailure ? "fail" : "missing",
+    unresolvedDeliverableKeys: [...unresolved].sort(),
+  };
+}
 
 export type PlanBacklogCoverageValidation =
   | {
@@ -31,6 +94,26 @@ export type PlanBacklogCoverageValidation =
       missingBacklogItemIds?: string[];
     };
 
+type PlanBacklogCoverageErrorCode = Extract<PlanBacklogCoverageValidation, { ok: false }>["code"];
+
+function hasDependencyCycle(deliverables: PlanBacklogDeliverable[]): boolean {
+  const graph = new Map(deliverables.map((item) => [item.key, item.dependsOn ?? []]));
+  const visiting = new Set<string>();
+  const visited = new Set<string>();
+  const visit = (key: string): boolean => {
+    if (visiting.has(key)) return true;
+    if (visited.has(key)) return false;
+    visiting.add(key);
+    for (const dependency of graph.get(key) ?? []) {
+      if (visit(dependency)) return true;
+    }
+    visiting.delete(key);
+    visited.add(key);
+    return false;
+  };
+  return [...graph.keys()].some(visit);
+}
+
 export function validatePlanBacklogCoverage(args: {
   effortSize: string | null;
   decision?: PlanBacklogCoverageDecision;
@@ -49,6 +132,13 @@ export function validatePlanBacklogCoverage(args: {
       };
     }
     keys.add(key);
+  }
+  if (hasDependencyCycle(args.deliverables)) {
+    return {
+      ok: false,
+      code: "invalid-deliverable-graph",
+      error: "The deliverable dependency graph contains a cycle.",
+    };
   }
   for (const deliverable of args.deliverables) {
     const unknown = (deliverable.dependsOn ?? []).filter((key) => !keys.has(key));
@@ -121,6 +211,65 @@ export function validatePlanBacklogCoverage(args: {
   };
 }
 
+export type PlanBacklogCoverageReceiptValidation =
+  | { ok: true; schemaVersion: 1 | 2; decision: PlanBacklogCoverageDecision; mappedItemIds: string[] }
+  | {
+    ok: false;
+    code:
+      | "coverage-v2-required"
+      | "stale-plan-artifact"
+      | "traceability-incomplete"
+      | PlanBacklogCoverageErrorCode;
+    error: string;
+  };
+
+function nonEmptyRefs(value: unknown): value is string[] {
+  return Array.isArray(value) && value.length > 0
+    && value.every((entry) => typeof entry === "string" && entry.trim().length > 0);
+}
+
+export function validatePlanBacklogCoverageReceipt(args: {
+  receipt: PlanBacklogCoverageReceipt;
+  mappedBacklogItems: MappedBacklogItem[];
+  requireGovernedImplementation: boolean;
+  currentPlanDigest: string;
+}): PlanBacklogCoverageReceiptValidation {
+  const schemaVersion = args.receipt.schemaVersion ?? 1;
+  if (args.requireGovernedImplementation && schemaVersion !== 2) {
+    return { ok: false, code: "coverage-v2-required", error: "Governed implementation requires plan coverage schema version 2." };
+  }
+  if (schemaVersion === 2) {
+    const locator = args.receipt.planArtifactRef;
+    if (!locator || locator.kind !== "repo-blob-at-commit"
+      || !locator.repositoryFullName || !locator.commitSha || !locator.path || !locator.providerBlobId
+      || !args.receipt.planArtifactDigest
+      || args.receipt.planArtifactDigest !== args.currentPlanDigest) {
+      return { ok: false, code: "stale-plan-artifact", error: "Plan coverage is not bound to the current immutable plan artifact." };
+    }
+    const incomplete = args.receipt.deliverables.some((deliverable) => {
+      if (!deliverable.independentlyShippable) return false;
+      const v2 = deliverable as Partial<PlanBacklogDeliverableV2>;
+      return !nonEmptyRefs(v2.requirementRefs)
+        || !nonEmptyRefs(v2.contractRefs)
+        || !nonEmptyRefs(v2.flowRefs)
+        || !nonEmptyRefs(v2.verificationRefs);
+    });
+    if (incomplete) {
+      return { ok: false, code: "traceability-incomplete", error: "Every implementation deliverable needs requirement, contract, flow, and verification references." };
+    }
+  }
+
+  const base = validatePlanBacklogCoverage({
+    effortSize: null,
+    decision: args.receipt.decision,
+    rationale: args.receipt.rationale,
+    deliverables: args.receipt.deliverables,
+    mappedBacklogItems: args.mappedBacklogItems,
+  });
+  if (!base.ok) return { ok: false, code: base.code, error: base.error };
+  return { ok: true, schemaVersion, decision: base.decision, mappedItemIds: base.mappedItemIds };
+}
+
 export type PlanBacklogCoverageDb = {
   backlogItem: {
     findUnique: (args: {
@@ -169,6 +318,7 @@ export type BranchPlanBacklogGateDb = {
 export async function checkBranchPlanBacklogGate(args: {
   branchName: string;
   db?: BranchPlanBacklogGateDb;
+  resolveArtifact?: typeof resolveRepositoryArtifact;
 }): Promise<
   | { ok: true; required: false; itemId?: string }
   | { ok: true; required: true; itemId: string; receiptId: string; decision: PlanBacklogCoverageDecision }
@@ -213,24 +363,33 @@ export async function checkBranchPlanBacklogGate(args: {
       itemId: parent.itemId,
     };
   }
-  const payload = activity.payload as { decision?: unknown; rationale?: unknown; deliverables?: unknown };
+  const payload = activity.payload as (PlanBacklogCoverageReceipt & Record<string, unknown>) | null;
   if (
-    (payload.decision !== "atomic" && payload.decision !== "decomposed") ||
-    !Array.isArray(payload.deliverables)
+    !payload
+    || payload.schemaVersion !== 2
+    || (payload.decision !== "atomic" && payload.decision !== "decomposed")
+    || !Array.isArray(payload.deliverables)
+    || !payload.planArtifactRef
   ) {
-    return { ok: false, required: true, code: "receipt-invalid", error: "Latest coverage receipt is invalid.", itemId: parent.itemId };
+    return { ok: false, required: true, code: "receipt-invalid", error: "Latest coverage receipt is invalid; governed implementation requires schema version 2.", itemId: parent.itemId };
   }
   const deliverables = payload.deliverables as PlanBacklogDeliverable[];
   const requestedIds = Array.from(new Set(deliverables.map((d) => d.backlogItemId).filter((id): id is string => Boolean(id))));
   const mappedBacklogItems = requestedIds.length
     ? await db.backlogItem.findMany({ where: { itemId: { in: requestedIds } }, select: { itemId: true, status: true } })
     : [];
-  const validation = validatePlanBacklogCoverage({
-    effortSize: parent.effortSize,
-    decision: payload.decision,
-    rationale: typeof payload.rationale === "string" ? payload.rationale : undefined,
-    deliverables,
+  const resolved = await (args.resolveArtifact ?? resolveRepositoryArtifact)({
+    locator: payload.planArtifactRef,
+    subject: { kind: "backlog-item", id: parent.itemId },
+  });
+  if (!resolved.ok) {
+    return { ok: false, required: true, code: "receipt-invalid", error: resolved.error, itemId: parent.itemId };
+  }
+  const validation = validatePlanBacklogCoverageReceipt({
+    receipt: payload,
     mappedBacklogItems,
+    requireGovernedImplementation: true,
+    currentPlanDigest: resolved.artifact.digest,
   });
   if (!validation.ok) {
     return { ok: false, required: true, code: "receipt-invalid", error: validation.error, itemId: parent.itemId };
@@ -243,6 +402,7 @@ export async function checkPlanBacklogCoverage(args: {
   planPath: string;
   receiptId: string;
   db?: PlanBacklogCoverageDb;
+  resolveArtifact?: typeof resolveRepositoryArtifact;
 }): Promise<CheckPlanBacklogCoverageResult> {
   const db: PlanBacklogCoverageDb = args.db ?? {
     backlogItem: {
@@ -285,12 +445,7 @@ export async function checkPlanBacklogCoverage(args: {
   } else if (activity.kind !== "plan_backlog_coverage") {
     rawPayload = null;
   }
-  const payload = rawPayload as {
-    planPath?: unknown;
-    decision?: unknown;
-    rationale?: unknown;
-    deliverables?: unknown;
-  } | null;
+  const payload = rawPayload as (PlanBacklogCoverageReceipt & Record<string, unknown>) | null;
   if (!payload) {
     return { ok: false, valid: false, code: "receipt-not-found", error: `Coverage receipt ${args.receiptId} was not found.` };
   }
@@ -313,6 +468,26 @@ export async function checkPlanBacklogCoverage(args: {
         select: { itemId: true, status: true },
       })
     : [];
+  if (payload.schemaVersion === 2) {
+    if (!payload.planArtifactRef) {
+      return { ok: false, valid: false, code: "receipt-invalid", error: "Version 2 coverage has no immutable plan locator." };
+    }
+    const resolved = await (args.resolveArtifact ?? resolveRepositoryArtifact)({
+      locator: payload.planArtifactRef,
+      subject: { kind: "backlog-item", id: parent.itemId },
+    });
+    if (!resolved.ok) {
+      return { ok: false, valid: false, code: "receipt-invalid", error: resolved.error };
+    }
+    const governed = validatePlanBacklogCoverageReceipt({
+      receipt: payload,
+      mappedBacklogItems,
+      requireGovernedImplementation: true,
+      currentPlanDigest: resolved.artifact.digest,
+    });
+    if (!governed.ok) return { ok: false, valid: false, code: "receipt-invalid", error: governed.error };
+    return { ok: true, valid: true, decision: governed.decision, mappedItemIds: governed.mappedItemIds };
+  }
   const validation = validatePlanBacklogCoverage({
     effortSize: parent.effortSize,
     decision: payload.decision,
@@ -332,18 +507,21 @@ export type RecordPlanBacklogCoverageResult =
       mappedItemIds: string[];
     }
   | ({ ok: false; code: "backlog-item-not-found"; error: string } & Record<string, unknown>)
-  | Extract<PlanBacklogCoverageValidation, { ok: false }>;
+  | ({ ok: false; code: "plan-artifact-invalid"; error: string } & Record<string, unknown>)
+  | Extract<PlanBacklogCoverageReceiptValidation, { ok: false }>;
 
 export async function recordPlanBacklogCoverage(args: {
   itemId: string;
   planPath: string;
+  planArtifactRef: Extract<InitiativeArtifactRef, { kind: "repo-blob-at-commit" }>;
   decision: PlanBacklogCoverageDecision;
   rationale?: string;
-  deliverables: PlanBacklogDeliverable[];
+  deliverables: PlanBacklogDeliverableV2[];
   userId: string;
   agentId?: string | null;
   db?: PlanBacklogCoverageDb;
   now?: () => Date;
+  resolveArtifact?: typeof resolveRepositoryArtifact;
 }): Promise<RecordPlanBacklogCoverageResult> {
   const db: PlanBacklogCoverageDb = args.db ?? {
     backlogItem: {
@@ -365,6 +543,16 @@ export async function recordPlanBacklogCoverage(args: {
       error: `BacklogItem ${args.itemId} was not found.`,
     };
   }
+  if (args.planArtifactRef.path !== args.planPath) {
+    return { ok: false, code: "stale-plan-artifact", error: "Plan artifact path does not match the governed plan path." };
+  }
+  const resolvedPlan = await (args.resolveArtifact ?? resolveRepositoryArtifact)({
+    locator: args.planArtifactRef,
+    subject: { kind: "backlog-item", id: parent.itemId },
+  });
+  if (!resolvedPlan.ok) {
+    return { ok: false, code: "plan-artifact-invalid", error: resolvedPlan.error };
+  }
 
   const requestedIds = Array.from(
     new Set(
@@ -379,12 +567,20 @@ export async function recordPlanBacklogCoverage(args: {
         select: { itemId: true, status: true },
       })
     : [];
-  const validation = validatePlanBacklogCoverage({
-    effortSize: parent.effortSize,
+  const receipt: PlanBacklogCoverageReceipt = {
+    schemaVersion: 2,
+    planPath: args.planPath,
+    planArtifactRef: args.planArtifactRef,
+    planArtifactDigest: resolvedPlan.artifact.digest,
     decision: args.decision,
     rationale: args.rationale,
     deliverables: args.deliverables,
+  };
+  const validation = validatePlanBacklogCoverageReceipt({
+    receipt,
     mappedBacklogItems,
+    requireGovernedImplementation: true,
+    currentPlanDigest: resolvedPlan.artifact.digest,
   });
   if (!validation.ok) return validation;
 
@@ -398,11 +594,9 @@ export async function recordPlanBacklogCoverage(args: {
           ? "Plan coverage accepted as atomic with operator rationale."
           : `Plan coverage validated across ${validation.mappedItemIds.length} live BacklogItem(s).`,
       payload: {
-        planPath: args.planPath,
-        decision: validation.decision,
+        ...receipt,
         rationale: args.rationale?.trim() || null,
         mappedItemIds: validation.mappedItemIds,
-        deliverables: args.deliverables,
         recordedAt,
       },
       recordedById: args.userId,

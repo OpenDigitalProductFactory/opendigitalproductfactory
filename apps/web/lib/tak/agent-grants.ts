@@ -187,6 +187,15 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   record_semantic_review_outcome: ["backlog_write"],
   record_local_integration_result: ["backlog_write"],
   record_functional_failure_evidence: ["backlog_write"],
+  record_initiative_evidence: ["initiative_evidence_write"],
+  record_initiative_design_review: ["initiative_design_review"],
+  record_initiative_architecture_review: ["initiative_architecture_review"],
+  record_initiative_data_review: ["initiative_data_review"],
+  record_initiative_ux_review: ["initiative_ux_review"],
+  record_initiative_security_review: ["initiative_security_review"],
+  record_initiative_compliance_review: ["initiative_compliance_review"],
+  record_initiative_domain_review: ["initiative_domain_review"],
+  record_initiative_archetype_review: ["initiative_archetype_review"],
   get_next_recommended_work: ["backlog_read"],
   // Read-only coworker-roster discovery-by-intent (BI-5FB59BC6); returns ids/
   // names to then pass to request_coworker/summon_coworker.

@@ -625,6 +625,7 @@ async function handleToolsCall(
       routeContext: token.routeContext ?? undefined,
       callerClient,
       authSource: token.source,
+      tokenScope: token.scope,
     },
     source: token.source === "session-jwt" ? "internal-mcp-session" : "external-jsonrpc",
   });

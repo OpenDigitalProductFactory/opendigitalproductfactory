@@ -56,6 +56,8 @@ type ToolExecutionContext = {
   callerClient?: string;
   apiTokenId?: string;
   authSource?: string;
+  tokenScope?: string;
+  authorityDecisionId?: string;
   suppressDesignReviewAutoRepair?: boolean; suppressPlanReviewAutoRepair?: boolean;
   /**
    * Build the user is currently messaging from. Plumbed by agentic-loop.ts

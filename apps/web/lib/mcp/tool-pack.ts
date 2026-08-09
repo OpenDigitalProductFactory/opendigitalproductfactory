@@ -34,6 +34,8 @@ export type ToolPackHandler = (
     callerClient?: string;
     apiTokenId?: string;
     authSource?: string;
+    tokenScope?: string;
+    authorityDecisionId?: string;
   },
 ) => Promise<ToolResult>;
 

@@ -15,6 +15,7 @@ import {
   normalizeBranchTaxonomy,
   normalizeWorkCapsuleScopeInput,
   parseScopeClaims,
+  parseWorkIntentDeclared,
   type ScopeClaim,
   type WorkCapsuleActivityKind,
   type WorkCapsuleBranchTaxonomy,
@@ -23,6 +24,8 @@ import {
   type WorkCapsuleScopeInput,
   type WorkCapsuleSource,
   type WorkCapsuleStatus,
+  type WorkIntent,
+  type WorkIntentDeclared,
 } from "@/lib/work-capsules";
 import { revalidatePortalContext } from "@/lib/portal-context/invalidation";
 import { publishRecordedWorkCapsuleActivity } from "@/lib/work-capsules/activity-events";
@@ -167,6 +170,40 @@ async function recordActivity(
   publishRecordedWorkCapsuleActivity(input.workCapsuleId, activity?.id);
   revalidatePortalContext();
   return activity;
+}
+
+export async function declareWorkCapsuleIntent(args: {
+  db: CapsuleDb;
+  capsuleId: string;
+  intent: WorkIntent;
+  policyVersion: string;
+  subject: WorkIntentDeclared["subject"];
+  actor: WorkCapsuleActor;
+}) {
+  const payload = parseWorkIntentDeclared({
+    schemaVersion: 1,
+    intent: args.intent,
+    policyVersion: args.policyVersion,
+    subject: args.subject,
+  });
+  if (!payload.ok) throw new Error(payload.error);
+  const capsule = await args.db.workCapsule.findUnique({
+    where: { capsuleId: args.capsuleId },
+    select: { id: true },
+  });
+  if (!capsule) throw new Error(`Work Capsule ${args.capsuleId} not found`);
+  return recordActivity(args.db, {
+    workCapsuleId: capsule.id,
+    kind: "work-intent-declared",
+    summary: `Work intent declared: ${payload.intent}`,
+    payload: {
+      schemaVersion: payload.schemaVersion,
+      intent: payload.intent,
+      policyVersion: payload.policyVersion,
+      subject: payload.subject,
+    },
+    actor: args.actor,
+  });
 }
 
 export async function createWorkCapsule(args: {
