@@ -22,11 +22,11 @@ The adapter calls `GET /proxy/network/api/s/{site}/stat/device` and `GET /proxy/
 ## Step 2 — Add the connection in the portal
 
 1. Open **Platform → Tools → Estate Discovery** (`/platform/tools/discovery`).
-2. Click **Add Connection** (or **Configure** on the detected gateway tile if your edge node has already surfaced one).
-3. Fill in:
+2. Click **Review & Connect** on the identified gateway tile. DPF ranks canonical gateway inventory by its network address, manufacturer, model, discovery source, and confidence. When one usable gateway matches the detected network route, it is selected automatically; when several are plausible, choose the named device deliberately.
+3. Review the identified device and fill in:
    - **Discovery Method**: `Ubiquiti UniFi`
    - **Site**: `default` (or the slug from your UniFi UI for multi-site installs)
-   - **Controller URL**: full URL to the controller. UDM/UDM-Pro: `https://<gateway-ip>`. Hosted Network (`https://unifi.ui.com`) is not supported on this path — local LAN only.
+   - **Gateway**: the device identity and endpoint come from discovery evidence; there is no URL to type in the normal path.
    - **API Key**: paste the value from Step 1.
    - **Allow self-signed controller certificate**: enable only for a trusted closed LAN when the UniFi appliance uses its factory/self-signed certificate.
 4. Click **Save & Test**. The portal:
@@ -35,6 +35,8 @@ The adapter calls `GET /proxy/network/api/s/{site}/stat/device` and `GET /proxy/
    - Flips status to `active` on success, or reports `auth_failed` / `unreachable` / `tls_error` with the failure reason.
 
 That's it. No file on disk, no bind mount, no container restart needed.
+
+If discovery cannot identify the correct device, expand **Enter a gateway manually**. Enter a host or IP address; `http://`, `https://`, and an optional port are accepted and normalized to the canonical HTTPS endpoint. Paths, credentials, non-HTTP schemes, control characters, and unsafe targets are rejected with field-specific guidance while preserving the value for correction. Manual entry is recovery, not the primary setup path. Hosted Network (`unifi.ui.com`) is not supported here; this adapter targets the physical network reachable from the portal host.
 
 ## Step 3 — The edge node picks it up automatically
 
@@ -53,7 +55,7 @@ docker compose logs edge-node --tail 50
 The connection row on `/platform/tools/discovery` has per-row **Re-test**, **Edit**, and **Delete** buttons:
 
 - **Re-test** — runs the one-shot probe against the controller and updates `lastTestStatus`.
-- **Edit** — opens the form with controller URL + site pre-filled; leave the API key field blank to keep the existing ciphertext, paste a new value to rotate.
+- **Edit** — opens the form with the linked gateway identity and site pre-filled; leave the API key field blank to keep the existing ciphertext, or paste a new value to rotate. Endpoint changes remain available under manual recovery.
 - **Delete** — removes the row (with a confirmation step). The edge node's next sweep will see it's gone and stop polling that controller.
 
 ## What the adapter emits
