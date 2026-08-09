@@ -5,6 +5,7 @@
 import { getTableSensitivity } from "./table-classification";
 import { spawn, type ChildProcess } from "node:child_process";
 import { pipeline } from "node:stream/promises";
+import { provisionContributorPreviewAdmin, requireContributorPreviewPassword } from "./contributor-preview-auth";
 
 // -- Obfuscation Helpers --
 
@@ -34,6 +35,8 @@ const PII_FIELDS: Record<string, (val: string | null, idx: number) => string> = 
 
 export { PII_FIELDS };
 
+const INVALIDATED_PASSWORD_HASH = "$2a$10$devhashplaceholdernotreal000000000000000000000";
+
 export function obfuscateField(
   value: string | null | undefined,
   fieldName: string,
@@ -43,6 +46,23 @@ export function obfuscateField(
   if (value === undefined) return undefined;
   const fn = PII_FIELDS[fieldName];
   return fn ? fn(value, index) : value;
+}
+
+export function sanitizeConfidentialRow(
+  row: Record<string, unknown>,
+  index: number,
+): Record<string, unknown> {
+  return Object.fromEntries(
+    Object.entries(row).map(([key, value]) => {
+      if (typeof value === "string" && key in PII_FIELDS) {
+        return [key, obfuscateField(value, key, index)];
+      }
+      if (key === "passwordHash") {
+        return [key, INVALIDATED_PASSWORD_HASH];
+      }
+      return [key, value];
+    }),
+  );
 }
 
 // -- Table Classification Helpers --
@@ -321,6 +341,12 @@ export async function runSanitizedClone(): Promise<void> {
 
   if (!prodUrl) throw new Error("PRODUCTION_DATABASE_URL is not set");
   if (!devUrl) throw new Error("DATABASE_URL is not set");
+  if (process.env.DPF_ENVIRONMENT !== "dev") {
+    throw new Error("Sanitized Contributor preview provisioning requires DPF_ENVIRONMENT=dev");
+  }
+  const previewPassword = requireContributorPreviewPassword(
+    process.env.CONTRIBUTOR_PREVIEW_PASSWORD,
+  );
 
   const prodAdapter = new PrismaPg({ connectionString: prodUrl });
   const devAdapter = new PrismaPg({ connectionString: devUrl });
@@ -399,6 +425,8 @@ export async function runSanitizedClone(): Promise<void> {
             await insertRowsWithReplicationDisabled(dev, tablename, obfuscated);
           }
         }
+
+        await provisionContributorPreviewAdmin(dev, previewPassword);
       },
     );
 
@@ -489,17 +517,7 @@ function obfuscateRows(
     const idx = userId && userIdMap.has(userId)
       ? userIdMap.get(userId)!
       : nextIndex();
-    const result: Record<string, unknown> = {};
-    for (const [key, value] of Object.entries(row)) {
-      if (typeof value === "string" && key in PII_FIELDS) {
-        result[key] = obfuscateField(value, key, idx);
-      } else if (key === "passwordHash") {
-        result[key] = "$2a$10$devhashplaceholdernotreal000000000000000000000";
-      } else {
-        result[key] = value;
-      }
-    }
-    return result;
+    return sanitizeConfidentialRow(row, idx);
   });
 }
 
