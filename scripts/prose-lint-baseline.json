@@ -1343,13 +1343,6 @@
     "longSentences": 0,
     "textMass": 154
   },
-  "apps/web/app/(shell)/platform/ai/decisions/[interactionId]/page.tsx": {
-    "vocabulary": 0,
-    "genericLabels": 0,
-    "readability": 0,
-    "longSentences": 0,
-    "textMass": 3
-  },
   "apps/web/app/(shell)/platform/ai/founder-review/page.tsx": {
     "vocabulary": 0,
     "genericLabels": 0,
@@ -3050,6 +3043,34 @@
     "readability": 0,
     "longSentences": 0,
     "textMass": 4
+  },
+  "apps/web/app/api/v1/surfaces/[sessionId]/act/route.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 6
+  },
+  "apps/web/app/api/v1/surfaces/[sessionId]/client-state/route.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 23
+  },
+  "apps/web/app/api/v1/surfaces/[sessionId]/route.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 12
+  },
+  "apps/web/app/api/v1/surfaces/route.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 10
   },
   "apps/web/app/api/v1/upload/route.ts": {
     "vocabulary": 0,
@@ -5548,7 +5569,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 40
+    "textMass": 52
   },
   "apps/web/components/inventory/DataEnrichmentHelpNote.tsx": {
     "vocabulary": 0,
@@ -5562,7 +5583,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 120
+    "textMass": 117
   },
   "apps/web/components/inventory/DiscoveryRunSummary.tsx": {
     "vocabulary": 0,
