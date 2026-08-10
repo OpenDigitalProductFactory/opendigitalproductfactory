@@ -62,7 +62,12 @@ const definitions: ToolDefinition[] = [
   },
   {
     name: "create_knowledge_article",
-    description: "Draft a new knowledge article. The article is created in 'draft' status and must be published separately. Use when the user asks to document a process, record a decision, or create a runbook.",
+    description:
+      "Draft a new knowledge article. The article is created in 'draft' status and must be published separately. " +
+      "Use when the user asks to document a process, record a decision, or create a runbook. " +
+      "Requires title, body, and category (process|policy|decision|how-to|reference|troubleshooting|runbook). " +
+      "On failure: fix the payload once — do not re-call with identical args (BI-CAP-D90C6A02). " +
+      "Search knowledge first to avoid near-duplicate drafts.",
     inputSchema: {
       type: "object",
       properties: {
@@ -138,6 +143,22 @@ async function createKnowledgeArticleHandler(params: Record<string, unknown>, us
   const { prisma } = await import("@dpf/db");
   const { storeKnowledgeArticle } = await import("@/lib/semantic-memory");
 
+  const title = String(params["title"] ?? "").trim();
+  const body = String(params["body"] ?? "").trim();
+  const category = String(params["category"] ?? "reference").trim();
+  // BI-CAP-D90C6A02: fail closed on missing required fields so agents do not
+  // re-submit empty drafts in a loop.
+  if (!title || !body || !category) {
+    return {
+      success: false,
+      error: "invalid_input",
+      message:
+        "create_knowledge_article requires non-empty title, body, and category. " +
+        "Do NOT retry with the same empty payload (retryable: false).",
+      data: { retryable: false },
+    };
+  }
+
   // Generate next articleId: KA-001, KA-002, ...
   const lastArticle = await prisma.knowledgeArticle.findFirst({
     orderBy: { createdAt: "desc" },
@@ -148,55 +169,64 @@ async function createKnowledgeArticleHandler(params: Record<string, unknown>, us
     : 1;
   const articleId = `KA-${String(nextNum).padStart(3, "0")}`;
 
-  const title = String(params["title"] ?? "");
-  const body = String(params["body"] ?? "");
-  const category = String(params["category"] ?? "reference");
   const productIds = Array.isArray(params["productIds"]) ? params["productIds"].map(String) : [];
   const portfolioIds = Array.isArray(params["portfolioIds"]) ? params["portfolioIds"].map(String) : [];
   const valueStreams = Array.isArray(params["valueStreams"]) ? params["valueStreams"].map(String) : [];
   const tags = Array.isArray(params["tags"]) ? params["tags"].map(String) : [];
 
-  await prisma.knowledgeArticle.create({
-    data: {
+  try {
+    await prisma.knowledgeArticle.create({
+      data: {
+        articleId,
+        title,
+        body,
+        category,
+        status: "draft",
+        visibility: "internal",
+        authorId: userId,
+        valueStreams,
+        tags,
+        products: productIds.length > 0
+          ? { create: productIds.map((id) => ({ digitalProductId: id })) }
+          : undefined,
+        portfolios: portfolioIds.length > 0
+          ? { create: portfolioIds.map((id) => ({ portfolioId: id })) }
+          : undefined,
+        revisions: {
+          create: {
+            version: 1,
+            title,
+            body,
+            changeSummary: "Initial draft",
+            createdById: userId,
+          },
+        },
+      },
+    });
+
+    // Index into Qdrant
+    await storeKnowledgeArticle({
       articleId,
       title,
       body,
       category,
       status: "draft",
-      visibility: "internal",
-      authorId: userId,
+      productIds,
+      portfolioIds,
       valueStreams,
       tags,
-      products: productIds.length > 0
-        ? { create: productIds.map((id) => ({ digitalProductId: id })) }
-        : undefined,
-      portfolios: portfolioIds.length > 0
-        ? { create: portfolioIds.map((id) => ({ portfolioId: id })) }
-        : undefined,
-      revisions: {
-        create: {
-          version: 1,
-          title,
-          body,
-          changeSummary: "Initial draft",
-          createdById: userId,
-        },
-      },
-    },
-  });
-
-  // Index into Qdrant
-  await storeKnowledgeArticle({
-    articleId,
-    title,
-    body,
-    category,
-    status: "draft",
-    productIds,
-    portfolioIds,
-    valueStreams,
-    tags,
-  });
+    });
+  } catch (error) {
+    const { getErrorMessage } = await import("@/lib/shared/get-error-message");
+    return {
+      success: false,
+      error: "create_failed",
+      message:
+        `create_knowledge_article failed: ${getErrorMessage(error)}. ` +
+        "Fix title/body/category/links; do NOT re-submit identical args (retryable: false).",
+      data: { retryable: false },
+    };
+  }
 
   return {
     success: true,
