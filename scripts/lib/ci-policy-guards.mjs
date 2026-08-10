@@ -130,6 +130,10 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
     guard("compose-env-contract-guard", "Compose Env Contract Guard", [
       node("scripts/check-compose-env-contract.mjs"),
     ]),
+    guard("compose-resource-budgets-guard", "Compose Resource Budgets Guard", [
+      node("--test", "scripts/check-compose-resource-budgets.test.mjs"),
+      node("scripts/check-compose-resource-budgets.mjs"),
+    ]),
     guard("n-minus-one-caller-honesty", "N-1 Caller Honesty", [
       node("--test", "scripts/check-n-minus-one-caller-honesty.test.mjs"),
       node("scripts/check-n-minus-one-caller-honesty.mjs"),
