@@ -288,12 +288,12 @@
     ],
     ".github/workflows/codeql.yml": [
       "docs/security/2026-05-24-shift-left-rollout.md",
-      "docs/security/codeql-advanced-setup.md",
       "docs/security/secrets-scan.md",
       "docs/testing/pre-pr-gate.md"
     ],
     ".github/workflows/install-verification.yml": [
-      "docs/install/linux.md"
+      "docs/install/linux.md",
+      "docs/maintenance/staleness-report.md"
     ],
     ".github/workflows/migration-safety-guard.yml": [
       "docs/architecture/orientation.md"
@@ -312,6 +312,7 @@
       "docs/security/secrets-scan.md"
     ],
     ".github/workflows/security-inflow-gate.yml": [
+      "docs/maintenance/staleness-report.md",
       "docs/security/2026-05-24-shift-left-rollout.md",
       "docs/security/README.md",
       "docs/security/secrets-scan.md"
@@ -427,7 +428,8 @@
       "docs/user-guide/ai-workforce/coworker-proactivity.md"
     ],
     "apps/web/components/shell/SectionNav.tsx": [
-      "docs/architecture/section-navigation.md"
+      "docs/architecture/section-navigation.md",
+      "docs/maintenance/staleness-report.md"
     ],
     "apps/web/components/shell/shell-action-result-contract.test.tsx": [
       "docs/platform-usability-standards.md"
@@ -616,7 +618,8 @@
     ],
     "apps/web/lib/ea/ai-routing-architecture-registry.ts": [
       "docs/architecture/2026-06-14-ai-cockpit-sysml-architecture-note.md",
-      "docs/architecture/ai-routing-document-map.md"
+      "docs/architecture/ai-routing-document-map.md",
+      "docs/maintenance/staleness-report.md"
     ],
     "apps/web/lib/ea/reconcile-ai-routing-architecture.ts": [
       "docs/architecture/ai-routing-document-map.md"
@@ -681,7 +684,8 @@
     ],
     "apps/web/lib/inference/routed-inference.ts": [
       "docs/architecture/2026-06-14-odysseus-review-depth-pass.md",
-      "docs/architecture/ai-routing-document-map.md"
+      "docs/architecture/ai-routing-document-map.md",
+      "docs/maintenance/staleness-report.md"
     ],
     "apps/web/lib/integrate/build-orchestrator.ts": [
       "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md",
@@ -768,7 +772,8 @@
       "docs/professions/data-architect/wiki/mdm-what-it-does-and-does-not-do.md"
     ],
     "apps/web/lib/navigation/section-nav-model.ts": [
-      "docs/architecture/section-navigation.md"
+      "docs/architecture/section-navigation.md",
+      "docs/maintenance/staleness-report.md"
     ],
     "apps/web/lib/operate/db-continuity.ts": [
       "docs/architecture/delivery-surfaces-runbook.md"
@@ -780,7 +785,8 @@
       "docs/architecture/capability-driven-runtime-profiles.md"
     ],
     "apps/web/lib/platform-runtime/operational-state.ts": [
-      "docs/architecture/capability-driven-runtime-profiles.md"
+      "docs/architecture/capability-driven-runtime-profiles.md",
+      "docs/maintenance/staleness-report.md"
     ],
     "apps/web/lib/proactivity/proactivity-roster.ts": [
       "docs/user-guide/ai-workforce/coworker-proactivity.md"
@@ -1077,9 +1083,7 @@
       "docs/operations/observability-coverage.md"
     ],
     "docker-compose.tls.yml": [
-      "docs/install/edge-node-multi-host.md",
-      "docs/install/verification-runbook.md",
-      "docs/security/tool-evaluations/2026-07-20-step-ca.md"
+      "docs/install/edge-node-multi-host.md"
     ],
     "docker-compose.yml": [
       "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md",
@@ -1200,6 +1204,7 @@
       "docs/operations/ai-provider-compliance-source-renewal-runbook.md"
     ],
     "packages/db/src/regulation-applicability.ts": [
+      "docs/maintenance/staleness-report.md",
       "docs/strategy/2026-09-cada-architects-forum-deck.md"
     ],
     "packages/db/src/seed-decision-perspective.ts": [
@@ -1279,6 +1284,7 @@
     ],
     "packages/storefront-templates/src/archetypes/index.ts": [
       "docs/architecture/four-portfolio-archetype-standard-profile-catalog.md",
+      "docs/maintenance/staleness-report.md",
       "docs/testing/archetype-audit-plan.md"
     ],
     "packages/storefront-templates/src/archetypes/retail-goods.ts": [
@@ -1374,7 +1380,8 @@
       "docs/testing/pre-pr-gate.md"
     ],
     "scripts/check-module-size.mjs": [
-      "docs/architecture/mcp-tool-packs.md"
+      "docs/architecture/mcp-tool-packs.md",
+      "docs/maintenance/staleness-report.md"
     ],
     "scripts/check-no-dialog-in-transition.mjs": [
       "docs/architecture/theme-aware-styling-runbook.md"
@@ -1416,6 +1423,7 @@
     ],
     "scripts/check-style-drift.mjs": [
       "docs/architecture/ui-token-styling.md",
+      "docs/maintenance/staleness-report.md",
       "docs/platform-usability-standards.md"
     ],
     "scripts/check-tool-surface.mjs": [
@@ -1450,6 +1458,7 @@
     ],
     "scripts/dpf-compose.mjs": [
       "docs/architecture/capability-driven-runtime-profiles.md",
+      "docs/maintenance/staleness-report.md",
       "docs/operations/install.md"
     ],
     "scripts/fresh-install.ps1": [
@@ -1489,7 +1498,6 @@
     ],
     "scripts/lib/ci-policy-guards.mjs": [
       "docs/architecture/context-engineering-standards.md",
-      "docs/maintenance/staleness-report.md",
       "docs/testing/pre-pr-gate.md"
     ],
     "scripts/lib/compose-safety.mjs": [
@@ -1519,6 +1527,7 @@
     ],
     "scripts/lib/resolve-capability-compose-profiles.mjs": [
       "docs/architecture/capability-driven-runtime-profiles.md",
+      "docs/maintenance/staleness-report.md",
       "docs/operations/install.md"
     ],
     "scripts/local-ci-pilot-report.mjs": [
@@ -1554,10 +1563,12 @@
       "docs/architecture/platform-substrate-boundaries.md"
     ],
     "scripts/pr-health.mjs": [
+      "docs/maintenance/staleness-report.md",
       "docs/testing/pr-health.md",
       "docs/testing/pre-pr-gate.md"
     ],
     "scripts/pr-health.test.mjs": [
+      "docs/maintenance/staleness-report.md",
       "docs/testing/pr-health.md"
     ],
     "scripts/probes/marketing-media/local-render-receipt.json": [
@@ -2314,7 +2325,6 @@
     "docs/install/verification-runbook.md": [
       ".github/workflows/release-gates.yml",
       "apps/web/scripts/issue-edge-bootstrap-token.ts",
-      "docker-compose.tls.yml",
       "services/edge-node/scripts/verify-lifecycle.ts"
     ],
     "docs/maintenance/README.md": [
@@ -2325,8 +2335,22 @@
       "scripts/measure-doc-staleness-coverage.mjs"
     ],
     "docs/maintenance/staleness-report.md": [
+      ".github/workflows/install-verification.yml",
+      ".github/workflows/security-inflow-gate.yml",
+      "apps/web/components/shell/SectionNav.tsx",
+      "apps/web/lib/ea/ai-routing-architecture-registry.ts",
+      "apps/web/lib/inference/routed-inference.ts",
+      "apps/web/lib/navigation/section-nav-model.ts",
+      "apps/web/lib/platform-runtime/operational-state.ts",
+      "packages/db/src/regulation-applicability.ts",
+      "packages/storefront-templates/src/archetypes/index.ts",
       "scripts/build-docs-staleness.mjs",
-      "scripts/lib/ci-policy-guards.mjs"
+      "scripts/check-module-size.mjs",
+      "scripts/check-style-drift.mjs",
+      "scripts/dpf-compose.mjs",
+      "scripts/lib/resolve-capability-compose-profiles.mjs",
+      "scripts/pr-health.mjs",
+      "scripts/pr-health.test.mjs"
     ],
     "docs/operations/ai-provider-compliance-source-renewal-runbook.md": [
       "apps/web/lib/routing/provider-suitability/provider-compliance-advisory.ts",
@@ -2458,16 +2482,12 @@
       ".github/codeql/codeql-config.yml",
       ".github/codeql/dpf-sanitizers/dpf-sanitizers.model.yml",
       ".github/codeql/dpf-sanitizers/qlpack.yml",
-      ".github/workflows/codeql.yml",
       "apps/web/lib/security/safe-log.ts"
     ],
     "docs/security/secrets-scan.md": [
       ".github/workflows/codeql.yml",
       ".github/workflows/secrets-scan.yml",
       ".github/workflows/security-inflow-gate.yml"
-    ],
-    "docs/security/tool-evaluations/2026-07-20-step-ca.md": [
-      "docker-compose.tls.yml"
     ],
     "docs/security/tool-evaluations/2026-08-01-marketing-media-stack.md": [
       "scripts/probes/marketing-media/local-render-receipt.json"
