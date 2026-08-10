@@ -48,7 +48,10 @@ const definitions: ToolDefinition[] = [
   },
   {
     name: "get_quiescence_status",
-    description: "Read quiescence, blockers, write availability, coordinator state, and retry guidance before CI.",
+    description:
+      "Read quiescence, blockers, write availability, coordinator state, and retry guidance before CI or mutating MCP writes. " +
+      "Call once at the start of a write/CI sequence; when level is normal and writesRefused is false, do not re-poll every tool call (BI-MCP-EFF-A5FD3BFD — 1278 calls was waste). " +
+      "Re-check only after a refused write, a self-upgrade notice, or when retryAfterSeconds elapses.",
     inputSchema: {
       type: "object",
       properties: {},

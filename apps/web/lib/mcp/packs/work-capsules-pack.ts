@@ -209,7 +209,11 @@ const definitions: ToolDefinition[] = [
   },
   {
     name: "release_capsule_scope",
-    description: "Release previously claimed Work Capsule scope items by kind and value.",
+    description:
+      "Release previously claimed Work Capsule scope items by kind and value. " +
+      "Requires capsuleId plus claims: [{kind, value}, ...]. Call once per handoff with the full claim set — " +
+      "do not release item-by-item in a loop (BI-MCP-EFF-1ED7A911 high volume). " +
+      "Idempotent when claims are already absent; do not retry on success.",
     inputSchema: {
       type: "object",
       properties: {
