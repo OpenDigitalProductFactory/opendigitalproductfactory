@@ -56,6 +56,8 @@ describe("tierForProfileKind", () => {
 describe("tierForGateKey", () => {
   it("maps gate keys onto the three governance tiers", () => {
     expect(tierForGateKey("build-studio")).toBe("wwmd");
+    expect(tierForGateKey("backlog-triage")).toBe("wwmd");
+    expect(tierForGateKey("kernel-consult")).toBe("wwmd");
     expect(tierForGateKey("org-business")).toBe("wwwd");
     expect(tierForGateKey("profession")).toBe("wsid");
     expect(tierForGateKey("not-a-gate")).toBe("other");
