@@ -33,7 +33,7 @@ const definitions: ToolDefinition[] = [{
   name: "review_semantic_change",
   description:
     "Independently review an immutable committed change before its first publication, record one fresh semantic-review receipt on the Work Capsule, and return whether the author should publish, repair, or escalate. " +
-    "Call ONCE per committed (baseTreeHash, headTreeHash, diffDigest) identity — not as a status poll (BI-MCP-EFF-F345FEE0). " +
+    "Call ONCE per committed (baseTreeHash, headTreeHash, diffDigest) identity — not as a status poll. " +
     "After a publish/repair/escalate decision, do not re-call until the tree digests change. repairRound > 2 escalates instead of looping.",
   inputSchema: {
     type: "object",
