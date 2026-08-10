@@ -29,10 +29,11 @@ describe("ArchetypeReadinessMatrixPanel", () => {
     for (const record of ARCHETYPE_READINESS_MATRIX) {
       expect(html).toContain(formatArchetypeReadinessLabel(record.archetypeCategory));
     }
-    expect(html).toContain("Claim gate in effect");
+    expect(html).toContain("Claim gate is on");
     expect(html).toContain("Template Ready");
     expect(html).toContain("Sole Platform Ready");
     expect(html).toContain("BI-PSC-010");
     expect(html).toContain("BI-903F5A94");
+    expect(html).toContain("Category claim table");
   });
 });

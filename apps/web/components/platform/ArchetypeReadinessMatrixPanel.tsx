@@ -55,38 +55,39 @@ export function ArchetypeReadinessMatrixPanel({
         <KpiCard
           value={summary.opsReadyCategories}
           label="Ops ready"
-          hint="Current category claims"
+          hint="At least ops-ready today"
           intent={summary.opsReadyCategories > 0 ? "success" : "neutral"}
           size="sm"
         />
         <KpiCard
           value={summary.solePlatformReadyCategories}
-          label="Sole platform ready"
-          hint="Requires portability and action integrity"
+          label="Sole-platform ready"
+          hint="Needs full proof pack"
           intent={summary.solePlatformReadyCategories > 0 ? "success" : "danger"}
           size="sm"
         />
       </div>
 
-      <Notice variant="warn" title="Claim gate in effect" icon={false}>
-        Template-ready means template coverage only. Higher claims need completed operational,
-        connector, regulated, portability, and AI action-integrity evidence.
+      <Notice variant="warn" title="Claim gate is on" icon={false}>
+        Template ready means only a template exists. Higher claims need more proof.
       </Notice>
 
       {summary.categoriesMissingVerticalLane > 0 ? (
-        <Notice variant="info" title="Vertical readiness mapping gap" icon={false}>
+        <Notice variant="info" title="Some rows need a vertical epic" icon={false}>
           {summary.categoriesMissingVerticalLane} categor
-          {summary.categoriesMissingVerticalLane === 1 ? "y has" : "ies have"} no mapped
-          category-level vertical-readiness epic in the matrix.
+          {summary.categoriesMissingVerticalLane === 1 ? "y has" : "ies have"} no vertical
+          epic yet.
         </Notice>
       ) : null}
 
-      {/* Full matrix + tier prose stay collapsed on arrival so the net-new
-          detail shell stays under the UX word budget (CI measured 1390 default
-          words with the table open). Expand to scan claim blockers. */}
-      <details className="rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-4">
+      {/* Full matrix stays collapsed on arrival so the net-new detail shell stays
+          under the UX word budget. Expand to scan claim blockers. */}
+      <details
+        id="archetype-claim-matrix"
+        className="rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-4"
+      >
         <summary className="cursor-pointer text-sm font-semibold text-[var(--dpf-text)]">
-          Category claim matrix ({rows.length} categories)
+          Category claim table ({rows.length} categories)
         </summary>
         <div className="mt-3">
           <ArchetypeReadinessMatrixTable rows={rows} />
