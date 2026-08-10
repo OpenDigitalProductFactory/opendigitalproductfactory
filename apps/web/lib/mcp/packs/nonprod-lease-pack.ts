@@ -93,7 +93,10 @@ const hostPressureSchema = {
 const definitions: ToolDefinition[] = [
   {
     name: "list_nonprod_environment_leases",
-    description: "List admitted and queued nonproduction environment leases so agents can reuse governed shared localhost environments instead of starting unmanaged servers.",
+    description:
+      "List admitted and queued nonproduction environment leases so agents can reuse governed shared localhost environments instead of starting unmanaged servers. " +
+      "Call once before claim/release decisions; do not poll this tool in a tight loop. " +
+      "Cache the result for the current decision step; re-list only after a claim/release/renew you initiated.",
     inputSchema: {
       type: "object",
       properties: {},
@@ -176,7 +179,10 @@ const definitions: ToolDefinition[] = [
   },
   {
     name: "release_nonprod_environment_lease",
-    description: "Release a governed shared nonproduction environment lease after verification is complete or blocked.",
+    description:
+      "Release a governed shared nonproduction environment lease after verification is complete or blocked. " +
+      "Requires leaseId from claim. Idempotent on already-released leases — do not thrash release after success. " +
+      "On not_found: stop; list_nonprod_environment_leases for live ids (retryable: false).",
     inputSchema: {
       type: "object",
       properties: {
