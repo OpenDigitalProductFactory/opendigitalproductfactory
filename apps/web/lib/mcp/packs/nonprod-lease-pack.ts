@@ -95,7 +95,7 @@ const definitions: ToolDefinition[] = [
     name: "list_nonprod_environment_leases",
     description:
       "List admitted and queued nonproduction environment leases so agents can reuse governed shared localhost environments instead of starting unmanaged servers. " +
-      "Call once before claim/release decisions; do not poll this tool in a tight loop (BI-MCP-EFF-148E847C — 1174 list calls was waste). " +
+      "Call once before claim/release decisions; do not poll this tool in a tight loop. " +
       "Cache the result for the current decision step; re-list only after a claim/release/renew you initiated.",
     inputSchema: {
       type: "object",
@@ -138,7 +138,7 @@ const definitions: ToolDefinition[] = [
     name: "claim_nonprod_environment_lease",
     description:
       "Request admission to a governed shared nonproduction environment for preview, UX verification, or local integration. " +
-      "Reusing claimKey returns the same durable queue entry (idempotent wait — BI-MCP-EFF-8815EA40). " +
+      "Reusing claimKey returns the same durable queue entry (idempotent wait). " +
       "Do not open a second claim for the same session/purpose while one is queued or active.",
     inputSchema: {
       type: "object",
@@ -180,7 +180,7 @@ const definitions: ToolDefinition[] = [
     name: "release_nonprod_environment_lease",
     description:
       "Release a governed shared nonproduction environment lease after verification is complete or blocked. " +
-      "Requires leaseId from claim. Idempotent on already-released leases — do not thrash release after success (BI-MCP-EFF-B68C5ABC). " +
+      "Requires leaseId from claim. Idempotent on already-released leases — do not thrash release after success. " +
       "On not_found: stop; list_nonprod_environment_leases for live ids (retryable: false).",
     inputSchema: {
       type: "object",
