@@ -147,6 +147,10 @@ export async function recordKernelConsultInteraction(input: {
     usable: boolean;
     optionsWithFeatures: number;
     optionCount: number;
+    /** BI-1D23EC26 */
+    autonomyEligible?: boolean;
+    featureCoverageWeak?: boolean;
+    sensitivityUnstable?: boolean;
   } | null;
   /**
    * Trust-envelope evidence grounding (BI-EA97E5CD). Admissible per-(option,
@@ -296,6 +300,13 @@ export async function recordKernelConsultInteraction(input: {
         optionsWithFeatures: input.signalQuality?.optionsWithFeatures ?? null,
         optionCount: input.signalQuality?.optionCount ?? null,
         signalUsable: input.signalQuality?.usable ?? null,
+        // BI-1D23EC26 MCDA quality gates (queryable autonomy evidence)
+        autonomyEligible: input.signalQuality?.autonomyEligible ?? null,
+        featureCoverageWeak: input.signalQuality?.featureCoverageWeak ?? null,
+        sensitivityUnstable: input.signalQuality?.sensitivityUnstable ?? null,
+        featureCoverage: input.result.flags.featureCoverage ?? null,
+        sensitivity: input.result.flags.sensitivity ?? null,
+        autonomyBlockers: input.result.flags.autonomyBlockers ?? null,
         optionDescriptions: input.optionDescriptions,
         topContributors,
       },

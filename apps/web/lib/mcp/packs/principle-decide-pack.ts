@@ -275,6 +275,14 @@ async function principleDecide(
     PRINCIPLE_DECIDE_DEFAULTS.contextualSimilarityThreshold;
   const semanticWarnRatio =
     PRINCIPLE_DECIDE_DEFAULTS.semanticFallbackWarnRatio;
+  const minFeatureKeys =
+    typeof params["minFeatureKeys"] === "number"
+      ? params["minFeatureKeys"]
+      : PRINCIPLE_DECIDE_DEFAULTS.minFeatureKeys;
+  const sensitivityEpsilon =
+    typeof params["sensitivityEpsilon"] === "number"
+      ? params["sensitivityEpsilon"]
+      : PRINCIPLE_DECIDE_DEFAULTS.sensitivityEpsilon;
 
   const org = await prisma.organization
     .findFirst({ select: { id: true } })
@@ -632,6 +640,8 @@ async function principleDecide(
   const result = decide(decisionOptions, cappedPrinciples, {
     tieMargin,
     semanticFallbackWarnRatio: semanticWarnRatio,
+    minFeatureKeys,
+    sensitivityEpsilon,
   });
 
   // BI-E1FB2307: resolve which decision-perspective profile governs this
@@ -684,6 +694,8 @@ async function principleDecide(
     !result.flags.insufficientSignal &&
     result.recommendation !== null &&
     !retrievalDegraded;
+  // BI-1D23EC26: unattended autonomy requires stricter gates than "usable".
+  const autonomyEligible = result.flags.autonomyEligible === true && usable;
   const degradedAdvisory =
     "EMBEDDING PROVIDER UNAVAILABLE — only commandment-tier principles were consulted; " +
     "core and contextual retrieval returned nothing because the query could not be embedded, " +
@@ -691,14 +703,23 @@ async function principleDecide(
     "Restore the provider (docker model pull ai/nomic-embed-text-v1.5), then re-run.";
   const signalQuality = {
     usable,
+    /** True only when high-confidence + coverage + sensitivity + no conflict. */
+    autonomyEligible,
+    autonomyBlockers: result.flags.autonomyBlockers ?? [],
     insufficientSignal: result.flags.insufficientSignal,
     retrievalDegraded,
     structuredCoverage: result.flags.structuredCoverage,
     semanticFallbackRatio: result.flags.semanticFallbackRatio,
+    featureCoverageWeak: result.flags.featureCoverageWeak === true,
+    sensitivityUnstable: result.flags.sensitivityUnstable === true,
+    featureCoverage: result.flags.featureCoverage ?? null,
+    sensitivity: result.flags.sensitivity ?? null,
     optionsWithFeatures,
     optionCount: decisionOptions.length,
     advisory: usable
-      ? null
+      ? autonomyEligible
+        ? null
+        : `Recommendation is advisory only — autonomyEligible=false (${(result.flags.autonomyBlockers ?? []).join(", ") || "quality gates"}). Do not auto-execute without operator ratification.`
       : retrievalDegraded
         ? degradedAdvisory
         : optionsWithFeatures === 0
@@ -707,7 +728,7 @@ async function principleDecide(
   };
 
   const summary = usable
-    ? `Recommends ${result.recommendation!.optionId} (confidence: ${result.recommendation!.confidence}, composite ${result.recommendation!.composite.toFixed(3)}; governing profile: ${governingProfile.governingProfileKind})`
+    ? `Recommends ${result.recommendation!.optionId} (confidence: ${result.recommendation!.confidence}, composite ${result.recommendation!.composite.toFixed(3)}; autonomyEligible: ${autonomyEligible}; governing profile: ${governingProfile.governingProfileKind})`
     : retrievalDegraded
       ? `NO RECOMMENDATION — signalQuality.retrievalDegraded=true. ${degradedAdvisory}`
       : `NO RECOMMENDATION — signalQuality.usable=false. ${result.reasoning} ${signalQuality.advisory}`;
@@ -746,6 +767,10 @@ async function principleDecide(
       usable: signalQuality.usable,
       optionsWithFeatures: signalQuality.optionsWithFeatures,
       optionCount: signalQuality.optionCount,
+      // BI-1D23EC26 — autonomy + MCDA quality (persisted for audit)
+      autonomyEligible: signalQuality.autonomyEligible,
+      featureCoverageWeak: signalQuality.featureCoverageWeak,
+      sensitivityUnstable: signalQuality.sensitivityUnstable,
     },
     // Trust-envelope: persist evidence citations onto the ledger row and seal
     // the decision into the append-only hash chain (BI-EA97E5CD / BI-81CC5D8E).
