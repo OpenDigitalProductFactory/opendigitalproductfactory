@@ -97,9 +97,13 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         "scripts/lib/ci-build-artifact.test.mjs",
         "scripts/lib/ci-evidence-plan.test.mjs",
         "scripts/ci-policy-guards.test.mjs",
+        // BI-812C676D: every covered-root *.test.mjs must appear here or on the
+        // deliberate allowlist — otherwise CI stays green while the test never runs.
+        "scripts/lib/ci-policy-test-inventory.test.mjs",
         "scripts/pregate-preflight.test.mjs",
         "scripts/gate-context.test.mjs",
       ),
+      node("scripts/check-ci-policy-test-inventory.mjs"),
     ]),
     guard("mobile-jest-pin-guard", "Mobile Jest Pin Guard", [
       node("scripts/check-mobile-jest-pin.mjs"),
