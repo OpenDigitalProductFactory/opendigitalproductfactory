@@ -30,7 +30,10 @@ const definitions: ToolDefinition[] = [
   {
     name: "principle_decide",
     description:
-      "Advisory only. Score a set of options against the governance principles in scope for the calling population, and return a recommendation plus a per-principle contribution ledger. Uses commandments from Postgres (always included) and relevant core/contextual principles from semantic search. Does not execute the recommended option; the caller retains authority. Use when you have two or more options and want to surface which governance principles pull which way.",
+      "Advisory only. Score a set of options against the governance principles in scope for the calling population, and return a recommendation plus a per-principle contribution ledger. " +
+      "Uses commandments from Postgres (always included) and relevant core/contextual principles from semantic search. Does not execute the recommended option; the caller retains authority. " +
+      "Use when you have two or more options and want to surface which governance principles pull which way. " +
+      "Call once per distinct option set — do not re-score identical options hoping for a different winner.",
     inputSchema: {
       type: "object",
       properties: {
