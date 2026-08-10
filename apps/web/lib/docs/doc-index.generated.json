@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 627,
+  "pageCount": 628,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -325,6 +325,36 @@
         "gap-analysis-by-platform-adequacy-dimension",
         "guardrails-for-future-agents",
         "recovery-notes"
+      ]
+    },
+    "docs/architecture/2026-08-09-portal-architecture-hardening-findings.md": {
+      "publicHref": "/architecture/2026-08-09-portal-architecture-hardening-findings/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "portal-architecture-hardening-findings",
+        "1-purpose",
+        "2-method",
+        "3-evidence-base-prior-review-lineage",
+        "31-what-moved-since-2026-06-22-2026-07-27",
+        "4-executive-verdict",
+        "5-quality-dimension-findings",
+        "51-stability",
+        "52-scalability",
+        "53-reliability-incl-resilience-recoverability",
+        "54-upgradeability",
+        "55-supportability-incl-operability-maintainability",
+        "56-security-data-protection-related",
+        "57-observability-related",
+        "58-ai-action-integrity-signature-risk",
+        "59-maintainability-evolvability-related",
+        "6-best-in-class-comparison",
+        "7-architectural-drift-inventory",
+        "8-prioritized-hardening-recommendations",
+        "9-assumed-limits",
+        "10-spot-check-claims-verification-anchors",
+        "11-conclusion"
       ]
     },
     "docs/architecture/GAID.md": {
