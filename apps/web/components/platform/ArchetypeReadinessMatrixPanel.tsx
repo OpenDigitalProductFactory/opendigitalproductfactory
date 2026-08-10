@@ -81,7 +81,17 @@ export function ArchetypeReadinessMatrixPanel({
         </Notice>
       ) : null}
 
-      <ArchetypeReadinessMatrixTable rows={rows} />
+      {/* Full matrix + tier prose stay collapsed on arrival so the net-new
+          detail shell stays under the UX word budget (CI measured 1390 default
+          words with the table open). Expand to scan claim blockers. */}
+      <details className="rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-4">
+        <summary className="cursor-pointer text-sm font-semibold text-[var(--dpf-text)]">
+          Category claim matrix ({rows.length} categories)
+        </summary>
+        <div className="mt-3">
+          <ArchetypeReadinessMatrixTable rows={rows} />
+        </div>
+      </details>
 
       <details className="rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-4">
         <summary className="cursor-pointer text-sm font-semibold text-[var(--dpf-text)]">

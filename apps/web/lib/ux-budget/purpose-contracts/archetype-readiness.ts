@@ -34,9 +34,13 @@ export const ARCHETYPE_READINESS_PURPOSE_CONTRACTS: PurposeContractModule = [
           "ops-ready-count",
           "sole-platform-ready-count",
           "claim-gate-notice",
-          "readiness-matrix",
         ],
         deferredRegions: [
+          {
+            key: "readiness-matrix",
+            role: "Per-category highest claim tier, blocked higher claims, and evidence references.",
+            trigger: "Operator expands 'Category claim matrix'.",
+          },
           {
             key: "tier-definitions",
             role: "Detailed tier meanings for template-ready, ops-ready, connector-ready, regulated-ready, and sole-platform-ready claims.",
@@ -52,7 +56,7 @@ export const ARCHETYPE_READINESS_PURPOSE_CONTRACTS: PurposeContractModule = [
         feedbackPrimitive:
           "Inline report badges and notices communicate claim status; there are no dialogs or destructive actions.",
         disclosurePattern:
-          "Summary counts and the readiness table are visible by default; tier definitions are collapsed until requested.",
+          "Summary KPI cards and the claim-gate notice are visible on arrival; the full category matrix and tier definitions expand on demand so the detail shell stays under the net-new word budget.",
         returnBehavior:
           "The operator returns to the Platform Hub through the same Overview navigation family.",
       },
