@@ -21,7 +21,7 @@ const definitions: ToolDefinition[] = [
   {
     name: "get_ai_platform_posture",
     description:
-      "Read authoritative, real-time AI-layer state in one call: provider status/config, ModelProfile tiers/capabilities/toolFidelity, token spend per provider and per agent (current calendar month), failover-chain integrity (fallback rate + recent fallback chains + provider error codes over a lookback window), agent-to-provider assignment (which provider each agent was most routed to recently), and scheduled-task status (both per-user recurring agent tasks and the platform cron catalog). Read-only — grounds AI-ops posture reporting in real data instead of derived capability-needs feedback.",
+      "Read authoritative, real-time AI-layer state in one call: provider status/config, ModelProfile tiers/capabilities/toolFidelity, token spend per provider and per agent (current calendar month), failover-chain integrity (fallback rate + recent fallback chains + provider error codes over a lookback window), agent-to-provider assignment (which provider each agent was most routed to recently), and scheduled-task status (both per-user recurring agent tasks and the platform cron catalog). Read-only — grounds AI-ops posture reporting in real data instead of derived capability-needs feedback. Call once at the start of a posture review. Cache the result for the session rather than re-polling. On errors, fix grants or runtime readiness once; do not blind-retry identical calls.",
     inputSchema: {
       type: "object",
       properties: {

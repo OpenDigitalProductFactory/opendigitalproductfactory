@@ -858,45 +858,94 @@ if ((Test-StepDone "wsl2_partial") -and -not (Test-StepDone "wsl2")) {
     Save-Progress "wsl2"
 }
 
-# Cap WSL2's built-in crash-dump collector (Microsoft Learn: "Advanced settings
-# configuration in WSL", maxCrashDumpCount under [wsl2]). Left uncapped, every
-# ephemeral process that aborts inside a WSL-backed Docker container writes a
-# dump to %LOCALAPPDATA%\Temp\wsl-crashes with no automatic cleanup -- observed
-# reaching 60GB+ and filling the system drive on a dev box running many
-# parallel containerized builds. Runs on every install/reinstall pass (not
-# gated behind Test-StepDone) so it backfills existing installs whose
-# .wslconfig predates this fix, but never overwrites an operator's own
-# explicit choice for this key.
+# Born-bounded WSL2 ceilings (BI-4F3AB6B3) + crash-dump retention.
+# Microsoft Learn: "Advanced settings configuration in WSL" under [wsl2].
+# Runs on every install/reinstall pass (not gated behind Test-StepDone) so it
+# backfills existing installs, but never overwrites an operator's own explicit
+# choice for any key. Sizing mirrors scripts/check-compose-resource-budgets.mjs
+# sizeWslCeilings() / config/install-resource-budgets.json host.wsl policy.
 $wslConfigPath = Join-Path $env:USERPROFILE ".wslconfig"
 $crashDumpCap = 2
-$wslConfigChanged = $false
-if (Test-Path $wslConfigPath) {
-    $wslConfigLines = @(Get-Content -LiteralPath $wslConfigPath)
-    # NOTE: "-notmatch" against an array filters to non-matching elements (almost
-    # always truthy) rather than testing "no element matches" -- use a positive
-    # -match filter and check its Count instead.
-    if (@($wslConfigLines -match "^\s*maxCrashDumpCount\s*=").Count -eq 0) {
-        if (@($wslConfigLines -match "^\s*\[wsl2\]\s*$").Count -gt 0) {
-            # Insert right after the [wsl2] section header.
+$wslMemoryShare = 0.5
+$wslMinMemoryGb = 8
+$wslMaxMemoryGb = 32
+$wslLeaveOsHeadroomGb = 8
+$wslProcessorShare = 0.75
+$wslMinProcessors = 2
+$wslAutoMemoryReclaim = "gradual"
+
+$hostRamGb = [math]::Floor((Get-CimInstance Win32_ComputerSystem).TotalPhysicalMemory / 1GB)
+$hostCpus = (Get-CimInstance Win32_ComputerSystem).NumberOfLogicalProcessors
+if (-not $hostRamGb -or $hostRamGb -le 0) { $hostRamGb = 16 }
+if (-not $hostCpus -or $hostCpus -le 0) { $hostCpus = 4 }
+
+$shareGb = [math]::Floor($hostRamGb * $wslMemoryShare)
+$headroomCapped = [math]::Floor($hostRamGb - $wslLeaveOsHeadroomGb)
+$wslMemoryGb = [math]::Min([math]::Min($shareGb, $headroomCapped), $wslMaxMemoryGb)
+$wslMemoryGb = [math]::Max($wslMemoryGb, [math]::Min($wslMinMemoryGb, $headroomCapped))
+if ($wslMemoryGb -lt 1) { $wslMemoryGb = 1 }
+$wslProcessors = [math]::Floor($hostCpus * $wslProcessorShare)
+$wslProcessors = [math]::Max($wslMinProcessors, $wslProcessors)
+$wslProcessors = [math]::Min($hostCpus, $wslProcessors)
+
+# Keys we may insert when absent. Operator-authored values are never replaced.
+$wslDesiredKeys = [ordered]@{
+    "maxCrashDumpCount" = "$crashDumpCap"
+    "memory"            = "${wslMemoryGb}GB"
+    "processors"        = "$wslProcessors"
+    "autoMemoryReclaim" = $wslAutoMemoryReclaim
+}
+
+function Add-WslConfigKeysIfMissing {
+    param(
+        [string]$Path,
+        [System.Collections.Specialized.OrderedDictionary]$Desired
+    )
+    $changed = $false
+    $added = New-Object System.Collections.Generic.List[string]
+    if (Test-Path -LiteralPath $Path) {
+        $lines = @(Get-Content -LiteralPath $Path)
+    } else {
+        $lines = @()
+    }
+
+    foreach ($key in $Desired.Keys) {
+        # NOTE: "-notmatch" against an array filters elements; use Count on -match.
+        if (@($lines -match ("^\s*" + [regex]::Escape($key) + "\s*=")).Count -gt 0) {
+            continue
+        }
+        $entry = "$key=$($Desired[$key])"
+        if (@($lines -match "^\s*\[wsl2\]\s*$").Count -gt 0) {
             $newLines = New-Object System.Collections.Generic.List[string]
-            foreach ($line in $wslConfigLines) {
+            $inserted = $false
+            foreach ($line in $lines) {
                 $newLines.Add($line)
-                if ($line -match "^\s*\[wsl2\]\s*$") {
-                    $newLines.Add("maxCrashDumpCount=$crashDumpCap")
+                if (-not $inserted -and $line -match "^\s*\[wsl2\]\s*$") {
+                    $newLines.Add($entry)
+                    $inserted = $true
                 }
             }
-            Set-Content -LiteralPath $wslConfigPath -Value $newLines
+            $lines = @($newLines)
+        } elseif ($lines.Count -eq 0) {
+            $lines = @("[wsl2]", $entry)
         } else {
-            Add-Content -LiteralPath $wslConfigPath -Value @("", "[wsl2]", "maxCrashDumpCount=$crashDumpCap")
+            $lines = @($lines) + @("", "[wsl2]", $entry)
         }
-        $wslConfigChanged = $true
+        $added.Add($entry)
+        $changed = $true
     }
-} else {
-    Set-Content -LiteralPath $wslConfigPath -Value @("[wsl2]", "maxCrashDumpCount=$crashDumpCap")
-    $wslConfigChanged = $true
+
+    if ($changed) {
+        Set-Content -LiteralPath $Path -Value $lines
+    }
+    return @{ Changed = $changed; Added = $added }
 }
-if ($wslConfigChanged) {
-    Write-OK "Capped WSL crash-dump retention (maxCrashDumpCount=$crashDumpCap) in .wslconfig"
+
+$wslResult = Add-WslConfigKeysIfMissing -Path $wslConfigPath -Desired $wslDesiredKeys
+if ($wslResult.Changed) {
+    Write-OK ("Born-bounded WSL ceilings written to .wslconfig (host {0}GB RAM / {1} CPUs): {2}" -f $hostRamGb, $hostCpus, ($wslResult.Added -join ", "))
+    Write-Host "  Note: .wslconfig is inert until the next 'wsl --shutdown' (stops containers)." -ForegroundColor Yellow
+    Write-Host "  Sweep in-flight pregate/local-CI work before cycling WSL (BI-4F3AB6B3)." -ForegroundColor Yellow
 }
 
 # --- Step 3: Docker Desktop ---------------------------------------------------
