@@ -17,7 +17,11 @@ import { backlogStatusToolDefinition } from "./backlog-status-tool-definition";
 export const backlogPackDefinitions: ToolDefinition[] = [
   {
     name: "create_backlog_item",
-    description: "Create a new backlog item in the ops backlog. Use this tool to add new items — do NOT use update_backlog_item for items that do not exist yet. New items default to status=triaging; supply status+triageOutcome together only when explicitly skipping triage (e.g. Build Studio brief intake). When triageOutcome=build, effortSize is required.",
+    description:
+      "Create a new backlog item in the ops backlog. Use this tool to add new items — do NOT use update_backlog_item for items that do not exist yet. " +
+      "New items default to status=triaging; supply status+triageOutcome together only when explicitly skipping triage (e.g. Build Studio brief intake). When triageOutcome=build, effortSize is required. " +
+      "Before creating: list_backlog_items or search_knowledge for an existing BI on the same defect. " +
+      "Do not create-then-recreate on transient errors; read the error and fix the payload once.",
     inputSchema: {
       type: "object",
       properties: {
@@ -129,7 +133,11 @@ export const backlogPackDefinitions: ToolDefinition[] = [
   },
   {
     name: "query_backlog",
-    description: "Query backlog items and epics. Returns items matching the filter criteria with status, priority, and epic information.",
+    description:
+      "Query backlog items and epics. Returns items matching the filter criteria with status, priority, and epic information. " +
+      "Prefer list_backlog_items when you only need item rows with workType/claim filters. " +
+      "Prefer get_next_recommended_work for \"what should I pick next\". " +
+      "Do not poll query_backlog in a tight loop — responses include total/truncated; widen filters or raise limit once instead of thrashing.",
     inputSchema: {
       type: "object",
       properties: {
@@ -203,7 +211,9 @@ export const backlogPackDefinitions: ToolDefinition[] = [
   },
   {
     name: "list_epics",
-    description: "List epics with item-count rollups. Read-only. Filterable by status and whether the epic has open items. Returned epicId is the semantic id (EP-*), not the internal cuid.",
+    description:
+      "List epics with item-count rollups. Read-only. Filterable by status and whether the epic has open items. Returned epicId is the semantic id (EP-*), not the internal cuid. " +
+      "Prefer one filtered list (status/hasOpenItems/limit) over re-listing the full catalog for every decision.",
     inputSchema: {
       type: "object",
       properties: {
@@ -220,7 +230,10 @@ export const backlogPackDefinitions: ToolDefinition[] = [
   },
   {
     name: "list_backlog_items",
-    description: "List backlog items filtered by status, type, workType, source, epic, claim state, or active-build state. Read-only. Returns semantic IDs (BI-*, EP-*) — never cuids.",
+    description:
+      "List backlog items filtered by status, type, workType, source, epic, claim state, or active-build state. Read-only. Returns semantic IDs (BI-*, EP-*) — never cuids. " +
+      "Prefer one filtered list over many get_backlog_item calls. " +
+      "Use status+unclaimed+limit; honor total/truncated instead of re-listing the same page.",
     inputSchema: {
       type: "object",
       properties: {
@@ -271,7 +284,9 @@ export const backlogPackDefinitions: ToolDefinition[] = [
   },
   {
     name: "get_next_recommended_work",
-    description: "Return a short ranked list of backlog items the caller could pick up next. Ranks by spec/plan presence, triage outcome, effort size, priority, and active-build state. Read-only.",
+    description:
+      "Return a short ranked list of backlog items the caller could pick up next. Ranks by spec/plan presence, triage outcome, effort size, priority, and active-build state. Read-only. " +
+      "Call once at session start (or after finishing a BI); pass excludeItemIds for rejected candidates instead of re-polling without filters.",
     inputSchema: {
       type: "object",
       properties: {

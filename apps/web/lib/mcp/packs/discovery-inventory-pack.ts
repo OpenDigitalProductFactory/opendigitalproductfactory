@@ -79,7 +79,7 @@ const definitions: ToolDefinition[] = [
   },
   {
     name: "run_discovery_triage",
-    description: "Run a single discovery triage pass over needs-review and weakly resolved inventory, applying safe high-confidence matches and returning a summary of the run.",
+    description: "Run a single discovery triage pass over needs-review and weakly resolved inventory, applying safe high-confidence matches and returning a summary of the run. Run once per triage window (cadence or volume trigger). Do not loop this tool on the same inventory snapshot. Prefer includeDecisions=false unless you will consume the full decisions array. On failure, inspect the error once — do not blind-retry.",
     inputSchema: {
       type: "object",
       properties: {
