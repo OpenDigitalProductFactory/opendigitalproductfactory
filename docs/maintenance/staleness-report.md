@@ -7,7 +7,7 @@
 > whether the doc's wording actually needs updating (BI-AA5DFEA2). It does NOT
 > mean the doc is definitely wrong.
 
-**142** stale-candidate doc(s).
+**143** stale-candidate doc(s).
 
 | Doc | Drift | Most-recently-changed reference(s) |
 | --- | ----- | ---------------------------------- |
@@ -44,6 +44,7 @@
 | `docs/founder-kernel/wiki/principles/outbound-actions-require-explicit-go.md` | 34d | `docs/founder-kernel/wiki/principles/destructive-actions-require-explicit-go.md` (+34d) |
 | `docs/runbooks/dependency-compromise.md` | 31d | `docs/architecture/dependency-reduction-routine.md` (+31d) |
 | `docs/founder-kernel/wiki/principles/never-auto-execute-irreversible-or-estate-wide-response.md` | 28d | `docs/founder-kernel/wiki/principles/never-wipe-db-for-code-fixes.md` (+28d) |
+| `docs/maintenance/README.md` | 28d | `docs/maintenance/staleness-report.md` (+28d) |
 | `docs/founder-kernel/raw-sources/articles/why-we-ended-up-proposing-two-standards-for-ai-agents.md` | 27d | `docs/architecture/GAID.md` (+27d)<br>`docs/architecture/trusted-ai-kernel.md` (+20d)<br>`docs/architecture/2026-04-18-trusted-ai-agent-governance-white-paper.md` (+14d) |
 | `docs/founder-kernel/wiki/principles/autonomous-directives-are-blanket-approval.md` | 27d | `docs/founder-kernel/wiki/principles/never-ask-user-to-run-commands.md` (+27d) |
 | `docs/founder-kernel/wiki/index.md` | 24d | `docs/founder-kernel/RAW-SOURCES-LICENSE.md` (+24d)<br>`docs/founder-kernel/raw-sources/frameworks/csdm.md` (+24d)<br>`docs/founder-kernel/raw-sources/frameworks/it4it-v3.md` (+24d)<br>…+2 more |
@@ -52,7 +53,6 @@
 | `docs/architecture/platform-substrate-boundaries.md` | 21d | `scripts/platform-substrate-baseline.json` (+21d) |
 | `docs/founder-kernel/wiki/principles/research-before-implementing.md` | 21d | `docs/founder-kernel/wiki/principles/check-tool-signals-first.md` (+21d) |
 | `docs/install/windows.md` | 19d | `docs/install/platform-support-watchlist.md` (+19d)<br>`docs/superpowers/specs/2026-05-09-deployment-contracts.md` (+14d) |
-| `docs/maintenance/README.md` | 19d | `docs/maintenance/staleness-report.md` (+19d) |
 | `docs/testing/archetype-audit-plan.md` | 17d | `packages/storefront-templates/src/archetypes/index.ts` (+17d)<br>`docs/architecture/archetype-business-value-streams.md` (+10d)<br>`docs/superpowers/specs/2026-06-09-bian-banking-archetypes-design.md` (+10d)<br>…+1 more |
 | `docs/architecture/dpf-patterns.md` | 16d | `apps/web/lib/mcp-tools.ts` (+16d)<br>`packages/db/prisma/schema.prisma` (+16d)<br>`docs/founder-kernel/wiki/principles/consult-specs-first.md` (+9d)<br>…+9 more |
 | `docs/founder-kernel/wiki/principles/image-identity-equals-bytes.md` | 16d | `AGENTS.md` (+16d)<br>`docs/superpowers/specs/2026-06-05-unified-delivery-surfaces-execution-alignment-design.md` (+16d) |
@@ -134,13 +134,14 @@
 | `docs/Reference/html-living-standard.md` | 1d | `docs/Reference/sysml-v2.md` (+1d) |
 | `docs/user-guide/platform/address-validation-providers.md` | 1d | `docs/user-guide/platform/tools-and-integrations.md` (+1d) |
 | `docs/user-guide/storefront/setup-and-launch.md` | 1d | `docs/user-guide/storefront/index.md` (+1d) |
+| `docs/architecture/2026-06-09-long-running-agentic-process-architecture.md` | 0d | `docker-compose.yml` (+0d) |
 | `docs/architecture/2026-06-19-edge-node-deployment-sysml-architecture-note.md` | 0d | `docs/superpowers/specs/2026-06-16-living-architecture-graph-and-operational-bridge-design.md` (+0d) |
 | `docs/architecture/2026-08-09-portal-architecture-hardening-findings.md` | 0d | `AGENTS.md` (+0d) |
 | `docs/architecture/archetype-owner-positioning.md` | 0d | `docs/architecture/archetype-business-value-streams.md` (+0d) |
 | `docs/architecture/delivery-surfaces-runbook.md` | 0d | `AGENTS.md` (+0d)<br>`docs/superpowers/specs/2026-06-05-unified-delivery-surfaces-execution-alignment-design.md` (+0d) |
 | `docs/architecture/jsi-conformance-tests.md` | 0d | `docs/architecture/job-specific-intelligence.md` (+0d) |
 | `docs/architecture/mcp-tool-authorization-runbook.md` | 0d | `AGENTS.md` (+0d) |
-| `docs/architecture/mcp-tool-packs.md` | 0d | `scripts/check-module-size.mjs` (+0d)<br>`scripts/module-size-baseline.txt` (+0d) |
+| `docs/architecture/mcp-tool-packs.md` | 0d | `apps/web/lib/mcp/packs/work-capsules-pack.ts` (+0d)<br>`scripts/check-module-size.mjs` (+0d)<br>`scripts/module-size-baseline.txt` (+0d) |
 | `docs/architecture/section-navigation.md` | 0d | `apps/web/components/shell/SectionNav.tsx` (+0d)<br>`apps/web/lib/navigation/section-nav-model.ts` (+0d) |
 | `docs/founder-kernel/wiki/principles/destructive-actions-require-explicit-go.md` | 0d | `docs/founder-kernel/wiki/principles/never-wipe-db-for-code-fixes.md` (+0d) |
 | `docs/founder-kernel/wiki/principles/propose-acknowledge-reassign.md` | 0d | `docs/founder-kernel/wiki/principles/mention-uncommitted-changes.md` (+0d)<br>`docs/founder-kernel/wiki/principles/worktree-base-origin-main.md` (+0d)<br>`docs/founder-kernel/wiki/principles/worktree-per-session.md` (+0d) |
@@ -149,7 +150,7 @@
 | `docs/operations/install.md` | 0d | `packages/dpf-skill-pack/README.md` (+0d)<br>`README.md` (+0d) |
 | `docs/professions/frontend-engineer/wiki/compose-report-kit-for-reporting-ux.md` | 0d | `docs/founder-kernel/wiki/principles/no-hardcoded-colors.md` (+0d) |
 | `docs/testing/archetype-exercise-playbook.md` | 0d | `docs/testing/archetype-exercise-harness.md` (+0d) |
-| `docs/testing/pre-pr-gate.md` | 0d | `.github/workflows/ci.yml` (+0d)<br>`AGENTS.md` (+0d) |
+| `docs/testing/pre-pr-gate.md` | 0d | `.github/workflows/ci.yml` (+0d)<br>`AGENTS.md` (+0d)<br>`scripts/lib/ci-policy-guards.mjs` (+0d) |
 | `docs/user-guide/ai-workforce/coworker-proactivity.md` | 0d | `docs/user-guide/workspace/attention-inbox.md` (+0d) |
 | `docs/user-guide/build-studio/autonomous-builds.md` | 0d | `docs/operations/autonomous-build-completion.md` (+0d) |
 | `docs/user-guide/compliance/regulatory-submissions.md` | 0d | `docs/user-guide/compliance/regulations-and-obligations.md` (+0d) |

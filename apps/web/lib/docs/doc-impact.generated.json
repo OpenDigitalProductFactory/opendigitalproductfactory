@@ -752,7 +752,8 @@
       "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md"
     ],
     "apps/web/lib/mcp/packs/work-capsules-pack.ts": [
-      "docs/architecture/mcp-tool-packs.md"
+      "docs/architecture/mcp-tool-packs.md",
+      "docs/maintenance/staleness-report.md"
     ],
     "apps/web/lib/mcp/packs/workbooks-pack.ts": [
       "docs/architecture/mcp-tool-packs.md"
@@ -1498,6 +1499,7 @@
     ],
     "scripts/lib/ci-policy-guards.mjs": [
       "docs/architecture/context-engineering-standards.md",
+      "docs/maintenance/staleness-report.md",
       "docs/testing/pre-pr-gate.md"
     ],
     "scripts/lib/compose-safety.mjs": [
@@ -2340,6 +2342,7 @@
       "apps/web/components/shell/SectionNav.tsx",
       "apps/web/lib/ea/ai-routing-architecture-registry.ts",
       "apps/web/lib/inference/routed-inference.ts",
+      "apps/web/lib/mcp/packs/work-capsules-pack.ts",
       "apps/web/lib/navigation/section-nav-model.ts",
       "apps/web/lib/platform-runtime/operational-state.ts",
       "packages/db/src/regulation-applicability.ts",
@@ -2348,6 +2351,7 @@
       "scripts/check-module-size.mjs",
       "scripts/check-style-drift.mjs",
       "scripts/dpf-compose.mjs",
+      "scripts/lib/ci-policy-guards.mjs",
       "scripts/lib/resolve-capability-compose-profiles.mjs",
       "scripts/pr-health.mjs",
       "scripts/pr-health.test.mjs"
