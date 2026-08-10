@@ -92,7 +92,7 @@ const definitions: ToolDefinition[] = [
   },
   {
     name: "doc_search",
-    description: "Search managed documents by metadata, tags, owner, lifecycle state, full text, and best-effort semantic similarity.",
+    description: "Search managed documents by metadata, tags, owner, lifecycle state, full text, and best-effort semantic similarity. Call once per search intent with a clear query and mode. Empty results mean refine the query or filters — do not re-call with identical arguments. On tool errors, fix inputs or grants once; do not blind-retry.",
     inputSchema: {
       type: "object",
       properties: {
