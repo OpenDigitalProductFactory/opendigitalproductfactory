@@ -13,6 +13,7 @@
 
 import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
 import type { LocalCiHostPressure } from "@/lib/nonprod/local-ci-pool-policy";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
 
 // Per-key trimmed string coercer — a copy of the inline helper the former switch
@@ -410,7 +411,7 @@ async function releaseNonprodEnvironmentLeaseHandler(params: Record<string, unkn
       data: { lease },
     };
   } catch (error) {
-    const detail = error instanceof Error ? error.message : String(error);
+    const detail = getErrorMessage(error);
     if (detail === "nonprod_lease_not_found") {
       return {
         success: false,

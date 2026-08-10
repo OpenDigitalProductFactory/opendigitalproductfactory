@@ -550,7 +550,7 @@ export async function releaseCapsuleScopeTool(
       data: { capsule: renewedCapsule },
     };
   } catch (error) {
-    const detail = error instanceof Error ? error.message : String(error);
+    const detail = getErrorMessage(error);
     if (/not found/i.test(detail)) {
       return {
         success: false,
