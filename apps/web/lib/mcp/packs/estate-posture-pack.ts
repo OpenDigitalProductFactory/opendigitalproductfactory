@@ -36,7 +36,7 @@ const definitions: ToolDefinition[] = [
   },
   {
     name: "review_estate_identity",
-    description: "Explain what an estate item most likely is, who made it, how confident the identity evidence is, and what still needs review.",
+    description: "Explain what an estate item most likely is, who made it, how confident the identity evidence is, and what still needs review. Call once per estate entity under review. Low confidence is a finding to present, not a reason to re-call with the same entity. On errors, fix identifiers or capability grants once; do not thrash.",
     inputSchema: {
       type: "object",
       properties: { ...entityProps },

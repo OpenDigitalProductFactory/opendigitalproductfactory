@@ -24,7 +24,8 @@ const definitions: ToolDefinition[] = [
       "Search the founder kernel + per-org overlay wiki for entity, stance, heuristic, principle, decision, summary, runbook, or index pages. " +
       "Use when the user asks about a DPF concept, what the founder's view is on something, what governance principles apply, or for grounded judgment on a question. " +
       "Returns top-K pages with slug, kind, kernel/overlay origin, content preview, and (for principle pages) tier + applies-to + dimensions + public-classification metadata. Prefer this over web speculation. " +
-      "Do not re-query the same keywords in a loop — raise limit or refine the query once.",
+      "Call with a focused query once per question; refine from the returned pages rather than re-polling the same query. " +
+      "Empty or low-relevance hits are a signal to rephrase, not to thrash identical calls.",
     inputSchema: {
       type: "object",
       properties: {
