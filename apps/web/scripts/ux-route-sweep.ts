@@ -470,6 +470,22 @@ function loadBaseline(path: string): BaselineFile {
   return JSON.parse(readFileSync(path, "utf8")) as BaselineFile;
 }
 
+/**
+ * BI-EE6E0CFC — routes present in the committed baseline but missing from a
+ * freshly frozen measurement. A non-empty result means the refresh would
+ * silently delete ratchets and must be refused.
+ */
+export function findDroppedBaselineRoutes(
+  committed: BaselineFile | null | undefined,
+  frozen: BaselineFile,
+): string[] {
+  if (!committed?.routes) return [];
+  const frozenRoutes = new Set(Object.keys(frozen.routes ?? {}));
+  return Object.keys(committed.routes)
+    .filter((routePath) => !frozenRoutes.has(routePath))
+    .sort();
+}
+
 function routeArtifactSlug(routePath: string): string {
   return (
     routePath
@@ -633,9 +649,31 @@ async function main(): Promise<void> {
   }
 
   if (updateBaseline) {
+    // BI-EE6E0CFC: never emit a baseline that silently drops routes the
+    // committed file already watches. A refresh that shrinks coverage is not
+    // publishable — the documented "commit the artifact" path would delete
+    // ratchets for routes the sweep failed to measure (timeout, error, auth).
+    const baselinePath = join(ROOT, BASELINE_REL);
+    const frozen = freezeBaseline(measurements, GENERATOR);
+    if (existsSync(baselinePath)) {
+      const committed = loadBaseline(baselinePath);
+      const dropped = findDroppedBaselineRoutes(committed, frozen);
+      if (dropped.length > 0) {
+        console.error(
+          `[ux-sweep] REFUSE TO SHRINK BASELINE — ${dropped.length} committed route(s) missing from this measurement run (BI-EE6E0CFC).`,
+        );
+        for (const routePath of dropped) {
+          console.error(`  - ${routePath}`);
+        }
+        console.error(
+          "Either fix the sweep so these routes measure, declare a sweepExclusionReason in the route-shell registry, or splice only the deliberately re-frozen route(s) rather than replacing the whole file.",
+        );
+        process.exit(1);
+      }
+    }
     writeFileSync(
-      join(ROOT, BASELINE_REL),
-      `${JSON.stringify(freezeBaseline(measurements, GENERATOR), null, 2)}\n`,
+      baselinePath,
+      `${JSON.stringify(frozen, null, 2)}\n`,
       "utf8",
     );
     console.error(`[ux-sweep] froze ${measurements.length} routes into ${BASELINE_REL}`);

@@ -92,11 +92,24 @@ const definitions: ToolDefinition[] = [
   },
   {
     name: "evaluate_page",
-    description: "Evaluate a live page for UX and accessibility issues using AI-powered browser automation (browser-use). Navigates to the page, analyzes layout, interactions, and accessibility, and returns structured findings. Works on production pages (default) or sandbox pages (if URL provided).",
+    description:
+      "Evaluate a live page for UX and accessibility issues using AI-powered browser automation (browser-use). " +
+      "Navigates to the page, analyzes layout, interactions, and accessibility, and returns structured findings. " +
+      "Requires the browser-use sidecar (BROWSER_USE_URL, default http://browser-use:8500/mcp) and a reachable target URL. " +
+      "If success=false with DEGRADED / NOT-RUN / connection error: do NOT retry the same call — check sidecar health " +
+      "(GET /health/capability), confirm the URL is reachable from the browser-use container (not host-only localhost), " +
+      "and fall back to code-only review (read the route component + theme tokens) instead of looping. " +
+      "Works on production pages (default) or sandbox pages when an absolute URL is provided.",
     inputSchema: {
       type: "object",
       properties: {
-        url: { type: "string", description: "URL to evaluate. Defaults to the current route if not specified." },
+        url: {
+          type: "string",
+          description:
+            "Absolute URL to evaluate (e.g. http://portal:3000/workspace or https://…/route). " +
+            "Defaults to the current route only when routeContext is set; bare paths without a host fail. " +
+            "Inside Docker, use the service hostname — not Windows/macOS localhost.",
+        },
       },
     },
     requiredCapability: null,
@@ -344,30 +357,64 @@ async function evaluatePageHandler(
 ): Promise<ToolResult> {
   const url = typeof params["url"] === "string" ? params["url"] : null;
   const targetUrl = url || (context?.routeContext ? `http://localhost:3000${context.routeContext}` : null);
-  if (!targetUrl) return { success: false, error: "No URL to evaluate.", message: "Provide a URL or navigate to a page first." };
+  if (!targetUrl) {
+    return {
+      success: false,
+      error: "missing_url",
+      // BI-MCP-EFF-71D7229F: fail with a non-retryable contract message so agents
+      // do not loop the same call (97% historical failure was blind retry).
+      message:
+        "evaluate_page needs an absolute URL (or a portal routeContext). " +
+        "Do not retry without a URL. Fall back to reading the route source for a code-only UX review.",
+    };
+  }
 
   try {
     const BROWSER_USE_URL = process.env.BROWSER_USE_URL || "http://browser-use:8500/mcp";
 
     // Use browser-use to evaluate the page with AI-powered analysis
-    const extractRes = await fetch(BROWSER_USE_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        jsonrpc: "2.0",
-        id: 1,
-        method: "tools/call",
-        params: {
-          name: "browse_open",
-          arguments: { url: targetUrl },
-        },
-      }),
-      signal: AbortSignal.timeout(60000),
-    });
+    let extractRes: Response;
+    try {
+      extractRes = await fetch(BROWSER_USE_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: 1,
+          method: "tools/call",
+          params: {
+            name: "browse_open",
+            arguments: { url: targetUrl },
+          },
+        }),
+        signal: AbortSignal.timeout(60000),
+      });
+    } catch (connectError) {
+      const reason = connectError instanceof Error ? connectError.message : String(connectError);
+      return {
+        success: false,
+        error: "browser_use_unavailable",
+        message:
+          `evaluate_page could not reach browser-use at ${BROWSER_USE_URL}: ${reason}. ` +
+          "Do NOT retry the same call — the sidecar is down or unreachable from this runtime. " +
+          "Check BROWSER_USE_URL and GET /health/capability; fall back to code-only review.",
+        data: { url: targetUrl, browserUseUrl: BROWSER_USE_URL, retryable: false },
+      };
+    }
     const openResult = await extractRes.json();
     const openContent = JSON.parse(openResult?.result?.content?.[0]?.text ?? "{}");
     const sessionId = openContent.session_id;
-    if (!sessionId) throw new Error("Failed to open browser session");
+    if (!sessionId) {
+      return {
+        success: false,
+        error: "browser_session_open_failed",
+        message:
+          "evaluate_page could not open a browser session (no session_id). " +
+          "Do NOT retry blindly — verify browser-use health and that the target URL is reachable from the sidecar network. " +
+          "Fall back to code-only review.",
+        data: { url: targetUrl, retryable: false, openResult },
+      };
+    }
 
     // BI-1BAA177C: a degraded/errored navigation means nothing after this
     // point is evidence — report NOT-RUN instead of success-shaped emptiness.
@@ -376,8 +423,10 @@ async function evaluatePageHandler(
       return {
         success: false,
         error: `Page evaluation DEGRADED — did not run: ${reason}`,
-        message: `Page evaluation did not run: ${reason}. This is a NOT-RUN (browser-use could not drive its browser), not a clean page. Check GET /health/capability on the sidecar.`,
-        data: { url: targetUrl, degraded: true, reason },
+        message:
+          `Page evaluation did not run: ${reason}. This is a NOT-RUN (browser-use could not drive its browser), not a clean page. ` +
+          "Do NOT retry the same args. Check GET /health/capability on the sidecar and use a container-reachable URL.",
+        data: { url: targetUrl, degraded: true, reason, retryable: false },
       };
     }
 
