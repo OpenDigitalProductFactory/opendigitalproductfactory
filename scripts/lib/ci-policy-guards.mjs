@@ -221,6 +221,8 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         "--test",
         "scripts/lib/runtime-artifact-janitor.test.mjs",
         "scripts/runtime-artifact-janitor.cli.test.mjs",
+        // BI-C85D1B0A: managed BuildKit cool-down / obsolete policy reap planner.
+        "scripts/lib/local-ci-builder-lifecycle.test.mjs",
         "scripts/lib/junction-safe-worktree-remove.test.mjs",
         "scripts/lib/compose-safety.test.mjs",
         "scripts/lib/local-integration-ci.test.mjs",

@@ -389,7 +389,16 @@ the admission-resolved accepted-base ref, `origin/main` by default → merge
 candidate → sandbox-freshness converge → typecheck → exhaustive Vitest → production build)
 in a dedicated **non-mutating scratch worktree** (`~/dpf-worktrees/.local-ci-runner`
 for slot 0 and a manifest-owned sibling for slot 1) — never in your topic
-worktree. It records content-addressed
+worktree.
+
+**BuildKit session cool-down (BI-C85D1B0A).** The production-build stage uses a
+managed builder (`dpf-local-ci-buildkit-vN-S`) with resource ceilings and an
+in-daemon GC budget (`scripts/config/local-ci-buildkitd.toml`). When the build
+ends, the gate **stops** that builder (`docker buildx stop`) so multi-GiB idle
+RAM is not held between pregates; disk layer cache is retained under GC. Set
+`DPF_LOCAL_CI_BUILDER_KEEP_WARM=1` only for debugging. Obsolete policy-version
+builders are removed on the next ensure. See
+[`docs/superpowers/specs/2026-08-10-buildkit-session-lifecycle-design.md`](../superpowers/specs/2026-08-10-buildkit-session-lifecycle-design.md). It records content-addressed
 metadata to `.git/dpf-local-ci-metadata.json` and into MCP evidence: candidate
 ref/SHA, base ref/SHA, integration commit SHA, synthesized tree SHA, command
 list, timestamps, slot key, Compose/PostgreSQL identities, the exact production
