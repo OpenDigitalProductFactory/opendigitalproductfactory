@@ -1780,7 +1780,8 @@
         "what-the-scorer-is",
         "what-it-is-not",
         "autonomy-gate-bi-1d23ec26",
-        "operator-surfaces"
+        "operator-surfaces",
+        "design-grounding"
       ]
     },
     "docs/architecture/product-demand-activation.md": {
