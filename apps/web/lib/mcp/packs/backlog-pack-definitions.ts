@@ -223,7 +223,7 @@ export const backlogPackDefinitions: ToolDefinition[] = [
     description:
       "List backlog items filtered by status, type, workType, source, epic, claim state, or active-build state. Read-only. " +
       "Returns semantic IDs (BI-*, EP-*) — never cuids. " +
-      "Prefer this over repeated get_backlog_item when scanning the pool (BI-MCP-EFF-1FE23977): list carries status, effort, epic, and claim fields for triage ranking.",
+      "Prefer this over repeated get_backlog_item when scanning the pool: list carries status, effort, epic, and claim fields for triage ranking.",
     inputSchema: {
       type: "object",
       properties: {
@@ -247,7 +247,7 @@ export const backlogPackDefinitions: ToolDefinition[] = [
     name: "get_backlog_item",
     description:
       "Fetch ONE backlog item by semantic id with body, demand activation readiness, evidence links, linked epic, active build, and recent activity. Read-only. " +
-      "Do NOT poll this tool in a loop for many IDs — use list_backlog_items (filters + total/truncated) for scanning, then get_backlog_item only for the few items you will actually open (BI-MCP-EFF-1FE23977 waste was N+1 status polling). " +
+      "Do NOT poll this tool in a loop for many IDs — use list_backlog_items (filters + total/truncated) for scanning, then get_backlog_item only for the few items you will actually open — avoid N+1 status polling. " +
       "Not a webhook; there is no push for status changes — re-list with filters instead of thrashing get.",
     inputSchema: {
       type: "object",
