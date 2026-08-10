@@ -90,7 +90,9 @@ const definitions: ToolDefinition[] = [
   },
   {
     name: "search_tool_marketplace",
-    description: "Search the cross-source tool marketplace readiness catalog. Use when the user asks what integrations, MCP servers, built-in tools, model requirements, or ungranted/unconfigured tools are available for an AI coworker.",
+    description:
+      "Search the cross-source tool marketplace readiness catalog. Use when the user asks what integrations, MCP servers, built-in tools, model requirements, or ungranted/unconfigured tools are available for an AI coworker. " +
+      "Prefer load_tools with an exact name or intent query once you know the tool — do not re-search the marketplace for the same query every turn.",
     inputSchema: {
       type: "object",
       properties: {
