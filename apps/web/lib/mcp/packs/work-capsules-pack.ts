@@ -274,7 +274,9 @@ const definitions: ToolDefinition[] = [
   {
     name: "start_external_work",
     description:
-      "Register that you are STARTING work on an external session — before any evidence — so a tracked Work Capsule exists immediately and the session is visible to other agents instead of appearing only after the first result. Idempotent per session (or per repo+branch when a worktree is supplied); summary is optional at start.",
+      "Register that you are STARTING work on an external session — before any evidence — so a tracked Work Capsule exists immediately and the session is visible to other agents instead of appearing only after the first result. " +
+      "Idempotent per session (or per repo+branch when a worktree is supplied); summary is optional at start. " +
+      "Call once at session start — re-calling with the same session/worktree is a no-op, not a progress signal.",
     inputSchema: {
       type: "object",
       properties: {
