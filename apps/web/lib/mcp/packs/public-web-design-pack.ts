@@ -390,7 +390,7 @@ async function evaluatePageHandler(
         signal: AbortSignal.timeout(60000),
       });
     } catch (connectError) {
-      const reason = connectError instanceof Error ? connectError.message : String(connectError);
+      const reason = getErrorMessage(connectError);
       return {
         success: false,
         error: "browser_use_unavailable",
