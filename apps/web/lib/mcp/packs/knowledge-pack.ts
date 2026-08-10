@@ -17,7 +17,9 @@ import type { ToolPack, ToolPackHandler } from "../tool-pack";
 const definitions: ToolDefinition[] = [
   {
     name: "search_knowledge",
-    description: "Search the platform knowledge base for relevant backlog items, epics, improvement proposals, and specs. Uses semantic similarity, not keyword matching.",
+    description:
+      "Search the platform knowledge base for relevant backlog items, epics, improvement proposals, and specs. Uses semantic similarity, not keyword matching. " +
+      "Prefer one well-scoped query over many near-duplicate searches. Pair with list_backlog_items for status filters, not repeated search as a poll.",
     inputSchema: {
       type: "object",
       properties: {
