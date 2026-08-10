@@ -653,10 +653,17 @@ async function main(): Promise<void> {
     // committed file already watches. A refresh that shrinks coverage is not
     // publishable — the documented "commit the artifact" path would delete
     // ratchets for routes the sweep failed to measure (timeout, error, auth).
+    // Read once (no existsSync→write TOCTOU; CodeQL js/file-system-race).
     const baselinePath = join(ROOT, BASELINE_REL);
     const frozen = freezeBaseline(measurements, GENERATOR);
-    if (existsSync(baselinePath)) {
-      const committed = loadBaseline(baselinePath);
+    let committed: BaselineFile | null = null;
+    try {
+      committed = JSON.parse(readFileSync(baselinePath, "utf8")) as BaselineFile;
+    } catch (err) {
+      const code = err && typeof err === "object" && "code" in err ? String((err as { code?: unknown }).code) : "";
+      if (code !== "ENOENT") throw err;
+    }
+    if (committed) {
       const dropped = findDroppedBaselineRoutes(committed, frozen);
       if (dropped.length > 0) {
         console.error(
