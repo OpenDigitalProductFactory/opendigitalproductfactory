@@ -55,3 +55,5 @@ A recommendation with `autonomyEligible: false` is **advisory** — surface the 
   - Ship coverage + sensitivity + autonomyEligible on the existing decide() path; densify sparse corpus vectors; do not replace WSM with AHP/TOPSIS in this PR.
 
 Seed-Fit-Decision: global-default
+
+Docs-Impact-Decision: internal decision-kernel quality gates and principle vector densify; runtime-kernel-commandments / AUTHORING / SCHEMA pages remain accurate without user-visible route or operator-facing doc rewrites (no new public UI, no commandment text change for operators).
