@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 628,
+  "pageCount": 629,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -355,6 +355,21 @@
         "9-assumed-limits",
         "10-spot-check-claims-verification-anchors",
         "11-conclusion"
+      ]
+    },
+    "docs/architecture/2026-08-09-tts-idle-process-elimination.md": {
+      "publicHref": "/architecture/2026-08-09-tts-idle-process-elimination/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "tts-idle-process-elimination-bi-a0a0568f",
+        "problem",
+        "options-considered",
+        "decision",
+        "evidence-hooks",
+        "acceptance-mapping",
+        "related"
       ]
     },
     "docs/architecture/GAID.md": {
