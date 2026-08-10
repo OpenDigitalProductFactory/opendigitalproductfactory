@@ -598,11 +598,6 @@
     "apps/web/lib/decision/golden-decisions.test.ts": [
       "docs/founder-kernel/AUTHORING.md"
     ],
-    "apps/web/lib/decision/option-scoring.ts": [
-      "docs/architecture/decision-vectors.md",
-      "docs/architecture/vector-decisioning-and-jsi.md",
-      "docs/user-guide/ai-workforce/decision-perspective-in-practice.md"
-    ],
     "apps/web/lib/deliberation/external-review-activation.ts": [
       "docs/architecture/agent-client-capability-parity.md"
     ],
@@ -2057,7 +2052,6 @@
     ],
     "docs/architecture/decision-vectors.md": [
       "apps/web/lib/decision-perspective/material.ts",
-      "apps/web/lib/decision/option-scoring.ts",
       "packages/db/src/dimension-scope.ts",
       "packages/db/src/profession-local-axes.ts"
     ],
@@ -2201,8 +2195,7 @@
       "apps/web/lib/decision-perspective/evaluator.ts",
       "apps/web/lib/decision-perspective/material.ts",
       "apps/web/lib/decision-perspective/stance-promotion.ts",
-      "apps/web/lib/decision-perspective/weight-inference.ts",
-      "apps/web/lib/decision/option-scoring.ts"
+      "apps/web/lib/decision-perspective/weight-inference.ts"
     ],
     "docs/design/golden-triangle-design.md": [
       "apps/web/lib/queue/functions/deliberation-run.ts",
@@ -2604,9 +2597,6 @@
       "apps/web/app/(shell)/coworker-decisions/proactivity/page.tsx",
       "apps/web/components/proactivity/ProactivityRosterList.tsx",
       "apps/web/lib/proactivity/proactivity-roster.ts"
-    ],
-    "docs/user-guide/ai-workforce/decision-perspective-in-practice.md": [
-      "apps/web/lib/decision/option-scoring.ts"
     ],
     "docs/user-guide/ai-workforce/decision-perspective.md": [
       "apps/web/lib/founder-review/queue.ts",
