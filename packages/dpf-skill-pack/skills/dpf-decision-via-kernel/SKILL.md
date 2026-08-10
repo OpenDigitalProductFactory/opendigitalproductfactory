@@ -76,7 +76,18 @@ When you face an open question with 2+ architecturally-distinct options inside t
    - Unknown feature keys are **rejected**, not ignored — a typo used to score silently as zero.
    - **Interface-surface changes are NOT eligible for the `features: {}` escape.** When an option adds or changes a button, fillable field, form, or route, you must score it — interface surface is governed by [`remove-avoidable-failure-opportunities`](../../../../docs/founder-kernel/wiki/principles/remove-avoidable-failure-opportunities.md) (§"Interface surface is failure surface"): a new control must *earn its surface*. Derive features the way [`apps/web/lib/decision/ui-surface-features.ts`](../../../../apps/web/lib/decision/ui-surface-features.ts) does — `human_cognitive_load` is a **cost** axis (negative-weighted since #1904), bought down by **justification/research**, **long-term reuse across multiple internal outcomes**, and **clarification value**. An unjustified new surface scores against the principle; a net **removal** scores favorably. "We might want it" is not justification — score it `low`, not no-op.
 
-3. **Invoke `principle_decide`.**
+3. **Invoke `principle_decide`.** Always pass a **normalized** `callingSurface` so the Decision Governance log can attribute the consult by client (BI-D5ACBAE2). Free-form labels (`"Codex desktop"`, `"Codex"`, thread titles) fragment adoption metrics — use one of:
+
+   | Surface | `callingSurface` value |
+   |---|---|
+   | Grok Build / Grok desktop | `grok-desktop` |
+   | Claude Code / Claude desktop | `claude-desktop` |
+   | Codex CLI / Codex desktop | `codex-desktop` |
+   | Antigravity | `antigravity-desktop` |
+   | Build Studio phase | `build-studio` |
+   | In-portal coworker | `coworker` |
+
+   Optional suffix for a thread: `grok-desktop:<short-slug>` (e.g. `grok-desktop:process-decision-gaps`). Never put the full question in `callingSurface`.
 
    ```
    mcp__dpf__principle_decide({
@@ -86,18 +97,22 @@ When you face an open question with 2+ architecturally-distinct options inside t
        { id: "<slug>", description: "<distinctive text>", features: { <dim>: 0..1, ... } }
      ],
      callingPopulation: "in_platform_coworker" | "external_coding_agent" | "human",
+     callingSurface: "grok-desktop" | "claude-desktop" | "codex-desktop" | "antigravity-desktop" | "build-studio" | "coworker" | "<surface>:<slug>",
      ringScope: [ "<one of PRINCIPLE_RING_SCOPES>" ]  // optional, defaults to universal
    })
    ```
 
-4. **Read the contribution ledger.** The result contains `signalQuality` (**check this first**), `scores` (per-option composite + per-principle contribution rows), `flags` (tie-margin confidence, semantic-fallback ratio, commandment-conflict signal), and `reasoning` (one-sentence human-readable summary).
+   For external coding agents (Grok/Claude/Codex/Antigravity) use `callingPopulation: "external_coding_agent"`.
+
+4. **Read the contribution ledger.** The result contains `signalQuality` (**check this first**), `scores` (per-option composite + per-principle contribution rows), `flags` (tie-margin confidence, semantic-fallback ratio, commandment-conflict signal), `reasoning`, and **`ledger`** (persistence outcome).
    - **`signalQuality.usable: false`** → there is NO verdict. Do not read `recommendation` (it is `null`) and do not treat it as a tie or a neutral outcome. Follow `signalQuality.advisory`: usually "supply a features map and re-call". This is your error to fix, not the operator's.
    - **High confidence + no commandment conflict** → proceed with the recommendation.
    - **Low confidence (margin below tieMargin)** → surface to the operator with the ledger; the decision is close enough that human judgment beats math.
    - **Commandment conflict flag set** → defer. A commandment opposing the top-scored option means a hard-rule violation; either reframe the option or escalate.
    - **Weak structured coverage** (>40% semantic fallback) → consider returning to step 2 and supplying real features against more dimensions.
+   - **`ledger.recorded`** → if `true`, keep `ledger.interactionId` (DI-*) and continue with [`dpf-record-decision-outcome`](../dpf-record-decision-outcome/SKILL.md). If `false`, name `ledger.reason` to the operator — the hub will not show this consult.
 
-5. **Surface the ledger, not just the answer.** When reporting back to the operator, show: the chosen option, the top 2 contributing principles (positive and negative), and any flag that fired. The operator's role is to ratify (or override) the math, which requires seeing it.
+5. **Surface the ledger, not just the answer.** When reporting back to the operator, show: the chosen option, the top 2 contributing principles (positive and negative), any flag that fired, and the **DI id**. The operator's role is to ratify (or override) the math, which requires seeing it. Then run `dpf-record-decision-outcome` so the capsule (if any) points at the same DI.
 
 ## Output template
 
@@ -110,6 +125,8 @@ When you face an open question with 2+ architecturally-distinct options inside t
 - Top positive contributors: <principle name 1> (+<contribution>), <principle name 2> (+<contribution>)
 - Top negative contributors: <principle name> (<contribution>)  (if any)
 - Flags: <commandment conflict / weak coverage / none>
+- Ledger: recorded=<true|false> interactionId=<DI-… or reason>
+- callingSurface: <normalized surface>
 - Recommended next step: <proceed | surface to operator | reframe options | defer>
 ```
 
@@ -122,6 +139,9 @@ If the kernel flips a default the agent had pre-decided, **say so explicitly** �
 - **Never invoke with empty features AND no `description`.** Pre-BI-3C1A6451 this produced silent all-zero alignment; post-fix the semantic fallback uses the description. An option with neither is a bug — return to step 1.
 - **Never claim the kernel "agrees with you" if confidence is low.** A 0.05 margin between two options is noise.
 - **Never bypass on a commandment conflict.** Commandments are hard rules. If one opposes the recommendation, the decision is not yours OR the kernel's to make alone — escalate.
+- **Never skip this skill on a multi-option platform decision** because "the hub looks empty" or "decisions aren't working". Empty-looking hubs are usually (a) looking at wiki DEC pages instead of `/coworker-decisions/decisions`, (b) free-form / missing `callingSurface`, or (c) agents never calling the tool. Call it; check `ledger.recorded`.
+- **Never invent a free-form callingSurface.** Use the normalized table above so Grok/Claude/Codex adoption is comparable.
+- **Grok / progressive MCP:** if `principle_decide` is not in the host tool list, `load_tools` then invoke via the host catalog. A stale host registry is not permission to decide by gut.
 
 ## Worked example (2026-05-24)
 
