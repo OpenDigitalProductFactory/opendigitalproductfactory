@@ -632,11 +632,17 @@
     "apps/web/lib/explore/feature-build-types.ts": [
       "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md"
     ],
+    "apps/web/lib/federation/demand-response.ts": [
+      "docs/architecture/2026-08-09-portal-architecture-hardening-findings.md"
+    ],
     "apps/web/lib/finance/finance-validation.ts": [
       "docs/testing/handoff-invoice-gaps.md"
     ],
     "apps/web/lib/founder-review/queue.ts": [
       "docs/user-guide/ai-workforce/decision-perspective.md"
+    ],
+    "apps/web/lib/gear-interface/otel-exporter.ts": [
+      "docs/architecture/2026-08-09-portal-architecture-hardening-findings.md"
     ],
     "apps/web/lib/golden-triangle/compile.ts": [
       "docs/design/golden-triangle-vector-reference.md"
@@ -1267,7 +1273,8 @@
       "docs/architecture/2026-06-22-platform-adequacy-architecture-review.md"
     ],
     "packages/storefront-templates/src/archetype-readiness.ts": [
-      "docs/architecture/2026-07-27-platform-adequacy-roadmap-backlog-map.md"
+      "docs/architecture/2026-07-27-platform-adequacy-roadmap-backlog-map.md",
+      "docs/architecture/2026-08-09-portal-architecture-hardening-findings.md"
     ],
     "packages/storefront-templates/src/archetypes/fitness-recreation.ts": [
       "docs/testing/findings/run-4-fresh-findings.md"
@@ -1400,6 +1407,7 @@
       "docs/architecture/contributor-procedure-runbook.md"
     ],
     "scripts/check-package-boundaries.mjs": [
+      "docs/architecture/2026-08-09-portal-architecture-hardening-findings.md",
       "docs/architecture/package-boundaries.md"
     ],
     "scripts/check-retired-substrate.mjs": [
@@ -1904,6 +1912,12 @@
     ],
     "docs/architecture/2026-07-27-platform-adequacy-roadmap-backlog-map.md": [
       "packages/storefront-templates/src/archetype-readiness.ts"
+    ],
+    "docs/architecture/2026-08-09-portal-architecture-hardening-findings.md": [
+      "apps/web/lib/federation/demand-response.ts",
+      "apps/web/lib/gear-interface/otel-exporter.ts",
+      "packages/storefront-templates/src/archetype-readiness.ts",
+      "scripts/check-package-boundaries.mjs"
     ],
     "docs/architecture/agent-client-capability-parity.md": [
       "apps/web/lib/build/unified-wip-query.ts",

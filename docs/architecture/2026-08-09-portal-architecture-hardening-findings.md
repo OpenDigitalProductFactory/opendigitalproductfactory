@@ -120,7 +120,7 @@ Ratings are relative to **sole-platform / appliance-grade SMB install**, not gen
 | | |
 | --- | --- |
 | **Best-in-class focus** | Backup integrity, tested restore, multi-store consistency, RPO/RTO stated and drilled, chaos/failure injection, degraded modes. |
-| **Current posture** | **Medium; improving.** Postgres backup + daily trial-restore + critical notifications + DR runbook exist. Gaps: Neo4j/Qdrant/off-host/PITR still future; portal recover-from-backup UX deferred (`BI-3849A48B`); sole-platform readiness **verdict** still in progress (`BI-903F5A94`); self-upgrade still has open failure and mid-flight observation work. |
+| **Current posture** | **Medium; improving.** Postgres backup + daily trial-restore + critical notifications + DR runbook exist. Gaps: off-host backup, PITR, and any non-Postgres derived-store restore paths remain future work; portal recover-from-backup UX deferred (`BI-3849A48B`); sole-platform readiness **verdict** still in progress (`BI-903F5A94`); self-upgrade still has open failure and mid-flight observation work. |
 | **Evidence** | `EP-DR-HARDENING-2026-05-23` — most original items done; remaining mostly deferred recover/promote/self-heal; `docs/operations/disaster-recovery.md`; `BI-903F5A94` in progress; `BI-AF4D4F23` background-operation observation in progress. |
 | **Gaps / hardening** | Finish sole-platform evidence gate as the **aggregation** of existing DR/upgrade probes (do not re-implement DR). Expand trial-restore beyond Postgres when graph/vector become load-bearing for the install. Restore-grade account export (`BI-4C16947C`) is part of reliability *and* trust. |
 | **Owners** | `BI-903F5A94`, `EP-DR-HARDENING-2026-05-23`, `EP-UPGRADE-LIFECYCLE`, `BI-4C16947C` / `EP-DATA-GOVERNANCE`. |
