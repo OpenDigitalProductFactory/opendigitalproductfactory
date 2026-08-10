@@ -4,7 +4,7 @@
 //
 // Used by local-ci-runner (and callable from other three-dot-diff callers).
 
-import { existsSync, statSync, unlinkSync, writeFileSync } from "node:fs";
+import { existsSync, statSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 
