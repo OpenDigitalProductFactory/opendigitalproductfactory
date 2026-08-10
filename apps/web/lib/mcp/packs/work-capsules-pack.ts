@@ -181,7 +181,10 @@ const definitions: ToolDefinition[] = [
   },
   {
     name: "heartbeat_capsule",
-    description: "Renew the active lease for a Work Capsule so other agents can see that work is in flight.",
+    description:
+      "Renew the active lease for a Work Capsule so other agents can see that work is in flight. " +
+      "Heartbeat on a human-scale cadence (between stages / few minutes), not every tool call. " +
+      "If the lease is already expired, re-claim or abandon — do not thrash heartbeat.",
     inputSchema: {
       type: "object",
       properties: {
