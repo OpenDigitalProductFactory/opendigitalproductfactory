@@ -5,7 +5,7 @@ status: published
 abstract: Choose the architecturally sound solution. Quick fixes that bypass the design create more debt than they save.
 principleTier: commandment
 principleDirection: Prefer architecturally sound solutions over quick fixes that bypass the design.
-principleDimensionVector: {"long_term_maintainability": 1.0, "schema_grounding": 0.7, "speed_to_value": -0.4}
+principleDimensionVector: {"long_term_maintainability": 1.0, "schema_grounding": 0.7, "speed_to_value": -0.4, "reusability": 0.6, "blast_radius": -0.35}
 principleAppliesTo:
   - in_platform_coworker
   - external_coding_agent

@@ -233,7 +233,7 @@ export function detectPrincipleMissingVector(input: {
 // ─── 4b. principle-sparse-vector (BI-6006E35D) ──────────────────────────────
 
 /** Commandments need enough independent axes to discriminate (rank, not count). */
-export const COMMANDMENT_MIN_VECTOR_KEYS = 3;
+export const COMMANDMENT_MIN_VECTOR_KEYS = 4;
 /** Core principles recommended floor for structured discrimination. */
 export const CORE_MIN_VECTOR_KEYS = 3;
 

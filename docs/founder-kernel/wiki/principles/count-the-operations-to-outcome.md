@@ -6,7 +6,7 @@ status: published
 abstract: Judge a design by the operator operations and elapsed time to the operator's outcome, measured on the running portal — not by the number of screens or features shipped.
 principleTier: core
 principleDirection: Judge a design by the operator operations and elapsed time to the operator's outcome, measured on the running portal, not by the number of screens or features shipped.
-principleDimensionVector: {"operator_effort": -0.9, "evidence_density": 0.6, "human_cognitive_load": -0.3}
+principleDimensionVector: {"operator_effort": -0.9, "evidence_density": 0.6, "human_cognitive_load": -0.3, "cost_efficiency": 0.65, "speed_to_value": 0.55}
 principleAppliesTo:
   - in_platform_coworker
   - external_coding_agent

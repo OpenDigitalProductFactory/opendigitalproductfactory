@@ -5,7 +5,7 @@ status: published
 abstract: Stop on the first error; don't retry blindly; tell the user what happened.
 principleTier: core
 principleDirection: Report errors plainly and stop, instead of retrying or hiding the failure.
-principleDimensionVector: {"evidence_density": 0.8, "blast_radius": -0.5, "speed_to_value": 0.4}
+principleDimensionVector: {"evidence_density": 0.8, "blast_radius": -0.5, "speed_to_value": 0.4, "legibility_of_consequence": 0.65, "human_cognitive_load": -0.35}
 principleAppliesTo:
   - in_platform_coworker
   - external_coding_agent

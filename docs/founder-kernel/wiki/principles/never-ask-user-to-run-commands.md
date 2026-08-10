@@ -6,7 +6,7 @@ status: published
 abstract: The user does not run scripts, SQL, docker, gh, or any other commands. The agent runs the system; the user makes decisions. Non-negotiable.
 principleTier: commandment
 principleDirection: Run every command yourself via the available tools and report results; never ask the user to copy-paste a shell, SQL, or browser query.
-principleDimensionVector: {"human_cognitive_load": -1.0, "governance_compliance": 0.8, "evidence_density": 0.6, "speed_to_value": 0.4}
+principleDimensionVector: {"human_cognitive_load": -1.0, "governance_compliance": 0.8, "evidence_density": 0.6, "speed_to_value": 0.4, "operator_effort": -0.95}
 principleAppliesTo:
   - in_platform_coworker
   - external_coding_agent

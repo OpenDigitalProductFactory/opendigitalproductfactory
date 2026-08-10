@@ -230,14 +230,27 @@ Kernel scored **upgrade-scoring-math-first** lowest. Literature agrees: change a
 
 ## 5. Program plan (sequenced)
 
-| Phase | Work | Precedent | BIs |
-|---|---|---|---|
-| **0** | Research + identity (this doc) | MAVT / MCDA / AHP / CAI | (this memo) |
-| **1** | Coverage + sensitivity gates; science pack in decision ledger + skills | UK GAF MCDA; Appendix B | **New BI** |
-| **2** | Corpus densify + underused axes + lint floors | Spec 2026-07-23 §1.2; rank theory | **New BI** |
-| **3** | Wire fluid weight layer + pairwise cold start | Saaty AHP CR; swing weighting | BI-47CF0AA5, BI-DF87F8D2 |
-| **4** | Stance-derived + JSI inventory | Revealed preference / CAI | BI-E1427A3E, BI-25CCF1A4 |
-| **5** | Golden-decisions live regression + optional TOPSIS pilot if still under-discriminating | Empirical MCDA | BI-4C0F9E21 + future |
+| Phase | Work | Precedent | BIs | Status (2026-08-10) |
+|---|---|---|---|---|
+| **0** | Research + identity (this doc) | MAVT / MCDA / AHP / CAI | (this memo) | **done** (main via #4178) |
+| **1** | Coverage + sensitivity gates; science pack in decision ledger + skills | UK GAF MCDA; Appendix B | **BI-1D23EC26** | **in PR #4180** (merge queue) |
+| **2** | Corpus densify + underused axes + lint floors | Spec 2026-07-23 §1.2; rank theory | **BI-6006E35D** | **tranche 1–2 shipping** (t1 in #4180; t2 branch) |
+| **3** | Wire fluid weight layer + pairwise cold start | Saaty AHP CR; swing weighting | BI-47CF0AA5, BI-DF87F8D2 | open (gated on densify + golden live) |
+| **4** | Stance-derived + JSI inventory | Revealed preference / CAI | BI-E1427A3E, BI-25CCF1A4 | open |
+| **5** | Golden-decisions live regression + optional TOPSIS pilot if still under-discriminating | Empirical MCDA | BI-4C0F9E21 + future | open |
+| **obs** | Decision log adoption metrics + silent-surface hygiene | process spine | **BI-6A686EBB** | open (process skills landed #4178) |
+
+### 5.1 Densify tranche 2 re-census (source files, 2026-08-10)
+
+| Metric | Baseline (§1.3) | After t1+t2 |
+|---|---:|---:|
+| Avg keys / principle (docs corpus) | ~3.7 | **~4.5** |
+| `cost_efficiency` principles | **0** | **7** |
+| `data_privacy` / `customer_consent_state` | 1 each | **4 / 5** |
+| Commandment sparse (&lt;4 keys) | most at 3 | **0** (lint floor raised to 4) |
+| Top-5 axes share of key-mass | dominant | **~61%** (still concentrated — t3 rebalance) |
+
+**Remaining densify (BI-6006E35D, not this tranche):** rebalance over-loaded `long_term_maintainability` / `governance_compliance` mass; further thin-axis doctrine; live Postgres re-census after seed/sync; top-5 share target to be set after golden live arm.
 
 ---
 
