@@ -53,6 +53,12 @@ services:
       dockerfile: docker/postgres/Dockerfile
     restart: unless-stopped
     logging: *default-logging
+    # BI-4F3AB6B3: born-bounded always-on ceiling (config/install-resource-budgets.json).
+    deploy:
+      resources:
+        limits:
+          memory: 2g
+          cpus: "2.0"
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-dpf}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-dpf_dev}
@@ -114,6 +120,12 @@ services:
         DPF_PLATFORM_VERSION: ${DPF_PLATFORM_VERSION:-}
     restart: unless-stopped
     logging: *default-logging
+    # BI-4F3AB6B3: born-bounded always-on ceiling (config/install-resource-budgets.json).
+    deploy:
+      resources:
+        limits:
+          memory: 3g
+          cpus: "2.0"
     ports:
       - "3000:3000"
       - "1455:3000"  # OpenAI Codex OAuth callback (shared client requires this port)
@@ -936,6 +948,8 @@ services:
   # Compatibility alias selects the full local-speech closure:
   #   docker compose --profile tts up
   dpf-tts:
+    # BI-A0A0568F: profile-gated only (never always-on). See
+    # docs/superpowers/plans/2026-08-09-tts-idle-process-elimination.md.
     image: ${DPF_TTS_IMAGE:-travisvn/chatterbox-tts-api:v0.1.0}
     profiles: ["runtime-local-speech", "tts"]
     restart: unless-stopped
@@ -949,6 +963,9 @@ services:
       TTS_MODEL: ${TTS_CHATTERBOX_MODEL:-turbo}
     deploy:
       resources:
+        limits:
+          memory: 2g
+          cpus: "2.0"
         reservations:
           devices:
             - driver: nvidia
