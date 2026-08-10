@@ -331,12 +331,7 @@ function discoverManagedBuilders(nowMs = Date.now()) {
     const ls = runCapture("docker", ["buildx", "ls", "--format", "{{.Name}}\t{{.StatusEndpoint}}"]);
     for (const line of ls.split("\n")) {
       const name = line.split("\t")[0]?.trim();
-      const parsed = parseManagedBuilderContainer(`buildx_buildkit_${name}0`)
-        || (name && name.startsWith("dpf-local-ci-buildkit-")
-          ? { builderName: name, policyVersion: 0, ordinal: 0 }
-          : null);
-      // Prefer parseManagedBuilderName via container helper only for containers;
-      // for bare names, accept the name if it matches the builder pattern.
+      // Bare buildx names only — container path above already covers the common case.
       const bare = name && /^dpf-local-ci-buildkit-v\d+-\d+$/i.test(name) ? name : null;
       if (!bare || seen.has(bare)) continue;
       seen.add(bare);
