@@ -66,7 +66,7 @@ const definitions: ToolDefinition[] = [
       "Draft a new knowledge article. The article is created in 'draft' status and must be published separately. " +
       "Use when the user asks to document a process, record a decision, or create a runbook. " +
       "Requires title, body, and category (process|policy|decision|how-to|reference|troubleshooting|runbook). " +
-      "On failure: fix the payload once — do not re-call with identical args (BI-CAP-D90C6A02). " +
+      "On failure: fix the payload once — do not re-call with identical args. " +
       "Search knowledge first to avoid near-duplicate drafts.",
     inputSchema: {
       type: "object",
