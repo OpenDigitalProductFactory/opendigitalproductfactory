@@ -55,3 +55,21 @@ The platform **does** record decisions when tools are called. The operator signa
 
 - Unit: kernel-consult-ledger gateKey; decision-audit tier map includes `kernel-consult`.
 - Live (post-upgrade): `principle_decide` with `callingSurface: "grok-desktop"` → DI row with `gateKey=kernel-consult` visible on `/coworker-decisions/decisions`.
+
+## Design grounding
+
+- Existing specs/plans reviewed:
+  - docs/superpowers/specs/2026-06-05-unified-delivery-surfaces-execution-alignment-design.md
+  - docs/architecture/delivery-surfaces-runbook.md
+  - docs/superpowers/plans/2026-07-06-decision-governance-audit-log.md
+- Current code substrate reviewed:
+  - apps/web/lib/decision/kernel-consult-ledger.ts
+  - apps/web/lib/wiki/decision-audit.ts
+  - apps/web/lib/decision-perspective/types.ts
+  - packages/dpf-skill-pack/skills/dpf-decision-via-kernel/SKILL.md
+- Source of truth:
+  - DecisionInteraction remains the decision ledger; skills must not re-home outcomes into build notes.
+- Decision:
+  - Set gateKey=kernel-consult; normalize callingSurface; fix record-decision skill; keep one process across Grok/Claude/Codex.
+
+Seed-Fit-Decision: global-default
