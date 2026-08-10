@@ -28,6 +28,7 @@ export type LintFindingKind =
   | "principle-missing-applies-to"
   | "principle-missing-direction"
   | "principle-missing-vector"
+  | "principle-sparse-vector"
   | "principle-vector-dimension-mismatch"
   | "principle-unknown-dimension"
   | "principle-tier-weight-mismatch"
