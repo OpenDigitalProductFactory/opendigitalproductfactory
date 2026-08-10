@@ -57,3 +57,6 @@ A recommendation with `autonomyEligible: false` is **advisory** — surface the 
 Seed-Fit-Decision: global-default
 
 Docs-Impact-Decision: internal decision-kernel quality gates and principle vector densify; runtime-kernel-commandments / AUTHORING / SCHEMA pages remain accurate without user-visible route or operator-facing doc rewrites (no new public UI, no commandment text change for operators).
+
+<!-- index-refresh: 2026-08-10 -->
+
