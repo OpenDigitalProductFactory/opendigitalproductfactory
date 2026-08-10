@@ -17,7 +17,11 @@ import { backlogStatusToolDefinition } from "./backlog-status-tool-definition";
 export const backlogPackDefinitions: ToolDefinition[] = [
   {
     name: "create_backlog_item",
-    description: "Create a new backlog item in the ops backlog. Use this tool to add new items — do NOT use update_backlog_item for items that do not exist yet. New items default to status=triaging; supply status+triageOutcome together only when explicitly skipping triage (e.g. Build Studio brief intake). When triageOutcome=build, effortSize is required.",
+    description:
+      "Create a new backlog item in the ops backlog. Use this tool to add new items — do NOT use update_backlog_item for items that do not exist yet. " +
+      "New items default to status=triaging; supply status+triageOutcome together only when explicitly skipping triage (e.g. Build Studio brief intake). When triageOutcome=build, effortSize is required. " +
+      "Before creating: list_backlog_items or search_knowledge for an existing BI on the same defect (BI-MCP-EFF-B31F3D07 — high create volume often means duplicate filing). " +
+      "Do not create-then-recreate on transient errors; read the error and fix the payload once.",
     inputSchema: {
       type: "object",
       properties: {
@@ -129,7 +133,11 @@ export const backlogPackDefinitions: ToolDefinition[] = [
   },
   {
     name: "query_backlog",
-    description: "Query backlog items and epics. Returns items matching the filter criteria with status, priority, and epic information.",
+    description:
+      "Query backlog items and epics. Returns items matching the filter criteria with status, priority, and epic information. " +
+      "Prefer list_backlog_items when you only need item rows with workType/claim filters (BI-MCP-EFF-F7078492). " +
+      "Prefer get_next_recommended_work for \"what should I pick next\". " +
+      "Do not poll query_backlog in a tight loop — responses include total/truncated; widen filters or raise limit once instead of thrashing.",
     inputSchema: {
       type: "object",
       properties: {
@@ -220,7 +228,10 @@ export const backlogPackDefinitions: ToolDefinition[] = [
   },
   {
     name: "list_backlog_items",
-    description: "List backlog items filtered by status, type, workType, source, epic, claim state, or active-build state. Read-only. Returns semantic IDs (BI-*, EP-*) — never cuids.",
+    description:
+      "List backlog items filtered by status, type, workType, source, epic, claim state, or active-build state. Read-only. Returns semantic IDs (BI-*, EP-*) — never cuids. " +
+      "Prefer one filtered list over many get_backlog_item calls (BI-MCP-EFF-577F9381 / BI-MCP-EFF-1FE23977). " +
+      "Use status+unclaimed+limit; honor total/truncated instead of re-listing the same page.",
     inputSchema: {
       type: "object",
       properties: {

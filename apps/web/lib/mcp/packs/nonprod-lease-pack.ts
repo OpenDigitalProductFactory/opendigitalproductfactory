@@ -133,7 +133,11 @@ const definitions: ToolDefinition[] = [
   },
   {
     name: "claim_nonprod_environment_lease",
-    description: "Request admission to a governed shared nonproduction environment for preview, UX verification, or local integration. Reusing claimKey returns the same durable queue entry.",
+    description:
+      "Request admission to a governed shared nonproduction environment for preview, UX verification, or local integration. " +
+      "Reusing claimKey returns the same durable queue entry (idempotent wait). " +
+      "Do not claim in a tight loop without a stable claimKey (BI-MCP-EFF-8815EA40 waste). " +
+      "When queued, wait and renew with the returned leaseId — do not open a second claim for the same session purpose.",
     inputSchema: {
       type: "object",
       properties: {
@@ -187,7 +191,11 @@ const definitions: ToolDefinition[] = [
   },
   {
     name: "renew_nonprod_environment_lease",
-    description: "Heartbeat an active shared nonproduction environment lease, optionally binding its assigned slot before host mutation. Only the owning session can renew, and a lapsed lease is not revivable.",
+    description:
+      "Heartbeat an active shared nonproduction environment lease, optionally binding its assigned slot before host mutation. " +
+      "Only the owning session can renew, and a lapsed lease is not revivable. " +
+      "Renew on a human-scale cadence (on gate stages / ~minutes), not every few seconds (BI-MCP-EFF-F04CF901 — 617 renews was waste polling). " +
+      "On owner mismatch or not_found: stop retrying; re-claim with claimKey if work continues.",
     inputSchema: {
       type: "object",
       properties: {
