@@ -3,6 +3,14 @@
 ## Background
 Nothing on the platform reclaims Docker disk space. The scheduled job named 'Infrastructure prune' currently only prunes stale InfraCI DATABASE records, not actual Docker disk. This leads to disk space exhaustion due to unpruned images and build cache.
 
+## Related (2026-08-10)
+Primary **BuildKit cache bounding** for the managed local-CI builder is now **in-daemon GC** via
+`scripts/config/local-ci-buildkitd.toml` (see
+[`2026-08-10-buildkit-session-lifecycle-design.md`](./2026-08-10-buildkit-session-lifecycle-design.md),
+BI-C85D1B0A). External `builder prune` remains a backstop for operators and weekly jobs; it is
+not the only control. Session cool-down (`docker buildx stop`) reclaims **RAM**, not layer
+disk — GC / prune reclaim **disk**.
+
 ## Objective
 - Add a new scheduled job or extend `infra-prune` to reclaim Docker disk space by pruning dangling images and build caches.
 - Target: `docker image prune -f --filter until=48h` and `docker builder prune -f --keep-storage 20gb`.
