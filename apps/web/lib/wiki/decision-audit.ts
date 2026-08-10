@@ -30,6 +30,7 @@ export function tierForGateKey(gateKey: string | null | undefined): DecisionAudi
   switch (gateKey) {
     case "build-studio":
     case "backlog-triage":
+    case "kernel-consult":
       return "wwmd";
     case "org-business":
       return "wwwd";
@@ -83,7 +84,8 @@ export function profileKindsForTier(tier: DecisionAuditTier): string[] {
 export function gateKeysForTier(tier: DecisionAuditTier): string[] {
   switch (tier) {
     case "wwmd":
-      return ["build-studio", "backlog-triage"];
+      // kernel-consult = MCP principle_decide (external agents / coworkers)
+      return ["build-studio", "backlog-triage", "kernel-consult"];
     case "wwwd":
       return ["org-business"];
     case "wsid":

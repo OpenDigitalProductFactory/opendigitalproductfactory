@@ -274,6 +274,9 @@ export async function recordKernelConsultInteraction(input: {
       taskRunId: input.taskRunId ?? null,
       triggeredByUserId: input.triggeredByUserId ?? null,
       routeContext: input.routeContext ?? input.callingSurface ?? "mcp:principle_decide",
+      // BI-FD7CBA06: name the door so WWMD audit can filter external MCP consults
+      // separately from build-studio / backlog-triage (was always null before).
+      gateKey: "kernel-consult",
       phaseFrom: null,
       phaseTo: null,
       chain,
