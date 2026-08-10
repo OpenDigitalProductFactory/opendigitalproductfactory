@@ -10,12 +10,12 @@ describe("PlatformArchetypeReadinessPage", () => {
     const { default: PlatformArchetypeReadinessPage } = await import("./page");
     const html = renderToStaticMarkup(<PlatformArchetypeReadinessPage />);
 
-    expect(html).toContain("Archetype Readiness");
+    expect(html).toContain("Type claims");
     expect(html).toContain("Platform navigation");
-    expect(html).toContain("Claim gate is on");
+    expect(html).toContain("Gate is on");
     expect(html).toContain("data-dpf-lead");
     expect(html).toContain("data-owner-first-next-action");
-    expect(html).toContain("Open the claim table");
+    expect(html).toContain("Open the table");
     expect(html).toContain("BI-PSC-010");
   });
 });

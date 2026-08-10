@@ -9,12 +9,9 @@ export default function PlatformArchetypeReadinessPage() {
           reading-level exemption, and the grade includes shell chrome. Pattern
           matches /admin/graph-explorer. */}
       <header className="space-y-2" data-dpf-lead>
-        <h1 className="text-xl font-bold text-[var(--dpf-text)]">
-          Archetype Readiness
-        </h1>
+        <h1 className="text-xl font-bold text-[var(--dpf-text)]">Type claims</h1>
         <p className="max-w-3xl text-sm leading-5 text-[var(--dpf-muted)]">
-          See what each business type can claim today. Read the counts. Then open the
-          full table.
+          See what each type can claim. Read the counts. Then open the table.
         </p>
         <a
           href="#archetype-claim-matrix"
@@ -22,7 +19,7 @@ export default function PlatformArchetypeReadinessPage() {
           data-owner-first-next-action="open-claim-matrix"
           className="inline-flex text-sm font-semibold text-[var(--dpf-accent)] underline-offset-2 hover:underline"
         >
-          Open the claim table
+          Open the table
         </a>
       </header>
 

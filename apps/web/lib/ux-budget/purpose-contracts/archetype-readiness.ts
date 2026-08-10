@@ -29,22 +29,19 @@ export const ARCHETYPE_READINESS_PURPOSE_CONTRACTS: PurposeContractModule = [
       },
       contentRoles: {
         defaultVisibleKeys: [
-          "category-count",
-          "template-only-count",
-          "ops-ready-count",
-          "sole-platform-ready-count",
-          "claim-gate-notice",
+          "lead-summary",
+          "open-claim-table-action",
         ],
         deferredRegions: [
           {
             key: "readiness-matrix",
-            role: "Per-category highest claim tier, blocked higher claims, and evidence references.",
-            trigger: "Operator expands 'Category claim matrix'.",
+            role: "KPI counts, claim-gate notice, and per-type highest claim tier with blockers and evidence.",
+            trigger: "Operator expands 'All claims' or uses Open the table.",
           },
           {
             key: "tier-definitions",
             role: "Detailed tier meanings for template-ready, ops-ready, connector-ready, regulated-ready, and sole-platform-ready claims.",
-            trigger: "Operator expands 'Tier definitions'.",
+            trigger: "Operator expands 'Tier list'.",
           },
         ],
       },
@@ -56,7 +53,7 @@ export const ARCHETYPE_READINESS_PURPOSE_CONTRACTS: PurposeContractModule = [
         feedbackPrimitive:
           "Inline report badges and notices communicate claim status; there are no dialogs or destructive actions.",
         disclosurePattern:
-          "Summary KPI cards and the claim-gate notice are visible on arrival; the full category matrix and tier definitions expand on demand so the detail shell stays under the net-new word budget.",
+          "Lead summary and open-table action are visible on arrival; counts, gate notice, matrix, and tier list expand on demand so net-new reading-grade and word budgets pass with platform chrome included.",
         returnBehavior:
           "The operator returns to the Platform Hub through the same Overview navigation family.",
       },
