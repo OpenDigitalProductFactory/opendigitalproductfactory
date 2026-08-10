@@ -100,6 +100,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         // BI-812C676D: every covered-root *.test.mjs must appear here or on the
         // deliberate allowlist — otherwise CI stays green while the test never runs.
         "scripts/lib/ci-policy-test-inventory.test.mjs",
+        "scripts/lib/git-shallow-preflight.test.mjs",
         "scripts/pregate-preflight.test.mjs",
         "scripts/gate-context.test.mjs",
       ),
