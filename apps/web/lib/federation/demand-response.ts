@@ -15,6 +15,7 @@ import {
 import { decodeDemandMirrorPayload } from "./demand-exchange";
 import type { FederationIdentity } from "./demand-identity";
 import { scheduleFederationDeliveryJob } from "./delivery-queue";
+import { findFirstMirrorAcrossPages } from "./mirror-page";
 
 interface ResponseMirrorRow {
   mirrorId: string;
@@ -141,20 +142,23 @@ export async function handleIncomingDemandResponse(
 ): Promise<{ action: "created" | "noop" | "rejected"; responseId?: string; violations?: string[] }> {
   const violations = validateDemandResponseV1(response);
   if (violations.length > 0) return { action: "rejected", violations };
-  const shared = await db.federatedRecordMirror.findMany({
-    where: { federationLinkId: linkId, recordType: "demand-envelope", canonicalSide: "local" },
-    select: { payload: true, localRecordRef: true },
-    take: 1_000,
-  });
-  // Correlate the incoming response to the exact demand WE projected, and keep the
-  // matched row so we can bind the response to the ORIGINATOR's local item below.
-  const matchedEnvelope = shared.find((row) => {
-    const payload = decodeDemandOutboxPayload(row.payload);
-    return payload?.envelope.specVersion === "dpf.demand/1"
-      && payload.envelope.envelopeId === response.envelopeId
-      && payload.envelope.originInstallationId === response.originInstallationId
-      && payload.envelope.originRecordRef === response.originRecordRef;
-  });
+  // Correlate the incoming response to the exact demand WE projected. Page the
+  // local envelope inventory (BI-72C3FBA2) — a silent take:1_000 dropped every
+  // envelope past the first batch on busy links.
+  const matchedEnvelope = await findFirstMirrorAcrossPages(
+    (args) => db.federatedRecordMirror.findMany(args),
+    {
+      where: { federationLinkId: linkId, recordType: "demand-envelope", canonicalSide: "local" },
+      select: { payload: true, localRecordRef: true, mirrorId: true },
+    },
+    (row) => {
+      const payload = decodeDemandOutboxPayload(row.payload);
+      return payload?.envelope.specVersion === "dpf.demand/1"
+        && payload.envelope.envelopeId === response.envelopeId
+        && payload.envelope.originInstallationId === response.originInstallationId
+        && payload.envelope.originRecordRef === response.originRecordRef;
+    },
+  );
   if (!matchedEnvelope) return { action: "rejected", violations: ["response:unknown-envelope"] };
   const where = {
     federationLinkId_recordType_peerRecordRef: {

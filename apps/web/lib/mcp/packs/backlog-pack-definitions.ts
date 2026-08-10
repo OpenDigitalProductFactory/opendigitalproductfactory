@@ -211,7 +211,9 @@ export const backlogPackDefinitions: ToolDefinition[] = [
   },
   {
     name: "list_epics",
-    description: "List epics with item-count rollups. Read-only. Filterable by status and whether the epic has open items. Returned epicId is the semantic id (EP-*), not the internal cuid.",
+    description:
+      "List epics with item-count rollups. Read-only. Filterable by status and whether the epic has open items. Returned epicId is the semantic id (EP-*), not the internal cuid. " +
+      "Prefer one filtered list (status/hasOpenItems/limit) over re-listing the full catalog for every decision.",
     inputSchema: {
       type: "object",
       properties: {
@@ -282,7 +284,9 @@ export const backlogPackDefinitions: ToolDefinition[] = [
   },
   {
     name: "get_next_recommended_work",
-    description: "Return a short ranked list of backlog items the caller could pick up next. Ranks by spec/plan presence, triage outcome, effort size, priority, and active-build state. Read-only.",
+    description:
+      "Return a short ranked list of backlog items the caller could pick up next. Ranks by spec/plan presence, triage outcome, effort size, priority, and active-build state. Read-only. " +
+      "Call once at session start (or after finishing a BI); pass excludeItemIds for rejected candidates instead of re-polling without filters.",
     inputSchema: {
       type: "object",
       properties: {
