@@ -1,19 +1,19 @@
 ---
 name: dpf-record-decision-outcome
-description: "Use in the DPF codebase after a WWMD/kernel decision is made. Records the decision result, evidence summary, and next action through governed MCP tools so Build Studio and reviewers share one source of truth."
+description: "Use in the DPF codebase after a WWMD/kernel decision is made. Confirms the DecisionInteraction ledger write from principle_decide, surfaces the DI id to the operator, and attaches follow-on evidence (capsule, human ratification) so Build Studio and reviewers share one source of truth."
 disable-model-invocation: false
 user-invocable: true
-allowed-tools: mcp__dpf__save_build_notes mcp__dpf__record_execution_evidence
+allowed-tools: mcp__dpf__principle_decide mcp__dpf__record_capsule_evidence mcp__dpf__wiki_query
 category: governance
 assignTo: ["*"]
 capability: null
 taskType: evidence
-triggerPattern: "record decision|save decision outcome|decision evidence|capture recommendation|record WWMD"
+triggerPattern: "record decision|save decision outcome|decision evidence|capture recommendation|record WWMD|ledger recorded"
 userInvocable: true
 agentInvocable: true
-allowedTools: ["mcp__dpf__save_build_notes", "mcp__dpf__record_execution_evidence"]
+allowedTools: ["mcp__dpf__principle_decide", "mcp__dpf__record_capsule_evidence", "mcp__dpf__wiki_query"]
 composesFrom: ["dpf-decision-via-kernel"]
-contextRequirements: ["DPF MCP write tools reachable; decision result available"]
+contextRequirements: ["DPF MCP tools reachable; decision result available"]
 riskBand: medium
 enforces:
   - kernel/principles/evidence-before-diagnosis
@@ -22,33 +22,88 @@ enforces:
 
 # DPF Record Decision Outcome
 
-Persist a decision result once WWMD or founder review has produced an answer.
+Close the loop after a WWMD / kernel decision so the operator can **see** it on the Decision Governance log and so follow-on work carries the DI id.
+
+## What is already recorded (do not re-home)
+
+**`principle_decide` already persists** every successful consult to `DecisionInteraction` via the kernel-consult ledger (`apps/web/lib/decision/kernel-consult-ledger.ts`). The tool response carries:
+
+```
+data.ledger = { recorded: true, interactionId: "DI-…", profileId: "…" }
+# or { recorded: false, reason: "…" } on fail-open skip
+```
+
+The operator-visible audit surface is **`/coworker-decisions/decisions`** (and drill-in `/coworker-decisions/decisions/[interactionId]`), **not** wiki `pageKind=decision` DEC-* pages and **not** a parallel build-note store.
+
+> **Anti-pattern (retired).** Do not treat `save_build_notes` / free-form notes as the decision ledger. That was the pre-ledger habit and makes the hub look empty while agents believe they "recorded" something.
 
 ## When to use
 
-- Build Studio needs to carry a recommendation from one route, phase, or task to another.
-- Claude or Codex made a governed decision outside the portal and needs to hand it back.
-- A reviewer needs to see what was decided, why, and what action follows.
+- After `dpf-decision-via-kernel` / `principle_decide` returns a recommendation.
+- When the operator (or agent) **overrides** the kernel recommendation — the DI row exists; you still need to say so in capsule evidence.
+- When handing off across surfaces (Grok → Claude → Build Studio) and the next thread must know which DI governed the choice.
 
-## Enforces
+## When NOT to use
 
-- `kernel/principles/evidence-before-diagnosis`
-- `kernel/principles/single-source-of-truth`
+- Before options are weighed — call `dpf-decision-via-kernel` first.
+- To invent a second audit home. One ledger: `DecisionInteraction`.
 
 ## Steps
 
-1. Collect the decision question, selected option, confidence, reason summary, and next action label.
-2. Record execution evidence with links to the build, task run, branch, or PR when available.
-3. Save a concise build note that can be shown in the Build Studio timeline.
-4. Put raw tool details in audit fields only. Keep the default summary operator-readable.
-5. Return the persisted evidence identifier and the recommended next action.
+1. **Confirm the ledger write.** From the `principle_decide` response, read `data.ledger`.
+   - `recorded: true` → keep `interactionId` (DI-*). Report it to the operator.
+   - `recorded: false` → surface `reason` (e.g. profile not provisioned). The decision still returned, but the hub will not show it — that is a process defect; file or escalate.
+
+2. **Report the canonical link.** Operator-facing:
+   - Question + recommended option + confidence
+   - `interactionId` (DI-*)
+   - Hub path: `/coworker-decisions/decisions/<interactionId>`
+   - `callingSurface` you passed (must be a **normalized** surface id — see `dpf-decision-via-kernel`)
+
+3. **Attach to the Work Capsule when one exists.** Call `record_capsule_evidence` with a short, operator-readable summary:
+   - decision question
+   - chosen option (and whether it matched the kernel recommendation)
+   - `interactionId`
+   - next action
+
+4. **Human ratification / override.**
+   - High confidence + operator agrees → proceed; capsule evidence is enough.
+   - Low confidence / commandment conflict / operator override → state the override and rationale in capsule evidence (and escalate via open decision reviews when the outcome is `escalate`/`defer`).
+
+5. **Do not** write a second decision record to notes-only tools for the same consult.
+
+## Output template
+
+```
+**Decision recorded (ledger).**
+
+- Question: <one sentence>
+- Recommendation: <optionId> (confidence <high|low>)
+- Operator disposition: <accepted | overridden: <option> | escalated>
+- DecisionInteraction: <DI-…>
+- Hub: /coworker-decisions/decisions/<DI-…>
+- Capsule evidence: <id or n/a>
+- Next action: <one sentence>
+```
 
 ## Guardrails
 
-- Do not write directly to the database if MCP reports insufficient scope. Stop and request the correct token scope.
-- Do not create duplicate notes for the same decision. Prefer updating or linking existing evidence when the tool supports it.
-- Do not make the operator copy IDs between surfaces; include the context links in the persisted payload.
+- **Single source of truth** is `DecisionInteraction`. Capsule evidence **points at** the DI; it does not replace it.
+- Never claim "no decisions are recorded" without checking `/coworker-decisions/decisions` or the DI id from `ledger`.
+- Never invent DI ids. Only use ids returned by MCP.
+- If MCP progressive loading hides a tool, `load_tools` then retry — do not skip the ledger path.
 
 ## Worked example
 
-After WWMD selects the shared nonproduction environment, this skill records the recommendation, confidence, route context, current branch, and next action. The Build Studio phase view can then show "Recommended next action: use the shared environment" while the audit panel keeps the detailed ledger.
+After WWMD selects "enforce-call-plus-observability" for external-agent process gaps:
+
+1. `principle_decide` returns `ledger: { recorded: true, interactionId: "DI-24A1F966C697" }`.
+2. Report that DI and the hub path to the operator.
+3. `record_capsule_evidence` on the active WorkCapsule with the DI id and next action (file BIs / implement gateKey).
+
+## See also
+
+- Predecessor: [`dpf-decision-via-kernel`](../dpf-decision-via-kernel/SKILL.md)
+- Writer: `apps/web/lib/decision/kernel-consult-ledger.ts`
+- Audit: `apps/web/lib/wiki/decision-audit.ts`, route `/coworker-decisions/decisions`
+- Process BIs: BI-D5ACBAE2 (external-agent process), BI-FD7CBA06 (gateKey attribution)
