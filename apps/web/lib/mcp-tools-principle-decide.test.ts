@@ -264,11 +264,30 @@ describe("principle_decide MCP tool", () => {
       {
         context: "x",
         options: [
-          { id: "a", description: "A", features: { schema_grounding: 0.5 } },
-          { id: "b", description: "B", features: { schema_grounding: 0.51 } },
+          {
+            id: "a",
+            description: "A",
+            features: {
+              schema_grounding: 0.5,
+              long_term_maintainability: 0.4,
+              evidence_density: 0.4,
+            },
+          },
+          {
+            id: "b",
+            description: "B",
+            features: {
+              schema_grounding: 0.51,
+              long_term_maintainability: 0.4,
+              evidence_density: 0.4,
+            },
+          },
         ],
         callingPopulation: "human",
         tieMargin: 0.001, // very tight → margin 0.01 should clear it
+        // Isolate tie-margin from BI-1D23EC26 sensitivity gate for this unit.
+        minFeatureKeys: 3,
+        sensitivityEpsilon: 0,
       },
       "user_test",
     );
