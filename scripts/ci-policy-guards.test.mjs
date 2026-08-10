@@ -16,6 +16,7 @@ const EXPECTED_LEGACY_JOBS = [
   "bundle-boundary-guard",
   "capability-consumer-guard",
   "compose-env-contract-guard",
+  "compose-resource-budgets-guard",
   "context-economy-guard",
   "data-impact-gate",
   "decision-baseline",

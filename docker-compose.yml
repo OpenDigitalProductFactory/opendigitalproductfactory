@@ -949,7 +949,7 @@ services:
   #   docker compose --profile tts up
   dpf-tts:
     # BI-A0A0568F: profile-gated only (never always-on). See
-    # docs/superpowers/plans/2026-08-09-tts-idle-process-elimination.md.
+    # docs/architecture/2026-08-09-tts-idle-process-elimination.md.
     image: ${DPF_TTS_IMAGE:-travisvn/chatterbox-tts-api:v0.1.0}
     profiles: ["runtime-local-speech", "tts"]
     restart: unless-stopped

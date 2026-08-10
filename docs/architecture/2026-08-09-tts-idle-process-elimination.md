@@ -1,6 +1,6 @@
 # TTS idle process elimination (BI-A0A0568F)
 
-**Backlog item:** `BI-A0A0568F`  
+**Backlog item (coordination):** `BI-A0A0568F`  
 **Epic:** `EP-413F2602`  
 **Date:** 2026-08-09  
 **Status:** decision + first enforcement slice (profile gate + memory cap)
