@@ -96,12 +96,6 @@ const ALIGN_CLASS: Record<Align, string> = {
   center: "text-center",
 };
 
-const JUSTIFY_CLASS: Record<Align, string> = {
-  left: "justify-start",
-  right: "justify-end",
-  center: "justify-center",
-};
-
 export function DataTable<T>({
   columns,
   rows,
@@ -156,13 +150,6 @@ export function DataTable<T>({
             {columns.map((col) => {
               const sortable = Boolean(col.sortAccessor);
               const active = sort?.key === col.key;
-              const nextSortDir = active && sort?.dir === "asc" ? "desc" : "asc";
-              const sortLabel =
-                typeof col.header === "string"
-                  ? `Sort by ${col.header} ${
-                      nextSortDir === "asc" ? "ascending" : "descending"
-                    }`
-                  : "Sort column";
               return (
                 <th
                   key={col.key}
@@ -172,39 +159,23 @@ export function DataTable<T>({
                     cellPad,
                     "font-medium uppercase tracking-wide text-[var(--dpf-muted)]",
                     ALIGN_CLASS[col.align ?? "left"],
+                    sortable ? "cursor-pointer select-none" : "",
                   ]
                     .filter(Boolean)
                     .join(" ")}
+                  onClick={sortable ? () => toggleSort(col) : undefined}
                   aria-sort={
                     active ? (sort?.dir === "asc" ? "ascending" : "descending") : undefined
                   }
                 >
-                  {sortable ? (
-                    <button
-                      type="button"
-                      className={[
-                        "inline-flex w-full items-center gap-1 rounded-sm text-inherit outline-none",
-                        JUSTIFY_CLASS[col.align ?? "left"],
-                        "focus-visible:ring-2 focus-visible:ring-[var(--dpf-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--dpf-surface-1)]",
-                      ].join(" ")}
-                      onClick={() => toggleSort(col)}
-                      aria-label={sortLabel}
-                    >
-                      <span>{col.header}</span>
+                  <span className="inline-flex items-center gap-1">
+                    {col.header}
+                    {sortable ? (
                       <span aria-hidden="true" className="text-[8px]">
                         {active ? (sort?.dir === "asc" ? "▲" : "▼") : "↕"}
                       </span>
-                    </button>
-                  ) : (
-                    <span
-                      className={[
-                        "inline-flex items-center gap-1",
-                        JUSTIFY_CLASS[col.align ?? "left"],
-                      ].join(" ")}
-                    >
-                      {col.header}
-                    </span>
-                  )}
+                    ) : null}
+                  </span>
                 </th>
               );
             })}

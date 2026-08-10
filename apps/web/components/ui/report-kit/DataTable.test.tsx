@@ -74,23 +74,6 @@ describe("DataTable render", () => {
     expect(html.match(/scope="col"/g)).toHaveLength(COLUMNS.length);
   });
 
-  it("renders sortable headers as keyboard-focusable buttons", () => {
-    const html = renderToStaticMarkup(
-      <DataTable
-        columns={COLUMNS}
-        rows={ROWS}
-        getRowKey={(r) => r.id}
-        initialSort={{ key: "name", dir: "asc" }}
-      />,
-    );
-
-    expect(html).toContain('<button type="button"');
-    expect(html).toContain('aria-label="Sort by Name descending"');
-    expect(html).toContain('aria-label="Sort by Amount ascending"');
-    expect(html).not.toContain('aria-label="Sort by ID ascending"');
-    expect(html).toContain('aria-sort="ascending"');
-  });
-
   it("renders the empty state when there are no rows", () => {
     const html = renderToStaticMarkup(
       <DataTable
