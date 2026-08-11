@@ -5,8 +5,7 @@
   "scope": {
     "files": [
       "apps/web/app/(shell)/platform/archetype-readiness/page.tsx",
-      "apps/web/components/platform/ArchetypeReadinessMatrixPanel.tsx",
-      "apps/web/components/ui/report-kit/DataTable.tsx"
+      "apps/web/components/platform/ArchetypeReadinessMatrixPanel.tsx"
     ]
   },
 
