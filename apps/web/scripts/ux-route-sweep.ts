@@ -695,6 +695,18 @@ async function main(): Promise<void> {
     console.error(
       "\n[ux-sweep] BLOCKED — a route regressed against its frozen baseline, or a net-new route exceeded its shell budget.",
     );
+    // BI-26DA1AEB residual: structureChanged failures used to strand authors who
+    // did not know the sanctioned re-freeze path exists (workflow_dispatch +
+    // update_baseline artifact, not a silent CI commit).
+    if (sweep.verdicts.some((v) => !v.ok && v.structureChanged)) {
+      console.error(
+        "\n[ux-sweep] structureChanged recovery (BI-26DA1AEB):\n" +
+          "  1. gh workflow run ux-route-sweep.yml --ref <branch> -f update_baseline=true\n" +
+          "  2. Download artifact ux-route-budget-baseline\n" +
+          "  3. Splice ONLY the deliberately re-frozen route(s) into the committed baseline (do not replace the whole file if routes are missing — BI-EE6E0CFC)\n" +
+          "  4. Commit under review. The baseline is a reviewed engineering act, not a CI auto-write.",
+      );
+    }
     process.exit(1);
   }
   console.error("[ux-sweep] OK");

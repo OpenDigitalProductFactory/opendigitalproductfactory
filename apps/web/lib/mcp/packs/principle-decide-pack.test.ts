@@ -298,23 +298,51 @@ describe("principle-decide pack — abstention is machine-checkable", () => {
     expect(advisory).toMatch(/not a neutral or tie result/);
   });
 
-  it("marks usable=true and leaves no advisory on a healthy recommendation", async () => {
+  it("marks usable=true and autonomyEligible when decide reports full quality gates", async () => {
     wiki.decide.mockReturnValue({
       recommendation: { optionId: "a", composite: 2, margin: 1, confidence: "high" },
       scores: [],
-      flags: { insufficientSignal: false, structuredCoverage: "strong", semanticFallbackRatio: 0 },
+      flags: {
+        insufficientSignal: false,
+        structuredCoverage: "strong",
+        semanticFallbackRatio: 0,
+        commandmentConflict: false,
+        commandmentConflictPrinciples: [],
+        featureCoverageWeak: false,
+        sensitivityUnstable: false,
+        autonomyEligible: true,
+        autonomyBlockers: [],
+      },
       reasoning: "ok",
     });
     const res = await principleDecidePack.handlers.principle_decide(
       {
         context: "x",
         callingPopulation: "human",
-        options: [{ id: "a", description: "A", features: { reusability: 0.9 } }],
+        options: [
+          {
+            id: "a",
+            description: "A",
+            features: {
+              reusability: 0.9,
+              long_term_maintainability: 0.8,
+              governance_compliance: 0.7,
+            },
+          },
+        ],
       },
       "u1",
     );
     expect(res.message).toMatch(/^Recommends a/);
-    expect(res.data).toMatchObject({ signalQuality: { usable: true, advisory: null, optionsWithFeatures: 1 } });
+    expect(res.message).toMatch(/autonomyEligible: true/);
+    expect(res.data).toMatchObject({
+      signalQuality: {
+        usable: true,
+        autonomyEligible: true,
+        advisory: null,
+        optionsWithFeatures: 1,
+      },
+    });
   });
 
   it("persists signal quality to the ledger so the abstention rate is queryable", async () => {
@@ -330,7 +358,11 @@ describe("principle-decide pack — abstention is machine-checkable", () => {
     );
     expect(decision.recordKernelConsultInteraction).toHaveBeenCalledWith(
       expect.objectContaining({
-        signalQuality: { usable: false, optionsWithFeatures: 0, optionCount: 1 },
+        signalQuality: expect.objectContaining({
+          usable: false,
+          optionsWithFeatures: 0,
+          optionCount: 1,
+        }),
       }),
     );
   });

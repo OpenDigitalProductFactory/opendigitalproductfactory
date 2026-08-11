@@ -5,7 +5,7 @@ status: published
 abstract: Run platform services on your own hardware first. Use external APIs only when no viable self-hosted alternative exists.
 principleTier: core
 principleDirection: Own the infrastructure stack. Self-hosted services over third-party APIs for any platform capability that has a viable open-source equivalent.
-principleDimensionVector: {"long_term_maintainability": 0.9, "governance_compliance": 0.8, "capacity_utilization": 0.7, "blast_radius": -0.7}
+principleDimensionVector: {"long_term_maintainability": 0.9, "governance_compliance": 0.8, "capacity_utilization": 0.7, "blast_radius": -0.7, "cost_efficiency": 0.75, "operational_independence": 0.9, "vendor_lock_in": -0.85}
 principleAppliesTo:
   - in_platform_coworker
   - external_coding_agent

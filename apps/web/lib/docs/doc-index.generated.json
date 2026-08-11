@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 629,
+  "pageCount": 630,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -1783,6 +1783,20 @@
         "scope-and-exclusions",
         "completion-evidence",
         "what-success-means"
+      ]
+    },
+    "docs/architecture/principle-decide-mcda-identity.md": {
+      "publicHref": "/architecture/principle-decide-mcda-identity/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "principledecide-math-identity-mcda",
+        "what-the-scorer-is",
+        "what-it-is-not",
+        "autonomy-gate-bi-1d23ec26",
+        "operator-surfaces",
+        "design-grounding"
       ]
     },
     "docs/architecture/product-demand-activation.md": {

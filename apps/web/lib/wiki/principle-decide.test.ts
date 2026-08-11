@@ -306,7 +306,8 @@ describe("decide: tie-margin guardrail", () => {
         option("b", { schema_grounding: 0.9 }),
       ],
       principles,
-      { tieMargin: 0.2 },
+      // Isolate tie-margin from BI-1D23EC26 coverage/sensitivity gates.
+      { tieMargin: 0.2, minFeatureKeys: 0, sensitivityEpsilon: 0 },
     );
 
     expect(result.recommendation?.optionId).toBe("b");

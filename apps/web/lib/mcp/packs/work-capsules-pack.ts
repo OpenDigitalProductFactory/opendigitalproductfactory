@@ -181,7 +181,10 @@ const definitions: ToolDefinition[] = [
   },
   {
     name: "heartbeat_capsule",
-    description: "Renew the active lease for a Work Capsule so other agents can see that work is in flight.",
+    description:
+      "Renew the active lease for a Work Capsule so other agents can see that work is in flight. " +
+      "Heartbeat on a human-scale cadence (between stages / few minutes), not every tool call. " +
+      "If the lease is already expired, re-claim or abandon — do not thrash heartbeat.",
     inputSchema: {
       type: "object",
       properties: {
@@ -212,6 +215,7 @@ const definitions: ToolDefinition[] = [
     description:
       "Release previously claimed Work Capsule scope items by kind and value. " +
       "Requires capsuleId (WC-*) plus claims: [{kind, value}, ...] matching prior claim_capsule_scope entries. " +
+      "Call once per handoff with the full claim set — do not release item-by-item in a loop. " +
       "Do NOT retry on invalid_input — fix the payload (claims must be a non-empty array of {kind,value}). " +
       "Do NOT call for an abandoned/unknown capsule (retryable: false). " +
       "If nothing matched, success still returns (idempotent no-op on empty released set).",
