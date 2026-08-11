@@ -1508,6 +1508,9 @@
     "scripts/lib/compose-safety.mjs": [
       "docs/architecture/delivery-surfaces-runbook.md"
     ],
+    "scripts/lib/dco-signoff.mjs": [
+      "docs/architecture/build-gate-runbook.md"
+    ],
     "scripts/lib/dockerfile-portal-build.test.mjs": [
       "docs/install/platform-support-watchlist.md"
     ],
@@ -1575,6 +1578,13 @@
     "scripts/pr-health.test.mjs": [
       "docs/maintenance/staleness-report.md",
       "docs/testing/pr-health.md"
+    ],
+    "scripts/pre-push-dco-check.mjs": [
+      "docs/architecture/build-gate-runbook.md",
+      "docs/founder-kernel/wiki/principles/dco-sign-off-required.md"
+    ],
+    "scripts/pregate-preflight.mjs": [
+      "docs/architecture/build-gate-runbook.md"
     ],
     "scripts/probes/marketing-media/local-render-receipt.json": [
       "docs/security/tool-evaluations/2026-08-01-marketing-media-stack.md"
@@ -2010,7 +2020,10 @@
       "apps/web/lib/integrate/build-orchestrator.ts",
       "apps/web/lib/integrate/coding-agent.ts",
       "apps/web/lib/queue/functions/build-review-verification.ts",
-      "pnpm-lock.yaml"
+      "pnpm-lock.yaml",
+      "scripts/lib/dco-signoff.mjs",
+      "scripts/pre-push-dco-check.mjs",
+      "scripts/pregate-preflight.mjs"
     ],
     "docs/architecture/build-studio-namespace.md": [
       "apps/web/lib/integrate/build-plan-paths.ts",
@@ -2266,6 +2279,9 @@
     "docs/founder-kernel/SCHEMA.md": [
       "apps/web/lib/queue/functions/wiki-lint.ts",
       "packages/db/src/wiki-taxonomy.ts"
+    ],
+    "docs/founder-kernel/wiki/principles/dco-sign-off-required.md": [
+      "scripts/pre-push-dco-check.mjs"
     ],
     "docs/founder-kernel/wiki/principles/no-native-browser-dialogs.md": [
       "scripts/check-no-native-dialogs.mjs"
