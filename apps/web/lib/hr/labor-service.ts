@@ -21,6 +21,12 @@ import {
   type PayrollEarnings,
   type ApprovedTimesheetTotals,
 } from "./labor-billing";
+import {
+  computePayslip,
+  type Payslip,
+  type StatutoryDeductionFn,
+  type PayComponent,
+} from "./payroll";
 
 // ─── Compensation resolution ─────────────────────────────────────────────────
 
@@ -93,6 +99,54 @@ export async function getEmployeePayrollEarnings(
     approved,
     periodsCounted: periods.length,
   };
+}
+
+// ─── Employee payslip: comp (from hire) + approved time → gross-to-net ────────
+
+export type EmployeePayslipResult =
+  | { ok: true; payslip: Payslip; periodsCounted: number }
+  | { ok: false; reason: "no-employee" | "no-compensation" };
+
+/**
+ * Run one employee's payslip for a pay period, end to end: read their
+ * EmployeeProfile compensation (populated at hire — lib/recruiting/offer-compensation.ts)
+ * plus approved timesheets via getEmployeePayrollEarnings, then compute gross→net via
+ * computePayslip with the supplied jurisdiction statutory function. This is the caller
+ * that makes a hired employee actually payable — the hiring→paying hop of the seam.
+ * Pure compute over the spine; PayRun/Payslip persistence + disbursement are the
+ * governed follow-ups (EP-PAYROLL-COMP-BENEFITS). `no-compensation` means the hire
+ * never received comp — the seam is only closed when the offer carries it through.
+ */
+export async function computeEmployeePayslip(
+  employeeProfileId: string,
+  periodStart: Date,
+  periodEnd: Date,
+  statutory: StatutoryDeductionFn,
+  opts?: {
+    periodsPerYear?: number;
+    overtimeMultiplier?: number;
+    additions?: PayComponent[];
+    preTaxDeductions?: PayComponent[];
+    postTaxDeductions?: PayComponent[];
+  },
+): Promise<EmployeePayslipResult> {
+  const earningsResult = await getEmployeePayrollEarnings(
+    employeeProfileId,
+    periodStart,
+    periodEnd,
+    opts,
+  );
+  if (!earningsResult.ok) return earningsResult;
+
+  const payslip = computePayslip({
+    ...earningsResult.earnings,
+    ...(opts?.additions ? { additions: opts.additions } : {}),
+    ...(opts?.preTaxDeductions ? { preTaxDeductions: opts.preTaxDeductions } : {}),
+    ...(opts?.postTaxDeductions ? { postTaxDeductions: opts.postTaxDeductions } : {}),
+    statutory,
+  });
+
+  return { ok: true, payslip, periodsCounted: earningsResult.periodsCounted };
 }
 
 // ─── Billable time → draft invoice ───────────────────────────────────────────

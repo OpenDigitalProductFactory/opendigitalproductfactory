@@ -28,13 +28,17 @@ The spine is already the right shape on both ends — but the middle is severed:
 
 Effect: a hired candidate is immediately payable — the recruiting→hiring→paying comp handoff is closed with one small, testable module and no schema/migration change (the `Offer.compensation` column already holds JSON).
 
+### 3.1b Slice 2 — the payroll run (this PR)
+
+`lib/hr/labor-service.ts#computeEmployeePayslip(employeeProfileId, periodStart, periodEnd, statutory, opts)` — the missing caller that turns the landed comp into an actual payslip. It calls `getEmployeePayrollEarnings` (previously **dead code — no caller**) → `computePayslip` (gross→net), returning a `Payslip` or `{no-employee|no-compensation}`. This closes the hiring→**paying** compute hop: a Greenhouse (or native P4) hire whose offer carried comp now produces a real gross-to-net payslip from that comp + approved timesheets. An end-to-end test drives offer comp → the columns slice 1 writes → `computeEmployeePayslip` → asserted gross/net, and makes the `no-compensation` gap explicit (a hire without comp is provably not payable). Pure compute over the spine — no persistence yet.
+
 ### 3.2 Downstream (converges the two threads on the spine)
 
-These are the payroll-thread deliverables; this design fixes their contract to the spine so they don't fork:
+The compute path now runs end to end; what remains is persistence, dated history, real jurisdictions, and money movement — the payroll-thread deliverables, whose contract this design pins to the spine so they don't fork:
 1. **Effective-dated comp (BI-36FEECC4):** a dated comp row (effective = offer `startDate`) instead of overwrite-in-place; slice 1 sets the current value + supplies the effective date for the first dated row when this lands.
-2. **Payroll persistence + run (EP-PAYROLL-COMP-BENEFITS):** `PayRun`/`Payslip`/earning/deduction models + a runner that calls `getEmployeePayrollEarnings` + `computePayslip`, GL posting, disbursement, pay-stub surface. Kernel-decide the model shapes when built.
-3. **Real statutory engine + net-pay disbursement + pay-stub delivery.**
-4. **Onboarding → payroll enrollment:** the `OnboardingTask` packet (`lib/actions/onboarding.ts`, exists) gains a "payroll enrollment" task that is satisfied once comp + effective date are present — so onboarding and payroll share one readiness signal.
+2. **Payroll persistence (EP-PAYROLL-COMP-BENEFITS):** `PayRun`/`Payslip`/earning/deduction models + a runner that persists what `computeEmployeePayslip` computes, GL posting, pay-stub surface. Kernel-decide the model shapes when built.
+3. **Real statutory engine + net-pay disbursement + pay-stub delivery** (slice 2 takes the statutory function as a parameter — production jurisdictions plug in here).
+4. **Onboarding → payroll enrollment:** the `OnboardingTask` packet (`lib/actions/onboarding.ts`, exists) gains a "payroll enrollment" task satisfied once comp + effective date are present — so onboarding and payroll share one readiness signal.
 
 ## 4. Sequence (replace-first, seamless-first)
 
