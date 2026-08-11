@@ -2,17 +2,13 @@
 // EP-COWORKER-IDENTITY-360 Phase 1 — the per-coworker Cost facet body. Pure
 // presentation over CoworkerCostSummary (loadCoworkerCostProjection); no data
 // fetching here. Server component.
-import type { CoworkerCostSummary } from "@/lib/coworker-identity/cost-projection";
-
-function fmtUsd(n: number): string {
-  return n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
-
-function fmtTokens(n: number): string {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(2)}M`;
-  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}k`;
-  return String(n);
-}
+import {
+  fmtCostTokens,
+  fmtCostUsd,
+  hasCostActivity,
+  isCostEffectivelyFree,
+  type CoworkerCostSummary,
+} from "@/lib/coworker-identity/cost-projection";
 
 /** A minimal sparkline from the ascending daily series. */
 function Sparkline({ series }: { series: Array<{ day: string; usd: number }> }) {
@@ -45,15 +41,18 @@ function Sparkline({ series }: { series: Array<{ day: string; usd: number }> }) 
 
 export function CostFacetPanel({ summary }: { summary: CoworkerCostSummary }) {
   const { totalUsd, tokens, deltaPct, dailyUsd, drivers, budget, window } = summary;
-  const hasSpend = totalUsd > 0 || drivers.length > 0;
+  const free = isCostEffectivelyFree(summary);
   const deltaTone =
     deltaPct == null ? "var(--dpf-muted)" : deltaPct > 0 ? "var(--dpf-warning)" : "var(--dpf-success)";
-  const maxDriver = Math.max(...drivers.map((d) => d.costUsd), 0.0001);
+  // When inference is free the bars represent token share, not dollar share.
+  const maxDriver = free
+    ? Math.max(...drivers.map((d) => d.tokens), 1)
+    : Math.max(...drivers.map((d) => d.costUsd), 0.0001);
 
-  if (!hasSpend) {
+  if (!hasCostActivity(summary)) {
     return (
       <p style={{ fontSize: 13, color: "var(--dpf-muted)" }}>
-        No recorded spend for this coworker in the last {window.days} days.
+        No recorded usage for this coworker in the last {window.days} days.
       </p>
     );
   }
@@ -62,20 +61,34 @@ export function CostFacetPanel({ summary }: { summary: CoworkerCostSummary }) {
     <div>
       <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
         <div>
-          <div style={{ fontSize: 28, fontWeight: 750, letterSpacing: "-0.02em", fontVariantNumeric: "tabular-nums" }}>
-            <span style={{ fontSize: 15, color: "var(--dpf-muted)", fontWeight: 650 }}>$</span>
-            {fmtUsd(totalUsd)}
-          </div>
-          <div style={{ fontSize: 12, color: "var(--dpf-muted)", marginTop: 2 }}>
-            last {window.days} days ·{" "}
-            {deltaPct != null && (
-              <span style={{ color: deltaTone, fontWeight: 650 }}>
-                {deltaPct > 0 ? "▲" : "▼"} {Math.abs(deltaPct)}%
-              </span>
-            )}
-            {deltaPct != null ? " vs prior · " : ""}
-            <span style={{ fontVariantNumeric: "tabular-nums" }}>{fmtTokens(tokens)}</span> tokens
-          </div>
+          {free ? (
+            <>
+              <div style={{ fontSize: 28, fontWeight: 750, letterSpacing: "-0.02em", fontVariantNumeric: "tabular-nums" }}>
+                {fmtCostTokens(tokens)}{" "}
+                <span style={{ fontSize: 15, color: "var(--dpf-muted)", fontWeight: 650 }}>tokens</span>
+              </div>
+              <div style={{ fontSize: 12, color: "var(--dpf-muted)", marginTop: 2 }}>
+                $0.00 · local inference · last {window.days} days
+              </div>
+            </>
+          ) : (
+            <>
+              <div style={{ fontSize: 28, fontWeight: 750, letterSpacing: "-0.02em", fontVariantNumeric: "tabular-nums" }}>
+                <span style={{ fontSize: 15, color: "var(--dpf-muted)", fontWeight: 650 }}>$</span>
+                {fmtCostUsd(totalUsd)}
+              </div>
+              <div style={{ fontSize: 12, color: "var(--dpf-muted)", marginTop: 2 }}>
+                last {window.days} days ·{" "}
+                {deltaPct != null && (
+                  <span style={{ color: deltaTone, fontWeight: 650 }}>
+                    {deltaPct > 0 ? "▲" : "▼"} {Math.abs(deltaPct)}%
+                  </span>
+                )}
+                {deltaPct != null ? " vs prior · " : ""}
+                <span style={{ fontVariantNumeric: "tabular-nums" }}>{fmtCostTokens(tokens)}</span> tokens
+              </div>
+            </>
+          )}
         </div>
         <Sparkline series={dailyUsd} />
       </div>
@@ -94,7 +107,7 @@ export function CostFacetPanel({ summary }: { summary: CoworkerCostSummary }) {
             <span>Daily budget posture</span>
             {budget.dailyTokenLimit ? (
               <span style={{ fontVariantNumeric: "tabular-nums" }}>
-                {fmtTokens(budget.tokensToday)} / {fmtTokens(budget.dailyTokenLimit)} today
+                {fmtCostTokens(budget.tokensToday)} / {fmtCostTokens(budget.dailyTokenLimit)} today
                 {budget.usedPct != null ? ` · ${budget.usedPct}%` : ""}
               </span>
             ) : (
@@ -152,7 +165,7 @@ export function CostFacetPanel({ summary }: { summary: CoworkerCostSummary }) {
                     style={{
                       display: "block",
                       height: "100%",
-                      width: `${Math.max(4, (d.costUsd / maxDriver) * 100)}%`,
+                      width: `${Math.max(4, ((free ? d.tokens : d.costUsd) / maxDriver) * 100)}%`,
                       background: "var(--dpf-accent)",
                       opacity: 0.8,
                       borderRadius: 999,
@@ -160,7 +173,7 @@ export function CostFacetPanel({ summary }: { summary: CoworkerCostSummary }) {
                   />
                 </span>
                 <span style={{ fontVariantNumeric: "tabular-nums", color: "var(--dpf-muted)", fontWeight: 600 }}>
-                  ${fmtUsd(d.costUsd)}
+                  {free ? `${fmtCostTokens(d.tokens)} tok` : `$${fmtCostUsd(d.costUsd)}`}
                 </span>
               </div>
             ))}
