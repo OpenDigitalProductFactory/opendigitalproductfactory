@@ -30,6 +30,7 @@ vi.mock("@dpf/db", () => ({
   executeBootstrapDiscovery: vi.fn(),
   normalizeDiscoveredFacts: (value: unknown) => mockNormalizeDiscoveredFacts(value),
   persistBootstrapDiscoveryRun: (...args: unknown[]) => mockPersistBootstrapDiscoveryRun(...args),
+  loadDiscoveryAttributionInputs: vi.fn(async () => ({})),
 }));
 vi.mock("@dpf/db/discovery-collectors-unifi", () => ({
   collectUnifiDiscovery: (...args: unknown[]) => mockCollectUnifiDiscovery(...args),
