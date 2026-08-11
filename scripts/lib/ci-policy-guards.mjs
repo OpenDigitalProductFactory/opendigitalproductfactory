@@ -232,6 +232,12 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         // BI-C85D1B0A: managed BuildKit cool-down / obsolete policy reap planner.
         "scripts/lib/local-ci-builder-lifecycle.test.mjs",
         "scripts/lib/junction-safe-worktree-remove.test.mjs",
+        // Worktree lifecycle hygiene (plan 2026-08-11): the reaping classifier
+        // (now with the liveness + abandoned-merge verdicts), the session
+        // heartbeat liveness signal, and the root-clone fast-forward remedy.
+        "scripts/lib/worktree-janitor-core.test.mjs",
+        "scripts/lib/worktree-session-heartbeat.test.mjs",
+        "scripts/lib/root-clone-refresh.test.mjs",
         "scripts/lib/compose-safety.test.mjs",
         "scripts/lib/local-integration-ci.test.mjs",
         "scripts/lib/sandbox-freshness.test.mjs",
@@ -320,6 +326,11 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         "--test",
         "packages/dpf-skill-pack/hooks/pregate-invocation-guard.test.mjs",
         "packages/dpf-skill-pack/hooks/worktree-readiness-banner.test.mjs",
+        // Worktree lifecycle hygiene hooks (plan 2026-08-11): the session
+        // heartbeat (liveness marker) and the SessionStart root-clone
+        // fast-forward. Hand-enumerated like every entry here — unlisted = unrun.
+        "packages/dpf-skill-pack/hooks/worktree-session-heartbeat.test.mjs",
+        "packages/dpf-skill-pack/hooks/root-clone-freshness.test.mjs",
       ),
       node(
         "--test",
