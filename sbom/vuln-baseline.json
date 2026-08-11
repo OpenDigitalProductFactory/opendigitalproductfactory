@@ -8,6 +8,22 @@
       "severity": "moderate",
       "reason": "Trusted-input-only. js-yaml 3.14.2 is a transitive dep of gray-matter, used for build-time frontmatter parsing of our own repo-controlled .md files — never attacker-supplied YAML, so the quadratic-complexity DoS is not reachable. The fix is in js-yaml 4.x, a breaking major gray-matter does not support (consistent with the prior tolerable_risk dismissal, Dependabot #74). Re-evaluate if gray-matter adopts js-yaml 4 or a 3.x patch ships.",
       "expires": "2026-12-31"
+    },
+    {
+      "id": "GHSA-5p2g-fcmc-qvqq",
+      "aliases": ["CVE-2025-71329"],
+      "package": "image-size@1.2.1",
+      "severity": "high",
+      "reason": "No-fix-available + not-reachable + build-time-only. image-size is a transitive dep of metro@0.84.4 (the React Native / Expo bundler) under apps/mobile ONLY — it is never in the apps/web production runtime. The JXL/HEIF infinite-loop DoS is only reachable by parsing an attacker-supplied image; metro parses image ASSETS committed to our own repo at build time, so the vector is not reachable in our threat model. Critically there is NO patched version: the advisory affects image-size <= 2.0.2 (every published release, incl. latest), so bumping/overriding cannot fix it, and 2.x is a breaking major metro cannot consume. Remediation rides a future Expo/RN SDK + metro bump. Re-evaluate when image-size ships a patched release or metro drops the dep.",
+      "expires": "2027-02-28"
+    },
+    {
+      "id": "GHSA-w3rx-r6r6-pgpr",
+      "aliases": ["CVE-2025-71330"],
+      "package": "image-size@1.2.1",
+      "severity": "high",
+      "reason": "No-fix-available + not-reachable + build-time-only. Same package/vector as GHSA-5p2g-fcmc-qvqq (this is the ICNS-parser infinite-loop variant). image-size is transitive via metro@0.84.4 under apps/mobile only, never in the apps/web production runtime; the DoS needs an attacker-supplied image, whereas metro parses our own repo-controlled build assets. No patched version exists (affects <= 2.0.2, every release), and 2.x is a breaking major metro cannot consume. Remediation rides a future Expo/RN SDK + metro bump. Re-evaluate when image-size ships a patched release or metro drops the dep.",
+      "expires": "2027-02-28"
     }
   ]
 }
