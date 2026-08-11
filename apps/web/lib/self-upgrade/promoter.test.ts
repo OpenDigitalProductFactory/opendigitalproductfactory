@@ -1,9 +1,10 @@
 import { describe, it, expect, vi } from "vitest";
-import { existsSync } from "node:fs";
+import { existsSync, readdirSync, statSync } from "node:fs";
 import { readFileSync } from "node:fs";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
+import { PROMOTER_BUILD_CONTEXT_FILES } from "./promoter-build-context";
 import {
   buildPromoterCommand,
   buildCandidatePromoterImage,
@@ -140,24 +141,56 @@ describe("resolvePromoterArtifact", () => {
 });
 
 describe("buildCandidatePromoterImage", () => {
-  it("builds and labels an offline target-SHA image from prepared candidate source", async () => {
+  it("builds an offline target-SHA image from a minimal staged context, never the whole workspace", async () => {
     const sourcePath = await mkdtemp(join(tmpdir(), "dpf-promoter-candidate-"));
     try {
-      await mkdir(join(sourcePath, "scripts"));
-      await writeFile(join(sourcePath, "promoter-contract.json"), "{\"schemaVersion\":1}\n");
+      // A real candidate checkout contains every promoter build input…
+      for (const file of PROMOTER_BUILD_CONTEXT_FILES) {
+        const dest = join(sourcePath, file);
+        await mkdir(dirname(dest), { recursive: true });
+        await writeFile(
+          dest,
+          file === "promoter-contract.json" ? '{"schemaVersion":1}\n' : `// ${file}\n`,
+        );
+      }
+      // …plus a large decoy tree that must NOT be walked into the docker context
+      // (walking it was the readdirent OOM that bricked SUR-BF75ED2A).
+      await mkdir(join(sourcePath, "apps", "web"), { recursive: true });
+      await writeFile(join(sourcePath, "apps", "web", "huge.txt"), "x".repeat(4096));
+
       const calls: string[][] = [];
+      let stagedFiles: string[] = [];
       const image = await buildCandidatePromoterImage(
         { sourcePath, targetSha: "abc1234" },
         async (args) => {
           calls.push(args);
+          // The staged context still exists here (cleaned up in a finally after).
+          const contextDir = String(args.at(-1));
+          stagedFiles = readdirSync(contextDir, { recursive: true })
+            .map((p) => String(p).replaceAll("\\", "/"))
+            .filter((p) => !statSync(join(contextDir, p)).isDirectory())
+            .sort();
           return { exitCode: 0, stdout: "", stderr: "" };
         },
       );
+
       expect(image).toBe("dpf-promoter:abc1234");
       expect(calls).toHaveLength(1);
       expect(calls[0]?.slice(0, 4)).toEqual(["buildx", "build", "--load", "-f"]);
       expect(calls[0]).toContain("DPF_PROMOTER_SOURCE_SHA=abc1234");
-      expect(calls[0]?.at(-1)).toBe(sourcePath);
+
+      // Context is the throwaway staged dir, not the source workspace.
+      const contextDir = String(calls[0]?.at(-1));
+      expect(contextDir).not.toBe(sourcePath);
+      expect(contextDir).toContain("dpf-promoter-ctx-");
+      // The staged dir is removed once the build returns.
+      expect(existsSync(contextDir)).toBe(false);
+      // -f resolves inside that staged context.
+      expect(calls[0]?.[4]).toBe(join(contextDir, "Dockerfile.promoter"));
+
+      // Exactly the promoter inputs are staged — the apps/web decoy is absent.
+      expect(stagedFiles).toEqual([...PROMOTER_BUILD_CONTEXT_FILES].sort());
+      expect(stagedFiles.some((p) => p.startsWith("apps/"))).toBe(false);
     } finally {
       await rm(sourcePath, { recursive: true, force: true });
     }

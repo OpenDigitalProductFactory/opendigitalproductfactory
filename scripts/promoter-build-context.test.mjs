@@ -29,6 +29,18 @@ function parseSimpleLocalCopySources(dockerfile) {
   });
 }
 
+/** Extract the quoted entries of an exported `readonly string[]` array literal. */
+function parseExportedStringArray(source, exportName) {
+  const start = source.indexOf(exportName);
+  assert.ok(start >= 0, `${exportName} not found`);
+  // Skip the `: readonly string[]` type annotation and open at the `= [` literal.
+  const eq = source.indexOf("=", start);
+  const open = source.indexOf("[", eq);
+  const close = source.indexOf("]", open);
+  assert.ok(eq >= 0 && open >= 0 && close > open, `${exportName} array literal malformed`);
+  return [...source.slice(open + 1, close).matchAll(/"([^"]+)"/g)].map((m) => m[1]);
+}
+
 test("promoter COPY parser fails closed on forms the contract does not support", () => {
   assert.throws(
     () => parseSimpleLocalCopySources('COPY ["one", "two", "/dest/"]'),
@@ -119,4 +131,69 @@ test("Dockerfile.promoter.dockerignore allowlist matches the promoter COPY sourc
   for (const included of allowlisted) {
     assert.ok(copySources.has(included), `dockerignore re-includes ${included}, not a Dockerfile.promoter COPY source`);
   }
+});
+
+test("shared PROMOTER_BUILD_CONTEXT_SOURCES equals Dockerfile.promoter's local COPY sources exactly", async () => {
+  const [promoterDockerfile, contextSource] = await Promise.all([
+    readFile(join(root, "Dockerfile.promoter"), "utf8"),
+    readFile(join(root, "apps", "web", "lib", "self-upgrade", "promoter-build-context.ts"), "utf8"),
+  ]);
+  const copySources = parseSimpleLocalCopySources(promoterDockerfile);
+  const shared = parseExportedStringArray(contextSource, "PROMOTER_BUILD_CONTEXT_SOURCES");
+
+  assert.ok(shared.length > 0, "PROMOTER_BUILD_CONTEXT_SOURCES must not be empty");
+  assert.deepEqual(
+    [...shared].sort(),
+    [...copySources].sort(),
+    "the shared build-context source-of-truth must match Dockerfile.promoter's COPY sources exactly (no drift)",
+  );
+  // The Dockerfile that builds the image is not a COPY source but must also be
+  // staged so `-f <ctx>/Dockerfile.promoter` resolves inside the minimal context.
+  assert.ok(
+    /PROMOTER_DOCKERFILE\s*=\s*"Dockerfile\.promoter"/.test(contextSource),
+    "PROMOTER_DOCKERFILE must be the Dockerfile.promoter filename",
+  );
+  assert.ok(
+    /PROMOTER_BUILD_CONTEXT_FILES[\s\S]*\.\.\.PROMOTER_BUILD_CONTEXT_SOURCES[\s\S]*PROMOTER_DOCKERFILE/.test(contextSource),
+    "PROMOTER_BUILD_CONTEXT_FILES must stage every COPY source plus the Dockerfile",
+  );
+});
+
+test("candidate promoter build stages exactly the COPY sources, never the whole workspace", async () => {
+  const artifactSource = await readFile(
+    join(root, "apps", "web", "lib", "self-upgrade", "promoter-artifact.ts"),
+    "utf8",
+  );
+
+  // It must derive its context from the shared source-of-truth staging helper…
+  assert.ok(
+    /import\s*\{[\s\S]*stageMinimalPromoterBuildContext[\s\S]*\}\s*from\s*"\.\/promoter-build-context"/.test(artifactSource),
+    "candidate build must import the shared staging helper",
+  );
+  assert.ok(
+    artifactSource.includes("stageMinimalPromoterBuildContext(params.sourcePath)"),
+    "candidate build must stage the minimal context from the target-sha sourcePath",
+  );
+  assert.ok(
+    /rm\(contextDir,\s*\{\s*recursive:\s*true,\s*force:\s*true\s*\}\)/.test(artifactSource),
+    "candidate build must clean up the staged context directory",
+  );
+
+  // …and the docker build must use that staged directory as its context, never
+  // the raw whole-tree sourcePath (the readdirent OOM that bricked SUR-BF75ED2A).
+  const buildCall = /"buildx",\s*"build",\s*"--load",([\s\S]*?)\]\)/.exec(artifactSource);
+  assert.ok(buildCall, "candidate build must issue a buildx build invocation");
+  const buildArgs = buildCall[1];
+  assert.ok(
+    buildArgs.includes("contextDir,"),
+    "candidate build context must be the staged contextDir",
+  );
+  assert.ok(
+    buildArgs.includes("join(contextDir, PROMOTER_DOCKERFILE)"),
+    "candidate build -f must resolve inside the staged context",
+  );
+  assert.ok(
+    !buildArgs.includes("params.sourcePath"),
+    "candidate build must NOT pass the whole workspace sourcePath as the docker context",
+  );
 });
