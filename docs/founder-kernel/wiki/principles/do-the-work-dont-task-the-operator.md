@@ -5,7 +5,7 @@ status: published
 abstract: An in-platform coworker or external coding agent should complete tasks within its reach, not hand them back to the human. Operator tasking is reserved for HITL gates (consent, judgment, irreversible actions) or genuinely-impossible work — never for friction an agent could have absorbed.
 principleTier: commandment
 principleDirection: Prefer completing tasks the agent can do itself over handing them to the operator.
-principleDimensionVector: {"human_cognitive_load": -1.0, "speed_to_value": 0.6, "evidence_density": 0.4, "governance_compliance": 0.2}
+principleDimensionVector: {"human_cognitive_load": -1.0, "speed_to_value": 0.6, "evidence_density": 0.4, "governance_compliance": 0.2, "operator_effort": -0.75}
 principleAppliesTo:
   - in_platform_coworker
   - external_coding_agent

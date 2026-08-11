@@ -5,7 +5,7 @@ status: published
 abstract: Routing picks the right model by capability tier and task contract, dynamically. Never pin an agent to a specific provider or model.
 principleTier: core
 principleDirection: Express what a task needs as capability requirements and tiers; let routing pick the model. No hard pins in seeds, AgentModelConfig, or override tables.
-principleDimensionVector: {"long_term_maintainability": 0.8, "vendor_lock_in": -0.9, "operational_independence": 0.6, "capacity_utilization": 0.4}
+principleDimensionVector: {"long_term_maintainability": 0.8, "vendor_lock_in": -0.9, "operational_independence": 0.6, "capacity_utilization": 0.4, "cost_efficiency": 0.5, "reusability": 0.45}
 principleAppliesTo:
   - in_platform_coworker
   - external_coding_agent

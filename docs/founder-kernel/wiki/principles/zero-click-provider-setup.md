@@ -5,7 +5,7 @@ status: published
 abstract: OAuth sign-in (or API-key paste) is the only manual step for provider configuration. Everything else is automatic.
 principleTier: core
 principleDirection: After the one mandatory authentication step, every other provider-activation action (status, discovery, profiling, family enabling, routing availability) must be automatic. Test/Eval/Probe buttons are optimization, not prerequisites.
-principleDimensionVector: {"human_cognitive_load": -0.8, "speed_to_value": 0.7, "long_term_maintainability": 0.4, "evidence_density": -0.2}
+principleDimensionVector: {"human_cognitive_load": -0.8, "speed_to_value": 0.7, "long_term_maintainability": 0.4, "evidence_density": -0.2, "operator_effort": -0.7, "cost_efficiency": 0.45}
 principleAppliesTo:
   - in_platform_coworker
   - external_coding_agent

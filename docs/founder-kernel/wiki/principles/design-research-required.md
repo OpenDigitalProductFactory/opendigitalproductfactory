@@ -5,7 +5,7 @@ status: published
 abstract: Every new feature spec includes a Research & Benchmarking section comparing 2-3 OSS leaders and 2-3 commercial products.
 principleTier: core
 principleDirection: Anchor every design on research against real comparable systems; document adopted patterns, rejected patterns, anti-patterns, and gaps.
-principleDimensionVector: {"schema_grounding": 0.6, "long_term_maintainability": 0.6, "evidence_density": 0.7}
+principleDimensionVector: {"schema_grounding": 0.6, "long_term_maintainability": 0.6, "evidence_density": 0.7, "reusability": 0.5, "evidence_confidence": 0.55}
 principleAppliesTo:
   - in_platform_coworker
   - external_coding_agent
