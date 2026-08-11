@@ -15,7 +15,7 @@
 
 import { existsSync } from "node:fs";
 import { spawnSync } from "node:child_process";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { pathToFileURL } from "node:url";
 
 import { resolveRootClonePath } from "./lib/stale-root-clone.mjs";
 import { refreshRootClone } from "./lib/root-clone-refresh.mjs";
