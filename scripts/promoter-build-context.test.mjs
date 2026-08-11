@@ -91,3 +91,32 @@ test("portal-baked JIT context includes every local Dockerfile.promoter COPY sou
     "JIT build must clean up its temp directory on success and failure",
   );
 });
+
+test("Dockerfile.promoter.dockerignore allowlist matches the promoter COPY sources exactly", async () => {
+  const [promoterDockerfile, dockerignore] = await Promise.all([
+    readFile(join(root, "Dockerfile.promoter"), "utf8"),
+    readFile(join(root, "Dockerfile.promoter.dockerignore"), "utf8"),
+  ]);
+  const copySources = new Set(parseSimpleLocalCopySources(promoterDockerfile));
+  const allowlisted = new Set(
+    dockerignore
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter((line) => line.startsWith("!"))
+      .map((line) => line.slice(1).trim()),
+  );
+  // The context must be ignored-by-default so ONLY the allowlist is sent — this is
+  // what keeps the candidate build's context off the whole repo (SUR-BF75ED2A).
+  assert.match(dockerignore, /^\*\*$/m, "dockerignore must ignore ** before re-including");
+  // The dockerignore also re-includes Dockerfile.promoter itself (read via -f;
+  // harmless in-context). Everything else it re-includes MUST be a real COPY
+  // source, and every COPY source MUST be re-included — drift either way breaks
+  // the promoter build (missing file) or reintroduces the OOM (extra tree).
+  allowlisted.delete("Dockerfile.promoter");
+  for (const source of copySources) {
+    assert.ok(allowlisted.has(source), `dockerignore must re-include COPY source ${source}`);
+  }
+  for (const included of allowlisted) {
+    assert.ok(copySources.has(included), `dockerignore re-includes ${included}, not a Dockerfile.promoter COPY source`);
+  }
+});

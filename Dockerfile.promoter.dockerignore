@@ -1,0 +1,44 @@
+# Build context allowlist for the promoter image (Dockerfile.promoter).
+#
+# BuildKit prefers `<dockerfile>.dockerignore` over the root `.dockerignore`, so
+# this file governs the promoter build's context — WITHOUT changing the root
+# `.dockerignore` that the portal/release images rely on.
+#
+# WHY: the candidate promoter build (self-upgrade preflight) handed Docker the
+# entire upgrade workspace as build context. On a memory-pressured host buildkit's
+# context sender OOMs while enumerating that tree — SUR-BF75ED2A (2026-08-11):
+# `readdirent /host-dpf/.upgrade-workspace/scripts: cannot allocate memory`. The
+# image COPYs only ~20 files, so there is no reason to walk/transfer the whole
+# repo. Ignore everything, then re-include exactly the Dockerfile.promoter COPY
+# sources. This keeps the context tiny (apps/, packages/, docs/, tests/, node_modules
+# are never sent), so the build fits a lean customer host.
+#
+# GUARD: scripts/promoter-build-context.test.mjs asserts this allowlist matches the
+# Dockerfile.promoter COPY sources exactly — add a COPY, add its `!` line here.
+
+# Ignore the entire context first.
+**
+
+# Re-include only what Dockerfile.promoter COPYs.
+!promoter-contract.json
+!Dockerfile
+!Dockerfile.promoter
+!scripts/promote.sh
+!scripts/apply-runtime-capability-transition.mjs
+!scripts/runtime-transition-authority.mjs
+!scripts/rotate-runtime-transition-secret.mjs
+!scripts/lib/transition-signing.mjs
+!scripts/promoter-migration-envelope.mjs
+!scripts/installer/validate-install-state.mjs
+!scripts/installer/migrate-install-state.mjs
+!scripts/installer/resolve-host-identity.mjs
+!scripts/installer/install-state-transaction.mjs
+!scripts/installer/install-state-lock-contract.json
+!scripts/installer/install-state-schema-registry.mjs
+!scripts/installer/install-state.schema.json
+!scripts/installer/install-state.v1.schema.json
+!scripts/installer/install-state.v2.schema.json
+!scripts/lib/resolve-capability-compose-profiles.mjs
+!scripts/lib/govern-capability-compose-args.mjs
+!scripts/lib/capability-state-hash.mjs
+!scripts/capability-service-catalog.generated.json
