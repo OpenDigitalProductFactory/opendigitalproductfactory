@@ -56,6 +56,34 @@ describe("landGreenhouseHire", () => {
     });
   });
 
+  it("lands the accepted offer's compensation so the hire is payable", async () => {
+    const { db, empCreate } = fakeDb({ existingRef: null });
+
+    await landGreenhouseHire(
+      db,
+      hire({ compensation: { payType: "salary", annualSalary: 120000, standardAnnualHours: 2080 } }),
+    );
+
+    const empData = empCreate.mock.calls[0][0].data;
+    // The exact columns lib/hr/labor-service#compensationFromEmployee reads to pay.
+    expect(empData).toMatchObject({
+      payType: "salary",
+      annualSalary: 120000,
+      standardAnnualHours: 2080,
+    });
+  });
+
+  it("lands a hire with absent/malformed comp unpaid, never blocking the hire", async () => {
+    const { db, empCreate } = fakeDb({ existingRef: null });
+
+    const result = await landGreenhouseHire(db, hire({ compensation: { payType: "hourly" } }));
+
+    expect(result).toEqual({ landed: true, employeeProfileId: "emp-cuid-1" });
+    const empData = empCreate.mock.calls[0][0].data;
+    expect(empData.payType).toBeUndefined();
+    expect(empData.hourlyRate).toBeUndefined();
+  });
+
   it("is idempotent — an existing crosswalk returns the existing profile, no create", async () => {
     const { db, empCreate, refCreate } = fakeDb({ existingRef: { canonicalId: "emp-existing" } });
 

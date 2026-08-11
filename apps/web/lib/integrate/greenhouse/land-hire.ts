@@ -8,6 +8,10 @@
 // the typed PrincipalAlias link is a later hardening (design §2.1, §9).
 
 import { slugify } from "@/lib/shared/slugify";
+import {
+  offerCompensationColumns,
+  type EmployeeCompensationColumns,
+} from "@/lib/recruiting/offer-compensation";
 
 export const WORKER_MDM_DOMAIN = "worker";
 export const GREENHOUSE_SOURCE_SYSTEM = "greenhouse";
@@ -24,6 +28,13 @@ export interface GreenhouseHire {
   phoneWork: string | null;
   /** ISO date the offer starts (Offer Packet `starts_at`). */
   startDate: string | null;
+  /**
+   * The accepted offer's compensation (Offer.compensation JSON). Mapped onto the
+   * EmployeeProfile comp columns payroll reads, so the hire lands PAYABLE — the
+   * recruiting→hiring→paying seam. Absent/malformed comp lands the hire unpaid
+   * (comp can be entered later); it never blocks the hire.
+   */
+  compensation?: unknown;
 }
 
 /** Structural client — satisfied by the real PrismaClient and by test fakes. */
@@ -68,6 +79,12 @@ export async function landGreenhouseHire(
     return { landed: false, reason: "already-landed", employeeProfileId: existing.canonicalId };
   }
 
+  // Carry the accepted offer's pay terms onto the comp columns payroll reads, so
+  // the new hire is immediately payable (the recruiting→hiring→paying seam).
+  const compColumns: EmployeeCompensationColumns | null = offerCompensationColumns(
+    hire.compensation,
+  );
+
   const created = await db.employeeProfile.create({
     data: {
       employeeId: makeGreenhouseEmployeeId(hire.displayName, hire.candidateId),
@@ -78,6 +95,7 @@ export async function landGreenhouseHire(
       ...(hire.workEmail ? { workEmail: hire.workEmail } : {}),
       ...(hire.phoneWork ? { phoneWork: hire.phoneWork } : {}),
       ...(hire.startDate ? { startDate: new Date(hire.startDate) } : {}),
+      ...(compColumns ?? {}),
     },
     select: { id: true },
   });
