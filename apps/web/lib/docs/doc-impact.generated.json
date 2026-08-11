@@ -1317,7 +1317,8 @@
     ],
     "pnpm-lock.yaml": [
       "docs/architecture/build-gate-runbook.md",
-      "docs/architecture/dependency-reduction-routine.md"
+      "docs/architecture/dependency-reduction-routine.md",
+      "docs/architecture/enforced-ci-gates.md"
     ],
     "scripts/backup-postgres.sh": [
       "docs/operations/disaster-recovery.md"
@@ -2106,6 +2107,7 @@
       "docs/_config.yml",
       "packages/db/src/table-classification.ts",
       "packages/dpf-skill-pack/hooks/design-grounding-precheck.mjs",
+      "pnpm-lock.yaml",
       "scripts/check-data-impact.mjs",
       "scripts/check-design-grounding-decision.mjs",
       "scripts/check-doc-links.mjs",
