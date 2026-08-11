@@ -6,7 +6,7 @@ status: published
 abstract: A sent email, a published post, and a placed ad cannot be recalled. Before an agent commits an outbound or money-spending action, refuse it outright in an autonomous session and require typed confirmation interactively.
 principleTier: commandment
 principleDirection: Before any action that sends to real recipients, publishes to a public channel, or spends money, require an explicit operator go — refuse outright in autonomous sessions, require typed confirmation interactively — because an outbound effect cannot be unsent.
-principleDimensionVector: {"blast_radius": -1.0, "public_safety": 0.8, "governance_compliance": 0.9, "speed_to_value": -0.4}
+principleDimensionVector: {"blast_radius": -1.0, "public_safety": 0.8, "governance_compliance": 0.9, "speed_to_value": -0.4, "customer_consent_state": 0.75, "data_privacy": 0.45, "reversibility": -0.7}
 principleAppliesTo:
   - in_platform_coworker
   - external_coding_agent

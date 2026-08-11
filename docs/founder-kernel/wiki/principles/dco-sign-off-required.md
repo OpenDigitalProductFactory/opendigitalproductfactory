@@ -5,7 +5,7 @@ status: published
 abstract: Every commit carries a Signed-off-by trailer attesting to the Developer Certificate of Origin.
 principleTier: commandment
 principleDirection: Sign every commit with the Developer Certificate of Origin trailer.
-principleDimensionVector: {"governance_compliance": 1.0, "public_safety": 0.7, "evidence_density": 0.4}
+principleDimensionVector: {"governance_compliance": 1.0, "public_safety": 0.7, "evidence_density": 0.5, "long_term_maintainability": 0.4, "blast_radius": -0.35}
 principleAppliesTo:
   - in_platform_coworker
   - external_coding_agent

@@ -6,7 +6,7 @@ status: published
 abstract: Before any destructive infrastructure action — volume wipes, force-pushes, secret rotation, recreates that lose state — list the steps and wait for an explicit go.
 principleTier: commandment
 principleDirection: List the steps and wait for an affirmative go before any destructive infrastructure action; this overrides autonomous-directive blanket approval.
-principleDimensionVector: {"blast_radius": -1.0, "governance_compliance": 0.9, "evidence_density": 0.7, "speed_to_value": -0.4, "legibility_of_consequence": 0.8}
+principleDimensionVector: {"blast_radius": -1.0, "governance_compliance": 0.9, "evidence_density": 0.7, "speed_to_value": -0.4, "legibility_of_consequence": 0.8, "reversibility": 0.55, "public_safety": 0.7}
 principleAppliesTo:
   - in_platform_coworker
   - external_coding_agent

@@ -503,34 +503,66 @@ export async function releaseCapsuleScopeTool(
   context: ToolContext,
 ): Promise<ToolResult> {
   const capsuleId = stringParam(params, "capsuleId");
+  // BI-MCP-EFF-6EBA2407: agents passed a single claim object or empty array and
+  // looped on generic invalid_input — spell the contract and do not invite retry.
+  if (!Array.isArray(params.claims)) {
+    return {
+      success: false,
+      error: "invalid_input",
+      message:
+        "release_capsule_scope requires claims as a non-empty array of {kind, value}. " +
+        "Example: { capsuleId: \"WC-…\", claims: [{ kind: \"path\", value: \"apps/web/lib/foo.ts\" }] }. " +
+        "Do NOT retry the same malformed payload (retryable: false).",
+      data: { retryable: false },
+    };
+  }
   const claims = parseReleaseInputs(params);
   if (!capsuleId || !claims) {
     return {
       success: false,
       error: "invalid_input",
-      message: "capsuleId and at least one valid scope claim release are required.",
+      message:
+        "capsuleId (WC-*) and at least one valid scope claim release are required " +
+        "(each claim needs kind in path|module|package|route|skill|prompt and a non-empty value). " +
+        "Do NOT retry without fixing the payload (retryable: false).",
+      data: { retryable: false },
     };
   }
 
   const db = workCapsuleDb();
-  const renewedCapsule = await runAutoRenewedCapsuleWrite({
-    capsuleId,
-    userId,
-    context,
-    write: (currentActor) => releaseWorkCapsuleScope({
-      db,
+  try {
+    const renewedCapsule = await runAutoRenewedCapsuleWrite({
       capsuleId,
-      claims,
-      actor: currentActor,
-    }),
-  });
+      userId,
+      context,
+      write: (currentActor) => releaseWorkCapsuleScope({
+        db,
+        capsuleId,
+        claims,
+        actor: currentActor,
+      }),
+    });
 
-  return {
-    success: true,
-    entityId: renewedCapsule.capsuleId,
-    message: `Released ${claims.length} scope item(s) for ${renewedCapsule.capsuleId}.`,
-    data: { capsule: renewedCapsule },
-  };
+    return {
+      success: true,
+      entityId: renewedCapsule.capsuleId,
+      message: `Released ${claims.length} scope item(s) for ${renewedCapsule.capsuleId}.`,
+      data: { capsule: renewedCapsule },
+    };
+  } catch (error) {
+    const detail = getErrorMessage(error);
+    if (/not found/i.test(detail)) {
+      return {
+        success: false,
+        error: "not_found",
+        message:
+          `${detail} Do NOT retry release_capsule_scope for an unknown/abandoned capsule — ` +
+          "list_work_capsules or get_work_capsule first (retryable: false).",
+        data: { retryable: false },
+      };
+    }
+    throw error;
+  }
 }
 
 export async function createWorkCapsuleTool(

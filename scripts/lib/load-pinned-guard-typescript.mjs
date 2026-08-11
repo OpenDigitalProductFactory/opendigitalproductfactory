@@ -5,7 +5,14 @@ import { fileURLToPath } from "node:url";
 
 const LIB_DIR = dirname(fileURLToPath(import.meta.url));
 const DEFAULT_REPO_ROOT = resolve(LIB_DIR, "../..");
-const INSTALL_COMMAND = "pnpm install --frozen-lockfile --ignore-scripts --filter @dpf/repo-guard-runtime";
+// BI-99CAE42F: a bare `pnpm install --filter @dpf/repo-guard-runtime` at the
+// workspace root can prune sibling links (apps/web/react-dom, @dpf/*, prisma).
+// Point every GuardRuntimeEnvironmentError at the managed bootstrap instead.
+export const INSTALL_COMMAND =
+  "node scripts/lib/bootstrap-worktree-deps.mjs .   # managed full install — never bare pnpm --filter at the workspace root (BI-99CAE42F)";
+/** Legacy filter command kept for CI job wiring that intentionally isolates the runtime package. */
+export const FILTER_INSTALL_COMMAND =
+  "pnpm install --frozen-lockfile --ignore-scripts --filter @dpf/repo-guard-runtime";
 
 export const GUARD_RUNTIME_ENVIRONMENT_ERROR_NAME = "GuardRuntimeEnvironmentError";
 

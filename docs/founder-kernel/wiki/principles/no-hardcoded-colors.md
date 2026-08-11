@@ -5,7 +5,7 @@ status: published
 abstract: All UI uses CSS custom properties so light mode, dark mode, and branding work automatically.
 principleTier: commandment
 principleDirection: Bind every UI color to a theme token; never hardcode hex, Tailwind gray-*, or inline style colors.
-principleDimensionVector: {"long_term_maintainability": 0.9, "reusability": 0.7, "schema_grounding": 0.5}
+principleDimensionVector: {"long_term_maintainability": 0.9, "reusability": 0.7, "schema_grounding": 0.5, "human_cognitive_load": -0.35, "governance_compliance": 0.4}
 principleAppliesTo:
   - in_platform_coworker
   - external_coding_agent
