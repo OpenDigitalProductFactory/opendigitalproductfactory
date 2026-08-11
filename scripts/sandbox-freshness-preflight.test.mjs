@@ -89,6 +89,72 @@ function prependPathEnv(dir) {
   return `${dir}${process.platform === "win32" ? ";" : ":"}${process.env.PATH ?? ""}`;
 }
 
+/**
+ * Reproduce the stale-bin incident (BI-675D9085): after a dependency-version
+ * bump, node_modules keeps a stale `.bin/<pkg>` symlink at a removed build, so
+ * `pnpm install --frozen-lockfile` FAILS (non-zero exit) on the postinstall/bin
+ * step even though every workspace link now resolves to the locked version (the
+ * freshness re-check is green). The only recovery is a clean node_modules reset.
+ * This fake fails every install while the root node_modules directory still
+ * exists, and only succeeds once the preflight has wiped it — modelling "a stale
+ * bin the incremental/force install can't clear, healed by the clean reset".
+ */
+function writeFakePnpmThatSucceedsOnlyAfterNodeModulesReset(binDir) {
+  mkdirSync(binDir, { recursive: true });
+  const fake = join(binDir, "fake-pnpm-stale-bin.mjs");
+  writeFileSync(fake, `#!/usr/bin/env node
+import { existsSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+
+const args = process.argv.slice(2);
+const root = process.cwd();
+writeFileSync(join(root, "pnpm-invocations.log"), args.join(" ") + "\\n", { flag: "a" });
+
+// The preflight wipes root node_modules on its clean-reset escalation. Before
+// that happens node_modules (and its stale .bin) still exists, so the install
+// cannot complete; after the wipe it can.
+const staleBinPresent = existsSync(join(root, "node_modules"));
+
+// Whether it exits 0 or not, pnpm relinks the workspace to the locked versions,
+// so the freshness re-check is green either way — that's the incident: green
+// links, failed install.
+const lockfile = readFileSync(join(root, "pnpm-lock.yaml"), "utf8");
+mkdirSync(join(root, "node_modules", ".pnpm"), { recursive: true });
+writeFileSync(join(root, "node_modules", ".pnpm", "lock.yaml"), lockfile);
+const packages = [
+  ["next", "apps/web", "16.2.9"],
+  ["react", "apps/web", "19.2.7"],
+  ["react-dom", "apps/web", "19.2.7"],
+  ["typescript", ".", "5.9.3"],
+  ["prisma", "packages/db", "6.19.1"],
+  ["vitest", "apps/web", "4.1.10"],
+];
+for (const [name, importer, version] of packages) {
+  const storeDir = join(root, "node_modules", ".pnpm", name + "@" + version + "_healed", "node_modules", name);
+  mkdirSync(storeDir, { recursive: true });
+  writeFileSync(join(storeDir, "package.json"), JSON.stringify({ name, version }));
+  if (name === "vitest") {
+    mkdirSync(join(storeDir, "dist", "chunks"), { recursive: true });
+    writeFileSync(join(storeDir, "dist", "cli.js"), "import './chunks/cac.ok.js';\\n");
+    writeFileSync(join(storeDir, "dist", "chunks", "cac.ok.js"), "export default {};\\n");
+  }
+  const importerNodeModules = importer === "." ? join(root, "node_modules") : join(root, importer, "node_modules");
+  const linkPath = join(importerNodeModules, name);
+  rmSync(linkPath, { recursive: true, force: true });
+  mkdirSync(importerNodeModules, { recursive: true });
+  symlinkSync(storeDir, linkPath, process.platform === "win32" ? "junction" : "dir");
+}
+process.exit(staleBinPresent ? 1 : 0);
+`);
+  chmodSync(fake, 0o755);
+  if (process.platform === "win32") {
+    writeFileSync(join(binDir, "pnpm.cmd"), `@echo off\r\nnode "%~dp0fake-pnpm-stale-bin.mjs" %*\r\n`);
+  } else {
+    writeFileSync(join(binDir, "pnpm"), `#!/bin/sh\nexec node "${fake}" "$@"\n`);
+    chmodSync(join(binDir, "pnpm"), 0o755);
+  }
+}
+
 function writeFakePnpmThatRepairsOnlyWithFreshStore(binDir) {
   mkdirSync(binDir, { recursive: true });
   const fake = join(binDir, "fake-pnpm.mjs");
@@ -316,6 +382,90 @@ test("--converge honors the admitted slot's explicit convergence lock", () => {
   assert.equal(result.status, 4, `${result.stdout}\n${result.stderr}`);
   assert.equal(report.convergence.reason, "convergence_lock_held");
   assert.equal(existsSync(join(root, "pnpm-invocations.log")), false);
+  rmSync(root, { recursive: true, force: true });
+});
+
+test("--converge self-heals a stale bin that fails the frozen-lockfile install (BI-675D9085)", () => {
+  // Prisma bump on main left a stale node_modules/.bin/prisma symlink: the
+  // install fails (non-zero exit) on the bin/postinstall step while every
+  // workspace link resolves to the locked version, so the freshness re-check is
+  // green. The old escalation ladder only fired on *tracked drift*, so it never
+  // reset node_modules — it fell straight through to sandbox_drift (exit 3) and
+  // demanded a manual `rm -rf node_modules`. It must now escalate to the clean
+  // reset and heal on its own.
+  const root = scaffold({
+    installedVersions: { prisma: "6.19.0" },
+    lockedVersions: { prisma: "6.19.1" },
+    installedLockVersions: { prisma: "6.19.0" },
+  });
+  // The clean reset enumerates workspace packages from pnpm-workspace.yaml.
+  writeFileSync(join(root, "pnpm-workspace.yaml"), 'packages:\n  - "apps/*"\n  - "packages/*"\n');
+  // Sentinels proving the clean reset wiped BOTH the root and the workspace
+  // package node_modules (the manual recovery the platform must automate).
+  writeFileSync(join(root, "node_modules", ".stale-bin-root"), "x");
+  writeFileSync(join(root, "packages", "db", "node_modules", ".stale-bin-pkg"), "x");
+  const binDir = join(root, "fake-bin");
+  writeFakePnpmThatSucceedsOnlyAfterNodeModulesReset(binDir);
+
+  const { result, report } = runPreflight(root, ["--converge"], {
+    env: {
+      DPF_ALLOW_SANDBOX_NODE_MODULES_RESET: "1",
+      PATH: prependPathEnv(binDir),
+    },
+  });
+
+  assert.equal(result.status, 0, `expected self-heal to green, got ${result.status}\n${result.stdout}\n${result.stderr}`);
+  assert.equal(report.verdict, "green");
+  assert.ok(
+    report.convergence.attempts.some((attempt) => attempt.resetNodeModules === true),
+    `expected a node_modules-reset escalation, got ${JSON.stringify(report.convergence)}`,
+  );
+  // The clean reset removed root + package node_modules before the healing install.
+  assert.equal(existsSync(join(root, "node_modules", ".stale-bin-root")), false, "root node_modules must be reset");
+  assert.equal(existsSync(join(root, "packages", "db", "node_modules", ".stale-bin-pkg")), false, "package node_modules must be reset");
+  const prisma = report.packages.find((p) => p.name === "prisma");
+  assert.equal(prisma.resolvedVersion, "6.19.1");
+  rmSync(root, { recursive: true, force: true });
+});
+
+test("--converge stays bounded: a stale bin that never heals reports drift without looping (BI-675D9085)", () => {
+  // If even the clean reset can't produce a working install, the ladder must
+  // stop (bounded) and report sandbox_drift — never loop resets forever.
+  const root = scaffold({
+    installedVersions: { prisma: "6.19.0" },
+    lockedVersions: { prisma: "6.19.1" },
+    installedLockVersions: { prisma: "6.19.0" },
+  });
+  const binDir = join(root, "fake-bin");
+  // A pnpm that always exits non-zero and never relinks: nothing heals it.
+  mkdirSync(binDir, { recursive: true });
+  const fake = join(binDir, "always-fail.mjs");
+  writeFileSync(fake, `#!/usr/bin/env node
+import { writeFileSync } from "node:fs";
+import { join } from "node:path";
+writeFileSync(join(process.cwd(), "pnpm-invocations.log"), process.argv.slice(2).join(" ") + "\\n", { flag: "a" });
+process.exit(1);
+`);
+  chmodSync(fake, 0o755);
+  writeFileSync(join(binDir, "pnpm"), `#!/bin/sh\nexec node "${fake}" "$@"\n`);
+  chmodSync(join(binDir, "pnpm"), 0o755);
+
+  const { result, report } = runPreflight(root, ["--converge"], {
+    env: {
+      DPF_ALLOW_SANDBOX_NODE_MODULES_RESET: "1",
+      PATH: prependPathEnv(binDir),
+    },
+  });
+
+  // Terminal non-green (drift or not-ready) — it must never report a false green
+  // when the install never succeeded.
+  assert.notEqual(result.status, 0, `must not report green when nothing heals\n${result.stderr}`);
+  assert.notEqual(report.verdict, "green");
+  // Bounded: the ladder is a fixed sequence, so the node_modules reset ran at
+  // most once and the whole convergence took at most the four ladder rungs.
+  const resetAttempts = report.convergence.attempts.filter((attempt) => attempt.resetNodeModules === true);
+  assert.ok(resetAttempts.length <= 1, `reset must be bounded, saw ${resetAttempts.length}`);
+  assert.ok(report.convergence.attempts.length <= 4, `ladder must be bounded, saw ${report.convergence.attempts.length}`);
   rmSync(root, { recursive: true, force: true });
 });
 
