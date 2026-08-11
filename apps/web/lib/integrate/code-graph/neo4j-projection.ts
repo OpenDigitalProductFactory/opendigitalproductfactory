@@ -55,7 +55,17 @@ export function buildCodeFileKey(graphKey: string, filePath: string): string {
 
 // ─── Graph-mirror primitives ──────────────────────────────────────────────────
 
-/** UPSERT a node; props shallow-merged (parity with Cypher `SET n.x = …` / `n += map`). */
+/** UPSERT a node; props shallow-merged (parity with Cypher `SET n.x = …` / `n += map`).
+ *
+ *  Labels are UNION-merged, not replaced. A node in this mirror can carry ADDITIVE
+ *  markers owned by another projection — `DocImpactSource`, stamped by the doc-impact
+ *  projection onto files it shares with the code graph. `SET labels = excluded.labels`
+ *  silently erased every one of them on the next re-index: 504 markers on the live
+ *  install went to zero, and the projection that owns them has no way to notice.
+ *
+ *  This matches `upsertGraphNode` in packages/db/src/graph-sync.ts, which already
+ *  union-merges for exactly this reason. The two implementations had diverged, and
+ *  this one held the unsafe half. */
 async function upsertGraphNode(
   key: string,
   labels: string[],
@@ -65,7 +75,11 @@ async function upsertGraphNode(
     `INSERT INTO graph_node (key, labels, props)
      VALUES ($1, $2::text[], $3::jsonb)
      ON CONFLICT (key) DO UPDATE
-       SET labels = excluded.labels,
+       SET labels = graph_node.labels || COALESCE((
+             SELECT array_agg(l ORDER BY ord)
+               FROM unnest(excluded.labels) WITH ORDINALITY AS t(l, ord)
+              WHERE NOT (l = ANY(graph_node.labels))
+           ), '{}'),
            props  = graph_node.props || excluded.props`,
     key,
     labels,
@@ -93,12 +107,21 @@ async function upsertGraphEdge(
 }
 
 export async function clearCodeGraph(graphKey: string): Promise<void> {
-  // DETACH DELETE equivalent for every node in this graphKey (all labels).
+  // DETACH DELETE equivalent for every node in this graphKey (all labels), scoped to
+  // the edges THIS PROJECTION OWNS.
+  //
+  // A full clear is followed by a re-sync that recreates the same nodes under the same
+  // deterministic keys (`source-code:<path>`), so a foreign edge pointing at a code node
+  // is dangling only for the duration of the rebuild and resolves again afterwards.
+  // Deleting it instead is permanent and silent: that is how a code-graph rebuild
+  // destroyed all 616 doc-impact IMPACTS edges, leaving 183 DocPage nodes orphaned but
+  // still counted in the explorer census.
   await prisma.$executeRawUnsafe(
     `DELETE FROM graph_edge
       WHERE props->>'graphKey' = $1
-         OR src_key IN (SELECT key FROM graph_node WHERE props->>'graphKey' = $1)
-         OR dst_key IN (SELECT key FROM graph_node WHERE props->>'graphKey' = $1)`,
+         OR (props ? 'graphKey'
+             AND (src_key IN (SELECT key FROM graph_node WHERE props->>'graphKey' = $1)
+               OR dst_key IN (SELECT key FROM graph_node WHERE props->>'graphKey' = $1)))`,
     graphKey,
   );
   await prisma.$executeRawUnsafe(
@@ -120,17 +143,27 @@ async function clearStructuralFactsForFile(graphKey: string, filePath: string): 
     graphKey,
     filePath,
   );
-  // 2. DETACH the structural nodes at this path: drop any remaining incident edges…
+  // 2. DETACH the structural nodes at this path: drop any remaining incident edges
+  //    THIS PROJECTION OWNS. `props ? 'graphKey'` is the ownership discriminator, and
+  //    it is exact rather than approximate: on the live install every code-graph edge
+  //    carries it (IMPORTS 10764/10764, DEFINES 7665/7665, TESTED_BY 1986/1986,
+  //    IMPLEMENTS_ROUTE 481/481) and no foreign edge does (ASSOCIATED_WITH, BELONGS_TO,
+  //    LINKS_TO, CHILD_OF, DEPENDS_ON, MEMBER_OF all 0).
+  //
+  //    Without the predicate this deleted every incident edge regardless of owner, which
+  //    is how a routine re-index destroyed all 616 doc-impact IMPACTS edges and left 183
+  //    orphaned DocPage nodes still counted in the census.
   await prisma.$executeRawUnsafe(
     `DELETE FROM graph_edge
-      WHERE src_key IN (
+      WHERE props ? 'graphKey'
+        AND (src_key IN (
               SELECT key FROM graph_node
                WHERE props->>'graphKey' = $1 AND props->>'path' = $2 AND labels && $3::text[]
             )
          OR dst_key IN (
               SELECT key FROM graph_node
                WHERE props->>'graphKey' = $1 AND props->>'path' = $2 AND labels && $3::text[]
-            )`,
+            ))`,
     graphKey,
     filePath,
     STRUCTURAL_NODE_LABELS,
@@ -270,9 +303,14 @@ export async function syncTrackedFile(
     }
     await projectStructuralFacts(await extractStructuralFacts(graphKey, filePath, content));
   } catch {
-    // DETACH DELETE the CodeFile node (drop incident edges first, then the node).
+    // DETACH DELETE the CodeFile node: drop the incident edges THIS PROJECTION OWNS
+    // first, then the node. Scoped by `props ? 'graphKey'` for the same reason as
+    // clearStructuralFactsForFile — an unscoped delete here takes foreign edges
+    // (doc-impact IMPACTS, and anything added later) down with a file that merely
+    // failed to parse.
     await prisma.$executeRawUnsafe(
-      `DELETE FROM graph_edge WHERE src_key = $1 OR dst_key = $1`,
+      `DELETE FROM graph_edge
+        WHERE (src_key = $1 OR dst_key = $1) AND props ? 'graphKey'`,
       codeFileKey,
     );
     await prisma.$executeRawUnsafe(
