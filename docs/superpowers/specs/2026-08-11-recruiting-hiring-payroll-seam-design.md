@@ -32,13 +32,22 @@ Effect: a hired candidate is immediately payable — the recruiting→hiring→p
 
 `lib/hr/labor-service.ts#computeEmployeePayslip(employeeProfileId, periodStart, periodEnd, statutory, opts)` — the missing caller that turns the landed comp into an actual payslip. It calls `getEmployeePayrollEarnings` (previously **dead code — no caller**) → `computePayslip` (gross→net), returning a `Payslip` or `{no-employee|no-compensation}`. This closes the hiring→**paying** compute hop: a Greenhouse (or native P4) hire whose offer carried comp now produces a real gross-to-net payslip from that comp + approved timesheets. An end-to-end test drives offer comp → the columns slice 1 writes → `computeEmployeePayslip` → asserted gross/net, and makes the `no-compensation` gap explicit (a hire without comp is provably not payable). Pure compute over the spine — no persistence yet.
 
-### 3.2 Downstream (converges the two threads on the spine)
+### 3.1c Slice 3 — durable, disbursable payroll (this PR)
 
-The compute path now runs end to end; what remains is persistence, dated history, real jurisdictions, and money movement — the payroll-thread deliverables, whose contract this design pins to the spine so they don't fork:
+The computed payslip is now persisted. New Prisma models `PayRun` (a run per pay period) + `Payslip` (per-employee gross/net/deductions + `disbursementStatus`), whose shape mirrors the pure `Payslip` compute type (no arbitrary fork). `lib/hr/payroll-run.ts#runPayroll` computes each employee's payslip (slice 2) and persists one `Payslip` per employee under a `PayRun`, idempotent per `(payRunId, employee)`, **skipping anyone not yet payable (no comp) with a reason** so the gap stays visible. `markPayslipDisbursed` records the money-movement outcome (`pending → paid|failed` + `paidAt`).
+
+**Money-movement boundary (deliberate):** this module never moves money. Actual net-pay disbursement (bank file / ACH / payment-provider send) is a governed provider bridge performed outside; `disbursementStatus` is the auditable hook it writes back. So the platform can *run and record* payroll for a hire end to end; wiring a real payment provider + the operator's explicit per-run approval is the remaining, deliberately-separate step. Regulated records: `PayRun`/`Payslip` are retained per payroll/tax law (data-impact manifest `docs/data-impact/2026-08-11-payroll-run-payslip.data-impact.json`).
+
+### 3.2 Downstream (still open)
+
+What remains after slices 1–3 — the deeper payroll capabilities, contract-pinned to the spine:
 1. **Effective-dated comp (BI-36FEECC4):** a dated comp row (effective = offer `startDate`) instead of overwrite-in-place; slice 1 sets the current value + supplies the effective date for the first dated row when this lands.
-2. **Payroll persistence (EP-PAYROLL-COMP-BENEFITS):** `PayRun`/`Payslip`/earning/deduction models + a runner that persists what `computeEmployeePayslip` computes, GL posting, pay-stub surface. Kernel-decide the model shapes when built.
-3. **Real statutory engine + net-pay disbursement + pay-stub delivery** (slice 2 takes the statutory function as a parameter — production jurisdictions plug in here).
-4. **Onboarding → payroll enrollment:** the `OnboardingTask` packet (`lib/actions/onboarding.ts`, exists) gains a "payroll enrollment" task satisfied once comp + effective date are present — so onboarding and payroll share one readiness signal.
+2. **GL posting** of a `PayRun` (Dr wages / Cr net-pay-payable / Cr tax-payable) into the finance ledger.
+3. **Real statutory engine** (production jurisdictions — US/Mexico for Infinitum) plugged into slice 2's `statutory` parameter, replacing the demo flat function.
+4. **Payment-provider bridge** that performs the actual disbursement and calls `markPayslipDisbursed` + **pay-stub delivery** to the employee.
+5. **Onboarding → payroll enrollment:** the `OnboardingTask` packet (`lib/actions/onboarding.ts`, exists) gains a "payroll enrollment" task satisfied once comp + effective date are present — so onboarding and payroll share one readiness signal.
+
+These belong in EP-PAYROLL-COMP-BENEFITS / EP-F7BD23BB with kernel decisions where the shapes are open; they build **on** the persisted `PayRun`/`Payslip` this PR lands.
 
 ## 4. Sequence (replace-first, seamless-first)
 

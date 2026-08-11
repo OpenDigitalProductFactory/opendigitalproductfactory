@@ -1,0 +1,32 @@
+{
+  "version": "1",
+  "accountableOwner": "platform-architecture",
+  "affectedCopies": [
+    "New payroll persistence: PayRun (a payroll run per pay period) + Payslip (the per-employee gross-to-net result), the durable output of lib/hr/labor-service.ts#computeEmployeePayslip. No existing data changed — two new tables only.",
+    "EmployeeProfile gains a virtual payslips back-relation (no column change)."
+  ],
+  "migration": {
+    "name": "20260811120000_add_payroll_run_payslip",
+    "backfill": "none — additive: 2 new tables (PayRun, Payslip) + FKs on freshly-created empty tables (attested data-safe). No existing table altered; no backfill."
+  },
+  "tests": [
+    "apps/web/lib/hr/payroll-run.test.ts",
+    "apps/web/lib/hr/employee-payslip.test.ts"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:pay-run",
+      "prismaModel": "PayRun",
+      "lifecycleDisposition": "regulated-record; payroll run records retained per payroll/tax recordkeeping law (multi-year, jurisdiction-specific); the platform must not auto-purge within the statutory window (domain-lifecycle-managed via run status draft|approved|paid|cancelled).",
+      "fields": []
+    },
+    {
+      "kind": "model",
+      "assetId": "data:payslip",
+      "prismaModel": "Payslip",
+      "lifecycleDisposition": "regulated-record; per-employee pay records (gross/net/deductions/employer cost) retained per payroll/tax law; employee financial data — access-controlled and jurisdiction-gated retention; disbursementStatus tracks money-movement outcome (pending|paid|failed), the actual transfer being a separate provider bridge.",
+      "fields": []
+    }
+  ]
+}
