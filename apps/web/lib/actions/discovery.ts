@@ -2,6 +2,7 @@
 
 import {
   executeBootstrapDiscovery,
+  loadDiscoveryAttributionInputs,
   normalizeDiscoveredFacts,
   persistBootstrapDiscoveryRun,
   prisma,
@@ -451,7 +452,12 @@ export async function rerunDiscoveryConnection(connectionId: string): Promise<Re
     revalidateDiscoverySurfaces();
     return { ok: false, error: health.message };
   }
-  const normalized = normalizeDiscoveredFacts(collectorOutput);
+  // Identify + place devices the same way the bootstrap and edge-node paths do:
+  // load the taxonomy tree + active fingerprint rules before normalizing, so a
+  // UniFi-discovered appliance/thermostat/camera is fingerprinted rather than
+  // filed as a generic host (BI-BAF38ED3).
+  const attributionInputs = await loadDiscoveryAttributionInputs(prisma);
+  const normalized = normalizeDiscoveredFacts(collectorOutput, attributionInputs);
 
   const summary = await persistBootstrapDiscoveryRun(
     prisma as never,
