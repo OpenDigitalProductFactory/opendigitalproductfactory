@@ -80,9 +80,10 @@ and the existing `docker-origin` containment substrate.
 - Populating `technicalClass` from `resolvedIdentity.deviceClass` (needs a
   normalize→persist field thread; deferred to avoid divergence).
 
-## Coverage
+## Backlog coverage
+- Decision: atomic
 - Parent: BI-BAF38ED3
-- Decision: extend canonical pipeline + docker-origin containment (grounding above)
-- Receipt: this plan + PR
-- Dependencies: none blocking
-- Follow-ups -> new BIs for rule-coverage growth and UniFi polling cadence
+- Receipt: cmsoyrgu63chc01o4h23g124f
+- Rationale: The four phases are one correctness fix — the host->servers demotion is only safe once the fingerprint wiring runs first, the backfill re-applies the exact wired+demoted logic to existing rows, and containment shares the same view model. Shipping any phase alone leaves the estate half-corrected.
+- Dependencies: none
+- Follow-ups (separate BIs, not phases of this plan): fingerprint-rule/vendor coverage growth; UniFi/SNMP polling cadence.
