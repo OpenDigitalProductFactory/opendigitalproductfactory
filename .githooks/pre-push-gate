@@ -23,6 +23,15 @@
 
 set -eu
 
+# A push is not "done": the PR is complete only once its required checks are
+# GREEN. Emitted on every path that lets a push through (gate passed, recorded
+# override, docs-only exempt) so an agent does not push-and-abandon a red PR
+# (the failure mode behind PRs #4172/#4173/#4189). Cheap, non-blocking reminder.
+completion_notice() {
+  echo "[pre-push-gate] NOTE: pushing is not 'done' — a PR is complete only when its required checks are GREEN."
+  echo "[pre-push-gate]       After CI starts, verify with:  pnpm pr:health <PR#>   (do not leave a red PR unattended)."
+}
+
 # gate-worktree.sh pushes the branch as part of the gate run itself, before the
 # gate record exists. That push carries the in-flight marker and must pass —
 # the run it belongs to records the real result minutes later.
@@ -67,6 +76,32 @@ fi
 if [ "$branch" = "main" ]; then
   echo "[pre-push-gate] main is governed by the merge queue — local-CI gate skipped."
   exit 0
+fi
+
+# DCO sign-off is mandatory for EVERY commit that will become part of the PR,
+# and it is checked here — before any skip/exempt exit below — because an
+# unsigned commit is unsigned regardless of what it changes. The "DCO" required
+# check is posted by the third-party DCO GitHub App only AFTER the push, so a
+# missing sign-off (classically a corrupted or auto-generated MERGE commit —
+# PR #4189 pushed exactly that) otherwise turns the PR red minutes later, once
+# the author has moved on. scripts/pre-push-dco-check.mjs scans origin/main..HEAD
+# (merges included) with the same predicate `pnpm pr:ready` uses. Its exit 2
+# ("base ref unresolvable on this host") is a loud WARN, not a block — an
+# offline fork must not be hard-failed, and CI's DCO app still enforces it.
+# The [ -f ] guard lets the gate's temp-dir contract tests (no scripts/ tree)
+# fall through, matching the sibling derived-artifacts / semantic-review guards.
+if [ -f "scripts/pre-push-dco-check.mjs" ]; then
+  if node scripts/pre-push-dco-check.mjs; then
+    :
+  else
+    dco_status=$?
+    if [ "$dco_status" = "2" ]; then
+      echo "[pre-push-gate] DCO range could not be computed locally (see above) — CI's DCO app still enforces sign-off." >&2
+    else
+      echo "[pre-push-gate] DCO sign-off check failed — refusing to push (see above)." >&2
+      exit "$dco_status"
+    fi
+  fi
 fi
 
 # Recorded override: allowed, but never silent. The reason is persisted so the
@@ -119,6 +154,29 @@ fs.writeFileSync(file, JSON.stringify({
 ' "$state_file" "$branch" "$sha" "$reason"
   echo "[pre-push-gate] override recorded for $branch@$sha: $reason"
   echo "[pre-push-gate] NOTE: pnpm pr:health accepts only allowlisted override codes."
+
+  # A recorded sandbox-gate skip — the standard source-only agent path via
+  # external-contribution-no-install — still owes the CHEAP guard-parity
+  # preflight. It needs no sandbox, runs host-native in seconds, and catches
+  # exactly the deterministic guard class a skipped sandbox gate would otherwise
+  # let sail through to a red PR: a stale UX-Fit manifest (PR #4173), a prose
+  # ratchet, a module-size breach. The preflight self-degrades — a guard the
+  # host cannot run WARNS rather than blocks (exit 0), so a source-only worktree
+  # is never false-blocked; only a genuine deterministic violation (exit 1) is.
+  # Escape hatch for the rare case even the preflight must be skipped:
+  # DPF_SKIP_PREGATE_PREFLIGHT_REASON, honoured inside the preflight itself.
+  if [ -f "scripts/pregate-preflight.mjs" ]; then
+    if node scripts/pregate-preflight.mjs; then
+      echo "[pre-push-gate] guard-parity preflight clean on override path."
+    else
+      echo "[pre-push-gate] guard-parity preflight found a deterministic guard violation — refusing the override push." >&2
+      echo "[pre-push-gate] Fix the guard failure above. To bypass the preflight too (rare), set" >&2
+      echo "[pre-push-gate]   DPF_SKIP_PREGATE_PREFLIGHT_REASON=\"why\" alongside the override." >&2
+      exit 1
+    fi
+  fi
+
+  completion_notice
   exit 0
 fi
 
@@ -147,12 +205,14 @@ if git rev-parse --verify --quiet "$base_ref" >/dev/null 2>&1; then
     if [ -f "scripts/derived-artifacts-gate.mjs" ]; then
       if node scripts/derived-artifacts-gate.mjs push-exempt "$merge_base"; then
         echo "[pre-push-gate] docs-only diff vs $base_ref — no gate record required."
+        completion_notice
         exit 0
       fi
     else
       non_docs="$(git diff --name-only "$merge_base" HEAD 2>/dev/null | grep -Ev '^(docs/|memory/)|\.md$' || true)"
       if [ -z "$non_docs" ]; then
         echo "[pre-push-gate] docs-only diff vs $base_ref — no gate record required."
+        completion_notice
         exit 0
       fi
     fi
@@ -213,3 +273,4 @@ if (expiresAt <= Date.now()) {
 ' "$state_file" "$branch" "$sha"
 
 echo "[pre-push-gate] local-CI gate passed for $branch@$sha"
+completion_notice
