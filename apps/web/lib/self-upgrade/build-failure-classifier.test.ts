@@ -290,6 +290,34 @@ describe("classifyBuildFailure", () => {
     expect(c.summary).toContain("lockfile");
   });
 
+  it("classifies the SUR-BF75ED2A host-OOM candidate build as retryable environment, beating the readiness wrapper", () => {
+    // Verbatim shape of the persisted failureLog: the pipeline prepends
+    // `promoter-readiness-failed: promoter_candidate_build_failed:` — which the
+    // readiness-extraction branch would otherwise claim first, mislabeling a
+    // pure host-OOM as the generic unactionable readiness class.
+    const log = `promoter-readiness-failed: promoter_candidate_build_failed:  DONE 0.1s
+
+#5 [internal] load build context
+#5 transferring context: 22.62kB 0.3s done
+#5 ERROR: error from sender: readdirent /host-dpf/.upgrade-workspace/scripts: cannot allocate memory
+
+#6 [ 2/25] RUN apk add --no-cache bash docker-cli docker-cli-buildx
+#6 CANCELED
+ERROR: failed to build: failed to solve: error from sender: readdirent /host-dpf/.upgrade-workspace/scripts: cannot allocate memory`;
+    const c = classifyBuildFailure({ log });
+    expect(c.class).toBe("host-out-of-memory");
+    expect(c.isMainDefectVsEnvironment).toBe("environment");
+    expect(c.failingTrace).toContain("cannot allocate memory");
+  });
+
+  it("classifies an OOMKilled container as host-out-of-memory", () => {
+    const c = classifyBuildFailure({
+      log: "#12 [build 4/8] RUN pnpm --filter web build\nnext build worker terminated: OOMKilled (exit 137)",
+    });
+    expect(c.class).toBe("host-out-of-memory");
+    expect(c.isMainDefectVsEnvironment).toBe("environment");
+  });
+
   it("classifies a promoter timeout as retryable environment, superseding earlier build noise", () => {
     // The kill happened because nothing completed, so a half-emitted NFT trace
     // above the marker is noise — the timeout must win.

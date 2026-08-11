@@ -1,8 +1,12 @@
+import { readFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 import type { ReadinessOwner } from "./promoter";
 import { signTransitionPayload } from "@/lib/platform-runtime/transition-protocol";
 import { verifyInstallStateMigrationEnvelope } from "../../../../scripts/lib/transition-signing.mjs";
-import type { SelfUpgradeHostIdentity } from "./config";
+import { resolveSelfUpgradeHostIdentity, type SelfUpgradeHostIdentity } from "./config";
+
+type EmitFailure = (runId: string) => Promise<unknown>;
 
 type PromoterRuntime = Pick<
   typeof import("./promoter"),
@@ -159,3 +163,69 @@ export type InstallStateMigrationEnvelope = {
 export type InstallStateMigrationHandoff = { envelope: InstallStateMigrationEnvelope; signature: string };
 function requireHash(value: unknown, error: string): string { if (typeof value !== "string" || !/^[a-f0-9]{64}$/.test(value)) throw new Error(error); return value; }
 function requireVersion(value: unknown): number { if (!Number.isInteger(value) || (value as number) < 1) throw new Error("schema_version_missing"); return value as number; }
+
+export type InstallStateSigningContext =
+  | { ok: true; runtimeTransitionSecret: string | undefined; hostIdentity: SelfUpgradeHostIdentity | undefined }
+  | { ok: false; reason: string };
+
+/**
+ * Load the runtime-transition secret + host identity the swap must sign the
+ * install-state migration handoff with. dryRun carries no signing context. On
+ * any read/parse failure it records the run failed and returns a repair reason —
+ * the orchestrator just returns it. Extracted from the self-upgrade orchestrator
+ * to keep this install-state concern beside the signing/verify logic it feeds.
+ */
+export async function loadInstallStateSigningContext(params: {
+  dryRun?: boolean;
+  runId: string;
+  failRun: FailRun;
+  emitFailure: EmitFailure;
+}): Promise<InstallStateSigningContext> {
+  if (params.dryRun) return { ok: true, runtimeTransitionSecret: undefined, hostIdentity: undefined };
+  try {
+    const installStateBytes = await readFile("/dpf-state/install-state.json", "utf8");
+    const runtimeTransitionSecret = (await readFile("/dpf-state/runtime-transition.secret", "utf8")).trim();
+    if (!runtimeTransitionSecret) throw new Error("runtime_transition_secret_empty");
+    const hostIdentity = resolveSelfUpgradeHostIdentity(process.env, JSON.parse(installStateBytes.replace(/^\uFEFF/, "")));
+    return { ok: true, runtimeTransitionSecret, hostIdentity };
+  } catch (error) {
+    const reason = `installer-state-repair-required: ${error instanceof Error ? error.message : "install_state_preparation_failed"}`;
+    await params.failRun(params.runId, reason);
+    await params.emitFailure(params.runId);
+    return { ok: false, reason };
+  }
+}
+
+/**
+ * Re-verify the signed migration handoff against the CURRENT install-state hash
+ * immediately before the swap (the state may have moved since preflight signed
+ * it). On failure it records the run failed and returns a repair reason.
+ */
+export async function verifyMigrationHandoff(params: {
+  dryRun?: boolean;
+  runId: string;
+  migrationHandoff?: InstallStateMigrationHandoff;
+  resolvedPromoterDigest?: string;
+  runtimeTransitionSecret?: string;
+  hostIdentity?: SelfUpgradeHostIdentity;
+  failRun: FailRun;
+  emitFailure: EmitFailure;
+}): Promise<{ ok: true } | { ok: false; reason: string }> {
+  if (params.dryRun) return { ok: true };
+  try {
+    if (!params.migrationHandoff || !params.resolvedPromoterDigest || !params.runtimeTransitionSecret || !params.hostIdentity) {
+      throw new Error("install_state_migration_handoff_missing");
+    }
+    const currentStateBytes = await readFile("/dpf-state/install-state.json", "utf8");
+    verifyInstallStateMigrationEnvelope(params.migrationHandoff.envelope, params.migrationHandoff.signature, params.runtimeTransitionSecret, {
+      runId: params.runId, promoterDigest: params.resolvedPromoterDigest,
+      sourceHash: createHash("sha256").update(currentStateBytes).digest("hex"), hostIdentity: params.hostIdentity, now: Date.now(),
+    });
+    return { ok: true };
+  } catch (error) {
+    const reason = `installer-state-repair-required: ${error instanceof Error ? error.message : "install_state_migration_handoff_invalid"}`;
+    await params.failRun(params.runId, reason);
+    await params.emitFailure(params.runId);
+    return { ok: false, reason };
+  }
+}

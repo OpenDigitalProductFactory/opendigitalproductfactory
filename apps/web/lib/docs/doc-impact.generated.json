@@ -909,6 +909,9 @@
     "apps/web/lib/security/safe-log.ts": [
       "docs/security/codeql-advanced-setup.md"
     ],
+    "apps/web/lib/self-upgrade/host-memory-preflight.ts": [
+      "docs/runbooks/bet5-windows-self-upgrade.md"
+    ],
     "apps/web/lib/self-upgrade/local-changes-ledger.ts": [
       "docs/architecture/branch-and-worktree-runbook.md"
     ],
@@ -2492,6 +2495,7 @@
       "packages/db/src/migrations/exact-key-repair.ts"
     ],
     "docs/runbooks/bet5-windows-self-upgrade.md": [
+      "apps/web/lib/self-upgrade/host-memory-preflight.ts",
       "scripts/promote.sh"
     ],
     "docs/security/2026-05-24-shift-left-rollout.md": [
