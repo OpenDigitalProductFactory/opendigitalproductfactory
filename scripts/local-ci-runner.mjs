@@ -26,11 +26,15 @@ import {
   refreshAcceptedBase,
   resolveBaseFreshnessPolicy,
 } from "./lib/local-ci-base-freshness.mjs";
+import { ensureFullHistory } from "./lib/git-shallow-preflight.mjs";
 
 const THIS_FILE = fileURLToPath(import.meta.url);
 
 function die(message) {
-  process.stderr.write(`local-ci-runner: ${message}\n`);
+  // BI-8304AB09: write BOTH streams so gate-worktree log capture cannot drop the cause.
+  const line = `local-ci-runner: ${message}\n`;
+  process.stdout.write(line);
+  process.stderr.write(line);
   process.exit(1);
 }
 
@@ -270,11 +274,18 @@ async function main() {
   });
   if (!workspace) workspace = manifest.scratch.workspace;
 
-  if (!dryRun && gitOrEmpty(["rev-parse", "--is-shallow-repository"], root) === "true") {
-    process.stdout.write("local-ci-runner: root clone is shallow — fetching full history so the scratch merge has a common ancestor (BI-AA2201B0)\n");
-    const unshallow = git(["fetch", "--unshallow", "origin"], root);
-    if (unshallow.status !== 0) {
-      die(`failed to unshallow root clone at ${root}: ${unshallow.stderr || unshallow.stdout}`);
+  // BI-8304AB09 / BI-AA2201B0: fail loud on shallow clones + clear stale shallow.lock.
+  if (!dryRun) {
+    const shallow = ensureFullHistory({
+      cwd: root,
+      fetch: true,
+      log: (line) => {
+        process.stdout.write(`${line}\n`);
+        process.stderr.write(`${line}\n`);
+      },
+    });
+    if (!shallow.ok) {
+      die(shallow.message);
     }
   }
 

@@ -13,6 +13,7 @@
 
 import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
 import type { LocalCiHostPressure } from "@/lib/nonprod/local-ci-pool-policy";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
 
 // Per-key trimmed string coercer — a copy of the inline helper the former switch
@@ -181,12 +182,16 @@ const definitions: ToolDefinition[] = [
     name: "release_nonprod_environment_lease",
     description:
       "Release a governed shared nonproduction environment lease after verification is complete or blocked. " +
-      "Requires leaseId from claim. Idempotent on already-released leases — do not thrash release after success. " +
-      "On not_found: stop; list_nonprod_environment_leases for live ids (retryable: false).",
+      "Requires the exact leaseId returned by claim_nonprod_environment_lease (not environmentKey alone). " +
+      "Idempotent on already-released/cancelled leases — do not thrash release after success. " +
+      "On nonprod_lease_not_found: do NOT retry — list_nonprod_environment_leases and use a live leaseId (retryable: false).",
     inputSchema: {
       type: "object",
       properties: {
-        leaseId: { type: "string" },
+        leaseId: {
+          type: "string",
+          description: "Lease id from claim_nonprod_environment_lease (e.g. NPEL-…), not the environmentKey.",
+        },
       },
       required: ["leaseId"],
     },
@@ -399,18 +404,42 @@ async function releaseNonprodEnvironmentLeaseHandler(params: Record<string, unkn
     return {
       success: false,
       error: "missing_required",
-      message: "leaseId is required",
+      // BI-MCP-EFF-85398F73: stop blind retries without a real leaseId.
+      message:
+        "leaseId is required (the id returned by claim_nonprod_environment_lease). " +
+        "Do NOT pass environmentKey alone. Do NOT retry without a leaseId (retryable: false).",
+      data: { retryable: false },
     };
   }
-  const lease = await releaseNonprodEnvironmentLease({ leaseId });
-  return {
-    success: true,
-    entityId: lease.leaseId,
-    message: lease.status === "cancelled"
-      ? `Cancelled queued nonproduction environment lease ${lease.leaseId}.`
-      : `Released nonproduction environment lease ${lease.leaseId}.`,
-    data: { lease },
-  };
+  try {
+    const lease = await releaseNonprodEnvironmentLease({ leaseId });
+    return {
+      success: true,
+      entityId: lease.leaseId,
+      message: lease.status === "cancelled"
+        ? `Cancelled queued nonproduction environment lease ${lease.leaseId}.`
+        : `Released nonproduction environment lease ${lease.leaseId}.`,
+      data: { lease },
+    };
+  } catch (error) {
+    const detail = getErrorMessage(error);
+    if (detail === "nonprod_lease_not_found") {
+      return {
+        success: false,
+        error: "not_found",
+        message:
+          `No nonprod lease ${leaseId}. Call list_nonprod_environment_leases for live ids; ` +
+          "do NOT retry the same leaseId (retryable: false).",
+        data: { retryable: false, leaseId },
+      };
+    }
+    return {
+      success: false,
+      error: "release_failed",
+      message: `Could not release lease ${leaseId}: ${detail}. Do not blind-retry (retryable: false).`,
+      data: { retryable: false, leaseId },
+    };
+  }
 }
 
 async function renewNonprodEnvironmentLeaseHandler(params: Record<string, unknown>): Promise<ToolResult> {

@@ -214,9 +214,11 @@ const definitions: ToolDefinition[] = [
     name: "release_capsule_scope",
     description:
       "Release previously claimed Work Capsule scope items by kind and value. " +
-      "Requires capsuleId plus claims: [{kind, value}, ...]. Call once per handoff with the full claim set — " +
-      "do not release item-by-item in a loop. " +
-      "Idempotent when claims are already absent; do not retry on success.",
+      "Requires capsuleId (WC-*) plus claims: [{kind, value}, ...] matching prior claim_capsule_scope entries. " +
+      "Call once per handoff with the full claim set — do not release item-by-item in a loop. " +
+      "Do NOT retry on invalid_input — fix the payload (claims must be a non-empty array of {kind,value}). " +
+      "Do NOT call for an abandoned/unknown capsule (retryable: false). " +
+      "If nothing matched, success still returns (idempotent no-op on empty released set).",
     inputSchema: {
       type: "object",
       properties: {
@@ -227,11 +229,11 @@ const definitions: ToolDefinition[] = [
             type: "object",
             properties: {
               kind: { type: "string", enum: ["path", "module", "package", "route", "skill", "prompt"] },
-              value: { type: "string", description: "Scope value to release." },
+              value: { type: "string", description: "Scope value to release (exact match to the prior claim)." },
             },
             required: ["kind", "value"],
           },
-          description: "Scope claims to release.",
+          description: "Scope claims to release — array required, not a single object.",
         },
       },
       required: ["capsuleId", "claims"],
