@@ -18,7 +18,12 @@ import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { loadCoworkerRecord } from "@/lib/coworker-record/load-record";
 import { getCoworkerPostureInheritance } from "@/lib/actions/golden-triangle";
-import { loadCoworkerCostProjection } from "@/lib/coworker-identity/cost-projection";
+import {
+  loadCoworkerCostProjection,
+  costGlance,
+  costFacetSummary,
+  hasCostActivity,
+} from "@/lib/coworker-identity/cost-projection";
 import { loadCoworkerEngagements } from "@/lib/coworker-identity/engagements-projection";
 import { CoworkerPriorityControl } from "@/components/golden-triangle/CoworkerPriorityControl";
 import { CoworkerProactivitySetting } from "@/components/platform/coworker-record/CoworkerProactivitySetting";
@@ -37,18 +42,35 @@ function titleCase(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
-/** A collapsed-by-default facet: the summary line is all you see until you open it. */
+/** A collapsed-by-default facet: the summary line is all you see until you open it.
+ *  When `empty`, it renders as a muted, non-openable row (no caret, no New badge)
+ *  stating the empty condition — so a coworker with genuinely no data for a facet
+ *  doesn't add an inviting-but-hollow click (smart progressive disclosure). */
 function Facet({
   title,
   isNew,
   summary,
+  empty,
+  emptyLabel,
   children,
 }: {
   title: string;
   isNew?: boolean;
   summary: string;
+  empty?: boolean;
+  emptyLabel?: string;
   children: ReactNode;
 }) {
+  if (empty) {
+    return (
+      <div className="flex items-center gap-3 rounded-xl border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-4 py-3">
+        <span className="text-sm font-semibold text-[var(--dpf-muted)]">{title}</span>
+        <span className="ml-auto text-right text-xs text-[var(--dpf-faint,var(--dpf-muted))]">
+          {emptyLabel ?? "Nothing yet"}
+        </span>
+      </div>
+    );
+  }
   return (
     <details className="overflow-hidden rounded-xl border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)]">
       <summary className="flex cursor-pointer list-none items-center gap-3 px-4 py-3">
@@ -209,11 +231,7 @@ export default async function CoworkerIdentityPage({
           value={String(engagements.totals.total)}
           sub={`${engagements.totals.open} open`}
         />
-        <Kpi
-          label={`Cost · ${cost.window.days}d`}
-          value={`$${cost.totalUsd.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
-          sub={cost.deltaPct != null ? `${cost.deltaPct > 0 ? "▲" : "▼"} ${Math.abs(cost.deltaPct)}%` : "no prior"}
-        />
+        <Kpi label={`Cost · ${cost.window.days}d`} {...costGlance(cost)} />
         <Kpi label="Teams" value={teamName ? "1+" : "—"} sub="collaboration" />
         <Kpi label="Status" value={titleCase(agent.status)} sub={titleCase(agent.lifecycleStage)} />
       </section>
@@ -245,6 +263,8 @@ export default async function CoworkerIdentityPage({
         <Facet
           title="Who has engaged it"
           isNew
+          empty={engagements.totals.total === 0}
+          emptyLabel="No one has engaged it yet"
           summary={`${engagements.totals.total} · ${engagements.totals.people} people · ${engagements.totals.agents} agents`}
         >
           <EngagementsFacetPanel summary={engagements} />
@@ -253,7 +273,9 @@ export default async function CoworkerIdentityPage({
         <Facet
           title="Cost"
           isNew
-          summary={`$${cost.totalUsd.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} · ${cost.window.days}d`}
+          empty={!hasCostActivity(cost)}
+          emptyLabel={`No recorded usage in ${cost.window.days}d`}
+          summary={costFacetSummary(cost)}
         >
           <CostFacetPanel summary={cost} />
         </Facet>

@@ -5,6 +5,10 @@ import { describe, it, expect } from "vitest";
 import {
   summarizeCoworkerCost,
   humanizeCostDriver,
+  isCostEffectivelyFree,
+  hasCostActivity,
+  costFacetSummary,
+  costGlance,
   type CostUsageRow,
 } from "./cost-projection";
 
@@ -138,5 +142,44 @@ describe("summarizeCoworkerCost", () => {
     expect(s.dailyUsd).toHaveLength(2);
     expect(s.dailyUsd[0].day < s.dailyUsd[1].day).toBe(true);
     expect(s.dailyUsd.reduce((a, b) => a + b.usd, 0)).toBe(5);
+  });
+});
+
+describe("cost display helpers (token-forward when free)", () => {
+  function summaryWith(partial: Partial<ReturnType<typeof summarizeCoworkerCost>>) {
+    return {
+      window: { since: NOW, until: NOW, days: 30 },
+      totalUsd: 0,
+      tokens: 0,
+      priorTotalUsd: 0,
+      deltaPct: null,
+      dailyUsd: [],
+      drivers: [],
+      budget: { dailyTokenLimit: null, tokensToday: 0, usedPct: null, recentRejections: 0 },
+      ...partial,
+    } as ReturnType<typeof summarizeCoworkerCost>;
+  }
+
+  it("treats $0 spend with real tokens as effectively free", () => {
+    expect(isCostEffectivelyFree({ totalUsd: 0, tokens: 606_400 })).toBe(true);
+    expect(isCostEffectivelyFree({ totalUsd: 12.5, tokens: 606_400 })).toBe(false);
+    expect(isCostEffectivelyFree({ totalUsd: 0, tokens: 0 })).toBe(false);
+  });
+
+  it("hasCostActivity is true when tokens exist even at $0", () => {
+    expect(hasCostActivity({ totalUsd: 0, tokens: 606_400, drivers: [] })).toBe(true);
+    expect(hasCostActivity({ totalUsd: 0, tokens: 0, drivers: [] })).toBe(false);
+  });
+
+  it("leads the facet summary and glance with tokens when free", () => {
+    const free = summaryWith({ totalUsd: 0, tokens: 606_400 });
+    expect(costFacetSummary(free)).toBe("606.4k tokens · 30d");
+    expect(costGlance(free)).toEqual({ value: "606.4k tok", sub: "$0.00 · local" });
+  });
+
+  it("leads with dollars when there is real spend", () => {
+    const paid = summaryWith({ totalUsd: 212.4, tokens: 1_420_000, deltaPct: 18 });
+    expect(costFacetSummary(paid)).toBe("$212.40 · 30d");
+    expect(costGlance(paid)).toEqual({ value: "$212.40", sub: "▲ 18%" });
   });
 });
