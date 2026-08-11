@@ -79,6 +79,13 @@ export type LeaveKernelOutcome =
   | "escalate"
   | "defer";
 
+/**
+ * Surface-agnostic alias. The outcome is produced by whichever decision surface
+ * the coworker consults (the org WWWD business-decision surface for leave — see
+ * `leave-decision-surface.ts`), not by the platform kernel; this name reflects that.
+ */
+export type LeaveDecisionOutcome = LeaveKernelOutcome;
+
 export type LeaveDecisionAction = "approve" | "deny" | "escalate";
 
 /**
