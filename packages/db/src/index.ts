@@ -375,6 +375,14 @@ export {
   type NormalizedSoftwareEvidence,
 } from "./discovery-normalize";
 export {
+  loadDiscoveryAttributionInputs,
+  type DiscoveryAttributionInputs,
+} from "./discovery-attribution-inputs";
+export {
+  backfillDiscoveryAttribution,
+  type AttributionBackfillReport,
+} from "./discovery-attribution-backfill";
+export {
   attributeInventoryEntity,
   buildDiscoveryDescriptor,
   evaluateInventoryQuality,

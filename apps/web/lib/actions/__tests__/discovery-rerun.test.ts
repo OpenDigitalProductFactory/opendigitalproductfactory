@@ -20,6 +20,7 @@ vi.mock("@dpf/db", () => ({
   prisma: mockPrisma,
   normalizeDiscoveredFacts: mockNormalize,
   persistBootstrapDiscoveryRun: mockPersistRun,
+  loadDiscoveryAttributionInputs: vi.fn(async () => ({})),
 }));
 
 vi.mock("@/lib/auth", () => ({

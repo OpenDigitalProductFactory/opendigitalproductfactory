@@ -9,8 +9,7 @@ import {
   normalizeDiscoveredFacts,
   type NormalizeDiscoveryOptions,
 } from "./discovery-normalize";
-import type { AdapterRule, AdapterRuleStatus } from "./discovery-fingerprint-adapter";
-import type { FingerprintMatchExpression, ResolvedIdentity } from "./discovery-fingerprint-rules";
+import { loadDiscoveryAttributionInputs } from "./discovery-attribution-inputs";
 import { persistBootstrapDiscoveryRun } from "./discovery-sync";
 import { promoteInventoryEntities } from "./discovery-promotion";
 import { reconcilePromotedProducts } from "./discovery-reconcile";
@@ -18,7 +17,6 @@ import {
   inferCrossCollectorRelationships,
   inferProductDependencies,
 } from "./discovery-inference";
-import { flattenEnrichmentForScoring } from "./discovery-attribution";
 import { runConnectionCollectors, type DecryptFn } from "./discovery-runners/connection-collectors";
 import { prisma } from "./client";
 import type { CollectorOutput, DiscoveryCollector } from "./discovery-types";
@@ -113,85 +111,15 @@ export async function executeBootstrapDiscovery(
 
   await yieldToEventLoop();
 
-  const taxonomyNodes = options.taxonomyNodes
-    ?? (typeof (db as { taxonomyNode?: { findMany?: unknown } }).taxonomyNode?.findMany === "function"
-      ? (await ((db as unknown) as {
-          taxonomyNode: {
-            findMany(args: {
-              select: { nodeId: true; name: true; description: true; enrichment: true };
-            }): Promise<Array<{ nodeId: string; name: string; description: string | null; enrichment: unknown }>>;
-          };
-        }).taxonomyNode.findMany({
-          select: { nodeId: true, name: true, description: true, enrichment: true },
-        })).map((n) => ({
-          nodeId: n.nodeId,
-          name: n.name,
-          description: n.description,
-          enrichmentText: flattenEnrichmentForScoring(n.enrichment as Record<string, unknown> | null),
-        }))
-      : undefined);
-  // Active discovery-fingerprint rules (spec §4 layer 0). Loaded joined to the
-  // taxonomy node's semantic nodeId, because the normalizer attaches taxonomy by
-  // `connect: { nodeId }`. A confident match identifies + places the device
-  // deterministically, ahead of the heuristic taxonomy scoring.
-  const fingerprintRules = options.fingerprintRules
-    ?? (typeof (db as { discoveryFingerprintRule?: { findMany?: unknown } }).discoveryFingerprintRule?.findMany === "function"
-      ? (await ((db as unknown) as {
-          discoveryFingerprintRule: {
-            findMany(args: {
-              where: { status: "active" };
-              select: {
-                id: true;
-                ruleKey: true;
-                status: true;
-                matchExpression: true;
-                requiredEvidenceFamilies: true;
-                identityConfidence: true;
-                taxonomyConfidence: true;
-                resolvedIdentity: true;
-                catalogIdentityId: true;
-                taxonomyNode: { select: { nodeId: true } };
-              };
-            }): Promise<Array<{
-              id: string;
-              ruleKey: string;
-              status: string;
-              matchExpression: unknown;
-              requiredEvidenceFamilies: string[];
-              identityConfidence: number;
-              taxonomyConfidence: number;
-              resolvedIdentity: unknown;
-              catalogIdentityId: string | null;
-              taxonomyNode: { nodeId: string } | null;
-            }>>;
-          };
-        }).discoveryFingerprintRule.findMany({
-          where: { status: "active" },
-          select: {
-            id: true,
-            ruleKey: true,
-            status: true,
-            matchExpression: true,
-            requiredEvidenceFamilies: true,
-            identityConfidence: true,
-            taxonomyConfidence: true,
-            resolvedIdentity: true,
-            catalogIdentityId: true,
-            taxonomyNode: { select: { nodeId: true } },
-          },
-        })).map((rule): AdapterRule => ({
-          id: rule.id,
-          ruleKey: rule.ruleKey,
-          status: rule.status as AdapterRuleStatus,
-          matchExpression: rule.matchExpression as FingerprintMatchExpression,
-          requiredEvidenceFamilies: rule.requiredEvidenceFamilies,
-          taxonomyNodeId: rule.taxonomyNode?.nodeId ?? null,
-          identityConfidence: rule.identityConfidence,
-          taxonomyConfidence: rule.taxonomyConfidence,
-          resolvedIdentity: (rule.resolvedIdentity ?? {}) as ResolvedIdentity,
-          catalogIdentityId: rule.catalogIdentityId ?? null,
-        }))
-      : undefined);
+  // Load the taxonomy tree + active fingerprint rules the normalizer needs to
+  // identify + place a device. Shared with the edge-node and portal-connection
+  // ingestion paths via loadDiscoveryAttributionInputs so all three normalize
+  // from the same inputs (BI-BAF38ED3). Explicit options still win as overrides
+  // (test injection / callers that already hold the data).
+  const { taxonomyNodes, fingerprintRules } = await loadDiscoveryAttributionInputs(db, {
+    ...(options.taxonomyNodes ? { taxonomyNodes: options.taxonomyNodes } : {}),
+    ...(options.fingerprintRules ? { fingerprintRules: options.fingerprintRules } : {}),
+  });
 
   const normalized = (options.normalize ?? normalizeDiscoveredFacts)(collected, {
     ...(taxonomyNodes ? { taxonomyNodes } : {}),

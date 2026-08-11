@@ -14,7 +14,7 @@ apps/web/components/platform/edge-nodes/EdgeNodesAdminClient.tsx	985
 apps/web/components/storefront/SlotBookingFlow.tsx	1015
 apps/web/components/workbooks/Grid.tsx	1830
 apps/web/instrumentation.test.ts	945
-apps/web/instrumentation.ts	1524
+apps/web/instrumentation.ts	1535
 apps/web/lib/actions/agent-coworker-external.test.ts	867
 apps/web/lib/actions/agent-coworker.ts	2794
 apps/web/lib/actions/agent-task-scheduler.test.ts	1124
@@ -45,7 +45,7 @@ apps/web/lib/mcp-tools.ts	1953
 apps/web/lib/mcp/packs/backlog-pack.ts	858
 apps/web/lib/mcp/packs/contribution-hive-pack.ts	854
 apps/web/lib/mcp/packs/sandbox-pack.ts	920
-apps/web/lib/navigation/portal-navigation-model.ts	949
+apps/web/lib/navigation/portal-navigation-model.ts	944
 apps/web/lib/operate/coworker-regression-detector.ts	935
 apps/web/lib/queue/functions/self-upgrade.test.ts	1383
 apps/web/lib/routing/chat-adapter.test.ts	924

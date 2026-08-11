@@ -5653,7 +5653,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 36
+    "textMass": 41
   },
   "apps/web/components/inventory/TopologyGraph.tsx": {
     "vocabulary": 0,

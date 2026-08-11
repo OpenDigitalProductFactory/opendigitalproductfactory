@@ -1,6 +1,7 @@
 import {
   INVENTORY_ENTITY_CANONICAL_WHERE,
   INVENTORY_RELATIONSHIP_CANONICAL_WHERE,
+  isDockerOriginEntityKey,
   prisma,
 } from "@dpf/db";
 
@@ -283,15 +284,37 @@ export type SubnetGroup = {
   clientCount: number;
 };
 
+/**
+ * The DPF install's OWN self-scan footprint (its Docker containers, the docker
+ * host, bridge networks/NICs), collapsed into a single contained summary.
+ *
+ * These rows are discovered by the `dpf_bootstrap` self-scan but are NOT estate
+ * the operator manages — they are the platform itself. Exploding them into the
+ * managed inventory (hundreds of "server"/"container" rows) blends DPF's own
+ * topology with the real network and buries the actual signal. They are
+ * excluded from `physicalSubnets`/`ungrouped`/`totalCount` and represented here
+ * as one thing: "this DPF instance". (BI-BAF38ED3.)
+ */
+export type DpfInstanceContainment = {
+  present: boolean;
+  /** Total contained rows (containers + hosts + bridge networks/interfaces). */
+  entityCount: number;
+  containerCount: number;
+  hostCount: number;
+  networkCount: number;
+};
+
 export type GroupedInventory = {
   physicalSubnets: SubnetGroup[];
   dockerSubnets: SubnetGroup[];
   ungrouped: SubnetGroupEntity[];
   totalCount: number;
+  /** DPF's own self-scan footprint, contained as one managed unit. */
+  dpfInstance: DpfInstanceContainment;
 };
 
 export async function getInventoryEntitiesGroupedBySubnet(): Promise<GroupedInventory> {
-  const [entities, memberOfRels] = await Promise.all([
+  const [allEntities, memberOfRels] = await Promise.all([
     prisma.inventoryEntity.findMany({
       where: { ...INVENTORY_ENTITY_CANONICAL_WHERE, status: "active" },
       orderBy: [{ entityType: "asc" }, { name: "asc" }],
@@ -311,7 +334,24 @@ export async function getInventoryEntitiesGroupedBySubnet(): Promise<GroupedInve
     }),
   ]);
 
-  // Map entity IDs to entities
+  // Contain the DPF install's own self-scan footprint BEFORE grouping, using the
+  // canonical key-based detector (not a subnet-name heuristic) so a contained
+  // container/host cannot leak into the managed estate via `ungrouped` or a
+  // physical-subnet membership. The remaining `entities` are the real estate.
+  const dpfInternalEntities = allEntities.filter((e) => isDockerOriginEntityKey(e.entityKey, e.name));
+  const entities = allEntities.filter((e) => !isDockerOriginEntityKey(e.entityKey, e.name));
+  const dpfInstance: DpfInstanceContainment = {
+    present: dpfInternalEntities.length > 0,
+    entityCount: dpfInternalEntities.length,
+    containerCount: dpfInternalEntities.filter((e) => e.entityType === "container").length,
+    hostCount: dpfInternalEntities.filter((e) => e.entityType === "host" || e.entityType === "docker_host").length,
+    networkCount: dpfInternalEntities.filter(
+      (e) => e.entityType === "subnet" || e.entityType === "vlan" || e.entityType === "network_interface",
+    ).length,
+  };
+
+  // Map entity IDs to entities (estate only — a MEMBER_OF edge into a contained
+  // entity is dropped, keeping contained rows out of estate subnet groups).
   const entityById = new Map(entities.map((e) => [e.id, e]));
 
   // Find subnet/vlan entities
@@ -424,7 +464,10 @@ export async function getInventoryEntitiesGroupedBySubnet(): Promise<GroupedInve
     physicalSubnets,
     dockerSubnets,
     ungrouped,
+    // Managed-estate count only — DPF's own contained footprint is reported
+    // separately via `dpfInstance`, never folded into the estate total.
     totalCount: entities.length,
+    dpfInstance,
   };
 }
 

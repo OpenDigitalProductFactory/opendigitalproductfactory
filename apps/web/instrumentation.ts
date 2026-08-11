@@ -1160,6 +1160,17 @@ export async function register() {
     });
 
     void import("@/lib/onboarding/backfill-commercial-catalog-on-boot").then(({ backfillCommercialCatalogOnBoot }) => backfillCommercialCatalogOnBoot());
+
+    // Self-heal discovery attribution (BI-BAF38ED3) for any install whose estate
+    // was discovered before the fingerprint layer was wired into every ingestion
+    // path — those InventoryEntity rows were mis-binned by the coarse
+    // `host -> /servers` heuristic with no resolved identity. Re-runs the
+    // fingerprint layer over the persisted rows; idempotent and cheap once
+    // healed (diff-only writes), non-fatal, and fire-and-forget so it never
+    // delays boot.
+    void import("@/lib/onboarding/backfill-discovery-attribution-on-boot").then(
+      ({ backfillDiscoveryAttributionOnBoot }) => backfillDiscoveryAttributionOnBoot(),
+    );
     // Build Studio engine reliability (spec §3.1 engine-first / FB-78E967D4).
     // These are correctness reconcilers, not optional maintenance — skipped
     // only under measurement runtime (an ephemeral sweep portal runs no
