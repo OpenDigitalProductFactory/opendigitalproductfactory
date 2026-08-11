@@ -34,7 +34,8 @@ import {
   evaluateFreshness,
   exitCodeForVerdict,
   parseLockedVersion,
-  shouldForceConvergenceAfterInstall,
+  parseWorkspacePackageGlobs,
+  shouldEscalateConvergence,
   stalePackagePathsForRelink,
 } from "./lib/sandbox-freshness.mjs";
 
@@ -318,22 +319,70 @@ function canResetNodeModules() {
     || process.env.DPF_ALLOW_SANDBOX_NODE_MODULES_RESET === "1";
 }
 
-function resetSandboxNodeModules() {
-  if (!canResetNodeModules()) return false;
-  const target = path.join(rootDir, "node_modules");
-  const resolved = path.resolve(target);
-  if (path.relative(rootDir, resolved) !== "node_modules") return false;
-  try {
-    const stat = fs.lstatSync(resolved);
-    if (stat.isSymbolicLink()) {
-      console.error(`[sandbox-freshness] refusing full node_modules reset because ${resolved} is a symlink/junction`);
-      return false;
+// Enumerate the workspace-package node_modules dirs (apps/web/node_modules,
+// packages/db/node_modules, ...) so the clean reset clears BOTH the root store
+// AND the per-package .bin trees a stale bin can hide in — the "root + package
+// node_modules" wipe the incident (BI-675D9085) required by hand. Globs come
+// from pnpm-workspace.yaml; only real directories INSIDE the slot are returned.
+function workspacePackageNodeModulesDirs() {
+  const workspaceYaml = readFileIfExists(path.join(rootDir, "pnpm-workspace.yaml"));
+  const dirs = new Set();
+  for (const glob of parseWorkspacePackageGlobs(workspaceYaml)) {
+    let packageDirs = [];
+    if (glob.endsWith("/*")) {
+      const parent = path.join(rootDir, glob.slice(0, -2));
+      try {
+        packageDirs = fs
+          .readdirSync(parent, { withFileTypes: true })
+          .filter((entry) => entry.isDirectory())
+          .map((entry) => path.join(parent, entry.name));
+      } catch {
+        packageDirs = [];
+      }
+    } else {
+      packageDirs = [path.join(rootDir, glob)];
     }
+    for (const packageDir of packageDirs) {
+      const candidate = path.resolve(packageDir, "node_modules");
+      const displacement = path.relative(rootDir, candidate);
+      if (!displacement || displacement.startsWith("..") || path.isAbsolute(displacement)) continue;
+      dirs.add(candidate);
+    }
+  }
+  return [...dirs];
+}
+
+// Remove one node_modules dir if it is a real directory inside the slot (never a
+// symlink/junction, whose target could live outside the sandbox). Returns true
+// when the path is absent or was removed; false only when refused.
+function removeNodeModulesDir(resolved) {
+  if (path.basename(resolved) !== "node_modules") return false;
+  const displacement = path.relative(rootDir, resolved);
+  if (!displacement || displacement.startsWith("..") || path.isAbsolute(displacement)) return false;
+  let stat;
+  try {
+    stat = fs.lstatSync(resolved);
   } catch {
-    return true;
+    return true; // already gone.
+  }
+  if (stat.isSymbolicLink()) {
+    console.error(`[sandbox-freshness] refusing node_modules reset because ${resolved} is a symlink/junction`);
+    return false;
   }
   fs.rmSync(resolved, { recursive: true, force: true });
-  log("reset scratch sandbox node_modules after package-level convergence could not repair dependency drift");
+  return true;
+}
+
+function resetSandboxNodeModules() {
+  if (!canResetNodeModules()) return false;
+  const rootNodeModules = path.resolve(rootDir, "node_modules");
+  if (path.relative(rootDir, rootNodeModules) !== "node_modules") return false;
+  if (!removeNodeModulesDir(rootNodeModules)) return false;
+  let clearedPackages = 0;
+  for (const packageNodeModules of workspacePackageNodeModulesDirs()) {
+    if (removeNodeModulesDir(packageNodeModules)) clearedPackages += 1;
+  }
+  log(`reset scratch sandbox node_modules (root + ${clearedPackages} workspace package trees) after package-level convergence could not repair dependency drift`);
   return true;
 }
 
@@ -391,24 +440,29 @@ try {
   state = collectState();
   evaluation = evaluateFreshness(state);
 
-  if (shouldForceConvergenceAfterInstall(evaluation)) {
-    log("first convergence left dependency drift; retrying once with --force to refresh the sandbox store/link graph");
+  // Escalate on tracked drift OR a failed install (the stale-bin signature,
+  // BI-675D9085): a frozen-lockfile install that exits non-zero after a dep bump
+  // can leave every link resolving to the locked version (re-check green) while
+  // the install itself never completed. Each rung runs at most once, so the
+  // whole ladder is bounded.
+  if (shouldEscalateConvergence(evaluation, attempts[attempts.length - 1])) {
+    log("first convergence did not settle (drift or failed install); retrying once with --force to refresh the sandbox store/link graph");
     attempts.push(runConvergenceAttempt(state, { force: true }));
     convergence = { ...attempts[attempts.length - 1], attempts };
     state = collectState();
     evaluation = evaluateFreshness(state);
   }
 
-  if (shouldForceConvergenceAfterInstall(evaluation) && canResetNodeModules()) {
-    log("forced convergence left dependency drift; resetting scratch node_modules once and reinstalling from the lockfile");
+  if (shouldEscalateConvergence(evaluation, attempts[attempts.length - 1]) && canResetNodeModules()) {
+    log("forced convergence did not settle; resetting scratch node_modules once (root + package trees) and reinstalling from the lockfile");
     attempts.push(runConvergenceAttempt(state, { resetNodeModules: true }));
     convergence = { ...attempts[attempts.length - 1], attempts };
     state = collectState();
     evaluation = evaluateFreshness(state);
   }
 
-  if (shouldForceConvergenceAfterInstall(evaluation) && canResetNodeModules()) {
-    log("scratch node_modules reset still left dependency drift; retrying once with a scratch-local pnpm store");
+  if (shouldEscalateConvergence(evaluation, attempts[attempts.length - 1]) && canResetNodeModules()) {
+    log("scratch node_modules reset still did not settle; retrying once with a scratch-local pnpm store");
     attempts.push(runConvergenceAttempt(state, { freshStore: true }));
     convergence = { ...attempts[attempts.length - 1], attempts };
     state = collectState();

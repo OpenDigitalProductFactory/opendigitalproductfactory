@@ -16,6 +16,8 @@ import {
   isPnpmInstallCommand,
   parseEtimeMinutes,
   parseLockedVersion,
+  parseWorkspacePackageGlobs,
+  shouldEscalateConvergence,
   shouldForceConvergenceAfterInstall,
   stalePackagePathsForRelink,
 } from "./sandbox-freshness.mjs";
@@ -236,6 +238,34 @@ test("shouldForceConvergenceAfterInstall is limited to dependency drift after in
     verdict: "sandbox_not_ready",
     failures: [{ kind: "install_in_progress" }],
   }), false);
+});
+
+test("shouldEscalateConvergence also escalates on a failed install with a green re-check (stale bin, BI-675D9085)", () => {
+  // The old gate only saw tracked drift; a stale .bin fails the install while
+  // every link resolves to the locked version, so the re-check is green.
+  const green = { verdict: "green", failures: [] };
+  assert.equal(shouldEscalateConvergence(green, { attempted: true, exitCode: 1 }), true);
+  // A clean install (exit 0) that reached green must NOT escalate — the ladder stops.
+  assert.equal(shouldEscalateConvergence(green, { attempted: true, exitCode: 0 }), false);
+  // Tracked drift still escalates regardless of the install's exit code.
+  const drift = { verdict: "sandbox_drift", failures: [{ kind: "version_drift", package: "prisma" }] };
+  assert.equal(shouldEscalateConvergence(drift, { attempted: true, exitCode: 0 }), true);
+  // A skipped/absent attempt on a green re-check is not an escalation signal.
+  assert.equal(shouldEscalateConvergence(green, { attempted: false, exitCode: 1 }), false);
+  assert.equal(shouldEscalateConvergence(green, null), false);
+  assert.equal(shouldEscalateConvergence(green, undefined), false);
+});
+
+test("parseWorkspacePackageGlobs reads the pnpm-workspace.yaml package list", () => {
+  const yaml = `packages:\n  - "apps/*"\n  - "packages/*"\n  - services/adp\n  - '!**/__fixtures__/**'\noverrides:\n  react: 19.2.3\n`;
+  assert.deepEqual(parseWorkspacePackageGlobs(yaml), ["apps/*", "packages/*", "services/adp"]);
+  assert.deepEqual(parseWorkspacePackageGlobs(""), []);
+  assert.deepEqual(parseWorkspacePackageGlobs("overrides:\n  react: 19.2.3\n"), []);
+  // A column-0 comment or a blank line inside the block must NOT drop the
+  // entries after it, and an inline trailing comment on an entry is stripped —
+  // otherwise those packages' node_modules would go un-reset (partial drift).
+  const withComments = `packages:\n  - "apps/*"\n# a comment at column 0\n\n  - packages/* # inline note\n  - services/adp\noverrides:\n  react: 19.2.3\n`;
+  assert.deepEqual(parseWorkspacePackageGlobs(withComments), ["apps/*", "packages/*", "services/adp"]);
 });
 
 test("evaluateFreshness flags a whole-lockfile mismatch the sentinels can't see (new dep added)", () => {
