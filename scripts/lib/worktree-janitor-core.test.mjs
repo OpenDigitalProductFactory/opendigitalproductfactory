@@ -41,6 +41,29 @@ describe("classifyWorktree", () => {
     assert.equal(r.tier, "A");
   });
 
+  it("live session KEEPS a merged+clean worktree that would otherwise be Tier-A", () => {
+    // The safety fix: a live session heartbeat outranks Tier-A eligibility, so
+    // the janitor never reaps a worktree out from under an active session.
+    const r = classifyWorktree({ ...base, merged: true, dirty: false, hasLiveSession: true });
+    assert.equal(r.verdict, "KEEP");
+    assert.equal(r.tier, null);
+    assert.match(r.reason, /live session/);
+  });
+
+  it("abandoned mid-merge (no live session) is FLAGGED, never reaped", () => {
+    const r = classifyWorktree({ ...base, midMerge: true, hasLiveSession: false });
+    assert.equal(r.verdict, "FLAG_ABANDONED_MERGE");
+    assert.equal(r.tier, null);
+    assert.equal(isLiveReapEligible("all", r.verdict), false);
+    assert.equal(isLiveReapEligible("tier-a-only", r.verdict), false);
+  });
+
+  it("a live session's in-progress merge is KEPT, not flagged as abandoned", () => {
+    const r = classifyWorktree({ ...base, midMerge: true, hasLiveSession: true });
+    assert.equal(r.verdict, "KEEP");
+    assert.match(r.reason, /live session/);
+  });
+
   it("Tier B: stale unmerged clean", () => {
     const r = classifyWorktree({ ...base, ageDays: 20 }, { graceDays: 14 });
     assert.equal(r.verdict, "PRUNE_TIER_B");
@@ -67,10 +90,13 @@ describe("summarizeDecisions", () => {
       { path: "/a", branch: "a", verdict: "PRUNE_TIER_A", reason: "", tier: "A" },
       { path: "/b", branch: "b", verdict: "PRUNE_TIER_B", reason: "", tier: "B" },
       { path: "/c", branch: "c", verdict: "KEEP", reason: "", tier: null },
+      { path: "/d", branch: "d", verdict: "FLAG_ABANDONED_MERGE", reason: "", tier: null },
     ]);
     assert.equal(s.counts.PRUNE_TIER_A, 1);
     assert.equal(s.counts.PRUNE_TIER_B, 1);
+    assert.equal(s.counts.FLAG_ABANDONED_MERGE, 1);
     assert.deepEqual(s.tierAPaths, ["/a"]);
     assert.deepEqual(s.tierBPaths, ["/b"]);
+    assert.deepEqual(s.flaggedPaths, ["/d"]);
   });
 });

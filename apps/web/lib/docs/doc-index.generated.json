@@ -896,6 +896,8 @@
         "verification-readiness-classification",
         "compose-project-isolation",
         "freshness-a-stale-worktree-base-is-a-landmine",
+        "root-clone-freshness-the-shared-root-must-stay-on-current-main",
+        "reaping-safety-a-live-sessions-worktree-is-never-reaped",
         "rebasing-on-a-shallow-clone-never-a-bare-git-rebase-originmain",
         "housekeeping"
       ]

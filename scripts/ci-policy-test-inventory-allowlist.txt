@@ -98,7 +98,6 @@ scripts/lib/resolve-compose-install-context.test.mjs
 scripts/lib/scratch-first-run-walkthrough-options.test.mjs
 scripts/lib/stale-root-clone.test.mjs
 scripts/lib/transition-signing.test.mjs
-scripts/lib/worktree-janitor-core.test.mjs
 scripts/lifecycle-surface-policy.test.mjs
 scripts/local-ci-bounded-build.test.mjs
 scripts/local-ci-capacity-broker.test.mjs
