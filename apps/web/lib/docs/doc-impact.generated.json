@@ -1261,6 +1261,9 @@
     "packages/dpf-skill-pack/hooks/process-spine-health-check.mjs": [
       "docs/architecture/skill-surfaces-runbook.md"
     ],
+    "packages/dpf-skill-pack/hooks/root-clone-freshness.mjs": [
+      "docs/architecture/branch-and-worktree-runbook.md"
+    ],
     "packages/dpf-skill-pack/hooks/tool-economy-precheck.mjs": [
       "docs/architecture/context-engineering-standards.md"
     ],
@@ -1645,6 +1648,9 @@
       "docs/architecture/2026-06-19-edge-node-deployment-sysml-architecture-note.md",
       "docs/edge-node/deployment-topology.md"
     ],
+    "scripts/worktree-janitor.mjs": [
+      "docs/architecture/branch-and-worktree-runbook.md"
+    ],
     "services/edge-node/scripts/verify-lifecycle.ts": [
       "docs/architecture/2026-06-19-edge-node-deployment-sysml-architecture-note.md",
       "docs/install/edge-node-multi-host.md",
@@ -2004,7 +2010,9 @@
     ],
     "docs/architecture/branch-and-worktree-runbook.md": [
       "apps/web/lib/self-upgrade/local-changes-ledger.ts",
-      "scripts/dpf-bootstrap-agent-toolchain.ps1"
+      "packages/dpf-skill-pack/hooks/root-clone-freshness.mjs",
+      "scripts/dpf-bootstrap-agent-toolchain.ps1",
+      "scripts/worktree-janitor.mjs"
     ],
     "docs/architecture/build-gate-runbook.md": [
       "apps/web/lib/integrate/build-orchestrator.ts",
