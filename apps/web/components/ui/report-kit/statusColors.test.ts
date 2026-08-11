@@ -83,6 +83,13 @@ describe("statusColors", () => {
     expect(resolveIntent("selfUpgradeRun", "skipped")).toBe("neutral");
   });
 
+  it("maps archetype readiness tiers and evidence statuses", () => {
+    expect(resolveIntent("archetypeReadinessTier", "template-ready")).toBe("info");
+    expect(resolveIntent("archetypeReadinessTier", "sole-platform-ready")).toBe("success");
+    expect(resolveIntent("archetypeReadinessEvidence", "required")).toBe("warning");
+    expect(resolveIntent("archetypeReadinessEvidence", "merged")).toBe("success");
+  });
+
   it("maps Work Room state, outcome health, and activity through shared domains", () => {
     expect(resolveIntent("workCaseState", "waiting-on-person")).toBe("warning");
     expect(resolveIntent("workRoomOutcomeHealth", "at-risk")).toBe("warning");

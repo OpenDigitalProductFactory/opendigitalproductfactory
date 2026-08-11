@@ -450,6 +450,23 @@ export const STATUS_INTENT: Record<string, Record<string, Intent>> = {
     blocked: "danger",
     unknown: "neutral",
   },
+  // Archetype claim-readiness gate (BI-1A222A7A). Tiers and evidence states
+  // are shared by the operator matrix and any future docs/sales claim surfaces.
+  archetypeReadinessTier: {
+    "template-ready": "info",
+    "ops-ready": "accent",
+    "connector-ready": "warning",
+    "regulated-ready": "warning",
+    "sole-platform-ready": "success",
+  },
+  archetypeReadinessEvidence: {
+    planned: "neutral",
+    open: "warning",
+    "in-progress": "info",
+    done: "success",
+    merged: "success",
+    required: "warning",
+  },
   // Field-dispatch job lifecycle (dispatch board). Mirrors FIELD_DISPATCH_JOB_STATUSES
   // in @dpf/validators (packages/validators/src/field-dispatch.ts). `needs-review` is the exception
   // bucket (a job with no valid dispatch state) so it is warning, not neutral; truly

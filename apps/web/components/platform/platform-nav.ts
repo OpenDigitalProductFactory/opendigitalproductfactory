@@ -25,6 +25,7 @@ export const PLATFORM_FAMILIES: PlatformFamily[] = [
     matchPrefixes: ["/platform"],
     subItems: [
       { label: "Platform Hub", href: "/platform" },
+      { label: "Archetype Readiness", href: "/platform/archetype-readiness" },
       { label: "Schedule", href: "/platform/schedule" },
       { label: "Workbooks", href: "/workbooks" },
     ],

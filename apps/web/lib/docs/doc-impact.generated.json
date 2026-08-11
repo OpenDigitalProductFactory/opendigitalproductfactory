@@ -782,6 +782,9 @@
     "apps/web/lib/operate/retention/policies.ts": [
       "docs/architecture/enforced-ci-gates.md"
     ],
+    "apps/web/lib/operate/sole-platform-readiness.ts": [
+      "docs/architecture/2026-07-27-platform-adequacy-roadmap-backlog-map.md"
+    ],
     "apps/web/lib/platform-runtime/capability-service-projection.ts": [
       "docs/architecture/capability-driven-runtime-profiles.md"
     ],
@@ -1919,6 +1922,7 @@
       "packages/integration-shared/src/credential-crypto.ts"
     ],
     "docs/architecture/2026-07-27-platform-adequacy-roadmap-backlog-map.md": [
+      "apps/web/lib/operate/sole-platform-readiness.ts",
       "packages/storefront-templates/src/archetype-readiness.ts"
     ],
     "docs/architecture/2026-08-09-portal-architecture-hardening-findings.md": [

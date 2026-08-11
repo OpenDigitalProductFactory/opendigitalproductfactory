@@ -1427,6 +1427,13 @@
     "longSentences": 0,
     "textMass": 69
   },
+  "apps/web/app/(shell)/platform/archetype-readiness/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 29
+  },
   "apps/web/app/(shell)/platform/audit/authority/page.tsx": {
     "vocabulary": 0,
     "genericLabels": 0,
@@ -5562,14 +5569,14 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 64
+    "textMass": 45
   },
   "apps/web/components/inventory/ConfigureConnectionInline.tsx": {
     "vocabulary": 0,
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 52
+    "textMass": 48
   },
   "apps/web/components/inventory/DataEnrichmentHelpNote.tsx": {
     "vocabulary": 0,
@@ -6139,6 +6146,20 @@
     "textMass": 2
   },
   "apps/web/components/platform/AiReadinessSummaryPanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 4
+  },
+  "apps/web/components/platform/ArchetypeReadinessMatrixPanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 27
+  },
+  "apps/web/components/platform/ArchetypeReadinessMatrixTable.tsx": {
     "vocabulary": 0,
     "genericLabels": 0,
     "readability": 0,
@@ -6934,7 +6955,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 104
+    "textMass": 106
   },
   "apps/web/components/platform/service-desk/ServiceTicketsTable.tsx": {
     "vocabulary": 0,

@@ -420,7 +420,9 @@ describe("generated route-shell registry", () => {
     // 197 -> 198: /employee/recruiting (BI-9CC44DC7) is sweep-eligible — a read-only
     // recruiting funnel over getRecruitingPipeline with a requisition filter; it renders
     // no wall-clock or live-orchestration state, only the deduped pipeline read model.
-    expect(registry.routes.filter((route) => route.sweepEligible)).toHaveLength(198);
+    // 198 -> 199: /platform/archetype-readiness is a static operator matrix sourced
+    // from storefront-template metadata, so it is safe for the generic sweep.
+    expect(registry.routes.filter((route) => route.sweepEligible)).toHaveLength(199);
     // 110 -> 113: the three exclusions above. Product Direction then adds seven
     // explicitly classified dynamic routes, bringing the combined total to 120.
     // 120 -> 121: /platform/ai/operations-map.
