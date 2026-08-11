@@ -79,7 +79,9 @@ const definitions: ToolDefinition[] = [
   {
     name: "record_runtime_verification",
     description:
-      "Record a typed verification event against exactly one primary runtime/build/promotion attach point, with optional evidence links.",
+      "Record a typed verification event against exactly one primary runtime/build/promotion attach point, with optional evidence links. " +
+      "One verificationId per real check — do not re-record the same command result as thrash heartbeats. " +
+      "Supersede with status=superseded when replacing, rather than inventing parallel ids.",
     inputSchema: {
       type: "object",
       properties: {
