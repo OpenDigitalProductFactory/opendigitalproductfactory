@@ -5,10 +5,22 @@ import { join } from "node:path";
 import test from "node:test";
 
 import {
+  createLocalCiPassEvidenceValidity,
   isRecoverableInterruptedGateState,
   readLocalCiGateState,
   writeLocalCiGateState,
 } from "./local-ci-gate-state.mjs";
+
+test("completed PASS evidence receives bounded validity independent of its lease", () => {
+  const issuedAt = "2026-08-09T10:00:00.000Z";
+  const validity = createLocalCiPassEvidenceValidity({ issuedAt });
+
+  assert.deepEqual(validity, {
+    schemaVersion: 1,
+    issuedAt,
+    expiresAt: "2026-08-10T10:00:00.000Z",
+  });
+});
 
 test("local-CI gate state helper writes and reads the shared evidence shape", () => {
   const stateFile = join(mkdtempSync(join(tmpdir(), "dpf-gate-state-")), "gate.json");
@@ -21,6 +33,7 @@ test("local-CI gate state helper writes and reads the shared evidence shape", ()
     evidenceId: "",
     status: "running",
     expiresAt: "2026-07-30T06:00:00.000Z",
+    leaseExpiresAt: "2026-07-30T06:00:00.000Z",
     resilience: null,
     leaseEvents: [{ type: "admitted", at: "2026-07-30T05:00:00.000Z" }],
     recovery: { reason: "test" },
@@ -38,6 +51,7 @@ test("local-CI gate state helper writes and reads the shared evidence shape", ()
   assert.deepEqual(state, raw);
   assert.equal(state.recovery.reason, "test");
   assert.equal(state.queueObserver.token, "observer-token");
+  assert.equal(state.leaseExpiresAt, "2026-07-30T06:00:00.000Z");
 });
 
 test("only matching queued/admitted/running gate states are recoverable", () => {

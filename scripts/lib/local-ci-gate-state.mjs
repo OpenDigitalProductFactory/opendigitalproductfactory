@@ -9,12 +9,17 @@ import {
   writeFileSync,
 } from "node:fs";
 import { basename, dirname, join } from "node:path";
+import { createCiEvidenceValidity } from "./evidence-validity-policy.mjs";
 
 export const NONTERMINAL_LOCAL_CI_GATE_STATUSES = Object.freeze(new Set([
   "queued",
   "admitted",
   "running",
 ]));
+
+export function createLocalCiPassEvidenceValidity(options) {
+  return createCiEvidenceValidity(options);
+}
 
 export function readLocalCiGateState(stateFile) {
   if (!stateFile) return null;
@@ -42,6 +47,8 @@ export function writeLocalCiGateState(stateFile, {
   evidenceId,
   status,
   expiresAt,
+  leaseExpiresAt = "",
+  evidenceValidity = null,
   resilience,
   leaseEvents,
   evidencePending = false,
@@ -70,6 +77,8 @@ export function writeLocalCiGateState(stateFile, {
     evidencePending,
     recordedAt: new Date().toISOString(),
   };
+  if (leaseExpiresAt) payload.leaseExpiresAt = leaseExpiresAt;
+  if (evidenceValidity) payload.evidenceValidity = evidenceValidity;
   if (resilience) payload.resilience = resilience;
   if (evidencePending) payload.evidencePendingReason = evidencePendingReason || "unknown";
   if (quiescence) payload.quiescence = quiescence;

@@ -238,6 +238,7 @@ test("gate-worktree.mjs refuses to run when neither an explicit command, the stu
   cpSync(join(repoRoot, "scripts", "lib", "local-queue-observer.mjs"), join(temp, "scripts", "lib", "local-queue-observer.mjs"));
   cpSync(join(repoRoot, "scripts", "lib", "local-ci-slot-manifest.mjs"), join(temp, "scripts", "lib", "local-ci-slot-manifest.mjs"));
   cpSync(join(repoRoot, "scripts", "lib", "local-ci-gate-state.mjs"), join(temp, "scripts", "lib", "local-ci-gate-state.mjs"));
+  cpSync(join(repoRoot, "scripts", "lib", "evidence-validity-policy.mjs"), join(temp, "scripts", "lib", "evidence-validity-policy.mjs"));
   cpSync(join(repoRoot, "scripts", "lib", "pregate-console.mjs"), join(temp, "scripts", "lib", "pregate-console.mjs"));
   cpSync(join(repoRoot, "scripts", "lib", "local-ci-host-pressure.mjs"), join(temp, "scripts", "lib", "local-ci-host-pressure.mjs"));
   cpSync(join(repoRoot, "scripts", "lib", "agent-identity.mjs"), join(temp, "scripts", "lib", "agent-identity.mjs"));
@@ -330,6 +331,9 @@ test("gate-worktree.mjs claims, records, and releases in order, and carries evid
     assert.equal(state.gatePassed, true);
     assert.equal(state.branch, "feat/local-ci-sandbox");
     assert.equal(state.sha, "candidate-sha");
+    assert.equal(state.leaseExpiresAt, evidenceCall.params.arguments.evidence.expiresAt);
+    assert.equal(state.expiresAt, state.evidenceValidity.expiresAt);
+    assert.ok(Date.parse(state.expiresAt) > Date.parse(state.leaseExpiresAt));
   } finally {
     await mcp.close();
   }
@@ -484,6 +488,118 @@ test("gate-worktree.mjs preserves a green gate for finalize-only evidence replay
     assert.equal(finalState.gatePassed, true);
     assert.equal(finalState.evidencePending, false);
     assert.equal(finalState.evidenceRecordId, "EXT-FINALIZED");
+    assert.equal(finalState.leaseExpiresAt, pending.expiresAt);
+    assert.ok(
+      Date.parse(finalState.expiresAt) >= Date.parse(finalState.recordedAt) + 23 * 60 * 60_000,
+      "finalized PASS evidence must remain publishable beyond the short lease authority",
+    );
+  } finally {
+    await mcp.close();
+  }
+});
+
+test("gate-worktree.mjs finalizes an exact legacy published PASS without rerunning CI", async () => {
+  const { dir } = makeTempRepo();
+  const gitDir = join(dir, ".git");
+  const branch = "feat/legacy-pass";
+  const sha = "candidate-sha";
+  const recordedAt = new Date(Date.now() - 60_000).toISOString();
+  const leaseExpiresAt = new Date(Date.now() - 30_000).toISOString();
+  writeFileSync(join(gitDir, "dpf-local-ci-gate.json"), JSON.stringify({
+    branch,
+    sha,
+    gatePassed: true,
+    status: "passed",
+    leaseId: "NPEL-LEGACY",
+    evidenceRecordId: "EXT-LEGACY",
+    evidencePending: false,
+    expiresAt: leaseExpiresAt,
+    recordedAt,
+    leaseEvents: [],
+  }));
+  writeFileSync(join(gitDir, "dpf-local-ci-metadata.json"), JSON.stringify({ candidateSha: sha }));
+  const mcp = await startMockMcp({});
+  try {
+    const result = await runGateAsync([
+      "--finalize-evidence",
+      "--branch", branch,
+      "--sha", sha,
+      "--worktree", dir,
+      "--no-push",
+      "--mcp-url", mcp.url,
+    ], {
+      ...process.env,
+      DPF_MCP_BEARER_TOKEN: "dpfmcp_test",
+      DPF_GATE_OWNER_PROVIDER: "codex",
+      DPF_GATE_OWNER_SESSION_ID: "contract-thread",
+    });
+
+    assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
+    assert.match(result.stdout, /finalized existing local-CI evidence: EXT-LEGACY/);
+    assert.deepEqual(mcp.calls.map((call) => call.params.name), ["get_quiescence_status"]);
+    const state = JSON.parse(readFileSync(join(gitDir, "dpf-local-ci-gate.json"), "utf8"));
+    assert.equal(state.leaseExpiresAt, leaseExpiresAt);
+    assert.equal(state.evidenceRecordId, "EXT-LEGACY");
+    assert.equal(
+      state.expiresAt,
+      new Date(Date.parse(recordedAt) + 24 * 60 * 60_000).toISOString(),
+      "legacy finalization is anchored to the original PASS, not the finalization attempt",
+    );
+
+    const repeated = await runGateAsync([
+      "--finalize-evidence",
+      "--branch", branch,
+      "--sha", sha,
+      "--worktree", dir,
+      "--no-push",
+      "--mcp-url", mcp.url,
+    ], {
+      ...process.env,
+      DPF_MCP_BEARER_TOKEN: "dpfmcp_test",
+      DPF_GATE_OWNER_PROVIDER: "codex",
+      DPF_GATE_OWNER_SESSION_ID: "contract-thread",
+    });
+    assert.equal(repeated.status, 0, `${repeated.stdout}\n${repeated.stderr}`);
+    const repeatedState = JSON.parse(readFileSync(join(gitDir, "dpf-local-ci-gate.json"), "utf8"));
+    assert.equal(repeatedState.expiresAt, state.expiresAt, "repeated finalization cannot extend evidence authority");
+  } finally {
+    await mcp.close();
+  }
+});
+
+test("gate-worktree.mjs refuses legacy PASS finalization when metadata is not exact", async () => {
+  const { dir } = makeTempRepo();
+  const gitDir = join(dir, ".git");
+  writeFileSync(join(gitDir, "dpf-local-ci-gate.json"), JSON.stringify({
+    branch: "feat/legacy-pass",
+    sha: "candidate-sha",
+    gatePassed: true,
+    status: "passed",
+    leaseId: "NPEL-LEGACY",
+    evidenceRecordId: "EXT-LEGACY",
+    evidencePending: false,
+    expiresAt: new Date(Date.now() - 30_000).toISOString(),
+    recordedAt: new Date(Date.now() - 60_000).toISOString(),
+    leaseEvents: [],
+  }));
+  writeFileSync(join(gitDir, "dpf-local-ci-metadata.json"), JSON.stringify({ candidateSha: "other-sha" }));
+  const mcp = await startMockMcp({});
+  try {
+    const result = await runGateAsync([
+      "--finalize-evidence",
+      "--branch", "feat/legacy-pass",
+      "--sha", "candidate-sha",
+      "--worktree", dir,
+      "--no-push",
+      "--mcp-url", mcp.url,
+    ], {
+      ...process.env,
+      DPF_MCP_BEARER_TOKEN: "dpfmcp_test",
+      DPF_GATE_OWNER_PROVIDER: "codex",
+      DPF_GATE_OWNER_SESSION_ID: "contract-thread",
+    });
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /no exact published PASS is available to finalize/);
   } finally {
     await mcp.close();
   }

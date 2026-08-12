@@ -123,6 +123,7 @@ A single identity surface per coworker, composed from the existing read-model (`
 - **Canonical route:** a per-identity URL in the identity idiom (e.g. `/workforce/[agentId]` or `/identity/coworker/[agentId]`), surfaced beside **People** and **Customers** in the primary nav. Exact route is a review decision (§8).
 - The existing `/platform/ai/agent/[agentId]` **admin record** stays for configuration and is reachable via **Manage**; the 360 is the identity/inspection front door. (No hard 308 on the admin record — it is not moving; a new identity surface is added.)
 - The **directory** (`/platform/ai/overview` roster) gains an "open identity" affordance; longer term the roster is the identity directory (peer to People directory).
+- **DELIVERED (2026-08-11, DI-CB054DD6F79D):** an **AI Coworkers** entry now sits in the *business* nav section beside **People** (`/employee`) and **Customers** (`/customer`), landing on a business-domain directory at `/workforce` — a real page reusing the roster read-model (`loadRoster` + `RosterView`), not a redirect (a business→platform redirect is a cross-domain teleport the nav-inventory gate forbids). The platform-admin "AI Workforce" overview keeps its health/coverage panels; `/workforce` is the clean identity directory, each row opening `/workforce/[agentId]`.
 
 ### 4.3 Share the identity (not the guts) — one read-model, two projections
 

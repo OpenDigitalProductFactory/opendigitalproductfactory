@@ -558,6 +558,15 @@ publish that saved evidence without rerunning local-CI:
 pnpm run pregate -- --finalize-evidence --branch <branch> --sha <sha>
 ```
 
+A successfully published PASS receives a bounded 24-hour evidence-validity
+window anchored to the original gate result. That window is intentionally
+independent of the short active-lease heartbeat: `expiresAt` authorizes
+publication of the exact branch/SHA, while `leaseExpiresAt` preserves the
+runtime lease boundary for audit. Finalization is idempotent and never extends
+the original window. It can also attest a legacy already-published PASS when
+the state branch, SHA, metadata candidate SHA, and evidence record ID all agree;
+an expired 24-hour window still requires a new pregate.
+
 The pre-push gate blocks `evidencePending=true` records until finalization
 succeeds. Failure evidence also carries `failureSummary`, a bounded list of
 failed tests/checks and omitted counts, plus an explicit pointer to
