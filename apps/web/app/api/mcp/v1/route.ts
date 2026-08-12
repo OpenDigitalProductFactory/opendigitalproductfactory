@@ -25,6 +25,11 @@ import { PLATFORM_TOOLS, resolveAnnotations, type ToolDefinition } from "@/lib/m
 import { submitRemoteCoworkerTask } from "@/lib/mcp-task-submit";
 import { getQuiescenceConfig } from "@/lib/self-upgrade/quiescence";
 import { getToolGrantMapping, expandGrants } from "@/lib/tak/agent-grants";
+import {
+  resolveListingAuthorityForToken,
+  filterListableTools,
+} from "@/lib/mcp/listing-authority-resolver";
+import { resolveWorkforcePlatformRole } from "@/lib/govern/auth-utils";
 import { MCP_ROUTE_TOOL_RESULT_CHAR_CAP } from "@/lib/tak/tool-result-budget";
 import {
   resolveEffectiveTier,
@@ -239,13 +244,18 @@ async function loadUserContext(userId: string): Promise<UserContext> {
       where: { id: userId },
       select: {
         isSuperuser: true,
-        groups: { include: { platformRole: true }, take: 1 },
+        // ALL groups, not `take: 1`: a human in more than one group has their
+        // platform role under-determined by the first row (which may even carry
+        // a null platformRole). Resolve it exactly as the web session does
+        // (resolveWorkforcePlatformRole — first group with a non-null role) so
+        // the agent's role matches what the human sees logged in.
+        groups: { include: { platformRole: true } },
       },
     })
     .catch(() => null);
   return {
     userId,
-    platformRole: row?.groups[0]?.platformRole.roleId ?? null,
+    platformRole: row ? resolveWorkforcePlatformRole(row.groups) : null,
     isSuperuser: row?.isSuperuser ?? false,
   };
 }
@@ -414,7 +424,13 @@ async function handleLoadTools(
   const userContext = await loadUserContext(token.userId);
   const grantMap = getToolGrantMapping();
   const granted = PLATFORM_TOOLS.filter((t) => tokenCanUseTool(t, token, userContext, grantMap));
-  const selected = resolveLoadToolsSelection(granted, args);
+  // Same authority filter as tools/list: a token can never load (and so never
+  // call) a tool the agent's grants / the human's clearance would reject.
+  const authorized = filterListableTools(
+    granted,
+    await resolveListingAuthorityForToken(token, userContext),
+  );
+  const selected = resolveLoadToolsSelection(authorized, args);
   const loadedToolNames = await loadToolsForSession(
     token.tokenId,
     selected.map((t) => t.name),
@@ -552,13 +568,22 @@ async function handleToolsList(
   const granted = PLATFORM_TOOLS.filter((t) =>
     tokenCanUseTool(t, token, userContext, grantMap),
   );
+  // Unify the list with the call path's coworker-authority gate for agent-bound
+  // tokens: drop tools the acting agent's grants don't cover (list/call skew),
+  // and — when the acting human's clearance doesn't cover the agent's data
+  // sensitivity — drop the whole agent-bound surface (every call would be denied
+  // sensitivity-clearance-denied). A non-agent-bound token is unaffected.
+  const authorized = filterListableTools(
+    granted,
+    await resolveListingAuthorityForToken(token, userContext),
+  );
   // Phase 2 (deferred loading): the tier surface is the FLOOR; append any tools
   // this token pulled in via load_tools, then the load_tools meta-tool itself.
   // Append-not-swap keeps the lean core for clients that ignore list_changed and
   // preserves the cached prompt prefix (tools are only ever added, never
   // removed/reordered).
   const loadedNames = new Set(await getLoadedToolNames(token.tokenId));
-  const listed = selectToolsForListing(granted, tier, loadedNames).map(annotateTool);
+  const listed = selectToolsForListing(authorized, tier, loadedNames).map(annotateTool);
   return jsonRpcOk(id, { tools: [...listed, LOAD_TOOLS_LISTED] });
 }
 
