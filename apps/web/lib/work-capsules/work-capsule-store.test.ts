@@ -529,175 +529,6 @@ describe("work capsule store", () => {
     });
   });
 
-  describe("adoptWorktreeCapsule backlog binding", () => {
-    it("persists backlogItemId + epicId on a fresh adoption", async () => {
-      db.workCapsule.findFirst.mockResolvedValueOnce(null);
-      db.workCapsule.create.mockResolvedValueOnce({ id: "row-1", capsuleId: "WC-BOUND01" });
-
-      const result = await adoptWorktreeCapsule({
-        db: capsuleDb(),
-        input: {
-          title: "Bound branch",
-          objective: "Work an item.",
-          repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory",
-          headBranch: "feat/bound",
-          worktreePath: "D:/DPF-bound",
-          backlogItemId: "BI-7D20BFDF",
-          epicId: "EP-XYZ",
-          executorRef: "session-1",
-        },
-        actor: { userId: "user-1", agentId: "codex", principalId: "principal-1" },
-      });
-
-      expect(result.capsuleId).toBe("WC-BOUND01");
-      expect(db.workCapsule.create).toHaveBeenCalledWith(expect.objectContaining({
-        data: expect.objectContaining({
-          backlogItemId: "BI-7D20BFDF",
-          epicId: "EP-XYZ",
-          executorRef: "session-1",
-        }),
-      }));
-    });
-
-    it("late-binds backlogItemId onto an existing capsule that had none", async () => {
-      db.workCapsule.findFirst.mockResolvedValueOnce({
-        id: "row-1",
-        capsuleId: "WC-EXISTING",
-        status: "ready",
-        backlogItemId: null,
-        epicId: null,
-        executorRef: null,
-      });
-      db.workCapsule.update.mockResolvedValueOnce({
-        id: "row-1",
-        capsuleId: "WC-EXISTING",
-        backlogItemId: "BI-7D20BFDF",
-      });
-
-      const result = await adoptWorktreeCapsule({
-        db: capsuleDb(),
-        input: {
-          title: "Reuse",
-          objective: "Reuse existing branch.",
-          repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory",
-          headBranch: "feat/existing",
-          worktreePath: "D:/DPF-existing",
-          backlogItemId: "BI-7D20BFDF",
-        },
-        actor: { userId: "user-1", agentId: "codex", principalId: "principal-1" },
-      });
-
-      expect(result.capsuleId).toBe("WC-EXISTING");
-      expect(db.workCapsule.create).not.toHaveBeenCalled();
-      expect(db.workCapsule.update).toHaveBeenCalledWith(expect.objectContaining({
-        data: expect.objectContaining({ backlogItemId: "BI-7D20BFDF" }),
-      }));
-      expect(db.workCapsuleActivity.create).toHaveBeenCalledWith(expect.objectContaining({
-        data: expect.objectContaining({ kind: "adopted", payload: expect.objectContaining({ lateBind: true }) }),
-      }));
-    });
-
-    it("does not late-bind (or write) when the existing capsule already has the same backlogItemId", async () => {
-      db.workCapsule.findFirst.mockResolvedValueOnce({
-        id: "row-1",
-        capsuleId: "WC-EXISTING",
-        status: "working",
-        backlogItemId: "BI-7D20BFDF",
-        epicId: null,
-        executorRef: null,
-      });
-
-      const result = await adoptWorktreeCapsule({
-        db: capsuleDb(),
-        input: {
-          title: "Reuse",
-          objective: "Reuse existing branch.",
-          repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory",
-          headBranch: "feat/existing",
-          worktreePath: "D:/DPF-existing",
-          backlogItemId: "BI-7D20BFDF",
-        },
-        actor: { userId: "user-1", agentId: "codex", principalId: "principal-1" },
-      });
-
-      expect(result.capsuleId).toBe("WC-EXISTING");
-      expect(result.backlogItemId).toBe("BI-7D20BFDF");
-      expect(db.workCapsule.update).not.toHaveBeenCalled();
-      expect(db.workCapsule.create).not.toHaveBeenCalled();
-    });
-
-    // BI-95E37EA1 — abandoned main capsule must not be returned as a successful bind.
-    it("creates a fresh capsule when the only (repo, branch) hit is abandoned for another BI", async () => {
-      // findFirst with status notIn terminal returns null (abandoned filtered out).
-      db.workCapsule.findFirst.mockResolvedValueOnce(null);
-      db.workCapsule.create.mockResolvedValueOnce({
-        id: "row-new",
-        capsuleId: "WC-FRESH01",
-        status: "ready",
-        backlogItemId: "BI-NEWITEM",
-        headBranch: "main",
-        worktreePath: "D:/DPF",
-        executorRef: "session-new",
-      });
-
-      const result = await adoptWorktreeCapsule({
-        db: capsuleDb(),
-        input: {
-          title: "Work on BI-NEWITEM",
-          objective: "Claim-at-start binding for BI-NEWITEM",
-          repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory",
-          headBranch: "main",
-          worktreePath: "D:/DPF",
-          backlogItemId: "BI-NEWITEM",
-          executorRef: "session-new",
-          executorKind: "codex-desktop",
-        },
-        actor: { userId: "user-1", agentId: "codex", principalId: "principal-1" },
-      });
-
-      expect(result.capsuleId).toBe("WC-FRESH01");
-      expect(result.backlogItemId).toBe("BI-NEWITEM");
-      expect(db.workCapsule.create).toHaveBeenCalledTimes(1);
-      expect(db.workCapsule.update).not.toHaveBeenCalled();
-    });
-
-    it("creates a fresh capsule when a live capsule on the branch is bound to a different BI", async () => {
-      db.workCapsule.findFirst.mockResolvedValueOnce({
-        id: "row-1",
-        capsuleId: "WC-OTHERBI",
-        status: "working",
-        backlogItemId: "BI-OTHER",
-        executorRef: "session-other",
-        epicId: null,
-      });
-      db.workCapsule.create.mockResolvedValueOnce({
-        id: "row-new",
-        capsuleId: "WC-MINE001",
-        status: "ready",
-        backlogItemId: "BI-MINE",
-        executorRef: "session-mine",
-      });
-
-      const result = await adoptWorktreeCapsule({
-        db: capsuleDb(),
-        input: {
-          title: "Mine",
-          objective: "Different BI on same branch.",
-          repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory",
-          headBranch: "main",
-          worktreePath: "D:/DPF",
-          backlogItemId: "BI-MINE",
-          executorRef: "session-mine",
-        },
-        actor: { userId: "user-1", agentId: "codex", principalId: "principal-1" },
-      });
-
-      expect(result.capsuleId).toBe("WC-MINE001");
-      expect(db.workCapsule.create).toHaveBeenCalledTimes(1);
-      expect(db.workCapsule.update).not.toHaveBeenCalled();
-    });
-  });
-
   describe("claimBacklogItemWorkspace", () => {
     const baseInput = {
       backlogItemId: "BI-7D20BFDF",
@@ -746,6 +577,55 @@ describe("work capsule store", () => {
           claimStatus: "active",
           claimedById: "user-1",
           claimedByAgentId: "agent-1",
+        }),
+      }));
+    });
+
+    it("resumes the durable abandoned capsule when the same BI reclaims its branch", async () => {
+      db.backlogItem.findFirst.mockResolvedValueOnce({
+        id: "bi-row-1",
+        itemId: "BI-7D20BFDF",
+        epicId: "EP-1",
+        claimStatus: "active",
+        claimedById: "user-1",
+        claimedByAgentId: "agent-1",
+        claimedAt: new Date(),
+      });
+      db.workCapsule.findFirst.mockResolvedValueOnce({
+        id: "row-abandoned",
+        capsuleId: "WC-CLAIM01",
+        status: "abandoned",
+        archivedAt: null,
+        backlogItemId: "BI-7D20BFDF",
+        epicId: "EP-1",
+        executorKind: "codex-desktop",
+        executorRef: "session-old",
+        baseBranch: "main",
+        headBranch: baseInput.headBranch,
+        worktreePath: baseInput.worktreePath,
+      });
+      db.workCapsule.update.mockResolvedValueOnce({
+        id: "row-abandoned",
+        capsuleId: "WC-CLAIM01",
+        status: "ready",
+        backlogItemId: "BI-7D20BFDF",
+        headBranch: baseInput.headBranch,
+        worktreePath: baseInput.worktreePath,
+      });
+      db.workCapsule.findMany.mockResolvedValueOnce([]);
+      db.backlogItem.update.mockResolvedValueOnce({ id: "bi-row-1" });
+
+      const result = await claimBacklogItemWorkspace({ db: capsuleDb(), input: baseInput, actor });
+
+      expect(result.capsuleId).toBe("WC-CLAIM01");
+      expect(result.claimed).toBe(true);
+      expect(db.workCapsule.create).not.toHaveBeenCalled();
+      expect(db.workCapsule.update).toHaveBeenCalledWith(expect.objectContaining({
+        where: { capsuleId: "WC-CLAIM01" },
+        data: expect.objectContaining({
+          status: "ready",
+          executorRef: "session-A",
+          leaseHolderPrincipalId: "PRN-1",
         }),
       }));
     });

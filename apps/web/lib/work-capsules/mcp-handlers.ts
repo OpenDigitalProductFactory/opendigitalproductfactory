@@ -46,7 +46,7 @@ import {
 } from "./work-capsule-store";
 import { listLocalBranches } from "./git-scanner";
 import { providerToExecutorKind, ensureExternalSessionCapsule } from "./external-session-capture";
-
+import { branchOccupiedResult, invalidScopeResult } from "./mcp-result-errors";
 type ToolContext = {
   routeContext?: string;
   agentId?: string;
@@ -112,18 +112,9 @@ function parseScopeInput(params: Record<string, unknown>): WorkCapsuleScopeInput
   };
 }
 
-function invalidScopeResult(error: unknown): ToolResult {
-  return {
-    success: false,
-    error: "invalid_scope",
-    message: error instanceof Error ? error.message : "Invalid Work Capsule scope metadata.",
-  };
-}
-
 function workCapsuleDb(): CapsuleDb {
   return prisma as unknown as CapsuleDb;
 }
-
 async function renewLeaseAfterCapsuleWrite(capsuleId: string, currentActor: WorkCapsuleActor) {
   return heartbeatWorkCapsule({
     db: workCapsuleDb(),
@@ -300,22 +291,29 @@ export async function adoptWorktreeTool(
     return invalidScopeResult(error);
   }
 
-  const capsule = await adoptWorktreeCapsule({
-    db: workCapsuleDb(),
-    input: {
-      title,
-      objective,
-      repositoryFullName,
-      headBranch,
-      worktreePath,
-      baseBranch: stringParam(params, "baseBranch") ?? null,
-      baseSha: stringParam(params, "baseSha") ?? null,
-      headSha: stringParam(params, "headSha") ?? null,
-      executorKind: validatedExecutorKind,
-      scope: parseScopeInput(params),
-    },
-    actor: await actor(userId, context),
-  });
+  let capsule;
+  try {
+    capsule = await adoptWorktreeCapsule({
+      db: workCapsuleDb(),
+      input: {
+        title,
+        objective,
+        repositoryFullName,
+        headBranch,
+        worktreePath,
+        baseBranch: stringParam(params, "baseBranch") ?? null,
+        baseSha: stringParam(params, "baseSha") ?? null,
+        headSha: stringParam(params, "headSha") ?? null,
+        executorKind: validatedExecutorKind,
+        scope: parseScopeInput(params),
+      },
+      actor: await actor(userId, context),
+    });
+  } catch (error) {
+    const occupied = branchOccupiedResult(error);
+    if (occupied) return occupied;
+    throw error;
+  }
 
   return {
     success: true,
@@ -395,6 +393,8 @@ export async function claimBacklogItemForWorkTool(
       data: result,
     };
   } catch (error) {
+    const occupied = branchOccupiedResult(error);
+    if (occupied) return occupied;
     const detail = error instanceof Error ? error.message : "Unknown failure";
     if (/not found/i.test(detail)) {
       return { success: false, error: "not_found", message: detail };

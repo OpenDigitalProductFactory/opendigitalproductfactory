@@ -1,6 +1,5 @@
 import { randomUUID } from "node:crypto";
 import {
-  LEASE_TTL_MS,
   STATUS_OVERRIDE_TTL_MS,
   buildCapsuleBranchName,
   buildCapsuleSlug,
@@ -28,9 +27,20 @@ import { revalidatePortalContext } from "@/lib/portal-context/invalidation";
 import { publishRecordedWorkCapsuleActivity } from "@/lib/work-capsules/activity-events";
 import { admitRuntimeGuardedWork } from "@/lib/platform-runtime/work-admission";
 import { planCapsuleChangeImpact, type CapsuleChangeImpactContract } from "./change-impact-contract";
+import {
+  CapsuleBranchOccupiedError,
+  isExternalLeaseExecutor,
+  isReusableLiveCapsule,
+  isTerminalCapsuleStatus,
+  leaseUntil,
+  planAbandonedCapsuleResume,
+  TERMINAL_CAPSULE_STATUSES,
+  type CapsuleAdoptionInput,
+} from "./work-capsule-branch-identity";
 import type { CapsuleDb, WorkCapsuleActor } from "./work-capsule-store-types";
 
 export type { CapsuleDb, WorkCapsuleActor } from "./work-capsule-store-types";
+export { CapsuleBranchOccupiedError } from "./work-capsule-branch-identity";
 
 type CapsuleCreateInput = {
   title: string;
@@ -48,22 +58,6 @@ type CapsuleCreateInput = {
   // BI-B24F96D0: principal who commissioned the work (Requester), distinct from
   // the creating actor. Optional.
   requestedByPrincipalId?: string | null;
-};
-
-type CapsuleAdoptionInput = {
-  title: string;
-  objective: string;
-  repositoryFullName: string;
-  headBranch: string;
-  worktreePath: string;
-  baseBranch?: string | null;
-  baseSha?: string | null;
-  headSha?: string | null;
-  executorKind?: WorkCapsuleExecutorKind | null;
-  executorRef?: string | null;
-  backlogItemId?: string | null;
-  epicId?: string | null;
-  scope?: WorkCapsuleScopeInput | null;
 };
 
 type CapsuleEvidenceInput = {
@@ -91,20 +85,6 @@ type CapsuleWorkspacePlanInput = {
 
 function nextCapsuleId(): string {
   return `WC-${randomUUID().replace(/-/g, "").slice(0, 8).toUpperCase()}`;
-}
-
-function leaseUntil(now = new Date()): Date {
-  return new Date(now.getTime() + LEASE_TTL_MS);
-}
-
-function isExternalLeaseExecutor(executorKind: WorkCapsuleExecutorKind | null | undefined): boolean {
-  return (
-    executorKind === "codex-desktop" ||
-    executorKind === "claude-desktop" ||
-    executorKind === "grok-desktop" ||
-    executorKind === "antigravity-desktop" ||
-    executorKind === "human"
-  );
 }
 
 function isUniqueViolation(error: unknown): boolean {
@@ -219,44 +199,6 @@ export async function createWorkCapsule(args: {
   }
 }
 
-// Statuses that end a capsule's reuse eligibility for (repo, branch) adoption.
-// BI-95E37EA1: an abandoned/complete/archived capsule must NOT be returned as a
-// successful bind for a new BI/session — that poisoned claim-at-start with a
-// false-success pointing at stale ownership.
-const TERMINAL_CAPSULE_STATUSES: WorkCapsuleStatus[] = ["complete", "abandoned", "archived"];
-
-function isTerminalCapsuleStatus(status: unknown): boolean {
-  return typeof status === "string" && (TERMINAL_CAPSULE_STATUSES as string[]).includes(status);
-}
-
-/**
- * Whether an existing live capsule on (repo, branch) is compatible with a new
- * adopt/claim request. Same BI + same executor session is idempotent reuse;
- * unbound (null BI) is late-bind eligible; a different BI or session requires a
- * fresh capsule so history on the prior capsule stays intact.
- */
-function isReusableLiveCapsule(
-  existing: {
-    status?: string | null;
-    backlogItemId?: string | null;
-    executorRef?: string | null;
-  },
-  input: { backlogItemId?: string | null; executorRef?: string | null },
-): boolean {
-  if (isTerminalCapsuleStatus(existing.status)) return false;
-  const existingBi = existing.backlogItemId ?? null;
-  const incomingBi = input.backlogItemId ?? null;
-  // Unbound capsule can be late-bound to any BI.
-  if (existingBi == null) return true;
-  // Bound to a different BI → never silently re-home.
-  if (incomingBi != null && existingBi !== incomingBi) return false;
-  // Same BI: reuse when session matches or either side has no session stamp yet.
-  const existingSession = existing.executorRef ?? null;
-  const incomingSession = input.executorRef ?? null;
-  if (existingSession == null || incomingSession == null) return true;
-  return existingSession === incomingSession;
-}
-
 export async function adoptWorktreeCapsule(args: {
   db: CapsuleDb;
   input: CapsuleAdoptionInput;
@@ -267,17 +209,29 @@ export async function adoptWorktreeCapsule(args: {
   }
   const scope = normalizeWorkCapsuleScopeInput(args.input.scope);
 
-  // Prefer a non-terminal capsule on this branch. Terminal capsules keep their
-  // audit trail; a new adopt creates a new WC rather than rewriting them.
+  // The schema deliberately owns one capsule identity per (repository, branch).
+  // Read that row regardless of lifecycle: an abandoned same-BI capsule is the
+  // durable identity to resume, while a foreign/terminal identity must refuse
+  // instead of falling through to an impossible duplicate create (BI-E363A524).
   const existing = await args.db.workCapsule.findFirst({
     where: {
       repositoryFullName: args.input.repositoryFullName,
       headBranch: args.input.headBranch,
-      archivedAt: null,
-      status: { notIn: TERMINAL_CAPSULE_STATUSES },
     },
     orderBy: { updatedAt: "desc" },
   });
+
+  const now = new Date();
+  const resumePlan = planAbandonedCapsuleResume({ existing, input: args.input, actor: args.actor, now });
+  if (resumePlan) {
+    return inTransaction(args.db, async (tx) => {
+      await admitCapsuleWork(tx, "work-capsule:external-adoption");
+      const resumed = await tx.workCapsule.update(resumePlan.update);
+      await recordActivity(tx, { ...resumePlan.activity, actor: args.actor });
+      return resumed;
+    });
+  }
+
   if (existing && isReusableLiveCapsule(existing, args.input)) {
     // Late-bind (BI-7D20BFDF): a branch adopted before its BacklogItem was known
     // has a null backlogItemId. When a claim now supplies one, bind the existing
@@ -311,10 +265,10 @@ export async function adoptWorktreeCapsule(args: {
     }
     return existing;
   }
-  // existing is null, terminal-only on this branch, or live-but-incompatible
-  // (different BI/session) — fall through to create a fresh capsule.
+  if (existing) {
+    throw new CapsuleBranchOccupiedError(existing);
+  }
 
-  const now = new Date();
   try {
     return await inTransaction(args.db, async (tx) => {
       await admitCapsuleWork(tx, "work-capsule:external-adoption");
@@ -366,12 +320,11 @@ export async function adoptWorktreeCapsule(args: {
         where: {
           repositoryFullName: args.input.repositoryFullName,
           headBranch: args.input.headBranch,
-          archivedAt: null,
-          status: { notIn: TERMINAL_CAPSULE_STATUSES },
         },
         orderBy: { updatedAt: "desc" },
       });
       if (winner && isReusableLiveCapsule(winner, args.input)) return winner;
+      if (winner) throw new CapsuleBranchOccupiedError(winner);
     }
     throw error;
   }
