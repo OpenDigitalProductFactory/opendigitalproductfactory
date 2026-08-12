@@ -6,6 +6,7 @@ import { auth } from "@/lib/auth";
 import { EmptyState } from "@/components/ui/report-kit";
 import { BusinessPerformanceDashboard } from "@/components/performance/BusinessPerformanceDashboard";
 import { loadBusinessPerformance } from "@/lib/performance/business-performance-provider";
+import { listBusinessAnalysisWatchesFor } from "@/lib/performance/business-analysis-watch.server";
 
 export const metadata: Metadata = {
   title: "Performance",
@@ -26,6 +27,9 @@ export default async function PerformancePage({
   const performance = await loadBusinessPerformance(
     { userId: session.user.id, ...(query?.period ? { period: query.period } : {}) },
   );
+  const watches = performance.status === "ready"
+    ? await listBusinessAnalysisWatchesFor(session.user.id, performance.organizationId)
+    : [];
 
   return (
     <main
@@ -41,7 +45,7 @@ export default async function PerformancePage({
       </header>
 
       {performance.status === "ready" ? (
-        <BusinessPerformanceDashboard performance={performance} />
+        <BusinessPerformanceDashboard performance={performance} watches={watches} />
       ) : (
         <EmptyState
           title="Performance history is not ready yet"

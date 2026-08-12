@@ -5,6 +5,10 @@ import { loadBusinessPerformance } from "@/lib/performance/business-performance-
 import { auth } from "@/lib/auth";
 import PerformancePage, { metadata } from "./page";
 
+vi.mock("@/lib/performance/business-analysis-watch.server", () => ({
+  listBusinessAnalysisWatchesFor: vi.fn(async () => []),
+}));
+
 vi.mock("@/lib/performance/business-performance-provider", () => ({
   loadBusinessPerformance: vi.fn(),
 }));

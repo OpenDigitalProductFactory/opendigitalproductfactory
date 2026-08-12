@@ -3,6 +3,10 @@ import {
   resolvePerformanceMetricPack,
   type PerformanceMetricDefinition,
 } from "@dpf/storefront-templates";
+import {
+  resolvePerformanceOrganizationContext,
+  type PerformanceOrganizationContextDataSource,
+} from "./performance-organization-context";
 
 export interface UnconfiguredBusinessPerformance {
   status: "not-configured";
@@ -52,6 +56,7 @@ export interface BusinessPerformanceTrendPoint {
 
 export interface ReadyBusinessPerformance {
   status: "ready";
+  organizationId: string;
   archetypeId: string;
   periodLabel: string;
   periodStart: Date;
@@ -96,14 +101,8 @@ type PersistedMetricDbRow = Omit<PersistedMetricRow, "value" | "availability"> &
   availability: string;
 };
 
-export interface BusinessPerformanceDataSource {
-  platformSetupProgress: {
-    findUnique(args: unknown): Promise<{ organizationId: string | null } | null>;
-  };
-  storefrontConfig: {
-    findUnique(args: unknown): Promise<StorefrontPerformanceContext | null>;
-    findMany(args: unknown): Promise<StorefrontPerformanceContext[]>;
-  };
+export interface BusinessPerformanceDataSource
+  extends PerformanceOrganizationContextDataSource {
   businessMetricRollup: {
     findMany(args: unknown): Promise<PersistedMetricDbRow[]>;
   };
@@ -152,6 +151,7 @@ function uniqueMetricKeys(archetypeId: string): string[] {
 }
 
 export function buildBusinessPerformanceReadModel(input: {
+  organizationId?: string;
   archetypeId: string;
   rows: readonly PersistedMetricRow[];
   now?: Date;
@@ -235,6 +235,7 @@ export function buildBusinessPerformanceReadModel(input: {
 
   return {
     status: "ready",
+    organizationId: input.organizationId ?? "unscoped-test-context",
     archetypeId: input.archetypeId,
     periodLabel: periodLabel(reference.periodStart, reference.timezone),
     periodStart: reference.periodStart,
@@ -263,56 +264,13 @@ export function buildBusinessPerformanceReadModel(input: {
   };
 }
 
-async function resolvePerformanceContext(
-  db: BusinessPerformanceDataSource,
-  userId: string,
-): Promise<StorefrontPerformanceContext | UnconfiguredBusinessPerformance> {
-  const progress = await db.platformSetupProgress.findUnique({
-    where: { userId },
-    select: { organizationId: true },
-  });
-
-  if (progress?.organizationId) {
-    const config = await db.storefrontConfig.findUnique({
-      where: { organizationId: progress.organizationId },
-      select: {
-        organizationId: true,
-        archetype: { select: { archetypeId: true } },
-      },
-    });
-    return config ?? unconfigured("Finish storefront setup before performance is calculated.");
-  }
-
-  // Legacy single-organization installs may predate the user-to-organization
-  // setup link. Inspect at most two configuration identities: one is a safe,
-  // deterministic compatibility fallback; two means the current organization
-  // is ambiguous and no tenant-owned rollup may be read.
-  const configs = await db.storefrontConfig.findMany({
-    orderBy: { organizationId: "asc" },
-    take: 2,
-    select: {
-      organizationId: true,
-      archetype: { select: { archetypeId: true } },
-    },
-  });
-  if (configs.length === 0) {
-    return unconfigured("Finish storefront setup before performance is calculated.");
-  }
-  if (configs.length > 1) {
-    return unconfigured(
-      "We could not determine your current organization, so no performance data was loaded.",
-    );
-  }
-  return configs[0]!;
-}
-
 export function createBusinessPerformanceProvider(
   db: BusinessPerformanceDataSource,
 ): BusinessPerformanceProvider {
   return {
     async load(input) {
-      const context = await resolvePerformanceContext(db, input.userId);
-      if ("status" in context) return context;
+      const context = await resolvePerformanceOrganizationContext(db, input.userId);
+      if (context.status === "unconfigured") return unconfigured(context.reason);
 
       const rows = await db.businessMetricRollup.findMany({
         where: { organizationId: context.organizationId },
@@ -337,7 +295,8 @@ export function createBusinessPerformanceProvider(
       });
 
       return buildBusinessPerformanceReadModel({
-        archetypeId: context.archetype.archetypeId,
+        organizationId: context.organizationId,
+        archetypeId: context.archetypeId,
         ...(input.period ? { selectedPeriod: input.period } : {}),
         rows: rows.map((row) => ({
           ...row,

@@ -19,6 +19,8 @@ import {
 import { buildPerformanceExportRows } from "@/lib/performance/performance-export";
 import { buildPerformanceDecisionSummary } from "@/lib/performance/performance-decision-summary";
 import { PerformanceTrendPanel } from "./PerformanceTrendPanel";
+import { BusinessAnalysisWorkspace } from "./BusinessAnalysisWorkspace";
+import type { BusinessAnalysisWatchView } from "@/lib/performance/business-analysis-watch.server";
 
 function sourceModels(lineage: unknown): string[] {
   if (!lineage || typeof lineage !== "object" || !("sourceModels" in lineage)) return [];
@@ -102,8 +104,10 @@ function MetricSection({
 
 export function BusinessPerformanceDashboard({
   performance,
+  watches = [],
 }: {
   performance: ReadyBusinessPerformance;
+  watches?: readonly BusinessAnalysisWatchView[];
 }) {
   const metrics = new Map(performance.metricValues.map((metric) => [metric.key, metric]));
   const decisionSummary = buildPerformanceDecisionSummary({
@@ -232,6 +236,8 @@ export function BusinessPerformanceDashboard({
           </div>
         </div>
       </section>
+
+      <BusinessAnalysisWorkspace performance={performance} watches={watches} />
 
       <PerformanceTrendPanel
         points={performance.trendPoints}

@@ -10,6 +10,7 @@ import { BusinessPerformanceDashboard } from "./BusinessPerformanceDashboard";
 
 const performance: ReadyBusinessPerformance = {
   status: "ready",
+  organizationId: "org-1",
   archetypeId: "restaurant",
   periodLabel: "Jul 31, 2026",
   periodStart: new Date("2026-07-31T05:00:00.000Z"),
@@ -91,6 +92,7 @@ describe("BusinessPerformanceDashboard", () => {
     expect(html).toContain("Why it changed");
     expect(html).toContain("What deserves review");
     expect(html).toContain("Observation, not a recommendation");
+    expect(html).toContain("Performance questions");
     expect(html).toContain("do not yet prove what caused the change");
     expect(html.indexOf("Headline performance")).toBeLessThan(html.indexOf("Owner brief"));
     expect(html).toContain('href="/performance?period=2026-07-30"');

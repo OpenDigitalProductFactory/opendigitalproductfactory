@@ -803,6 +803,9 @@
     "apps/web/lib/operate/sole-platform-readiness.ts": [
       "docs/architecture/2026-07-27-platform-adequacy-roadmap-backlog-map.md"
     ],
+    "apps/web/lib/performance/business-analysis-watch-run.ts": [
+      "docs/architecture/agent-standards-dpf-conformance.md"
+    ],
     "apps/web/lib/performance/business-performance-provider.ts": [
       "docs/architecture/operations-hot-path.md"
     ],
@@ -2003,6 +2006,7 @@
       "apps/web/lib/identity/aidoc-resolver.ts",
       "apps/web/lib/mcp/load-tools.ts",
       "apps/web/lib/mcp/tool-tier.ts",
+      "apps/web/lib/performance/business-analysis-watch-run.ts",
       "apps/web/lib/tak/agent-card-service.ts",
       "apps/web/lib/tak/agent-grants.ts",
       "apps/web/lib/tak/agent-routing.ts",
