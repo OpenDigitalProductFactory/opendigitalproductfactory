@@ -34,11 +34,25 @@ vi.mock("@/lib/tak/task-records", () => ({
 vi.mock("@dpf/db", () => ({
   prisma: {
     user: { findUnique: vi.fn() },
+    agent: { findFirst: vi.fn() },
     taskRun: { findFirst: vi.fn(), update: vi.fn() },
     agentThread: { upsert: vi.fn() },
     taskMessage: { create: vi.fn() },
     mcpToolSession: { findUnique: vi.fn(), deleteMany: vi.fn(), upsert: vi.fn() },
   },
+}));
+
+// BI-HDLEMP-04: the agent-bound tools/list authority filter resolves the acting
+// agent's grants and the acting human's clearance. Override only those two seams
+// — keep the REAL grant mapping / expansion so the token-scope tests are
+// unaffected — and stub the effective-auth loader (it makes its own DB reads the
+// mock above doesn't model).
+vi.mock("@/lib/tak/agent-grants", async (importActual) => ({
+  ...(await importActual<typeof import("@/lib/tak/agent-grants")>()),
+  getAgentToolGrantsAsync: vi.fn(),
+}));
+vi.mock("@/lib/identity/load-effective-auth-context", () => ({
+  loadEffectiveAuthContext: vi.fn(),
 }));
 
 import { prisma } from "@dpf/db";
@@ -52,6 +66,8 @@ import {
   resolveAutonomousWorkTools,
 } from "@/lib/tak/autonomous-work-run";
 import { createTaskMessage } from "@/lib/tak/task-records";
+import { getAgentToolGrantsAsync } from "@/lib/tak/agent-grants";
+import { loadEffectiveAuthContext } from "@/lib/identity/load-effective-auth-context";
 import { GET, POST } from "./route";
 import { deriveCallerClient } from "@/lib/mcp/caller-client";
 
@@ -67,6 +83,9 @@ const executeLoopMock = executeAutonomousAgenticLoop as unknown as ReturnType<ty
 const resolveAgentMock = resolveAutonomousWorkAgent as unknown as ReturnType<typeof vi.fn>;
 const resolveToolsMock = resolveAutonomousWorkTools as unknown as ReturnType<typeof vi.fn>;
 const createTaskMessageMock = createTaskMessage as unknown as ReturnType<typeof vi.fn>;
+const agentFindFirstMock = prisma.agent.findFirst as unknown as ReturnType<typeof vi.fn>;
+const agentGrantsMock = getAgentToolGrantsAsync as unknown as ReturnType<typeof vi.fn>;
+const effectiveAuthMock = loadEffectiveAuthContext as unknown as ReturnType<typeof vi.fn>;
 
 function makeRequest(opts: {
   url?: string;
@@ -126,6 +145,14 @@ beforeEach(() => {
   resolveToolsMock.mockResolvedValue({ tools: [], toolsForProvider: [] } as never);
   executeLoopMock.mockResolvedValue({ content: "Done.", executedTools: [] } as never);
   createTaskMessageMock.mockResolvedValue(undefined as never);
+  // Agent-bound listing-authority seams (BI-HDLEMP-04). Defaults are only
+  // reached by agent-bound tokens; the agentId:null tests short-circuit before
+  // touching them.
+  agentFindFirstMock.mockResolvedValue({ sensitivity: "internal" } as never);
+  agentGrantsMock.mockResolvedValue([] as never);
+  effectiveAuthMock.mockResolvedValue({
+    sensitivityClearance: ["public", "internal", "confidential"],
+  } as never);
 });
 
 afterEach(() => {
@@ -812,6 +839,67 @@ describe("POST — tools/list", () => {
       }),
     );
     expect(ccNames).toContain("wiki_query");
+  });
+
+  // ─── BI-HDLEMP-04: agent-bound tools/list ⇄ tools/call authority parity ──
+  describe("agent-bound token: list is filtered by agent grants + clearance", () => {
+    const agentBoundToken = {
+      tokenId: "tok_agent",
+      userId: "u1",
+      agentId: "AGT-EMP",
+      scopes: ["backlog_read"],
+      capability: "read" as const,
+    };
+    const listNames = async () => {
+      const res = await POST(
+        makeRequest({
+          bearer: "dpfmcp_X",
+          body: { jsonrpc: "2.0", id: 70, method: "tools/list" },
+        }),
+      );
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      return (body.result.tools as { name: string }[]).map((t) => t.name);
+    };
+
+    it("lists a token-scoped tool the agent's grants also cover", async () => {
+      resolveMock.mockResolvedValue(agentBoundToken);
+      agentGrantsMock.mockResolvedValue(["backlog_read"] as never); // agent covers it
+      const names = await listNames();
+      expect(names).toContain("query_backlog");
+      expect(names).toContain("list_epics");
+    });
+
+    it("drops a token-scoped tool the agent's grants do NOT cover (list/call skew fix)", async () => {
+      resolveMock.mockResolvedValue(agentBoundToken);
+      agentGrantsMock.mockResolvedValue([] as never); // agent grants nothing
+      const names = await listNames();
+      expect(names).not.toContain("query_backlog");
+      expect(names).not.toContain("list_epics");
+      // The transport meta-tool is always present; only governed tools are gated.
+      expect(names).toContain("load_tools");
+    });
+
+    it("drops the whole agent-bound surface when clearance excludes the agent's sensitivity", async () => {
+      resolveMock.mockResolvedValue(agentBoundToken);
+      agentGrantsMock.mockResolvedValue(["backlog_read"] as never); // grant would allow…
+      agentFindFirstMock.mockResolvedValue({ sensitivity: "restricted" } as never);
+      effectiveAuthMock.mockResolvedValue({
+        sensitivityClearance: ["public", "internal", "confidential"], // …but no clearance
+      } as never);
+      const names = await listNames();
+      expect(names).not.toContain("query_backlog");
+      expect(names).toContain("load_tools");
+    });
+
+    it("drops the whole agent-bound surface when the acting agent cannot be resolved", async () => {
+      resolveMock.mockResolvedValue(agentBoundToken);
+      agentGrantsMock.mockResolvedValue(["backlog_read"] as never);
+      agentFindFirstMock.mockResolvedValue(null as never); // agent not active/found
+      const names = await listNames();
+      expect(names).not.toContain("query_backlog");
+      expect(names).toContain("load_tools");
+    });
   });
 
   // ─── Principles-as-wiki-kind Phase 2 Task 2.8 ───────────────────────────
