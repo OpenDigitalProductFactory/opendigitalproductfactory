@@ -1,6 +1,6 @@
 # MCP Tool Tiering & Deferred Loading on the External-CLI Path (R3)
 
-**Status:** Phase 1 SHIPPED — core tier on `tools/list`, and it is **on by default for every non-Claude-Code client**, not opt-in. `defaultTierForClient` (`apps/web/lib/mcp/tool-tier.ts`) returns `full` only for a `claude-code/*` user-agent — which defers client-side via ToolSearch — and `core` for everything else; an explicit `?tier=` overrides. Phase 2 (model-driven deferral) SHIPPED — `load_tools` meta-tool + per-token `McpToolSession` short-TTL store + `notifications/tools/list_changed` (emitted over an SSE response on the `load_tools` POST for clients that `Accept: text/event-stream`). `tools/list` returns the tier floor UNION the token's session-loaded tools UNION `load_tools` (append-not-swap, so the lean core stays the floor and the cached prompt prefix survives). See §4 and `apps/web/lib/mcp/tool-session-store.ts`.
+**Status:** Phase 1 SHIPPED — core tier on `tools/list`, defaulted by proven client capability. Claude Code and Codex receive `full` because their hosts index the authorized catalogue and attach tools lazily; generic/Grok/unknown callers receive `core`. An explicit `?tier=` overrides. Phase 2 (model-driven deferral) SHIPPED — `load_tools` meta-tool + per-token `McpToolSession` short-TTL store + `notifications/tools/list_changed`. `tools/list` returns the tier floor UNION the token's session-loaded tools UNION `load_tools`. See §4 and `apps/web/lib/mcp/tool-session-store.ts`.
 
 > **Status corrected 2026-08-04.** This line previously read "opt-in, default unchanged", which sent a reader looking for an unsolved token problem on external surfaces that is in fact already solved by default. Verified against the code, not the changelog. Tier narrows **discovery only** — `tools/call` still executes any *granted* tool by name (`route.ts`), so the core set is never an authorization boundary and `search_tool_marketplace` keeps the rest reachable.
 **Date:** 2026-06-20
@@ -20,7 +20,7 @@ True *model-driven* deferred loading on an MCP **server** is stateful and client
 ## 3. Phase 1 — core tier (shipped)
 
 - A curated `CORE_MCP_TOOL_NAMES` (~22 broadly-useful discovery/read/backlog/work-visibility tools, incl. `search_tool_marketplace` so a model can still discover the rest) — `apps/web/lib/mcp/tool-tier.ts`.
-- `/api/mcp/v1` `tools/list` honors a `?tier=core` hint: it applies the grant/capability/scope filter first (the authority), then narrows to the core set. The server defaults Claude Code to `full` because that host defers client-side and every other/unknown client to `core`; explicit `?tier=` wins.
+- `/api/mcp/v1` `tools/list` applies the grant/capability/scope filter first, then the client tier. Claude Code and Codex default to `full` for host-native lazy attachment; generic/Grok/unknown clients default to `core`; explicit `?tier=` wins.
 - **Tiering affects discovery only, never execution.** `tools/call` still runs any *granted* tool by name regardless of tier — so core tier is a pure context saving with **no loss of capability**, and Phase 2 is purely additive.
 - **Drift guard:** a test asserts every `CORE_MCP_TOOL_NAMES` entry exists in `PLATFORM_TOOLS`, so a tool rename can't leave a dangling core entry.
 
@@ -35,7 +35,7 @@ Compose on Phase 1:
 4. Fire `notifications/tools/list_changed` for SSE-capable clients and always return a result that tells notification-blind clients to re-fetch `tools/list`.
 5. Put the recovery workflow in the first 512 characters of MCP initialize instructions: resources are not tools, plugin installation is not recovery for an already-connected DPF server, missing grants are authorization failures, and transport failure means the server is unavailable.
 
-This preserves the lean upfront surface without depending on unverified host behavior. DPF's conformance harness (`scripts/mcp-progressive-disclosure-conformance.mjs`) exercises Codex Desktop, Codex CLI, Claude Code, and generic MCP protocol profiles; actual host consumption of `list_changed` remains separate evidence.
+This preserves a lean model-attached surface without depending on Codex consuming `list_changed`: recognized lazy hosts index the full authorized catalogue up front, while the host decides what reaches the model. DPF's conformance harness (`scripts/mcp-progressive-disclosure-conformance.mjs`) exercises Codex Desktop, Codex CLI, Claude Code, and generic MCP protocol profiles; fresh-host callability remains separate required evidence.
 
 ## 5. Tests
 

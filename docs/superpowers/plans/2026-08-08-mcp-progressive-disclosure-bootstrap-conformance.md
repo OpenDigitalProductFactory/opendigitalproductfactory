@@ -2,7 +2,7 @@
 
 | Field | Value |
 |---|---|
-| Status | Implemented and source-verified; governed PR completion in progress |
+| Status | Continuation in progress — server bootstrap shipped; clean Codex host callability remained open |
 | Backlog item | `BI-88681BE0` |
 | Work capsule | `WC-C53A840E` |
 | Branch | `fix/mcp-progressive-disclosure-bootstrap` |
@@ -23,7 +23,7 @@ Observed on 2026-08-08:
 - Raw `tools/list` included `load_tools` on the core floor.
 - Exact-name loading emitted `notifications/tools/list_changed`; a same-token re-list appended the selected tool and retained every core-floor tool.
 - A natural-language query (`claim a backlog item and bind it to my worktree`) returned no match because the implementation matches the whole query as one substring.
-- A follow-up Codex task loaded `create_epic` successfully but stopped because the top-level model registry did not refresh. A live host probe showed the same tool was present in `ALL_TOOLS` and callable through `tools.mcp__dpf__create_epic` inside `functions.exec`; the missing contract was the programmatic-catalog fallback, not server authorization.
+- A follow-up Codex task loaded `create_epic` successfully but stopped because the top-level model registry did not refresh. One earlier task found the tool in `ALL_TOOLS`, but a deployed acceptance replay on 2026-08-11 found both `create_epic` and `claim_backlog_item_for_work` absent from `ALL_TOOLS` after `load_tools` returned `listChanged=true`. That counter-example invalidated the fallback as a general completion claim.
 - Codex's official MCP documentation says Codex consumes the server's initialize `instructions` for cross-tool workflows and recommends putting the essential guidance in the first 512 characters.
 - Multiple architecture/conformance documents still call Phase 2 staged even though PR #4112 shipped it.
 
@@ -61,6 +61,13 @@ No UI or migration is required. The existing `McpToolSession` schema and per-tok
 - The credential-safe protocol probe covers Codex Desktop, Codex CLI, Claude Code, and generic MCP profiles without claiming unobserved host refresh behavior.
 - Source verification: 124 targeted Vitest tests, 3 Node protocol/client tests, full web TypeScript compile, production web build, module-size ratchet, 35-guard pregate preflight, skill-pack updater tests, docs links/impact/prose checks, and gitleaks all pass. The production build retains pre-existing Edge-runtime warnings and exits successfully.
 - UX and migration gates are not applicable: this change adds no UI surface and no migration.
+
+## Continuation correction (2026-08-11)
+
+- Live preflight proved the served runtime contained PR #4166, then the exact original failure reproduced: server-side exact/intent loading succeeded while Codex's callable registry stayed unchanged.
+- Root boundary: Codex was defaulted to DPF's server `core` tier even though Codex performs its own lazy attachment. The host could not search definitions the server never supplied during initial catalogue construction, and it does not rebuild that registry mid-turn from `list_changed`.
+- Correction: recognized Claude Code and Codex user agents receive the full authorized server catalogue; their hosts remain responsible for lazy model attachment. Generic/Grok/unknown clients retain the lean core plus `load_tools` expansion.
+- Completion now requires a fresh deployed Codex task to find and call a non-core tool from the initial host catalogue; protocol simulation alone is insufficient.
 
 ## Implementation phases
 

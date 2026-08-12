@@ -101,10 +101,9 @@ function makeRequest(opts: {
 }): Request {
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   // Default the caller to Claude Code so tools/list returns the FULL granted
-  // surface (BI-88681BE0: tools/list defaults non-Claude-Code clients to the
-  // lean core tier). Tests asserting a specific tool is exposed assume the full
-  // surface; the client-aware default is covered explicitly below and in
-  // tool-tier.test.ts. Pass userAgent to exercise a different client.
+  // surface. Claude Code and Codex defer attachment host-side; the client-aware
+  // default is covered explicitly below and in tool-tier.test.ts. Pass
+  // userAgent to exercise a different client.
   headers["User-Agent"] = opts.userAgent ?? "claude-code/2.1 (test)";
   if (opts.bearer !== null && opts.bearer !== undefined) {
     headers["Authorization"] = `Bearer ${opts.bearer}`;
@@ -768,7 +767,7 @@ describe("POST — tools/list", () => {
     const res = await POST(
       makeRequest({
         bearer: "dpfmcp_X",
-        userAgent: "codex/1.0", // lean core tier — load_tools must still be present
+        userAgent: "codex/1.0", // full host catalog — load_tools must still be present
         body: { jsonrpc: "2.0", id: 42, method: "tools/list" },
       }),
     );
@@ -782,7 +781,7 @@ describe("POST — tools/list", () => {
     expect(loadTools?.inputSchema.properties).toHaveProperty("names");
   });
 
-  it("defaults a non-Claude-Code client to the lean core tier; ?tier=full opts back in (BI-88681BE0)", async () => {
+  it("gives lazy host registries the full catalog while generic hosts keep the lean core", async () => {
     resolveMock.mockResolvedValue({
       tokenId: "tok_c",
       userId: "u1",
@@ -793,34 +792,27 @@ describe("POST — tools/list", () => {
     const names = async (req: Request) =>
       ((await (await POST(req)).json()).result.tools as { name: string }[]).map((t) => t.name);
 
-    // Non-Claude-Code client, no explicit tier -> lean core surface.
-    const coreNames = await names(
+    // Codex needs the full authorized server catalog so its own lazy registry
+    // can search/attach deferred definitions without a mid-turn re-list.
+    const codexNames = await names(
       makeRequest({
         bearer: "dpfmcp_X",
         userAgent: "codex/1.0",
         body: { jsonrpc: "2.0", id: 20, method: "tools/list" },
       }),
     );
-    expect(coreNames).toContain("query_backlog"); // a core tool: present
-    // WWMD tools are core so Grok/Codex (no ToolSearch) can discover them.
-    expect(coreNames).toContain("wiki_query");
-    expect(coreNames).toContain("principle_decide");
-    // Still lean: bulk domain packs stay off the default list.
-    expect(coreNames).not.toContain("dispatch_consolidation_bet");
-
-    // Same non-CC client, explicit ?tier=full -> opts back into the full surface.
-    const fullNames = await names(
+    const codexCoreNames = await names(
       makeRequest({
         bearer: "dpfmcp_X",
         userAgent: "codex/1.0",
-        url: "http://localhost:3000/api/mcp/v1?tier=full",
+        url: "http://localhost:3000/api/mcp/v1?tier=core",
         body: { jsonrpc: "2.0", id: 21, method: "tools/list" },
       }),
     );
-    expect(fullNames).toContain("wiki_query");
-    expect(fullNames.length).toBeGreaterThan(coreNames.length);
+    expect(codexNames).toContain("wiki_query");
+    expect(codexNames.length).toBeGreaterThan(codexCoreNames.length);
 
-    // Grok UA also gets WWMD on core (peer of Codex).
+    // Grok has no proven host-side lazy registry, so it keeps the core floor.
     const grokNames = await names(
       makeRequest({
         bearer: "dpfmcp_X",
@@ -830,8 +822,9 @@ describe("POST — tools/list", () => {
     );
     expect(grokNames).toContain("principle_decide");
     expect(grokNames).toContain("wiki_query");
+    expect(grokNames).toEqual(codexCoreNames);
 
-    // Claude Code (default UA) keeps the full surface without opting in.
+    // Claude Code also keeps the full surface for its native ToolSearch.
     const ccNames = await names(
       makeRequest({
         bearer: "dpfmcp_X",
@@ -839,6 +832,7 @@ describe("POST — tools/list", () => {
       }),
     );
     expect(ccNames).toContain("wiki_query");
+    expect(ccNames).toEqual(codexNames);
   });
 
   // ─── BI-HDLEMP-04: agent-bound tools/list ⇄ tools/call authority parity ──
