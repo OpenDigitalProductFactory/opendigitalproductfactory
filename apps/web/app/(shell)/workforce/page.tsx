@@ -29,41 +29,42 @@ export default async function WorkforceDirectoryPage({
       })
     : [];
 
+  const coworkerCount = rows.length;
+
   return (
-    <div>
-      <header className="mb-5">
+    <div className="space-y-5">
+      {/* Owner-first lead band. Net-new business shells must lead with a
+          data-dpf-lead band, plain high-school-grade copy, and a marked next
+          action (UX budget, spec §4.2). The directory itself — the rich,
+          searchable RosterView, the same component the platform overview uses —
+          is deferred one click away, so arrival is a calm summary rather than a
+          wall of coworker cards. This deferral IS the progressive disclosure this
+          epic is about. Copy stays short and plain on purpose: the grade is
+          measured over the whole default-visible surface. */}
+      <header className="space-y-2" data-dpf-lead>
         <h1 className="text-xl font-bold text-[var(--dpf-text)]">AI Coworkers</h1>
-        <p className="mt-1 text-sm text-[var(--dpf-muted)]">
-          Your AI coworkers as identities — alongside People and Customers. Open one to see what it does, who has
-          engaged it, its cost, skills, and teams.
+        <p className="max-w-2xl text-sm leading-5 text-[var(--dpf-muted)]">
+          {coworkerCount > 0
+            ? `Your AI coworkers live here — ${coworkerCount} in all. Each one is an identity, like a person or a customer. Open one to see what it does. See its cost, skills, and team.`
+            : "Your AI coworkers live here. Each one is an identity, like a person or a customer. None are set up yet."}
         </p>
+        {coworkerCount > 0 && (
+          <a
+            href="#all-coworkers"
+            data-dpf-primary-action
+            data-owner-first-next-action="open-coworker-directory"
+            className="inline-flex text-sm font-semibold text-[var(--dpf-accent)] underline-offset-2 hover:underline"
+          >
+            Browse coworkers
+          </a>
+        )}
       </header>
 
-      {rows.length > 0 ? (
-        // Progressive disclosure (EP-COWORKER-IDENTITY-360; the same owner-first
-        // pattern People uses to keep its arrival scannable): the directory LEADS
-        // with a lean, scannable list of coworker identities — a name that opens
-        // the full 360 record where "what it does, who engaged it, cost, skills,
-        // teams" live. The rich searchable/filterable RosterView (the same visual
-        // component as the platform overview) is one click away behind a collapsed
-        // disclosure, so arrival is a directory to scan, not a wall of cards.
-        <>
-          <ul className="mb-6 grid gap-1 sm:grid-cols-2 lg:grid-cols-3">
-            {rows.map((row) => (
-              <li key={row.agentId}>
-                <a
-                  href={`/workforce/${encodeURIComponent(row.agentId)}`}
-                  className="block rounded-md px-3 py-2 text-sm font-medium text-[var(--dpf-text)] hover:bg-[var(--dpf-surface-2)]"
-                >
-                  {row.displayName}
-                </a>
-              </li>
-            ))}
-          </ul>
-
+      {coworkerCount > 0 ? (
+        <section id="all-coworkers">
           <OwnerFirstDisclosure
-            summary="Search & filter all coworkers"
-            hint="Filter by team, skill, lifecycle, or status; open any coworker's full identity"
+            summary="Browse all coworkers"
+            hint="Search, filter, and open any coworker."
           >
             <RosterView
               rows={rows}
@@ -72,7 +73,7 @@ export default async function WorkforceDirectoryPage({
               grantedCapabilities={grantedCapabilities}
             />
           </OwnerFirstDisclosure>
-        </>
+        </section>
       ) : (
         <div className="border-l-2 border-[var(--dpf-accent)] py-1 pl-4">
           <h2 className="text-sm font-semibold text-[var(--dpf-text)]">No coworkers to show</h2>

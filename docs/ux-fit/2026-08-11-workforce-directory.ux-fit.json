@@ -1,6 +1,6 @@
 {
   "version": "1",
-  "decidedOption": "lean-list-plus-disclosed-roster",
+  "decidedOption": "lead-band-plus-deferred-roster",
   "decisionInteractionId": "DI-2DC4676A4EA2",
   "scope": {
     "files": [
@@ -10,11 +10,11 @@
   "evidence": {
     "kind": "propose-n-pick",
     "consideredOptions": [
+      "lead-band-plus-deferred-roster",
       "lean-list-plus-disclosed-roster",
       "reuse-roster-directory",
-      "redirect-to-platform-overview",
-      "bespoke-new-directory"
+      "redirect-to-platform-overview"
     ],
-    "rationale": "The full RosterView renders every coworker as a rich card (name + description + status badges) — measured at 2902 words visible on arrival, 6x the 450-word net-new absolute budget and a cognitive-overload wall of text. Progressive disclosure (the same owner-first pattern People uses): arrival LEADS with a lean scannable list of coworker identities (name -> the /workforce/[agentId] 360 record), with the rich searchable/filterable RosterView one click away behind a collapsed OwnerFirstDisclosure. Arrival drops to ~110 words while keeping the same visual component available on demand."
+    "rationale": "The full RosterView renders every coworker as a rich card — measured at 2902 words on arrival, 6x the 450-word net-new absolute budget. A visible lean name list still failed net-new: 25 un-punctuated names spike Flesch-Kincaid to grade 38.8 (high-school cap is 9, measured over all default-visible prose). Final design matches the compliant net-new pattern (/platform/archetype-readiness): a data-dpf-lead header with plain high-school-grade copy and a data-owner-first-next-action marker, with the whole searchable RosterView deferred behind a collapsed OwnerFirstDisclosure (excised from both the word count and the reading grade). Arrival is a calm ~45-word summary that names the count and the next action; the rich directory is one click away. This deferral is the progressive disclosure the epic is about."
   }
 }
