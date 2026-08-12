@@ -1,7 +1,18 @@
 import { describe, expect, it } from "vitest";
 
-import { projectCoworkerOfferAgentCard } from "./agent-card";
+import {
+  projectCoworkerOfferAgentCard,
+  projectCoworkerIdentityAgentCard,
+  type CoworkerIdentityCardInput,
+} from "./agent-card";
 import type { CoworkerOfferCatalogItem } from "./catalog";
+
+const BUILD_LEAD: CoworkerIdentityCardInput = {
+  agentId: "legal-operations-counsel",
+  displayName: "Legal Operations Counsel",
+  kind: "specialist",
+  description: "Owns legal review packets end to end.",
+};
 
 function offer(overrides: Partial<CoworkerOfferCatalogItem> = {}): CoworkerOfferCatalogItem {
   const service = {
@@ -162,5 +173,45 @@ describe("projectCoworkerOfferAgentCard", () => {
       reason: "offer_not_available_for_access_profile",
       missing: [],
     });
+  });
+});
+
+describe("projectCoworkerIdentityAgentCard", () => {
+  it("aggregates a coworker's internal offers into one whole-coworker identity card", () => {
+    const a = offer({ offerId: "offer-a", deliverables: ["packet"] });
+    const b = offer({
+      offerId: "offer-b",
+      deliverables: ["memo"],
+      service: { ...offer().service, backing: { ...offer().service.backing, skillIds: ["draft-memo"] } },
+    });
+    const res = projectCoworkerIdentityAgentCard(BUILD_LEAD, [a, b], { accessProfile: "internal-a2a" });
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    expect(res.card).toMatchObject({
+      agentId: "legal-operations-counsel",
+      kind: "coworker-identity",
+      name: "Legal Operations Counsel",
+      role: "specialist",
+      exposure: "private",
+      endpoint: { kind: "dpf-a2a", path: "/api/a2a/coworkers/legal-operations-counsel" },
+    });
+    // skills + capabilities are the union across the offers
+    expect(res.card.skills.map((s) => s.id).sort()).toEqual(["draft-memo", "prepare-counsel-packet"]);
+    expect(res.card.capabilities.sort()).toEqual(["memo", "packet"]);
+    // each offer becomes an engagement entry-point pointing at the per-offer card
+    expect(res.card.offers).toHaveLength(2);
+    expect(res.card.offers[0].path).toBe("/api/a2a/coworkers/legal-operations-counsel/offers/offer-a");
+  });
+
+  it("is not available at a profile the coworker exposes no offer for", () => {
+    // only internal offers → external agents get nothing to engage
+    const res = projectCoworkerIdentityAgentCard(BUILD_LEAD, [offer()], { accessProfile: "external-a2a" });
+    expect(res).toMatchObject({ ok: false, reason: "coworker_not_available_for_access_profile" });
+  });
+
+  it("ignores offers belonging to a different coworker", () => {
+    const foreign = offer({ provider: { ...offer().provider, agentId: "someone-else" } });
+    const res = projectCoworkerIdentityAgentCard(BUILD_LEAD, [foreign], { accessProfile: "internal-a2a" });
+    expect(res.ok).toBe(false);
   });
 });

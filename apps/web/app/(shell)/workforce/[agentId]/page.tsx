@@ -25,10 +25,13 @@ import {
   hasCostActivity,
 } from "@/lib/coworker-identity/cost-projection";
 import { loadCoworkerEngagements } from "@/lib/coworker-identity/engagements-projection";
+import { loadCoworkerTeams } from "@/lib/coworker-identity/teams-projection";
 import { CoworkerPriorityControl } from "@/components/golden-triangle/CoworkerPriorityControl";
 import { CoworkerProactivitySetting } from "@/components/platform/coworker-record/CoworkerProactivitySetting";
 import { CostFacetPanel } from "@/components/platform/coworker-identity/CostFacetPanel";
 import { EngagementsFacetPanel } from "@/components/platform/coworker-identity/EngagementsFacetPanel";
+import { TeamsFacetPanel } from "@/components/platform/coworker-identity/TeamsFacetPanel";
+import { ShareIdentity } from "@/components/platform/coworker-identity/ShareIdentity";
 import { AskCoworkerButton } from "@/components/agent/AskCoworkerButton";
 
 const AUTONOMY_LABELS: Record<number, string> = {
@@ -116,11 +119,12 @@ export default async function CoworkerIdentityPage({
   if (!record) return notFound();
   const { agent, runtime } = record;
 
-  const [session, inheritance, cost, engagements] = await Promise.all([
+  const [session, inheritance, cost, engagements, teams] = await Promise.all([
     auth(),
     getCoworkerPostureInheritance(agent.agentId),
     loadCoworkerCostProjection(runtime.agentId, { slugId: runtime.slugId }),
     loadCoworkerEngagements(runtime.agentId, runtime.id, { slugId: runtime.slugId }),
+    loadCoworkerTeams(runtime.id),
   ]);
 
   const canWrite =
@@ -129,7 +133,13 @@ export default async function CoworkerIdentityPage({
 
   const detailRoute = `/workforce/${encodeURIComponent(agent.agentId)}`;
   const adminRecord = `/platform/ai/agent/${encodeURIComponent(agent.agentId)}`;
+  const agentCardPath = `/api/a2a/coworkers/${encodeURIComponent(agent.agentId)}`;
   const kindLabel = titleCase(agent.kind);
+  const shareSummary = (() => {
+    const d = (agent.description ?? "").trim();
+    const base = d || `${kindLabel} coworker`;
+    return base.length > 160 ? `${base.slice(0, 157)}…` : base;
+  })();
   const teamName = agent.ownerships?.[0]?.team?.name ?? null;
   const skillCount = runtime.assignedSkillIds.length;
   const toolCount = runtime.heldGrantKeys.length;
@@ -173,6 +183,13 @@ export default async function CoworkerIdentityPage({
               <MessageSquare aria-hidden className="h-4 w-4" />
               <span>{`Ask ${agent.displayName}`}</span>
             </AskCoworkerButton>
+            <ShareIdentity
+              displayName={agent.displayName}
+              role={kindLabel}
+              summary={shareSummary}
+              identityPath={detailRoute}
+              agentCardPath={agentCardPath}
+            />
             <Link
               href={adminRecord}
               className="inline-flex min-h-11 items-center gap-2 rounded-md border border-[var(--dpf-border)] px-3 text-sm font-semibold text-[var(--dpf-text)] hover:bg-[var(--dpf-surface-2)]"
@@ -232,7 +249,11 @@ export default async function CoworkerIdentityPage({
           sub={`${engagements.totals.open} open`}
         />
         <Kpi label={`Cost · ${cost.window.days}d`} {...costGlance(cost)} />
-        <Kpi label="Teams" value={teamName ? "1+" : "—"} sub="collaboration" />
+        <Kpi
+          label="Teams / rooms"
+          value={String(teams.totals.total)}
+          sub={teams.totals.leads > 0 ? `leads ${teams.totals.leads}` : "collaboration"}
+        />
         <Kpi label="Status" value={titleCase(agent.status)} sub={titleCase(agent.lifecycleStage)} />
       </section>
 
@@ -278,6 +299,16 @@ export default async function CoworkerIdentityPage({
           summary={costFacetSummary(cost)}
         >
           <CostFacetPanel summary={cost} />
+        </Facet>
+
+        <Facet
+          title="Teams & collaboration"
+          isNew
+          empty={teams.totals.total === 0}
+          emptyLabel="Not in any team yet"
+          summary={`${teams.totals.total} room${teams.totals.total === 1 ? "" : "s"}${teams.totals.leads > 0 ? ` · leads ${teams.totals.leads}` : ""}`}
+        >
+          <TeamsFacetPanel summary={teams} />
         </Facet>
 
         <Facet title="Skills & capabilities" summary={`${skillCount} skills · ${toolCount} tools`}>
