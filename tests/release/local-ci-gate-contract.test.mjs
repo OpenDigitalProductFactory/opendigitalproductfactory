@@ -717,7 +717,11 @@ writeFileSync(process.env.DPF_LOCAL_CI_METADATA_FILE, JSON.stringify({
   });
   assert.match(evidenceCall.params.arguments.evidence.expiresAt, /^\d{4}-\d{2}-\d{2}T/);
   const state = JSON.parse(readFileSync(join(temp, "dpf-local-ci-gate.json"), "utf8"));
-  assert.equal(state.expiresAt, evidenceCall.params.arguments.evidence.expiresAt);
+  assert.equal(state.leaseExpiresAt, evidenceCall.params.arguments.evidence.expiresAt);
+  assert.ok(
+    Date.parse(state.expiresAt) >= Date.parse(state.recordedAt) + 23 * 60 * 60_000,
+    "published PASS validity must outlive the short active lease",
+  );
   assert.deepEqual(state.resilience, evidenceCall.params.arguments.evidence.resilience);
 });
 

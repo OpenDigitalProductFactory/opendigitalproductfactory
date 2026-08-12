@@ -39,7 +39,11 @@ import {
   localCiSlotEnvironment,
 } from "./lib/local-ci-slot-manifest.mjs";
 import { classifyBaseResilience } from "./lib/local-ci-base-freshness.mjs";
-import { writeLocalCiGateState } from "./lib/local-ci-gate-state.mjs";
+import {
+  createLocalCiPassEvidenceValidity,
+  readLocalCiGateState,
+  writeLocalCiGateState,
+} from "./lib/local-ci-gate-state.mjs";
 import {
   sampleLocalCiHostPressure,
   summarizeLocalCiPressureSamples,
@@ -193,7 +197,7 @@ Options:
   --push                       Push before claiming the lease (legacy/explicit publication mode)
   --no-push                    Do not push before claiming the lease (default)
   --dry-run                    Print planned actions; skip git push and MCP calls
-  --finalize-evidence          Publish pending local-CI evidence without rerunning the gate
+  --finalize-evidence          Publish pending evidence or attest an exact legacy PASS without rerunning
   --help                       Show this help
 
 Environment:
@@ -851,7 +855,7 @@ async function main() {
     candidateGitDir,
   });
   let stateFile = slotManifest.evidence.state;
-  let metadataFile;
+  let metadataFile = slotManifest.evidence.metadata;
   let pendingEvidenceFile = slotManifest.evidence.pending;
   let fullLogFile;
   let freshnessReportFile;
@@ -905,7 +909,46 @@ async function main() {
 
   if (options.finalizeEvidence) {
     if (!existsSync(pendingEvidenceFile)) {
-      die(`no pending local-CI evidence file found at ${pendingEvidenceFile}`);
+      const state = readLocalCiGateState(stateFile);
+      let metadata = null;
+      try {
+        metadata = JSON.parse(readFileSync(metadataFile, "utf8"));
+      } catch {
+        // The exact metadata check below remains fail-closed.
+      }
+      if (
+        state?.branch !== branch
+        || state?.sha !== sha
+        || state?.gatePassed !== true
+        || state?.status !== "passed"
+        || state?.evidencePending === true
+        || !state?.evidenceRecordId
+        || metadata?.candidateSha !== sha
+      ) {
+        die(`no exact published PASS is available to finalize at ${stateFile}`);
+      }
+      const evidenceValidity = createLocalCiPassEvidenceValidity({
+        issuedAt: state.evidenceValidity?.issuedAt || state.recordedAt,
+      });
+      if (Date.parse(evidenceValidity.expiresAt) <= Date.now()) {
+        die(`published local-CI evidence expired at ${evidenceValidity.expiresAt}; re-run pregate`);
+      }
+      writeState(stateFile, {
+        branch,
+        sha,
+        gatePassed: true,
+        leaseId: state.leaseId || "",
+        evidenceId: state.evidenceRecordId,
+        status: "passed",
+        expiresAt: evidenceValidity.expiresAt,
+        leaseExpiresAt: state.leaseExpiresAt || state.expiresAt || "",
+        evidenceValidity,
+        resilience: state.resilience ?? null,
+        leaseEvents: state.leaseEvents ?? [],
+        evidencePending: false,
+      });
+      process.stdout.write(`finalized existing local-CI evidence: ${state.evidenceRecordId}\n`);
+      process.exit(0);
     }
     const pending = JSON.parse(readFileSync(pendingEvidenceFile, "utf8"));
     if (pending.branch !== branch) die(`pending evidence branch mismatch: ${pending.branch} != ${branch}`);
@@ -920,6 +963,10 @@ async function main() {
     }
     const evidenceId = response.entityId || "";
     const evidence = pending.recordArgs?.evidence ?? {};
+    const pendingState = readLocalCiGateState(stateFile);
+    const evidenceValidity = createLocalCiPassEvidenceValidity({
+      issuedAt: pendingState?.recordedAt || new Date().toISOString(),
+    });
     writeState(stateFile, {
       branch,
       sha,
@@ -927,7 +974,9 @@ async function main() {
       leaseId: evidence.leaseId || "",
       evidenceId,
       status: "passed",
-      expiresAt: pending.expiresAt || evidence.expiresAt || "",
+      expiresAt: evidenceValidity.expiresAt,
+      leaseExpiresAt: pending.expiresAt || evidence.expiresAt || "",
+      evidenceValidity,
       resilience: evidence.resilience ?? null,
       leaseEvents: evidence.leaseEvents ?? [],
       evidencePending: false,
@@ -1707,6 +1756,9 @@ async function main() {
     die(`failed to record local integration evidence: ${JSON.stringify(evidenceResponse)}`);
   }
 
+  const evidenceValidity = outcome.gatePassed
+    ? createLocalCiPassEvidenceValidity()
+    : null;
   writeState(stateFile, {
     branch,
     sha,
@@ -1714,7 +1766,9 @@ async function main() {
     leaseId,
     evidenceId,
     status: outcome.status,
-    expiresAt,
+    expiresAt: evidenceValidity?.expiresAt || expiresAt,
+    leaseExpiresAt: expiresAt,
+    evidenceValidity,
     resilience,
     leaseEvents,
     evidencePending: false,
@@ -1764,6 +1818,8 @@ function writeState(stateFile, {
   evidenceId,
   status,
   expiresAt,
+  leaseExpiresAt = "",
+  evidenceValidity = null,
   resilience,
   leaseEvents,
   evidencePending = false,
@@ -1781,6 +1837,8 @@ function writeState(stateFile, {
     evidenceId,
     status,
     expiresAt,
+    leaseExpiresAt,
+    evidenceValidity,
     resilience,
     leaseEvents,
     evidencePending,
