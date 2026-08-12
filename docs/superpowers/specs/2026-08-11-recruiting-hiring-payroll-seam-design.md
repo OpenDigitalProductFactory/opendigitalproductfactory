@@ -1,6 +1,6 @@
 # Recruiting → hiring → paying: the seamless spine (design)
 
-**Status:** design + first slice in-flight. **Anchor BIs:** BI-F3AEBF68 (native recruiting → hire), BI-E5561DC9 (Greenhouse absorption), EP-PAYROLL-COMP-BENEFITS / EP-F7BD23BB (payroll / Paycom parity). **Filed:** pending — the DPF MCP was disconnected this session, so the governed BI + `record_plan_backlog_coverage` receipt are deferred to reconnect; this doc is the durable design of record until then.
+**Status:** implemented on `claude/recruiting-hiring-payroll-seam`; governed review/merge pending. **Anchor BIs:** BI-44C79A02 (umbrella), BI-A90203A4 (offer compensation handoff), BI-3E300172 (payslip compute), BI-838F8D00 (PayRun/Payslip persistence), BI-DR-02/03 (manual artifact + attestation), BI-F3AEBF68 (native recruiting → hire), and BI-E5561DC9 (Greenhouse absorption). **Coverage:** receipt `cmspndncd0aif01nvtkn16kgg` maps the six independently shippable seam/manual-rail deliverables.
 
 > Operator directive (2026-08-11): "recruiting, hiring, then paying the employees we hire needs to be seamless." Close the gaps on the Greenhouse-replacement effort AND tightly integrate with the payroll processes from the Paycom-replacement thread.
 
@@ -57,4 +57,5 @@ Slice 1 (comp handoff) ships now — it makes every hire payable and is the conn
 
 - Round-trip unit test (offer comp → columns → `compensationFromEmployee` → same comp) is the seam proof; `land-hire` lands comp; graceful null path covered.
 - No schema change (JSON column reused) → no migration/data-impact gauntlet.
-- **Governance deferral:** the governed BI + `record_plan_backlog_coverage` + kernel ratification of any sub-fork are deferred until the DPF MCP reconnects; this doc + the round-trip test carry the design intent meanwhile.
+- **Governance recovered:** live BIs and coverage are recorded above. Kernel decision DI-2E77D02EB450 selected normalized PayRun + per-employee Payslip persistence over a JSON snapshot or reconstruction-only shape (high confidence, autonomy eligible).
+- **Money boundary:** tests and code may compute, persist, prepare a bank artifact, and record a human attestation; they never execute a real transfer.

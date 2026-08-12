@@ -1,6 +1,6 @@
 # Payroll Disbursement Rails — epic + backlog manifest
 
-**Status:** durable plan of record. **Filing:** the DPF MCP (backlog/kernel plane) was disconnected when this was written, so the governed epic + BIs are specified here and filed verbatim on reconnect (see §6 "Filing instructions"). This doc is the source of truth until then.
+**Status:** governed plan of record. **Filed 2026-08-12:** `EP-PAYROLL-DISBURSEMENT` plus BI-DR-01 through BI-DR-14 are live in the backlog; the kernel and tool-evaluation recovery record is in §6.
 
 > Operator directive (2026-08-11): plan + file the epic and backlog for paying hired employees — "the most automated route, but also provisions for non-automated options should the customer's bank not offer electronic API interfaces." Robust, durable BIs with detail tails to execute when the time comes.
 
@@ -72,7 +72,7 @@ Effort key: S ≤1d, M ~2–4d, L ~1–2wk. Every BI: `type=product` unless note
 **BI-DR-05 — Payment-provider selection (decision BI, no code).** [S, decision]
 - Scope: WWMD kernel decision (`principle_decide`) over ACH provider candidates (Increase / Modern Treasury / Dwolla / direct-bank API), each first run through the `tool-evaluation` skill (security, compliance/SOC2, data-residency, sandbox quality, lock-in). Record the ledger + the chosen rail default.
 - Acceptance: a recorded kernel ledger + tool-evaluation dossier name the provider and the fallback; "never adopt an unvetted external tool" satisfied.
-- Tail: run when MCP is back. Weigh `data_privacy`, `operational_independence`, `vendor_lock_in` (cost axis), `governance_compliance`.
+- Tail: tool evaluations opened for Increase (`cmspn7l770aag01nvttqdlgw9`), Modern Treasury (`cmspn7l840aai01nve54k6lij`), Dwolla (`cmspn7l910aak01nvgaowv7i2`), and direct-bank API (`cmspn7la30aam01nv7abjjd7i`). Kernel ledger DI-3D7890D23409 provisionally selects Modern Treasury; adoption remains blocked until the evaluation pipeline completes and receives human approval.
 - Deps: none (parallel to Phase 0).
 
 **BI-DR-06 — Automated ACH provider adapter (behind the port).** [L]
@@ -142,10 +142,10 @@ Effort key: S ≤1d, M ~2–4d, L ~1–2wk. Every BI: `type=product` unless note
 - **Regulated records:** `DisbursementBatch`/`Disbursement` retained per payroll/tax law → data-impact manifests on the schema BIs.
 - **Kernel decisions to run when MCP returns:** model shape (BI-DR-01), provider selection (BI-DR-05); both are `dpf-decision-via-kernel` candidates.
 
-## 6. Filing instructions (execute when the DPF MCP reconnects)
+## 6. Governance recovery record (executed 2026-08-12)
 
-1. `create_epic`: title + scopeKind `common` + rationale from §1; capture the returned `EP-…` id.
-2. For each BI in §3, `create_backlog_item` with: title, `type` (product; BI-DR-05 is a decision), `workType` (feature; BI-DR-05 chore/decision), `status open` + `triageOutcome build` + `effortSize` (S/M/L → small/medium/large), `epicId` = the new epic, `scopeKind`, and the scope/acceptance/refs body from this doc's BI entry (the "tail" is the body).
-3. Record dependencies in each body (already listed). File Phase 0 first.
-4. Run the two kernel decisions (BI-DR-01 shape, BI-DR-05 provider) via `principle_decide`; attach ledgers.
-5. This doc remains the durable design of record; link it from each BI.
+1. Created `EP-PAYROLL-DISBURSEMENT` (`scopeKind=common`) and filed BI-DR-01 through BI-DR-14 with their phase dependencies, acceptance criteria, sizes, and this design link.
+2. Kernel DI-02525F508D14 selected an EmployeeProfile-owned encrypted payment account plus `DisbursementBatch`/`Disbursement` lines (high confidence, autonomy eligible).
+3. The four provider evaluations listed under BI-DR-05 were opened through the governed tool-evaluation pipeline. DI-3D7890D23409 selected Modern Treasury provisionally (high confidence, autonomy eligible), with the non-negotiable condition that provider adoption waits for completed evaluations and human approval.
+4. Seam coverage receipt `cmspndncd0aif01nvtkn16kgg` maps BI-DR-01/02/03 alongside the recruiting→payroll slices under umbrella BI-44C79A02.
+5. No real transfer was executed; this record governs capability construction only.
