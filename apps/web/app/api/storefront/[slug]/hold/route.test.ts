@@ -53,6 +53,7 @@ describe("restaurant booking hold capacity", () => {
     vi.mocked(prisma.storefrontConfig.findFirst).mockResolvedValue({
       id: "storefront-1",
       organizationId: "org-1",
+      archetype: { archetypeId: "restaurant" },
     } as never);
     vi.mocked(prisma.bookingHold.count).mockResolvedValue(0 as never);
     vi.mocked(prisma.storefrontItem.findFirst).mockResolvedValue({
@@ -133,5 +134,54 @@ describe("restaurant booking hold capacity", () => {
       { params: Promise.resolve({ slug: "restaurant" }) },
     );
     expect(prisma.bookingHold.findFirst).not.toHaveBeenCalled();
+  });
+
+  it("refuses a Restaurant hold when the provider is not a table resource", async () => {
+    vi.mocked(resolveHospitalityResourceForProvider).mockResolvedValue(null);
+
+    const response = (await POST(
+      request({
+        itemId: "item-1",
+        providerId: "generic-provider",
+        slotStart: "2026-07-30T18:00:00.000Z",
+        slotEnd: "2026-07-30T19:00:00.000Z",
+      }) as never,
+      { params: Promise.resolve({ slug: "restaurant" }) },
+    )) as unknown as {
+      body: { code: string; message: string };
+      status: number;
+    };
+
+    expect(response).toEqual(expect.objectContaining({
+      status: 409,
+      body: {
+        code: "CAPACITY_CONFIGURATION_REQUIRED",
+        message: "That table is not available for reservations. Please choose another time.",
+      },
+    }));
+    expect(prisma.bookingHold.create).not.toHaveBeenCalled();
+  });
+
+  it("refuses a Restaurant hold when no table provider is selected", async () => {
+    const response = (await POST(
+      request({
+        itemId: "item-1",
+        slotStart: "2026-07-30T18:00:00.000Z",
+        slotEnd: "2026-07-30T19:00:00.000Z",
+      }) as never,
+      { params: Promise.resolve({ slug: "restaurant" }) },
+    )) as unknown as {
+      body: { code: string; message: string };
+      status: number;
+    };
+
+    expect(response).toEqual(expect.objectContaining({
+      status: 409,
+      body: {
+        code: "CAPACITY_CONFIGURATION_REQUIRED",
+        message: "That table is not available for reservations. Please choose another time.",
+      },
+    }));
+    expect(prisma.bookingHold.create).not.toHaveBeenCalled();
   });
 });

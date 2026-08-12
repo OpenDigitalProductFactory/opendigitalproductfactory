@@ -17,6 +17,13 @@ const privacyMigrationPath = fileURLToPath(
   ),
 );
 const privacySql = readFileSync(privacyMigrationPath, "utf8");
+const bookingCapacityMigrationPath = fileURLToPath(
+  new URL(
+    "../prisma/migrations/20260812070000_repair_restaurant_booking_capacity/migration.sql",
+    import.meta.url,
+  ),
+);
+const bookingCapacitySql = readFileSync(bookingCapacityMigrationPath, "utf8");
 
 describe("restaurant demo floor migration", () => {
   it("targets only platform-owned demo restaurant rows", () => {
@@ -50,5 +57,14 @@ describe("restaurant demo floor migration", () => {
     expect(privacySql).toContain('"dietaryNotes" = NULL');
     expect(privacySql).toContain("^demo-restaurant-bk-[0-6]$");
     expect(privacySql).toContain("archetype.\"archetypeId\" = 'restaurant'");
+  });
+
+  it("projects demo tables into booking services without retaining generic providers", () => {
+    expect(bookingCapacitySql).toContain('INSERT INTO "ProviderService"');
+    expect(bookingCapacitySql).toContain('INSERT INTO "ProviderAvailability"');
+    expect(bookingCapacitySql).toContain('INSERT INTO "HospitalityResourceAvailability"');
+    expect(bookingCapacitySql).toContain("^demo-restaurant-prov-res-[0-8]$");
+    expect(bookingCapacitySql).toContain("archetype.\"archetypeId\" = 'restaurant'");
+    expect(bookingCapacitySql).toContain('DELETE FROM "ProviderService"');
   });
 });
