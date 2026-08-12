@@ -1,9 +1,9 @@
 {
   "generator": "apps/web/scripts/build-route-shells.ts",
-  "pageRouteCount": 322,
+  "pageRouteCount": 323,
   "migratedCount": 1,
   "summary": {
-    "cockpit": 16,
+    "cockpit": 17,
     "list": 6,
     "detail": 249,
     "settings": 12,
@@ -3893,6 +3893,18 @@
       ],
       "sweepEligible": false,
       "sweepExclusionReason": "dynamic-fixture-required",
+      "confidence": "high"
+    },
+    {
+      "routePath": "/workforce",
+      "shell": "cockpit",
+      "audience": "owner",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {

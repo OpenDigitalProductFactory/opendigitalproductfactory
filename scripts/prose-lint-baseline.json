@@ -1966,6 +1966,13 @@
     "longSentences": 0,
     "textMass": 48
   },
+  "apps/web/app/(shell)/workforce/page.tsx": {
+    "vocabulary": 1,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 44
+  },
   "apps/web/app/(shell)/workspace/calendar/page.tsx": {
     "vocabulary": 0,
     "genericLabels": 0,

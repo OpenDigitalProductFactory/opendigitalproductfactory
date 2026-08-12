@@ -1,13 +1,13 @@
 {
   "generator": "apps/web/scripts/build-route-audience.ts",
-  "pageRouteCount": 351,
+  "pageRouteCount": 352,
   "summary": {
     "byAudience": {
       "admin": 145,
       "auth-setup": 10,
       "builder": 3,
       "customer": 11,
-      "owner": 159,
+      "owner": 160,
       "public": 21,
       "worker": 2
     },
@@ -15,11 +15,11 @@
       "advanced-diagnostic": 99,
       "detail": 170,
       "legacy-internal": 29,
-      "section-home": 32,
+      "section-home": 33,
       "settings-config": 12,
       "workflow-step": 9
     },
-    "overrideCount": 7,
+    "overrideCount": 8,
     "lowConfidenceCount": 0,
     "lowConfidencePaths": []
   },
@@ -2424,6 +2424,13 @@
       "destinationKind": "detail",
       "confidence": "high",
       "source": "heuristic"
+    },
+    {
+      "routePath": "/workforce",
+      "audience": "owner",
+      "destinationKind": "section-home",
+      "confidence": "high",
+      "source": "override"
     },
     {
       "routePath": "/workforce/[agentId]",

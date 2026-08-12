@@ -422,7 +422,10 @@ describe("generated route-shell registry", () => {
     // no wall-clock or live-orchestration state, only the deduped pipeline read model.
     // 198 -> 199: /platform/archetype-readiness is a static operator matrix sourced
     // from storefront-template metadata, so it is safe for the generic sweep.
-    expect(registry.routes.filter((route) => route.sweepEligible)).toHaveLength(199);
+    // 199 -> 200: /workforce (EP-COWORKER-IDENTITY-360) — the AI Coworkers directory,
+    // a business-domain peer to /employee and /customer, reusing the roster read-model;
+    // static, no wall-clock or live-orchestration state, so it is sweep-eligible.
+    expect(registry.routes.filter((route) => route.sweepEligible)).toHaveLength(200);
     // 110 -> 113: the three exclusions above. Product Direction then adds seven
     // explicitly classified dynamic routes, bringing the combined total to 120.
     // 120 -> 121: /platform/ai/operations-map.
