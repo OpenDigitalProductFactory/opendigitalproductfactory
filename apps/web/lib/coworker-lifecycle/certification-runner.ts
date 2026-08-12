@@ -93,7 +93,7 @@ export type CertificationDeps = {
   runLoop: (params: {
     journey: GoldenJourney;
     systemPrompt: string;
-    sensitivity: "public" | "internal" | "confidential" | "restricted";
+    sensitivity: RouteSensitivity;
     tools: Parameters<typeof toolsToOpenAIFormat>[0];
     toolsForProvider: Array<Record<string, unknown>>;
     userId: string;

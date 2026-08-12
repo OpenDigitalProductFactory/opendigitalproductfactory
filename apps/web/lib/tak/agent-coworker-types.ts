@@ -111,7 +111,7 @@ export type RouteAgentEntry = {
   agentName: string;
   agentDescription: string;
   capability: CapabilityKey | null;
-  sensitivity: "public" | "internal" | "confidential" | "restricted";
+  sensitivity: RouteSensitivity;
   systemPrompt: string;
   skills: AgentSkill[];
   modelRequirements?: AgentModelRequirements;
