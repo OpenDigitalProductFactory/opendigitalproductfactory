@@ -32,12 +32,12 @@ apps/web/lib/actions/tax-remittance.test.ts	1080
 apps/web/lib/actions/tax-remittance.ts	978
 apps/web/lib/ai-operations-map/load-map-data.test.ts	928
 apps/web/lib/deliberation/orchestrator.ts	808
-apps/web/lib/explore/build-process-matrix.ts	811
+apps/web/lib/explore/build-process-matrix.ts	834
 apps/web/lib/explore/feature-build-types.ts	1098
 apps/web/lib/finance/ai-provider-finance.ts	1309
 apps/web/lib/inference/ai-provider-internals.ts	1266
 apps/web/lib/integrate/build-agent-prompts.ts	1075
-apps/web/lib/integrate/build-orchestrator.ts	1800
+apps/web/lib/integrate/build-orchestrator.ts	1801
 apps/web/lib/integrate/sandbox/build-branch.ts	949
 apps/web/lib/marketing.ts	1369
 apps/web/lib/mcp-tools-backlog.test.ts	874
