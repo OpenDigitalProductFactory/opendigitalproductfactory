@@ -38,6 +38,13 @@ const busyShiftGuardPath = fileURLToPath(
   ),
 );
 const busyShiftGuardSql = readFileSync(busyShiftGuardPath, "utf8");
+const busyShiftResourceGuardPath = fileURLToPath(
+  new URL(
+    "../prisma/migrations/20260812102930_guard_restaurant_demo_resources/migration.sql",
+    import.meta.url,
+  ),
+);
+const busyShiftResourceGuardSql = readFileSync(busyShiftResourceGuardPath, "utf8");
 
 describe("restaurant demo floor migration", () => {
   it("targets only platform-owned demo restaurant rows", () => {
@@ -111,5 +118,18 @@ describe("restaurant demo floor migration", () => {
     expect(busyShiftGuardSql).toContain("archetype.\"archetypeId\" = 'restaurant'");
     expect(busyShiftGuardSql).toContain("booking.\"organizationId\" = allocation.\"organizationId\"");
     expect(busyShiftGuardSql).toContain("booking.\"storefrontId\" = allocation.\"storefrontId\"");
+  });
+
+  it("fails closed before refresh when a reserved table is not the exact demo provider resource", () => {
+    expect(busyShiftGuardPath.localeCompare(busyShiftResourceGuardPath)).toBeLessThan(0);
+    expect(busyShiftResourceGuardPath.localeCompare(busyShiftRefreshPath)).toBeLessThan(0);
+    expect(busyShiftResourceGuardSql).toContain("'demo-restaurant-table-1', 'demo-restaurant-prov-res-0'");
+    expect(busyShiftResourceGuardSql).toContain("'demo-restaurant-table-9', 'demo-restaurant-prov-res-8'");
+    expect(busyShiftResourceGuardSql).toContain("provider.\"storefrontId\" = resource.\"storefrontId\"");
+    expect(busyShiftResourceGuardSql).toContain("config.\"organizationId\" = resource.\"organizationId\"");
+    expect(busyShiftResourceGuardSql).toContain("archetype.\"archetypeId\" = 'restaurant'");
+    expect(busyShiftResourceGuardSql).toContain(
+      "Reserved Restaurant demo table identifiers are attached to non-demo data",
+    );
   });
 });

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 
 import { LocalTime } from "@/components/ui/LocalTime";
@@ -141,6 +141,7 @@ export function RestaurantFloorOperations({
   const [queueFilter, setQueueFilter] = useState<QueueFilter>("all");
   const [centerView, setCenterView] = useState<CenterView>("floor");
   const [result, setResult] = useState<OperationalCommandResult | null>(null);
+  const conflictNoticeRef = useRef<HTMLDivElement>(null);
   const [selectedMoveTurnId, setSelectedMoveTurnId] = useState<string | null>(null);
   const [selectedMoveOption, setSelectedMoveOption] =
     useState<RestaurantFloorCommandOption | null>(null);
@@ -197,6 +198,10 @@ export function RestaurantFloorOperations({
     setSelectedMoveOption(null);
     router.refresh();
   };
+
+  useEffect(() => {
+    if (result?.status === "conflict") conflictNoticeRef.current?.focus();
+  }, [result]);
 
   const bindings = useMemo(
     () => Object.fromEntries(view.floor.tables.map((table) => [
@@ -386,7 +391,13 @@ export function RestaurantFloorOperations({
         </dl>
       </header>
 
-      <div role="status" aria-live="polite" aria-atomic="true">
+      <div
+        ref={conflictNoticeRef}
+        role={result?.status === "conflict" ? "alert" : "status"}
+        aria-live={result?.status === "conflict" ? "assertive" : "polite"}
+        aria-atomic="true"
+        tabIndex={result?.status === "conflict" ? -1 : undefined}
+      >
         {resultNotice(result)}
       </div>
 
