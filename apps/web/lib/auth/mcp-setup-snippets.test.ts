@@ -3,6 +3,7 @@ import { buildSetupSnippets } from "./mcp-setup-snippets";
 
 const BASE = "http://localhost:3000";
 const LOCAL_MCP_URL = "http://127.0.0.1:3000/api/mcp/v1";
+const LOCAL_FULL_MCP_URL = `${LOCAL_MCP_URL}?tier=full`;
 const LOCAL_REFRESH_URL = "http://127.0.0.1:3000/api/mcp/token/refresh";
 const TOKEN = "dpfmcp_TESTTOKEN";
 
@@ -12,7 +13,7 @@ describe("buildSetupSnippets", () => {
     const parsed = JSON.parse(claudeCode) as Record<string, unknown>;
     const dpf = (parsed.mcpServers as Record<string, unknown>).dpf as Record<string, unknown>;
     expect(dpf.type).toBe("http");
-    expect(dpf.url).toBe(LOCAL_MCP_URL);
+    expect(dpf.url).toBe(LOCAL_FULL_MCP_URL);
     expect((dpf.headers as Record<string, string>).Authorization).toBe("Bearer ${DPF_MCP_BEARER_TOKEN}");
     expect(claudeCode).not.toContain(TOKEN);
   });
@@ -31,7 +32,7 @@ describe("buildSetupSnippets", () => {
   it("codex uses bearer_token_env_var instead of embedding the secret", () => {
     const { codex } = buildSetupSnippets(TOKEN, BASE);
     expect(codex).toContain("[mcp_servers.dpf]");
-    expect(codex).toContain(`url = "${LOCAL_MCP_URL}"`);
+    expect(codex).toContain(`url = "${LOCAL_FULL_MCP_URL}"`);
     expect(codex).toContain('bearer_token_env_var = "DPF_MCP_BEARER_TOKEN"');
     expect(codex).not.toContain(TOKEN);
   });
@@ -43,6 +44,16 @@ describe("buildSetupSnippets", () => {
     expect(grok).toContain('bearer_token_env_var = "DPF_MCP_BEARER_TOKEN"');
     expect(grok).toContain("Grok (xAI) MCP server configuration");
     expect(grok).not.toContain(TOKEN);
+  });
+
+  it("keeps generic clients on the lean core endpoint", () => {
+    const { grok, antigravity, vscode } = buildSetupSnippets(TOKEN, BASE);
+    expect(grok).toContain(`url = "${LOCAL_MCP_URL}"`);
+    expect(grok).not.toContain("tier=full");
+    expect(antigravity).toContain(`"url": "${LOCAL_MCP_URL}"`);
+    expect(antigravity).not.toContain("tier=full");
+    expect(vscode).toContain(`"url": "${LOCAL_MCP_URL}"`);
+    expect(vscode).not.toContain("tier=full");
   });
 
   it("antigravity produces a JSON mcpServers.dpf block (http, env-backed auth) and never embeds the secret", () => {

@@ -15,6 +15,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@dpf/integration-shared": "workspace:*",
     "smol-toml": "^1.7.1"
   },
   "devDependencies": {

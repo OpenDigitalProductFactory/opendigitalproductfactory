@@ -97,14 +97,16 @@ function makeRequest(opts: {
   forwardedProto?: string;
   forwardedHost?: string;
   hostHeader?: string;
-  userAgent?: string;
+  userAgent?: string | null;
 }): Request {
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   // Default the caller to Claude Code so tools/list returns the FULL granted
   // surface. Claude Code and Codex defer attachment host-side; the client-aware
   // default is covered explicitly below and in tool-tier.test.ts. Pass
   // userAgent to exercise a different client.
-  headers["User-Agent"] = opts.userAgent ?? "claude-code/2.1 (test)";
+  if (opts.userAgent !== null) {
+    headers["User-Agent"] = opts.userAgent ?? "claude-code/2.1 (test)";
+  }
   if (opts.bearer !== null && opts.bearer !== undefined) {
     headers["Authorization"] = `Bearer ${opts.bearer}`;
   }
@@ -833,6 +835,27 @@ describe("POST — tools/list", () => {
     );
     expect(ccNames).toContain("wiki_query");
     expect(ccNames).toEqual(codexNames);
+
+    // Current Codex Streamable HTTP requests omit User-Agent. The bootstrap's
+    // explicit tier therefore has to be sufficient on its own; without it an
+    // unidentified client correctly retains the generic core default.
+    const unidentifiedCoreNames = await names(
+      makeRequest({
+        bearer: "dpfmcp_X",
+        userAgent: null,
+        body: { jsonrpc: "2.0", id: 24, method: "tools/list" },
+      }),
+    );
+    const explicitFullNames = await names(
+      makeRequest({
+        bearer: "dpfmcp_X",
+        userAgent: null,
+        url: "http://localhost:3000/api/mcp/v1?tier=full",
+        body: { jsonrpc: "2.0", id: 25, method: "tools/list" },
+      }),
+    );
+    expect(unidentifiedCoreNames).toEqual(codexCoreNames);
+    expect(explicitFullNames).toEqual(codexNames);
   });
 
   // ─── BI-HDLEMP-04: agent-bound tools/list ⇄ tools/call authority parity ──

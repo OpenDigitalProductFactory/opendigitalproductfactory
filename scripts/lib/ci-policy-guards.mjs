@@ -349,6 +349,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       ),
       node(
         "--test",
+        "packages/dpf-skill-pack/hooks/mcp-catalog-profile.test.mjs",
         "packages/dpf-skill-pack/hooks/surface-manifest-paths.test.mjs",
       ),
       node("scripts/check-spec-plan-doc.mjs"),

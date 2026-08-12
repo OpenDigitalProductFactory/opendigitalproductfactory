@@ -13,12 +13,11 @@
  * capability, and shipped model-driven deferral (load_tools + list_changed,
  * spec Phase 2) is purely additive on top of it.
  *
- * Server-authoritative default (BI-88681BE0): when a caller passes no explicit
- * `?tier=`, the default now depends on the client (defaultTierForClient) —
- * Hosts with their own lazy tool registry (Claude Code and Codex) keep "full"
- * so their registry can index every authorized definition before attaching a
- * small task-relevant subset to the model. Other/unknown clients default to the
- * lean "core" surface. Any caller can override this with `?tier=core|full`.
+ * Server-authoritative default (BI-88681BE0): an explicit `?tier=` wins. Known
+ * lazy-host bootstrap/config URLs use `?tier=full`, because current Codex HTTP
+ * requests carry no User-Agent and do not refresh the top-level registry after
+ * `list_changed`. User-Agent recognition remains a compatibility fallback for
+ * clients that identify themselves. Other/unknown clients default to `core`.
  *
  * Core is not "backlog-only": peer clients without host-side ToolSearch, such
  * as Grok and generic MCP clients, still need the WWMD tools that AGENTS.md
@@ -50,13 +49,11 @@ export function resolveMcpToolTier(raw: string | null | undefined): McpToolTier 
 
 /**
  * The default tier for a caller when it did NOT pass an explicit `?tier=`
- * (BI-88681BE0 / BI-71310615 §5a — server-authoritative default-minimal
- * disclosure). Claude Code and Codex defer attachment client-side, so the MCP
- * host registry must receive the `full` authorized surface to make every tool
- * searchable/callable without relying on a mid-turn tools/list refresh. The
- * host still attaches only a task-relevant subset to the model. Clients without
- * a proven lazy registry (Grok, generic MCP clients, and unidentified callers)
- * default to `core`. Explicit `?tier=` always wins.
+ * Compatibility fallback for a request without `?tier=`. Bootstrap does not
+ * rely on this signal: current Codex Streamable HTTP requests omit User-Agent,
+ * so known lazy-host configs request `tier=full` explicitly. Recognized Claude
+ * Code/Codex identifiers still receive `full`; Grok, generic MCP clients, and
+ * unidentified callers default to `core`. Explicit `?tier=` always wins.
  */
 export function defaultTierForClient(callerClient: string | null | undefined): McpToolTier {
   return typeof callerClient === "string" && CLIENT_SIDE_LAZY_TOOL_CATALOG.test(callerClient)

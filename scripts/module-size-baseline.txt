@@ -1,4 +1,4 @@
-apps/web/app/api/mcp/v1/route.test.ts	1515
+apps/web/app/api/mcp/v1/route.test.ts	1532
 apps/web/app/api/mcp/v1/route.ts	901
 apps/web/app/api/v1/edge/discovery-runs/route.test.ts	982
 apps/web/components/admin/BusinessModelBuilder.tsx	821
@@ -8,7 +8,7 @@ apps/web/components/agent/AgentMessageInput.tsx	1034
 apps/web/components/ea/EaCanvas.tsx	1047
 apps/web/components/inventory/TopologyGraph.tsx	1030
 apps/web/components/ops/SelfUpgradeClient.test.tsx	1118
-apps/web/components/ops/SelfUpgradeClient.tsx	1124
+apps/web/components/ops/SelfUpgradeClient.tsx	1123
 apps/web/components/platform/EffectivePermissionsPanel.tsx	844
 apps/web/components/platform/edge-nodes/EdgeNodesAdminClient.tsx	985
 apps/web/components/storefront/SlotBookingFlow.tsx	1015
@@ -32,7 +32,7 @@ apps/web/lib/actions/tax-remittance.test.ts	1080
 apps/web/lib/actions/tax-remittance.ts	978
 apps/web/lib/ai-operations-map/load-map-data.test.ts	928
 apps/web/lib/deliberation/orchestrator.ts	808
-apps/web/lib/explore/build-process-matrix.ts	834
+apps/web/lib/explore/build-process-matrix.ts	832
 apps/web/lib/explore/feature-build-types.ts	1098
 apps/web/lib/finance/ai-provider-finance.ts	1309
 apps/web/lib/inference/ai-provider-internals.ts	1266
@@ -60,8 +60,8 @@ apps/web/lib/tak/agentic-loop.test.ts	2387
 apps/web/lib/tak/agentic-loop.ts	2737
 apps/web/lib/tak/route-context-map.ts	1273
 apps/web/lib/work-capsules/mcp-handlers.ts	901
-apps/web/lib/work-capsules/work-capsule-store.test.ts	1205
-apps/web/lib/work-capsules/work-capsule-store.ts	1107
+apps/web/lib/work-capsules/work-capsule-store.test.ts	1085
+apps/web/lib/work-capsules/work-capsule-store.ts	1060
 apps/web/lib/workbooks/platform-tables.ts	938
 apps/web/lib/workforce/calendar-data.ts	1134
 apps/web/lib/workspace/command-center.ts	1118

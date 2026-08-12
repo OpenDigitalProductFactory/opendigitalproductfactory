@@ -1307,6 +1307,9 @@
     "packages/integration-shared/src/credential-crypto.ts": [
       "docs/architecture/2026-06-22-platform-adequacy-architecture-review.md"
     ],
+    "packages/integration-shared/src/mcp-catalog-tier.ts": [
+      "docs/architecture/agent-standards-dpf-conformance.md"
+    ],
     "packages/storefront-templates/src/archetype-readiness.ts": [
       "docs/architecture/2026-07-27-platform-adequacy-roadmap-backlog-map.md",
       "docs/architecture/2026-08-09-portal-architecture-hardening-findings.md"
@@ -2013,7 +2016,8 @@
       "apps/web/lib/tak/tool-result-budget.ts",
       "apps/web/lib/tak/tool-script.ts",
       "apps/web/lib/tool-description-hygiene.test.ts",
-      "packages/db/src/seed-decision-perspective.ts"
+      "packages/db/src/seed-decision-perspective.ts",
+      "packages/integration-shared/src/mcp-catalog-tier.ts"
     ],
     "docs/architecture/ai-agent-meta-model.md": [
       "apps/web/app/api/mcp/v1/route.ts",
