@@ -335,6 +335,25 @@ describe("RestaurantFloorOperations", () => {
     expect(screen.getByText("Party seated")).toBeTruthy();
   });
 
+  it("refreshes the floor and clears stale seating choices after a conflict", async () => {
+    mocks.execute.mockResolvedValueOnce({
+      status: "conflict",
+      idempotencyKey: "seat-conflict",
+      replayed: false,
+      message: "The floor changed before confirmation.",
+      currentVersion: "restaurant-seat.v1-newer",
+      changedFacts: [],
+    });
+
+    render(<RestaurantFloorOperations {...props} />);
+    fireEvent.click(screen.getByRole("button", { name: "Confirm seating" }));
+
+    await waitFor(() => expect(mocks.refresh).toHaveBeenCalledTimes(1));
+    expect(screen.getByText("Floor changed before confirmation")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Confirm seating" })).toBeNull();
+    expect(screen.getByText("Choose a party to see the safest live seating choice.")).toBeTruthy();
+  });
+
   it("submits host commands when randomUUID is unavailable on an HTTP install", async () => {
     vi.stubGlobal("crypto", {
       getRandomValues: (bytes: Uint8Array) => bytes.fill(7),

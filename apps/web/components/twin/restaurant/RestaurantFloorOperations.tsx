@@ -190,6 +190,14 @@ export function RestaurantFloorOperations({
     }
   };
 
+  const refreshAfterConflict = () => {
+    setSelectedDemandId(null);
+    setSelectedOption(null);
+    setSelectedMoveTurnId(null);
+    setSelectedMoveOption(null);
+    router.refresh();
+  };
+
   const bindings = useMemo(
     () => Object.fromEntries(view.floor.tables.map((table) => [
       `table:${table.id}`,
@@ -281,6 +289,8 @@ export function RestaurantFloorOperations({
         setSelectedDemandId(null);
         setSelectedOption(null);
         router.refresh();
+      } else if (next.status === "conflict") {
+        refreshAfterConflict();
       }
     });
   };
@@ -298,6 +308,7 @@ export function RestaurantFloorOperations({
       });
       setResult(nextResult);
       if (nextResult.status === "confirmed") router.refresh();
+      else if (nextResult.status === "conflict") refreshAfterConflict();
     });
   };
 
@@ -317,6 +328,8 @@ export function RestaurantFloorOperations({
         setSelectedMoveTurnId(null);
         setSelectedMoveOption(null);
         router.refresh();
+      } else if (nextResult.status === "conflict") {
+        refreshAfterConflict();
       }
     });
   };

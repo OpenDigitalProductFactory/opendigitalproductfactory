@@ -24,6 +24,13 @@ const bookingCapacityMigrationPath = fileURLToPath(
   ),
 );
 const bookingCapacitySql = readFileSync(bookingCapacityMigrationPath, "utf8");
+const busyShiftRefreshPath = fileURLToPath(
+  new URL(
+    "../prisma/migrations/20260812103000_refresh_restaurant_demo_busy_shift/migration.sql",
+    import.meta.url,
+  ),
+);
+const busyShiftRefreshSql = readFileSync(busyShiftRefreshPath, "utf8");
 
 describe("restaurant demo floor migration", () => {
   it("targets only platform-owned demo restaurant rows", () => {
@@ -66,5 +73,15 @@ describe("restaurant demo floor migration", () => {
     expect(bookingCapacitySql).toContain("^demo-restaurant-prov-res-[0-8]$");
     expect(bookingCapacitySql).toContain("archetype.\"archetypeId\" = 'restaurant'");
     expect(bookingCapacitySql).toContain('DELETE FROM "ProviderService"');
+  });
+
+  it("keeps only the Restaurant demo roster durable and restores its busy-shift state", () => {
+    expect(busyShiftRefreshSql).toContain("TIMESTAMPTZ '2100-01-01 00:00:00+00'");
+    expect(busyShiftRefreshSql).toContain("^demo-restaurant-bk-[0-6]$");
+    expect(busyShiftRefreshSql).toContain("archetype.\"archetypeId\" = 'restaurant'");
+    expect(busyShiftRefreshSql).toContain("Restaurant demo busy shift refreshed");
+    expect(busyShiftRefreshSql).toContain("(4, 'demo-restaurant-table-5')");
+    expect(busyShiftRefreshSql).toContain("(4, 'demo-restaurant-table-6')");
+    expect(busyShiftRefreshSql).not.toMatch(/DELETE FROM \"HospitalityCapacityAllocation\"/);
   });
 });

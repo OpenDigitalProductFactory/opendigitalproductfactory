@@ -1,6 +1,11 @@
 import type { RestaurantTableAttributes } from "@/lib/storefront/restaurant-table-attributes";
 
 const MINUTE = 60_000;
+// Demo sections represent an always-ready sample roster, not a scheduled shift
+// owned by a real employee. Keep that synthetic coverage stable across long-lived
+// demo installs; real restaurant shifts continue to use bounded intervals.
+const DEMO_SECTION_START = new Date("2020-01-01T00:00:00.000Z");
+const DEMO_SECTION_END = new Date("2100-01-01T00:00:00.000Z");
 
 export interface RestaurantDemoBookingInput {
   id: string;
@@ -145,8 +150,8 @@ export function buildRestaurantDemoFloorPlan(input: {
     assignmentId: `demo-restaurant-assignment-${index + 1}`,
     employeeId: server.id,
     employeeName: server.displayName,
-    startAt: at(input.now, -240),
-    endAt: at(input.now, 240),
+    startAt: DEMO_SECTION_START,
+    endAt: DEMO_SECTION_END,
     timezone: input.timezone,
     tableKeys,
   }));
