@@ -205,6 +205,15 @@ columns/indexes exist in the DB):
   `_dpfObservationSnapshot` exists, and the candidate carries the exact committed `11:58`
   quarantine migration. It verifies that same row after resolution before normal deploy. Any
   mismatch fails closed before the portal swap and requires the evidence-led decision below.
+- **Exact human-principal alias collision**
+  (`20260812110000_backfill_missing_human_principals`): the promoter automatically marks the row
+  rolled back only when it is the sole unresolved migration, the row id and immutable migration
+  checksum match, the failure is SQLSTATE `23505` on
+  `PrincipalAlias_aliasType_aliasValue_issuer_key`, `applied_steps_count = 0`, and the candidate
+  carries the exact preceding collision-preparation migration. It verifies the same ledger row
+  after resolution, then normal deploy applies the preparation migration before retrying the
+  immutable backfill. A different migration, checksum, constraint, SQLSTATE, step count, or
+  corrective file fails closed before the portal swap.
 - **Schema half-applied** (columns/index present): `prisma migrate resolve --applied <name>` — NOT
   `--rolled-back`, which would re-run the `ADD COLUMN` and fail `already exists`.
 - **Nothing applied** (`applied_steps_count = 0`, no DDL landed): fix the root cause (de-duplicate,

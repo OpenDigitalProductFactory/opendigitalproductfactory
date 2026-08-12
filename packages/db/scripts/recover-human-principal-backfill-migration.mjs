@@ -10,46 +10,31 @@ import {
   inspectUnresolvedMigrations,
   verifyExactMigrationRolledBack,
 } from "./lib/failed-migration-ledger.mjs";
-
 import {
-  classifyInventorySnapshotRecovery,
-  INVENTORY_SNAPSHOT_MIGRATION,
-} from "./lib/inventory-snapshot-migration-recovery.mjs";
+  classifyHumanPrincipalMigrationRecovery,
+  HUMAN_PRINCIPAL_BACKFILL_MIGRATION,
+} from "./lib/human-principal-migration-recovery.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const indexQuarantinePath = resolve(
+const preparationPath = resolve(
   here,
-  "../prisma/migrations/20260728115800_quarantine_damaged_inventory_unique_index/migration.sql",
+  "../prisma/migrations/20260812105900_prepare_human_principal_backfill/migration.sql",
 );
 
 function fail(message) {
-  process.stderr.write(`inventory-snapshot-recovery: ${message}\n`);
+  process.stderr.write(`human-principal-recovery: ${message}\n`);
   process.exit(1);
 }
 
 export async function inspectRecoveryState(client) {
-  const unresolvedMigrations = await inspectUnresolvedMigrations(client);
-
-  if (unresolvedMigrations.length === 0) {
-    return { unresolvedMigrations, snapshotEffectCount: 0 };
-  }
-
-  const effects = await client.query(
-    `SELECT count(*)::int AS count
-       FROM "InventoryEntity"
-      WHERE properties ? '_dpfObservationSnapshot'`,
-  );
-  return {
-    unresolvedMigrations,
-    snapshotEffectCount: Number(effects.rows[0]?.count ?? 0),
-  };
+  return { unresolvedMigrations: await inspectUnresolvedMigrations(client) };
 }
 
 export async function verifyRolledBackMigration(client, migrationId) {
   return verifyExactMigrationRolledBack(
     client,
     migrationId,
-    INVENTORY_SNAPSHOT_MIGRATION,
+    HUMAN_PRINCIPAL_BACKFILL_MIGRATION,
   );
 }
 
@@ -72,16 +57,14 @@ async function main() {
     }
 
     const state = await inspectRecoveryState(client);
-    const indexQuarantineChecksum = createHash("sha256")
-      .update(readFileSync(indexQuarantinePath))
+    const preparationChecksum = createHash("sha256")
+      .update(readFileSync(preparationPath))
       .digest("hex");
-    const decision = classifyInventorySnapshotRecovery({
+    const decision = classifyHumanPrincipalMigrationRecovery({
       ...state,
-      indexQuarantineChecksum,
+      preparationChecksum,
     });
-    if (decision.action === "blocked") {
-      fail(decision.reason);
-    }
+    if (decision.action === "blocked") fail(decision.reason);
     process.stdout.write(
       decision.action === "recover"
         ? `recover:${decision.migrationId}\n`
@@ -95,6 +78,4 @@ async function main() {
 const invokedDirectly =
   process.argv[1]
   && import.meta.url === pathToFileURL(resolve(process.argv[1])).href;
-if (invokedDirectly) {
-  main().catch((error) => fail(error.message ?? String(error)));
-}
+if (invokedDirectly) main().catch((error) => fail(error.message ?? String(error)));
