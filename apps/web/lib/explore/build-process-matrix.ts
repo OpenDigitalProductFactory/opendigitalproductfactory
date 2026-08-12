@@ -476,6 +476,29 @@ export function deriveDeliverableSensitivity(
   return SENSITIVITY_RANK[keyword] >= SENSITIVITY_RANK[postureFloor] ? keyword : postureFloor;
 }
 
+/**
+ * Map a derived deliverable sensitivity to the ROUTING data-sensitivity for a
+ * Build Studio dispatch. Founder ruling (2026-08-12): platform source-code
+ * generation is development work, not business data — ordinary builds (low) route
+ * at `public` so connected cloud dev tools are eligible; elevated/high escalate to
+ * internal/confidential. Content-based payload screening still runs on every
+ * request. Interim to BI-0DBDCB77 (a dedicated `development` class needs the
+ * duplicated 4-value sensitivity literal consolidated first).
+ */
+export function mapBuildDeliverableToRoutingSensitivity(
+  d: DeliverableSensitivity,
+): "public" | "internal" | "confidential" {
+  switch (d) {
+    case "high":
+      return "confidential";
+    case "elevated":
+      return "internal";
+    case "low":
+    default:
+      return "public";
+  }
+}
+
 // ─── Public API ─────────────────────────────────────────────────────────────
 
 /**

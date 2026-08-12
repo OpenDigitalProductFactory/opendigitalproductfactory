@@ -487,7 +487,7 @@ export async function dispatchIdeateResearch(params: {
         "You are a senior software architect producing a structured design document. Respond with the design document content only — no preamble.";
       const { designDoc, rawOutput } = await runLocalIdeateWithRetry(
         async (messages) => {
-          const response = await routeAndCall(messages, systemPrompt, params.sensitivity ?? "internal", {
+          const response = await routeAndCall(messages, systemPrompt, params.sensitivity ?? "public", {
             budgetClass: "quality_first",
             ...(providerId ? { allowedProviders: [providerId] } : {}),
             ...(params.modelTier ? { modelTier: params.modelTier } : {}),

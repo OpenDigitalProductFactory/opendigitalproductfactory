@@ -598,7 +598,7 @@ async function stepGenerateCode(
   const result = await runAgenticLoop({
     chatHistory: [{ role: "user", content: userMessage }],
     systemPrompt,
-    sensitivity: "internal",
+    sensitivity: "public", // code-gen is dev work, not business data (BI-0DBDCB77)
     tools,
     toolsForProvider,
     userId: "system",
