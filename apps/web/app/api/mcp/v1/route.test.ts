@@ -662,7 +662,9 @@ describe("POST — tools/list", () => {
     const body = await res.json();
     expect(typeof body.result.serverInfo.description).toBe("string");
     expect(body.result.serverInfo.description.length).toBeGreaterThan(0);
-    expect(body.result.capabilities.tasks).toEqual({ list: true, cancel: true });
+    // Spec shape: tasks.list/.cancel are `object`, not boolean (a boolean
+    // fails strict client capability validation — Claude Code rejects init).
+    expect(body.result.capabilities.tasks).toEqual({ list: {}, cancel: {} });
   });
 
   it("rejects an unsupported MCP-Protocol-Version header with 400 (Slice 1)", async () => {

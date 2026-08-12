@@ -520,8 +520,12 @@ async function handleInitialize(id: JsonRpcId, params?: Record<string, unknown>)
       // Advertising on 2024-11-05 / 2025-03-26 breaks clients that reject
       // unknown capability keys at initialize (Grok Build 1.0.0 → CustomResult
       // handshake failure). Methods remain routable; discovery is gated.
+      // Value shape is spec-load-bearing: tasks.list/.cancel are `object`
+      // (present-if-supported), NOT boolean. A boolean fails strict client
+      // capability validation — Claude Code rejects the whole initialize and
+      // loads zero tools. Empty object = supported (cf. logging/completions).
       ...(shouldAdvertiseTasksCapability(negotiated)
-        ? { tasks: { list: true, cancel: true } }
+        ? { tasks: { list: {}, cancel: {} } }
         : {}),
     },
     serverInfo: {
