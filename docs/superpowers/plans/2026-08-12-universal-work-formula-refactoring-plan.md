@@ -87,7 +87,7 @@ Write-model-first ordering (P1 anchor before adapters), matching the memo's prov
 
 **Research verdict (sources dated 2026-08-12):** the surveyed standards each own one layer and stop short of ours. A2A (Linux Foundation) standardizes *task transport + state* but models **one task, one agent, two roles** (`user`/`agent`) — no rooms, no accountability, no standing work. MCP Tasks standardizes *async execution* (and is **in flux** — demoted to an extension in the 2026-07-28 RC, so anchor loosely). OMG **CMMN** is the mature *case/stage/milestone/role* meta-model for non-deterministic knowledge work — but a notation, not a runtime protocol, and agent-blind. AGNTCY / Agent Protocol standardize agent *infrastructure/runtime*, not a work-case. **RACI/DACI** give the accountability vocabulary. **No standard defines a shared work-case spanning human + AI participants with roles, finite/standing temporality, outcome packets, and a governance envelope.** That is genuine white space — and DPF has already *built the reference implementation* of it.
 
-**Recommendation: author AWC as a NEW standard candidate that is explicitly a *composition*, not a competitor** — the strongest position because we contribute working code, not a paper, matching Arcamanus's OSS-steward posture.
+**Recommendation: author AWC as a NEW standard candidate that is explicitly a *composition*, not a competitor** — the strongest position because we contribute working code, not a paper, matching the platform's OSS-steward posture.
 
 | Layer | Source | DPF stance |
 |---|---|---|
