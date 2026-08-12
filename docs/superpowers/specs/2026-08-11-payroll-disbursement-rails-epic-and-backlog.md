@@ -11,6 +11,15 @@ The recruiting→hiring→paying spine already reaches **persisted, computed pay
 
 **Money-movement boundary (whole epic):** the platform prepares, tracks, reconciles, and records disbursement; a real net-pay send is a governed, operator-approved action, and against a **provider sandbox** in all automated tests. No agent executes a real-money transfer.
 
+## 0b. Delivered in this branch (2026-08-11) — manual-rail core
+
+The pure, dependency-free core of the manual rail is already built + verified here, ahead of filing (the loop now reaches a prepared bank artifact + an attested paid state, in code):
+- **NACHA generator** (`apps/web/lib/hr/nacha.ts`) — PPD-credit ACH file, byte-position-correct + control-total balanced (6 golden/structural tests). This is **BI-DR-02**'s core (US format).
+- **Manual disbursement flow** (`apps/web/lib/hr/manual-disbursement.ts`) — `prepareManualNachaBatch` (payslip net-pay lines + payee bank details → the file + summary) and `recordManualDisbursement` (attested "paid" through the existing `markPayslipDisbursed` hook; refuses without a `bankReference`). This is **BI-DR-03**'s core.
+- Verified: 9 tests + web typecheck green. Money-movement boundary held (produces a file + records a human attestation; never sends).
+
+**The one remaining input for a production manual run:** a **payee bank-account store** (routing/account per employee) — that is **BI-DR-01**'s persistence, which needs the model-shape kernel decision + a migration (both MCP-gated). Today the generator takes bank details as input; BI-DR-01 supplies them durably. So BI-DR-02/03 are code-complete over transient input; BI-DR-01 is the governed piece that makes the manual rail runnable end to end on real data.
+
 ## 1. Epic
 
 - **Proposed id:** `EP-PAYROLL-DISBURSEMENT` (assigned on filing).
