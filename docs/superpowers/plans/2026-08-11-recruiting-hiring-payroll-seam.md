@@ -42,6 +42,8 @@ Verification: additive migration safety, migration application in the governed i
 
 Refactoring delivered: `payRunRef` is the stable retry key; a retry cannot mutate its defining period or recompute a run after `draft`. `PayRun.status` and `Payslip.disbursementStatus` are database-enforced Prisma enums with generated TypeScript unions rather than new free-form strings.
 
+Intentional substrate budget: DI-2E77D02EB450 requires two relational identities with different cardinality and lifecycle (`PayRun` aggregate and per-employee `Payslip` line). The measured `prismaModelCount` ratchet therefore moves from 589 to 591; folding the lines into JSON would defeat the selected normalized shape, employee FK, and per-run uniqueness constraint. No other non-increasing substrate metric is relaxed.
+
 ### 4. Manual disbursement artifact — BI-DR-02
 
 Generate a deterministic PPD-credit NACHA file and operator instruction summary from validated payee input. Keep the generator pure and format-pluggable.
