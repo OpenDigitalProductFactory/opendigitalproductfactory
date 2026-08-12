@@ -1,6 +1,6 @@
 {
   "generator": "apps/web/scripts/build-route-manifest.ts",
-  "routeCount": 620,
+  "routeCount": 621,
   "routes": [
     {
       "routePath": "/",
@@ -405,6 +405,20 @@
       ],
       "dynamicParams": [],
       "file": "apps/web/app/(shell)/admin/wiki/lint/page.tsx"
+    },
+    {
+      "routePath": "/api/a2a/coworkers/[agentId]",
+      "kind": "route",
+      "segments": [
+        "api",
+        "a2a",
+        "coworkers",
+        "[agentId]"
+      ],
+      "dynamicParams": [
+        "agentId"
+      ],
+      "file": "apps/web/app/api/a2a/coworkers/[agentId]/route.ts"
     },
     {
       "routePath": "/api/a2a/coworkers/[agentId]/offers/[offerId]",
