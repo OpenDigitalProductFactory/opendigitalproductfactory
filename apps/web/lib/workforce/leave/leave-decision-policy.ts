@@ -24,6 +24,18 @@ export type LeaveGuardInputs = {
   /** Remaining balance BEFORE this request is applied. */
   remainingBalance: number;
   coverage: LeaveCoverage;
+  /**
+   * Minimum staffing cushion the org wants to keep ABOVE the required minimum
+   * before an AI may recommend approval. Default 0 = only a true breach (below
+   * the minimum) escalates. A coverage-sensitive org (e.g. food-hospitality,
+   * where a service that runs to the bone risks the guest experience) sets this
+   * to 1+, so approving down to zero cushion escalates to a human instead of
+   * being auto-recommended. Verified 2026-08-07 against the live restaurant org
+   * stance: the WWWD gate's option pick is commandment-argmax and barely weights
+   * business_disruption, so coverage-tightness sensitivity must live in this
+   * deterministic guard, not in the gate.
+   */
+  minCoverageCushion?: number | null;
   /** Policy cap on a single consecutive run, or null/undefined for no cap. */
   maxConsecutiveDays?: number | null;
   requestedConsecutiveDays: number;
@@ -50,9 +62,12 @@ export function evaluateLeaveGuards(inputs: LeaveGuardInputs): LeaveGuardVerdict
     );
   }
 
-  if (inputs.coverage.coveredIfApproved < inputs.coverage.requiredHeadcount) {
+  const cushion = inputs.minCoverageCushion ?? 0;
+  if (inputs.coverage.coveredIfApproved < inputs.coverage.requiredHeadcount + cushion) {
     reasons.push(
-      `Approving would breach required coverage (${inputs.coverage.coveredIfApproved} covered vs ${inputs.coverage.requiredHeadcount} required).`,
+      cushion > 0
+        ? `Approving would drop coverage below the required minimum plus a ${cushion}-person cushion (${inputs.coverage.coveredIfApproved} covered vs ${inputs.coverage.requiredHeadcount} required + ${cushion} cushion).`
+        : `Approving would breach required coverage (${inputs.coverage.coveredIfApproved} covered vs ${inputs.coverage.requiredHeadcount} required).`,
     );
   }
 

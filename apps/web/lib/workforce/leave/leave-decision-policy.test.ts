@@ -62,6 +62,30 @@ describe("evaluateLeaveGuards", () => {
     expect(v.forceEscalate).toBe(true);
     expect(v.reasons.length).toBeGreaterThanOrEqual(2);
   });
+
+  it("with the default (no cushion) passes a request that sits exactly at the required minimum", () => {
+    const v = evaluateLeaveGuards({ ...safe, coverage: { requiredHeadcount: 3, coveredIfApproved: 3 } });
+    expect(v.forceEscalate).toBe(false);
+  });
+
+  it("with a coverage cushion, escalates a request that would sit exactly at the minimum (zero cushion)", () => {
+    const v = evaluateLeaveGuards({
+      ...safe,
+      coverage: { requiredHeadcount: 3, coveredIfApproved: 3 },
+      minCoverageCushion: 1,
+    });
+    expect(v.forceEscalate).toBe(true);
+    expect(v.reasons.join(" ")).toMatch(/cushion/i);
+  });
+
+  it("with a coverage cushion, still passes when the cushion is satisfied", () => {
+    const v = evaluateLeaveGuards({
+      ...safe,
+      coverage: { requiredHeadcount: 3, coveredIfApproved: 5 },
+      minCoverageCushion: 1,
+    });
+    expect(v.forceEscalate).toBe(false);
+  });
 });
 
 describe("resolveLeaveDecision", () => {
