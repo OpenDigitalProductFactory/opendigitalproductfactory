@@ -1,4 +1,5 @@
 import { spawnSync } from "node:child_process";
+import { resolveHostCommandInvocation } from "./host-command-invocation.mjs";
 
 function guard(legacyJobId, name, commands) {
   return {
@@ -24,29 +25,12 @@ export function isPolicyGuardSelfTest([command, args]) {
     || command === "pnpm" && args[0] === "run" && args[1]?.endsWith(":test");
 }
 
-function quoteWindowsCommandToken(token) {
-  const value = String(token);
-  if (!/[\s"&|<>^()%]/.test(value)) return value;
-  return `"${value.replaceAll("%", "%%").replaceAll('"', '""')}"`;
-}
-
 export function resolvePolicyGuardInvocation(
   command,
   args,
   { platform = process.platform, env = process.env } = {},
 ) {
-  if (platform !== "win32" || command !== "pnpm") {
-    return { command, args };
-  }
-  return {
-    command: env.ComSpec || env.COMSPEC || "cmd.exe",
-    args: [
-      "/d",
-      "/s",
-      "/c",
-      [command, ...args].map(quoteWindowsCommandToken).join(" "),
-    ],
-  };
+  return resolveHostCommandInvocation(command, args, { platform, env });
 }
 
 export const POLICY_GUARD_PROFILES = Object.freeze({
@@ -97,6 +81,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         "scripts/lib/ci-build-artifact.test.mjs",
         "scripts/lib/ci-evidence-plan.test.mjs",
         "scripts/ci-policy-guards.test.mjs",
+        "scripts/lib/host-command-invocation.test.mjs",
         // BI-812C676D: every covered-root *.test.mjs must appear here or on the
         // deliberate allowlist — otherwise CI stays green while the test never runs.
         "scripts/lib/ci-policy-test-inventory.test.mjs",

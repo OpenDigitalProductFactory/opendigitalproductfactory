@@ -19,6 +19,7 @@
 
 import { existsSync, readFileSync, readdirSync, realpathSync } from "node:fs";
 import { execFileSync } from "node:child_process";
+import { resolveHostCommandInvocation } from "./host-command-invocation.mjs";
 
 /**
  * Readiness classification given probe results. Pure — unit-tested.
@@ -103,13 +104,34 @@ export function readinessReason({ hasNodeModules, depProbeOk, gateOk, staleWorks
   return "managed_bootstrap_ok";
 }
 
-function run(cmd, args, cwd) {
+function executeCommand(cmd, args, cwd, opts = {}) {
+  const invocation = resolveHostCommandInvocation(cmd, args, opts);
   try {
-    execFileSync(cmd, args, { cwd, stdio: "pipe", encoding: "utf8" });
-    return true;
-  } catch {
-    return false;
+    const stdout = execFileSync(invocation.command, invocation.args, {
+      cwd,
+      stdio: "pipe",
+      encoding: "utf8",
+    });
+    return { ok: true, ...invocation, status: 0, signal: null, stdout, stderr: "" };
+  } catch (cause) {
+    return {
+      ok: false,
+      ...invocation,
+      status: cause?.status ?? null,
+      signal: cause?.signal ?? null,
+      error: {
+        name: cause?.name ?? "Error",
+        code: cause?.code ?? null,
+        message: cause?.message ?? String(cause),
+      },
+      stdout: String(cause?.stdout ?? ""),
+      stderr: String(cause?.stderr ?? ""),
+    };
   }
+}
+
+function run(cmd, args, cwd, opts = {}) {
+  return (opts.execute ?? executeCommand)(cmd, args, cwd, opts).ok;
 }
 
 function norm(p) {
@@ -175,7 +197,7 @@ export function probeWorktreeReadiness(worktreePath, opts = {}) {
   // existed but was EMPTY — so both the path set and the emptiness test matter.
   const missing = missingCompileArtifacts(worktreePath, opts.artifactDeps);
   const hasNodeModules = !missing.some((m) => m.path === "node_modules");
-  const depProbeOk = hasNodeModules && run(pkgMgr, ["ls", "--depth", "-1"], worktreePath);
+  const depProbeOk = hasNodeModules && run(pkgMgr, ["ls", "--depth", "-1"], worktreePath, opts);
   const linkCheck = depProbeOk
     ? checkWorkspaceLinksResolveLocally(worktreePath, opts.linkCheckDeps)
     : { ok: true, stale: [] };
@@ -276,8 +298,10 @@ export function formatReadinessBanner(readiness, worktreePath) {
  */
 export function bootstrapWorktreeDeps(worktreePath, opts = {}) {
   const pkgMgr = opts.packageManager ?? "pnpm";
+  const exists = opts.exists ?? existsSync;
+  const execute = opts.execute ?? executeCommand;
   try {
-    if (!existsSync(`${worktreePath}/node_modules`)) {
+    if (!exists(`${worktreePath}/node_modules`)) {
       // Managed install via the shared store; --frozen-lockfile keeps it honest
       // to the worktree's lockfile (a worktree off main carries main's lockfile).
       //
@@ -290,11 +314,16 @@ export function bootstrapWorktreeDeps(worktreePath, opts = {}) {
       // ERR_PNPM_OUTDATED_LOCKFILE — still never a release-age error. Keeping the
       // override would have silently defeated a real control on this path once
       // the floor became versioned repo config.
-      run(
+      const install = execute(
         pkgMgr,
         ["install", "--prefer-offline", "--frozen-lockfile"],
         worktreePath,
+        opts,
       );
+      if (!install.ok) {
+        const { ok: _ok, ...failure } = install;
+        return { status: "source-only", reason: "managed_install_failed", failure: { phase: "install", ...failure } };
+      }
     }
     return probeWorktreeReadiness(worktreePath, opts);
   } catch {

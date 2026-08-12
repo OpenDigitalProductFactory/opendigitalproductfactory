@@ -10,6 +10,7 @@ import {
   missingCompileArtifacts,
   formatReadinessBanner,
   diagnoseUnprovisionedFailure,
+  bootstrapWorktreeDeps,
 } from "./bootstrap-worktree-deps.mjs";
 
 test("compile-ready ONLY when deps resolved AND the cheap gate passes", () => {
@@ -168,4 +169,33 @@ test("ordinary type errors are never relabelled as environmental", () => {
       .unprovisioned,
     false,
   );
+});
+
+test("bootstrapWorktreeDeps reports a managed install launch failure instead of silently relabelling it node_modules_missing", () => {
+  const result = bootstrapWorktreeDeps("C:/worktrees/topic", {
+    exists: () => false,
+    execute: () => ({
+      ok: false,
+      command: "C:\\Windows\\System32\\cmd.exe",
+      args: ["/d", "/s", "/c", "pnpm install --prefer-offline --frozen-lockfile"],
+      error: { name: "Error", code: "EINVAL", message: "spawnSync pnpm.cmd EINVAL" },
+      status: null,
+      signal: null,
+      stdout: "",
+      stderr: "",
+    }),
+  });
+
+  assert.equal(result.status, "source-only");
+  assert.equal(result.reason, "managed_install_failed");
+  assert.deepEqual(result.failure, {
+    phase: "install",
+    command: "C:\\Windows\\System32\\cmd.exe",
+    args: ["/d", "/s", "/c", "pnpm install --prefer-offline --frozen-lockfile"],
+    status: null,
+    signal: null,
+    error: { name: "Error", code: "EINVAL", message: "spawnSync pnpm.cmd EINVAL" },
+    stdout: "",
+    stderr: "",
+  });
 });
