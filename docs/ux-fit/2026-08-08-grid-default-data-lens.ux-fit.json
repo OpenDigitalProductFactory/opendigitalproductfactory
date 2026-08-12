@@ -14,7 +14,7 @@
       "page-local",
       "saved-view-default"
     ],
-    "accessibility": "The existing view links and the new data-scope links are grouped in separately labelled navigation regions, expose the selected choice with aria-current, retain no-JavaScript URLs, and use a visible theme-token focus outline.",
+    "accessibility": "The existing view links preserve their established accessibility-tree shape. New data-scope links are exposed as a separately labelled group, expose the selected choice with aria-current, retain no-JavaScript URLs, and use a visible theme-token focus outline.",
     "responsive": "The two compact segments wrap as independent groups when horizontal space is constrained; no fixed width or viewport assumption is introduced."
   }
 }

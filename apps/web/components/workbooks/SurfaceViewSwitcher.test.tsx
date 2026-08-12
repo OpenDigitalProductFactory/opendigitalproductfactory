@@ -54,6 +54,7 @@ describe("SurfaceViewSwitcher data lens (BI-9DB20C39)", () => {
     );
 
     expect(listHtml).not.toContain("data scope");
+    expect(listHtml).not.toContain("<nav");
     expect(unfilteredGridHtml).not.toContain("data scope");
   });
 });

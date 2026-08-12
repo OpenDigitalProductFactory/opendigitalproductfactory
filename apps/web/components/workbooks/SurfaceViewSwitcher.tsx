@@ -53,8 +53,7 @@ export function SurfaceViewSwitcher({
 
   return (
     <div className="mb-4 flex w-fit max-w-full flex-wrap items-center gap-2 text-sm">
-      <nav
-        aria-label={`${home.label} view`}
+      <div
         className="inline-flex overflow-hidden rounded-md border border-[var(--dpf-border)]"
       >
         {tabs.map((t) => (
@@ -67,9 +66,10 @@ export function SurfaceViewSwitcher({
             {t.label}
           </Link>
         ))}
-      </nav>
+      </div>
       {lens ? (
-        <nav
+        <div
+          role="group"
           aria-label={`${home.label} data scope`}
           className="inline-flex overflow-hidden rounded-md border border-[var(--dpf-border)]"
         >
@@ -86,7 +86,7 @@ export function SurfaceViewSwitcher({
               {option.label}
             </Link>
           ))}
-        </nav>
+        </div>
       ) : null}
     </div>
   );
