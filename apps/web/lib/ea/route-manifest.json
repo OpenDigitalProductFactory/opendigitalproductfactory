@@ -1,6 +1,6 @@
 {
   "generator": "apps/web/scripts/build-route-manifest.ts",
-  "routeCount": 622,
+  "routeCount": 623,
   "routes": [
     {
       "routePath": "/",
@@ -1157,6 +1157,18 @@
       ],
       "dynamicParams": [],
       "file": "apps/web/app/api/ops/self-upgrade/impact-summary/route.ts"
+    },
+    {
+      "routePath": "/api/ops/self-upgrade/status",
+      "kind": "route",
+      "segments": [
+        "api",
+        "ops",
+        "self-upgrade",
+        "status"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/ops/self-upgrade/status/route.ts"
     },
     {
       "routePath": "/api/platform/alerts",

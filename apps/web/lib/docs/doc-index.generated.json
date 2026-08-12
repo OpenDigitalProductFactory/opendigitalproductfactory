@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 630,
+  "pageCount": 631,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -856,6 +856,21 @@
         "the-decision-ledger",
         "the-learning-loop",
         "current-boundaries"
+      ]
+    },
+    "docs/architecture/background-operation-observation-contract.md": {
+      "publicHref": "/architecture/background-operation-observation-contract/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "background-operation-observation-contract",
+        "required-architecture",
+        "page-refresh-policy",
+        "platform-primitives",
+        "failure-semantics",
+        "review-and-verification-checklist",
+        "standards-and-precedent"
       ]
     },
     "docs/architecture/backlog-and-planning-runbook.md": {
