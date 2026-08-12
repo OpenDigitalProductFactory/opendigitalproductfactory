@@ -32,6 +32,7 @@ import { LIFECYCLE_GOVERNANCE_ASSETS } from "./lifecycle-governance-assets";
 import { STOCK_COVERAGE_ASSETS } from "./stock-coverage-assets";
 import { FINANCE_INVOICE_DOCUMENT_ASSETS } from "./finance-invoice-document-assets";
 import { RECRUITING_ASSETS } from "./recruiting-assets";
+import { PAYROLL_ASSETS } from "./payroll-assets";
 import { DECISION_TRUST_ENVELOPE_ASSETS } from "./decision-trust-envelope-assets";
 import { MCP_ASSETS } from "./mcp-assets";
 import { FEDERATION_INTRODUCTION_ASSETS } from "./federation-introduction-assets";
@@ -724,6 +725,7 @@ const SEED_ASSETS: readonly DataAssetDefinition[] = [
   ...FINANCE_INVOICE_DOCUMENT_ASSETS,
   ...PROCESSING_GOVERNANCE_ASSETS,
   ...RECRUITING_ASSETS,
+  ...PAYROLL_ASSETS,
   ...DECISION_TRUST_ENVELOPE_ASSETS, ...MCP_ASSETS, ...FEDERATION_INTRODUCTION_ASSETS,
    {
     id: "data:agent-conversation",
