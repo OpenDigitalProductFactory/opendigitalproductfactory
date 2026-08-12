@@ -76,7 +76,7 @@ describe("useBackgroundOperationObserver", () => {
       signal = init?.signal ?? undefined;
       return new Promise<Response>(() => undefined);
     });
-    const { result, unmount } = renderHook(() =>
+    const { unmount } = renderHook(() =>
       useBackgroundOperationObserver<Snapshot>({
         endpoint: "/api/status",
         eventType: "system:self-upgrade",
