@@ -963,7 +963,7 @@ async function dispatchSpecialist(params: {
     lastResult = await runAgenticLoop({
       chatHistory: [{ role: "user", content: taskPrompt }],
       systemPrompt,
-      sensitivity: "internal",
+      sensitivity: "public", // code-gen is dev work, not business data (BI-0DBDCB77)
       tools: scopedTools,
       toolsForProvider,
       userId,
@@ -1147,10 +1147,11 @@ export async function runBuildOrchestrator(params: {
   // ─── Pre-flight check: select one policy-qualified healthy engine ─────────
   // The shared selector owns auth, health, capacity, residency, sensitivity,
   // capability, and hard-pin gates before any specialist side effect begins.
-  const { deriveDeliverableSensitivity } = await import("@/lib/explore/build-process-matrix");
+  const { deriveDeliverableSensitivity, mapBuildDeliverableToRoutingSensitivity } = await import("@/lib/explore/build-process-matrix");
   const buildSensitivity = deriveDeliverableSensitivity({ text: buildContext });
   const preflightConfig = await getBuildStudioConfig({
-    sensitivity: buildSensitivity === "high" ? "confidential" : "internal",
+    // low→public, elevated→internal, high→confidential (BI-0DBDCB77).
+    sensitivity: mapBuildDeliverableToRoutingSensitivity(buildSensitivity),
   });
 
   if (preflightConfig.selection) {

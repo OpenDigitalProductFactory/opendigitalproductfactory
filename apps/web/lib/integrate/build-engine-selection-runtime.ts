@@ -212,7 +212,8 @@ export async function resolveBuildEngineSelection(
     try {
       const preview = await previewRoute(
         [{ role: "user", content: "Generate and modify source code for a Build Studio task." }],
-        opts.sensitivity ?? "internal",
+        // Code-gen is dev work, not business data — default `public` (BI-0DBDCB77).
+        opts.sensitivity ?? "public",
         {
           taskType: "code-gen",
           tools: [{ name: "edit_sandbox_file" }, { name: "run_sandbox_tests" }],
