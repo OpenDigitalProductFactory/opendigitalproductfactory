@@ -24,6 +24,21 @@ const BASH_PROBE = spawnSync("bash", ["-lc", "printf '%s' \"$PWD\""], {
 const BASH_OK = BASH_PROBE.status === 0;
 const BASH_PWD = BASH_PROBE.stdout?.trim() ?? "";
 
+// The portable process-group watchdog (used when GNU `timeout` is absent, e.g.
+// stock macOS) times itself with its own `sleep`. But makeFakeBin() puts an
+// instant fake `sleep` on PATH to neutralize the SCRIPT's retry `sleep 3`, and
+// that fake shadows the watchdog's `sleep` too — so the watchdog fires at 0s and
+// SIGTERMs a healthy boot before it can exit. Resolve the REAL `sleep` once (in
+// an unmodified PATH) and invoke it by absolute path in the watchdog so the fake
+// only affects the script it was meant for. On Linux/Git Bash the native
+// `timeout` path runs instead, so this value is unused there.
+const SLEEP_PROBE = spawnSync("sh", ["-lc", "command -v sleep"], {
+  encoding: "utf8",
+  timeout: 2_000,
+});
+const REAL_SLEEP =
+  SLEEP_PROBE.status === 0 && SLEEP_PROBE.stdout?.trim() ? SLEEP_PROBE.stdout.trim() : "/bin/sleep";
+
 function toBashPath(value: string): string {
   if (process.platform !== "win32") return value;
   const normalized = value.replace(/\\/g, "/");
@@ -86,9 +101,12 @@ function run(opts: {
     "else",
     "  set -m",
     `  ${bootCommand} & boot_pid=$!`,
-    `  ( sleep ${timeoutSeconds}; kill -TERM -$boot_pid 2>/dev/null || kill -TERM $boot_pid 2>/dev/null; sleep 1; kill -KILL -$boot_pid 2>/dev/null || true ) & watchdog_pid=$!`,
+    `  ( ${q(toBashPath(REAL_SLEEP))} ${timeoutSeconds}; kill -TERM -$boot_pid 2>/dev/null || kill -TERM $boot_pid 2>/dev/null; ${q(toBashPath(REAL_SLEEP))} 1; kill -KILL -$boot_pid 2>/dev/null || true ) & watchdog_pid=$!`,
     "  wait $boot_pid; boot_status=$?",
-    "  kill $watchdog_pid 2>/dev/null || true",
+    // Kill the watchdog's whole process group (set -m gave it its own), not just
+    // the subshell: otherwise its real `sleep` is orphaned, keeps the stdout pipe
+    // open, and stalls spawnSync for the full timeout after a healthy boot exits.
+    "  kill -TERM -$watchdog_pid 2>/dev/null || kill -TERM $watchdog_pid 2>/dev/null || true",
     "  wait $watchdog_pid 2>/dev/null || true",
     '  [ "$boot_status" -ge 128 ] && exit 124',
     '  exit "$boot_status"',
