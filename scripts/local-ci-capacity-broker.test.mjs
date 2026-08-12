@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  builderMemoryUsageBytesFromDocker,
   dockerMemoryWorkingSetBytes,
   mergeLocalCiHostPressure,
   observeLocalCiServerPressure,
@@ -100,4 +101,62 @@ test("Docker builder usage excludes reclaimable inactive file cache", () => {
     },
   }), 1.5 * 1024 ** 3);
   assert.equal(Number.isNaN(dockerMemoryWorkingSetBytes({})), true);
+});
+
+test("an exited builder with empty stats is absent from current memory usage", async () => {
+  const requestedPaths = [];
+  const dockerGet = async (path) => {
+    requestedPaths.push(path);
+    if (path === "/containers/json?all=1") {
+      return [{
+        Id: "stopped-builder",
+        Names: ["/buildx_buildkit_dpf-local-ci-buildkit-v2-00"],
+        State: "exited",
+      }];
+    }
+    if (path.includes("/stats?stream=false")) return { memory_stats: {} };
+    throw new Error(`unexpected Docker path: ${path}`);
+  };
+
+  const builderMemoryUsageBytes = await builderMemoryUsageBytesFromDocker(
+    dockerGet,
+  );
+  const pressure = await observeLocalCiServerPressure({
+    now: () => new Date("2026-08-12T01:33:09.145Z"),
+    availableMemoryBytes: () => 18 * 1024 ** 3,
+    builderMemoryUsageBytes: () => builderMemoryUsageBytes,
+    sustainedCpuPercent: () => 21,
+    diskFreeBytes: async () => 1.5 * 1024 ** 4,
+    dockerHealthy: async () => true,
+    convergenceActive: async () => false,
+    fencesHealthy: async () => true,
+    evidenceIsolationHealthy: async () => true,
+  });
+
+  assert.deepEqual(builderMemoryUsageBytes, [0, 0]);
+  assert.deepEqual(requestedPaths, ["/containers/json?all=1"]);
+  assert.equal(pressure.sustainedCpuPercent, 21);
+  assert.equal(pressure.dockerHealthy, true);
+  assert.deepEqual(pressure.builderMemoryUsageBytes, [0, 0]);
+});
+
+test("a running builder with empty stats remains fail-closed", async () => {
+  const dockerGet = async (path) => {
+    if (path === "/containers/json?all=1") {
+      return [{
+        Id: "running-builder",
+        Names: ["/buildx_buildkit_dpf-local-ci-buildkit-v2-00"],
+        State: "running",
+      }];
+    }
+    if (path === "/containers/running-builder/stats?stream=false") {
+      return { memory_stats: {} };
+    }
+    throw new Error(`unexpected Docker path: ${path}`);
+  };
+
+  await assert.rejects(
+    builderMemoryUsageBytesFromDocker(dockerGet),
+    /docker_builder_memory_unmeasurable/,
+  );
 });
