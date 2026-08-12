@@ -1,5 +1,6 @@
 import {
   findRestaurantSeatingAlternatives,
+  restaurantSeatingAllocationsForInterval,
   restaurantSeatingVersion,
   type RestaurantSeatingAllocationFact,
   type RestaurantSeatingResourceFact,
@@ -489,19 +490,26 @@ export async function loadRestaurantFloorOperationalView(
         return resource && floorTable?.state === "available" ? [resource] : [];
       });
       if (optionResources.length !== resourceIds.length) return [];
-      const resourceAllocations = allocations.filter(
-        (allocation) =>
-          allocation.resourceId !== null &&
-          resourceIds.includes(allocation.resourceId),
-      );
+      const interval = {
+        startsAt: now,
+        endsAt: new Date(
+          now.getTime() + demand.durationMinutes * 60_000,
+        ),
+      };
+      const resourceAllocations = restaurantSeatingAllocationsForInterval({
+        allocations: allocations.filter(
+          (allocation) =>
+            allocation.resourceId !== null &&
+            resourceIds.includes(allocation.resourceId),
+        ),
+        ...interval,
+      });
       return [{
         resourceIds,
         label: optionResources.map((resource) => resource.label).join(" + "),
         interval: {
-          startsAt: now.toISOString(),
-          endsAt: new Date(
-            now.getTime() + demand.durationMinutes * 60_000,
-          ).toISOString(),
+          startsAt: interval.startsAt.toISOString(),
+          endsAt: interval.endsAt.toISOString(),
         },
         expectedVersion: restaurantSeatingVersion({
           demand,
@@ -583,11 +591,15 @@ export async function loadRestaurantFloorOperationalView(
         const optionResources = resources.filter((resource) =>
           alternative.resourceIds.includes(resource.id),
         );
-        const optionAllocations = allocations.filter(
-          (allocation) =>
-            allocation.resourceId !== null &&
-            alternative.resourceIds.includes(allocation.resourceId),
-        );
+        const optionAllocations = restaurantSeatingAllocationsForInterval({
+          allocations: allocations.filter(
+            (allocation) =>
+              allocation.resourceId !== null &&
+              alternative.resourceIds.includes(allocation.resourceId),
+          ),
+          startsAt: now,
+          endsAt,
+        });
         return {
           resourceIds: alternative.resourceIds,
           label: alternative.label,
