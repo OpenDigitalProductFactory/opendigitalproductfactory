@@ -96,6 +96,7 @@ const SEATABLE_DEMAND_STATUSES = new Set([
   "pending",
 ]);
 const ACTIVE_STAFFING_LIFECYCLES = new Set(["confirmed", "on_site"]);
+const TERMINAL_SERVICE_TURN_STAGES = new Set(["closed", "cancelled"]);
 
 function fingerprint(command: OperationalAssignmentCommand): string {
   return JSON.stringify({
@@ -226,6 +227,7 @@ class RestaurantCommandRollback extends Error {
 function serviceTurnRecord(value: unknown): {
   id: string;
   turnId: string;
+  stage: string;
   version: number;
 } {
   if (
@@ -233,9 +235,11 @@ function serviceTurnRecord(value: unknown): {
     value === null ||
     !("id" in value) ||
     !("turnId" in value) ||
+    !("stage" in value) ||
     !("version" in value) ||
     typeof value.id !== "string" ||
     typeof value.turnId !== "string" ||
+    typeof value.stage !== "string" ||
     typeof value.version !== "number"
   ) {
     throw new Error("Hospitality service turn persistence returned no identity");
@@ -243,6 +247,7 @@ function serviceTurnRecord(value: unknown): {
   return {
     id: value.id,
     turnId: value.turnId,
+    stage: value.stage,
     version: value.version,
   };
 }
@@ -516,6 +521,12 @@ export function createRestaurantFloorCommandAdapter(input: {
               },
             }),
           );
+          if (TERMINAL_SERVICE_TURN_STAGES.has(turn.stage)) {
+            return rejected(
+              "demand-turn-terminal",
+              "This party already completed service. Refresh the floor before seating another party.",
+            );
+          }
 
           for (const resourceId of assignmentCommand.entityRefs.resourceIds) {
             const existing = allocations.find(
