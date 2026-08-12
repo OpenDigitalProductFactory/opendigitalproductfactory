@@ -96,6 +96,27 @@ export function localCiBuildHeadroomCapacity(input: {
 }
 
 /**
+ * Admission reserves measured demand plus margin. The builder's memoryBytes
+ * remains the hard runtime ceiling; an absent or invalid calibration falls
+ * back to that ceiling so incomplete evidence can never make admission looser.
+ */
+export function localCiBuilderAdmissionReserveBytes(input: {
+  hardCeilingBytes: number;
+  calibratedReserveBytes: number;
+}): number {
+  if (!Number.isFinite(input.hardCeilingBytes) || input.hardCeilingBytes <= 0) {
+    return 0;
+  }
+  if (
+    !Number.isFinite(input.calibratedReserveBytes)
+    || input.calibratedReserveBytes <= 0
+  ) {
+    return input.hardCeilingBytes;
+  }
+  return Math.min(input.hardCeilingBytes, input.calibratedReserveBytes);
+}
+
+/**
  * Number of host-native stage slots that can start without spending the
  * configured continuation floor. The floor is the active-stage safety fence;
  * the stage envelope is predictable Node/TypeScript/Vitest growth that must be
@@ -352,7 +373,11 @@ export function resolveLocalCiPoolPolicy(input: {
   }
 
   if (input.reserveAdmissionHeadroom) {
-    const builderMemoryBytes = localCiSlotResources.builderPolicy.memoryBytes;
+    const builderMemoryBytes = localCiBuilderAdmissionReserveBytes({
+      hardCeilingBytes: localCiSlotResources.builderPolicy.memoryBytes,
+      calibratedReserveBytes:
+        localCiSlotResources.builderPolicy.admissionReserveBytes,
+    });
     const hostBuildCapacity = localCiBuildHeadroomCapacity({
       dockerAvailableMemoryBytes:
         input.host.dockerAvailableMemoryBytes ?? Number.NaN,
