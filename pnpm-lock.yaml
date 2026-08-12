@@ -502,6 +502,9 @@ importers:
 
   packages/dpf-bootstrap:
     dependencies:
+      '@dpf/integration-shared':
+        specifier: workspace:*
+        version: link:../integration-shared
       smol-toml:
         specifier: ^1.7.1
         version: 1.7.1

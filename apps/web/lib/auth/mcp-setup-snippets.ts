@@ -3,6 +3,8 @@
 // Used by apps/web/lib/actions/mcp-tokens.ts (server action) and
 // apps/web/scripts/issue-mcp-token.ts (CLI).
 
+import { withDpfMcpCatalogTier } from "@dpf/integration-shared/mcp-catalog-tier";
+
 export type McpSnippetFormat = "claude-code" | "codex" | "grok" | "antigravity" | "vscode" | "raw";
 
 export const MCP_BEARER_TOKEN_ENV_VAR = "DPF_MCP_BEARER_TOKEN";
@@ -51,22 +53,24 @@ function normalizeLocalClientBaseUrl(baseUrl: string): string {
 export function buildSetupSnippets(plaintext: string, baseUrl: string): McpSetupSnippets {
   const clientBaseUrl = normalizeLocalClientBaseUrl(baseUrl);
   const url = `${clientBaseUrl}/api/mcp/v1`;
+  const lazyHostUrl = withDpfMcpCatalogTier(url, "full");
   const refreshUrl = `${clientBaseUrl}/api/mcp/token/refresh`;
   const httpEntry = {
     type: "http",
     url,
     headers: { Authorization: `Bearer \${${MCP_BEARER_TOKEN_ENV_VAR}}` },
   };
+  const lazyHostHttpEntry = { ...httpEntry, url: lazyHostUrl };
   const vscodeHttpEntry = {
     type: "http",
     url,
     headers: { Authorization: `Bearer \${env:${MCP_BEARER_TOKEN_ENV_VAR}}` },
   };
   // Claude Code: .mcp.json uses the mcpServers key.
-  const claudeCode = JSON.stringify({ mcpServers: { dpf: httpEntry } }, null, 2);
+  const claudeCode = JSON.stringify({ mcpServers: { dpf: lazyHostHttpEntry } }, null, 2);
   const codex = [
     "[mcp_servers.dpf]",
-    `url = "${url}"`,
+    `url = "${lazyHostUrl}"`,
     `bearer_token_env_var = "${MCP_BEARER_TOKEN_ENV_VAR}"`,
   ].join("\n");
   // Grok: identical TOML shape to Codex (Grok CLI/desktop reads a config.toml).

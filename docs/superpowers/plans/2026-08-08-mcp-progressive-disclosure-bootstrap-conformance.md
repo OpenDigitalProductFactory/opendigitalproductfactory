@@ -2,11 +2,11 @@
 
 | Field | Value |
 |---|---|
-| Status | Continuation in progress — server bootstrap shipped; clean Codex host callability remained open |
+| Status | Continuation in progress — explicit lazy-host bootstrap correction implemented; governed verification pending |
 | Backlog item | `BI-88681BE0` |
-| Work capsule | `WC-C53A840E` |
-| Branch | `fix/mcp-progressive-disclosure-bootstrap` |
-| Kernel decision | `DI-B6500324926D` — `server-contract`, high confidence, no commandment conflict |
+| Work capsule | `WC-14332796` |
+| Branch | `fix/codex-mcp-list-changed-refresh` |
+| Kernel decisions | `DI-B6500324926D` — server contract; `DI-ED80F45DC052` — explicit-tier-url correction, high confidence/autonomy eligible |
 | Existing design | `docs/superpowers/specs/2026-06-20-mcp-tool-tier-deferred-loading-design.md` |
 | Existing implementation | BI-D8101329 / PR #4112 |
 
@@ -68,6 +68,14 @@ No UI or migration is required. The existing `McpToolSession` schema and per-tok
 - Root boundary: Codex was defaulted to DPF's server `core` tier even though Codex performs its own lazy attachment. The host could not search definitions the server never supplied during initial catalogue construction, and it does not rebuild that registry mid-turn from `list_changed`.
 - Correction: recognized Claude Code and Codex user agents receive the full authorized server catalogue; their hosts remain responsible for lazy model attachment. Generic/Grok/unknown clients retain the lean core plus `load_tools` expansion.
 - Completion now requires a fresh deployed Codex task to find and call a non-core tool from the initial host catalogue; protocol simulation alone is insufficient.
+
+## Post-deployment acceptance correction (2026-08-12)
+
+- PR #4228 deployed successfully, but a fresh Codex Desktop task still received exactly the generic core floor plus `load_tools`; non-core `create_epic` was absent.
+- Exact `load_tools({names:["create_epic"]})` succeeded and returned `listChanged=true`, yet the refreshed Codex `ALL_TOOLS` registry still omitted the qualified call. A separate task reproduced the same result for `claim_backlog_item_for_work`. This is host callability failure, not authorization or server discovery failure.
+- [Official Codex transport evidence](https://github.com/openai/codex/issues/16485) and live request behavior established that current Streamable HTTP calls omit User-Agent. The PR #4228 server heuristic therefore classified the connection as unknown/core even though initialize `clientInfo` identified Codex; the stateless route cannot safely bind later `tools/list` calls to that initialization body. [Codex MCP configuration](https://learn.chatgpt.com/docs/extend/mcp?surface=cli) makes the endpoint URL a shared Desktop/CLI/IDE seam, so the explicit query works across those hosts without adding a parallel client protocol.
+- Kernel comparison selected the existing explicit tier URL over a new header or stateful identity/session layer (`DI-ED80F45DC052`). A safe local config calibration changed only the DPF URL to `?tier=full`; a brand-new Codex task then exposed both `create_epic` and `claim_backlog_item_for_work` before any `load_tools` call and reached the governed claim operation.
+- The correction converges Codex and Claude Code bootstrap/setup URLs to explicit `?tier=full`, preserves Grok/VS Code/Antigravity/generic no-query core behavior, centralizes TypeScript URL construction in `@dpf/integration-shared`, and mirrors the same tested contract in the dependency-free Python updater. Fresh deployed multi-client acceptance remains mandatory before closure.
 
 ## Implementation phases
 

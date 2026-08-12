@@ -2,7 +2,7 @@
 
 **Status:** Living record — the external coding clients change weekly; this is the dated, owned source of truth for what each does and what DPF depends on / should adopt.
 **Owner:** Enterprise Architect persona / `dpf-platform:dpf-architecture-review`.
-**Refresh cadence:** Monthly (see "Refresh ritual"). **Last full refresh:** 2026-06-20. **Last verified:** 2026-06-26 (delivery-surface sweep — see "2026-06-26 refresh" below).
+**Refresh cadence:** Monthly (see "Refresh ritual"). **Last full refresh:** 2026-06-20. **Last verified:** 2026-08-12 (Codex MCP host-registry acceptance — see update below).
 **Standard it serves:** `docs/architecture/context-engineering-standards.md`.
 
 ## Why this exists
@@ -19,7 +19,7 @@ Adoption status legend: ✅ adopted · ◐ partial/planned · ⬜ not adopted ·
 | **Compaction style** | summarize + tool-result clearing | encrypted latent-state | `/compress` (lossy) | window scale-out | auto/`/smol` | window-aware `compactAgenticMessages`. ✅ |
 | **Out-of-window instruction retention** | system reminders | — | `/memory add` pin | — | Focus-Chain-like | `withPlanReminder` re-injects plan every iteration. ✅ (ahead) |
 | **Prompt caching / cache boundary** | static/dynamic boundary; ⚠️ TTL 1h→5m (2026-03) | prefix cache | prefix cache | n/a (beta) | provider-dependent | `SYSTEM_PROMPT_DYNAMIC_BOUNDARY` mirrored; local prefix-KV ◐ (R6 verify). ⚠️ track TTL. |
-| **Deferred / search-based tool loading** | Tool Search Tool (`defer_loading`, ~85% list cut) | host-deferred catalog observed in Desktop; mid-turn `list_changed` does not refresh the callable registry | all enabled | discovers MCP | per-tool wildcard perms | native and external paths share intent matching; Claude Code/Codex receive the full authorized host catalogue for native lazy attachment, while generic/Grok/unknown clients default to core and may expand with `load_tools`. ✅ server contract; ◐ fresh-host acceptance required per release. |
+| **Deferred / search-based tool loading** | Tool Search Tool (`defer_loading`, ~85% list cut) | host-deferred catalog observed in Desktop; Streamable HTTP omits User-Agent and mid-turn `list_changed` does not refresh the callable registry | all enabled | discovers MCP | per-tool wildcard perms | native and external paths share intent matching; Claude Code/Codex bootstrap with explicit `?tier=full`, while generic/Grok/unknown clients keep core and may expand with `load_tools`. ✅ contract; fresh-host acceptance required per release. |
 | **Code execution / programmatic tool calling** | code-exec w/ MCP (37–98% cut) | sandboxed shell | — | — | — | `run_tool_script` shipped dark ◐ (R4; governed read-only, flag+grant gated, live-verify pending). |
 | **Tool-result cap** | ~25K-token default | — | — | — | — | `tool-result-budget.ts` (native + MCP route). ✅ |
 | **Subagents / context isolation** | Task subagents | subagents | subagents (tool allowlist) | up to 8 parallel | primary+sub | Build Studio specialists; A2A. ✅ |
