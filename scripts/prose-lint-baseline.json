@@ -1964,7 +1964,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 42
+    "textMass": 48
   },
   "apps/web/app/(shell)/workspace/calendar/page.tsx": {
     "vocabulary": 0,
@@ -6690,6 +6690,20 @@
     "readability": 0,
     "longSentences": 0,
     "textMass": 20
+  },
+  "apps/web/components/platform/coworker-identity/ShareIdentity.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 32
+  },
+  "apps/web/components/platform/coworker-identity/TeamsFacetPanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 13
   },
   "apps/web/components/platform/coworker-record/CapabilitiesEditor.tsx": {
     "vocabulary": 0,
