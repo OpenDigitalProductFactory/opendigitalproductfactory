@@ -240,6 +240,7 @@ test("gate-worktree.mjs refuses to run when neither an explicit command, the stu
   cpSync(join(repoRoot, "scripts", "lib", "local-ci-gate-state.mjs"), join(temp, "scripts", "lib", "local-ci-gate-state.mjs"));
   cpSync(join(repoRoot, "scripts", "lib", "evidence-validity-policy.mjs"), join(temp, "scripts", "lib", "evidence-validity-policy.mjs"));
   cpSync(join(repoRoot, "scripts", "lib", "pregate-console.mjs"), join(temp, "scripts", "lib", "pregate-console.mjs"));
+  cpSync(join(repoRoot, "scripts", "lib", "local-convergence-lock.mjs"), join(temp, "scripts", "lib", "local-convergence-lock.mjs"));
   cpSync(join(repoRoot, "scripts", "lib", "local-ci-host-pressure.mjs"), join(temp, "scripts", "lib", "local-ci-host-pressure.mjs"));
   cpSync(join(repoRoot, "scripts", "lib", "agent-identity.mjs"), join(temp, "scripts", "lib", "agent-identity.mjs"));
   cpSync(join(repoRoot, "scripts", "lib", "local-ci-base-freshness.mjs"), join(temp, "scripts", "lib", "local-ci-base-freshness.mjs"));
