@@ -153,6 +153,7 @@ describe("restaurant seating decision", () => {
       id: "overlapping",
       resourceId: "t1",
       startsAt: new Date("2026-07-31T18:30:00.000Z"),
+      // clock-bomb-guard: allow pure interval-overlap test has no wall-clock dependency
       endsAt: new Date("2026-07-31T19:30:00.000Z"),
       lifecycle: "reserved" as const,
       version: 1,
@@ -164,6 +165,7 @@ describe("restaurant seating decision", () => {
           ...overlapping,
           id: "later",
           startsAt: new Date("2026-07-31T20:00:00.000Z"),
+          // clock-bomb-guard: allow pure interval-overlap test has no wall-clock dependency
           endsAt: new Date("2026-07-31T21:00:00.000Z"),
         },
         { ...overlapping, id: "released", lifecycle: "released" },
