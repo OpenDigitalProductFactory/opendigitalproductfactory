@@ -477,17 +477,15 @@ export function deriveDeliverableSensitivity(
 }
 
 /**
- * Map a derived deliverable sensitivity to the ROUTING data-sensitivity for a
- * Build Studio dispatch. Founder ruling (2026-08-12): platform source-code
- * generation is development work, not business data — ordinary builds (low) route
- * at `public` so connected cloud dev tools are eligible; elevated/high escalate to
- * internal/confidential. Content-based payload screening still runs on every
- * request. Interim to BI-0DBDCB77 (a dedicated `development` class needs the
- * duplicated 4-value sensitivity literal consolidated first).
+ * Map deliverable sensitivity to the ROUTING provider-clearance contract.
+ * Founder ruling (2026-08-12): source-code generation is development work, while
+ * business data remains sensitive. Ordinary builds therefore use `development`;
+ * elevated/high briefs retain internal/confidential gates. Payload screening
+ * still runs, so this does not widen the data-leak surface.
  */
 export function mapBuildDeliverableToRoutingSensitivity(
   d: DeliverableSensitivity,
-): "public" | "internal" | "confidential" {
+): "development" | "internal" | "confidential" {
   switch (d) {
     case "high":
       return "confidential";
@@ -495,7 +493,7 @@ export function mapBuildDeliverableToRoutingSensitivity(
       return "internal";
     case "low":
     default:
-      return "public";
+      return "development";
   }
 }
 

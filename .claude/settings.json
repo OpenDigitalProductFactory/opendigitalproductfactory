@@ -61,6 +61,10 @@
         "hooks": [
           {
             "type": "command",
+            "command": "node \"${CLAUDE_PROJECT_DIR}/packages/dpf-skill-pack/hooks/root-clone-guard.mjs\""
+          },
+          {
+            "type": "command",
             "command": "node \"${CLAUDE_PROJECT_DIR}/packages/dpf-skill-pack/hooks/plan-backlog-coverage-guard.mjs\""
           },
           {

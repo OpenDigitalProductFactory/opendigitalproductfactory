@@ -75,6 +75,29 @@ function getProviderConstraintExclusionReason(
  * This is the V2 equivalent of `getExclusionReason()` from pipeline.ts,
  * adapted for RequestContract instead of TaskRequirementContract.
  */
+/**
+ * True when the endpoint's clearance covers the request's sensitivity.
+ *
+ * Business-data levels (public/internal/confidential/restricted) use exact
+ * membership — the closed clearance model where a provider lists every level it
+ * is cleared for. The `development` class (platform source-code generation) is
+ * the one exception: it is the least-sensitive class, so any endpoint cleared for
+ * `public` business content is cleared for it (source code ≤ public data). This
+ * is what lets connected frontier cloud dev tools — cleared for public but never
+ * internal business data — run Build Studio code-gen. An endpoint with no
+ * clearance at all is never eligible.
+ */
+export function endpointClearsSensitivity(
+  ep: EndpointManifest,
+  sensitivity: RequestContract["sensitivity"],
+): boolean {
+  if (ep.sensitivityClearance.includes(sensitivity)) return true;
+  if (sensitivity === "development" && ep.sensitivityClearance.includes("public")) {
+    return true;
+  }
+  return false;
+}
+
 export function getExclusionReasonV2(
   ep: EndpointManifest,
   contract: RequestContract,
@@ -116,8 +139,14 @@ export function getExclusionReasonV2(
     }
   }
 
-  // Sensitivity clearance
-  if (!ep.sensitivityClearance.includes(contract.sensitivity)) {
+  // Sensitivity clearance. Exact-match membership, EXCEPT the development class
+  // (platform source-code generation): an endpoint cleared for `public` business
+  // content is cleared for development work too, since generating source code is
+  // no more sensitive than public data. This keeps the operator's connected
+  // frontier cloud dev tools (cleared for public/approved-cloud, never internal)
+  // eligible for builds without weakening the internal/confidential/restricted
+  // business-data gates. Content-based payload screening still runs downstream.
+  if (!endpointClearsSensitivity(ep, contract.sensitivity)) {
     return `Sensitivity clearance missing for '${contract.sensitivity}'`;
   }
 

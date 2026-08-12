@@ -963,7 +963,7 @@ async function dispatchSpecialist(params: {
     lastResult = await runAgenticLoop({
       chatHistory: [{ role: "user", content: taskPrompt }],
       systemPrompt,
-      sensitivity: "public", // code-gen is dev work, not business data (BI-0DBDCB77)
+      sensitivity: "development", // code clearance; payload screening still applies
       tools: scopedTools,
       toolsForProvider,
       userId,
@@ -1150,7 +1150,7 @@ export async function runBuildOrchestrator(params: {
   const { deriveDeliverableSensitivity, mapBuildDeliverableToRoutingSensitivity } = await import("@/lib/explore/build-process-matrix");
   const buildSensitivity = deriveDeliverableSensitivity({ text: buildContext });
   const preflightConfig = await getBuildStudioConfig({
-    // low→public, elevated→internal, high→confidential (BI-0DBDCB77).
+    // low→development; elevated→internal; high→confidential (founder ruling).
     sensitivity: mapBuildDeliverableToRoutingSensitivity(buildSensitivity),
   });
 
