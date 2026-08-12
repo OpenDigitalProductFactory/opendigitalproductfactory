@@ -11,10 +11,13 @@
 // business doctrine (archetype-business-context.ts), OrgSettings locale/currency
 // (org-locale.ts), and the archetype stance vectors.
 //
-// The rendered instructions also tell the agent to declare
-// decisionDomain="org-business" on business decisions, which activates the
-// route-on-domain engine (BI-HDLEMP-01) so those decisions are scored against
-// the organization's WWWD profile rather than founder/platform doctrine.
+// The rendered instructions also route the agent's decisions to the right gate:
+// a BUSINESS decision goes to evaluate_org_business_decision (scored against the
+// organization's WWWD profile), a PLATFORM decision to principle_decide (the
+// founder kernel). Live verification (BI-HDLEMP-07) showed principle_decide does
+// not honor a decisionDomain hint — the caller-context route-on-domain axis
+// (BI-HDLEMP-01) exists but has no consumer on that tool — so the directive
+// names the dedicated org-business gate, which reaches WWWD by construction.
 
 import {
   resolveBusinessProfile,
@@ -171,7 +174,7 @@ export function formatOrgContextInstructions(
     `How we decide: ${p.howWeDecide}`,
     `Supply/vendor posture: ${p.supplyChain}`,
     `Standing stances (owner-editable starters):\n${stances}`,
-    `DECISION ROUTING: when you make a decision about operating THIS organization's business (pricing, staffing, customers, spend, growth), you act under the organization's own doctrine — call decision tools (e.g. principle_decide) with decisionDomain="org-business" so they are governed by the organization's WWWD profile, not platform/founder doctrine. For decisions about building the DPF platform itself, use decisionDomain="platform-development".`,
+    `DECISION ROUTING: for a decision about operating THIS organization's business (pricing, staffing, customers, spend, growth), call the evaluate_org_business_decision tool — it is scored against the organization's own recorded stance and doctrine (its WWWD profile) and escalates to a human when the organization's confidence is not high enough for the risk. For a decision about building the DPF platform itself, use principle_decide, which is governed by the platform/founder kernel.`,
   ]
     .filter(Boolean)
     .join("\n\n");
