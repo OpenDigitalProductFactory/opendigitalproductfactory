@@ -88,6 +88,21 @@ for arg in "$@"; do
 done
 [ -n "$DOCKER_LOG" ] && printf '%s\\n' "$*" >> "$DOCKER_LOG"
 case "$*" in
+  *"recover-human-principal-backfill-migration.mjs --verify-rolled-back"*)
+    [ "\${DPF_TEST_PRINCIPAL_VERIFY_FAIL:-no}" = "yes" ] && exit 1
+    printf "verified"
+    ;;
+  *"prisma migrate resolve --rolled-back 20260812110000_backfill_missing_human_principals"*)
+    [ "\${DPF_TEST_PRINCIPAL_RESOLVE_FAIL:-no}" = "yes" ] && exit 1
+    ;;
+  *"recover-human-principal-backfill-migration.mjs"*)
+    [ "\${DPF_TEST_PRINCIPAL_RECOVERY_DECISION:-not-needed}" = "blocked" ] && exit 1
+    if [ "\${DPF_TEST_PRINCIPAL_RECOVERY_DECISION:-not-needed}" = "recover" ]; then
+      printf "recover:11111111-1111-4111-8111-111111111111"
+    else
+      printf "not-needed"
+    fi
+    ;;
   *"recover-inventory-snapshot-migration.mjs --verify-rolled-back"*) printf "verified" ;;
   *"recover-inventory-snapshot-migration.mjs"*)
     [ "\${DPF_TEST_RECOVERY_DECISION:-not-needed}" = "blocked" ] && exit 1
@@ -129,6 +144,9 @@ function runPromote(opts: {
   composeEnvFile?: string;
   dockerLog?: string;
   recoveryDecision?: "recover" | "not-needed" | "blocked";
+  principalRecoveryDecision?: "recover" | "not-needed" | "blocked";
+  principalResolveFails?: boolean;
+  principalVerifyFails?: boolean;
 }): { status: number | null; stdout: string; stderr: string } {
   const stateDir = join(opts.backup, "state");
   const secret = "s".repeat(32);
@@ -168,6 +186,11 @@ function runPromote(opts: {
     ...(opts.recoveryDecision
       ? [`export DPF_TEST_RECOVERY_DECISION=${shellQuote(opts.recoveryDecision)}`]
       : []),
+    ...(opts.principalRecoveryDecision
+      ? [`export DPF_TEST_PRINCIPAL_RECOVERY_DECISION=${shellQuote(opts.principalRecoveryDecision)}`]
+      : []),
+    ...(opts.principalResolveFails ? ["export DPF_TEST_PRINCIPAL_RESOLVE_FAIL=yes"] : []),
+    ...(opts.principalVerifyFails ? ["export DPF_TEST_PRINCIPAL_VERIFY_FAIL=yes"] : []),
     ...(opts.composeEnvFile
       ? [`export PROMOTE_COMPOSE_ENV_FILE=${shellQuote(toBashPath(opts.composeEnvFile))}`]
       : []),
@@ -303,7 +326,7 @@ describe.skipIf(!BASH_OK || !GIT_OK)("promote.sh — real-script functional run"
       mkdirSync(emptyShaBin, { recursive: true });
       writeFileSync(
         join(emptyShaBin, "docker"),
-        '#!/bin/sh\ncase "$*" in\n  *"recover-inventory-snapshot-migration.mjs"*) printf "not-needed" ;;\n  *"/app/.dpf-source-content-hash"*) printf "deadbeefhash" ;;\nesac\nexit 0\n',
+        '#!/bin/sh\ncase "$*" in\n  *"recover-human-principal-backfill-migration.mjs"*) printf "not-needed" ;;\n  *"recover-inventory-snapshot-migration.mjs"*) printf "not-needed" ;;\n  *"/app/.dpf-source-content-hash"*) printf "deadbeefhash" ;;\nesac\nexit 0\n',
       );
       // /sha → empty (the bug); other probes → ok.
       writeFileSync(
@@ -391,6 +414,117 @@ describe.skipIf(!BASH_OK || !GIT_OK)("promote.sh — real-script functional run"
     }
   }, PROMOTE_TEST_TIMEOUT_MS);
 
+  it("resolves the allowlisted human-principal failure before normal migrate deploy", () => {
+    const { root, source, backup, fakeBin, head } = makeScratch();
+    const dockerLog = join(root, "docker.log");
+    try {
+      const r = runPromote({
+        source,
+        backup,
+        targetSha: head,
+        fakeBin,
+        dockerLog,
+        principalRecoveryDecision: "recover",
+      });
+
+      expect(r.status).toBe(0);
+      const calls = readFileSync(dockerLog, "utf8");
+      const check = calls.indexOf("recover-human-principal-backfill-migration.mjs");
+      const resolve = calls.indexOf(
+        "prisma migrate resolve --rolled-back 20260812110000_backfill_missing_human_principals",
+      );
+      const verify = calls.indexOf(
+        "recover-human-principal-backfill-migration.mjs --verify-rolled-back",
+      );
+      const deploy = calls.indexOf("prisma migrate deploy");
+      expect(check).toBeGreaterThanOrEqual(0);
+      expect(resolve).toBeGreaterThan(check);
+      expect(verify).toBeGreaterThan(resolve);
+      expect(deploy).toBeGreaterThan(verify);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  }, PROMOTE_TEST_TIMEOUT_MS);
+
+  it("stops before verification and deployment when principal rollback resolution fails", () => {
+    const { root, source, backup, fakeBin, head } = makeScratch();
+    const dockerLog = join(root, "docker.log");
+    try {
+      const r = runPromote({
+        source,
+        backup,
+        targetSha: head,
+        fakeBin,
+        dockerLog,
+        principalRecoveryDecision: "recover",
+        principalResolveFails: true,
+      });
+
+      expect(r.status).not.toBe(0);
+      const calls = readFileSync(dockerLog, "utf8");
+      expect(calls).toContain(
+        "prisma migrate resolve --rolled-back 20260812110000_backfill_missing_human_principals",
+      );
+      expect(calls).not.toContain(
+        "recover-human-principal-backfill-migration.mjs --verify-rolled-back",
+      );
+      expect(calls).not.toContain("prisma migrate deploy");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  }, PROMOTE_TEST_TIMEOUT_MS);
+
+  it("stops before deployment when principal post-rollback verification fails", () => {
+    const { root, source, backup, fakeBin, head } = makeScratch();
+    const dockerLog = join(root, "docker.log");
+    try {
+      const r = runPromote({
+        source,
+        backup,
+        targetSha: head,
+        fakeBin,
+        dockerLog,
+        principalRecoveryDecision: "recover",
+        principalVerifyFails: true,
+      });
+
+      expect(r.status).not.toBe(0);
+      const calls = readFileSync(dockerLog, "utf8");
+      expect(calls).toContain(
+        "recover-human-principal-backfill-migration.mjs --verify-rolled-back",
+      );
+      expect(calls).not.toContain("prisma migrate deploy");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  }, PROMOTE_TEST_TIMEOUT_MS);
+
+  it("fails before migrate deploy when human-principal recovery cannot prove safety", () => {
+    const { root, source, backup, fakeBin, head } = makeScratch();
+    const dockerLog = join(root, "docker.log");
+    try {
+      const r = runPromote({
+        source,
+        backup,
+        targetSha: head,
+        fakeBin,
+        dockerLog,
+        principalRecoveryDecision: "blocked",
+      });
+
+      expect(r.status).not.toBe(0);
+      expect(r.stderr).toContain(
+        "human-principal migration recovery did not prove a safe state",
+      );
+      const calls = readFileSync(dockerLog, "utf8");
+      expect(calls).toContain("recover-human-principal-backfill-migration.mjs");
+      expect(calls).not.toContain("prisma migrate deploy");
+      expect(calls).not.toContain("up -d --no-deps --force-recreate portal");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  }, PROMOTE_TEST_TIMEOUT_MS);
+
   it("fails before migrate deploy when snapshot recovery cannot prove safety", () => {
     const { root, source, backup, fakeBin, head } = makeScratch();
     const dockerLog = join(root, "docker.log");
@@ -430,7 +564,7 @@ describe.skipIf(!BASH_OK || !GIT_OK)("promote.sh — real-script functional run"
       mkdirSync(bin, { recursive: true });
       writeFileSync(
         join(bin, "docker"),
-        '#!/bin/sh\n[ -n "$DOCKER_LOG" ] && printf "%s\\n" "$*" >> "$DOCKER_LOG"\ncase "$*" in\n  *"recover-inventory-snapshot-migration.mjs"*) printf "not-needed" ;;\n  *"build sandbox"*) exit 1 ;;\n  *"/app/.dpf-source-content-hash"*) printf "deadbeefhash" ;;\nesac\nexit 0\n',
+        '#!/bin/sh\n[ -n "$DOCKER_LOG" ] && printf "%s\\n" "$*" >> "$DOCKER_LOG"\ncase "$*" in\n  *"recover-human-principal-backfill-migration.mjs"*) printf "not-needed" ;;\n  *"recover-inventory-snapshot-migration.mjs"*) printf "not-needed" ;;\n  *"build sandbox"*) exit 1 ;;\n  *"/app/.dpf-source-content-hash"*) printf "deadbeefhash" ;;\nesac\nexit 0\n',
       );
       writeFileSync(
         join(bin, "curl"),
@@ -466,7 +600,7 @@ describe.skipIf(!BASH_OK || !GIT_OK)("promote.sh — real-script functional run"
       // present ("1"); everything else behaves like the default fake.
       writeFileSync(
         join(bin, "docker"),
-        '#!/bin/sh\n[ -n "$DOCKER_LOG" ] && printf "%s\\n" "$*" >> "$DOCKER_LOG"\ncase "$*" in\n  *"recover-inventory-snapshot-migration.mjs"*) printf "not-needed" ;;\n  *pg_available_extensions*) printf "1" ;;\n  *"/app/.dpf-source-content-hash"*) printf "deadbeefhash" ;;\nesac\nexit 0\n',
+        '#!/bin/sh\n[ -n "$DOCKER_LOG" ] && printf "%s\\n" "$*" >> "$DOCKER_LOG"\ncase "$*" in\n  *"recover-human-principal-backfill-migration.mjs"*) printf "not-needed" ;;\n  *"recover-inventory-snapshot-migration.mjs"*) printf "not-needed" ;;\n  *pg_available_extensions*) printf "1" ;;\n  *"/app/.dpf-source-content-hash"*) printf "deadbeefhash" ;;\nesac\nexit 0\n',
       );
       writeFileSync(
         join(bin, "curl"),
