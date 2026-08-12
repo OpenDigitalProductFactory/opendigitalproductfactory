@@ -72,12 +72,12 @@ Each carrier goes through the identical 5 steps (that repetition is the "repeata
 
 | Phase | Work | BI mapping |
 |---|---|---|
-| **P0** Contract | Extract `WorkUnit` + `toWorkUnit()` interface; declare single projection authority | NEW BI (contract) + reconcile **BI-BB13B599** vs `OwnerChangeView`/**BI-8B601F2F** |
-| **P1** Anchor | Canonical WorkItem + `workItemId` FK + join + terminal reconcile | NEW BI (anchor) ⊃ **BI-C2EB2C6B**; extend **BI-5FDBF786** |
+| **P0** Contract | Extract `WorkUnit` + `toWorkUnit()` interface; declare single projection authority | **BI-5659D187** (contract + single authority) — reconciles **BI-BB13B599** vs `OwnerChangeView`/**BI-8B601F2F** |
+| **P1** Anchor | Canonical WorkItem + `workItemId` FK + join + terminal reconcile | **BI-650994D7** (anchor) ⊃ **BI-C2EB2C6B**; extends **BI-5FDBF786** |
 | **P2** Adapters | `toWorkUnit()` for capsule/workitem/taskrun; fold build-local projectors | reframe **BI-C41AB195** (AgentSession rollup → room), **BI-B416B12A** (comments/@mention/presence → room) |
-| **P3** Gate + Skill | Conformance gate CI check + `dpf-bring-work-under-formula` skill | NEW BI (gate) + NEW skill |
+| **P3** Gate + Skill | Conformance gate CI check + `dpf-bring-work-under-formula` skill | **BI-BC6099FE** (gate + paved-road skill) |
 | **P4** Terminology/UX | Demote "capsule"; orphan-free rooms; unify surfaces | reframe under **BI-5EA94BD1** lineage |
-| **P5** Principle | Kernel principle `universal-work-formula.md` + `wiki_query` | NEW BI (principle) — route via `principle_decide` first |
+| **P5** Principle | Kernel principle `universal-work-formula.md` + `wiki_query` | **BI-321FA58B** (principle) — kernel-ratified DI-BF10BF48EED5 |
 
 Write-model-first ordering (P1 anchor before adapters), matching the memo's proven sequencing.
 
@@ -101,7 +101,7 @@ Write-model-first ordering (P1 anchor before adapters), matching the memo's prov
 
 **Venue:** the Linux Foundation agentic cluster (A2A + AGNTCY), which already positions as A2A/MCP-interoperable — the plausible home for a work-case layer *above* them. Governed under the existing MCP/A2A adoption epic **EP-E1F1DB58** (which already commits to the "coded spine · AI-reasoned fulfillment · human-gated consequences · coordinate-by-proposal-never-remote-write" boundary — AWC extends that, doesn't restate it).
 
-**Standard-candidate BI:** file "AWC standard candidate — externalize the WorkUnit contract as an A2A/MCP/CMMN composition" under EP-E1F1DB58, sequenced **after** P3 (gate) proves the contract. Route the extend-vs-author decision through `principle_decide` (WWMD) for a ratified ledger before committing authorship effort.
+**Standard-candidate BI:** **BI-AADFFCAF** ("AWC standard candidate — externalize the WorkUnit contract as an A2A/MCP/CMMN composition") under **EP-E1F1DB58**, sequenced **after** P3 (gate) proves the contract. Extend-vs-author ratified via `principle_decide` (WWMD) — **DI-149854BD4A55**, author-awc-composition, composite 11.61, margin 5.84, HIGH.
 
 ---
 
