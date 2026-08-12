@@ -18,6 +18,7 @@
 import { prisma } from "@dpf/db";
 import { COWORKER_AGENT_SEEDS } from "@dpf/db/workforce-seed";
 import { runAgenticLoop } from "@/lib/tak/agentic-loop";
+import type { RouteSensitivity } from "@/lib/agent-sensitivity";
 import {
   resolveAutonomousWorkAgent,
   resolveAutonomousWorkTools,
