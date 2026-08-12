@@ -168,6 +168,26 @@ history, and the intended surviving record. A merged account is retained as a
 superseded tombstone and excluded from normal lists; **Unmerge** is available
 when the merge itself was wrong.
 
+### Correct or Retire an Account
+
+You can keep the record truthful from the account page itself, without touching
+the database:
+
+- **Edit** — change the account name, status, industry, website, and notes. Use
+  the status field to reclassify a mislabelled record — for example move an
+  account that was set to **Active** in error back to **Prospect**.
+- **Archive** — retire an account with no surviving successor. It is hidden from
+  active account lists but keeps its full history and stays reachable by direct
+  link, so you can change its status back later. Nothing is deleted.
+- **Remove an opportunity** — strip a fabricated or erroneous opportunity
+  entirely, with a confirm step. If the opportunity already has quotes, void
+  those quotes first and then remove it.
+- **Cancel a support contract** — cancel a subscription from the contract card
+  when the deal it represents is not real.
+
+Every one of these actions is recorded on the account timeline, so a correction
+is auditable rather than silent.
+
 ## Evidence and Recovery Checklist
 
 Before advancing a customer record, confirm:
