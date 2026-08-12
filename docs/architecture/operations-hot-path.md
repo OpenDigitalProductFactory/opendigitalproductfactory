@@ -82,3 +82,38 @@ constraints; they do not fork this hot-path contract.
 
 Historical metric providers and reporting modules are forbidden dependencies of
 the Operations hot path. A static boundary test enforces that separation.
+
+## Historical Performance boundary
+
+`BusinessMetricRollup` is the inverse side of that boundary: a tenant-scoped,
+definition-versioned projection keyed by metric, local-business period, and
+dimensions. An hourly idempotent job recomputes the current and prior business
+day from canonical domain sources. The `/performance` request reads only this
+bounded indexed projection; it never aggregates bookings, service turns,
+allocations, or resources on demand.
+
+Metric definitions and archetype packs remain code-owned in
+`packages/storefront-templates`; the database stores values, availability,
+definition version, source watermark, model-level lineage, and computation time.
+Unavailable source contracts are persisted as unavailable with a reason, never
+as zero. A failed job writes nothing, so the prior valid snapshot remains visible
+with a delayed-freshness state. Client boundaries receive only aggregate trend or
+export projections; source lineage and tenant identifiers stay server-side.
+
+## Design grounding
+
+- Existing specs/plans reviewed:
+  - `docs/superpowers/specs/2026-07-28-business-operations-and-performance-views-design.md`
+  - `docs/superpowers/plans/2026-07-28-business-operations-and-performance-views-plan.md`
+- Current code substrate reviewed:
+  - `apps/web/lib/performance/business-performance-provider.ts`
+  - `packages/storefront-templates/src/business-view-profile.ts`
+  - `apps/web/components/ui/report-kit/README.md`
+- Source of truth:
+  - `BusinessMetricRollup` is the bounded historical read model;
+    `PERFORMANCE_METRIC_DEFINITIONS` owns metric semantics and source owners.
+- Decision:
+  - extend the existing `/performance` route with report-kit progressive
+    disclosure and preserve the hard dependency boundary from Operations;
+    do not create another dashboard home or perform source aggregation during
+    an owner request.

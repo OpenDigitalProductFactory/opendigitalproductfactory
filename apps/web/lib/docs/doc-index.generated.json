@@ -1719,7 +1719,9 @@
         "read-contract",
         "command-contract",
         "performance-and-evidence",
-        "reuse-boundary"
+        "reuse-boundary",
+        "historical-performance-boundary",
+        "design-grounding"
       ]
     },
     "docs/architecture/orientation.md": {

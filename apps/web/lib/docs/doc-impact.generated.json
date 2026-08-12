@@ -800,6 +800,9 @@
     "apps/web/lib/operate/sole-platform-readiness.ts": [
       "docs/architecture/2026-07-27-platform-adequacy-roadmap-backlog-map.md"
     ],
+    "apps/web/lib/performance/business-performance-provider.ts": [
+      "docs/architecture/operations-hot-path.md"
+    ],
     "apps/web/lib/platform-runtime/capability-service-projection.ts": [
       "docs/architecture/capability-driven-runtime-profiles.md"
     ],
@@ -1321,6 +1324,9 @@
     ],
     "packages/storefront-templates/src/archetypes/trades-maintenance.ts": [
       "docs/personas/dale-hvac.md"
+    ],
+    "packages/storefront-templates/src/business-view-profile.ts": [
+      "docs/architecture/operations-hot-path.md"
     ],
     "packages/storefront-templates/src/twin-profile.ts": [
       "docs/architecture/operational-precedent-corpus.md"
@@ -2209,6 +2215,10 @@
       "apps/web/lib/design-intelligence.ts",
       "packages/db/src/portfolio-sources/vertical-incumbents-manifest.ts",
       "packages/storefront-templates/src/twin-profile.ts"
+    ],
+    "docs/architecture/operations-hot-path.md": [
+      "apps/web/lib/performance/business-performance-provider.ts",
+      "packages/storefront-templates/src/business-view-profile.ts"
     ],
     "docs/architecture/orientation.md": [
       ".github/workflows/migration-safety-guard.yml",

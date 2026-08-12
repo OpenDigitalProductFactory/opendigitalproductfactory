@@ -4677,6 +4677,7 @@ model Organization {
   storefrontConfig                  StorefrontConfig?
   stockItems                        StockItem[]
   operationalSceneLayouts           OperationalSceneLayout[]
+  businessMetricRollups              BusinessMetricRollup[]            @relation("BusinessMetricRollupOrganization")
   hospitalityResources              HospitalityResource[]              @relation("HospitalityResourceOrganization")
   hospitalityCapacityPools          HospitalityCapacityPool[]          @relation("HospitalityCapacityPoolOrganization")
   hospitalityResourceAvailability   HospitalityResourceAvailability[]  @relation("HospitalityAvailabilityOrganization")
@@ -13846,6 +13847,49 @@ model QueueMetricSnapshot {
   @@unique([queueKey, period])
   @@index([queueKey, period])
   @@index([period])
+}
+
+enum BusinessMetricAvailability {
+  available
+  unavailable
+}
+
+enum PerformanceMetricUnit {
+  count
+  currency
+  percent
+  rate
+  duration
+}
+
+/// Tenant-scoped, definition-versioned historical metric read model. Source
+/// systems remain authoritative; this table exists so owner/manager reads never
+/// run historical aggregation on the operational hot path.
+model BusinessMetricRollup {
+  id                  String   @id @default(cuid())
+  organizationId      String
+  metricKey           String
+  periodStart         DateTime
+  periodEnd           DateTime
+  timezone            String
+  dimensionsHash      String
+  dimensions          Json
+  value               Decimal? @db.Decimal(20, 6)
+  unit                PerformanceMetricUnit
+  availability        BusinessMetricAvailability
+  unavailableReason   String?
+  definitionVersion   String
+  sourceWatermark     DateTime
+  sourceLineage       Json
+  computedAt          DateTime @default(now())
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  organization Organization @relation("BusinessMetricRollupOrganization", fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, metricKey, periodStart, periodEnd, dimensionsHash, definitionVersion], map: "business_metric_rollup_identity")
+  @@index([organizationId, periodStart, periodEnd])
+  @@index([organizationId, metricKey, sourceWatermark])
 }
 
 // ─── Prompt Templates ─────────────────────────────────────────────────────────
