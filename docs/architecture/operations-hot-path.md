@@ -100,6 +100,18 @@ as zero. A failed job writes nothing, so the prior valid snapshot remains visibl
 with a delayed-freshness state. Client boundaries receive only aggregate trend or
 export projections; source lineage and tenant identifiers stay server-side.
 
+### Watched analysis
+
+Watched questions reuse this historical boundary; they do not create another
+analytics store or read Operations sources directly. An owner first reviews an
+inspectable `BusinessAnalysisPlan`, including its metric, comparison, cadence,
+materiality threshold, and evidence limits. Only the accepted plan fingerprint
+may become a `ScheduledAgentTask`. Each run resolves the authenticated current
+organization, evaluates the bounded rollup projection, and writes `TaskRun`
+evidence only when a typed material change is present. An unchanged result is a
+successful quiet run, not a fabricated finding. See the
+[watched-analysis design](../superpowers/specs/2026-08-12-inspectable-watched-business-analysis-design.md).
+
 ## Design grounding
 
 - Existing specs/plans reviewed:
@@ -114,6 +126,7 @@ export projections; source lineage and tenant identifiers stay server-side.
     `PERFORMANCE_METRIC_DEFINITIONS` owns metric semantics and source owners.
 - Decision:
   - extend the existing `/performance` route with report-kit progressive
-    disclosure and preserve the hard dependency boundary from Operations;
+    disclosure, including inspectable watched questions, and preserve the hard
+    dependency boundary from Operations;
     do not create another dashboard home or perform source aggregation during
     an owner request.

@@ -36,6 +36,22 @@ export const PERFORMANCE_METRIC_SENSITIVITIES = [
 ] as const;
 export type PerformanceMetricSensitivity = (typeof PERFORMANCE_METRIC_SENSITIVITIES)[number];
 
+export const PERFORMANCE_MATERIALITY_MODES = ["absolute", "relative"] as const;
+export type PerformanceMaterialityMode = (typeof PERFORMANCE_MATERIALITY_MODES)[number];
+
+export const PERFORMANCE_MATERIALITY_DIRECTIONS = [
+  "increase",
+  "decrease",
+  "either",
+] as const;
+export type PerformanceMaterialityDirection =
+  (typeof PERFORMANCE_MATERIALITY_DIRECTIONS)[number];
+
+export interface PerformanceMetricMaterialityCapability {
+  modes: readonly PerformanceMaterialityMode[];
+  directions: readonly PerformanceMaterialityDirection[];
+}
+
 export const PERFORMANCE_CALCULATION_KINDS = [
   "sum",
   "count",
@@ -76,6 +92,7 @@ export interface PerformanceMetricDefinition {
   comparison: PerformanceMetricComparison;
   drilldownRoute?: string;
   sensitivity: PerformanceMetricSensitivity;
+  materiality: PerformanceMetricMaterialityCapability;
 }
 
 export interface PerformanceMetricPack {

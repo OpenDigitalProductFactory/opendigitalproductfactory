@@ -112,6 +112,10 @@ const metric = (
   aggregation,
   comparison,
   sensitivity,
+  materiality: {
+    modes: ["absolute", "relative"],
+    directions: ["increase", "decrease", "either"],
+  },
   ...(drilldownRoute ? { drilldownRoute } : {}),
 });
 

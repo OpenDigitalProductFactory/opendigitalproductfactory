@@ -9,9 +9,11 @@ describe("scheduled agent task kinds", () => {
     expect(SCHEDULED_AGENT_TASK_KINDS).toEqual([
       "product-intelligence-watch",
       "product-management-playbook",
+      "business-analysis-watch",
     ]);
     expect(isScheduledAgentTaskKind("product-intelligence-watch")).toBe(true);
     expect(isScheduledAgentTaskKind("product-management-playbook")).toBe(true);
+    expect(isScheduledAgentTaskKind("business-analysis-watch")).toBe(true);
     expect(isScheduledAgentTaskKind("prompt-defined-work")).toBe(false);
   });
 });

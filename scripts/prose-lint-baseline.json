@@ -1110,10 +1110,10 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 25
+    "textMass": 27
   },
   "apps/web/app/(shell)/finance/spend/page.tsx": {
-    "vocabulary": 0,
+    "vocabulary": 1,
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
@@ -1278,7 +1278,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 27
+    "textMass": 25
   },
   "apps/web/app/(shell)/platform/ai/agent/[agentId]/page.tsx": {
     "vocabulary": 0,
@@ -1761,7 +1761,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 23
+    "textMass": 44
   },
   "apps/web/app/(shell)/portfolio/product/[id]/architecture/page.tsx": {
     "vocabulary": 0,
@@ -1817,7 +1817,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 2
+    "textMass": 4
   },
   "apps/web/app/(shell)/portfolio/product/[id]/offerings/page.tsx": {
     "vocabulary": 0,
@@ -1894,7 +1894,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 16
+    "textMass": 21
   },
   "apps/web/app/(shell)/storefront/settings/business/page.tsx": {
     "vocabulary": 0,
@@ -1967,11 +1967,11 @@
     "textMass": 48
   },
   "apps/web/app/(shell)/workforce/page.tsx": {
-    "vocabulary": 1,
+    "vocabulary": 0,
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 44
+    "textMass": 23
   },
   "apps/web/app/(shell)/workspace/calendar/page.tsx": {
     "vocabulary": 0,
@@ -4974,7 +4974,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 4
+    "textMass": 2
   },
   "apps/web/components/employee/HrUserLifecyclePanel.tsx": {
     "vocabulary": 0,
@@ -4988,7 +4988,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 21
+    "textMass": 16
   },
   "apps/web/components/employee/LifecycleEventPanel.tsx": {
     "vocabulary": 0,
@@ -5625,7 +5625,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 108
+    "textMass": 112
   },
   "apps/web/components/inventory/PortfolioQualityIssuesPanel.tsx": {
     "vocabulary": 0,
@@ -6082,12 +6082,19 @@
     "longSentences": 0,
     "textMass": 19
   },
+  "apps/web/components/performance/BusinessAnalysisWorkspace.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 154
+  },
   "apps/web/components/performance/BusinessPerformanceDashboard.tsx": {
     "vocabulary": 0,
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 112
+    "textMass": 108
   },
   "apps/web/components/performance/PerformanceTrendPanel.tsx": {
     "vocabulary": 0,
