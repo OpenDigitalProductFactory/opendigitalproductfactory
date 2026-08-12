@@ -32,12 +32,17 @@ export const CUSTOMER_SITE_STATUSES = [
 ] as const;
 export type CustomerSiteStatus = (typeof CUSTOMER_SITE_STATUSES)[number];
 
-/** Tombstone statuses excluded from default list/typeahead reads. */
-export const CUSTOMER_TOMBSTONE_STATUSES = ["superseded"] as const;
+/**
+ * Statuses excluded from default list/typeahead reads: `superseded` (merged into
+ * a survivor) and `archived` (operator-retired soft-delete, BI-15AC1B33). Both
+ * remain resolvable by direct id — archiving hides an account from active lists
+ * without destroying it or its history.
+ */
+export const CUSTOMER_TOMBSTONE_STATUSES = ["superseded", "archived"] as const;
 
 /**
- * Default-read where fragment: excludes merge tombstones. Spread into the
- * `where` of any CustomerAccount/CustomerSite list or typeahead query that
+ * Default-read where fragment: excludes tombstoned + archived rows. Spread into
+ * the `where` of any CustomerAccount/CustomerSite list or typeahead query that
  * has no explicit status filter of its own.
  */
 export const EXCLUDE_TOMBSTONED = {

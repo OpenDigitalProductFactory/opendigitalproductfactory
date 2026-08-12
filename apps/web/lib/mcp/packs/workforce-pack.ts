@@ -350,6 +350,16 @@ async function createEmployee(params: Record<string, unknown>, userId: string): 
       },
     },
   });
+
+  // Identity spine: every human-creation path must produce a linked human
+  // Principal, same as the governed People-screen createEmployeeProfile path
+  // (BI-4150F4D6). syncEmployeePrincipal is idempotent; a sync failure must not
+  // orphan the created employee, so it is best-effort and logged.
+  const { syncEmployeePrincipal } = await import("@/lib/identity/principal-linking");
+  await syncEmployeePrincipal(employee.id).catch((err: unknown) => {
+    console.error("[workforce-pack.createEmployee] principal sync failed", err);
+  });
+
   return {
     success: true,
     entityId: employee.employeeId,

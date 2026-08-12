@@ -99,7 +99,7 @@ export default async function ShellLayout({ children }: { children: React.ReactN
 
       const emailName = user.email?.split("@")[0] ?? "Admin";
       const employeeId = `EMP-${Date.now().toString(36).toUpperCase()}`;
-      await prisma.employeeProfile.create({
+      const bootstrapProfile = await prisma.employeeProfile.create({
         data: {
           employeeId,
           userId: user.id,
@@ -119,10 +119,25 @@ export default async function ShellLayout({ children }: { children: React.ReactN
             },
           },
         },
+        select: { id: true },
       }).catch((err: unknown) => {
         // Unique constraint race — another request already created it
         console.warn("[bootstrap-employee]", err);
+        return null;
       });
+
+      // Identity spine: the auto-provisioned owner/admin must get a linked human
+      // Principal, same as the governed People-screen path (BI-4150F4D6).
+      // syncEmployeePrincipal is idempotent and converges onto any principal the
+      // user already has via the shared 'user' alias.
+      if (bootstrapProfile) {
+        const { syncEmployeePrincipal } = await import(
+          "@/lib/identity/principal-linking"
+        );
+        await syncEmployeePrincipal(bootstrapProfile.id).catch((err: unknown) => {
+          console.error("[bootstrap-employee] principal sync failed", err);
+        });
+      }
     }
   }
 

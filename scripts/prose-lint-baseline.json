@@ -760,7 +760,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 98
+    "textMass": 97
   },
   "apps/web/app/(shell)/employee/recruiting/page.tsx": {
     "vocabulary": 0,
@@ -1110,10 +1110,10 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 27
+    "textMass": 25
   },
   "apps/web/app/(shell)/finance/spend/page.tsx": {
-    "vocabulary": 1,
+    "vocabulary": 0,
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
@@ -1761,7 +1761,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 44
+    "textMass": 23
   },
   "apps/web/app/(shell)/portfolio/product/[id]/architecture/page.tsx": {
     "vocabulary": 0,
@@ -1817,7 +1817,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 4
+    "textMass": 2
   },
   "apps/web/app/(shell)/portfolio/product/[id]/offerings/page.tsx": {
     "vocabulary": 0,
@@ -1894,7 +1894,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 21
+    "textMass": 16
   },
   "apps/web/app/(shell)/storefront/settings/business/page.tsx": {
     "vocabulary": 0,
@@ -4521,12 +4521,19 @@
     "longSentences": 0,
     "textMass": 34
   },
+  "apps/web/components/customer/AccountAdminActions.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 14
+  },
   "apps/web/components/customer/AccountLifecycleActions.tsx": {
     "vocabulary": 0,
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 12
+    "textMass": 16
   },
   "apps/web/components/customer/AcquisitionSignalRouter.tsx": {
     "vocabulary": 0,
@@ -4688,6 +4695,13 @@
     "readability": 0,
     "longSentences": 0,
     "textMass": 3
+  },
+  "apps/web/components/customer/RemoveOpportunityButton.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 5
   },
   "apps/web/components/customer/RevenueCockpit.tsx": {
     "vocabulary": 0,
@@ -5625,7 +5639,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 112
+    "textMass": 108
   },
   "apps/web/components/inventory/PortfolioQualityIssuesPanel.tsx": {
     "vocabulary": 0,
@@ -5793,7 +5807,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 22
+    "textMass": 41
   },
   "apps/web/components/monitoring/PortalHealthSummary.tsx": {
     "vocabulary": 0,
@@ -7851,7 +7865,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 218
+    "textMass": 217
   },
   "apps/web/components/twin/rooms/RoomsOperations.tsx": {
     "vocabulary": 0,

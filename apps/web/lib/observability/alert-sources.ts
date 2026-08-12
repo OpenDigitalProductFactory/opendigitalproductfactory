@@ -20,6 +20,27 @@ const PROMETHEUS_URL = process.env.PROMETHEUS_URL || "http://prometheus:9090";
 const LOKI_URL = process.env.LOKI_URL || "http://loki:3100";
 const DEFAULT_TIMEOUT_MS = 4_000;
 
+/**
+ * True iff a Prometheus scrape endpoint is explicitly configured for this
+ * install. The module falls back to the in-cluster hostname
+ * `http://prometheus:9090`, which does not resolve on a fresh/local topology
+ * that ships no monitoring stack — so the fallback must NOT be read as
+ * "configured". Only an explicit PROMETHEUS_URL counts. (BI-63FF58D2)
+ */
+export function isPrometheusConfigured(): boolean {
+  return Boolean(process.env.PROMETHEUS_URL?.trim());
+}
+
+/**
+ * True iff ANY monitoring backend (Prometheus metrics or the Loki log ruler) is
+ * explicitly configured. Drives the "not configured" vs "offline" distinction
+ * in the operator health chrome: an install with no monitoring target shows a
+ * neutral "not configured" state, never an alarming "offline" one. (BI-63FF58D2)
+ */
+export function isMonitoringConfigured(): boolean {
+  return isPrometheusConfigured() || Boolean(process.env.LOKI_URL?.trim());
+}
+
 export type AlertSourceSystem = "prometheus" | "loki-ruler";
 
 /**

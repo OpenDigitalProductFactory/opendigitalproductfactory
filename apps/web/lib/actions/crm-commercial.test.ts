@@ -8,6 +8,15 @@ vi.mock("@dpf/db", () => ({
     opportunity: {
       findUnique: vi.fn(),
       update: vi.fn(),
+      delete: vi.fn(),
+    },
+    customerAccount: {
+      findUnique: vi.fn(),
+      update: vi.fn(),
+    },
+    subscription: {
+      findUnique: vi.fn(),
+      update: vi.fn(),
     },
     quote: {
       findUnique: vi.fn(),
@@ -64,6 +73,12 @@ vi.mock(
 
 import { prisma } from "@dpf/db";
 import { createQuote, acceptQuote } from "./crm";
+import {
+  updateCustomerAccount,
+  archiveCustomerAccount,
+  removeOpportunity,
+  cancelSubscription,
+} from "./crm-account-admin";
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -169,6 +184,43 @@ describe("createQuote commercial lineage", () => {
       "Every selected SKU must belong to its quote-line catalog item",
     );
     expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  // BI-0D1FF269: a quote must inherit its opportunity's currency (deal
+  // consistency), not a hardcoded USD — so a GBP opportunity never yields a USD
+  // quote by default.
+  it("inherits the opportunity currency when the caller omits one", async () => {
+    vi.mocked(prisma.opportunity.findUnique).mockResolvedValue({
+      id: "opportunity-row",
+      accountId: "account-row",
+      currency: "GBP",
+    } as never);
+    vi.mocked(prisma.$queryRawUnsafe).mockResolvedValue([{ nextval: 2n }] as never);
+
+    const quoteCreate = vi.fn().mockResolvedValue({
+      quoteId: "QUO-2",
+      quoteNumber: "QUO-2026-0002",
+      currency: "GBP",
+      totalAmount: 100,
+      accountId: "account-row",
+      opportunityId: "opportunity-row",
+    });
+    vi.mocked(prisma.$transaction).mockImplementation(async (callback) =>
+      callback({ quote: { create: quoteCreate } } as never),
+    );
+    vi.mocked(prisma.activity.create).mockResolvedValue({} as never);
+
+    await createQuote({
+      opportunityId: "opportunity-row",
+      validUntil: "2026-08-31", // clock-bomb-guard: allow not asserted against the wall clock
+      lineItems: [{ description: "Consulting", quantity: 1, unitPrice: 100 }],
+    });
+
+    expect(quoteCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ currency: "GBP" }),
+      }),
+    );
   });
 });
 
@@ -290,6 +342,138 @@ describe("acceptQuote Product Sold traceability", () => {
           contactId: null,
         }),
       }),
+    );
+  });
+});
+
+// BI-15AC1B33: account hygiene — edit / status change / archive / record removal.
+describe("account hygiene actions", () => {
+  it("updateCustomerAccount changes status and logs a status_change", async () => {
+    vi.mocked(prisma.customerAccount.findUnique).mockResolvedValue({
+      id: "acct-1",
+      name: "Emma3D",
+      status: "active",
+      website: null,
+    } as never);
+    vi.mocked(prisma.customerAccount.update).mockResolvedValue({
+      id: "acct-1",
+      name: "Emma3D",
+      status: "prospect",
+    } as never);
+
+    await updateCustomerAccount({ accountId: "acct-1", status: "prospect" });
+
+    expect(prisma.customerAccount.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "acct-1" },
+        data: expect.objectContaining({ status: "prospect" }),
+      }),
+    );
+    expect(prisma.activity.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ type: "status_change", accountId: "acct-1" }),
+      }),
+    );
+  });
+
+  it("updateCustomerAccount rejects an invalid status", async () => {
+    vi.mocked(prisma.customerAccount.findUnique).mockResolvedValue({
+      id: "acct-1",
+      name: "Emma3D",
+      status: "active",
+      website: null,
+    } as never);
+
+    await expect(
+      updateCustomerAccount({ accountId: "acct-1", status: "not-a-status" }),
+    ).rejects.toThrow(/Invalid account status/);
+    expect(prisma.customerAccount.update).not.toHaveBeenCalled();
+  });
+
+  it("updateCustomerAccount refuses to edit a merged (superseded) account", async () => {
+    vi.mocked(prisma.customerAccount.findUnique).mockResolvedValue({
+      id: "acct-1",
+      name: "Emma3D",
+      status: "superseded",
+      website: null,
+    } as never);
+
+    await expect(
+      updateCustomerAccount({ accountId: "acct-1", name: "New name" }),
+    ).rejects.toThrow(/merged account cannot be edited/);
+  });
+
+  it("archiveCustomerAccount sets status archived and audits", async () => {
+    vi.mocked(prisma.customerAccount.findUnique).mockResolvedValue({
+      id: "acct-1",
+      name: "Emma3D",
+      status: "active",
+    } as never);
+    vi.mocked(prisma.customerAccount.update).mockResolvedValue({
+      id: "acct-1",
+      status: "archived",
+    } as never);
+
+    await archiveCustomerAccount({ accountId: "acct-1" });
+
+    expect(prisma.customerAccount.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { status: "archived" } }),
+    );
+  });
+
+  it("removeOpportunity refuses when quotes reference it", async () => {
+    vi.mocked(prisma.opportunity.findUnique).mockResolvedValue({
+      id: "opp-1",
+      title: "Fabricated deal",
+      accountId: "acct-1",
+      _count: { quotes: 2 },
+    } as never);
+
+    await expect(
+      removeOpportunity({ opportunityId: "opp-1" }),
+    ).rejects.toThrow(/has quotes/);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it("removeOpportunity deletes a quote-free opportunity inside a transaction", async () => {
+    vi.mocked(prisma.opportunity.findUnique).mockResolvedValue({
+      id: "opp-1",
+      title: "Fabricated deal",
+      accountId: "acct-1",
+      _count: { quotes: 0 },
+    } as never);
+    const activityUpdateMany = vi.fn().mockResolvedValue({ count: 0 });
+    const opportunityDelete = vi.fn().mockResolvedValue({ id: "opp-1" });
+    vi.mocked(prisma.$transaction).mockImplementation(async (cb: unknown) =>
+      (cb as (tx: unknown) => unknown)({
+        activity: { updateMany: activityUpdateMany },
+        opportunity: { delete: opportunityDelete },
+      }),
+    );
+
+    const res = await removeOpportunity({ opportunityId: "opp-1" });
+
+    expect(activityUpdateMany).toHaveBeenCalled();
+    expect(opportunityDelete).toHaveBeenCalledWith({ where: { id: "opp-1" } });
+    expect(res).toEqual({ ok: true, accountId: "acct-1" });
+  });
+
+  it("cancelSubscription sets status cancelled", async () => {
+    vi.mocked(prisma.subscription.findUnique).mockResolvedValue({
+      id: "sub-1",
+      subscriptionRef: "SUB-1",
+      accountId: "acct-1",
+      status: "active",
+    } as never);
+    vi.mocked(prisma.subscription.update).mockResolvedValue({
+      id: "sub-1",
+      status: "cancelled",
+    } as never);
+
+    await cancelSubscription({ subscriptionId: "sub-1" });
+
+    expect(prisma.subscription.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { status: "cancelled" } }),
     );
   });
 });

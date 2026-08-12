@@ -49,11 +49,16 @@ vi.mock("next/cache", () => ({
   revalidatePath: vi.fn(),
 }));
 
+vi.mock("@/lib/identity/principal-linking", () => ({
+  syncUserPrincipal: vi.fn(),
+}));
+
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { getUserTeamIds, createAuthorizationDecisionLog } from "@/lib/governance-data";
 import { buildPrincipalContext } from "@/lib/principal-context";
 import { resolveGovernedAction } from "@/lib/governance-resolver";
+import { syncUserPrincipal } from "@/lib/identity/principal-linking";
 import { prisma } from "@dpf/db";
 import {
   adminIssuePasswordReset,
@@ -93,6 +98,8 @@ describe("user actions", () => {
       async (callback: (tx: typeof prisma) => Promise<unknown>) => callback(prisma),
     );
     mockPrisma.platformConfig.findUnique.mockResolvedValue(null);
+    // Default: principal sync resolves (BI-4150F4D6); tests override as needed.
+    (syncUserPrincipal as ReturnType<typeof vi.fn>).mockResolvedValue({} as never);
   });
 
   it("returns a neutral message for unknown emails", async () => {
@@ -204,6 +211,41 @@ describe("user actions", () => {
 
     expect(result.ok).toBe(false);
     expect(result.message).toMatch(/at least 12 characters/i);
+  });
+
+  // BI-4150F4D6: the Admin createUserAccount path must sync a human Principal so
+  // an owner/admin onboarded through Admin is not identity-incomplete.
+  it("syncs a human Principal after creating a user account", async () => {
+    mockPrisma.platformRole.findUnique.mockResolvedValue({ id: "role-db-1" });
+    mockPrisma.user.findUnique.mockResolvedValue(null);
+    mockPrisma.user.create.mockResolvedValue({ id: "new-user-id" });
+
+    const result = await createUserAccount({
+      email: "owner@example.com",
+      password: "ValidPassword1!",
+      roleId: "HR-100",
+      isSuperuser: true,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(syncUserPrincipal).toHaveBeenCalledWith("new-user-id");
+  });
+
+  // A principal-sync failure must not fail the account creation.
+  it("still creates the user when principal sync fails", async () => {
+    mockPrisma.platformRole.findUnique.mockResolvedValue({ id: "role-db-1" });
+    mockPrisma.user.findUnique.mockResolvedValue(null);
+    mockPrisma.user.create.mockResolvedValue({ id: "new-user-id-2" });
+    (syncUserPrincipal as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error("boom"));
+
+    const result = await createUserAccount({
+      email: "owner2@example.com",
+      password: "ValidPassword1!",
+      roleId: "HR-100",
+      isSuperuser: false,
+    });
+
+    expect(result.ok).toBe(true);
   });
 
   it("updates lifecycle when role exists and governance allows it", async () => {
