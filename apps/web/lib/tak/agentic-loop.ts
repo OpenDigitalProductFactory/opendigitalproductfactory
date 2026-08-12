@@ -21,6 +21,7 @@ import { governedExecuteTool } from "@/lib/mcp-governed-execute";
 import { sanitizeForLog } from "@/lib/security/safe-log";
 import { recordCoworkerTurnMetric } from "@/lib/operate/coworker-turn-metrics";
 import type { ChatMessage } from "@/lib/ai-inference";
+import type { RouteSensitivity } from "@/lib/agent-sensitivity";
 import { prisma } from "@dpf/db";
 import { interceptToolCallAsProposal } from "@/lib/proactivity/propose-interception";
 import { agentEventBus } from "./agent-event-bus";
@@ -1118,7 +1119,7 @@ export type RunAgenticLoopParams = {
 
   chatHistory: ChatMessage[];
   systemPrompt: string;
-  sensitivity: "public" | "internal" | "confidential" | "restricted";
+  sensitivity: RouteSensitivity;
   tools: ToolDefinition[];
   toolsForProvider: Array<Record<string, unknown>> | undefined;
   /**

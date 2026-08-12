@@ -53,7 +53,7 @@ export type AgentInfo = {
   agentName: string;
   agentDescription: string;
   canAssist: boolean;
-  sensitivity: "public" | "internal" | "confidential" | "restricted";
+  sensitivity: RouteSensitivity;
   systemPrompt: string;
   skills: AgentSkill[];
   modelRequirements?: AgentModelRequirements;
@@ -131,3 +131,4 @@ export function validateMessageInput(input: {
   if (!input.routeContext) return "Route context is required";
   return null;
 }
+import type { RouteSensitivity } from "@/lib/agent-sensitivity";

@@ -14,6 +14,7 @@ import { randomUUID } from "crypto";
 import type { ModelClass } from "./model-card-types";
 import { classifyTask } from "./task-classifier";
 import type { TaskRequirement } from "./task-router-types";
+import type { SensitivityLevel } from "./types";
 
 // ── RequestContract type ────────────────────────────────────────────────────
 
@@ -31,7 +32,7 @@ export interface RequestContract {
 
   // ── Interaction ────────────────────────────────────────────────
   interactionMode: "sync" | "background" | "batch";
-  sensitivity: "public" | "internal" | "confidential" | "restricted";
+  sensitivity: SensitivityLevel;
 
   // ── Hard Requirements ──────────────────────────────────────────
   requiresTools: boolean;
