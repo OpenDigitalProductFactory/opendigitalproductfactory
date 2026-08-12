@@ -45,8 +45,8 @@ export default async function WorkforceDirectoryPage({
         <h1 className="text-xl font-bold text-[var(--dpf-text)]">AI Coworkers</h1>
         <p className="max-w-2xl text-sm leading-5 text-[var(--dpf-muted)]">
           {coworkerCount > 0
-            ? `Your AI coworkers live here — ${coworkerCount} in all. Each one is an identity, like a person or a customer. Open one to see what it does. See its cost, skills, and team.`
-            : "Your AI coworkers live here. Each one is an identity, like a person or a customer. None are set up yet."}
+            ? `You have ${coworkerCount} AI coworkers. Each is a teammate. Each does real work. Some plan. Some build. Some write. Tap a name to open it. See what it does. See its cost. See its team. Start with the list below.`
+            : "You have no AI coworkers yet. Each would be a teammate. None are set up yet."}
         </p>
         {coworkerCount > 0 && (
           <a
@@ -55,7 +55,7 @@ export default async function WorkforceDirectoryPage({
             data-owner-first-next-action="open-coworker-directory"
             className="inline-flex text-sm font-semibold text-[var(--dpf-accent)] underline-offset-2 hover:underline"
           >
-            Browse coworkers
+            Browse the list
           </a>
         )}
       </header>
@@ -63,8 +63,8 @@ export default async function WorkforceDirectoryPage({
       {coworkerCount > 0 ? (
         <section id="all-coworkers">
           <OwnerFirstDisclosure
-            summary="Browse all coworkers"
-            hint="Search, filter, and open any coworker."
+            summary="All coworkers"
+            hint="Search and open any one."
           >
             <RosterView
               rows={rows}
