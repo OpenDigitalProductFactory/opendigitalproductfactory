@@ -99,7 +99,13 @@ describe("restaurant demo floor migration", () => {
 
   it("fails closed before the refresh when a reserved demo identifier belongs to other data", () => {
     expect(busyShiftGuardPath).toContain("20260812102900_guard_restaurant_demo_busy_shift");
+    expect(busyShiftGuardPath.localeCompare(busyShiftRefreshPath)).toBeLessThan(0);
     expect(busyShiftGuardSql.match(/RAISE EXCEPTION/g)).toHaveLength(5);
+    for (const reservedKind of ["booking", "shift", "assignment", "turn", "allocation"]) {
+      expect(busyShiftGuardSql).toContain(
+        `Reserved Restaurant demo ${reservedKind} identifiers are attached to non-demo data`,
+      );
+    }
     expect(busyShiftGuardSql).toContain("^demo-restaurant-bk-[0-6]$");
     expect(busyShiftGuardSql).toContain("^demo-restaurant-turn-[2-6]$");
     expect(busyShiftGuardSql).toContain("archetype.\"archetypeId\" = 'restaurant'");
