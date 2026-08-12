@@ -114,7 +114,7 @@ describeDatabase("human principal backfill migration", () => {
     ]);
 
     const superuserClearance = await client.query<{ sensitivityClearance: string[] }>(`
-      SELECT principal."sensitivityClearance"
+      SELECT array_to_json(principal."sensitivityClearance") AS "sensitivityClearance"
       FROM "Principal" principal
       JOIN "PrincipalAlias" alias ON alias."principalId" = principal.id
       WHERE alias."aliasType" = 'user' AND alias."aliasValue" = 'user-b'
