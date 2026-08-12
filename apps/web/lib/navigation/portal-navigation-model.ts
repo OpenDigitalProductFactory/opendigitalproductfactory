@@ -246,7 +246,10 @@ export const PORTAL_NAV_ROUTES: readonly PortalNavRecord[] = [
     parentPath: "/workforce",
     domain: "business",
     audienceModes: ["operator"],
-    destinationKind: "section-home",
+    // Directory landing, like People (/employee). NB: the shell/page-purpose
+    // destinationKind comes from ROUTE_AUDIENCE_OVERRIDES (section-home →
+    // cockpit), which is a DIFFERENT enum from PortalDestinationKind here.
+    destinationKind: "domain-home",
     capabilityKey: "view_platform",
     shellNav: {
       sectionKey: "business",

@@ -45,7 +45,7 @@ apps/web/lib/mcp-tools.ts	1953
 apps/web/lib/mcp/packs/backlog-pack.ts	858
 apps/web/lib/mcp/packs/contribution-hive-pack.ts	854
 apps/web/lib/mcp/packs/sandbox-pack.ts	920
-apps/web/lib/navigation/portal-navigation-model.ts	962
+apps/web/lib/navigation/portal-navigation-model.ts	964
 apps/web/lib/operate/coworker-regression-detector.ts	935
 apps/web/lib/queue/functions/self-upgrade.test.ts	1383
 apps/web/lib/routing/chat-adapter.test.ts	924
