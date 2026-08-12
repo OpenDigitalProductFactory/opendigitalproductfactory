@@ -1,6 +1,6 @@
 {
   "version": "1",
-  "decidedOption": "reuse-roster-directory",
+  "decidedOption": "lean-list-plus-disclosed-roster",
   "decisionInteractionId": "DI-2DC4676A4EA2",
   "scope": {
     "files": [
@@ -10,9 +10,11 @@
   "evidence": {
     "kind": "propose-n-pick",
     "consideredOptions": [
+      "lean-list-plus-disclosed-roster",
       "reuse-roster-directory",
       "redirect-to-platform-overview",
       "bespoke-new-directory"
-    ]
+    ],
+    "rationale": "The full RosterView renders every coworker as a rich card (name + description + status badges) — measured at 2902 words visible on arrival, 6x the 450-word net-new absolute budget and a cognitive-overload wall of text. Progressive disclosure (the same owner-first pattern People uses): arrival LEADS with a lean scannable list of coworker identities (name -> the /workforce/[agentId] 360 record), with the rich searchable/filterable RosterView one click away behind a collapsed OwnerFirstDisclosure. Arrival drops to ~110 words while keeping the same visual component available on demand."
   }
 }

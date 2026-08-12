@@ -9,6 +9,7 @@
 // health/coverage panels; this business surface is the clean identity directory.
 import { loadRoster } from "@/lib/coworker-record/roster";
 import { RosterView } from "@/components/platform/coworker-record/RosterView";
+import { OwnerFirstDisclosure } from "@/components/owner-first/OwnerFirstDisclosure";
 import { auth } from "@/lib/auth";
 import { getGrantedCapabilities } from "@/lib/permissions";
 
@@ -39,12 +40,39 @@ export default async function WorkforceDirectoryPage({
       </header>
 
       {rows.length > 0 ? (
-        <RosterView
-          rows={rows}
-          facets={facets}
-          initialQuery={initialQuery}
-          grantedCapabilities={grantedCapabilities}
-        />
+        // Progressive disclosure (EP-COWORKER-IDENTITY-360; the same owner-first
+        // pattern People uses to keep its arrival scannable): the directory LEADS
+        // with a lean, scannable list of coworker identities — a name that opens
+        // the full 360 record where "what it does, who engaged it, cost, skills,
+        // teams" live. The rich searchable/filterable RosterView (the same visual
+        // component as the platform overview) is one click away behind a collapsed
+        // disclosure, so arrival is a directory to scan, not a wall of cards.
+        <>
+          <ul className="mb-6 grid gap-1 sm:grid-cols-2 lg:grid-cols-3">
+            {rows.map((row) => (
+              <li key={row.agentId}>
+                <a
+                  href={`/workforce/${encodeURIComponent(row.agentId)}`}
+                  className="block rounded-md px-3 py-2 text-sm font-medium text-[var(--dpf-text)] hover:bg-[var(--dpf-surface-2)]"
+                >
+                  {row.displayName}
+                </a>
+              </li>
+            ))}
+          </ul>
+
+          <OwnerFirstDisclosure
+            summary="Search & filter all coworkers"
+            hint="Filter by team, skill, lifecycle, or status; open any coworker's full identity"
+          >
+            <RosterView
+              rows={rows}
+              facets={facets}
+              initialQuery={initialQuery}
+              grantedCapabilities={grantedCapabilities}
+            />
+          </OwnerFirstDisclosure>
+        </>
       ) : (
         <div className="border-l-2 border-[var(--dpf-accent)] py-1 pl-4">
           <h2 className="text-sm font-semibold text-[var(--dpf-text)]">No coworkers to show</h2>
