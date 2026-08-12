@@ -1,14 +1,14 @@
-// D2 (BI-4D030159) — safety core for the kernel-decided time-off coworker.
+// D2 (BI-4D030159) — safety core for the time-off decision coworker.
 //
-// The decision kernel (principle_decide) RECOMMENDS; these hard guards VETO.
+// The organization's WWWD business-decision gate RECOMMENDS; these hard guards VETO.
 // A leave-decisioning coworker must never auto-recommend approval into a
 // coverage breach or a negative balance, and always escalates an ambiguous
-// kernel outcome (BI acceptance #2/#3, and the "escalate by exception"
-// contract). Pure and kernel-independent by construction: the guards are the
-// safety rails that hold whatever the kernel scores.
+// gate outcome (BI acceptance #2/#3, and the "escalate by exception"
+// contract). Pure and decision-surface-independent by construction: the guards
+// are the safety rails that hold whatever the org gate scores.
 //
 // This module deliberately does NOT decide anything on its own confidence —
-// the actual approve/deny recommendation still comes from the kernel via
+// the actual approve/deny recommendation still comes from the WWWD gate via
 // `resolveLeaveDecision`. The guards can only ever push toward escalation
 // (the safe direction), never toward auto-approval.
 
@@ -87,33 +87,26 @@ export function evaluateLeaveGuards(inputs: LeaveGuardInputs): LeaveGuardVerdict
   return { forceEscalate: reasons.length > 0, reasons };
 }
 
-/** The kernel's classified outcome, mapped from `mapConsultOutcome`. */
-export type LeaveKernelOutcome =
+/** Surface-agnostic classification of the consulted business-decision outcome. */
+export type LeaveDecisionOutcome =
   | "recommend-approve"
   | "recommend-deny"
   | "escalate"
   | "defer";
 
-/**
- * Surface-agnostic alias. The outcome is produced by whichever decision surface
- * the coworker consults (the org WWWD business-decision surface for leave — see
- * `leave-decision-surface.ts`), not by the platform kernel; this name reflects that.
- */
-export type LeaveDecisionOutcome = LeaveKernelOutcome;
-
 export type LeaveDecisionAction = "approve" | "deny" | "escalate";
 
 /**
- * Combine the hard guards with the kernel outcome. A fired guard always wins
- * and forces escalation; otherwise the kernel's recommendation passes through,
- * and any non-committal kernel outcome (escalate/defer) escalates by exception.
+ * Combine the hard guards with the WWWD outcome. A fired guard always wins and
+ * forces escalation; otherwise the org recommendation passes through, and any
+ * non-committal outcome (escalate/defer) escalates by exception.
  */
 export function resolveLeaveDecision(args: {
   guards: LeaveGuardVerdict;
-  kernelOutcome: LeaveKernelOutcome;
+  decisionOutcome: LeaveDecisionOutcome;
 }): LeaveDecisionAction {
   if (args.guards.forceEscalate) return "escalate";
-  switch (args.kernelOutcome) {
+  switch (args.decisionOutcome) {
     case "recommend-approve":
       return "approve";
     case "recommend-deny":

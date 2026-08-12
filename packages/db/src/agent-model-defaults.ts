@@ -37,6 +37,7 @@ export const AGENT_MODEL_CONFIG_DEFAULTS: AgentModelConfigDefault[] = [
   { agentId: "inventory-specialist", minimumTier: "adequate", budgetClass: "balanced", minimumCapabilities: { toolUse: true }, minimumContextTokens: 16000 },
   { agentId: "ea-architect", minimumTier: "adequate", budgetClass: "balanced", minimumCapabilities: { toolUse: true }, minimumContextTokens: 32000 },
   { agentId: "hr-specialist", minimumTier: "adequate", budgetClass: "balanced", minimumCapabilities: { toolUse: true }, minimumContextTokens: 16000 },
+  { agentId: "time-off-advisor", minimumTier: "adequate", budgetClass: "balanced", minimumCapabilities: { toolUse: true }, minimumContextTokens: 16000 },
   { agentId: "customer-advisor", minimumTier: "adequate", budgetClass: "balanced", minimumCapabilities: { toolUse: true }, minimumContextTokens: 16000 },
   // minimumContextTokens: 0 — no static context floor. Routing uses a dynamic
   // floor computed from actual message size (estimatedInputTokens × 1.5), which

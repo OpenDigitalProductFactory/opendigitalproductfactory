@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   COWORKER_AGENT_SEEDS,
+  HARDCODED_COWORKER_GRANTS,
   getDefaultEmploymentTypes,
   getDefaultWorkLocations,
   resolveCoworkerLifecycleSeedPolicy,
@@ -38,5 +39,18 @@ describe("workforce seed defaults", () => {
       create: { lifecycleStage: "production" },
       update: {},
     });
+  });
+
+  it("seeds the Time-off Advisor as a confidential draft with least-privilege grants", () => {
+    expect(COWORKER_AGENT_SEEDS.find((item) => item.agentId === "time-off-advisor")).toMatchObject({
+      name: "Time-off Advisor",
+      valueStream: "operate",
+      sensitivity: "confidential",
+      initialLifecycleStage: "draft",
+    });
+    expect(HARDCODED_COWORKER_GRANTS["time-off-advisor"]).toEqual([
+      "consumer_read",
+      "registry_read",
+    ]);
   });
 });

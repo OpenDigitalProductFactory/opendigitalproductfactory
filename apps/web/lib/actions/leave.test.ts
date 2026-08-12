@@ -15,6 +15,7 @@ vi.mock("@dpf/db", () => ({
   prisma: {
     leaveRequest: { findUnique: vi.fn(), update: vi.fn() },
     leaveBalance: { upsert: vi.fn() },
+    agentActionProposal: { updateMany: vi.fn() },
   },
 }));
 
@@ -56,6 +57,10 @@ describe("approveLeaveRequest — governance audit", () => {
 
     expect(result.success).toBe(true);
     expect(prisma.leaveRequest.update).toHaveBeenCalled();
+    expect(prisma.agentActionProposal.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ actionType: "leave.decide", status: "proposed" }),
+      data: expect.objectContaining({ status: "executed", decidedById: "user-approver" }),
+    }));
     expect(createAuthorizationDecisionLog).toHaveBeenCalledWith(
       expect.objectContaining({
         actorType: "user",
@@ -98,6 +103,10 @@ describe("rejectLeaveRequest — governance audit", () => {
 
     expect(result.success).toBe(true);
     expect(prisma.leaveRequest.update).toHaveBeenCalled();
+    expect(prisma.agentActionProposal.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ actionType: "leave.decide", status: "proposed" }),
+      data: expect.objectContaining({ status: "rejected", decidedById: "user-approver" }),
+    }));
     expect(createAuthorizationDecisionLog).toHaveBeenCalledWith(
       expect.objectContaining({
         actorType: "user",

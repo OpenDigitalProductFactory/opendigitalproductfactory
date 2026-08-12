@@ -8,6 +8,30 @@ import { revalidatePath } from "next/cache";
 import * as crypto from "crypto";
 import { authorizeApprovalDecision } from "@/lib/workforce/approval-authority";
 import { createAuthorizationDecisionLog } from "@/lib/governance-data";
+import { LEAVE_DECISION_ACTION } from "@/lib/workforce/leave/leave-decision-proposal-contract";
+
+async function settleLeaveDecisionProposal(input: {
+  requestId: string;
+  userId: string;
+  status: "executed" | "rejected";
+}): Promise<void> {
+  const decidedAt = new Date();
+  await prisma.agentActionProposal.updateMany({
+    where: {
+      actionType: LEAVE_DECISION_ACTION,
+      status: "proposed",
+      parameters: { path: ["requestId"], equals: input.requestId },
+    },
+    data: {
+      status: input.status,
+      decidedAt,
+      decidedById: input.userId,
+      ...(input.status === "executed"
+        ? { executedAt: decidedAt, resultEntityId: input.requestId }
+        : {}),
+    },
+  });
+}
 
 // ─── Leave Request Flow ──────────────────────────────────────────────────────
 
@@ -125,6 +149,7 @@ export async function approveLeaveRequest(
       approvedAt: new Date(),
     },
   });
+  await settleLeaveDecisionProposal({ requestId, userId: session.user.id, status: "executed" });
 
   await createAuthorizationDecisionLog({
     actorType: "user",
@@ -183,6 +208,7 @@ export async function rejectLeaveRequest(
       rejectionReason: reason,
     },
   });
+  await settleLeaveDecisionProposal({ requestId, userId: session.user.id, status: "rejected" });
 
   await createAuthorizationDecisionLog({
     actorType: "user",

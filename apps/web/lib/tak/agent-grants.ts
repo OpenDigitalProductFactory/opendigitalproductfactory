@@ -720,10 +720,10 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   // Recruiting pipeline lens (BI-E64D11AE) — unified native + Greenhouse funnel.
   get_recruiting_pipeline: ["consumer_read", "registry_read"],
 
-  // Workforce staffing (EP-WORKFORCE-OPS / BI-4AD09A35) read surface.
+  // Workforce staffing + propose-only leave-decision surfaces.
   list_staffing_demand: ["registry_read"],
   get_staffing_coverage: ["registry_read"],
-
+  propose_leave_decision: ["consumer_read", "registry_read"],
   // ─── Pseudo-User Contract: screen_* view-command family (BI-DF6079E9) ─────
   // Three finer grants (coworker_screen_read / drive / fill) carry the view-
   // command surface. screen_scroll_to is read-class per the chief-architect

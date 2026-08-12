@@ -311,7 +311,7 @@
     {
       "professionKey": "hr-people-ops",
       "label": "HR / People Operations",
-      "roles": ["hr-specialist"],
+      "roles": ["hr-specialist", "time-off-advisor"],
       "contextSlugs": ["compliance"],
       "sources": [
         {

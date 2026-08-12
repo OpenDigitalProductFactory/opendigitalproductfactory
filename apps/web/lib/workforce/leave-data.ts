@@ -3,6 +3,10 @@
 
 import { cache } from "react";
 import { prisma } from "@dpf/db";
+import {
+  LEAVE_DECISION_ACTION,
+  parseLeaveDecisionProposalParameters,
+} from "@/lib/workforce/leave/leave-decision-proposal-contract";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -34,8 +38,10 @@ export type LeaveBalanceRow = {
 export type LeaveRequestRow = {
   id: string;
   requestId: string;
+  employeeProfileId: string;
   employeeName: string;
   employeeId: string;
+  departmentId: string | null;
   leaveType: string;
   startDate: string;
   endDate: string;
@@ -45,8 +51,17 @@ export type LeaveRequestRow = {
   approverName: string | null;
   approvedAt: string | null;
   rejectionReason: string | null;
+  decisionInteractionId: string | null;
+  decisionRecommendation: "approve" | "deny" | "escalate" | null;
+  decisionRationale: string | null;
+  decisionGuardReasons: string[];
   createdAt: string;
 };
+
+type LeaveDecisionProjection = Pick<
+  LeaveRequestRow,
+  "decisionRecommendation" | "decisionRationale" | "decisionGuardReasons"
+>;
 
 // ─── Queries ─────────────────────────────────────────────────────────────────
 
@@ -91,23 +106,51 @@ export const getLeaveBalances = cache(async (employeeProfileId: string, year?: n
 });
 
 export const getLeaveRequests = cache(async (filters?: {
+  requestId?: string;
   employeeProfileId?: string;
   status?: string;
   managerId?: string;
 }): Promise<LeaveRequestRow[]> => {
   const where: Record<string, unknown> = {};
+  if (filters?.requestId) where["requestId"] = filters.requestId;
   if (filters?.employeeProfileId) where["employeeProfileId"] = filters.employeeProfileId;
   if (filters?.status) where["status"] = filters.status;
 
-  const rows = await prisma.leaveRequest.findMany({
-    where,
-    orderBy: { createdAt: "desc" },
-    take: 50,
-    include: {
-      employeeProfile: { select: { displayName: true, employeeId: true, managerEmployeeId: true } },
-      approver: { select: { displayName: true } },
-    },
-  });
+  const [rows, proposals] = await Promise.all([
+    prisma.leaveRequest.findMany({
+      where,
+      orderBy: { createdAt: "desc" },
+      take: 50,
+      include: {
+        employeeProfile: {
+          select: {
+            displayName: true,
+            employeeId: true,
+            departmentId: true,
+            managerEmployeeId: true,
+          },
+        },
+        approver: { select: { displayName: true } },
+      },
+    }),
+    prisma.agentActionProposal.findMany({
+      where: { actionType: LEAVE_DECISION_ACTION },
+      orderBy: { proposedAt: "desc" },
+      take: 100,
+      select: { parameters: true },
+    }),
+  ]);
+  const recommendationByRequest = new Map<string, LeaveDecisionProjection>();
+  for (const proposal of proposals) {
+    const parsed = parseLeaveDecisionProposalParameters(proposal.parameters);
+    if (parsed && !recommendationByRequest.has(parsed.requestId)) {
+      recommendationByRequest.set(parsed.requestId, {
+        decisionRecommendation: parsed.recommendation,
+        decisionRationale: parsed.rationale,
+        decisionGuardReasons: parsed.guardReasons,
+      });
+    }
+  }
 
   // If filtering by managerId, filter in application layer
   const filtered = filters?.managerId
@@ -117,8 +160,10 @@ export const getLeaveRequests = cache(async (filters?: {
   return filtered.map((r) => ({
     id: r.id,
     requestId: r.requestId,
+    employeeProfileId: r.employeeProfileId,
     employeeName: r.employeeProfile.displayName,
     employeeId: r.employeeProfile.employeeId,
+    departmentId: r.employeeProfile.departmentId,
     leaveType: r.leaveType,
     startDate: r.startDate.toISOString(),
     endDate: r.endDate.toISOString(),
@@ -128,6 +173,12 @@ export const getLeaveRequests = cache(async (filters?: {
     approverName: r.approver?.displayName ?? null,
     approvedAt: r.approvedAt?.toISOString() ?? null,
     rejectionReason: r.rejectionReason,
+    decisionInteractionId: r.decisionInteractionId,
+    ...(recommendationByRequest.get(r.requestId) ?? {
+      decisionRecommendation: null,
+      decisionRationale: null,
+      decisionGuardReasons: [],
+    }),
     createdAt: r.createdAt.toISOString(),
   }));
 });
@@ -170,8 +221,10 @@ export const getTeamLeaveCalendar = cache(async (
   return filtered.map((r) => ({
     id: r.id,
     requestId: r.requestId,
+    employeeProfileId: r.employeeProfileId,
     employeeName: r.employeeProfile.displayName,
     employeeId: r.employeeProfile.employeeId,
+    departmentId: r.employeeProfile.departmentId,
     leaveType: r.leaveType,
     startDate: r.startDate.toISOString(),
     endDate: r.endDate.toISOString(),
@@ -181,6 +234,10 @@ export const getTeamLeaveCalendar = cache(async (
     approverName: r.approver?.displayName ?? null,
     approvedAt: r.approvedAt?.toISOString() ?? null,
     rejectionReason: r.rejectionReason,
+    decisionInteractionId: r.decisionInteractionId,
+    decisionRecommendation: null,
+    decisionRationale: null,
+    decisionGuardReasons: [],
     createdAt: r.createdAt.toISOString(),
   }));
 });

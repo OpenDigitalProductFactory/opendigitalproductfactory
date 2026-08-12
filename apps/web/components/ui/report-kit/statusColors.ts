@@ -143,6 +143,14 @@ export const STATUS_INTENT: Record<string, Record<string, Intent>> = {
     offboarding: "warning",
     inactive: "neutral",
   },
+  // Human-owned leave approval lifecycle. AI recommendations are rendered on
+  // a separate axis so a recommendation can never masquerade as a decision.
+  leaveRequest: {
+    pending: "warning",
+    approved: "success",
+    rejected: "danger",
+    cancelled: "neutral",
+  },
   // Decision governance ledger (DecisionInteraction.outcomeType / riskTier).
   decisionOutcome: {
     recommend: "success",

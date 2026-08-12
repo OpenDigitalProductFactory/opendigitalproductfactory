@@ -6,10 +6,10 @@ import { resolveSelectedCoworkerForRoute } from "./selected-coworker-route";
 import { CHANGE_REVIEWER_ROUTE_AGENT } from "./change-reviewer-route";
 import { PERFORMANCE_ROUTE_AGENT } from "./performance-route";
 import { AGRICULTURAL_OPERATIONS_ROUTE, AGRICULTURAL_OPERATIONS_ROUTE_AGENT } from "./agricultural-operations-route-agent";
+import { LEAVE_DECISION_ROUTE_AGENT } from "./leave-decision-route";
 import { buildAgentNameMap } from "./agent-name-map";
 // prompt-loader is imported server-side only via agent-routing-server.ts.
 // This file stays free of @dpf/db for client component compatibility.
-
 /** Shared identity preamble; prevents page-context hallucination and redundant questions. */
 const PLATFORM_PREAMBLE = `You are an AI co-worker. The user is on a specific page in the platform. You know which page from the route context below.
 
@@ -31,7 +31,6 @@ MANDATORY BEHAVIORS:
 - Stay calm under pressure. If context is incomplete or the safest action is unclear, pause briefly, verify, and ask for the minimum missing input rather than forcing an answer.
 - Never optimize for a pass signal alone. Do not game tests, approvals, or workflow proxies when they conflict with the user's real goal.
 - You HAVE create_backlog_item — always use it when issues are reported.
-
 SCOPE AWARENESS:
 - Small fixes to the current page (bugs, styling, behavior changes): handle directly — search the code, diagnose, create a backlog item with findings.
 - Large requests (new features, new pages, new database models, integrations): tell the user "This needs the Build Studio for a proper design and build cycle" and offer to redirect them to /build with a brief summary of what they want. Create a backlog item to capture the requirement.
@@ -89,6 +88,7 @@ ON THIS PAGE: The user sees discovery operations with a review queue, subnet evi
  * what any single agent could provide.
  */
 const ROUTE_AGENT_MAP: Record<string, RouteAgentEntry> = {
+  "/coworker/leave-decision": LEAVE_DECISION_ROUTE_AGENT,
   [AGRICULTURAL_OPERATIONS_ROUTE]: AGRICULTURAL_OPERATIONS_ROUTE_AGENT,
   // AGT-906 (EP-UX-SYSTEM L6). Bound to the WSID craft surface rather than to an
   // owner route: this coworker's home is the profession corpus it curates, not

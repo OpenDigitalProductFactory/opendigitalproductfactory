@@ -138,7 +138,7 @@ export async function decideLeaveRequest(
   });
 
   return {
-    action: resolveLeaveDecision({ guards, kernelOutcome: outcome }),
+    action: resolveLeaveDecision({ guards, decisionOutcome: outcome }),
     interactionId: gate.interactionId,
     orgProfileSelected: gate.orgProfileSelected,
     operatorMessage: gate.operatorMessage,

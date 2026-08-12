@@ -92,7 +92,7 @@ describe("resolveLeaveDecision", () => {
   it("escalates whenever a hard guard fired, even if the kernel recommends approval", () => {
     const action = resolveLeaveDecision({
       guards: { forceEscalate: true, reasons: ["would breach required coverage"] },
-      kernelOutcome: "recommend-approve",
+      decisionOutcome: "recommend-approve",
     });
     expect(action).toBe("escalate");
   });
@@ -100,7 +100,7 @@ describe("resolveLeaveDecision", () => {
   it("passes a clean kernel approval through when no guard fired", () => {
     const action = resolveLeaveDecision({
       guards: { forceEscalate: false, reasons: [] },
-      kernelOutcome: "recommend-approve",
+      decisionOutcome: "recommend-approve",
     });
     expect(action).toBe("approve");
   });
@@ -108,17 +108,17 @@ describe("resolveLeaveDecision", () => {
   it("passes a clean kernel denial through when no guard fired", () => {
     const action = resolveLeaveDecision({
       guards: { forceEscalate: false, reasons: [] },
-      kernelOutcome: "recommend-deny",
+      decisionOutcome: "recommend-deny",
     });
     expect(action).toBe("deny");
   });
 
   it("escalates an ambiguous kernel outcome (escalate/defer) with no guard", () => {
     expect(
-      resolveLeaveDecision({ guards: { forceEscalate: false, reasons: [] }, kernelOutcome: "escalate" }),
+      resolveLeaveDecision({ guards: { forceEscalate: false, reasons: [] }, decisionOutcome: "escalate" }),
     ).toBe("escalate");
     expect(
-      resolveLeaveDecision({ guards: { forceEscalate: false, reasons: [] }, kernelOutcome: "defer" }),
+      resolveLeaveDecision({ guards: { forceEscalate: false, reasons: [] }, decisionOutcome: "defer" }),
     ).toBe("escalate");
   });
 });

@@ -8970,6 +8970,7 @@ model LeaveRequest {
   approverEmployeeId String?
   approvedAt         DateTime?
   rejectionReason    String?
+  decisionInteractionId String?
   createdAt          DateTime         @default(now())
   updatedAt          DateTime         @updatedAt
   approver           EmployeeProfile? @relation("LeaveApprovals", fields: [approverEmployeeId], references: [id])

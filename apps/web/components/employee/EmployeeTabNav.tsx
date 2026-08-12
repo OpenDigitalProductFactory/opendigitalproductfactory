@@ -10,9 +10,10 @@ import { SectionNav } from "@/components/shell/SectionNav";
 const TABS = [
   { label: "Directory", value: "directory" },
   { label: "Workforce", value: "workforce" },
-  { label: "Org Chart", value: "orgchart" },
+  { label: "Organization", value: "orgchart" },
   { label: "Timesheets", value: "timesheets" },
-  { label: "My Policies", value: "mypolicies" },
+  { label: "Time off", value: "timeoff" },
+  { label: "Policies", value: "mypolicies" },
   // Recruiting is its own route (/employee/recruiting), not a ?view= mode — a
   // jump-off to the unified recruiting funnel (BI-9CC44DC7).
   { label: "Recruiting", value: "recruiting" },
