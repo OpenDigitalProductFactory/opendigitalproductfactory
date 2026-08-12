@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 631,
+  "pageCount": 632,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -6658,6 +6658,18 @@
         "sources"
       ]
     },
+    "docs/professions/market-research/wiki/replaceable-stack-and-spend-analysis.md": {
+      "publicHref": "/professions/market-research/wiki/replaceable-stack-and-spend-analysis/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "what-this-covers",
+        "how-to-analyse-a-prospects-stack",
+        "the-hard-rule-cite-every-number",
+        "output"
+      ]
+    },
     "docs/professions/marketing/wiki/agriculture-evidence-led-market-positioning.md": {
       "publicHref": "/professions/marketing/wiki/agriculture-evidence-led-market-positioning/",
       "portalHref": null,
@@ -10432,6 +10444,7 @@
         "maintain-the-account-record",
         "correct-or-retire-an-account",
         "evidence-and-recovery-checklist",
+        "market-intelligence-research-a-prospect-on-request",
         "related-guides"
       ]
     },

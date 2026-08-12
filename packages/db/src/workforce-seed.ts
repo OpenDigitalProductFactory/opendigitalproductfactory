@@ -80,6 +80,22 @@ export const COWORKER_AGENT_SEEDS: readonly CoworkerAgentSeed[] = [
     initialLifecycleStage: "draft",
   },
   {
+    // BI-6D10EB1F: owner-facing competitive intelligence / market research.
+    // Researches a prospect or segment's tool stack + spend on the public web
+    // and synthesizes it against the internal CRM into a grounded, cited brief.
+    // Seeded as a draft; promoted after the nightly golden-journey certification.
+    agentId: "market-research-analyst",
+    slugId: "market-research-analyst",
+    name: "Market Research Analyst",
+    tier: 2,
+    type: "coworker",
+    description:
+      "Competitive intelligence and market research on request — public-web reconnaissance of a prospect or segment's tool stack and spend, synthesized against internal CRM into a grounded, cited brief tied to an opportunity",
+    valueStream: "explore",
+    sensitivity: "confidential",
+    initialLifecycleStage: "draft",
+  },
+  {
     agentId: "customer-advisor",
     slugId: "customer-advisor",
     name: "Customer Success Manager",
@@ -329,6 +345,15 @@ export const HARDCODED_COWORKER_GRANTS: Record<string, readonly string[]> = {
     "web_search",
   ],
   "time-off-advisor": ["consumer_read", "registry_read"],
+  // BI-6D10EB1F: web_search gates the public-web research doors
+  // (search_public_web, fetch_public_website, analyze_public_website_branding);
+  // crm_read lets it target and cite an opportunity/account WITHOUT mutating the
+  // pipeline (no crm_write); document_write + registry_write reach doc_save/
+  // doc_link so it can author and attach a cited brief. registry_read/
+  // document_read/code_graph_read arrive via COWORKER_READ_BASELINE_GRANTS. No
+  // sandbox_execute: the Build-Studio scout/ideate research launchers are
+  // feature-scoped, not owner-facing market research.
+  "market-research-analyst": ["web_search", "crm_read", "document_write", "registry_write"],
   // The Customer Success Manager operates the CRM (accounts, pipeline, quotes),
   // so it needs crm_read/crm_write — NOT backlog_write (which let it retire live
   // backlog items while flailing) or marketing_read (wrong domain). Its runtime

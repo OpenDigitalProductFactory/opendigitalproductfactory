@@ -215,6 +215,21 @@ opportunity → engagement → source signal. Correct the earliest inaccurate re
 and then reconcile downstream statuses. Do not create replacement records merely
 to make a dashboard count look right.
 
+## Market Intelligence — research a prospect on request
+
+The **Market Research Analyst** coworker (on the **Opportunities** page, and
+summonable from anywhere) researches a prospect or market segment on request: the
+software tools they likely use, what those tools cost, and which of them the
+platform could replace. It reads your CRM opportunities and accounts (read-only)
+to ground the brief, researches the public web, and returns a **cited** brief tied
+to a specific opportunity.
+
+Ask it things like "research the likely software stack for this prospect and what
+we can replace," or "size the replaceable spend for my strongest opportunity." It
+never presents an unsourced number as fact — every figure is cited to a source it
+retrieved, or clearly labelled as an estimate range. Use it to size the core
+pitch (how many tools the platform consolidates) before a sales conversation.
+
 ## Related Guides
 
 - [Marketing](marketing.md)

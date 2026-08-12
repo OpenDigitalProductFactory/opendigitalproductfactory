@@ -77,6 +77,10 @@ export const KNOWN_GRANT_DIVERGENCES: readonly string[] = [
   // carry the identical grant set, so it is no longer a tracked divergence.
   "inventory-specialist",
   "legal-operations-counsel",
+  // market-research-analyst (BI-6D10EB1F) is a seed-defined coworker: its runtime
+  // grants live in HARDCODED_COWORKER_GRANTS (the durable source), and the JSON
+  // agent_registry mirror intentionally does not carry a duplicate entry.
+  "market-research-analyst",
   "marketing-specialist",
   "ops-coordinator",
   "platform-engineer",
