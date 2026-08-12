@@ -9,6 +9,7 @@ import type { AgentEvent } from "@/lib/tak/agent-event-bus";
 import type { ResolvedDelegatedPosture } from "@/lib/proactivity/delegated-posture";
 import type { ProactivityPlan } from "@/lib/proactivity/proactivity-types";
 import { admitRuntimeGuardedWork } from "@/lib/platform-runtime/work-admission";
+import type { RouteSensitivity } from "@/lib/agent-sensitivity";
 
 /** Best-effort latest user-turn text, for the reviewer's context. */
 function lastUserRequest(history: ChatMessage[]): string {
@@ -35,8 +36,6 @@ export type AutonomousWorkRunRef = {
   contextId: string | null;
 };
 
-type AgentSensitivity = "public" | "internal" | "confidential" | "restricted";
-
 export type AutonomousWorkUserContext = {
   userId?: string;
   platformRole: string | null;
@@ -46,7 +45,7 @@ export type AutonomousWorkUserContext = {
 type AgentPromptInfo = {
   agentId?: string | null;
   systemPrompt: string;
-  sensitivity?: AgentSensitivity | null;
+  sensitivity?: RouteSensitivity | null;
   [key: string]: unknown;
 };
 
@@ -294,7 +293,7 @@ export async function resolveAutonomousWorkTools(input: {
 export async function executeAutonomousAgenticLoop(input: {
   systemPrompt: string;
   chatHistory: ChatMessage[];
-  sensitivity: AgentSensitivity;
+  sensitivity: RouteSensitivity;
   tools: ToolDefinition[];
   toolsForProvider?: Array<Record<string, unknown>>;
   /** Authorized-but-not-attached tools forwarded to runAgenticLoop for on-demand

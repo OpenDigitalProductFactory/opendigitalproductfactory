@@ -479,6 +479,29 @@ describe("createAutonomousWorkRun", () => {
     );
   });
 
+  it("preserves development as a routing sensitivity through the unified loop", async () => {
+    const agentic = await import("@/lib/tak/agentic-loop");
+    vi.mocked(agentic.runAgenticLoop).mockResolvedValue({ content: "Done.", executedTools: [] } as never);
+
+    const { executeAutonomousAgenticLoop } = await import("./autonomous-work-run");
+
+    await executeAutonomousAgenticLoop({
+      systemPrompt: "You are helpful.",
+      chatHistory: [{ role: "user", content: "Implement the change." }],
+      sensitivity: "development",
+      tools: [],
+      toolsForProvider: [],
+      userId: "user-1",
+      routeContext: "/build",
+      agentId: "build-specialist",
+      threadId: "thread-1",
+    });
+
+    expect(agentic.runAgenticLoop).toHaveBeenCalledWith(
+      expect.objectContaining({ sensitivity: "development" }),
+    );
+  });
+
   it("fires the pattern observer after an agentic loop run", async () => {
     const agentic = await import("@/lib/tak/agentic-loop");
     vi.mocked(agentic.runAgenticLoop).mockResolvedValue({ content: "Done.", executedTools: [] } as never);

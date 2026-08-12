@@ -114,7 +114,11 @@ export function screenInferencePayload(
   // is still a floor and can never be lowered here.
   const routedPayloadSensitivity = prior
     ? "internal"
-    : classification.overallSensitivity;
+    : originalSensitivity === "development" &&
+        governedData === undefined &&
+        classification.dataClasses.every((dataClass) => dataClass === "source-code")
+      ? "public"
+      : classification.overallSensitivity;
   const sensitivity = strongestSensitivity(originalSensitivity, routedPayloadSensitivity);
   const maskRequired = policy.obligations.some((obligation) => obligation.kind === "mask");
   const routeEffect = policy.effect === "deny" ||
