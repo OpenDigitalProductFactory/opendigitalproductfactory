@@ -28,6 +28,7 @@ import { cliSaturationPercent } from "./cli-concurrency";
 import { usesCodexCli, usesCliAdapter } from "./provider-utils";
 import { isLocalProviderId } from "./provider-locality";
 import { satisfiesMinimumCapabilities } from "./agent-capability-types";
+import { QUALITY_TIERS, type QualityTier } from "./quality-tiers";
 import {
   estimateSuccessProbability,
   rankByCostPerSuccess,
@@ -544,7 +545,38 @@ export async function routeEndpointV2(
   // rankScore order within each tier. No-op when only one tier is present.
   const tierOrder = (ep: EndpointManifest): number =>
     ep.providerTier === "user_configured" ? 0 : 1;
-  ranked.sort((a, b) => tierOrder(a.endpoint) - tierOrder(b.endpoint));
+
+  // BI-654EE2E9: quality-tier preference among effectively-free endpoints.
+  // When every provider is free, cost-per-success ranking collapses to
+  // successProb and never reads qualityTier — so an "adequate" local model that
+  // merely clears the tier floor can tie or beat a "frontier" cloud endpoint
+  // whose curated dimension scores are absent. That let coworker reasoning and
+  // identity inference run on local while free frontier providers sat idle.
+  //
+  // This makes a strictly-higher quality tier win, but ONLY:
+  //   - as a SECONDARY key under the existing provider-tier preference (so the
+  //     user_configured>bundled intent is preserved), and
+  //   - among endpoints that are both free (estimatedCost 0/null), so the paid
+  //     cost-per-success path is untouched.
+  // Governance is unaffected: this only re-orders endpoints that ALREADY passed
+  // every hard gate (policy, clearance, capability, capacity). It never routes
+  // around a sensitivity-clearance or capability exclusion.
+  const qualityRank = (ep: EndpointManifest): number => {
+    const tier: QualityTier = ep.qualityTier ?? "adequate";
+    const idx = QUALITY_TIERS.indexOf(tier);
+    return idx === -1 ? QUALITY_TIERS.indexOf("adequate") : idx;
+  };
+  const isFree = (entry: (typeof ranked)[number]): boolean =>
+    (entry.estimatedCost ?? 0) === 0;
+  ranked.sort((a, b) => {
+    const providerDelta = tierOrder(a.endpoint) - tierOrder(b.endpoint);
+    if (providerDelta !== 0) return providerDelta;
+    if (isFree(a) && isFree(b)) {
+      const qualityDelta = qualityRank(a.endpoint) - qualityRank(b.endpoint);
+      if (qualityDelta !== 0) return qualityDelta;
+    }
+    return 0; // preserve prior rankScore order (stable sort)
+  });
 
   // ── Stage 6: Finalize eligible preferences ──────────────────────────────
   // Persisted endpoint pins and per-coworker provider/model assignments are

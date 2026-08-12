@@ -2,6 +2,7 @@
 
 import { Prisma, prisma } from "@dpf/db";
 import { registerCustomerAccountSource } from "@/lib/mdm/crosswalk";
+import { resolveOrgLocale, type OrgLocaleClient } from "@/lib/org-locale/org-locale";
 import crypto from "crypto";
 import { STAGE_DEFAULT_PROBABILITY } from "@dpf/validators";
 import { revalidatePath } from "next/cache";
@@ -111,7 +112,9 @@ export async function createCustomerAccount(
       website: input.website || null,
       industry: input.industry || null,
       notes: input.notes || null,
-      currency: "USD",
+      // Default to the org's configured base currency, not a hardcoded USD, so a
+      // non-USD operator's new accounts carry the right currency (BI-0D1FF269).
+      currency: (await resolveOrgLocale(prisma as unknown as OrgLocaleClient)).currency,
     },
   });
   await logSystemActivity(
@@ -590,7 +593,8 @@ export async function createOpportunity(input: {
       assignedToId: input.assignedToId || null,
       engagementId: input.engagementId || null,
       expectedValue: input.expectedValue ?? null,
-      currency: input.currency || "USD",
+      // Org base currency default when the caller omits one (BI-0D1FF269).
+      currency: input.currency || (await resolveOrgLocale(prisma as unknown as OrgLocaleClient)).currency,
       expectedClose: input.expectedClose
         ? new Date(input.expectedClose)
         : null,
@@ -795,7 +799,7 @@ export async function createQuote(input: {
 }) {
   const opp = await prisma.opportunity.findUnique({
     where: { id: input.opportunityId },
-    select: { id: true, accountId: true },
+    select: { id: true, accountId: true, currency: true },
   });
   if (!opp) throw new Error("Opportunity not found");
 
@@ -885,7 +889,9 @@ export async function createQuote(input: {
         discountValue,
         taxAmount,
         totalAmount,
-        currency: input.currency || "USD",
+        // A quote inherits its opportunity's currency for deal consistency, then
+        // the org base currency — never a hardcoded USD (BI-0D1FF269).
+        currency: input.currency || opp.currency || (await resolveOrgLocale(prisma as unknown as OrgLocaleClient)).currency,
         terms: input.terms?.trim() || null,
         notes: input.notes?.trim() || null,
         createdById: input.userId || null,

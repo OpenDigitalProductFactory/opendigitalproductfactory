@@ -107,6 +107,17 @@ type TargetResponse = {
 };
 
 export async function runPrometheusTargetCheck(): Promise<{ newTargets: string[] }> {
+  // No Prometheus target configured on this topology (fresh/local install): the
+  // hourly poll would fetch the unresolved in-cluster default and record an
+  // "error"/"fetch failed" every hour, surfacing a false "Monitoring offline"
+  // in the operator chrome. Record a neutral "not-configured" status and skip
+  // the fetch entirely instead of alarming. (BI-63FF58D2)
+  const { isPrometheusConfigured } = await import("../observability/alert-sources");
+  if (!isPrometheusConfigured()) {
+    await recordJobRun(JOB_PROMETHEUS_POLL, "not-configured");
+    return { newTargets: [] };
+  }
+
   try {
     const res = await fetch(`${PROMETHEUS_URL}/api/v1/targets`, {
       signal: AbortSignal.timeout(3_000),

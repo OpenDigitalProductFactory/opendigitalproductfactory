@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 vi.mock("@dpf/db", () => ({
   executeBootstrapDiscovery: vi.fn().mockResolvedValue({}),
@@ -76,8 +76,18 @@ describe("recordJobRun", () => {
 });
 
 describe("runPrometheusTargetCheck", () => {
+  const savedPrometheusUrl = process.env.PROMETHEUS_URL;
+
   beforeEach(() => {
     vi.restoreAllMocks();
+    // The configured-path tests below need an explicit target; the short-circuit
+    // test clears it. Default each test to "configured".
+    process.env.PROMETHEUS_URL = "http://prometheus.example:9090";
+  });
+
+  afterEach(() => {
+    if (savedPrometheusUrl === undefined) delete process.env.PROMETHEUS_URL;
+    else process.env.PROMETHEUS_URL = savedPrometheusUrl;
   });
 
   it("returns empty when prometheus is unreachable", async () => {
@@ -100,6 +110,25 @@ describe("runPrometheusTargetCheck", () => {
 
     const result = await runPrometheusTargetCheck();
     expect(result.newTargets).toContain("postgres:postgres:5432");
+  });
+
+  // BI-63FF58D2: with no PROMETHEUS_URL configured (fresh/local topology) the
+  // poll must NOT fetch the unresolved in-cluster default and record an hourly
+  // "error"/"fetch failed" — it records a neutral "not-configured" and skips.
+  it("skips the fetch and records not-configured when no target is set", async () => {
+    delete process.env.PROMETHEUS_URL;
+    const fetchSpy = vi.fn();
+    vi.stubGlobal("fetch", fetchSpy);
+    const { prisma } = await import("@dpf/db");
+    const upsert = prisma.scheduledJob.upsert as ReturnType<typeof vi.fn>;
+    upsert.mockClear();
+
+    const result = await runPrometheusTargetCheck();
+
+    expect(result.newTargets).toEqual([]);
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(upsert).toHaveBeenCalledTimes(1);
+    expect(upsert.mock.calls[0][0].update.lastStatus).toBe("not-configured");
   });
 });
 

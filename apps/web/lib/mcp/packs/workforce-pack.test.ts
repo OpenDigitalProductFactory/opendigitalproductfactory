@@ -14,6 +14,7 @@ const db = vi.hoisted(() => ({
   employmentEventCreate: vi.fn(),
   leavePolicyCreate: vi.fn(),
   transaction: vi.fn(),
+  syncEmployeePrincipal: vi.fn(),
 }));
 vi.mock("@dpf/db", () => ({
   prisma: {
@@ -38,6 +39,9 @@ vi.mock("@dpf/db", () => ({
     $transaction: (...a: unknown[]) => db.transaction(...a),
   },
 }));
+vi.mock("@/lib/identity/principal-linking", () => ({
+  syncEmployeePrincipal: (...a: unknown[]) => db.syncEmployeePrincipal(...a),
+}));
 
 import { workforcePack } from "./workforce-pack";
 import { isToolAllowedByGrants } from "@/lib/tak/agent-grants";
@@ -53,6 +57,9 @@ const EXPECTED_TOOLS = [
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // Default: principal sync resolves. Individual tests override to assert the
+  // call or to simulate a sync failure (BI-4150F4D6).
+  db.syncEmployeePrincipal.mockResolvedValue({ id: "prn-default" });
 });
 
 describe("workforce pack — registration", () => {
@@ -166,6 +173,35 @@ describe("workforce pack — handler behavior (delegation preserved)", () => {
     const arg = db.employeeCreate.mock.calls[0][0] as { data: { status: string; employmentEvents: { create: { actorUserId: string } } } };
     expect(arg.data.status).toBe("active");
     expect(arg.data.employmentEvents.create.actorUserId).toBe("actor-42");
+  });
+
+  // BI-4150F4D6: the MCP create_employee path must sync a human Principal, same
+  // as the governed People-screen path — otherwise MCP-onboarded people end up
+  // identity-incomplete.
+  it("create_employee syncs a human Principal for the new employee", async () => {
+    db.employeeFindFirst.mockResolvedValue(null);
+    db.employeeCreate.mockResolvedValue({ id: "emp-cuid-1", employeeId: "EMP-NEW", displayName: "Grace Hopper" });
+    db.syncEmployeePrincipal.mockResolvedValue({ id: "prn-1" });
+    const res = await workforcePack.handlers.create_employee(
+      { firstName: "Grace", lastName: "Hopper", status: "active" },
+      "actor-42",
+    );
+    expect(res.success).toBe(true);
+    expect(db.syncEmployeePrincipal).toHaveBeenCalledWith("emp-cuid-1");
+  });
+
+  // A principal-sync failure must not orphan the created employee — the create
+  // still succeeds and the backfill migration is the net.
+  it("create_employee still succeeds when principal sync fails", async () => {
+    db.employeeFindFirst.mockResolvedValue(null);
+    db.employeeCreate.mockResolvedValue({ id: "emp-cuid-2", employeeId: "EMP-NEW2", displayName: "Ada Lovelace" });
+    db.syncEmployeePrincipal.mockRejectedValue(new Error("boom"));
+    const res = await workforcePack.handlers.create_employee(
+      { firstName: "Ada", lastName: "Lovelace", status: "active" },
+      "actor-42",
+    );
+    expect(res.success).toBe(true);
+    expect(res.entityId).toBe("EMP-NEW2");
   });
 
   it("transition_employee_status errors when the employee is not found", async () => {

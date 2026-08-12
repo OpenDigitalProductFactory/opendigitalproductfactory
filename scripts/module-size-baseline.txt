@@ -22,7 +22,7 @@ apps/web/lib/actions/ai-providers.ts	914
 apps/web/lib/actions/build-governed.test.ts	1149
 apps/web/lib/actions/build.ts	1744
 apps/web/lib/actions/compliance.ts	867
-apps/web/lib/actions/crm.ts	1062
+apps/web/lib/actions/crm.ts	1068
 apps/web/lib/actions/ea.ts	918
 apps/web/lib/actions/mcp-tokens.test.ts	1254
 apps/web/lib/actions/platform-dev-config.ts	1254

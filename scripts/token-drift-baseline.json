@@ -1064,8 +1064,13 @@
     "spacing": 0,
     "motion": 0
   },
+  "apps/web/components/customer/AccountAdminActions.tsx": {
+    "type": 5,
+    "spacing": 0,
+    "motion": 0
+  },
   "apps/web/components/customer/AccountLifecycleActions.tsx": {
-    "type": 2,
+    "type": 3,
     "spacing": 0,
     "motion": 0
   },
@@ -1121,6 +1126,11 @@
   },
   "apps/web/components/customer/QuoteShareLink.tsx": {
     "type": 2,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/customer/RemoveOpportunityButton.tsx": {
+    "type": 4,
     "spacing": 0,
     "motion": 0
   },
@@ -1230,7 +1240,7 @@
     "motion": 0
   },
   "apps/web/components/employee/LeavePanel.tsx": {
-    "type": 10,
+    "type": 2,
     "spacing": 0,
     "motion": 0
   },
@@ -1555,7 +1565,7 @@
     "motion": 0
   },
   "apps/web/components/monitoring/PlatformHealthIndicator.tsx": {
-    "type": 5,
+    "type": 6,
     "spacing": 0,
     "motion": 0
   },

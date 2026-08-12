@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { convertAccountToActiveCustomer, convertOrderToSubscription } from "@/lib/actions/subscriptions";
+import { cancelSubscription } from "@/lib/actions/crm-account-admin";
 
 export type LifecycleContext = {
   accountId: string;
@@ -11,6 +12,7 @@ export type LifecycleContext = {
   contractableOrder: { id: string; orderRef: string } | null;
   // The active support contract, if one already exists.
   contract: {
+    id: string;
     subscriptionRef: string;
     planName: string;
     status: string;
@@ -78,13 +80,27 @@ export function AccountLifecycleActions(ctx: LifecycleContext) {
 
       {ctx.contract && (
         <div className="mt-3 rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-3">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-2">
             <p className="text-sm font-semibold text-[var(--dpf-text)]">
               Support contract — {ctx.contract.planName}
             </p>
-            <span className="text-[10px] font-medium uppercase tracking-wide text-[var(--dpf-accent)]">
-              {ctx.contract.status}
-            </span>
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-medium uppercase tracking-wide text-[var(--dpf-accent)]">
+                {ctx.contract.status}
+              </span>
+              {ctx.contract.status !== "cancelled" && (
+                <button
+                  className="text-[10px] text-[var(--dpf-muted)] hover:text-[var(--dpf-danger)]"
+                  disabled={isPending}
+                  onClick={() =>
+                    run(() => cancelSubscription({ subscriptionId: ctx.contract!.id }))
+                  }
+                  title="Cancel this support contract"
+                >
+                  Cancel
+                </button>
+              )}
+            </div>
           </div>
           <p className="mt-1 text-[11px] font-mono text-[var(--dpf-muted)]">
             {ctx.contract.subscriptionRef}
