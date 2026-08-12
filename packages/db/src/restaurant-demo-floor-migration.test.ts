@@ -45,6 +45,13 @@ const busyShiftResourceGuardPath = fileURLToPath(
   ),
 );
 const busyShiftResourceGuardSql = readFileSync(busyShiftResourceGuardPath, "utf8");
+const actionableWalkInRepairPath = fileURLToPath(
+  new URL(
+    "../prisma/migrations/20260812152000_repair_restaurant_demo_actionable_walk_in/migration.sql",
+    import.meta.url,
+  ),
+);
+const actionableWalkInRepairSql = readFileSync(actionableWalkInRepairPath, "utf8");
 
 describe("restaurant demo floor migration", () => {
   it("targets only platform-owned demo restaurant rows", () => {
@@ -131,5 +138,14 @@ describe("restaurant demo floor migration", () => {
     expect(busyShiftResourceGuardSql).toContain(
       "Reserved Restaurant demo table identifiers are attached to non-demo data",
     );
+  });
+
+  it("preserves a completed demo turn and creates a fresh actionable walk-in", () => {
+    expect(actionableWalkInRepairSql).toContain("demo-restaurant-bk-live-1");
+    expect(actionableWalkInRepairSql).toContain("stage IN ('closed', 'cancelled')");
+    expect(actionableWalkInRepairSql).toContain("Restaurant demo stale terminal allocation released");
+    expect(actionableWalkInRepairSql).toContain("INSERT INTO \"StorefrontBooking\"");
+    expect(actionableWalkInRepairSql).toContain("'waiting'");
+    expect(actionableWalkInRepairSql).not.toMatch(/DELETE FROM \"HospitalityServiceTurn(?:Event)?\"/);
   });
 });
