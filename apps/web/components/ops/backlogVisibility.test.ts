@@ -5,7 +5,7 @@ import {
   isTerminalBacklogItemStatus,
   summarizeBacklogStatuses,
   visibleUnderActiveOnly,
-} from "./backlogVisibility";
+} from "@/lib/backlog-visibility";
 
 describe("isTerminalBacklogItemStatus", () => {
   it("treats done and deferred as terminal, everything else as active", () => {

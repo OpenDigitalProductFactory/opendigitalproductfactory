@@ -3,14 +3,18 @@ import { RISK_LEVELS } from "@/lib/compliance-types";
 import Link from "next/link";
 import { CreateRiskAssessmentForm } from "@/components/compliance/CreateRiskAssessmentForm";
 import { StatusBadge } from "@/components/ui/report-kit";
-import { SurfaceViewSwitcher } from "@/components/workbooks/SurfaceViewSwitcher";
-import { SurfacePlatformGrid } from "@/components/workbooks/SurfacePlatformGrid";
+import {
+  PlatformGridSection,
+  parseSurfaceDataScope,
+  parseSurfaceView,
+} from "@/components/workbooks/PlatformGridSection";
 
-type Props = { searchParams: Promise<{ inherentRisk?: string; status?: string; view?: string }> };
+type Props = { searchParams: Promise<{ inherentRisk?: string; status?: string; view?: string; dataScope?: string }> };
 
 export default async function RisksPage({ searchParams }: Props) {
   const sp = await searchParams;
-  const view = sp.view === "grid" || sp.view === "board" ? sp.view : null;
+  const view = parseSurfaceView(sp.view);
+  const dataScope = parseSurfaceDataScope(sp.dataScope);
   const filters = {
     ...(sp.inherentRisk && { inherentRisk: sp.inherentRisk }),
     ...(sp.status && { status: sp.status }),
@@ -27,11 +31,13 @@ export default async function RisksPage({ searchParams }: Props) {
         <CreateRiskAssessmentForm />
       </div>
 
-      <SurfaceViewSwitcher entityType="risk_assessment" current={view ?? "list"} />
+      <PlatformGridSection
+        entityType="risk_assessment"
+        view={view}
+        dataScope={dataScope}
+      />
 
-      {view ? (
-        <SurfacePlatformGrid entityType="risk_assessment" view={view} />
-      ) : (
+      {!view ? (
         <>
       {/* Filter bar */}
       <form className="flex flex-wrap gap-3 mb-6">
@@ -91,7 +97,7 @@ export default async function RisksPage({ searchParams }: Props) {
         </div>
       )}
         </>
-      )}
+      ) : null}
     </div>
   );
 }

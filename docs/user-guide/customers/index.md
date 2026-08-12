@@ -86,6 +86,13 @@ Simple navigation intentionally emphasizes today's work. Full navigation exposes
 the wider CRM structure. A saved grid view still opens the detailed surface
 directly.
 
+When you switch Accounts or Pipeline from **List** to **Grid** or **Board**, the
+domain's working scope follows you. Accounts show current customers rather than
+superseded merge tombstones; Pipeline shows open qualification-through-
+negotiation work. Use **All customers** or **All opportunities** beside the view
+controls to include history. This scope is separate from personal saved grid
+sorting, grouping, and column choices, and remains in the URL.
+
 ## Capture and Qualify a Lead
 
 ### Manual lead

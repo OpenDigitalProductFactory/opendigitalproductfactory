@@ -1,5 +1,33 @@
+import {
+  BACKLOG_STATUS_VALUES,
+  type BacklogStatus,
+} from "@/lib/explore/backlog";
+
+export const ACTIVE_BACKLOG_STATUSES = [
+  "triaging",
+  "open",
+  "in-progress",
+] as const satisfies readonly BacklogStatus[];
+
+export const TERMINAL_BACKLOG_STATUSES = [
+  "done",
+  "deferred",
+] as const satisfies readonly BacklogStatus[];
+
+const terminalStatuses = new Set<string>(TERMINAL_BACKLOG_STATUSES);
+
+// Keep the operator visibility split exhaustive when the canonical lifecycle
+// registry changes. The lists remain readonly so List/Grid consumers cannot
+// quietly redefine the domain lens at their call site.
+if (
+  ACTIVE_BACKLOG_STATUSES.length + TERMINAL_BACKLOG_STATUSES.length
+  !== BACKLOG_STATUS_VALUES.length
+) {
+  throw new Error("Backlog visibility statuses do not cover the lifecycle registry");
+}
+
 export function isTerminalBacklogItemStatus(status: string): boolean {
-  return status === "done" || status === "deferred";
+  return terminalStatuses.has(status);
 }
 
 export type BacklogStatusSummary = {
@@ -54,11 +82,7 @@ export function backlogItemLifecycleLabel(item: BacklogLifecycleInput): string {
   return "deferred";
 }
 
-/**
- * The subset shown while the operator asks for active work only. Terminal items
- * (done + deferred) are removed from the rows, while their distinct counts remain
- * visible in the surrounding status summary.
- */
+/** Rows shown by the Operations page's default active-work lens. */
 export function visibleUnderActiveOnly<T extends { status: string }>(
   items: T[],
   activeOnly: boolean,

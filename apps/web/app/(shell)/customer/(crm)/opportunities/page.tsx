@@ -15,16 +15,21 @@ import { getStageAgeDays, isStageStale } from "@/lib/crm/pipeline-inspector";
 import { getPipelineInspectorView } from "@/lib/crm/pipeline-inspector-data";
 import { formatRevenueAmount } from "@/lib/crm/revenue-cockpit";
 import { getOrgSettings } from "@/lib/actions/currency";
-import { PlatformGridSection, parseSurfaceView } from "@/components/workbooks/PlatformGridSection";
+import {
+  PlatformGridSection,
+  parseSurfaceDataScope,
+  parseSurfaceView,
+} from "@/components/workbooks/PlatformGridSection";
 
 type OpportunitiesPageProps = {
-  searchParams?: Promise<{ opportunity?: string; view?: string }>;
+  searchParams?: Promise<{ opportunity?: string; view?: string; dataScope?: string }>;
 };
 
 export default async function OpportunitiesPage({ searchParams }: OpportunitiesPageProps) {
   const sp = await searchParams;
   const requestedOpportunityId = sp?.opportunity;
   const view = parseSurfaceView(sp?.view);
+  const dataScope = parseSurfaceDataScope(sp?.dataScope);
   const [opportunities, orgSettings, accounts] = await Promise.all([
     prisma.opportunity.findMany({
     orderBy: { createdAt: "desc" },
@@ -94,7 +99,11 @@ export default async function OpportunitiesPage({ searchParams }: OpportunitiesP
         <NewOpportunityButton accounts={accounts} />
       </div>
 
-      <PlatformGridSection entityType="opportunity" view={view} />
+      <PlatformGridSection
+        entityType="opportunity"
+        view={view}
+        dataScope={dataScope}
+      />
 
       {!view && (
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_24rem]">

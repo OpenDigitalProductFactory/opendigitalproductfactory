@@ -9,7 +9,6 @@
 
 import { prisma } from "@dpf/db";
 import { updateBacklogItemFields } from "@/lib/actions/backlog";
-import { getBacklogItems } from "@/lib/explore/backlog-data";
 import {
   gridRegistry,
   type DataSourceAdapter,
@@ -32,27 +31,30 @@ import {
   type GridCapabilities,
 } from "./types";
 import { applyFilters, applySort, paginate } from "./grid-query";
+import { backlogPrismaWhere } from "./backlog-adapter-filter";
+
+const BACKLOG_GRID_SELECT = {
+  itemId: true,
+  title: true,
+  status: true,
+  type: true,
+  workType: true,
+  source: true,
+  priority: true,
+  epicId: true,
+  scopeKind: true,
+  archetypeCategories: true,
+  archetypeIds: true,
+  scopeRationale: true,
+  lifecycleTags: true,
+  body: true,
+  updatedAt: true,
+} as const;
 
 async function readGridRow(itemId: string): Promise<GridRow | null> {
   const item = await prisma.backlogItem.findUnique({
     where: { itemId },
-    select: {
-      itemId: true,
-      title: true,
-      status: true,
-      type: true,
-      workType: true,
-      source: true,
-      priority: true,
-      epicId: true,
-      scopeKind: true,
-      archetypeCategories: true,
-      archetypeIds: true,
-      scopeRationale: true,
-      lifecycleTags: true,
-      body: true,
-      updatedAt: true,
-    },
+    select: BACKLOG_GRID_SELECT,
   });
   return item ? backlogItemToGridRow(item) : null;
 }
@@ -68,7 +70,14 @@ class BacklogItemAdapter implements DataSourceAdapter {
     _entityType: string,
     opts: { filters: DataSourceFilter; sort: SortSpec[]; pagination: Pagination },
   ): Promise<PagedRows> {
-    const items = await getBacklogItems();
+    // The platform grid needs only scalar grid fields. Push down the domain's
+    // exact status lens when safe, then reapply the shared filter below as the
+    // semantic guard for every query path.
+    const items = await prisma.backlogItem.findMany({
+      where: backlogPrismaWhere(opts.filters),
+      orderBy: [{ priority: "asc" }, { createdAt: "asc" }],
+      select: BACKLOG_GRID_SELECT,
+    });
     const rows = items.map(backlogItemToGridRow);
     const filtered = applyFilters(rows, opts.filters);
     const sorted = applySort(filtered, opts.sort);

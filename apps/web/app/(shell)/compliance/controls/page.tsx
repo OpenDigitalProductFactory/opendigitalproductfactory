@@ -1,14 +1,19 @@
 import { listControls } from "@/lib/actions/compliance";
 import { CreateControlForm } from "@/components/compliance/CreateControlForm";
 import { FilterBar, StatusBadge } from "@/components/ui/report-kit";
-import { PlatformGridSection, parseSurfaceView } from "@/components/workbooks/PlatformGridSection";
+import {
+  PlatformGridSection,
+  parseSurfaceDataScope,
+  parseSurfaceView,
+} from "@/components/workbooks/PlatformGridSection";
 import Link from "next/link";
 
-type Props = { searchParams: Promise<{ controlType?: string; implementationStatus?: string; effectiveness?: string; view?: string }> };
+type Props = { searchParams: Promise<{ controlType?: string; implementationStatus?: string; effectiveness?: string; view?: string; dataScope?: string }> };
 
 export default async function ControlsPage({ searchParams }: Props) {
   const sp = await searchParams;
   const view = parseSurfaceView(sp.view);
+  const dataScope = parseSurfaceDataScope(sp.dataScope);
   const filters = {
     ...(sp.controlType && { controlType: sp.controlType }),
     ...(sp.implementationStatus && { implementationStatus: sp.implementationStatus }),
@@ -82,7 +87,11 @@ export default async function ControlsPage({ searchParams }: Props) {
         )}
       </div>
 
-      <PlatformGridSection entityType="compliance_control" view={view} />
+      <PlatformGridSection
+        entityType="compliance_control"
+        view={view}
+        dataScope={dataScope}
+      />
 
       {!view && (controls.length === 0 ? (
         <p className="text-sm text-[var(--dpf-muted)]">No controls match the current filters.</p>

@@ -1,0 +1,20 @@
+{
+  "version": "1",
+  "decidedOption": "registry-data-lens",
+  "decisionInteractionId": "DI-93238917B4E0",
+  "scope": {
+    "files": [
+      "apps/web/components/workbooks/SurfaceViewSwitcher.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "registry-data-lens",
+      "page-local",
+      "saved-view-default"
+    ],
+    "accessibility": "The existing view links preserve their established accessibility-tree shape. New data-scope links are exposed as a separately labelled group, expose the selected choice with aria-current, retain no-JavaScript URLs, and use a visible theme-token focus outline.",
+    "responsive": "The two compact segments wrap as independent groups when horizontal space is constrained; no fixed width or viewport assumption is introduced."
+  }
+}

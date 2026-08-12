@@ -8,7 +8,12 @@
 
 import { can } from "@/lib/permissions";
 import type { CapabilityKey } from "@/lib/govern/permissions";
-import { gridRegistry, type AdapterContext } from "./adapter";
+import {
+  gridRegistry,
+  queryBoundedRowsOnce,
+  type AdapterContext,
+} from "./adapter";
+import { platformTableHomeSurface, type PlatformTableHomeSurface } from "./platform-table-surfaces";
 import "./backlog-adapter"; // self-register the backlog adapter
 import "./invoice-adapter"; // self-register the invoice adapter
 import "./risk-adapter"; // self-register the risk-assessment adapter
@@ -41,12 +46,6 @@ export interface PlatformUser {
  * not on a standalone Workbooks hub. `board` marks whether the grid has a groupable
  * column suitable for a Kanban Board view.
  */
-export interface PlatformTableHomeSurface {
-  path: string;
-  label: string;
-  board: boolean;
-}
-
 export interface PlatformTableDef {
   entityType: string;
   label: string;
@@ -177,6 +176,7 @@ const COMPLIANCE_CONTROL_TABLE: GenericTableConfig = {
       ],
     },
     { field: "nextReviewDate", name: "Next review", fieldType: "date", width: 130 },
+    { field: "status", name: "Lifecycle", fieldType: "text", width: 110 },
     { field: "updatedAt", name: "Updated", fieldType: "datetime", width: 170 },
   ],
 };
@@ -553,7 +553,7 @@ export const PLATFORM_TABLES: PlatformTableDef[] = [
     description: "Every backlog item as an editable spreadsheet — same records as the backlog forms.",
     viewCapability: "view_operations",
     manageCapability: "manage_backlog",
-    homeSurface: { path: "/ops", label: "Operations", board: true },
+    homeSurface: platformTableHomeSurface("backlog_item", "/ops", "Operations", true),
   },
   {
     entityType: "invoice",
@@ -561,7 +561,7 @@ export const PLATFORM_TABLES: PlatformTableDef[] = [
     description: "Finance invoices as a grid — edit status inline; amounts/dates stay in the invoice form.",
     viewCapability: "view_finance",
     manageCapability: "manage_finance",
-    homeSurface: { path: "/finance/invoices", label: "Invoices", board: true },
+    homeSurface: platformTableHomeSurface("invoice", "/finance/invoices", "Invoices", true),
   },
   {
     entityType: "risk_assessment",
@@ -569,7 +569,7 @@ export const PLATFORM_TABLES: PlatformTableDef[] = [
     description: "Compliance risk register as an editable spreadsheet — same records as the risk forms.",
     viewCapability: "view_compliance",
     manageCapability: "manage_compliance",
-    homeSurface: { path: "/compliance/risks", label: "Risk assessments", board: true },
+    homeSurface: platformTableHomeSurface("risk_assessment", "/compliance/risks", "Risk assessments", true),
   },
   {
     entityType: "compliance_control",
@@ -577,7 +577,7 @@ export const PLATFORM_TABLES: PlatformTableDef[] = [
     description: "Compliance controls as a read-only grid — sort, filter, and board by status.",
     viewCapability: "view_compliance",
     manageCapability: "view_compliance", // read-only grid; adapter performs no writes
-    homeSurface: { path: "/compliance/controls", label: "Controls", board: true },
+    homeSurface: platformTableHomeSurface("compliance_control", "/compliance/controls", "Controls", true),
   },
   {
     entityType: "compliance_obligation",
@@ -585,7 +585,7 @@ export const PLATFORM_TABLES: PlatformTableDef[] = [
     description: "Regulatory obligations as a read-only grid — sort and filter.",
     viewCapability: "view_compliance",
     manageCapability: "view_compliance", // read-only grid; adapter performs no writes
-    homeSurface: { path: "/compliance/obligations", label: "Obligations", board: false },
+    homeSurface: platformTableHomeSurface("compliance_obligation", "/compliance/obligations", "Obligations", false),
   },
   {
     entityType: "compliance_incident",
@@ -593,7 +593,7 @@ export const PLATFORM_TABLES: PlatformTableDef[] = [
     description: "Compliance incidents as a read-only grid — sort and filter.",
     viewCapability: "view_compliance",
     manageCapability: "view_compliance", // read-only grid; adapter performs no writes
-    homeSurface: { path: "/compliance/incidents", label: "Incidents", board: false },
+    homeSurface: platformTableHomeSurface("compliance_incident", "/compliance/incidents", "Incidents", false),
   },
   {
     entityType: "opportunity",
@@ -601,7 +601,7 @@ export const PLATFORM_TABLES: PlatformTableDef[] = [
     description: "Sales opportunities as a read-only grid — sort, filter, and board by stage.",
     viewCapability: "view_customer",
     manageCapability: "view_customer", // read-only grid; adapter performs no writes
-    homeSurface: { path: "/customer/opportunities", label: "Opportunities", board: true },
+    homeSurface: platformTableHomeSurface("opportunity", "/customer/opportunities", "Opportunities", true),
   },
   {
     entityType: "quote",
@@ -609,7 +609,7 @@ export const PLATFORM_TABLES: PlatformTableDef[] = [
     description: "Sales quotes as a read-only grid — sort, filter, and board by status.",
     viewCapability: "view_customer",
     manageCapability: "view_customer", // read-only grid; adapter performs no writes
-    homeSurface: { path: "/customer/quotes", label: "Quotes", board: true },
+    homeSurface: platformTableHomeSurface("quote", "/customer/quotes", "Quotes", true),
   },
   {
     entityType: "sales_order",
@@ -617,7 +617,7 @@ export const PLATFORM_TABLES: PlatformTableDef[] = [
     description: "Sales orders as a read-only grid — sort, filter, and board by status.",
     viewCapability: "view_customer",
     manageCapability: "view_customer", // read-only grid; adapter performs no writes
-    homeSurface: { path: "/customer/sales-orders", label: "Sales orders", board: true },
+    homeSurface: platformTableHomeSurface("sales_order", "/customer/sales-orders", "Sales orders", true),
   },
   {
     entityType: "engagement",
@@ -625,7 +625,7 @@ export const PLATFORM_TABLES: PlatformTableDef[] = [
     description: "CRM engagements as a read-only grid — sort, filter, and board by status.",
     viewCapability: "view_customer",
     manageCapability: "view_customer", // read-only grid; adapter performs no writes
-    homeSurface: { path: "/customer/engagements", label: "Engagements", board: true },
+    homeSurface: platformTableHomeSurface("engagement", "/customer/engagements", "Engagements", true),
   },
   {
     entityType: "bill",
@@ -633,7 +633,7 @@ export const PLATFORM_TABLES: PlatformTableDef[] = [
     description: "Supplier bills as a read-only grid — sort and filter.",
     viewCapability: "view_finance",
     manageCapability: "view_finance", // read-only grid; adapter performs no writes
-    homeSurface: { path: "/finance/bills", label: "Bills", board: false },
+    homeSurface: platformTableHomeSurface("bill", "/finance/bills", "Bills", false),
   },
   {
     entityType: "bank_account",
@@ -641,7 +641,7 @@ export const PLATFORM_TABLES: PlatformTableDef[] = [
     description: "Bank accounts as a read-only grid (no account numbers) — sort and filter.",
     viewCapability: "view_finance",
     manageCapability: "view_finance", // read-only grid; adapter performs no writes
-    homeSurface: { path: "/finance/banking", label: "Banking", board: false },
+    homeSurface: platformTableHomeSurface("bank_account", "/finance/banking", "Banking", false),
   },
   {
     entityType: "expense_claim",
@@ -649,7 +649,7 @@ export const PLATFORM_TABLES: PlatformTableDef[] = [
     description: "Expense claims as a read-only grid — sort and filter.",
     viewCapability: "view_finance",
     manageCapability: "view_finance", // read-only grid; adapter performs no writes
-    homeSurface: { path: "/finance/expense-claims", label: "Expense claims", board: false },
+    homeSurface: platformTableHomeSurface("expense_claim", "/finance/expense-claims", "Expense claims", false),
   },
   {
     entityType: "fixed_asset",
@@ -657,7 +657,7 @@ export const PLATFORM_TABLES: PlatformTableDef[] = [
     description: "Fixed assets as a read-only grid — sort and filter.",
     viewCapability: "view_finance",
     manageCapability: "view_finance", // read-only grid; adapter performs no writes
-    homeSurface: { path: "/finance/assets", label: "Assets", board: false },
+    homeSurface: platformTableHomeSurface("fixed_asset", "/finance/assets", "Assets", false),
   },
   {
     entityType: "storefront_item",
@@ -665,7 +665,7 @@ export const PLATFORM_TABLES: PlatformTableDef[] = [
     description: "Storefront catalogue items as a read-only grid — sort and filter.",
     viewCapability: "view_storefront",
     manageCapability: "view_storefront", // read-only grid; adapter performs no writes
-    homeSurface: { path: "/storefront", label: "Storefront", board: false },
+    homeSurface: platformTableHomeSurface("storefront_item", "/storefront", "Storefront", false),
   },
   {
     entityType: "inventory_entity",
@@ -673,7 +673,7 @@ export const PLATFORM_TABLES: PlatformTableDef[] = [
     description: "Discovered inventory entities as a read-only grid — sort and filter.",
     viewCapability: "view_inventory",
     manageCapability: "view_inventory", // read-only grid; adapter performs no writes
-    homeSurface: { path: "/inventory", label: "Inventory", board: false },
+    homeSurface: platformTableHomeSurface("inventory_entity", "/inventory", "Inventory", false),
   },
   {
     entityType: "rental_agreement",
@@ -681,7 +681,7 @@ export const PLATFORM_TABLES: PlatformTableDef[] = [
     description: "Rental agreements as a read-only grid (no contact PII) — sort, filter, board by status.",
     viewCapability: "view_customer",
     manageCapability: "view_customer", // read-only grid; adapter performs no writes
-    homeSurface: { path: "/rental", label: "Rental", board: true },
+    homeSurface: platformTableHomeSurface("rental_agreement", "/rental", "Rental", true),
   },
   {
     entityType: "fund_budget_line",
@@ -689,7 +689,7 @@ export const PLATFORM_TABLES: PlatformTableDef[] = [
     description: "Fund budget lines as a read-only grid — sort, filter, and board by fund.",
     viewCapability: "view_finance",
     manageCapability: "view_finance", // read-only grid; adapter performs no writes
-    homeSurface: { path: "/finance/funds", label: "Funds", board: true },
+    homeSurface: platformTableHomeSurface("fund_budget_line", "/finance/funds", "Funds", true),
   },
   {
     entityType: "epic",
@@ -697,7 +697,7 @@ export const PLATFORM_TABLES: PlatformTableDef[] = [
     description: "Every epic as a read-only grid — sort, filter, and board by status.",
     viewCapability: "view_operations",
     manageCapability: "view_operations", // read-only grid; adapter performs no writes
-    homeSurface: { path: "/ops", label: "Operations", board: true },
+    homeSurface: platformTableHomeSurface("epic", "/ops", "Operations", true),
   },
   {
     entityType: "digital_product",
@@ -705,7 +705,7 @@ export const PLATFORM_TABLES: PlatformTableDef[] = [
     description: "The product portfolio as a read-only grid — sort, filter, and board by lifecycle.",
     viewCapability: "view_portfolio",
     manageCapability: "view_portfolio", // read-only grid; adapter performs no writes
-    homeSurface: { path: "/portfolio", label: "Portfolio", board: true },
+    homeSurface: platformTableHomeSurface("digital_product", "/portfolio", "Portfolio", true),
   },
   {
     entityType: "customer_account",
@@ -713,7 +713,7 @@ export const PLATFORM_TABLES: PlatformTableDef[] = [
     description: "Customer accounts as a read-only grid — sort, filter, and board by status.",
     viewCapability: "view_customer",
     manageCapability: "view_customer", // read-only grid; adapter performs no writes
-    homeSurface: { path: "/customer", label: "Customers", board: true },
+    homeSurface: platformTableHomeSurface("customer_account", "/customer", "Customers", true),
   },
   {
     entityType: "employee_profile",
@@ -721,7 +721,7 @@ export const PLATFORM_TABLES: PlatformTableDef[] = [
     description: "The team directory as an editable grid (safe fields only) — board by status.",
     viewCapability: "view_employee",
     manageCapability: "manage_user_lifecycle", // seeing the directory ≠ editing it; governed write-through
-    homeSurface: { path: "/employee", label: "People", board: true },
+    homeSurface: platformTableHomeSurface("employee_profile", "/employee", "People", true),
   },
   {
     entityType: "supplier",
@@ -730,7 +730,7 @@ export const PLATFORM_TABLES: PlatformTableDef[] = [
     viewCapability: "view_finance",
     manageCapability: "manage_finance", // validated raw-write tier (editableFields allow-list)
     // The Suppliers list lives at /finance/suppliers, so the List/Grid tabs target it.
-    homeSurface: { path: "/finance/suppliers", label: "Suppliers", board: true },
+    homeSurface: platformTableHomeSurface("supplier", "/finance/suppliers", "Suppliers", true),
   },
 ];
 
@@ -807,10 +807,9 @@ export async function getPlatformTableGridData(
 }
 
 /**
- * Like getPlatformTableGridData but loads EVERY row (paginating through the
- * adapter's cursors, capped at MAX_GRID_ROWS) so the client grid — which filters,
- * sorts, groups and exports over the rows it holds — reflects the whole table, not
- * just the first page. `nextCursor` is non-null only if the cap was hit.
+ * Like getPlatformTableGridData but asks the adapter once for the bounded eager
+ * dataset the client grid filters, sorts, groups, and exports. `nextCursor` is
+ * non-null only if the MAX_GRID_ROWS safety ceiling was hit.
  */
 export async function getAllPlatformTableRows(
   user: PlatformUser,
@@ -824,19 +823,20 @@ export async function getAllPlatformTableRows(
     canManage: can(userCtx(user), def.manageCapability),
   };
   const columns = await adapter.getColumns(entityType);
-  const rows: GridRow[] = [];
-  let cursor: string | null = null;
-  do {
-    const { data, nextCursor } = await adapter.queryRows(entityType, {
-      filters: opts.filters ?? { conditions: [], logic: "and" },
-      sort: opts.sort ?? [],
-      pagination: { cursor, limit: MAX_PAGE_SIZE },
-    });
-    rows.push(...data);
-    cursor = nextCursor;
-    // Guard against a stuck cursor that never returns rows or never clears.
-    if (data.length === 0) break;
-  } while (cursor && rows.length < MAX_GRID_ROWS);
+  const filters = opts.filters ?? { conditions: [], logic: "and" };
+  const columnIds = new Set(columns.map((column) => column.columnId));
+  const unknownField = filters.conditions.find((condition) => !columnIds.has(condition.field));
+  if (unknownField) {
+    throw new WorkbookError(
+      `The ${def.label} data lens references an unknown field: ${unknownField.field}`,
+      400,
+    );
+  }
+  const { data: rows, nextCursor } = await queryBoundedRowsOnce(adapter, entityType, {
+    filters,
+    sort: opts.sort ?? [],
+    limit: MAX_GRID_ROWS,
+  });
   return {
     schema: {
       tableId: entityType,
@@ -846,7 +846,7 @@ export async function getAllPlatformTableRows(
       capabilities: adapter.getCapabilities(ctx),
     },
     rows,
-    nextCursor: cursor,
+    nextCursor,
     view: emptyViewConfig(columns),
   };
 }
