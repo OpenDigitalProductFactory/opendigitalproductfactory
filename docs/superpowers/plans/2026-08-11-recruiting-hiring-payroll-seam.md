@@ -40,17 +40,23 @@ Kernel decision: DI-2E77D02EB450 selected normalized PayRun/Payslip over JSON sn
 
 Verification: additive migration safety, migration application in the governed integration sandbox, persistence/idempotency tests, non-payable skip evidence, and regulated-record data-impact coverage.
 
+Refactoring delivered: `payRunRef` is the stable retry key; a retry cannot mutate its defining period or recompute a run after `draft`. `PayRun.status` and `Payslip.disbursementStatus` are database-enforced Prisma enums with generated TypeScript unions rather than new free-form strings.
+
 ### 4. Manual disbursement artifact — BI-DR-02
 
 Generate a deterministic PPD-credit NACHA file and operator instruction summary from validated payee input. Keep the generator pure and format-pluggable.
 
 Verification: golden fixed-width output, block/count/hash totals, balanced amount, and invalid routing/account refusal.
 
+Safety hardening delivered: ABA checksum, account-width, whole-cent amount, date, file-modifier, and non-empty-batch validation fail closed before an artifact is emitted.
+
 ### 5. Human attestation transition core — partial BI-DR-03
 
 Require a named attester, timestamp, and bank reference before atomically marking only pending payslips paid. This branch returns the evidence projection; durable, immutable `ComplianceEvidence` and operator UI follow after BI-DR-01 provides the batch identity.
 
-Verification: missing-reference refusal, immutable evidence mapping, multi-payslip status update, and proof that the code has no external bank call.
+Verification: missing-reference refusal, attestation projection, atomic multi-payslip status update, and proof that the code has no external bank call.
+
+Refactoring delivered: the batch update is one database transaction, duplicate targets are refused, and the shared write-back hook cannot silently rewrite a non-pending regulated payroll record.
 
 ## Follow-on decisions, not scope creep
 
@@ -60,7 +66,7 @@ Verification: missing-reference refusal, immutable evidence mapping, multi-paysl
 
 ## Refactoring allocation
 
-Reserve one fifth of implementation effort for consolidation: one `Compensation` contract across recruiting/payroll, one hire mapper across Greenhouse/native P4, one disbursement status hook across rails, and removal of any branch-local duplicate helper discovered during merge reconciliation.
+One fifth of implementation effort was reserved for consolidation: one `Compensation` contract across recruiting/payroll, one transaction-safe hire mapper across Greenhouse/native P4, one pending-only disbursement status hook across rails, typed payroll lifecycles, and fail-closed NACHA validation.
 
 ## Risks and rollback
 
