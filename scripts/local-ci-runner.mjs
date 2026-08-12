@@ -91,6 +91,32 @@ export function planPostgresOwnership({
   return "provision";
 }
 
+/**
+ * Recreate the admitted slot's disposable database before each exact candidate.
+ * The container and database identities are derived from the slot manifest; the
+ * strict shape check keeps this recovery path away from developer/production DBs.
+ */
+export function resetOwnedSlotDatabase({
+  container,
+  database,
+  run = spawnSync,
+}) {
+  if (!/^dpf-local-ci-postgres-\d+$/.test(container) || !/^dpf_local_ci_\d+$/.test(database)) {
+    throw new Error(`refusing non-slot Postgres reset: ${container}/${database}`);
+  }
+  const commands = [
+    ["exec", container, "dropdb", "--if-exists", "--force", "-U", "dpf", database],
+    ["exec", container, "createdb", "-U", "dpf", "-O", "dpf", database],
+  ];
+  for (const args of commands) {
+    const result = run("docker", args, { encoding: "utf8" });
+    if (result.status !== 0) {
+      const detail = (result.stderr || result.stdout || "unknown Docker error").trim();
+      throw new Error(`could not reset disposable slot database ${database}: ${detail}`);
+    }
+  }
+}
+
 async function resolveDatabaseUrl(env, manifest) {
   if (env.DPF_LOCAL_CI_ALLOW_EXPLICIT_DATABASE_URL === "1") {
     if (env.DPF_LOCAL_CI_TEST_DATABASE_URL) return env.DPF_LOCAL_CI_TEST_DATABASE_URL;
@@ -149,7 +175,13 @@ async function resolveDatabaseUrl(env, manifest) {
 
   for (let tries = 0; tries < 30; tries += 1) {
     const ready = spawnSync("docker", ["exec", manifest.postgres.container, "pg_isready", "-U", "dpf", "-d", manifest.postgres.database], { encoding: "utf8" });
-    if (ready.status === 0) return manifest.postgres.url;
+    if (ready.status === 0) {
+      resetOwnedSlotDatabase({
+        container: manifest.postgres.container,
+        database: manifest.postgres.database,
+      });
+      return manifest.postgres.url;
+    }
     await new Promise((resolve) => setTimeout(resolve, 1000));
   }
   return "";
