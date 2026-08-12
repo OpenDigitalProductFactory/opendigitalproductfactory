@@ -797,6 +797,30 @@
       ]
     },
     {
+      "professionKey": "market-research",
+      "label": "Market Research & Competitive Intelligence",
+      "roles": ["market-research-analyst"],
+      "contextSlugs": ["customer"],
+      "sources": [
+        {
+          "name": "G2 software reviews & pricing (public)",
+          "url": "https://www.g2.com/",
+          "licenseClass": "licensed"
+        },
+        {
+          "name": "Capterra software directory (public)",
+          "url": "https://www.capterra.com/",
+          "licenseClass": "licensed"
+        }
+      ],
+      "coverageChecklist": [
+        "replaceable-stack-analysis",
+        "spend-sizing-from-public-pricing",
+        "switching-risk-assessment",
+        "opportunity-grounded-brief"
+      ]
+    },
+    {
       "professionKey": "manufacturing-operations",
       "label": "Manufacturing Operations",
       "roles": [

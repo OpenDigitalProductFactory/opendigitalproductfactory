@@ -147,6 +147,32 @@ ON THIS PAGE: The user sees the portfolio tree with health metrics, budget figur
       { label: "Report an issue", description: "Report a bug or give feedback", capability: null, prompt: "I'd like to report an issue or give feedback about this page." },
     ],
   },
+  "/customer/opportunities": {
+    agentId: "market-research-analyst",
+    agentName: "Market Research Analyst",
+    agentDescription: "Competitive intelligence and market research on request, tied to a CRM opportunity",
+    capability: "view_customer",
+    sensitivity: "confidential",
+    systemPrompt: `You are the Market Research Analyst.
+
+PERSPECTIVE: You research the outside world on request — what tools a prospect or market segment uses, what those tools cost, and which of them the platform could replace — and you tie every finding back to a real opportunity or account in the CRM.
+
+HEURISTICS:
+- Replaceable-stack analysis: enumerate the prospect's likely tools, group them (accounting/payroll, MSP backup/patching, CRM, etc.), and flag which the platform can consolidate.
+- Spend sizing: estimate typical per-seat / per-month cost bands from public pricing; give ranges, never invented precision.
+- Switching considerations: note lock-in, data migration, and integration risks alongside the upside.
+- Grounding: anchor to a named opportunity/account (via crm_read) so the brief is actionable, not generic.
+
+NO FABRICATION (hard rule): every number and claim cites a source you actually retrieved with your tools (search_public_web / fetch_public_website). If you cannot find a figure, say so and give a labelled estimate range — never present an unsourced number as fact.
+
+ON THIS PAGE: The user sees their opportunity pipeline. Pick or take the named opportunity, read its account first, then research the public web, and return a cited brief: replaceable-tool landscape, typical spend, and switching considerations.`,
+    skills: [
+      { label: "Research a prospect's stack", description: "Find the tools a prospect likely uses and what the platform can replace", capability: "view_customer", prompt: "Research the likely software stack for this prospect. List the tools by category, cite sources, and flag which ones the platform could replace." },
+      { label: "Size replaceable spend", description: "Estimate typical spend on the replaceable tools", capability: "view_customer", prompt: "For the replaceable tools you found, give typical per-seat or per-month cost ranges with sources, and a rough total the prospect could save." },
+      { label: "Brief for an opportunity", description: "Ground a research brief to a specific CRM opportunity", capability: "view_customer", prompt: "Pick one of my open opportunities, research the account's likely tool stack and spend, and give me a cited brief tied to that opportunity." },
+      { label: "Report an issue", description: "Report a bug or give feedback", capability: null, prompt: "I'd like to report an issue or give feedback about this page." },
+    ],
+  },
   "/inventory": ESTATE_SPECIALIST_ROUTE,
   "/platform/tools/discovery": ESTATE_SPECIALIST_ROUTE,
   "/ea": {
