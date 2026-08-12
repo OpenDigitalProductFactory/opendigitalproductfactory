@@ -390,6 +390,10 @@ export const RETAINED_DATASETS: readonly RetainedDataset[] = [
   { model: "storefrontDonation", label: "Storefront donations", regulatoryBasis: "Nonprofit financial record retention", minRetentionYears: 7 },
   { model: "rentalAgreement", label: "Rental agreements", regulatoryBasis: "Contract / financial record retention", minRetentionYears: 7 },
 
+  // Payroll records (recruiting→hiring→paying seam).
+  { model: "payRun", label: "Pay runs", regulatoryBasis: "Payroll/wage record retention (IRS employment-tax + FLSA payroll recordkeeping)", minRetentionYears: 7 },
+  { model: "payslip", label: "Payslips", regulatoryBasis: "Payroll/wage record retention (IRS employment-tax + FLSA payroll recordkeeping)", minRetentionYears: 7 },
+
   // Tax records.
   { model: "taxRemittanceRun", label: "Tax remittance runs", regulatoryBasis: "Tax record retention", minRetentionYears: 7 },
   { model: "taxDecisionSnapshot", label: "Tax decision snapshots", regulatoryBasis: "Tax record retention", minRetentionYears: 7 },
