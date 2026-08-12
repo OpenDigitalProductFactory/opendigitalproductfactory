@@ -1,6 +1,6 @@
 # Recruiting → hiring → paying: the seamless spine (design)
 
-**Status:** implemented on `claude/recruiting-hiring-payroll-seam`; governed review/merge pending. **Anchor BIs:** BI-44C79A02 (umbrella), BI-A90203A4 (offer compensation handoff), BI-3E300172 (payslip compute), BI-838F8D00 (PayRun/Payslip persistence), BI-DR-02/03 (manual artifact + attestation), BI-F3AEBF68 (native recruiting → hire), and BI-E5561DC9 (Greenhouse absorption). **Coverage:** receipt `cmspndncd0aif01nvtkn16kgg` maps the six independently shippable seam/manual-rail deliverables.
+**Status:** implemented on `claude/recruiting-hiring-payroll-seam`; governed review/merge pending. **Anchor BIs:** BI-44C79A02 (umbrella), BI-A90203A4 (offer compensation handoff), BI-3E300172 (payslip compute), BI-838F8D00 (PayRun/Payslip persistence), BI-DR-02 (manual artifact) and partial BI-DR-03 (attestation transition core; durable evidence remains open), BI-F3AEBF68 (native recruiting → hire), and BI-E5561DC9 (Greenhouse absorption). **Coverage:** receipt `cmspndncd0aif01nvtkn16kgg` maps the six independently shippable seam/manual-rail deliverables.
 
 > Operator directive (2026-08-11): "recruiting, hiring, then paying the employees we hire needs to be seamless." Close the gaps on the Greenhouse-replacement effort AND tightly integrate with the payroll processes from the Paycom-replacement thread.
 
@@ -58,4 +58,4 @@ Slice 1 (comp handoff) ships now — it makes every hire payable and is the conn
 - Round-trip unit test (offer comp → columns → `compensationFromEmployee` → same comp) is the seam proof; `land-hire` lands comp; graceful null path covered.
 - No schema change (JSON column reused) → no migration/data-impact gauntlet.
 - **Governance recovered:** live BIs and coverage are recorded above. Kernel decision DI-2E77D02EB450 selected normalized PayRun + per-employee Payslip persistence over a JSON snapshot or reconstruction-only shape (high confidence, autonomy eligible).
-- **Money boundary:** tests and code may compute, persist, prepare a bank artifact, and record a human attestation; they never execute a real transfer.
+- **Money boundary:** tests and code may compute, persist, prepare a bank artifact, and require human-supplied proof before recording status; they never execute a real transfer. Durable attestation evidence remains BI-DR-03 work after BI-DR-01 establishes batch identity.

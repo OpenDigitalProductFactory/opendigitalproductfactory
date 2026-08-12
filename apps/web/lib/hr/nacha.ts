@@ -73,12 +73,56 @@ const hhmm = (d: Date): string => `${num(d.getUTCHours(), 2)}${num(d.getUTCMinut
 // PPD credit transaction codes: 22 = checking credit, 32 = savings credit.
 const txCode = (t: NachaEntry["accountType"]): string => (t === "savings" ? "32" : "22");
 
+function assertAbaRoutingNumber(value: string, field: string): void {
+  if (!/^\d{9}$/.test(value)) {
+    throw new Error(`${field} must contain exactly 9 digits`);
+  }
+  const d = [...value].map(Number);
+  const checksum =
+    3 * (d[0] + d[3] + d[6]) +
+    7 * (d[1] + d[4] + d[7]) +
+    (d[2] + d[5] + d[8]);
+  if (checksum % 10 !== 0) {
+    throw new Error(`${field} failed the ABA routing checksum`);
+  }
+}
+
+function assertValidInput(input: NachaBatchInput): void {
+  if (Number.isNaN(input.effectiveDate.getTime()) || Number.isNaN(input.fileCreated.getTime())) {
+    throw new Error("effectiveDate and fileCreated must be valid dates");
+  }
+  if (input.entries.length === 0) {
+    throw new Error("a NACHA payroll batch requires at least one entry");
+  }
+  assertAbaRoutingNumber(input.originator.originatingDfiRouting, "originatingDfiRouting");
+  assertAbaRoutingNumber(input.originator.immediateDestination, "immediateDestination");
+  if (!/^\d{9,10}$/.test(input.originator.immediateOrigin)) {
+    throw new Error("immediateOrigin must contain 9 or 10 digits");
+  }
+  if (input.fileIdModifier !== undefined && !/^[A-Z]$/i.test(input.fileIdModifier)) {
+    throw new Error("fileIdModifier must be one letter A-Z");
+  }
+  input.entries.forEach((entry, index) => {
+    const prefix = `entries[${index}]`;
+    assertAbaRoutingNumber(entry.routingNumber, `${prefix}.routingNumber`);
+    if (!entry.accountNumber.trim() || entry.accountNumber.length > 17) {
+      throw new Error(`${prefix}.accountNumber must contain 1-17 characters`);
+    }
+    if (!Number.isSafeInteger(entry.amountCents) || entry.amountCents <= 0 || entry.amountCents > 9_999_999_999) {
+      throw new Error(`${prefix}.amountCents must be a positive whole-cent amount within NACHA width`);
+    }
+    if (!entry.receiverName.trim()) throw new Error(`${prefix}.receiverName is required`);
+    if (!entry.individualId.trim()) throw new Error(`${prefix}.individualId is required`);
+  });
+}
+
 /**
  * Build a NACHA file (single PPD credit batch) for payroll net pay. Deterministic:
  * pass fileCreated/effectiveDate explicitly. Returns the CRLF-joined 94-char records,
  * padded to a multiple of the blocking factor with 9-filler records.
  */
 export function buildNachaFile(input: NachaBatchInput): string {
+  assertValidInput(input);
   const { originator: o, entries } = input;
   const originDfi8 = digits(o.originatingDfiRouting).slice(0, 8);
   const lines: string[] = [];

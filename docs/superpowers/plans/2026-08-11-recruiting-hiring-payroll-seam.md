@@ -8,7 +8,7 @@
 
 ## Objective and boundary
 
-Carry accepted-offer compensation through the canonical `EmployeeProfile` spine, compute and persist an auditable payslip, and prepare the manual bank artifact plus human attestation that closes the non-automated payment rail. The code prepares and records disbursement; it never submits a real transfer. Automated provider work stays blocked behind completion of its tool evaluation, an operator approval gate, and sandbox-only integration proof.
+Carry accepted-offer compensation through the canonical `EmployeeProfile` spine, compute and persist an auditable payslip, and prepare the validated manual bank artifact plus the proof-required status-transition core. The code prepares artifacts and records status; it never submits a real transfer. BI-DR-01 supplies durable encrypted payee/batch data, and BI-DR-03 remains open until the human attestation is immutable `ComplianceEvidence`. Automated provider work stays blocked behind completion of its tool evaluation, an operator approval gate, and sandbox-only integration proof.
 
 ## Grounded substrate
 
@@ -46,9 +46,9 @@ Generate a deterministic PPD-credit NACHA file and operator instruction summary 
 
 Verification: golden fixed-width output, block/count/hash totals, balanced amount, and invalid routing/account refusal.
 
-### 5. Human attestation write-back — BI-DR-03
+### 5. Human attestation transition core — partial BI-DR-03
 
-Require a bank reference and record who attested, when, and what bank evidence supports the status update before marking payslips paid.
+Require a named attester, timestamp, and bank reference before atomically marking only pending payslips paid. This branch returns the evidence projection; durable, immutable `ComplianceEvidence` and operator UI follow after BI-DR-01 provides the batch identity.
 
 Verification: missing-reference refusal, immutable evidence mapping, multi-payslip status update, and proof that the code has no external bank call.
 

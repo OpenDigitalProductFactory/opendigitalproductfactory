@@ -13,12 +13,12 @@ The recruiting→hiring→paying spine already reaches **persisted, computed pay
 
 ## 0b. Delivered in this branch (2026-08-11) — manual-rail core
 
-The pure, dependency-free core of the manual rail is already built + verified here, ahead of filing (the loop now reaches a prepared bank artifact + an attested paid state, in code):
+The pure, dependency-free core of the manual rail is already built here (the loop reaches a validated bank artifact plus an atomic, proof-required `pending → paid` write-back hook, in code):
 - **NACHA generator** (`apps/web/lib/hr/nacha.ts`) — PPD-credit ACH file, byte-position-correct + control-total balanced (6 golden/structural tests). This is **BI-DR-02**'s core (US format).
-- **Manual disbursement flow** (`apps/web/lib/hr/manual-disbursement.ts`) — `prepareManualNachaBatch` (payslip net-pay lines + payee bank details → the file + summary) and `recordManualDisbursement` (attested "paid" through the existing `markPayslipDisbursed` hook; refuses without a `bankReference`). This is **BI-DR-03**'s core.
-- Verified: 9 tests + web typecheck green. Money-movement boundary held (produces a file + records a human attestation; never sends).
+- **Manual disbursement flow** (`apps/web/lib/hr/manual-disbursement.ts`) — `prepareManualNachaBatch` (payslip net-pay lines + payee bank details → the file + summary) and `recordManualDisbursement` (one transaction, explicit attester + bank reference, pending-only write-back through `markPayslipDisbursed`). This is **BI-DR-03**'s transition core, not its durable evidence capture.
+- Verification is re-run on the governed exact tree before PR publication. Money-movement boundary holds: the code produces a file and records status only; it never submits the file or sends money.
 
-**The one remaining input for a production manual run:** a **payee bank-account store** (routing/account per employee) — that is **BI-DR-01**'s persistence, which needs the model-shape kernel decision + a migration (both MCP-gated). Today the generator takes bank details as input; BI-DR-01 supplies them durably. So BI-DR-02/03 are code-complete over transient input; BI-DR-01 is the governed piece that makes the manual rail runnable end to end on real data.
+**Remaining production inputs:** BI-DR-01 must supply the encrypted payee bank account plus `DisbursementBatch`/`Disbursement` identity; BI-DR-03 must then persist the immutable `ComplianceEvidence` record against that batch and expose explicit operator confirmation. Today the generator takes transient bank details and the transition core returns the attestation projection to its future caller. BI-DR-02's generator core is implemented; BI-DR-03 remains open until its evidence is durable and retrievable.
 
 ## 1. Epic
 

@@ -9038,15 +9038,28 @@ model TimesheetEntry {
 // hiring→paying seam). Regulated financial records — retained per payroll/tax law.
 // Actual money movement (bank/ACH) is a separate provider bridge; disbursementStatus
 // tracks it. Model shape mirrors the pure Payslip type (lib/hr/payroll.ts).
+enum PayRunStatus {
+  draft
+  approved
+  paid
+  cancelled
+}
+
+enum PayslipDisbursementStatus {
+  pending
+  paid
+  failed
+}
+
 model PayRun {
-  id          String    @id @default(cuid())
-  payRunRef   String    @unique
+  id          String       @id @default(cuid())
+  payRunRef   String       @unique
   periodStart DateTime
   periodEnd   DateTime
   payDate     DateTime?
-  status      String    @default("draft") // draft|approved|paid|cancelled
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  status      PayRunStatus @default(draft)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
 
   payslips Payslip[]
 
@@ -9055,7 +9068,7 @@ model PayRun {
 }
 
 model Payslip {
-  id                 String    @id @default(cuid())
+  id                 String                    @id @default(cuid())
   payRunId           String
   employeeProfileId  String
   grossPay           Decimal
@@ -9065,9 +9078,9 @@ model Payslip {
   earnings           Json // PayComponent[] — earning lines
   employeeDeductions Json // PayComponent[] — income tax / NI / post-tax
   employerCosts      Json // PayComponent[] — employer NI etc.
-  disbursementStatus String    @default("pending") // pending|paid|failed
+  disbursementStatus PayslipDisbursementStatus @default(pending)
   paidAt             DateTime?
-  createdAt          DateTime  @default(now())
+  createdAt          DateTime                  @default(now())
 
   payRun          PayRun          @relation(fields: [payRunId], references: [id], onDelete: Cascade)
   employeeProfile EmployeeProfile @relation(fields: [employeeProfileId], references: [id], onDelete: Cascade)

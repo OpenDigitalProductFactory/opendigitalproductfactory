@@ -18,17 +18,26 @@ function hire(overrides: Partial<GreenhouseHire> = {}): GreenhouseHire {
 function fakeDb(opts: {
   existingRef?: { canonicalId: string } | null;
   refCreateThrows?: boolean;
+  raceWinnerRef?: { canonicalId: string };
 }) {
-  const findUnique = vi.fn().mockResolvedValue(opts.existingRef ?? null);
+  const findUnique = vi
+    .fn()
+    .mockResolvedValueOnce(opts.existingRef ?? null)
+    .mockResolvedValue(opts.raceWinnerRef ?? opts.existingRef ?? null);
   const refCreate = opts.refCreateThrows
     ? vi.fn().mockRejectedValue(new Error("unique constraint"))
     : vi.fn().mockResolvedValue({});
   const empCreate = vi.fn().mockResolvedValue({ id: "emp-cuid-1" });
-  const db: HireLandingClient = {
+  const tx = {
     masterDataSourceRef: { findUnique, create: refCreate },
     employeeProfile: { create: empCreate },
   };
-  return { db, findUnique, refCreate, empCreate };
+  const transaction = vi.fn(async (fn: (client: typeof tx) => Promise<unknown>) => fn(tx));
+  const db: HireLandingClient = {
+    ...tx,
+    $transaction: transaction as HireLandingClient["$transaction"],
+  };
+  return { db, findUnique, refCreate, empCreate, transaction };
 }
 
 describe("landGreenhouseHire", () => {
@@ -98,15 +107,21 @@ describe("landGreenhouseHire", () => {
     expect(refCreate).not.toHaveBeenCalled();
   });
 
-  it("treats a lost crosswalk race (unique violation) as already-landed", async () => {
-    const { db } = fakeDb({ existingRef: null, refCreateThrows: true });
+  it("rolls back a lost crosswalk race and returns the winning canonical profile", async () => {
+    const { db, findUnique, transaction } = fakeDb({
+      existingRef: null,
+      refCreateThrows: true,
+      raceWinnerRef: { canonicalId: "emp-winner" },
+    });
 
     const result = await landGreenhouseHire(db, hire());
 
     expect(result).toEqual({
       landed: false,
       reason: "already-landed",
-      employeeProfileId: "emp-cuid-1",
+      employeeProfileId: "emp-winner",
     });
+    expect(transaction).toHaveBeenCalledTimes(1);
+    expect(findUnique).toHaveBeenCalledTimes(2);
   });
 });

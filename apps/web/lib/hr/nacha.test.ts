@@ -87,4 +87,61 @@ describe("buildNachaFile", () => {
   it("uses the effective entry date (YYMMDD) in the batch header", () => {
     expect(lines[1]).toContain("260915"); // 2026-09-15
   });
+
+  it("refuses an invalid ABA routing checksum instead of emitting a corrupt artifact", () => {
+    const input: NachaBatchInput = {
+      originator,
+      effectiveDate: new Date(Date.UTC(2026, 8, 15)),
+      fileCreated: new Date(Date.UTC(2026, 8, 11, 14, 30)),
+      entries: [
+        {
+          receiverName: "Maria Reyes",
+          routingNumber: "021000022",
+          accountNumber: "123456789",
+          accountType: "checking",
+          amountCents: 250000,
+          individualId: "emp-1",
+        },
+      ],
+    };
+
+    expect(() => buildNachaFile(input)).toThrow(/routingNumber.*checksum/);
+  });
+
+  it("refuses empty account numbers and fractional cent amounts", () => {
+    const base: NachaBatchInput = {
+      originator,
+      effectiveDate: new Date(Date.UTC(2026, 8, 15)),
+      fileCreated: new Date(Date.UTC(2026, 8, 11, 14, 30)),
+      entries: [
+        {
+          receiverName: "Maria Reyes",
+          routingNumber: "021000021",
+          accountNumber: "",
+          accountType: "checking",
+          amountCents: 250000,
+          individualId: "emp-1",
+        },
+      ],
+    };
+
+    expect(() => buildNachaFile(base)).toThrow(/accountNumber/);
+    expect(() =>
+      buildNachaFile({
+        ...base,
+        entries: [{ ...base.entries[0], accountNumber: "123456789", amountCents: 1.5 }],
+      }),
+    ).toThrow(/amountCents/);
+  });
+
+  it("refuses an empty payroll batch", () => {
+    expect(() =>
+      buildNachaFile({
+        originator,
+        effectiveDate: new Date(Date.UTC(2026, 8, 15)),
+        fileCreated: new Date(Date.UTC(2026, 8, 11, 14, 30)),
+        entries: [],
+      }),
+    ).toThrow(/at least one entry/);
+  });
 });

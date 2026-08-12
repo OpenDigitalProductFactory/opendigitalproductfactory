@@ -3,10 +3,10 @@ import { describe, expect, it, vi } from "vitest";
 import {
   prepareManualNachaBatch,
   recordManualDisbursement,
+  type ManualDisbursementClient,
   type ManualDisbursementLine,
   type PrepareManualBatchInput,
 } from "./manual-disbursement";
-import type { DisbursePayslipClient } from "./payroll-run";
 
 const originator: PrepareManualBatchInput["originator"] = {
   companyName: "Infinitum Motors",
@@ -53,8 +53,13 @@ describe("prepareManualNachaBatch", () => {
 describe("recordManualDisbursement", () => {
   function fakeDb() {
     const update = vi.fn().mockResolvedValue({});
-    const db: DisbursePayslipClient = { payslip: { update } };
-    return { db, update };
+    const transaction = vi.fn(async (fn: (tx: { payslip: { update: typeof update } }) => Promise<unknown>) =>
+      fn({ payslip: { update } }),
+    );
+    const db: ManualDisbursementClient = {
+      $transaction: transaction as ManualDisbursementClient["$transaction"],
+    };
+    return { db, update, transaction };
   }
 
   const attestation = {
@@ -64,7 +69,7 @@ describe("recordManualDisbursement", () => {
   };
 
   it("marks every payslip paid as of the attestation time", async () => {
-    const { db, update } = fakeDb();
+    const { db, update, transaction } = fakeDb();
 
     const result = await recordManualDisbursement(db, {
       payslipIds: ["ps-1", "ps-2"],
@@ -72,9 +77,10 @@ describe("recordManualDisbursement", () => {
     });
 
     expect(result.disbursed).toEqual(["ps-1", "ps-2"]);
+    expect(transaction).toHaveBeenCalledTimes(1);
     expect(update).toHaveBeenCalledTimes(2);
     expect(update.mock.calls[0][0]).toMatchObject({
-      where: { id: "ps-1" },
+      where: { id: "ps-1", disbursementStatus: "pending" },
       data: { disbursementStatus: "paid", paidAt: attestation.attestedAt },
     });
     expect(result.attestation.bankReference).toBe("ACH-BATCH-8842");
@@ -88,6 +94,23 @@ describe("recordManualDisbursement", () => {
         attestation: { ...attestation, bankReference: "  " },
       }),
     ).rejects.toThrow(/bankReference/);
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it("refuses an unidentified attester or duplicate payslip target", async () => {
+    const { db, update } = fakeDb();
+    await expect(
+      recordManualDisbursement(db, {
+        payslipIds: ["ps-1"],
+        attestation: { ...attestation, attestedBy: " " },
+      }),
+    ).rejects.toThrow(/attestedBy/);
+    await expect(
+      recordManualDisbursement(db, {
+        payslipIds: ["ps-1", "ps-1"],
+        attestation,
+      }),
+    ).rejects.toThrow(/duplicate payslip/);
     expect(update).not.toHaveBeenCalled();
   });
 });

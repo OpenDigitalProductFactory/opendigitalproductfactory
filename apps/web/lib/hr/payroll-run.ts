@@ -11,10 +11,19 @@
 
 import { computeEmployeePayslip } from "./labor-service";
 import type { StatutoryDeductionFn } from "./payroll";
+import type { PayRunStatus, PayslipDisbursementStatus } from "@dpf/db";
 
 /** Structural write client — satisfied by the real PrismaClient and by test fakes. */
 export type RunPayrollClient = {
-  payRun: { create: (args: unknown) => Promise<{ id: string }> };
+  payRun: {
+    upsert: (args: unknown) => Promise<{
+      id: string;
+      periodStart: Date;
+      periodEnd: Date;
+      payDate: Date | null;
+      status: PayRunStatus;
+    }>;
+  };
   payslip: { upsert: (args: unknown) => Promise<{ id: string }> };
 };
 
@@ -45,15 +54,34 @@ export async function runPayroll(
   db: RunPayrollClient,
   input: RunPayrollInput,
 ): Promise<RunPayrollResult> {
-  const payRun = await db.payRun.create({
-    data: {
+  const requestedPayDate = input.payDate ?? null;
+  const payRun = await db.payRun.upsert({
+    where: { payRunRef: input.payRunRef },
+    create: {
       payRunRef: input.payRunRef,
       periodStart: input.periodStart,
       periodEnd: input.periodEnd,
-      payDate: input.payDate ?? null,
-      status: "draft",
+      payDate: requestedPayDate,
+      status: "draft" satisfies PayRunStatus,
     },
+    // A stable payRunRef is the idempotency key. Never mutate an existing run's
+    // defining period (or reset its lifecycle) as a side effect of a retry.
+    update: {},
+    select: { id: true, periodStart: true, periodEnd: true, payDate: true, status: true },
   });
+
+  const sameInstant = (a: Date | null, b: Date | null): boolean =>
+    a === null || b === null ? a === b : a.getTime() === b.getTime();
+  if (
+    !sameInstant(payRun.periodStart, input.periodStart) ||
+    !sameInstant(payRun.periodEnd, input.periodEnd) ||
+    !sameInstant(payRun.payDate, requestedPayDate)
+  ) {
+    throw new Error(`payRunRef ${input.payRunRef} already belongs to a different pay period`);
+  }
+  if (payRun.status !== "draft") {
+    throw new Error(`payRunRef ${input.payRunRef} cannot be recomputed from status ${payRun.status}`);
+  }
 
   const paid: RunPayrollResult["paid"] = [];
   const skipped: RunPayrollResult["skipped"] = [];
@@ -109,11 +137,13 @@ export type DisbursePayslipClient = {
 export async function markPayslipDisbursed(
   db: DisbursePayslipClient,
   payslipId: string,
-  outcome: "paid" | "failed",
+  outcome: Exclude<PayslipDisbursementStatus, "pending">,
   at: Date,
 ): Promise<void> {
   await db.payslip.update({
-    where: { id: payslipId },
+    // Only the pending state may transition through this hook. A replay cannot
+    // silently rewrite an already-paid or failed regulated payroll record.
+    where: { id: payslipId, disbursementStatus: "pending" },
     data: {
       disbursementStatus: outcome,
       ...(outcome === "paid" ? { paidAt: at } : {}),

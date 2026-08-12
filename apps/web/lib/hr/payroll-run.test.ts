@@ -27,12 +27,18 @@ const EMPLOYEES: Record<string, unknown> = {
 };
 
 function writeDb() {
-  const payRunCreate = vi.fn().mockResolvedValue({ id: "run-1" });
+  const payRunUpsert = vi.fn().mockResolvedValue({
+    id: "run-1",
+    periodStart: START,
+    periodEnd: END,
+    payDate: null,
+    status: "draft",
+  });
   let seq = 0;
   const payslipUpsert = vi.fn().mockImplementation(() => Promise.resolve({ id: `slip-${++seq}` }));
   return {
-    db: { payRun: { create: payRunCreate }, payslip: { upsert: payslipUpsert } },
-    payRunCreate,
+    db: { payRun: { upsert: payRunUpsert }, payslip: { upsert: payslipUpsert } },
+    payRunUpsert,
     payslipUpsert,
   };
 }
@@ -51,7 +57,7 @@ describe("runPayroll — persist a hire's computed pay as a durable, disbursable
   });
 
   it("creates a PayRun and persists one Payslip per payable employee", async () => {
-    const { db, payRunCreate, payslipUpsert } = writeDb();
+    const { db, payRunUpsert, payslipUpsert } = writeDb();
 
     const result = await runPayroll(db, {
       payRunRef: "PR-2026-09",
@@ -62,8 +68,12 @@ describe("runPayroll — persist a hire's computed pay as a durable, disbursable
       opts: { periodsPerYear: 12 },
     });
 
-    expect(payRunCreate).toHaveBeenCalledTimes(1);
-    expect(payRunCreate.mock.calls[0][0].data).toMatchObject({ payRunRef: "PR-2026-09", status: "draft" });
+    expect(payRunUpsert).toHaveBeenCalledTimes(1);
+    expect(payRunUpsert.mock.calls[0][0]).toMatchObject({
+      where: { payRunRef: "PR-2026-09" },
+      create: { payRunRef: "PR-2026-09", status: "draft" },
+      update: {},
+    });
 
     expect(payslipUpsert).toHaveBeenCalledTimes(1);
     const upsertArg = payslipUpsert.mock.calls[0][0];
@@ -96,6 +106,79 @@ describe("runPayroll — persist a hire's computed pay as a durable, disbursable
     // Only the payable employee got a payslip.
     expect(payslipUpsert).toHaveBeenCalledTimes(1);
   });
+
+  it("reuses the same PayRun when the caller retries a stable payRunRef", async () => {
+    const payRunUpsert = vi.fn().mockResolvedValue({
+      id: "run-stable",
+      periodStart: START,
+      periodEnd: END,
+      payDate: null,
+      status: "draft",
+    });
+    const payslipUpsert = vi.fn().mockResolvedValue({ id: "slip-1" });
+    const db = {
+      payRun: { upsert: payRunUpsert },
+      payslip: { upsert: payslipUpsert },
+    };
+    const input = {
+      payRunRef: "PR-2026-09-retry",
+      periodStart: START,
+      periodEnd: END,
+      employeeProfileIds: ["emp-salary"],
+      statutory: flat20,
+      opts: { periodsPerYear: 12 },
+    };
+
+    const first = await runPayroll(db, input);
+    const retried = await runPayroll(db, input);
+
+    expect(retried.payRunId).toBe(first.payRunId);
+    expect(payRunUpsert).toHaveBeenCalledTimes(2);
+  });
+
+  it("refuses to reuse a payRunRef for a different period", async () => {
+    const { db, payRunUpsert, payslipUpsert } = writeDb();
+    payRunUpsert.mockResolvedValueOnce({
+      id: "run-existing",
+      periodStart: new Date("2026-08-01"),
+      periodEnd: new Date("2026-09-01"),
+      payDate: null,
+      status: "draft",
+    });
+
+    await expect(
+      runPayroll(db, {
+        payRunRef: "PR-reused-wrongly",
+        periodStart: START,
+        periodEnd: END,
+        employeeProfileIds: ["emp-salary"],
+        statutory: flat20,
+      }),
+    ).rejects.toThrow(/different pay period/);
+    expect(payslipUpsert).not.toHaveBeenCalled();
+  });
+
+  it("refuses to recompute a run after it leaves draft", async () => {
+    const { db, payRunUpsert, payslipUpsert } = writeDb();
+    payRunUpsert.mockResolvedValueOnce({
+      id: "run-approved",
+      periodStart: START,
+      periodEnd: END,
+      payDate: null,
+      status: "approved",
+    });
+
+    await expect(
+      runPayroll(db, {
+        payRunRef: "PR-approved",
+        periodStart: START,
+        periodEnd: END,
+        employeeProfileIds: ["emp-salary"],
+        statutory: flat20,
+      }),
+    ).rejects.toThrow(/cannot be recomputed from status approved/);
+    expect(payslipUpsert).not.toHaveBeenCalled();
+  });
 });
 
 describe("markPayslipDisbursed — record the money-movement outcome (never moves money)", () => {
@@ -104,7 +187,7 @@ describe("markPayslipDisbursed — record the money-movement outcome (never move
     const at = new Date("2026-09-30");
     await markPayslipDisbursed({ payslip: { update } }, "slip-1", "paid", at);
     expect(update).toHaveBeenCalledWith({
-      where: { id: "slip-1" },
+      where: { id: "slip-1", disbursementStatus: "pending" },
       data: { disbursementStatus: "paid", paidAt: at },
     });
   });
@@ -113,7 +196,7 @@ describe("markPayslipDisbursed — record the money-movement outcome (never move
     const update = vi.fn().mockResolvedValue({});
     await markPayslipDisbursed({ payslip: { update } }, "slip-2", "failed", new Date());
     expect(update).toHaveBeenCalledWith({
-      where: { id: "slip-2" },
+      where: { id: "slip-2", disbursementStatus: "pending" },
       data: { disbursementStatus: "failed" },
     });
   });

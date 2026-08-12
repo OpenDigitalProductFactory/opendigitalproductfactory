@@ -97,6 +97,10 @@ export interface RecordManualDisbursementResult {
   attestation: ManualDisbursementAttestation;
 }
 
+export interface ManualDisbursementClient {
+  $transaction: <T>(fn: (tx: DisbursePayslipClient) => Promise<T>) => Promise<T>;
+}
+
 /**
  * Record an attested manual payment: mark each payslip paid (through the shared
  * markPayslipDisbursed hook) as of the attestation time. Requires a bankReference
@@ -104,17 +108,31 @@ export interface RecordManualDisbursementResult {
  * for the caller to persist as ComplianceEvidence (BI-DR-03).
  */
 export async function recordManualDisbursement(
-  db: DisbursePayslipClient,
+  db: ManualDisbursementClient,
   input: RecordManualDisbursementInput,
 ): Promise<RecordManualDisbursementResult> {
   const { attestation } = input;
+  if (!attestation.attestedBy || attestation.attestedBy.trim() === "") {
+    throw new Error("manual disbursement requires attestedBy");
+  }
   if (!attestation.bankReference || attestation.bankReference.trim() === "") {
     throw new Error("manual disbursement requires a bankReference (the external proof of payment)");
   }
-  const disbursed: string[] = [];
-  for (const payslipId of input.payslipIds) {
-    await markPayslipDisbursed(db, payslipId, "paid", attestation.attestedAt);
-    disbursed.push(payslipId);
+  if (Number.isNaN(attestation.attestedAt.getTime())) {
+    throw new Error("manual disbursement requires a valid attestedAt timestamp");
   }
+  if (input.payslipIds.length === 0) {
+    throw new Error("manual disbursement requires at least one payslip");
+  }
+  if (new Set(input.payslipIds).size !== input.payslipIds.length) {
+    throw new Error("manual disbursement contains a duplicate payslip target");
+  }
+  const disbursed: string[] = [];
+  await db.$transaction(async (tx) => {
+    for (const payslipId of input.payslipIds) {
+      await markPayslipDisbursed(tx, payslipId, "paid", attestation.attestedAt);
+      disbursed.push(payslipId);
+    }
+  });
   return { disbursed, attestation };
 }

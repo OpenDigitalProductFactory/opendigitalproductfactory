@@ -17,9 +17,14 @@ function fakeDb() {
   const findUnique = vi.fn().mockResolvedValue(null);
   const refCreate = vi.fn().mockResolvedValue({});
   const empCreate = vi.fn().mockResolvedValue({ id: "emp-1" });
-  const db: HireLandingClient = {
+  const tx = {
     masterDataSourceRef: { findUnique, create: refCreate },
     employeeProfile: { create: empCreate },
+  };
+  const transaction = vi.fn(async (fn: (client: typeof tx) => Promise<unknown>) => fn(tx));
+  const db: HireLandingClient = {
+    ...tx,
+    $transaction: transaction as HireLandingClient["$transaction"],
   };
   return { db, empCreate };
 }
