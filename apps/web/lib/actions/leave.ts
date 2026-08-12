@@ -2,11 +2,36 @@
 "use server";
 
 import { ROUTES } from "@/lib/routes";
-import { prisma } from "@dpf/db";
+import { prisma, type Prisma } from "@dpf/db";
 import { auth } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
 import * as crypto from "crypto";
 import { authorizeApprovalDecision } from "@/lib/workforce/approval-authority";
+import { createAuthorizationDecisionLog } from "@/lib/governance-data";
+import { LEAVE_DECISION_ACTION } from "@/lib/workforce/leave/leave-decision-proposal-contract";
+
+async function settleLeaveDecisionProposal(input: {
+  requestId: string;
+  userId: string;
+  status: "executed" | "rejected";
+}): Promise<void> {
+  const decidedAt = new Date();
+  await prisma.agentActionProposal.updateMany({
+    where: {
+      actionType: LEAVE_DECISION_ACTION,
+      status: "proposed",
+      parameters: { path: ["requestId"], equals: input.requestId },
+    },
+    data: {
+      status: input.status,
+      decidedAt,
+      decidedById: input.userId,
+      ...(input.status === "executed"
+        ? { executedAt: decidedAt, resultEntityId: input.requestId }
+        : {}),
+    },
+  });
+}
 
 // ─── Leave Request Flow ──────────────────────────────────────────────────────
 
@@ -76,7 +101,22 @@ export async function approveLeaveRequest(
   // Authority check BEFORE any state change — the balance deduction below is not something to
   // do on behalf of someone who may not decide this.
   const authorized = await authorizeApprovalDecision(session.user.id, request.employeeProfileId, "leave");
-  if (!authorized.ok) return { success: false, error: authorized.error };
+  if (!authorized.ok) {
+    await createAuthorizationDecisionLog({
+      actorType: "user",
+      actorRef: session.user.id,
+      humanContextRef: session.user.id,
+      actionKey: "leave.approve",
+      objectRef: requestId,
+      decision: "deny",
+      rationale: {
+        code: "approval_authority_denied",
+        detail: authorized.error,
+        subjectEmployeeProfileId: request.employeeProfileId,
+      } satisfies Prisma.InputJsonValue,
+    });
+    return { success: false, error: authorized.error };
+  }
   const approverProfile = { id: authorized.approverEmployeeId };
 
   // Deduct from balance
@@ -109,6 +149,22 @@ export async function approveLeaveRequest(
       approvedAt: new Date(),
     },
   });
+  await settleLeaveDecisionProposal({ requestId, userId: session.user.id, status: "executed" });
+
+  await createAuthorizationDecisionLog({
+    actorType: "user",
+    actorRef: session.user.id,
+    humanContextRef: session.user.id,
+    actionKey: "leave.approve",
+    objectRef: requestId,
+    decision: "allow",
+    rationale: {
+      result: "approved",
+      approverEmployeeId: approverProfile.id,
+      subjectEmployeeProfileId: request.employeeProfileId,
+      days: request.days,
+    } satisfies Prisma.InputJsonValue,
+  });
 
   revalidatePath(ROUTES.employee);
   return { success: true };
@@ -126,7 +182,22 @@ export async function rejectLeaveRequest(
   if (request.status !== "pending") return { success: false, error: "Request already decided" };
 
   const authorized = await authorizeApprovalDecision(session.user.id, request.employeeProfileId, "leave");
-  if (!authorized.ok) return { success: false, error: authorized.error };
+  if (!authorized.ok) {
+    await createAuthorizationDecisionLog({
+      actorType: "user",
+      actorRef: session.user.id,
+      humanContextRef: session.user.id,
+      actionKey: "leave.reject",
+      objectRef: requestId,
+      decision: "deny",
+      rationale: {
+        code: "approval_authority_denied",
+        detail: authorized.error,
+        subjectEmployeeProfileId: request.employeeProfileId,
+      } satisfies Prisma.InputJsonValue,
+    });
+    return { success: false, error: authorized.error };
+  }
   const approverProfile = { id: authorized.approverEmployeeId };
 
   await prisma.leaveRequest.update({
@@ -136,6 +207,22 @@ export async function rejectLeaveRequest(
       approverEmployeeId: approverProfile.id,
       rejectionReason: reason,
     },
+  });
+  await settleLeaveDecisionProposal({ requestId, userId: session.user.id, status: "rejected" });
+
+  await createAuthorizationDecisionLog({
+    actorType: "user",
+    actorRef: session.user.id,
+    humanContextRef: session.user.id,
+    actionKey: "leave.reject",
+    objectRef: requestId,
+    decision: "allow",
+    rationale: {
+      result: "rejected",
+      approverEmployeeId: approverProfile.id,
+      subjectEmployeeProfileId: request.employeeProfileId,
+      reason,
+    } satisfies Prisma.InputJsonValue,
   });
 
   revalidatePath(ROUTES.employee);

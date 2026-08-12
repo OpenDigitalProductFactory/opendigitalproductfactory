@@ -36,6 +36,8 @@ import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { getFinancialProfile } from "@dpf/finance-templates";
 import { CompensationPanel } from "@/components/employee/CompensationPanel";
+import { LeavePanel } from "@/components/employee/LeavePanel";
+import { getLeaveBalances, getLeavePolicies, getLeaveRequests } from "@/lib/leave-data";
 import { getEmployeeCompensationRows } from "@/lib/hr/compensation-data";
 import type { TimesheetBillingContext } from "@/components/employee/TimesheetGrid";
 
@@ -165,6 +167,17 @@ export default async function EmployeePage({ searchParams }: Props) {
     };
   }
   const compensationRows = view === "directory" ? await getEmployeeCompensationRows() : [];
+  const [leavePolicies, leaveBalances, leaveRequests, pendingLeaveApprovals] =
+    view === "timeoff"
+      ? await Promise.all([
+          getLeavePolicies(),
+          currentUserProfile ? getLeaveBalances(currentUserProfile.id) : Promise.resolve([]),
+          currentUserProfile
+            ? getLeaveRequests({ employeeProfileId: currentUserProfile.id })
+            : Promise.resolve([]),
+          canManageWorkforce ? getLeaveRequests({ status: "pending" }) : Promise.resolve([]),
+        ])
+      : [[], [], [], []];
 
   // Owner-first: lead with service-staffing readiness, then demote role
   // governance behind progressive disclosure (BI-3BCAF95F). For a Restaurant
@@ -258,10 +271,19 @@ export default async function EmployeePage({ searchParams }: Props) {
               />
             ) : (
               <p className="text-sm text-[var(--dpf-muted)] py-8 text-center">
-                No employee profile linked to your account. Timesheets will appear once your profile is set up.
+                Timesheets appear after your employee profile is linked.
               </p>
             )}
           </div>
+        ) : view === "timeoff" ? (
+          <LeavePanel
+            policies={leavePolicies}
+            balances={leaveBalances}
+            requests={leaveRequests}
+            canRequest={Boolean(currentUserProfile)}
+            isManager={canManageWorkforce}
+            pendingApprovals={pendingLeaveApprovals}
+          />
         ) : view === "orgchart" ? (
           <OrgChartView
             employees={employees}

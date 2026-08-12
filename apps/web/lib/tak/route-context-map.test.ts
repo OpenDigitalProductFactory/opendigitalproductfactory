@@ -112,6 +112,14 @@ describe("resolveRouteContext", () => {
     expect(ctx.sensitivity).toBe("confidential");
   });
 
+  it("gives the internal leave-decision context only the proposal door", () => {
+    const ctx = resolveRouteContext("/coworker/leave-decision");
+    expect(ctx.domain).toBe("Time-off Recommendation");
+    expect(ctx.sensitivity).toBe("confidential");
+    expect(ctx.domainTools).toContain("propose_leave_decision");
+    expect(ctx.domainContext).toContain("human");
+  });
+
   it("returns correct sensitivity for /portfolio (internal)", () => {
     const ctx = resolveRouteContext("/portfolio");
     expect(ctx.sensitivity).toBe("internal");

@@ -68,6 +68,18 @@ export const COWORKER_AGENT_SEEDS: readonly CoworkerAgentSeed[] = [
     sensitivity: "confidential",
   },
   {
+    agentId: "time-off-advisor",
+    slugId: "time-off-advisor",
+    name: "Time-off Advisor",
+    tier: 2,
+    type: "coworker",
+    description:
+      "Propose-only time-off recommendations grounded in leave facts, staffing coverage, and the organization's recorded stance",
+    valueStream: "operate",
+    sensitivity: "confidential",
+    initialLifecycleStage: "draft",
+  },
+  {
     agentId: "customer-advisor",
     slugId: "customer-advisor",
     name: "Customer Success Manager",
@@ -316,6 +328,7 @@ export const HARDCODED_COWORKER_GRANTS: Record<string, readonly string[]> = {
     "backlog_write",
     "web_search",
   ],
+  "time-off-advisor": ["consumer_read", "registry_read"],
   // The Customer Success Manager operates the CRM (accounts, pipeline, quotes),
   // so it needs crm_read/crm_write — NOT backlog_write (which let it retire live
   // backlog items while flailing) or marketing_read (wrong domain). Its runtime

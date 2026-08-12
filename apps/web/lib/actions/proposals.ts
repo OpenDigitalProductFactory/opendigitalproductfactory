@@ -15,6 +15,11 @@ import {
   persistProactivityFact,
   scopeKeyFor,
 } from "@/lib/proactivity/proactivity-override-preferences";
+import { approveLeaveRequest, rejectLeaveRequest } from "@/lib/actions/leave";
+import {
+  LEAVE_DECISION_ACTION,
+  parseLeaveDecisionProposalParameters,
+} from "@/lib/workforce/leave/leave-decision-proposal-contract";
 
 
 export async function approveProposal(
@@ -30,6 +35,12 @@ export async function approveProposal(
 
   if (proposal.actionType === PROACTIVITY_CHANGE_ACTION) {
     return approveProactivityChangeProposal(proposal, user.id);
+  }
+  if (proposal.actionType === LEAVE_DECISION_ACTION) {
+    const parameters = parseLeaveDecisionProposalParameters(proposal.parameters);
+    return parameters
+      ? approveLeaveRequest(parameters.requestId)
+      : { success: false, error: "Invalid leave decision proposal" };
   }
 
   // Check capability
@@ -127,6 +138,12 @@ export async function rejectProposal(
 
   if (proposal.actionType === PROACTIVITY_CHANGE_ACTION) {
     return rejectProactivityChangeProposal(proposal, user.id, reason);
+  }
+  if (proposal.actionType === LEAVE_DECISION_ACTION) {
+    const parameters = parseLeaveDecisionProposalParameters(proposal.parameters);
+    return parameters
+      ? rejectLeaveRequest(parameters.requestId, reason ?? "Manager declined this request")
+      : { success: false, error: "Invalid leave decision proposal" };
   }
 
   await prisma.agentActionProposal.update({

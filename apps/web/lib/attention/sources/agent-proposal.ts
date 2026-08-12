@@ -9,6 +9,11 @@ import {
   parseProactivityChangeProposalParameters,
 } from "@/lib/proactivity/proactivity-change-proposal";
 import { getProactivityLevelCopy } from "@/lib/proactivity/proactivity-copy";
+import {
+  LEAVE_DECISION_ACTION,
+  LEAVE_DECISION_ROUTE,
+  parseLeaveDecisionProposalParameters,
+} from "@/lib/workforce/leave/leave-decision-proposal-contract";
 import { attentionAuthorForAgent } from "../attribution";
 import type { AttentionItem } from "../types";
 
@@ -29,6 +34,9 @@ export function agentProposalToAttentionItem(row: AgentActionProposalRow): Atten
   const isActivityRoutingAction = row.actionType === "activity_harness_confidence_override";
   const proactivityChange = row.actionType === PROACTIVITY_CHANGE_ACTION
     ? parseProactivityChangeProposalParameters(row.parameters)
+    : null;
+  const leaveDecision = row.actionType === LEAVE_DECISION_ACTION
+    ? parseLeaveDecisionProposalParameters(row.parameters)
     : null;
 
   if (proactivityChange) {
@@ -74,6 +82,30 @@ export function agentProposalToAttentionItem(row: AgentActionProposalRow): Atten
       },
       technical: { detectedBy: proactivityChange.agentId ?? "AI workforce" },
       author: attentionAuthorForAgent(proactivityChange.agentId ?? row.agentId),
+    };
+  }
+
+  if (leaveDecision) {
+    return {
+      id: `agent-proposal:${row.proposalId}`,
+      source: "agent-proposal",
+      title: "Review time-off recommendation",
+      context: leaveDecision.rationale ?? "A time-off request needs a human decision.",
+      decisionClass: { scorability: "unscorable" },
+      riskClass: "bounded-write",
+      triage: {
+        timeToAct: "none",
+        residueReason: "policy-approval",
+        blastRadius: `time-off request ${leaveDecision.requestId}`,
+        decideEffort: "review",
+        irreversible: false,
+      },
+      createdAtIso: row.proposedAt.toISOString(),
+      actions: [{ kind: "open-in-context", label: "Review time off", href: LEAVE_DECISION_ROUTE }],
+      deepLink: LEAVE_DECISION_ROUTE,
+      audience: { operator: true },
+      technical: { detectedBy: row.agentId },
+      author: attentionAuthorForAgent(row.agentId),
     };
   }
 

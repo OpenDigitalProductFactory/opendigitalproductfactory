@@ -142,6 +142,33 @@ describe("OwnerDecisionCards", () => {
     expect(screen.queryByRole("link", { name: /platform|workforce/i })).toBeNull();
   });
 
+  it("routes leave proposals to the governed human controls instead of generic tool execution", () => {
+    const leaveProposal = {
+      ...entry,
+      item: {
+        ...entry.item,
+        id: "agent-proposal:AP-LEAVE",
+        source: "agent-proposal" as const,
+        title: "Review time-off recommendation",
+        deepLink: "/employee?view=timeoff",
+        actions: [{ kind: "open-in-context" as const, label: "Review time off", href: "/employee?view=timeoff" }],
+      },
+      card: {
+        ...entry.card,
+        id: "agent-proposal:AP-LEAVE",
+        source: "agent-proposal" as const,
+        headline: "Review this time-off request?",
+        choices: [{ kind: "open-in-context" as const, label: "Review time off", href: "/employee?view=timeoff" }],
+      },
+    };
+    render(<OwnerDecisionCards entries={[leaveProposal]} />);
+
+    expect(screen.getByRole("link", { name: "Review time off" }).getAttribute("href")).toBe(
+      "/employee?view=timeoff",
+    );
+    expect(screen.queryByRole("button", { name: "Approve action" })).toBeNull();
+  });
+
   it("keeps a weekly research decision in the owner card instead of routing to admin", () => {
     const research = {
       ...entry,

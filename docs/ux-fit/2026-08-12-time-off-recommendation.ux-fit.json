@@ -1,0 +1,36 @@
+{
+  "version": "1",
+  "decidedOption": "existing-time-off-tab-with-human-confirmation",
+  "scope": {
+    "files": [
+      "apps/web/components/employee/LeavePanel.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "sweep-measurement",
+    "baselineComparison": "improved",
+    "measured": {
+      "/employee": {
+        "defaultVisibleWords": 130,
+        "leadBandWords": 0,
+        "primaryActions": 1,
+        "visibleFields": 0,
+        "maxChoicesPerControl": 0,
+        "subLegibleControls": 0,
+        "buriedPrimaryAction": 0,
+        "axeViolations": 2
+      }
+    },
+    "fitDecision": "fits-with-guardrails",
+    "owningArea": "People",
+    "routeFamily": "/employee?view=timeoff",
+    "primaryPersona": "employee requesting time off and authorized manager reviewing the recommendation",
+    "navigationLayer": "local task in the existing People surface; no new route or competing navigation family",
+    "reuseConvergence": "reuses the People SectionNav, LeavePanel, StatusBadge, DatePicker, and the existing governed leave approval actions",
+    "sourceTruth": "LeaveRequest remains the employment record; the recommendation links to its governed WWWD DecisionInteraction without copying the rationale into another model",
+    "emptyFailureBehavior": "employees without a linked profile see an explicit setup state, empty request lists stay quiet, and guard escalation remains visible beside the human decision controls",
+    "aiBoundary": "the advisor proposes approve, deny, or escalate with rationale; only an authorized human can approve or reject the LeaveRequest",
+    "accessibility": "named native controls, token-backed StatusBadge semantics, visible Human decision copy, keyboard focus treatment, and no color-only recommendation state; the served route held its frozen two serious/critical axe findings",
+    "responsive": "verified at 1440px in light and dark themes and at 390px in light theme; the expanded seven-tab People navigation wraps with no horizontal overflow"
+  }
+}

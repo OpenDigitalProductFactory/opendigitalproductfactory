@@ -6,31 +6,52 @@ import { useRouter } from "next/navigation";
 import type { LeavePolicyRow, LeaveBalanceRow, LeaveRequestRow } from "@/lib/leave-data";
 import { submitLeaveRequest, approveLeaveRequest, rejectLeaveRequest } from "@/lib/actions/leave";
 import { DatePicker } from "@/components/ui/DatePicker";
+import { StatusBadge, type Intent } from "@/components/ui/report-kit";
 
 const LEAVE_COLOURS: Record<string, string> = {
   vacation: "var(--dpf-info)",
-  sick: "#fb923c",
+  sick: "var(--dpf-warning)",
   personal: "var(--dpf-accent)",
-  parental: "#f472b6",
+  parental: "var(--dpf-accent)",
   unpaid: "var(--dpf-muted)",
 };
 
-const STATUS_COLOURS: Record<string, string> = {
-  pending: "var(--dpf-warning)",
-  approved: "var(--dpf-success)",
-  rejected: "var(--dpf-error)",
-  cancelled: "var(--dpf-muted)",
+const RECOMMENDATION_INTENT: Record<NonNullable<LeaveRequestRow["decisionRecommendation"]>, Intent> = {
+  approve: "success",
+  deny: "danger",
+  escalate: "warning",
 };
 
 type Props = {
   policies: LeavePolicyRow[];
   balances: LeaveBalanceRow[];
   requests: LeaveRequestRow[];
+  canRequest?: boolean;
   isManager?: boolean;
   pendingApprovals?: LeaveRequestRow[];
 };
 
-export function LeavePanel({ policies, balances, requests, isManager, pendingApprovals }: Props) {
+function DecisionRecommendation({ request }: { request: LeaveRequestRow }) {
+  const recommendation = request.decisionRecommendation;
+  if (!recommendation) return null;
+  return (
+    <div className="mt-2 rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-3 py-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-xs font-medium text-[var(--dpf-text)]">Advisor recommends</span>
+        <StatusBadge intent={RECOMMENDATION_INTENT[recommendation]} label={recommendation} variant="soft" uppercase={false} />
+        <span className="text-dpf-caption text-[var(--dpf-muted)]">Human decision</span>
+      </div>
+      {request.decisionRationale ? (
+        <p className="mt-1 text-xs leading-5 text-[var(--dpf-muted)]">{request.decisionRationale}</p>
+      ) : null}
+      {request.decisionGuardReasons.map((reason) => (
+        <p key={reason} className="mt-1 text-xs leading-5 text-[var(--dpf-warning)]">{reason}</p>
+      ))}
+    </div>
+  );
+}
+
+export function LeavePanel({ policies, balances, requests, canRequest = true, isManager, pendingApprovals }: Props) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [showRequest, setShowRequest] = useState(false);
@@ -79,7 +100,7 @@ export function LeavePanel({ policies, balances, requests, isManager, pendingApp
       {balances.length > 0 && (
         <div className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-4">
           <h3 className="text-xs font-semibold uppercase tracking-widest text-[var(--dpf-muted)] mb-3">
-            Leave Balances ({new Date().getFullYear()})
+            Balances ({new Date().getFullYear()})
           </h3>
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
             {balances.map((b) => {
@@ -103,23 +124,24 @@ export function LeavePanel({ policies, balances, requests, isManager, pendingApp
       {/* Manager: Pending Approvals */}
       {isManager && pendingApprovals && pendingApprovals.length > 0 && (
         <div className="rounded-lg border border-[var(--dpf-warning)]/30 bg-[var(--dpf-warning)]/5 p-4">
-          <h3 className="text-xs font-semibold uppercase tracking-widest text-[var(--dpf-warning)] mb-3">
-            Pending Approvals ({pendingApprovals.length})
+          <h3 className="mb-3 text-xs font-semibold uppercase tracking-widest text-[var(--dpf-warning)]">
+            Needs review ({pendingApprovals.length})
           </h3>
           <div className="space-y-2">
             {pendingApprovals.map((r) => (
-              <div key={r.id} className="flex items-center gap-3 p-2 rounded border border-[var(--dpf-border)]">
-                <div className="flex-1 min-w-0">
+              <div key={r.id} className="rounded border border-[var(--dpf-border)] p-3" aria-busy={isPending}>
+                <div className="flex flex-wrap items-center gap-3">
+                  <div className="min-w-0 flex-1">
                   <span className="text-xs text-[var(--dpf-text)]">{r.employeeName}</span>
-                  <span className="text-[10px] text-[var(--dpf-muted)] ml-2">
+                  <span className="ml-2 text-dpf-caption text-[var(--dpf-muted)]">
                     {r.leaveType} · {r.days} day{r.days !== 1 ? "s" : ""} · {new Date(r.startDate).toLocaleDateString()} – {new Date(r.endDate).toLocaleDateString()}
                   </span>
-                </div>
-                <button
+                  </div>
+                  <button
                   type="button"
                   disabled={isPending}
                   onClick={() => handleApprove(r.requestId)}
-                  className="text-[10px] px-2 py-0.5 rounded border border-[var(--dpf-success)]/30 text-[var(--dpf-success)] hover:bg-[var(--dpf-success)]/10 disabled:opacity-50"
+                  className="min-h-8 rounded border border-[var(--dpf-success)]/30 px-3 text-xs font-medium text-[var(--dpf-success)] hover:bg-[var(--dpf-success)]/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--dpf-focus)] disabled:opacity-50"
                 >
                   Approve
                 </button>
@@ -127,10 +149,12 @@ export function LeavePanel({ policies, balances, requests, isManager, pendingApp
                   type="button"
                   disabled={isPending}
                   onClick={() => handleReject(r.requestId)}
-                  className="text-[10px] px-2 py-0.5 rounded border border-[var(--dpf-error)]/30 text-[var(--dpf-error)] hover:bg-[var(--dpf-error)]/10 disabled:opacity-50"
+                  className="min-h-8 rounded border border-[var(--dpf-error)]/30 px-3 text-xs font-medium text-[var(--dpf-error)] hover:bg-[var(--dpf-error)]/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--dpf-focus)] disabled:opacity-50"
                 >
                   Reject
                 </button>
+                </div>
+                <DecisionRecommendation request={r} />
               </div>
             ))}
           </div>
@@ -141,15 +165,17 @@ export function LeavePanel({ policies, balances, requests, isManager, pendingApp
       <div className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-4">
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-xs font-semibold uppercase tracking-widest text-[var(--dpf-muted)]">
-            Leave Requests
+            Requests
           </h3>
-          <button
-            type="button"
-            onClick={() => setShowRequest(!showRequest)}
-            className="text-[10px] px-2 py-0.5 rounded border border-[var(--dpf-accent)]/40 text-[var(--dpf-accent)] hover:bg-[var(--dpf-accent)]/10"
-          >
-            + Request Leave
-          </button>
+          {canRequest ? (
+            <button
+              type="button"
+              onClick={() => setShowRequest(!showRequest)}
+              className="min-h-8 rounded border border-[var(--dpf-accent)]/40 px-3 text-xs font-medium text-[var(--dpf-accent)] hover:bg-[var(--dpf-accent)]/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--dpf-focus)]"
+            >
+              Request time off
+            </button>
+          ) : null}
         </div>
 
         {showRequest && (
@@ -188,7 +214,7 @@ export function LeavePanel({ policies, balances, requests, isManager, pendingApp
             </div>
             <input
               type="text"
-              placeholder="Reason (optional)"
+              placeholder="Reason"
               value={newRequest.reason}
               onChange={(e) => setNewRequest((p) => ({ ...p, reason: e.target.value }))}
               className="w-full px-2 py-1 text-xs rounded border border-[var(--dpf-border)] bg-[var(--dpf-bg)] text-[var(--dpf-text)]"
@@ -198,14 +224,14 @@ export function LeavePanel({ policies, balances, requests, isManager, pendingApp
                 type="button"
                 disabled={isPending || !newRequest.startDate || !newRequest.endDate}
                 onClick={handleSubmit}
-                className="text-[10px] px-2 py-1 rounded bg-[var(--dpf-accent)]/20 border border-[var(--dpf-accent)]/40 text-[var(--dpf-accent)] disabled:opacity-50"
+                className="min-h-8 rounded border border-[var(--dpf-accent)]/40 bg-[var(--dpf-accent)]/20 px-3 text-xs font-medium text-[var(--dpf-accent)] disabled:opacity-50"
               >
-                Submit Request
+                {isPending ? "Submitting…" : "Submit"}
               </button>
               <button
                 type="button"
                 onClick={() => setShowRequest(false)}
-                className="text-[10px] px-2 py-1 rounded border border-[var(--dpf-border)] text-[var(--dpf-muted)]"
+                className="min-h-8 rounded border border-[var(--dpf-border)] px-3 text-xs text-[var(--dpf-muted)]"
               >
                 Cancel
               </button>
@@ -214,26 +240,24 @@ export function LeavePanel({ policies, balances, requests, isManager, pendingApp
         )}
 
         {requests.length === 0 ? (
-          <p className="text-xs text-[var(--dpf-muted)]">No leave requests.</p>
+          <p className="text-xs text-[var(--dpf-muted)]">
+            {canRequest ? "No requests." : "Link an employee profile to request time off."}
+          </p>
         ) : (
           <div className="space-y-2">
             {requests.map((r) => {
-              const colour = STATUS_COLOURS[r.status] ?? "var(--dpf-muted)";
               return (
-                <div key={r.id} className="flex items-center gap-3 p-2 rounded border border-[var(--dpf-border)]">
-                  <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: colour }} />
-                  <div className="flex-1 min-w-0">
+                <div key={r.id} className="rounded border border-[var(--dpf-border)] p-3">
+                  <div className="flex items-center gap-3">
+                  <div className="min-w-0 flex-1">
                     <span className="text-xs text-[var(--dpf-text)]">{r.leaveType}</span>
-                    <span className="text-[10px] text-[var(--dpf-muted)] ml-2">
+                    <span className="ml-2 text-dpf-caption text-[var(--dpf-muted)]">
                       {r.days} day{r.days !== 1 ? "s" : ""} · {new Date(r.startDate).toLocaleDateString()} – {new Date(r.endDate).toLocaleDateString()}
                     </span>
                   </div>
-                  <span
-                    className="text-[10px] px-1.5 py-0.5 rounded"
-                    style={{ background: `color-mix(in srgb, ${colour} 8%, transparent)`, color: colour }}
-                  >
-                    {r.status}
-                  </span>
+                  <StatusBadge domain="leaveRequest" status={r.status} label={r.status} variant="soft" uppercase={false} />
+                  </div>
+                  <DecisionRecommendation request={r} />
                 </div>
               );
             })}

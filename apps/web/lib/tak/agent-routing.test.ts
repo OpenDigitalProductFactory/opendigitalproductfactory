@@ -22,6 +22,14 @@ describe("resolveAgentForRoute", () => {
     expect(result.canAssist).toBe(true);
   });
 
+  it("binds the internal leave-decision context to the propose-only Time-off Advisor", () => {
+    const result = resolveAgentForRoute("/coworker/leave-decision", superuser);
+    expect(result.agentId).toBe("time-off-advisor");
+    expect(result.agentName).toBe("Time-off Advisor");
+    expect(result.sensitivity).toBe("confidential");
+    expect(result.systemPrompt).toContain("never approve or reject");
+  });
+
   it("routes discovery operations to the estate specialist", () => {
     const result = resolveAgentForRoute("/platform/tools/discovery", superuser);
     expect(result.agentId).toBe("inventory-specialist");

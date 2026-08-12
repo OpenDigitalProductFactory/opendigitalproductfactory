@@ -19,6 +19,7 @@
 export type StaffingAction =
   | "prepare_proposal" // read facts, run solver, compose options — evidence only
   | "refresh_proposal" // re-run when only demand changed — low-risk, delegable
+  | "prepare_leave_decision" // recommend + queue for a human; never decide leave
   | "send_notification" // message employees — consequential
   | "publish_schedule" // bind assignments, project to calendar — consequential
   | "approve_exception" // waive an org rule — consequential
