@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const db = vi.hoisted(() => ({
+  userFindUnique: vi.fn(),
   departmentFindFirst: vi.fn(),
   departmentFindMany: vi.fn(),
   positionFindMany: vi.fn(),
@@ -16,6 +17,7 @@ const db = vi.hoisted(() => ({
 }));
 vi.mock("@dpf/db", () => ({
   prisma: {
+    user: { findUnique: (...a: unknown[]) => db.userFindUnique(...a) },
     department: {
       findFirst: (...a: unknown[]) => db.departmentFindFirst(...a),
       findMany: (...a: unknown[]) => db.departmentFindMany(...a),
@@ -97,11 +99,47 @@ describe("workforce pack — handler behavior (delegation preserved)", () => {
     expect(res.data).toEqual({ positions: [{ id: "POS-1", title: "Engineer", jobFamily: "Tech" }] });
   });
 
-  it("query_employees reports the empty state when none match", async () => {
+  it("query_employees reports the empty state when none match (superuser: unrestricted)", async () => {
+    db.userFindUnique.mockResolvedValue({ isSuperuser: true });
     db.employeeFindMany.mockResolvedValue([]);
     const res = await workforcePack.handlers.query_employees({ search: "nobody" }, "u1");
     expect(res.success).toBe(true);
     expect(res.message).toContain("No employees found matching your criteria.");
+    // Superuser is unrestricted — no manager-scope tree read, just the one query.
+    expect(db.employeeFindMany).toHaveBeenCalledOnce();
+    const where = db.employeeFindMany.mock.calls[0][0].where;
+    expect(where.id).toBeUndefined(); // no row-scope filter for a superuser
+  });
+
+  it("query_employees row-scopes a non-superuser to self ∪ direct ∪ indirect reports (BI-HDLEMP-05)", async () => {
+    db.userFindUnique.mockResolvedValue({ isSuperuser: false });
+    // Org tree: mgr manages r1 and r2; r2 manages r3 (indirect for mgr).
+    db.employeeFindMany
+      .mockResolvedValueOnce([
+        { id: "mgr", userId: "u-mgr", managerEmployeeId: null },
+        { id: "r1", userId: "u-r1", managerEmployeeId: "mgr" },
+        { id: "r2", userId: "u-r2", managerEmployeeId: "mgr" },
+        { id: "r3", userId: "u-r3", managerEmployeeId: "r2" },
+        { id: "other", userId: "u-other", managerEmployeeId: null },
+      ])
+      .mockResolvedValueOnce([]);
+    await workforcePack.handlers.query_employees({}, "u-mgr");
+    // Second findMany is the actual employee query; it must carry the row filter.
+    const where = db.employeeFindMany.mock.calls[1][0].where;
+    expect([...where.id.in].sort()).toEqual(["mgr", "r1", "r2", "r3"].sort());
+    expect(where.id.in).not.toContain("other");
+  });
+
+  it("query_employees returns empty for a non-superuser who is neither employee nor manager, without querying", async () => {
+    db.userFindUnique.mockResolvedValue({ isSuperuser: false });
+    // The acting user backs no EmployeeProfile → no visible rows.
+    db.employeeFindMany.mockResolvedValueOnce([
+      { id: "a", userId: "u-a", managerEmployeeId: null },
+    ]);
+    const res = await workforcePack.handlers.query_employees({}, "u-nobody");
+    expect(res.success).toBe(true);
+    expect(res.data).toEqual({ employees: [] });
+    // Only the manager-scope tree read happened; the row query was short-circuited.
     expect(db.employeeFindMany).toHaveBeenCalledOnce();
   });
 

@@ -669,6 +669,9 @@
     "apps/web/lib/govern/data/policy-enforcement.ts": [
       "docs/architecture/ai-routing-document-map.md"
     ],
+    "apps/web/lib/govern/manager-scope.ts": [
+      "docs/architecture/mcp-tool-authorization-runbook.md"
+    ],
     "apps/web/lib/govern/permissions.ts": [
       "docs/architecture/delivery-ia.md"
     ],
@@ -2190,6 +2193,7 @@
       "apps/web/app/api/mcp/v1/route.ts",
       "apps/web/lib/agent-grants.ts",
       "apps/web/lib/coworker-lifecycle/lifecycle-gate.ts",
+      "apps/web/lib/govern/manager-scope.ts",
       "apps/web/lib/tak/tool-result-budget.ts",
       "apps/web/lib/tool-description-hygiene.test.ts",
       "scripts/lib/bootstrap-worktree-deps.mjs"
