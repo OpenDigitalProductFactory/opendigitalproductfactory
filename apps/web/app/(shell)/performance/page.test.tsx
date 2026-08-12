@@ -30,7 +30,7 @@ describe("PerformancePage", () => {
 
     expect(metadata.title).toBe("Performance");
     expect(html).toContain(">Performance<");
-    expect(html).toContain("Review results, trends, and the operating evidence behind them.");
+    expect(html).toContain("Review results, trends, and their operating evidence.");
     expect(html).toContain("Performance history is not ready yet");
     expect(html).toContain("We will not show made-up numbers.");
     expect(html).toContain('href="/workspace"');

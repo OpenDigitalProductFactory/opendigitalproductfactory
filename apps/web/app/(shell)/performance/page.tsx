@@ -36,7 +36,7 @@ export default async function PerformancePage({
       <header className="space-y-1" data-dpf-lead>
         <h1 className="text-xl font-semibold text-[var(--dpf-text)]">Performance</h1>
         <p className="max-w-3xl text-sm text-[var(--dpf-text-secondary)]">
-          Review results, trends, and the operating evidence behind them.
+          Review results, trends, and their operating evidence.
         </p>
       </header>
 

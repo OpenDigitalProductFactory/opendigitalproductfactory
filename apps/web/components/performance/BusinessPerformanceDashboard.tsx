@@ -181,7 +181,7 @@ export function BusinessPerformanceDashboard({
               Owner brief
             </h2>
             <p className="mt-1 text-xs text-[var(--dpf-muted)]">
-              Observed facts for this period, with evidence limits kept visible.
+              Observed facts with visible evidence limits.
             </p>
           </div>
           <StatusBadge intent="neutral" label="Observation, not a recommendation" />
