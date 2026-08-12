@@ -38,7 +38,13 @@ import { BuildDecisionLedgerBand } from "./BuildDecisionLedgerBand";
 import { BuildChangeSummaryBand } from "./BuildChangeSummaryBand";
 import { BuildSolutionSummaryBand } from "./BuildSolutionSummaryBand";
 import { BuildWorkWarrantBand } from "./BuildWorkWarrantBand";
-import type { BuildStudioCustomerStatus } from "@/lib/build/customer-status-projection";
+import {
+  type BuildStudioCustomerStatus,
+} from "@/lib/build/customer-status-projection";
+import {
+  reconcileBuildStudioCustomerStatus,
+  type BuildStudioOwnerState,
+} from "@/lib/build/owner-status-reconciliation";
 import { projectAutonomousBuildCustody } from "@/lib/build/autonomous-build-custody";
 import { BuildOperatorHeaderDetails, formatOperatorPhaseLabel } from "./BuildOperatorContext";
 import { BuildOperatorOverview } from "./BuildOperatorOverview";
@@ -46,7 +52,7 @@ import { groupOperatorBuilds } from "./build-studio-operator-view";
 import { resolveBuildStudioBranchBadge } from "./build-studio-branch-badge";
 import { deleteFeatureBuild } from "@/lib/actions/build";
 import { createBuildStudioBacklogIntake, startBacklogBuild } from "@/lib/actions/backlog-build";
-import { getFeatureBuild } from "@/lib/actions/build-read";
+import { getFeatureBuild, getFeatureBuildCustomerStatus } from "@/lib/actions/build-read";
 import { getBuildDecisionLedgerAction } from "@/lib/actions/build-decision-ledger";
 import { getBuildChangeNarrativeAction } from "@/lib/actions/build-change-narrative";
 import { getBuildFlowStateAction } from "@/lib/actions/build-flow";
@@ -122,6 +128,7 @@ const MISSING_BOM_SUMMARY: BomSummary = {
 
 const MAX_OPERATOR_FLEET_ITEMS = 4;
 const BUILD_CUSTODIAN_SNOOZE_KEY = "dpf:build-studio-custodian-snoozed";
+const EMPTY_CUSTOMER_STATUSES: Record<string, BuildStudioCustomerStatus> = {};
 
 type BuildStudioPendingIntake = {
   itemId: string;
@@ -180,7 +187,7 @@ export function BuildStudio({
   initialBuildId,
   portalContext,
   initialActiveBuild,
-  customerStatuses = {},
+  customerStatuses = EMPTY_CUSTOMER_STATUSES,
 }: Props) {
   const router = useRouter();
   const buildRows = Array.isArray(builds) ? builds : [];
@@ -188,6 +195,12 @@ export function BuildStudio({
   const portfolioRows = Array.isArray(portfolios) ? portfolios : [];
   const [activeBuild, setActiveBuild] = useState<FeatureBuildRow | null>(
     () => initialActiveBuild ?? resolveInitialActiveBuild(buildRows, initialBuildId),
+  );
+  const [activeCustomerStatus, setActiveCustomerStatus] = useState<BuildStudioCustomerStatus | null>(
+    () => {
+      const initial = initialActiveBuild ?? resolveInitialActiveBuild(buildRows, initialBuildId);
+      return initial ? customerStatuses[initial.id] ?? null : null;
+    },
   );
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
@@ -290,6 +303,13 @@ export function BuildStudio({
       progressVisibility,
     })
     : null;
+  const ownerStatus = activeBuild && activeCustomerStatus
+    ? reconcileBuildStudioCustomerStatus({
+        phase: activeBuild.phase,
+        status: activeCustomerStatus,
+        progress: progressVisibility,
+      })
+    : null;
   const custodianPromptRaw = activeBuild && workflowAction
     ? deriveBuildStudioCustodianPrompt({
       build: activeBuild,
@@ -317,8 +337,9 @@ export function BuildStudio({
   }, [activeBuild?.buildId, initialBuildId, router]);
 
   const refreshActiveBuildState = useCallback(async (buildId: string) => {
-    const [freshResult, flowResult, progressResult, bomResult, findingsResult] = await Promise.allSettled([
+    const [freshResult, customerStatusResult, flowResult, progressResult, bomResult, findingsResult] = await Promise.allSettled([
       getFeatureBuild(buildId),
+      getFeatureBuildCustomerStatus(buildId),
       getBuildFlowStateAction(buildId),
       getBuildProgressVisibilityAction(buildId),
       getBuildBomSummary(buildId),
@@ -331,6 +352,9 @@ export function BuildStudio({
     const nextFindings = findingsResult.status === "fulfilled" ? findingsResult.value : [];
 
     if (fresh) setActiveBuild(fresh);
+    if (customerStatusResult.status === "fulfilled" && customerStatusResult.value) {
+      setActiveCustomerStatus(customerStatusResult.value);
+    }
     setFlowState(nextFlow);
     setProgressVisibility(nextProgress);
     setBomSummary(nextBomSummary);
@@ -340,6 +364,7 @@ export function BuildStudio({
     const existing = buildRows.find((build) => build.buildId === buildId);
     if (existing) {
       setActiveBuild(existing);
+      setActiveCustomerStatus(customerStatuses[existing.id] ?? null);
       setSidebarOpen(true);
       return;
     }
@@ -347,9 +372,10 @@ export function BuildStudio({
     const fresh = await getFeatureBuild(buildId);
     if (fresh) {
       setActiveBuild(fresh);
+      setActiveCustomerStatus(customerStatuses[fresh.id] ?? null);
       setSidebarOpen(true);
     }
-  }, [buildRows]);
+  }, [buildRows, customerStatuses]);
   const debouncedRefetch = useCallback(async () => {
     if (!activeBuild) return;
     const now = Date.now();
@@ -371,6 +397,7 @@ export function BuildStudio({
   // updates.
   useEffect(() => {
     if (!activeBuild) {
+      setActiveCustomerStatus(null);
       setFlowState(null);
       setProgressVisibility(null);
       setBomSummary(MISSING_BOM_SUMMARY);
@@ -379,12 +406,18 @@ export function BuildStudio({
     }
     let cancelled = false;
     Promise.allSettled([
+      getFeatureBuildCustomerStatus(activeBuild.buildId),
       getBuildFlowStateAction(activeBuild.buildId),
       getBuildProgressVisibilityAction(activeBuild.buildId),
       getBuildBomSummary(activeBuild.buildId),
       getBuildAssuranceFindings(activeBuild.buildId, 25),
-    ]).then(([flowResult, progressResult, bomResult, findingsResult]) => {
+    ]).then(([customerStatusResult, flowResult, progressResult, bomResult, findingsResult]) => {
       if (!cancelled) {
+        setActiveCustomerStatus(
+          customerStatusResult.status === "fulfilled"
+            ? customerStatusResult.value
+            : customerStatuses[activeBuild.id] ?? null,
+        );
         setFlowState(flowResult.status === "fulfilled" ? flowResult.value : null);
         setProgressVisibility(progressResult.status === "fulfilled" ? progressResult.value : null);
         setBomSummary(bomResult.status === "fulfilled" ? bomResult.value : MISSING_BOM_SUMMARY);
@@ -392,6 +425,7 @@ export function BuildStudio({
       }
     }).catch(() => {
       if (!cancelled) {
+        setActiveCustomerStatus(customerStatuses[activeBuild.id] ?? null);
         setFlowState(null);
         setProgressVisibility(null);
         setBomSummary(MISSING_BOM_SUMMARY);
@@ -399,7 +433,7 @@ export function BuildStudio({
       }
     });
     return () => { cancelled = true; };
-  }, [activeBuild?.buildId]);
+  }, [activeBuild?.buildId, customerStatuses]);
 
   useEffect(() => {
     let cancelled = false;
@@ -548,16 +582,16 @@ export function BuildStudio({
     },
   );
 
-  // ─── Ultimate fallback: DB poll when panel is closed AND no threadId ───
-  // Only runs when we have no other update channel. 10-second interval
-  // to avoid hammering the DB. Covers: external agent builds, panel closed
-  // before first message.
+  // ─── Durable reconciliation poll ────────────────────────────────────────
+  // SSE is a fast notification channel, not durable state. Reconcile every
+  // active build from the DB even when a thread exists so a dropped stream,
+  // closed panel, or leave-and-return journey cannot freeze owner status.
   useEffect(() => {
     if (!activeBuild) return;
-    if (activeBuild.threadId) return; // SSE fallback will handle it
+    if (activeBuild.phase === "complete" || activeBuild.phase === "failed" || activeBuild.phase === "abandoned") return;
     const interval = setInterval(debouncedRefetch, 10_000);
     return () => clearInterval(interval);
-  }, [activeBuild?.buildId, activeBuild?.threadId, debouncedRefetch]);
+  }, [activeBuild?.buildId, activeBuild?.phase, debouncedRefetch]);
 
   async function handleCreate() {
     if (!newTitle.trim()) return;
@@ -704,7 +738,7 @@ export function BuildStudio({
                       type="button"
                       onClick={handleCreate}
                       disabled={creating || !newTitle.trim() || !newPortfolioId}
-                      className="inline-flex items-center gap-1.5 rounded-md border-none bg-[var(--dpf-accent)] px-4 py-2 text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50"
+                      className="inline-flex items-center gap-1.5 rounded-md border-none bg-[var(--dpf-accent)] px-4 py-2 text-sm font-semibold text-[var(--dpf-on-accent,var(--dpf-surface-1))] transition-opacity hover:opacity-90 disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       {creating && <Spinner size="xs" tone="current" presentational />}
                       {creating ? "Saving..." : "Continue"}
@@ -725,7 +759,7 @@ export function BuildStudio({
                         type="button"
                         onClick={handlePromotePendingIntake}
                         disabled={promotingItemId === pendingIntake.itemId}
-                        className="mt-3 inline-flex w-full items-center justify-center gap-1.5 rounded-md border border-[var(--dpf-accent)] bg-[var(--dpf-surface-1)] px-3 py-2 text-sm font-semibold text-[var(--dpf-accent)] transition-colors hover:bg-[var(--dpf-accent)] hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
+                        className="mt-3 inline-flex w-full items-center justify-center gap-1.5 rounded-md border border-[var(--dpf-accent)] bg-[var(--dpf-surface-1)] px-3 py-2 text-sm font-semibold text-[var(--dpf-accent)] transition-colors hover:bg-[var(--dpf-accent)] hover:text-[var(--dpf-on-accent,var(--dpf-surface-1))] disabled:cursor-not-allowed disabled:opacity-60"
                       >
                         {promotingItemId === pendingIntake.itemId && (
                           <Spinner size="xs" tone="current" presentational />
@@ -752,6 +786,7 @@ export function BuildStudio({
             buildRows={buildRows}
             epicRollups={rollupRows}
             activeBuildId={activeBuild?.buildId ?? null}
+            activeOwnerState={ownerStatus?.ownerState ?? null}
             governedBacklogEnabled={governedBacklogEnabled}
             isDevEnvironment={isDevEnvironment}
             onSelectBuild={(build) => {
@@ -800,7 +835,7 @@ export function BuildStudio({
                   ?? activeBuild.originator?.resolution
                 }
                 phase={activeBuild.phase}
-                status={customerStatuses[activeBuild.id]}
+                status={ownerStatus}
               />
 
               {/* Error banner for failed builds */}
@@ -1035,10 +1070,12 @@ export function BuildStudio({
       {/* Footer — single shared OpenSandboxButton (sandbox is shared across
           all in-flight builds; surfacing one link labeled with the current
           driver replaces the dishonest per-build Preview tab). */}
-      <BuildStudioFooter
-        builds={supervisedBuildRows}
-        showDrivingBuildCode={engineerView}
-      />
+      {engineerView ? (
+        <BuildStudioFooter
+          builds={supervisedBuildRows}
+          showDrivingBuildCode
+        />
+      ) : null}
     </div>
   );
 }
@@ -1443,7 +1480,7 @@ function BuildFailedBanner({ execState }: { execState: BuildExecutionState | nul
   return (
     <div className="mx-4 mt-3 p-3 rounded-lg border border-[var(--dpf-error)] bg-[color-mix(in_srgb,var(--dpf-error)_8%,var(--dpf-surface-1))] animate-dpf-fade-in" role="alert">
       <div className="flex items-start gap-2">
-        <span className="w-5 h-5 rounded-full bg-[var(--dpf-error)] text-white text-xs font-bold grid place-items-center shrink-0 mt-0.5">!</span>
+        <span className="mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full bg-[var(--dpf-state-error)] text-xs font-bold text-[var(--dpf-error)]">!</span>
         <div className="flex-1 min-w-0">
           <p className="text-sm font-semibold text-[var(--dpf-error)]">Build failed at: {stepLabel}</p>
           {errorMsg && (
@@ -1460,6 +1497,7 @@ function FleetRailZone({
   buildRows,
   epicRollups,
   activeBuildId,
+  activeOwnerState,
   governedBacklogEnabled,
   isDevEnvironment,
   onSelectBuild,
@@ -1470,6 +1508,7 @@ function FleetRailZone({
   buildRows: FeatureBuildRow[];
   epicRollups: EpicRollupView[];
   activeBuildId: string | null;
+  activeOwnerState: BuildStudioOwnerState | null;
   governedBacklogEnabled: boolean;
   isDevEnvironment: boolean;
   onSelectBuild: (build: FeatureBuildRow) => void;
@@ -1646,7 +1685,7 @@ function FleetRailZone({
             </span>
           ) : activeCount > 0 ? (
             <span className="text-dpf-caption font-normal text-[var(--dpf-muted)]">
-              {activeCount} active
+              {activeCount} open
             </span>
           ) : null}
         </span>
@@ -1676,6 +1715,7 @@ function FleetRailZone({
               density="fleet"
               queueState={entry.queueState}
               needsAttention={entry.needsAttention}
+              ownerState={activeBuildId === entry.build.buildId ? activeOwnerState : null}
               onSelect={() => onSelectBuild(entry.build)}
               onDelete={() => onDeleteBuild(entry.build)}
             />
@@ -1753,6 +1793,7 @@ function FleetRailZone({
                         density="fleet"
                         queueState={entry.queueState}
                         needsAttention={entry.needsAttention}
+                        ownerState={activeBuildId === entry.build.buildId ? activeOwnerState : null}
                         onSelect={() => onSelectBuild(entry.build)}
                         onDelete={() => onDeleteBuild(entry.build)}
                       />
@@ -1771,7 +1812,7 @@ function FleetRailZone({
 function Step({ n, text }: { n: number; text: string }) {
   return (
     <div className="flex items-start gap-3">
-      <span className="w-5 h-5 rounded-full bg-[var(--dpf-accent)] text-[10px] font-bold text-white grid place-items-center shrink-0 mt-0.5">
+      <span className="mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full bg-[var(--dpf-accent)] text-[10px] font-bold text-[var(--dpf-on-accent,var(--dpf-surface-1))]">
         {n}
       </span>
       <span className="text-sm leading-snug text-[var(--dpf-text)]">{text}</span>

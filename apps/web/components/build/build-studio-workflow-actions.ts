@@ -23,6 +23,7 @@ import type {
 } from "@/lib/build/progress-visibility-types";
 import {
   friendlyInferenceFailureMessage,
+  isTransientInferenceFailure,
   type InferenceFailureKind,
 } from "@/lib/build/inference-failure";
 
@@ -35,12 +36,18 @@ type BuildStudioWorkflowActionMetadata = {
   inferenceFailureKind?: InferenceFailureKind | null;
 };
 
-export type BuildOperatorStatusKind = "waiting-on-you" | "working" | "blocked-technical" | "escalated";
+export type BuildOperatorStatusKind =
+  | "waiting-on-you"
+  | "waiting-capacity"
+  | "working"
+  | "blocked-technical"
+  | "escalated"
+  | "complete";
 
 export type BuildOperatorStatus = {
   kind: BuildOperatorStatusKind;
-  label: "Waiting on you" | "Working" | "Blocked (technical)" | "Escalated to you";
-  intent: "accent" | "info" | "danger";
+  label: "Waiting on you" | "Capacity wait" | "Working" | "Blocked (technical)" | "Escalated to you" | "Complete";
+  intent: "accent" | "info" | "danger" | "success";
 };
 
 export type BuildStudioOperatorGuidance = {
@@ -398,6 +405,17 @@ function statusForAction(
   action: BuildStudioWorkflowAction,
   build?: OperatorGuidanceBuildContext,
 ): BuildOperatorStatus {
+  // The workflow action falls back to review-only after the terminal phase,
+  // but terminal truth outranks that generic action classification. Without
+  // this guard a completed build rendered a green banner labelled "Working".
+  if (build?.phase === "complete") {
+    return {
+      kind: "complete",
+      label: "Complete",
+      intent: "success",
+    };
+  }
+
   // BI-A2F3FA9D — terminal handoff: the build is a human's now, not "Working".
   if (action.kind === "escalated-to-human") {
     return {
@@ -411,13 +429,18 @@ function statusForAction(
     action.kind === "retry-build"
     || action.kind === "reset-build"
     || action.kind === "resume-implementation"
-    || action.kind === "retry-inference"
   ) {
     return {
       kind: "blocked-technical",
       label: "Blocked (technical)",
       intent: "danger",
     };
+  }
+
+  if (action.kind === "retry-inference") {
+    return isTransientInferenceFailure(action.inferenceFailureKind ?? null)
+      ? { kind: "waiting-capacity", label: "Capacity wait", intent: "info" }
+      : { kind: "blocked-technical", label: "Blocked (technical)", intent: "danger" };
   }
 
   const exec = build?.buildExecState as { step?: string | null; error?: string | null } | null | undefined;
@@ -471,7 +494,9 @@ function nextSentenceForAction(action: BuildStudioWorkflowAction): string {
     case "retry-build":
       return "Next: retry the sandbox launch.";
     case "retry-inference":
-      return "Next: retry the AI call. I will keep watching and pick it up if it fails again.";
+      return isTransientInferenceFailure(action.inferenceFailureKind ?? null)
+        ? "Next: retry when convenient. Your change will stay here while capacity recovers."
+        : "Next: retry the AI call after the issue is resolved.";
     case "reset-build":
       return "Next: reset the build pipeline and start it again.";
     case "resume-implementation":
@@ -495,12 +520,18 @@ export function deriveBuildStudioOperatorGuidance(
   action: BuildStudioWorkflowAction,
   build?: OperatorGuidanceBuildContext,
 ): BuildStudioOperatorGuidance {
-  const useCoworkerForNext = action.disabledReason != null || action.primaryLabel == null;
+  const terminalComplete = build?.phase === "complete";
+  const useCoworkerForNext = !terminalComplete
+    && (action.disabledReason != null || action.primaryLabel == null);
   const guidedRecovery = action.kind === "rerun-plan-review" || action.kind === "resume-implementation";
   return {
     status: statusForAction(action, build),
-    nextLabel: useCoworkerForNext ? action.coworkerLabel : action.primaryLabel,
-    nextSentence: nextSentenceForAction(action),
+    nextLabel: terminalComplete
+      ? null
+      : useCoworkerForNext ? action.coworkerLabel : action.primaryLabel,
+    nextSentence: terminalComplete
+      ? "The result and its evidence are ready to review."
+      : nextSentenceForAction(action),
     useCoworkerForNext,
     guidedRecovery,
     recoveryHint: guidedRecovery
@@ -601,9 +632,14 @@ function buildRetryInferenceAction(
     ? friendlyInferenceFailureMessage(kind)
     : "The AI call did not complete. Retry to try the request again.";
   const phaseNoun = phase === "ideate" ? "define this feature" : "plan this build";
+  const title = isTransientInferenceFailure(kind)
+    ? "Waiting for AI capacity"
+    : kind === "config"
+      ? "AI setup needs attention"
+      : "No usable AI response";
   return {
     kind: "retry-inference",
-    title: "The AI call failed.",
+    title,
     message: `${friendly} Next: click Retry the AI call to run it again.`,
     primaryLabel: "Retry the AI call",
     targetPhase: null,

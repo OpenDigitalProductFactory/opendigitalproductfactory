@@ -55,4 +55,31 @@ describe("BuildOperatorOverview", () => {
     expect(html).toContain("Needs you");
     expect(html).toContain("Choose the preferred delivery policy.");
   });
+
+  it("shows capacity, elapsed time, and the leave-and-return expectation as one owner state", () => {
+    const html = renderToStaticMarkup(
+      <BuildOperatorOverview
+        title="Improve Build Studio progress"
+        outcome="Make long-running work understandable."
+        phase="ideate"
+        status={{
+          whatIsBeingBuilt: "Improve Build Studio progress",
+          lifecyclePosition: "Waiting for AI capacity",
+          worker: "The AI service is briefly unavailable",
+          evidence: "Build Studio did not receive a usable response.",
+          nextAction: "Retry when convenient.",
+          owner: "owner",
+          needsYou: true,
+          ownerState: "waiting-capacity",
+          elapsedLabel: "Waiting for 2 minutes",
+          expectation: "You can leave this page and return. Build Studio will show the latest result.",
+        }}
+      />,
+    );
+
+    expect(html).toContain("Capacity wait");
+    expect(html).toContain("Waiting for 2 minutes");
+    expect(html).toContain("You can leave this page and return");
+    expect(html).not.toContain(">Needs you<");
+  });
 });

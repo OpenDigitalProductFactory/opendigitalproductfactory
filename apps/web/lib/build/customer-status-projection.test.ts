@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import { projectBuildStudioCustomerStatus } from "./customer-status-projection";
+import { reconcileBuildStudioCustomerStatus } from "./owner-status-reconciliation";
+import type { BuildProgressVisibility } from "./progress-visibility";
 import { STALLED_BUILD_REAP_MS } from "./inert-build-reaper";
 import { createBuildPrDeliveryState, writeBuildPrDeliveryState } from "./build-pr-delivery-state";
 
@@ -197,5 +199,128 @@ describe("projectBuildStudioCustomerStatus (BI-BB13B599)", () => {
       expect(status.lifecyclePosition).toBe("Building it");
       expect(status.needsYou).toBe(false);
     });
+  });
+});
+
+describe("reconcileBuildStudioCustomerStatus — canonical owner state", () => {
+  const base = projectBuildStudioCustomerStatus({
+    build,
+    capsule: { capsuleId: "WC-1", status: "working" },
+  });
+
+  function progress(
+    overrides: Partial<BuildProgressVisibility> = {},
+  ): BuildProgressVisibility {
+    return {
+      buildId: "FB-OWNER",
+      generatedAt: "2026-08-12T12:10:00.000Z",
+      statusHeading: { operatorAction: "Monitor build progress", failureAxis: null },
+      progress: {
+        primary: { source: "db-task-results", completed: 0, total: 0, observedAt: null },
+        conflicts: [],
+      },
+      tasks: {
+        completedTasks: 0,
+        totalTasks: 0,
+        source: { source: "db-task-results", completed: 0, total: 0, observedAt: null },
+        tasks: [],
+      },
+      staleChatSnapshots: [],
+      sandbox: null,
+      dispatchHistory: [],
+      verification: null,
+      quietAgent: {
+        quiet: false,
+        minutesQuiet: 0,
+        lastObservableSignalAt: "2026-08-12T12:09:30.000Z",
+      },
+      inferenceFailure: { failed: false, kind: null, observedAt: null },
+      phaseRuns: [],
+      ...overrides,
+    };
+  }
+
+  it("shows a real in-flight dispatch with persisted elapsed time and a bounded expectation", () => {
+    const status = reconcileBuildStudioCustomerStatus({
+      phase: "build",
+      status: base,
+      progress: progress({
+        dispatchHistory: [{
+          id: "attempt-1",
+          buildId: "FB-OWNER",
+          taskTitle: "Build the owner state",
+          specialist: "software-engineer",
+          providerId: "chatgpt",
+          model: "gpt-5.3-codex",
+          attemptNumber: 1,
+          startedAt: "2026-08-12T12:01:00.000Z",
+          completedAt: null,
+          durationMs: null,
+          exitCode: null,
+          success: false,
+          failureAxis: "unknown",
+          stdoutExcerpt: null,
+          stderrExcerpt: null,
+          rootCauseSummary: null,
+          rootCauseHash: null,
+        }],
+      }),
+    });
+
+    expect(status.ownerState).toBe("working");
+    expect(status.lifecyclePosition).toBe("Building the change");
+    expect(status.elapsedLabel).toBe("Working for 9 minutes");
+    expect(status.expectation).toMatch(/several minutes/i);
+    expect(status.expectation).toMatch(/leave this page/i);
+    expect(status.needsYou).toBe(false);
+  });
+
+  it("distinguishes provider capacity from generic work and preserves the retry action", () => {
+    const status = reconcileBuildStudioCustomerStatus({
+      phase: "ideate",
+      status: base,
+      progress: progress({
+        inferenceFailure: {
+          failed: true,
+          kind: "provider-unavailable",
+          observedAt: "2026-08-12T12:08:00.000Z",
+        },
+      }),
+    });
+
+    expect(status.ownerState).toBe("waiting-capacity");
+    expect(status.lifecyclePosition).toBe("Waiting for AI capacity");
+    expect(status.evidence).not.toMatch(/providerId|engine|dispatch/i);
+    expect(status.nextAction).toMatch(/retry/i);
+    expect(status.needsYou).toBe(true);
+  });
+
+  it("does not call a zero-task, never-dispatched build active execution", () => {
+    const status = reconcileBuildStudioCustomerStatus({
+      phase: "build",
+      status: base,
+      progress: progress(),
+    });
+
+    expect(status.ownerState).toBe("not-started");
+    expect(status.lifecyclePosition).toBe("Preparing the build");
+    expect(status.evidence).toMatch(/has not dispatched implementation work/i);
+    expect(`${status.lifecyclePosition} ${status.worker} ${status.evidence}`).not.toMatch(/actively executing/i);
+  });
+
+  it.each([
+    ["config", "blocked", true],
+    ["empty-response", "inconclusive", true],
+  ] as const)("maps %s inference failure to %s", (kind, ownerState, needsYou) => {
+    const status = reconcileBuildStudioCustomerStatus({
+      phase: "plan",
+      status: base,
+      progress: progress({
+        inferenceFailure: { failed: true, kind, observedAt: "2026-08-12T12:08:00.000Z" },
+      }),
+    });
+
+    expect(status.ownerState).toBe(ownerState);
+    expect(status.needsYou).toBe(needsYou);
   });
 });
