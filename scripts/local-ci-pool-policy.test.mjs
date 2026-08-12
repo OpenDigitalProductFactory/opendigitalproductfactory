@@ -3,6 +3,8 @@ import test from "node:test";
 
 import {
   LOCAL_CI_POOL_CONFIG_KEY,
+  localCiBuildHeadroomCapacity,
+  localCiHostStageHeadroomCapacity,
   loadLocalCiPoolConfig,
   resolveLocalCiPoolPolicy,
 } from "../apps/web/lib/nonprod/local-ci-pool-policy.ts";
@@ -85,12 +87,218 @@ test("enables slot 1 only when requested, declared, and all host evidence is saf
   assert.deepEqual(resolved.slotKeys, ["slot-0", "slot-1"]);
 });
 
-test("unmeasurable or unsafe host evidence contracts admission to singleton with one reason", () => {
+test("admission reserves the canonical bounded-build memory above the host safety floor", () => {
+  const resolved = resolveLocalCiPoolPolicy({
+    configValue: {
+      ...PILOT_CONFIG,
+      ceilings: {
+        ...PILOT_CONFIG.ceilings,
+        minAvailableMemoryBytes: 8 * 1024 ** 3,
+      },
+    },
+    host: {
+      ...SAFE_HOST,
+      availableMemoryBytes: 11 * 1024 ** 3,
+      dockerAvailableMemoryBytes: 11 * 1024 ** 3,
+      builderMemoryUsageBytes: [0, 0],
+    },
+    manifestSlotCount: 2,
+    reserveAdmissionHeadroom: true,
+  });
+
+  assert.equal(resolved.hostSafeCapacity, 0);
+  assert.equal(resolved.effectiveCapacity, 0);
+  assert.equal(resolved.rollbackReason, "host-build-headroom-low");
+  assert.deepEqual(resolved.slotKeys, []);
+});
+
+test("admission reserves the host-native stage envelope above the safety floor", () => {
+  const gib = 1024 ** 3;
+  const configValue = {
+    ...PILOT_CONFIG,
+    ceilings: {
+      ...PILOT_CONFIG.ceilings,
+      minAvailableMemoryBytes: 8 * gib,
+    },
+  };
+
+  for (const availableMemoryBytes of [12 * gib, 14 * gib]) {
+    const resolved = resolveLocalCiPoolPolicy({
+      configValue,
+      host: {
+        ...SAFE_HOST,
+        availableMemoryBytes,
+        dockerAvailableMemoryBytes: 40 * gib,
+        builderMemoryUsageBytes: [0, 0],
+      },
+      manifestSlotCount: 2,
+      reserveAdmissionHeadroom: true,
+    });
+
+    assert.equal(resolved.hostSafeCapacity, 0);
+    assert.equal(resolved.effectiveCapacity, 0);
+    assert.equal(resolved.rollbackReason, "host-stage-headroom-low");
+    assert.deepEqual(resolved.slotKeys, []);
+  }
+
+  const oneSlot = resolveLocalCiPoolPolicy({
+    configValue,
+    host: {
+      ...SAFE_HOST,
+      availableMemoryBytes: 20 * gib,
+      dockerAvailableMemoryBytes: 40 * gib,
+      builderMemoryUsageBytes: [0, 0],
+    },
+    manifestSlotCount: 2,
+    reserveAdmissionHeadroom: true,
+  });
+  assert.equal(oneSlot.hostSafeCapacity, 1);
+  assert.equal(oneSlot.effectiveCapacity, 1);
+  assert.equal(oneSlot.rollbackReason, "host-stage-capacity-one");
+  assert.deepEqual(oneSlot.slotKeys, ["slot-0"]);
+
+  const twoSlots = resolveLocalCiPoolPolicy({
+    configValue,
+    host: {
+      ...SAFE_HOST,
+      availableMemoryBytes: 24 * gib,
+      dockerAvailableMemoryBytes: 40 * gib,
+      builderMemoryUsageBytes: [0, 0],
+    },
+    manifestSlotCount: 2,
+    reserveAdmissionHeadroom: true,
+  });
+  assert.equal(twoSlots.hostSafeCapacity, 2);
+  assert.equal(twoSlots.effectiveCapacity, 2);
+  assert.equal(twoSlots.rollbackReason, null);
+  assert.deepEqual(twoSlots.slotKeys, ["slot-0", "slot-1"]);
+});
+
+test("admission contracts to one slot when headroom covers only one bounded build", () => {
+  const resolved = resolveLocalCiPoolPolicy({
+    configValue: PILOT_CONFIG,
+    host: {
+      ...SAFE_HOST,
+      availableMemoryBytes: 28 * 1024 ** 3,
+      dockerAvailableMemoryBytes: 16 * 1024 ** 3,
+      builderMemoryUsageBytes: [1.5 * 1024 ** 3, 0],
+    },
+    manifestSlotCount: 2,
+    reserveAdmissionHeadroom: true,
+  });
+
+  assert.equal(resolved.hostSafeCapacity, 1);
+  assert.equal(resolved.effectiveCapacity, 1);
+  assert.equal(resolved.rollbackReason, "host-build-capacity-one");
+  assert.deepEqual(resolved.slotKeys, ["slot-0"]);
+});
+
+test("execution pressure does not reserve bounded-build memory a second time", () => {
+  const resolved = resolveLocalCiPoolPolicy({
+    configValue: {
+      ...PILOT_CONFIG,
+      ceilings: {
+        ...PILOT_CONFIG.ceilings,
+        minAvailableMemoryBytes: 8 * 1024 ** 3,
+      },
+    },
+    host: {
+      ...SAFE_HOST,
+      availableMemoryBytes: 11 * 1024 ** 3,
+      dockerAvailableMemoryBytes: 5 * 1024 ** 3,
+    },
+    manifestSlotCount: 2,
+    reserveAdmissionHeadroom: false,
+  });
+
+  assert.equal(resolved.hostSafeCapacity, 2);
+  assert.equal(resolved.effectiveCapacity, 2);
+  assert.equal(resolved.rollbackReason, null);
+});
+
+test("bounded-build headroom arithmetic fails closed for invalid resource policy", () => {
+  const valid = {
+    dockerAvailableMemoryBytes: 30.5 * 1024 ** 3,
+    builderMemoryBytes: 16 * 1024 ** 3,
+    builderMemoryUsageBytes: [1.5 * 1024 ** 3, 0],
+    manifestCapacity: 2,
+  };
+
+  assert.equal(localCiBuildHeadroomCapacity(valid), 2);
+  for (const builderMemoryBytes of [0, -1, Number.NaN, Number.POSITIVE_INFINITY]) {
+    assert.equal(localCiBuildHeadroomCapacity({
+      ...valid,
+      builderMemoryBytes,
+    }), 0);
+  }
+  assert.equal(localCiBuildHeadroomCapacity({
+    ...valid,
+    dockerAvailableMemoryBytes: 11 * 1024 ** 3,
+    builderMemoryUsageBytes: [0, 0],
+  }), 0);
+});
+
+test("host-stage headroom arithmetic keeps the configured floor unconsumed", () => {
+  const gib = 1024 ** 3;
+  const valid = {
+    availableMemoryBytes: 24 * gib,
+    minAvailableMemoryBytes: 8 * gib,
+    hostStageMemoryBytes: 8 * gib,
+    manifestCapacity: 2,
+  };
+
+  assert.equal(localCiHostStageHeadroomCapacity(valid), 2);
+  assert.equal(localCiHostStageHeadroomCapacity({
+    ...valid,
+    availableMemoryBytes: 20 * gib,
+  }), 1);
+  assert.equal(localCiHostStageHeadroomCapacity({
+    ...valid,
+    availableMemoryBytes: 15 * gib,
+  }), 0);
+  for (const hostStageMemoryBytes of [0, -1, Number.NaN, Number.POSITIVE_INFINITY]) {
+    assert.equal(localCiHostStageHeadroomCapacity({
+      ...valid,
+      hostStageMemoryBytes,
+    }), 0);
+  }
+});
+
+test("admission intersects Docker and host-stage capacity instead of returning the first partial fit", () => {
+  const gib = 1024 ** 3;
+  const resolved = resolveLocalCiPoolPolicy({
+    configValue: {
+      ...PILOT_CONFIG,
+      ceilings: {
+        ...PILOT_CONFIG.ceilings,
+        minAvailableMemoryBytes: 8 * gib,
+      },
+    },
+    host: {
+      ...SAFE_HOST,
+      availableMemoryBytes: 14 * gib,
+      dockerAvailableMemoryBytes: 20 * gib,
+      builderMemoryUsageBytes: [0, 0],
+    },
+    manifestSlotCount: 2,
+    reserveAdmissionHeadroom: true,
+  });
+
+  assert.equal(resolved.hostSafeCapacity, 0);
+  assert.equal(resolved.effectiveCapacity, 0);
+  assert.equal(resolved.rollbackReason, "host-stage-headroom-low");
+  assert.deepEqual(resolved.slotKeys, []);
+});
+
+test("unmeasurable or unsafe configured host evidence contracts admission to zero", () => {
   const scenarios = [
+    [{ ...SAFE_HOST, observedAt: undefined }, "host-observation-unmeasurable"],
     [{ ...SAFE_HOST, availableMemoryBytes: undefined }, "host-memory-unmeasurable"],
     [{ ...SAFE_HOST, observedAt: "2026-01-01T00:00:00.000Z" }, "host-observation-stale"],
     [{ ...SAFE_HOST, availableMemoryBytes: 4 * 1024 ** 3 }, "host-memory-low"],
+    [{ ...SAFE_HOST, sustainedCpuPercent: undefined }, "host-cpu-unmeasurable"],
     [{ ...SAFE_HOST, sustainedCpuPercent: 88 }, "host-cpu-high"],
+    [{ ...SAFE_HOST, diskFreeBytes: undefined }, "host-disk-unmeasurable"],
     [{ ...SAFE_HOST, diskFreeBytes: 20 * 1024 ** 3 }, "host-disk-low"],
     [{ ...SAFE_HOST, dockerHealthy: false }, "docker-unhealthy"],
     [{ ...SAFE_HOST, convergenceActive: true }, "dependency-convergence-active"],
@@ -104,10 +312,25 @@ test("unmeasurable or unsafe host evidence contracts admission to singleton with
       host,
       manifestSlotCount: 2,
     });
-    assert.equal(resolved.effectiveCapacity, 1);
+    assert.equal(resolved.hostSafeCapacity, 0);
+    assert.equal(resolved.effectiveCapacity, 0);
     assert.equal(resolved.rollbackReason, rollbackReason);
-    assert.deepEqual(resolved.slotKeys, ["slot-0"]);
+    assert.deepEqual(resolved.slotKeys, []);
   }
+});
+
+test("a valid requested-singleton policy still defers all work under unsafe pressure", () => {
+  const resolved = resolveLocalCiPoolPolicy({
+    configValue: { ...PILOT_CONFIG, requestedCapacity: 1 },
+    host: { ...SAFE_HOST, availableMemoryBytes: 2 * 1024 ** 3 },
+    manifestSlotCount: 2,
+  });
+
+  assert.equal(resolved.requestedCapacity, 1);
+  assert.equal(resolved.hostSafeCapacity, 0);
+  assert.equal(resolved.effectiveCapacity, 0);
+  assert.equal(resolved.rollbackReason, "host-memory-low");
+  assert.deepEqual(resolved.slotKeys, []);
 });
 
 test("manifest capacity and requested singleton are hard upper bounds", () => {

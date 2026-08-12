@@ -291,6 +291,18 @@ intentionally sampled more slowly because each WMI/CIM process-table read is
 itself a heavyweight host operation; `DPF_GATE_PROCESS_SCAN_MS` and
 `DPF_GATE_DESCENDANT_POLL_MS` remain explicit debugging overrides.
 
+While a `local-integration-ci` lease is active, the portal reserves the shared
+host against new local inference dispatch. The common completion adapter and
+embedding choke point consult the same lease registry immediately before local
+provider contact; a local-only request receives a typed capacity deferral,
+while an eligible cloud fallback remains available. Registry uncertainty fails
+closed for local inference only. This exclusion addresses the observed temporal
+overlap between post-admission local-provider/model residency and the Windows
+host free-memory metric crossing the CI fence; it does not claim that Docker's
+displayed model size is ordinary RAM, conflate GPU VRAM with physical memory,
+or infer the Docker/WSL/shared-memory mechanism. It also does not terminate a
+model that was already resident before admission.
+
 **Fail-fast command order (BI-7BCCDE3D).** Inside an admitted runtime-code
 gate, freshness, Prisma generation, migrations, and the cheap doc/repository
 guards run first. Web typecheck then runs before exhaustive Vitest, followed by
@@ -377,7 +389,16 @@ the admission-resolved accepted-base ref, `origin/main` by default → merge
 candidate → sandbox-freshness converge → typecheck → exhaustive Vitest → production build)
 in a dedicated **non-mutating scratch worktree** (`~/dpf-worktrees/.local-ci-runner`
 for slot 0 and a manifest-owned sibling for slot 1) — never in your topic
-worktree. It records content-addressed
+worktree.
+
+**BuildKit session cool-down (BI-C85D1B0A).** The production-build stage uses a
+managed builder (`dpf-local-ci-buildkit-vN-S`) with resource ceilings and an
+in-daemon GC budget (`scripts/config/local-ci-buildkitd.toml`). When the build
+ends, the gate **stops** that builder (`docker buildx stop`) so multi-GiB idle
+RAM is not held between pregates; disk layer cache is retained under GC. Set
+`DPF_LOCAL_CI_BUILDER_KEEP_WARM=1` only for debugging. Obsolete policy-version
+builders are removed on the next ensure. See
+[`docs/superpowers/specs/2026-08-10-buildkit-session-lifecycle-design.md`](../superpowers/specs/2026-08-10-buildkit-session-lifecycle-design.md). It records content-addressed
 metadata to `.git/dpf-local-ci-metadata.json` and into MCP evidence: candidate
 ref/SHA, base ref/SHA, integration commit SHA, synthesized tree SHA, command
 list, timestamps, slot key, Compose/PostgreSQL identities, the exact production
@@ -430,7 +451,39 @@ evidence rather than a product test failure. Local-CI writes its main metadata
 on failure as well as success so this diagnostic survives lease release.
 If the supervisor host itself disappears, the next exact-tree run recognizes
 the stale running receipt and starts directly at the two-worker differentiated
-profile; it does not repeat the already disproven four-worker profile.
+profile; it does not repeat the already disproven four-worker profile. The
+selected execution profile is persisted before the child launches. If a later
+host also disappears during that same differentiated profile, the receipt is
+terminal retry-exhaustion evidence: the wrapper exits 86 without spawning an
+unchanged third attempt. Another run requires a materially changed runner or
+integration identity.
+
+With a valid sandbox-pool policy, admission is capacity zero whenever current
+memory, CPU, disk, Docker, dependency-convergence, slot-fence, or evidence-
+isolation input is unsafe or unmeasurable. The lease supervisor continues
+sampling after admission and fences the active stage child for hard memory,
+disk, Docker, slot-fence, or evidence-integrity loss. CPU pressure blocks new
+admission but does not kill an active stage, and dependency convergence keeps
+its separate quiescence fence. A release or expiry preserves the queue without
+blind promotion; the FIFO head is admitted only after its next poll supplies
+fresh safe host evidence.
+
+A live queued `local-integration-ci` claim also reserves the next safe host
+window against **new** local-provider dispatch. Active local inference is never
+terminated: it finishes normally, while completions, embeddings, semantic
+review, background triage, and future local routes receive the same typed
+queued-capacity deferral until the FIFO head can admit. The reservation is
+bounded by the queue claim's existing heartbeat and expiry, so an abandoned
+waiter cannot suppress local inference indefinitely. Cloud providers do not
+consume this host reservation.
+
+Every queued observation persists its queue position, wait age, resolved pool
+policy (including `rollbackReason` and effective slot capacity), and paired
+host-pressure sample in the candidate's SHA-bound gate state. Later recovery or
+terminal writes retain the latest admission record. Diagnose a timeout from
+that durable record; do not infer the refusal from process residency, cancel
+and recreate a healthy FIFO claim, or conflate Docker model residency and GPU
+VRAM with Windows physical-memory telemetry.
 
 Typecheck writes a separate `web-typecheck` receipt before `next typegen &&
 tsc --noEmit` starts, heartbeats the compiler descendant tree, memory, and a

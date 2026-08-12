@@ -35,3 +35,35 @@ test("Contributor preview waits for a pgvector-capable database", async () => {
     "dev-init must use the disposable migrate converge wrapper (BI-4DB4B415)",
   );
 });
+
+test("Contributor preview receives a separate local-only login credential", async () => {
+  const compose = await readFile(new URL("../docker-compose.yml", import.meta.url), "utf8");
+  const init = composeService(compose, "dev-init");
+
+  assert.match(
+    init,
+    /^      CONTRIBUTOR_PREVIEW_PASSWORD: \$\{CONTRIBUTOR_PREVIEW_PASSWORD:-\}$/m,
+    "dev-init must receive the explicit Contributor preview credential",
+  );
+  assert.doesNotMatch(
+    init,
+    /CONTRIBUTOR_PREVIEW_PASSWORD:.*ADMIN_PASSWORD/,
+    "the preview credential must not reuse the live administrator password",
+  );
+});
+
+test("Contributor preview keeps authentication redirects on the preview origin", async () => {
+  const compose = await readFile(new URL("../docker-compose.yml", import.meta.url), "utf8");
+  const portal = composeService(compose, "dev-portal");
+
+  assert.match(
+    portal,
+    /^      PUBLIC_URL: http:\/\/localhost:3001$/m,
+    "dev-portal sign-in must return contributors to the leased preview instead of the live portal",
+  );
+  assert.match(
+    portal,
+    /^      AUTH_URL: http:\/\/localhost:3001$/m,
+    "dev-portal credential errors must remain on the leased preview origin",
+  );
+});

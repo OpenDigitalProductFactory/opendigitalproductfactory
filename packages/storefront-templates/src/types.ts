@@ -97,7 +97,12 @@ export type ArchetypeCategory =
    *  clock is seasonal and biological. Covers forage/crop cycles, grazing and
    *  livestock health, working animals, equipment readiness, regulated inputs,
    *  outside services, and market/weather decisions. */
-  | "agriculture-ranching";
+  | "agriculture-ranching"
+  /** Discrete manufacturing and industrial OEMs own the transformation of
+   *  materials into serialized finished goods. The defining operating loop is
+   *  release → make → inspect → hold/rework → ship, organized by the ISA-95
+   *  enterprise/site/area/line/cell/equipment hierarchy. */
+  | "manufacturing";
 
 export interface FormField {
   name: string;

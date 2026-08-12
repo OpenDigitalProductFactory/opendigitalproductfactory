@@ -19,7 +19,8 @@ const definitions: ToolDefinition[] = [
       "List recent guest activity from the public storefront: orders, reservations (bookings), or " +
       "inquiries, newest first, with status and customer. For orders the result includes an " +
       "item-quantity rollup across the whole window (e.g. Margherita Pizza x11) — the demand " +
-      "signal for restocking, staffing, and follow-up proposals. Read-only.",
+      "signal for restocking, staffing, and follow-up proposals. Read-only. " +
+      "Call once per review window with the filters you need. Empty results are a finding, not a retry signal — do not re-call with identical arguments. On errors, fix scope or grants once; do not thrash.",
     inputSchema: {
       type: "object",
       properties: {

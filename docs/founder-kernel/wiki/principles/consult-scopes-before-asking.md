@@ -7,7 +7,7 @@ principleTier: commandment
 principleDirection: Prefer resolving a decision through the governed scopes (WWMD, WWWD, WSID) over asking a human; escalate only what they cannot answer, with the consultation ledger attached.
 principleWeight: 0.3
 principleWeightRationale: "Procedural meta-principle — a MUST (commandment-tier, always in scope) that deliberately carries a low structured decision weight so it does not perturb substantive trade-off decisions (e.g. shortcut-vs-proper-fix) it has no bearing on. Its force is as a followed directive, not a decision-math driver."
-principleDimensionVector: {"human_cognitive_load": -0.9, "governance_compliance": 0.5}
+principleDimensionVector: {"human_cognitive_load": -0.9, "governance_compliance": 0.5, "evidence_density": 0.7, "legibility_of_consequence": 0.6, "operator_effort": -0.4, "schema_grounding": 0.5}
 principleAppliesTo:
   - in_platform_coworker
   - external_coding_agent

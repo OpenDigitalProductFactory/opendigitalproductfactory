@@ -10,6 +10,8 @@ import { fileURLToPath } from "node:url";
 import { join } from "node:path";
 
 import {
+  computeChangeImpactContract,
+  computeGateContextJson,
   computeGateContextMarkdown,
   plannedChangesFromPlan,
   resolveGateContextRepoRoot,
@@ -52,8 +54,14 @@ describe("resolveGateContextRepoRoot", () => {
     expect(resolveGateContextRepoRoot({ DPF_REPO_ROOT: repoRoot })).toBe(repoRoot);
   });
 
-  it("returns null when no candidate carries the generator", () => {
-    expect(resolveGateContextRepoRoot({ DPF_REPO_ROOT: join(repoRoot, "docs") })).toBeNull();
+  it("walks up from a nested working directory when configured roots are stale", () => {
+    const previous = process.cwd();
+    process.chdir(join(repoRoot, "docs"));
+    try {
+      expect(resolveGateContextRepoRoot({ DPF_REPO_ROOT: join(repoRoot, "missing") })).toBe(repoRoot);
+    } finally {
+      process.chdir(previous);
+    }
   });
 });
 
@@ -93,4 +101,48 @@ describe("computeGateContextMarkdown (real generator)", () => {
     expect(section).toMatch(/≤ \d+ lines/);
     expect(section).toContain("CI remains the authority");
   }, 30_000);
+});
+
+describe("change-impact contract", () => {
+  it("returns typed resolved JSON for planned edit paths", async () => {
+    const context = await computeGateContextJson(
+      [{ path: "apps/web/components/ops/NewActivityPanel.tsx", status: "A" }],
+      { repoRoot },
+    );
+    expect(context?.schemaVersion).toBe(2);
+    expect(context?.guardObligations.some((entry) => entry.id === "prose-lint-guard")).toBe(true);
+
+    const contract = await computeChangeImpactContract(
+      ["apps/web/components/ops/NewActivityPanel.tsx"],
+      { repoRoot },
+    );
+    expect(contract.status).toBe("resolved");
+    expect(contract.paths).toEqual(["apps/web/components/ops/NewActivityPanel.tsx"]);
+    expect(contract.gateContext?.schemaVersion).toBe(2);
+    expect(contract.gateContext?.moduleSize).toEqual(expect.arrayContaining([
+      expect.objectContaining({ path: "apps/web/components/ops/NewActivityPanel.tsx", rule: expect.stringContaining("new module") }),
+    ]));
+  }, 30_000);
+
+  it("fails safe when the generator cannot be resolved", async () => {
+    const contract = await computeChangeImpactContract(
+      ["apps/web/lib/example.ts"],
+      { repoRoot: join(repoRoot, "docs") },
+    );
+    expect(contract).toMatchObject({
+      status: "unresolved",
+      paths: ["apps/web/lib/example.ts"],
+      reason: "gate-context generator unavailable or returned invalid JSON",
+    });
+    expect(contract.instructions.join(" ")).toMatch(/exhaustive verification/i);
+  });
+
+  it("marks directory scope unresolved instead of claiming an empty impact set", async () => {
+    const contract = await computeChangeImpactContract(["apps/web/lib"], { repoRoot });
+    expect(contract).toMatchObject({
+      status: "unresolved",
+      unresolvedPaths: ["apps/web/lib"],
+    });
+    expect(contract.reason).toMatch(/concrete files/i);
+  });
 });

@@ -563,6 +563,7 @@ describe("work capsule store", () => {
       db.workCapsule.findFirst.mockResolvedValueOnce({
         id: "row-1",
         capsuleId: "WC-EXISTING",
+        status: "ready",
         backlogItemId: null,
         epicId: null,
         executorRef: null,
@@ -596,11 +597,12 @@ describe("work capsule store", () => {
       }));
     });
 
-    it("does not late-bind (or write) when the existing capsule already has a backlogItemId", async () => {
+    it("does not late-bind (or write) when the existing capsule already has the same backlogItemId", async () => {
       db.workCapsule.findFirst.mockResolvedValueOnce({
         id: "row-1",
         capsuleId: "WC-EXISTING",
-        backlogItemId: "BI-ALREADY",
+        status: "working",
+        backlogItemId: "BI-7D20BFDF",
         epicId: null,
         executorRef: null,
       });
@@ -618,9 +620,81 @@ describe("work capsule store", () => {
         actor: { userId: "user-1", agentId: "codex", principalId: "principal-1" },
       });
 
-      expect(result.backlogItemId).toBe("BI-ALREADY");
+      expect(result.capsuleId).toBe("WC-EXISTING");
+      expect(result.backlogItemId).toBe("BI-7D20BFDF");
       expect(db.workCapsule.update).not.toHaveBeenCalled();
       expect(db.workCapsule.create).not.toHaveBeenCalled();
+    });
+
+    // BI-95E37EA1 — abandoned main capsule must not be returned as a successful bind.
+    it("creates a fresh capsule when the only (repo, branch) hit is abandoned for another BI", async () => {
+      // findFirst with status notIn terminal returns null (abandoned filtered out).
+      db.workCapsule.findFirst.mockResolvedValueOnce(null);
+      db.workCapsule.create.mockResolvedValueOnce({
+        id: "row-new",
+        capsuleId: "WC-FRESH01",
+        status: "ready",
+        backlogItemId: "BI-NEWITEM",
+        headBranch: "main",
+        worktreePath: "D:/DPF",
+        executorRef: "session-new",
+      });
+
+      const result = await adoptWorktreeCapsule({
+        db: capsuleDb(),
+        input: {
+          title: "Work on BI-NEWITEM",
+          objective: "Claim-at-start binding for BI-NEWITEM",
+          repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory",
+          headBranch: "main",
+          worktreePath: "D:/DPF",
+          backlogItemId: "BI-NEWITEM",
+          executorRef: "session-new",
+          executorKind: "codex-desktop",
+        },
+        actor: { userId: "user-1", agentId: "codex", principalId: "principal-1" },
+      });
+
+      expect(result.capsuleId).toBe("WC-FRESH01");
+      expect(result.backlogItemId).toBe("BI-NEWITEM");
+      expect(db.workCapsule.create).toHaveBeenCalledTimes(1);
+      expect(db.workCapsule.update).not.toHaveBeenCalled();
+    });
+
+    it("creates a fresh capsule when a live capsule on the branch is bound to a different BI", async () => {
+      db.workCapsule.findFirst.mockResolvedValueOnce({
+        id: "row-1",
+        capsuleId: "WC-OTHERBI",
+        status: "working",
+        backlogItemId: "BI-OTHER",
+        executorRef: "session-other",
+        epicId: null,
+      });
+      db.workCapsule.create.mockResolvedValueOnce({
+        id: "row-new",
+        capsuleId: "WC-MINE001",
+        status: "ready",
+        backlogItemId: "BI-MINE",
+        executorRef: "session-mine",
+      });
+
+      const result = await adoptWorktreeCapsule({
+        db: capsuleDb(),
+        input: {
+          title: "Mine",
+          objective: "Different BI on same branch.",
+          repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory",
+          headBranch: "main",
+          worktreePath: "D:/DPF",
+          backlogItemId: "BI-MINE",
+          executorRef: "session-mine",
+        },
+        actor: { userId: "user-1", agentId: "codex", principalId: "principal-1" },
+      });
+
+      expect(result.capsuleId).toBe("WC-MINE001");
+      expect(db.workCapsule.create).toHaveBeenCalledTimes(1);
+      expect(db.workCapsule.update).not.toHaveBeenCalled();
     });
   });
 
@@ -777,10 +851,11 @@ describe("work capsule store", () => {
         claimedByAgentId: "agent-1",
         claimedAt: new Date(),
       });
-      // adopt reuse: existing capsule already bound to this BI.
+      // adopt reuse: existing capsule already bound to this BI + session.
       db.workCapsule.findFirst.mockResolvedValueOnce({
         id: "row-1",
         capsuleId: "WC-CLAIM01",
+        status: "working",
         backlogItemId: "BI-7D20BFDF",
         epicId: null,
         executorRef: "session-A",
@@ -820,7 +895,13 @@ describe("work capsule store", () => {
     }
 
     it("rejects an edit claim that overlaps another active capsule's edit claim", async () => {
-      db.workCapsule.findUnique.mockResolvedValueOnce({ id: "row-1", capsuleId: "WC-MINE001", scopeClaims: [] });
+      db.workCapsule.findUnique.mockResolvedValueOnce({
+        id: "row-1",
+        capsuleId: "WC-MINE001",
+        status: "working",
+        archivedAt: null,
+        scopeClaims: [],
+      });
       db.workCapsule.findMany.mockResolvedValueOnce([otherCapsule({})]);
 
       await expect(
@@ -833,6 +914,27 @@ describe("work capsule store", () => {
       ).rejects.toBeInstanceOf(ScopeOverlapError);
 
       // The conflicting write must never reach the DB.
+      expect(db.workCapsule.update).not.toHaveBeenCalled();
+    });
+
+    it("refuses scope claims on an abandoned capsule (BI-95E37EA1)", async () => {
+      db.workCapsule.findUnique.mockResolvedValueOnce({
+        id: "row-stale",
+        capsuleId: "WC-DEAC865E",
+        status: "abandoned",
+        archivedAt: null,
+        scopeClaims: [],
+      });
+
+      await expect(
+        claimWorkCapsuleScope({
+          db: capsuleDb(),
+          capsuleId: "WC-DEAC865E",
+          claims: [{ kind: "path", value: "apps/web/lib/foo.ts", intent: "read" }],
+          actor,
+        }),
+      ).rejects.toThrow(/abandoned and cannot accept scope claims/i);
+
       expect(db.workCapsule.update).not.toHaveBeenCalled();
     });
 

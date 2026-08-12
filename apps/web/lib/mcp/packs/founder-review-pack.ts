@@ -34,7 +34,7 @@ const definitions: ToolDefinition[] = [
   {
     name: "list_open_decision_reviews",
     description:
-      "List the OPEN DECISION REVIEWS shown on the /coworker-decisions Decision Governance hub — decisions your AI workforce deferred or escalated to a human and that are still unresolved. Returns each review's question, discipline (WWMD platform / WWWD business / WSID craft), why it is unresolved, the gap detail, a suggested next action, and a decision-canvas link. Use this to answer 'what should we do about these open reviews?' by reading and recommending on the actual queue instead of asking the user to paste the screen. Read-only: resolving a review is a human action taken in the owning workflow after reviewing the Decision Canvas evidence; this tool lets you understand and recommend.",
+      "List the OPEN DECISION REVIEWS shown on the /coworker-decisions Decision Governance hub — decisions your AI workforce deferred or escalated to a human and that are still unresolved. Returns each review's question, discipline (WWMD platform / WWWD business / WSID craft), why it is unresolved, the gap detail, a suggested next action, and a decision-canvas link. Use this to answer 'what should we do about these open reviews?' by reading and recommending on the actual queue instead of asking the user to paste the screen. Read-only: resolving a review is a human action taken in the owning workflow after reviewing the Decision Canvas evidence; this tool lets you understand and recommend. Call once when opening a review queue; do not poll in a tight loop. Prefer filters over repeated full-list calls. On errors, fix grants once; do not thrash.",
     inputSchema: {
       type: "object",
       properties: {

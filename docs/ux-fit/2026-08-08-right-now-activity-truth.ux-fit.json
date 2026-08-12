@@ -1,0 +1,19 @@
+{
+  "version": "1",
+  "decidedOption": "right-now-only",
+  "decisionInteractionId": "DI-15DC5BCA696C",
+  "scope": {
+    "files": [
+      "apps/web/components/ops/CoworkerActivityInspectionLink.tsx",
+      "apps/web/components/ops/SelfUpgradeClient.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "right-now-only",
+      "direct-coworker-with-fallback",
+      "both-links"
+    ]
+  }
+}

@@ -46,6 +46,8 @@ describe("selectLocalDemandForLink direction", () => {
         backlogItem: { findUnique: vi.fn().mockResolvedValue({
           itemId: "BI-LOCAL",
           title: "Local need",
+          sensitivity: "public",
+          scopeKind: null,
           body: null,
           status: "open",
           workType: "feature",
@@ -82,6 +84,8 @@ describe("selectLocalDemandForLink direction", () => {
         backlogItem: { findUnique: vi.fn().mockResolvedValue({
           itemId: "BI-CLOSED",
           title: "Resolved need",
+          sensitivity: "public",
+          scopeKind: null,
           body: null,
           status,
           workType: "feature",
@@ -116,6 +120,44 @@ describe("selectLocalDemandForLink direction", () => {
       backlogItem: { findUnique: vi.fn().mockResolvedValue({
         itemId: "BI-LOCAL",
         title: "Distributor need",
+        sensitivity: "internal",
+        scopeKind: "platform",
+        body: null,
+        status: "open",
+        workType: "feature",
+        occurrenceCount: 1,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        digitalProduct: { productId: "dpf-portal" },
+      }) },
+      projectionContract: { findFirst: vi.fn().mockResolvedValue(null) },
+    };
+
+    await expect(selectLocalDemandForLink(db as never, {
+      linkId: "FL-FOUNDER",
+      itemId: "BI-LOCAL",
+      allowForwardToFounder: true,
+    })).rejects.toThrow("Founder forwarding consent applies only when sharing with a distributor.");
+  });
+
+  it("denies cross-org sharing of an item that is not marked public (BI-DC4E526E deny-by-default)", async () => {
+    const db = {
+      federationLink: { findUnique: vi.fn().mockResolvedValue({
+        linkId: "FL-CHANNEL",
+        role: "channel-downstream",
+        linkState: "trusted",
+        peerAuthorityUrl: "https://distributor.example",
+        peerTokenEnc: "token",
+        peerInstallationId: "inst_dist",
+        projectionContractId: null,
+        revokedAt: null,
+        quarantinedAt: null,
+      }) },
+      backlogItem: { findUnique: vi.fn().mockResolvedValue({
+        itemId: "BI-PROPRIETARY",
+        title: "Proprietary need",
+        sensitivity: "internal",
+        scopeKind: null, // the default — not cleared to leave the org
         body: null,
         status: "open",
         workType: "feature",
@@ -128,10 +170,50 @@ describe("selectLocalDemandForLink direction", () => {
     };
 
     await expect(selectLocalDemandForLink(db as never, {
-      linkId: "FL-FOUNDER",
-      itemId: "BI-LOCAL",
-      allowForwardToFounder: true,
-    })).rejects.toThrow("Founder forwarding consent applies only when sharing with a distributor.");
+      linkId: "FL-CHANNEL",
+      itemId: "BI-PROPRIETARY",
+    })).rejects.toThrow(/cannot be shared across an organization boundary/);
+  });
+});
+
+describe("selectLocalDemandForLink — cross-org content redaction (BI-DC4E526E)", () => {
+  it("projects TITLE-only as the summary; the raw body never crosses", async () => {
+    const queueProjection = vi.fn().mockResolvedValue({ action: "queued", mirrorId: "m", originVersion: 1 });
+    const resolveIdentity = vi.fn().mockResolvedValue({ installationId: "inst_self", projectionSecret: "s".repeat(64) });
+    const db = {
+      federationLink: {
+        findUnique: vi.fn().mockResolvedValue({
+          linkId: "FL-CH", role: "channel-downstream", linkState: "trusted",
+          peerAuthorityUrl: "https://distributor.example", peerTokenEnc: "token",
+          peerInstallationId: "inst_dist", projectionContractId: null,
+          revokedAt: null, quarantinedAt: null,
+        }),
+        update: vi.fn(),
+      },
+      backlogItem: { findUnique: vi.fn().mockResolvedValue({
+        itemId: "BI-PLAT",
+        title: "Platform sync bug",
+        sensitivity: "internal",
+        scopeKind: "platform",
+        body: "SECRET customer infra detail: 10.0.0.5 admin creds",
+        status: "open",
+        workType: "bug",
+        occurrenceCount: 1,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        digitalProduct: { productId: "dpf-portal" },
+      }) },
+      projectionContract: { findFirst: vi.fn().mockResolvedValue(null), upsert: vi.fn() },
+    };
+
+    await selectLocalDemandForLink(db as never, { linkId: "FL-CH", itemId: "BI-PLAT" }, {
+      queueProjection, resolveIdentity,
+    });
+
+    const source = queueProjection.mock.calls[0][1].source;
+    expect(source.summary).toBe("Platform sync bug");
+    expect(JSON.stringify(source)).not.toContain("SECRET");
+    expect(JSON.stringify(source)).not.toContain("10.0.0.5");
   });
 });
 

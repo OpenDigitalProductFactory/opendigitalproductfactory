@@ -1,0 +1,18 @@
+{
+  "version": "1",
+  "decidedOption": "workspace-journey-now",
+  "decisionInteractionId": "DI-0AFBC431BADE",
+  "scope": {
+    "files": [
+      "apps/web/components/workspace/InstallationPurposePanel.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "workspace-journey-now",
+      "admin-settings-now",
+      "platform-identity-route"
+    ]
+  }
+}

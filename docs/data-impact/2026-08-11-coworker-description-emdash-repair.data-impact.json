@@ -1,0 +1,32 @@
+{
+  "version": "1",
+  "accountableOwner": "data-steward",
+  "affectedCopies": [
+    "Existing Agent.description rows that still contain the CP1252-mangled em-dash have that exact 3-character substring replaced in place with a real em-dash (U+2014). No row is rewritten from the seed, so operator-edited descriptions keep their edits.",
+    "Only rows matching the exact mojibake sequence are touched (WHERE-guarded); clean installs and already-corrected descriptions match zero rows. Verified read-only against a live install: 8 rows affected (dual-seed pairs plus one quarantined row).",
+    "No schema field or relationship is added or removed; Agent.description is a pre-existing authority. The migration is data repair only and idempotent — re-running is a no-op. It pairs with the agent_registry.json source fix so new installs never seed the defect."
+  ],
+  "migration": {
+    "name": "20260811120000_repair_coworker_description_mojibake_emdash",
+    "backfill": "Data-only, corrective, idempotent. A single UPDATE that REPLACEs the exact mojibake substring (chr(226)||chr(8364)||chr(8221)) with an em-dash (chr(8212)) inside Agent.description, scoped by a WHERE guard to only affected rows. No deletes, no schema change, no overwrite of unaffected or operator-edited data. Applied exactly once per install via prisma migrate deploy — never a re-seed."
+  },
+  "tests": [
+    "packages/db/prisma/migrations/20260811120000_repair_coworker_description_mojibake_emdash/migration.sql"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:agent#description-emdash-repair",
+      "prismaModel": "Agent",
+      "lifecycleDisposition": "Existing Agent lifecycle. Only the corrupted em-dash substring within description is repaired in place, on rows that still contain it. Operator rows and operator-edited descriptions outside the mojibake pattern are untouched; the migration never rewrites a description from the seed.",
+      "fields": [
+        {
+          "fieldId": "data:agent#description",
+          "resolution": "inherited",
+          "reason": "description is a pre-existing Agent authority; this repairs corrupted characters seeded from a mangled registry entry, it does not introduce or re-govern a field",
+          "provenance": "agent_registry.json source fix (\\u00e2\\u20ac\\u201d -> \\u2014) plus the corrective, idempotent data migration"
+        }
+      ]
+    }
+  ]
+}

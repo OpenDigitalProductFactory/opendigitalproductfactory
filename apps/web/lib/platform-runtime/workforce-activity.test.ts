@@ -41,6 +41,40 @@ function fakePrisma(data: {
 }
 
 describe("loadWorkforceActivity", () => {
+  it("uses only the canonical live states and never reports stalled work as working (BI-FDB25FA6)", async () => {
+    let taskRunWhere: unknown;
+    const prisma = fakePrisma({
+      agents: [agent({ agentId: "stalled-coworker", displayName: "Stalled Coworker" })],
+      liveRuns: [
+        {
+          taskRunId: "stalled-1",
+          status: "stalled",
+          title: "Old scheduled work",
+          currentAgentId: "stalled-coworker",
+          startedAt: new Date(NOW - 30 * 86_400_000),
+          lastHeartbeatAt: new Date(NOW - 29 * 86_400_000),
+        },
+      ],
+    }) as unknown as {
+      taskRun: { findMany: (args: { where: unknown }) => Promise<unknown[]> };
+    };
+    const originalFindMany = prisma.taskRun.findMany;
+    prisma.taskRun.findMany = async (args) => {
+      taskRunWhere = args.where;
+      return originalFindMany(args);
+    };
+
+    const wf = await loadWorkforceActivity({ prisma: prisma as never, now: () => NOW });
+
+    expect(taskRunWhere).toEqual({
+      archivedAt: null,
+      status: { in: ["working", "active"] },
+    });
+    expect(wf.working).toEqual([]);
+    expect(wf.pulse.workingCount).toBe(0);
+    expect(wf.quiet.map((coworker) => coworker.name)).toEqual(["Stalled Coworker"]);
+  });
+
   it("splits working vs quiet and builds the outcome digest", async () => {
     const prisma = fakePrisma({
       agents: [

@@ -1,0 +1,50 @@
+{
+  "version": "1",
+  "accountableOwner": "platform-architecture",
+  "affectedCopies": [
+    "Prisma-to-EA current-state data-model mirror",
+    "nearby federation pairing session read model"
+  ],
+  "migration": {
+    "name": "20260808200000_federation_sas_pairing_state",
+    "backfill": "none — existing invitation sessions keep null SAS state; newly initiated nearby sessions use the identity-bound commit/reveal protocol"
+  },
+  "tests": [
+    "apps/web/lib/federation/instance-identity.test.ts",
+    "apps/web/lib/federation/sas-pairing.test.ts",
+    "apps/web/lib/federation/nearby-pairing.test.ts",
+    "apps/web/lib/federation/nearby-pairing-service.test.ts",
+    "apps/web/app/connect/pair/route.test.ts",
+    "apps/web/lib/actions/federation-links-pairing.test.ts"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:federation-pairing-session#sas",
+      "prismaModel": "FederationPairingSession",
+      "lifecycleDisposition": "expires with the short-lived pairing session; encrypted ephemeral private material and nonce are cleared immediately after reveal, and trust remains owned by FederationBootstrapToken and FederationLink",
+      "fields": [
+        {
+          "fieldId": "data:federation-pairing-session#sasState",
+          "resolution": "governed",
+          "reason": "a versioned commit/reveal transcript binds ephemeral X25519 material to each installation's stable Ed25519 identity without creating a parallel trust model",
+          "provenance": "BI-7432348C and federation zero-shell autodiscovery design section 3.5",
+          "flags": ["sensitive"],
+          "fieldPolicy": "encrypt private key and nonce while in flight; clear both after reveal; retain only public keys, commitments, and revealed transcript facts for pairing audit"
+        },
+        {
+          "fieldId": "data:federation-pairing-session#sasConfirmedAtLocal",
+          "resolution": "governed",
+          "reason": "records that this installation's authorized operator explicitly confirmed the six-digit comparison",
+          "provenance": "BI-7432348C dual-confirmation acceptance contract"
+        },
+        {
+          "fieldId": "data:federation-pairing-session#sasConfirmedAtPeer",
+          "resolution": "governed",
+          "reason": "prevents bootstrap authority from being issued until the peer operator has independently confirmed the same six-digit comparison",
+          "provenance": "BI-7432348C dual-confirmation acceptance contract"
+        }
+      ]
+    }
+  ]
+}

@@ -73,8 +73,10 @@ export async function main() {
   const elapsed = ((Date.now() - startedAt) / 1000).toFixed(1);
 
   for (const entry of environmentSkipped) {
+    // BI-99CAE42F: never recommend a bare --filter install from the workspace root.
     process.stderr.write(
-      `[pregate-preflight] WARN ${entry.name} could not run on this host (missing runtime) — CI will still enforce it. Remedy: pnpm install --frozen-lockfile --ignore-scripts --filter @dpf/repo-guard-runtime\n`,
+      `[pregate-preflight] WARN ${entry.name} could not run on this host (missing runtime) — CI will still enforce it. ` +
+        `Remedy: node scripts/lib/bootstrap-worktree-deps.mjs .  (managed install; do NOT run bare pnpm --filter at the workspace root — it prunes sibling links)\n`,
     );
   }
 

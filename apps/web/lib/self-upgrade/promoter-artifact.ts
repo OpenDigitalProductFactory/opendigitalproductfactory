@@ -1,6 +1,10 @@
 import { createHash } from "node:crypto";
-import { readFile } from "node:fs/promises";
+import { readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
+import {
+  PROMOTER_DOCKERFILE,
+  stageMinimalPromoterBuildContext,
+} from "./promoter-build-context";
 
 export const SELF_UPGRADE_CALLER_PROTOCOL_VERSION = 1;
 export const PROMOTER_CONTRACT_SCHEMA_VERSION = 1;
@@ -48,13 +52,26 @@ export async function buildCandidatePromoterArtifactImage(
   const manifest = await readFile(join(params.sourcePath, "promoter-contract.json"));
   const contractDigest = `sha256:${createHash("sha256").update(manifest).digest("hex")}`;
   const targetImage = `${DEFAULT_PROMOTER_IMAGE}:${params.targetSha}`;
-  requireDockerSuccess(await runDocker([
-    "buildx", "build", "--load",
-    "-f", join(params.sourcePath, "Dockerfile.promoter"), "-t", targetImage,
-    "--build-arg", `DPF_PROMOTER_SOURCE_SHA=${params.targetSha}`,
-    "--build-arg", `DPF_PROMOTER_CONTRACT_DIGEST=${contractDigest}`,
-    params.sourcePath,
-  ]), "promoter_candidate_build");
+  // Stage ONLY the promoter build inputs into a throwaway minimal context so
+  // `docker build` never enumerates the whole upgrade workspace (apps/packages/
+  // docs) — the `readdirent … cannot allocate memory` OOM that bricked
+  // SUR-BF75ED2A on a lean host (PR #4199). The staged file list is the shared
+  // PROMOTER_BUILD_CONTEXT_* source-of-truth, so it can't drift from
+  // Dockerfile.promoter's COPY list. This mirrors the JIT rebuild's tar-context
+  // (PROMOTER_JIT_BUILD_SCRIPT); it just sources from the target-sha checkout
+  // instead of the portal's baked-in /promoter/ layout.
+  const contextDir = await stageMinimalPromoterBuildContext(params.sourcePath);
+  try {
+    requireDockerSuccess(await runDocker([
+      "buildx", "build", "--load",
+      "-f", join(contextDir, PROMOTER_DOCKERFILE), "-t", targetImage,
+      "--build-arg", `DPF_PROMOTER_SOURCE_SHA=${params.targetSha}`,
+      "--build-arg", `DPF_PROMOTER_CONTRACT_DIGEST=${contractDigest}`,
+      contextDir,
+    ]), "promoter_candidate_build");
+  } finally {
+    await rm(contextDir, { recursive: true, force: true });
+  }
   return targetImage;
 }
 

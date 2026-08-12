@@ -417,13 +417,22 @@ describe("generated route-shell registry", () => {
     // above — it re-fetches live-edge-windowed orchestration state on a 45s timer, so
     // its frozen ariaSnapshot flips on untouched code (measured across six sweep runs
     // two days apart; see ROUTE_SWEEP_EXCLUSIONS for the run ids).
-    expect(registry.routes.filter((route) => route.sweepEligible)).toHaveLength(197);
+    // 197 -> 198: /employee/recruiting (BI-9CC44DC7) is sweep-eligible — a read-only
+    // recruiting funnel over getRecruitingPipeline with a requisition filter; it renders
+    // no wall-clock or live-orchestration state, only the deduped pipeline read model.
+    // 198 -> 199: /platform/archetype-readiness is a static operator matrix sourced
+    // from storefront-template metadata, so it is safe for the generic sweep.
+    expect(registry.routes.filter((route) => route.sweepEligible)).toHaveLength(199);
     // 110 -> 113: the three exclusions above. Product Direction then adds seven
     // explicitly classified dynamic routes, bringing the combined total to 120.
     // 120 -> 121: /platform/ai/operations-map.
     // 121 -> 122: /platform/ai/right-now (BI-1A68257F) joins the same wall-clock /
     // live-orchestration exclusion — it polls the live workforce set on a 12s timer.
-    expect(registry.routes.filter((route) => !route.sweepEligible)).toHaveLength(122);
+    // 122 -> 123: /workforce/[agentId] (EP-COWORKER-IDENTITY-360) — the Coworker Identity
+    // 360 detail page is a dynamic ([agentId]) route the generator auto-excludes with
+    // reason "dynamic-fixture-required": the sweep cannot render it without a per-coworker
+    // fixture, so it is not measured (not a live-state exclusion, a fixture one).
+    expect(registry.routes.filter((route) => !route.sweepEligible)).toHaveLength(123);
   });
 
   it("keeps contextual sweep exclusions explicit, valid, and non-stale", () => {

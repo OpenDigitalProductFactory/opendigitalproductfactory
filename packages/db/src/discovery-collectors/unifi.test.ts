@@ -165,6 +165,60 @@ function makeDeps(overrides: Partial<UnifiDeps> = {}): UnifiDeps {
 // ─── Device Discovery ─────────────────────────────────────────────────────
 
 describe("collectUnifiDiscovery", () => {
+  it("uses the official UniFi API to model the physical device chain", async () => {
+    const seen: string[] = [];
+    const deps = makeDeps({
+      fetchFn: async (url: string | URL) => {
+        const path = new URL(String(url)).pathname;
+        seen.push(path);
+        if (path.endsWith("/integration/v1/sites")) {
+          return Response.json({ data: [{ id: "site-1", name: "Default" }] });
+        }
+        if (path.endsWith("/integration/v1/sites/site-1/devices")) {
+          return Response.json({ data: [
+            { id: "gw-1", macAddress: "aa:bb:cc:dd:ee:01", ipAddress: "192.168.0.1", name: "Cloud Gateway Ultra", model: "UCG-Ultra", firmwareVersion: "4.1.13", features: ["gateway"] },
+            { id: "sw-1", macAddress: "aa:bb:cc:dd:ee:02", ipAddress: "192.168.0.2", name: "US 8 PoE 150W", model: "US-8-150W", firmwareVersion: "7.1.26", features: ["switching"] },
+            { id: "ap-1", macAddress: "aa:bb:cc:dd:ee:03", ipAddress: "192.168.0.3", name: "U7 Pro", model: "U7-Pro", firmwareVersion: "8.0.24", features: ["accessPoint"] },
+          ] });
+        }
+        if (path.endsWith("/integration/v1/sites/site-1/devices/gw-1")) {
+          return Response.json({ id: "gw-1" });
+        }
+        if (path.endsWith("/integration/v1/sites/site-1/devices/sw-1")) {
+          return Response.json({ id: "sw-1", uplink: { deviceId: "gw-1", portNumber: 1 } });
+        }
+        if (path.endsWith("/integration/v1/sites/site-1/devices/ap-1")) {
+          return Response.json({ id: "ap-1", uplink: { deviceId: "sw-1", portNumber: 5 } });
+        }
+        return new Response("Not Found", { status: 404 });
+      },
+    });
+
+    const result = await collectUnifiDiscovery({ sourceKind: "unifi" }, deps);
+
+    expect(result.items.map((item) => item.itemType)).toEqual(["router", "switch", "access_point"]);
+    expect(result.relationships).toEqual(expect.arrayContaining([
+      expect.objectContaining({ relationshipType: "CONNECTS_TO", fromExternalRef: "unifi-device:aa:bb:cc:dd:ee:02", toExternalRef: "unifi-device:aa:bb:cc:dd:ee:01" }),
+      expect.objectContaining({ relationshipType: "CONNECTS_TO", fromExternalRef: "unifi-device:aa:bb:cc:dd:ee:03", toExternalRef: "unifi-device:aa:bb:cc:dd:ee:02" }),
+    ]));
+    expect(result.warnings).toEqual([]);
+    expect(seen.some((path) => path.includes("/proxy/network/api/s/"))).toBe(false);
+  });
+
+  it("does not hide an official API authentication failure behind legacy fallback", async () => {
+    const seen: string[] = [];
+    const result = await collectUnifiDiscovery(undefined, makeDeps({
+      fetchFn: async (url: string | URL) => {
+        seen.push(String(url));
+        return new Response("Unauthorized", { status: 401 });
+      },
+    }));
+
+    expect(result.warnings).toContain("unifi_auth_failed");
+    expect(seen).toHaveLength(1);
+    expect(seen[0]).toContain("/proxy/network/integration/v1/sites");
+  });
+
   it("discovers devices with correct item types", async () => {
     const result = await collectUnifiDiscovery(undefined, makeDeps());
 
@@ -176,6 +230,12 @@ describe("collectUnifiDiscovery", () => {
     expect(router!.attributes?.osiLayer).toBe(3);
     // Serial captured under the canonical key the estate bridges read (BI-828998DC).
     expect(router!.attributes?.serialNumber).toBe("UDMPRO-SN-001");
+    // The collector deliberately does NOT hardcode a vendor. It reports the MAC;
+    // discovery-sync resolves the manufacturer from the IEEE OUI registry, which
+    // generalises to every collector instead of one vendor's happy path
+    // (BI-9632B15B). Pinned so a future "just set it here" does not creep back.
+    expect(router!.attributes && "vendor" in router!.attributes).toBe(false);
+    expect(router!.attributes?.mac).toBe("aa:bb:cc:dd:ee:01");
 
     const sw = result.items.find((i) => i.itemType === "switch");
     expect(sw).toBeDefined();
@@ -183,6 +243,8 @@ describe("collectUnifiDiscovery", () => {
     expect(sw!.attributes?.osiLayer).toBe(2);
     // A device with no serial in the API carries no serialNumber key (not an empty string).
     expect(sw!.attributes && "serialNumber" in sw!.attributes).toBe(false);
+    // The MAC is what the collector owes; the vendor is derived downstream.
+    expect(sw!.attributes?.mac).toBe("aa:bb:cc:dd:ee:02");
 
     const ap = result.items.find((i) => i.itemType === "access_point");
     expect(ap).toBeDefined();
@@ -274,6 +336,9 @@ describe("collectUnifiDiscovery", () => {
     const deps = makeDeps({
       fetchFn: async (url: string | URL) => {
         const urlStr = String(url);
+        if (urlStr.includes("/integration/v1/")) {
+          return new Response("Not Found", { status: 404 });
+        }
         if (urlStr.includes("stat/health")) {
           return new Response(JSON.stringify({ data: [{ subsystem: "wlan", status: "ok" }] }), {
             status: 200,
@@ -438,6 +503,9 @@ describe("collectUnifiDiscovery", () => {
     const deps = makeDeps({
       fetchFn: async (url: string | URL) => {
         const urlStr = String(url);
+        if (urlStr.includes("/integration/v1/")) {
+          return new Response("Not Found", { status: 404 });
+        }
         if (urlStr.includes("stat/device")) {
           return new Response(JSON.stringify({ data: [] }), {
             status: 200,
@@ -459,6 +527,9 @@ describe("collectUnifiDiscovery", () => {
     const deps = makeDeps({
       fetchFn: async (url: string | URL) => {
         const urlStr = String(url);
+        if (urlStr.includes("/integration/v1/")) {
+          return new Response("Not Found", { status: 404 });
+        }
         if (urlStr.includes("stat/device")) {
           return new Response(JSON.stringify(deviceData), {
             status: 200,

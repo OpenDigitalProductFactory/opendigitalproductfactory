@@ -2,6 +2,9 @@ import pilotGuardrails from "./local-ci-pilot-guardrails.json" with {
   type: "json",
 };
 import { isRecord as isRecordRuntime } from "../shared/is-record.mjs";
+import localCiSlotResources from "./local-ci-slot-resources.json" with {
+  type: "json",
+};
 
 export const LOCAL_CI_POOL_CONFIG_KEY = "local_ci.sandbox_pool";
 export const LOCAL_CI_POOL_POLICY_VERSION = 1 as const;
@@ -17,6 +20,8 @@ export type LocalCiPoolPolicySource =
 export type LocalCiHostPressure = {
   observedAt?: string;
   availableMemoryBytes?: number;
+  dockerAvailableMemoryBytes?: number;
+  builderMemoryUsageBytes?: number[];
   sustainedCpuPercent?: number;
   diskFreeBytes?: number;
   dockerHealthy?: boolean;
@@ -45,12 +50,85 @@ export type ResolvedLocalCiPoolPolicy = {
   source: LocalCiPoolPolicySource;
   requestedCapacity: 1 | 2;
   manifestCapacity: number;
-  hostSafeCapacity: 1 | 2;
-  effectiveCapacity: 1 | 2;
+  hostSafeCapacity: 0 | 1 | 2;
+  effectiveCapacity: 0 | 1 | 2;
   slotKeys: Array<"slot-0" | "slot-1">;
   rollbackReason: string | null;
   config: LocalCiPoolConfig | null;
 };
+
+export function localCiBuildHeadroomCapacity(input: {
+  dockerAvailableMemoryBytes: number;
+  builderMemoryBytes: number;
+  builderMemoryUsageBytes: number[];
+  manifestCapacity: number;
+}): number {
+  if (
+    !Number.isFinite(input.dockerAvailableMemoryBytes)
+    || input.dockerAvailableMemoryBytes < 0
+    || !Number.isFinite(input.builderMemoryBytes)
+    || input.builderMemoryBytes <= 0
+    || !Number.isFinite(input.manifestCapacity)
+    || input.manifestCapacity < 1
+    || !Array.isArray(input.builderMemoryUsageBytes)
+    || input.builderMemoryUsageBytes.length < Math.floor(input.manifestCapacity)
+    || input.builderMemoryUsageBytes.some(
+      (value) => !Number.isFinite(value) || value < 0,
+    )
+  ) {
+    return 0;
+  }
+
+  let cumulativeReservationBytes = 0;
+  let capacity = 0;
+  for (const usageBytes of input.builderMemoryUsageBytes.slice(
+    0,
+    Math.floor(input.manifestCapacity),
+  )) {
+    cumulativeReservationBytes += Math.max(
+      0,
+      input.builderMemoryBytes - usageBytes,
+    );
+    if (cumulativeReservationBytes > input.dockerAvailableMemoryBytes) break;
+    capacity += 1;
+  }
+  return capacity;
+}
+
+/**
+ * Number of host-native stage slots that can start without spending the
+ * configured continuation floor. The floor is the active-stage safety fence;
+ * the stage envelope is predictable Node/TypeScript/Vitest growth that must be
+ * reserved before admission rather than discovered by killing the stage.
+ */
+export function localCiHostStageHeadroomCapacity(input: {
+  availableMemoryBytes: number;
+  minAvailableMemoryBytes: number;
+  hostStageMemoryBytes: number;
+  manifestCapacity: number;
+}): number {
+  if (
+    !Number.isFinite(input.availableMemoryBytes)
+    || input.availableMemoryBytes < 0
+    || !Number.isFinite(input.minAvailableMemoryBytes)
+    || input.minAvailableMemoryBytes < 0
+    || !Number.isFinite(input.hostStageMemoryBytes)
+    || input.hostStageMemoryBytes <= 0
+    || !Number.isFinite(input.manifestCapacity)
+    || input.manifestCapacity < 1
+  ) {
+    return 0;
+  }
+
+  const reservableBytes = Math.max(
+    0,
+    input.availableMemoryBytes - input.minAvailableMemoryBytes,
+  );
+  return Math.min(
+    Math.floor(input.manifestCapacity),
+    Math.floor(reservableBytes / input.hostStageMemoryBytes),
+  );
+}
 
 type PolicyEnv = Record<string, string | undefined>;
 type PlatformConfigReader = {
@@ -168,6 +246,26 @@ function singleton(input: {
   };
 }
 
+function unavailable(input: {
+  source: LocalCiPoolPolicySource;
+  requestedCapacity: 1 | 2;
+  manifestCapacity: number;
+  reason: string;
+  config: LocalCiPoolConfig;
+}): ResolvedLocalCiPoolPolicy {
+  return {
+    policyVersion: LOCAL_CI_POOL_POLICY_VERSION,
+    source: input.source,
+    requestedCapacity: input.requestedCapacity,
+    manifestCapacity: input.manifestCapacity,
+    hostSafeCapacity: 0,
+    effectiveCapacity: 0,
+    slotKeys: [],
+    rollbackReason: input.reason,
+    config: input.config,
+  };
+}
+
 function hostRollbackReason(
   host: LocalCiHostPressure,
   config: LocalCiPoolConfig,
@@ -209,13 +307,14 @@ function hostRollbackReason(
 
 /**
  * Resolve the one capacity decision consumed by both durable admission and
- * shared-lease WIP reporting. Any missing or ambiguous safety input contracts
- * to the proven singleton.
+ * shared-lease WIP reporting. Missing configuration preserves the compatibility
+ * singleton; ambiguous host safety under a valid policy contracts to zero.
  */
 export function resolveLocalCiPoolPolicy(input: {
   configValue: unknown;
   host: LocalCiHostPressure;
   manifestSlotCount: number;
+  reserveAdmissionHeadroom?: boolean;
   env?: PolicyEnv;
   now?: Date;
 }): ResolvedLocalCiPoolPolicy {
@@ -237,6 +336,75 @@ export function resolveLocalCiPoolPolicy(input: {
   const requestedCapacity = override?.capacity ?? config.requestedCapacity;
   const source: LocalCiPoolPolicySource = override?.source ?? "platform-config";
 
+  const rollbackReason = hostRollbackReason(
+    input.host,
+    config,
+    input.now ?? new Date(),
+  );
+  if (rollbackReason) {
+    return unavailable({
+      source,
+      requestedCapacity,
+      manifestCapacity,
+      reason: rollbackReason,
+      config,
+    });
+  }
+
+  if (input.reserveAdmissionHeadroom) {
+    const builderMemoryBytes = localCiSlotResources.builderPolicy.memoryBytes;
+    const hostBuildCapacity = localCiBuildHeadroomCapacity({
+      dockerAvailableMemoryBytes:
+        input.host.dockerAvailableMemoryBytes ?? Number.NaN,
+      builderMemoryBytes,
+      builderMemoryUsageBytes: input.host.builderMemoryUsageBytes ?? [],
+      manifestCapacity,
+    });
+
+    if (hostBuildCapacity === 0) {
+      return unavailable({
+        source,
+        requestedCapacity,
+        manifestCapacity,
+        reason: "host-build-headroom-low",
+        config,
+      });
+    }
+    const hostStageCapacity = localCiHostStageHeadroomCapacity({
+      availableMemoryBytes: input.host.availableMemoryBytes ?? Number.NaN,
+      minAvailableMemoryBytes: config.ceilings.minAvailableMemoryBytes,
+      hostStageMemoryBytes: localCiSlotResources.hostStagePolicy.memoryBytes,
+      manifestCapacity,
+    });
+    if (hostStageCapacity === 0) {
+      return unavailable({
+        source,
+        requestedCapacity,
+        manifestCapacity,
+        reason: "host-stage-headroom-low",
+        config,
+      });
+    }
+    if (hostBuildCapacity === 1 && requestedCapacity === 2) {
+      return singleton({
+        source,
+        requestedCapacity,
+        manifestCapacity,
+        reason: "host-build-capacity-one",
+        config,
+      });
+    }
+    if (hostStageCapacity === 1 && requestedCapacity === 2) {
+      return singleton({
+        source,
+        requestedCapacity,
+        manifestCapacity,
+        reason: "host-stage-capacity-one",
+        config,
+      });
+    }
+  }
+
   if (requestedCapacity === 1) {
     return singleton({
       source,
@@ -252,21 +420,6 @@ export function resolveLocalCiPoolPolicy(input: {
       requestedCapacity,
       manifestCapacity,
       reason: "manifest-capacity-one",
-      config,
-    });
-  }
-
-  const rollbackReason = hostRollbackReason(
-    input.host,
-    config,
-    input.now ?? new Date(),
-  );
-  if (rollbackReason) {
-    return singleton({
-      source,
-      requestedCapacity,
-      manifestCapacity,
-      reason: rollbackReason,
       config,
     });
   }

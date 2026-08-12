@@ -27,32 +27,10 @@ import {
 import { revalidatePortalContext } from "@/lib/portal-context/invalidation";
 import { publishRecordedWorkCapsuleActivity } from "@/lib/work-capsules/activity-events";
 import { admitRuntimeGuardedWork } from "@/lib/platform-runtime/work-admission";
-export type WorkCapsuleActor = {
-  userId: string;
-  agentId: string | null;
-  principalId: string | null;
-};
+import { planCapsuleChangeImpact, type CapsuleChangeImpactContract } from "./change-impact-contract";
+import type { CapsuleDb, WorkCapsuleActor } from "./work-capsule-store-types";
 
-export type CapsuleDb = {
-  workCapsule: {
-    create(args: unknown): Promise<any>;
-    findFirst(args: unknown): Promise<any>;
-    findUnique(args: unknown): Promise<any>;
-    findMany(args: unknown): Promise<any[]>;
-    update(args: unknown): Promise<any>;
-  };
-  workCapsuleActivity: {
-    create(args: unknown): Promise<any>;
-  };
-  backlogItem?: {
-    findFirst(args: unknown): Promise<any>;
-    update(args: unknown): Promise<any>;
-  };
-  $transaction?<T>(fn: (tx: CapsuleDb) => Promise<T>): Promise<T>;
-  $queryRaw?(strings: TemplateStringsArray, ...values: unknown[]): Promise<unknown>;
-  platformCapability?: { findMany(args: unknown): Promise<any[]> };
-  runtimeCapabilityTransition?: { findFirst(args: unknown): Promise<any> };
-};
+export type { CapsuleDb, WorkCapsuleActor } from "./work-capsule-store-types";
 
 type CapsuleCreateInput = {
   title: string;
@@ -241,6 +219,44 @@ export async function createWorkCapsule(args: {
   }
 }
 
+// Statuses that end a capsule's reuse eligibility for (repo, branch) adoption.
+// BI-95E37EA1: an abandoned/complete/archived capsule must NOT be returned as a
+// successful bind for a new BI/session — that poisoned claim-at-start with a
+// false-success pointing at stale ownership.
+const TERMINAL_CAPSULE_STATUSES: WorkCapsuleStatus[] = ["complete", "abandoned", "archived"];
+
+function isTerminalCapsuleStatus(status: unknown): boolean {
+  return typeof status === "string" && (TERMINAL_CAPSULE_STATUSES as string[]).includes(status);
+}
+
+/**
+ * Whether an existing live capsule on (repo, branch) is compatible with a new
+ * adopt/claim request. Same BI + same executor session is idempotent reuse;
+ * unbound (null BI) is late-bind eligible; a different BI or session requires a
+ * fresh capsule so history on the prior capsule stays intact.
+ */
+function isReusableLiveCapsule(
+  existing: {
+    status?: string | null;
+    backlogItemId?: string | null;
+    executorRef?: string | null;
+  },
+  input: { backlogItemId?: string | null; executorRef?: string | null },
+): boolean {
+  if (isTerminalCapsuleStatus(existing.status)) return false;
+  const existingBi = existing.backlogItemId ?? null;
+  const incomingBi = input.backlogItemId ?? null;
+  // Unbound capsule can be late-bound to any BI.
+  if (existingBi == null) return true;
+  // Bound to a different BI → never silently re-home.
+  if (incomingBi != null && existingBi !== incomingBi) return false;
+  // Same BI: reuse when session matches or either side has no session stamp yet.
+  const existingSession = existing.executorRef ?? null;
+  const incomingSession = input.executorRef ?? null;
+  if (existingSession == null || incomingSession == null) return true;
+  return existingSession === incomingSession;
+}
+
 export async function adoptWorktreeCapsule(args: {
   db: CapsuleDb;
   input: CapsuleAdoptionInput;
@@ -251,14 +267,18 @@ export async function adoptWorktreeCapsule(args: {
   }
   const scope = normalizeWorkCapsuleScopeInput(args.input.scope);
 
+  // Prefer a non-terminal capsule on this branch. Terminal capsules keep their
+  // audit trail; a new adopt creates a new WC rather than rewriting them.
   const existing = await args.db.workCapsule.findFirst({
     where: {
       repositoryFullName: args.input.repositoryFullName,
       headBranch: args.input.headBranch,
       archivedAt: null,
+      status: { notIn: TERMINAL_CAPSULE_STATUSES },
     },
+    orderBy: { updatedAt: "desc" },
   });
-  if (existing) {
+  if (existing && isReusableLiveCapsule(existing, args.input)) {
     // Late-bind (BI-7D20BFDF): a branch adopted before its BacklogItem was known
     // has a null backlogItemId. When a claim now supplies one, bind the existing
     // capsule instead of leaving the work orphaned — this is what lets a worktree
@@ -272,6 +292,9 @@ export async function adoptWorktreeCapsule(args: {
             ...(args.input.epicId && existing.epicId == null ? { epicId: args.input.epicId } : {}),
             ...(args.input.executorRef && existing.executorRef == null
               ? { executorRef: args.input.executorRef }
+              : {}),
+            ...(args.input.worktreePath && existing.worktreePath !== args.input.worktreePath
+              ? { worktreePath: args.input.worktreePath }
               : {}),
           },
         });
@@ -288,6 +311,8 @@ export async function adoptWorktreeCapsule(args: {
     }
     return existing;
   }
+  // existing is null, terminal-only on this branch, or live-but-incompatible
+  // (different BI/session) — fall through to create a fresh capsule.
 
   const now = new Date();
   try {
@@ -342,9 +367,11 @@ export async function adoptWorktreeCapsule(args: {
           repositoryFullName: args.input.repositoryFullName,
           headBranch: args.input.headBranch,
           archivedAt: null,
+          status: { notIn: TERMINAL_CAPSULE_STATUSES },
         },
+        orderBy: { updatedAt: "desc" },
       });
-      if (winner) return winner;
+      if (winner && isReusableLiveCapsule(winner, args.input)) return winner;
     }
     throw error;
   }
@@ -810,10 +837,6 @@ export class ScopeOverlapError extends Error {
   }
 }
 
-// A capsule in one of these statuses no longer holds its scope — its claims are
-// inert and never conflict with a fresh claim.
-const TERMINAL_CAPSULE_STATUSES: WorkCapsuleStatus[] = ["complete", "abandoned", "archived"];
-
 // `edit` is an exclusive intent: two `edit` claims on the same scope conflict, as
 // does an `edit` against a `read`. Two `read` claims coexist (non-exclusive).
 function intentsConflict(a: ScopeClaim["intent"], b: ScopeClaim["intent"]): boolean {
@@ -910,11 +933,23 @@ export async function claimWorkCapsuleScope(args: {
   now?: Date;
   /** Deliberately co-claim despite an overlap with another active capsule. */
   force?: boolean;
+  /** Prospective, advisory impact derived before the scope write. */
+  buildChangeImpactContract?: (paths: string[]) => Promise<CapsuleChangeImpactContract>;
 }) {
   const capsule = await args.db.workCapsule.findUnique({
     where: { capsuleId: args.capsuleId },
   });
   if (!capsule) throw new Error(`Work Capsule ${args.capsuleId} not found`);
+
+  // BI-95E37EA1: never append scope claims to a terminal or foreign capsule.
+  // The abandoned-main false-success path used to land claims on an unrelated
+  // WC; refuse here so even a stale capsuleId cannot pollute its audit trail.
+  if (isTerminalCapsuleStatus(capsule.status) || capsule.archivedAt != null) {
+    throw new Error(
+      `Work Capsule ${args.capsuleId} is ${capsule.status ?? "terminal"} and cannot accept scope claims. ` +
+        "Claim a live capsule (or re-run claim_backlog_item_for_work to mint a fresh one).",
+    );
+  }
 
   // Capsule-first enforcement: refuse to claim scope already held by another
   // active capsule unless the caller explicitly forces it. This is the lock that
@@ -952,10 +987,19 @@ export async function claimWorkCapsuleScope(args: {
   }
 
   const scopeClaims = Array.from(nextClaims.values());
+  const impact = await planCapsuleChangeImpact({
+    scopeClaims,
+    incomingClaims: args.claims,
+    verificationState: capsule.verificationState,
+    build: args.buildChangeImpactContract,
+  });
   return inTransaction(args.db, async (tx) => {
     const updated = await tx.workCapsule.update({
       where: { capsuleId: args.capsuleId },
-      data: { scopeClaims },
+      data: {
+        scopeClaims,
+        ...(impact.verificationState ? { verificationState: impact.verificationState } : {}),
+      },
     });
     await recordActivity(tx, {
       workCapsuleId: capsule.id,
@@ -971,7 +1015,14 @@ export async function claimWorkCapsuleScope(args: {
       },
       actor: args.actor,
     });
-    return updated;
+    if (impact.activity) {
+      await recordActivity(tx, {
+        workCapsuleId: capsule.id,
+        ...impact.activity,
+        actor: args.actor,
+      });
+    }
+    return { ...updated, changeImpactContract: impact.contract };
   });
 }
 

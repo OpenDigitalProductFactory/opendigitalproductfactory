@@ -5,6 +5,8 @@
 **Related epics:** EP-8C706944 (Coworker Memory & Context Architecture), EP-0AF96937 (Decision Governance)
 **Related memory:** `coworker-page-perception-agency-gap`, `coworker-memory-architecture-epic`
 
+> **Superseded in part on 2026-08-08:** The incident evidence, exact-route safety, and surface/tool parity requirement remain valid. The proposed page-owned context module is replaced by the shared loader/view-model projection in [`2026-08-08-authorized-surface-contract-design.md`](2026-08-08-authorized-surface-contract-design.md), which also covers non-rendered, workroom, mobile, and external surfaces without a second page description.
+
 ---
 
 ## 1. Problem

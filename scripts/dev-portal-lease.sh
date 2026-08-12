@@ -15,7 +15,9 @@ set -eu
 # This script makes the claim explicit: it claims the SAME governed lease the
 # pre-PR CI gate uses (environmentKey="local-integration-ci") before :3001 is
 # bound, surfaces who currently holds it, and refuses to silently re-bind while
-# another holder is active. It does NOT touch docker; it only gates the claim.
+# another holder is active. The refresh command remains in the foreground as
+# the lease keeper; losing authority stops the shared preview before it can run
+# unfenced.
 #
 # Subcommands:
 #   claim    Claim the shared lease for the :3001 preview. On conflict, prints
@@ -27,13 +29,14 @@ set -eu
 #
 # Reuses the same MCP tools as scripts/gate-worktree.sh:
 #   claim_nonprod_environment_lease / list_nonprod_environment_leases /
-#   release_nonprod_environment_lease.
+#   renew_nonprod_environment_lease / release_nonprod_environment_lease.
 
 MCP_URL="${DPF_MCP_URL:-http://127.0.0.1:3000/api/mcp/v1}"
 ENVIRONMENT_KEY="${DPF_DEV_PORTAL_ENVIRONMENT_KEY:-local-integration-ci}"
 OWNER_PROVIDER="${DPF_DEV_PORTAL_OWNER_PROVIDER:-claude}"
 OWNER_SESSION_ID="${DPF_DEV_PORTAL_OWNER_SESSION_ID:-}"
 EXPIRES_MINUTES="${DPF_DEV_PORTAL_EXPIRES_MINUTES:-120}"
+MAX_TERMINAL_CLAIM_ATTEMPTS="${DPF_DEV_PORTAL_MAX_TERMINAL_CLAIM_ATTEMPTS:-64}"
 URL="${DPF_DEV_PORTAL_URL:-http://localhost:3001}"
 PORTS="${DPF_DEV_PORTAL_PORTS:-3001}"
 WORKTREE_PATH="${DPF_DEV_WORKTREE:-}"
@@ -42,6 +45,8 @@ LEASE_ID="${DPF_DEV_PORTAL_LEASE_ID:-}"
 GIT_BIN="${DPF_DEV_PORTAL_GIT_BIN:-git}"
 CURL_BIN="${DPF_DEV_PORTAL_CURL_BIN:-curl}"
 DOCKER_BIN="${DPF_DEV_PORTAL_DOCKER_BIN:-docker}"
+HEARTBEAT_SECONDS="${DPF_DEV_PORTAL_HEARTBEAT_SECONDS:-30}"
+HEARTBEAT_TTL_MINUTES="${DPF_DEV_PORTAL_HEARTBEAT_TTL_MINUTES:-2}"
 COMMAND=""
 
 usage() {
@@ -56,7 +61,8 @@ Subcommands:
   claim     Claim the shared lease for :3001 before binding the preview.
             Refuses (non-zero) when another holder is active and prints them.
   refresh   Claim the lease, stop the shared preview, and restart it from this
-            worktree. Keeps the lease on success; releases it on startup failure.
+            worktree. Stays in the foreground to renew authority; stopping the
+            keeper stops the preview and releases the lease.
   status    Print the current holder for the shared lease (if any).
   release   Release a lease previously claimed for the preview.
 
@@ -72,6 +78,10 @@ Options:
 Environment:
   DPF_MCP_BEARER_TOKEN    Required for claim/status/release (MCP auth).
   DPF_DEV_WORKTREE        Absolute worktree path (forward slashes).
+  DPF_DEV_PORTAL_MAX_TERMINAL_CLAIM_ATTEMPTS
+                          Bounded historical terminal-key scan (default: 64).
+  DPF_DEV_PORTAL_HEARTBEAT_SECONDS
+                          Active-lease renewal cadence (default: 30 seconds).
 EOF
 }
 
@@ -157,6 +167,34 @@ process.stdout.write(match ? JSON.stringify(match) : "");
 ' "$1"
 }
 
+sample_host_pressure() {
+  if [ -n "${DPF_DEV_PORTAL_HOST_PRESSURE_JSON:-}" ]; then
+    node -e 'const value=JSON.parse(process.argv[1]); process.stdout.write(JSON.stringify(value));' \
+      "$DPF_DEV_PORTAL_HOST_PRESSURE_JSON"
+    return
+  fi
+  module_path="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)/lib/local-ci-host-pressure.mjs"
+  node -e '
+const { pathToFileURL } = require("node:url");
+const modulePath = pathToFileURL(process.argv[1]).href;
+const rootPath = process.argv[2];
+import(modulePath).then(async ({ sampleLocalCiHostPressure }) => {
+  const pressure = await sampleLocalCiHostPressure({
+    rootPath,
+    convergenceLockPaths: [],
+    fencePaths: [],
+    // Contributor preview produces no local-CI evidence artifact; isolation is
+    // vacuously healthy while the registry activeKey remains the process fence.
+    evidenceIsolationHealthy: true,
+  });
+  process.stdout.write(JSON.stringify(pressure));
+}).catch((error) => {
+  process.stderr.write(`host pressure sampling failed: ${error.message}\n`);
+  process.exit(1);
+});
+' "$module_path" "$WORKTREE_PATH"
+}
+
 if [ "$#" -gt 0 ]; then
   case "$1" in
     claim|refresh|status|release) COMMAND="$1"; shift ;;
@@ -180,11 +218,11 @@ done
 
 [ -n "$COMMAND" ] || { usage; exit 2; }
 [ -n "${DPF_MCP_BEARER_TOKEN:-}" ] || die "DPF_MCP_BEARER_TOKEN is required to talk to the DPF MCP lease tools"
+case "$MAX_TERMINAL_CLAIM_ATTEMPTS" in
+  ''|*[!0-9]*) die "DPF_DEV_PORTAL_MAX_TERMINAL_CLAIM_ATTEMPTS must be a non-negative integer" ;;
+esac
 
 [ -n "$OWNER_SESSION_ID" ] || OWNER_SESSION_ID="dev-portal-$$"
-if [ -z "$BRANCH" ]; then
-  BRANCH="$("$GIT_BIN" rev-parse --abbrev-ref HEAD 2>/dev/null || printf 'unknown')"
-fi
 
 release_lease() {
   lease_id_to_release="$1"
@@ -196,47 +234,63 @@ release_lease() {
 
 claim_lease() {
   [ -n "$WORKTREE_PATH" ] || die "DPF_DEV_WORKTREE (or --worktree) must be set so the lease records which worktree :3001 is bound to"
+  if [ -z "$BRANCH" ]; then
+    BRANCH="$("$GIT_BIN" -C "$WORKTREE_PATH" rev-parse --abbrev-ref HEAD 2>/dev/null)" \
+      || die "could not resolve the branch for contributor-preview worktree $WORKTREE_PATH"
+    [ -n "$BRANCH" ] || die "resolved an empty branch for contributor-preview worktree $WORKTREE_PATH"
+  fi
   expires_at="$(node -e 'process.stdout.write(new Date(Date.now() + Number(process.argv[1]) * 60000).toISOString())' "$EXPIRES_MINUTES")"
-  claim_args="$(node -e '
+  base_claim_key="dev-portal:${OWNER_SESSION_ID}:${BRANCH}"
+  claim_key="$base_claim_key"
+  terminal_claim_attempt_sequence=0
+  while :; do
+    host_pressure_json="$(sample_host_pressure)" \
+      || die "could not measure host pressure for governed preview admission"
+    claim_args="$(node -e '
 const args = {
   environmentKey: process.argv[1],
   ownerProvider: process.argv[2],
   ownerSessionId: process.argv[3],
-  claimKey: `dev-portal:${process.argv[3]}:${process.argv[5]}`,
+  claimKey: process.argv[9],
   purpose: `Contributor preview (:3001) bound to ${process.argv[4]} @ ${process.argv[5]}`,
   url: process.argv[6],
   ports: JSON.parse(process.argv[7]),
   expiresAt: process.argv[8],
   worktreePath: process.argv[4],
   branchName: process.argv[5],
-  cleanupCommand: "docker compose -p dpf --profile dev rm -sf dev-portal"
+  cleanupCommand: "docker compose -p dpf --profile dev rm -sf dev-portal",
+  hostPressure: JSON.parse(process.argv[10]),
 };
 process.stdout.write(JSON.stringify(args));
-' "$ENVIRONMENT_KEY" "$OWNER_PROVIDER" "$OWNER_SESSION_ID" "$WORKTREE_PATH" "$BRANCH" "$URL" "$(json_array_numbers "$PORTS")" "$expires_at")"
-  claim_response="$(mcp_call claim_nonprod_environment_lease "$claim_args" | extract_tool_result)"
-  claim_success="$(printf '%s' "$claim_response" | field success)"
-  claim_error="$(printf '%s' "$claim_response" | field error)"
-  if [ "$claim_success" = "true" ]; then
-    CLAIMED_LEASE_ID="$(printf '%s' "$claim_response" | field entityId)"
-    [ -n "$CLAIMED_LEASE_ID" ] \
-      || CLAIMED_LEASE_ID="$(printf '%s' "$claim_response" | field data.lease.leaseId)"
-    [ -n "$CLAIMED_LEASE_ID" ] \
-      || die "lease claim succeeded without returning a lease id"
-    admission_status="$(printf '%s' "$claim_response" | field data.admission.status)"
-    if [ "$admission_status" = "queued" ]; then
-      queue_position="$(printf '%s' "$claim_response" | field data.admission.queuePosition)"
-      printf '%s\n' "WAITING lease ${CLAIMED_LEASE_ID} is queued at position ${queue_position:-unknown}; :3001 is not owned yet." >&2
-      printf '%s\n' "Retry this same claim after the admitted holder releases; the stable claim key preserves FIFO position." >&2
-      return 3
+' "$ENVIRONMENT_KEY" "$OWNER_PROVIDER" "$OWNER_SESSION_ID" "$WORKTREE_PATH" "$BRANCH" "$URL" "$(json_array_numbers "$PORTS")" "$expires_at" "$claim_key" "$host_pressure_json")"
+    claim_response="$(mcp_call claim_nonprod_environment_lease "$claim_args" | extract_tool_result)"
+    claim_success="$(printf '%s' "$claim_response" | field success)"
+    claim_error="$(printf '%s' "$claim_response" | field error)"
+    if [ "$claim_success" = "true" ]; then
+      CLAIMED_LEASE_ID="$(printf '%s' "$claim_response" | field entityId)"
+      [ -n "$CLAIMED_LEASE_ID" ] \
+        || CLAIMED_LEASE_ID="$(printf '%s' "$claim_response" | field data.lease.leaseId)"
+      [ -n "$CLAIMED_LEASE_ID" ] \
+        || die "lease claim succeeded without returning a lease id"
+      admission_status="$(printf '%s' "$claim_response" | field data.admission.status)"
+      if [ "$admission_status" = "queued" ]; then
+        queue_position="$(printf '%s' "$claim_response" | field data.admission.queuePosition)"
+        capacity_reason="$(printf '%s' "$claim_response" | field data.poolPolicy.rollbackReason)"
+        printf '%s\n' "WAITING lease ${CLAIMED_LEASE_ID} is queued at position ${queue_position:-unknown}; :3001 is not owned yet." >&2
+        if [ -n "$capacity_reason" ]; then
+          printf '%s\n' "Host-capacity admission reason: $capacity_reason." >&2
+        fi
+        printf '%s\n' "Retry this same claim after the admitted holder releases; the stable claim key preserves FIFO position." >&2
+        return 3
+      fi
+      printf 'LEASE_ID=%s\n' "$CLAIMED_LEASE_ID"
+      printf 'admitted %s for :3001 -> %s (%s)\n' "$ENVIRONMENT_KEY" "$WORKTREE_PATH" "$BRANCH"
+      return 0
     fi
-    printf 'LEASE_ID=%s\n' "$CLAIMED_LEASE_ID"
-    printf 'admitted %s for :3001 -> %s (%s)\n' "$ENVIRONMENT_KEY" "$WORKTREE_PATH" "$BRANCH"
-    return 0
-  fi
-  if [ "$claim_error" = "lease_conflict" ]; then
-    holder="$(printf '%s' "$claim_response" | field data.active)"
-    # data.active is an object; re-extract it as JSON for describe_holder.
-    holder_json="$(node -e '
+    if [ "$claim_error" = "lease_conflict" ]; then
+      holder="$(printf '%s' "$claim_response" | field data.active)"
+      # data.active is an object; re-extract it as JSON for describe_holder.
+      holder_json="$(node -e '
 const fs = require("node:fs");
 const resp = JSON.parse(fs.readFileSync(0, "utf8") || "{}");
 const active = resp && resp.data && resp.data.active ? resp.data.active : null;
@@ -245,13 +299,46 @@ process.stdout.write(active ? JSON.stringify(active) : "");
 $claim_response
 EOF
 )"
-    holder_line="$(printf '%s' "$holder_json" | describe_holder)"
-    printf '%s\n' "REFUSING to silently re-bind :3001." >&2
-    printf '%s\n' "The shared ${ENVIRONMENT_KEY} lease is already held by: ${holder_line:-$holder}" >&2
-    printf '%s\n' "Coordinate explicitly: ask that holder to release, or take over only after they release their lease (scripts/dev-portal-lease.sh release --lease-id <id>)." >&2
-    return 3
-  fi
-  die "failed to claim ${ENVIRONMENT_KEY} lease for :3001: $claim_response"
+      holder_line="$(printf '%s' "$holder_json" | describe_holder)"
+      printf '%s\n' "REFUSING to silently re-bind :3001." >&2
+      printf '%s\n' "The shared ${ENVIRONMENT_KEY} lease is already held by: ${holder_line:-$holder}" >&2
+      printf '%s\n' "Coordinate explicitly: ask that holder to release, or take over only after they release their lease (scripts/dev-portal-lease.sh release --lease-id <id>)." >&2
+      return 3
+    fi
+    terminal_reason="$(printf '%s' "$claim_response" | field data.reason)"
+    [ -n "$terminal_reason" ] \
+      || terminal_reason="$(printf '%s' "$claim_response" | field data.lease.status)"
+    if [ "$claim_error" = "lease_terminal" ]; then
+      case "$terminal_reason" in
+        released|cancelled|expired)
+          if [ "$terminal_claim_attempt_sequence" -ge "$MAX_TERMINAL_CLAIM_ATTEMPTS" ]; then
+            die "terminal claim retry budget exhausted after ${terminal_claim_attempt_sequence} replacement attempt(s); last claim was ${terminal_reason}"
+          fi
+          terminal_claim_attempt_sequence=$((terminal_claim_attempt_sequence + 1))
+          claim_key="${base_claim_key}:rerun-${terminal_claim_attempt_sequence}"
+          printf '%s\n' "previous contributor-preview claim was ${terminal_reason}; creating terminal attempt ${terminal_claim_attempt_sequence}..."
+          continue
+          ;;
+      esac
+    fi
+    die "failed to claim ${ENVIRONMENT_KEY} lease for :3001: $claim_response"
+  done
+}
+
+renew_lease() {
+  host_pressure_json="$(sample_host_pressure)" || return 1
+  renew_args="$(node -e '
+const args = {
+  leaseId: process.argv[1],
+  ownerSessionId: process.argv[2],
+  ttlMinutes: Number(process.argv[3]),
+  hostPressure: JSON.parse(process.argv[4]),
+};
+process.stdout.write(JSON.stringify(args));
+' "$CLAIMED_LEASE_ID" "$OWNER_SESSION_ID" "$HEARTBEAT_TTL_MINUTES" "$host_pressure_json")"
+  renew_response="$(mcp_call renew_nonprod_environment_lease "$renew_args" | extract_tool_result)" \
+    || return 1
+  [ "$(printf '%s' "$renew_response" | field success)" = "true" ] || return 1
 }
 
 case "$COMMAND" in
@@ -283,21 +370,60 @@ case "$COMMAND" in
         || die "could not resolve the worktree to bind"
     fi
     claim_lease
-    cleanup_failed_refresh() {
+    heartbeat_pid=""
+    heartbeat_failure_file="$(mktemp "${TMPDIR:-/tmp}/dpf-dev-portal-heartbeat.XXXXXX")"
+    cleanup_refresh() {
       refresh_status="$?"
       trap - EXIT HUP INT TERM
-      [ "$refresh_status" -ne 0 ] || refresh_status=1
+      "$DOCKER_BIN" compose -p dpf --profile dev stop dev-portal >/dev/null 2>&1 || true
+      if [ -n "$heartbeat_pid" ]; then
+        kill "$heartbeat_pid" >/dev/null 2>&1 || true
+        wait "$heartbeat_pid" >/dev/null 2>&1 || true
+      fi
       if [ -n "${CLAIMED_LEASE_ID:-}" ]; then
         release_lease "$CLAIMED_LEASE_ID" >/dev/null 2>&1 || true
       fi
+      rm -f "$heartbeat_failure_file"
       exit "$refresh_status"
     }
-    trap cleanup_failed_refresh EXIT HUP INT TERM
+    trap cleanup_refresh EXIT HUP INT TERM
+    (
+      while :; do
+        sleep "$HEARTBEAT_SECONDS"
+        if ! renew_lease; then
+          printf '%s\n' "lease authority lost during Contributor preview" > "$heartbeat_failure_file"
+          exit 1
+        fi
+      done
+    ) &
+    heartbeat_pid="$!"
     "$DOCKER_BIN" compose -p dpf --profile dev stop dev-portal
     "$DOCKER_BIN" compose -p dpf --profile dev up -d dev-portal
-    trap - EXIT HUP INT TERM
-    printf '%s\n' "Contributor preview refreshed; lease remains held as $CLAIMED_LEASE_ID."
-    printf '%s\n' "Release when verification ends: scripts/dev-portal-lease.sh release --lease-id $CLAIMED_LEASE_ID"
+    if [ -s "$heartbeat_failure_file" ] || ! kill -0 "$heartbeat_pid" >/dev/null 2>&1; then
+      printf '%s\n' "dev-portal-lease: lease authority lost before Contributor preview became ready" >&2
+      exit 1
+    fi
+    printf '%s\n' "Contributor preview refreshed; lease heartbeat active as $CLAIMED_LEASE_ID."
+    printf '%s\n' "Keep this process running during verification; stopping it stops :3001 and releases the lease."
+    if [ "${NODE_ENV:-}" = "test" ] && [ "${DPF_DEV_PORTAL_TEST_EXIT_AFTER_READY:-}" = "1" ]; then
+      kill "$heartbeat_pid" >/dev/null 2>&1 || true
+      wait "$heartbeat_pid" >/dev/null 2>&1 || true
+      heartbeat_pid=""
+      release_lease "$CLAIMED_LEASE_ID" >/dev/null 2>&1 || true
+      CLAIMED_LEASE_ID=""
+      rm -f "$heartbeat_failure_file"
+      trap - EXIT HUP INT TERM
+      exit 0
+    fi
+    set +e
+    wait "$heartbeat_pid"
+    heartbeat_status="$?"
+    set -e
+    heartbeat_pid=""
+    if [ "$heartbeat_status" -ne 0 ]; then
+      printf '%s\n' "dev-portal-lease: $(cat "$heartbeat_failure_file")" >&2
+      exit 1
+    fi
     exit 0
     ;;
 esac

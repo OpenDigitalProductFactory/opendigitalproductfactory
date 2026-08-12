@@ -22,6 +22,7 @@ import {
 import { decryptSecret, encryptSecret } from "@/lib/govern/credential-crypto";
 
 import { postToPeer } from "./client";
+import { generateLinkToken } from "./tokens";
 
 export interface EnrollWithPeerInput {
   /** The peer Authority Core base URL. */
@@ -34,6 +35,8 @@ export interface EnrollWithPeerInput {
   displayName: string;
   localOrganizationId?: string | null;
   peerOrganizationRef?: string | null;
+  localDeviceId?: string | null;
+  peerDeviceId?: string | null;
   fetchImpl?: typeof fetch;
 }
 
@@ -52,6 +55,12 @@ interface PeerEnrollResponse {
 }
 
 export async function enrollWithPeer(input: EnrollWithPeerInput): Promise<EnrollWithPeerResult> {
+  // Our own inbound token, minted here and sent to the inviter as the callback
+  // token. The inviter stores it as ITS outbound token, so it can relay approval
+  // and push demand back to us — the mutual half of the handshake. We keep its
+  // hash to authenticate the inviter's inbound calls.
+  const callback = generateLinkToken();
+
   // Reuse the generic peer-POST. The enroll body fields are from the RECEIVER's
   // POV, so we send OUR url/org as the "peer" the receiver records.
   const res = await postToPeer({
@@ -61,8 +70,15 @@ export async function enrollWithPeer(input: EnrollWithPeerInput): Promise<Enroll
     cloudEvent: {
       peerAuthorityUrl: input.localAuthorityUrl,
       displayName: input.displayName,
+      callbackToken: callback.plaintext,
+      ...(input.localDeviceId ? { peerDeviceId: input.localDeviceId } : {}),
       ...(input.localOrganizationId ? { peerOrganizationRef: input.localOrganizationId } : {}),
     },
+    // Operator-initiated connect: allow a private-LAN peer over http without the
+    // global flag. The role is not known until the peer responds, so this is
+    // scoped by the private-host check in safePeerRequestUrl — a public peer URL
+    // still requires HTTPS here.
+    sameOrgLan: true,
     ...(input.fetchImpl ? { fetchImpl: input.fetchImpl } : {}),
   });
 
@@ -97,10 +113,16 @@ export async function enrollWithPeer(input: EnrollWithPeerInput): Promise<Enroll
         role: ourRole,
         peerAuthorityUrl: input.peerAuthorityUrl,
         peerOrganizationRef: input.peerOrganizationRef ?? null,
+        peerDeviceId: input.peerDeviceId ?? null,
         localOrganizationId: input.localOrganizationId ?? null,
         linkState: "pending",
-        // Outbound token (peer-issued) encrypted at rest; no inbound token here.
+        // Outbound token (peer-issued) encrypted at rest, so we can call them.
         peerTokenEnc: encryptSecret(body.linkToken!),
+        // Our inbound token (the callback we sent): authenticates the inviter's
+        // calls back to us (approval relay + demand push).
+        tokenHash: callback.hash,
+        tokenPrefix: callback.prefix,
+        tokenRotatedAt: now,
         enrolledAt: now,
       },
     });
@@ -121,7 +143,7 @@ export function decryptPeerToken(peerTokenEnc: string | null | undefined): strin
  * whether the peer accepted. Needs the peer-issued token (from outbound enroll).
  */
 export async function relayApprovalToPeer(
-  link: { linkId: string; peerAuthorityUrl: string; peerTokenEnc: string | null },
+  link: { linkId: string; peerAuthorityUrl: string; peerTokenEnc: string | null; role?: string },
   fetchImpl?: typeof fetch,
 ): Promise<{ ok: boolean; reason?: string }> {
   const token = decryptPeerToken(link.peerTokenEnc);
@@ -131,6 +153,7 @@ export async function relayApprovalToPeer(
     linkToken: token,
     path: "/api/v1/federation/approval-relay",
     cloudEvent: { type: "dpf.federation.approval", linkId: link.linkId },
+    sameOrgLan: link.role === "same-org-peer",
     ...(fetchImpl ? { fetchImpl } : {}),
   });
   return res.ok ? { ok: true } : { ok: false, reason: `peer responded ${res.status}` };

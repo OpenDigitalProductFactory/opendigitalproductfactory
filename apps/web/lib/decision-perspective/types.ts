@@ -26,7 +26,17 @@ export type DecisionOutcomeType = typeof DECISION_OUTCOME_TYPES[number];
 // so an operator scanning WWMD can distinguish an unattended hourly cron
 // mutation from a human-initiated Build Studio phase advance — which is the
 // whole reason the gate is recorded separately from the profile (BI-BB2E585C).
-export const DECISION_GATE_KEYS = ["build-studio", "backlog-triage", "org-business", "profession"] as const;
+// `kernel-consult` is the MCP `principle_decide` door (external agents +
+// coworkers). It is WWMD platform doctrine, but a distinct door so operators
+// can measure external-agent adoption separately from Build Studio / triage
+// (BI-FD7CBA06).
+export const DECISION_GATE_KEYS = [
+  "build-studio",
+  "backlog-triage",
+  "kernel-consult",
+  "org-business",
+  "profession",
+] as const;
 export type DecisionGateKey = typeof DECISION_GATE_KEYS[number];
 
 export const DECISION_DOMAIN_CLASSES = ["plan-readiness", "architecture-tradeoff", "risk-assessment", "professional-practice", "kernel-consult"] as const;

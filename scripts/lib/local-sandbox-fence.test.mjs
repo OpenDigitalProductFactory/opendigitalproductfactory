@@ -8,6 +8,7 @@ import {
   acquireLocalSandboxFence,
   heartbeatLocalSandboxFence,
   inspectLocalSandboxFence,
+  reconcileDeadLocalSandboxFence,
   readProcessIdentity,
   releaseLocalSandboxFence,
 } from "./local-sandbox-fence.mjs";
@@ -131,6 +132,92 @@ test("inspection rejects a reused pid whose process-start identity changed", () 
     processIdentity: () => "test:new-start",
     now: () => new Date("2026-07-30T12:01:00.000Z"),
   }).status, "stale");
+});
+
+test("reconciliation removes only a valid fence whose original process is gone", () => {
+  const path = fencePath();
+  writeFileSync(path, JSON.stringify({
+    schema: "dpf-local-sandbox-fence/v1",
+    token: "dead-owner",
+    pid: 717,
+    processIdentity: "test:717",
+    ownerSessionId: "dead-owner",
+    branch: "feat/dead",
+    acquiredAt: "2026-07-30T12:00:00.000Z",
+    heartbeatAt: "2026-07-30T12:00:30.000Z",
+  }));
+
+  assert.equal(reconcileDeadLocalSandboxFence({
+    path,
+    processAlive: () => false,
+  }).status, "reconciled");
+  assert.equal(existsSync(path), false);
+});
+
+test("reconciliation preserves live and malformed fences fail-closed", () => {
+  const livePath = fencePath();
+  writeFileSync(livePath, JSON.stringify({
+    schema: "dpf-local-sandbox-fence/v1",
+    token: "live-owner",
+    pid: 727,
+    processIdentity: "test:727",
+    ownerSessionId: "live-owner",
+    branch: "feat/live",
+    acquiredAt: "2026-07-30T12:00:00.000Z",
+    heartbeatAt: "2026-07-30T12:00:30.000Z",
+  }));
+  assert.equal(reconcileDeadLocalSandboxFence({
+    path: livePath,
+    processAlive: () => true,
+    processIdentity: (pid) => `test:${pid}`,
+  }).status, "live");
+  assert.equal(existsSync(livePath), true);
+
+  const malformedPath = fencePath();
+  writeFileSync(malformedPath, JSON.stringify({ pid: 737 }));
+  assert.equal(reconcileDeadLocalSandboxFence({
+    path: malformedPath,
+    processAlive: () => false,
+  }).status, "invalid");
+  assert.equal(existsSync(malformedPath), true);
+});
+
+test("reconciliation reaps PID reuse but preserves an unmeasurable live process", () => {
+  const reusedPath = fencePath();
+  writeFileSync(reusedPath, JSON.stringify({
+    schema: "dpf-local-sandbox-fence/v1",
+    token: "old-owner",
+    pid: 747,
+    processIdentity: "test:old-start",
+    ownerSessionId: "old-owner",
+    branch: "feat/old",
+    acquiredAt: "2026-07-30T12:00:00.000Z",
+    heartbeatAt: "2026-07-30T12:00:30.000Z",
+  }));
+  assert.equal(reconcileDeadLocalSandboxFence({
+    path: reusedPath,
+    processAlive: () => true,
+    processIdentity: () => "test:new-start",
+  }).status, "reconciled");
+  assert.equal(existsSync(reusedPath), false);
+
+  const unmeasurablePath = fencePath();
+  writeFileSync(unmeasurablePath, JSON.stringify({
+    schema: "dpf-local-sandbox-fence/v1",
+    token: "unknown-owner",
+    pid: 757,
+    processIdentity: "test:757",
+    ownerSessionId: "unknown-owner",
+    branch: "feat/unknown",
+    acquiredAt: "2026-07-30T12:00:00.000Z",
+    heartbeatAt: "2026-07-30T12:00:30.000Z",
+  }));
+  assert.equal(reconcileDeadLocalSandboxFence({
+    path: unmeasurablePath,
+    processAlive: () => true,
+    processIdentity: () => "",
+  }).status, "unmeasurable");
+  assert.equal(existsSync(unmeasurablePath), true);
 });
 
 test("inspection rejects a live pid whose fence heartbeat is stale", () => {

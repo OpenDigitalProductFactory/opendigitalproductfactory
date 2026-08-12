@@ -2,12 +2,16 @@ import { statfs } from "node:fs/promises";
 import { cpus, freemem, loadavg } from "node:os";
 import { dockerSocketGet } from "../platform-runtime/docker-socket.mjs";
 import type { LocalCiHostPressure } from "./local-ci-pool-policy";
+import localCiSlotResources from "./local-ci-slot-resources.json" with {
+  type: "json",
+};
 
 type MaybePromise<T> = T | Promise<T>;
 
 export type LocalCiServerPressureProbes = {
   now: () => Date;
   availableMemoryBytes: () => number;
+  builderMemoryUsageBytes: () => MaybePromise<number[]>;
   sustainedCpuPercent: () => number;
   diskFreeBytes: () => MaybePromise<number>;
   dockerHealthy: () => MaybePromise<boolean>;
@@ -54,10 +58,20 @@ export function mergeLocalCiHostPressure(input: {
       input.client.observedAt,
       input.server.observedAt,
     ),
-    availableMemoryBytes: pessimisticMinimum(
-      input.client.availableMemoryBytes,
-      input.server.availableMemoryBytes,
-    ),
+    // The client samples Windows physical memory. The server runs inside the
+    // bounded Docker/WSL VM, whose MemAvailable is a separate reservation
+    // domain and naturally falls while an approved builder consumes memory.
+    availableMemoryBytes: finite(input.client.availableMemoryBytes)
+      ? input.client.availableMemoryBytes
+      : undefined,
+    dockerAvailableMemoryBytes: finite(input.server.availableMemoryBytes)
+      ? input.server.availableMemoryBytes
+      : undefined,
+    builderMemoryUsageBytes: Array.isArray(
+      input.server.builderMemoryUsageBytes,
+    )
+      ? [...input.server.builderMemoryUsageBytes]
+      : undefined,
     sustainedCpuPercent: pessimisticMaximum(
       input.client.sustainedCpuPercent,
       input.server.sustainedCpuPercent,
@@ -97,9 +111,82 @@ async function defaultDockerHealthy(): Promise<boolean> {
     && typeof info.OSType === "string";
 }
 
+function dockerBuilderContainerName(ordinal: number): string {
+  const version = localCiSlotResources.builderPolicy.version;
+  return `buildx_buildkit_dpf-local-ci-buildkit-v${version}-${ordinal}0`;
+}
+
+type DockerGet = (path: string) => Promise<unknown>;
+
+type DockerContainerSummary = {
+  Id?: unknown;
+  Names?: unknown;
+  State?: unknown;
+};
+
+function builderIsStopped(container: DockerContainerSummary): boolean {
+  return container.State === "created"
+    || container.State === "exited"
+    || container.State === "dead";
+}
+
+export function dockerMemoryWorkingSetBytes(value: unknown): number {
+  if (!value || typeof value !== "object") return Number.NaN;
+  const memoryStats = (value as { memory_stats?: unknown }).memory_stats;
+  if (!memoryStats || typeof memoryStats !== "object") return Number.NaN;
+  const usage = Number((memoryStats as { usage?: unknown }).usage);
+  const stats = (memoryStats as { stats?: unknown }).stats;
+  const inactiveFile = stats && typeof stats === "object"
+    ? Number(
+      (stats as { total_inactive_file?: unknown; inactive_file?: unknown })
+        .total_inactive_file
+        ?? (stats as { inactive_file?: unknown }).inactive_file
+        ?? 0,
+    )
+    : 0;
+  if (!Number.isFinite(usage) || usage < 0 || !Number.isFinite(inactiveFile)) {
+    return Number.NaN;
+  }
+  return Math.max(0, usage - Math.max(0, inactiveFile));
+}
+
+export async function builderMemoryUsageBytesFromDocker(
+  dockerGet: DockerGet,
+): Promise<number[]> {
+  const containers = await dockerGet(
+    "/containers/json?all=1",
+  ) as DockerContainerSummary[];
+  if (!Array.isArray(containers)) throw new Error("docker_container_list_invalid");
+
+  return Promise.all(Object.values(localCiSlotResources.slots).map(
+    async (slot) => {
+      const expectedName = `/${dockerBuilderContainerName(slot.ordinal)}`;
+      const container = containers.find((candidate) => (
+        Array.isArray(candidate.Names)
+        && candidate.Names.includes(expectedName)
+      ));
+      if (typeof container?.Id !== "string") return 0;
+      if (builderIsStopped(container)) return 0;
+      const stats = await dockerGet(
+        `/containers/${encodeURIComponent(container.Id)}/stats?stream=false`,
+      );
+      const workingSet = dockerMemoryWorkingSetBytes(stats);
+      if (!Number.isFinite(workingSet)) {
+        throw new Error("docker_builder_memory_unmeasurable");
+      }
+      return workingSet;
+    },
+  ));
+}
+
+async function defaultBuilderMemoryUsageBytes(): Promise<number[]> {
+  return builderMemoryUsageBytesFromDocker(dockerSocketGet);
+}
+
 const DEFAULT_PROBES: LocalCiServerPressureProbes = {
   now: () => new Date(),
   availableMemoryBytes: () => freemem(),
+  builderMemoryUsageBytes: defaultBuilderMemoryUsageBytes,
   sustainedCpuPercent: () => {
     const cpuCount = cpus().length;
     if (cpuCount < 1) return Number.NaN;
@@ -129,6 +216,7 @@ export async function observeLocalCiServerPressure(
   try {
     const [
       availableMemoryBytes,
+      builderMemoryUsageBytes,
       sustainedCpuPercent,
       diskFreeBytes,
       dockerHealthy,
@@ -137,6 +225,7 @@ export async function observeLocalCiServerPressure(
       evidenceIsolationHealthy,
     ] = await Promise.all([
       probes.availableMemoryBytes(),
+      probes.builderMemoryUsageBytes(),
       probes.sustainedCpuPercent(),
       probes.diskFreeBytes(),
       probes.dockerHealthy(),
@@ -147,6 +236,8 @@ export async function observeLocalCiServerPressure(
     return {
       observedAt,
       availableMemoryBytes,
+      dockerAvailableMemoryBytes: availableMemoryBytes,
+      builderMemoryUsageBytes,
       sustainedCpuPercent,
       diskFreeBytes,
       dockerHealthy,

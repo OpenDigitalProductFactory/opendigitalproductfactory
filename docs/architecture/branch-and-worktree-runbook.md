@@ -68,6 +68,19 @@ Before serious implementation: `git fetch origin main`, confirm your base is cur
 
 The durable fix is to create worktrees from a freshly-fetched `origin/main` in the first place.
 
+## Root-clone freshness — the shared root must stay on current `main`
+
+This is a *different* concern from worktree-base freshness above: peer worktrees junction `@dpf/*` workspace packages into the **shared root clone**'s source tree, so if the root clone's own checkout falls behind `origin/main`, `pregate-preflight` aborts with *"Stale root clone detected (BI-A900EA3F)"* for **every** worktree until the root is fast-forwarded — even worktrees whose own branch is perfectly current.
+
+The `SessionStart` `root-clone-freshness` hook (`packages/dpf-skill-pack/hooks/root-clone-freshness.mjs`) fast-forwards the root clone to `origin/main` automatically at session start — **fast-forward only**, and only when the root is on `main` and clean. It **refuses** (and prints an advisory) when the root is off-main, detached, or dirty, because those states mean work is stranded there and a forced move would corrupt it. Run it by hand any time with `node scripts/root-clone-refresh.mjs [--json]`; silence the hook with `DPF_SKIP_ROOT_CLONE_REFRESH=1`. This runs the same safe `git merge --ff-only origin/main` that the stale-root-clone detector already recommends, so it never conflicts with the root-clone delete/mutation guard.
+
+## Reaping safety — a live session's worktree is never reaped
+
+The worktree janitor (`scripts/worktree-janitor.mjs`, fleet backstop; and the SessionEnd reaper) removes merged+clean worktrees. Two safety rails keep it from removing a worktree out from under work:
+
+- **Live-session gate.** A session writes a gitignored `.dpf-session-heartbeat.json` marker into its worktree, refreshed every turn by the `worktree-session-heartbeat` hook (SessionStart/Stop) and removed on SessionEnd. The janitor treats a fresh marker (TTL default 60 min, `DPF_WORKTREE_SESSION_HEARTBEAT_TTL_MIN`) as `KEEP`, **outranking** Tier-A eligibility — because a live session's tree first becomes Tier-A the moment its own PR merges, which is exactly when it must not be reaped.
+- **Abandoned-merge quarantine.** A worktree with `MERGE_HEAD` present and **no** live session is classified `FLAG_ABANDONED_MERGE`: surfaced in the janitor summary and never auto-reaped, since an interrupted merge can hide un-reconciled work. A *live* session's in-progress merge is kept, not flagged.
+
 ## Rebasing on a shallow clone — never a bare `git rebase origin/main`
 
 ⟦runtime: precondition — shallow checkouts only; on a full clone the phantom replay does not occur⟧

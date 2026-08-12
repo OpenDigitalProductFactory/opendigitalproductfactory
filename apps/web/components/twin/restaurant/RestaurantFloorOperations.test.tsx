@@ -154,7 +154,10 @@ const props: RestaurantFloorOperationsProps = {
 };
 
 describe("RestaurantFloorOperations", () => {
-  afterEach(cleanup);
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+  });
 
   beforeEach(() => {
     mocks.execute.mockReset();
@@ -208,6 +211,10 @@ describe("RestaurantFloorOperations", () => {
     expect(console).toHaveAttribute("data-dpf-density", "compact");
     expect(console.className).toContain("overflow-visible");
     expect(console.className).toContain("lg:overflow-hidden");
+    expect(screen.getByTestId("restaurant-host-workspace")).toHaveStyle({
+      gridTemplateColumns:
+        "repeat(auto-fit, minmax(min(100%, 28rem), 1fr))",
+    });
     expect(screen.getByRole("heading", { name: "Host stand" })).toBeTruthy();
     expect(screen.getByRole("heading", { name: "Waiting now" })).toBeTruthy();
     expect(screen.getByRole("heading", { name: "AI host recommends" })).toBeTruthy();
@@ -236,6 +243,13 @@ describe("RestaurantFloorOperations", () => {
     expect(screen.getByTestId("restaurant-floor-canvas")).toHaveAttribute(
       "data-navigation",
       "locked",
+    );
+    const bindings = mocks.canvasProps?.bindings as Record<
+      string,
+      { sublabel?: string }
+    >;
+    expect(bindings["table:table-1"]?.sublabel).toBe(
+      "2 seats · Jordan Rivera",
     );
   });
 
@@ -319,6 +333,22 @@ describe("RestaurantFloorOperations", () => {
     );
     await waitFor(() => expect(mocks.refresh).toHaveBeenCalled());
     expect(screen.getByText("Party seated")).toBeTruthy();
+  });
+
+  it("submits host commands when randomUUID is unavailable on an HTTP install", async () => {
+    vi.stubGlobal("crypto", {
+      getRandomValues: (bytes: Uint8Array) => bytes.fill(7),
+    });
+
+    render(<RestaurantFloorOperations {...props} />);
+    fireEvent.click(screen.getByRole("button", { name: "Confirm seating" }));
+
+    await waitFor(() => expect(mocks.execute).toHaveBeenCalledTimes(1));
+    expect(mocks.execute).toHaveBeenCalledWith(
+      expect.objectContaining({
+        idempotencyKey: expect.stringMatching(/^seat:booking-waiting:\d+:/),
+      }),
+    );
   });
 
   it("keeps compatibility and assignment state in text, not color alone", () => {

@@ -15,6 +15,19 @@ import { sendDemandToPeer, type PeerPostResult } from "./client";
 import { buildDemandEnvelope, type ProjectableDemandSource } from "./demand-projection";
 import type { FederationIdentity } from "./demand-identity";
 import { decryptPeerToken } from "./outbound";
+import { incrementVersionVector, isVersionVector, type VersionVector } from "./version-vector";
+import {
+  ensureFederationDeliveryJob,
+  claimFederationDeliveryJob,
+  finishFederationDeliveryJob,
+  scheduleFederationDeliveryJob,
+  type FederationDeliveryQueueDb,
+} from "./delivery-queue";
+
+/** Parse a stored JSON version vector, defaulting to empty when absent/legacy. */
+function readStoredVector(value: unknown): VersionVector {
+  return isVersionVector(value) ? value : {};
+}
 
 type OutboundDemandActivity = Extract<DemandActivity, "dpf.demand.proposed" | "dpf.demand.updated" | "dpf.demand.withdrawn">;
 type OutboundResponseActivity = Extract<DemandActivity, "dpf.demand.interest-recorded" | "dpf.demand.help-offered">;
@@ -31,22 +44,24 @@ interface DemandOutboxRow {
   mirrorId: string;
   federationLinkId: string;
   canonicalSide?: string;
-  version: number;
+  localRecordRef?: string | null;
+  version: bigint;
   syncStatus: string;
   deliveryAttempts: number;
   payload: unknown;
 }
 
-export interface DemandDeliveryDb {
+export interface DemandDeliveryDb extends FederationDeliveryQueueDb {
   federationLink: {
     findMany(args: unknown): Promise<Array<{
       linkId: string;
       peerAuthorityUrl: string;
       peerTokenEnc: string | null;
+      role: string;
     }>>;
   };
   federatedRecordMirror: {
-    findUnique(args: unknown): Promise<Partial<DemandOutboxRow> & { mirrorId: string; version: number; syncStatus: string; payload: unknown } | null>;
+    findUnique(args: unknown): Promise<Partial<DemandOutboxRow> & { mirrorId: string; version: bigint; syncStatus: string; payload: unknown; versionVector?: unknown } | null>;
     findMany(args: unknown): Promise<DemandOutboxRow[]>;
     create(args: unknown): Promise<unknown>;
     update(args: unknown): Promise<unknown>;
@@ -97,8 +112,17 @@ export async function queueDemandProjection(db: DemandDeliveryDb, input: {
   const existing = await db.federatedRecordMirror.findUnique({ where });
   const prior = decodeDemandOutboxPayload(existing?.payload);
   if (existing && prior?.envelope.payloadDigest === built.envelope.payloadDigest) {
-    return { action: "noop", mirrorId: existing.mirrorId, originVersion: existing.version };
+    return { action: "noop", mirrorId: existing.mirrorId, originVersion: Number(existing.version) };
   }
+
+  // Real content change → advance THIS installation's counter in the causal vector,
+  // carried forward from the record's prior vector. Set after the noop check and
+  // (harmlessly) after digest computation, since the vector is digest-excluded.
+  const versionVector = incrementVersionVector(
+    readStoredVector(existing?.versionVector),
+    input.identity.installationId,
+  );
+  built.envelope.versionVector = versionVector;
 
   const activity: OutboundDemandActivity = existing ? "dpf.demand.updated" : "dpf.demand.proposed";
   const payload: DemandOutboxPayload = {
@@ -110,14 +134,13 @@ export async function queueDemandProjection(db: DemandDeliveryDb, input: {
   const data = {
     syncStatus: "pending",
     version: built.envelope.originVersion,
+    versionVector,
     payload,
-    deliveryAttempts: 0,
-    nextDeliveryAt: input.now ?? new Date(),
-    lastDeliveryError: null,
     deadLetteredAt: null,
   };
   if (existing) {
     await db.federatedRecordMirror.update({ where: { mirrorId: existing.mirrorId }, data });
+    await scheduleFederationDeliveryJob(db, existing.mirrorId, input.now ?? new Date());
     return { action: "queued", mirrorId: existing.mirrorId, originVersion: built.envelope.originVersion };
   }
   const mirrorId = outboxId(input.link.linkId, input.source.localRecordRef);
@@ -130,6 +153,7 @@ export async function queueDemandProjection(db: DemandDeliveryDb, input: {
     peerRecordRef: null,
     ...data,
   } });
+  await scheduleFederationDeliveryJob(db, mirrorId, input.now ?? new Date());
   return { action: "queued", mirrorId, originVersion: built.envelope.originVersion };
 }
 
@@ -146,7 +170,7 @@ export async function queueForwardedDemand(db: DemandDeliveryDb, input: {
   const existing = await db.federatedRecordMirror.findUnique({ where });
   const prior = decodeDemandOutboxPayload(existing?.payload);
   if (existing && prior?.envelope.payloadDigest === input.envelope.payloadDigest) {
-    return { action: "noop", mirrorId: existing.mirrorId, originVersion: existing.version };
+    return { action: "noop", mirrorId: existing.mirrorId, originVersion: Number(existing.version) };
   }
   const activity: OutboundDemandActivity = existing ? "dpf.demand.updated" : "dpf.demand.proposed";
   const payload: DemandOutboxPayload = {
@@ -159,13 +183,11 @@ export async function queueForwardedDemand(db: DemandDeliveryDb, input: {
     syncStatus: "pending",
     version: input.envelope.originVersion,
     payload,
-    deliveryAttempts: 0,
-    nextDeliveryAt: input.now ?? new Date(),
-    lastDeliveryError: null,
     deadLetteredAt: null,
   };
   if (existing) {
     await db.federatedRecordMirror.update({ where: { mirrorId: existing.mirrorId }, data });
+    await scheduleFederationDeliveryJob(db, existing.mirrorId, input.now ?? new Date());
     return { action: "queued", mirrorId: existing.mirrorId, originVersion: input.envelope.originVersion };
   }
   const mirrorId = outboxId(input.link.linkId, localRecordRef);
@@ -178,6 +200,7 @@ export async function queueForwardedDemand(db: DemandDeliveryDb, input: {
     peerRecordRef: null,
     ...data,
   } });
+  await scheduleFederationDeliveryJob(db, mirrorId, input.now ?? new Date());
   return { action: "queued", mirrorId, originVersion: input.envelope.originVersion };
 }
 
@@ -196,7 +219,7 @@ export async function queueDemandWithdrawal(
   }
   const envelope: DemandEnvelopeV1 = {
     ...prior.envelope,
-    originVersion: Math.max(existing.version + 1, now.getTime()),
+    originVersion: Math.max(Number(existing.version) + 1, now.getTime()),
     updatedAt: now.toISOString(),
     payloadDigest: "sha256:pending",
   };
@@ -207,9 +230,10 @@ export async function queueDemandWithdrawal(
     data: {
       syncStatus: "pending", version: envelope.originVersion,
       payload: { envelope, activity, eventId: eventId(linkId, envelope, activity), queuedAt: now.toISOString() },
-      deliveryAttempts: 0, nextDeliveryAt: now, lastDeliveryError: null, deadLetteredAt: null,
+      deadLetteredAt: null,
     },
   });
+  await scheduleFederationDeliveryJob(db, existing.mirrorId, now);
   return { action: "queued", activity, mirrorId: existing.mirrorId };
 }
 
@@ -232,20 +256,39 @@ export async function dispatchDueDemand(db: DemandDeliveryDb, options: {
   send?: SendDemand;
 } = {}): Promise<{ attempted: number; delivered: number; deferred: number; deadLettered: number }> {
   const now = options.now ?? new Date();
-  const rows = await db.federatedRecordMirror.findMany({
+  // Safe rolling migration: every legacy pending mirror gets one idempotent
+  // canonical queue job. Existing jobs retain their own retry clock.
+  const pendingMirrors = await db.federatedRecordMirror.findMany({
     where: {
       recordType: { in: ["demand-envelope", "demand-response", "demand-disposition"] }, canonicalSide: "local", syncStatus: "pending",
-      OR: [{ nextDeliveryAt: null }, { nextDeliveryAt: { lte: now } }],
     },
-    orderBy: [{ nextDeliveryAt: "asc" }, { updatedAt: "asc" }],
-    take: options.limit ?? 50,
+    select: { mirrorId: true },
   });
+  for (const row of pendingMirrors) await ensureFederationDeliveryJob(db, row.mirrorId, now);
+  if (!db.workItem.findMany) throw new Error("Federation delivery queue reader is unavailable.");
+  const jobs = await db.workItem.findMany({
+    where: {
+      sourceType: "federation-demand-delivery",
+      OR: [
+        { status: "queued", OR: [{ nextAttemptAt: null }, { nextAttemptAt: { lte: now } }] },
+        { status: "in-progress", lastAttemptAt: { lte: new Date(now.getTime() - 5 * 60_000) } },
+      ],
+    },
+    orderBy: [{ nextAttemptAt: "asc" }, { createdAt: "asc" }],
+    take: options.limit ?? 50,
+    select: { itemId: true, sourceId: true, attemptCount: true, createdAt: true, claimedAt: true },
+  });
+  const mirrorIds = jobs.flatMap((job) => job.sourceId ? [job.sourceId] : []);
+  const rows = mirrorIds.length === 0 ? [] : await db.federatedRecordMirror.findMany({
+    where: { mirrorId: { in: mirrorIds }, canonicalSide: "local", syncStatus: "pending" },
+  });
+  const jobByMirrorId = new Map(jobs.flatMap((job) => job.sourceId ? [[job.sourceId, job] as const] : []));
   const links = await db.federationLink.findMany({
     where: {
       linkId: { in: [...new Set(rows.map((row) => row.federationLinkId))] },
       linkState: "trusted", revokedAt: null, quarantinedAt: null,
     },
-    select: { linkId: true, peerAuthorityUrl: true, peerTokenEnc: true },
+    select: { linkId: true, peerAuthorityUrl: true, peerTokenEnc: true, role: true },
   });
   const linkById = new Map(links.map((link) => [link.linkId, link]));
   const deliverableRows = rows.filter((row) => linkById.has(row.federationLinkId));
@@ -253,6 +296,9 @@ export async function dispatchDueDemand(db: DemandDeliveryDb, options: {
   let deferred = 0;
   let deadLettered = 0;
   for (const row of deliverableRows) {
+    const job = jobByMirrorId.get(row.mirrorId);
+    if (!job) continue;
+    if (!await claimFederationDeliveryJob(db, job.itemId, now)) continue;
     const link = linkById.get(row.federationLinkId)!;
     const payload = decodeDemandOutboxPayload(row.payload);
     const token = (options.decryptToken ?? decryptPeerToken)(link.peerTokenEnc);
@@ -260,7 +306,12 @@ export async function dispatchDueDemand(db: DemandDeliveryDb, options: {
     if (!payload) result = { ok: false, status: 0, error: "invalid outbox payload" };
     else if (!token) result = { ok: false, status: 0, error: "missing peer token" };
     else result = await (options.send ?? sendDemandToPeer)(
-      { peerAuthorityUrl: link.peerAuthorityUrl, linkToken: token, linkId: link.linkId },
+      {
+        peerAuthorityUrl: link.peerAuthorityUrl,
+        linkToken: token,
+        linkId: link.linkId,
+        sameOrgLan: link.role === "same-org-peer",
+      },
       payload.activity,
       payload.envelope,
       { eventId: payload.eventId, now },
@@ -278,33 +329,36 @@ export async function dispatchDueDemand(db: DemandDeliveryDb, options: {
         ? (result.body as { noticeId?: unknown }).noticeId === noticeId
         : responseId
         ? (result.body as { responseId?: unknown }).responseId === responseId
-        : Number((result.body as { originVersion?: unknown }).originVersion) === row.version);
+        : Number((result.body as { originVersion?: unknown }).originVersion) === Number(row.version));
     if (acknowledged) {
       delivered++;
       await db.federatedRecordMirror.update({ where: { mirrorId: row.mirrorId }, data: {
         syncStatus: payload?.activity === "dpf.demand.withdrawn" ? "withdrawn" : "synced",
-        acknowledgedVersion: row.version, deliveryAttempts: row.deliveryAttempts + 1,
-        lastDeliveryAt: now, lastSyncedAt: now, nextDeliveryAt: null,
-        lastDeliveryError: null, deadLetteredAt: null,
+        acknowledgedVersion: row.version, lastSyncedAt: now,
+        deadLetteredAt: null, rehealCount: 0,
       } });
+      await finishFederationDeliveryJob(db, { itemId: job.itemId, attemptCount: job.attemptCount, outcome: "success", now });
       continue;
     }
 
-    const attempts = row.deliveryAttempts + 1;
+    const attempts = job.attemptCount + 1;
     const error = (result.error ?? `peer responded ${result.status}`).slice(0, 1_000);
     if (attempts >= MAX_ATTEMPTS) {
       deadLettered++;
       await db.federatedRecordMirror.update({ where: { mirrorId: row.mirrorId }, data: {
-        syncStatus: "dead-letter", deliveryAttempts: attempts, lastDeliveryAt: now,
-        lastDeliveryError: error, nextDeliveryAt: null, deadLetteredAt: now,
+        syncStatus: "dead-letter", deadLetteredAt: now,
       } });
+      await finishFederationDeliveryJob(db, { itemId: job.itemId, attemptCount: job.attemptCount, outcome: "dead-letter", error, now });
     } else {
       deferred++;
-      await db.federatedRecordMirror.update({ where: { mirrorId: row.mirrorId }, data: {
-        syncStatus: "pending", deliveryAttempts: attempts, lastDeliveryAt: now,
-        lastDeliveryError: error,
-        nextDeliveryAt: new Date(now.getTime() + retryDelayMs(attempts, options.random)),
-      } });
+      await finishFederationDeliveryJob(db, {
+        itemId: job.itemId,
+        attemptCount: job.attemptCount,
+        outcome: "retry",
+        error,
+        now,
+        nextAttemptAt: new Date(now.getTime() + retryDelayMs(attempts, options.random)),
+      });
     }
   }
   return { attempted: deliverableRows.length, delivered, deferred, deadLettered };

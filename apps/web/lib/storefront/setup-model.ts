@@ -125,6 +125,7 @@ const RESOURCE_LABELS: Record<string, { plural: string; singular: string }> = {
   "fitness-recreation": { plural: "Spaces", singular: "Space" },
   "fabric-care-services": { plural: "Counters & stations", singular: "Station" },
   "agriculture-ranching": { plural: "Fields, pastures & pens", singular: "Area" },
+  "manufacturing": { plural: "Lines, cells & stations", singular: "Work centre" },
 };
 
 /** Categories where the storefront is booking/availability-shaped. */

@@ -63,6 +63,7 @@ describe("isDockerOriginEntityKey (server-side)", () => {
       isDockerOriginEntityKey("__dpf_quarantined__cmpjsbvh8006c01lmp4levblx__network_interface:iface:eth0:172.18.0.14"),
     ).toBe(true);
     expect(isDockerOriginEntityKey("network_interface:iface:eth0:172.31.255.254")).toBe(true);
+    expect(isDockerOriginEntityKey("gateway:gateway:172.18.0.1")).toBe(true);
     // Real LAN NIC (192.168) and outside-/12 stay false.
     expect(isDockerOriginEntityKey("network_interface:iface:Ethernet_2:192.168.0.200")).toBe(false);
     expect(isDockerOriginEntityKey("network_interface:iface:eth0:172.15.0.1")).toBe(false);

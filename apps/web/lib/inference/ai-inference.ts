@@ -50,6 +50,7 @@ import {
   currentInferenceOrigin,
   engineKeyForProvider,
 } from "./inference-admission";
+import { assertProviderDispatchCapacity } from "@/lib/routing/local-provider-capacity";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -452,6 +453,11 @@ export async function callProvider(
     buildId?: string | null;
   },
 ): Promise<InferenceResult> {
+  // Host capacity is a dispatch constraint, not a routing hint. Enforce it at
+  // the shared adapter boundary so direct, agentic, evaluation and fallback
+  // callers cannot start a local model while governed local CI owns the host.
+  await assertProviderDispatchCapacity(providerId);
+
   // 0. EP-COST-001 Phase 2 — pre-call budget gate.
   // Check the agent's daily token budget before dispatching. If the agent has
   // consumed ≥100% of its registry limit today, throw a billing error so the

@@ -5,7 +5,7 @@ status: published
 abstract: Validate every local function — human, AI, or application — against the end-to-end outcome it serves; a change that optimizes one step while degrading the whole is rejected, however good it looks locally.
 principleTier: commandment
 principleDirection: Balance every local function against the end-to-end outcome it serves, and reject local optimizations that degrade the whole.
-principleDimensionVector: {"long_term_maintainability": 1.0, "reusability": 0.6, "governance_compliance": 0.7, "speed_to_value": -0.5}
+principleDimensionVector: {"long_term_maintainability": 1.0, "reusability": 0.6, "governance_compliance": 0.7, "speed_to_value": -0.5, "cost_efficiency": 0.55, "blast_radius": -0.35}
 principleAppliesTo:
   - in_platform_coworker
   - external_coding_agent

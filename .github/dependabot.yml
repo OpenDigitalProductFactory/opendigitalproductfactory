@@ -19,6 +19,22 @@ updates:
     labels:
       - "dependencies"
       - "javascript"
+  # BI-32F2BE47: probe has its own lockfile; security alerts fire but UPDATE PRs
+  # never did because only directory "/" was declared. Same cooldown as root.
+  - package-ecosystem: "npm"
+    directory: "/scripts/probes/marketing-media"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 2
+    cooldown:
+      default-days: 5
+      semver-major-days: 14
+      semver-minor-days: 7
+      semver-patch-days: 3
+    labels:
+      - "dependencies"
+      - "javascript"
+      - "probe"
     groups:
       minor-and-patch:
         update-types:

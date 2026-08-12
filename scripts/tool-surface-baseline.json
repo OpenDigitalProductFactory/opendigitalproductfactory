@@ -3,19 +3,19 @@
   "selectionCliff": 15,
   "entries": {
     "registry.toolDefinitions": {
-      "value": 362,
-      "reason": "Adds get_recruiting_pipeline (BI-E64D11AE): the HR-coworker read lens over the unified recruiting funnel — native Applications plus Greenhouse-sourced staged rows, deduped by crosswalk — so a coworker sees one pipeline across native and absorbed work. No existing tool carries it: query_employees is People-Core directory, and the backlog/estate read lenses do not touch recruiting entities. It is the coworker surface of the merged dual-read read-model (getRecruitingPipeline, #4067); read-only, +1, under the 15-tool selection cliff.",
-      "recordedAt": "2026-08-06"
+      "value": 371,
+      "reason": "Adds the six-tool Authorized Surface Contract protocol (surface_list/open/snapshot/query/act/close) plus read and atomic configure/test tools for the Discovery reference surface. The generic protocol replaces page-specific coworker tool growth, is force-budgeted as one universal perception/action capability, and re-enters existing governed domain tools for persistent effects. EP-F7E35344.",
+      "recordedAt": "2026-08-08"
     },
     "registry.packFiles": {
-      "value": 87,
-      "reason": "Adds recruiting-pipeline-pack.ts (the get_recruiting_pipeline pack) — the Absorb coworker surface over the shared recruiting read-model. One pack, one tool; reuses lib/recruiting/pipeline-read-model.ts rather than adding read logic. BI-E64D11AE.",
-      "recordedAt": "2026-08-06"
+      "value": 88,
+      "reason": "Adds one generic surface-pack.ts for the versioned Authorized Surface Contract. It serves browser, mobile, workroom, scheduled, background, headless, and external callers through the same compact protocol instead of adding one pack per UX surface. EP-F7E35344.",
+      "recordedAt": "2026-08-08"
     },
     "tier.coreToolNames": {
-      "value": 29,
-      "reason": "Adds WWMD kernel discovery to core for peer CLIs (Grok/Codex): principle_decide + wiki_query. Those clients have no ToolSearch, so a lean core that omitted WWMD blocked AGENTS-required kernel consults even when the token already granted registry_read. Still lean vs full catalogue; authority stays grant/scope gated.",
-      "recordedAt": "2026-08-03"
+      "value": 30,
+      "reason": "Promotes find_coworker into the lean core tier so peer CLIs without client-side ToolSearch (Grok, Codex) can discover the coworker roster to route A2A handoffs — same rationale that keeps principle_decide/wiki_query core. Discovery-only; execution still gates on grants. BI-5FB59BC6.",
+      "recordedAt": "2026-08-08"
     },
     "dispatch.maxAttachedTools": {
       "value": 48

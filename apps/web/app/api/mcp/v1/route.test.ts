@@ -37,6 +37,7 @@ vi.mock("@dpf/db", () => ({
     taskRun: { findFirst: vi.fn(), update: vi.fn() },
     agentThread: { upsert: vi.fn() },
     taskMessage: { create: vi.fn() },
+    mcpToolSession: { findUnique: vi.fn(), deleteMany: vi.fn(), upsert: vi.fn() },
   },
 }));
 
@@ -542,10 +543,12 @@ describe("POST — initialize", () => {
     expect(body.result.protocolVersion).toBe("2024-11-05");
     expect(body.result.serverInfo.name).toBe("dpf-platform");
     expect(body.result.capabilities.tools).toBeDefined();
+    // Pre-Tasks fallback must NOT advertise tasks (breaks Grok Build 1.0.0 etc.).
+    expect(body.result.capabilities.tasks).toBeUndefined();
   });
 
   it("negotiates protocol version — echoes client version when supported", async () => {
-    for (const version of ["2024-11-05", "2025-03-26", "2025-11-25"]) {
+    for (const version of ["2024-11-05", "2025-03-26", "2025-06-18", "2025-11-25"]) {
       const res = await POST(
         makeRequest({
           bearer: "dpfmcp_X",
@@ -557,6 +560,51 @@ describe("POST — initialize", () => {
     }
   });
 
+  it("omits capabilities.tasks on pre-Tasks protocol versions (client-compat)", async () => {
+    // Includes Grok Build 1.0.0's negotiated version (2025-06-18).
+    for (const version of ["2024-11-05", "2025-03-26", "2025-06-18"]) {
+      const res = await POST(
+        makeRequest({
+          bearer: "dpfmcp_X",
+          body: {
+            jsonrpc: "2.0",
+            id: 1,
+            method: "initialize",
+            params: { protocolVersion: version },
+          },
+        }),
+      );
+      const body = await res.json();
+      expect(body.result.protocolVersion).toBe(version);
+      expect(body.result.capabilities.tools).toEqual({ listChanged: true });
+      expect(body.result.capabilities.tasks).toBeUndefined();
+    }
+  });
+
+  it("accepts MCP-Protocol-Version: 2025-06-18 on post-initialize calls (Grok)", async () => {
+    resolveMock.mockResolvedValue({
+      tokenId: "tok_grok",
+      userId: "u1",
+      agentId: null,
+      scopes: ["backlog_read"],
+      capability: "read",
+    });
+    const req = new Request("https://localhost/api/mcp/v1", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: "Bearer dpfmcp_X",
+        "User-Agent": "grok/1.0.0",
+        "MCP-Protocol-Version": "2025-06-18",
+      },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 2, method: "tools/list" }),
+    });
+    const res = await POST(req);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(Array.isArray(body.result.tools)).toBe(true);
+  });
+
   it("negotiates protocol version — falls back when client version is unknown", async () => {
     const res = await POST(
       makeRequest({
@@ -566,6 +614,8 @@ describe("POST — initialize", () => {
     );
     const body = await res.json();
     expect(body.result.protocolVersion).toBe("2024-11-05");
+    // Fallback is pre-Tasks — do not advertise tasks on the safe floor.
+    expect(body.result.capabilities.tasks).toBeUndefined();
   });
 });
 
@@ -595,6 +645,69 @@ describe("POST — tools/list", () => {
     expect(toolNames).not.toContain("update_backlog_item_status");
   });
 
+  it("initialize returns serverInfo.description and advertises the tasks capability (Slices 1/4)", async () => {
+    resolveMock.mockResolvedValue({
+      tokenId: "tok_i",
+      userId: "u1",
+      agentId: null,
+      scopes: ["backlog_read"],
+      capability: "read",
+    });
+    const res = await POST(
+      makeRequest({
+        bearer: "dpfmcp_X",
+        body: { jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-11-25" } },
+      }),
+    );
+    const body = await res.json();
+    expect(typeof body.result.serverInfo.description).toBe("string");
+    expect(body.result.serverInfo.description.length).toBeGreaterThan(0);
+    // Spec shape: tasks.list/.cancel are `object`, not boolean (a boolean
+    // fails strict client capability validation — Claude Code rejects init).
+    expect(body.result.capabilities.tasks).toEqual({ list: {}, cancel: {} });
+  });
+
+  it("rejects an unsupported MCP-Protocol-Version header with 400 (Slice 1)", async () => {
+    resolveMock.mockResolvedValue({
+      tokenId: "tok_p",
+      userId: "u1",
+      agentId: null,
+      scopes: ["backlog_read"],
+      capability: "read",
+    });
+    const req = new Request("https://localhost/api/mcp/v1", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: "Bearer dpfmcp_X",
+        "User-Agent": "codex/1.0",
+        "MCP-Protocol-Version": "1999-01-01",
+      },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 2, method: "tools/list" }),
+    });
+    const res = await POST(req);
+    expect(res.status).toBe(400);
+  });
+
+  it("emits outputSchema (2020-12) + title on query_backlog (Slice 2)", async () => {
+    resolveMock.mockResolvedValue({
+      tokenId: "tok_m",
+      userId: "u1",
+      agentId: null,
+      scopes: ["backlog_read"],
+      capability: "read",
+    });
+    const res = await POST(
+      makeRequest({ bearer: "dpfmcp_X", body: { jsonrpc: "2.0", id: 3, method: "tools/list" } }),
+    );
+    const body = await res.json();
+    const qb = (body.result.tools as Array<{ name: string; title?: string; outputSchema?: { $schema?: string } }>).find(
+      (t) => t.name === "query_backlog",
+    );
+    expect(qb?.title).toBe("Query backlog");
+    expect(qb?.outputSchema?.$schema).toContain("2020-12");
+  });
+
   it("includes annotations on every returned tool", async () => {
     resolveMock.mockResolvedValue({
       tokenId: "tok_x",
@@ -615,6 +728,31 @@ describe("POST — tools/list", () => {
       expect(typeof tool.annotations.readOnlyHint).toBe("boolean");
       expect(typeof tool.annotations.destructiveHint).toBe("boolean");
     }
+  });
+
+  it("appends the load_tools meta-tool to every tools/list (Phase 2 deferred loading, BI-D8101329)", async () => {
+    resolveMock.mockResolvedValue({
+      tokenId: "tok_lt",
+      userId: "u1",
+      agentId: null,
+      scopes: ["backlog_read"],
+      capability: "read",
+    });
+    const res = await POST(
+      makeRequest({
+        bearer: "dpfmcp_X",
+        userAgent: "codex/1.0", // lean core tier — load_tools must still be present
+        body: { jsonrpc: "2.0", id: 42, method: "tools/list" },
+      }),
+    );
+    const body = await res.json();
+    const names = (body.result.tools as { name: string }[]).map((t) => t.name);
+    expect(names).toContain("load_tools");
+    const loadTools = (body.result.tools as { name: string; inputSchema: { properties: Record<string, unknown> } }[]).find(
+      (t) => t.name === "load_tools",
+    );
+    expect(loadTools?.inputSchema.properties).toHaveProperty("query");
+    expect(loadTools?.inputSchema.properties).toHaveProperty("names");
   });
 
   it("defaults a non-Claude-Code client to the lean core tier; ?tier=full opts back in (BI-88681BE0)", async () => {

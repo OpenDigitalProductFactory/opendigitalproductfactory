@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
+vi.mock("@/lib/queue/queue-telemetry", () => ({ recordQueueTransition: vi.fn().mockResolvedValue(undefined) }));
+
 import { DEMAND_PROJECTION_TEMPLATES } from "@dpf/db/federated-demand-contract";
 
 import {
@@ -23,11 +25,23 @@ const source = {
   updatedAt: new Date("2026-07-20T06:05:00.000Z"),
 };
 const link = { linkId: "link_1", peerAuthorityUrl: "https://peer.example", peerTokenEnc: "encrypted" };
+function queueDelegates() {
+  return {
+    workQueue: { upsert: vi.fn().mockResolvedValue({ id: "queue-db-id" }) },
+    workItem: {
+      upsert: vi.fn().mockResolvedValue({ itemId: "job-1" }),
+      update: vi.fn().mockResolvedValue({}),
+      updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+      findMany: vi.fn().mockResolvedValue([]),
+    },
+  };
+}
 
 describe("queueDemandProjection", () => {
   it("creates a local-canonical durable outbox record before network delivery", async () => {
     const create = vi.fn().mockResolvedValue({});
     const db = {
+      ...queueDelegates(),
       federationLink: { findMany: vi.fn() },
       federatedRecordMirror: {
         findUnique: vi.fn().mockResolvedValue(null),
@@ -55,7 +69,6 @@ describe("queueDemandProjection", () => {
       localRecordRef: "BI-LOCAL-1",
       peerRecordRef: null,
       syncStatus: "pending",
-      nextDeliveryAt: new Date("2026-07-20T06:06:00.000Z"),
     }) });
     const payload = create.mock.calls[0][0].data.payload;
     expect(payload.activity).toBe("dpf.demand.proposed");
@@ -64,6 +77,7 @@ describe("queueDemandProjection", () => {
 
   it("does not requeue an unchanged acknowledged projection", async () => {
     const firstDb = {
+      ...queueDelegates(),
       federationLink: { findMany: vi.fn() },
       federatedRecordMirror: {
         findUnique: vi.fn().mockResolvedValue(null),
@@ -80,6 +94,7 @@ describe("queueDemandProjection", () => {
     const payload = (firstDb.federatedRecordMirror.create as ReturnType<typeof vi.fn>).mock.calls[0][0].data.payload;
     const update = vi.fn();
     const db = {
+      ...queueDelegates(),
       federationLink: { findMany: vi.fn() },
       federatedRecordMirror: {
         findUnique: vi.fn().mockResolvedValue({ mirrorId: "fdmo_1", version: source.updatedAt.getTime(), syncStatus: "synced", payload }),
@@ -98,6 +113,7 @@ describe("queueDemandProjection", () => {
   it("does not reset retry state for an unchanged pending projection", async () => {
     const create = vi.fn().mockResolvedValue({});
     const firstDb = {
+      ...queueDelegates(),
       federationLink: { findMany: vi.fn() },
       federatedRecordMirror: { findUnique: vi.fn().mockResolvedValue(null), create, update: vi.fn(), findMany: vi.fn() },
     } as unknown as DemandDeliveryDb;
@@ -109,6 +125,7 @@ describe("queueDemandProjection", () => {
     const payload = create.mock.calls[0][0].data.payload;
     const update = vi.fn();
     const db = {
+      ...queueDelegates(),
       federationLink: { findMany: vi.fn() },
       federatedRecordMirror: {
         findUnique: vi.fn().mockResolvedValue({ mirrorId: "fdmo_1", version: source.updatedAt.getTime(), syncStatus: "pending", payload }),
@@ -138,7 +155,7 @@ describe("queueDemandProjection", () => {
       },
     };
     const update = vi.fn().mockResolvedValue({});
-    const db = { federationLink: { findMany: vi.fn() }, federatedRecordMirror: {
+    const db = { ...queueDelegates(), federationLink: { findMany: vi.fn() }, federatedRecordMirror: {
       findUnique: vi.fn().mockResolvedValue({ mirrorId: "fdmo_1", version: 10, syncStatus: "synced", payload }),
       create: vi.fn(), update, findMany: vi.fn(),
     } } as unknown as DemandDeliveryDb;
@@ -146,7 +163,7 @@ describe("queueDemandProjection", () => {
     await expect(queueDemandWithdrawal(db, "link_1", "BI-LOCAL-1", new Date("2026-07-20T06:07:00.000Z")))
       .resolves.toMatchObject({ action: "queued", activity: "dpf.demand.withdrawn" });
     expect(update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({
-      syncStatus: "pending", deliveryAttempts: 0,
+      syncStatus: "pending",
     }) }));
     expect(update.mock.calls[0][0].data.payload.envelope.originVersion).toBeGreaterThan(10);
   });
@@ -156,6 +173,7 @@ describe("queueForwardedDemand", () => {
   it("retains original provenance and uses only a local mirror as its outbox key", async () => {
     const create = vi.fn().mockResolvedValue({});
     const db = {
+      ...queueDelegates(),
       federationLink: { findMany: vi.fn() },
       federatedRecordMirror: {
         findUnique: vi.fn().mockResolvedValue(null),
@@ -205,12 +223,31 @@ describe("queueForwardedDemand", () => {
 describe("dispatchDueDemand", () => {
   function deliveryDb(row: Record<string, unknown>) {
     const update = vi.fn().mockResolvedValue({});
+    const workItemUpdate = vi.fn().mockResolvedValue({});
+    const job = {
+      itemId: "job-1", sourceId: "fdmo_1",
+      attemptCount: Number(row.deliveryAttempts ?? 0),
+      createdAt: new Date("2026-07-20T06:00:00.000Z"), claimedAt: null,
+    };
     return {
       db: {
+        workQueue: { upsert: vi.fn().mockResolvedValue({ id: "queue-db-id" }) },
+        workItem: {
+          upsert: vi.fn().mockResolvedValue({ itemId: "job-1" }),
+          update: workItemUpdate,
+          updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+          findMany: vi.fn().mockResolvedValue([job]),
+        },
         federationLink: { findMany: vi.fn().mockResolvedValue([link]) },
-        federatedRecordMirror: { findMany: vi.fn().mockResolvedValue([{ ...row, federationLinkId: "link_1" }]), update, findUnique: vi.fn(), create: vi.fn() },
+        federatedRecordMirror: {
+          findMany: vi.fn()
+            .mockResolvedValueOnce([{ mirrorId: "fdmo_1" }])
+            .mockResolvedValueOnce([{ ...row, federationLinkId: "link_1" }]),
+          update, findUnique: vi.fn(), create: vi.fn(),
+        },
       } as unknown as DemandDeliveryDb,
       update,
+      workItemUpdate,
     };
   }
 
@@ -220,7 +257,7 @@ describe("dispatchDueDemand", () => {
   };
 
   it("marks an acknowledged version synchronized", async () => {
-    const { db, update } = deliveryDb(outbox);
+    const { db, update, workItemUpdate } = deliveryDb(outbox);
     const send = vi.fn().mockResolvedValue({ ok: true, status: 202, body: { ok: true, originVersion: 7 } });
 
     const result = await dispatchDueDemand(db, {
@@ -229,12 +266,13 @@ describe("dispatchDueDemand", () => {
 
     expect(result).toEqual({ attempted: 1, delivered: 1, deferred: 0, deadLettered: 0 });
     expect(update).toHaveBeenCalledWith({ where: { mirrorId: "fdmo_1" }, data: expect.objectContaining({
-      syncStatus: "synced", acknowledgedVersion: 7, nextDeliveryAt: null, lastDeliveryError: null,
+      syncStatus: "synced", acknowledgedVersion: 7,
     }) });
+    expect(workItemUpdate).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ status: "completed" }) }));
   });
 
   it("retains a failed delivery and schedules bounded exponential retry with jitter", async () => {
-    const { db, update } = deliveryDb(outbox);
+    const { db, workItemUpdate } = deliveryDb(outbox);
     const send = vi.fn().mockResolvedValue({ ok: false, status: 503, error: "unavailable" });
 
     const result = await dispatchDueDemand(db, {
@@ -242,14 +280,13 @@ describe("dispatchDueDemand", () => {
     });
 
     expect(result.deferred).toBe(1);
-    expect(update).toHaveBeenCalledWith({ where: { mirrorId: "fdmo_1" }, data: expect.objectContaining({
-      syncStatus: "pending", deliveryAttempts: 1,
-      nextDeliveryAt: new Date("2026-07-20T06:10:30.000Z"),
+    expect(workItemUpdate).toHaveBeenCalledWith({ where: { itemId: "job-1" }, data: expect.objectContaining({
+      status: "queued", attemptCount: 1, nextAttemptAt: new Date("2026-07-20T06:10:30.000Z"),
     }) });
   });
 
   it("moves exhausted delivery to a visible dead-letter state", async () => {
-    const { db, update } = deliveryDb({ ...outbox, deliveryAttempts: 7 });
+    const { db, update, workItemUpdate } = deliveryDb({ ...outbox, deliveryAttempts: 7 });
     const send = vi.fn().mockResolvedValue({ ok: false, status: 0, error: "network error" });
 
     const result = await dispatchDueDemand(db, {
@@ -258,9 +295,9 @@ describe("dispatchDueDemand", () => {
 
     expect(result.deadLettered).toBe(1);
     expect(update).toHaveBeenCalledWith({ where: { mirrorId: "fdmo_1" }, data: expect.objectContaining({
-      syncStatus: "dead-letter", deliveryAttempts: 8,
-      deadLetteredAt: new Date("2026-07-20T06:10:00.000Z"), nextDeliveryAt: null,
+      syncStatus: "dead-letter", deadLetteredAt: new Date("2026-07-20T06:10:00.000Z"),
     }) });
+    expect(workItemUpdate).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ status: "failed", attemptCount: 8 }) }));
   });
 });
 

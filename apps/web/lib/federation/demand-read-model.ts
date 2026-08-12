@@ -50,6 +50,10 @@ export interface DemandShareContext {
   localItems: LocalDemandShareCandidate[];
   responses: Array<{
     responseId: string;
+    /** The originator's local backlog item this response is about (from the
+     *  linked mirror), so a renderer can show responses ON the item rather than
+     *  as a disconnected global list. Null only for legacy unlinked mirrors. */
+    localItemId: string | null;
     sourceName: string;
     responseKind: "interest" | "help-offer";
     message: string | null;
@@ -67,7 +71,7 @@ export interface DemandShareContext {
 interface DemandReadRow {
   mirrorId: string;
   syncStatus: string;
-  version: number;
+  version: bigint;
   localRecordRef: string | null;
   lastSyncedAt: Date | null;
   payload: unknown;
@@ -88,13 +92,36 @@ export function mapNetworkDemandRows(rows: DemandReadRow[]): NetworkDemandView[]
       affectedOrganizations: envelope.signal.affectedOrganizations ?? null,
       disposition: payload.disposition,
       syncStatus: row.syncStatus,
-      originVersion: row.version,
+      originVersion: Number(row.version),
       updatedAt: (row.lastSyncedAt ?? new Date(payload.receivedAt)).toISOString(),
       localItemId: row.localRecordRef,
       forwardingToFounderPermitted:
         envelope.forwarding?.permitted === true
         && envelope.forwarding.audiences.includes("founder"),
       forwardingExpiresAt: envelope.forwarding?.expiresAt ?? null,
+    }];
+  });
+}
+
+/** Pure mapper: incoming demand-response mirrors → the view's response list,
+ *  each carrying the originator's local item id (from the linked mirror) so a
+ *  renderer can attribute a response to the item it is about. Exported for unit
+ *  testing without a DB, matching the other read-model mappers. */
+export function mapDemandResponses(
+  responseMirrors: Array<{ federationLinkId: string; localRecordRef: string | null; payload: unknown }>,
+  links: Array<{ linkId: string; principal: { displayName: string } }>,
+): DemandShareContext["responses"] {
+  return responseMirrors.flatMap((mirror) => {
+    const payload = decodeDemandResponseMirrorPayload(mirror.payload);
+    if (!payload) return [];
+    const source = links.find((link) => link.linkId === mirror.federationLinkId);
+    return [{
+      responseId: payload.response.responseId,
+      localItemId: mirror.localRecordRef,
+      sourceName: source?.principal.displayName ?? "Connected installation",
+      responseKind: payload.response.responseKind,
+      message: payload.response.message ?? null,
+      receivedAt: payload.receivedAt,
     }];
   });
 }
@@ -170,6 +197,7 @@ export const getDemandShareContext = cache(async (): Promise<DemandShareContext>
       where: { recordType: "demand-response", canonicalSide: "peer", syncStatus: "synced" },
       select: {
         federationLinkId: true,
+        localRecordRef: true,
         payload: true,
       },
       orderBy: { lastSyncedAt: "desc" },
@@ -196,18 +224,7 @@ export const getDemandShareContext = cache(async (): Promise<DemandShareContext>
       .filter((link) => link.role === "channel-downstream" && link.peerInstallationId)
       .map((link) => ({ linkId: link.linkId, displayName: link.principal.displayName })),
     localItems,
-    responses: responseMirrors.flatMap((mirror) => {
-      const payload = decodeDemandResponseMirrorPayload(mirror.payload);
-      if (!payload) return [];
-      const source = links.find((link) => link.linkId === mirror.federationLinkId);
-      return [{
-        responseId: payload.response.responseId,
-        sourceName: source?.principal.displayName ?? "Connected installation",
-        responseKind: payload.response.responseKind,
-        message: payload.response.message ?? null,
-        receivedAt: payload.receivedAt,
-      }];
-    }),
+    responses: mapDemandResponses(responseMirrors, links),
     dispositions: dispositionMirrors.flatMap((mirror) => {
       const payload = decodeDemandDispositionMirrorPayload(mirror.payload);
       if (!payload) return [];

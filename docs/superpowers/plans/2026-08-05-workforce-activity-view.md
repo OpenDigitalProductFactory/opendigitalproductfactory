@@ -64,3 +64,59 @@ per-phase model resolver (lives on Runtime Health).
   outcome mapping, read exclusion, "other" bucket, sensitivity flagging,
   working/quiet split, no-owner counting, ordering. Injected Prisma double.
 - Full local CI on the merged tree before merge.
+
+## 2026-08-08 truth-and-inspection correction — BI-FDB25FA6
+
+The live-install audit found that this page's private `LIVE_TASK_STATUSES` list
+included `stalled`, `input-required`, and `auth-required`, while the canonical
+`TASK_LIVE_STATES` contract intentionally defines only `working | active` as
+live. As a result, old stalled schedules appeared under **Working now** even
+though they could not block Self-Upgrade and had not heartbeated for weeks.
+
+### Backlog coverage
+
+- Decision: atomic
+- Parent: BI-FDB25FA6
+- Receipt: `cmskxrnit03al01o2ab7cuos3`
+- Deliverable: `activity-truth` — converge Right Now and Self-Upgrade inspection
+  on one trustworthy coworker-activity path.
+- Rationale: a blocker link into a view that still labels stalled history as
+  live would be misleading; correcting the view without making the initiating
+  upgrade blocker inspectable leaves the operator's original journey broken.
+  The two seams therefore ship and verify together.
+- Dependencies: none
+
+### Implementation sequence
+
+1. Test-drive the liveness correction: stalled and waiting states must not enter
+   `working`, while canonical `working` and `active` rows still do.
+2. Replace the local status vocabulary with `TASK_LIVE_STATES`; retain quiet
+   coworker/outcome behavior without creating a second status classifier.
+3. Test-drive and add a contextual **Inspect AI workforce activity** link to the
+   Self-Upgrade blocker band, using the existing `/platform/ai/right-now` route.
+4. Verify the targeted tests and production build, then exercise both the
+   zero-live-work and blocker-inspection states through the governed nonprod UX
+   path.
+
+### UX decision record
+
+- Decision: link the coworker-specific Self-Upgrade blocker to the existing
+  **Right Now** workforce view, without adding a second coworker-identity link.
+- WWMD interaction: `DI-15DC5BCA696C`
+- Confidence: high (margin `1.7886216977355875`).
+- Rationale: one contextual action gives the operator a stable workforce-wide
+  inspection surface while keeping upgrade recovery simple. The destination
+  now shares the canonical `TASK_LIVE_STATES` definition, so the action does
+  not direct operators into a contradictory status view.
+
+### Risks and rollback
+
+- Risk: a legitimately waiting task could disappear from the live band. This is
+  intentional: waiting and stalled are not active execution and belong on an
+  attention surface, not under **Working now**. This change does not delete or
+  mutate any TaskRun.
+- Risk: a generic Self-Upgrade blocker may not be coworker-related. The link is
+  rendered only when blocker evidence identifies the coworker reasoning-loop
+  surface.
+- Rollback: revert the application commit. There is no migration or runtime-data
+  rewrite.

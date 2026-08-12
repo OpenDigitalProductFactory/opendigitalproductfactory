@@ -217,7 +217,9 @@ export function buildManifest() {
 
   // 2. Frontmatter relatedRoutes / relatedCode edges, across every published page.
   for (const sourcePath of publishedDocFiles(REPO_ROOT)) {
-    const raw = fs.readFileSync(path.join(REPO_ROOT, sourcePath), "utf-8");
+    const raw = fs
+      .readFileSync(path.join(REPO_ROOT, sourcePath), "utf-8")
+      .replace(/\r\n/g, "\n");
     for (const route of frontmatterList(raw, "relatedRoutes")) {
       if (!route.startsWith("/")) problems.push(`${sourcePath}: relatedRoutes "${route}" must start with /`);
       addEdge(routeToDocs, route, sourcePath);

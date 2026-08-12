@@ -15,6 +15,10 @@ export type TableSensitivity = "public" | "internal" | "confidential" | "restric
 export const TABLE_CLASSIFICATION: Record<string, TableSensitivity> = {
   // -- public --
   TaxonomyNode: "public",
+  // Published IEEE registry of manufacturer MAC prefixes (BI-9632B15B). Contains no
+  // customer, estate or personal data — an OUI identifies a manufacturer, never a
+  // device owner. Same class as the other shipped lookup tables above.
+  MacVendorOui: "public",
   EaElementType: "public",
   EaRelationshipType: "public",
   EaRelationshipRule: "public",
@@ -34,6 +38,12 @@ export const TABLE_CLASSIFICATION: Record<string, TableSensitivity> = {
   AbsorptionPosture: "public",
 
   // -- internal --
+  // Per-token deferred-tool-loading discovery state: tool names + token id, no
+  // PII. Short-TTL, swept by its own expiry (see stewardship-exemptions.txt).
+  McpToolSession: "internal",
+  // Candidate company/device coordinates learned from trusted introducers are
+  // operator-only until independent SAS pairing establishes a relationship.
+  FederationIntroductionCandidate: "confidential",
   Portfolio: "internal",
   DigitalProduct: "internal",
   ProductLine: "internal",
@@ -172,7 +182,6 @@ export const TABLE_CLASSIFICATION: Record<string, TableSensitivity> = {
   // observations for LL144/four-fifths bias audit. PII — obfuscate before any copy.
   ProtectedMonitoringObservation: "confidential",
   User: "confidential",
-  UserGroup: "confidential",
   CustomerContact: "confidential",
   SocialIdentity: "confidential",
   AccountInvite: "confidential",
@@ -278,6 +287,9 @@ export const TABLE_CLASSIFICATION: Record<string, TableSensitivity> = {
   // -- restricted (16) --
   PasswordResetToken: "restricted",
   PlatformRole: "restricted",
+  // Memberships require PlatformRole, so retaining them while roles are
+  // omitted creates authorization references that can never be resolved.
+  UserGroup: "restricted",
   CredentialEntry: "restricted",
   DataPolicyException: "restricted",
   OAuthPendingFlow: "restricted",

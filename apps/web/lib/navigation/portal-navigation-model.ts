@@ -74,13 +74,7 @@ export type PortalShellNavEntry = PortalNavEntry & {
   sectionKey: PortalShellSectionKey;
 };
 
-const platformSectionSiblings = [
-  "/platform",
-  "/platform/identity",
-  "/platform/ai",
-  "/platform/tools",
-  "/platform/audit",
-] as const;
+const platformSectionSiblings = ["/platform", "/platform/archetype-readiness", "/platform/identity", "/platform/ai", "/platform/tools", "/platform/audit"] as const;
 
 function platformAiRoute(
   key: string,
@@ -494,6 +488,7 @@ export const PORTAL_NAV_ROUTES: readonly PortalNavRecord[] = [
     },
     sectionSiblings: platformSectionSiblings,
   },
+  { key: "platform-archetype-readiness", label: "Archetype Readiness", path: "/platform/archetype-readiness", parentPath: "/platform", domain: "platform", audienceModes: ["operator"], destinationKind: "section-page", capabilityKey: "view_platform" },
   {
     key: "platform-schedule",
     label: "Schedule",
@@ -630,6 +625,7 @@ export const PORTAL_NAV_ROUTES: readonly PortalNavRecord[] = [
       "/platform/tools/built-ins",
       "/platform/tools/discovery",
       "/platform/tools/inventory",
+      "/platform/federation-links",
     ],
   },
   {
@@ -686,6 +682,18 @@ export const PORTAL_NAV_ROUTES: readonly PortalNavRecord[] = [
     key: "platform-tools-inventory",
     label: "Capability Inventory",
     path: "/platform/tools/inventory",
+    parentPath: "/platform/tools",
+    domain: "platform",
+    audienceModes: ["operator"],
+    destinationKind: "section-page",
+    capabilityKey: "view_platform",
+  },
+  {
+    // Peer-deployment federation ("Connections" page). Distinct from Identity
+    // Federation (SSO) under /platform/identity/federation.
+    key: "platform-federation-links",
+    label: "Connections",
+    path: "/platform/federation-links",
     parentPath: "/platform/tools",
     domain: "platform",
     audienceModes: ["operator"],

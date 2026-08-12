@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 626,
+  "pageCount": 630,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -327,6 +327,51 @@
         "recovery-notes"
       ]
     },
+    "docs/architecture/2026-08-09-portal-architecture-hardening-findings.md": {
+      "publicHref": "/architecture/2026-08-09-portal-architecture-hardening-findings/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "portal-architecture-hardening-findings",
+        "1-purpose",
+        "2-method",
+        "3-evidence-base-prior-review-lineage",
+        "31-what-moved-since-2026-06-22-2026-07-27",
+        "4-executive-verdict",
+        "5-quality-dimension-findings",
+        "51-stability",
+        "52-scalability",
+        "53-reliability-incl-resilience-recoverability",
+        "54-upgradeability",
+        "55-supportability-incl-operability-maintainability",
+        "56-security-data-protection-related",
+        "57-observability-related",
+        "58-ai-action-integrity-signature-risk",
+        "59-maintainability-evolvability-related",
+        "6-best-in-class-comparison",
+        "7-architectural-drift-inventory",
+        "8-prioritized-hardening-recommendations",
+        "9-assumed-limits",
+        "10-spot-check-claims-verification-anchors",
+        "11-conclusion"
+      ]
+    },
+    "docs/architecture/2026-08-09-tts-idle-process-elimination.md": {
+      "publicHref": "/architecture/2026-08-09-tts-idle-process-elimination/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "tts-idle-process-elimination-bi-a0a0568f",
+        "problem",
+        "options-considered",
+        "decision",
+        "evidence-hooks",
+        "acceptance-mapping",
+        "related"
+      ]
+    },
     "docs/architecture/GAID.md": {
       "publicHref": "/architecture/GAID/",
       "portalHref": null,
@@ -392,6 +437,7 @@
         "103-trace-context-and-delegation",
         "104-integrity-and-non-repudiation",
         "105-privacy-and-minimization",
+        "106-enterprise-identity-boundary-projection",
         "11-protocol-profiles-and-interoperability",
         "111-general-rule",
         "112-core-extensions-and-profile-pattern",
@@ -850,6 +896,8 @@
         "verification-readiness-classification",
         "compose-project-isolation",
         "freshness-a-stale-worktree-base-is-a-landmine",
+        "root-clone-freshness-the-shared-root-must-stay-on-current-main",
+        "reaping-safety-a-live-sessions-worktree-is-never-reaped",
         "rebasing-on-a-shallow-clone-never-a-bare-git-rebase-originmain",
         "housekeeping"
       ]
@@ -1456,6 +1504,7 @@
         "522-warehousing-and-fulfilment-4",
         "523-fabric-care-services-3",
         "524-agriculture-and-ranching-3",
+        "525-manufacturing-1",
         "6-shared-and-specialized-ai-coworker-families",
         "61-controlled-activity-applicability-and-ai-realization-states",
         "62-category-applicability-matrix",
@@ -1736,6 +1785,20 @@
         "scope-and-exclusions",
         "completion-evidence",
         "what-success-means"
+      ]
+    },
+    "docs/architecture/principle-decide-mcda-identity.md": {
+      "publicHref": "/architecture/principle-decide-mcda-identity/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "principledecide-math-identity-mcda",
+        "what-the-scorer-is",
+        "what-it-is-not",
+        "autonomy-gate-bi-1d23ec26",
+        "operator-surfaces",
+        "design-grounding"
       ]
     },
     "docs/architecture/product-demand-activation.md": {
@@ -2398,9 +2461,9 @@
         "step-3-the-edge-node-picks-it-up-automatically",
         "editing-or-rotating-the-key",
         "what-the-adapter-emits",
-        "unifi-managed-devices-slice-a-statdevice",
-        "connected-clients-slice-b-statsta",
-        "independent-failure-handling",
+        "unifi-managed-devices-official-sitesdevicesdevice-details-routes",
+        "connected-clients-official-site-clients-route",
+        "failure-and-fallback-handling",
         "troubleshooting",
         "whats-not-in-this-slice",
         "reference"
@@ -4877,6 +4940,8 @@
       "publishedPortal": false,
       "anchors": [
         "federated-demand-channels",
+        "how-an-installation-advertises-its-own-address",
+        "local-network-peers-over-http",
         "same-company-installations",
         "customer-and-reseller-operation",
         "founder-hub-business-management",
@@ -5184,6 +5249,7 @@
         "design-token-scales-l0",
         "ux-budgets-l2",
         "design-grounding",
+        "operator-finding-actionability",
         "contrast-requirements",
         "form-elements",
         "user-facing-form-contract-mandatory",
@@ -6563,6 +6629,17 @@
         "see-also"
       ]
     },
+    "docs/professions/manufacturing-operations/wiki/production-flow-and-quality-holds.md": {
+      "publicHref": "/professions/manufacturing-operations/wiki/production-flow-and-quality-holds/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "heuristic",
+        "human-authority",
+        "sources"
+      ]
+    },
     "docs/professions/marketing/wiki/agriculture-evidence-led-market-positioning.md": {
       "publicHref": "/professions/marketing/wiki/agriculture-evidence-led-market-positioning/",
       "portalHref": null,
@@ -7815,6 +7892,7 @@
         "step-3-monitor-the-chain",
         "step-4-verify-postgres-only-done-criteria",
         "if-it-fails-anyway-recovery",
+        "failure-class-host-out-of-memory-candidate-build-enomem",
         "failure-class-migration-unique-violation-p3018-23505",
         "references"
       ]
@@ -8308,6 +8386,7 @@
         "activation-gate-later-waves",
         "local-ci-admission-and-fairness",
         "impact-planner-shadow-mode",
+        "work-start-impact-contract",
         "exact-tree-production-build-reuse",
         "exact-tree-cross-lifecycle-receipt-reuse",
         "ux-route-sweep-stability",
@@ -9775,6 +9854,7 @@
         "oauth-sign-in",
         "device-code-sign-in-xai-grok",
         "none",
+        "local-capacity-during-platform-verification",
         "how-oauth-works",
         "choosing-the-right-method",
         "business-safe-review",

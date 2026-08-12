@@ -1,6 +1,6 @@
 {
   "generator": "apps/web/scripts/build-route-manifest.ts",
-  "routeCount": 609,
+  "routeCount": 621,
   "routes": [
     {
       "routePath": "/",
@@ -9,6 +9,29 @@
       "dynamicParams": [],
       "file": "apps/web/app/page.tsx",
       "redirectTo": "/welcome"
+    },
+    {
+      "routePath": "/.well-known/agent-card.json",
+      "kind": "route",
+      "segments": [
+        ".well-known",
+        "agent-card.json"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/.well-known/agent-card.json/route.ts"
+    },
+    {
+      "routePath": "/.well-known/agent-card/[agentId]",
+      "kind": "route",
+      "segments": [
+        ".well-known",
+        "agent-card",
+        "[agentId]"
+      ],
+      "dynamicParams": [
+        "agentId"
+      ],
+      "file": "apps/web/app/.well-known/agent-card/[agentId]/route.ts"
     },
     {
       "routePath": "/.well-known/dpf-instance.json",
@@ -382,6 +405,20 @@
       ],
       "dynamicParams": [],
       "file": "apps/web/app/(shell)/admin/wiki/lint/page.tsx"
+    },
+    {
+      "routePath": "/api/a2a/coworkers/[agentId]",
+      "kind": "route",
+      "segments": [
+        "api",
+        "a2a",
+        "coworkers",
+        "[agentId]"
+      ],
+      "dynamicParams": [
+        "agentId"
+      ],
+      "file": "apps/web/app/api/a2a/coworkers/[agentId]/route.ts"
     },
     {
       "routePath": "/api/a2a/coworkers/[agentId]/offers/[offerId]",
@@ -2525,6 +2562,18 @@
       "file": "apps/web/app/api/v1/federation/enroll/route.ts"
     },
     {
+      "routePath": "/api/v1/federation/inbox",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "federation",
+        "inbox"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/v1/federation/inbox/route.ts"
+    },
+    {
       "routePath": "/api/v1/federation/incident",
       "kind": "route",
       "segments": [
@@ -2535,6 +2584,18 @@
       ],
       "dynamicParams": [],
       "file": "apps/web/app/api/v1/federation/incident/route.ts"
+    },
+    {
+      "routePath": "/api/v1/federation/introductions",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "federation",
+        "introductions"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/v1/federation/introductions/route.ts"
     },
     {
       "routePath": "/api/v1/federation/proposal",
@@ -3460,6 +3521,61 @@
       ],
       "dynamicParams": [],
       "file": "apps/web/app/api/v1/portfolio/tree/route.ts"
+    },
+    {
+      "routePath": "/api/v1/surfaces",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "surfaces"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/v1/surfaces/route.ts"
+    },
+    {
+      "routePath": "/api/v1/surfaces/[sessionId]",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "surfaces",
+        "[sessionId]"
+      ],
+      "dynamicParams": [
+        "sessionId"
+      ],
+      "file": "apps/web/app/api/v1/surfaces/[sessionId]/route.ts"
+    },
+    {
+      "routePath": "/api/v1/surfaces/[sessionId]/act",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "surfaces",
+        "[sessionId]",
+        "act"
+      ],
+      "dynamicParams": [
+        "sessionId"
+      ],
+      "file": "apps/web/app/api/v1/surfaces/[sessionId]/act/route.ts"
+    },
+    {
+      "routePath": "/api/v1/surfaces/[sessionId]/client-state",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "surfaces",
+        "[sessionId]",
+        "client-state"
+      ],
+      "dynamicParams": [
+        "sessionId"
+      ],
+      "file": "apps/web/app/api/v1/surfaces/[sessionId]/client-state/route.ts"
     },
     {
       "routePath": "/api/v1/upload",
@@ -4481,6 +4597,16 @@
       ],
       "dynamicParams": [],
       "file": "apps/web/app/(shell)/employee/page.tsx"
+    },
+    {
+      "routePath": "/employee/recruiting",
+      "kind": "page",
+      "segments": [
+        "employee",
+        "recruiting"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/employee/recruiting/page.tsx"
     },
     {
       "routePath": "/finance",
@@ -5623,6 +5749,16 @@
       ],
       "dynamicParams": [],
       "file": "apps/web/app/(shell)/platform/ai/skills/page.tsx"
+    },
+    {
+      "routePath": "/platform/archetype-readiness",
+      "kind": "page",
+      "segments": [
+        "platform",
+        "archetype-readiness"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/platform/archetype-readiness/page.tsx"
     },
     {
       "routePath": "/platform/audit",
@@ -7175,6 +7311,18 @@
         "entityType"
       ],
       "file": "apps/web/app/(shell)/workbooks/system/[entityType]/page.tsx"
+    },
+    {
+      "routePath": "/workforce/[agentId]",
+      "kind": "page",
+      "segments": [
+        "workforce",
+        "[agentId]"
+      ],
+      "dynamicParams": [
+        "agentId"
+      ],
+      "file": "apps/web/app/(shell)/workforce/[agentId]/page.tsx"
     },
     {
       "routePath": "/workspace",

@@ -39,6 +39,11 @@ Each assertion should identify:
 | `GAID-017` | `Federated` | Qualification scope disclosure | Qualification badge with activities, exclusions, data/risk constraints, autonomy ceiling, evidence, and evaluator | A relying party can distinguish the qualified scope from declared capability and prohibited use |
 | `GAID-018` | `Federated` | Qualification lifecycle status | Status and history tests covering pending revalidation, restriction, suspension, expiry, and revocation | Stale or invalid qualifications are not advertised as current and historical evidence is preserved |
 | `GAID-019` | `All` | Qualification is not authorization | Verifier and runtime-integration tests | Resolving an active qualification never independently grants a token, entitlement, tool, or live action permission |
+| `GAID-020` | `Federated` | Complete multi-agent participation custody | A consequential fan-out/fan-in fixture with canonical GAIDs, roles, stable hop IDs, parent edges, receipts, trace/time, and installation/device evidence | Every materially participating agent is represented in one protected acyclic graph and deterministic tools are not misclassified as agent subjects |
+| `GAID-021` | `Federated` | Policy-derived identity boundary projection | Same-org and cross-org projection fixtures plus the governing disclosure contract | Same-org disclosure matches explicit policy; cross-org output contains only approved public GAID aliases and no private GAID, Principal, hidden topology, installation/device, or source-local evidence identifier |
+| `GAID-022` | `Federated` | Private/public subject continuity | Principal/alias mapping evidence, issuer status, and negative missing-mapping test | Each exposed public GAID and protected private GAID resolve to the same canonical subject; missing required public mapping fails closed without private fallback |
+| `GAID-023` | `Federated` | Minimized-participation commitment | Signed public receipt, retained protected graph, private nonce, projection-policy version, and authorized audit-opening test | The commitment opens for authorized audit and graph/context/policy/nonce mutation fails; the public receipt reveals neither hidden identity/topology nor hidden-hop count by default |
+| `GAID-024` | `Public` | Whole-surface private-identity non-disclosure | Automated scan of messages, task history, artifacts, cards, receipts, errors, peer-visible traces/logs, and exports seeded with private identifiers | No private/internal identity or topology leaves the organization boundary and projection failure occurs before signing or delivery |
 
 ## Evidence Publication Guidance
 
@@ -49,6 +54,7 @@ Implementations should publish, at minimum:
 - representative badge and receipt samples
 - issuer-status or trust-anchor validation material for federated or public profiles
 - known deviations, compensating controls, or profile extensions
+- protected-participation and boundary-projection evidence for federated/public multi-agent systems
 
 ## Use in DPF
 

@@ -93,6 +93,31 @@ describe("buildRestaurantStarterScene", () => {
       ).toBeLessThanOrEqual(zone.geometry.y + zone.geometry.height);
     }
   });
+
+  it("lays out a dining room as a recognizable primary room with adjacent areas", () => {
+    const scene = buildRestaurantStarterScene([
+      ...TABLES,
+      {
+        id: "table-4",
+        label: "Aster 2",
+        capacity: 4,
+        serviceArea: "Main dining",
+        attributes: { shape: "round" },
+      },
+    ]);
+    const main = scene.zones.find((zone) => zone.label === "Main dining");
+    const patio = scene.zones.find((zone) => zone.label === "Patio");
+
+    expect(main?.geometry.kind).toBe("rectangle");
+    expect(patio?.geometry.kind).toBe("rectangle");
+    if (main?.geometry.kind !== "rectangle" || patio?.geometry.kind !== "rectangle") {
+      return;
+    }
+    expect(main.geometry.x).toBe(0);
+    expect(main.geometry.y).toBe(0);
+    expect(patio.geometry.x).toBeGreaterThan(main.geometry.x + main.geometry.width);
+    expect(scene.viewport.zoom).toBeLessThanOrEqual(0.8);
+  });
 });
 
 describe("loadOrCreateRestaurantScene", () => {
@@ -199,6 +224,39 @@ describe("loadOrCreateRestaurantScene", () => {
       where: { id: "scene-existing", version: 5 },
       data: {
         layoutState: expect.any(Object),
+        underlayRef: null,
+        version: { increment: 1 },
+      },
+    });
+  });
+
+  it("replaces only the legacy unassigned starter after structured areas arrive", async () => {
+    const unassigned = buildRestaurantStarterScene(
+      TABLES.map((table) => ({ ...table, serviceArea: null })),
+    );
+    const db = database({
+      id: "scene-existing",
+      version: 5,
+      layoutState: unassigned,
+    });
+
+    const scene = await loadOrCreateRestaurantScene({
+      database: db,
+      orgId: "ORG-1",
+      locationId: "storefront-1",
+      locationLabel: "Restaurant floor",
+      tables: TABLES,
+    });
+
+    expect(scene.version).toBe(6);
+    expect(scene.layout.zones.map((zone) => zone.label)).toEqual([
+      "Main dining",
+      "Patio",
+    ]);
+    expect(db.operationalSceneLayout.updateMany).toHaveBeenCalledWith({
+      where: { id: "scene-existing", version: 5 },
+      data: {
+        layoutState: scene.layout,
         underlayRef: null,
         version: { increment: 1 },
       },

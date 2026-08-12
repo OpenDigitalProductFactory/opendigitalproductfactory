@@ -268,6 +268,10 @@ export const PRINCIPLE_DECIDE_DEFAULTS = {
   tieMargin: 0.2,
   contextualSimilarityThreshold: 0.75,
   semanticFallbackWarnRatio: 0.4,
+  /** BI-1D23EC26: min feature axes per option for MCDA coverage gate. */
+  minFeatureKeys: 3,
+  /** BI-1D23EC26: ±ε principle-weight swing for sensitivity gate. */
+  sensitivityEpsilon: 0.1,
 } as const;
 
 // ─── WSID profession-corpus variant axes (BI-871126F9, variant addendum) ────
@@ -390,6 +394,7 @@ export const PROFESSION_ARCHETYPES = [
   "warehousing-fulfilment",
   "fabric-care-services",
   "agriculture-ranching",
+  "manufacturing",
 ] as const;
 export type ProfessionArchetype = (typeof PROFESSION_ARCHETYPES)[number];
 

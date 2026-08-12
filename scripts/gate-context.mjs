@@ -16,7 +16,8 @@
 // code exists (the plan's fileStructure is the intended diff).
 
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { buildGateContext, formatGateContextMarkdown } from "./lib/gate-context.mjs";
@@ -40,7 +41,13 @@ function git(args, cwd) {
 
 function safePath(path) {
   const normalized = String(path ?? "").trim().replace(/\\/g, "/");
-  if (!normalized || !PATH_RE.test(normalized) || normalized.startsWith("-")) return null;
+  if (
+    !normalized ||
+    !PATH_RE.test(normalized) ||
+    normalized.startsWith("-") ||
+    normalized.startsWith("/") ||
+    normalized.split("/").includes("..")
+  ) return null;
   return normalized;
 }
 
@@ -83,7 +90,7 @@ export function parseStdinChanges(text) {
   return entries
     .map((entry) => ({
       path: safePath(entry?.path),
-      status: entry?.status === "A" || entry?.status === "D" ? entry.status : "M",
+      status: entry?.status === "A" || entry?.status === "D" || entry?.status === "P" ? entry.status : "M",
     }))
     .filter((entry) => entry.path);
 }
@@ -98,7 +105,16 @@ export async function main() {
   let provenance = {};
   if (args.includes("--stdin-json")) {
     changedFiles = parseStdinChanges(readFileSync(0, "utf8"));
-    provenance = { source: "stdin-json" };
+    const unresolvedPaths = [];
+    changedFiles = changedFiles.map((entry) => {
+      if (entry.status !== "P") return entry;
+      const absolute = join(process.cwd(), entry.path);
+      if (entry.path.endsWith("/") || (existsSync(absolute) && statSync(absolute).isDirectory())) {
+        unresolvedPaths.push(entry.path);
+      }
+      return { ...entry, status: existsSync(absolute) ? "M" : "A" };
+    });
+    provenance = { source: "stdin-json", unresolvedPaths };
   } else {
     const diff = collectWorktreeDiff({ base });
     changedFiles = diff.changedFiles;

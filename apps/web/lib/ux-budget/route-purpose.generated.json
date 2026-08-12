@@ -1,9 +1,9 @@
 {
   "schemaVersion": 1,
   "generator": "apps/web/scripts/build-page-purpose.ts",
-  "pageRouteCount": 319,
+  "pageRouteCount": 322,
   "draftCount": 317,
-  "ratifiedCount": 2,
+  "ratifiedCount": 5,
   "quarantinedCount": 0,
   "routes": [
     {
@@ -1293,6 +1293,157 @@
     },
     {
       "schemaVersion": 1,
+      "status": "intent-ratified",
+      "routePath": "/employee/recruiting",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      },
+      "intent": {
+        "primaryUser": "An HR or recruiting operator with the view_employee capability.",
+        "triggeringNeed": "Seeing the whole recruiting funnel across natively-created applications and Greenhouse-sourced candidates as one list — without logging into two systems or reconciling duplicates by hand.",
+        "prerequisites": [
+          "Signed in with the view_employee capability (the Employee area gate).",
+          "Recruiting data exists: native Applications and/or Greenhouse-staged application records imported through the connector."
+        ],
+        "job": "Scan the unified recruiting funnel, read how many candidates are native versus sourced-from-Greenhouse-and-not-yet-promoted, see the shape by stage, and narrow to a single requisition.",
+        "successOutcome": "The operator sees one deduped funnel, reads the native / Greenhouse / total counts and the by-stage summary, can filter to a single requisition, and can tell a native candidate from a Greenhouse-sourced one at a glance.",
+        "findability": {
+          "parentArea": "Employee",
+          "entryPoints": [
+            "/employee",
+            "Employee > Recruiting"
+          ],
+          "navigationLayer": "Employee area secondary nav",
+          "discoveryCue": "A 'Recruiting' entry in the Employee area, beside the People directory.",
+          "expectedPath": [
+            "/employee",
+            "/employee/recruiting"
+          ]
+        },
+        "contentRoles": {
+          "defaultVisibleKeys": [
+            "funnel-counts",
+            "stage-summary",
+            "candidate-list",
+            "requisition-filter"
+          ],
+          "deferredRegions": []
+        },
+        "familyConsistency": {
+          "terminology": "Candidate display names and source labels ('Native', 'Greenhouse') — never raw external ids or connector internals.",
+          "actionLocation": "The requisition filter sits above the candidate list; changing it re-reads the funnel in place.",
+          "feedbackPrimitive": "Inline pending state on the list while the filtered funnel re-reads — no native dialogs.",
+          "disclosurePattern": "Counts, stage summary, and the full funnel show by default; the requisition filter narrows the same list rather than revealing a new surface.",
+          "returnBehavior": "Selecting 'All requisitions' restores the full funnel without leaving the route."
+        }
+      },
+      "stateScenarios": {
+        "empty-funnel": {
+          "statePredicate": "No native Applications and no un-promoted Greenhouse-staged rows exist.",
+          "stateSource": {
+            "oracleKey": "route-owned-read-model",
+            "sourceRef": "apps/web/lib/recruiting/pipeline-read-model.ts#getRecruitingPipeline"
+          },
+          "essentialEvidenceKeys": [
+            "funnel-counts"
+          ],
+          "primaryExperience": {
+            "kind": "informational",
+            "messageKey": "recruiting-pipeline.empty"
+          },
+          "prohibitedActionKeys": [],
+          "completionSignal": "The count trio reads zero and an empty-state message explains that native and Greenhouse-sourced candidates will appear here as they arrive.",
+          "errorCorrection": "The empty state names both sources so the operator knows nothing is hidden — the funnel is genuinely empty, not mis-filtered.",
+          "recovery": {
+            "actionKey": "open-people-directory",
+            "routePath": "/employee"
+          }
+        },
+        "populated-funnel": {
+          "statePredicate": "At least one native Application or un-promoted Greenhouse-staged row exists.",
+          "stateSource": {
+            "oracleKey": "route-owned-read-model",
+            "sourceRef": "apps/web/lib/recruiting/pipeline-read-model.ts#getRecruitingPipeline"
+          },
+          "essentialEvidenceKeys": [
+            "funnel-counts",
+            "candidate-list",
+            "stage-summary"
+          ],
+          "primaryExperience": {
+            "kind": "informational",
+            "messageKey": "recruiting-pipeline.populated"
+          },
+          "prohibitedActionKeys": [],
+          "completionSignal": "Each candidate row shows a source badge (Native or Greenhouse), stage, and status; the counts and stage chips reconcile with the list.",
+          "errorCorrection": "A candidate imported from Greenhouse and already promoted appears once (native), never twice — the crosswalk dedupe is visible in the counts.",
+          "recovery": {
+            "actionKey": "clear-requisition-filter",
+            "routePath": "/employee/recruiting"
+          }
+        },
+        "filtered-empty": {
+          "statePredicate": "A requisition is selected but has no applications in the funnel.",
+          "stateSource": {
+            "oracleKey": "route-owned-read-model",
+            "sourceRef": "apps/web/lib/recruiting/pipeline-read-model.ts#getRecruitingPipeline"
+          },
+          "essentialEvidenceKeys": [
+            "requisition-filter",
+            "funnel-counts"
+          ],
+          "primaryExperience": {
+            "kind": "informational",
+            "messageKey": "recruiting-pipeline.filtered-empty"
+          },
+          "prohibitedActionKeys": [],
+          "completionSignal": "The list is empty and the message points to clearing the requisition filter to see the full funnel.",
+          "errorCorrection": "The empty state distinguishes 'this requisition has no candidates' from 'the funnel is empty' so the operator clears the filter rather than concluding recruiting is idle.",
+          "recovery": {
+            "actionKey": "clear-requisition-filter",
+            "routePath": "/employee/recruiting"
+          }
+        }
+      },
+      "taskProtocol": {
+        "startRoute": "/employee/recruiting",
+        "taskPrompt": "Show me the recruiting funnel and tell me how many candidates came from Greenhouse but haven't been promoted to native yet.",
+        "completionOracle": "The operator reads the 'From Greenhouse' count and can point to Greenhouse-badged rows in the list.",
+        "falseSuccessConditions": [
+          "The operator counts a promoted (native) candidate as a Greenhouse one.",
+          "The requisition filter is mistaken for a search over all candidates rather than a narrowing to one role.",
+          "An empty filtered list is read as an empty funnel."
+        ],
+        "acceptanceThresholds": [
+          "Native and Greenhouse-sourced candidates are distinguishable at a glance via the source badge.",
+          "The funnel counts reconcile with the visible list.",
+          "The page performs no write action — it is a read-only funnel."
+        ]
+      },
+      "ratifiedBy": {
+        "role": "owner",
+        "ref": "operator-request:mark-bodman-2026-08-06"
+      },
+      "reviewRef": "BI-9CC44DC7",
+      "intentEvidenceRefs": [
+        {
+          "kind": "operator-request",
+          "ref": "BI-9CC44DC7",
+          "summary": "Founder selected the visual recruiting pipeline page as the next absorption chunk and signed off an HTML prototype: a read-only funnel with count trio, by-stage summary, source-badged candidate list, and a requisition filter."
+        },
+        {
+          "kind": "existing-behavior",
+          "ref": "apps/web/lib/recruiting/pipeline-read-model.ts",
+          "summary": "getRecruitingPipeline already merges native Applications with Greenhouse-staged rows and dedupes via the MasterDataSourceRef crosswalk; the coworker tool (BI-E64D11AE) surfaces it to the AI workforce. This page is its human-facing surface, reading the same model so the two never drift."
+        }
+      ]
+    },
+    {
+      "schemaVersion": 1,
       "status": "draft",
       "routePath": "/finance",
       "derived": {
@@ -2576,6 +2727,150 @@
         "confidence": "high",
         "sweepEligible": true
       }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "intent-ratified",
+      "routePath": "/platform/archetype-readiness",
+      "derived": {
+        "audience": "admin",
+        "destinationKind": "advanced-diagnostic",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      },
+      "intent": {
+        "primaryUser": "A platform operator or founder reviewing which business archetype claims are currently supportable.",
+        "triggeringNeed": "Separating template-ready coverage from higher operational, connector, regulated, and sole-platform claims without reading package code or architecture memos.",
+        "prerequisites": [
+          "Signed in with access to the Platform Overview family.",
+          "The archetype readiness matrix has been maintained in @dpf/storefront-templates."
+        ],
+        "job": "Scan every archetype category, identify the highest earned claim tier, and see which evidence blocks higher claims.",
+        "successOutcome": "The operator can name the current claim tier for a category and cite the BI, epic, or evidence reference that blocks the next unsupported claim.",
+        "findability": {
+          "parentArea": "Platform",
+          "entryPoints": [
+            "/platform",
+            "Platform > Overview > Archetype Readiness"
+          ],
+          "navigationLayer": "Platform secondary nav, Overview family",
+          "discoveryCue": "An 'Archetype Readiness' item in the Overview family next to the Platform Hub and Schedule.",
+          "expectedPath": [
+            "/platform",
+            "/platform/archetype-readiness"
+          ]
+        },
+        "contentRoles": {
+          "defaultVisibleKeys": [
+            "lead-summary",
+            "open-claim-table-action"
+          ],
+          "deferredRegions": [
+            {
+              "key": "readiness-matrix",
+              "role": "KPI counts, claim-gate notice, and per-type highest claim tier with blockers and evidence.",
+              "trigger": "Operator expands 'All claims' or uses Open the table."
+            },
+            {
+              "key": "tier-definitions",
+              "role": "Detailed tier meanings for template-ready, ops-ready, connector-ready, regulated-ready, and sole-platform-ready claims.",
+              "trigger": "Operator expands 'Tier list'."
+            }
+          ]
+        },
+        "familyConsistency": {
+          "terminology": "Use the readiness-tier names from the shared matrix and speak in claim/evidence language, not sales promises.",
+          "actionLocation": "Navigation stays in the Platform Overview tab row; the page itself is read-only and table-oriented.",
+          "feedbackPrimitive": "Inline report badges and notices communicate claim status; there are no dialogs or destructive actions.",
+          "disclosurePattern": "Lead summary and open-table action are visible on arrival; counts, gate notice, matrix, and tier list expand on demand so net-new reading-grade and word budgets pass with platform chrome included.",
+          "returnBehavior": "The operator returns to the Platform Hub through the same Overview navigation family."
+        }
+      },
+      "stateScenarios": {
+        "matrix-readable": {
+          "statePredicate": "The shared archetype readiness matrix contains category records.",
+          "stateSource": {
+            "oracleKey": "route-owned-read-model",
+            "sourceRef": "packages/storefront-templates/src/archetype-readiness.ts#ARCHETYPE_READINESS_MATRIX"
+          },
+          "essentialEvidenceKeys": [
+            "category-count",
+            "claim-gate-notice",
+            "readiness-matrix"
+          ],
+          "primaryExperience": {
+            "kind": "informational",
+            "messageKey": "archetype-readiness.matrix-readable"
+          },
+          "prohibitedActionKeys": [
+            "edit-readiness-tier"
+          ],
+          "completionSignal": "Every matrix category appears with a highest claim tier and at least one blocking evidence reference when higher claims are blocked.",
+          "errorCorrection": "Missing or stale readiness rows are corrected in the shared matrix source, not copied into the page.",
+          "recovery": {
+            "actionKey": "open-platform-hub",
+            "routePath": "/platform"
+          }
+        },
+        "sole-platform-blocked": {
+          "statePredicate": "At least one category is below the sole-platform-ready tier.",
+          "stateSource": {
+            "oracleKey": "route-owned-read-model",
+            "sourceRef": "apps/web/components/platform/ArchetypeReadinessMatrixPanel.tsx#buildArchetypeReadinessRows"
+          },
+          "essentialEvidenceKeys": [
+            "sole-platform-ready-count",
+            "blocked-higher-claims",
+            "evidence-refs"
+          ],
+          "primaryExperience": {
+            "kind": "informational",
+            "messageKey": "archetype-readiness.sole-platform-blocked"
+          },
+          "prohibitedActionKeys": [
+            "claim-sole-platform-ready"
+          ],
+          "completionSignal": "The blocked tier badges and evidence references make the unsupported higher claim visible without changing the matrix.",
+          "errorCorrection": "The operator follows the named BI or epic evidence reference before making a higher public or sales claim.",
+          "recovery": {
+            "actionKey": "review-tier-definitions",
+            "routePath": "/platform/archetype-readiness"
+          }
+        }
+      },
+      "taskProtocol": {
+        "startRoute": "/platform/archetype-readiness",
+        "taskPrompt": "Find the current readiness claim for Food and Hospitality and name one blocker for a higher claim.",
+        "completionOracle": "The readiness table shows Food and Hospitality with its highest claim tier and a blocking evidence reference for a higher tier.",
+        "falseSuccessConditions": [
+          "The operator repeats the architecture-review conclusion without reading the matrix row.",
+          "A template-ready category is described as sole-platform-ready because the blocker badges were ignored.",
+          "The page renders counts but no category-specific evidence reference is cited."
+        ],
+        "acceptanceThresholds": [
+          "The target category is found from the Platform Overview navigation path.",
+          "The cited tier matches the shared ARCHETYPE_READINESS_MATRIX value.",
+          "The cited blocker is visible in the table or tier definitions without inspecting source code."
+        ]
+      },
+      "ratifiedBy": {
+        "role": "owner",
+        "ref": "operator-request:mark-bodman-2026-07-31"
+      },
+      "reviewRef": "BI-1A222A7A",
+      "intentEvidenceRefs": [
+        {
+          "kind": "operator-request",
+          "ref": "BI-1A222A7A",
+          "summary": "Operator asked for the platform adequacy finding to become a durable, readable surface rather than thread-only analysis."
+        },
+        {
+          "kind": "existing-behavior",
+          "ref": "packages/storefront-templates/src/archetype-readiness.ts",
+          "summary": "The readiness tiers, matrix, and claim gate already exist as typed substrate and need an operator-facing consumer."
+        }
+      ]
     },
     {
       "schemaVersion": 1,
@@ -4144,6 +4439,153 @@
         "sweepEligible": false,
         "sweepExclusionReason": "dynamic-fixture-required"
       }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "intent-ratified",
+      "routePath": "/workforce/[agentId]",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": false,
+        "sweepExclusionReason": "dynamic-fixture-required"
+      },
+      "intent": {
+        "primaryUser": "A platform operator looking at one AI coworker as a first-class identity, the way they look at a person or a customer.",
+        "triggeringNeed": "Seeing everything about one AI coworker in a single place — what it does and why it's valuable, who has engaged it, what it costs, and its skills — and adjusting how it behaves, without hopping across platform-admin surfaces.",
+        "prerequisites": [
+          "Signed in with the view_platform capability (managing behaviour dials additionally requires manage_platform).",
+          "The coworker exists in the workforce registry."
+        ],
+        "job": "Inspect a coworker's identity — definition, engagements, cost, skills — and set its priority and proactivity in place.",
+        "successOutcome": "The operator can state what the coworker does and why it's here, see which people and other agents have engaged it, read what it has cost, and change its Cost/Quality/Time priority and proactivity from this one surface.",
+        "findability": {
+          "parentArea": "AI Coworkers",
+          "entryPoints": [
+            "/platform/ai/overview",
+            "AI Coworkers roster row"
+          ],
+          "navigationLayer": "AI Coworkers directory drill-in",
+          "discoveryCue": "Selecting a coworker from the roster opens its identity.",
+          "expectedPath": [
+            "/platform/ai/overview",
+            "/workforce/[agentId]"
+          ]
+        },
+        "contentRoles": {
+          "defaultVisibleKeys": [
+            "definition-header",
+            "at-a-glance",
+            "who-engaged-it",
+            "cost"
+          ],
+          "deferredRegions": [
+            {
+              "key": "priority-control",
+              "role": "The Cost/Quality/Time priority control (Golden Triangle + inheritance).",
+              "trigger": "Operator activates 'Change' on the Priority setting."
+            },
+            {
+              "key": "proactivity-control",
+              "role": "The Quiet/Balanced/Assertive proactivity control and its runtime effects.",
+              "trigger": "Operator activates 'Change' on the Proactivity setting."
+            },
+            {
+              "key": "facet-detail",
+              "role": "Full facet bodies (cost drivers, engagement list, skills).",
+              "trigger": "Operator opens a collapsed facet summary."
+            }
+          ]
+        },
+        "familyConsistency": {
+          "terminology": "Coworker-facing role names and plain-language outcomes — 'who has engaged it', 'what it cost' — never raw tool names or agent ids.",
+          "actionLocation": "Ask and Manage sit in the identity header; behaviour dials sit directly below the at-a-glance band; each facet expands in place.",
+          "feedbackPrimitive": "Inline text status (the priority control's saving/saved line) — no native dialogs.",
+          "disclosurePattern": "Definition and the at-a-glance summary show by default; settings show only their current value until 'Change'; facets show a one-line summary until opened.",
+          "returnBehavior": "Expanding a facet or a dial reveals detail in place without leaving the route; 'Manage' deep-links to the admin record for edits beyond the dials."
+        }
+      },
+      "stateScenarios": {
+        "no-activity": {
+          "statePredicate": "The coworker has no recorded engagements and no recorded spend in the window.",
+          "stateSource": {
+            "oracleKey": "route-owned-read-model",
+            "sourceRef": "apps/web/lib/coworker-identity/engagements-projection.ts#loadCoworkerEngagements"
+          },
+          "essentialEvidenceKeys": [
+            "definition-header",
+            "at-a-glance"
+          ],
+          "primaryExperience": {
+            "kind": "informational",
+            "messageKey": "coworker-identity.no-activity"
+          },
+          "prohibitedActionKeys": [],
+          "completionSignal": "The definition and at-a-glance band render; the engagements and cost facets state plainly that nothing has been recorded yet.",
+          "errorCorrection": "An empty engagements facet states that no one has engaged the coworker yet, rather than showing a blank region.",
+          "recovery": {
+            "actionKey": "open-admin-record",
+            "routePath": "/platform/ai/agent/[agentId]"
+          }
+        },
+        "has-activity": {
+          "statePredicate": "The coworker has recorded engagements and/or spend in the window.",
+          "stateSource": {
+            "oracleKey": "route-owned-read-model",
+            "sourceRef": "apps/web/lib/coworker-identity/cost-projection.ts#loadCoworkerCostProjection"
+          },
+          "essentialEvidenceKeys": [
+            "who-engaged-it",
+            "cost",
+            "at-a-glance"
+          ],
+          "primaryExperience": {
+            "kind": "informational",
+            "messageKey": "coworker-identity.has-activity"
+          },
+          "prohibitedActionKeys": [],
+          "completionSignal": "The engagements facet distinguishes people from other agents with recency; the cost facet shows spend, trend, drivers, and budget posture.",
+          "errorCorrection": "A read hiccup on cost or engagements fails open to an empty-state facet rather than 500-ing the identity.",
+          "recovery": {
+            "actionKey": "open-admin-record",
+            "routePath": "/platform/ai/agent/[agentId]"
+          }
+        }
+      },
+      "taskProtocol": {
+        "startRoute": "/workforce/[agentId]",
+        "taskPrompt": "Tell me what this coworker does, who has engaged it, and what it has cost — then set its priority to Quality first.",
+        "completionOracle": "The operator reads the definition, names a person and an agent that engaged it, reads the 30-day cost, and changes the priority to Quality first.",
+        "falseSuccessConditions": [
+          "The operator reads a raw agentId instead of the role name.",
+          "Token totals are mistaken for accomplishment or for dollar cost.",
+          "The operator leaves to the admin record to read cost or engagements that belong on the identity."
+        ],
+        "acceptanceThresholds": [
+          "The definition (what it does / why valuable) is legible at the top without scrolling into a facet.",
+          "People and other agents that engaged it are visually distinguishable.",
+          "Priority and proactivity are changeable in place, showing inheritance / current value first."
+        ]
+      },
+      "ratifiedBy": {
+        "role": "owner",
+        "ref": "operator-request:mark-bodman-2026-08-06"
+      },
+      "reviewRef": "BI-COWORKER-360-PAGE",
+      "intentEvidenceRefs": [
+        {
+          "kind": "operator-request",
+          "ref": "EP-COWORKER-IDENTITY-360",
+          "summary": "Founder asked for a single place to see an AI coworker as an identity (definition, engagements, costs, skills) and drill in — the way People and Customers work — for employees and other AI use-cases."
+        },
+        {
+          "kind": "existing-behavior",
+          "ref": "apps/web/lib/coworker-record/load-record.ts",
+          "summary": "The admin coworker record already aggregates the coworker's facets but is positioned as platform administration; this identity surface reuses its loader and the canonical priority/proactivity controls."
+        }
+      ]
     },
     {
       "schemaVersion": 1,

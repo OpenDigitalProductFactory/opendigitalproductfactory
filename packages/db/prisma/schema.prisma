@@ -438,6 +438,9 @@ model EmployeeProfile {
   annualSalary                 Decimal?
   standardAnnualHours          Int?
   accountableItems             BacklogItem[]                 @relation("ItemAccountable")
+  requisitionsAsHiringManager  JobRequisition[]              @relation("ReqHiringManager") // BI-7ACC38CE
+  requisitionsAsRecruiter      JobRequisition[]              @relation("ReqRecruiter") // BI-7ACC38CE
+  scorecardsSubmitted          Scorecard[]                   @relation("ScorecardSubmitter") // BI-7ACC38CE
   calendarEvents               CalendarEvent[]
   calendarSyncs                CalendarSync[]
   communicationChannelBindings CommunicationChannelBinding[]
@@ -514,6 +517,7 @@ model Department {
   parentDepartment   Department?       @relation("DepartmentTree", fields: [parentDepartmentId], references: [id])
   childDepartments   Department[]      @relation("DepartmentTree")
   employees          EmployeeProfile[] @relation("DepartmentEmployees")
+  requisitions       JobRequisition[] // BI-7ACC38CE
 
   @@index([parentDepartmentId])
   @@index([headEmployeeId])
@@ -535,6 +539,7 @@ model Position {
   createdAt     DateTime          @default(now())
   updatedAt     DateTime          @updatedAt
   employees     EmployeeProfile[]
+  requisitions  JobRequisition[] // BI-7ACC38CE
 
   @@index([status])
   @@index([occupationKey])
@@ -584,6 +589,7 @@ model EmploymentType {
   createdAt        DateTime          @default(now())
   updatedAt        DateTime          @updatedAt
   employees        EmployeeProfile[]
+  requisitions     JobRequisition[] // BI-7ACC38CE
 
   @@index([status])
 }
@@ -600,6 +606,7 @@ model WorkLocation {
   addressId    String?
   employees    EmployeeProfile[]
   address      Address?          @relation(fields: [addressId], references: [id])
+  requisitions JobRequisition[] // BI-7ACC38CE
 
   @@index([status])
   @@index([addressId])
@@ -2094,6 +2101,11 @@ model BacklogItem {
   title                   String
   status                  String
   type                    String
+  // Cross-org sharing classification (BI-DC4E526E): public | internal |
+  // confidential | restricted. Deny-by-default — only `public` may cross an
+  // organization boundary in federated demand (kernel DI-3E77E48D5710). Default
+  // `internal` so unclassified proprietary demand never leaks upstream.
+  sensitivity             String                        @default("internal")
   body                    String?
   createdAt               DateTime                      @default(now())
   updatedAt               DateTime                      @updatedAt
@@ -13593,6 +13605,9 @@ model WorkItem {
   itemId                        String                 @unique @default(cuid())
   sourceType                    String
   sourceId                      String?
+  // Idempotent adapter-owned identity for queue jobs whose source must have at
+  // most one live WorkItem (for example federation-demand:<mirrorId>).
+  sourceKey                     String?                @unique
   title                         String
   description                   String                 @db.Text
   urgency                       String                 @default("routine")
@@ -13622,6 +13637,12 @@ model WorkItem {
   presence                      WorkItemPresence[]
   governedDataControlOperations DataControlOperation[] @relation("DataControlOperationGovernedCase")
   routingDecision               Json?
+  // Generic retry scheduling owned by the canonical queue. Domain mirrors keep
+  // domain/version state; they do not grow their own transport scheduler.
+  attemptCount                  Int                    @default(0)
+  nextAttemptAt                 DateTime?
+  lastAttemptAt                 DateTime?
+  lastError                     String?                @db.Text
   completedAt                   DateTime?
   createdAt                     DateTime               @default(now())
   updatedAt                     DateTime               @updatedAt
@@ -13632,6 +13653,7 @@ model WorkItem {
   @@index([teamId, status])
   @@index([parentItemId])
   @@index([sourceType, sourceId])
+  @@index([status, nextAttemptAt])
   @@index([urgency, status])
   @@index([dueAt])
 }
@@ -14867,6 +14889,7 @@ model FederationLink {
   // Stable pseudonymous installation identity learned from an authenticated
   // digest exchange. Used for route-loop checks; never derived from hostname.
   peerInstallationId    String?
+  peerDeviceId          String?
   localOrganizationId   String?
   // Trust state — derived from the approval/revoke/quarantine timestamps below.
   linkState             String    @default("pending")
@@ -14893,18 +14916,54 @@ model FederationLink {
   authorityBindingId    String?
   metadata              Json?
   enrolledAt            DateTime?
+  // Introductions exchange candidate coordinates only over an already-trusted
+  // link. Each direction is explicit; neither flag transfers trust.
+  offersIntroductions   Boolean   @default(false)
+  acceptsIntroductions  Boolean   @default(false)
   createdAt             DateTime  @default(now())
   updatedAt             DateTime  @updatedAt
 
-  principal       Principal                  @relation("FederationLinkIdentity", fields: [principalId], references: [id], onDelete: Cascade)
-  bootstrapTokens FederationBootstrapToken[] @relation("FederationBootstrapConsumer")
-  partnerAccount  PartnerAccount?
+  principal              Principal                         @relation("FederationLinkIdentity", fields: [principalId], references: [id], onDelete: Cascade)
+  bootstrapTokens        FederationBootstrapToken[]        @relation("FederationBootstrapConsumer")
+  partnerAccount         PartnerAccount?
+  introductionCandidates FederationIntroductionCandidate[] @relation("FederationIntroducerLink")
 
   @@index([linkState])
   @@index([role])
   @@index([tokenHash])
   @@index([peerOrganizationRef])
   @@index([peerInstallationId])
+  @@index([peerDeviceId])
+}
+
+// Durable review candidates learned from one trusted introducer. This is not a
+// trust table: pairing still runs through FederationPairingSession and the only
+// durable relationship authority is FederationLink.
+model FederationIntroductionCandidate {
+  id                     String    @id @default(cuid())
+  introductionId         String    @unique
+  introducerLinkId       String
+  installationId         String
+  deviceId               String
+  displayName            String
+  authorityUrl           String
+  relationshipHint       String
+  introducedByPath       String[]
+  hopCount               Int
+  firstSeenAt            DateTime  @default(now())
+  lastSeenAt             DateTime  @default(now())
+  expiresAt              DateTime
+  withdrawnAt            DateTime?
+  dismissedAt            DateTime?
+  pairedFederationLinkId String?
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
+
+  introducerLink FederationLink @relation("FederationIntroducerLink", fields: [introducerLinkId], references: [linkId], onDelete: Cascade)
+
+  @@unique([introducerLinkId, installationId])
+  @@index([expiresAt, withdrawnAt, dismissedAt])
+  @@index([installationId])
 }
 
 // Single-use invitation, mirrors BootstrapToken. The inviting peer issues a
@@ -14945,7 +15004,14 @@ model FederationPairingSession {
   status                String    @default("pending")
   relationshipPreset    String    @default("same-organization")
   projectionTemplateKey String    @default("same-organization")
+  offeredRole            String    @default("same-org-peer")
   matchingCode          String
+  // Versioned SAS commit/reveal transcript. Ephemeral private material and
+  // nonces are encrypted while the exchange is in flight and cleared after
+  // reveal; public identity/reveal facts remain for auditability.
+  sasState              Json?
+  sasConfirmedAtLocal   DateTime?
+  sasConfirmedAtPeer    DateTime?
   pairingSecretHash     String?   @unique
   pairingSecretEnc      String?
   peerAuthorityUrl      String
@@ -15018,7 +15084,15 @@ model FederatedRecordMirror {
   peerRecordRef       String?
   // pending | synced | conflict | withdrawn | dead-letter | revoked
   syncStatus          String    @default("pending")
-  version             Int       @default(1)
+  // BigInt: demand originVersion is derived from the source record's updatedAt
+  // epoch (ms) so re-projecting an unchanged record is idempotent. A ms epoch
+  // (~1.7e12) overflows Int (int4, max ~2.1e9) — see BI-CC8021CE.
+  version             BigInt    @default(1)
+  // Per-installation causal-ordering vector (BI-67315C4A). When present on both
+  // sides, the exchange uses it (not the scalar `version`) to distinguish a clean
+  // newer-than from a genuine concurrent conflict. Null on legacy rows / peers
+  // that predate the vector — the exchange falls back to the scalar then.
+  versionVector       Json?
   conflictReason      String?
   lastSyncedAt        DateTime?
   // Durable delivery state for local-canonical outbox records. Peer-canonical
@@ -15027,8 +15101,12 @@ model FederatedRecordMirror {
   nextDeliveryAt      DateTime?
   lastDeliveryAt      DateTime?
   lastDeliveryError   String?
-  acknowledgedVersion Int?
+  acknowledgedVersion BigInt?
   deadLetteredAt      DateTime?
+  // How many times digest reconciliation has resurrected this record after it
+  // dead-lettered. Bounded by MAX_DEMAND_REHEALS so a transient/upgrade-window
+  // stranding recovers while a genuinely-poison record eventually stays dead.
+  rehealCount         Int       @default(0)
   // Last projected (already minimized) payload that crossed — never raw data.
   payload             Json?
   createdAt           DateTime  @default(now())
@@ -16448,9 +16526,25 @@ model JobRequisition {
   stages       PipelineStage[]
   applications Application[]
 
+  // Typed People-Core relations (BI-7ACC38CE, kernel DI-A114C610DFD9). All
+  // nullable + onDelete SetNull: a requisition survives the removal of a
+  // position/department/location/type/employee. Populated only by native
+  // authoring (never by absorption, which holds external refs in
+  // StagedRecord + MasterDataSourceRef).
+  position       Position?        @relation(fields: [positionId], references: [id], onDelete: SetNull)
+  department     Department?      @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  workLocation   WorkLocation?    @relation(fields: [workLocationId], references: [id], onDelete: SetNull)
+  employmentType EmploymentType?  @relation(fields: [employmentTypeId], references: [id], onDelete: SetNull)
+  hiringManager  EmployeeProfile? @relation("ReqHiringManager", fields: [hiringManagerId], references: [id], onDelete: SetNull)
+  recruiter      EmployeeProfile? @relation("ReqRecruiter", fields: [recruiterId], references: [id], onDelete: SetNull)
+
   @@index([status])
   @@index([positionId])
   @@index([departmentId])
+  @@index([workLocationId])
+  @@index([employmentTypeId])
+  @@index([hiringManagerId])
+  @@index([recruiterId])
 }
 
 model RequisitionOpening {
@@ -16603,8 +16697,11 @@ model Scorecard {
 
   application Application         @relation(fields: [applicationId], references: [id], onDelete: Cascade)
   interview   ScheduledInterview? @relation(fields: [interviewId], references: [id], onDelete: SetNull)
+  // BI-7ACC38CE: the interviewer/submitter is a native worker.
+  submittedBy EmployeeProfile?    @relation("ScorecardSubmitter", fields: [submittedById], references: [id], onDelete: SetNull)
 
   @@index([applicationId])
+  @@index([submittedById])
 }
 
 model Offer {
@@ -16653,4 +16750,43 @@ model DemographicResponse {
 
   @@index([applicationId])
   @@index([jurisdiction])
+}
+
+/// IEEE OUI registry: the first 24 bits of a burned-in MAC identify its manufacturer.
+///
+/// Reference data, not estate data — global, unscoped, and seeded from
+/// `packages/db/data/oui.tsv` rather than written by discovery.
+///
+/// Why this is a table and not a file read: discovery-sync resolves vendors inside
+/// its transaction on the server, and a 1.2MB TSV read from a bundled workspace
+/// package is not reliable at runtime. Seeding happens in Node context where the
+/// file definitely exists, and the sweep then does one batched query.
+///
+/// Why it exists at all: nothing in the platform resolved a MAC to a vendor. The
+/// vendors that DID appear came from the UniFi controller's own lookup, supplied
+/// per-client — so anything the controller did not hand us stayed unidentified,
+/// including every UniFi device itself (BI-9632B15B).
+model MacVendorOui {
+  /// Upper-case 24-bit prefix, no separators (e.g. "AC8BA9").
+  oui       String   @id
+  vendor    String
+  updatedAt DateTime @updatedAt
+
+  @@index([vendor])
+}
+
+/// Per-token deferred-tool-loading session (BI-D8101329, MCP tool-tier Phase 2).
+/// Keyed by the MCP token id (PAT id or `session:*` id). Records which
+/// additional tool names a model has pulled into scope via `load_tools`, so
+/// `tools/list` can APPEND them to the lean core tier (never swap it) on the
+/// next fetch. Short-TTL and swept on expiry — discovery-only state, no
+/// authorization meaning (execution still gates on grants at tools/call).
+model McpToolSession {
+  tokenId         String   @id
+  loadedToolNames String[] @default([])
+  expiresAt       DateTime
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @default(now()) @updatedAt
+
+  @@index([expiresAt])
 }

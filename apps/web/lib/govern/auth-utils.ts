@@ -6,3 +6,9 @@ export function extractPlatformRole(
   if (!session?.user?.groups?.length) return null;
   return session.user.groups[0]?.platform_role ?? null;
 }
+
+export function resolveWorkforcePlatformRole(
+  groups: ReadonlyArray<{ platformRole: { roleId: string } | null }>,
+): string | null {
+  return groups.find((group) => group.platformRole !== null)?.platformRole?.roleId ?? null;
+}

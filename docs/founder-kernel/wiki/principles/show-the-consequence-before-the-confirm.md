@@ -6,7 +6,7 @@ status: published
 abstract: Every affordance that authorizes an AI action must state, before the confirm, what will happen, to what, under whose authority, and how it is undone.
 principleTier: core
 principleDirection: Every affordance that authorizes an AI action must state, before the confirm, what will happen, to what, under whose authority, and how it is undone.
-principleDimensionVector: {"legibility_of_consequence": 0.9, "human_cognitive_load": -0.4, "evidence_density": 0.4}
+principleDimensionVector: {"legibility_of_consequence": 0.9, "human_cognitive_load": -0.4, "evidence_density": 0.4, "customer_consent_state": 0.5, "blast_radius": -0.3}
 principleAppliesTo:
   - in_platform_coworker
   - external_coding_agent

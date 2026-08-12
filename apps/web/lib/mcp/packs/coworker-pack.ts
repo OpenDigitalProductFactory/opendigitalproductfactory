@@ -59,6 +59,25 @@ const definitions: ToolDefinition[] = [
     // exempts it from the advise-mode runtime filter (BI-7EB4AE2C).
     adviseCoordination: true,
   },
+  {
+    name: "find_coworker",
+    description:
+      "Discover which coworker to hand a task to, by intent. request_coworker and summon_coworker need an exact agentId or slug; call this first with {query} describing the capability you need (e.g. \"review a database schema\", \"marketing campaign\") to get the matching coworkers' ids, names, and what they do. Read-only discovery — it does not contact anyone. Then pass the chosen agentId to request_coworker or summon_coworker.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        query: {
+          type: "string",
+          description: "Case-insensitive intent/capability keywords matched against coworker name, role, description, and skills.",
+        },
+        limit: { type: "number", description: "Max matches to return (default 8, max 25)." },
+      },
+      required: ["query"],
+    },
+    requiredCapability: "view_platform",
+    executionMode: "immediate",
+    sideEffect: false,
+  },
 ];
 
 async function requestCoworkerHandler(
@@ -140,9 +159,109 @@ async function summonCoworkerHandler(
   }
 }
 
+export type CoworkerRosterEntry = {
+  agentId: string;
+  slugId: string | null;
+  displayName: string;
+  description: string | null;
+  role: string | null;
+  kind: string;
+  skills: string[];
+};
+
+export type CoworkerMatch = {
+  agentId: string;
+  slugId: string | null;
+  displayName: string;
+  description: string | null;
+  matchedOn: string[];
+};
+
+// Pure intent matcher: score each coworker by how many query terms hit its
+// name/role/kind/description/skills (name and role weighted higher); return the
+// top `limit`, best first. Ties break alphabetically for a stable order.
+export function matchCoworkers(
+  roster: CoworkerRosterEntry[],
+  query: string,
+  limit: number,
+): CoworkerMatch[] {
+  const terms = query.toLowerCase().split(/\s+/).filter((t) => t.length > 1);
+  if (terms.length === 0) return [];
+  return roster
+    .map((c) => {
+      const fields: Array<[string, string, number]> = [
+        ["name", c.displayName.toLowerCase(), 2],
+        ["role", (c.role ?? "").toLowerCase(), 2],
+        ["kind", c.kind.toLowerCase(), 1],
+        ["description", (c.description ?? "").toLowerCase(), 1],
+        ["skills", c.skills.join(" ").toLowerCase(), 1],
+      ];
+      const matchedOn = new Set<string>();
+      let score = 0;
+      for (const term of terms) {
+        for (const [field, hay, weight] of fields) {
+          if (hay.includes(term)) {
+            score += weight;
+            matchedOn.add(field);
+          }
+        }
+      }
+      return { c, score, matchedOn: [...matchedOn] };
+    })
+    .filter((s) => s.score > 0)
+    .sort((a, b) => b.score - a.score || a.c.displayName.localeCompare(b.c.displayName))
+    .slice(0, limit)
+    .map(({ c, matchedOn }) => ({
+      agentId: c.agentId,
+      slugId: c.slugId,
+      displayName: c.displayName,
+      description: c.description,
+      matchedOn,
+    }));
+}
+
+async function findCoworkerHandler(params: Record<string, unknown>): Promise<ToolResult> {
+  const query = String(params["query"] ?? "").trim();
+  if (!query) {
+    return { success: false, error: "invalid_params", message: "find_coworker requires a query." };
+  }
+  const limit = Math.min(Math.max(Number(params["limit"]) || 8, 1), 25);
+  const { prisma } = await import("@dpf/db");
+  const rows = await prisma.agent.findMany({
+    where: { status: "active", archived: false, lifecycleStage: "production" },
+    select: {
+      agentId: true,
+      slugId: true,
+      displayName: true,
+      description: true,
+      role: true,
+      kind: true,
+      skills: { select: { label: true } },
+    },
+  });
+  const roster: CoworkerRosterEntry[] = rows.map((r) => ({
+    agentId: r.agentId,
+    slugId: r.slugId,
+    displayName: r.displayName,
+    description: r.description,
+    role: r.role,
+    kind: r.kind,
+    skills: r.skills.map((s) => s.label),
+  }));
+  const matches = matchCoworkers(roster, query, limit);
+  return {
+    success: true,
+    message: matches.length
+      ? `Found ${matches.length} coworker(s) for "${query}". Pass an agentId to request_coworker or summon_coworker.`
+      : `No coworker matched "${query}". Try broader capability keywords.`,
+    data: { matches, count: matches.length },
+  };
+}
+
 const handlers: Record<string, ToolPackHandler> = {
   request_coworker: (params, userId, context) => requestCoworkerHandler(params, userId, context),
   summon_coworker: (params, userId, context) => summonCoworkerHandler(params, userId, context),
+  find_coworker: (params) => findCoworkerHandler(params),
 };
 
 export const coworkerPack: ToolPack = {

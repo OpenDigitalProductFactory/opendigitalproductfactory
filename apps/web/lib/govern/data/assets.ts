@@ -33,9 +33,9 @@ import { STOCK_COVERAGE_ASSETS } from "./stock-coverage-assets";
 import { FINANCE_INVOICE_DOCUMENT_ASSETS } from "./finance-invoice-document-assets";
 import { RECRUITING_ASSETS } from "./recruiting-assets";
 import { DECISION_TRUST_ENVELOPE_ASSETS } from "./decision-trust-envelope-assets";
-
+import { MCP_ASSETS } from "./mcp-assets";
+import { FEDERATION_INTRODUCTION_ASSETS } from "./federation-introduction-assets";
 // ─── Definitions (spec §6.1) ─────────────────────────────────────────────────
-
 export type FieldResolution = "inherited" | "governed" | "not-applicable";
 
 export type DataFieldDefinition = {
@@ -181,6 +181,45 @@ const SEED_ASSETS: readonly DataAssetDefinition[] = [
     // BI-CD99DC3F: operator-authored physical geometry is durable business
     // configuration. It can expose room, equipment, table, or site structure and
     // typed pointers to operational entities, so it stays confidential and local.
+    // Published IEEE OUI registry: MAC prefix -> manufacturer (BI-9632B15B).
+    // Reference data, not tenant data. An OUI identifies a HARDWARE MAKER, never a
+    // device owner or a person, so there is no subject to locate and nothing to
+    // mask — it is the same class of shipped lookup as the taxonomy tables.
+    id: "data:mac-vendor-oui",
+    physical: { prismaModel: "MacVendorOui" },
+    domain: "platform-operations",
+    ownerRole: "platform-operator",
+    stewardRole: "data-steward",
+    categories: ["configuration"],
+    sensitivity: "public",
+    criticality: "low",
+    subjectLocators: [],
+    lifecycleClass: "ephemeral",
+    purposeCapabilities: ["platform-operations"],
+    residencyClass: "local-only",
+    projectionClass: "structure",
+    classification: { state: "confirmed", source: "manual", effectiveFrom: "2026-08-06" },
+    // Identical governance on both columns, so one definition. An OUI identifies a
+    // MANUFACTURER, never an owner: no subject to locate, nothing to mask.
+    fields: (["oui", "vendor"] as const).map((physicalName) => ({
+      id: `data:mac-vendor-oui#${physicalName}` as DataFieldId,
+      physicalName,
+      resolution: "governed" as const,
+      resolutionReason:
+        "Published IEEE registry data: a manufacturer prefix and its name. No tenant scope, no subject.",
+      categories: ["configuration"] as DataCategory[],
+      sensitivity: "public" as DataSensitivity,
+      collectionRule: "allowed" as const,
+      protection: "none" as ProtectionProfileKey,
+      provenance: {
+        source: "manual" as const,
+        state: "confirmed" as const,
+        assertedBy: "data-steward",
+        effectiveFrom: "2026-08-06",
+      },
+    })),
+  },
+  {
     id: "data:operational-scene-layout",
     physical: { prismaModel: "OperationalSceneLayout" },
     domain: "business-operations",
@@ -685,7 +724,7 @@ const SEED_ASSETS: readonly DataAssetDefinition[] = [
   ...FINANCE_INVOICE_DOCUMENT_ASSETS,
   ...PROCESSING_GOVERNANCE_ASSETS,
   ...RECRUITING_ASSETS,
-  ...DECISION_TRUST_ENVELOPE_ASSETS,
+  ...DECISION_TRUST_ENVELOPE_ASSETS, ...MCP_ASSETS, ...FEDERATION_INTRODUCTION_ASSETS,
    {
     id: "data:agent-conversation",
     physical: { prismaModel: "AgentMessage" },

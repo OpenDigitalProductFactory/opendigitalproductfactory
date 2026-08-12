@@ -1,0 +1,18 @@
+{
+  "version": "1",
+  "decidedOption": "definition-header-summary-first-collapsed-facets",
+  "decisionInteractionId": "DI-FEC1B3719CBA",
+  "scope": {
+    "files": [
+      "apps/web/app/(shell)/workforce/[agentId]/page.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "definition-header-summary-first-collapsed-facets",
+      "tabbed-record-like-admin",
+      "everything-expanded-single-scroll"
+    ]
+  }
+}

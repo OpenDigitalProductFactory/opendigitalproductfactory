@@ -4,7 +4,7 @@
 // rendered with the required themed <option> classes (AGENTS.md §12). Pass a
 // placeholder to render a disabled leading "Select…" option.
 
-import type { ReactNode } from "react";
+import type { ReactNode, SelectHTMLAttributes } from "react";
 import { FormField } from "./FormField";
 import { cx, fieldControlClass, fieldOptionClass } from "./styles";
 
@@ -13,6 +13,11 @@ export type SelectOption = {
   label: string;
   disabled?: boolean;
 };
+
+type NativeSelectProps = Omit<
+  SelectHTMLAttributes<HTMLSelectElement>,
+  "id" | "name" | "value" | "onChange" | "required" | "className"
+>;
 
 export type SelectFieldProps = {
   name: string;
@@ -29,7 +34,7 @@ export type SelectFieldProps = {
   autoComplete?: string;
   className?: string;
   selectClassName?: string;
-};
+} & NativeSelectProps;
 
 export function SelectField({
   name,
@@ -45,6 +50,7 @@ export function SelectField({
   autoComplete,
   className,
   selectClassName,
+  ...selectProps
 }: SelectFieldProps) {
   return (
     <FormField
@@ -58,6 +64,7 @@ export function SelectField({
     >
       {(control) => (
         <select
+          {...selectProps}
           {...control}
           value={value}
           onChange={(e) => onValueChange(e.target.value)}

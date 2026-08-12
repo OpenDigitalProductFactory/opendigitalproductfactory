@@ -21,6 +21,7 @@ import {
   queueForwardedDemand,
   type DemandDeliveryDb,
 } from "./demand-delivery";
+import { assertMayShareDemandCrossOrg } from "./cross-org-sharing";
 import { decodeDemandMirrorPayload } from "./demand-exchange";
 import { resolveFederationIdentity, type FederationIdentityDb } from "./demand-identity";
 import { relationshipPresetForRole } from "./demand-reconciliation";
@@ -42,6 +43,8 @@ interface ChannelBacklogItem {
   title: string;
   body: string | null;
   status: string;
+  sensitivity: string;
+  scopeKind: string | null;
   workType: string | null;
   occurrenceCount: number;
   createdAt: Date;
@@ -70,7 +73,7 @@ export interface ChannelDemandDb extends FederationIdentityDb, DemandDeliveryDb 
     upsert(args: unknown): Promise<unknown>;
   };
   federatedRecordMirror: DemandDeliveryDb["federatedRecordMirror"] & {
-    findUnique(args: unknown): Promise<(ChannelMirror & { version: number }) | null>;
+    findUnique(args: unknown): Promise<(ChannelMirror & { version: bigint }) | null>;
   };
 }
 
@@ -126,13 +129,15 @@ function assertTrustedPartnerLink(link: ChannelLink | null): asserts link is Cha
   }
 }
 
-function safeSummary(body: string | null, title: string): string {
-  const value = (body ?? "")
-    .split("\n")
-    .filter((line) => !line.trim().startsWith("[origin:"))
-    .join("\n")
-    .trim();
-  return value || title;
+// Cross-org content redaction (BI-DC4E526E). The raw backlog BODY may hold a
+// customer's internal detail, so it must NEVER cross an organization boundary —
+// even for platform demand. The projected cross-org summary is the operator's
+// concise TITLE only (bounded), automatically; the body stays local. No operator
+// step is required (cognitive-load aversion): the safe minimum is the default, and
+// an operator-authored shareable summary can be layered on later if richer upstream
+// context is ever wanted.
+function redactedCrossOrgSummary(title: string): string {
+  return (title.trim() || "Shared demand").slice(0, 240);
 }
 
 export function decodeChannelDemandPolicy(value: unknown): ChannelDemandPolicy {
@@ -232,6 +237,8 @@ export async function selectLocalDemandForLink(
         title: true,
         body: true,
         status: true,
+        sensitivity: true,
+        scopeKind: true,
         workType: true,
         occurrenceCount: true,
         createdAt: true,
@@ -257,6 +264,16 @@ export async function selectLocalDemandForLink(
   if ((item.body ?? "").includes("[origin:federatedDemand:")) {
     throw new Error("Adopted demand must use governed forwarding so original provenance is preserved.");
   }
+  // Cross-org gate (BI-DC4E526E, kernel DI-3E77E48D5710) — CONTEXT-DERIVED, so no
+  // manual per-item classification is required for correct behavior (cognitive-load
+  // aversion): PLATFORM demand (dpf-portal / scopeKind=platform) auto-flows upstream
+  // to the vendor; a customer's OWN domain work (their internal infrastructure /
+  // operations) never leaves by default. Sensitivity is only a rare override.
+  assertMayShareDemandCrossOrg({
+    sensitivity: item.sensitivity,
+    digitalProductId: item.digitalProduct?.productId ?? null,
+    scopeKind: item.scopeKind,
+  });
   const preset = relationshipPresetForRole(link.role);
   if (preset !== "channel" && preset !== "service-provider") {
     throw new Error("This relationship cannot receive explicitly shared demand.");
@@ -280,7 +297,8 @@ export async function selectLocalDemandForLink(
     source: {
       localRecordRef: item.itemId,
       title: item.title,
-      summary: safeSummary(item.body, item.title),
+      // Cross-org: title-only, never the raw body (see redactedCrossOrgSummary).
+      summary: redactedCrossOrgSummary(item.title),
       workType: item.workType,
       occurrenceCount: item.occurrenceCount,
       product: item.digitalProduct?.productId ?? null,

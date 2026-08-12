@@ -106,3 +106,12 @@ found by this slice's first drift-guard run and fixed in the same change.
   cover the one distribution boundary.
 - **Prospective ≠ enforcement.** The pack is advisory context; CI gates remain
   the only authority. The pack must never claim a gate passed.
+
+## Live backlog reconciliation (2026-08-08)
+
+The historical BI and epic identifiers above are retained as delivery
+provenance, but they no longer resolve in the current live backlog. The next
+prevention slice is governed by live `BI-A7407F49` under
+`EP-WORK-CONVERGENCE`: it makes gate context an automatic, persisted Work
+Capsule impact contract at edit-scope claim time. See
+`docs/superpowers/plans/2026-08-08-automatic-work-capsule-impact-contract.md`.

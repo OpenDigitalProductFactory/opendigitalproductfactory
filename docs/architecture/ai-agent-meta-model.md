@@ -10,6 +10,8 @@
 
 > **An AI agent is a stable governed *identity* bound to a *model-routing policy*, a *tool surface* (MCP + platform tools), a set of *prompts*, a set of *skills*, and an *authority/governance envelope* — assembled at runtime and traceable through an audit ledger.**
 
+For product UX, the tool surface now includes the [Authorized Surface Contract](../superpowers/specs/2026-08-08-authorized-surface-contract-design.md): a renderer-neutral, principal-filtered projection of semantic state and governed actions. It gives browser, mobile, workroom/headless, scheduled, and external agents the same page contract without treating DOM access as authority.
+
 A useful mental shorthand:
 
 ```

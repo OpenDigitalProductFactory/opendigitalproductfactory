@@ -154,7 +154,7 @@ const definitions: ToolDefinition[] = [
   },
   {
     name: "claim_capsule_scope",
-    description: "Claim path/module/package/route/skill/prompt scope for a Work Capsule. Repeated claims refresh the existing scope entry. Rejected with error=scope_conflict if another active Work Capsule already holds an overlapping edit claim — coordinate, claim different scope, or pass force=true to deliberately co-claim.",
+    description: "Claim path/module/package/route/skill/prompt scope for a Work Capsule. Edit-path claims automatically derive, persist, and return changeImpactContract with the tests and guards to address before implementation; consume it immediately, and treat status=unresolved as requiring exhaustive verification. Repeated claims refresh both scope and the full edit-path impact contract. Rejected with error=scope_conflict if another active Work Capsule already holds an overlapping edit claim — coordinate, claim different scope, or pass force=true to deliberately co-claim.",
     inputSchema: {
       type: "object",
       properties: {
@@ -181,7 +181,10 @@ const definitions: ToolDefinition[] = [
   },
   {
     name: "heartbeat_capsule",
-    description: "Renew the active lease for a Work Capsule so other agents can see that work is in flight.",
+    description:
+      "Renew the active lease for a Work Capsule so other agents can see that work is in flight. " +
+      "Heartbeat on a human-scale cadence (between stages / few minutes), not every tool call. " +
+      "If the lease is already expired, re-claim or abandon — do not thrash heartbeat.",
     inputSchema: {
       type: "object",
       properties: {
@@ -209,7 +212,13 @@ const definitions: ToolDefinition[] = [
   },
   {
     name: "release_capsule_scope",
-    description: "Release previously claimed Work Capsule scope items by kind and value.",
+    description:
+      "Release previously claimed Work Capsule scope items by kind and value. " +
+      "Requires capsuleId (WC-*) plus claims: [{kind, value}, ...] matching prior claim_capsule_scope entries. " +
+      "Call once per handoff with the full claim set — do not release item-by-item in a loop. " +
+      "Do NOT retry on invalid_input — fix the payload (claims must be a non-empty array of {kind,value}). " +
+      "Do NOT call for an abandoned/unknown capsule (retryable: false). " +
+      "If nothing matched, success still returns (idempotent no-op on empty released set).",
     inputSchema: {
       type: "object",
       properties: {
@@ -220,11 +229,11 @@ const definitions: ToolDefinition[] = [
             type: "object",
             properties: {
               kind: { type: "string", enum: ["path", "module", "package", "route", "skill", "prompt"] },
-              value: { type: "string", description: "Scope value to release." },
+              value: { type: "string", description: "Scope value to release (exact match to the prior claim)." },
             },
             required: ["kind", "value"],
           },
-          description: "Scope claims to release.",
+          description: "Scope claims to release — array required, not a single object.",
         },
       },
       required: ["capsuleId", "claims"],
@@ -274,7 +283,9 @@ const definitions: ToolDefinition[] = [
   {
     name: "start_external_work",
     description:
-      "Register that you are STARTING work on an external session — before any evidence — so a tracked Work Capsule exists immediately and the session is visible to other agents instead of appearing only after the first result. Idempotent per session (or per repo+branch when a worktree is supplied); summary is optional at start.",
+      "Register that you are STARTING work on an external session — before any evidence — so a tracked Work Capsule exists immediately and the session is visible to other agents instead of appearing only after the first result. " +
+      "Idempotent per session (or per repo+branch when a worktree is supplied); summary is optional at start. " +
+      "Call once at session start — re-calling with the same session/worktree is a no-op, not a progress signal.",
     inputSchema: {
       type: "object",
       properties: {

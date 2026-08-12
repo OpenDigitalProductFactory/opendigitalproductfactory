@@ -1,47 +1,32 @@
-import { INVENTORY_ENTITY_CANONICAL_WHERE, prisma } from "@dpf/db";
+import { getDiscoveryOperationsViewModel } from "@/lib/discovery-operations-view-model";
+import { projectDiscoveryOperationsSurface } from "@/lib/coworker/surfaces/discovery-operations-surface";
 
 export async function getDiscoveryOperationsContext(): Promise<string> {
-  const [latestRun, connectionCount, needsReviewCount, openIssues] = await Promise.all([
-    prisma.discoveryRun.findFirst({
-      orderBy: { startedAt: "desc" },
-      select: {
-        runKey: true,
-        status: true,
-        startedAt: true,
-        completedAt: true,
-        itemCount: true,
-        relationshipCount: true,
-      },
-    }),
-    prisma.discoveryConnection.count(),
-    prisma.inventoryEntity.count({
-      where: {
-        ...INVENTORY_ENTITY_CANONICAL_WHERE,
-        attributionStatus: "needs_review",
-      },
-    }),
-    prisma.portfolioQualityIssue.groupBy({
-      by: ["issueType"],
-      where: { status: "open" },
-      _count: true,
-      orderBy: { _count: { issueType: "desc" } },
-      take: 8,
-    }),
-  ]);
-
-  const latestRunSummary = latestRun
-    ? `${latestRun.runKey} [${latestRun.status}] items=${latestRun.itemCount}, relationships=${latestRun.relationshipCount}`
-    : "No discovery run recorded";
+  const model = await getDiscoveryOperationsViewModel();
+  const projection = projectDiscoveryOperationsSurface({
+    productsLinked: model.products.length,
+    needsReview: model.triageQueues.metrics.total,
+    latestRun: model.latestRun
+      ? {
+          runKey: model.latestRun.runKey,
+          status: model.latestRun.status,
+          itemCount: model.latestRun.itemCount,
+          relationshipCount: model.latestRun.relationshipCount,
+        }
+      : null,
+    openIssues: model.openIssues.reduce<Array<{ issueType: string; count: number }>>((issues, issue) => {
+      const existing = issues.find((candidate) => candidate.issueType === issue.issueType);
+      if (existing) existing.count += 1;
+      else issues.push({ issueType: issue.issueType, count: 1 });
+      return issues;
+    }, []),
+    detectedGateway: model.detectedGateway,
+    connections: model.connections,
+  });
 
   return [
     "\nPAGE DATA — Discovery Operations:",
-    `Connections: ${connectionCount}`,
-    `Needs review: ${needsReviewCount}`,
-    `Latest run: ${latestRunSummary}`,
-    "",
-    "Open discovery issues:",
-    ...(openIssues.length > 0
-      ? openIssues.map((issue) => `- ${issue.issueType}: ${issue._count}`)
-      : ["- none"]),
+    ...(projection.summary.highlights ?? []),
+    "Use the Authorized Surface tools for current fields, values, validation, and actions. Do not infer controls from this text.",
   ].join("\n");
 }

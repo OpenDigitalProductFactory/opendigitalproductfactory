@@ -176,6 +176,16 @@ describe("deriveTwinProfile — signature mappings", () => {
     expectAll("hoa-property-management", (t) => t.template === "TERRITORY" && t.variant === "unit-portfolio");
     expectAll("real-estate-construction", (t) => t.template === "TERRITORY" && t.variant === "job-sites");
     expectAll("live-events-venues", (t) => t.template === "VENUE");
+    expectAll("manufacturing", (t) => t.template === "BAYS" && t.physical);
+  });
+
+  it("keeps manufacturing out of the retail sales-floor grammar until FACTORY lands", () => {
+    const oem = deriveTwinProfile(
+      ALL_ARCHETYPES.find((archetype) => archetype.archetypeId === "industrial-equipment-oem")!,
+    );
+
+    expect(oem.template).toBe("BAYS");
+    expect(oem.template).not.toBe("STORE");
   });
 
   it("does not flatten catering or bakery into restaurant table-turning", () => {

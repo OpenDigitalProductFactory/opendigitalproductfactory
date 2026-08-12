@@ -10,7 +10,7 @@
  * Important property: tiering affects ONLY discovery (`tools/list`), never
  * execution (`tools/call`). A granted tool can still be called by name even in
  * core tier — so this is a pure context-economy lever with no loss of
- * capability, and the staged model-driven deferral (load_tools + list_changed,
+ * capability, and shipped model-driven deferral (load_tools + list_changed,
  * spec Phase 2) is purely additive on top of it.
  *
  * Server-authoritative default (BI-88681BE0): when a caller passes no explicit
@@ -25,6 +25,11 @@
  * kernel even when the token grants them. That is discovery only; execution
  * already allowed by-name before this expansion.
  */
+
+import {
+  selectLoadableTools,
+} from "@/lib/tak/tool-intent";
+export { LOAD_TOOLS_TOOL_NAME } from "@/lib/tak/tool-intent";
 
 export type McpToolTier = "core" | "full";
 
@@ -105,6 +110,7 @@ export const CORE_MCP_TOOL_NAMES: ReadonlySet<string> = new Set([
   "link_backlog_item_to_epic",
   // work / coworker / build visibility
   "get_my_coworker_profile",
+  "find_coworker",
   "get_next_recommended_work",
   "list_work_capsules",
   "get_work_capsule",
@@ -124,4 +130,59 @@ export const CORE_MCP_TOOL_NAMES: ReadonlySet<string> = new Set([
 export function selectToolsByTier<T extends { name: string }>(tools: T[], tier: McpToolTier): T[] {
   if (tier === "full") return tools;
   return tools.filter((t) => CORE_MCP_TOOL_NAMES.has(t.name));
+}
+
+// ─── Phase 2: model-driven deferral (load_tools + list_changed) ──────────────
+// Spec: docs/superpowers/specs/2026-06-20-mcp-tool-tier-deferred-loading-design.md §4.
+// This is PURELY ADDITIVE on top of the Phase-1 tier: `tools/list` returns the
+// tier surface (the floor) UNION any tools a model has pulled in via load_tools,
+// plus the load_tools meta-tool itself. Append-not-swap: the lean core stays
+// present for clients that don't honor list_changed, and the cached prompt
+// prefix survives because tools are appended, never removed/reordered.
+
+/**
+ * The append-not-swap listing set: the tier floor (core|full) UNION any
+ * session-loaded tools not already in the floor. Preserves floor order, then
+ * appends newly-loaded tools in their original grant order. Pure. The caller
+ * appends the `load_tools` meta-tool separately (it is not a granted domain
+ * tool). `loadedNames` is the set of tool names this token has loaded.
+ */
+export function selectToolsForListing<T extends { name: string }>(
+  granted: T[],
+  tier: McpToolTier,
+  loadedNames: ReadonlySet<string>,
+): T[] {
+  const floor = selectToolsByTier(granted, tier);
+  if (loadedNames.size === 0) return floor;
+  const floorNames = new Set(floor.map((t) => t.name));
+  const appended = granted.filter((t) => loadedNames.has(t.name) && !floorNames.has(t.name));
+  return [...floor, ...appended];
+}
+
+/**
+ * Resolve which already-grant-filtered tools a `load_tools({query?,names?})`
+ * call selects. Exact `names` take precedence; natural-language `query` intent
+ * is ranked by token overlap over name and description and capped at 16.
+ * Pure — the caller persists the resulting names to the session store.
+ */
+export function resolveLoadToolsSelection<T extends { name: string; description?: string }>(
+  granted: T[],
+  args: { names?: unknown; query?: unknown },
+): T[] {
+  return selectLoadableTools(granted, args);
+}
+
+// ─── Session-store pure helpers (DB wrapper lives in tool-session-store.ts) ──
+
+/** Merge newly-loaded names into an existing set, de-duplicated and sorted. */
+export function mergeLoadedToolNames(
+  existing: readonly string[],
+  incoming: readonly string[],
+): string[] {
+  return [...new Set([...existing, ...incoming])].sort();
+}
+
+/** True when a session's expiry has passed — expired sessions read as empty. */
+export function isToolSessionExpired(expiresAt: Date, now: Date): boolean {
+  return expiresAt.getTime() <= now.getTime();
 }

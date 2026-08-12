@@ -129,6 +129,73 @@ describe("persistSubmittedDiscoveryRun", () => {
     expect(meta?.trigger).not.toBe("bootstrap");
   });
 
+  it("loads active fingerprint rules from the db and identifies a known-vendor host (regression: BI-BAF38ED3)", async () => {
+    // Regression for the wiring break: the edge-node ingestion path normalized
+    // WITHOUT loading fingerprint rules / taxonomy, so every ARP host fell
+    // through to the coarse `host -> /servers` rule. A Whirlpool appliance must
+    // be fingerprinted to the smart-appliance node, not filed as a server.
+    persistMock.mockResolvedValueOnce(summary);
+
+    const applianceNodeId = "foundational/building_management/smart_home_and_appliances";
+    const whirlpoolRule = {
+      id: "rule_whirlpool",
+      ruleKey: "estate:whirlpool-appliance",
+      status: "active",
+      matchExpression: { all: [{ type: "contains", path: "vendor", value: "whirlpool" }] },
+      requiredEvidenceFamilies: ["mac_oui"],
+      identityConfidence: 0.95,
+      taxonomyConfidence: 0.95,
+      resolvedIdentity: { kind: "device", vendor: "Whirlpool", deviceClass: "smart_appliance" },
+      catalogIdentityId: "catid_whirlpool",
+      taxonomyNode: { nodeId: applianceNodeId },
+    };
+
+    // A db that can answer the loader's findMany calls in addition to $transaction.
+    const dbWithRules = {
+      $transaction: vi.fn(),
+      taxonomyNode: {
+        findMany: vi.fn(async () => [
+          { nodeId: applianceNodeId, name: "Smart Home & Appliances", description: null, enrichment: null },
+          { nodeId: "foundational/compute/servers", name: "Servers", description: null, enrichment: null },
+        ]),
+      },
+      discoveryFingerprintRule: {
+        findMany: vi.fn(async () => [whirlpoolRule]),
+      },
+    } as unknown as DiscoverySyncClient;
+
+    const whirlpoolOutput: CollectorOutput = {
+      items: [
+        {
+          sourceKind: "host",
+          itemType: "host",
+          name: "Whirlpool 192.168.0.91",
+          externalRef: "host:whirlpool-91",
+          naturalKey: "host:whirlpool-91",
+          confidence: 0.9,
+          attributes: { vendor: "Whirlpool", mac: "88:e7:12:00:00:91" },
+        },
+      ],
+      relationships: [],
+    };
+
+    await persistSubmittedDiscoveryRun(dbWithRules, {
+      edgeNodeId: "edgenode_arp",
+      nodeId: "edge_arp_1",
+      runKey: "run_whirlpool",
+      submittedOutput: whirlpoolOutput,
+    });
+
+    const normalizedArg = persistMock.mock.calls[0]?.[1];
+    const entity = normalizedArg.inventoryEntities[0];
+    // The fix: fingerprinted to the appliance node with a resolved identity,
+    // NOT the coarse `host -> /servers` fallback.
+    expect(entity?.taxonomyNodeId).toBe(applianceNodeId);
+    expect(entity?.taxonomyNodeId).not.toMatch(/\/servers$/);
+    expect(entity?.identityStatus).toBe("rule_resolved");
+    expect(entity?.catalogIdentityId).toBe("catid_whirlpool");
+  });
+
   it("forwards options through (e.g. test-injected projectors)", async () => {
     persistMock.mockResolvedValueOnce(summary);
     const fakeProjector = vi.fn(async () => ({}) as never);

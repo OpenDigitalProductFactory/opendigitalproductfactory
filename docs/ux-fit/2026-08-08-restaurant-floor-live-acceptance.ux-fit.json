@@ -1,0 +1,20 @@
+{
+  "version": "1",
+  "decidedOption": "restaurant-shift-console",
+  "decisionInteractionId": "DI-8AC53E1793E6",
+  "scope": {
+    "files": [
+      "apps/web/components/twin/restaurant/RestaurantFloorOperations.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "restaurant-shift-console",
+      "compress-existing-stack",
+      "dedicated-host-route"
+    ],
+    "accessibility": "The removed FloorPlanCanvas compatibility adapter has no production caller. The live route already uses CartesianSceneCanvas, whose ReactFlow nodes expose label, status, capacity, and server text to assistive technology. CartesianSceneCanvas now also renders the same placement facts in an always-available screen-reader list when embedded chrome is hidden, while the parent-owned visible Table list supplies keyboard-readable parity including service area and readiness.",
+    "responsive": "The host workspace derives columns from its actual container rather than viewport width, so the coworker panel can coexist without clipping the floor. Compact node text retains capacity and server identity; state remains separately exposed as statusLabel and readiness remains in the equivalent table list."
+  }
+}

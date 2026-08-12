@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import localCiSlotResources from "./local-ci-slot-resources.json";
 
 const recordQueueTransition = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/queue/queue-telemetry", () => ({ recordQueueTransition }));
@@ -6,6 +7,7 @@ vi.mock("@/lib/queue/queue-telemetry", () => ({ recordQueueTransition }));
 import {
   claimNonprodEnvironmentLease,
   clampLeaseExpiry,
+  listCapacityReservingNonprodEnvironmentLeases,
   listActiveNonprodEnvironmentLeases,
   listQueuedNonprodEnvironmentLeases,
   releaseNonprodEnvironmentLease,
@@ -91,6 +93,25 @@ function admitted(overrides: Record<string, unknown> = {}) {
   });
 }
 
+function configuredPool(requestedCapacity: 1 | 2 = 1) {
+  return {
+    value: {
+      version: 1,
+      requestedCapacity,
+      ceilings: {
+        minAvailableMemoryBytes: 8 * 1024 ** 3,
+        maxSustainedCpuPercent: 75,
+        minDiskFreeBytes: 100 * 1024 ** 3,
+      },
+      rollback: {
+        maxServiceDurationRegressionPercent: 15,
+        maxInfrastructureFailureRatePercent: 5,
+        evidenceMismatchTolerance: 0,
+      },
+    },
+  };
+}
+
 async function claim(mockDb: ReturnType<typeof db>, overrides = {}) {
   return claimNonprodEnvironmentLease({
     db: mockDb as never,
@@ -135,6 +156,22 @@ describe("durable nonproduction admission", () => {
     });
     expect(mockDb.nonProductionEnvironmentLease.findMany).toHaveBeenNthCalledWith(2, {
       where: { status: "queued", expiresAt: { gt: NOW } },
+      orderBy: [{ queuedAt: "asc" }, { id: "asc" }],
+    });
+  });
+
+  it("reads active and queued capacity reservations in one FIFO snapshot", async () => {
+    const mockDb = db();
+    await listCapacityReservingNonprodEnvironmentLeases({
+      db: mockDb as never,
+      now: NOW,
+    });
+
+    expect(mockDb.nonProductionEnvironmentLease.findMany).toHaveBeenCalledWith({
+      where: {
+        status: { in: ["active", "queued"] },
+        expiresAt: { gt: NOW },
+      },
       orderBy: [{ queuedAt: "asc" }, { id: "asc" }],
     });
   });
@@ -231,7 +268,7 @@ describe("durable nonproduction admission", () => {
     expect(mockDb.nonProductionEnvironmentLease.create).toHaveBeenCalledOnce();
   });
 
-  it("cancels a queued lease and promotes the next FIFO waiter", async () => {
+  it("cancels a queued local-CI lease without promoting from stale pressure", async () => {
     const mockDb = db();
     const current = lease();
     const next = lease({
@@ -244,19 +281,11 @@ describe("durable nonproduction admission", () => {
     mockDb.nonProductionEnvironmentLease.findUnique
       .mockResolvedValueOnce(current)
       .mockResolvedValueOnce(current);
-    mockDb.nonProductionEnvironmentLease.update
-      .mockResolvedValueOnce(lease({
-        status: "cancelled",
-        cancelledAt: NOW,
-        releasedAt: NOW,
-      }))
-      .mockResolvedValueOnce(admitted({
-        ...next,
-        status: "active",
-        slotKey: "slot-0",
-        activeKey: "local-integration-ci:slot-0",
-        admittedAt: NOW,
-      }));
+    mockDb.nonProductionEnvironmentLease.update.mockResolvedValueOnce(lease({
+      status: "cancelled",
+      cancelledAt: NOW,
+      releasedAt: NOW,
+    }));
     mockDb.nonProductionEnvironmentLease.findMany.mockResolvedValueOnce([next]);
 
     const released = await releaseNonprodEnvironmentLease({
@@ -274,16 +303,10 @@ describe("durable nonproduction admission", () => {
         activeKey: null,
       }),
     });
-    expect(mockDb.nonProductionEnvironmentLease.update).toHaveBeenNthCalledWith(2, {
-      where: { id: "row-2" },
-      data: expect.objectContaining({
-        status: "active",
-        slotKey: "slot-0",
-      }),
-    });
+    expect(mockDb.nonProductionEnvironmentLease.update).toHaveBeenCalledTimes(1);
   });
 
-  it("expires lapsed owners and promotes a live waiter", async () => {
+  it("expires lapsed local-CI owners without promoting from stale pressure", async () => {
     const mockDb = db();
     const lapsed = admitted({
       expiresAt: new Date(NOW.getTime() - 1),
@@ -306,10 +329,7 @@ describe("durable nonproduction admission", () => {
         activeKey: null,
       }),
     });
-    expect(mockDb.nonProductionEnvironmentLease.update).toHaveBeenCalledWith({
-      where: { id: "row-2" },
-      data: expect.objectContaining({ status: "active", slotKey: "slot-0" }),
-    });
+    expect(mockDb.nonProductionEnvironmentLease.update).not.toHaveBeenCalled();
   });
 
   it("admits a slot-aware FIFO waiter to slot-1 only under a safe capacity-two policy", async () => {
@@ -323,22 +343,7 @@ describe("durable nonproduction admission", () => {
       activeKey: "local-integration-ci:slot-1",
       slotManifestVersion: 1,
     });
-    mockDb.platformConfig.findUnique.mockResolvedValue({
-      value: {
-        version: 1,
-        requestedCapacity: 2,
-        ceilings: {
-          minAvailableMemoryBytes: 8 * 1024 ** 3,
-          maxSustainedCpuPercent: 75,
-          minDiskFreeBytes: 100 * 1024 ** 3,
-        },
-        rollback: {
-          maxServiceDurationRegressionPercent: 15,
-          maxInfrastructureFailureRatePercent: 5,
-          evidenceMismatchTolerance: 0,
-        },
-      },
-    });
+    mockDb.platformConfig.findUnique.mockResolvedValue(configuredPool(2));
     mockDb.nonProductionEnvironmentLease.findUnique
       .mockResolvedValueOnce(null)
       .mockResolvedValueOnce(slot1Owner);
@@ -350,7 +355,8 @@ describe("durable nonproduction admission", () => {
 
     const hostPressure = {
       observedAt: NOW.toISOString(),
-      availableMemoryBytes: 12 * 1024 ** 3,
+      availableMemoryBytes: 8 * 1024 ** 3
+        + 2 * localCiSlotResources.builderPolicy.memoryBytes,
       sustainedCpuPercent: 20,
       diskFreeBytes: 500 * 1024 ** 3,
       dockerHealthy: true,
@@ -361,7 +367,11 @@ describe("durable nonproduction admission", () => {
     const result = await claim(mockDb, {
       slotManifestVersion: 1,
       hostPressure,
-      capacityBroker: async () => hostPressure,
+      capacityBroker: async () => ({
+        ...hostPressure,
+        dockerAvailableMemoryBytes: 32 * 1024 ** 3,
+        builderMemoryUsageBytes: [0, 0],
+      }),
     });
 
     expect(result).toMatchObject({
@@ -378,6 +388,57 @@ describe("durable nonproduction admission", () => {
         slotKey: "slot-1",
         phase: "admitted-unbound",
       }),
+    });
+  });
+
+  it("does not reserve an exact-gate builder envelope for a contributor preview", async () => {
+    const gib = 1024 ** 3;
+    const mockDb = db();
+    const waiting = lease({
+      purpose: "Contributor preview (:3001)",
+      url: "http://localhost:3001",
+      ports: [3001],
+      slotManifestVersion: null,
+    });
+    const previewOwner = admitted({
+      ...waiting,
+      status: "active",
+      slotKey: "slot-0",
+      activeKey: "local-integration-ci:slot-0",
+    });
+    mockDb.platformConfig.findUnique.mockResolvedValue(configuredPool());
+    mockDb.nonProductionEnvironmentLease.findUnique
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(previewOwner);
+    mockDb.nonProductionEnvironmentLease.create.mockResolvedValue(waiting);
+    mockDb.nonProductionEnvironmentLease.findMany.mockResolvedValueOnce([waiting]);
+
+    const hostPressure = {
+      observedAt: NOW.toISOString(),
+      availableMemoryBytes: 24 * gib,
+      sustainedCpuPercent: 20,
+      diskFreeBytes: 500 * gib,
+      dockerHealthy: true,
+      convergenceActive: false,
+      fencesHealthy: true,
+      evidenceIsolationHealthy: true,
+    };
+    const result = await claim(mockDb, {
+      purpose: "Contributor preview (:3001)",
+      url: "http://localhost:3001",
+      ports: [3001],
+      hostPressure,
+      capacityBroker: async () => ({
+        ...hostPressure,
+        availableMemoryBytes: 8 * gib,
+        builderMemoryUsageBytes: [0, 0],
+      }),
+    });
+
+    expect(result).toMatchObject({
+      status: "admitted",
+      slotKey: "slot-0",
+      poolPolicy: { effectiveCapacity: 1, rollbackReason: "requested-singleton" },
     });
   });
 
@@ -404,25 +465,10 @@ describe("durable nonproduction admission", () => {
     });
   });
 
-  it("lets canonical server pressure contract but never expand client capacity", async () => {
+  it("lets canonical server pressure contract a configured singleton to zero", async () => {
     const mockDb = db();
     const waiting = lease({ slotManifestVersion: 1 });
-    mockDb.platformConfig.findUnique.mockResolvedValue({
-      value: {
-        version: 1,
-        requestedCapacity: 2,
-        ceilings: {
-          minAvailableMemoryBytes: 8 * 1024 ** 3,
-          maxSustainedCpuPercent: 75,
-          minDiskFreeBytes: 100 * 1024 ** 3,
-        },
-        rollback: {
-          maxServiceDurationRegressionPercent: 15,
-          maxInfrastructureFailureRatePercent: 5,
-          evidenceMismatchTolerance: 0,
-        },
-      },
-    });
+    mockDb.platformConfig.findUnique.mockResolvedValue(configuredPool());
     mockDb.nonProductionEnvironmentLease.findUnique
       .mockResolvedValueOnce(null)
       .mockResolvedValueOnce(waiting);
@@ -458,8 +504,52 @@ describe("durable nonproduction admission", () => {
     expect(result).toMatchObject({
       status: "queued",
       poolPolicy: {
-        effectiveCapacity: 1,
-        rollbackReason: "host-memory-low",
+        effectiveCapacity: 0,
+        rollbackReason: "host-build-headroom-low",
+      },
+    });
+  });
+
+  it("keeps a claimant queued when the next host-native stage would spend the continuation floor", async () => {
+    const gib = 1024 ** 3;
+    const mockDb = db();
+    const waiting = lease({ slotManifestVersion: 1 });
+    mockDb.platformConfig.findUnique.mockResolvedValue(configuredPool());
+    mockDb.nonProductionEnvironmentLease.findUnique
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(waiting);
+    mockDb.nonProductionEnvironmentLease.create.mockResolvedValue(waiting);
+    mockDb.nonProductionEnvironmentLease.findMany
+      .mockResolvedValueOnce([waiting])
+      .mockResolvedValueOnce([{ id: "row-1" }]);
+
+    const hostPressure = {
+      observedAt: NOW.toISOString(),
+      availableMemoryBytes: 14 * gib,
+      sustainedCpuPercent: 20,
+      diskFreeBytes: 500 * gib,
+      dockerHealthy: true,
+      convergenceActive: false,
+      fencesHealthy: true,
+      evidenceIsolationHealthy: true,
+    };
+    const result = await claim(mockDb, {
+      slotManifestVersion: 1,
+      hostPressure,
+      capacityBroker: async () => ({
+        ...hostPressure,
+        availableMemoryBytes: 40 * gib,
+        dockerAvailableMemoryBytes: 40 * gib,
+        builderMemoryUsageBytes: [0, 0],
+      }),
+    });
+
+    expect(result).toMatchObject({
+      status: "queued",
+      queuePosition: 1,
+      poolPolicy: {
+        effectiveCapacity: 0,
+        rollbackReason: "host-stage-headroom-low",
       },
     });
   });

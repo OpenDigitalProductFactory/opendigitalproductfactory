@@ -12,7 +12,6 @@
 // server discovery (the GitHub-PAT pattern, intentionally) but we still
 // return a WWW-Authenticate header on 401 so clients that perform
 // discovery don't fail mysteriously.
-
 import {
   resolveMcpApiToken,
   type McpTokenCapability,
@@ -27,7 +26,24 @@ import { submitRemoteCoworkerTask } from "@/lib/mcp-task-submit";
 import { getQuiescenceConfig } from "@/lib/self-upgrade/quiescence";
 import { getToolGrantMapping, expandGrants } from "@/lib/tak/agent-grants";
 import { MCP_ROUTE_TOOL_RESULT_CHAR_CAP } from "@/lib/tak/tool-result-budget";
-import { resolveEffectiveTier, selectToolsByTier, type McpToolTier } from "@/lib/mcp/tool-tier";
+import {
+  resolveEffectiveTier,
+  selectToolsForListing,
+  resolveLoadToolsSelection,
+  LOAD_TOOLS_TOOL_NAME,
+  type McpToolTier,
+} from "@/lib/mcp/tool-tier";
+import { getLoadedToolNames, loadToolsForSession } from "@/lib/mcp/tool-session-store";
+import {
+  shouldAdvertiseTasksCapability,
+  tasksLifecycleEnabled,
+  handleTasksGet,
+  handleTasksResult,
+  handleTasksList,
+  handleTasksCancel,
+  type TaskLifecycleResult,
+} from "@/lib/mcp/tasks-lifecycle";
+import { LOAD_TOOLS_LISTED, MCP_PROGRESSIVE_DISCLOSURE_INSTRUCTIONS, buildLoadToolsResult, buildUnknownToolResult, loadToolsSseResponse } from "@/lib/mcp/load-tools";
 import { can, type CapabilityKey, type UserContext } from "@/lib/permissions";
 import { prisma } from "@dpf/db";
 
@@ -42,9 +58,18 @@ type ResolvedAuth = ResolvedMcpToken & {
   source: "pat" | "session-jwt";
 };
 
-// Versions we can speak, newest first. We echo back the highest version the
-// client supports so older clients (e.g. Claude Code pre-2025-11-25) connect.
-const SUPPORTED_PROTOCOL_VERSIONS = ["2025-11-25", "2025-03-26", "2024-11-05"] as const;
+// Versions we can speak, newest first. We echo back the version the client
+// requested when it is in this list so older clients connect. Include every
+// wire revision clients actually send — Grok Build 1.0.0 negotiates
+// `2025-06-18` and re-sends it as `MCP-Protocol-Version` on tools/list; omitting
+// it made initialize fall back but then 400'd subsequent calls.
+// Tasks capability is ONLY advertised on 2025-11-25 (see shouldAdvertiseTasksCapability).
+const SUPPORTED_PROTOCOL_VERSIONS = [
+  "2025-11-25",
+  "2025-06-18",
+  "2025-03-26",
+  "2024-11-05",
+] as const;
 const FALLBACK_PROTOCOL_VERSION = "2024-11-05";
 const SERVER_NAME = "dpf-platform";
 const SERVER_VERSION = "1.0.0";
@@ -352,18 +377,88 @@ function insufficientScopeResult(
 
 function annotateTool(tool: ToolDefinition) {
   const ann = resolveAnnotations(tool);
+  // MCP 2025-11-25 optional metadata: emit top-level title/icons/outputSchema
+  // only when the tool defines them. outputSchema is stamped with the 2020-12
+  // dialect ($schema) unless the tool already declared one.
+  const outputSchema = tool.outputSchema
+    ? { $schema: "https://json-schema.org/draft/2020-12/schema", ...tool.outputSchema }
+    : undefined;
   return {
     name: tool.name,
+    ...(tool.title ? { title: tool.title } : {}),
     description: tool.description,
     inputSchema: tool.inputSchema,
+    ...(outputSchema ? { outputSchema } : {}),
+    ...(tool.icons ? { icons: tool.icons } : {}),
     annotations: {
-      title: tool.name.replace(/_/g, " "),
+      title: tool.title ?? tool.name.replace(/_/g, " "),
       readOnlyHint: ann.readOnlyHint,
       destructiveHint: ann.destructiveHint,
       idempotentHint: ann.idempotentHint,
       openWorldHint: ann.openWorldHint,
     },
   };
+}
+
+// load_tools: mark the requested GRANTED tools loaded for this token's session
+// so the next tools/list appends them (append-not-swap). Candidates come from
+// the SAME grant filter as tools/list, so a model can never load a tool it isn't
+// granted; execution still gates on grants at tools/call. Presentation + SSE
+// framing live in lib/mcp/load-tools.ts to keep this transport module lean.
+async function handleLoadTools(
+  id: JsonRpcId,
+  token: ResolvedAuth,
+  args: Record<string, unknown>,
+  acceptsEventStream: boolean,
+): Promise<Response> {
+  const userContext = await loadUserContext(token.userId);
+  const grantMap = getToolGrantMapping();
+  const granted = PLATFORM_TOOLS.filter((t) => tokenCanUseTool(t, token, userContext, grantMap));
+  const selected = resolveLoadToolsSelection(granted, args);
+  const loadedToolNames = await loadToolsForSession(
+    token.tokenId,
+    selected.map((t) => t.name),
+  );
+  const result = buildLoadToolsResult(
+    selected.map((t) => ({ name: t.name, description: t.description })),
+    loadedToolNames,
+  );
+  return acceptsEventStream && selected.length > 0
+    ? loadToolsSseResponse(id, result)
+    : jsonRpcOk(id, result);
+}
+
+// Standard MCP Tasks Phase-0 read surface: route tasks/get|result|list|cancel to
+// the tasks-lifecycle module (auth-context bound over the TaskRun substrate) and
+// map its typed result to a JSON-RPC response. Cross-context / bad-id → -32602.
+async function handleTasksLifecycle(
+  method: string,
+  id: JsonRpcId,
+  token: ResolvedAuth,
+  params: Record<string, unknown> | undefined,
+): Promise<Response> {
+  if (!tasksLifecycleEnabled()) {
+    return jsonRpcError(id, JSONRPC_METHOD_NOT_FOUND, `unknown method: ${method}`);
+  }
+  let result: TaskLifecycleResult;
+  switch (method) {
+    case "tasks/get":
+      result = await handleTasksGet(token.userId, params);
+      break;
+    case "tasks/result":
+      result = await handleTasksResult(token.userId, params);
+      break;
+    case "tasks/list":
+      result = await handleTasksList(token.userId, params);
+      break;
+    case "tasks/cancel":
+      result = await handleTasksCancel(token.userId, params);
+      break;
+    default:
+      return jsonRpcError(id, JSONRPC_METHOD_NOT_FOUND, `unknown method: ${method}`);
+  }
+  if (result.kind === "ok") return jsonRpcOk(id, result.value);
+  return jsonRpcError(id, JSONRPC_INVALID_PARAMS, result.message);
 }
 
 async function handleTasksSubmit(
@@ -388,9 +483,6 @@ async function handleTasksSubmit(
   return jsonRpcOk(id, outcome.result);
 }
 
-const BASE_MCP_INSTRUCTIONS =
-  "Domain-level MCP surface for the Digital Product Factory. Use tools/list to discover the backlog and planning tools available to your token.";
-
 async function handleInitialize(id: JsonRpcId, params?: Record<string, unknown>): Promise<Response> {
   const requested = typeof params?.["protocolVersion"] === "string" ? params["protocolVersion"] : null;
   const negotiated = SUPPORTED_PROTOCOL_VERSIONS.find((v) => v === requested) ?? FALLBACK_PROTOCOL_VERSION;
@@ -400,7 +492,7 @@ async function handleInitialize(id: JsonRpcId, params?: Record<string, unknown>)
   // decisionDomain routing directive that activates BI-HDLEMP-01 — from connect,
   // instead of only a bare tool list. Fail-open: any compose error falls back to
   // the base note; initialize must never break.
-  let instructions = BASE_MCP_INSTRUCTIONS;
+  let instructions = MCP_PROGRESSIVE_DISCLOSURE_INSTRUCTIONS;
   try {
     const [{ buildOrgContextBundle, formatOrgContextInstructions }, { prisma }] =
       await Promise.all([
@@ -410,7 +502,7 @@ async function handleInitialize(id: JsonRpcId, params?: Record<string, unknown>)
     const bundle = await buildOrgContextBundle(
       prisma as unknown as Parameters<typeof buildOrgContextBundle>[0],
     );
-    instructions = formatOrgContextInstructions(BASE_MCP_INSTRUCTIONS, bundle);
+    instructions = formatOrgContextInstructions(MCP_PROGRESSIVE_DISCLOSURE_INSTRUCTIONS, bundle);
   } catch (err) {
     console.warn("[mcp/initialize] org-context compose failed (fail-open):", err);
   }
@@ -418,11 +510,29 @@ async function handleInitialize(id: JsonRpcId, params?: Record<string, unknown>)
   return jsonRpcOk(id, {
     protocolVersion: negotiated,
     capabilities: {
-      tools: { listChanged: false },
+      // listChanged: load_tools emits notifications/tools/list_changed (over an
+      // SSE response on the load_tools POST for clients that Accept it); clients
+      // that ignore it still work — the lean core tier is always the floor.
+      tools: { listChanged: true },
+      // Standard MCP Tasks (Phase 0, read-only): tasks/get|result|list|cancel
+      // over the durable TaskRun substrate. Advertise ONLY when the negotiated
+      // protocol is Tasks-aware (2025-11-25+) AND the feature flag is on.
+      // Advertising on 2024-11-05 / 2025-03-26 breaks clients that reject
+      // unknown capability keys at initialize (Grok Build 1.0.0 → CustomResult
+      // handshake failure). Methods remain routable; discovery is gated.
+      // Value shape is spec-load-bearing: tasks.list/.cancel are `object`
+      // (present-if-supported), NOT boolean. A boolean fails strict client
+      // capability validation — Claude Code rejects the whole initialize and
+      // loads zero tools. Empty object = supported (cf. logging/completions).
+      ...(shouldAdvertiseTasksCapability(negotiated)
+        ? { tasks: { list: {}, cancel: {} } }
+        : {}),
     },
     serverInfo: {
       name: SERVER_NAME,
       version: SERVER_VERSION,
+      description:
+        "Digital Product Factory MCP transport — governed backlog, planning, coworker, and build tools for external coding agents.",
     },
     instructions,
   });
@@ -442,8 +552,14 @@ async function handleToolsList(
   const granted = PLATFORM_TOOLS.filter((t) =>
     tokenCanUseTool(t, token, userContext, grantMap),
   );
-  const tools = selectToolsByTier(granted, tier).map(annotateTool);
-  return jsonRpcOk(id, { tools });
+  // Phase 2 (deferred loading): the tier surface is the FLOOR; append any tools
+  // this token pulled in via load_tools, then the load_tools meta-tool itself.
+  // Append-not-swap keeps the lean core for clients that ignore list_changed and
+  // preserves the cached prompt prefix (tools are only ever added, never
+  // removed/reordered).
+  const loadedNames = new Set(await getLoadedToolNames(token.tokenId));
+  const listed = selectToolsForListing(granted, tier, loadedNames).map(annotateTool);
+  return jsonRpcOk(id, { tools: [...listed, LOAD_TOOLS_LISTED] });
 }
 
 async function handleToolsCall(
@@ -451,12 +567,20 @@ async function handleToolsCall(
   token: ResolvedAuth,
   params: Record<string, unknown> | undefined,
   callerClient?: string,
+  acceptsEventStream: boolean = false,
 ): Promise<Response> {
   if (!params || typeof params["name"] !== "string") {
     return jsonRpcError(id, JSONRPC_INVALID_PARAMS, "tools/call requires params.name (string)");
   }
   const toolName = params["name"];
   const args = (params["arguments"] as Record<string, unknown> | undefined) ?? {};
+
+  // load_tools is a transport-level meta-tool, not a governed domain tool:
+  // handle it inline (it manages per-token discovery state) and never route it
+  // to governedExecuteTool.
+  if (toolName === LOAD_TOOLS_TOOL_NAME) {
+    return await handleLoadTools(id, token, args, acceptsEventStream);
+  }
 
   // Token-scope gate. The wrapper also rejects on grant mismatch when an
   // agentId is in context, but we want a fast pre-check here so an external
@@ -465,10 +589,7 @@ async function handleToolsCall(
   const grantMap = getToolGrantMapping();
   const required = grantMap[toolName];
   if (!required) {
-    return jsonRpcOk(id, {
-      content: [{ type: "text", text: `Unknown tool: ${toolName}` }],
-      isError: true,
-    });
+    return jsonRpcOk(id, buildUnknownToolResult(toolName));
   }
   const toolDef = PLATFORM_TOOLS.find((t) => t.name === toolName);
   const tokenScope = normalizeTokenScope(token);
@@ -517,6 +638,7 @@ async function handleToolsCall(
       routeContext: token.routeContext ?? undefined,
       callerClient,
       authSource: token.source,
+      tokenScope, tokenGrantScopes: expandedScopes,
     },
     source: token.source === "session-jwt" ? "internal-mcp-session" : "external-jsonrpc",
   });
@@ -649,6 +771,25 @@ export async function POST(request: Request): Promise<Response> {
   // Notifications (no id) — return 202 Accepted, no body, per spec.
   const isNotification = body.id === undefined;
 
+  // MCP 2025-11-25 protocol negotiation: a non-initialize request MAY carry an
+  // MCP-Protocol-Version header. When present it must be a version we speak;
+  // when absent the caller inherits the version negotiated at initialize. An
+  // explicit unsupported value is a 400 (lenient on absence, strict on mismatch).
+  const protocolHeader = request.headers.get("mcp-protocol-version");
+  if (
+    protocolHeader &&
+    body.method !== "initialize" &&
+    !(SUPPORTED_PROTOCOL_VERSIONS as readonly string[]).includes(protocolHeader)
+  ) {
+    return jsonRpcError(
+      body.id ?? null,
+      JSONRPC_INVALID_REQUEST,
+      `unsupported MCP-Protocol-Version: ${protocolHeader}; supported: ${SUPPORTED_PROTOCOL_VERSIONS.join(", ")}`,
+      undefined,
+      400,
+    );
+  }
+
   try {
     switch (body.method) {
       case "initialize":
@@ -682,6 +823,7 @@ export async function POST(request: Request): Promise<Response> {
           token,
           body.params,
           deriveCallerClient(request.headers.get("user-agent")),
+          (request.headers.get("accept") ?? "").includes("text/event-stream"),
         );
 
       case "tasks/submit":
@@ -689,6 +831,15 @@ export async function POST(request: Request): Promise<Response> {
           return new Response(null, { status: 202 });
         }
         return await handleTasksSubmit(body.id ?? null, token, body.params);
+
+      case "tasks/get":
+      case "tasks/result":
+      case "tasks/list":
+      case "tasks/cancel":
+        if (isNotification) {
+          return new Response(null, { status: 202 });
+        }
+        return await handleTasksLifecycle(body.method, body.id ?? null, token, body.params);
 
       case "ping":
         if (isNotification) {

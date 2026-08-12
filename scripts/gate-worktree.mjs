@@ -57,6 +57,23 @@ const THIS_FILE = fileURLToPath(import.meta.url);
 const SCRIPT_DIR = dirname(THIS_FILE);
 const LOCAL_CI_ACTIVE_LEASE_TTL_MS = 2 * 60_000;
 
+const HARD_EXECUTION_PRESSURE_REASONS = new Set([
+  "host-memory-low",
+  "host-memory-unmeasurable",
+  "host-disk-low",
+  "host-disk-unmeasurable",
+  "docker-unhealthy",
+  "slot-fence-unhealthy",
+  "evidence-isolation-unproven",
+]);
+
+export function executionPressureFenceReason(poolPolicy) {
+  const reason = poolPolicy?.rollbackReason;
+  return HARD_EXECUTION_PRESSURE_REASONS.has(reason)
+    ? `host-capacity-lost:${reason}`
+    : null;
+}
+
 function die(message) {
   process.stderr.write(`gate-worktree: ${message}\n`);
   process.exit(1);
@@ -1095,6 +1112,12 @@ async function main() {
         leaseEvents,
         evidencePending: false,
         queueObserver: queueObserverState(),
+        admission: {
+          queuePosition: admission?.queuePosition ?? null,
+          waitAgeMs: admission?.waitAgeMs ?? null,
+          poolPolicy: claimResponse?.data?.poolPolicy ?? null,
+          hostPressure,
+        },
       });
       break;
     }
@@ -1119,6 +1142,12 @@ async function main() {
         leaseEvents,
         evidencePending: false,
         queueObserver: queueObserverState(),
+        admission: {
+          queuePosition: admission.queuePosition ?? null,
+          waitAgeMs: admission.waitAgeMs ?? null,
+          poolPolicy: claimResponse?.data?.poolPolicy ?? null,
+          hostPressure,
+        },
       });
       if (Date.now() >= deadline) {
         await releaseLeaseOnce();
@@ -1250,6 +1279,16 @@ async function main() {
       // Rolling-upgrade compatibility for a portal that renews successfully
       // but does not yet return the authoritative expiry.
       expiresAt = new Date(Date.now() + leaseTtlMs).toISOString();
+    }
+    const pressureFenceReason = response?.success === true
+      ? executionPressureFenceReason(response?.data?.poolPolicy)
+      : null;
+    if (pressureFenceReason) {
+      return {
+        success: false,
+        error: pressureFenceReason,
+        data: response.data,
+      };
     }
     return response;
   };
@@ -1730,6 +1769,9 @@ function writeState(stateFile, {
   evidencePending = false,
   evidencePendingReason = "",
   quiescence = null,
+  recovery = null,
+  queueObserver = null,
+  admission = null,
 }) {
   writeLocalCiGateState(stateFile, {
     branch,
@@ -1744,6 +1786,9 @@ function writeState(stateFile, {
     evidencePending,
     evidencePendingReason,
     quiescence,
+    recovery,
+    queueObserver,
+    admission,
   });
 }
 

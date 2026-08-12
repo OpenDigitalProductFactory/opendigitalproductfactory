@@ -2,6 +2,7 @@
 
 import {
   executeBootstrapDiscovery,
+  loadDiscoveryAttributionInputs,
   normalizeDiscoveredFacts,
   persistBootstrapDiscoveryRun,
   prisma,
@@ -12,6 +13,11 @@ import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { encryptSecret, decryptSecret } from "@/lib/govern/credential-crypto";
+import {
+  discoveryConnectionKey,
+  normalizeDiscoveryEndpoint,
+  type DiscoveryCollectorType,
+} from "@/lib/discovery-connection/endpoint";
 
 const DISCOVERY_REVALIDATE_PATHS = [
   "/platform/tools",
@@ -61,9 +67,63 @@ function formatConnectionTestMessage(status: string, fallback?: string): string 
       return "The UniFi controller rejected the API key. Rotate the key in UniFi OS and paste the new value here.";
     case "unifi_unreachable":
       return "The portal could not reach the UniFi controller from this host. Check the controller URL and local network reachability.";
+    case "unifi_no_devices":
+      return "The UniFi API responded, but returned no managed network devices. The connection is degraded and cannot supply a physical topology.";
+    case "unifi_no_sites":
+      return "The UniFi API responded, but returned no accessible sites for this API key.";
+    case "unifi_partial":
+      return fallback ?? "UniFi returned a partial result. The discovered topology may be incomplete.";
     default:
       return fallback ?? status;
   }
+}
+
+type UnifiHealth = {
+  testStatus: string;
+  connectionStatus: string;
+  healthy: boolean;
+  message: string;
+};
+
+function classifyUnifiHealth(warnings: string[] | undefined, deviceCount: number): UnifiHealth {
+  const values = warnings ?? [];
+  const blocking = values.find((warning) =>
+    warning.startsWith("unifi_auth")
+      || warning === "unifi_unreachable"
+      || warning === "unifi_tls_error"
+      || warning.startsWith("unifi_api_error")
+      || warning === "unifi_no_sites",
+  );
+  if (blocking) {
+    return {
+      testStatus: blocking,
+      connectionStatus: blocking === "unifi_auth_failed" ? "auth_failed" : "unreachable",
+      healthy: false,
+      message: formatConnectionTestMessage(blocking, values.join(", ")),
+    };
+  }
+  if (values.includes("unifi_no_devices") || deviceCount === 0) {
+    return {
+      testStatus: "unifi_no_devices",
+      connectionStatus: "degraded",
+      healthy: false,
+      message: formatConnectionTestMessage("unifi_no_devices"),
+    };
+  }
+  if (values.length > 0) {
+    return {
+      testStatus: "unifi_partial",
+      connectionStatus: "degraded",
+      healthy: false,
+      message: formatConnectionTestMessage("unifi_partial", values.join(", ")),
+    };
+  }
+  return {
+    testStatus: "ok",
+    connectionStatus: "active",
+    healthy: true,
+    message: `Discovered ${deviceCount} devices`,
+  };
 }
 
 async function requireManageDiscovery(): Promise<{ ok: true } | { ok: false; error: string }> {
@@ -154,78 +214,9 @@ export async function listDiscoveryConnections(): Promise<
   };
 }
 
-/**
- * Strip every trailing "/" without using `replace(/\/+$/, "")` — that
- * regex tripped a CodeQL polynomial-ReDoS alert on user-supplied input,
- * and an explicit slice loop is both safer and easier to reason about.
- */
-function trimTrailingSlashes(input: string): string {
-  let end = input.length;
-  while (end > 0 && input.charCodeAt(end - 1) === 0x2f /* "/" */) end--;
-  return input.slice(0, end);
-}
-
-/** Strip a leading "http://" or "https://" without a regex (CodeQL-safe). */
-function stripScheme(input: string): string {
-  if (input.startsWith("https://")) return input.slice(8);
-  if (input.startsWith("http://")) return input.slice(7);
-  if (input.startsWith("HTTPS://")) return input.slice(8);
-  if (input.startsWith("HTTP://")) return input.slice(7);
-  return input;
-}
-
-function stripPath(input: string): string {
-  const slashIndex = input.indexOf("/");
-  return slashIndex >= 0 ? input.slice(0, slashIndex) : input;
-}
-
-function isIpv4Octet(input: string): boolean {
-  if (input.length === 0 || input.length > 3) return false;
-  for (const char of input) {
-    if (char < "0" || char > "9") return false;
-  }
-  const octet = Number(input);
-  return octet >= 0 && octet <= 255;
-}
-
-function isIpv4Cidr(input: string): boolean {
-  const [ip, cidr, extra] = input.trim().split("/");
-  if (!ip || !cidr || extra !== undefined) return false;
-  const prefix = Number(cidr);
-  if (!Number.isInteger(prefix) || prefix < 16 || prefix > 32) return false;
-  const parts = ip.split(".");
-  return parts.length === 4 && parts.every(isIpv4Octet);
-}
-
-/**
- * Normalize user input into a proper endpoint URL.
- * Accepts: "192.168.0.1", "http://192.168.0.1", "https://192.168.0.1:8443/"
- * Returns: "https://192.168.0.1" (HTTPS by default for UniFi/SNMP controllers)
- */
-function normalizeEndpointUrl(raw: string, collectorType: string): string {
-  let url = trimTrailingSlashes(raw.trim());
-
-  // For ARP scan, the input is a subnet not a URL
-  if (collectorType === "arp_scan") return url;
-
-  if (collectorType === "snmp") return stripPath(stripScheme(url));
-
-  // If no protocol specified, add one. Fixed-prefix checks instead of a
-  // regex — no backtracking risk.
-  const hasScheme = url.startsWith("http://") || url.startsWith("https://")
-    || url.startsWith("HTTP://") || url.startsWith("HTTPS://");
-  if (!hasScheme) {
-    // UniFi controllers always use HTTPS
-    const protocol = collectorType === "unifi" ? "https" : "http";
-    url = `${protocol}://${url}`;
-  }
-
-  // UniFi should always be HTTPS (common mistake to use http://)
-  if (collectorType === "unifi" && url.startsWith("http://")) {
-    url = url.replace("http://", "https://");
-  }
-
-  return url;
+/** Keep the action boundary closed even when invoked outside the typed UI. */
+function isDiscoveryCollectorType(value: string): value is DiscoveryCollectorType {
+  return value === "unifi" || value === "snmp" || value === "arp_scan";
 }
 
 /**
@@ -247,14 +238,13 @@ export async function configureDiscoveryConnection(input: {
   const authResult = await requireManageDiscovery();
   if (!authResult.ok) return authResult;
 
-  const endpointUrl = normalizeEndpointUrl(input.endpointUrl, input.collectorType);
-  if (input.collectorType === "arp_scan" && !isIpv4Cidr(endpointUrl)) {
-    return {
-      ok: false,
-      error: "Subnet must be CIDR notation, for example 192.168.0.0/24",
-    };
+  if (!isDiscoveryCollectorType(input.collectorType)) {
+    return { ok: false, error: `Unsupported discovery method: ${input.collectorType}` };
   }
-  const connectionKey = `${input.collectorType}:${trimTrailingSlashes(stripScheme(endpointUrl))}`;
+  const normalizedEndpoint = normalizeDiscoveryEndpoint(input.endpointUrl, input.collectorType);
+  if (!normalizedEndpoint.ok) return normalizedEndpoint;
+  const endpointUrl = normalizedEndpoint.value;
+  const connectionKey = discoveryConnectionKey(input.collectorType, endpointUrl);
 
   const encryptedApiKey = input.apiKey ? encryptSecret(input.apiKey) : undefined;
   const configuration = normalizeConnectionConfiguration(input.collectorType, input.configuration);
@@ -348,26 +338,19 @@ export async function testDiscoveryConnection(connectionId: string): Promise<
     });
 
     const result = await collectUnifiDiscovery({ sourceKind: "unifi" }, deps);
-    const hasError = result.warnings?.some((w) =>
-      w.startsWith("unifi_auth") || w === "unifi_unreachable" || w === "unifi_tls_error",
-    );
-    testStatus = hasError
-      ? (result.warnings?.find((w) => w.startsWith("unifi_")) ?? "error")
-      : "ok";
     deviceCount = result.items.filter((i) =>
       ["router", "switch", "access_point"].includes(i.itemType),
     ).length;
-    testMessage = hasError
-      ? formatConnectionTestMessage(testStatus, result.warnings?.join(", "))
-      : `Discovered ${deviceCount} devices`;
+    const health = classifyUnifiHealth(result.warnings, deviceCount);
+    testStatus = health.testStatus;
+    testMessage = health.message;
   } else if (collectorType === "arp_scan") {
     const { collectArpScanDiscovery } = await import("@dpf/db/discovery-collectors-arp-scan");
     const configuration = (conn.configuration ?? {}) as Record<string, unknown>;
     const subnet = typeof configuration.subnet === "string" ? configuration.subnet : conn.endpointUrl;
-    if (!isIpv4Cidr(subnet)) {
-      return { ok: false, error: "Subnet must be CIDR notation, for example 192.168.0.0/24" };
-    }
-    const result = await collectArpScanDiscovery({ sourceKind: "arp_scan" }, [{ subnet }]);
+    const normalizedSubnet = normalizeDiscoveryEndpoint(subnet, "arp_scan");
+    if (!normalizedSubnet.ok) return normalizedSubnet;
+    const result = await collectArpScanDiscovery({ sourceKind: "arp_scan" }, [{ subnet: normalizedSubnet.value }]);
     deviceCount = result.items.length;
     testMessage = result.warnings?.some((warning) => warning.startsWith("arp_scan_empty"))
       ? "ARP scan completed, but no hosts responded on that subnet"
@@ -378,8 +361,10 @@ export async function testDiscoveryConnection(connectionId: string): Promise<
     const encryptedCommunity = conn.encryptedApiKey ? decryptSecret(conn.encryptedApiKey) : null;
     const community = encryptedCommunity
       ?? (typeof configuration.community === "string" ? configuration.community : "public");
+    const normalizedAddress = normalizeDiscoveryEndpoint(conn.endpointUrl, "snmp");
+    if (!normalizedAddress.ok) return normalizedAddress;
     const result = await collectSnmpDiscovery({ sourceKind: "snmp" }, [{
-      address: normalizeEndpointUrl(conn.endpointUrl, "snmp"),
+      address: normalizedAddress.value,
       community,
     }]);
     const errorWarning = result.warnings?.find((warning) => warning.startsWith("snmp_error"));
@@ -398,7 +383,9 @@ export async function testDiscoveryConnection(connectionId: string): Promise<
       lastTestedAt: new Date(),
       lastTestStatus: testStatus,
       lastTestMessage: testMessage,
-      status: testStatus === "ok" ? "active" : testStatus.replace("unifi_", "").replace("snmp_error", "unreachable"),
+      status: collectorType === "unifi"
+        ? classifyUnifiHealth(testStatus === "ok" ? [] : [testStatus], deviceCount).connectionStatus
+        : testStatus === "ok" ? "active" : "unreachable",
     },
   });
 
@@ -436,18 +423,41 @@ export async function rerunDiscoveryConnection(connectionId: string): Promise<Re
   if (!apiKey) return { ok: false, error: "Cannot decrypt API key" };
 
   const { collectUnifiDiscovery, buildDepsFromConnection } = await import("@dpf/db/discovery-collectors-unifi");
-  const config = (conn.configuration ?? {}) as Record<string, unknown>;
+  const config = readUnifiConfiguration(conn.configuration);
   const deps = buildDepsFromConnection({
     endpointUrl: conn.endpointUrl,
     apiKey,
     configuration: {
-      site: (config.site as string) ?? "default",
-      discoverClients: (config.discoverClients as boolean) ?? false,
+      site: config.site,
+      discoverClients: config.discoverClients,
+      tlsInsecure: config.tlsInsecure,
     },
   });
 
   const collectorOutput = await collectUnifiDiscovery({ sourceKind: conn.collectorType as never }, deps);
-  const normalized = normalizeDiscoveredFacts(collectorOutput);
+  const deviceCount = collectorOutput.items.filter((item) =>
+    ["router", "switch", "access_point"].includes(item.itemType),
+  ).length;
+  const health = classifyUnifiHealth(collectorOutput.warnings, deviceCount);
+  if (deviceCount === 0) {
+    await prisma.discoveryConnection.update({
+      where: { id: connectionId },
+      data: {
+        lastTestedAt: new Date(),
+        lastTestStatus: health.testStatus,
+        lastTestMessage: health.message,
+        status: health.connectionStatus,
+      },
+    });
+    revalidateDiscoverySurfaces();
+    return { ok: false, error: health.message };
+  }
+  // Identify + place devices the same way the bootstrap and edge-node paths do:
+  // load the taxonomy tree + active fingerprint rules before normalizing, so a
+  // UniFi-discovered appliance/thermostat/camera is fingerprinted rather than
+  // filed as a generic host (BI-BAF38ED3).
+  const attributionInputs = await loadDiscoveryAttributionInputs(prisma);
+  const normalized = normalizeDiscoveredFacts(collectorOutput, attributionInputs);
 
   const summary = await persistBootstrapDiscoveryRun(
     prisma as never,
@@ -459,13 +469,15 @@ export async function rerunDiscoveryConnection(connectionId: string): Promise<Re
     },
   );
 
-  const status = "active";
+  const status = health.connectionStatus;
   await prisma.discoveryConnection.update({
     where: { id: connectionId },
     data: {
       lastTestedAt: new Date(),
-      lastTestStatus: "ok",
-      lastTestMessage: `Discovered ${summary.createdEntities + summary.updatedEntities} items`,
+      lastTestStatus: health.testStatus,
+      lastTestMessage: health.healthy
+        ? `Discovered ${summary.createdEntities + summary.updatedEntities} items`
+        : health.message,
       status,
     },
   });

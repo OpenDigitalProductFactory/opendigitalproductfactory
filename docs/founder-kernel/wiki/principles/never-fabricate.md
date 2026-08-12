@@ -5,7 +5,7 @@ status: published
 abstract: Ground claims in code, specs, or DB state — never in training patterns.
 principleTier: commandment
 principleDirection: Ground every claim in queried state, code, or specs; never substitute training patterns.
-principleDimensionVector: {"evidence_density": 1.0, "governance_compliance": 0.5, "blast_radius": -0.4}
+principleDimensionVector: {"evidence_density": 1.0, "governance_compliance": 0.5, "blast_radius": -0.4, "evidence_confidence": 0.9, "human_cognitive_load": -0.35}
 principleAppliesTo:
   - in_platform_coworker
   - external_coding_agent

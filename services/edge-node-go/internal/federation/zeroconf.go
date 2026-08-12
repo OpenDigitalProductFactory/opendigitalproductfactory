@@ -15,7 +15,14 @@ import (
 	"github.com/betamos/zeroconf"
 )
 
-const ServiceType = "_dpf-federation._tcp.local."
+// ServiceType is the application/protocol portion expected by zeroconf.NewType.
+// The library supplies the local domain itself; passing the fully-qualified
+// name leaves its parsed domain as "local." and silently produces bad DNS
+// resource data on announcement.
+const ServiceType = "_dpf-federation._tcp"
+
+// ServiceFQDN is the operator-facing standard DNS-SD name.
+const ServiceFQDN = ServiceType + ".local."
 
 type DiscoveryOptions struct {
 	AuthorityURL       string

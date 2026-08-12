@@ -1487,6 +1487,8 @@ HOOK_PURPOSES = {
     "governance-freshness-check.mjs": "SessionStart: warns if governance guard wiring is stale",
     "grok-session-start.mjs": "Grok SessionStart: process-spine exposure probe + governance-freshness (global hook plane)",
     "worktree-session-hygiene.mjs": "SessionStart observe worktree sprawl; SessionEnd reaps THIS worktree when Tier-A (merged+clean) — primary reaper, not cron",
+    "worktree-session-heartbeat.mjs": "SessionStart/Stop write + SessionEnd remove a gitignored session heartbeat so the janitor never reaps a worktree with a live session (non-destructive)",
+    "root-clone-freshness.mjs": "SessionStart: fast-forwards the shared root clone to origin/main (ff-only, on-main+clean) so junctioned worktrees never inherit a stale root",
     "uncommitted-work-guard.mjs": "SessionEnd/Stop/post-checkout: warns before uncommitted spec/plan loss",
 }
 

@@ -9,7 +9,12 @@
 // passes a per-run token budget + hard call cap so a 10k+-entity estate cannot blow
 // the AI budget in one pass.
 
-import type { IdentityInferenceResult, ProposedIdentity, UnresolvedEntityRow } from "@dpf/db";
+import type {
+  IdentityInferenceDiagnostic,
+  IdentityInferenceResult,
+  ProposedIdentity,
+  UnresolvedEntityRow,
+} from "@dpf/db";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 import {
   IDENTITY_INFERENCE_JOB_ID,
@@ -21,7 +26,7 @@ import {
 } from "./identity-inference-constants";
 
 export type IdentityInferenceRunOutcome =
-  | ({ skipped: false } & IdentityInferenceResult)
+  | ({ skipped: false; diagnostic?: IdentityInferenceDiagnostic } & IdentityInferenceResult)
   | { skipped: true; reason: string };
 
 const SYSTEM_PROMPT =
@@ -105,11 +110,27 @@ export function parseProposals(content: string, batchIds: Set<string>): Proposed
  * row. Never throws — inference/DB errors are reflected in the row's lastStatus and a
  * failure count in the result.
  */
+/**
+ * Optional operator override for the AI auto-apply confidence gate. Parsed from
+ * IDENTITY_INFERENCE_AUTO_APPLY_THRESHOLD (0..1); invalid/unset falls back to the
+ * engine default. The default itself is already tuned for cheap/local models — this
+ * exists so a high-precision-model install can RAISE the bar, not so operators must
+ * tune it to get a working baseline.
+ */
+function resolveAutoApplyThresholdOverride(): number | undefined {
+  const raw = process.env.IDENTITY_INFERENCE_AUTO_APPLY_THRESHOLD;
+  if (!raw) return undefined;
+  const parsed = Number.parseFloat(raw);
+  if (!Number.isFinite(parsed) || parsed <= 0 || parsed > 1) return undefined;
+  return parsed;
+}
+
 export async function runIdentityInferenceFallbackJob(
   options: { scanLimit?: number } = {},
 ): Promise<IdentityInferenceRunOutcome> {
-  const { prisma, runIdentityInferenceFallback } = await import("@dpf/db");
+  const { prisma, runIdentityInferenceFallback, diagnoseIdentityInference } = await import("@dpf/db");
   const { computeNextRunAt } = await import("@/lib/ai-provider-types");
+  const autoApplyThreshold = resolveAutoApplyThresholdOverride();
 
   const job = await prisma.scheduledJob.upsert({
     where: { jobId: IDENTITY_INFERENCE_JOB_ID },
@@ -170,8 +191,19 @@ export async function runIdentityInferenceFallbackJob(
         batchSize: IDENTITY_INFERENCE_BATCH_SIZE,
         maxInferenceTokens: IDENTITY_INFERENCE_TOKEN_BUDGET,
         maxInferenceCalls: IDENTITY_INFERENCE_MAX_CALLS,
+        ...(autoApplyThreshold !== undefined ? { autoApplyThreshold } : {}),
       },
     );
+
+    // Proactive self-diagnosis: if the run resolved devices but applied almost
+    // none, the confidence gate is starving identifications — surface it instead
+    // of silently discarding correct results (operator feedback: no user would
+    // ever know to look for this).
+    const effectiveThreshold = autoApplyThreshold ?? 0.9;
+    const diagnostic = diagnoseIdentityInference(result, effectiveThreshold);
+    if (diagnostic) {
+      console.warn(`[identity-inference] ${diagnostic.message}`);
+    }
 
     const now = new Date();
     await prisma.scheduledJob
@@ -180,13 +212,17 @@ export async function runIdentityInferenceFallbackJob(
         data: {
           lastRunAt: now,
           lastStatus: result.failures > 0 ? "partial" : "ok",
-          lastError: result.failures > 0 ? `${result.failures} failure(s)` : null,
+          lastError: result.failures > 0
+            ? `${result.failures} failure(s)`
+            : diagnostic
+              ? `advisory: ${diagnostic.message}`
+              : null,
           nextRunAt: computeNextRunAt(job.schedule, now),
         },
       })
       .catch(() => {});
 
-    return { skipped: false, ...result };
+    return { skipped: false, ...result, ...(diagnostic ? { diagnostic } : {}) };
   } catch (err: unknown) {
     const message = getErrorMessage(err);
     await prisma.scheduledJob

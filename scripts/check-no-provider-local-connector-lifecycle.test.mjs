@@ -123,7 +123,8 @@ test("Policy Guards source profile provisions the pinned isolated AST runtime", 
     resolvedPackagePath: "/repo/node_modules/typescript/package.json",
     repoRoot: "/repo",
   };
-  assert.throws(() => loadPinnedGuardTypeScript({ ...base, resolvePackage: () => { throw new Error("missing"); } }), /pnpm install --frozen-lockfile.*repo-guard-runtime/);
+  // BI-99CAE42F: error text points at managed bootstrap, not bare --filter install.
+  assert.throws(() => loadPinnedGuardTypeScript({ ...base, resolvePackage: () => { throw new Error("missing"); } }), /bootstrap-worktree-deps/);
   assert.throws(() => loadPinnedGuardTypeScript({ ...base, resolvePackage: () => base.resolvedPackagePath, readResolvedPackage: () => ({ version: "6.0.2" }), loadModule: () => ({ version: "6.0.2" }) }), /expected 6\.0\.3.*resolved 6\.0\.2/);
   assert.equal(loadPinnedGuardTypeScript({ ...base, resolvePackage: () => base.resolvedPackagePath, readResolvedPackage: () => ({ version: "6.0.3" }), loadModule: () => ({ version: "6.0.3" }) }).version, "6.0.3");
 });

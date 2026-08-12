@@ -8,6 +8,7 @@ import {
 
 import type { BacklogIngestInput, BacklogIngestResult } from "@/lib/operate/backlog-ingest";
 import { BACKLOG_WORK_TYPE_VALUES, type BacklogWorkType } from "@/lib/explore/backlog";
+import { compareVersionVectors, isVersionVector } from "./version-vector";
 
 export type InboundDemandActivity = Extract<
   DemandActivity,
@@ -28,9 +29,10 @@ export interface DemandMirrorRow {
   federationLinkId: string;
   peerRecordRef: string | null;
   localRecordRef: string | null;
-  version: number;
+  version: bigint;
   syncStatus: string;
   payload: unknown;
+  versionVector?: unknown;
 }
 
 export interface DemandExchangeDb {
@@ -124,6 +126,7 @@ export async function handleIncomingDemand(
           peerRecordRef: peerRef,
           syncStatus,
           version: envelope.originVersion,
+          ...(isVersionVector(envelope.versionVector) ? { versionVector: envelope.versionVector } : {}),
           payload,
           lastSyncedAt: new Date(receivedAt),
         },
@@ -142,23 +145,42 @@ export async function handleIncomingDemand(
   }
 
   const current = decodeDemandMirrorPayload(existing.payload);
+
+  // Causal-vector conflict detection (BI-67315C4A): when BOTH sides carry a version
+  // vector, a "concurrent" comparison is a genuine concurrent edit that the scalar
+  // `version` cannot see — surface it as a conflict rather than let one side's write
+  // silently clobber the other. Ordering otherwise still flows through the scalar
+  // below (back-compat with peers that send no vector).
   if (
-    existing.version === envelope.originVersion
+    isVersionVector(envelope.versionVector)
+    && isVersionVector(existing.versionVector)
+    && compareVersionVectors(envelope.versionVector, existing.versionVector) === "concurrent"
+  ) {
+    return {
+      action: "conflict",
+      mirrorId: existing.mirrorId,
+      originVersion: Number(existing.version),
+      reason: "concurrent-update",
+    };
+  }
+
+  if (
+    Number(existing.version) === envelope.originVersion
     && current?.envelope.payloadDigest === envelope.payloadDigest
     && current.activity === activity
   ) {
     return {
       action: "noop",
       mirrorId: existing.mirrorId,
-      originVersion: existing.version,
+      originVersion: Number(existing.version),
       disposition: current.disposition,
     };
   }
-  if (envelope.originVersion <= existing.version) {
+  if (envelope.originVersion <= Number(existing.version)) {
     return {
       action: "conflict",
       mirrorId: existing.mirrorId,
-      originVersion: existing.version,
+      originVersion: Number(existing.version),
       reason: "origin-version-not-advancing",
     };
   }
@@ -173,6 +195,7 @@ export async function handleIncomingDemand(
     data: {
       syncStatus,
       version: envelope.originVersion,
+      ...(isVersionVector(envelope.versionVector) ? { versionVector: envelope.versionVector } : {}),
       payload,
       conflictReason: null,
       lastSyncedAt: new Date(receivedAt),
@@ -182,7 +205,7 @@ export async function handleIncomingDemand(
     return {
       action: "conflict",
       mirrorId: existing.mirrorId,
-      originVersion: existing.version,
+      originVersion: Number(existing.version),
       reason: "concurrent-update",
     };
   }

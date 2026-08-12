@@ -34,9 +34,11 @@ import {
 const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 // Line-oriented `<path>\t<loc>` baseline, merged with git's built-in
 // `merge=union` driver (.gitattributes) so concurrent PRs that each re-baseline
-// never conflict (BI-3B0AD9CF). A union merge can leave duplicate paths; the
-// check fails closed on those duplicates (BI-EEB04701) so contributors re-run
-// `--update` rather than living with an ambiguous threshold.
+// never conflict (BI-3B0AD9CF). A union merge can leave duplicate paths;
+// parseBaseline keeps the SMALLER LOC (never loosens a size ceiling) and
+// check mode continues; --update rewrites a clean one-line-per-path file
+// (BI-24115B65). Hard-refusing duplicates defeated the union driver: green
+// merge, then red guard on every rebase.
 const BASELINE_PATH = join(REPO_ROOT, "scripts", "module-size-baseline.txt");
 
 function serializeBaseline(baseline) {
@@ -47,12 +49,8 @@ function serializeBaseline(baseline) {
 }
 
 /**
- * Parse `<path>\t<loc>` lines.
- * Union merges (BI-3B0AD9CF) can leave the same path on multiple lines. When
- * that happens the file is corrupt: fail closed so contributors re-run
- * `--update` rather than silently picking max/min (BI-EEB04701). Until then,
- * if a consumer must resolve in memory, keep the SMALLER LOC so a stale
- * duplicate never loosens the ratchet.
+ * Report paths that appear more than once (union-merge artifact).
+ * Diagnostic only — check mode tolerates them via parseBaseline min-wins.
  */
 export function findDuplicateBaselinePaths(text) {
   const seen = new Map();
@@ -69,6 +67,12 @@ export function findDuplicateBaselinePaths(text) {
   return [...dups].sort();
 }
 
+/**
+ * Parse `<path>\t<loc>` lines.
+ * Union merges (BI-3B0AD9CF) can leave the same path on multiple lines.
+ * Keep the SMALLER LOC so a stale/larger sibling never loosens the ratchet
+ * (size ceiling semantics — min-wins, not max-wins).
+ */
 export function parseBaseline(text) {
   const baseline = {};
   for (const raw of text.split(/\r?\n/)) {
@@ -114,16 +118,16 @@ function main() {
     process.exit(1);
   }
 
+  // BI-24115B65: tolerate union-merge duplicates (min LOC wins). Surface a
+  // notice so contributors can optionally normalize with --update, but do
+  // not fail a green merge on an intentional merge-driver artifact.
   const duplicatePaths = findDuplicateBaselinePaths(baselineText);
   if (duplicatePaths.length > 0) {
-    console.error(
-      "Module-size baseline has duplicate paths (union-merge artifact, BI-EEB04701).\n" +
-        "The on-disk baseline must have one line per path. Re-run:\n" +
-        "  node scripts/check-module-size.mjs --update\n" +
-        "Duplicates:",
+    console.warn(
+      `Module-size baseline has ${duplicatePaths.length} union-merge duplicate path(s); ` +
+        `using the smaller LOC for each (never loosens). Optional cleanup: ` +
+        `node scripts/check-module-size.mjs --update`,
     );
-    for (const p of duplicatePaths) console.error(`  - ${p}`);
-    process.exit(1);
   }
 
   const grew = []; // baselined file now larger than its recorded LOC

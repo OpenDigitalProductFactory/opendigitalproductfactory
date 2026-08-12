@@ -268,6 +268,58 @@ export const DEFAULT_WORKSPACE_HOME_CONTRIBUTIONS: WorkspaceHomeContribution[] =
     ],
   }),
   profile({
+    // Manufacturing is modeled around released work and constrained production
+    // flow. It intentionally does not imply write authority over PLCs, robots,
+    // safety systems, or machine controllers.
+    id: "home-manufacturing",
+    label: "Manufacturing operations home",
+    description:
+      "Released work, line and cell capacity, material and equipment readiness, quality holds, and production handoffs in one operating view.",
+    primaryOperatingQuestion:
+      "which released work is at risk of missing its quality or delivery commitment today?",
+    topConcerns: [
+      "released work waiting on a line, cell, station, or operator",
+      "material, tooling, or equipment readiness constraints",
+      "work in progress aging or missing its next operation",
+      "quality holds, nonconformance, and inspection decisions",
+      "engineering, production, supply, and service handoffs",
+    ],
+    archetypeCategories: ["manufacturing"],
+    primitives: ["capacity-lanes", "inventory-watch", "decision-queue", "handoff-queue"],
+    requiredCanonicalData: ["work-item", "work-schedule"],
+    requiredSignals: ["scheduled-work", "urgent-exception", "coworker-handoff"],
+    components: [
+      {
+        key: "technician-load",
+        slotId: "today-now",
+        primitiveKey: "capacity-lanes",
+        title: "Line, cell, station, and operator capacity",
+        dataRefs: [workSchedule, scheduledWork],
+      },
+      {
+        key: "parts-watch",
+        slotId: "today-now",
+        primitiveKey: "inventory-watch",
+        title: "Material, tooling, and equipment readiness",
+        dataRefs: [workItem],
+      },
+      {
+        key: "unassigned-work",
+        slotId: "exceptions-needs-review",
+        primitiveKey: "decision-queue",
+        title: "Released work, WIP, and quality constraints",
+        dataRefs: [workItem, urgentException],
+      },
+      {
+        key: "coworker-handoffs",
+        slotId: "coworker-handoffs",
+        primitiveKey: "handoff-queue",
+        title: "Engineering, production, supply, quality, and service handoffs",
+        dataRefs: [coworkerHandoff],
+      },
+    ],
+  }),
+  profile({
     id: "home-fabric-care-services",
     label: "Fabric care operations home",
     description:

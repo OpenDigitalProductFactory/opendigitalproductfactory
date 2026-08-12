@@ -56,6 +56,14 @@ export type DiscoverySyncTx = InventoryEntityHeapIntegrityTx & {
       select: { id: true };
     }): Promise<{ id: string }>;
   };
+  // IEEE OUI registry lookup (BI-9632B15B). Read-only reference data, batched once
+  // per sweep on the distinct prefixes observed — see the call site in discovery-sync.
+  macVendorOui: {
+    findMany(args: {
+      where: { oui: { in: string[] } };
+      select: { oui: true; vendor: true };
+    }): Promise<Array<{ oui: string; vendor: string }>>;
+  };
   inventoryEntity: {
     // Identity columns come back with the key set for the same reason `upsert`
     // selects them (below): quality is evaluated against the PERSISTED row. This

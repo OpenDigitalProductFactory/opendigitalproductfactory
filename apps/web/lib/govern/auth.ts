@@ -7,6 +7,7 @@ import { prisma } from "@dpf/db";
 import { verifyPassword, hashPassword } from "./password";
 import { determineSocialAuthFlow, createTempToken } from "./social-auth";
 import { normalizeAuthRedirect } from "./auth-redirect";
+import { resolveWorkforcePlatformRole } from "./auth-utils";
 
 /**
  * Load social auth credentials from PlatformConfig DB into process.env.
@@ -150,7 +151,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
             id: user.id,
             email: user.email,
             type: "admin" as const,
-            platformRole: user.groups[0]?.platformRole.roleId ?? null,
+            platformRole: resolveWorkforcePlatformRole(user.groups),
             isSuperuser: user.isSuperuser,
             accountId: null,
             accountName: null,

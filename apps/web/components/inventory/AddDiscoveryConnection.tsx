@@ -2,10 +2,12 @@
 
 import { useState } from "react";
 import { ConfigureConnectionInline } from "./ConfigureConnectionInline";
+import type { GatewayCandidate } from "@/lib/discovery-connection/gateway-candidate";
 
 type Props = {
   /** Gateway IP detected from discovered network interfaces (e.g., "192.168.0.1") */
   detectedGateway?: string | null;
+  gatewayCandidates?: GatewayCandidate[];
   /**
    * "hero" (default) is the empty-state pitch with detected-gateway copy.
    * "compact" is the small "+ Add another" tile shown beneath an existing list.
@@ -13,13 +15,14 @@ type Props = {
   variant?: "hero" | "compact";
 };
 
-export function AddDiscoveryConnection({ detectedGateway, variant = "hero" }: Props) {
+export function AddDiscoveryConnection({ detectedGateway, gatewayCandidates = [], variant = "hero" }: Props) {
   const [showForm, setShowForm] = useState(false);
 
   if (showForm) {
     return (
       <ConfigureConnectionInline
-        gatewayName={detectedGateway ? `Gateway ${detectedGateway}` : "Network Gateway"}
+        gatewayCandidates={gatewayCandidates}
+        gatewayName={gatewayCandidates[0]?.name ?? (detectedGateway ? `Gateway ${detectedGateway}` : "Network Gateway")}
         gatewayAddress={detectedGateway ?? undefined}
         onComplete={() => setShowForm(false)}
       />
@@ -45,15 +48,15 @@ export function AddDiscoveryConnection({ detectedGateway, variant = "hero" }: Pr
           <p className="text-xs font-medium uppercase tracking-[0.16em] text-[var(--dpf-muted)]">
             Network Discovery
           </p>
-          {detectedGateway ? (
+          {gatewayCandidates.length > 0 ? (
             <>
               <p className="text-sm text-[var(--dpf-text)] mt-1">
-                Gateway detected at <span className="font-mono font-medium">{detectedGateway}</span>
+                {gatewayCandidates.length === 1
+                  ? <>Gateway identified: <span className="font-medium">{gatewayCandidates[0].name}</span></>
+                  : <>{gatewayCandidates.length} possible gateways identified</>}
               </p>
               <p className="text-xs text-[var(--dpf-muted)] mt-1">
-                Connect to your gateway to discover all devices on your network.
-                If this is a Ubiquiti UniFi gateway, you will need an API key from
-                Settings &gt; API in your UniFi console.
+                DPF will use the discovered device identity and recommend the best supported connection method.
               </p>
             </>
           ) : (
@@ -66,9 +69,9 @@ export function AddDiscoveryConnection({ detectedGateway, variant = "hero" }: Pr
         <button
           type="button"
           onClick={() => setShowForm(true)}
-          className="rounded-md bg-[#7c8cf8] px-4 py-1.5 text-sm font-medium text-white hover:bg-[#6b7bf7] transition-colors shrink-0"
+          className="shrink-0 rounded-md bg-[var(--dpf-accent)] px-4 py-1.5 text-sm font-medium text-[var(--dpf-accent-contrast)] transition-opacity hover:opacity-90"
         >
-          {detectedGateway ? "Configure" : "Add Connection"}
+          {gatewayCandidates.length > 0 ? "Review & Connect" : "Add Connection"}
         </button>
       </div>
     </div>

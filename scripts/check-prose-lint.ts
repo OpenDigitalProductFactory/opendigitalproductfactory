@@ -49,6 +49,7 @@ import {
   analyzeReadability,
   withinReadingLevel,
 } from "../packages/validators/src/readability";
+import { isProseLintSource } from "./lib/gate-sensitivity.mjs";
 
 const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const WEB = join(REPO_ROOT, "apps", "web");
@@ -234,6 +235,7 @@ function scan(): Record<string, ProseAxes> {
   for (const dir of SCAN_DIRS) {
     for (const file of listSourceFiles(dir)) {
       const rel = relative(REPO_ROOT, file).replace(/\\/g, "/");
+      if (!isProseLintSource(rel)) continue;
       const text = readFileSync(file, "utf8");
       const axes = analyzeFile(rel, text);
       if (!isZero(axes)) counts[rel] = axes;

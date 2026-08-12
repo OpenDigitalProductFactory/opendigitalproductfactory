@@ -24,6 +24,36 @@ describe("relationshipPresetForRole", () => {
 });
 
 describe("runDemandReconciliation", () => {
+  it("fault-isolates a throwing item so every other item still projects (BI-8A7E3E56 follow-up)", async () => {
+    const mkItem = (id: string) => ({
+      itemId: id, title: `Need ${id}`, body: null, workType: "feature", occurrenceCount: 1,
+      createdAt: new Date("2026-08-01T00:00:00Z"), updatedAt: new Date("2026-08-01T00:00:00Z"), digitalProduct: null,
+    });
+    // Middle item throws (e.g. an envelope violation); the loop must skip it and
+    // keep going — not abort and strand every item after it.
+    const queueProjection = vi.fn()
+      .mockResolvedValueOnce({ action: "queued" })
+      .mockRejectedValueOnce(new Error("Demand projection refused: field:not-allowed:x"))
+      .mockResolvedValueOnce({ action: "queued" });
+    const db = {
+      federationLink: { findMany: vi.fn().mockResolvedValue(links) },
+      backlogItem: { findMany: vi.fn().mockResolvedValue([mkItem("BI-A"), mkItem("BI-B"), mkItem("BI-C")]) },
+      federatedRecordMirror: { findMany: vi.fn().mockResolvedValue([]) },
+    } as unknown as DemandReconciliationDb;
+
+    const result = await runDemandReconciliation(db, {
+      resolveIdentity: vi.fn().mockResolvedValue({ installationId: `inst_${"a".repeat(32)}`, projectionSecret: "b".repeat(64) }),
+      queueProjection,
+      queueWithdrawal: vi.fn(),
+      reconcileDigests: vi.fn().mockResolvedValue({ linksChecked: 0, requeued: 0, confirmed: 0, failedLinks: 0 }),
+      dispatch: vi.fn().mockResolvedValue({ attempted: 0, delivered: 0, deferred: 0, deadLettered: 0 }),
+    });
+
+    expect(queueProjection).toHaveBeenCalledTimes(3); // BI-C attempted despite BI-B throwing
+    expect(result.projected).toBe(2);
+    expect(result.failed).toBe(1);
+  });
+
   it("automatically queues only platform demand on a trusted same-organization link", async () => {
     const queueProjection = vi.fn().mockResolvedValue({ action: "queued" });
     const db = {
@@ -77,6 +107,27 @@ describe("runDemandReconciliation", () => {
         status: { in: ["triaging", "open", "in-progress"] },
       }),
     }));
+  });
+
+  it("shares ALL non-sensitive same-org backlog, not just the dpf-portal-tagged subset (BI-8A7E3E56 follow-up)", async () => {
+    const db = {
+      federationLink: { findMany: vi.fn().mockResolvedValue(links) },
+      backlogItem: { findMany: vi.fn().mockResolvedValue([]) },
+      federatedRecordMirror: { findMany: vi.fn().mockResolvedValue([]) },
+    } as unknown as DemandReconciliationDb;
+
+    await runDemandReconciliation(db, {
+      resolveIdentity: vi.fn().mockResolvedValue({ installationId: `inst_${"a".repeat(32)}`, projectionSecret: "b".repeat(64) }),
+      queueProjection: vi.fn(),
+      queueWithdrawal: vi.fn(),
+      reconcileDigests: vi.fn().mockResolvedValue({ linksChecked: 0, requeued: 0, confirmed: 0, failedLinks: 0 }),
+      dispatch: vi.fn().mockResolvedValue({ attempted: 0, delivered: 0, deferred: 0, deadLettered: 0 }),
+    });
+
+    const where = (db.backlogItem.findMany as unknown as { mock: { calls: Array<[{ where: Record<string, unknown> }]> } }).mock.calls[0][0].where;
+    // Same-org is trust-by-default: gate on sensitivity, NOT on the dpf-portal product tag.
+    expect(where.sensitivity).toEqual({ notIn: ["confidential", "restricted"] });
+    expect(where).not.toHaveProperty("digitalProduct");
   });
 
   it("never re-egresses a locally adopted peer envelope", async () => {

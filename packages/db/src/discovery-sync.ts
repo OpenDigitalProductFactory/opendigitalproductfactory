@@ -1,21 +1,13 @@
 import { evaluateInventoryQuality } from "./discovery-attribution";
 import { buildQualityEvaluationEntities } from "./discovery-quality-input";
+import { ouiPrefix, resolveMacVendor } from "./mac-oui";
 import { persistQualityIssues } from "./discovery-quality-persistence";
 import type { NormalizedDiscoveryOutput } from "./discovery-normalize";
 import { deriveInventoryEvidenceSnapshot } from "./discovery-evidence";
 import { deriveInventoryEnrichment } from "./inventory-enrichment";
-import {
-  syncInventoryEntityAsInfraCI,
-  syncInventoryRelationship,
-} from "./graph-sync";
-import {
-  INVENTORY_ENTITY_CANONICAL_WHERE,
-  INVENTORY_RELATIONSHIP_CANONICAL_WHERE,
-} from "./inventory-entity-lifecycle";
-import {
-  assertInventoryEntityHeapIntegrity,
-  lockInventoryEntityKeys,
-} from "./inventory-entity-heap-integrity";
+import { syncInventoryEntityAsInfraCI, syncInventoryRelationship } from "./graph-sync";
+import { INVENTORY_ENTITY_CANONICAL_WHERE, INVENTORY_RELATIONSHIP_CANONICAL_WHERE } from "./inventory-entity-lifecycle";
+import { assertInventoryEntityHeapIntegrity, lockInventoryEntityKeys } from "./inventory-entity-heap-integrity";
 import type {
   DiscoveryPersistenceSummary,
   DiscoveryProjectionOptions,
@@ -125,6 +117,9 @@ export async function persistBootstrapDiscoveryRun(
 
   const projected = await db.$transaction(async (tx) => {
     const now = new Date();
+    const sourceKindByDiscoveredKey = new Map(dedupedDiscoveredItems.map(
+      (item) => [item.discoveredKey, item.sourceKind] as const,
+    ));
     const softwareEvidenceByEntityKey = new Map<string, NormalizedDiscoveryOutput["softwareEvidence"]>();
     for (const software of normalized.softwareEvidence) {
       const existing = softwareEvidenceByEntityKey.get(software.inventoryEntityKey) ?? [];
@@ -247,11 +242,53 @@ export async function persistBootstrapDiscoveryRun(
       normalizedVersion: string | null;
       supportStatus: string;
     }>();
+    // Resolve MAC -> vendor for this sweep BEFORE enrichment runs.
+    //
+    // Nothing in the platform did this. Every vendor that appeared came from the
+    // UniFi controller's own lookup, handed to us per-client — so a device the
+    // controller did not describe stayed unidentified forever, including every
+    // UniFi device itself (BI-9632B15B). The OUI is on the wire; depending on a
+    // vendor's API to volunteer it is the fragile part.
+    //
+    // Resolved into `properties.vendor`, which `deriveInventoryEnrichment` already
+    // reads — so this needs no change to that pure function, and a looked-up
+    // vendor arrives by exactly the same route the controller's own value does.
+    // An existing vendor is never overwritten: a collector that genuinely knows
+    // the manufacturer outranks a 24-bit prefix.
+    //
+    // One batched query per sweep, keyed on the distinct prefixes actually seen.
+    const ouiPrefixesInSweep = new Set<string>();
+    for (const entity of normalized.inventoryEntities) {
+      const props = entity.properties as Record<string, unknown> | undefined;
+      const prefix = ouiPrefix(
+        (props?.mac ?? props?.macAddress ?? null) as string | null,
+      );
+      if (prefix) ouiPrefixesInSweep.add(prefix);
+    }
+    const vendorsByOui = new Map<string, string>();
+    if (ouiPrefixesInSweep.size > 0) {
+      for (const row of await tx.macVendorOui.findMany({
+        where: { oui: { in: [...ouiPrefixesInSweep] } },
+        select: { oui: true, vendor: true },
+      })) {
+        vendorsByOui.set(row.oui, row.vendor);
+      }
+    }
+
     for (const entity of normalized.inventoryEntities) {
       const existed = existingEntityKeys.has(entity.entityKey);
       const evidenceSnapshot = deriveInventoryEvidenceSnapshot(
         softwareEvidenceByEntityKey.get(entity.entityKey) ?? [],
       );
+      // See the OUI batch above. Only fills a GAP — a collector-supplied vendor wins.
+      const entityProps = entity.properties as Record<string, unknown> | undefined;
+      if (entityProps && !entityProps.vendor && !entityProps.vendorShort) {
+        const resolution = resolveMacVendor(
+          (entityProps.mac ?? entityProps.macAddress ?? null) as string | null,
+          vendorsByOui,
+        );
+        if (resolution.vendor) entityProps.vendor = resolution.vendor;
+      }
       // Enrichment closes the gap between raw discovery signals (MAC OUI
       // vendor in properties, container image tag, name patterns) and the
       // typed columns the UI reads. evidenceSnapshot only sees package-
@@ -710,6 +747,9 @@ export async function persistBootstrapDiscoveryRun(
         entityType: entity.entityType,
         status: entity.attributionStatus === "stale" ? "stale" : "active",
         portfolioSlug: entity.portfolioSlug ?? null,
+        properties: { ...entity.properties,
+          sourceKind: sourceKindByDiscoveredKey.get(entity.discoveredKey) ?? runMeta.sourceSlug,
+          lastObservedAt: now.toISOString() },
       })),
       relationshipsToProject: normalized.inventoryRelationships.flatMap((relationship) => {
         const fromEntityKey = relationship.fromDiscoveredKey

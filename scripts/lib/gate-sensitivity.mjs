@@ -67,3 +67,22 @@ export const UI_CONTROL_RE = new RegExp(
 export const UX_ROUTE_FILE_RE = /app\/.*\/page\.tsx$/;
 // Test/story scaffolding is never user-facing.
 export const UX_EXCLUDE_RE = /\.(test|spec|stories)\.tsx$/;
+
+// ── Source scopes for prospective guard guidance ───────────────────────────
+// These predicates are also consumed by the guard scanners themselves. That
+// keeps gate-context from maintaining a second, looser idea of which planned
+// files the prose/style guards inspect.
+export const PROSE_LINT_SOURCE_RE =
+  /^apps\/web\/(?:app|components)\/.*\.(?:ts|tsx)$/;
+export const STYLE_DRIFT_SOURCE_RE =
+  /^apps\/web\/(?:app|components|lib|hooks)\/.*\.(?:ts|tsx|mts|cts)$/;
+
+export function isProseLintSource(path) {
+  return PROSE_LINT_SOURCE_RE.test(String(path ?? "").replace(/\\/g, "/")) &&
+    !/\.(?:test|spec)\.(?:ts|tsx)$/.test(path);
+}
+
+export function isStyleDriftSource(path) {
+  return STYLE_DRIFT_SOURCE_RE.test(String(path ?? "").replace(/\\/g, "/")) &&
+    !/\.(?:test|spec)\.(?:ts|tsx)$/.test(path);
+}

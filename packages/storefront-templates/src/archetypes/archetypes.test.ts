@@ -46,6 +46,22 @@ describe("archetype catalog", () => {
     }
   });
 
+  it("ships manufacturing as an owned-transformation industrial OEM category (BI-7697CAD3)", () => {
+    const manufacturing = ALL_ARCHETYPES.filter((a) => a.category === "manufacturing");
+    expect(manufacturing.map((a) => a.archetypeId)).toEqual(["industrial-equipment-oem"]);
+
+    const oem = manufacturing[0]!;
+    expect(oem.ctaType).toBe("inquiry");
+    expect(oem.activationProfile?.axes).toMatchObject({
+      form: "goods",
+      delivery: "physical",
+      primaryConsumer: "business",
+      consumptionChannel: "sales-assisted",
+    });
+    expect(oem.activationProfile?.portfolios?.manufactureAndDeliver.scope).toBe("primary");
+    expect(oem.itemTemplates.some((item) => /serialized|prototype|production/i.test(`${item.name} ${item.description}`))).toBe(true);
+  });
+
   it("ships fabric-care services with dry-cleaning plant-network custody flow (BI-7CFFC421)", () => {
     const fabricCare = ALL_ARCHETYPES.filter((a) => a.category === "fabric-care-services");
     expect(fabricCare.map((a) => a.archetypeId).sort()).toEqual([

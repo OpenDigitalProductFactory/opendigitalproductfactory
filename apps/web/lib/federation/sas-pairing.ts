@@ -1,0 +1,159 @@
+// EP-DELIVERY-FLOW · BI-67315C4A increment 3 — SAS pairing crypto.
+//
+// Secure device pairing via a Short Authentication String (SAS), the numeric-
+// comparison method from Bluetooth LE Secure Connections and IETF
+// draft-ietf-dnssd-pairing (SAS over DNS-SD — DPF's exact same-LAN case). The
+// original "approve on both" flow is the "just works" method, which the pairing
+// literature is explicit gives ZERO MITM protection. SAS closes that: both
+// installs show the SAME 6-digit code and the operators confirm it matches.
+//
+// Protocol (MANA-IV commit / reveal / compare):
+//   1. Each side generates an ephemeral X25519 keypair + a random nonce, and
+//      sends commitment = H(ephemeralPub || nonce) FIRST.
+//   2. After both commitments are exchanged, each side reveals (ephemeralPub, nonce).
+//   3. Each side verifies the peer's reveal against its earlier commitment — this
+//      binds a MITM to keys chosen BEFORE seeing the peer's, defeating adaptive
+//      SAS-collision search.
+//   4. Each side computes the X25519 shared secret and derives the 6-digit SAS
+//      over a canonical transcript (both device IDs + both ephemeral pubs + both
+//      nonces + the shared secret). A MITM holds a DIFFERENT shared secret with
+//      each honest side, so the two honest SAS values differ → operators see a
+//      mismatch and abort.
+//
+// Pure and Node-crypto only — no DB, no transport — so it is exhaustively
+// unit-testable. Transport (exchanging commitments/reveals) and the identity-key
+// signature binding are later wiring on top of this core.
+
+import {
+  createHash,
+  createPrivateKey,
+  createPublicKey,
+  diffieHellman,
+  generateKeyPairSync,
+  randomBytes,
+  timingSafeEqual,
+} from "node:crypto";
+
+export interface EphemeralKeypair {
+  /** X25519 public key, SPKI DER, base64. Sent to the peer (after commitment). */
+  publicKey: string;
+  /** X25519 private key, PKCS8 DER, base64. Never leaves this process. */
+  privateKey: string;
+}
+
+const NONCE_BYTES = 16;
+export const SAS_DIGITS = 6;
+const SAS_PROTOCOL_CONTEXT = "dpf-federation-sas-v1";
+
+export interface SasCommitmentBinding {
+  deviceId: string;
+  /** Stable peer device ID when known; rotating discovery ID during first contact. */
+  peerBinding: string;
+  authorityUrl: string;
+  pairingContext: string;
+  commitment: string;
+}
+
+/** Canonical identity-signature statement for the commit phase. */
+export function buildSasCommitmentStatement(binding: SasCommitmentBinding): string {
+  return [
+    SAS_PROTOCOL_CONTEXT,
+    binding.deviceId,
+    binding.peerBinding,
+    binding.authorityUrl,
+    binding.pairingContext,
+    binding.commitment,
+  ].join("\u0000");
+}
+
+/** Generate an ephemeral X25519 keypair for a single pairing session. */
+export function generateEphemeralKeypair(): EphemeralKeypair {
+  const { publicKey, privateKey } = generateKeyPairSync("x25519");
+  return {
+    publicKey: publicKey.export({ type: "spki", format: "der" }).toString("base64"),
+    privateKey: privateKey.export({ type: "pkcs8", format: "der" }).toString("base64"),
+  };
+}
+
+/** A fresh random pairing nonce (base64). */
+export function generatePairingNonce(): string {
+  return randomBytes(NONCE_BYTES).toString("base64");
+}
+
+/** Commitment sent before reveal: H(ephemeralPub || nonce). */
+export function computeCommitment(ephemeralPublicKey: string, nonce: string): string {
+  return createHash("sha256").update(`${ephemeralPublicKey}\u0000${nonce}`).digest("hex");
+}
+
+/** Verify a peer's revealed (ephemeralPub, nonce) against its earlier commitment,
+ *  in constant time. A failure means the peer changed its keys after committing —
+ *  abort the pairing. */
+export function verifyCommitment(
+  ephemeralPublicKey: string,
+  nonce: string,
+  expectedCommitment: string,
+): boolean {
+  const actual = Buffer.from(computeCommitment(ephemeralPublicKey, nonce), "utf8");
+  const expected = Buffer.from(expectedCommitment, "utf8");
+  return actual.length === expected.length && timingSafeEqual(actual, expected);
+}
+
+/** X25519 shared secret from our private key and the peer's public key (base64). */
+export function deriveSharedSecret(myPrivateKey: string, theirPublicKey: string): Buffer {
+  const privateKey = createPrivateKey({
+    key: Buffer.from(myPrivateKey, "base64"),
+    format: "der",
+    type: "pkcs8",
+  });
+  const publicKey = createPublicKey({
+    key: Buffer.from(theirPublicKey, "base64"),
+    format: "der",
+    type: "spki",
+  });
+  return diffieHellman({ privateKey, publicKey });
+}
+
+export interface SasTranscript {
+  localDeviceId: string;
+  remoteDeviceId: string;
+  localEphemeralPublicKey: string;
+  remoteEphemeralPublicKey: string;
+  localNonce: string;
+  remoteNonce: string;
+  sharedSecret: Buffer;
+}
+
+/** Derive the 6-digit SAS from the session transcript. Symmetric: both honest
+ *  sides compute the same value because the transcript is canonicalized by
+ *  device-ID order and the X25519 shared secret is identical for them. A MITM
+ *  has a different shared secret with each side, so their SAS values diverge. */
+export function deriveSas(transcript: SasTranscript): string {
+  const parties = [
+    {
+      id: transcript.localDeviceId,
+      pub: transcript.localEphemeralPublicKey,
+      nonce: transcript.localNonce,
+    },
+    {
+      id: transcript.remoteDeviceId,
+      pub: transcript.remoteEphemeralPublicKey,
+      nonce: transcript.remoteNonce,
+    },
+  ].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+
+  const canonical =
+    parties.map((p) => `${p.id}|${p.pub}|${p.nonce}`).join("\u0000") +
+    "\u0000" +
+    transcript.sharedSecret.toString("base64");
+
+  const digest = createHash("sha256").update(canonical).digest();
+  const modulus = 10 ** SAS_DIGITS;
+  return String(digest.readUInt32BE(0) % modulus).padStart(SAS_DIGITS, "0");
+}
+
+/** Constant-time equality of two SAS strings (for programmatic confirmation). */
+export function sasEquals(a: string, b: string): boolean {
+  const ab = Buffer.from(a, "utf8");
+  const bb = Buffer.from(b, "utf8");
+  return ab.length === bb.length && timingSafeEqual(ab, bb);
+}

@@ -14,6 +14,8 @@ import {
 } from "./demand-delivery";
 import { decodeDemandMirrorPayload } from "./demand-exchange";
 import type { FederationIdentity } from "./demand-identity";
+import { scheduleFederationDeliveryJob } from "./delivery-queue";
+import { findFirstMirrorAcrossPages } from "./mirror-page";
 
 interface ResponseMirrorRow {
   mirrorId: string;
@@ -22,7 +24,7 @@ interface ResponseMirrorRow {
   localRecordRef: string | null;
   peerRecordRef: string | null;
   syncStatus: string;
-  version: number;
+  version: bigint;
   payload: unknown;
 }
 
@@ -112,16 +114,14 @@ export async function queueDemandResponse(
     syncStatus: "pending",
     version: (input.now ?? new Date()).getTime(),
     payload: { envelope: response, activity, eventId: id, queuedAt: createdAt },
-    deliveryAttempts: 0,
-    nextDeliveryAt: input.now ?? new Date(),
-    lastDeliveryError: null,
     deadLetteredAt: null,
   };
+  const mirrorId = existing?.mirrorId ?? `fdr_${id.slice(4, 28)}`;
   if (existing) {
-    await db.federatedRecordMirror.update({ where: { mirrorId: existing.mirrorId }, data });
+    await db.federatedRecordMirror.update({ where: { mirrorId }, data });
   } else {
     await db.federatedRecordMirror.create({ data: {
-      mirrorId: `fdr_${id.slice(4, 28)}`,
+      mirrorId,
       federationLinkId: link.linkId,
       recordType: "demand-response",
       canonicalSide: "local",
@@ -130,6 +130,7 @@ export async function queueDemandResponse(
       ...data,
     } });
   }
+  await scheduleFederationDeliveryJob(db, mirrorId, input.now ?? new Date());
   return { action: "queued", responseId: id };
 }
 
@@ -141,19 +142,24 @@ export async function handleIncomingDemandResponse(
 ): Promise<{ action: "created" | "noop" | "rejected"; responseId?: string; violations?: string[] }> {
   const violations = validateDemandResponseV1(response);
   if (violations.length > 0) return { action: "rejected", violations };
-  const shared = await db.federatedRecordMirror.findMany({
-    where: { federationLinkId: linkId, recordType: "demand-envelope", canonicalSide: "local" },
-    select: { payload: true },
-    take: 1_000,
-  });
-  const matchesSharedEnvelope = shared.some((row) => {
-    const payload = decodeDemandOutboxPayload(row.payload);
-    return payload?.envelope.specVersion === "dpf.demand/1"
-      && payload.envelope.envelopeId === response.envelopeId
-      && payload.envelope.originInstallationId === response.originInstallationId
-      && payload.envelope.originRecordRef === response.originRecordRef;
-  });
-  if (!matchesSharedEnvelope) return { action: "rejected", violations: ["response:unknown-envelope"] };
+  // Correlate the incoming response to the exact demand WE projected. Page the
+  // local envelope inventory (BI-72C3FBA2) — a silent take:1_000 dropped every
+  // envelope past the first batch on busy links.
+  const matchedEnvelope = await findFirstMirrorAcrossPages(
+    (args) => db.federatedRecordMirror.findMany(args),
+    {
+      where: { federationLinkId: linkId, recordType: "demand-envelope", canonicalSide: "local" },
+      select: { payload: true, localRecordRef: true, mirrorId: true },
+    },
+    (row) => {
+      const payload = decodeDemandOutboxPayload(row.payload);
+      return payload?.envelope.specVersion === "dpf.demand/1"
+        && payload.envelope.envelopeId === response.envelopeId
+        && payload.envelope.originInstallationId === response.originInstallationId
+        && payload.envelope.originRecordRef === response.originRecordRef;
+    },
+  );
+  if (!matchedEnvelope) return { action: "rejected", violations: ["response:unknown-envelope"] };
   const where = {
     federationLinkId_recordType_peerRecordRef: {
       federationLinkId: linkId,
@@ -168,7 +174,10 @@ export async function handleIncomingDemandResponse(
     federationLinkId: linkId,
     recordType: "demand-response",
     canonicalSide: "peer",
-    localRecordRef: null,
+    // Bind the response to the originator's local backlog item (the outbound
+    // mirror's localRecordRef is the BacklogItem id) so it is no longer orphaned
+    // and a read model can surface "who responded" on the item itself.
+    localRecordRef: matchedEnvelope.localRecordRef,
     peerRecordRef: response.responseId,
     syncStatus: "synced",
     version: 1,

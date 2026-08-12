@@ -5,6 +5,46 @@ shares a deliberately minimized demand envelope; it never exposes or co-writes
 the source backlog. The source installation decides which item can travel over
 which connection and may withdraw that projection independently.
 
+## How an installation advertises its own address
+
+When you invite or connect to a peer, this installation tells the peer the
+address to reach it at. That address is resolved automatically — the operator
+does not type it:
+
+1. If `PUBLIC_URL` (or `NEXT_PUBLIC_*`) is configured it is used — the correct
+   choice for a reverse-proxy or public deployment.
+2. Otherwise the address is taken from the **request host** — the address you
+   used to open the Connections page. Opening
+   `http://192.168.0.152:3000/platform/federation-links` advertises
+   `http://192.168.0.152:3000`, which is exactly what a same-network peer can
+   reach. (The container's own network address cannot be used: inside the portal
+   container it is the Docker bridge address, not the reachable LAN address.)
+
+So a same-organization LAN pairing needs no typed URL — open the Connections
+page at the installation's LAN address and pair.
+
+Because the address is taken from how you reached the page, **open it at the LAN
+address, not `localhost`** — the address you view it at is exactly what the peer
+is told to use. As a safety net, connecting is refused with a clear message if
+this installation would advertise a loopback address (`localhost` / `127.x` /
+`::1`) to a peer on a different host, since the peer could never reach it. Two
+instances on one host may still pair over loopback.
+
+## Local-network peers over http
+
+Outbound calls to a peer default to HTTPS-only with private/loopback networks
+blocked (SSRF protection). Two things relax that for on-premises LAN federation:
+
+- `DPF_FEDERATION_ALLOW_INSECURE_PEERS=1` — a global operator flag (all peers).
+- **Automatically, with no flag, for a same-organization peer whose address is a
+  private/loopback host** (for example `http://192.168.0.200:3000`). This scoped
+  allowance is narrower than the global flag: a public or DNS-named peer still
+  requires HTTPS even when it is a same-organization link, so channel/reseller
+  connections to public hosts are unaffected.
+
+Combined with automatic address resolution above, a same-organization LAN
+pairing needs no typed URL and no typed flag — install, then Connect and Approve.
+
 ## Same-company installations
 
 Approved `same-organization` connections synchronize share-safe platform demand
@@ -12,6 +52,12 @@ in both directions. Every installation runs the same reconciliation policy, so
 new eligible work and later source updates become visible to the other internal
 installations without another sharing click. This is the normal pattern for a
 company operating separate Mac, Windows, development, or test installations.
+
+Both directions work because enrollment is a **mutual** exchange: each side issues
+the other an inbound link token, so either box can relay its approval and push
+demand to the other. This is what lets a link reach `trusted` on **both** sides
+(not just the inviter) and demand flow each way — a one-directional token exchange
+would leave the connecting side stuck at `pending`.
 
 This is not multi-master backlog replication. Each source backlog item remains
 single-writer authoritative. A peer receives a versioned mirror that it can

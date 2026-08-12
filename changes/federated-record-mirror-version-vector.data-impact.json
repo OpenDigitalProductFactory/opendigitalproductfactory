@@ -1,0 +1,21 @@
+{
+  "version": "1",
+  "accountableOwner": "Mark Bodman (markdbodman@gmail.com)",
+  "summary": "BI-67315C4A. Add FederatedRecordMirror.versionVector (nullable JSONB): a per-installation causal-ordering vector for federated demand records. When present on both peer + local mirrors, the demand exchange uses it to distinguish a clean newer-than from a genuine concurrent conflict (which the scalar version cannot see); null on legacy rows / peers that predate it, where the exchange falls back to the scalar. Additive, non-destructive: no existing row is rewritten. No personal data — the vector holds only opaque installation ids mapped to monotonic integers. Migration: 20260807230000_federated_record_mirror_version_vector.",
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "FederatedRecordMirror",
+      "lifecycleDisposition": "retain-for-link-lifetime",
+      "fields": [
+        {
+          "name": "versionVector",
+          "resolution": "not-applicable",
+          "reason": "Operational causal-ordering metadata (installationId -> monotonic counter) for conflict detection between federated mirrors. Not personal data and not tied to a data subject.",
+          "provenance": "Authored locally by queueDemandProjection (advances this installation's counter on each real change) and carried on the demand envelope; stored on the receiving mirror by the exchange. No new source of data.",
+          "flags": []
+        }
+      ]
+    }
+  ]
+}

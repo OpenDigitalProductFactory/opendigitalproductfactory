@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  builderMemoryUsageBytesFromDocker,
+  dockerMemoryWorkingSetBytes,
   mergeLocalCiHostPressure,
   observeLocalCiServerPressure,
 } from "../apps/web/lib/nonprod/local-ci-capacity-broker.ts";
@@ -17,7 +19,7 @@ const CLIENT = {
   evidenceIsolationHealthy: true,
 };
 
-test("server-owned pressure can only make a client sample less optimistic", () => {
+test("keeps Windows and Docker memory in separate reservation domains", () => {
   const merged = mergeLocalCiHostPressure({
     client: CLIENT,
     server: {
@@ -30,12 +32,15 @@ test("server-owned pressure can only make a client sample less optimistic", () =
       convergenceActive: true,
       fencesHealthy: false,
       evidenceIsolationHealthy: false,
+      builderMemoryUsageBytes: [2 * 1024 ** 3, 0],
     },
   });
 
   assert.deepEqual(merged, {
     observedAt: "2026-07-30T08:00:00.000Z",
-    availableMemoryBytes: 7 * 1024 ** 3,
+    availableMemoryBytes: 16 * 1024 ** 3,
+    dockerAvailableMemoryBytes: 7 * 1024 ** 3,
+    builderMemoryUsageBytes: [2 * 1024 ** 3, 0],
     sustainedCpuPercent: 80,
     diskFreeBytes: 90 * 1024 ** 3,
     dockerHealthy: false,
@@ -45,7 +50,7 @@ test("server-owned pressure can only make a client sample less optimistic", () =
   });
 });
 
-test("a missing server measurement remains unmeasurable instead of trusting the client", () => {
+test("a missing Docker measurement remains unmeasurable without erasing Windows memory", () => {
   const merged = mergeLocalCiHostPressure({
     client: CLIENT,
     server: {
@@ -57,7 +62,8 @@ test("a missing server measurement remains unmeasurable instead of trusting the 
     },
   });
 
-  assert.equal(merged.availableMemoryBytes, undefined);
+  assert.equal(merged.availableMemoryBytes, 16 * 1024 ** 3);
+  assert.equal(merged.dockerAvailableMemoryBytes, undefined);
   assert.equal(merged.sustainedCpuPercent, undefined);
   assert.equal(merged.diskFreeBytes, undefined);
   assert.equal(merged.dockerHealthy, false);
@@ -69,6 +75,7 @@ test("canonical broker converts probe failure into fail-closed pressure", async 
     availableMemoryBytes: () => {
       throw new Error("memory unavailable");
     },
+    builderMemoryUsageBytes: async () => [0, 0],
     sustainedCpuPercent: () => 10,
     diskFreeBytes: async () => 400 * 1024 ** 3,
     dockerHealthy: async () => true,
@@ -84,4 +91,72 @@ test("canonical broker converts probe failure into fail-closed pressure", async 
     fencesHealthy: false,
     evidenceIsolationHealthy: false,
   });
+});
+
+test("Docker builder usage excludes reclaimable inactive file cache", () => {
+  assert.equal(dockerMemoryWorkingSetBytes({
+    memory_stats: {
+      usage: 3 * 1024 ** 3,
+      stats: { inactive_file: 1.5 * 1024 ** 3 },
+    },
+  }), 1.5 * 1024 ** 3);
+  assert.equal(Number.isNaN(dockerMemoryWorkingSetBytes({})), true);
+});
+
+test("an exited builder with empty stats is absent from current memory usage", async () => {
+  const requestedPaths = [];
+  const dockerGet = async (path) => {
+    requestedPaths.push(path);
+    if (path === "/containers/json?all=1") {
+      return [{
+        Id: "stopped-builder",
+        Names: ["/buildx_buildkit_dpf-local-ci-buildkit-v2-00"],
+        State: "exited",
+      }];
+    }
+    if (path.includes("/stats?stream=false")) return { memory_stats: {} };
+    throw new Error(`unexpected Docker path: ${path}`);
+  };
+
+  const builderMemoryUsageBytes = await builderMemoryUsageBytesFromDocker(
+    dockerGet,
+  );
+  const pressure = await observeLocalCiServerPressure({
+    now: () => new Date("2026-08-12T01:33:09.145Z"),
+    availableMemoryBytes: () => 18 * 1024 ** 3,
+    builderMemoryUsageBytes: () => builderMemoryUsageBytes,
+    sustainedCpuPercent: () => 21,
+    diskFreeBytes: async () => 1.5 * 1024 ** 4,
+    dockerHealthy: async () => true,
+    convergenceActive: async () => false,
+    fencesHealthy: async () => true,
+    evidenceIsolationHealthy: async () => true,
+  });
+
+  assert.deepEqual(builderMemoryUsageBytes, [0, 0]);
+  assert.deepEqual(requestedPaths, ["/containers/json?all=1"]);
+  assert.equal(pressure.sustainedCpuPercent, 21);
+  assert.equal(pressure.dockerHealthy, true);
+  assert.deepEqual(pressure.builderMemoryUsageBytes, [0, 0]);
+});
+
+test("a running builder with empty stats remains fail-closed", async () => {
+  const dockerGet = async (path) => {
+    if (path === "/containers/json?all=1") {
+      return [{
+        Id: "running-builder",
+        Names: ["/buildx_buildkit_dpf-local-ci-buildkit-v2-00"],
+        State: "running",
+      }];
+    }
+    if (path === "/containers/running-builder/stats?stream=false") {
+      return { memory_stats: {} };
+    }
+    throw new Error(`unexpected Docker path: ${path}`);
+  };
+
+  await assert.rejects(
+    builderMemoryUsageBytesFromDocker(dockerGet),
+    /docker_builder_memory_unmeasurable/,
+  );
 });

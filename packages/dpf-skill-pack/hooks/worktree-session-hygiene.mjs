@@ -176,6 +176,13 @@ function gatherThisWorktreeFacts(cwd, mainRoot) {
     merged,
     dirty,
     ageDays,
+    // This is the ENDING session's OWN worktree; its own heartbeat liveness is
+    // irrelevant to whether SessionEnd may reap it (the session is over). The
+    // heartbeat gate exists for the FLEET janitor protecting OTHER live sessions.
+    hasLiveSession: false,
+    // A mid-merge in the ending session's own tree is left to that session's
+    // dirty check (KEEP), not quarantined here.
+    midMerge: false,
   };
 }
 

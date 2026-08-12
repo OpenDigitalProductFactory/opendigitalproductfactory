@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 
 import { prisma } from "@dpf/db";
 import { isFederationPairingDirection } from "@dpf/db/federation-pairing-types";
+import { isFederationRelationshipPreset } from "@dpf/db/federation-link-types";
 import { resolveIncidentProjectionSpec } from "@dpf/db/projection-egress";
 
 import { auth } from "@/lib/auth";
@@ -39,7 +40,7 @@ export default async function FederationLinksPage() {
     redirect("/403");
   }
 
-  const [links, discoveryCapabilities, partnerAccounts, nearbyPairingSessions, organizationJoinNodes] = await Promise.all([
+  const [links, discoveryCapabilities, partnerAccounts, nearbyPairingSessions, organizationJoinNodes, introducedCandidates] = await Promise.all([
     prisma.federationLink.findMany({
       include: { principal: { select: { displayName: true } } },
       orderBy: { createdAt: "desc" },
@@ -73,6 +74,16 @@ export default async function FederationLinksPage() {
       take: 20,
     }),
     getOrganizationJoinNodeSummariesAction(),
+    prisma.federationIntroductionCandidate.findMany({
+      where: {
+        expiresAt: { gt: new Date() }, withdrawnAt: null, dismissedAt: null,
+        pairedFederationLinkId: null,
+        introducerLink: { linkState: "trusted", acceptsIntroductions: true, revokedAt: null, quarantinedAt: null },
+      },
+      include: { introducerLink: { include: { principal: { select: { displayName: true } } } } },
+      orderBy: { lastSeenAt: "desc" },
+      take: 100,
+    }),
   ]);
 
   const enabledDiscovery = discoveryCapabilities.filter(
@@ -132,6 +143,8 @@ export default async function FederationLinksPage() {
       sharedSlices: spec.includeSlices,
       sharedRetention: spec.retentionClass ?? "short",
       environmentClass: resolveFounderDemandEnvironment(meta),
+      offersIntroductions: l.offersIntroductions,
+      acceptsIntroductions: l.acceptsIntroductions,
       createdAtISO: l.createdAt.toISOString(),
     };
   });
@@ -148,10 +161,15 @@ export default async function FederationLinksPage() {
     supportRouteCount: partner._count.supportRoutes,
     recognitionCount: partner._count.contributionRecognitions,
   }));
-  const nearbyProjection = summarizeNearbyPairingProjection();
   const nearbyPairings: NearbyPairingRow[] = nearbyPairingSessions.flatMap((pairing) =>
     isFederationPairingDirection(pairing.direction)
-      ? [{
+      ? (() => {
+          const projection = summarizeNearbyPairingProjection(
+            isFederationRelationshipPreset(pairing.relationshipPreset)
+              ? pairing.relationshipPreset
+              : "same-organization",
+          );
+          return [{
           pairingId: pairing.pairingId,
           direction: pairing.direction,
           status: pairing.status,
@@ -159,16 +177,36 @@ export default async function FederationLinksPage() {
           peerDisplayName: pairing.peerDisplayName,
           peerAuthorityUrl: pairing.peerAuthorityUrl,
           expiresAt: pairing.expiresAt.toISOString(),
-          sharedSlices: nearbyProjection.sharedSlices,
-          retentionClass: nearbyProjection.retentionClass,
-          staysLocal: nearbyProjection.staysLocal,
-        }]
+          sharedSlices: projection.sharedSlices,
+          retentionClass: projection.retentionClass,
+          staysLocal: projection.staysLocal,
+          sasConfirmedAtLocal: pairing.sasConfirmedAtLocal != null,
+          sasConfirmedAtPeer: pairing.sasConfirmedAtPeer != null,
+          }];
+        })()
       : [],
   );
   const enrolledLinkIds = new Set(partnerAccounts.flatMap((partner) => partner.federationLinkId ? [partner.federationLinkId] : []));
   const eligiblePartnerLinks = links
     .filter((link) => link.role === "channel-upstream" && link.linkState === "trusted" && !enrolledLinkIds.has(link.linkId))
     .map((link) => ({ linkId: link.linkId, displayName: link.principal.displayName }));
+  const connectionCandidates = [
+    ...listNearbyFederationCandidates(),
+    ...introducedCandidates.map((candidate) => ({
+      discoveryId: candidate.introductionId,
+      endpoint: candidate.authorityUrl,
+      protocol: "1" as const,
+      capabilityDigest: candidate.deviceId,
+      pairPath: "/connect/pair" as const,
+      displayName: candidate.displayName,
+      source: "introducer" as const,
+      introducedBy: candidate.introducerLink.principal.displayName,
+      relationshipHint: candidate.relationshipHint,
+      observedAt: candidate.lastSeenAt.toISOString(),
+      expiresAt: candidate.expiresAt.toISOString(),
+      automaticPairing: "tls-validation-required" as const,
+    })),
+  ];
 
   return (
     <div className="space-y-6">
@@ -182,7 +220,7 @@ export default async function FederationLinksPage() {
       <OrganizationJoinPanel nodes={organizationJoinNodes.ok ? organizationJoinNodes.nodes : []} />
       <FederationLinksAdminClient
         rows={rows}
-        nearbyCandidates={listNearbyFederationCandidates()}
+        nearbyCandidates={connectionCandidates}
         nearbyPairings={nearbyPairings}
         nearbyDiscoveryHealth={nearbyDiscoveryHealth}
       />

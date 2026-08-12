@@ -78,7 +78,10 @@ export function buildIndex() {
     const publishedPublic = isPublicPublished(sourcePath);
     const publishedPortal = isPortalPublished(sourcePath);
     if (!publishedPublic && !publishedPortal) continue;
-    const raw = fs.readFileSync(file, "utf-8");
+    // Normalize newlines so Windows (CRLF) and Linux (LF) checkouts produce
+    // the same anchors/index. Without this, --check fails on CI after a
+    // Windows pre-commit regen (heading splits and frontmatter edges differ).
+    const raw = fs.readFileSync(file, "utf-8").replace(/\r\n/g, "\n");
     pages[sourcePath] = {
       publicHref: sourcePathToPublicHref(sourcePath),
       portalHref: sourcePathToPortalHref(sourcePath),

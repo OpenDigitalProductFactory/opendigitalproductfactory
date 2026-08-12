@@ -145,6 +145,9 @@ export const ROUTE_AUDIENCE_OVERRIDES: Record<
   "/workspace/inbox": { audience: "worker", destinationKind: "detail" },
   "/knowledge": { audience: "public", destinationKind: "section-home" },
   "/docs": { audience: "public", destinationKind: "section-home" },
+  // EP-COWORKER-IDENTITY-360: the Coworker Identity 360 — an owner-facing per-
+  // coworker detail surface, peer to People (/employee) and Customers (/customer).
+  "/workforce/[agentId]": { audience: "owner", destinationKind: "detail" },
 };
 
 // ─── Classifier ──────────────────────────────────────────────────────────────

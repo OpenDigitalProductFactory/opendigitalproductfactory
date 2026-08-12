@@ -1,9 +1,9 @@
 "use client";
-
 import { Fragment, useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { rollbackSelfUpgrade, repairPromoterImage } from "@/lib/actions/promotions";
 import { LocalTime } from "@/components/ui/LocalTime";
+import { CoworkerActivityInspectionLink } from "./CoworkerActivityInspectionLink";
 import UpgradeImpactPanel from "@/components/ops/UpgradeImpactPanel";
 import type { SummaryResult, RunImpactDigest } from "@/lib/self-upgrade/impact/types";
 import { UpgradeScopeRibbon } from "@/components/ops/UpgradeScopeRibbon";
@@ -14,7 +14,6 @@ import { isExpectedDuringSwap } from "@/lib/self-upgrade/is-expected-during-swap
 import { SelfUpgradeReadiness } from "@/components/ops/SelfUpgradeReadiness";
 import { BuildStamps } from "@/components/ops/BuildStamps";
 import type { LatestRun, QuiescenceActivity } from "@/lib/self-upgrade/run-types";
-
 type RecoveryPointSummary = {
   status: string;
   members: Array<{ target: string; runId: string | null; status: string }>;
@@ -595,6 +594,7 @@ export default function SelfUpgradeClient({
                         )}
                       </div>
                     )}
+                    <CoworkerActivityInspectionLink surface={b.surface} />
                   </li>
                 ))}
               </ul>

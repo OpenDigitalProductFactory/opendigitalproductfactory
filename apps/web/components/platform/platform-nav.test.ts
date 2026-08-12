@@ -47,6 +47,19 @@ describe("platform-nav", () => {
     expect(getPlatformFamily("/platform/services").key).toBe("tools");
   });
 
+  it("routes the peer-deployment Connections page (federation-links) to Tools & Services", () => {
+    const family = getPlatformFamily("/platform/federation-links");
+    expect(family.key).toBe("tools");
+    expect(family.subItems.some((item) => item.href === "/platform/federation-links")).toBe(true);
+    expect(family.subItems.some((item) => item.label === "Connections")).toBe(true);
+  });
+
+  it("disambiguates Identity Federation (SSO) from peer-deployment Connections", () => {
+    const identity = getPlatformFamily("/platform/identity");
+    expect(identity.subItems.some((item) => item.label === "Identity Federation (SSO)")).toBe(true);
+    expect(identity.subItems.some((item) => item.label === "Federation")).toBe(false);
+  });
+
   it("renames discovery operations to estate discovery in the tools family", () => {
     const toolsFamily = getPlatformFamily("/platform/tools/discovery");
 
@@ -104,5 +117,15 @@ describe("platform-nav", () => {
 
   it("keeps the platform root in the Overview family", () => {
     expect(getPlatformFamily("/platform").key).toBe("overview");
+  });
+
+  it("exposes archetype readiness inside the Overview family", () => {
+    const overview = getPlatformFamily("/platform/archetype-readiness");
+
+    expect(overview.key).toBe("overview");
+    expect(overview.subItems).toContainEqual({
+      label: "Archetype Readiness",
+      href: "/platform/archetype-readiness",
+    });
   });
 });

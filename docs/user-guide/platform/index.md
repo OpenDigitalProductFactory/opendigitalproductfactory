@@ -42,12 +42,12 @@ The page reports whether the native Edge Node is listening for nearby installati
 For another installation owned by the same organization, choose **Set up this
 DPF**. Automatic setup is available only when both installations advertise a
 private/local HTTPS address whose certificate is trusted by the other host.
-Confirm that both screens show the same matching code and the same **Shares / Stays
-here** summary, then approve on the receiving installation. DPF exchanges and
-redeems a short-lived invitation, but the resulting connection remains pending
-until an authorized operator independently approves the connection on both
-installations. The matching code is only a visual check; it is never a password
-or bearer credential.
+Both screens display the same six-digit code and **Shares / Stays here** summary.
+Compare the digits directly, then choose **Codes match** on each installation.
+A different code can mean that the connection is being intercepted: stop and
+start setup again. DPF does not issue connection authority until authorized
+operators on both installations confirm the match. The code authenticates this
+one short-lived setup exchange; it is never a password or bearer credential.
 
 When the second installation does not yet trust the organization's private
 HTTPS authority, use **Connect your own installations** on the Connections

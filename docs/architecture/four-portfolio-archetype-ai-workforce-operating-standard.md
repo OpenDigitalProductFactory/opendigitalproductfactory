@@ -2350,12 +2350,12 @@ every live customer organization's operational state.
 
 ### 18.1 Current coverage
 
-- The authoritative source contains 24 categories and 106 unique leaf archetypes with 570 item
+- The authoritative source contains 25 categories and 107 unique leaf archetypes with 574 item
   templates.
-- All 106 can derive an operational-value-stream projection, but the current stage shape lacks the
+- All 107 can derive an operational-value-stream projection, but the current stage shape lacks the
   complete work/performer/resource/evidence contract defined here.
-- 68 leaves have explicit activation profiles; 38 do not.
-- 65 leaves have explicit four-portfolio decompositions; 41 rely on missing or legacy inference.
+- 69 leaves have explicit activation profiles; 38 do not.
+- 66 leaves have explicit four-portfolio decompositions; 41 rely on missing or legacy inference.
 - Only two leaves declare an explicit `productMix`; most business Products are derived from item
   templates.
 - 59 leaves contain legacy Request-to-Fulfill metadata; 30 explicit decompositions contain no other
@@ -2373,9 +2373,9 @@ every live customer organization's operational state.
 - Six specialized metric-pack registrations exist: five target current leaves and one
   (`independent-hotel`) is orphaned from the current 106-leaf registry; the remaining leaves rely on
   generic metrics.
-- Thirty leaves derive one or more trust gates and 76 do not; field-dispatch has rich type
+- Thirty-one leaves derive one or more trust gates and 76 do not; field-dispatch has rich type
   definitions but no configured built-in profile registry.
-- Three of 24 categories currently meet the mechanically checked Tier-2 depth floor; 21 remain
+- Four of 25 categories currently meet the mechanically checked Tier-2 depth floor; 21 remain
   grandfathered gaps.
 - Current readiness claims are `template-ready`; no category has source evidence here for a blanket
   `ops-ready`, `connector-ready`, `regulated-ready`, or `sole-platform-ready` claim.

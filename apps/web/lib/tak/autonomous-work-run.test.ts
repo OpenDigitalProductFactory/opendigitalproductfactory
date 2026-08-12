@@ -441,7 +441,13 @@ describe("createAutonomousWorkRun", () => {
     });
     expect(mcpTools.getAvailableTools).toHaveBeenCalledWith(
       { userId: "user-1", platformRole: null, isSuperuser: true },
-      { mode: "act", agentId: "inventory-specialist" },
+      {
+        mode: "act",
+        agentId: "inventory-specialist",
+        externalAccessEnabled: undefined,
+        unifiedMode: undefined,
+        additionalGrants: ["coworker_screen_read", "coworker_screen_drive"],
+      },
     );
   });
 

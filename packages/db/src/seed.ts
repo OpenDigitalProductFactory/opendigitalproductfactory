@@ -9,6 +9,7 @@ import { resolveAgentIdentity } from "./agent-identity.js";
 import { resolvePrincipalSensitivityClearance } from "./principal-sensitivity.js";
 import { upsertCoworkerAgentTolerant } from "./coworker-agent-upsert.js";
 import { loadFingerprintCatalogIntoDb, defaultCatalogPath } from "./discovery-fingerprint-catalog-loader.js";
+import { loadOuiRegistryIntoDb, defaultOuiRegistryPath } from "./mac-oui-loader.js";
 import { seedEaArchimate4 } from "./seed-ea-archimate4.js";
 import { seedEaBpmn20 } from "./seed-ea-bpmn20.js";
 import { seedEaCrossNotation } from "./seed-ea-cross-notation.js";
@@ -495,6 +496,17 @@ async function seedDiscoveryFingerprints(): Promise<void> {
     `Seeded ${result.loaded} discovery fingerprint rules (catalog ${result.catalogKey}@${result.version}), ` +
       `${result.catalogIdentitiesLinked} linked to canonical CatalogIdentity rows`,
   );
+}
+
+async function seedMacVendorOui(): Promise<void> {
+  const result = await loadOuiRegistryIntoDb(prisma, defaultOuiRegistryPath(__dirname));
+  if (result.skippedMalformed > 0) {
+    // Non-fatal: a refreshed IEEE dump may carry lines this parser does not
+    // recognise. Surface the count so a format change is visible instead of
+    // silently shrinking the registry.
+    console.warn(`[seed] skipped ${result.skippedMalformed} malformed OUI line(s)`);
+  }
+  console.log(`Seeded ${result.loaded} MAC OUI vendor prefixes`);
 }
 
 async function seedDigitalProducts(): Promise<void> {
@@ -2480,6 +2492,7 @@ async function main(): Promise<void> {
   await step("featureDegradationMappings", () => seedFeatureDegradationMappings());
   await step("taxonomyNodes", () => seedTaxonomyNodes());
   await step("discoveryFingerprints", () => seedDiscoveryFingerprints());
+  await step("macVendorOui", () => seedMacVendorOui());
   await step("agentControlPlaneMaturity", () => seedAgentControlPlaneMaturity(prisma));
   await step("eaReferenceModels", () => seedEaReferenceModels());
   await step("digitalProducts", () => seedDigitalProducts());

@@ -25,6 +25,8 @@ export type OpenOrgDecision = {
   // kernel's recommendation, so the owner picks a structured option.
   scoredOptions?: { id: string; description: string }[] | null;
   recommendedOptionId?: string | null;
+  /** Number of unresolved audit occurrences represented by this one work item. */
+  occurrenceCount: number;
 };
 
 function CaptureCard({ decision }: { decision: OpenOrgDecision }) {
@@ -33,7 +35,11 @@ function CaptureCard({ decision }: { decision: OpenOrgDecision }) {
   const [chosenOptionId, setChosenOptionId] = useState<string>(decision.recommendedOptionId ?? "");
   const [makeStanding, setMakeStanding] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [done, setDone] = useState<null | { standing: boolean }>(null);
+  const [done, setDone] = useState<null | {
+    standing: boolean;
+    resolvedCount: number;
+    warning?: string;
+  }>(null);
   const [pending, startTransition] = useTransition();
 
   function onSubmit(e: React.FormEvent) {
@@ -50,7 +56,11 @@ function CaptureCard({ decision }: { decision: OpenOrgDecision }) {
         setError(result.error);
         return;
       }
-      setDone({ standing: result.standingPromoted === true });
+      setDone({
+        standing: result.standingPromoted === true,
+        resolvedCount: result.resolvedCount,
+        warning: result.warning,
+      });
       router.refresh();
     });
   }
@@ -59,8 +69,14 @@ function CaptureCard({ decision }: { decision: OpenOrgDecision }) {
     return (
       <li className="rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-3">
         <p className="text-sm text-[var(--dpf-success)]">
-          Answer recorded{done.standing ? " — and saved as your standing answer for cases like this." : "."}
+          Answer recorded for {done.resolvedCount === 1 ? "this item" : `${done.resolvedCount} matching items`}
+          {done.standing ? " — and saved as your standing answer for cases like this." : "."}
         </p>
+        {done.warning && (
+          <p className="mt-1 text-xs text-[var(--dpf-warning)]" role="status" aria-live="polite">
+            {done.warning}
+          </p>
+        )}
       </li>
     );
   }
@@ -73,6 +89,11 @@ function CaptureCard({ decision }: { decision: OpenOrgDecision }) {
         </span>
         {decision.riskTier && (
           <span className="text-xs text-[var(--dpf-muted)] shrink-0">risk: {decision.riskTier}</span>
+        )}
+        {decision.occurrenceCount > 1 && (
+          <span className="text-xs text-[var(--dpf-muted)] shrink-0">
+            {decision.occurrenceCount} matching asks
+          </span>
         )}
         <LocalTime value={decision.createdAt} mode="date" className="text-xs text-[var(--dpf-muted)] shrink-0" />
       </div>

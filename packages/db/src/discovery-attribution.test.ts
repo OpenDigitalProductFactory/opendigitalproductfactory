@@ -68,6 +68,42 @@ describe("attributeInventoryEntity", () => {
     expect(result.confidence).toBeGreaterThan(0.9);
   });
 
+  it("does NOT confidently file a bare network-sweep host as a server (regression: BI-BAF38ED3)", () => {
+    // An ARP/UniFi host carries only a vendor + MAC, no OS/compute signal. If it
+    // reached the heuristic, the fingerprint layer already missed — it must not
+    // be masked as a 0.98 "server". It surfaces as needs_review instead.
+    const result = attributeInventoryEntity(
+      {
+        entityKey: "organization:internal:host:arp:88E712000091",
+        entityType: "host",
+        itemType: "host",
+        name: "Whirlpool 192.168.0.91",
+        properties: { vendor: "Whirlpool", mac: "88:e7:12:00:00:91" },
+      },
+      taxonomyNodes,
+    );
+
+    expect(result.taxonomyNodeId).not.toBe("foundational/compute/servers");
+    expect(result.attributionStatus).toBe("needs_review");
+  });
+
+  it("still files a corroborated compute host (OS signal) as a server", () => {
+    // The demotion is surgical: a host WITH a compute signal is still a server.
+    const result = attributeInventoryEntity(
+      {
+        entityKey: "host:hostname:app-01",
+        entityType: "host",
+        itemType: "host",
+        name: "app-01",
+        properties: { os: "ubuntu 22.04", uptime: 91234 },
+      },
+      taxonomyNodes,
+    );
+
+    expect(result.taxonomyNodeId).toBe("foundational/compute/servers");
+    expect(result.attributionStatus).toBe("attributed");
+  });
+
   it("maps a docker runtime to the container platform taxonomy by rule", () => {
     const result = attributeInventoryEntity(
       {

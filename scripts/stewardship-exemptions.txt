@@ -110,3 +110,6 @@ DispositionReason  reference-data  # Disposition-reason lookup table; superseded
 # ── Trust envelope over the decision kernel (EP-VERIFICATION-INTEGRITY) ───────
 EvidenceReVerification  domain-lifecycle-managed  # Re-checks of a decision's cited evidence (BI-70FF9114); created and removed with their parent DecisionInteraction via cascade, never independently aged.
 JurisdictionCriteriaProfile  reference-data  # Operator-authored jurisdiction criteria packs (BI-B84CD2D3); versioned and superseded by a newer version, never aged out.
+MacVendorOui  reference-data  # IEEE OUI registry seeded from packages/db/data/oui.tsv (BI-9632B15B); replaced wholesale on reseed, never time-aged. A purge window would delete the lookup discovery depends on.
+McpToolSession  domain-lifecycle-managed  # short-TTL discovery state; rows are removed by their own expiresAt sweep (sweepExpiredToolSessions + lazy delete on read), not the retention engine
+FederationIntroductionCandidate  derived-projection  # Reconciled from a trusted introducer, expired/withdrawn by that exchange, and cascade-removed with its introducer link; it is never an independent source of trust.
