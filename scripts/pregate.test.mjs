@@ -3,11 +3,76 @@ import test from "node:test";
 
 import {
   WINDOWS_WRAPPER_TERMINATED_STATUS,
+  createQueuedGateRevivalWindow,
+  gateArgsForQueuedRevivalWindow,
+  runGateWithQueuedRevival,
   detectWorkingShell,
   recoverInterruptedGateState,
   reviveInterruptedQueuedGateState,
   shouldUseShell,
 } from "./pregate.mjs";
+
+test("queued gate revivals share the original bounded admission deadline", () => {
+  const startedAtMs = Date.parse("2026-08-12T03:00:00.000Z");
+  const window = createQueuedGateRevivalWindow({
+    args: ["--branch", "fix/local-ci-survival", "--lease-wait-seconds", "7200"],
+    env: {},
+    nowMs: startedAtMs,
+  });
+
+  assert.equal(window.deadlineMs, startedAtMs + 7_200_000);
+  assert.deepEqual(
+    gateArgsForQueuedRevivalWindow({
+      args: ["--branch", "fix/local-ci-survival", "--lease-wait-seconds", "7200"],
+      window,
+      nowMs: startedAtMs + 1_800_123,
+    }),
+    ["--branch", "fix/local-ci-survival", "--lease-wait-seconds", "5400"],
+  );
+  assert.deepEqual(
+    gateArgsForQueuedRevivalWindow({
+      args: ["--branch", "fix/local-ci-survival"],
+      window,
+      nowMs: window.deadlineMs,
+    }),
+    null,
+  );
+});
+
+test("queued gate survival is bounded by time rather than an arbitrary revival count", async () => {
+  const wrapperExit = { status: WINDOWS_WRAPPER_TERMINATED_STATUS, signal: null };
+  const results = Array.from({ length: 7 }, () => wrapperExit).concat({ status: 0, signal: null });
+  const invocations = [];
+  const revivals = [];
+  let recovered = false;
+  let nowMs = Date.parse("2026-08-12T03:00:00.000Z");
+
+  const outcome = await runGateWithQueuedRevival({
+    args: ["--lease-wait-seconds", "7200"],
+    useShell: false,
+    now: () => nowMs,
+    spawnSyncImpl: (_command, args) => {
+      invocations.push(args);
+      nowMs += 300_000;
+      return results.shift();
+    },
+    reviveInterruptedQueuedGateImpl: async ({ result }) => {
+      revivals.push(result.status);
+      return { revived: true, leaseId: "NPEL-STABLE" };
+    },
+    recoverInterruptedGateImpl: async () => {
+      recovered = true;
+    },
+    stderr: { write() {} },
+  });
+
+  assert.equal(outcome.result.status, 0);
+  assert.equal(outcome.queuedRevivals, 7);
+  assert.equal(invocations.length, 8);
+  assert.equal(revivals.length, 7);
+  assert.equal(recovered, false);
+  assert.equal(invocations.at(-1).at(-1), "5100");
+});
 
 function shellProbe(status = 0) {
   return () => ({
