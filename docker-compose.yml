@@ -253,6 +253,17 @@ services:
       # explicit per-install operator opt-in after a clean observe soak.
       DPF_WORKTREE_JANITOR_ENABLED: ${DPF_WORKTREE_JANITOR_ENABLED:-1}
       DPF_SANDBOX_BUILD_GC_ENABLED: ${DPF_SANDBOX_BUILD_GC_ENABLED:-1}
+      # WS9 governed WorkCapsule reaper (BI-CBAAEA94): transitions dead capsules
+      # (lease-expired / linked-build-terminal / idle-past-floor) working->abandoned
+      # so abandoned work stops reading as active on the board and jamming the WIP
+      # cap. Delivered HERE (base compose), not override-only: an override-only flag
+      # is dropped when the self-upgrade promoter recreates the portal, which is why
+      # the WS9 sprawl re-accumulated after it first shipped. Same soak model as the
+      # janitors above — ENABLED defaults ON = observe-only (logs would-reap, no DB
+      # writes); AUTO_REAP is the live/reversible actuation and stays OFF until a
+      # per-install operator opt-in via .env.
+      DPF_WORKCAPSULE_REAPER_ENABLED: ${DPF_WORKCAPSULE_REAPER_ENABLED:-1}
+      DPF_WORKCAPSULE_REAPER_AUTO_REAP: ${DPF_WORKCAPSULE_REAPER_AUTO_REAP:-0}
       # Runtime-artifact janitor (BI-DBF3F426 / BI-A55BE432): reaps orphaned
       # per-branch CI images + stray compose projects INCLUDING their named
       # volumes — the dominant local-disk leak (dead dpf-<topic> dev stacks
