@@ -1,6 +1,6 @@
 {
   "generator": "apps/web/scripts/build-route-manifest.ts",
-  "routeCount": 621,
+  "routeCount": 622,
   "routes": [
     {
       "routePath": "/",
@@ -7311,6 +7311,15 @@
         "entityType"
       ],
       "file": "apps/web/app/(shell)/workbooks/system/[entityType]/page.tsx"
+    },
+    {
+      "routePath": "/workforce",
+      "kind": "page",
+      "segments": [
+        "workforce"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/workforce/page.tsx"
     },
     {
       "routePath": "/workforce/[agentId]",
