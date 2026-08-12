@@ -9,7 +9,27 @@ import type { QualityTier } from "./quality-tiers";
 
 // ── Sensitivity ──
 
-export type SensitivityLevel = PrincipalSensitivity;
+/**
+ * Routing sensitivity. Extends the principal/business-data confidentiality scale
+ * (`PrincipalSensitivity`: public < internal < confidential < restricted) with a
+ * distinct **development** class for platform source-code generation.
+ *
+ * Founder ruling (2026-08-12): "code isn't sensitive, the business data is
+ * sensitive." Generating platform source code is development work, not the
+ * processing of internal business data, so it must not be gated at the internal
+ * business-data clearance bar. `development` is the least-sensitive class — an
+ * endpoint cleared for `public` business content is cleared for it — which lets
+ * the operator's connected frontier cloud dev tools run builds, while builds that
+ * actually ingest business/customer data stay classified at their real level.
+ * Content-based payload screening still inspects every request, so this only
+ * relaxes the declared-clearance floor, never the data-leak safety net.
+ *
+ * It is a routing-only superset of PrincipalSensitivity (which stays the closed
+ * DB enum for principal clearances), so no Prisma enum migration is required and
+ * provider `sensitivityClearance` (a `String[]`) can carry it without schema
+ * change.
+ */
+export type SensitivityLevel = PrincipalSensitivity | "development";
 
 // ── Endpoint Manifest (loaded from ModelProfile joined with ModelProvider) ──
 

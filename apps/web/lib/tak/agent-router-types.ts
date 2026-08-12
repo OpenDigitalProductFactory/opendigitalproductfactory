@@ -3,7 +3,8 @@
 
 import type { PrincipalSensitivity } from "@dpf/db/principal-sensitivity";
 
-export type SensitivityLevel = PrincipalSensitivity;
+/** Routing-only superset; principal/business-data persistence stays closed. */
+export type SensitivityLevel = PrincipalSensitivity | "development";
 export type CapabilityTier = "basic" | "routine" | "analytical" | "deep-thinker";
 export type CostBand = "free" | "low" | "medium" | "high";
 

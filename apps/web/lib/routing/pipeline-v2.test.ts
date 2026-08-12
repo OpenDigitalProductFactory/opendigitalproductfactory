@@ -147,6 +147,35 @@ beforeEach(async () => {
 
 // ── getExclusionReasonV2 ─────────────────────────────────────────────────────
 
+describe("getExclusionReasonV2 — development sensitivity (platform code-gen)", () => {
+  // Source code uses development clearance while payload screening remains active.
+  it("clears a public-cleared frontier endpoint that lacks internal clearance", () => {
+    const publicOnlyCloud = makeEndpoint({
+      id: "ep-cloud-public",
+      providerId: "anthropic",
+      sensitivityClearance: ["public"],
+      reasoning: 90,
+      codegen: 91,
+      toolFidelity: 88,
+    });
+    // internal business-data work stays correctly gated:
+    expect(
+      getExclusionReasonV2(publicOnlyCloud, makeContract({ sensitivity: "internal", requiresTools: true })),
+    ).toContain("Sensitivity clearance missing");
+    // development (source-code) work is cleared by public:
+    expect(
+      getExclusionReasonV2(publicOnlyCloud, makeContract({ sensitivity: "development", requiresTools: true })),
+    ).toBeNull();
+  });
+
+  it("excludes an endpoint with no clearance at all from development work", () => {
+    const noClearance = makeEndpoint({ id: "ep-none", sensitivityClearance: [] });
+    expect(
+      getExclusionReasonV2(noClearance, makeContract({ sensitivity: "development" })),
+    ).toContain("Sensitivity clearance missing");
+  });
+});
+
 describe("getExclusionReasonV2", () => {
   it("excludes retired/disabled status models", () => {
     const retired = makeEndpoint({ id: "ep-retired", status: "retired" });

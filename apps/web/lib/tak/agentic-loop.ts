@@ -1118,7 +1118,7 @@ export type RunAgenticLoopParams = {
 
   chatHistory: ChatMessage[];
   systemPrompt: string;
-  sensitivity: "public" | "internal" | "confidential" | "restricted";
+  sensitivity: import("@/lib/agent-sensitivity").RouteSensitivity;
   tools: ToolDefinition[];
   toolsForProvider: Array<Record<string, unknown>> | undefined;
   /**

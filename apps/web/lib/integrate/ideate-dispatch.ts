@@ -449,7 +449,7 @@ export async function dispatchIdeateResearch(params: {
    *  path. "robust" lets routing prefer a frontier endpoint for large designs;
    *  "local"/undefined keeps it on the on-box model. */
   modelTier?: "local" | "robust";
-  sensitivity?: "public" | "internal" | "confidential" | "restricted";
+  sensitivity?: "public" | "development" | "internal" | "confidential" | "restricted";
   /** FeatureBuild this research belongs to — threaded into AdapterRunTelemetry
    *  so completeBuildPhaseRun can meter the ideate phase (BI-0A6B8B38). */
   buildId?: string;
@@ -487,7 +487,7 @@ export async function dispatchIdeateResearch(params: {
         "You are a senior software architect producing a structured design document. Respond with the design document content only — no preamble.";
       const { designDoc, rawOutput } = await runLocalIdeateWithRetry(
         async (messages) => {
-          const response = await routeAndCall(messages, systemPrompt, params.sensitivity ?? "public", {
+          const response = await routeAndCall(messages, systemPrompt, params.sensitivity ?? "development", {
             budgetClass: "quality_first",
             ...(providerId ? { allowedProviders: [providerId] } : {}),
             ...(params.modelTier ? { modelTier: params.modelTier } : {}),

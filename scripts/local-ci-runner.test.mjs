@@ -7,6 +7,7 @@ import {
   LOCAL_CI_MISSING_DATABASE_URL,
   createLocalIntegrationChildInvocation,
   planPostgresOwnership,
+  resetOwnedSlotDatabase,
 } from "./local-ci-runner.mjs";
 
 const cli = fileURLToPath(new URL("./local-ci-runner.mjs", import.meta.url));
@@ -130,5 +131,46 @@ test("a foreign listener never satisfies manifest Postgres ownership", () => {
       assignedPortReachable: true,
     }),
     "reuse",
+  );
+});
+
+test("an admitted runner resets only its manifest-owned disposable slot database", () => {
+  const calls = [];
+  resetOwnedSlotDatabase({
+    container: "dpf-local-ci-postgres-0",
+    database: "dpf_local_ci_0",
+    run: (command, args) => {
+      calls.push([command, args]);
+      return { status: 0, stdout: "", stderr: "" };
+    },
+  });
+
+  assert.deepEqual(calls, [
+    ["docker", ["exec", "dpf-local-ci-postgres-0", "dropdb", "--if-exists", "--force", "-U", "dpf", "dpf_local_ci_0"]],
+    ["docker", ["exec", "dpf-local-ci-postgres-0", "createdb", "-U", "dpf", "-O", "dpf", "dpf_local_ci_0"]],
+  ]);
+});
+
+test("slot database reset rejects non-manifest identities before invoking Docker", () => {
+  let called = false;
+  assert.throws(
+    () => resetOwnedSlotDatabase({
+      container: "postgres",
+      database: "production",
+      run: () => { called = true; return { status: 0 }; },
+    }),
+    /refusing non-slot Postgres reset/,
+  );
+  assert.equal(called, false);
+});
+
+test("slot database reset fails closed when drop or create fails", () => {
+  assert.throws(
+    () => resetOwnedSlotDatabase({
+      container: "dpf-local-ci-postgres-1",
+      database: "dpf_local_ci_1",
+      run: () => ({ status: 1, stdout: "", stderr: "database busy" }),
+    }),
+    /could not reset disposable slot database.*database busy/,
   );
 });

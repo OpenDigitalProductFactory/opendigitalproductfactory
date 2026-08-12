@@ -18,6 +18,7 @@
 import { prisma } from "@dpf/db";
 import { COWORKER_AGENT_SEEDS } from "@dpf/db/workforce-seed";
 import { runAgenticLoop } from "@/lib/tak/agentic-loop";
+import type { RouteSensitivity } from "@/lib/agent-sensitivity";
 import {
   resolveAutonomousWorkAgent,
   resolveAutonomousWorkTools,
@@ -93,7 +94,7 @@ export type CertificationDeps = {
   runLoop: (params: {
     journey: GoldenJourney;
     systemPrompt: string;
-    sensitivity: "public" | "internal" | "confidential" | "restricted";
+    sensitivity: RouteSensitivity;
     tools: Parameters<typeof toolsToOpenAIFormat>[0];
     toolsForProvider: Array<Record<string, unknown>>;
     userId: string;

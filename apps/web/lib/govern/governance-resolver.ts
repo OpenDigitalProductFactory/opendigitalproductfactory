@@ -79,6 +79,9 @@ export type SensitivityOverrideResult = {
 };
 
 const SENSITIVITY_ORDER: Record<SensitivityLevel, number> = {
+  // development (platform source-code generation) is the least-sensitive class,
+  // ranked alongside public: it is never a business-data confidentiality level.
+  development: 0,
   public: 0,
   internal: 1,
   confidential: 2,

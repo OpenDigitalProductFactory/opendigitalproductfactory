@@ -598,7 +598,7 @@ async function stepGenerateCode(
   const result = await runAgenticLoop({
     chatHistory: [{ role: "user", content: userMessage }],
     systemPrompt,
-    sensitivity: "public", // code-gen is dev work, not business data (BI-0DBDCB77)
+    sensitivity: "development", // code clearance; payload screening still applies
     tools,
     toolsForProvider,
     userId: "system",

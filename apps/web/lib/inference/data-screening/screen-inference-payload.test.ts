@@ -20,6 +20,36 @@ describe("screenInferencePayload", () => {
     });
   });
 
+  it("preserves development routing for benign source-code work", () => {
+    const result = screenInferencePayload({
+      messages: [{ role: "user", content: "Add a loading state to the component." }],
+      systemPrompt: "You generate platform source code.",
+      taskType: "code-gen",
+      routeContext: { sensitivity: "development" },
+    });
+
+    expect(result.routeContext.sensitivity).toBe("development");
+    expect(result.receipt).toMatchObject({
+      declaredSensitivity: "public",
+      measuredSensitivity: "public",
+      sensitivityFloorApplied: true,
+    });
+  });
+
+  it("escalates development routing when the payload contains governed data", () => {
+    const result = screenInferencePayload({
+      messages: [{ role: "user", content: "Add Jane's employee payroll record to this fixture." }],
+      systemPrompt: "You generate platform source code.",
+      taskType: "code-gen",
+      routeContext: { sensitivity: "development" },
+    });
+
+    expect(result.routeContext).toMatchObject({
+      sensitivity: "restricted",
+      residencyPolicy: "local_only",
+    });
+  });
+
   it("constrains restricted external payloads to local-only routing without storing raw values", () => {
     const result = screenInferencePayload({
       messages: [{ role: "user", content: "Review employee payroll and disciplinary notes for Jane." }],
