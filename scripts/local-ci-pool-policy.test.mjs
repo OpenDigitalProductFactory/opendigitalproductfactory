@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import {
   LOCAL_CI_POOL_CONFIG_KEY,
   localCiBuildHeadroomCapacity,
+  localCiBuilderAdmissionReserveBytes,
   localCiHostStageHeadroomCapacity,
   loadLocalCiPoolConfig,
   resolveLocalCiPoolPolicy,
@@ -34,6 +36,11 @@ const PILOT_CONFIG = Object.freeze({
     evidenceMismatchTolerance: 0,
   },
 });
+
+const SLOT_RESOURCES = JSON.parse(readFileSync(new URL(
+  "../apps/web/lib/nonprod/local-ci-slot-resources.json",
+  import.meta.url,
+), "utf8"));
 
 test("uses one versioned PlatformConfig key and defaults absent policy to singleton", () => {
   assert.equal(LOCAL_CI_POOL_CONFIG_KEY, "local_ci.sandbox_pool");
@@ -99,7 +106,7 @@ test("admission reserves the canonical bounded-build memory above the host safet
     host: {
       ...SAFE_HOST,
       availableMemoryBytes: 11 * 1024 ** 3,
-      dockerAvailableMemoryBytes: 11 * 1024 ** 3,
+      dockerAvailableMemoryBytes: 9 * 1024 ** 3,
       builderMemoryUsageBytes: [0, 0],
     },
     manifestSlotCount: 2,
@@ -110,6 +117,33 @@ test("admission reserves the canonical bounded-build memory above the host safet
   assert.equal(resolved.effectiveCapacity, 0);
   assert.equal(resolved.rollbackReason, "host-build-headroom-low");
   assert.deepEqual(resolved.slotKeys, []);
+});
+
+test("admission uses the calibrated build high-water reserve without weakening the builder ceiling", () => {
+  const gib = 1024 ** 3;
+  const resolved = resolveLocalCiPoolPolicy({
+    configValue: {
+      ...PILOT_CONFIG,
+      requestedCapacity: 1,
+      ceilings: {
+        ...PILOT_CONFIG.ceilings,
+        minAvailableMemoryBytes: 8 * gib,
+      },
+    },
+    host: {
+      ...SAFE_HOST,
+      availableMemoryBytes: 24 * gib,
+      dockerAvailableMemoryBytes: 12 * gib,
+      builderMemoryUsageBytes: [0, 0],
+    },
+    manifestSlotCount: 2,
+    reserveAdmissionHeadroom: true,
+  });
+
+  assert.equal(resolved.hostSafeCapacity, 1);
+  assert.equal(resolved.effectiveCapacity, 1);
+  assert.equal(resolved.rollbackReason, "requested-singleton");
+  assert.deepEqual(resolved.slotKeys, ["slot-0"]);
 });
 
 test("admission reserves the host-native stage envelope above the safety floor", () => {
@@ -236,6 +270,32 @@ test("bounded-build headroom arithmetic fails closed for invalid resource policy
     dockerAvailableMemoryBytes: 11 * 1024 ** 3,
     builderMemoryUsageBytes: [0, 0],
   }), 0);
+});
+
+test("builder admission calibration is capped by and falls back to the hard ceiling", () => {
+  const gib = 1024 ** 3;
+  assert.equal(localCiBuilderAdmissionReserveBytes({
+    hardCeilingBytes: 16 * gib,
+    calibratedReserveBytes: 10 * gib,
+  }), 10 * gib);
+  assert.equal(localCiBuilderAdmissionReserveBytes({
+    hardCeilingBytes: 16 * gib,
+    calibratedReserveBytes: 20 * gib,
+  }), 16 * gib);
+  assert.equal(localCiBuilderAdmissionReserveBytes({
+    hardCeilingBytes: 16 * gib,
+    calibratedReserveBytes: Number.NaN,
+  }), 16 * gib);
+});
+
+test("builder admission calibration declares high-water plus margin below the hard ceiling", () => {
+  const builder = SLOT_RESOURCES.builderPolicy;
+  const calibration = builder.admissionCalibration;
+  assert.equal(
+    calibration.observedHighWaterBytes + calibration.safetyMarginBytes,
+    builder.admissionReserveBytes,
+  );
+  assert.ok(builder.admissionReserveBytes < builder.memoryBytes);
 });
 
 test("host-stage headroom arithmetic keeps the configured floor unconsumed", () => {
