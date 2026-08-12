@@ -1,0 +1,18 @@
+{
+  "version": "1",
+  "decidedOption": "reuse-roster-directory",
+  "decisionInteractionId": "DI-2DC4676A4EA2",
+  "scope": {
+    "files": [
+      "apps/web/app/(shell)/workforce/page.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "reuse-roster-directory",
+      "redirect-to-platform-overview",
+      "bespoke-new-directory"
+    ]
+  }
+}
