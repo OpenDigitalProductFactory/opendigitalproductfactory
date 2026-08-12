@@ -58,6 +58,7 @@ export function EmployeeTabNav() {
     <SectionNav
       config={{
         variant: "flat",
+        wrap: true,
         dataComponent: "employee-tab-nav",
         tabs: TABS.map((t) => ({
           key: t.value,

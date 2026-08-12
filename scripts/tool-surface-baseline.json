@@ -3,14 +3,14 @@
   "selectionCliff": 15,
   "entries": {
     "registry.toolDefinitions": {
-      "value": 371,
-      "reason": "Adds the six-tool Authorized Surface Contract protocol (surface_list/open/snapshot/query/act/close) plus read and atomic configure/test tools for the Discovery reference surface. The generic protocol replaces page-specific coworker tool growth, is force-budgeted as one universal perception/action capability, and re-enters existing governed domain tools for persistent effects. EP-F7E35344.",
-      "recordedAt": "2026-08-08"
+      "value": 372,
+      "reason": "Adds propose_leave_decision as the single governed entry point for a propose-only time-off recommendation: it combines leave guards, the organization's WWWD decision gate, and an auditable AgentActionProposal without changing LeaveRequest status. Existing staffing coverage is read-only and generic proposal execution would bypass the leave-specific human approval boundary, so neither can carry this contract. BI-4D030159.",
+      "recordedAt": "2026-08-12"
     },
     "registry.packFiles": {
-      "value": 88,
-      "reason": "Adds one generic surface-pack.ts for the versioned Authorized Surface Contract. It serves browser, mobile, workroom, scheduled, background, headless, and external callers through the same compact protocol instead of adding one pack per UX surface. EP-F7E35344.",
-      "recordedAt": "2026-08-08"
+      "value": 89,
+      "reason": "Adds one focused leave-decision pack so the permanent tool definition, propose-only authority metadata, and existing grant requirements remain one bounded MCP contract. Reusing the staffing pack would mix read-only coverage with a business-decision proposal side effect and obscure the human-only leave authority boundary. BI-4D030159.",
+      "recordedAt": "2026-08-12"
     },
     "tier.coreToolNames": {
       "value": 30,

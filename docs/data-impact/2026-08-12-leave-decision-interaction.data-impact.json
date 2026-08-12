@@ -12,7 +12,7 @@
   "tests": [
     "apps/web/lib/workforce/leave/leave-decision-runtime.test.ts",
     "apps/web/lib/workforce/leave/decide-proposal.test.ts",
-    "apps/web/lib/govern/data/coverage.live.test.ts"
+    "apps/web/lib/workforce/leave-data.test.ts"
   ],
   "changes": [
     {
