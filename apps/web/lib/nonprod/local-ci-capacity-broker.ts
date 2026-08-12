@@ -116,6 +116,20 @@ function dockerBuilderContainerName(ordinal: number): string {
   return `buildx_buildkit_dpf-local-ci-buildkit-v${version}-${ordinal}0`;
 }
 
+type DockerGet = (path: string) => Promise<unknown>;
+
+type DockerContainerSummary = {
+  Id?: unknown;
+  Names?: unknown;
+  State?: unknown;
+};
+
+function builderIsStopped(container: DockerContainerSummary): boolean {
+  return container.State === "created"
+    || container.State === "exited"
+    || container.State === "dead";
+}
+
 export function dockerMemoryWorkingSetBytes(value: unknown): number {
   if (!value || typeof value !== "object") return Number.NaN;
   const memoryStats = (value as { memory_stats?: unknown }).memory_stats;
@@ -136,11 +150,12 @@ export function dockerMemoryWorkingSetBytes(value: unknown): number {
   return Math.max(0, usage - Math.max(0, inactiveFile));
 }
 
-async function defaultBuilderMemoryUsageBytes(): Promise<number[]> {
-  const containers = await dockerSocketGet("/containers/json?all=1") as Array<{
-    Id?: unknown;
-    Names?: unknown;
-  }>;
+export async function builderMemoryUsageBytesFromDocker(
+  dockerGet: DockerGet,
+): Promise<number[]> {
+  const containers = await dockerGet(
+    "/containers/json?all=1",
+  ) as DockerContainerSummary[];
   if (!Array.isArray(containers)) throw new Error("docker_container_list_invalid");
 
   return Promise.all(Object.values(localCiSlotResources.slots).map(
@@ -151,7 +166,8 @@ async function defaultBuilderMemoryUsageBytes(): Promise<number[]> {
         && candidate.Names.includes(expectedName)
       ));
       if (typeof container?.Id !== "string") return 0;
-      const stats = await dockerSocketGet(
+      if (builderIsStopped(container)) return 0;
+      const stats = await dockerGet(
         `/containers/${encodeURIComponent(container.Id)}/stats?stream=false`,
       );
       const workingSet = dockerMemoryWorkingSetBytes(stats);
@@ -161,6 +177,10 @@ async function defaultBuilderMemoryUsageBytes(): Promise<number[]> {
       return workingSet;
     },
   ));
+}
+
+async function defaultBuilderMemoryUsageBytes(): Promise<number[]> {
+  return builderMemoryUsageBytesFromDocker(dockerSocketGet);
 }
 
 const DEFAULT_PROBES: LocalCiServerPressureProbes = {
