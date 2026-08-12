@@ -349,7 +349,10 @@ describe("RestaurantFloorOperations", () => {
     fireEvent.click(screen.getByRole("button", { name: "Confirm seating" }));
 
     await waitFor(() => expect(mocks.refresh).toHaveBeenCalledTimes(1));
-    expect(screen.getByText("Floor changed before confirmation")).toBeTruthy();
+    const status = screen.getByRole("status");
+    expect(status.getAttribute("aria-live")).toBe("polite");
+    expect(status.textContent).toContain("Floor changed before confirmation");
+    expect(status.textContent).toContain("Review the refreshed choices and confirm again");
     expect(screen.queryByRole("button", { name: "Confirm seating" })).toBeNull();
     expect(screen.getByText("Choose a party to see the safest live seating choice.")).toBeTruthy();
   });

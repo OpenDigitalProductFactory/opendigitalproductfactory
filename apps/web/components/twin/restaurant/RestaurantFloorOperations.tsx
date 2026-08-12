@@ -386,7 +386,9 @@ export function RestaurantFloorOperations({
         </dl>
       </header>
 
-      {resultNotice(result)}
+      <div role="status" aria-live="polite" aria-atomic="true">
+        {resultNotice(result)}
+      </div>
 
       <div
         className="grid min-h-0 gap-dpf-sm lg:flex-1"

@@ -31,6 +31,13 @@ const busyShiftRefreshPath = fileURLToPath(
   ),
 );
 const busyShiftRefreshSql = readFileSync(busyShiftRefreshPath, "utf8");
+const busyShiftGuardPath = fileURLToPath(
+  new URL(
+    "../prisma/migrations/20260812102900_guard_restaurant_demo_busy_shift/migration.sql",
+    import.meta.url,
+  ),
+);
+const busyShiftGuardSql = readFileSync(busyShiftGuardPath, "utf8");
 
 describe("restaurant demo floor migration", () => {
   it("targets only platform-owned demo restaurant rows", () => {
@@ -80,8 +87,23 @@ describe("restaurant demo floor migration", () => {
     expect(busyShiftRefreshSql).toContain("^demo-restaurant-bk-[0-6]$");
     expect(busyShiftRefreshSql).toContain("archetype.\"archetypeId\" = 'restaurant'");
     expect(busyShiftRefreshSql).toContain("Restaurant demo busy shift refreshed");
+    expect(busyShiftRefreshSql).toContain("(0, 'waiting',   INTERVAL '0 minutes',    INTERVAL '-14 minutes')");
+    expect(busyShiftRefreshSql).toContain("(1, 'confirmed', INTERVAL '9 minutes',    INTERVAL '-120 minutes')");
+    expect(busyShiftRefreshSql).toContain("(3, 'dirty',   INTERVAL '-100 minutes', INTERVAL '-10 minutes', 1)");
+    expect(busyShiftRefreshSql).toContain("(5, 'paid',    INTERVAL '-84 minutes',  INTERVAL '6 minutes',  2)");
     expect(busyShiftRefreshSql).toContain("(4, 'demo-restaurant-table-5')");
     expect(busyShiftRefreshSql).toContain("(4, 'demo-restaurant-table-6')");
+    expect(busyShiftRefreshSql).toContain("'demo-restaurant-reservation-table-9'");
     expect(busyShiftRefreshSql).not.toMatch(/DELETE FROM \"HospitalityCapacityAllocation\"/);
+  });
+
+  it("fails closed before the refresh when a reserved demo identifier belongs to other data", () => {
+    expect(busyShiftGuardPath).toContain("20260812102900_guard_restaurant_demo_busy_shift");
+    expect(busyShiftGuardSql.match(/RAISE EXCEPTION/g)).toHaveLength(5);
+    expect(busyShiftGuardSql).toContain("^demo-restaurant-bk-[0-6]$");
+    expect(busyShiftGuardSql).toContain("^demo-restaurant-turn-[2-6]$");
+    expect(busyShiftGuardSql).toContain("archetype.\"archetypeId\" = 'restaurant'");
+    expect(busyShiftGuardSql).toContain("booking.\"organizationId\" = allocation.\"organizationId\"");
+    expect(busyShiftGuardSql).toContain("booking.\"storefrontId\" = allocation.\"storefrontId\"");
   });
 });
