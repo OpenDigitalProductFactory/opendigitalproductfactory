@@ -10,8 +10,19 @@ import { join, resolve } from "node:path";
 // `pnpm` (success/fail) + instant `sleep` on PATH and a scratch DPF_APP_DIR.
 
 const SCRIPT = resolve(__dirname, "../../../../scripts/portal-migrate-boot.sh");
-const BASH_OK = spawnSync("bash", ["--version"], { encoding: "utf8" }).status === 0;
 const TIMEOUT_MS = 30_000;
+const BOOT_SUBPROCESS_TIMEOUT_MS = 10_000;
+// Probe once, with a hard deadline. The old converter started `bash -lc pwd`
+// for every path in every case (28 extra synchronous Bash launches per file),
+// which was the only command outside the per-case watchdog and let a delayed
+// Git Bash startup move a 30s timeout/status 127 between otherwise unrelated
+// cases under local-CI load.
+const BASH_PROBE = spawnSync("bash", ["-lc", "printf '%s' \"$PWD\""], {
+  encoding: "utf8",
+  timeout: 2_000,
+});
+const BASH_OK = BASH_PROBE.status === 0;
+const BASH_PWD = BASH_PROBE.stdout?.trim() ?? "";
 
 function toBashPath(value: string): string {
   if (process.platform !== "win32") return value;
@@ -19,8 +30,7 @@ function toBashPath(value: string): string {
   const m = /^([A-Za-z]):\/(.*)$/.exec(normalized);
   if (!m) return normalized;
   const cwdDrive = /^([A-Za-z]):/.exec(process.cwd())?.[1]?.toLowerCase();
-  const pwd = spawnSync("bash", ["-lc", "pwd"], { encoding: "utf8" }).stdout.trim();
-  const prefix = cwdDrive && pwd.startsWith(`/mnt/${cwdDrive}/`) ? "/mnt" : "";
+  const prefix = cwdDrive && BASH_PWD.startsWith(`/mnt/${cwdDrive}/`) ? "/mnt" : "";
   return `${prefix}/${m[1].toLowerCase()}/${m[2]}`;
 }
 
@@ -28,13 +38,13 @@ function q(value: string): string {
   return `'${value.replace(/'/g, `'\\''`)}'`;
 }
 
-/** Fake `pnpm` (exit code configurable via PNPM_EXIT/PNPM_FAIL_MATCH) and an instant `sleep`. */
+/** Fake `pnpm` (exit code/failure/hang configurable via env) and an instant retry `sleep`. */
 function makeFakeBin(root: string): string {
   const bin = join(root, "bin");
   mkdirSync(bin, { recursive: true });
   writeFileSync(
     join(bin, "pnpm"),
-    '#!/bin/sh\nprintf "%s\\n" "$*" >> "$PNPM_LOG"\necho "[fake pnpm] $*"\ncase "$*" in\n  *"$PNPM_FAIL_MATCH"*) [ -n "$PNPM_FAIL_MATCH" ] && exit 1 ;;\nesac\nexit ${PNPM_EXIT:-0}\n',
+    '#!/bin/sh\nprintf "%s\\n" "$*" >> "$PNPM_LOG"\necho "[fake pnpm] $*"\nif [ -n "$PNPM_HANG_MATCH" ]; then\n  case "$*" in *"$PNPM_HANG_MATCH"*) /bin/sleep "${PNPM_HANG_SECONDS:-3}" ;; esac\nfi\nif [ -n "$PNPM_FAIL_MATCH" ]; then\n  case "$*" in *"$PNPM_FAIL_MATCH"*) exit 1 ;; esac\nfi\nexit ${PNPM_EXIT:-0}\n',
   );
   writeFileSync(join(bin, "sleep"), "#!/bin/sh\nexit 0\n"); // instant — no real waits
   chmodSync(join(bin, "pnpm"), 0o755);
@@ -42,7 +52,15 @@ function makeFakeBin(root: string): string {
   return bin;
 }
 
-function run(opts: { appDir: string; fakeBin: string; pnpmExit: number; pnpmFailMatch?: string }) {
+function run(opts: {
+  appDir: string;
+  fakeBin: string;
+  pnpmExit: number;
+  pnpmFailMatch?: string;
+  pnpmHangMatch?: string;
+  subprocessTimeoutMs?: number;
+  forcePortableWatchdog?: boolean;
+}) {
   const pnpmLog = join(opts.appDir, "pnpm.log");
   const exports = [
     `export PATH=${q(toBashPath(opts.fakeBin))}:"$PATH"`,
@@ -50,14 +68,62 @@ function run(opts: { appDir: string; fakeBin: string; pnpmExit: number; pnpmFail
     `export PNPM_EXIT=${opts.pnpmExit}`,
     `export PNPM_LOG=${q(toBashPath(pnpmLog))}`,
     `export PNPM_FAIL_MATCH=${q(opts.pnpmFailMatch ?? "")}`,
+    `export PNPM_HANG_MATCH=${q(opts.pnpmHangMatch ?? "")}`,
+    `export DPF_TEST_FORCE_PORTABLE_WATCHDOG=${opts.forcePortableWatchdog ? "1" : "0"}`,
   ].join("\n");
-  // The server command is a marker echo — it only runs if migrate succeeds.
+  // A synchronous child blocks Vitest's timer, so the shell owns the primary
+  // deadline and kills the whole process group. The Node timeout is a secondary
+  // fail-safe for a broken/missing `timeout` binary, not the normal path.
+  const subprocessTimeoutMs = opts.subprocessTimeoutMs ?? BOOT_SUBPROCESS_TIMEOUT_MS;
+  const timeoutSeconds = (subprocessTimeoutMs / 1_000).toFixed(3);
+  const bootCommand = `bash ${q(toBashPath(SCRIPT))} sh -c 'echo BOOT_MARKER'`;
+  // Git Bash and Linux have GNU timeout. Stock macOS does not, so retain a
+  // process-group watchdog fallback rather than baking a GNU-only command into
+  // a cross-platform test. Both paths normalize a deadline to status 124.
+  const boundedCommand = [
+    'if [ "$DPF_TEST_FORCE_PORTABLE_WATCHDOG" != "1" ] && command -v timeout >/dev/null 2>&1; then',
+    `  timeout --signal=TERM --kill-after=1s ${timeoutSeconds}s ${bootCommand}`,
+    "else",
+    "  set -m",
+    `  ${bootCommand} & boot_pid=$!`,
+    `  ( sleep ${timeoutSeconds}; kill -TERM -$boot_pid 2>/dev/null || kill -TERM $boot_pid 2>/dev/null; sleep 1; kill -KILL -$boot_pid 2>/dev/null || true ) & watchdog_pid=$!`,
+    "  wait $boot_pid; boot_status=$?",
+    "  kill $watchdog_pid 2>/dev/null || true",
+    "  wait $watchdog_pid 2>/dev/null || true",
+    '  [ "$boot_status" -ge 128 ] && exit 124',
+    '  exit "$boot_status"',
+    "fi",
+  ].join("\n");
+  const startedAt = Date.now();
   const r = spawnSync(
     "bash",
-    ["-lc", `${exports}\nbash ${q(toBashPath(SCRIPT))} sh -c 'echo BOOT_MARKER'`],
-    { encoding: "utf8" },
+    ["-lc", `${exports}\n${boundedCommand}`],
+    { encoding: "utf8", timeout: subprocessTimeoutMs + 2_000 },
   );
-  return { status: r.status, stdout: r.stdout ?? "", stderr: r.stderr ?? "", pnpmLog };
+  return {
+    status: r.status,
+    signal: r.signal,
+    error: r.error?.message ?? "",
+    stdout: r.stdout ?? "",
+    stderr: r.stderr ?? "",
+    pnpmLog,
+    command: boundedCommand,
+    timedOut:
+      r.status === 124
+      || r.status === 137
+      || (r.error as NodeJS.ErrnoException | undefined)?.code === "ETIMEDOUT",
+    durationMs: Date.now() - startedAt,
+  };
+}
+
+function bootDiagnostics(r: ReturnType<typeof run>): string {
+  return [
+    `command: ${r.command}`,
+    `status: ${String(r.status)} signal: ${String(r.signal)} timedOut: ${String(r.timedOut)}`,
+    `error: ${r.error || "<none>"}`,
+    `stdout:\n${r.stdout || "<empty>"}`,
+    `stderr:\n${r.stderr || "<empty>"}`,
+  ].join("\n");
 }
 
 describe.skipIf(!BASH_OK)("portal-migrate-boot.sh (BI-5322D025)", () => {
@@ -67,7 +133,7 @@ describe.skipIf(!BASH_OK)("portal-migrate-boot.sh (BI-5322D025)", () => {
       const appDir = join(root, "app");
       mkdirSync(appDir, { recursive: true });
       const r = run({ appDir, fakeBin: makeFakeBin(root), pnpmExit: 0 });
-      expect(r.status).toBe(0);
+      expect(r.status, bootDiagnostics(r)).toBe(0);
       expect(r.stdout).toContain("prisma migrate deploy"); // the fake pnpm echoed its args
       expect(r.stdout).toContain("migrations applied");
       expect(r.stdout).toContain("BOOT_MARKER"); // server command was exec'd
@@ -82,7 +148,7 @@ describe.skipIf(!BASH_OK)("portal-migrate-boot.sh (BI-5322D025)", () => {
       const appDir = join(root, "app");
       mkdirSync(appDir, { recursive: true });
       const r = run({ appDir, fakeBin: makeFakeBin(root), pnpmExit: 0 });
-      expect(r.status).toBe(0);
+      expect(r.status, bootDiagnostics(r)).toBe(0);
       const log = r.stdout;
       expect(log.indexOf("prisma migrate deploy")).toBeLessThan(log.indexOf("scripts/sync-provider-registry.ts"));
       expect(log.indexOf("scripts/sync-provider-registry.ts")).toBeLessThan(log.indexOf("scripts/reconcile-catalog-capabilities.ts"));
@@ -103,7 +169,7 @@ describe.skipIf(!BASH_OK)("portal-migrate-boot.sh (BI-5322D025)", () => {
         pnpmExit: 0,
         pnpmFailMatch: "scripts/sync-provider-registry.ts",
       });
-      expect(r.status).not.toBe(0);
+      expect(r.status, bootDiagnostics(r)).not.toBe(0);
       expect(r.stderr).toContain("provider registry sync failed");
       expect(r.stdout).not.toContain("BOOT_MARKER");
     } finally {
@@ -125,7 +191,7 @@ describe.skipIf(!BASH_OK)("portal-migrate-boot.sh (BI-5322D025)", () => {
         pnpmExit: 0,
         pnpmFailMatch: "scripts/reconcile-catalog-capabilities.ts",
       });
-      expect(r.status).toBe(0); // boot still succeeds
+      expect(r.status, bootDiagnostics(r)).toBe(0); // boot still succeeds
       expect(r.stderr).toContain("catalog capability reconciliation failed");
       expect(r.stdout).toContain("BOOT_MARKER"); // server WAS started despite the failure
     } finally {
@@ -143,7 +209,7 @@ describe.skipIf(!BASH_OK)("portal-migrate-boot.sh (BI-5322D025)", () => {
       const appDir = join(root, "app");
       mkdirSync(appDir, { recursive: true });
       const r = run({ appDir, fakeBin: makeFakeBin(root), pnpmExit: 1 });
-      expect(r.status).not.toBe(0);
+      expect(r.status, bootDiagnostics(r)).not.toBe(0);
       expect(r.stderr).toContain("failed after 5 attempts");
       expect(r.stdout).not.toContain("BOOT_MARKER"); // server never started
     } finally {
@@ -155,9 +221,34 @@ describe.skipIf(!BASH_OK)("portal-migrate-boot.sh (BI-5322D025)", () => {
     const root = mkdtempSync(join(tmpdir(), "dpf-pmb-"));
     try {
       const r = run({ appDir: join(root, "does-not-exist"), fakeBin: makeFakeBin(root), pnpmExit: 0 });
-      expect(r.status).not.toBe(0);
+      expect(r.status, bootDiagnostics(r)).not.toBe(0);
       expect(r.stderr).toContain("app dir");
       expect(r.stdout).not.toContain("BOOT_MARKER");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  }, TIMEOUT_MS);
+
+  it.each([
+    { watchdog: "native timeout", forcePortableWatchdog: false },
+    { watchdog: "portable process group", forcePortableWatchdog: true },
+  ])("terminates a hung boot subprocess with the $watchdog watchdog", ({ forcePortableWatchdog }) => {
+    const root = mkdtempSync(join(tmpdir(), "dpf-pmb-"));
+    try {
+      const appDir = join(root, "app");
+      mkdirSync(appDir, { recursive: true });
+      const r = run({
+        appDir,
+        fakeBin: makeFakeBin(root),
+        pnpmExit: 0,
+        pnpmHangMatch: "prisma migrate deploy",
+        subprocessTimeoutMs: 1_000,
+        forcePortableWatchdog,
+      });
+      expect(r.timedOut, bootDiagnostics(r)).toBe(true);
+      expect(r.status, bootDiagnostics(r)).toBe(124);
+      expect(r.durationMs).toBeLessThan(2_500);
+      expect(r.command).toContain("portal-migrate-boot.sh");
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
