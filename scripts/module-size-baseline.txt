@@ -1,5 +1,5 @@
-apps/web/app/api/mcp/v1/route.test.ts	1427
-apps/web/app/api/mcp/v1/route.ts	876
+apps/web/app/api/mcp/v1/route.test.ts	1515
+apps/web/app/api/mcp/v1/route.ts	901
 apps/web/app/api/v1/edge/discovery-runs/route.test.ts	982
 apps/web/components/admin/BusinessModelBuilder.tsx	821
 apps/web/components/admin/McpTokenManager.tsx	1326

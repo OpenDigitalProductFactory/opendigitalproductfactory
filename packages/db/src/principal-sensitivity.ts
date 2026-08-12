@@ -26,6 +26,23 @@ export function isPrincipalSensitivity(value: string): value is PrincipalSensiti
   return PRINCIPAL_SENSITIVITY_SET.has(value);
 }
 
+/**
+ * Coerce a single stored data/agent sensitivity label to a known level, failing
+ * CLOSED to the most-sensitive level ("restricted") for any unrecognized value.
+ *
+ * Distinct from {@link normalizePrincipalSensitivities}, which validates a
+ * CLEARANCE *list* and throws on an unknown member: a single data-sensitivity
+ * label must ALWAYS resolve so the authority gate can compare it, and an unknown
+ * label must never widen access. Shared by the runtime coworker-authority gate
+ * (`resolve-coworker-tool-authority`) and the tools/list clearance filter
+ * (`lib/mcp/listing-authority`) so the two never drift.
+ */
+export function coerceDataSensitivity(
+  value: string | null | undefined,
+): PrincipalSensitivity {
+  return value && isPrincipalSensitivity(value) ? value : "restricted";
+}
+
 export function normalizePrincipalSensitivities(
   values: readonly string[] | null | undefined,
 ): PrincipalSensitivity[] {

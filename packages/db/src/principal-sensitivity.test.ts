@@ -5,9 +5,25 @@ import { describe, expect, it } from "vitest";
 import {
   INSTALLATION_OWNER_SENSITIVITY_FLOOR,
   PRINCIPAL_SENSITIVITIES,
+  coerceDataSensitivity,
   normalizePrincipalSensitivities,
   resolvePrincipalSensitivityClearance,
 } from "./principal-sensitivity";
+
+describe("coerceDataSensitivity", () => {
+  it("passes through every known sensitivity level", () => {
+    for (const level of PRINCIPAL_SENSITIVITIES) {
+      expect(coerceDataSensitivity(level)).toBe(level);
+    }
+  });
+
+  it("fails CLOSED to 'restricted' for unknown / empty / nullish labels", () => {
+    expect(coerceDataSensitivity("top-secret")).toBe("restricted");
+    expect(coerceDataSensitivity("")).toBe("restricted");
+    expect(coerceDataSensitivity(null)).toBe("restricted");
+    expect(coerceDataSensitivity(undefined)).toBe("restricted");
+  });
+});
 
 describe("principal sensitivity clearance", () => {
   it("keeps the canonical TypeScript vocabulary aligned with Prisma", () => {

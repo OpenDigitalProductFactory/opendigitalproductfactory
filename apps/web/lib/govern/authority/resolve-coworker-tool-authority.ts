@@ -1,6 +1,7 @@
 import "server-only";
 
 import { prisma } from "@dpf/db";
+import { coerceDataSensitivity } from "@dpf/db/principal-sensitivity";
 
 import { findApprovedAuthorityEnvelope } from "@/lib/coworker/authority-approval-envelope";
 import { loadEffectiveAuthContext } from "@/lib/identity/load-effective-auth-context";
@@ -90,20 +91,6 @@ export function deriveAllowedRouteContexts(
 ): readonly string[] | undefined {
   const surface = screenSurface?.trim();
   return surface && surface !== "*" ? [surface] : undefined;
-}
-
-function normalizeSensitivity(
-  value: string,
-): "public" | "internal" | "confidential" | "restricted" {
-  switch (value) {
-    case "public":
-    case "internal":
-    case "confidential":
-    case "restricted":
-      return value;
-    default:
-      return "restricted";
-  }
 }
 
 function authSource(
@@ -198,7 +185,7 @@ export const resolveCoworkerToolAuthorityInput: CoworkerAuthorityInputResolver =
       hitlTierDefault: agent.hitlTierDefault,
       hitlPolicy: agent.governanceProfile?.hitlPolicy ?? null,
     });
-    const sensitivity = normalizeSensitivity(agent.sensitivity);
+    const sensitivity = coerceDataSensitivity(agent.sensitivity);
     const decisionVersionIds = [
       "coworker-authority-v1",
       agent.governanceProfile?.updatedAt.toISOString(),
