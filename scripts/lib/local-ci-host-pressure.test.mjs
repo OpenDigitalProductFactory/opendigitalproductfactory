@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -114,6 +114,42 @@ test("a valid stale fence whose owner process is dead is reconciled", async () =
 
   assert.equal(sample.fencesHealthy, true);
   assert.equal(existsSync(fencePath), false);
+});
+
+test("a dead convergence owner is reconciled before admission telemetry is sampled", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "dpf-pressure-convergence-"));
+  const lockPath = join(directory, "converge.lock");
+  const ownerPath = join(lockPath, "owner.json");
+  mkdirSync(lockPath);
+  writeFileSync(ownerPath, JSON.stringify({
+    schema: "dpf-local-convergence-lock/v1",
+    token: "dead-owner",
+    pid: 2_147_483_000,
+    processIdentity: "win32:1",
+    acquiredAt: "2026-07-30T04:59:00.000Z",
+  }));
+
+  const cpuSnapshots = [{ idle: 0, total: 10 }, { idle: 5, total: 20 }];
+  const sample = await sampleLocalCiHostPressure({
+    rootPath: directory,
+    sampleWindowMs: 0,
+    convergenceLockPaths: [lockPath],
+    evidenceIsolationHealthy: true,
+    deps: {
+      now: () => new Date("2026-07-30T05:00:00.000Z"),
+      freeMemoryBytes: () => 1,
+      cpuTimes: () => cpuSnapshots.shift(),
+      delay: async () => {},
+      diskFreeBytes: async () => 1,
+      dockerHealthy: () => true,
+      fencesHealthy: () => true,
+      convergenceProcessAlive: () => false,
+      convergenceProcessIdentity: () => "",
+    },
+  });
+
+  assert.equal(sample.convergenceActive, false);
+  assert.equal(existsSync(lockPath), false);
 });
 
 test("summarizes pilot peaks and integrity observations without branch labels", () => {

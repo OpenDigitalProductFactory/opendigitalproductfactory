@@ -242,6 +242,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         "scripts/lib/root-clone-refresh.test.mjs",
         "scripts/lib/compose-safety.test.mjs",
         "scripts/lib/local-integration-ci.test.mjs",
+        "scripts/lib/local-convergence-lock.test.mjs",
         "scripts/lib/sandbox-freshness.test.mjs",
         "scripts/sandbox-freshness-preflight.test.mjs",
         "scripts/release/re-resolve-stt-digest.test.mjs",

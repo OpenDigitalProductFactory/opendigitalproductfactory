@@ -25,6 +25,10 @@
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
+import {
+  acquireLocalConvergenceLock,
+  releaseLocalConvergenceLock,
+} from "./lib/local-convergence-lock.mjs";
 import process from "node:process";
 import {
   CRITICAL_PACKAGES,
@@ -39,7 +43,6 @@ import {
   stalePackagePathsForRelink,
 } from "./lib/sandbox-freshness.mjs";
 
-const CONVERGE_LOCK_STALE_MS = 30 * 60_000;
 
 function valueAfter(flag) {
   const index = process.argv.indexOf(flag);
@@ -263,22 +266,15 @@ const lockDir = resolveSlotMutablePath(
   defaultLockDir,
   "convergence lock",
 );
-try {
-  fs.mkdirSync(lockDir, { recursive: false });
-} catch {
-  let stale = false;
-  try {
-    stale = Date.now() - fs.statSync(lockDir).mtimeMs > CONVERGE_LOCK_STALE_MS;
-  } catch {
-    stale = true; // vanished between mkdir and stat — retake below.
-  }
-  if (!stale) {
-    console.error("[sandbox-freshness] another convergence holds the lock; not starting a duplicate install");
-    writeReport(state, evaluation, { attempted: false, reason: "convergence_lock_held" });
-    process.exit(EXIT_SANDBOX_NOT_READY);
-  }
-  fs.rmSync(lockDir, { recursive: true, force: true });
-  fs.mkdirSync(lockDir, { recursive: true });
+const convergenceLock = acquireLocalConvergenceLock({ path: lockDir });
+if (convergenceLock.status !== "acquired") {
+  console.error(`[sandbox-freshness] another convergence holds the lock (${convergenceLock.active?.status ?? "unknown"}); not starting a duplicate install`);
+  writeReport(state, evaluation, {
+    attempted: false,
+    reason: "convergence_lock_held",
+    lockStatus: convergenceLock.active?.status ?? "unknown",
+  });
+  process.exit(EXIT_SANDBOX_NOT_READY);
 }
 
 // Defeat pnpm's up-to-date fast path: when node_modules/.pnpm/lock.yaml (and
@@ -469,7 +465,7 @@ try {
     evaluation = evaluateFreshness(state);
   }
 } finally {
-  fs.rmSync(lockDir, { recursive: true, force: true });
+  releaseLocalConvergenceLock({ path: lockDir, token: convergenceLock.owner.token });
 }
 
 if (convergence.exitCode !== 0 && evaluation.verdict === "green") {
