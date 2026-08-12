@@ -13,7 +13,7 @@
 //
 // Advisory only — no buttons here queue or apply the upgrade.
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { SummaryResult, ImpactItem } from "@/lib/self-upgrade/impact/types";
 import { formatImpactCounts } from "@/lib/self-upgrade/impact/format";
 import { CollapsibleList } from "@/components/ui/report-kit";
@@ -116,7 +116,10 @@ function isSummaryResult(value: unknown): value is SummaryResult {
   return candidate.ok === true || candidate.ok === false;
 }
 
-async function fetchUpgradeImpactSummary(refresh: boolean): Promise<SummaryResult> {
+async function fetchUpgradeImpactSummary(
+  refresh: boolean,
+  signal?: AbortSignal,
+): Promise<SummaryResult> {
   const params = new URLSearchParams();
   if (refresh) params.set("refresh", "true");
   const query = params.toString();
@@ -126,6 +129,7 @@ async function fetchUpgradeImpactSummary(refresh: boolean): Promise<SummaryResul
     {
       method: "GET",
       cache: "no-store",
+      signal,
     },
   );
 
@@ -155,20 +159,31 @@ export default function UpgradeImpactPanel({
   // generated summary is shown immediately on load — no click, no recompute.
   initialSummary?: SummaryResult | null;
 }) {
-  const [isPending, startTransition] = useTransition();
+  const [isPending, setIsPending] = useState(false);
   const [result, setResult] = useState<SummaryResult | null>(initialSummary ?? null);
   const [error, setError] = useState<string | null>(null);
+  const requestRef = useRef(null as AbortController | null);
 
   function run(refresh = false) {
+    requestRef.current?.abort();
+    const controller = new AbortController();
+    requestRef.current = controller;
     setError(null);
-    startTransition(async () => {
-      try {
-        const r = await fetchUpgradeImpactSummary(refresh);
+    setIsPending(true);
+    void fetchUpgradeImpactSummary(refresh, controller.signal)
+      .then((r) => {
+        if (controller.signal.aborted) return;
         setResult(r);
-      } catch (err) {
+      })
+      .catch((err: unknown) => {
+        if (controller.signal.aborted) return;
         setError(getErrorMessage(err));
-      }
-    });
+      })
+      .finally(() => {
+        if (requestRef.current !== controller) return;
+        requestRef.current = null;
+        setIsPending(false);
+      });
   }
 
   // Auto-generate the glance summary on first view when the page shipped no
@@ -180,6 +195,7 @@ export default function UpgradeImpactPanel({
   // cost once per (lineage, target). Fires once on mount.
   useEffect(() => {
     if (enabled && !initialSummary) run();
+    return () => requestRef.current?.abort();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

@@ -25,6 +25,10 @@ and governed by deployment windows.
 4. Confirm the health check passed after the swap, and read the deployment log if
    it did not.
 
+You may navigate away after the upgrade has been accepted. Leaving the page stops
+only that page's live status reads; it does not cancel or pause the durable upgrade.
+When you return, the page reloads the current run state and resumes live updates.
+
 The owner status card and upgrade action stay visible on arrival. Open
 **Deploy controls & history** only when you need technical controls, run
 history, logs, or the local-changes ledger.

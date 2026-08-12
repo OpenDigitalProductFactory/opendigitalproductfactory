@@ -25,7 +25,7 @@
  * is a UX enhancement, not a security boundary.
  */
 import { useEffect, useState } from "react";
-import { useResilientEventSource } from "@/lib/hooks/useResilientEventSource";
+import { useSystemEvent } from "@/components/platform/SystemEventProvider";
 
 export type PlatformReadyState = {
   ready: boolean;
@@ -56,19 +56,10 @@ export function usePlatformReady(): PlatformReadyState {
       });
   }, []);
 
-  // Resilient SSE (BI-864E83B0): shares the same /api/agent/system-stream
-  // source as PlatformBanner and gains the heartbeat watchdog so it can't
-  // become a zombie connection after a portal rebuild. Transient disconnects
-  // keep the last known level — the hook reconnects underneath.
-  useResilientEventSource("/api/agent/system-stream", {
-    onMessage: (msg) => {
-      let event: SystemQuiescenceEvent;
-      try {
-        event = JSON.parse(msg.data) as SystemQuiescenceEvent;
-      } catch {
-        return;
-      }
-      if (event.type !== "system:quiescence") return;
+  // The authenticated shell owns one resilient system stream per tab. This
+  // hook subscribes to its in-process fan-out rather than opening another SSE
+  // connection beside PlatformBanner.
+  useSystemEvent("system:quiescence", (event: SystemQuiescenceEvent) => {
       if (event.level === "draining") {
         setState({ ready: false, level: "draining" });
       } else if (event.level === "swapping") {
@@ -76,7 +67,6 @@ export function usePlatformReady(): PlatformReadyState {
       } else if (event.level === "cleared") {
         setState({ ready: true, level: "normal" });
       }
-    },
   });
 
   return state;

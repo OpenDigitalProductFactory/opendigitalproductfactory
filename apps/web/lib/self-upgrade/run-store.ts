@@ -1,17 +1,10 @@
 import { randomUUID } from "node:crypto";
 import { prisma, Prisma } from "@dpf/db";
 import { safeSyncSelfUpgradeChangeRecord } from "@/lib/self-upgrade/change-record";
+import { agentEventBus } from "@/lib/agent-event-bus";
+import type { SelfUpgradeRunStatus } from "@/lib/self-upgrade/run-types";
 
-export type SelfUpgradeRunStatus =
-  | "queued"
-  | "pending"
-  | "running"
-  | "succeeded"
-  | "failed"
-  | "cancelled"
-  | "skipped"
-  | "completing"
-  | "rolled_back";
+export type { SelfUpgradeRunStatus } from "@/lib/self-upgrade/run-types";
 
 export async function createRun(params: {
   runId?: string;
@@ -23,7 +16,7 @@ export async function createRun(params: {
   impactSummaryId?: string | null;
 }) {
   const runId = params.runId ?? `SUR-${randomUUID().replace(/-/g, "").slice(0, 8).toUpperCase()}`;
-  return prisma.selfUpgradeRun.create({
+  const created = await prisma.selfUpgradeRun.create({
     data: {
       runId,
       status: "queued",
@@ -34,6 +27,8 @@ export async function createRun(params: {
       impactSummaryId: params.impactSummaryId ?? null,
     },
   });
+  notifyRunState(created.runId, "queued");
+  return created;
 }
 
 export async function updateRunPlan(
@@ -59,6 +54,7 @@ export async function startRun(runId: string) {
     where: { runId },
     data: { status: "running", startedAt: new Date() },
   });
+  notifyRunState(updated.runId, "running");
   // Lazily open the paired change record (standard change → in-progress).
   await safeSyncSelfUpgradeChangeRecord(runId);
   return updated;
@@ -69,6 +65,7 @@ export async function completeRun(runId: string) {
     where: { runId },
     data: { status: "succeeded", completedAt: new Date() },
   });
+  notifyRunState(updated.runId, "succeeded");
   await safeSyncSelfUpgradeChangeRecord(runId);
   return updated;
 }
@@ -78,6 +75,7 @@ export async function failRun(runId: string, error: string) {
     where: { runId },
     data: { status: "failed", completedAt: new Date(), failureLog: error },
   });
+  notifyRunState(updated.runId, "failed");
   await safeSyncSelfUpgradeChangeRecord(runId);
   // BI-9EA09823 — best-effort: every self-upgrade failure lands a fingerprinted
   // corrective BI, keyed on the failure CLASS (not runId) so recurrences
@@ -113,6 +111,7 @@ export async function skipRun(runId: string, reason: string) {
     where: { runId },
     data: { status: "skipped", completedAt: new Date(), reason },
   });
+  notifyRunState(updated.runId, "skipped");
   // A skip is a non-event: no record is opened. The sync only finalizes a
   // record that already exists (defensive).
   await safeSyncSelfUpgradeChangeRecord(runId);
@@ -224,6 +223,7 @@ export async function cancelRun(runId: string) {
     where: { runId },
     data: { status: "cancelled", completedAt: new Date() },
   });
+  notifyRunState(updated.runId, "cancelled");
   await safeSyncSelfUpgradeChangeRecord(runId);
   return updated;
 }
@@ -261,4 +261,19 @@ export async function getLatestSucceededRun() {
 
 export async function getRun(runId: string) {
   return prisma.selfUpgradeRun.findUnique({ where: { runId } });
+}
+
+function notifyRunState(runId: string, status: SelfUpgradeRunStatus): void {
+  try {
+    agentEventBus.broadcastSystem({
+      type: "system:self-upgrade",
+      runId,
+      status,
+      observedAt: new Date().toISOString(),
+    });
+  } catch (error) {
+    // The database write above is authoritative. Notification failures are
+    // observable but never allowed to roll back or fail durable lifecycle work.
+    console.error("[self-upgrade] lifecycle notification failed", error);
+  }
 }

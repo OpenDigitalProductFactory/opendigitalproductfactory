@@ -1,13 +1,34 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const mocks = vi.hoisted(() => ({ findUnique: vi.fn(), update: vi.fn() }));
+const mocks = vi.hoisted(() => ({
+  create: vi.fn(),
+  findUnique: vi.fn(),
+  update: vi.fn(),
+  broadcastSystem: vi.fn(),
+}));
 vi.mock("@dpf/db", () => ({
   Prisma: {},
-  prisma: { selfUpgradeRun: { findUnique: mocks.findUnique, update: mocks.update } },
+  prisma: {
+    selfUpgradeRun: {
+      create: mocks.create,
+      findUnique: mocks.findUnique,
+      update: mocks.update,
+    },
+  },
 }));
 vi.mock("@/lib/self-upgrade/change-record", () => ({ safeSyncSelfUpgradeChangeRecord: vi.fn() }));
+vi.mock("@/lib/agent-event-bus", () => ({
+  agentEventBus: { broadcastSystem: mocks.broadcastSystem },
+}));
 
-import { recordPromoterReadiness, recordRunRecoveryPoint, sanitizePromoterReadinessReport } from "./run-store";
+import {
+  createRun,
+  startRun,
+  completeRun,
+  recordPromoterReadiness,
+  recordRunRecoveryPoint,
+  sanitizePromoterReadinessReport,
+} from "./run-store";
 
 const report = {
   stage: "preflight" as const, owner: "portal" as const, mode: "enforced" as const,
@@ -36,5 +57,42 @@ describe("self-upgrade evidence merging", () => {
     mocks.findUnique.mockResolvedValue({ completionEvidence: { readiness: report, rollback: { status: "pending" } } });
     await recordRunRecoveryPoint("SUR-1", { status: "ok" });
     expect(mocks.update.mock.calls[0][0].data.completionEvidence).toMatchObject({ readiness: report, rollback: { status: "pending" }, recoveryPoint: { status: "ok" } });
+  });
+});
+
+describe("self-upgrade lifecycle invalidation", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.create.mockImplementation(({ data }) => Promise.resolve({ ...data }));
+    mocks.update.mockImplementation(({ data, where }) =>
+      Promise.resolve({ runId: where.runId, ...data }),
+    );
+  });
+
+  it("publishes queued, running, and terminal hints after durable writes", async () => {
+    const created = await createRun({ runId: "SUR-LIVE" });
+    await startRun("SUR-LIVE");
+    await completeRun("SUR-LIVE");
+
+    expect(created.status).toBe("queued");
+    expect(mocks.broadcastSystem.mock.calls.map(([event]) => event)).toEqual([
+      expect.objectContaining({ type: "system:self-upgrade", runId: "SUR-LIVE", status: "queued" }),
+      expect.objectContaining({ type: "system:self-upgrade", runId: "SUR-LIVE", status: "running" }),
+      expect.objectContaining({ type: "system:self-upgrade", runId: "SUR-LIVE", status: "succeeded" }),
+    ]);
+  });
+
+  it("does not fail a durable transition when notification delivery fails", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    mocks.broadcastSystem.mockImplementation(() => {
+      throw new Error("stream consumer failed");
+    });
+
+    await expect(startRun("SUR-DURABLE")).resolves.toMatchObject({
+      runId: "SUR-DURABLE",
+      status: "running",
+    });
+    expect(errorSpy).toHaveBeenCalledOnce();
+    errorSpy.mockRestore();
   });
 });

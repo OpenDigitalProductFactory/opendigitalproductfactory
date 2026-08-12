@@ -1,5 +1,11 @@
 # Activity Quiescence Protocol
 
+> **Observation architecture note:** this spec owns the durable quiescence lifecycle. Browser
+> observation of that lifecycle follows the canonical
+> [background-operation observation contract](../../architecture/background-operation-observation-contract.md):
+> one shell system stream, event-as-invalidation, targeted projection rehydration, and no
+> timer-driven route refresh.
+
 | Field | Value |
 | --- | --- |
 | Date | 2026-05-24 |
