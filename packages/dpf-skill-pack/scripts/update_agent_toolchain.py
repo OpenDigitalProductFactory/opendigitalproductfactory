@@ -1305,7 +1305,10 @@ CODEX_BASH_GUARDS = (
     "pregate-invocation-guard.mjs",
 )
 CODEX_ASK_GUARDS = ("decision-routing-guard.mjs",)
-CODEX_WRITE_GUARDS = ("plan-backlog-coverage-guard.mjs",)
+CODEX_WRITE_GUARDS = (
+    "root-clone-guard.mjs",
+    "plan-backlog-coverage-guard.mjs",
+)
 
 
 def codex_hooks_file(home: Path) -> Path:

@@ -465,11 +465,11 @@ void _sizeCheck;
 describe("mapBuildDeliverableToRoutingSensitivity", () => {
   // Founder ruling (2026-08-12): platform source-code generation is development
   // work, not internal business data. Ordinary builds route at the least-
-  // sensitive `public` tier so connected frontier cloud dev tools (cleared for
+  // sensitive `development` tier so connected frontier cloud dev tools (cleared for
   // public, never internal business data) are eligible; builds whose brief
   // signals real business-data sensitivity keep the internal/confidential gates.
-  it("maps low deliverable sensitivity to public (unblocks cloud dev tools)", () => {
-    expect(mapBuildDeliverableToRoutingSensitivity("low")).toBe("public");
+  it("maps low deliverable sensitivity to development (unblocks cloud dev tools)", () => {
+    expect(mapBuildDeliverableToRoutingSensitivity("low")).toBe("development");
   });
   it("escalates elevated to internal and high to confidential", () => {
     expect(mapBuildDeliverableToRoutingSensitivity("elevated")).toBe("internal");

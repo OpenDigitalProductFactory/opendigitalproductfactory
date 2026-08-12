@@ -1,6 +1,11 @@
 import type { ProviderPriorityEntry } from "@/lib/ai-provider-priority";
+import type { PrincipalSensitivity } from "@dpf/db/principal-sensitivity";
 
-export type RouteSensitivity = "public" | "internal" | "confidential" | "restricted";
+/**
+ * Sensitivity used by inference routing. `development` classifies platform
+ * source-code work independently from the business-data confidentiality scale.
+ */
+export type RouteSensitivity = PrincipalSensitivity | "development";
 
 export type ProviderPolicyInfo = {
   providerId: string;
@@ -55,6 +60,7 @@ export function isProviderAllowedForSensitivity(
   sensitivity: RouteSensitivity,
   provider: ProviderPolicyInfo,
 ): boolean {
+  if (sensitivity === "development") return true;
   if (sensitivity === "public") return true;
   if (sensitivity === "internal") return true;
   if (sensitivity === "confidential") return true;
