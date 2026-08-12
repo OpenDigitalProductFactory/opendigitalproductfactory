@@ -277,6 +277,11 @@ export async function loadRestaurantFloorOperationalView(
           OR: [
             { status: "waiting" },
             {
+              hospitalityServiceTurn: {
+                is: { stage: { in: [...ACTIVE_TURN_STAGES] } },
+              },
+            },
+            {
               scheduledAt: {
                 gte: horizonStart,
                 lt: horizonEnd,

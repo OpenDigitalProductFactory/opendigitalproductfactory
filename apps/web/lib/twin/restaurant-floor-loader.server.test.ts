@@ -220,6 +220,41 @@ describe("restaurant floor operational loader", () => {
     ]);
   });
 
+  it("keeps active-turn booking context outside the ordinary demand horizon", async () => {
+    const db = database();
+    db.storefrontBooking.findMany.mockImplementation(
+      async (args: unknown) =>
+        JSON.stringify(args).includes("hospitalityServiceTurn")
+          ? [
+              {
+                ...seatedBooking,
+                scheduledAt: new Date("2026-07-28T18:00:00.000Z"),
+              },
+              waitingBooking,
+            ]
+          : [waitingBooking],
+    );
+
+    const view = await loadRestaurantFloorOperationalView(db, {
+      organizationId: "org-1",
+      storefrontId: "store-1",
+      now,
+    });
+
+    expect(view.floor.tables[0]).toEqual(
+      expect.objectContaining({
+        party: { id: "booking-seated", name: "Morgan Lee", covers: 2 },
+      }),
+    );
+    expect(view.moves).toEqual([
+      expect.objectContaining({
+        demandId: "booking-seated",
+        serviceTurnId: "turn-1",
+        options: [expect.objectContaining({ resourceIds: ["table-2"] })],
+      }),
+    ]);
+  });
+
   it("reports the bounded read count, elapsed time, and exact payload size", async () => {
     const ticks = [100, 112.5];
     const view = await loadRestaurantFloorOperationalView(database(), {
