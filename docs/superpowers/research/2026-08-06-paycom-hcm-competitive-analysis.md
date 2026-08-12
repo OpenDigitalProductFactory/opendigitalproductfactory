@@ -276,4 +276,3 @@ All ten are filed under **EP-F7BD23BB** (the "Owning epic" column names the *dom
 - **Beti adoption ethics:** validate the "AI does the work, human confirms" framing with the founder before P1 scoping — it is the load-bearing difference from Paycom and the answer to Paycom's worst reviews.
 
 **Next step (planning phase, when we move past doc-only):** file P1–P10 through the demand funnel (classify → link this doc as evidence → score impact/confidence → effort estimate + source → investment bucket), trace-link each to its `BusinessCapability`, and let priority fall out of the score — same mechanism the scorecard §8 defines. Lead with **P2 (GONE)** as the proof-of-concept for kernel-decided HCM.
-
