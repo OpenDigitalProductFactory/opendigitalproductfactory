@@ -1,4 +1,5 @@
 {
+  "processSpineDecision": "Localized Restaurant demo data repair and existing-contract bugfix; no process-spine, route, or operator-documentation contract changed.",
   "version": "1",
   "accountableOwner": "data-steward",
   "affectedCopies": [
