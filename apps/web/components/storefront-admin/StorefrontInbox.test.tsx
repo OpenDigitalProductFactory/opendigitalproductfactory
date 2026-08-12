@@ -264,6 +264,8 @@ describe("StorefrontInbox — order rows", () => {
     );
     // The row's forward action follows the new status without a reload.
     expect(screen.getByRole("button", { name: /mark ready ORD-0001/i })).toBeTruthy();
+    expect(screen.getByText(/next: in preparation — mark it ready when it's done/i)).toBeTruthy();
+    expect(screen.queryByText(/next: accept this order to start preparing it/i)).toBeNull();
   });
 
   it("offers Mark ready then Mark fulfilled along the lane", () => {

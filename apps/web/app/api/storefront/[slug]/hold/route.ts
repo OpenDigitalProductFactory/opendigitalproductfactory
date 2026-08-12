@@ -33,7 +33,11 @@ export async function POST(
   // Find storefront
   const storefront = await prisma.storefrontConfig.findFirst({
     where: { organization: { slug }, isPublished: true },
-    select: { id: true, organizationId: true },
+    select: {
+      id: true,
+      organizationId: true,
+      archetype: { select: { archetypeId: true } },
+    },
   });
   if (!storefront) {
     return apiErrorResponse("NOT_FOUND", "Storefront not found", 404);
@@ -108,6 +112,10 @@ export async function POST(
           })
         : null;
 
+      if (storefront.archetype?.archetypeId === "restaurant" && !resource) {
+        throw new Error("RESTAURANT_TABLE_REQUIRED");
+      }
+
       // Non-hospitality providers retain the compatibility hold check. A
       // structured resource skips this raceable preflight: its allocation
       // exclusion constraint is the atomic arbiter.
@@ -173,6 +181,16 @@ export async function POST(
       return apiErrorResponse(
         "CAPACITY_CONFLICT",
         "Slot is already held",
+        409,
+      );
+    }
+    if (
+      error instanceof Error &&
+      error.message === "RESTAURANT_TABLE_REQUIRED"
+    ) {
+      return apiErrorResponse(
+        "CAPACITY_CONFIGURATION_REQUIRED",
+        "That table is not available for reservations. Please choose another time.",
         409,
       );
     }

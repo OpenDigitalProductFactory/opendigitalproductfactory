@@ -11,6 +11,8 @@ import {
 } from "@/lib/operating-hours-types";
 import type { DaySchedule, WeeklySchedule } from "@/lib/operating-hours-types";
 import { deriveTimezoneFromBusinessLocation } from "@/lib/operating-hours-read";
+import { newId } from "@/lib/shared/new-id";
+import { ALL_ARCHETYPES } from "@dpf/storefront-templates";
 
 const DAY_NAMES = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"] as const;
 type DayName = (typeof DAY_NAMES)[number];
@@ -200,15 +202,20 @@ export async function getOperatingHours(opts?: {
 
   // Priority 2/3: Smart defaults from archetype/industry
   const config = await prisma.storefrontConfig.findFirst({
-    select: { archetypeId: true },
+    select: {
+      archetypeId: true,
+      archetype: { select: { category: true } },
+    },
   });
-  const archetypeCategory = config?.archetypeId?.split("/")[0];
   // Use storefront archetype if available, otherwise fall back to suggested industry from URL
-  const categoryForDefaults = archetypeCategory ?? opts?.suggestedIndustry;
+  const categoryForDefaults = config?.archetype?.category ?? opts?.suggestedIndustry;
 
   if (categoryForDefaults) {
     return {
-      schedule: await getDefaultHoursForArchetype(categoryForDefaults),
+      schedule: await getDefaultHoursForArchetype(
+        categoryForDefaults,
+        config?.archetypeId,
+      ),
       timezone: resolvedTimezone,
       isConfirmed: false,
     };
@@ -301,8 +308,27 @@ const INDUSTRY_DEFAULTS: Record<string, WeeklySchedule> = {
 };
 
 export async function getDefaultHoursForArchetype(
-  archetypeCategory?: string | null
+  archetypeCategory?: string | null,
+  archetypeId?: string | null,
 ): Promise<WeeklySchedule> {
+  const template = archetypeId
+    ? ALL_ARCHETYPES.find((candidate) => candidate.archetypeId === archetypeId)
+    : null;
+  const templateHours = template?.schedulingDefaults?.defaultOperatingHours;
+  if (templateHours && templateHours.length > 0) {
+    const byDay = new Map(templateHours.map((hours) => [hours.day, hours]));
+    return Object.fromEntries(
+      DAY_NAMES.map((day, dayIndex) => {
+        const hours = byDay.get(dayIndex);
+        return [
+          day,
+          hours
+            ? { enabled: true, open: hours.start, close: hours.end }
+            : { ...CLOSED_DAY },
+        ];
+      }),
+    ) as WeeklySchedule;
+  }
   if (archetypeCategory && INDUSTRY_DEFAULTS[archetypeCategory]) {
     return { ...INDUSTRY_DEFAULTS[archetypeCategory] };
   }
@@ -376,16 +402,17 @@ export async function saveOperatingHours(input: {
       await tx.deploymentWindow.createMany({ data: newWindows });
     }
 
-    // 3. Optionally seed ProviderAvailability if a ServiceProvider exists
-    const provider = await tx.serviceProvider.findFirst({
+    // 3. Keep every active provider on the shared business-hours schedule.
+    // A first-row-only write left Restaurant table providers on stale hours.
+    const providers = await tx.serviceProvider.findMany({
       where: { isActive: true },
       select: { id: true },
     });
 
-    if (provider) {
-      // Delete existing availability for this provider
+    if (providers.length > 0) {
+      const providerIds = providers.map((provider) => provider.id);
       await tx.providerAvailability.deleteMany({
-        where: { providerId: provider.id },
+        where: { providerId: { in: providerIds } },
       });
 
       // Group days by identical hours
@@ -398,18 +425,53 @@ export async function saveOperatingHours(input: {
         grouped.get(key)!.push(i);
       }
 
-      const availabilityRows = Array.from(grouped.entries()).map(([key, days]) => {
-        const [startTime, endTime] = key.split("|");
-        return {
-          providerId: provider.id,
-          days,
-          startTime: startTime ?? "09:00",
-          endTime: endTime ?? "17:00",
-        };
-      });
+      const availabilityRows = providers.flatMap((provider) =>
+        Array.from(grouped.entries()).map(([key, days]) => {
+          const [startTime, endTime] = key.split("|");
+          return {
+            providerId: provider.id,
+            days,
+            startTime: startTime ?? "09:00",
+            endTime: endTime ?? "17:00",
+          };
+        }),
+      );
 
       if (availabilityRows.length > 0) {
         await tx.providerAvailability.createMany({ data: availabilityRows });
+      }
+
+      // HospitalityResource is authoritative for Restaurant tables. Mirror the
+      // confirmed hours there while ProviderAvailability remains the slot-
+      // engine compatibility projection.
+      const resources = await tx.hospitalityResource.findMany({
+        where: {
+          status: "active",
+          legacyServiceProviderId: { in: providerIds },
+        },
+        select: { id: true, organizationId: true },
+      });
+      if (resources.length > 0) {
+        const resourceIds = resources.map((resource) => resource.id);
+        await tx.hospitalityResourceAvailability.deleteMany({
+          where: { resourceId: { in: resourceIds } },
+        });
+        await tx.hospitalityResourceAvailability.createMany({
+          data: resources.flatMap((resource) =>
+            Array.from(grouped.entries()).map(([key, days]) => {
+              const [startTime, endTime] = key.split("|");
+              return {
+                availabilityId: `HRA-${newId(10).toUpperCase()}`,
+                organizationId: resource.organizationId,
+                resourceId: resource.id,
+                kind: "available",
+                days,
+                startTime: startTime ?? "09:00",
+                endTime: endTime ?? "17:00",
+              };
+            }),
+          ),
+        });
       }
     }
   });

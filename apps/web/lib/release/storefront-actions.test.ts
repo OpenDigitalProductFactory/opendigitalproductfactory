@@ -436,6 +436,93 @@ describe("submitBooking (enhanced)", () => {
     });
   });
 
+  it("refuses a Restaurant booking when the selected provider has no table resource", async () => {
+    vi.mocked(prisma.storefrontConfig.findFirst).mockResolvedValue({
+      ...mockPublishedStorefront,
+      archetype: { archetypeId: "restaurant" },
+    } as never);
+    vi.mocked(prisma.hospitalityResource.findFirst).mockResolvedValue(null as never);
+
+    const result = await submitBooking("restaurant", {
+      itemId: "itm-1",
+      customerEmail: "a@b.com",
+      customerName: "Alice",
+      scheduledAt: new Date("2026-03-23T09:00:00Z"),
+      durationMinutes: 45,
+      providerId: "generic-provider",
+      covers: 4,
+    });
+
+    expect(result).toEqual({
+      success: false,
+      error: "That table is not available for reservations. Please choose another time.",
+    });
+    expect(prisma.storefrontBooking.create).not.toHaveBeenCalled();
+  });
+
+  it("refuses a Restaurant booking when no table provider is selected", async () => {
+    vi.mocked(prisma.storefrontConfig.findFirst).mockResolvedValue({
+      ...mockPublishedStorefront,
+      archetype: { archetypeId: "restaurant" },
+    } as never);
+
+    const result = await submitBooking("restaurant", {
+      itemId: "itm-1",
+      customerEmail: "a@b.com",
+      customerName: "Alice",
+      scheduledAt: new Date("2026-03-23T09:00:00Z"),
+      durationMinutes: 45,
+      covers: 4,
+    });
+
+    expect(result).toEqual({
+      success: false,
+      error: "That table is not available for reservations. Please choose another time.",
+    });
+    expect(prisma.storefrontBooking.create).not.toHaveBeenCalled();
+  });
+
+  it("returns a customer-safe error when party size exceeds table capacity", async () => {
+    vi.mocked(prisma.storefrontConfig.findFirst).mockResolvedValue({
+      ...mockPublishedStorefront,
+      archetype: { archetypeId: "restaurant" },
+    } as never);
+    vi.mocked(prisma.hospitalityResource.findFirst)
+      .mockResolvedValueOnce({
+        id: "table-1",
+        legacyServiceProviderId: "prov-1",
+        status: "active",
+      } as never)
+      .mockResolvedValueOnce({
+        id: "table-1",
+        legacyServiceProviderId: "prov-1",
+        status: "active",
+        capacity: 4,
+        availability: [],
+        storefront: { timezone: "UTC" },
+      } as never);
+    vi.mocked(prisma.hospitalityCapacityAllocation.findFirst).mockResolvedValue(null as never);
+    vi.mocked(prisma.storefrontBooking.create).mockResolvedValue({
+      id: "bk-1",
+      bookingRef: "BK-TESTREF",
+    } as never);
+
+    const result = await submitBooking("restaurant", {
+      itemId: "itm-1",
+      customerEmail: "a@b.com",
+      customerName: "Alice",
+      scheduledAt: new Date("2026-03-23T09:00:00Z"),
+      durationMinutes: 45,
+      providerId: "prov-1",
+      covers: 10,
+    });
+
+    expect(result).toEqual({
+      success: false,
+      error: "That table cannot seat this party. Please choose a smaller party or contact the venue.",
+    });
+  });
+
   it("rejects an overlapping slot on an exclusion-constraint violation (23P01)", async () => {
     vi.mocked(prisma.storefrontConfig.findFirst).mockResolvedValue(mockPublishedStorefront as never);
     // Simulate Postgres 23P01 surfaced through Prisma on the create.

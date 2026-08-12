@@ -26,8 +26,13 @@ function makeTxMocks() {
       deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
       createMany: vi.fn().mockResolvedValue({ count: 2 }),
     },
-    serviceProvider: { findFirst: vi.fn().mockResolvedValue(null) },
+    serviceProvider: { findMany: vi.fn().mockResolvedValue([]) },
     providerAvailability: {
+      deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
+      createMany: vi.fn().mockResolvedValue({ count: 1 }),
+    },
+    hospitalityResource: { findMany: vi.fn().mockResolvedValue([]) },
+    hospitalityResourceAvailability: {
       deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
       createMany: vi.fn().mockResolvedValue({ count: 1 }),
     },
@@ -86,11 +91,30 @@ describe("getOperatingHours", () => {
     } as never);
     vi.mocked(prisma.storefrontConfig.findFirst).mockResolvedValue({
       archetypeId: "healthcare-wellness/veterinary-clinic",
+      archetype: { category: "healthcare-wellness" },
     } as never);
 
     const result = await getOperatingHours();
     expect(result.schedule.monday.open).toBe("08:00");
     expect(result.schedule.monday.close).toBe("17:00");
+    expect(result.isConfirmed).toBe(false);
+  });
+
+  it("resolves Restaurant defaults from the canonical leaf template", async () => {
+    vi.mocked(prisma.businessProfile.findFirst).mockResolvedValue({
+      businessHours: null,
+      timezone: "America/Chicago",
+      hoursConfirmedAt: null,
+    } as never);
+    vi.mocked(prisma.storefrontConfig.findFirst).mockResolvedValue({
+      archetypeId: "restaurant",
+      archetype: { category: "food-hospitality" },
+    } as never);
+
+    const result = await getOperatingHours();
+
+    expect(result.schedule.monday).toEqual({ enabled: true, open: "11:00", close: "22:00" });
+    expect(result.schedule.sunday).toEqual({ enabled: true, open: "11:00", close: "22:00" });
     expect(result.isConfirmed).toBe(false);
   });
 
@@ -191,15 +215,52 @@ describe("saveOperatingHours", () => {
 
   it("seeds ProviderAvailability when ServiceProvider exists", async () => {
     const txMocks = makeTxMocks();
-    txMocks.serviceProvider.findFirst.mockResolvedValue({ id: "sp-1" } as never);
+    txMocks.serviceProvider.findMany.mockResolvedValue([
+      { id: "sp-1" },
+      { id: "sp-2" },
+    ] as never);
     vi.mocked(prisma.$transaction).mockImplementation(
       (async (fn: unknown) => (fn as (tx: typeof txMocks) => Promise<unknown>)(txMocks)) as never,
     );
 
     await saveOperatingHours({ schedule: MF_SCHEDULE });
 
-    expect(txMocks.providerAvailability.deleteMany).toHaveBeenCalledOnce();
-    expect(txMocks.providerAvailability.createMany).toHaveBeenCalledOnce();
+    expect(txMocks.providerAvailability.deleteMany).toHaveBeenCalledWith({
+      where: { providerId: { in: ["sp-1", "sp-2"] } },
+    });
+    expect(txMocks.providerAvailability.createMany).toHaveBeenCalledWith({
+      data: expect.arrayContaining([
+        expect.objectContaining({ providerId: "sp-1", days: [1, 2, 3, 4, 5] }),
+        expect.objectContaining({ providerId: "sp-2", days: [1, 2, 3, 4, 5] }),
+      ]),
+    });
+  });
+
+  it("mirrors confirmed hours to table-resource availability", async () => {
+    const txMocks = makeTxMocks();
+    txMocks.serviceProvider.findMany.mockResolvedValue([{ id: "sp-table" }] as never);
+    txMocks.hospitalityResource.findMany.mockResolvedValue([
+      { id: "table-1", organizationId: "org-1" },
+    ] as never);
+    vi.mocked(prisma.$transaction).mockImplementation(
+      (async (fn: unknown) => (fn as (tx: typeof txMocks) => Promise<unknown>)(txMocks)) as never,
+    );
+
+    await saveOperatingHours({ schedule: MF_SCHEDULE });
+
+    expect(txMocks.hospitalityResourceAvailability.deleteMany).toHaveBeenCalledWith({
+      where: { resourceId: { in: ["table-1"] } },
+    });
+    expect(txMocks.hospitalityResourceAvailability.createMany).toHaveBeenCalledWith({
+      data: [expect.objectContaining({
+        organizationId: "org-1",
+        resourceId: "table-1",
+        kind: "available",
+        days: [1, 2, 3, 4, 5],
+        startTime: "09:00",
+        endTime: "17:00",
+      })],
+    });
   });
 
   it("skips ProviderAvailability when no ServiceProvider", async () => {
