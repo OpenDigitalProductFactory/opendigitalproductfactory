@@ -352,10 +352,10 @@ describe("RestaurantFloorOperations", () => {
     const alert = screen.getByRole("alert");
     expect(alert.getAttribute("aria-live")).toBe("assertive");
     expect(alert.textContent).toContain("Floor changed before confirmation");
-    expect(alert.textContent).toContain("Review the refreshed choices and confirm again");
+    expect(alert.textContent).toContain("Review refreshed choices, then retry");
     expect(document.activeElement).toBe(alert);
     expect(screen.queryByRole("button", { name: "Confirm seating" })).toBeNull();
-    expect(screen.getByText("Choose a party to see the safest live seating choice.")).toBeTruthy();
+    expect(screen.getByText("Choose a party for a safe seating choice.")).toBeTruthy();
   });
 
   it("submits host commands when randomUUID is unavailable on an HTTP install", async () => {

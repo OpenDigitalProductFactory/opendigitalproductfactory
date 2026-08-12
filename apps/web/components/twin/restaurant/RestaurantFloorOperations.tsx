@@ -87,7 +87,7 @@ function resultNotice(result: OperationalCommandResult | null) {
   if (result.status === "conflict") {
     return (
       <Notice variant="warn" title="Floor changed before confirmation">
-        Nothing changed. Review the refreshed choices and confirm again.
+        Nothing changed. Review refreshed choices, then retry.
       </Notice>
     );
   }
@@ -506,13 +506,13 @@ export function RestaurantFloorOperations({
                 {selectedDemand.recommendation.warning ? (
                   <p className="mt-dpf-xs text-dpf-caption text-dpf-warning">Check: {selectedDemand.recommendation.warning}</p>
                 ) : (
-                  <p className="mt-dpf-xs text-dpf-caption text-dpf-muted">Best safe fit from live capacity, timing, and server load.</p>
+                  <p className="mt-dpf-xs text-dpf-caption text-dpf-muted">Best fit by capacity, timing, and server load.</p>
                 )}
                 <p className="mt-dpf-sm text-dpf-body text-dpf-text">Seat {selectedDemand.name} ({selectedDemand.covers}) at {selectedOption.label}.</p>
                 <button aria-busy={pending} type="button" className="dpf-tap-target mt-dpf-sm w-full rounded-dpf-md bg-dpf-accent px-dpf-md font-dpf-semibold text-[var(--dpf-on-accent,var(--dpf-surface-1))] disabled:opacity-60" data-dpf-primary-action="true" data-owner-first-next-action="restaurant-confirm-seating" disabled={pending} onClick={confirm}>{pending ? <InlineBusy label="Confirming…" tone="current" /> : "Confirm seating"}</button>
               </>
             ) : (
-              <p className="mt-dpf-sm text-dpf-body text-dpf-muted">Choose a party to see the safest live seating choice.</p>
+              <p className="mt-dpf-sm text-dpf-body text-dpf-muted">Choose a party for a safe seating choice.</p>
             )}
           </section>
 
