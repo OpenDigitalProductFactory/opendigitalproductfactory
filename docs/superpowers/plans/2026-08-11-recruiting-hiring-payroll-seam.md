@@ -40,7 +40,7 @@ Kernel decision: DI-2E77D02EB450 selected normalized PayRun/Payslip over JSON sn
 
 Verification: additive migration safety, migration application in the governed integration sandbox, persistence/idempotency tests, non-payable skip evidence, and regulated-record data-impact coverage.
 
-Refactoring delivered: `payRunRef` is the stable retry key; a retry cannot mutate its defining period or recompute a run after `draft`. `PayRun.status` and `Payslip.disbursementStatus` are database-enforced Prisma enums with generated TypeScript unions rather than new free-form strings.
+Refactoring delivered: `payRunRef` is the stable retry key; a retry cannot mutate its defining period or recompute a run after `draft`. `PayRun.status` and `Payslip.disbursementStatus` are database-enforced Prisma enums with generated TypeScript unions rather than new free-form strings. `PayRun` and `Payslip` are registered as confidential, local-only regulated payroll assets; amount and component projections are mask-on-read.
 
 Intentional substrate budget: DI-2E77D02EB450 requires two relational identities with different cardinality and lifecycle (`PayRun` aggregate and per-employee `Payslip` line). The measured `prismaModelCount` ratchet therefore moves from 589 to 591; folding the lines into JSON would defeat the selected normalized shape, employee FK, and per-run uniqueness constraint. No other non-increasing substrate metric is relaxed.
 
@@ -84,6 +84,13 @@ One fifth of implementation effort was reserved for consolidation: one `Compensa
 - The additive migration applies against existing data state.
 - Documentation index is regenerated and checked.
 - Independent semantic review, pregate evidence, DCO, ready PR, merge queue, and mechanical PR health all pass.
+
+### Source-verification ledger
+
+- Full web Vitest: 2,656 files and 22,752 tests passed; declared skips/todos only.
+- Final payroll data-governance composition: 2 focused files and 6 tests passed.
+- Web and `@dpf/db` typechecks, Prisma schema validation, substrate measurement, and all 37 pregate preflight guards passed.
+- The source-only `@dpf/db` run passed 246 files/2,156 tests; five existing DB-integration files (19 tests) could not connect while the shared PostgreSQL lease was occupied. Migration application, those DB-backed tests, and the production build remain mandatory outputs of the governed local merged-code pregate before publication.
 
 ## Backlog coverage
 
