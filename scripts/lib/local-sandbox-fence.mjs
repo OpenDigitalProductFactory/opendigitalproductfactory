@@ -21,6 +21,64 @@ function readFence(path) {
   }
 }
 
+function isVersionedFenceRecord(record) {
+  return record?.schema === "dpf-local-sandbox-fence/v1"
+    && typeof record.token === "string"
+    && record.token.length > 0
+    && Number.isInteger(record.pid)
+    && record.pid > 0
+    && typeof record.processIdentity === "string"
+    && record.processIdentity.length > 0;
+}
+
+/**
+ * Reconcile only fences whose recorded process can no longer be the owner.
+ * Live owners and records we cannot measure remain fail-closed.
+ */
+export function reconcileDeadLocalSandboxFence({
+  path,
+  processAlive = isProcessAlive,
+  processIdentity = readProcessIdentity,
+}) {
+  const record = readFence(path);
+  if (!record) return { status: "absent", record: null };
+  if (!isVersionedFenceRecord(record)) return { status: "invalid", record };
+
+  if (processAlive(record.pid)) {
+    const identity = processIdentity(record.pid);
+    if (!identity) return { status: "unmeasurable", record };
+    if (identity === record.processIdentity) return { status: "live", record };
+  }
+
+  const orphanPath = `${path}.orphan-${process.pid}-${Date.now()}`;
+  try {
+    renameSync(path, orphanPath);
+  } catch (error) {
+    if (["ENOENT", "EACCES", "EPERM"].includes(error?.code)) {
+      return { status: "contended", record };
+    }
+    throw error;
+  }
+
+  const moved = readFence(orphanPath);
+  if (
+    moved?.token !== record.token
+    || moved?.pid !== record.pid
+    || moved?.processIdentity !== record.processIdentity
+  ) {
+    try {
+      renameSync(orphanPath, path);
+    } catch {
+      // Another owner won the path. Leave the unexpected record quarantined;
+      // admission remains fail-closed for this observation.
+    }
+    return { status: "contended", record: moved };
+  }
+
+  unlinkSync(orphanPath);
+  return { status: "reconciled", record };
+}
+
 export function inspectLocalSandboxFence({
   path,
   processAlive = isProcessAlive,
@@ -31,13 +89,7 @@ export function inspectLocalSandboxFence({
   const record = readFence(path);
   if (!record) return { status: "absent", record: null };
   if (
-    record.schema !== "dpf-local-sandbox-fence/v1"
-    || !Number.isInteger(record.pid)
-    || record.pid <= 0
-    || typeof record.token !== "string"
-    || !record.token
-    || typeof record.processIdentity !== "string"
-    || !record.processIdentity
+    !isVersionedFenceRecord(record)
     || typeof record.heartbeatAt !== "string"
   ) {
     return { status: "invalid", record };
