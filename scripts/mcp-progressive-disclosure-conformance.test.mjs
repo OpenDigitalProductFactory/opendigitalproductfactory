@@ -13,7 +13,9 @@ test("client matrix covers supported and notification-blind MCP profiles", () =>
     ["Codex Desktop", "Codex CLI", "Claude Code", "Generic MCP"],
   );
   assert.equal(CLIENT_PROFILES.find((profile) => profile.name === "Claude Code").expectedDefault, "full");
-  assert.equal(CLIENT_PROFILES.find((profile) => profile.name === "Codex CLI").expectedDefault, "core");
+  assert.equal(CLIENT_PROFILES.find((profile) => profile.name === "Codex Desktop").expectedDefault, "full");
+  assert.equal(CLIENT_PROFILES.find((profile) => profile.name === "Codex CLI").expectedDefault, "full");
+  assert.equal(CLIENT_PROFILES.find((profile) => profile.name === "Generic MCP").expectedDefault, "core");
 });
 
 test("parses JSON and list_changed SSE response shapes without exposing headers", () => {
