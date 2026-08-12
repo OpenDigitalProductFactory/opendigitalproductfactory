@@ -1,7 +1,9 @@
 # Recruiting -> hiring -> paying seam implementation plan
 
-**Backlog anchors:** BI-A90203A4, BI-3E300172, BI-838F8D00, BI-DR-02, BI-DR-03.  
-**Designs:** `docs/superpowers/specs/2026-08-11-recruiting-hiring-payroll-seam-design.md` and `docs/superpowers/specs/2026-08-11-payroll-disbursement-rails-epic-and-backlog.md`.  
+**Backlog anchors:** BI-A90203A4, BI-3E300172, BI-838F8D00, BI-DR-02, BI-DR-03.
+
+**Designs:** `docs/superpowers/specs/2026-08-11-recruiting-hiring-payroll-seam-design.md` and `docs/superpowers/specs/2026-08-11-payroll-disbursement-rails-epic-and-backlog.md`.
+
 **Work Capsule:** WC-EB23CDAD.
 
 > **For agentic workers:** execute this plan one independently reviewable backlog item at a time — one BI, one branch, one PR. Use `dpf-tdd` for red-green implementation, `dpf-local-merge-ci-before-push` plus the plan's completion gate before any success claim, and `dpf-pr-with-dco` for handoff.
