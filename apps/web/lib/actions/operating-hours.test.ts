@@ -107,8 +107,11 @@ describe("getOperatingHours", () => {
       hoursConfirmedAt: null,
     } as never);
     vi.mocked(prisma.storefrontConfig.findFirst).mockResolvedValue({
-      archetypeId: "restaurant",
-      archetype: { category: "food-hospitality" },
+      archetypeId: "cmpims3xf090p6ymggadp4075",
+      archetype: {
+        archetypeId: "restaurant",
+        category: "food-hospitality",
+      },
     } as never);
 
     const result = await getOperatingHours();

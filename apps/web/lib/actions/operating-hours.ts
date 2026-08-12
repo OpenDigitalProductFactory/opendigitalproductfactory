@@ -204,7 +204,7 @@ export async function getOperatingHours(opts?: {
   const config = await prisma.storefrontConfig.findFirst({
     select: {
       archetypeId: true,
-      archetype: { select: { category: true } },
+      archetype: { select: { archetypeId: true, category: true } },
     },
   });
   // Use storefront archetype if available, otherwise fall back to suggested industry from URL
@@ -214,7 +214,7 @@ export async function getOperatingHours(opts?: {
     return {
       schedule: await getDefaultHoursForArchetype(
         categoryForDefaults,
-        config?.archetypeId,
+        config?.archetype?.archetypeId,
       ),
       timezone: resolvedTimezone,
       isConfirmed: false,
