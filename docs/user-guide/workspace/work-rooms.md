@@ -40,7 +40,8 @@ The **Activity** stream distinguishes messages, asks, coworker handoffs, work ch
 People and AI coworkers appear together as named participants. Their room role and current work state are separate:
 
 - **Accountable** owns the room outcome.
-- **Contributor** performs or coordinates work.
+- **Coordinator** keeps the room on-task to its outcome—curating who is in the room, sequencing turns, and driving to a decision, close, or escalation. A room has exactly one Coordinator; it may be the same person or coworker as the Accountable, or a different one. When no one is named, the Accountable coordinates by default.
+- **Contributor** performs work in the room.
 - **Reviewer** verifies work or an outcome.
 - **Observer** follows the room without changing it.
 
