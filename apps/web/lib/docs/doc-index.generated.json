@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 633,
+  "pageCount": 634,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -4247,6 +4247,17 @@
         "examples",
         "when-this-does-not-apply",
         "see-also"
+      ]
+    },
+    "docs/founder-kernel/wiki/principles/universal-work-formula.md": {
+      "publicHref": "/founder-kernel/wiki/principles/universal-work-formula/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "the-formula-is-invariant",
+        "only-three-axes-vary",
+        "the-review-altitude-check"
       ]
     },
     "docs/founder-kernel/wiki/principles/verify-substrate-before-proposing-new.md": {

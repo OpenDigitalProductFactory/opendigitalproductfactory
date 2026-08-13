@@ -1049,6 +1049,9 @@
     "apps/web/lib/work-management/room-participation.ts": [
       "docs/user-guide/workspace/work-rooms.md"
     ],
+    "apps/web/lib/work-management/work-unit.ts": [
+      "docs/founder-kernel/wiki/principles/universal-work-formula.md"
+    ],
     "apps/web/lib/work-management/workspace-case-loader.ts": [
       "docs/user-guide/workspace/work-rooms.md"
     ],
@@ -2351,6 +2354,9 @@
     ],
     "docs/founder-kernel/wiki/principles/outbound-actions-require-explicit-go.md": [
       "apps/web/lib/kernel/runtime-gate.ts"
+    ],
+    "docs/founder-kernel/wiki/principles/universal-work-formula.md": [
+      "apps/web/lib/work-management/work-unit.ts"
     ],
     "docs/founder-kernel/wiki/principles/worktree-per-session.md": [
       "scripts/seed-worktree-mcp.ps1",
