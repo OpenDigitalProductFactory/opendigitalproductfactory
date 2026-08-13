@@ -16,6 +16,8 @@
 
 **2026-08-13 evidence correction:** Successfully prehydrated, authorization-filtered ASC state is authoritative evidence for that bounded read-only guidance turn. The generic evidence-integrity gate therefore accepts an answer grounded in the injected surface snapshot without demanding a redundant tool call. The exception is not available when prehydration failed or the request is action-capable; those turns retain normal tool evidence, authorization, confirmation, and refusal behavior.
 
+**2026-08-13 response correction:** Authoritative ASC prehydration also crosses the response-presentation boundary: a tool-free local answer grounded in the current surface must not receive the generic “unverified” caveat. Configuration guidance is required to enumerate the applicable choices, exact field labels (including the names—but never values—of write-only fields), constraints/help, and submit/test action from the contract. This rule is generic across surfaces and renderers; it is not page-specific prompt copy.
+
 ## 1. Executive decision
 
 DPF will establish an **Authorized Surface Contract (ASC)** as a platform primitive. It is a versioned, render-independent semantic description of what a principal can perceive and do on a product surface. Browser DOM, accessibility tree, mobile UI, workroom, background session, external agent, and future renderers are projections or consumers of this contract—not its source of truth.

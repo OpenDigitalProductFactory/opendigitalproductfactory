@@ -95,6 +95,7 @@ describe("groundPromptWithAuthorizedSurface", () => {
     expect(result.systemPrompt).toContain("SNMP is the network-discovery method");
     expect(result.systemPrompt).toContain("Community String");
     expect(result.systemPrompt).toContain("Save & Test");
+    expect(result.systemPrompt).toContain("enumerate the exact applicable choices, fields, constraints, and submit/test action");
     expect(result.systemPrompt).toContain("surface-session-1");
     expect(result.systemPrompt).not.toContain("authority-1");
     expect(open).toHaveBeenCalledWith({

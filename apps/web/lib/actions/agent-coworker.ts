@@ -1991,8 +1991,8 @@ export async function sendMessage(input: {
       return { userMessage: serializeMessage(userMsg), agentMessage: serializeMessage(agentMsg, proposal) };
     }
 
-    // Map agentic result to the shape downstream code expects. (The Golden Triangle
-    // "review" pass now runs inside executeAutonomousAgenticLoop — the single seam
+    // Map agentic result to the downstream shape. The Golden Triangle review runs
+    // inside executeAutonomousAgenticLoop — the single seam
     // for both chat and autonomous turns — so agenticResult.content is already
     // reviewed when the coworker's posture calls for it.)
     const result = {
@@ -2007,13 +2007,11 @@ export async function sendMessage(input: {
       toolCalls: undefined as undefined, // already handled by loop
     };
 
-    // BI-C0F180E8 — honest local-degradation. If the bundled local model answered
-    // without using any tools, the coworker could not inspect live data this turn;
-    // prepend an unmissable caveat so the reply is framed as unverified instead of
-    // authoritative (it is kept, not discarded — it may still be a fine no-tool reply).
+    // Caveat a blind local answer, but not one grounded in authoritative ASC state.
     responseContent = applyLocalDegradationCaveat(result.content, {
       providerId: result.providerId,
       executedToolCount: agenticResult.executedTools.length,
+      authoritativeSurfaceEvidence: agenticResult.authoritativeSurfaceEvidence,
     });
     responseProviderId = result.providerId;
     responseModelId = result.modelId;

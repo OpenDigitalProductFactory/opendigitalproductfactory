@@ -39,7 +39,7 @@ vi.mock("@/lib/coworker/authorized-surface-prompt-grounding", () => ({
 
 async function callLoop(interactionMode?: "chat" | "autonomous", content = "Do the build task.") {
   const { executeAutonomousAgenticLoop } = await import("./autonomous-work-run");
-  await executeAutonomousAgenticLoop({
+  return executeAutonomousAgenticLoop({
     systemPrompt: "BASE",
     chatHistory: [{ role: "user", content }],
     sensitivity: "internal",
@@ -95,7 +95,7 @@ describe("executeAutonomousAgenticLoop — profession-corpus grounding gate", ()
   });
 
   it("routes prehydrated read-only surface guidance without tool schemas or a tool-use floor", async () => {
-    await callLoop("chat", "how should I setup this smtp discovery?");
+    const result = await callLoop("chat", "how should I setup this smtp discovery?");
 
     const agentic = await import("@/lib/tak/agentic-loop");
     expect(agentic.runAgenticLoop).toHaveBeenCalledWith(
@@ -105,6 +105,7 @@ describe("executeAutonomousAgenticLoop — profession-corpus grounding gate", ()
         systemPrompt: expect.stringContaining("SURFACE GROUNDED"),
       }),
     );
+    expect(result.authoritativeSurfaceEvidence).toBe(true);
   });
 
   it("grounds the autonomous path and forwards the grounded prompt to the loop", async () => {
