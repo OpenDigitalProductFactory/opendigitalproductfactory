@@ -27,17 +27,13 @@ const mocks = vi.hoisted(() => ({
   getLatestRun: vi.fn(),
   getLatestSucceededRun: vi.fn(),
   runPromoter: vi.fn(),
-  // Retained for back-compat; the precheck no longer calls it (it always rebuilds).
   isPromoterAvailable: vi.fn().mockResolvedValue(true),
-  // The precheck ALWAYS rebuilds the promoter before a swap, so the default is a
-  // successful rebuild; a test opts into failure to exercise the skip path.
   ensurePromoterImage: vi
     .fn()
     .mockResolvedValue({ ok: true, alreadyPresent: false, built: true }),
   buildCandidatePromoterImage: vi.fn().mockResolvedValue("dpf-promoter:abc1234deadbeef"),
   resolvePromoterArtifact: vi.fn(),
   runPromoterReadiness: vi.fn(),
-  // Cooldown backoff (this fix): no active cooldown by default.
   getCooldownUntil: vi.fn().mockResolvedValue(null),
   recordCooldown: vi.fn().mockResolvedValue(undefined),
   clearCooldown: vi.fn().mockResolvedValue(undefined),
@@ -49,17 +45,12 @@ const mocks = vi.hoisted(() => ({
   emitUpgradeEvent: vi.fn(),
   createSelfUpgradeRecoveryPoint: vi.fn(),
   summarizeRecoveryPointFailure: vi.fn(),
-  // BI-QUIESCE-010 — caller API consumed by runSelfUpgrade.
   startQuiescence: vi.fn(),
   signalSwapStarting: vi.fn(),
   signalSwapComplete: vi.fn(),
   failQuiescenceSwap: vi.fn(),
-  // Activity precheck snapshot (BI-F36E7510). Default empty so existing tests
-  // proceed to the drain exactly as before; the new skip-path test overrides it.
   captureActiveSessionBlockers: vi.fn().mockResolvedValue({ surfaces: [] }),
-  // 24/7 auto-window resolution (BI-A6382FB9). Default "operating-hours" so the
-  // gate behaves exactly as before (falls through to the mocked isUpgradeWindowOpen);
-  // the 24/7 tests override it.
+  // 24/7 auto-window resolution defaults to operating hours.
   resolveAutoUpgradeWindow: vi.fn().mockReturnValue({ kind: "operating-hours" }),
   // Operator blackout gate (BI-59591B14). Default null = no active blackout, so
   // every existing scheduled test proceeds exactly as before.
@@ -476,12 +467,21 @@ describe("success path", () => {
     );
   });
 
-  it("skips with up-to-date when the running build already contains the upstream SHA", async () => {
+  it("skips only when both upstream lineage and deployed identity match", async () => {
     mocks.getLatestSucceededRun.mockResolvedValue({ targetSha: "abc1234deadbeef" });
+    mocks.getDeployedSha.mockResolvedValue("abc1234deadbeef");
     const result = await runSelfUpgrade({ triggeredBy: "scheduled" });
     expect(result).toMatchObject({ skipped: true, reason: "up-to-date" });
     expect(mocks.prepareUpgradeSource).not.toHaveBeenCalled();
     expect(mocks.runPromoter).not.toHaveBeenCalled();
+    vi.clearAllMocks();
+    setupSourceReady();
+    setupQuiescenceReady();
+    mocks.getLatestSucceededRun.mockResolvedValue({ targetSha: "abc1234deadbeef" });
+    mocks.getDeployedSha.mockResolvedValue("synthetic-local-merge-sha");
+    await runSelfUpgrade({ triggeredBy: "ops" });
+    expect(mocks.prepareUpgradeSource).toHaveBeenCalled();
+    expect(mocks.runPromoter).toHaveBeenCalled();
   });
 
   it("skips BEFORE draining when activity is in flight — no drain/defer/cooldown cycle (BI-F36E7510)", async () => {
