@@ -39,9 +39,24 @@ const BASE_CONNECTION: DiscoveryConnectionSummary = {
 afterEach(() => {
   cleanup();
   vi.resetAllMocks();
+  vi.useRealTimers();
 });
 
 describe("SavedConnectionRow Re-run button", () => {
+  it("renders last-tested evidence through a semantic time element", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-13T05:00:00.000Z"));
+
+    render(
+      <SavedConnectionRow
+        connection={{ ...BASE_CONNECTION, lastTestedAt: "2026-08-13T04:18:00.000Z" }}
+      />,
+    );
+
+    expect(screen.getByText("42m ago")).toBeInTheDocument();
+    expect(screen.getByText("42m ago").tagName).toBe("TIME");
+  });
+
   it("renders the Re-run button", () => {
     render(<SavedConnectionRow connection={BASE_CONNECTION} />);
     expect(screen.getByRole("button", { name: /re-run/i })).toBeInTheDocument();
