@@ -60,6 +60,32 @@ export function isAuthorizedSurfaceGuidanceRequest(content: string): boolean {
   return true;
 }
 
+/**
+ * Preserve exact, authorization-filtered UX facts at the response boundary.
+ * Models may summarize prompt context and silently drop field/action labels;
+ * those labels are part of the user-facing surface contract, not optional
+ * prose. Missing highlights are appended verbatim after generation so every
+ * renderer and coworker path gets the same deterministic coverage without a
+ * page-specific response patch.
+ */
+export function enforceAuthorizedSurfaceGuidanceCoverage(
+  content: string,
+  guidanceHighlights: readonly string[],
+): string {
+  const exactHighlights = [...new Set(
+    guidanceHighlights.map((highlight) => highlight.trim()).filter(Boolean),
+  )];
+  const missing = exactHighlights.filter((highlight) => !content.includes(highlight));
+  if (missing.length === 0) return content;
+
+  const base = content.trimEnd();
+  const details = [
+    "AUTHORIZED SURFACE DETAILS",
+    ...missing.map((highlight) => `- ${highlight}`),
+  ].join("\n");
+  return base ? `${base}\n\n${details}` : details;
+}
+
 function json(value: unknown): string {
   return JSON.stringify(value);
 }
@@ -112,7 +138,13 @@ export async function groundPromptWithAuthorizedSurface(
     maxChars?: number;
   },
   deps: AuthorizedSurfacePromptGroundingDeps = defaultDeps,
-): Promise<{ systemPrompt: string; grounded: boolean; sessionId?: string; surfaceId?: string }> {
+): Promise<{
+  systemPrompt: string;
+  grounded: boolean;
+  sessionId?: string;
+  surfaceId?: string;
+  guidanceHighlights?: string[];
+}> {
   const selector = {
     route: input.context.route,
     workroomType: input.context.workContext?.workroomType,
@@ -145,6 +177,7 @@ export async function groundPromptWithAuthorizedSurface(
       grounded: true,
       sessionId: opened.session.sessionId,
       surfaceId: snapshot.graph.surfaceId,
+      guidanceHighlights: [...(snapshot.graph.summary.highlights ?? [])],
     };
   } catch (error) {
     console.warn(

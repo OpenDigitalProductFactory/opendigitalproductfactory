@@ -32,7 +32,15 @@ vi.mock("@/lib/coworker/authorized-surface-prompt-grounding", () => ({
     systemPrompt: `${systemPrompt}\n\nSURFACE GROUNDED`,
     grounded: true,
     sessionId: "surface-session-1",
+    guidanceHighlights: [
+      "For SNMP choose SNMP (Generic), enter Target IP or Hostname and the write-only Community String, then use Save & Test.",
+    ],
   })),
+  enforceAuthorizedSurfaceGuidanceCoverage: vi.fn((content: string, highlights: string[]) =>
+    highlights.every((highlight) => content.includes(highlight))
+      ? content
+      : `${content}\n\nAUTHORIZED SURFACE DETAILS\n${highlights.map((highlight) => `- ${highlight}`).join("\n")}`,
+  ),
   isAuthorizedSurfaceGuidanceRequest: vi.fn((content: string) => /how should i setup/i.test(content)),
   closeAuthorizedSurfacePromptGrounding: vi.fn(async () => undefined),
 }));
@@ -106,6 +114,10 @@ describe("executeAutonomousAgenticLoop — profession-corpus grounding gate", ()
       }),
     );
     expect(result.authoritativeSurfaceEvidence).toBe(true);
+    expect(result.content).toContain("SNMP (Generic)");
+    expect(result.content).toContain("Target IP or Hostname");
+    expect(result.content).toContain("Community String");
+    expect(result.content).toContain("Save & Test");
   });
 
   it("grounds the autonomous path and forwards the grounded prompt to the loop", async () => {
