@@ -15,6 +15,7 @@ type Entry = {
   type: string;
   detail: string;
   createdAt: string;
+  createdLabel: string;
   providerName: string | null;
   status: string;
   backlogItemId?: string | null;
@@ -335,7 +336,7 @@ export function StorefrontInbox({
                 </span>
               )}
               <span className="text-[var(--dpf-muted)]" style={{ fontSize: 11, marginLeft: "auto" }}>
-                {new Date(e.createdAt).toLocaleDateString("en-GB")}
+                {e.createdLabel}
               </span>
             </div>
             <div style={{ fontSize: 13 }}>{e.name ?? "Anonymous"} · {e.email}</div>
