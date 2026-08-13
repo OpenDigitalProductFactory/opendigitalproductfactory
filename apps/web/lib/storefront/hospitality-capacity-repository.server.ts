@@ -1,4 +1,5 @@
 import { newId } from "@/lib/shared/new-id";
+import { loadStorefrontOperatingTimezone } from "./storefront-operating-timezone.server";
 
 import {
   evaluatePoolCapacity,
@@ -13,6 +14,9 @@ import {
 } from "./hospitality-capacity";
 
 interface HospitalityCapacityDatabase {
+  businessProfile: {
+    findFirst(args: unknown): Promise<{ timezone: string } | null>;
+  };
   hospitalityResource: {
     findFirst(args: unknown): Promise<{
       id: string;
@@ -20,7 +24,6 @@ interface HospitalityCapacityDatabase {
       status: string;
       capacity?: number;
       availability?: HospitalityAvailabilityWindow[];
-      storefront?: { timezone: string };
     } | null>;
   };
   hospitalityCapacityPool: {
@@ -132,7 +135,6 @@ export async function allocateHospitalityCapacity(
             date: true,
           },
         },
-        storefront: { select: { timezone: true } },
       },
     });
     if (!resource) {
@@ -155,7 +157,7 @@ export async function allocateHospitalityCapacity(
         availability: resource.availability ?? [],
         startsAt: input.startsAt,
         endsAt: input.endsAt,
-        timeZone: resource.storefront?.timezone ?? "UTC",
+        timeZone: await loadStorefrontOperatingTimezone(database),
       })
     ) {
       throw new HospitalityCapacityConflictError(

@@ -5,10 +5,13 @@ import { getOrgSettings } from "@/lib/actions/currency";
 import { getCurrencySymbol } from "@/lib/finance/currency-symbol";
 import { formatReservationWhen, nextActionForReservation } from "@/lib/storefront/booking-summary";
 import { nextActionForOrder, summarizeOrderItems } from "@/lib/storefront/order-lifecycle";
+import { loadStorefrontOperatingTimezone } from "@/lib/storefront/storefront-operating-timezone.server";
 
 export default async function InboxPage() {
-  const config = await prisma.storefrontConfig.findFirst({ select: { id: true, timezone: true } });
+  const config = await prisma.storefrontConfig.findFirst({ select: { id: true } });
   if (!config) redirect("/storefront/setup");
+
+  const operatingTimezone = await loadStorefrontOperatingTimezone(prisma);
 
   const [inquiries, bookings, orders, donations, providerList, digitalProducts, orgSettings] = await Promise.all([
     prisma.storefrontInquiry.findMany({
@@ -154,7 +157,7 @@ export default async function InboxPage() {
         ) ?? null,
     })),
     ...bookings.map((booking) => {
-      const when = formatReservationWhen(booking.scheduledAt, config.timezone);
+      const when = formatReservationWhen(booking.scheduledAt, operatingTimezone);
       return {
         id: booking.id,
         ref: booking.bookingRef,

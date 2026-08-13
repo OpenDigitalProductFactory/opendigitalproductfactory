@@ -6,6 +6,7 @@ vi.mock("@/lib/actions/finance", () => ({
 }));
 vi.mock("@dpf/db", () => {
   const prisma = {
+    businessProfile: { findFirst: vi.fn() },
     storefrontConfig: { findFirst: vi.fn() },
     storefrontInquiry: { create: vi.fn() },
     storefrontBooking: { create: vi.fn() },
@@ -382,6 +383,9 @@ describe("submitBooking (enhanced)", () => {
   });
 
   it("writes the structured hospitality resource and allocation in the booking transaction", async () => {
+    vi.mocked(prisma.businessProfile.findFirst).mockResolvedValue({
+      timezone: "America/Chicago",
+    } as never);
     vi.mocked(prisma.storefrontConfig.findFirst).mockResolvedValue(
       mockPublishedStorefront as never,
     );
@@ -415,6 +419,10 @@ describe("submitBooking (enhanced)", () => {
     });
 
     expect(result.success).toBe(true);
+    expect(prisma.businessProfile.findFirst).toHaveBeenCalledWith({
+      where: { isActive: true },
+      select: { timezone: true },
+    });
     expect(prisma.storefrontBooking.create).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({
