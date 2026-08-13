@@ -11,10 +11,12 @@ import {
   detectToolRefusedDespiteAvailability,
   phaseRequiresToolCall,
   detectUnsavedEvidence,
-  enrichToolDescriptions,
+  buildToolSessionHintMessage,
   buildUnsavedAdviceNote,
   HARD_COMPLETION_CLAIM_PATTERN,
 } from "./agentic-loop";
+import { buildAnthropicSystem } from "../routing/anthropic-cache";
+import { SYSTEM_PROMPT_DYNAMIC_BOUNDARY } from "./prompt-boundary";
 
 vi.mock("@dpf/db", () => ({
   prisma: {
@@ -343,72 +345,135 @@ describe("buildMaxIterationsExhaustedMessage (BI-F4D3B9E9d)", () => {
   });
 });
 
-describe("enrichToolDescriptions — review-fail veto on write tool", () => {
-  const baseTools = [
-    { type: "function", name: "saveBuildEvidence", description: "Save evidence", inputSchema: {} },
-    { type: "function", name: "reviewDesignDoc", description: "Review design doc", inputSchema: {} },
-  ];
+describe("buildToolSessionHintMessage — review-fail veto + tool-error notes in the messages tail", () => {
+  // BI-56804810: these notes now ride in a per-turn user message (not tool
+  // descriptions), so the Anthropic tools→system cache prefix stays stable.
+  // The failure/veto semantics are unchanged from the prior in-description hint.
 
-  it("annotates saveBuildEvidence when reviewDesignDoc returned decision:fail", () => {
-    const enriched = enrichToolDescriptions(baseTools, [
+  it("names saveBuildEvidence + REVIEW REJECTION when reviewDesignDoc returned decision:fail", () => {
+    const hint = buildToolSessionHintMessage([
       { name: "saveBuildEvidence", args: { field: "designDoc", value: "v1" }, result: { success: true, message: "Evidence saved." } },
       { name: "reviewDesignDoc", args: {}, result: { success: true, message: "Design review: fail.", data: { review: { decision: "fail", rationale: "Missing codebase research section." } } } },
     ]);
-    const save = enriched.find((t) => t.name === "saveBuildEvidence")!;
-    expect(save.description).toContain("REVIEW REJECTION");
-    expect(save.description).toContain("Missing codebase research section.");
-    expect(save.description).toContain("submitting identical arguments will be rejected");
+    expect(hint).not.toBeNull();
+    expect(hint!).toContain("saveBuildEvidence");
+    expect(hint!).toContain("REVIEW REJECTION");
+    expect(hint!).toContain("Missing codebase research section.");
+    expect(hint!).toContain("submitting identical arguments will be rejected");
   });
 
-  it("clears the veto on a later passing review", () => {
-    const enriched = enrichToolDescriptions(baseTools, [
+  it("clears the veto on a later passing review (returns null)", () => {
+    const hint = buildToolSessionHintMessage([
       { name: "saveBuildEvidence", args: { field: "designDoc", value: "v1" }, result: { success: true, message: "Evidence saved." } },
       { name: "reviewDesignDoc", args: {}, result: { success: true, data: { review: { decision: "fail", rationale: "Missing research." } } } },
       { name: "saveBuildEvidence", args: { field: "designDoc", value: "v2" }, result: { success: true, message: "Evidence saved." } },
       { name: "reviewDesignDoc", args: {}, result: { success: true, data: { review: { decision: "pass" } } } },
     ]);
-    const save = enriched.find((t) => t.name === "saveBuildEvidence")!;
-    expect(save.description).toBe("Save evidence");
+    expect(hint).toBeNull();
   });
 
   it("keeps the veto sticky across a subsequent saveBuildEvidence success (intermediate save still rejected)", () => {
-    // This is the FB-C26D5B50 scenario: the next saveBuildEvidence succeeds at
-    // the protocol level but the review veto from the prior failed review
-    // must remain visible until a passing review clears it.
-    const enriched = enrichToolDescriptions(baseTools, [
+    // FB-C26D5B50 scenario: the next saveBuildEvidence succeeds at the protocol
+    // level but the review veto from the prior failed review must remain visible
+    // until a passing review clears it.
+    const hint = buildToolSessionHintMessage([
       { name: "saveBuildEvidence", args: { field: "designDoc", value: "v1" }, result: { success: true, message: "Evidence saved." } },
       { name: "reviewDesignDoc", args: {}, result: { success: true, data: { review: { decision: "fail", rationale: "Missing codebase research." } } } },
       { name: "saveBuildEvidence", args: { field: "designDoc", value: "v1-again" }, result: { success: true, message: "Evidence saved." } },
     ]);
-    const save = enriched.find((t) => t.name === "saveBuildEvidence")!;
-    expect(save.description).toContain("REVIEW REJECTION");
-    expect(save.description).toContain("Missing codebase research.");
+    expect(hint).not.toBeNull();
+    expect(hint!).toContain("REVIEW REJECTION");
+    expect(hint!).toContain("Missing codebase research.");
   });
 
   it("treats data.blocked=true as a veto even without decision:fail", () => {
-    const enriched = enrichToolDescriptions(baseTools, [
+    const hint = buildToolSessionHintMessage([
       { name: "reviewDesignDoc", args: {}, result: { success: true, data: { review: { decision: "pass" }, blocked: true } } },
     ]);
-    const save = enriched.find((t) => t.name === "saveBuildEvidence")!;
-    expect(save.description).toContain("REVIEW REJECTION");
+    expect(hint).not.toBeNull();
+    expect(hint!).toContain("REVIEW REJECTION");
   });
 
-  it("does nothing when there are no review failures and no tool errors", () => {
-    const enriched = enrichToolDescriptions(baseTools, [
+  it("returns null when there are no review failures and no tool errors", () => {
+    const hint = buildToolSessionHintMessage([
       { name: "saveBuildEvidence", args: { field: "designDoc", value: "v1" }, result: { success: true, message: "Evidence saved." } },
       { name: "reviewDesignDoc", args: {}, result: { success: true, data: { review: { decision: "pass" } } } },
     ]);
-    expect(enriched.find((t) => t.name === "saveBuildEvidence")!.description).toBe("Save evidence");
-    expect(enriched.find((t) => t.name === "reviewDesignDoc")!.description).toBe("Review design doc");
+    expect(hint).toBeNull();
   });
 
-  it("preserves the existing error-warning path when a tool itself failed", () => {
-    const enriched = enrichToolDescriptions(baseTools, [
+  it("returns null with no executed tools yet (first turn)", () => {
+    expect(buildToolSessionHintMessage([])).toBeNull();
+  });
+
+  it("preserves the error-warning path when a tool itself failed", () => {
+    const hint = buildToolSessionHintMessage([
       { name: "saveBuildEvidence", args: { field: "designDoc", value: "v1" }, result: { success: false, error: "Network timeout on persistence layer" } },
     ]);
-    const save = enriched.find((t) => t.name === "saveBuildEvidence")!;
-    expect(save.description).toContain("WARNING");
-    expect(save.description).toContain("Network timeout on persistence layer");
+    expect(hint).not.toBeNull();
+    expect(hint!).toContain("saveBuildEvidence");
+    expect(hint!).toContain("WARNING");
+    expect(hint!).toContain("Network timeout on persistence layer");
+  });
+
+  it("clears a tool's warning once it later succeeds", () => {
+    const hint = buildToolSessionHintMessage([
+      { name: "search_code_graph", args: {}, result: { success: false, error: "index cold" } },
+      { name: "search_code_graph", args: {}, result: { success: true, message: "ok" } },
+    ]);
+    expect(hint).toBeNull();
+  });
+});
+
+describe("Anthropic cache-prefix stability across a tool failure (BI-56804810)", () => {
+  // Functional proof that the fix keeps Anthropic prompt caching alive. Anthropic
+  // hashes its cache prefix as tools → system → messages, so the tools+system
+  // bytes ARE the cache key that gates usage.cache_read_input_tokens. This asserts
+  // those bytes are stable turn-over-turn once a tool has failed.
+
+  // Mirrors chat-adapter.ts: OpenAI-format function tools → Anthropic tool shape.
+  const toAnthropicTools = (
+    tools: Array<{ function: { name: string; description: string; parameters: unknown } }>,
+  ) => tools.map((t) => ({ name: t.function.name, description: t.function.description, input_schema: t.function.parameters }));
+
+  const TOOLS = [
+    { function: { name: "search_code_graph", description: "Search the code graph.", parameters: { type: "object" } } },
+    { function: { name: "saveBuildEvidence", description: "Save build evidence.", parameters: { type: "object" } } },
+  ];
+  const SYSTEM =
+    "You are DPF. Identity, mode, and mission are fixed for this session." +
+    SYSTEM_PROMPT_DYNAMIC_BOUNDARY +
+    "Today is 2026-08-12.";
+
+  // The exact bytes Anthropic hashes for the cached prefix: tools then system.
+  const cachePrefixSurface = (tools: unknown) => JSON.stringify({ tools, system: buildAnthropicSystem(SYSTEM) });
+
+  it("keeps the tools+system prefix byte-identical after a tool failure (the fix → cache HIT)", () => {
+    // Turn 1: nothing executed yet.
+    const turn1 = cachePrefixSurface(toAnthropicTools(TOOLS));
+
+    // Turn 2: a tool failed. Under the fix, tools pass through unchanged and the
+    // note is routed to the messages tail instead of a tool description.
+    const hint = buildToolSessionHintMessage([
+      { name: "search_code_graph", result: { success: false, error: "index cold" } },
+    ]);
+    const turn2 = cachePrefixSurface(toAnthropicTools(TOOLS));
+
+    expect(hint).not.toBeNull(); // the model still receives the "don't blindly retry" signal…
+    expect(turn2).toBe(turn1); // …but the cached tools+system prefix is unchanged → cache hits
+  });
+
+  it("documents the retired defect: annotating a tool description changes the prefix → cache MISS", () => {
+    const before = cachePrefixSurface(toAnthropicTools(TOOLS));
+    // Reproduce the old in-description mutation that busted the cache every turn.
+    const mutated = toAnthropicTools(TOOLS).map((t) =>
+      t.name === "search_code_graph"
+        ? { ...t, description: `${t.description} [WARNING: This tool failed earlier in this session with: "index cold". Consider a different approach or different arguments.]` }
+        : t,
+    );
+    const after = cachePrefixSurface(mutated);
+    // Regression guard — never route session hints back into tool descriptions.
+    expect(after).not.toBe(before);
   });
 });
 
@@ -1859,8 +1924,12 @@ describe("runAgenticLoop", () => {
     expect(result.executedTools).toHaveLength(2);
     expect(result.content).toContain("Added initial complaint severity enum scaffolding");
     const thirdCallMessages = mockRoute.mock.calls[2]?.[0] ?? [];
-    const lastUserMessage = [...thirdCallMessages].reverse().find((m: any) => m.role === "user");
-    expect(lastUserMessage?.content).toContain("Do not pause after a failed read");
+    // The stall nudge must reach the model. It is no longer guaranteed to be the
+    // LAST user message: BI-56804810 routes session tool-notes into a message at
+    // the tail (a failed run_sandbox_command yields such a note here), so assert
+    // the nudge is present among the delivered user messages rather than last.
+    const userMessages = thirdCallMessages.filter((m: any) => m.role === "user");
+    expect(userMessages.some((m: any) => typeof m.content === "string" && m.content.includes("Do not pause after a failed read"))).toBe(true);
   });
 
   // ─── Infra-aware fabrication guard (routing-resilience Slice D) ───────────

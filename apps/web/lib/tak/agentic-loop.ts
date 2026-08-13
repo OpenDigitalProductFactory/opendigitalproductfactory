@@ -988,17 +988,21 @@ function reviewFailMessage(t: { name: string; result: { success: boolean; data?:
   return `Your previous ${artifact} was REJECTED by ${t.name}. Reason: ${detail.slice(0, 200)}. Regenerate the content addressing this specific gap before calling saveBuildEvidence again — submitting identical arguments will be rejected the same way and the run will be stopped.`;
 }
 
-/**
- * Annotate tool descriptions with session-aware hints based on what the agent
- * has already tried. Inspired by Claude Code's dynamic tool description system.
- * Mutates nothing — returns a new array.
- */
-export function enrichToolDescriptions(
-  toolsForProvider: Array<Record<string, unknown>>,
-  executedTools: Array<{ name: string; args?: Record<string, unknown>; result: { success: boolean; error?: string; data?: Record<string, unknown>; message?: string } }>,
-): Array<Record<string, unknown>> {
-  if (executedTools.length === 0) return toolsForProvider;
+type ExecutedToolRecord = {
+  name: string;
+  args?: Record<string, unknown>;
+  result: { success: boolean; error?: string; data?: Record<string, unknown>; message?: string };
+};
 
+/**
+ * Compute session-aware tool signals from what the agent has already tried:
+ * a per-tool last-error map (cleared once that tool later succeeds) and a
+ * sticky content-level review-veto map (cleared only by a passing review).
+ * Pure — mutates nothing.
+ */
+function computeToolSessionSignals(
+  executedTools: Array<ExecutedToolRecord>,
+): { failures: Map<string, string>; reviewVetoes: Map<string, string> } {
   // Build failure map: tool name → last error. If a tool succeeded after
   // failing, clear the warning — the tool recovered.
   const failures = new Map<string, string>();
@@ -1025,24 +1029,55 @@ export function enrichToolDescriptions(
       failures.delete(t.name);
     }
   }
+  return { failures, reviewVetoes };
+}
 
-  if (failures.size === 0 && reviewVetoes.size === 0) return toolsForProvider;
+/**
+ * Build a per-turn "session tool notes" user message from what the agent has
+ * already tried, or null when there is nothing to warn about.
+ *
+ * BI-56804810 — this REPLACES annotating tool `description` fields in place.
+ * Anthropic's prompt-cache prefix is ordered tools → system → messages, so the
+ * stable system-prefix cache breakpoint (see routing/anthropic-cache.ts) also
+ * covers the tools block. The previous approach appended
+ * `[WARNING …]` / `[REVIEW REJECTION …]` strings into tool descriptions every
+ * turn, so once any tool failed or was review-vetoed the tools block changed on
+ * nearly every subsequent turn — busting the cached tools+system prefix and
+ * re-billing it at full input rate (vs ~0.1x cache reads) for the rest of the
+ * session. Emitting the identical signal as a message keeps the tools block
+ * byte-identical turn-over-turn so the cache actually hits; the message sits
+ * AFTER the cached prefix, where its per-turn churn carries no cache cost, and
+ * the model still gets the "don't blindly retry" guidance just as well.
+ *
+ * Provider-agnostic: the hint reaches every provider through the messages tail,
+ * so no per-provider branching is needed; only Anthropic gets the extra cache
+ * benefit, and the local served-model path is unaffected.
+ */
+export function buildToolSessionHintMessage(
+  executedTools: Array<ExecutedToolRecord>,
+): string | null {
+  if (executedTools.length === 0) return null;
 
-  return toolsForProvider.map((tool) => {
-    const name = tool.name as string;
-    const lastError = failures.get(name);
-    const veto = reviewVetoes.get(name);
-    if (!lastError && !veto) return tool;
+  const { failures, reviewVetoes } = computeToolSessionSignals(executedTools);
+  if (failures.size === 0 && reviewVetoes.size === 0) return null;
 
-    const desc = tool.description as string;
-    const warning = veto
-      ? `[REVIEW REJECTION: ${veto}]`
-      : `[WARNING: This tool failed earlier in this session with: "${lastError}". Consider a different approach or different arguments.]`;
-    return {
-      ...tool,
-      description: `${desc} ${warning}`,
-    };
-  });
+  const lines: string[] = [];
+  for (const [name, veto] of reviewVetoes) {
+    lines.push(`- ${name}: [REVIEW REJECTION: ${veto}]`);
+  }
+  for (const [name, lastError] of failures) {
+    lines.push(
+      `- ${name}: [WARNING: This tool failed earlier in this session with: "${lastError}". ` +
+        `Consider a different approach or different arguments.]`,
+    );
+  }
+
+  return (
+    "[Session tool notes — based on tool calls you already made this session. " +
+    "Do not blindly re-issue the same call with the same arguments; address the note first:\n" +
+    lines.join("\n") +
+    "]"
+  );
 }
 
 function truncateMessageContent(content: string, maxChars: number, label: string): string {
@@ -1697,13 +1732,6 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
       messages = [...messages, { role: "user" as const, content: buildNoProgressNudgeMessage(approaching) }];
     }
 
-    // Dynamic tool descriptions: annotate tools that failed earlier in this session
-    // Inspired by Claude Code's session-aware tool description system.
-    const enrichedRouteOptions = {
-      ...routeOptions,
-      ...(routeOptions.tools ? { tools: enrichToolDescriptions(routeOptions.tools as Array<Record<string, unknown>>, executedTools) } : {}),
-    };
-
     // EP-INF-009b: All inference goes through V2 routing pipeline
     inferenceCallCount++;
     // Assemble the compacted, plan-reminded context once (it was built twice,
@@ -1732,6 +1760,14 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
         ),
       );
     }
+    // Session tool notes ride in the messages tail — AFTER the cached
+    // tools→system prefix — instead of mutating tool descriptions, so the
+    // Anthropic prompt-cache prefix stays byte-identical turn-over-turn even
+    // after a tool fails or is review-vetoed. See buildToolSessionHintMessage.
+    const toolSessionHint = buildToolSessionHintMessage(executedTools);
+    const messagesForCall = toolSessionHint
+      ? [...assembledMessages, { role: "user" as const, content: toolSessionHint }]
+      : assembledMessages;
     let result: RoutedInferenceResult;
     try {
       // BI-e299d4d3 — wrap the slow inference with withHeartbeatTicker.
@@ -1744,18 +1780,18 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
         const { withHeartbeatTicker } = await import("@/lib/observability/heartbeat");
         result = await withHeartbeatTicker(taskRunId, () =>
           routeAndCall(
-            assembledMessages,
+            messagesForCall,
             systemPrompt,
             sensitivity,
-            { ...enrichedRouteOptions, previousResponseId },
+            { ...routeOptions, previousResponseId },
           ),
         );
       } else {
         result = await routeAndCall(
-          assembledMessages,
+          messagesForCall,
           systemPrompt,
           sensitivity,
-          { ...enrichedRouteOptions, previousResponseId },
+          { ...routeOptions, previousResponseId },
         );
       }
     } catch (routeErr) {

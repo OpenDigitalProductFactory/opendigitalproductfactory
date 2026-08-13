@@ -41,6 +41,11 @@ const mocks = vi.hoisted(() => ({
   getCooldownUntil: vi.fn().mockResolvedValue(null),
   recordCooldown: vi.fn().mockResolvedValue(undefined),
   clearCooldown: vi.fn().mockResolvedValue(undefined),
+  // Host-memory-headroom guard (BI-EFA383AA): mock so the unit test never reads
+  // real host memory. The real guard calls os.freemem(), which under-reports on
+  // macOS (cache-heavy) and defers the whole suite on any memory-constrained
+  // host. Default to "enough headroom"; the defer path is exercised via override.
+  evaluateHostMemoryGuard: vi.fn().mockResolvedValue({ defer: false }),
   emitUpgradeEvent: vi.fn(),
   createSelfUpgradeRecoveryPoint: vi.fn(),
   summarizeRecoveryPointFailure: vi.fn(),
@@ -155,6 +160,14 @@ vi.mock("@/lib/self-upgrade/cooldown", () => ({
   isInCooldown: (until: Date | null, now: Date) =>
     !!until && now.getTime() < until.getTime(),
   DEFAULT_COOLDOWN_MINUTES: 30,
+}));
+
+// BI-EFA383AA: override only evaluateHostMemoryGuard (real impl reads os.freemem);
+// keep every other export real via importActual so formatGiB / checkHostMemoryHeadroom
+// / constants are unaffected.
+vi.mock("@/lib/self-upgrade/host-memory-preflight", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/self-upgrade/host-memory-preflight")>()),
+  evaluateHostMemoryGuard: mocks.evaluateHostMemoryGuard,
 }));
 
 vi.mock("@/lib/self-upgrade/notifications", () => ({
@@ -1295,6 +1308,32 @@ describe("skip-before-drain guards", () => {
         targetBundleHash: "abc1234deadbeef",
       }),
     );
+  });
+
+  // BI-EFA383AA: host-memory defer path, driven by the mocked guard so the
+  // assertion is host-independent (the real guard reads os.freemem and would
+  // otherwise flip this test on macOS/low-memory hosts). Defers BEFORE draining
+  // and records a cooldown so the next tick retries once memory recovers.
+  it("defers with host-memory-pressure BEFORE draining and records a cooldown", async () => {
+    mocks.evaluateHostMemoryGuard.mockResolvedValueOnce({
+      defer: true,
+      reason: "host memory 1.50GiB < required 2.00GiB",
+      extra: { availableBytes: 1_610_612_736, requiredBytes: 2_147_483_648, memorySource: "os-freemem" },
+    });
+
+    const result = await runSelfUpgrade({ triggeredBy: "scheduled", scheduled: true });
+
+    expect(result).toMatchObject({ skipped: true, reason: "host-memory-pressure" });
+    expect(mocks.recordCooldown).toHaveBeenCalled();
+    // Deferred before the drain — the guard sits right before startQuiescence.
+    expect(mocks.startQuiescence).not.toHaveBeenCalled();
+  });
+
+  it("proceeds to drain when the host-memory guard reports enough headroom", async () => {
+    // Default mock is { defer: false }; the happy path must reach the drain.
+    await runSelfUpgrade({ triggeredBy: "ops" });
+    expect(mocks.evaluateHostMemoryGuard).toHaveBeenCalled();
+    expect(mocks.startQuiescence).toHaveBeenCalled();
   });
 });
 
