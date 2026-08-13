@@ -82,6 +82,7 @@ export function formatAuthorizedSurfacePrompt(
     `Status: ${graph.summary.status ?? "unspecified"}`,
     `Revision: ${graph.revision}`,
     `Surface session for governed actions: ${sessionId}`,
+    "For configuration guidance, enumerate the exact applicable choices, fields, constraints, and submit/test action from this contract. Name write-only fields but never invent or reveal their values.",
     ...(graph.summary.highlights ?? []).map((highlight) => `Highlight: ${highlight}`),
     ...graph.nodes.map((node) => {
       const details = [

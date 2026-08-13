@@ -556,7 +556,7 @@ export async function executeAutonomousAgenticLoop(input: {
     }
   })();
 
-  return result;
+  return { ...result, authoritativeSurfaceEvidence: surfaceGuidanceOnly };
 }
 
 export async function executeAutonomousWorkTool(input: {
