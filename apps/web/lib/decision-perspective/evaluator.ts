@@ -145,6 +145,25 @@ export function evaluateDecisionPerspective(
   if (selectedCoverage.contentAware) {
     const alignment = selectedCoverage.stanceAlignment ?? "none";
 
+    // Lexical-fallback fail-safe (BI-7E1F128A follow-up). When the embedding
+    // layer is unavailable, `computeStanceRelevance` scores relevance by coarse
+    // lexical token-overlap. That signal is too imprecise to drive a confident
+    // directional verdict: on a live install it spuriously matched a `support`
+    // stance and confidently APPROVED a blatantly off-mission decision — strictly
+    // worse than the pre-fix escalate, because it replaced "ask the owner" with
+    // "act wrongly". So when relevance is lexical we do NOT act autonomously in
+    // either direction; we escalate, exactly as the gate did before content
+    // discrimination existed. Confident directional outcomes require semantic
+    // relevance. (Restoring the embedding layer re-enables discrimination.)
+    if (input.relevanceMethod === "lexical") {
+      return {
+        ...baseResult,
+        outcomeType: "escalate",
+        rationale:
+          `Your recorded stance leans ${alignment} on this decision, but relevance was scored without the semantic embedding layer (lexical fallback) — too coarse to decide this on your behalf. Escalating to your call; restore embeddings to re-enable autonomous stance-grounded verdicts.`,
+      };
+    }
+
     // Conflict is judged by RELEVANCE-WEIGHTED direction (`mixed`), not the
     // coarse content-blind `principleConflict` — otherwise a domain that merely
     // *contains* an opposing principle would escalate every decision even when

@@ -406,4 +406,39 @@ describe("content-aware directional scoring (BI-7E1F128A)", () => {
     expect(b.outcomeType).toBe("escalate");
     expect(a.stanceAlignment).toBeUndefined();
   });
+
+  // BI-7E1F128A follow-up: when the embedding layer is down, relevance is scored
+  // by coarse lexical overlap. That signal is too imprecise to drive a confident
+  // directional verdict — on the live install it spuriously matched a support
+  // stance and confidently APPROVED an off-mission decision, strictly worse than
+  // escalating. On the lexical fallback the gate must revert to escalate (the
+  // safe pre-fix behavior) regardless of the apparent direction.
+  it("FAIL-SAFE: lexical relevance escalates even when the apparent stance APPROVES", () => {
+    const semantic = evaluateDecisionPerspective({
+      ...twoStances,
+      question: "Should we onboard an MSP as a certified reseller partner?",
+      relevanceByMaterialId: new Map([["markets-we-decline", 0], ["partner-network", 1]]),
+      relevanceMethod: "semantic",
+    });
+    const lexical = evaluateDecisionPerspective({
+      ...twoStances,
+      question: "Should we onboard an MSP as a certified reseller partner?",
+      relevanceByMaterialId: new Map([["markets-we-decline", 0], ["partner-network", 1]]),
+      relevanceMethod: "lexical",
+    });
+    // Same inputs, only the relevance METHOD differs: semantic acts, lexical asks.
+    expect(semantic.outcomeType).toBe("recommend");
+    expect(lexical.outcomeType).toBe("escalate");
+    expect(lexical.relevanceMethod).toBe("lexical");
+  });
+
+  it("FAIL-SAFE: lexical relevance escalates even when the apparent stance DECLINES", () => {
+    const lexical = evaluateDecisionPerspective({
+      ...twoStances,
+      question: "Should we sell toasters to fishermen from kiosks on Alaskan docks?",
+      relevanceByMaterialId: new Map([["markets-we-decline", 1], ["partner-network", 0]]),
+      relevanceMethod: "lexical",
+    });
+    expect(lexical.outcomeType).toBe("escalate");
+  });
 });
