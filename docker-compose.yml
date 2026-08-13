@@ -203,6 +203,9 @@ services:
       # helpers at the mounted host source so verify_live_install_readiness can
       # decide CAN-TEST vs MUST-ADVANCE without depending on github.com.
       DPF_REPO_ROOT: /host-dpf
+      # Runtime policy generators must resolve from the deployed image before
+      # the mutable host checkout so their rule bytes match DEPLOYED_SHA.
+      DPF_RUNTIME_REPO_ROOT: /app
       # Host path used by the governed PostgreSQL recovery-point workflow.
       DPF_BACKUPS_HOST_PATH: ${DPF_BACKUPS_HOST_PATH:-}
       DPF_SELF_UPGRADE_HOST_SOURCE_MOUNT: /host-dpf
