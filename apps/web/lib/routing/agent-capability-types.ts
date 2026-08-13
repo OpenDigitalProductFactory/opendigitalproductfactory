@@ -27,6 +27,16 @@ export const PASSIVE_AGENT_CAPABILITIES: AgentMinimumCapabilities = {};
 /** System default minimum context window for RAG/L2 context injection (tokens). */
 export const DEFAULT_MINIMUM_CONTEXT_TOKENS = 16_000;
 
+/** Resolve the floor for a turn whose authorized state may already be prehydrated. */
+export function resolveTurnMinimumCapabilities(
+  configured: AgentMinimumCapabilities | null | undefined,
+  options: { allowToolFreeInference: boolean; hasProviderTools: boolean; requireTools: boolean },
+): AgentMinimumCapabilities {
+  const floor = { ...(configured ?? DEFAULT_MINIMUM_CAPABILITIES) };
+  if (options.allowToolFreeInference && !options.hasProviderTools && !options.requireTools) delete floor.toolUse;
+  return floor;
+}
+
 /**
  * Check whether an endpoint satisfies an agent's minimum capability floor.
  *

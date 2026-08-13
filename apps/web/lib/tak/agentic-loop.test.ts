@@ -651,7 +651,8 @@ describe("runAgenticLoop", () => {
 
     expect(result.content).toContain("No AI model can handle this request right now");
     expect(result.content).toContain("Providers & Routing");
-    expect(result.content).toContain("waiting won't clear this");
+    expect(result.content).toContain("not necessarily a disconnected provider");
+    expect(result.content).toContain("data-policy or residency limits");
     expect(result.content).not.toContain("try again in about 30 seconds");
     expect(result.providerId).toBe("unknown");
     expect(result.modelId).toBe("unknown");
@@ -1159,7 +1160,6 @@ describe("runAgenticLoop", () => {
       }),
     );
   });
-
   it("keeps a hard local-only residency boundary in every agentic route call", async () => {
     const mockRoute = vi.mocked(routeAndCall);
     mockRoute.mockResolvedValueOnce(mockResult({

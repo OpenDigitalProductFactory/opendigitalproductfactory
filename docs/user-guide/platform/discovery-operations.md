@@ -58,6 +58,26 @@ Allow a self-signed UniFi certificate only for a controller on a trusted,
 closed LAN. A TLS error is not a reason to disable validation for a public or
 untrusted endpoint.
 
+## Work With The Discovery Coworker
+
+The Digital Product Estate Specialist receives the current, authorized
+Discovery surface before answering. That context includes the form's available
+methods, visible values and status, help text, and authorized actions—even when
+the selected AI model cannot inspect a browser or call tools. Password and
+write-only values, including API keys and SNMP community strings, are never
+included in that readable context.
+
+You can ask the coworker what the page means or how to complete the current
+form. For example, if you ask about “SMTP discovery,” it should correct the term
+to **SNMP**: SMTP is for outbound email, while this surface offers **SNMP
+(Generic)** for network-device discovery. For SNMP, choose that method, enter
+the **Target IP or Hostname** and the write-only **Community String**, then use
+**Save & Test**.
+
+When you ask the coworker to make a change, it acts through the same authorized
+surface contract. Your normal permissions, confirmation policy, validation,
+and audit trail still apply; page knowledge does not grant extra authority.
+
 ## Review A Run
 
 1. Check when the latest run started and whether its status and failure count
