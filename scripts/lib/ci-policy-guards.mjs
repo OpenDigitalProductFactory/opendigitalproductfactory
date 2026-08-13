@@ -88,6 +88,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         "scripts/lib/git-shallow-preflight.test.mjs",
         "scripts/pregate-preflight.test.mjs",
         "scripts/gate-context.test.mjs",
+        "scripts/lib/gate-context-runtime-contract.test.mjs",
         "scripts/pre-push-dco-check.test.mjs",
       ),
       node("scripts/check-ci-policy-test-inventory.mjs"),

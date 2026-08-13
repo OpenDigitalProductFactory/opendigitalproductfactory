@@ -5,7 +5,9 @@
 // WITHOUT any hand-written text — proven here end-to-end through the real
 // generator (single source), the bridge, and getBuildContextSection.
 
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
+import { mkdtempSync, mkdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
 
@@ -19,6 +21,19 @@ import {
 import { getBuildContextSection } from "./build-agent-prompts";
 
 const repoRoot = join(fileURLToPath(new URL(".", import.meta.url)), "..", "..", "..", "..");
+const temporaryRoots: string[] = [];
+
+afterEach(() => {
+  for (const root of temporaryRoots.splice(0)) rmSync(root, { recursive: true, force: true });
+});
+
+function fakeRepoRoot(label: string) {
+  const root = mkdtempSync(join(tmpdir(), `dpf-gate-context-${label}-`));
+  temporaryRoots.push(root);
+  mkdirSync(join(root, "scripts"), { recursive: true });
+  writeFileSync(join(root, "scripts", "gate-context.mjs"), "// fixture\n");
+  return root;
+}
 
 describe("plannedChangesFromPlan", () => {
   it("maps fileStructure create/modify to A/M and drops junk", () => {
@@ -59,6 +74,18 @@ describe("resolveGateContextRepoRoot", () => {
     process.chdir(join(repoRoot, "docs"));
     try {
       expect(resolveGateContextRepoRoot({ DPF_REPO_ROOT: join(repoRoot, "missing") })).toBe(repoRoot);
+    } finally {
+      process.chdir(previous);
+    }
+  });
+
+  it("prefers image-owned working-directory bytes over a mutable host checkout", () => {
+    const imageRoot = fakeRepoRoot("image");
+    const hostRoot = fakeRepoRoot("host");
+    const previous = process.cwd();
+    process.chdir(imageRoot);
+    try {
+      expect(resolveGateContextRepoRoot({ DPF_REPO_ROOT: hostRoot })).toBe(realpathSync(imageRoot));
     } finally {
       process.chdir(previous);
     }
