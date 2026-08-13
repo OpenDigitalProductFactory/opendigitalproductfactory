@@ -108,7 +108,15 @@ export async function runDemandReconciliation(
         // Open work only. A closed item is excluded here, drops out of
         // eligibleIds below, and is withdrawn from the peer. See BI-8A8C1D3A.
         status: { in: [...FEDERATION_SYNCABLE_BACKLOG_STATUSES] },
-        NOT: { body: { contains: "[origin:federatedDemand:" } },
+        // Exclude items RECEIVED from federation (they carry the origin marker in
+        // their body). NULL-SAFE: a NULL body has no marker, so it must be KEPT —
+        // a bare `NOT: { body: { contains } }` drops NULL-body rows via SQL
+        // three-valued logic (`NULL NOT LIKE …` = NULL = excluded), silently
+        // stranding every eligible item with no body. See BI-8A7E3E56.
+        OR: [
+          { body: null },
+          { NOT: { body: { contains: "[origin:federatedDemand:" } } },
+        ],
       },
       select: {
         itemId: true, title: true, body: true, workType: true, occurrenceCount: true,
