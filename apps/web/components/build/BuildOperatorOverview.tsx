@@ -32,7 +32,12 @@ export function BuildOperatorOverview({
   phase: BuildPhase;
   status?: BuildStudioCustomerStatus | null;
 }) {
-  const activity = deriveBuildActivityStory(phase);
+  const activityPhase = status?.ownerState === "complete"
+    ? "complete"
+    : status?.ownerState === "failed"
+      ? (phase === "failed" ? "failed" : "abandoned")
+      : phase;
+  const activity = deriveBuildActivityStory(activityPhase);
   const lifecyclePosition = status?.lifecyclePosition ?? fallbackStatus(phase);
   const nextAction = status?.nextAction ?? fallbackNextAction(phase);
   const ownerBadge = status?.ownerState

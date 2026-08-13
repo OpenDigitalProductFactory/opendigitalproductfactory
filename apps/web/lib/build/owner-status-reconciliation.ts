@@ -39,6 +39,29 @@ export function reconcileBuildStudioCustomerStatus(args: {
 }): BuildStudioCustomerStatus {
   const { phase, status, progress } = args;
 
+  // The WorkCapsule projection is the durable authority when it has already
+  // reached a terminal state. FeatureBuild.phase and dispatch rows can lag that
+  // transition, so stale in-flight evidence must never resurrect stopped work.
+  const projectedOwnerState = ownerStateFromStatus(status);
+  if (projectedOwnerState === "complete") {
+    return {
+      ...status,
+      ownerState: "complete",
+      needsYou: false,
+      expectation: status.expectation
+        ?? "The result and its evidence will remain here when you return.",
+    };
+  }
+  if (projectedOwnerState === "failed") {
+    return {
+      ...status,
+      ownerState: "failed",
+      needsYou: true,
+      expectation: status.expectation
+        ?? "You can leave this page and return; Build Studio will keep this stopped state recorded.",
+    };
+  }
+
   if (phase === "complete") {
     return {
       ...status,
@@ -60,7 +83,7 @@ export function reconcileBuildStudioCustomerStatus(args: {
   }
 
   if (!progress) {
-    return { ...status, ownerState: ownerStateFromStatus(status) };
+    return { ...status, ownerState: projectedOwnerState };
   }
 
   const failure = progress.inferenceFailure;
@@ -182,7 +205,12 @@ export function reconcileBuildStudioCustomerStatus(args: {
 }
 
 function ownerStateFromStatus(status: BuildStudioCustomerStatus): BuildStudioOwnerState {
-  if (/\b(done|deployed|closed)\b/i.test(status.lifecyclePosition)) return "complete";
+  const durableSummary = [
+    status.lifecyclePosition,
+    status.worker,
+  ].filter(Boolean).join(" ");
+  if (/\b(done|deployed|closed|completed|finished)\b/i.test(durableSummary)) return "complete";
+  if (/\b(stopped|cancelled|abandoned)\b/i.test(durableSummary)) return "failed";
   if (isWaitingForOwner(status)) return "waiting-owner";
   if (status.needsYou) return "blocked";
   return "working";

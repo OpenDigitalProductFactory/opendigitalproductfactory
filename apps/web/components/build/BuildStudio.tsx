@@ -296,19 +296,21 @@ export function BuildStudio({
       buildExecState: activeBuild.buildExecState,
     })
     : null;
-  const workflowAction = activeBuild
-    ? deriveBuildStudioWorkflowAction({
-      build: activeBuild,
-      governedBacklogEnabled,
-      progressVisibility,
-    })
-    : null;
   const ownerStatus = activeBuild && activeCustomerStatus
     ? reconcileBuildStudioCustomerStatus({
         phase: activeBuild.phase,
         status: activeCustomerStatus,
         progress: progressVisibility,
       })
+    : null;
+  const ownerStateIsTerminal = ownerStatus?.ownerState === "complete"
+    || ownerStatus?.ownerState === "failed";
+  const workflowAction = activeBuild && !ownerStateIsTerminal
+    ? deriveBuildStudioWorkflowAction({
+      build: activeBuild,
+      governedBacklogEnabled,
+      progressVisibility,
+    })
     : null;
   const custodianPromptRaw = activeBuild && workflowAction
     ? deriveBuildStudioCustodianPrompt({

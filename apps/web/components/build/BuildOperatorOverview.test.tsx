@@ -82,4 +82,28 @@ describe("BuildOperatorOverview", () => {
     expect(html).toContain("You can leave this page and return");
     expect(html).not.toContain(">Needs you<");
   });
+
+  it("renders terminal activity when the capsule stopped before the FeatureBuild phase caught up", () => {
+    const html = renderToStaticMarkup(
+      <BuildOperatorOverview
+        title="Reconcile stopped work"
+        outcome="Keep the owner state honest."
+        phase="build"
+        status={{
+          whatIsBeingBuilt: "Reconcile stopped work",
+          lifecyclePosition: "Stopped",
+          worker: "Stopped",
+          evidence: "Work capsule was abandoned.",
+          nextAction: "Restart only if the priority still stands.",
+          owner: "owner",
+          needsYou: true,
+          ownerState: "failed",
+        }}
+      />,
+    );
+
+    expect(html).toContain(">Stopped<");
+    expect(html).toContain("Work stopped");
+    expect(html).not.toContain("Building the solution");
+  });
 });

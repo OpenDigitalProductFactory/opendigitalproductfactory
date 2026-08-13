@@ -308,6 +308,48 @@ describe("reconcileBuildStudioCustomerStatus — canonical owner state", () => {
     expect(`${status.lifecyclePosition} ${status.worker} ${status.evidence}`).not.toMatch(/actively executing/i);
   });
 
+  it("keeps an abandoned capsule terminal when the FeatureBuild phase and dispatch history are stale", () => {
+    const status = reconcileBuildStudioCustomerStatus({
+      phase: "build",
+      status: {
+        ...base,
+        lifecyclePosition: "Stopped",
+        worker: "Stopped",
+        evidence: "Work capsule was abandoned.",
+        nextAction: "restart the work only if the business priority still stands.",
+        owner: "owner",
+        needsYou: false,
+      },
+      progress: progress({
+        dispatchHistory: [{
+          id: "stale-attempt",
+          buildId: "FB-OWNER",
+          taskTitle: "Old work",
+          specialist: "software-engineer",
+          providerId: "chatgpt",
+          model: "gpt-5.3-codex",
+          attemptNumber: 1,
+          startedAt: "2026-08-12T12:01:00.000Z",
+          completedAt: null,
+          durationMs: null,
+          exitCode: null,
+          success: false,
+          failureAxis: "unknown",
+          stdoutExcerpt: null,
+          stderrExcerpt: null,
+          rootCauseSummary: null,
+          rootCauseHash: null,
+        }],
+      }),
+    });
+
+    expect(status.ownerState).toBe("failed");
+    expect(status.lifecyclePosition).toBe("Stopped");
+    expect(status.evidence).toBe("Work capsule was abandoned.");
+    expect(status.nextAction).toMatch(/restart the work/i);
+    expect(status.worker).not.toMatch(/working/i);
+  });
+
   it.each([
     ["config", "blocked", true],
     ["empty-response", "inconclusive", true],
