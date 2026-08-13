@@ -1,4 +1,5 @@
 import type { EndpointManifest } from "./types";
+import { TIER_MINIMUM_DIMENSIONS } from "./quality-tiers";
 
 /**
  * EP-AGENT-CAP-002: Subset of ModelCardCapabilities used as a per-agent routing floor.
@@ -35,6 +36,33 @@ export function resolveTurnMinimumCapabilities(
   const floor = { ...(configured ?? DEFAULT_MINIMUM_CAPABILITIES) };
   if (options.allowToolFreeInference && !options.hasProviderTools && !options.requireTools) delete floor.toolUse;
   return floor;
+}
+
+/**
+ * A prehydrated, read-only surface question is a bounded factual lookup, even
+ * when the generic text classifier labels wording such as "how should I set
+ * up..." as reasoning. Route that turn at the existing adequate status-query
+ * contract so a residency-required local model is not rejected by an
+ * unrelated static frontier floor. Action-capable and ungrounded turns retain
+ * the configured task and quality requirements unchanged.
+ */
+export function resolveTurnGroundedGuidanceRoute(
+  taskType: string,
+  configuredMinimumDimensions: Record<string, number> | undefined,
+  options: { allowToolFreeInference: boolean; hasProviderTools: boolean; requireTools: boolean },
+): { taskType: string; minimumDimensions: Record<string, number> | undefined } {
+  if (options.allowToolFreeInference && !options.hasProviderTools && !options.requireTools) {
+    return {
+      taskType: "status-query",
+      minimumDimensions: { ...TIER_MINIMUM_DIMENSIONS.adequate },
+    };
+  }
+  return {
+    taskType,
+    minimumDimensions: configuredMinimumDimensions
+      ? { ...configuredMinimumDimensions }
+      : undefined,
+  };
 }
 
 /**
