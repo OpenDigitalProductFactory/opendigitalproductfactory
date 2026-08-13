@@ -1,11 +1,10 @@
 #!/usr/bin/env node
-import { createHash } from "node:crypto";
+import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { spawnSync } from "node:child_process";
 
-import { LOCAL_SEMANTIC_REVIEW_GATE_SCHEMA_VERSION, validateLocalSemanticReviewGate } from "./lib/semantic-review-gate.mjs";
+import { LOCAL_SEMANTIC_REVIEW_GATE_SCHEMA_VERSION, readGitDiffDigest, validateLocalSemanticReviewGate } from "./lib/semantic-review-gate.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const policy = JSON.parse(readFileSync(join(here, "semantic-review-policy.json"), "utf8"));
@@ -27,9 +26,7 @@ function currentIdentity(receipt = null) {
   const mergeBase = git("merge-base", "HEAD", "origin/main");
   const baseTreeHash = git("rev-parse", `${mergeBase}^{tree}`);
   const headTreeHash = git("rev-parse", "HEAD^{tree}");
-  const diff = spawnSync("git", ["diff", "--binary", mergeBase, "HEAD"], { encoding: null });
-  if (diff.status !== 0) throw new Error(diff.stderr?.toString().trim() || "git diff failed");
-  const diffDigest = createHash("sha256").update(diff.stdout).digest("hex");
+  const diffDigest = readGitDiffDigest(mergeBase);
   return {
     branch,
     sha,
