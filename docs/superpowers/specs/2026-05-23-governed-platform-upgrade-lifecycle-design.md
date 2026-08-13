@@ -513,22 +513,23 @@ Self-upgrade owns roles 1 and 2. Roles 3–5 govern developer and agent workflow
    the host clone (replacing ephemeral `/workspace` mutation), upstream merges
    into it, the promoter builds it. The sandbox `client/<clientId>` branch
    remains the build-staging area; promotion is the bridge into the canonical
-   tree. *Implementation shape (landed: PR #1389 / BI-A8A7CCFD):* the isolation is a dedicated **`.upgrade-workspace/`** sub-clone at `${hostInstallPath}/.upgrade-workspace/`, owned entirely by the upgrade process. `SelfUpgradeConfig.useIsolatedWorkspace` defaults to `true`; managed installs (the target population) use it automatically. Each upgrade run: (i) initialises or re-uses the workspace clone (hardlinked objects, no extra disk); (ii) configures a distinct `upgrade-upstream` remote pointing at the same URL as the install clone's `origin`; (iii) fetches both the upstream branch and the install clone's `dpf/install` ref; (iv) checks out the install branch from the install clone's ref (`reset --hard HEAD` + `clean -fdx`); (v) merges `--no-ff` from `upgrade-upstream/<branch>`; on conflict — aborts the merge, returns `conflictFiles`, and defers (operator resolves in the Upgrade Center; the current build keeps running); (vi) on clean merge — pushes the new `dpf/install` tip back to the install clone **ref-only** (the operator's checked-out working tree is never touched). The promoter then mounts the workspace path as `/host-source:ro` instead of the install clone, so the image is built from the merged bytes and the stamp is the merge-commit SHA. See `apps/web/lib/self-upgrade/prepare-source.ts` (`prepareUpgradeSourceInWorkspace`) and `config.ts` (`upgradeWorkspaceHostPath`/`upgradeWorkspaceMountPath`) for the authoritative implementation.
-2. **Merge, don't replace.** On upgrade: `git fetch` the upstream target, then
-   **merge** it into the install branch. Where upstream and local touch
-   disjoint files (the common case) the merge is clean and automatic. Build
-   the merged result; stamp with the **merge-commit SHA** (true → sha-verify is
-   real). Track *upstream lineage* (which upstream version is contained)
-   separately so "are we current with upstream?" stays answerable even though
-   the running SHA ≠ upstream SHA.
+   tree. *Implementation shape (landed: PR #1389 / BI-A8A7CCFD; canonical-SHA correction: BI-C6C92EE4):* the isolation is a dedicated **`.upgrade-workspace/`** sub-clone at `${hostInstallPath}/.upgrade-workspace/`, owned entirely by the upgrade process. `SelfUpgradeConfig.useIsolatedWorkspace` defaults to `true`; managed installs (the target population) use it automatically. Each upgrade run: (i) initialises or re-uses the workspace clone (hardlinked objects, no extra disk); (ii) configures a distinct `upgrade-upstream` remote pointing at the same URL as the install clone's `origin`; (iii) fetches both the upstream branch and the install clone's `dpf/install` ref; (iv) checks out the install branch from the install clone's ref (`reset --hard HEAD` + `clean -fdx`); (v) compares the install tree with its merge base; when there is no local content delta, advances to the exact `upgrade-upstream/<branch>` commit, otherwise merges it with `--no-ff`; on conflict — aborts the merge, returns `conflictFiles`, and defers (operator resolves in the Upgrade Center; the current build keeps running); (vi) on success — pushes the new `dpf/install` tip back to the install clone **ref-only** (the operator's checked-out working tree is never touched). The promoter then mounts the workspace path as `/host-source:ro` instead of the install clone, so the image is built from those bytes. An upstream-only install is stamped with the canonical upstream SHA that peers can fetch; an install with real local content is stamped with its honest merge-commit SHA. See `apps/web/lib/self-upgrade/prepare-source.ts` (`prepareUpgradeSourceInWorkspace`) and `config.ts` (`upgradeWorkspaceHostPath`/`upgradeWorkspaceMountPath`) for the authoritative implementation.
+2. **Advance when canonical; merge when local.** On upgrade: `git fetch` the
+   upstream target, then compare the install tree with its merge base. With no
+   local content delta, advance to and stamp the exact upstream commit so the
+   running identity remains globally fetchable. With a real local delta, merge
+   upstream into the install branch; disjoint changes merge automatically and
+   the result is stamped with the honest **merge-commit SHA**. Track *upstream
+   lineage* separately so "are we current with upstream?" stays answerable for
+   customized installs whose running SHA intentionally differs from upstream.
 3. **Conflicts are an in-portal decision, never a CLI ask.** When upstream and
    local edit the same code, attempt a 3-way merge; genuine conflicts surface
    in the Upgrade Center (§5.2.4 / §6) as an operator card — *keep mine / take
    upstream / show diff* — honoring `never-ask-user-to-run-commands`. If
    unresolved, **defer** that upgrade and keep running the current
    install-branch build: the operator is never broken, only not-yet-updated.
-4. **Degenerate postures fall out for free.** No local delta → the merge is a
-   fast-forward to upstream (the simple managed-install case). Contributed
+4. **Degenerate postures fall out for free.** No local delta → the install ref
+   becomes the exact upstream commit (the simple managed-install case). Contributed
    delta (`selective`/`contribute_all`) → once it lands upstream the merge is
    trivial because `ours` and `theirs` converge. Contribution mode therefore
    governs only whether local commits *also* flow outward; it never gates
@@ -568,7 +569,8 @@ follow-up read is free.
 1. **Change set.** `git log <currentLineageSha>..<targetSha>` over the host
    clone. `currentLineageSha` = the latest succeeded
    `SelfUpgradeRun.targetSha` (the §5.0 upstream lineage marker — *not*
-   `deployedSha`, which in merge mode is the merge-commit identity).
+   `deployedSha`, which is the canonical upstream identity for an upstream-only
+   install and the merge-commit identity when the install carries local content).
    `targetSha` = the resolved upstream HEAD from `version.ts:resolveTargetSha`.
    Reuses the no-auth dep-injected `execFile` pattern from `version.ts` and
    the host-clone read pattern from `operating-hours-read.ts`. No `git
@@ -889,7 +891,7 @@ Recovery point members:
 | Postgres | `runPostgresBackup(...)` existing runner, with `BackupTrigger` extended to include `"pre-upgrade"` | Yes | Authoritative business/operator state. Must pass checksum validation before L2 can start. |
 | Neo4j | `runNeo4jBackup(...)` existing runner, with `BackupTrigger` extended to include `"pre-upgrade"` | Yes by default; operator may accept degraded only if graph is declared regenerable for this install | Neo4j backup stops the container briefly; quiescence must already be preventing new graph writes. |
 | Qdrant | `runQdrantBackup(...)` existing runner, with `BackupTrigger` extended to include `"pre-upgrade"` | Yes by default; operator may accept degraded only if embeddings are declared regenerable | Online snapshot. |
-| Runtime/source identity | Previous image digest, previous deployed SHA, prepared-source merge commit, channel manifest hash | Yes | Enables L1 rollback and audit reconstruction. |
+| Runtime/source identity | Previous image digest, previous deployed SHA, prepared-source commit, channel manifest hash | Yes | The prepared-source commit is the canonical upstream SHA when there is no local content delta, otherwise the honest local merge SHA. Enables L1 rollback and audit reconstruction. |
 | Restore drill evidence | Latest successful Postgres trial restore for the selected dump, or an explicit "not yet verified" warning | Warn/block by policy | Patch auto-apply may block if no recent verified Postgres backup exists. |
 
 `RecoveryPoint` can be either a new model or a structured JSON field on
@@ -1255,7 +1257,7 @@ Proposed breakdown (each a Build Studio brief once spec is approved):
 
 - `BI-UPGRADE-000` — Self-upgrade substrate stabilization: one Inngest path, target SHA resolver, schema/DTO alignment, `/ops/self-upgrade` run listing, event-bus claim cleanup (Phase 0)
 - `BI-UPGRADE-000a` — Durable per-install branch (§5.0 prerequisite): commit Build-Studio promotions as real commits on a persistent install branch in the portal's build tree, so customizations survive container rebuild / Docker update / upgrade. Closes the `mcp-tools.ts:8891` "lost on rebuild" hazard. Independent of contribution mode (Phase 0)
-- `BI-UPGRADE-000b` — Merge-based upgrade source (§5.0): `git fetch` upstream target + **merge** into the install branch (not clean-checkout-replace); build merged result; stamp the true merge-commit SHA (non-circular sha-verify); track upstream lineage separately; clean auto-merge on disjoint files; genuine code conflicts surface in the Upgrade Center as keep-mine/take-upstream/show-diff (never a CLI ask), unresolved → defer and stay on current build. Extends §3.3/§6 3-way merge from seeded content to git/code (Phase 0/4)
+- `BI-UPGRADE-000b` — Content-preserving upgrade source (§5.0): `git fetch` the upstream target; advance to its exact canonical SHA when the install has no local content delta, otherwise **merge** into the install branch (never clean-checkout-replace local content); build the prepared result; stamp its true commit SHA (non-circular sha-verify); track upstream lineage separately; clean auto-merge on disjoint files; genuine code conflicts surface in the Upgrade Center as keep-mine/take-upstream/show-diff (never a CLI ask), unresolved → defer and stay on current build. Extends §3.3/§6 3-way merge from seeded content to git/code (Phase 0/4)
 - `BI-C26F7EE1` — Upgrade impact summary (§5.0.1): on-demand, install-tailored "what's in this update?" digest in the `/ops/self-upgrade` Upgrade Center and as the `summarize_upgrade_impact` MCP tool. Pipeline: `git log <currentLineageSha>..<targetSha>` → Conventional-Commits classify → relevance score against install signals (archetype / industry / FeaturePack-touched paths and verticals / open `PortfolioQualityIssue` keyword themes) → best-effort GitHub PR enrichment → strict-JSON LLM phrasing. Advisory only; never queues or applies. Path overlap with FeaturePack-touched files doubles as the §5.0 merge-conflict early warning. Cacheable per (`currentLineageSha`, `targetSha`). **Acceptance (pass-2):** unit tests confirm the orchestrator returns `phrased: null` plus the deterministic shape when the LLM returns (a) malformed JSON, (b) item-count mismatch vs the deterministic upstream list, (c) reordered items, or (d) when GitHub enrichment is unreachable. The UI displays raw commit subjects in those cases. No code path lets a fabricated headline, fabricated item, or reordered relevance score reach the operator.
 - `BI-UPGRADE-001` — Platform version baseline + `version.json` + `PlatformConfig["platform.version"]` + `/api/platform/version` (Phase 1)
 - `BI-UPGRADE-002` — Release-impact lint + release CI tag/build/GHCR publish/GitHub Releases metadata (Phase 2)

@@ -87,6 +87,7 @@ describe("prepareUpgradeSource — upstream mode (isolated workspace, BI-4043A64
       ["config --get remote.origin.url", ok("https://github.com/x/y.git\n")],
       ["config --get remote.upgrade-upstream.url", ok("")],
       ["rev-parse upgrade-upstream/main", ok(`${UPSTREAM}\n`)],
+      ["diff --quiet", fail("local content delta", 1)],
       ["rev-parse HEAD", ok(`${MERGE}\n`)],
       ["status --porcelain", ok("")],
     ]);
@@ -103,6 +104,30 @@ describe("prepareUpgradeSource — upstream mode (isolated workspace, BI-4043A64
     expect(
       git.calls.some((c) => c.join(" ").includes("push origin HEAD:refs/heads/dpf/install")),
     ).toBe(true);
+  });
+
+  it("advances an upstream-only install to the exact canonical upstream commit", async () => {
+    const git = fakeGit([
+      ["rev-parse --git-dir", ok()],
+      ["config --get remote.origin.url", ok("https://github.com/x/y.git\n")],
+      ["config --get remote.upgrade-upstream.url", ok("")],
+      ["rev-parse upgrade-upstream/main", ok(`${UPSTREAM}\n`)],
+      ["merge-base", ok(`${SHA}\n`)],
+      ["diff --quiet", ok()],
+      ["rev-parse HEAD", ok(`${UPSTREAM}\n`)],
+      ["status --porcelain", ok("")],
+    ]);
+
+    const r = await prepareUpgradeSource(baseWorkspace, git);
+
+    expect(r).toEqual({ ok: true, mode: "upstream", stamp: UPSTREAM, upstreamSha: UPSTREAM });
+    expect(
+      git.calls.some((c) =>
+        c.join(" ").includes("reset --hard upgrade-upstream/main"),
+      ),
+    ).toBe(true);
+    expect(git.calls.some((c) => c.includes("merge"))).toBe(false);
+    expect(noHostTreeMutation(git.calls)).toBe(true);
   });
 
   it("defers on merge conflict and cleans the workspace (host tree untouched)", async () => {

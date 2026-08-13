@@ -200,6 +200,43 @@ describe.skipIf(!GIT_AVAILABLE)("prepareUpgradeSource — workspace-isolated (BI
     expect(existsSync(join(workspace, "u2.txt"))).toBe(true);
   }, REAL_GIT_TEST_TIMEOUT_MS);
 
+  it("keeps an upstream-only install on the canonical upstream SHA instead of minting a local merge SHA", async () => {
+    const { upstream, install, workspace, root } = makeWorld();
+    cleanup.push(root);
+
+    // The install branch has no private/local content. It merely points at the
+    // upstream revision from the previous successful upgrade.
+    git(install, "checkout", "-b", "dpf/install");
+    git(install, "checkout", "-b", "feat/operator-wip");
+
+    // A later release advances upstream. The safe result is a canonical
+    // fast-forward to this exact commit, not an install-local --no-ff merge
+    // commit that no peer or canonical preflight can fetch.
+    commit(upstream, "u1.txt", "u1\n", "u1");
+    const upstreamCommit = git(upstream, "rev-parse", "HEAD").trim();
+
+    const result = await prepareUpgradeSource(
+      {
+        sourceMode: "upstream",
+        hostSourcePath: install,
+        remote: "origin",
+        branch: "main",
+        installBranch: "dpf/install",
+        workspacePath: workspace,
+      },
+      defaultGitRunner,
+    );
+
+    expect(result).toEqual({
+      ok: true,
+      mode: "upstream",
+      stamp: upstreamCommit,
+      upstreamSha: upstreamCommit,
+    });
+    expect(git(workspace, "rev-parse", "HEAD").trim()).toBe(upstreamCommit);
+    expect(git(install, "rev-parse", "dpf/install").trim()).toBe(upstreamCommit);
+  }, REAL_GIT_TEST_TIMEOUT_MS);
+
   it("workspace merge that conflicts aborts cleanly and surfaces conflict files (no install-clone mutation)", async () => {
     const { upstream, install, workspace, root } = makeWorld();
     cleanup.push(root);
