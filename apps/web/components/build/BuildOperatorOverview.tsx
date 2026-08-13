@@ -32,6 +32,8 @@ export function BuildOperatorOverview({
   phase: BuildPhase;
   status?: BuildStudioCustomerStatus | null;
 }) {
+  const ownerTitle = ownerSafeBuildText(title);
+  const ownerOutcome = outcome ? ownerSafeBuildText(outcome) : outcome;
   const activityPhase = status?.ownerState === "complete"
     ? "complete"
     : status?.ownerState === "failed"
@@ -62,11 +64,11 @@ export function BuildOperatorOverview({
           id="build-outcome-heading"
           className="m-0 mt-1 max-w-4xl text-balance text-xl font-semibold leading-7 text-[var(--dpf-text)] sm:text-2xl"
         >
-          {title}
+          {ownerTitle}
         </h2>
-        {outcome ? (
+        {ownerOutcome ? (
           <p className="m-0 mt-2 max-w-3xl text-sm leading-6 text-[var(--dpf-muted)]">
-            {outcome}
+            {ownerOutcome}
           </p>
         ) : null}
       </section>
@@ -168,6 +170,14 @@ export function BuildOperatorOverview({
       </section>
     </div>
   );
+}
+
+/** Keep governed record keys available in technical details, not owner copy. */
+export function ownerSafeBuildText(value: string): string {
+  return value
+    .replace(/\bBI-[A-Z0-9-]+\b/g, "this backlog item")
+    .replace(/\bWC-[A-Z0-9-]+\b/g, "this work record")
+    .replace(/\bFB-[A-Z0-9-]+\b/g, "this build");
 }
 
 function fallbackStatus(phase: BuildPhase): string {

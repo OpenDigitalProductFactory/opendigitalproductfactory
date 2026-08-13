@@ -822,11 +822,13 @@ export function BuildStudio({
 
         {/* Right: Preview or Brief */}
         <div className="flex min-w-0 flex-1 flex-col overflow-x-hidden overflow-y-auto bg-[var(--dpf-surface-1)]">
-          <PortalContextStrip
-            envelope={portalContext ?? null}
-            contextLabel="Build context"
-            showInternalIds={engineerView}
-          />
+          {engineerView ? (
+            <PortalContextStrip
+              envelope={portalContext ?? null}
+              contextLabel="Build context"
+              showInternalIds
+            />
+          ) : null}
           {activeBuild ? (
             <>
               <BuildOperatorOverview

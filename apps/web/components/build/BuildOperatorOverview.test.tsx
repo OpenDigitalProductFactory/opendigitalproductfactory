@@ -106,4 +106,19 @@ describe("BuildOperatorOverview", () => {
     expect(html).toContain("Work stopped");
     expect(html).not.toContain("Building the solution");
   });
+
+  it("removes DPF-internal record identifiers from owner-visible outcome copy", () => {
+    const html = renderToStaticMarkup(
+      <BuildOperatorOverview
+        title="Improve BI-62075FF9 without exposing WC-12345678"
+        outcome="Depends on FB-ABC12345 and BI-DR-105 before release."
+        phase="plan"
+        status={null}
+      />,
+    );
+
+    expect(html).toContain("Improve this backlog item without exposing this work record");
+    expect(html).toContain("Depends on this build and this backlog item before release.");
+    expect(html).not.toMatch(/\b(?:BI|WC|FB)-[A-Z0-9-]+\b/);
+  });
 });

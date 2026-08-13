@@ -515,15 +515,18 @@ describe("BuildStudio active-build header layout", () => {
         governedBacklogEnabled
         projectBranch="main"
         submissionBranchShortId="fb8783b9"
+        portalContext={makePortalContextEnvelope()}
       />,
     );
 
     const assuranceGate = await findByTestId("build-assurance-gate-card");
     expect(assuranceGate.textContent).toContain("Assurance Gate");
     expect(assuranceGate.textContent).toContain("No BOM generated");
+    expect(document.body.textContent).toContain("Build context");
+    expect(document.body.textContent).toContain("WC-123");
   });
 
-  it("renders the portal context strip when a server envelope is provided", () => {
+  it("keeps portal context mechanics out of the default owner viewport", () => {
     const html = renderToStaticMarkup(
       <BuildStudio
         builds={[makeBuild()]}
@@ -535,9 +538,8 @@ describe("BuildStudio active-build header layout", () => {
       />,
     );
 
-    expect(html).toContain("Build context");
-    expect(html).toContain("Build Studio");
-    expect(html).toContain("Portal overlay");
+    expect(html).not.toContain("Build context");
+    expect(html).not.toContain("Portal overlay");
     expect(html).not.toContain("WC-123");
   });
 
