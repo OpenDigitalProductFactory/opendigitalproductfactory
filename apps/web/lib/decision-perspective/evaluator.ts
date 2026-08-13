@@ -15,7 +15,6 @@ import { resolveRecommendedOptionId } from "./option-recommendation";
 import {
   hasPrincipleConflict,
   orderedProfileChain,
-  RISK_PENALTY,
   riskWithin,
   scoreProfileCoverage,
   summarizeFreshness,
