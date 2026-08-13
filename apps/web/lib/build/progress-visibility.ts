@@ -58,6 +58,12 @@ export type BuildProgressVisibility = {
     quiet: boolean;
     minutesQuiet: number;
     lastObservableSignalAt: string | null;
+    /**
+     * Newest signal that proves the build actually advanced. Generic
+     * BuildActivity is intentionally excluded: a heartbeat or status note can
+     * prove liveness, but it cannot clear a persisted provider failure.
+     */
+    lastMeaningfulSignalAt?: string | null;
   };
   /**
    * BI-F0005EB0 (EP-BS-UX-HARDENING) — whether the most recent assistant turn in
@@ -123,8 +129,13 @@ export function buildProgressProjectionFromParts(args: {
     dispatchHistory: args.dispatchHistory,
     lastActivityAt: args.lastActivityAt,
   });
+  const lastMeaningfulSignalAt = getLastMeaningfulSignalAt({
+    taskResultsAt: args.dbTasks.totalTasks > 0 ? args.dbTasks.source.observedAt : null,
+    verificationAt: args.verification?.observedAt ?? null,
+    dispatchHistory: args.dispatchHistory,
+  });
   const minutesQuiet = getMinutesQuiet(lastObservableSignalAt, now);
-  const inferenceFailure = deriveInferenceFailure(args.lastAssistant, lastObservableSignalAt);
+  const inferenceFailure = deriveInferenceFailure(args.lastAssistant, lastMeaningfulSignalAt);
 
   return {
     buildId: args.buildId,
@@ -158,6 +169,7 @@ export function buildProgressProjectionFromParts(args: {
       quiet: !hasInflightDispatch(args.dispatchHistory) && minutesQuiet >= 5,
       minutesQuiet,
       lastObservableSignalAt,
+      lastMeaningfulSignalAt,
     },
     inferenceFailure,
     engineSelection: args.engineSelection
@@ -173,14 +185,13 @@ export function buildProgressProjectionFromParts(args: {
 
 /**
  * BI-F0005EB0 — classify the newest assistant turn. Only reports `failed` when
- * the failing turn is at least as recent as the last observable non-chat signal:
- * a task result, dispatch, or activity landing AFTER the failed turn means the
- * pipeline moved on (e.g. the user retried and work resumed), so the stale error
- * must not keep the build parked in a danger state.
+ * the failing turn is at least as recent as the last meaningful non-chat
+ * signal. A newer task result, verification result, or dispatch proves the
+ * pipeline moved on; a generic activity row does not.
  */
 function deriveInferenceFailure(
   lastAssistant: { content: string | null; createdAt: Date | string | null } | null | undefined,
-  lastObservableSignalAt: string | null,
+  lastMeaningfulSignalAt: string | null,
 ): BuildProgressVisibility["inferenceFailure"] {
   const none: BuildProgressVisibility["inferenceFailure"] = { failed: false, kind: null, observedAt: null };
   if (!lastAssistant) {
@@ -193,8 +204,8 @@ function deriveInferenceFailure(
   const observedAt = normalizeObservedAt(lastAssistant.createdAt);
   if (
     observedAt != null
-    && lastObservableSignalAt != null
-    && new Date(lastObservableSignalAt).getTime() > new Date(observedAt).getTime()
+    && lastMeaningfulSignalAt != null
+    && new Date(lastMeaningfulSignalAt).getTime() > new Date(observedAt).getTime()
   ) {
     // A fresher observable signal superseded the failed turn — not stalled here.
     return { failed: false, kind, observedAt };
@@ -389,6 +400,22 @@ function getLastObservableSignalAt(args: {
     args.taskResultsAt,
     args.verificationAt,
     args.lastActivityAt,
+    ...args.dispatchHistory.flatMap((attempt) => [attempt.completedAt, attempt.startedAt]),
+  ];
+
+  return candidates
+    .filter((value): value is string => Boolean(value))
+    .sort((a, b) => new Date(b).getTime() - new Date(a).getTime())[0] ?? null;
+}
+
+function getLastMeaningfulSignalAt(args: {
+  taskResultsAt: string | null;
+  verificationAt: string | null;
+  dispatchHistory: BuildDispatchAttemptView[];
+}): string | null {
+  const candidates = [
+    args.taskResultsAt,
+    args.verificationAt,
     ...args.dispatchHistory.flatMap((attempt) => [attempt.completedAt, attempt.startedAt]),
   ];
 

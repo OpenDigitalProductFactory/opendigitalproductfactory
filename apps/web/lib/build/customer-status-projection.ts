@@ -26,6 +26,7 @@ import type { WorkCaseState } from "@/lib/work-management/case-types";
 import type { BuildPhase } from "@/lib/explore/feature-build-types";
 import { STALLED_BUILD_REAP_MS } from "@/lib/build/inert-build-reaper";
 import { readBuildPrDeliveryState } from "@/lib/build/build-pr-delivery-state";
+import type { BuildStudioOwnerState } from "@/lib/build/owner-status-reconciliation";
 
 export interface BuildStudioCustomerStatus {
   /** Plain restatement of what is being built (the build title). */
@@ -44,6 +45,12 @@ export interface BuildStudioCustomerStatus {
   owner: string;
   /** True when the work is waiting on the human (surfaces "Needs you"). */
   needsYou: boolean;
+  /** Canonical cause-oriented state for the owner-facing first viewport. */
+  ownerState?: BuildStudioOwnerState;
+  /** Persisted-duration copy; never an ETA. */
+  elapsedLabel?: string;
+  /** Bounded expectation and safe leave/return guidance. */
+  expectation?: string;
 }
 
 const NEEDS_YOU_STATES: ReadonlySet<WorkCaseState> = new Set([

@@ -55,4 +55,70 @@ describe("BuildOperatorOverview", () => {
     expect(html).toContain("Needs you");
     expect(html).toContain("Choose the preferred delivery policy.");
   });
+
+  it("shows capacity, elapsed time, and the leave-and-return expectation as one owner state", () => {
+    const html = renderToStaticMarkup(
+      <BuildOperatorOverview
+        title="Improve Build Studio progress"
+        outcome="Make long-running work understandable."
+        phase="ideate"
+        status={{
+          whatIsBeingBuilt: "Improve Build Studio progress",
+          lifecyclePosition: "Waiting for AI capacity",
+          worker: "The AI service is briefly unavailable",
+          evidence: "Build Studio did not receive a usable response.",
+          nextAction: "Retry when convenient.",
+          owner: "owner",
+          needsYou: true,
+          ownerState: "waiting-capacity",
+          elapsedLabel: "Waiting for 2 minutes",
+          expectation: "You can leave this page and return. Build Studio will show the latest result.",
+        }}
+      />,
+    );
+
+    expect(html).toContain("Capacity wait");
+    expect(html).toContain("Waiting for 2 minutes");
+    expect(html).toContain("You can leave this page and return");
+    expect(html).not.toContain(">Needs you<");
+  });
+
+  it("renders terminal activity when the capsule stopped before the FeatureBuild phase caught up", () => {
+    const html = renderToStaticMarkup(
+      <BuildOperatorOverview
+        title="Reconcile stopped work"
+        outcome="Keep the owner state honest."
+        phase="build"
+        status={{
+          whatIsBeingBuilt: "Reconcile stopped work",
+          lifecyclePosition: "Stopped",
+          worker: "Stopped",
+          evidence: "Work capsule was abandoned.",
+          nextAction: "Restart only if the priority still stands.",
+          owner: "owner",
+          needsYou: true,
+          ownerState: "failed",
+        }}
+      />,
+    );
+
+    expect(html).toContain(">Stopped<");
+    expect(html).toContain("Work stopped");
+    expect(html).not.toContain("Building the solution");
+  });
+
+  it("removes DPF-internal record identifiers from owner-visible outcome copy", () => {
+    const html = renderToStaticMarkup(
+      <BuildOperatorOverview
+        title="Improve BI-62075FF9 without exposing WC-12345678"
+        outcome="Depends on FB-ABC12345 and BI-DR-105 before release."
+        phase="plan"
+        status={null}
+      />,
+    );
+
+    expect(html).toContain("Improve this backlog item without exposing this work record");
+    expect(html).toContain("Depends on this build and this backlog item before release.");
+    expect(html).not.toMatch(/\b(?:BI|WC|FB)-[A-Z0-9-]+\b/);
+  });
 });

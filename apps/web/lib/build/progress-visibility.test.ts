@@ -119,6 +119,7 @@ describe("buildProgressProjectionFromParts", () => {
       quiet: true,
       minutesQuiet: 10,
       lastObservableSignalAt: "2026-05-18T12:00:00.000Z",
+      lastMeaningfulSignalAt: "2026-05-18T12:00:00.000Z",
     });
   });
 
@@ -208,20 +209,63 @@ describe("buildProgressProjectionFromParts — inferenceFailure (BI-F0005EB0)", 
     });
   });
 
-  it("does not flag when a fresher observable signal superseded the failed turn", () => {
+  it("does not let generic activity erase a persisted inference failure", () => {
     const projection = buildProgressProjectionFromParts(
       partsWithLastAssistant(
         {
           content: "API Error: Unable to connect to API (ConnectionRefused)",
           createdAt: "2026-07-05T11:59:00.000Z",
         },
-        // Activity landed AFTER the failed turn — pipeline moved on.
+        // A generic BuildActivity row landed AFTER the failed turn. That is
+        // liveness evidence, not proof that the failed inference recovered.
         "2026-07-05T11:59:30.000Z",
       ),
     );
 
-    expect(projection.inferenceFailure?.failed).toBe(false);
+    expect(projection.inferenceFailure?.failed).toBe(true);
     expect(projection.inferenceFailure?.kind).toBe("connection");
+  });
+
+  it("clears a persisted inference failure after newer task progress proves recovery", () => {
+    const projection = buildProgressProjectionFromParts({
+      ...partsWithLastAssistant(
+        {
+          content: "API Error: Unable to connect to API (ConnectionRefused)",
+          createdAt: "2026-07-05T11:59:00.000Z",
+        },
+        "2026-07-05T11:59:30.000Z",
+      ),
+      dbTasks: normalizeTaskResults({
+        completedTasks: 1,
+        totalTasks: 2,
+        timestamp: "2026-07-05T11:59:45.000Z",
+      }),
+    });
+
+    expect(projection.inferenceFailure).toEqual({
+      failed: false,
+      kind: "connection",
+      observedAt: "2026-07-05T11:59:00.000Z",
+    });
+  });
+
+  it("does not treat a newer zero-task snapshot as recovered work", () => {
+    const projection = buildProgressProjectionFromParts({
+      ...partsWithLastAssistant(
+        {
+          content: "API Error: Unable to connect to API (ConnectionRefused)",
+          createdAt: "2026-07-05T11:59:00.000Z",
+        },
+        "2026-07-05T11:59:30.000Z",
+      ),
+      dbTasks: normalizeTaskResults({
+        completedTasks: 0,
+        totalTasks: 0,
+        timestamp: "2026-07-05T11:59:45.000Z",
+      }),
+    });
+
+    expect(projection.inferenceFailure?.failed).toBe(true);
   });
 
   it("does not flag a normal assistant turn", () => {

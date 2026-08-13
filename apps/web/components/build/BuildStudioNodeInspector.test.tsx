@@ -45,6 +45,7 @@ vi.mock("@/lib/actions/build", () => ({
 
 vi.mock("@/lib/actions/build-read", () => ({
   getFeatureBuild: vi.fn(),
+  getFeatureBuildCustomerStatus: vi.fn().mockResolvedValue(null),
 }));
 
 vi.mock("@/lib/actions/build-flow", () => ({
