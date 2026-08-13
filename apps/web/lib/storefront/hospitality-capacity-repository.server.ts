@@ -80,6 +80,13 @@ export async function allocateHospitalityCapacity(
     endsAt: Date;
     quantity: number;
     idempotencyKey: string;
+    /**
+     * Public holds and bookings must fit the resource's bookable schedule.
+     * Authenticated host operations may extend an in-progress service turn
+     * beyond the last public bookable start while retaining every occupancy,
+     * capacity, version, and idempotency guard.
+     */
+    enforceResourceAvailability?: boolean;
   },
 ) {
   validateAllocationRequest(input);
@@ -153,6 +160,7 @@ export async function allocateHospitalityCapacity(
       );
     }
     if (
+      input.enforceResourceAvailability !== false &&
       !isHospitalityResourceAvailableForInterval({
         availability: resource.availability ?? [],
         startsAt: input.startsAt,
