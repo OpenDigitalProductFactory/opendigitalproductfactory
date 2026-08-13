@@ -10,7 +10,7 @@ export type WorkspaceRoomPolicyMetadata = {
 
 export type WorkspaceRoomPolicyParticipant = {
   principalRef: string;
-  roles: Array<"accountable" | "contributor" | "reviewer" | "observer">;
+  roles: Array<"accountable" | "coordinator" | "contributor" | "reviewer" | "observer">;
   enteredReason: string | null;
   currentWorkSummary: string | null;
 };
@@ -35,7 +35,7 @@ export function readWorkspaceRoomPolicy(evidence: unknown): Partial<WorkspaceRoo
             ? participant.principalRef.trim()
             : "";
           if (!principalRef) return [];
-          const validRoles = ["accountable", "contributor", "reviewer", "observer"];
+          const validRoles = ["accountable", "coordinator", "contributor", "reviewer", "observer"];
           const roles = Array.isArray(participant.roles)
             ? participant.roles.filter(
                 (role): role is WorkspaceRoomPolicyParticipant["roles"][number] =>

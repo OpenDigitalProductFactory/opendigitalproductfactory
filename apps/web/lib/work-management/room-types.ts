@@ -32,6 +32,7 @@ export type WorkRoomActivityKind =
 
 export type WorkRoomParticipantRole =
   | "accountable"
+  | "coordinator"
   | "contributor"
   | "reviewer"
   | "observer";
