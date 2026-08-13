@@ -27,6 +27,7 @@ import { agentEventBus } from "./agent-event-bus";
 import { TIER_MINIMUM_DIMENSIONS, type QualityTier } from "../routing/quality-tiers";
 import {
   DEFAULT_MINIMUM_CONTEXT_TOKENS,
+  resolveTurnGroundedGuidanceRoute,
   resolveTurnMinimumCapabilities,
 } from "@/lib/routing/agent-capability-types";
 import { extractToolCalls } from "@/lib/routing/extract-tool-calls";
@@ -1324,24 +1325,18 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
   const proposeSideEffects = params.proposeSideEffects ?? false;
   const userContext = await resolveUserContext(userId);
 
-  // EP-INF-012: Load admin-configured model assignment for this agent.
-  // DB config takes precedence over code defaults in modelRequirements.
+  // Admin DB configuration takes precedence over registry defaults.
   const agentModelConfig = await prisma.agentModelConfig.findUnique({ where: { agentId } }).catch(() => null);
 
-  // EP-AGENT-CAP-002: resolve the configured capability floor for this turn.
   const rawMinCaps = agentModelConfig?.minimumCapabilities as AgentMinimumCapabilities | null | undefined;
-  const baseMinimumCapabilities = resolveTurnMinimumCapabilities(rawMinCaps, {
+  const turnToolPosture = {
     allowToolFreeInference: params.allowToolFreeInference === true,
     hasProviderTools: Boolean(toolsForProvider?.length),
     requireTools: Boolean(requireTools),
+  };
+  const baseMinimumCapabilities = resolveTurnMinimumCapabilities(rawMinCaps, {
+    ...turnToolPosture,
   });
-  // When the turn carries an image (a pasted/attached screenshot becomes an
-  // `image_url` content block on the user message), require a vision-capable
-  // endpoint so routing never lands the image on a text-only model. Mirrors the
-  // visual-cognitive-load precedent's `minimumCapabilities: { imageInput: true }`
-  // floor — selects any vision endpoint (local DMR first), no provider pin. When
-  // none is configured the floor fails and routeAndCall surfaces a graceful
-  // degraded reply rather than silently dropping the image.
   const turnCarriesImage = chatHistory.some(
     (m) =>
       Array.isArray(m.content) &&
@@ -1355,11 +1350,16 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
   const agentMinimumContextTokens: number =
     agentModelConfig?.minimumContextTokens ?? DEFAULT_MINIMUM_CONTEXT_TOKENS;
 
-  // Resolve effective config: DB row > code defaults > nothing
   const effectiveConfig = resolveEffectiveAgentRouteConfig({
     agentModelConfig,
     modelRequirements,
   });
+  const turnRoute = resolveTurnGroundedGuidanceRoute(
+    taskType ?? "conversation",
+    effectiveConfig.minimumDimensions,
+    turnToolPosture,
+  );
+  effectiveConfig.minimumDimensions = turnRoute.minimumDimensions;
 
   // BI-E8BCA547 — spend-aware routing. Check the agent's live daily spend once
   // per turn and, when it is near the budget, bias the routing budget class
@@ -1393,7 +1393,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
   // Build routeAndCall options once (reused every iteration)
   const routeOptions = {
     ...(toolsForProvider ? { tools: toolsForProvider } : {}),
-    taskType: taskType ?? "conversation",
+    taskType: turnRoute.taskType,
     ...effectiveConfig,
     ...(requireTools ? { requireTools: true } : {}),
     ...(agentDisplayName ? { agentDisplayName } : {}),
