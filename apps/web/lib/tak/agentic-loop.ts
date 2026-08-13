@@ -26,8 +26,8 @@ import { interceptToolCallAsProposal } from "@/lib/proactivity/propose-intercept
 import { agentEventBus } from "./agent-event-bus";
 import { TIER_MINIMUM_DIMENSIONS, type QualityTier } from "../routing/quality-tiers";
 import {
-  DEFAULT_MINIMUM_CAPABILITIES,
   DEFAULT_MINIMUM_CONTEXT_TOKENS,
+  resolveTurnMinimumCapabilities,
 } from "@/lib/routing/agent-capability-types";
 import { extractToolCalls } from "@/lib/routing/extract-tool-calls";
 import type { AgentMinimumCapabilities } from "@/lib/routing/agent-capability-types";
@@ -190,16 +190,13 @@ export function describeToolRouteFailure(
   // "No eligible endpoints for task type '…'" with no `toolUse` token, so the
   // branch above misses it and — before this fix — it fell through to the generic
   // "temporarily unavailable, try again in 30 seconds" below. That is a LIE for a
-  // config gap: nothing changes on retry. Tell the operator the truth and the one
-  // lever that actually clears it. Check AFTER the tool-capability branch so its
-  // more specific wording still wins for the capability-floor case.
   if (/No eligible endpoints/i.test(msg)) {
     return (
-      "No AI model can handle this request right now. This usually means your cloud " +
-      "AI providers are disconnected or their sign-in has expired, and the built-in " +
-      "local model can't fit this assistant's larger requests on its own. Open " +
-      "Platform > AI Operations > Providers & Routing to reconnect a provider — " +
-      "waiting won't clear this on its own."
+      "No AI model can handle this request right now. No eligible model met this " +
+      "turn's routing requirements. The cause can be provider availability, data-policy " +
+      "or residency limits, capability requirements, or context size — not necessarily " +
+      "a disconnected provider. Open Platform > AI Operations > Providers & Routing " +
+      "to review the active route and provider status."
     );
   }
 
@@ -1156,6 +1153,8 @@ export type RunAgenticLoopParams = {
   sensitivity: import("@/lib/agent-sensitivity").RouteSensitivity;
   tools: ToolDefinition[];
   toolsForProvider: Array<Record<string, unknown>> | undefined;
+  /** Read-only turn already grounded in authorized semantic state. */
+  allowToolFreeInference?: boolean;
   /**
    * Authorized-but-not-attached tools (EP-COWORKER-INTERACTIVITY, BI-6A745E3C).
    * The chat coworker path right-sizes the per-turn attached set and passes the
@@ -1329,12 +1328,13 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
   // DB config takes precedence over code defaults in modelRequirements.
   const agentModelConfig = await prisma.agentModelConfig.findUnique({ where: { agentId } }).catch(() => null);
 
-  // EP-AGENT-CAP-002: Read capability floor from agent config.
-  // Null DB value = use system default { toolUse: true }.
-  // {} DB value = passive agent, no floor.
+  // EP-AGENT-CAP-002: resolve the configured capability floor for this turn.
   const rawMinCaps = agentModelConfig?.minimumCapabilities as AgentMinimumCapabilities | null | undefined;
-  const baseMinimumCapabilities: AgentMinimumCapabilities =
-    rawMinCaps !== null && rawMinCaps !== undefined ? rawMinCaps : DEFAULT_MINIMUM_CAPABILITIES;
+  const baseMinimumCapabilities = resolveTurnMinimumCapabilities(rawMinCaps, {
+    allowToolFreeInference: params.allowToolFreeInference === true,
+    hasProviderTools: Boolean(toolsForProvider?.length),
+    requireTools: Boolean(requireTools),
+  });
   // When the turn carries an image (a pasted/attached screenshot becomes an
   // `image_url` content block on the user message), require a vision-capable
   // endpoint so routing never lands the image on a text-only model. Mirrors the

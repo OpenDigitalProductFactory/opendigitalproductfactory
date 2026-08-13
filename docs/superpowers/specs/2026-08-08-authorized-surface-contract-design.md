@@ -10,6 +10,8 @@
 
 **Incident:** the Discovery-page coworker guessed at SMTP setup because it neither received the rendered workflow nor possessed a governed way to inspect or operate it.
 
+**2026-08-12 implementation correction:** ASC semantic state is prehydrated at the shared coworker inference seam for browser, workroom, scheduled, background, mobile, and external modes. This is required in addition to the generic `surface_*` tools: a local or otherwise tool-incapable model must still receive the current authorized UX contract for read-only guidance. Prehydration uses the already-filtered tool authority, creates a principal-bound session, omits write-only/secret values, is bounded to 8,000 prompt characters, and fails open on uncovered surfaces. A read-only surface question sheds tool schemas and the default `toolUse` routing floor; any request to enter data or execute an action keeps governed tools and confirmation.
+
 ## 1. Executive decision
 
 DPF will establish an **Authorized Surface Contract (ASC)** as a platform primitive. It is a versioned, render-independent semantic description of what a principal can perceive and do on a product surface. Browser DOM, accessibility tree, mobile UI, workroom, background session, external agent, and future renderers are projections or consumers of this contract—not its source of truth.
@@ -325,7 +327,7 @@ Backlog ownership:
 
 The design is accepted when all of the following are demonstrable in the canonical runtime:
 
-- On Discovery, the coworker can explain SMTP setup from current semantic state, identify exact missing fields/connections, populate permitted values, test/save through governed actions, and report evidence—without asking the user to transcribe the UI.
+- On Discovery, the coworker corrects an employee's “SMTP discovery” wording to SNMP, explains setup from current semantic state, identifies exact missing fields/connections, populates permitted values, tests/saves through governed actions, and reports evidence—without asking the user to transcribe the UI.
 - The same journey succeeds headlessly with no rendered page.
 - Browser and headless graph digests match for semantic content under the same principal/fixture.
 - A different role, tenant, clearance, or AuthorityBinding sees the correct narrower graph/actions.

@@ -3,6 +3,7 @@ import {
   satisfiesMinimumCapabilities,
   DEFAULT_MINIMUM_CAPABILITIES,
   PASSIVE_AGENT_CAPABILITIES,
+  resolveTurnMinimumCapabilities,
 } from "./agent-capability-types";
 import type { EndpointManifest } from "./types";
 
@@ -69,5 +70,21 @@ describe("satisfiesMinimumCapabilities", () => {
       { toolUse: true, imageInput: true },
     );
     expect(result).toEqual({ satisfied: true });
+  });
+});
+
+describe("resolveTurnMinimumCapabilities", () => {
+  it("drops only tool use for prehydrated read-only guidance", () => {
+    expect(resolveTurnMinimumCapabilities(
+      { toolUse: true, imageInput: true },
+      { allowToolFreeInference: true, hasProviderTools: false, requireTools: false },
+    )).toEqual({ imageInput: true });
+  });
+
+  it("retains tool use when tools are attached or required", () => {
+    expect(resolveTurnMinimumCapabilities(
+      { toolUse: true },
+      { allowToolFreeInference: true, hasProviderTools: true, requireTools: false },
+    )).toEqual({ toolUse: true });
   });
 });

@@ -10,6 +10,7 @@ import type { ResolvedDelegatedPosture } from "@/lib/proactivity/delegated-postu
 import type { ProactivityPlan } from "@/lib/proactivity/proactivity-types";
 import { admitRuntimeGuardedWork } from "@/lib/platform-runtime/work-admission";
 import type { RouteSensitivity } from "@/lib/agent-sensitivity";
+import type { SurfaceMode, SurfacePrincipalContext } from "@dpf/types";
 
 /** Best-effort latest user-turn text, for the reviewer's context. */
 function lastUserRequest(history: ChatMessage[]): string {
@@ -334,6 +335,15 @@ export async function executeAutonomousAgenticLoop(input: {
    * replies. See agentic-loop.ts param doc.
    */
   interactionMode?: "chat" | "autonomous";
+  /** Optional renderer-neutral surface identity for workroom/resource/task
+   * callers. Route-only browser and background callers are derived by default. */
+  surfaceContext?: {
+    mode?: SurfaceMode;
+    locale?: string;
+    timezone?: string;
+    organizationId?: string;
+    workContext?: SurfacePrincipalContext["workContext"];
+  };
   /** BI-80532D5C — divert side-effecting non-artifact tool calls to proposals
    *  (propose boundary). Forwarded verbatim to runAgenticLoop. */
   proposeSideEffects?: boolean;
@@ -371,6 +381,40 @@ export async function executeAutonomousAgenticLoop(input: {
     systemPrompt = grounding.systemPrompt;
   }
 
+  // Authorized Surface Contract: prehydrate the current semantic UX at the one
+  // seam shared by chat, workroom, scheduled, background, and external turns.
+  // This makes page truth available even when the selected model cannot call
+  // tools. The runtime applies the same principal/action authorization first;
+  // failures and uncovered routes leave the original prompt unchanged.
+  const { groundPromptWithAuthorizedSurface } = await import(
+    "@/lib/coworker/authorized-surface-prompt-grounding"
+  );
+  const authorizedToolNames = new Set([
+    ...input.tools.map((tool) => tool.name),
+    ...(input.deferredTools ?? []).map((tool) => tool.name),
+  ]);
+  const surfaceGrounding = await groundPromptWithAuthorizedSurface({
+    systemPrompt,
+    context: {
+      delegatingUserId: input.userId,
+      actingAgentId: input.agentId,
+      mode: input.surfaceContext?.mode ?? (input.interactionMode === "chat" ? "browser" : "background"),
+      locale: input.surfaceContext?.locale ?? "en-US",
+      timezone: input.surfaceContext?.timezone ?? "UTC",
+      route: input.routeContext,
+      ...(input.surfaceContext?.organizationId ? { organizationId: input.surfaceContext.organizationId } : {}),
+      ...(input.surfaceContext?.workContext ? { workContext: input.surfaceContext.workContext } : {}),
+    },
+    authorizedToolNames,
+  }).catch(() => ({ systemPrompt, grounded: false as const }));
+  systemPrompt = surfaceGrounding.systemPrompt;
+  const { isAuthorizedSurfaceGuidanceRequest } = await import(
+    "@/lib/coworker/authorized-surface-prompt-grounding"
+  );
+  const surfaceGuidanceOnly = surfaceGrounding.grounded
+    && isAuthorizedSurfaceGuidanceRequest(lastUserRequest(input.chatHistory));
+  const toolsForProvider = surfaceGuidanceOnly ? undefined : input.toolsForProvider;
+
   // This is the single seam both interactive chat (interactionMode "chat") and
   // autonomous work (scheduled self-tasks, build phases, system tasks) flow
   // through. Tag the inference origin here so the admission gate in callProvider
@@ -378,33 +422,48 @@ export async function executeAutonomousAgenticLoop(input: {
   // interactive; everything else → autonomous (matching the "autonomous" default).
   const inferenceOrigin = input.interactionMode === "chat" ? "interactive" : "autonomous";
 
-  const result = await withInferenceOrigin(inferenceOrigin, () =>
-    runAgenticLoop({
-      systemPrompt,
-      chatHistory: input.chatHistory,
-      sensitivity: input.sensitivity,
-      tools: input.tools,
-      toolsForProvider: input.toolsForProvider,
-      deferredTools: input.deferredTools,
-      userId: input.userId,
-      routeContext: input.routeContext,
-      agentId: input.agentId,
-      threadId: input.threadId,
-      taskRunId: input.taskRunId,
-      apiTokenId: input.apiTokenId,
-      taskType: input.taskType,
-      effortWarrant: input.effortWarrant,
-      agentDisplayName: input.agentDisplayName,
-      buildPhase: input.buildPhase,
-      featureBuildId: input.featureBuildId,
-      activeSkillId: input.activeSkillId ?? null,
-      agentMessageId: input.agentMessageId ?? null,
-      interactionMode: input.interactionMode,
-      proposeSideEffects: input.proposeSideEffects ?? false,
-      ...(input.modelRequirements ? { modelRequirements: input.modelRequirements } : {}),
-      onProgress: input.onProgress,
-    }),
-  );
+  let result: Awaited<ReturnType<typeof runAgenticLoop>>;
+  try {
+    result = await withInferenceOrigin(inferenceOrigin, () =>
+      runAgenticLoop({
+        systemPrompt,
+        chatHistory: input.chatHistory,
+        sensitivity: input.sensitivity,
+        tools: input.tools,
+        toolsForProvider,
+        deferredTools: input.deferredTools,
+        userId: input.userId,
+        routeContext: input.routeContext,
+        agentId: input.agentId,
+        threadId: input.threadId,
+        taskRunId: input.taskRunId,
+        apiTokenId: input.apiTokenId,
+        taskType: input.taskType,
+        effortWarrant: input.effortWarrant,
+        agentDisplayName: input.agentDisplayName,
+        buildPhase: input.buildPhase,
+        featureBuildId: input.featureBuildId,
+        activeSkillId: input.activeSkillId ?? null,
+        agentMessageId: input.agentMessageId ?? null,
+        interactionMode: input.interactionMode,
+        proposeSideEffects: input.proposeSideEffects ?? false,
+        allowToolFreeInference: surfaceGuidanceOnly,
+        ...(input.modelRequirements ? { modelRequirements: input.modelRequirements } : {}),
+        onProgress: input.onProgress,
+      }),
+    );
+  } finally {
+    const { closeAuthorizedSurfacePromptGrounding } = await import(
+      "@/lib/coworker/authorized-surface-prompt-grounding"
+    );
+    await closeAuthorizedSurfacePromptGrounding(
+      "sessionId" in surfaceGrounding ? surfaceGrounding.sessionId : undefined,
+      {
+        delegatingUserId: input.userId,
+        actingAgentId: input.agentId,
+      },
+    );
+  }
 
   // EP-GOLDEN-TRIANGLE: leverage the rigor ladder. This is the SINGLE seam for both
   // chat and autonomous coworker turns. When the coworker's posture sits high on
