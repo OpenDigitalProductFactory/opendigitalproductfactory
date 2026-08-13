@@ -1449,6 +1449,28 @@
       ]
     },
     {
+      "key": "work_room_read",
+      "description": "Read a Work Room's message feed.",
+      "category": "integrate",
+      "sensitivity": "internal",
+      "honored_by_tools": [
+        "read_room_messages"
+      ],
+      "implies": []
+    },
+    {
+      "key": "work_room_write",
+      "description": "Post a message into a Work Room.",
+      "category": "integrate",
+      "sensitivity": "internal",
+      "honored_by_tools": [
+        "post_room_message"
+      ],
+      "implies": [
+        "work_room_read"
+      ]
+    },
+    {
       "key": "work_engagement_read",
       "description": "Read work engagements and their materialized recurring instances.",
       "category": "work_engagement",

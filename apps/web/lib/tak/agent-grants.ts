@@ -33,6 +33,10 @@ export const GRANT_IMPLICATIONS: Readonly<Record<string, readonly string[]>> = {
   // `browser_read` (navigate / extract / screenshot). One-way, as ever —
   // `browser_read` alone never implies the drive grant.
   browser_drive: ["browser_read"],
+  // EP-WORKROOM-COMMS (BI-4402DABB): a coworker that can write a work capsule (the
+  // executors that claim/work rooms, incl. the external CLIs) may post to the room
+  // it is admitted to. One-way — work_room_write never implies capsule write.
+  work_capsule_write: ["work_room_write"],
   // CRM drafting (crm_write) implies CRM inspection (crm_read): a coworker that
   // can draft an opportunity or quote can always read the accounts/pipeline it
   // is drafting against. One-way — crm_read alone never implies crm_write.
@@ -96,6 +100,9 @@ export const COWORKER_READ_BASELINE_GRANTS: readonly string[] = [
   "document_read",
   "code_graph_read",
   "work_capsule_read",
+  // EP-WORKROOM-COMMS (BI-3F21C4D5): every coworker may read a room it is admitted
+  // to (room admission is the real gate; this is the baseline capability).
+  "work_room_read",
 ];
 /**
  * Maps platform tool names to agent grant categories.
@@ -195,6 +202,10 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   // Work Capsule control harness (spec 2026-05-14)
   list_work_capsules: ["work_capsule_read"],
   get_work_capsule: ["work_capsule_read"],
+  // EP-WORKROOM-COMMS (BI-3F21C4D5): read/post a Work Room's message feed. Room
+  // admission is enforced separately (room-agent-access); these are the coarse caps.
+  read_room_messages: ["work_room_read"],
+  post_room_message: ["work_room_write"],
   create_work_capsule: ["work_capsule_write"],
   plan_capsule_worktree: ["work_capsule_write"],
   adopt_worktree: ["work_capsule_adopt"],
