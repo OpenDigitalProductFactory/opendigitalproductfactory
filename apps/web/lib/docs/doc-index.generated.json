@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 632,
+  "pageCount": 633,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -9641,6 +9641,15 @@
         "pbi-inv-02-phase-2-third-party-e-signature",
         "pbi-inv-03-remove-dead-invoiceactionstsx",
         "pbi-inv-04-near-zero-config-email-ai-assisted-own-provider-setup-bundled-relay-tier"
+      ]
+    },
+    "docs/testing/performance-live-acceptance.md": {
+      "publicHref": "/testing/performance-live-acceptance/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "populated-performance-live-acceptance"
       ]
     },
     "docs/testing/pr-health.md": {
