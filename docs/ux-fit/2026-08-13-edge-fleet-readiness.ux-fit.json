@@ -1,0 +1,19 @@
+{
+  "version": "1",
+  "decidedOption": "readiness-first-progressive-disclosure",
+  "decisionInteractionId": "DI-0E22008385C8",
+  "scope": {
+    "files": [
+      "apps/web/components/platform/edge-nodes/EdgeFleetReadiness.tsx",
+      "apps/web/components/platform/edge-nodes/EdgeNodesAdminClient.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "readiness-first-progressive-disclosure",
+      "registry-first-technical-form",
+      "new-edge-dashboard"
+    ]
+  }
+}

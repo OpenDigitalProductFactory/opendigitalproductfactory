@@ -2,6 +2,17 @@
 
 import { useState, useTransition } from "react";
 import { confirmDialog, promptDialog } from "@/components/ui/Dialog";
+import { StatusBadge } from "@/components/ui/report-kit";
+
+import {
+  FleetHealthSummary,
+  HealthBadge,
+  MainInstallationReadiness,
+  NEXT_ACTION_LABELS,
+  formatHeartbeatAge,
+  type EdgeFleetNode,
+  type MainInstallationStatus,
+} from "./EdgeFleetReadiness";
 
 import {
   approveEdgeNodeAction,
@@ -14,8 +25,7 @@ import type {
   EdgeHostOs,
   RemoteProvisioningPlan,
 } from "@/lib/edge-node/remote-provisioning";
-
-type EdgeNodeRow = {
+type EdgeNodeRow = EdgeFleetNode & {
   id: string;
   nodeId: string;
   platform: string;
@@ -38,6 +48,7 @@ type EdgeNodeRow = {
   customerAccountName: string | null;
   customerSiteId: string | null;
   customerSiteName: string | null;
+  isMainInstallation: boolean;
 };
 
 type BootstrapTokenRow = {
@@ -74,6 +85,8 @@ type Props = {
   nodes: EdgeNodeRow[];
   tokens: BootstrapTokenRow[];
   customerAccounts: CustomerAccountOption[];
+  edgeEnabled?: boolean;
+  mainInstallationStatus?: MainInstallationStatus;
 };
 
 type FlashMessage = {
@@ -88,21 +101,6 @@ type IssuedTokenView = {
   prefix: string;
   expiresAt: string;
 };
-
-function trustStateBadgeColor(trustState: string): string {
-  switch (trustState) {
-    case "trusted":
-      return "var(--dpf-success)";
-    case "pending":
-      return "var(--dpf-warning)";
-    case "quarantined":
-      return "var(--dpf-danger)";
-    case "revoked":
-      return "var(--dpf-muted)";
-    default:
-      return "var(--dpf-muted)";
-  }
-}
 
 function formatTimestamp(iso: string | null): string {
   if (!iso) return "—";
@@ -143,93 +141,6 @@ function ScopeBadge({ scope }: { scope: ScopeBadgeInput }) {
     >
       <span className="truncate">{formatScopeLabel(scope)}</span>
     </span>
-  );
-}
-
-function formatCount(count: number, singular: string, plural = `${singular}s`): string {
-  return `${count} ${count === 1 ? singular : plural}`;
-}
-
-function RuntimeSummary({ nodes }: { nodes: EdgeNodeRow[] }) {
-  const trusted = nodes.filter((node) => node.trustState === "trusted").length;
-  const pending = nodes.filter((node) => node.trustState === "pending").length;
-  const active = nodes.filter((node) => node.status === "active").length;
-  const runtimeModes = Array.from(
-    new Set(nodes.map((node) => `${node.platform} / ${node.installMode}`)),
-  ).sort();
-  const hasContainerRuntime = nodes.some((node) =>
-    node.installMode === "container-host" || node.installMode === "container-vm",
-  );
-
-  return (
-    <section
-      className="rounded border p-4"
-      style={{
-        borderColor: "var(--dpf-border)",
-        backgroundColor: "var(--dpf-surface-1)",
-      }}
-    >
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-        <div>
-          <h2 className="text-base font-semibold text-[var(--dpf-text)]">
-            Runtime summary
-          </h2>
-          <div className="mt-2 flex flex-wrap gap-2 text-xs">
-            <span
-              className="rounded border px-2 py-1 text-[var(--dpf-text)]"
-              style={{ borderColor: "var(--dpf-border)" }}
-            >
-              {formatCount(active, "active", "active")}
-            </span>
-            <span
-              className="rounded border px-2 py-1 text-[var(--dpf-text)]"
-              style={{ borderColor: "var(--dpf-border)" }}
-            >
-              {formatCount(trusted, "trusted", "trusted")}
-            </span>
-            <span
-              className="rounded border px-2 py-1 text-[var(--dpf-text)]"
-              style={{ borderColor: "var(--dpf-border)" }}
-            >
-              {formatCount(pending, "pending", "pending")}
-            </span>
-          </div>
-        </div>
-        <div className="min-w-0 lg:max-w-xl">
-          <p className="text-xs font-medium uppercase text-[var(--dpf-muted)]">
-            Runtime modes
-          </p>
-          <div className="mt-1 flex flex-wrap gap-2">
-            {runtimeModes.length > 0 ? (
-              runtimeModes.map((mode) => (
-                <span
-                  key={mode}
-                  className="rounded border px-2 py-1 font-mono text-xs text-[var(--dpf-muted)]"
-                  style={{ borderColor: "var(--dpf-border)" }}
-                >
-                  {mode}
-                </span>
-              ))
-            ) : (
-              <span className="text-sm text-[var(--dpf-muted)]">No enrolled nodes</span>
-            )}
-          </div>
-        </div>
-      </div>
-      {hasContainerRuntime && (
-        <p
-          className="mt-3 rounded border px-3 py-2 text-sm text-[var(--dpf-text)]"
-          style={{
-            borderColor: "var(--dpf-warning)",
-            backgroundColor: "var(--dpf-surface-2)",
-          }}
-        >
-          Container runtime is connected to Authority Core, but can have limited
-          host-LAN visibility on Docker Desktop. Native Windows/macOS service mode is
-          the full host-LAN discovery target.
-        </p>
-      )}
-    </section>
   );
 }
 
@@ -282,7 +193,13 @@ function HostAddressCell({
 // above; this is not part of the public component API.
 export { HostAddressCell as __test_HostAddressCell };
 
-export function EdgeNodesAdminClient({ nodes, tokens, customerAccounts }: Props) {
+export function EdgeNodesAdminClient({
+  nodes,
+  tokens,
+  customerAccounts,
+  edgeEnabled = false,
+  mainInstallationStatus = "missing",
+}: Props) {
   const [flash, setFlash] = useState<FlashMessage | null>(null);
   const [issuedToken, setIssuedToken] = useState<IssuedTokenView | null>(null);
   const [ttlMinutes, setTtlMinutes] = useState<number>(15);
@@ -476,7 +393,7 @@ export function EdgeNodesAdminClient({ nodes, tokens, customerAccounts }: Props)
               className="rounded px-3 py-1 text-xs font-medium"
               style={{
                 backgroundColor: "var(--dpf-accent)",
-                color: "white",
+                color: "var(--dpf-on-accent, var(--dpf-surface-1))",
               }}
             >
               Copy
@@ -571,7 +488,10 @@ export function EdgeNodesAdminClient({ nodes, tokens, customerAccounts }: Props)
                   type="button"
                   onClick={() => navigator.clipboard?.writeText(cmd.command)}
                   className="rounded px-3 py-1 text-xs font-medium"
-                  style={{ backgroundColor: "var(--dpf-accent)", color: "white" }}
+                  style={{
+                    backgroundColor: "var(--dpf-accent)",
+                    color: "var(--dpf-on-accent, var(--dpf-surface-1))",
+                  }}
                 >
                   Copy
                 </button>
@@ -592,23 +512,27 @@ export function EdgeNodesAdminClient({ nodes, tokens, customerAccounts }: Props)
         </div>
       )}
 
-      <RuntimeSummary nodes={nodes} />
+      <MainInstallationReadiness
+        node={nodes.find((node) => node.isMainInstallation) ?? null}
+        edgeEnabled={edgeEnabled}
+        status={mainInstallationStatus}
+      />
 
-      <section
+      <FleetHealthSummary nodes={nodes} />
+
+      <details
         className="rounded border p-4"
         style={{
           borderColor: "var(--dpf-border)",
           backgroundColor: "var(--dpf-surface-1)",
         }}
       >
-        <h2 className="mb-1 text-base font-semibold text-[var(--dpf-text)]">
+        <summary className="cursor-pointer text-base font-semibold text-[var(--dpf-text)]">
           Add a node on another machine
-        </h2>
-        <p className="mb-3 text-sm text-[var(--dpf-muted)]">
-          The portal builds a ready-to-run command — no repo to clone, no file to edit. Pick the
-          host&apos;s operating system; we mint a one-time token and bake in this portal&apos;s
-          address. The node arrives <strong>pending</strong> and submits nothing until you
-          approve it below.
+        </summary>
+        <p className="mb-3 mt-2 text-sm text-[var(--dpf-muted)]">
+          Prepare a one-time install command for a remote Edge host. Remote nodes need approval
+          before the Authority accepts their evidence.
         </p>
         <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
           <div className="flex flex-col gap-1">
@@ -757,7 +681,7 @@ export function EdgeNodesAdminClient({ nodes, tokens, customerAccounts }: Props)
             className="rounded px-4 py-1.5 text-sm font-medium disabled:opacity-50"
             style={{
               backgroundColor: "var(--dpf-accent)",
-              color: "white",
+              color: "var(--dpf-on-accent, var(--dpf-surface-1))",
             }}
           >
             {isPending ? "Preparing…" : "Generate install command"}
@@ -775,11 +699,11 @@ export function EdgeNodesAdminClient({ nodes, tokens, customerAccounts }: Props)
             Issue raw token only
           </button>
         </div>
-      </section>
+      </details>
 
       <section>
         <h2 className="mb-2 text-base font-semibold text-[var(--dpf-text)]">
-          Enrolled nodes ({nodes.length})
+          Edge fleet ({nodes.length})
         </h2>
         {nodes.length === 0 ? (
           <p className="text-sm text-[var(--dpf-muted)]">
@@ -801,8 +725,10 @@ export function EdgeNodesAdminClient({ nodes, tokens, customerAccounts }: Props)
                   <th className="p-2 text-left text-[var(--dpf-muted)]">Platform / mode</th>
                   <th className="p-2 text-left text-[var(--dpf-muted)]">Host / LAN address</th>
                   <th className="p-2 text-left text-[var(--dpf-muted)]">Scope</th>
-                  <th className="p-2 text-left text-[var(--dpf-muted)]">Trust state</th>
-                  <th className="p-2 text-left text-[var(--dpf-muted)]">Last seen</th>
+                  <th className="p-2 text-left text-[var(--dpf-muted)]">Health</th>
+                  <th className="p-2 text-left text-[var(--dpf-muted)]">Readiness</th>
+                  <th className="p-2 text-left text-[var(--dpf-muted)]">Trust</th>
+                  <th className="p-2 text-left text-[var(--dpf-muted)]">Last heartbeat</th>
                   <th className="p-2 text-left text-[var(--dpf-muted)]">Actions</th>
                 </tr>
               </thead>
@@ -836,18 +762,30 @@ export function EdgeNodesAdminClient({ nodes, tokens, customerAccounts }: Props)
                       />
                     </td>
                     <td className="p-2">
-                      <span
-                        className="inline-block rounded px-2 py-0.5 text-xs font-medium"
-                        style={{
-                          backgroundColor: trustStateBadgeColor(n.trustState),
-                          color: "white",
-                        }}
-                      >
-                        {n.trustState}
+                      <HealthBadge health={n.health} />
+                    </td>
+                    <td className="max-w-72 p-2 text-xs">
+                      <span className="block font-medium text-[var(--dpf-text)]">
+                        {NEXT_ACTION_LABELS[n.nextAction]}
+                      </span>
+                      <span className="block text-[var(--dpf-muted)]">
+                        {n.readinessChecks.find((check) => check.status !== "pass")?.detail ??
+                          `Version ${n.version}; required checks pass.`}
                       </span>
                     </td>
+                    <td className="p-2">
+                      <StatusBadge
+                        domain="edgeTrust"
+                        status={n.trustState}
+                        variant="soft"
+                        uppercase={false}
+                      />
+                    </td>
                     <td className="p-2 text-xs text-[var(--dpf-muted)]">
-                      {formatTimestamp(n.lastSeenAt)}
+                      <span className="block text-[var(--dpf-text)]">
+                        {formatHeartbeatAge(n.heartbeatAgeMs)}
+                      </span>
+                      <span>{formatTimestamp(n.lastSeenAt)}</span>
                     </td>
                     <td className="p-2">
                       <div className="flex flex-wrap gap-1">
@@ -859,7 +797,7 @@ export function EdgeNodesAdminClient({ nodes, tokens, customerAccounts }: Props)
                             className="rounded px-2 py-1 text-xs font-medium disabled:opacity-50"
                             style={{
                               backgroundColor: "var(--dpf-success)",
-                              color: "white",
+                              color: "var(--dpf-on-accent, var(--dpf-surface-1))",
                             }}
                           >
                             Approve
@@ -873,7 +811,7 @@ export function EdgeNodesAdminClient({ nodes, tokens, customerAccounts }: Props)
                             className="rounded px-2 py-1 text-xs font-medium disabled:opacity-50"
                             style={{
                               backgroundColor: "var(--dpf-success)",
-                              color: "white",
+                              color: "var(--dpf-on-accent, var(--dpf-surface-1))",
                             }}
                           >
                             Restore (clear quarantine)
@@ -887,7 +825,7 @@ export function EdgeNodesAdminClient({ nodes, tokens, customerAccounts }: Props)
                             className="rounded px-2 py-1 text-xs font-medium disabled:opacity-50"
                             style={{
                               backgroundColor: "var(--dpf-warning)",
-                              color: "white",
+                              color: "var(--dpf-on-accent, var(--dpf-surface-1))",
                             }}
                           >
                             Quarantine
@@ -901,7 +839,7 @@ export function EdgeNodesAdminClient({ nodes, tokens, customerAccounts }: Props)
                             className="rounded px-2 py-1 text-xs font-medium disabled:opacity-50"
                             style={{
                               backgroundColor: "var(--dpf-danger)",
-                              color: "white",
+                              color: "var(--dpf-on-accent, var(--dpf-surface-1))",
                             }}
                           >
                             Revoke
