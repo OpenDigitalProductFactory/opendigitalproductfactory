@@ -37,7 +37,11 @@ export function reconcileBuildStudioCustomerStatus(args: {
   status: BuildStudioCustomerStatus;
   progress: BuildProgressVisibility | null | undefined;
 }): BuildStudioCustomerStatus {
-  const { phase, status, progress } = args;
+  const { phase, progress } = args;
+  const status = {
+    ...args.status,
+    evidence: ownerSafeStatusEvidence(args.status.evidence),
+  };
 
   // The WorkCapsule projection is the durable authority when it has already
   // reached a terminal state. FeatureBuild.phase and dispatch rows can lag that
@@ -202,6 +206,15 @@ export function reconcileBuildStudioCustomerStatus(args: {
       ? { expectation: "You can leave this page and return; Build Studio will show the latest recorded state." }
       : {}),
   };
+}
+
+function ownerSafeStatusEvidence(value: string): string {
+  if (/^Work capsule was abandoned\.$/i.test(value)) return "This work was stopped.";
+  if (/^Work capsule reached a completed execution state\.$/i.test(value)) return "This work is complete.";
+  if (/^Work capsule is actively executing\.$/i.test(value)) {
+    return "Build Studio is working on this change.";
+  }
+  return value.replace(/\bWork capsule\b/gi, "This work");
 }
 
 function ownerStateFromStatus(status: BuildStudioCustomerStatus): BuildStudioOwnerState {

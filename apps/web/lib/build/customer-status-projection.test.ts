@@ -345,7 +345,8 @@ describe("reconcileBuildStudioCustomerStatus — canonical owner state", () => {
 
     expect(status.ownerState).toBe("failed");
     expect(status.lifecyclePosition).toBe("Stopped");
-    expect(status.evidence).toBe("Work capsule was abandoned.");
+    expect(status.evidence).toBe("This work was stopped.");
+    expect(status.evidence).not.toMatch(/capsule/i);
     expect(status.nextAction).toMatch(/restart the work/i);
     expect(status.worker).not.toMatch(/working/i);
   });
