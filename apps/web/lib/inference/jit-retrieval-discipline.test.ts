@@ -31,6 +31,7 @@ const ALLOWED_EMBEDDING_CALLERS: ReadonlySet<string> = new Set([
   "apps/web/lib/wiki/principle-similarity.ts", // principle-vector similarity
   "apps/web/lib/mcp/packs/principle-decide-pack.ts", // principle-direction + semantic-decision knowledge
   "apps/web/lib/decision/evidence-grounding.ts", // embeds the option DESCRIPTION (transient decision input) for principle_decide's semantic fallback — same purpose as the pack entry, extracted here for module size; embeds no operational record (EP-VERIFICATION-INTEGRITY)
+  "apps/web/lib/decision-perspective/stance-relevance.ts", // embeds the decision QUESTION (transient input) + WWWD stance SUMMARIES (durable knowledge corpus) to score question↔stance relevance for the org business-decision gate; nothing is persisted to the vector store, no operational record (BI-7E1F128A)
 ]);
 
 function repoRoot(): string {

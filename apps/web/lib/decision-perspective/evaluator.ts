@@ -12,6 +12,14 @@ import {
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 import { MARK_DPF_PLATFORM_PROFILE } from "./default-profile";
 import { resolveRecommendedOptionId } from "./option-recommendation";
+import {
+  hasPrincipleConflict,
+  orderedProfileChain,
+  RISK_PENALTY,
+  riskWithin,
+  scoreProfileCoverage,
+  summarizeFreshness,
+} from "./coverage-scoring";
 import type {
   DecisionPerspectiveEvaluationInput,
   DecisionPerspectiveEvaluationResult,
@@ -29,106 +37,6 @@ export { scorePerspectiveMaterial } from "./material";
 
 export const RECENT_OVERRIDE_WINDOW_DAYS = 30;
 
-const RISK_RANK: Record<DecisionRiskTier, number> = {
-  low: 1,
-  medium: 2,
-  high: 3,
-  critical: 4,
-};
-
-const RISK_PENALTY: Record<DecisionRiskTier, number> = {
-  low: 0,
-  medium: 0.1,
-  high: 0.25,
-  critical: 0.5,
-};
-
-function roundConfidence(value: number): number {
-  if (!Number.isFinite(value)) return 0;
-  return Number(Math.max(0, Math.min(1, value)).toFixed(4));
-}
-
-function riskWithin(candidate: DecisionRiskTier, max: DecisionRiskTier): boolean {
-  return RISK_RANK[candidate] <= RISK_RANK[max];
-}
-
-function orderedProfileChain(
-  profile: DecisionPerspectiveProfile,
-  fallbackProfiles: DecisionPerspectiveProfile[] | undefined,
-): DecisionPerspectiveProfile[] {
-  const fallbacks = new Map((fallbackProfiles ?? []).map((entry) => [entry.profileId, entry]));
-  const chain: DecisionPerspectiveProfile[] = [profile];
-  let nextId = profile.fallbackProfileId;
-
-  while (nextId) {
-    const next = fallbacks.get(nextId);
-    if (!next || chain.some((entry) => entry.profileId === next.profileId)) {
-      break;
-    }
-    chain.push(next);
-    nextId = next.fallbackProfileId;
-  }
-
-  return chain;
-}
-
-function scoreProfileCoverage(input: {
-  profile: DecisionPerspectiveProfile;
-  materials: PerspectiveMaterial[];
-  questionDomain: DecisionDomainClass;
-  riskTier: DecisionRiskTier;
-  recentOverrideCount: number;
-}): {
-  profile: DecisionPerspectiveProfile;
-  applicableMaterials: PerspectiveMaterial[];
-  materialScores: PerspectiveMaterialScore[];
-  confidence: number;
-} {
-  const applicableMaterials = input.materials.filter(
-    (material) =>
-      material.profileId === input.profile.profileId
-      && isMaterialApplicable(material, input.questionDomain),
-  );
-  const materialScores = applicableMaterials.map(scorePerspectiveMaterial);
-  const positiveScores = materialScores.filter((score) => score.effectiveWeight > 0);
-  const baseScore = positiveScores.length === 0
-    ? 0
-    : positiveScores.reduce((total, score) => total + score.effectiveWeight, 0) / positiveScores.length;
-  const overridePenalty = Math.min(0.3, input.recentOverrideCount * 0.1);
-  const confidence = roundConfidence(baseScore - RISK_PENALTY[input.riskTier] - overridePenalty);
-
-  return {
-    profile: input.profile,
-    applicableMaterials,
-    materialScores,
-    confidence,
-  };
-}
-
-function summarizeFreshness(scores: PerspectiveMaterialScore[]) {
-  return scores.reduce(
-    (counts, score) => {
-      counts[score.freshness] += 1;
-      return counts;
-    },
-    { current: 0, stale: 0, superseded: 0, contradicted: 0 },
-  );
-}
-
-function hasPrincipleConflict(materials: PerspectiveMaterial[]): boolean {
-  const activeDirections = new Set(
-    materials
-      .filter((material) => material.sourceType === "principle")
-      .filter((material) => material.freshness === "current")
-      .filter((material) => material.reviewStatus === "approved")
-      .filter((material) => material.promotionState === "promoted")
-      .map((material) => material.direction ?? material.principleDirection)
-      .filter((direction): direction is "support" | "oppose" => direction === "support" || direction === "oppose"),
-  );
-
-  return activeDirections.has("support") && activeDirections.has("oppose");
-}
-
 export function evaluateDecisionPerspective(
   input: DecisionPerspectiveEvaluationInput,
 ): DecisionPerspectiveEvaluationResult {
@@ -142,6 +50,7 @@ export function evaluateDecisionPerspective(
       questionDomain: input.questionDomain,
       riskTier: input.riskTier,
       recentOverrideCount,
+      relevanceByMaterialId: input.relevanceByMaterialId,
     }),
   );
   const selectedCoverage = coverageByProfile.find((coverage) => coverage.confidence > 0);
@@ -216,9 +125,100 @@ export function evaluateDecisionPerspective(
     // below is known — this evaluator is synchronous and the commandment
     // lookup is not.
     recommendedOptionId: null,
+    ...(selectedCoverage.contentAware
+      ? {
+          alignmentScore: selectedCoverage.alignmentScore,
+          stanceAlignment: selectedCoverage.stanceAlignment,
+          relevanceMethod: input.relevanceMethod,
+        }
+      : {}),
     materialScores: selectedCoverage.materialScores,
     sources,
   };
+
+  // ── Content-aware directional outcome (WWWD, BI-7E1F128A) ────────────────────
+  // The org's OWN recorded stance is its standing decision for this class, so a
+  // clear, relevant stance governs — instead of every medium-risk business call
+  // bouncing back to the owner. Declining is inherently safe (saying "no" to an
+  // off-mission idea), so a relevant `oppose` stance recommends declining at any
+  // non-critical risk; approving carries consequence, so a `support` stance
+  // governs at low/medium risk but a high-risk approval still escalates.
+  if (selectedCoverage.contentAware) {
+    const alignment = selectedCoverage.stanceAlignment ?? "none";
+
+    // Conflict is judged by RELEVANCE-WEIGHTED direction (`mixed`), not the
+    // coarse content-blind `principleConflict` — otherwise a domain that merely
+    // *contains* an opposing principle would escalate every decision even when
+    // only one side is relevant to the question. `principleConflict` is still
+    // recorded on the result for audit.
+    if (alignment === "mixed") {
+      return {
+        ...baseResult,
+        outcomeType: "escalate",
+        rationale:
+          "Your recorded stance points in conflicting directions on this decision. Escalating to your call, and the resolution becomes candidate stance material.",
+      };
+    }
+
+    if (input.riskTier === "critical") {
+      return {
+        ...baseResult,
+        outcomeType: "escalate",
+        rationale:
+          `This is a critical-risk decision, so it goes to your call even though your recorded stance leans ${alignment} at confidence ${confidence}.`,
+      };
+    }
+
+    if (
+      alignment === "none"
+      || confidence < selectedProfile.autonomyPolicy.minimumConfidenceForRecommendation
+    ) {
+      return {
+        ...baseResult,
+        outcomeType: "escalate",
+        rationale:
+          `Your recorded stance does not clearly speak to this decision (alignment ${alignment}, confidence ${confidence} below the ${selectedProfile.autonomyPolicy.minimumConfidenceForRecommendation} threshold). Escalating to your call.`,
+        gapReason: "material-below-confidence",
+      };
+    }
+
+    if (alignment === "decline") {
+      return {
+        ...baseResult,
+        outcomeType: "recommend",
+        rationale:
+          `Recommend DECLINING: your recorded stance opposes this decision at confidence ${confidence}. Declining an off-stance option is low-consequence, so this does not require your live call.`,
+      };
+    }
+
+    // alignment === "approve"
+    if (input.riskTier === "high") {
+      return {
+        ...baseResult,
+        outcomeType: "escalate",
+        rationale:
+          `Your recorded stance supports this at confidence ${confidence}, but approving a high-risk decision still needs your live call.`,
+      };
+    }
+    if (
+      selectedProfile.autonomyPolicy.allowArbitration
+      && riskWithin(input.riskTier, selectedProfile.autonomyPolicy.maxRiskForArbitration)
+      && confidence >= selectedProfile.autonomyPolicy.minimumConfidenceForArbitration
+    ) {
+      return {
+        ...baseResult,
+        outcomeType: "arbitrate",
+        rationale:
+          `Arbitrate and proceed: your recorded stance supports this at confidence ${confidence} and the autonomy policy allows arbitration at ${input.riskTier} risk.`,
+      };
+    }
+    return {
+      ...baseResult,
+      outcomeType: "recommend",
+      rationale:
+        `Recommend APPROVING: your recorded stance supports this decision at confidence ${confidence}.`,
+    };
+  }
 
   if (principleConflict) {
     return {
@@ -382,15 +382,25 @@ export function operatorMessageFor(
     const scope = orgProfileSelected
       ? "your organization's recorded stance"
       : "platform defaults (your organization has not recorded a stance here yet)";
+    const direction =
+      evaluation.stanceAlignment === "approve"
+        ? "approving"
+        : evaluation.stanceAlignment === "decline"
+          ? "declining"
+          : null;
     switch (evaluation.outcomeType) {
       case "defer":
         return `No applicable business stance found via ${scope}. ${evaluation.rationale}`;
       case "escalate":
         return `This business decision needs your call (${scope}). ${evaluation.rationale}`;
       case "arbitrate":
-        return `Decided from ${scope} at ${evaluation.confidenceScore} confidence.`;
+        return direction
+          ? `Decided ${direction} from ${scope} at ${evaluation.confidenceScore} confidence.`
+          : `Decided from ${scope} at ${evaluation.confidenceScore} confidence.`;
       default:
-        return `Recommended from ${scope} at ${evaluation.confidenceScore} confidence.`;
+        return direction
+          ? `Recommended ${direction} from ${scope} at ${evaluation.confidenceScore} confidence.`
+          : `Recommended from ${scope} at ${evaluation.confidenceScore} confidence.`;
     }
   }
 
@@ -631,6 +641,33 @@ export async function evaluatePerspectiveGate(input: {
     ];
   }
 
+  // Content-aware WWWD scoring (BI-7E1F128A): compute how relevant each stance
+  // material is to THIS question, so the verdict discriminates by decision
+  // content instead of returning a per-domain coverage constant. WWMD (the build
+  // gate) keeps its coverage-only path — relevance is only computed when the
+  // caller supplied an organizationId. Fail-soft: a relevance error falls through
+  // to coverage-only rather than breaking the fail-closed gate.
+  let relevanceByMaterialId: Map<string, number> | undefined;
+  let relevanceMethod: "semantic" | "lexical" | undefined;
+  if (isWwwd && resolved.materials.length > 0) {
+    try {
+      const { computeStanceRelevance } = await import("./stance-relevance");
+      const relevance = await computeStanceRelevance({
+        question: input.question,
+        materials: resolved.materials,
+      });
+      relevanceByMaterialId = relevance.relevanceByMaterialId;
+      relevanceMethod = relevance.method;
+    } catch (error) {
+      console.info(
+        `[tool-trace] ${prefix}.relevance.failed ${JSON.stringify({
+          interactionId,
+          errorClass: errorClass(error),
+        })}`,
+      );
+    }
+  }
+
   const evaluator = input.evaluator ?? evaluateDecisionPerspective;
   let evaluation: DecisionPerspectiveEvaluationResult;
 
@@ -646,6 +683,8 @@ export async function evaluatePerspectiveGate(input: {
       riskTier: input.riskTier,
       recentOverrideCount: overrides,
       evidence,
+      relevanceByMaterialId,
+      relevanceMethod,
     });
   } catch (error) {
     evaluation = failClosedEvaluation({
