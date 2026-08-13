@@ -2005,11 +2005,8 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
 
       // Evidence-integrity gate (INV-1). When this turn's answer depends on live
       // operational state and NO authoritative tool ran, the model's factual
-      // prose is unverifiable (the Scrum Master fabrication). Nudge once for a
-      // tool, then refuse rather than surface a guess. The nudge re-runs the
-      // normal iteration (no tool_choice/fallback-chain change), so recovery can
-      // never silently escalate to a paid provider (INV-4). load_tools is a
-      // meta-tool, not evidence.
+      // prose is unverifiable. Nudge once for a tool, then refuse rather than
+      // guess. Recovery cannot escalate providers (INV-4); load_tools is not evidence.
       if (evidenceRequirement.required && trimmed.length > 0) {
         const authoritativeToolExecutions = executedTools.filter(
           (t) => t.result?.success && t.name !== LOAD_TOOLS_TOOL_NAME,
@@ -2017,6 +2014,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
         const recovery = resolveEvidenceRecovery({
           required: true,
           authoritativeToolExecutions,
+          authoritativeSurfaceEvidence: params.allowToolFreeInference,
           content: trimmed,
           recoveryNudgesUsed: evidenceRecoveryNudges,
         });
