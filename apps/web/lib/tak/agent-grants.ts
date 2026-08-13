@@ -97,17 +97,15 @@ export const COWORKER_READ_BASELINE_GRANTS: readonly string[] = [
   "code_graph_read",
   "work_capsule_read",
 ];
-/**
- * Maps platform tool names to agent grant categories.
- * A tool is allowed if the agent has ANY of the grants it maps to —
- * directly OR via GRANT_IMPLICATIONS expansion (see expandGrants).
- * Tools not in this map are DENIED by default — every tool must have an entry.
- *
- * Exported so the MCP-authority SysML reconcile (apps/web/lib/ea/reconcile-mcp-authority.ts)
- * can project this authority surface into the EA graph at runtime without parsing
- * source. The coworker-tool-grant audit still regex-parses the source form.
- */
+/** Maps tools to grants. [] means identity-scoped universal access; absence means deny. */
 export const TOOL_TO_GRANTS: Record<string, string[]> = {
+  record_working_note: [],
+  list_working_notes: [],
+  record_effort_context: [],
+  read_effort_context: [],
+  set_task_goal: [],
+  list_task_goals: [],
+  evaluate_task_goal: [],
   // Browser-driving (namespaced MCP, server slug `mcp-browser-use`) —
   // EP-BROWSER-DRIVE, spec 2026-06-05 §8.2 (Verdict 5). These are the
   // platform-visible `<serverId>__<toolName>` names (see mcp-server-tools.ts
@@ -843,6 +841,7 @@ export function isToolAllowedByGrants(
     console.warn(`[agent-grants] Tool ${JSON.stringify(toolName)} has no TOOL_TO_GRANTS entry — denied by default`);
     return false;
   }
+  if (requiredGrants.length === 0) return true;
   // Expand the agent's grants through GRANT_IMPLICATIONS, then check that the
   // expanded set includes at least one of the required grants.
   const expanded = expandGrants(agentGrants);

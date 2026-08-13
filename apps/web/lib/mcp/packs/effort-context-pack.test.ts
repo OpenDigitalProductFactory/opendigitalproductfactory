@@ -23,7 +23,7 @@ describe("effortContextPack shape", () => {
       "read_effort_context",
       "record_effort_context",
     ]);
-    expect(effortContextPack.grants).toEqual({});
+    expect(effortContextPack.grants).toEqual({ record_effort_context: [], read_effort_context: [] });
     for (const def of effortContextPack.definitions) {
       expect(effortContextPack.handlers[def.name], def.name).toBeTypeOf("function");
     }
