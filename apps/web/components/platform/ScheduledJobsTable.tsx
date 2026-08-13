@@ -4,15 +4,11 @@ import { useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { updateScheduledJob, runScheduledJobNow } from "@/lib/actions/ai-providers";
 import type { ScheduledJobRow } from "@/lib/ai-provider-types";
+import { LocalTime } from "@/components/ui/LocalTime";
 
 type Props = { jobs: ScheduledJobRow[]; canWrite: boolean };
 
 const SCHEDULES = ["daily", "weekly", "monthly", "disabled"] as const;
-
-function formatDate(d: Date | null): string {
-  if (!d) return "—";
-  return new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric" });
-}
 
 export function ScheduledJobsTable({ jobs, canWrite }: Props) {
   const router = useRouter();
@@ -62,8 +58,12 @@ export function ScheduledJobsTable({ jobs, canWrite }: Props) {
                 <span style={{ color: "var(--dpf-accent)" }}>{job.schedule}</span>
               )}
             </td>
-            <td style={{ padding: "6px 8px", color: "var(--dpf-muted)" }}>{formatDate(job.lastRunAt)}</td>
-            <td style={{ padding: "6px 8px", color: "var(--dpf-muted)" }}>{formatDate(job.nextRunAt)}</td>
+            <td style={{ padding: "6px 8px", color: "var(--dpf-muted)" }}>
+              <LocalTime value={job.lastRunAt} mode="date" />
+            </td>
+            <td style={{ padding: "6px 8px", color: "var(--dpf-muted)" }}>
+              <LocalTime value={job.nextRunAt} mode="date" />
+            </td>
             <td style={{ padding: "6px 8px" }}>
               {job.lastStatus === "ok"    && <span style={{ color: "var(--dpf-success)" }}>✓ ok</span>}
               {job.lastStatus === "error" && <span style={{ color: "var(--dpf-error)" }}>✗ error</span>}
