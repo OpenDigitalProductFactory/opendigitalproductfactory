@@ -69,6 +69,15 @@ export interface AdapterResult {
   raw?: Record<string, unknown>;
   /** Responses API: the response ID for chaining subsequent calls. */
   responseId?: string;
+  /**
+   * True when the provider stopped generation because it hit the output-token
+   * ceiling (Anthropic `stop_reason: "max_tokens"`, OpenAI `finish_reason:
+   * "length"`, Gemini `finishReason: "MAX_TOKENS"`, Responses `status:
+   * "incomplete"` with `max_output_tokens`). The agentic loop MUST NOT treat a
+   * truncated reply as a natural end_turn — it continues generation rather than
+   * returning the fragment (BI-1D144CC1). Absent/false means a clean stop.
+   */
+  truncated?: boolean;
 }
 
 /** Contract every execution adapter implements */

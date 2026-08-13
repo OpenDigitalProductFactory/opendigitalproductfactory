@@ -1433,6 +1433,11 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
   const noProgressNudgedSigs = new Set<string>();
   let fabricationRetries = 0;
   let frustrationCount = 0;
+  // BI-1D144CC1: bounded continue-generation budget for max_tokens-truncated
+  // turns. A truncation stop is not a natural end_turn; we ask the model to
+  // finish (up to this many times) before falling through to the best partial.
+  const MAX_TRUNCATION_CONTINUES = 2;
+  let truncationContinues = 0;
   // Evidence-integrity gate (INV-1). Decide once whether this turn's answer
   // depends on live operational state (a route with authoritative domain tools +
   // a live-state question); the terminal guard in the zero-tool branch enforces
@@ -1813,6 +1818,39 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
         `toolCalls=0 contentLen=${trimmed.length} nudges=${continuationNudges} ` +
         `executedTools=${executedTools.length} content=${JSON.stringify(trimmed.slice(0, 200))}`,
       );
+
+      // BI-1D144CC1: truncation stop. The provider cut generation off at the
+      // output-token ceiling (stop_reason=max_tokens / finish_reason=length /
+      // MAX_TOKENS / Responses incomplete). A reply that ends without a tool call
+      // because it RAN OUT OF TOKENS is not a natural end_turn — returning its
+      // partial text as the final answer is the defect this guards. Ask the model
+      // to finish (bounded) BEFORE the "why did you stop" contract/fabrication/
+      // nudge guards run: we already know why it stopped, so those diagnostics
+      // would misfire. This realizes the stop_reason==="end_turn" contract the
+      // loop's own header comment claims but never enforced.
+      if (result.truncated && truncationContinues < MAX_TRUNCATION_CONTINUES) {
+        truncationContinues++;
+        // Never regress below today's behaviour: keep the longest partial as the
+        // fallback answer in case a continuation returns empty.
+        if (trimmed.length > bestPreNudgeContent.length) bestPreNudgeContent = trimmed;
+        console.warn(
+          `[agentic-loop] response truncated at output-token ceiling with no tool call; ` +
+          `continuing generation (${truncationContinues}/${MAX_TRUNCATION_CONTINUES}). ` +
+          `thread=${JSON.stringify(threadId)} iter=${iteration}`,
+        );
+        messages = [
+          ...messages,
+          { role: "assistant" as const, content: result.content },
+          {
+            role: "user" as const,
+            content:
+              "Your previous response was cut off because it reached the output length limit " +
+              "before you finished. Provide the COMPLETE answer now in a single response — be " +
+              "more concise so it fits within the limit. Do not rely on the truncated version.",
+          },
+        ];
+        continue;
+      }
 
       // Build-specialist Operator Contract clause 2.6 — platform-side guards.
       // Detect contract violations the LLM cannot self-report. Each guard
