@@ -1,0 +1,21 @@
+{
+  "version": "1",
+  "accountableOwner": "Mark Bodman (markdbodman@gmail.com)",
+  "summary": "EP-WORK-CONVERGENCE (BI-650994D7). Add WorkCapsule.workItemId (nullable FK to WorkItem, ON DELETE SET NULL) so a coding capsule anchors to the single canonical WorkItem for its unit of work and capsule + case never split into two rows for one job. Additive, non-destructive; existing rows default NULL, no backfill. Migration 20260812170000_add_workcapsule_workitem_link.",
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "WorkCapsule",
+      "lifecycleDisposition": "retain-with-item",
+      "fields": [
+        {
+          "name": "workItemId",
+          "resolution": "not-applicable",
+          "reason": "Internal coordination-plane foreign key linking the capsule to its canonical WorkItem (the case anchor). Not personal or confidential data; system-set at claim/adoption time via resolve-or-create. Deleting the referenced WorkItem nulls the reference (ON DELETE SET NULL).",
+          "provenance": "System-set by ensureCapsuleWorkItemAnchor at capsule claim/adoption (resolve-or-create against WorkItem by sourceType/sourceId). No external or user-supplied source.",
+          "flags": []
+        }
+      ]
+    }
+  ]
+}

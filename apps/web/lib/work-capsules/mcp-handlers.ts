@@ -1,4 +1,5 @@
 import { prisma } from "@dpf/db";
+import { ensureCapsuleWorkItemAnchorWithPrisma } from "@/lib/work-capsules/capsule-workitem-anchor.server";
 import { computeChangeImpactContract } from "@/lib/integrate/gate-context-bridge";
 import type { ToolResult } from "@/lib/mcp-tools";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
@@ -363,6 +364,23 @@ export async function claimBacklogItemForWorkTool(
       },
       actor: await actor(userId, context),
     });
+
+    // EP-WORK-CONVERGENCE (BI-650994D7): anchor the capsule to the single canonical
+    // WorkItem for its backlog item, NON-FATALLY — the claim stands even if this fails,
+    // so capsule and case never split into two rows for one job.
+    try {
+      await ensureCapsuleWorkItemAnchorWithPrisma({
+        capsuleId: result.capsuleId,
+        backlogItemId: result.backlogItemId,
+        title: `Work on ${result.backlogItemId}`,
+      });
+    } catch (anchorError) {
+      console.warn(
+        `[work-convergence] WorkItem anchor skipped for ${result.capsuleId}: ${
+          anchorError instanceof Error ? anchorError.message : "unknown"
+        }`,
+      );
+    }
 
     const base = `Bound ${result.backlogItemId} to ${result.headBranch} (${result.capsuleId}).`;
     let message: string;
