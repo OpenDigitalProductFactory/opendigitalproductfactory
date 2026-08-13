@@ -65,6 +65,8 @@ function mockResult(overrides: {
   downgraded?: boolean;
   downgradeMessage?: string | null;
   downgradeReason?: "provider-unavailable" | "not-eligible" | null;
+  /** True when the provider cut generation off at max_tokens/length (BI-1D144CC1). */
+  truncated?: boolean;
 }) {
   return {
     content: overrides.content,
@@ -77,6 +79,7 @@ function mockResult(overrides: {
     downgradeReason: overrides.downgradeReason
       ?? (overrides.downgraded ? "provider-unavailable" as const : null),
     toolsStripped: overrides.toolsStripped ?? false,
+    truncated: overrides.truncated ?? false,
     inputTokens: overrides.inputTokens ?? 100,
     outputTokens: overrides.outputTokens ?? 50,
     toolCalls: overrides.toolCalls ?? [],
@@ -714,6 +717,51 @@ describe("runAgenticLoop", () => {
 
     expect(result.content).toContain("try again in about 30 seconds");
     expect(result.content).not.toContain("Model Assignment");
+  });
+
+  it("does not accept a max_tokens-truncated response as a complete answer — continues generation (BI-1D144CC1)", async () => {
+    // Regression: a response cut off by the provider's max_tokens/length limit that
+    // happens to end without a tool call was returned verbatim as the final answer.
+    // The provider stop signal (stop_reason/finish_reason) was discarded before the
+    // loop could see it, so a truncated fragment masqueraded as a natural end_turn.
+    // A truncation stop is NOT "done": the loop must continue generation and return
+    // the completed answer, never the fragment.
+    const mockRoute = vi.mocked(routeAndCall);
+    const PARTIAL =
+      "Here is the onboarding overview. First, the customer signs in and we provision " +
+      "their workspace. Second, the guided setup tour walks them through connecting their " +
+      "first data source and inviting a teammate. Third, the coworker introduces itself and";
+    const COMPLETE =
+      "Customer onboarding has three stages. First, the customer signs in and we provision " +
+      "their workspace. Second, the guided setup tour connects their first data source and " +
+      "invites a teammate. Third, the coworker introduces itself and offers to draft the " +
+      "first task, so the customer sees value on day one.";
+
+    // First dispatch: substantive but truncated (no tool call). On a conversational
+    // route with no tools, shouldNudge cannot fire (hasTools=false) — so the ONLY
+    // reason to make a second call is the truncation branch under test. Pre-fix the
+    // loop returns PARTIAL after ONE call; post-fix it continues and returns COMPLETE.
+    mockRoute
+      .mockResolvedValueOnce(
+        mockResult({ content: PARTIAL, toolCalls: [], truncated: true }) as never,
+      )
+      .mockResolvedValueOnce(
+        mockResult({ content: COMPLETE, toolCalls: [], truncated: false }) as never,
+      );
+
+    const result = await runAgenticLoop({
+      ...baseParams,
+      chatHistory: [{ role: "user" as const, content: "Give me an overview of customer onboarding." }],
+      routeContext: "/coworker/chat",
+      agentId: "market-research-analyst",
+      interactionMode: "chat" as const,
+      tools: [],
+      toolsForProvider: [],
+    });
+
+    expect(mockRoute.mock.calls.length).toBeGreaterThanOrEqual(2);
+    expect(result.content).toBe(COMPLETE);
+    expect(result.content).not.toBe(PARTIAL);
   });
 
   it("executes tools through the governed lifecycle path", async () => {

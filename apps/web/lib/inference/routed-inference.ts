@@ -80,6 +80,13 @@ export interface RoutedInferenceResult {
   downgradeReason: "provider-unavailable" | "not-eligible" | null;
   /** True when tools were stripped due to capability degradation (local model). */
   toolsStripped: boolean;
+  /**
+   * True when the provider stopped generation at the output-token ceiling
+   * (Anthropic max_tokens / OpenAI length / Gemini MAX_TOKENS / Responses
+   * incomplete). The agentic loop continues generation on a truncated turn
+   * rather than returning the partial as a final answer (BI-1D144CC1).
+   */
+  truncated?: boolean;
   /** Responses API: the response ID for chaining subsequent calls. */
   responseId?: string;
   /** The V2 route decision that selected this endpoint (for audit/metadata). */
@@ -644,6 +651,7 @@ export async function routeAndCall(
       // Background path: only a real dispatch failure downgrades here.
       downgradeReason: result.downgraded ? "provider-unavailable" : null,
       toolsStripped,
+      truncated: result.truncated ?? false,
       routeDecision: decision,
       ...routedRehydrationHandle(prepared.rehydrationHandle),
     };
@@ -730,6 +738,7 @@ export async function routeAndCall(
         ? "not-eligible"
         : null,
     toolsStripped,
+    truncated: result.truncated ?? false,
     routeDecision: decision,
     responseId: result.responseId,
     resolvedMaxContextTokens: selectedManifest?.maxContextTokens ?? null,

@@ -111,6 +111,8 @@ export interface FallbackResult {
   downgraded: boolean;
   downgradeMessage: string | null;
   responseId?: string;
+  /** True when the provider stopped at the output-token ceiling (BI-1D144CC1). */
+  truncated?: boolean;
   /** Policy-safe router receipt; never includes prompts or model output. */
   routingEvidence?: import("./provider-suitability/openrouter-policy").OpenRouterRoutingEvidence;
 }
@@ -372,6 +374,7 @@ export async function callWithFallbackChain(
             ? { inputTokens: result.inputTokens, outputTokens: result.outputTokens }
             : undefined,
         inferenceMs: result.inferenceMs,
+        truncated: result.truncated,
         downgraded,
         downgradeMessage: downgraded
           ? preferenceMiss
