@@ -577,6 +577,7 @@ export function createRestaurantFloorCommandAdapter(input: {
                 quantity: 1,
                 idempotencyKey:
                   `${assignmentCommand.idempotencyKey}:${resourceId}`,
+                enforceResourceAvailability: false,
               }),
             );
             await dependencies.transitionCapacity(transaction as never, {

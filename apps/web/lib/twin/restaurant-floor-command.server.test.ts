@@ -173,6 +173,7 @@ describe("restaurant floor command adapter", () => {
       expect.objectContaining({
         resourceId: "table-1",
         serviceTurnId: "turn-1",
+        enforceResourceAvailability: false,
       }),
     );
     expect(allocateCapacity).toHaveBeenNthCalledWith(
@@ -181,6 +182,7 @@ describe("restaurant floor command adapter", () => {
       expect.objectContaining({
         resourceId: "table-2",
         serviceTurnId: "turn-1",
+        enforceResourceAvailability: false,
       }),
     );
     expect(transitionCapacity).toHaveBeenCalledTimes(2);

@@ -141,6 +141,7 @@ describe("restaurant party move command", () => {
         resourceId: "table-2",
         serviceTurnId: "turn-1",
         demandRef: "BOOK-1",
+        enforceResourceAvailability: false,
       }),
     );
     expect(tx.hospitalityServiceTurn.updateMany).toHaveBeenCalledWith({

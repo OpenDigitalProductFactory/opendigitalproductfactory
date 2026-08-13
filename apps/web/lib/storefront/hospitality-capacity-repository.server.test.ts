@@ -167,6 +167,61 @@ describe("hospitality capacity repository", () => {
     expect(create).not.toHaveBeenCalled();
   });
 
+  it("allows an authenticated service turn to extend beyond the last public bookable start", async () => {
+    const create = vi.fn(async ({ data }: { data: Record<string, unknown> }) => ({
+      id: "allocation-row",
+      version: 1,
+      ...data,
+    }));
+    const db = database({
+      businessProfile: {
+        findFirst: vi.fn(async () => ({ timezone: "America/Chicago" })),
+      },
+      hospitalityResource: {
+        findFirst: vi.fn(async () => ({
+          id: "table-1",
+          legacyServiceProviderId: "provider-1",
+          status: "active",
+          capacity: 4,
+          availability: [{
+            kind: "available",
+            days: [3],
+            startTime: "11:00",
+            endTime: "22:00",
+            date: null,
+          }],
+        })),
+      },
+      hospitalityCapacityAllocation: {
+        findFirst: vi.fn(async () => null),
+        findMany: vi.fn(async () => []),
+        create,
+        updateMany: vi.fn(async () => ({ count: 0 })),
+      },
+    });
+
+    await expect(
+      allocateHospitalityCapacity(db, {
+        organizationId: "org-1",
+        storefrontId: "storefront-1",
+        resourceId: "table-1",
+        poolId: null,
+        demandType: "booking",
+        demandRef: "BK-WALK-IN",
+        bookingId: "booking-walk-in",
+        bookingHoldId: null,
+        serviceTurnId: "turn-1",
+        startsAt: new Date("2026-08-13T02:17:00.000Z"),
+        // clock-bomb-guard: allow pure historical interval fixture has no wall-clock dependency
+        endsAt: new Date("2026-08-13T03:47:00.000Z"),
+        quantity: 1,
+        idempotencyKey: "seat:booking-walk-in:table-1",
+        enforceResourceAvailability: false,
+      }),
+    ).resolves.toEqual(expect.objectContaining({ demandRef: "BK-WALK-IN" }));
+    expect(create).toHaveBeenCalledTimes(1);
+  });
+
   it("evaluates a Restaurant table schedule in the operator's Chicago timezone", async () => {
     const create = vi.fn(async ({ data }: { data: Record<string, unknown> }) => ({
       id: "allocation-row",
