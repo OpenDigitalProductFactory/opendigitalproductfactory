@@ -187,6 +187,25 @@ describe("HostAddressCell", () => {
   });
 });
 
+describe("main installation readiness", () => {
+  it("shows an enrollment conflict before a disabled-install message", () => {
+    render(
+      <EdgeNodesAdminClient
+        nodes={[]}
+        tokens={[]}
+        customerAccounts={[]}
+        edgeEnabled={false}
+        mainInstallationStatus="ambiguous"
+      />,
+    );
+
+    expect(
+      screen.getByText(/More than one installer-managed node claims this installation/),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/Edge is not enabled for this installation/)).not.toBeInTheDocument();
+  });
+});
+
 describe("EdgeNodesAdminClient customer/site scope", () => {
   it("shows this installation readiness before the fleet registry", () => {
     render(

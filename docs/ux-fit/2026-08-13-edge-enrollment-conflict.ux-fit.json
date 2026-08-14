@@ -1,0 +1,49 @@
+{
+  "version": "1",
+  "decidedOption": "explicit-enrollment-conflict",
+  "scope": {
+    "files": [
+      "apps/web/app/(shell)/platform/federation-links/page.tsx",
+      "apps/web/components/platform/edge-nodes/EdgeFleetReadiness.tsx",
+      "apps/web/lib/edge-node/readiness.ts"
+    ]
+  },
+  "evidence": {
+    "kind": "sweep-measurement",
+    "baselineComparison": "maintained",
+    "measurementRun": "governed contributor preview at http://localhost:3001",
+    "measured": {
+      "/platform/edge-nodes": {
+        "defaultVisibleWords": 159,
+        "leadBandWords": 0,
+        "primaryActions": 1,
+        "visibleFields": 0,
+        "maxChoicesPerControl": 0,
+        "subLegibleControls": 0,
+        "buriedPrimaryAction": 0,
+        "axeViolations": 2
+      },
+      "/platform/federation-links": {
+        "defaultVisibleWords": 335,
+        "leadBandWords": 0,
+        "primaryActions": 1,
+        "visibleFields": 0,
+        "maxChoicesPerControl": 0,
+        "subLegibleControls": 0,
+        "buriedPrimaryAction": 0,
+        "axeViolations": 2
+      }
+    },
+    "fitDecision": "fits-with-guardrails",
+    "owningArea": "Platform",
+    "routeFamily": "/platform/edge-nodes and /platform/federation-links",
+    "primaryPersona": "founder or platform operator diagnosing local Edge enrollment without needing to infer which machine the Authority selected",
+    "navigationLayer": "local status and recovery guidance inside existing Platform routes",
+    "reuseConvergence": "reuses the existing main-installation readiness card, discovery health panel, StatusBadge, and Edge Nodes recovery link; the shared readiness projection is now the single source for discovery copy",
+    "sourceTruth": "EdgeNode, BootstrapToken installer-managed enrollment evidence, EdgeNodeCapability, and the no-guess main-installation selector",
+    "emptyFailureBehavior": "an ambiguous installer-managed selection is named as an enrollment conflict before disabled or missing-discovery fallbacks, with a direct path to inspect the fleet",
+    "aiBoundary": "no coworker action or AI-generated decision",
+    "accessibility": "the conflict is expressed in text with an explicit recovery link and is not conveyed by color alone",
+    "responsive": "no layout or control changes; the existing wrapping status surfaces and recovery link remain responsive"
+  }
+}

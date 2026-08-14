@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   EDGE_HEARTBEAT_DEGRADED_AFTER_MS,
   EDGE_HEARTBEAT_OFFLINE_AFTER_MS,
+  deriveNearbyDiscoveryHealth,
   deriveEdgeNodeReadiness,
   selectMainInstallationNode,
   type EdgeReadinessNode,
@@ -173,5 +174,34 @@ describe("selectMainInstallationNode", () => {
     ]);
 
     expect(result.status).toBe("missing");
+  });
+});
+
+describe("deriveNearbyDiscoveryHealth", () => {
+  it("reports an installer enrollment conflict instead of claiming discovery was never registered", () => {
+    const nodes = [
+      node({ id: "current", nodeId: "edge_current" }),
+      node({
+        id: "historical",
+        nodeId: "edge_historical",
+        platform: "linux",
+        installMode: "container-host",
+        lastSeenAt: new Date("2026-07-20T12:00:00.000Z"),
+      }),
+    ];
+    const selection = selectMainInstallationNode(nodes);
+
+    const result = deriveNearbyDiscoveryHealth({
+      selection,
+      readiness: null,
+      discoveryCapability: null,
+    });
+
+    expect(result).toEqual({
+      status: "unavailable",
+      label: "Enrollment conflict",
+      detail:
+        "Multiple installer-managed Edge Nodes claim this installation. Review Edge Nodes before relying on nearby discovery.",
+    });
   });
 });

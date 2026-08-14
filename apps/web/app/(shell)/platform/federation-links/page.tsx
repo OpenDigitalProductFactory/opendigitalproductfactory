@@ -13,7 +13,6 @@ import { resolveFounderDemandEnvironment } from "@dpf/db/founder-shared-portfoli
 import {
   FederationLinksAdminClient,
   type FederationLinkRow,
-  type NearbyDiscoveryHealth,
   type NearbyPairingRow,
 } from "@/components/platform/federation-links/FederationLinksAdminClient";
 import {
@@ -23,6 +22,7 @@ import {
 import { OrganizationJoinPanel } from "@/components/platform/federation-links/OrganizationJoinPanel";
 import { getOrganizationJoinNodeSummariesAction } from "@/lib/actions/organization-join";
 import {
+  deriveNearbyDiscoveryHealth,
   deriveEdgeNodeReadiness,
   selectMainInstallationNode,
   type EdgeReadinessNode,
@@ -105,36 +105,11 @@ export default async function FederationLinksPage() {
   const readiness = mainNode.node
     ? deriveEdgeNodeReadiness(mainNode.node, { requiredCapabilities: ["federation.discovery"] })
     : null;
-  const nearbyDiscoveryHealth: NearbyDiscoveryHealth =
-    mainNode.status !== "found" || !readiness || !discoveryCapability
-      ? {
-          status: "unavailable",
-          label: "Not set up",
-          detail: "The native Edge Node has not registered nearby discovery.",
-        }
-      : discoveryCapability.mode !== "enabled" && discoveryCapability.mode !== "reporting-only"
-        ? {
-            status: "disabled",
-            label: "Paused",
-            detail: "Nearby discovery is disabled by the Authority.",
-          }
-        : readiness.health === "healthy"
-          ? {
-              status: "healthy",
-              label: "Listening",
-              detail: "This installation is announcing and looking for nearby DPF installations.",
-            }
-          : readiness.health === "starting"
-            ? {
-                status: "waiting",
-                label: "Starting",
-                detail: "Nearby discovery is enabled and waiting for its first health report.",
-              }
-            : {
-                status: "degraded",
-                label: "Needs attention",
-                detail: "Nearby discovery or its host service is stale or failing. Check the Edge fleet for the specific failed readiness check.",
-              };
+  const nearbyDiscoveryHealth = deriveNearbyDiscoveryHealth({
+    selection: mainNode,
+    readiness,
+    discoveryCapability: discoveryCapability ?? null,
+  });
 
   const rows: FederationLinkRow[] = links.map((l) => {
     // What crosses this link to the peer: the minimum-necessary projection the
