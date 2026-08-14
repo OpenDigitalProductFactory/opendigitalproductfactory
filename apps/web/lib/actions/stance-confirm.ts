@@ -16,6 +16,7 @@ import { prisma } from "@dpf/db";
 import { upsertWikiPage, appendRevision } from "@dpf/db/wiki-store";
 import { requireCapability } from "@/lib/actions/shared/guards";
 import { promoteStanceMaterial } from "@/lib/decision-perspective/stance-promotion";
+import { projectStanceDimensionVector } from "@/lib/decision-perspective/stance-dimension-map";
 import { storeWikiPage } from "@/lib/wiki/embeddings";
 import {
   resolveStanceVectors,
@@ -88,6 +89,7 @@ export async function confirmStanceVectors(input: {
         status: "published",
         isKernel: false,
         abstract,
+        ...projectStanceDimensionVector(vector.key),
       })) as { id: string };
 
       if (!existing || existing.body !== body) {
@@ -113,6 +115,7 @@ export async function confirmStanceVectors(input: {
             kernelVersion: null,
             organizationId: org.id,
             kernelPageId: null,
+            ...projectStanceDimensionVector(vector.key),
           });
         } catch {
           // best-effort

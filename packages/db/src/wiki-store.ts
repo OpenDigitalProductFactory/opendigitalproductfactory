@@ -170,6 +170,19 @@ export type UpsertWikiPageInput = {
 function principleDataFromInput(
   input: UpsertWikiPageInput,
 ): Record<string, unknown> {
+  // Stances may carry the same closed-axis projection used by the decision
+  // engine, but no principle tier, applies-to scope, or runtime authority.
+  // A qualification/vector is evidence, not permission (EP-1C37C089).
+  if (input.pageKind === "stance") {
+    const stanceData: Record<string, unknown> = {};
+    if (input.principleDimensionVector !== undefined) {
+      stanceData.principleDimensionVector = input.principleDimensionVector;
+    }
+    if (input.principleDimensions !== undefined) {
+      stanceData.principleDimensions = input.principleDimensions;
+    }
+    return stanceData;
+  }
   if (input.pageKind !== "principle") {
     return {};
   }

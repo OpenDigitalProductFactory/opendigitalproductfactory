@@ -104,6 +104,12 @@ export type StanceAxisEdge = {
 export const STANCE_DIMENSION_MAP = {
   "customer-goodwill": [
     {
+      dimension: "market_fit",
+      weight: 0.3,
+      rationale:
+        "Customer goodwill explicitly protects the continuing relationship with the people the organization chose to serve.",
+    },
+    {
       dimension: "cost_efficiency",
       weight: -0.3,
       rationale:
@@ -130,6 +136,12 @@ export const STANCE_DIMENSION_MAP = {
   ],
   "pricing-integrity": [
     {
+      dimension: "gtm_fit",
+      weight: 0.3,
+      rationale:
+        "Pricing and discount discipline is part of the declared commercial motion by which the organization reaches its market.",
+    },
+    {
       dimension: "governance_compliance",
       weight: 0.4,
       rationale:
@@ -149,6 +161,30 @@ export const STANCE_DIMENSION_MAP = {
     },
   ],
   "growth-vs-stability": [
+    {
+      dimension: "mission_fit",
+      weight: 0.4,
+      rationale:
+        "What the organization chooses to take on is an explicit boundary on whether proposed growth advances its stated direction.",
+    },
+    {
+      dimension: "market_fit",
+      weight: 0.35,
+      rationale:
+        "Growth choices must remain directed at the customers and segments the organization has declared it serves.",
+    },
+    {
+      dimension: "product_fit",
+      weight: 0.3,
+      rationale:
+        "The choice between new and existing commitments declares how adjacent a proposed offer may be to the current product promise.",
+    },
+    {
+      dimension: "gtm_fit",
+      weight: 0.35,
+      rationale:
+        "Growth pace and channel are a direct constraint on the go-to-market motion the organization has chosen.",
+    },
     {
       dimension: "long_term_maintainability",
       weight: 0.4,
@@ -170,6 +206,12 @@ export const STANCE_DIMENSION_MAP = {
     },
   ],
   "quality-bar": [
+    {
+      dimension: "product_fit",
+      weight: 0.4,
+      rationale:
+        "The quality bar defines what may leave the organization as an offer and therefore directly constrains product fit.",
+    },
     {
       dimension: "long_term_maintainability",
       weight: 0.4,
@@ -219,6 +261,45 @@ export const STANCE_DIMENSION_MAP = {
     },
   ],
 } as const satisfies Record<StanceVectorKey, readonly StanceAxisEdge[]>;
+
+export type StanceDimensionProjection = {
+  principleDimensionVector: Record<PrincipleDimension, number>;
+  principleDimensions: PrincipleDimension[];
+};
+
+export const STANCE_ALIGNMENT_DIMENSIONS = [
+  "mission_fit",
+  "market_fit",
+  "product_fit",
+  "gtm_fit",
+] as const satisfies readonly PrincipleDimension[];
+export type StanceAlignmentDimension = (typeof STANCE_ALIGNMENT_DIMENSIONS)[number];
+
+/** Project only alignment purposes explicitly declared by the authoring surface. */
+export function projectDeclaredStanceAlignment(
+  dimensions: readonly StanceAlignmentDimension[],
+): StanceDimensionProjection {
+  const vector = {} as Record<PrincipleDimension, number>;
+  for (const dimension of dimensions) vector[dimension] = STANCE_MAX_MAGNITUDE;
+  return {
+    principleDimensionVector: vector,
+    principleDimensions: [...dimensions],
+  };
+}
+
+/** Deterministically project one declared stance purpose into the closed axis registry. */
+export function projectStanceDimensionVector(
+  stanceKey: StanceVectorKey,
+): StanceDimensionProjection {
+  const vector = {} as Record<PrincipleDimension, number>;
+  for (const edge of STANCE_DIMENSION_MAP[stanceKey]) {
+    vector[edge.dimension] = edge.weight;
+  }
+  return {
+    principleDimensionVector: vector,
+    principleDimensions: Object.keys(vector) as PrincipleDimension[],
+  };
+}
 
 const COST_DIMENSIONS = new Set<string>(PRINCIPLE_COST_DIMENSIONS);
 const FORBIDDEN = new Set<string>(STANCE_FORBIDDEN_DIMENSIONS);
