@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { prisma, Prisma } from "@dpf/db";
 import { safeSyncSelfUpgradeChangeRecord } from "@/lib/self-upgrade/change-record";
 import { agentEventBus } from "@/lib/agent-event-bus";
+import { recordCorrectiveRecoveryEvidence } from "@/lib/backlog/capture-corrective-bi";
 import type { SelfUpgradeRunStatus } from "@/lib/self-upgrade/run-types";
 
 export type { SelfUpgradeRunStatus } from "@/lib/self-upgrade/run-types";
@@ -61,12 +62,23 @@ export async function startRun(runId: string) {
 }
 
 export async function completeRun(runId: string) {
+  const completedAt = new Date();
   const updated = await prisma.selfUpgradeRun.update({
     where: { runId },
-    data: { status: "succeeded", completedAt: new Date() },
+    data: { status: "succeeded", completedAt },
   });
   notifyRunState(updated.runId, "succeeded");
   await safeSyncSelfUpgradeChangeRecord(runId);
+  await recordCorrectiveRecoveryEvidence({
+    source: "self-upgrade-failure",
+    recovery: {
+      runId: updated.runId,
+      currentSha: updated.currentSha,
+      targetSha: updated.targetSha,
+      deployedSha: updated.deployedSha,
+      completedAt: updated.completedAt ?? completedAt,
+    },
+  });
   return updated;
 }
 
