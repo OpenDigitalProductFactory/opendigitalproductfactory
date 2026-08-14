@@ -612,6 +612,10 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   list_mdm_steward_tasks: ["crm_read"],
   enrich_customer_account: ["web_search"],
   run_data_steward: ["crm_write"],
+  // Proactive CRM enrichment (BI-B2497DFB): propose is web-research stewardship
+  // inside the CRM-read envelope; apply is the consequential CRM write.
+  propose_crm_enrichment: ["web_search", "crm_read"],
+  apply_crm_enrichment: ["crm_write"],
 
   // Security Operations / SIEM (EP-SOVEREIGN-SOC). Writes are propose-only +
   // coworkerArtifact; siem_investigate/siem_tune/incident_respond imply siem_read.

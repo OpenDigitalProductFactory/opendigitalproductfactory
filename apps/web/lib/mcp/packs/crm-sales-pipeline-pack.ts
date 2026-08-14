@@ -257,7 +257,46 @@ async function listQuotesTool(params: Record<string, unknown>): Promise<ToolResu
   return { success: true, message: `${quotes.length} quote(s):\n${lines.join("\n")}`, data: { quotes } };
 }
 
-async function createCustomerAccountTool(params: Record<string, unknown>): Promise<ToolResult> {
+/**
+ * Proactive enrichment offer on thin account intake (BI-B2497DFB, AC1). Pure +
+ * proactivity-bound: silent at quiet, offers at balanced/assertive. Never
+ * throws — an offer is a nicety, not part of the create contract.
+ */
+async function buildCreatedAccountEnrichmentOffer(
+  account: { id: string; name: string },
+  params: Record<string, unknown>,
+  context?: { agentId?: string | null; routeContext?: string | null },
+) {
+  try {
+    const { buildEnrichmentOfferForIntake } = await import("@/lib/crm/enrichment/enrichment-offer");
+    const { resolveProactivityPlan } = await import("@/lib/proactivity/proactivity-resolver");
+    const plan = resolveProactivityPlan({
+      activityFamily: "crm-record-enrichment",
+      agentId: context?.agentId ?? null,
+      routeContext: context?.routeContext ?? null,
+    });
+    return buildEnrichmentOfferForIntake({
+      recordKind: "customer-account",
+      recordId: account.id,
+      recordLabel: account.name,
+      intake: {
+        name: account.name,
+        website: params["website"],
+        industry: params["industry"],
+        notes: params["notes"],
+      },
+      plan,
+    });
+  } catch {
+    return null;
+  }
+}
+
+async function createCustomerAccountTool(
+  params: Record<string, unknown>,
+  _userId?: string,
+  context?: { agentId?: string | null; routeContext?: string | null },
+): Promise<ToolResult> {
   const name = typeof params["name"] === "string" ? params["name"].trim() : "";
   if (!name) return { success: false, error: "missing_name", message: "name is required to create a customer account." };
   const { createCustomerAccount } = await import("@/lib/actions/crm");
@@ -299,7 +338,9 @@ async function createCustomerAccountTool(params: Record<string, unknown>): Promi
     if (result.outcome === "existing") {
       return { success: true, message: `Reused existing customer account "${account.name}" (${account.accountId}) instead of creating a duplicate. Use its id ${account.id} as accountId downstream.`, data: { accountId: account.id, accountRef: account.accountId, reusedExisting: true } };
     }
-    return { success: true, message: `Created customer account "${account.name}" (${account.accountId}). Use its id ${account.id} as accountId when creating an opportunity.`, data: { accountId: account.id, accountRef: account.accountId } };
+    const enrichmentOffer = await buildCreatedAccountEnrichmentOffer(account, params, context);
+    const offerMsg = enrichmentOffer ? ` ${enrichmentOffer.message}` : "";
+    return { success: true, message: `Created customer account "${account.name}" (${account.accountId}). Use its id ${account.id} as accountId when creating an opportunity.${offerMsg}`, data: { accountId: account.id, accountRef: account.accountId, ...(enrichmentOffer ? { enrichmentOffer } : {}) } };
   } catch (err) {
     const msg = getErrorMessage(err);
     return { success: false, error: "create_failed", message: `create_customer_account failed: ${msg}` };
