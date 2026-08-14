@@ -77,6 +77,10 @@ describe("evaluateOrgBusinessDecisionGate (BI-230C9EF7)", () => {
       db: db as never,
       resolver: fakeResolver() as never,
       evaluator: () => makeEval({ stanceAlignment: "approve" }),
+      scoredOptions: [
+        { id: "proceed", description: "Proceed", features: { market_fit: 1 } },
+        { id: "decline", description: "Decline", features: { reversibility: 1 } },
+      ],
       alignmentCorpora: {
         wwwd: [{ ref: "wiki:stance", text: "We serve MSPs. We decline toasters for fishermen in Alaska." }],
         portfolio: [{ ref: "product:dpf", text: "Self-hosted software support subscription" }],
@@ -85,6 +89,7 @@ describe("evaluateOrgBusinessDecisionGate (BI-230C9EF7)", () => {
     });
 
     expect(result.evaluation.stanceAlignment).toBe("decline");
+    expect(result.evaluation.recommendedOptionId).toBe("decline");
     expect(result.evaluation.constitutionalAlignment?.veto).toMatchObject({
       corpus: "wwwd",
       criterion: "market",

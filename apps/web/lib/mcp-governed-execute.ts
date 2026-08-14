@@ -8,7 +8,6 @@
 // external-MCP transport a stable hook.
 
 import { prisma } from "@dpf/db";
-import { createHash, scryptSync } from "crypto";
 import { can, type CapabilityKey, type UserContext } from "./permissions";
 import type { CoworkerAuthorityDecision } from "./govern/authority/coworker-authority-decision";
 import {
@@ -35,9 +34,21 @@ import {
 } from "./mcp-tools";
 import { coerceMcpToolArgs } from "./mcp-arg-coercion";
 import { deriveAuditClassForTool, deriveCapabilityId } from "./tool-audit-helpers";
-import { getWorkCaseAction } from "./work-management/action-registry";
 import type { WorkCaseExecutionContext } from "./work-management/work-case-governance-hook";
 import type { AuthorizedSurfaceContext, AuthorizedSurfaceInvocation } from "@/lib/coworker/authorized-surface-execution-types";
+import {
+  classifyConsequentialTool,
+} from "./tak/consequential-tool-policy";
+import {
+  runTakAlignmentGate,
+  setAlignmentGateOverrideForTests,
+  type AlignmentGate,
+  type AlignmentGateDecision,
+} from "./tak/alignment-tool-gate";
+import {
+  setToolExecutionReceiptCreateOverrideForTests,
+  writeToolExecutionReceipt,
+} from "./tak/tool-execution-receipt";
 
 export type GovernedExecuteSource =
   | "rest"
@@ -118,6 +129,8 @@ export type GovernedExecuteContext = {
   tokenGrantScopes?: string[];
   /** Server-authored correlation for a domain tool reached through ASC. */
   surfaceInvocation?: AuthorizedSurfaceInvocation;
+  /** Server-resolved organization identity for WWWD alignment. */
+  organizationId?: string;
 };
 
 export type GovernedExecuteArgs = {
@@ -136,13 +149,17 @@ export type GovernedExecuteRejection =
   | "hook_denied"
   | "authority_denied"
   | "approval_required"
-  | "authority_evidence_unavailable";
+  | "authority_evidence_unavailable"
+  | "alignment_denied"
+  | "alignment_escalation_required";
 
 export type GovernedExecuteResult = ToolResult & {
   governance?: {
     rejected?: GovernedExecuteRejection;
     durationMs?: number;
     authorityReason?: CoworkerAuthorityDecision["reasonCode"];
+    alignment?: AlignmentGateDecision["alignment"];
+    alignmentInteractionId?: string;
   };
 };
 
@@ -203,14 +220,16 @@ export function _setGovernanceForTests(overrides: {
   authorityApprovalTaskResume?: AuthorityApprovalTaskResume | null;
   authorityApprovalEnvelopeFinalize?: AuthorityApprovalEnvelopeFinalize | null;
   lifecycleHooks?: ToolLifecycleHook[] | null;
+  alignmentGate?: AlignmentGate | null;
 }): void {
   _resolveAgentGrants = overrides.resolveAgentGrants ?? null;
   _isAllowedByGrants = overrides.isAllowedByGrants ?? null;
   _executeToolOverride = overrides.executeTool ?? null;
   _toolExecutionCreateOverride = overrides.toolExecutionCreate ?? null;
-  _toolExecutionReceiptCreateOverride = overrides.toolExecutionReceiptCreate ?? null;
+  setToolExecutionReceiptCreateOverrideForTests(overrides.toolExecutionReceiptCreate ?? null);
   setCoworkerToolAuthorityOverridesForTests(overrides);
   _lifecycleHooks = overrides.lifecycleHooks ?? [];
+  setAlignmentGateOverrideForTests(overrides.alignmentGate ?? null);
 }
 
 let _executeToolOverride:
@@ -231,9 +250,6 @@ let _toolExecutionCreateOverride:
   | ((data: Record<string, unknown>) => Promise<unknown>)
   | null = null;
 
-let _toolExecutionReceiptCreateOverride:
-  | ((data: Record<string, unknown>) => Promise<unknown>)
-  | null = null;
 
 async function resolveGrants(agentId: string): Promise<string[]> {
   if (_resolveAgentGrants) return _resolveAgentGrants(agentId);
@@ -301,6 +317,7 @@ async function writeAudit(data: {
   source: GovernedExecuteSource;
   context?: GovernedExecuteContext;
   durationMs: number;
+  alignmentDecision?: AlignmentGateDecision | null;
 }): Promise<{ id: string } | null> {
   const auditClass = deriveAuditClassForTool(data.toolName);
   const capabilityId = deriveCapabilityId(data.toolName);
@@ -316,6 +333,15 @@ async function writeAudit(data: {
     parameters: isMetricsOnly ? {} : ({
       ...auditedParams,
       ...(data.context?.surfaceInvocation ? { _surface: data.context.surfaceInvocation } : {}),
+      ...(data.alignmentDecision
+        ? {
+            _takAlignment: {
+              interactionId: data.alignmentDecision.interactionId,
+              verdict: data.alignmentDecision.verdict,
+              checks: data.alignmentDecision.alignment.checks,
+            },
+          }
+        : {}),
     } as object),
     result: isMetricsOnly ? {} : (data.result as unknown as object),
     success: data.result.success,
@@ -380,95 +406,6 @@ function redactWriteOnlyParameters(
   }));
 }
 
-function deriveReceiptKind(
-  toolName: string,
-  context?: GovernedExecuteContext,
-): string | null {
-  if (context?.workCase) {
-    const action = getWorkCaseAction(context.workCase.action);
-    if (action?.consequential) {
-      return "work-case-governed-action";
-    }
-  }
-
-  switch (toolName) {
-    case "run_sandbox_tests":
-      return "sandbox-test-run";
-    case "run_sandbox_command":
-      return "sandbox-command";
-    case "run_ux_test":
-      return "ux-run";
-    default:
-      return null;
-  }
-}
-
-// CodeQL #63 (js/insufficient-password-hash): API tokens flow into this
-// digestPayload via dataflow; CodeQL requires a slow KDF for any value
-// it traces from a password-like source. scrypt with a fixed salt
-// ("dpf-receipt") gives a deterministic digest (receipts are content-
-// addressable — a random salt would defeat the lookup). N=2^14 r=8 p=1
-// is the standard Node default and takes ~1-5ms per digest.
-function digestPayload(value: unknown): string {
-  const json = JSON.stringify(value ?? null);
-  return scryptSync(json, "dpf-receipt", 32, {
-    N: 16384, r: 8, p: 1, maxmem: 64 * 1024 * 1024,
-  }).toString("hex");
-}
-// Keep createHash imported for any future non-KDF digest sites.
-void createHash;
-
-async function writeReceipt(data: {
-  auditRowId: string;
-  buildId: string | null;
-  rawParams: Record<string, unknown>;
-  result: ToolResult;
-  toolName: string;
-  context?: GovernedExecuteContext;
-}): Promise<void> {
-  const receiptKind = deriveReceiptKind(data.toolName, data.context);
-  if (!receiptKind) {
-    return;
-  }
-
-  const row = {
-    buildId: data.buildId ?? null,
-    executionStatus: data.result.success ? "succeeded" : "failed",
-    expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
-    inputFingerprint: digestPayload({
-      params: data.rawParams,
-      toolName: data.toolName,
-    }),
-    outputDigest: {
-      sha256: digestPayload({
-        data: data.result.data ?? null,
-        error: data.result.error ?? null,
-        message: data.result.message ?? null,
-        success: data.result.success,
-      }),
-    },
-    receiptKind,
-    receiptStatus: data.result.success ? "valid" : "invalid",
-    toolExecutionId: data.auditRowId,
-  };
-
-  try {
-    if (_toolExecutionReceiptCreateOverride) {
-      await _toolExecutionReceiptCreateOverride(row);
-    } else {
-      await prisma.toolExecutionReceipt.create({ data: row });
-    }
-  } catch (err) {
-    // CodeQL #50 (js/tainted-format-string): tool/build names via format-args.
-    console.error(
-      "[governed-execute] receipt write failed tool=%s build=%s: %s",
-      JSON.stringify(data.toolName),
-      JSON.stringify(data.buildId),
-      err instanceof Error ? JSON.stringify(err.message) : JSON.stringify(String(err)),
-    );
-  }
-}
-
 function findTool(toolName: string): ToolDefinition | undefined {
   return PLATFORM_TOOLS.find((t) => t.name === toolName);
 }
@@ -517,6 +454,7 @@ export async function governedExecuteTool(
   args: GovernedExecuteArgs,
 ): Promise<GovernedExecuteResult> {
   let approvedAuthorityEnvelopeId: string | null = null;
+  let alignmentDecision: AlignmentGateDecision | null = null;
   const tool = findTool(args.toolName);
   if (!tool) {
     return {
@@ -539,6 +477,11 @@ export async function governedExecuteTool(
     ...args,
     rawParams: coerceMcpToolArgs(args.rawParams, tool.inputSchema),
   };
+  const consequence = classifyConsequentialTool({
+    toolName: args.toolName,
+    tool,
+    workCase: args.context?.workCase,
+  });
 
   const humanCapabilityAllowed = !tool.requiredCapability
     || can(args.userContext, tool.requiredCapability as CapabilityKey);
@@ -552,7 +495,7 @@ export async function governedExecuteTool(
         "forbidden_capability",
         `user lacks capability ${tool.requiredCapability}`,
       );
-      await writeAudit({
+      const auditRow = await writeAudit({
         toolName: args.toolName,
         rawParams: args.rawParams,
         result,
@@ -561,6 +504,17 @@ export async function governedExecuteTool(
         context: args.context,
         durationMs: 0,
       });
+      if (auditRow?.id && consequence.consequential) {
+        await writeToolExecutionReceipt({
+          auditRowId: auditRow.id,
+          buildId: null,
+          rawParams: args.rawParams,
+          result,
+          toolName: args.toolName,
+          context: args.context,
+          consequential: true,
+        });
+      }
       return result;
   }
 
@@ -608,8 +562,9 @@ export async function governedExecuteTool(
       if (
         authorityGate.rejection === "authority_denied"
         || authorityGate.rejection === "approval_required"
+        || consequence.consequential
       ) {
-        await writeAudit({
+        const auditRow = await writeAudit({
           toolName: args.toolName,
           rawParams: args.rawParams,
           result,
@@ -618,6 +573,17 @@ export async function governedExecuteTool(
           context: args.context,
           durationMs: 0,
         });
+        if (auditRow?.id && consequence.consequential) {
+          await writeToolExecutionReceipt({
+            auditRowId: auditRow.id,
+            buildId: null,
+            rawParams: args.rawParams,
+            result,
+            toolName: args.toolName,
+            context: args.context,
+            consequential: true,
+          });
+        }
       }
       return result;
     }
@@ -633,7 +599,7 @@ export async function governedExecuteTool(
     source: args.source,
   });
   if (hookRejection) {
-    await writeAudit({
+    const auditRow = await writeAudit({
       toolName: args.toolName,
       rawParams: args.rawParams,
       result: hookRejection,
@@ -642,7 +608,62 @@ export async function governedExecuteTool(
       context: args.context,
       durationMs: 0,
     });
+    if (auditRow?.id && consequence.consequential) {
+      await writeToolExecutionReceipt({
+        auditRowId: auditRow.id,
+        buildId: null,
+        rawParams: args.rawParams,
+        result: hookRejection,
+        toolName: args.toolName,
+        context: args.context,
+        consequential: true,
+      });
+    }
     return hookRejection;
+  }
+
+  if (consequence.alignmentRequired) {
+    alignmentDecision = await runTakAlignmentGate(args);
+    if (alignmentDecision.verdict !== "approve") {
+      const rejection: GovernedExecuteRejection = alignmentDecision.verdict === "decline"
+        ? "alignment_denied"
+        : "alignment_escalation_required";
+      const result: GovernedExecuteResult = {
+        ...rejectionResult(args.toolName, rejection, alignmentDecision.rationale),
+        data: {
+          interactionId: alignmentDecision.interactionId,
+          alignment: alignmentDecision.alignment,
+        },
+        governance: {
+          rejected: rejection,
+          alignment: alignmentDecision.alignment,
+          alignmentInteractionId: alignmentDecision.interactionId,
+        },
+      };
+      const auditRow = await writeAudit({
+        toolName: args.toolName,
+        rawParams: args.rawParams,
+        result,
+        userId: args.userId,
+        source: args.source,
+        context: args.context,
+        durationMs: 0,
+        alignmentDecision,
+      });
+      if (auditRow?.id) {
+        await writeToolExecutionReceipt({
+          auditRowId: auditRow.id,
+          buildId: null,
+          rawParams: args.rawParams,
+          result,
+          toolName: args.toolName,
+          context: args.context,
+          consequential: true,
+          alignmentDecision,
+        });
+      }
+      return result;
+    }
   }
 
   const t0 = Date.now();
@@ -749,6 +770,7 @@ export async function governedExecuteTool(
     source: args.source,
     context: args.context,
     durationMs,
+    alignmentDecision,
   });
 
   const resultBuildId =
@@ -757,15 +779,19 @@ export async function governedExecuteTool(
     && typeof (result.data as Record<string, unknown>).buildId === "string"
       ? String((result.data as Record<string, unknown>).buildId)
       : null;
-  const shouldWriteReceipt = Boolean(resultBuildId || args.context?.workCase);
+  const shouldWriteReceipt = Boolean(
+    resultBuildId || args.context?.workCase || consequence.consequential,
+  );
   if (auditRow?.id && shouldWriteReceipt) {
-    await writeReceipt({
+    await writeToolExecutionReceipt({
       auditRowId: auditRow.id,
       buildId: resultBuildId,
       rawParams: args.rawParams,
       result,
       toolName: args.toolName,
       context: args.context,
+      consequential: consequence.consequential,
+      alignmentDecision,
     });
   }
 
