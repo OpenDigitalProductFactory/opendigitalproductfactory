@@ -13,13 +13,17 @@ function ports(overrides: Partial<WorkItemAnchorPorts> = {}): WorkItemAnchorPort
 }
 
 describe("ensureCapsuleWorkItemAnchor", () => {
-  it("no-ops when there is no backlog item to anchor to", async () => {
+  it("anchors an ad-hoc capsule to its own addressable case", async () => {
     const p = ports();
     const result = await ensureCapsuleWorkItemAnchor({ ports: p, capsuleId: "WC-1", backlogItemId: null, title: "t" });
-    expect(result).toBeNull();
-    expect(p.findWorkItemBySource).not.toHaveBeenCalled();
-    expect(p.createWorkItem).not.toHaveBeenCalled();
-    expect(p.setCapsuleWorkItem).not.toHaveBeenCalled();
+    expect(result).toEqual({ workItemId: "wi-new", created: true });
+    expect(p.findWorkItemBySource).toHaveBeenCalledWith("work-capsule", "WC-1");
+    expect(p.createWorkItem).toHaveBeenCalledWith(expect.objectContaining({
+      sourceType: "work-capsule",
+      sourceId: "WC-1",
+      title: "t",
+    }));
+    expect(p.setCapsuleWorkItem).toHaveBeenCalledWith("WC-1", "wi-new");
   });
 
   it("links to an existing WorkItem without creating a duplicate", async () => {

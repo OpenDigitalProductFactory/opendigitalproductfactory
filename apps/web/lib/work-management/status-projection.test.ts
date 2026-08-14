@@ -3,7 +3,9 @@ import { describe, expect, it } from "vitest";
 import {
   WORK_CASE_STATES,
   projectWorkCaseState,
+  projectWorkUnitState,
 } from "./status-projection";
+import { toWorkUnitFromTaskRun } from "./work-unit";
 
 describe("Work Case status projection", () => {
   it("defines the company-facing state vocabulary from the spec", () => {
@@ -102,5 +104,19 @@ describe("Work Case status projection", () => {
         workItem: { itemId: "WI-7", status: "cancelled" },
       }),
     ).toMatchObject({ state: "cancelled", terminal: true });
+  });
+
+  it("projects carrier-neutral WorkUnits through the same authority", () => {
+    const task = toWorkUnitFromTaskRun({
+      taskRunId: "TR-9",
+      title: "Ask owner",
+      status: "input-required",
+      contextId: "BI-9",
+    });
+    expect(projectWorkUnitState(task)).toMatchObject({
+      state: "waiting-on-person",
+      a2aStatus: "input-required",
+      sourceRef: { kind: "task-run", id: "TR-9", status: "input-required" },
+    });
   });
 });

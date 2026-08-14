@@ -8,6 +8,7 @@ import {
   type WorkCaseState,
   type WorkCaseStateProjection,
 } from "./case-types";
+import type { WorkUnit } from "./work-unit";
 
 export { WORK_CASE_STATES };
 export type { WorkCaseState, WorkCaseStateProjection };
@@ -266,6 +267,55 @@ function projectWorkItem(
     });
   }
   return null;
+}
+
+function projectTaskRun(taskRun: { taskRunId: string; status: string }): WorkCaseStateProjection {
+  const status = normalized(taskRun.status);
+  const sourceRef = ref("task-run", taskRun.taskRunId, taskRun.status);
+  if (status === "input-required" || status === "auth-required") {
+    return projection({
+      state: "waiting-on-person",
+      reason: status === "auth-required"
+        ? "Task run is waiting for human authorization."
+        : "Task run is waiting for human input.",
+      sourceRef,
+      blockingActorKind: "person",
+      a2aStatus: status,
+    });
+  }
+  if (status === "completed") {
+    return projection({ state: "resolved", reason: "Task run completed.", sourceRef });
+  }
+  if (status === "canceled" || status === "rejected" || status === "archived") {
+    return projection({ state: "cancelled", reason: "Task run stopped.", sourceRef });
+  }
+  if (status === "failed") {
+    return projection({
+      state: "waiting-on-system",
+      reason: "Task run failed and needs remediation.",
+      sourceRef,
+      blockingActorKind: "system",
+      a2aStatus: "failed",
+    });
+  }
+  return projection({
+    state: status === "submitted" ? "intake" : "active",
+    reason: status === "submitted" ? "Task run is submitted." : "Task run is executing.",
+    sourceRef,
+  });
+}
+
+/** Single projection entry point for every registered durable work carrier. */
+export function projectWorkUnitState(workUnit: WorkUnit): WorkCaseStateProjection {
+  const { carrier, carrierId } = workUnit.identity;
+  const status = workUnit.currentState.status;
+  if (carrier === "work-capsule") {
+    return projectWorkCaseState({ capsule: { capsuleId: carrierId, status } });
+  }
+  if (carrier === "work-item") {
+    return projectWorkCaseState({ workItem: { itemId: carrierId, status } });
+  }
+  return projectTaskRun({ taskRunId: carrierId, status });
 }
 
 export function projectWorkCaseState(
