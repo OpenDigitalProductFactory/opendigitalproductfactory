@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => ({
   findUnique: vi.fn(),
   update: vi.fn(),
   broadcastSystem: vi.fn(),
+  recordCorrectiveRecoveryEvidence: vi.fn(),
 }));
 vi.mock("@dpf/db", () => ({
   Prisma: {},
@@ -19,6 +20,10 @@ vi.mock("@dpf/db", () => ({
 vi.mock("@/lib/self-upgrade/change-record", () => ({ safeSyncSelfUpgradeChangeRecord: vi.fn() }));
 vi.mock("@/lib/agent-event-bus", () => ({
   agentEventBus: { broadcastSystem: mocks.broadcastSystem },
+}));
+vi.mock("@/lib/backlog/capture-corrective-bi", () => ({
+  captureCorrectiveFailureBI: vi.fn(),
+  recordCorrectiveRecoveryEvidence: mocks.recordCorrectiveRecoveryEvidence,
 }));
 
 import {
@@ -80,6 +85,30 @@ describe("self-upgrade lifecycle invalidation", () => {
       expect.objectContaining({ type: "system:self-upgrade", runId: "SUR-LIVE", status: "running" }),
       expect.objectContaining({ type: "system:self-upgrade", runId: "SUR-LIVE", status: "succeeded" }),
     ]);
+  });
+
+  it("records non-closing corrective recovery evidence with exact run identity", async () => {
+    mocks.update.mockResolvedValue({
+      runId: "SUR-RECOVERED",
+      status: "succeeded",
+      currentSha: "before-sha",
+      targetSha: "target-sha",
+      deployedSha: "deployed-sha",
+      completedAt: new Date("2026-08-14T00:00:00.000Z"),
+    });
+
+    await completeRun("SUR-RECOVERED");
+
+    expect(mocks.recordCorrectiveRecoveryEvidence).toHaveBeenCalledWith({
+      source: "self-upgrade-failure",
+      recovery: {
+        runId: "SUR-RECOVERED",
+        currentSha: "before-sha",
+        targetSha: "target-sha",
+        deployedSha: "deployed-sha",
+        completedAt: new Date("2026-08-14T00:00:00.000Z"),
+      },
+    });
   });
 
   it("does not fail a durable transition when notification delivery fails", async () => {
