@@ -224,3 +224,19 @@ describe("healthcare care appointment mirror allocation", () => {
     );
   });
 });
+
+describe("employee asset-allocation precondition evidence", () => {
+  it("surfaces the current FixedAsset assignment field as drift, not a fabricated employee FK", () => {
+    const schema = readFileSync(
+      resolve(process.cwd(), "../../packages/db/prisma/schema.prisma"),
+      "utf8",
+    );
+    const desired = buildDesiredState(parsePrismaSchema(schema));
+    const fixedAsset = desired.elements.find((element) => element.sourceKey === modelSourceKey("FixedAsset"));
+    const fields = (fixedAsset?.properties.fields ?? []) as Array<{ name: string; isRequired: boolean }>;
+    const relationshipKeys = desired.relationships.map((relationship) => relationship.sourceKey);
+
+    expect(fields).toContainEqual(expect.objectContaining({ name: "assignedToId", isRequired: false }));
+    expect(relationshipKeys).not.toContain("prisma:relation:FixedAsset:employee:EmployeeProfile");
+  });
+});

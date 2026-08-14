@@ -8,6 +8,7 @@ describe("consequential tool policy", () => {
       class: "routine-read",
       consequential: false,
       alignmentRequired: false,
+      preconditionRequired: false,
       collaborationShape: null,
       reason: "read-only",
     });

@@ -139,4 +139,27 @@ describe("TAK alignment interception", () => {
       executionStatus: "succeeded",
     })]);
   });
+
+  it("blocks an unmet ordering prerequisite before a consequential workforce mutation", async () => {
+    _setGovernanceForTests({
+      preconditionGate: async () => ({
+        verdict: "decline", rationale: "Employee identity must exist before the transition.",
+        checks: [{
+          key: "employee-identity", coherent: true, satisfied: false,
+          evidenceRefs: ["ea:value-stream:onboarding:identity", "prisma:model:EmployeeProfile#employeeId"],
+        }],
+      }),
+      executeTool: execute,
+      toolExecutionCreate: async (data) => { audits.push(data); return { id: "precondition-deny" }; },
+      toolExecutionReceiptCreate: async (data) => { receipts.push(data); },
+    });
+    const result = await governedExecuteTool({
+      toolName: "transition_employee_status",
+      rawParams: { employeeId: "EMP-MISSING", status: "active" },
+      userId: "user-1", userContext: USER, source: "rest",
+    });
+    expect(result.error).toBe("precondition_denied");
+    expect(execute).not.toHaveBeenCalled();
+    expect(receipts).toEqual([expect.objectContaining({ toolExecutionId: "precondition-deny" })]);
+  });
 });

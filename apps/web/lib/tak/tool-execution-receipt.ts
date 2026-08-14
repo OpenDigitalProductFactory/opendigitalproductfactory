@@ -3,6 +3,7 @@ import { prisma } from "@dpf/db";
 
 import type { ToolResult } from "@/lib/mcp-tools";
 import type { AlignmentGateDecision } from "./alignment-tool-gate";
+import type { PreconditionOrderingDecision } from "./precondition-ordering-gate";
 import type { GovernedExecuteContext } from "@/lib/mcp-governed-execute";
 import { getWorkCaseAction } from "@/lib/work-management/action-registry";
 import { collaborationShapeForTool } from "./consequential-tool-policy";
@@ -40,6 +41,7 @@ export async function writeToolExecutionReceipt(data: {
   context?: GovernedExecuteContext;
   consequential?: boolean;
   alignmentDecision?: AlignmentGateDecision | null;
+  preconditionDecision?: PreconditionOrderingDecision | null;
 }): Promise<void> {
   const kind = receiptKind(data.toolName, data.context, data.consequential);
   if (!kind) return;
@@ -59,6 +61,7 @@ export async function writeToolExecutionReceipt(data: {
         specialistDelegation: data.alignmentDecision.specialistDelegation ?? null,
       } : null,
       collaborationShape: data.consequential ? collaborationShapeForTool(data.toolName) : null,
+      precondition: data.preconditionDecision ?? null,
     }) },
     receiptKind: kind,
     receiptStatus: data.result.success ? "valid" : "invalid",

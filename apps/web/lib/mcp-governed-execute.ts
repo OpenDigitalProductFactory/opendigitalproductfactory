@@ -40,7 +40,6 @@ import {
   classifyConsequentialTool,
 } from "./tak/consequential-tool-policy";
 import {
-  runTakAlignmentGate,
   setAlignmentGateOverrideForTests,
   type AlignmentGate,
   type AlignmentGateDecision,
@@ -49,6 +48,12 @@ import {
   setToolExecutionReceiptCreateOverrideForTests,
   writeToolExecutionReceipt,
 } from "./tak/tool-execution-receipt";
+import {
+  setPreconditionGateOverrideForTests,
+  type PreconditionGate,
+  type PreconditionOrderingDecision,
+} from "./tak/precondition-ordering-gate";
+import { enforceTakPreexecution } from "./tak/preexecution-control";
 
 export type GovernedExecuteSource =
   | "rest"
@@ -151,7 +156,9 @@ export type GovernedExecuteRejection =
   | "approval_required"
   | "authority_evidence_unavailable"
   | "alignment_denied"
-  | "alignment_escalation_required";
+  | "alignment_escalation_required"
+  | "precondition_denied"
+  | "precondition_escalation_required";
 
 export type GovernedExecuteResult = ToolResult & {
   governance?: {
@@ -160,6 +167,7 @@ export type GovernedExecuteResult = ToolResult & {
     authorityReason?: CoworkerAuthorityDecision["reasonCode"];
     alignment?: AlignmentGateDecision["alignment"];
     alignmentInteractionId?: string;
+    precondition?: PreconditionOrderingDecision;
   };
 };
 
@@ -221,6 +229,7 @@ export function _setGovernanceForTests(overrides: {
   authorityApprovalEnvelopeFinalize?: AuthorityApprovalEnvelopeFinalize | null;
   lifecycleHooks?: ToolLifecycleHook[] | null;
   alignmentGate?: AlignmentGate | null;
+  preconditionGate?: PreconditionGate | null;
 }): void {
   _resolveAgentGrants = overrides.resolveAgentGrants ?? null;
   _isAllowedByGrants = overrides.isAllowedByGrants ?? null;
@@ -230,6 +239,7 @@ export function _setGovernanceForTests(overrides: {
   setCoworkerToolAuthorityOverridesForTests(overrides);
   _lifecycleHooks = overrides.lifecycleHooks ?? [];
   setAlignmentGateOverrideForTests(overrides.alignmentGate ?? null);
+  setPreconditionGateOverrideForTests(overrides.preconditionGate ?? null);
 }
 
 let _executeToolOverride:
@@ -318,6 +328,7 @@ async function writeAudit(data: {
   context?: GovernedExecuteContext;
   durationMs: number;
   alignmentDecision?: AlignmentGateDecision | null;
+  preconditionDecision?: PreconditionOrderingDecision | null;
 }): Promise<{ id: string } | null> {
   const auditClass = deriveAuditClassForTool(data.toolName);
   const capabilityId = deriveCapabilityId(data.toolName);
@@ -342,6 +353,7 @@ async function writeAudit(data: {
             },
           }
         : {}),
+      ...(data.preconditionDecision ? { _takPrecondition: data.preconditionDecision } : {}),
     } as object),
     result: isMetricsOnly ? {} : (data.result as unknown as object),
     success: data.result.success,
@@ -455,6 +467,7 @@ export async function governedExecuteTool(
 ): Promise<GovernedExecuteResult> {
   let approvedAuthorityEnvelopeId: string | null = null;
   let alignmentDecision: AlignmentGateDecision | null = null;
+  let preconditionDecision: PreconditionOrderingDecision | null = null;
   const tool = findTool(args.toolName);
   if (!tool) {
     return {
@@ -622,49 +635,19 @@ export async function governedExecuteTool(
     return hookRejection;
   }
 
-  if (consequence.alignmentRequired) {
-    alignmentDecision = await runTakAlignmentGate(args);
-    if (alignmentDecision.verdict !== "approve") {
-      const rejection: GovernedExecuteRejection = alignmentDecision.verdict === "decline"
-        ? "alignment_denied"
-        : "alignment_escalation_required";
-      const result: GovernedExecuteResult = {
-        ...rejectionResult(args.toolName, rejection, alignmentDecision.rationale),
-        data: {
-          interactionId: alignmentDecision.interactionId,
-          alignment: alignmentDecision.alignment,
-        },
-        governance: {
-          rejected: rejection,
-          alignment: alignmentDecision.alignment,
-          alignmentInteractionId: alignmentDecision.interactionId,
-        },
-      };
-      const auditRow = await writeAudit({
-        toolName: args.toolName,
-        rawParams: args.rawParams,
-        result,
-        userId: args.userId,
-        source: args.source,
-        context: args.context,
-        durationMs: 0,
-        alignmentDecision,
-      });
-      if (auditRow?.id) {
-        await writeToolExecutionReceipt({
-          auditRowId: auditRow.id,
-          buildId: null,
-          rawParams: args.rawParams,
-          result,
-          toolName: args.toolName,
-          context: args.context,
-          consequential: true,
-          alignmentDecision,
-        });
-      }
-      return result;
-    }
-  }
+  const preexecution = await enforceTakPreexecution({
+    args,
+    alignmentRequired: consequence.alignmentRequired,
+    preconditionRequired: consequence.preconditionRequired,
+    writeAudit: ({ result, alignmentDecision: alignment, preconditionDecision: precondition }) => writeAudit({
+      toolName: args.toolName, rawParams: args.rawParams, result, userId: args.userId,
+      source: args.source, context: args.context, durationMs: 0,
+      alignmentDecision: alignment, preconditionDecision: precondition,
+    }),
+  });
+  alignmentDecision = preexecution.alignmentDecision;
+  preconditionDecision = preexecution.preconditionDecision;
+  if (preexecution.result) return preexecution.result;
 
   const t0 = Date.now();
   let result: ToolResult;
@@ -771,6 +754,7 @@ export async function governedExecuteTool(
     context: args.context,
     durationMs,
     alignmentDecision,
+    preconditionDecision,
   });
 
   const resultBuildId =
@@ -792,6 +776,7 @@ export async function governedExecuteTool(
       context: args.context,
       consequential: consequence.consequential,
       alignmentDecision,
+      preconditionDecision,
     });
   }
 
