@@ -12,9 +12,10 @@
 // here so the lease/resource contract has one implementation source.
 
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { X_OK } from "node:constants";
+import { accessSync, chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { connect } from "node:net";
-import { dirname, join } from "node:path";
+import { delimiter, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   assertLocalCiCleanupTarget,
@@ -27,6 +28,7 @@ import {
   resolveBaseFreshnessPolicy,
 } from "./lib/local-ci-base-freshness.mjs";
 import { ensureFullHistory } from "./lib/git-shallow-preflight.mjs";
+import { parseRepositoryPnpmVersion, resolvePinnedPnpmInvocation } from "./lib/pinned-pnpm.mjs";
 
 const THIS_FILE = fileURLToPath(import.meta.url);
 
@@ -57,6 +59,86 @@ function gitOutput(args, cwd) {
 
 function redactUrl(url) {
   return url.replace(/\/\/.*@/, "//***@");
+}
+
+function executableOnPath(command, { env = process.env, platform = process.platform } = {}) {
+  const extensions = platform === "win32"
+    ? (env.PATHEXT || ".COM;.EXE;.BAT;.CMD").split(";")
+    : [""];
+  for (const entry of (env.PATH || "").split(delimiter).filter(Boolean)) {
+    for (const extension of extensions) {
+      const candidate = join(entry, `${command}${extension}`);
+      try {
+        accessSync(candidate, platform === "win32" ? undefined : X_OK);
+        return candidate;
+      } catch {
+        // Continue through the admitted PATH.
+      }
+    }
+  }
+  return "";
+}
+
+function shellSingleQuote(value) {
+  return `'${String(value).replaceAll("'", `'"'"'`)}'`;
+}
+
+export function preparePinnedPnpmEnvironment({
+  packageManager,
+  toolchainDir,
+  env = process.env,
+  platform = process.platform,
+  spawnSyncImpl = spawnSync,
+}) {
+  const expectedVersion = parseRepositoryPnpmVersion(packageManager);
+  if (!expectedVersion) throw new Error(`local CI requires packageManager=pnpm@<version>; received ${packageManager || "missing"}`);
+  const hostPnpm = executableOnPath("pnpm", { env, platform });
+  if (!hostPnpm) throw new Error("local CI could not resolve pnpm on the admitted PATH");
+  const runOptions = { encoding: "utf8", env, shell: platform === "win32" };
+  const observed = spawnSyncImpl(hostPnpm, ["--version"], runOptions);
+  if (observed.status !== 0) {
+    throw new Error(`local CI could not inspect host pnpm: ${(observed.stderr || observed.stdout || "unknown error").trim()}`);
+  }
+  const actualVersion = observed.stdout.trim();
+  if (actualVersion === expectedVersion) {
+    return { mode: "host-match", expectedVersion, actualVersion, hostPnpm, env: { ...env } };
+  }
+
+  const pinnedInvocation = resolvePinnedPnpmInvocation(hostPnpm, actualVersion, expectedVersion, []);
+  const pinnedPrefix = pinnedInvocation.args;
+  const bootstrap = spawnSyncImpl(pinnedInvocation.command, [...pinnedPrefix, "--version"], runOptions);
+  if (bootstrap.status !== 0 || bootstrap.stdout.trim() !== expectedVersion) {
+    throw new Error(
+      `local CI could not provision repository-pinned pnpm ${expectedVersion}: ` +
+      `${(bootstrap.stderr || bootstrap.stdout || "version mismatch").trim()}`,
+    );
+  }
+
+  mkdirSync(toolchainDir, { recursive: true });
+  if (platform === "win32") {
+    writeFileSync(
+      join(toolchainDir, "pnpm.cmd"),
+      `@echo off\r\n"${hostPnpm.replaceAll('"', '""')}" ${pinnedPrefix.join(" ")} %*\r\n`,
+    );
+  } else {
+    const shimPath = join(toolchainDir, "pnpm");
+    writeFileSync(
+      shimPath,
+      `#!/bin/sh\nexec ${shellSingleQuote(hostPnpm)} ${pinnedPrefix.map(shellSingleQuote).join(" ")} "$@"\n`,
+    );
+    chmodSync(shimPath, 0o755);
+  }
+  return {
+    mode: "pinned-shim",
+    expectedVersion,
+    actualVersion,
+    hostPnpm,
+    env: {
+      ...env,
+      PATH: `${toolchainDir}${delimiter}${env.PATH || ""}`,
+      DPF_LOCAL_CI_PINNED_PNPM_VERSION: expectedVersion,
+    },
+  };
 }
 
 async function tcpReachable(host, port, timeoutMs = 500) {
@@ -386,6 +468,21 @@ async function main() {
   cleanScratchWorkspace(workspace, manifest);
 
   const slotEnv = localCiSlotEnvironment(manifest);
+  const packageManager = JSON.parse(readFileSync(join(workspace, "package.json"), "utf8")).packageManager;
+  let pnpmToolchain;
+  try {
+    pnpmToolchain = preparePinnedPnpmEnvironment({
+      packageManager,
+      toolchainDir: join(workspace, ".dpf-local-ci-toolchain", "bin"),
+      env: { ...env, ...slotEnv },
+    });
+  } catch (error) {
+    die(error instanceof Error ? error.message : String(error));
+  }
+  process.stdout.write(
+    `local-ci-runner: pnpm ${pnpmToolchain.expectedVersion} ` +
+    `(${pnpmToolchain.mode}${pnpmToolchain.mode === "pinned-shim" ? `; host was ${pnpmToolchain.actualVersion}` : ""})\n`,
+  );
   const testDatabaseUrl = await resolveDatabaseUrl(env, manifest);
   const invocation = createLocalIntegrationChildInvocation({
     repoTop,
@@ -397,7 +494,7 @@ async function main() {
     slotKey: manifest.slotKey,
     metadataFile,
     testDatabaseUrl,
-    env: { ...env, ...slotEnv },
+    env: pnpmToolchain.env,
   });
   if (testDatabaseUrl) {
     process.stdout.write(`local-ci-runner: test database ${redactUrl(testDatabaseUrl)}\n`);

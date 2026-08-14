@@ -149,6 +149,8 @@ export async function runFullDiscoverySweep(): Promise<void> {
       trigger: "scheduled",
       decrypt: decryptSecret,
     });
+    const { contributeEligibleFingerprintRules } = await import("@/lib/hive/contribute-fingerprint");
+    await contributeEligibleFingerprintRules();
     console.log("[discovery-scheduler] Sweep complete");
     await recordJobRun(JOB_FULL_SWEEP, "ok");
   } catch (err) {

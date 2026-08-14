@@ -18,6 +18,10 @@ vi.mock("../integrate/code-graph-refresh", () => ({
   registerCodeGraphScheduledJob: vi.fn().mockResolvedValue(undefined),
 }));
 
+vi.mock("@/lib/hive/contribute-fingerprint", () => ({
+  contributeEligibleFingerprintRules: vi.fn().mockResolvedValue({ eligible: 0, contributed: 0, skipped: 0 }),
+}));
+
 // Must import after mock setup
 import { runPrometheusTargetCheck, runFullDiscoverySweep, registerScheduledJobs, recordJobRun } from "./discovery-scheduler";
 import { registerModelDiscoveryJob } from "../inference/model-discovery-scheduler";
@@ -133,12 +137,14 @@ describe("runPrometheusTargetCheck", () => {
 });
 
 describe("runFullDiscoverySweep", () => {
-  it("calls executeBootstrapDiscovery", async () => {
+  it("runs discovery then submits eligible local fingerprint rules to the governed hive ledger", async () => {
     const { executeBootstrapDiscovery } = await import("@dpf/db");
     const mockExec = executeBootstrapDiscovery as ReturnType<typeof vi.fn>;
     mockExec.mockClear();
 
     await runFullDiscoverySweep();
     expect(mockExec).toHaveBeenCalledTimes(1);
+    const { contributeEligibleFingerprintRules } = await import("@/lib/hive/contribute-fingerprint");
+    expect(contributeEligibleFingerprintRules).toHaveBeenCalledTimes(1);
   });
 });

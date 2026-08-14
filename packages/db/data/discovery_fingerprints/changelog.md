@@ -1,6 +1,6 @@
 # Discovery Fingerprint Catalog Changelog
 
-## Unreleased — estate device seed (schemaVersion 2)
+## 0.2.0 — estate device seed (schemaVersion 2)
 
 - Seeded the operator's estate device identifications as catalog rules
   (`rules/estate-foundational-devices.json`): OUI-vendor → device class →
@@ -17,6 +17,9 @@
   placed per the operator's observed estate and carry slightly lower
   identityConfidence; the corroborating-signal path (DHCP-55, hostname, the
   layer-1 coworker) disambiguates them once richer capture lands.
+- Extended safe coverage for Google clients, Roku, Sonos, Ring, Wyze, Synology,
+  and Raspberry Pi. Espressif and LG Innotek remain module-vendor evidence that
+  requires corroboration instead of being promoted to finished-product rules.
 
 ## Unreleased — schemaVersion 2
 

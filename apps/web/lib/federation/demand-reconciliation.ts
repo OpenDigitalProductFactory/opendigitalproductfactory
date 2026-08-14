@@ -54,10 +54,20 @@ export function relationshipPresetForRole(role: string): FederationRelationshipP
   return null;
 }
 
+const FEDERATED_DEMAND_ORIGIN_LINE = /^\[origin:federatedDemand:[^\]\r\n]+\]$/;
+
+function isFederatedDemandOriginMarkerLine(line: string): boolean {
+  return FEDERATED_DEMAND_ORIGIN_LINE.test(line.trim());
+}
+
+export function hasFederatedDemandOriginMarker(body: string | null): boolean {
+  return (body ?? "").split(/\r?\n/).some(isFederatedDemandOriginMarkerLine);
+}
+
 function shareSafeSummary(body: string | null, title: string): string {
   const withoutMarkers = (body ?? "")
-    .split("\n")
-    .filter((line) => !line.trim().startsWith("[origin:"))
+    .split(/\r?\n/)
+    .filter((line) => !isFederatedDemandOriginMarkerLine(line))
     .join("\n")
     .trim();
   return withoutMarkers || title;
@@ -108,24 +118,19 @@ export async function runDemandReconciliation(
         // Open work only. A closed item is excluded here, drops out of
         // eligibleIds below, and is withdrawn from the peer. See BI-8A8C1D3A.
         status: { in: [...FEDERATION_SYNCABLE_BACKLOG_STATUSES] },
-        // Exclude items RECEIVED from federation (they carry the origin marker in
-        // their body). NULL-SAFE: a NULL body has no marker, so it must be KEPT —
-        // a bare `NOT: { body: { contains } }` drops NULL-body rows via SQL
-        // three-valued logic (`NULL NOT LIKE …` = NULL = excluded), silently
-        // stranding every eligible item with no body. See BI-8A7E3E56.
-        OR: [
-          { body: null },
-          { NOT: { body: { contains: "[origin:federatedDemand:" } } },
-        ],
       },
       select: {
         itemId: true, title: true, body: true, workType: true, occurrenceCount: true,
         createdAt: true, updatedAt: true, digitalProduct: { select: { productId: true } },
       },
     });
-    const eligibleIds = new Set(items.map((item) => item.itemId));
+    // Parse the governed marker as a complete standalone line. A broad SQL
+    // substring predicate both drops NULL bodies and mistakes explanatory prose
+    // for an adopted peer envelope.
+    const eligibleItems = items.filter((item) => !hasFederatedDemandOriginMarker(item.body));
+    const eligibleIds = new Set(eligibleItems.map((item) => item.itemId));
     for (const link of automaticLinks) {
-      for (const item of items) {
+      for (const item of eligibleItems) {
         // Fault-isolate each item: a single item that throws (envelope violation,
         // transient DB error) must NOT abort the whole cycle and strand every item
         // after it — the same "one bad record can't strand the batch" lesson as the

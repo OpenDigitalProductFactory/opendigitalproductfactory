@@ -20,6 +20,9 @@
 import { existsSync, readFileSync, readdirSync, realpathSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { resolveHostCommandInvocation } from "./host-command-invocation.mjs";
+import { parseRepositoryPnpmVersion, resolvePinnedPnpmInvocation } from "./pinned-pnpm.mjs";
+
+export { resolvePinnedPnpmInvocation } from "./pinned-pnpm.mjs";
 
 /**
  * Readiness classification given probe results. Pure — unit-tested.
@@ -134,6 +137,58 @@ function run(cmd, args, cwd, opts = {}) {
   return (opts.execute ?? executeCommand)(cmd, args, cwd, opts).ok;
 }
 
+export function classifyIgnoredBuilds(stdout) {
+  const lines = String(stdout ?? "").split(/\r?\n/).map((line) => line.trim());
+  const header = lines.findIndex((line) => /ignored builds during installation/i.test(line));
+  if (header < 0) return { ok: true, packages: [] };
+  const packages = lines
+    .slice(header + 1)
+    .map((line) => line.replace(/^[-*•]\s*/, ""))
+    .filter((line) => line.length > 0 && !/^none\.?$/i.test(line));
+  return { ok: packages.length === 0, packages };
+}
+
+export function dependencyPolicyReviewKey({ baseSha, packageName, version, errorCode }) {
+  return `dependency-policy:${baseSha}:${packageName}@${version}:${errorCode}`;
+}
+
+function splitPackageVersion(value) {
+  const at = value.lastIndexOf("@");
+  if (at <= 0) return { packageName: value, version: "unknown" };
+  return { packageName: value.slice(0, at), version: value.slice(at + 1) || "unknown" };
+}
+
+function readPinnedPnpmVersion(worktreePath) {
+  try {
+    const manifest = JSON.parse(readFileSync(`${worktreePath}/package.json`, "utf8"));
+    return parseRepositoryPnpmVersion(manifest.packageManager);
+  } catch {
+    return null;
+  }
+}
+
+function createPinnedPnpmRunner(worktreePath, packageManager, opts = {}) {
+  const execute = opts.execute ?? executeCommand;
+  const versionProbe = execute(packageManager, ["--version"], worktreePath, opts);
+  if (!versionProbe.ok) return { ok: false, failure: versionProbe };
+  const currentVersion = String(versionProbe.stdout ?? "").trim();
+  const pinnedVersion = opts.pinnedPnpmVersion ?? readPinnedPnpmVersion(worktreePath);
+  return {
+    ok: true,
+    currentVersion,
+    pinnedVersion,
+    run(args) {
+      const invocation = resolvePinnedPnpmInvocation(
+        packageManager,
+        currentVersion,
+        pinnedVersion,
+        args,
+      );
+      return execute(invocation.command, invocation.args, worktreePath, opts);
+    },
+  };
+}
+
 function norm(p) {
   return String(p ?? "").replace(/\\/g, "/").replace(/\/+$/g, "");
 }
@@ -197,18 +252,42 @@ export function probeWorktreeReadiness(worktreePath, opts = {}) {
   // existed but was EMPTY — so both the path set and the emptiness test matter.
   const missing = missingCompileArtifacts(worktreePath, opts.artifactDeps);
   const hasNodeModules = !missing.some((m) => m.path === "node_modules");
-  const depProbeOk = hasNodeModules && run(pkgMgr, ["ls", "--depth", "-1"], worktreePath, opts);
+  const runner = hasNodeModules ? createPinnedPnpmRunner(worktreePath, pkgMgr, opts) : null;
+  const depProbeOk = Boolean(runner?.ok && runner.run(["ls", "--depth", "-1"]).ok);
+  const ignoredBuildResult = depProbeOk ? runner.run(["ignored-builds"]) : null;
+  const ignoredBuilds = ignoredBuildResult?.ok
+    ? classifyIgnoredBuilds(ignoredBuildResult.stdout)
+    : { ok: false, packages: [] };
+  const gitResult = (opts.execute ?? executeCommand)("git", ["rev-parse", "HEAD"], worktreePath, opts);
+  const baseSha = gitResult.ok ? String(gitResult.stdout ?? "").trim() : "unknown-base";
+  const dependencyPolicyReviewKeys = ignoredBuilds.packages.map((pkg) =>
+    dependencyPolicyReviewKey({
+      baseSha,
+      ...splitPackageVersion(pkg),
+      errorCode: "ignored-build",
+    }),
+  );
   const linkCheck = depProbeOk
     ? checkWorkspaceLinksResolveLocally(worktreePath, opts.linkCheckDeps)
     : { ok: true, stale: [] };
-  const gateOk = depProbeOk && linkCheck.ok && missing.length === 0;
+  const gateOk = depProbeOk && ignoredBuilds.ok && linkCheck.ok && missing.length === 0;
   return {
     status: classifyReadiness({ hasNodeModules, depProbeOk, gateOk }),
-    reason: missing.length > 0 && hasNodeModules && depProbeOk && linkCheck.ok
+    reason: !ignoredBuilds.ok && ignoredBuilds.packages.length > 0
+      ? `ignored_builds_unclassified:${ignoredBuilds.packages.join(",")}`
+      : missing.length > 0 && hasNodeModules && depProbeOk && linkCheck.ok
       ? `missing_compile_artifacts:${missing.map((m) => m.path).join(",")}`
       : readinessReason({ hasNodeModules, depProbeOk, gateOk, staleWorkspaceLinks: linkCheck.stale }),
     missing,
-    checks: { hasNodeModules, depProbeOk, gateOk, staleWorkspaceLinks: linkCheck.stale },
+    checks: {
+      hasNodeModules,
+      depProbeOk,
+      gateOk,
+      packageManagerVersion: runner?.pinnedVersion ?? runner?.currentVersion ?? null,
+      ignoredBuilds: ignoredBuilds.packages,
+      dependencyPolicyReviewKeys,
+      staleWorkspaceLinks: linkCheck.stale,
+    },
   };
 }
 
@@ -314,12 +393,12 @@ export function bootstrapWorktreeDeps(worktreePath, opts = {}) {
       // ERR_PNPM_OUTDATED_LOCKFILE — still never a release-age error. Keeping the
       // override would have silently defeated a real control on this path once
       // the floor became versioned repo config.
-      const install = execute(
-        pkgMgr,
-        ["install", "--prefer-offline", "--frozen-lockfile"],
-        worktreePath,
-        opts,
-      );
+      const runner = createPinnedPnpmRunner(worktreePath, pkgMgr, { ...opts, execute });
+      if (!runner.ok) {
+        const { ok: _ok, ...failure } = runner.failure;
+        return { status: "source-only", reason: "package_manager_probe_failed", failure: { phase: "version", ...failure } };
+      }
+      const install = runner.run(["install", "--prefer-offline", "--frozen-lockfile"]);
       if (!install.ok) {
         const { ok: _ok, ...failure } = install;
         return { status: "source-only", reason: "managed_install_failed", failure: { phase: "install", ...failure } };
