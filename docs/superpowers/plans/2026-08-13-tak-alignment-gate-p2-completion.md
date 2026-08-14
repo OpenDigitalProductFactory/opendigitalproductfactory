@@ -60,7 +60,7 @@ TAK owns action gating, GAID owns subject identity and receipts, and TAK-JSI own
 - Targeted suites pass after every BI commit; full affected web/db tests pass at batch end.
 - Production web build passes; any migration applies against existing data and a clean schema.
 - UX verification covers rejection, escalation, deliberate amendment, and Work Room participant/receipt presentation in light and dark themes using existing `--dpf-*` tokens and shared primitives.
-- Canonical Arcamanus acceptance passes exactly: toaster/Alaskan fishermen grounded DECLINE; MSP partner and self-host support subscription APPROVE; every consequential call emits a GAID-bound ledger receipt.
+- Canonical customer-zero acceptance passes exactly: toaster/Alaskan fishermen grounded DECLINE; MSP partner and self-host support subscription APPROVE; every consequential call emits a GAID-bound ledger receipt.
 - Documentation/conformance surfaces accurately distinguish implemented behavior from specified future maturity.
 
 ## Risks and rollback
