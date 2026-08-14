@@ -6,6 +6,7 @@ import { ScheduleEditor } from "./ScheduleEditor";
 import {
   RESTAURANT_TABLE_SHAPES,
   type RestaurantTableAttributes,
+  type RestaurantTableBookingAccess,
   type RestaurantTableShape,
 } from "@/lib/storefront/restaurant-table-attributes";
 
@@ -60,6 +61,8 @@ function ResourceEditor({
   const [combinationGroup, setCombinationGroup] = useState(
     resource.attributes.combinationGroup ?? "",
   );
+  const [bookingAccess, setBookingAccess] =
+    useState<RestaurantTableBookingAccess>(resource.attributes.bookingAccess);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -82,6 +85,7 @@ function ResourceEditor({
             shape,
             combinationGroup: combinationGroup.trim() || null,
             combinableWith: resource.attributes.combinableWith,
+            bookingAccess,
             expectedVersion: resource.version,
           }),
         },
@@ -202,6 +206,22 @@ function ResourceEditor({
           </span>
         </label>
         <label className="grid gap-1 text-sm">
+          Booking access
+          <select
+            value={bookingAccess}
+            onChange={(event) =>
+              setBookingAccess(event.target.value as RestaurantTableBookingAccess)
+            }
+            className="min-h-[44px] rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-3"
+          >
+            <option value="online">Online and in-house</option>
+            <option value="in-house">In-house only</option>
+          </select>
+          <span className="text-xs text-[var(--dpf-muted)]">
+            In-house tables stay available to hosts but are withheld from external booking.
+          </span>
+        </label>
+        <label className="grid gap-1 text-sm">
           Status
           <select
             value={status}
@@ -233,7 +253,7 @@ function ResourceEditor({
             type="button"
             onClick={save}
             disabled={saving || !label.trim() || capacity < 1}
-            className="min-h-[44px] rounded-md bg-[var(--dpf-accent)] px-4 font-semibold text-white disabled:opacity-50"
+            className="min-h-[44px] rounded-md bg-[var(--dpf-accent)] px-4 font-semibold text-[var(--dpf-on-accent,var(--dpf-surface-1))] disabled:opacity-50"
           >
             {saving ? "Saving…" : "Save table"}
           </button>
@@ -271,6 +291,8 @@ export function HospitalityResourceManager({
   const [serviceArea, setServiceArea] = useState("");
   const [shape, setShape] = useState<RestaurantTableShape>("round");
   const [combinationGroup, setCombinationGroup] = useState("");
+  const [bookingAccess, setBookingAccess] =
+    useState<RestaurantTableBookingAccess>("online");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -295,6 +317,7 @@ export function HospitalityResourceManager({
             shape,
             combinationGroup: combinationGroup.trim() || null,
             combinableWith: [],
+            bookingAccess,
           }),
         },
       );
@@ -313,6 +336,7 @@ export function HospitalityResourceManager({
       setServiceArea("");
       setShape("round");
       setCombinationGroup("");
+      setBookingAccess("online");
       setAdding(false);
       refreshOperationalView();
     } catch {
@@ -408,7 +432,7 @@ export function HospitalityResourceManager({
               type="button"
               onClick={addTable}
               disabled={saving || !label.trim() || capacity < 1}
-              className="min-h-[44px] rounded-md bg-[var(--dpf-accent)] px-4 font-semibold text-white disabled:opacity-50"
+              className="min-h-[44px] rounded-md bg-[var(--dpf-accent)] px-4 font-semibold text-[var(--dpf-on-accent,var(--dpf-surface-1))] disabled:opacity-50"
             >
               {saving ? "Adding…" : "Add table"}
             </button>

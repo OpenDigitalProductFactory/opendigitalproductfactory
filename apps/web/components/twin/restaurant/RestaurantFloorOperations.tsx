@@ -14,12 +14,17 @@ import {
   type Intent,
 } from "@/components/ui/report-kit/statusColors";
 import { CartesianSceneCanvas } from "@/components/twin/cartesian/CartesianSceneCanvas";
+import {
+  RestaurantCapacityTimeline,
+  RestaurantWalkInIntake,
+} from "@/components/twin/restaurant/RestaurantHostStandPanels";
 import { createClientOperationId } from "@/lib/client-operation-id";
 import type { HospitalityServiceTurnStage } from "@/lib/storefront/hospitality-service-turn";
 import {
   advanceRestaurantServiceTurn,
   executeRestaurantFloorCommand,
   moveRestaurantParty,
+  setRestaurantTableBookingAccess,
 } from "@/lib/twin/restaurant-floor-actions";
 import type {
   RestaurantFloorCommandDemand,
@@ -75,10 +80,23 @@ function resultNotice(result: OperationalCommandResult | null) {
     const partySeated = result.changedFacts.some(
       (fact) => fact.field === "status" && fact.value === "seated",
     );
+    const bookingAccessChanged = result.changedFacts.some(
+      (fact) => fact.field === "bookingAccess",
+    );
     return (
       <Notice
         variant="success"
-        title={stageChanged ? "Table status updated" : partySeated ? "Party seated" : resourcesChanged ? "Party moved" : "Party seated"}
+        title={
+          bookingAccessChanged
+            ? "Table access updated"
+            : stageChanged
+              ? "Table status updated"
+              : partySeated
+                ? "Party seated"
+                : resourcesChanged
+                  ? "Party moved"
+                  : "Floor updated"
+        }
       >
         The change is confirmed and the live floor is refreshing.
       </Notice>
@@ -146,6 +164,10 @@ export function RestaurantFloorOperations({
   const [selectedMoveOption, setSelectedMoveOption] =
     useState<RestaurantFloorCommandOption | null>(null);
   const [pending, startTransition] = useTransition();
+  const [activeTableId, setActiveTableId] = useState<string | null>(null);
+  const [tableActionPosition, setTableActionPosition] = useState({ left: 0, top: 0 });
+  const tableActionRef = useRef<HTMLDivElement>(null);
+  const tableActionAnchorRef = useRef<HTMLElement | null>(null);
 
   const selectedDemand = view.floor.demand.find(
     (demand) => demand.id === selectedDemandId,
@@ -174,6 +196,7 @@ export function RestaurantFloorOperations({
   const filteredDemand = rankedDemand.filter(
     (demand) => queueFilter === "all" || demand.kind === queueFilter,
   );
+  const activeTable = view.floor.tables.find((table) => table.id === activeTableId) ?? null;
 
   const chooseDemand = (demandId: string) => {
     setSelectedDemandId(demandId);
@@ -190,6 +213,33 @@ export function RestaurantFloorOperations({
       setResult(null);
     }
   };
+
+  const closeTableActions = () => {
+    setActiveTableId(null);
+    tableActionAnchorRef.current?.focus();
+  };
+
+  const openTableActions = (resourceId: string, anchor: HTMLElement) => {
+    chooseTable(resourceId);
+    const rect = anchor.getBoundingClientRect();
+    const width = 304;
+    setTableActionPosition({
+      left: Math.max(8, Math.min(rect.right + 8, window.innerWidth - width - 8)),
+      top: Math.max(8, Math.min(rect.top, window.innerHeight - 280)),
+    });
+    tableActionAnchorRef.current = anchor;
+    setActiveTableId(resourceId);
+  };
+
+  useEffect(() => {
+    if (!activeTableId) return;
+    tableActionRef.current?.querySelector<HTMLElement>("button")?.focus();
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") closeTableActions();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [activeTableId]);
 
   const refreshAfterConflict = () => {
     setSelectedDemandId(null);
@@ -265,7 +315,7 @@ export function RestaurantFloorOperations({
             aria-pressed={selectedOption?.resourceIds.includes(table.id)}
             className="dpf-tap-target rounded-dpf-md border border-dpf-border px-dpf-sm text-dpf-body font-dpf-medium hover:bg-dpf-surface-2"
             disabled={pending}
-            onClick={() => chooseTable(table.id)}
+            onClick={(event) => openTableActions(table.id, event.currentTarget)}
           >
             {selectedOption?.resourceIds.includes(table.id) ? "Selected" : "Choose"}
           </button>
@@ -276,7 +326,7 @@ export function RestaurantFloorOperations({
     },
   ], [availableCommand, pending, selectedOption]);
 
-  const confirm = () => {
+  const confirmSeating = () => {
     if (!selectedDemand || !selectedOption) return;
     startTransition(async () => {
       const next = await executeRestaurantFloorCommand({
@@ -413,7 +463,7 @@ export function RestaurantFloorOperations({
           <div className="shrink-0 border-b border-dpf-border p-dpf-sm">
             <div className="flex items-center justify-between gap-dpf-sm">
               <h3 id="waiting-now-heading" className="text-dpf-body font-dpf-semibold text-dpf-text">Waiting now</h3>
-              <span className="text-dpf-caption text-dpf-muted">Priority order</span>
+              <RestaurantWalkInIntake onCreated={() => router.refresh()} />
             </div>
             <div className="mt-dpf-xs flex gap-1" aria-label="Filter waiting parties">
               {(["all", "walk-in", "reservation"] as const).map((filter) => (
@@ -469,7 +519,7 @@ export function RestaurantFloorOperations({
               <button type="button" aria-pressed={centerView === "floor"} className="dpf-tap-target rounded-dpf-md px-dpf-sm text-dpf-body font-dpf-semibold text-dpf-text aria-pressed:bg-dpf-accent-soft aria-pressed:text-dpf-accent" onClick={() => setCenterView("floor")}>Floor</button>
               <button type="button" aria-pressed={centerView === "list"} className="dpf-tap-target rounded-dpf-md px-dpf-sm text-dpf-body font-dpf-semibold text-dpf-text aria-pressed:bg-dpf-accent-soft aria-pressed:text-dpf-accent" onClick={() => setCenterView("list")}>Table list</button>
             </div>
-            <p className="text-dpf-caption text-dpf-muted">Tap a table to change the suggestion</p>
+            <p className="text-dpf-caption text-dpf-muted">Select a table for nearby actions</p>
           </div>
           <div className="min-h-0 flex-1 overflow-auto p-dpf-xs">
             {centerView === "floor" ? scene ? (
@@ -479,9 +529,9 @@ export function RestaurantFloorOperations({
                 bindings={bindings}
                 mode="operate"
                 chrome="embedded"
-                navigation="locked"
-                onActivate={(_placementId, entityRef) => {
-                  if (entityRef.kind === "table") chooseTable(entityRef.id);
+                navigation="interactive"
+                onActivate={(_placementId, entityRef, anchor) => {
+                  if (entityRef.kind === "table") openTableActions(entityRef.id, anchor);
                 }}
                 height={500}
                 className="h-full"
@@ -495,6 +545,7 @@ export function RestaurantFloorOperations({
         </section>
 
         <aside className="grid min-h-0 content-start gap-dpf-sm overflow-visible lg:overflow-y-auto">
+          <RestaurantCapacityTimeline slots={view.capacityTimeline ?? []} />
           <section aria-labelledby="ai-host-heading" className="rounded-dpf-lg border border-dpf-accent bg-dpf-accent-soft p-dpf-sm">
             <div className="flex items-center gap-dpf-xs">
               <span aria-hidden="true">✦</span>
@@ -509,7 +560,7 @@ export function RestaurantFloorOperations({
                   <p className="mt-dpf-xs text-dpf-caption text-dpf-muted">Best fit by capacity, timing, and server load.</p>
                 )}
                 <p className="mt-dpf-sm text-dpf-body text-dpf-text">Seat {selectedDemand.name} ({selectedDemand.covers}) at {selectedOption.label}.</p>
-                <button aria-busy={pending} type="button" className="dpf-tap-target mt-dpf-sm w-full rounded-dpf-md bg-dpf-accent px-dpf-md font-dpf-semibold text-[var(--dpf-on-accent,var(--dpf-surface-1))] disabled:opacity-60" data-dpf-primary-action="true" data-owner-first-next-action="restaurant-confirm-seating" disabled={pending} onClick={confirm}>{pending ? <InlineBusy label="Confirming…" tone="current" /> : "Confirm seating"}</button>
+                <button aria-busy={pending} type="button" className="dpf-tap-target mt-dpf-sm w-full rounded-dpf-md bg-dpf-accent px-dpf-md font-dpf-semibold text-[var(--dpf-on-accent,var(--dpf-surface-1))] disabled:opacity-60" data-dpf-primary-action="true" data-owner-first-next-action="restaurant-confirm-seating" disabled={pending} onClick={confirmSeating}>{pending ? <InlineBusy label="Confirming…" tone="current" /> : "Confirm seating"}</button>
               </>
             ) : (
               <p className="mt-dpf-sm text-dpf-body text-dpf-muted">Choose a party for a safe seating choice.</p>
@@ -616,6 +667,49 @@ export function RestaurantFloorOperations({
           </section>
         </aside>
       </div>
+
+      {activeTable ? (
+        <div
+          ref={tableActionRef}
+          role="dialog"
+          aria-label={`Actions for ${activeTable.label}`}
+          className="fixed z-50 grid w-[19rem] gap-dpf-sm rounded-dpf-lg border border-dpf-border bg-dpf-surface-1 p-dpf-md shadow-dpf-lg"
+          style={tableActionPosition}
+        >
+          <div className="flex items-start justify-between gap-dpf-sm">
+            <div>
+              <h3 className="text-dpf-body font-dpf-semibold text-dpf-text">{activeTable.label}</h3>
+              <p className="text-dpf-caption text-dpf-muted">{activeTable.capacity} seats · {activeTable.statusLabel} · {activeTable.bookingAccess === "online" ? "Open online" : "In-house only"}</p>
+            </div>
+            <button type="button" aria-label="Close table actions" className="dpf-tap-target rounded-dpf-md px-dpf-xs text-dpf-muted" onClick={closeTableActions}>×</button>
+          </div>
+          {selectedDemand && selectedOption?.resourceIds.includes(activeTable.id) ? (
+            <button type="button" disabled={pending} className="dpf-tap-target rounded-dpf-md bg-dpf-accent px-dpf-md font-dpf-semibold text-[var(--dpf-on-accent,var(--dpf-surface-1))] disabled:opacity-60" onClick={() => { closeTableActions(); confirmSeating(); }}>
+              Seat {selectedDemand.name} here
+            </button>
+          ) : (
+            <p className="text-dpf-body text-dpf-muted">Choose a waiting party to see a safe seating action.</p>
+          )}
+          <button
+            type="button"
+            disabled={pending}
+            className="dpf-tap-target rounded-dpf-md border border-dpf-border px-dpf-sm text-left text-dpf-body font-dpf-medium text-dpf-text hover:bg-dpf-surface-2 disabled:opacity-60"
+            onClick={() => startTransition(async () => {
+              const next = await setRestaurantTableBookingAccess({
+                resourceId: activeTable.id,
+                expectedVersion: activeTable.version,
+                bookingAccess: activeTable.bookingAccess === "online" ? "in-house" : "online",
+                idempotencyKey: `table-access:${activeTable.id}:${createClientOperationId()}`,
+              });
+              setResult(next);
+              closeTableActions();
+              router.refresh();
+            })}
+          >
+            {activeTable.bookingAccess === "online" ? "Hold for in-house guests" : "Open for online booking"}
+          </button>
+        </div>
+      ) : null}
     </section>
   );
 }

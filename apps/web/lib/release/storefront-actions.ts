@@ -325,6 +325,7 @@ export async function submitBooking(
             organizationId: storefront.organizationId,
             storefrontId: storefront.id,
             providerId: data.providerId,
+            bookingAccess: "online",
           },
         );
         hospitalityResourceId = resource?.id ?? null;

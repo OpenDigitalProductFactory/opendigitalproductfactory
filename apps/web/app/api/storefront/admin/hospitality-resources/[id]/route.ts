@@ -98,6 +98,7 @@ export async function PUT(
     shape?: string;
     combinationGroup?: string | null;
     combinableWith?: unknown[];
+    bookingAccess?: string;
   };
   const scheduleRequested =
     body.availability !== undefined || body.exceptions !== undefined;
@@ -252,6 +253,7 @@ export async function PUT(
       body.combinableWith === undefined
         ? currentAttributes.combinableWith
         : body.combinableWith,
+    bookingAccess: body.bookingAccess ?? currentAttributes.bookingAccess,
   });
   if (
     !label ||

@@ -71,8 +71,38 @@ describe("hospitality capacity repository", () => {
         legacyServiceProviderId: "provider-1",
         status: "active",
       },
-      select: { id: true, legacyServiceProviderId: true, status: true },
+      select: { id: true, legacyServiceProviderId: true, status: true, attributes: true },
     });
+  });
+
+  it("excludes in-house tables from public provider resolution", async () => {
+    const db = database({
+      hospitalityResource: {
+        findFirst: vi.fn(async () => ({
+          id: "table-1",
+          legacyServiceProviderId: "provider-1",
+          status: "active",
+          attributes: { shape: "round", bookingAccess: "in-house" },
+        })),
+      },
+    });
+
+    await expect(
+      resolveHospitalityResourceForProvider(db, {
+        organizationId: "org-1",
+        storefrontId: "storefront-1",
+        providerId: "provider-1",
+        bookingAccess: "online",
+      }),
+    ).resolves.toBeNull();
+
+    await expect(
+      resolveHospitalityResourceForProvider(db, {
+        organizationId: "org-1",
+        storefrontId: "storefront-1",
+        providerId: "provider-1",
+      }),
+    ).resolves.toEqual(expect.objectContaining({ id: "table-1" }));
   });
 
   it("creates a discrete allocation with a stable idempotency boundary", async () => {

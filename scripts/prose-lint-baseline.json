@@ -207,7 +207,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 6
+    "textMass": 8
   },
   "apps/web/app/(shell)/admin/page.tsx": {
     "vocabulary": 0,
@@ -7543,7 +7543,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 120
+    "textMass": 151
   },
   "apps/web/components/storefront-admin/ItemFormDialog.tsx": {
     "vocabulary": 0,
@@ -7865,7 +7865,14 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 217
+    "textMass": 239
+  },
+  "apps/web/components/twin/restaurant/RestaurantHostStandPanels.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 35
   },
   "apps/web/components/twin/rooms/RoomsOperations.tsx": {
     "vocabulary": 0,
