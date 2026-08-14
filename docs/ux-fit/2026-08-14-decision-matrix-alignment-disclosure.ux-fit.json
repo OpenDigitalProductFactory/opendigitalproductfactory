@@ -1,0 +1,37 @@
+{
+  "version": "1",
+  "decidedOption": "progressive-disclosure",
+  "scope": {
+    "files": [
+      "apps/web/app/(shell)/coworker-decisions/matrix/page.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "sweep-measurement",
+    "baselineComparison": "maintained",
+    "measurementRun": "governed UX route sweep run 31849736737",
+    "measured": {
+      "/coworker-decisions/matrix": {
+        "defaultVisibleWords": 292,
+        "leadBandWords": 0,
+        "primaryActions": 0,
+        "visibleFields": 0,
+        "maxChoicesPerControl": 0,
+        "subLegibleControls": 0,
+        "buriedPrimaryAction": 0,
+        "axeViolations": 0
+      }
+    },
+    "fitDecision": "fits-with-guardrails",
+    "owningArea": "Platform",
+    "routeFamily": "/coworker-decisions/matrix",
+    "primaryPersona": "platform operator reviewing the criteria and weights used by the Coworker Decision Engine",
+    "navigationLayer": "local progressive disclosure within the existing Decision Matrix route",
+    "reuseConvergence": "uses one native details disclosure and continues to render every row from buildMatrixDimensions",
+    "sourceTruth": "PRINCIPLE_DIMENSIONS and STANCE_ALIGNMENT_DIMENSIONS remain the closed registries; live WikiPage principle dimensions supply counts",
+    "emptyFailureBehavior": "the established axes and tier weights remain visible when no published principle counts exist",
+    "aiBoundary": "read-only explanation; no AI action or consequential tool call",
+    "accessibility": "native details and summary preserve keyboard and assistive-technology disclosure semantics",
+    "responsive": "the existing truncating row layout remains unchanged inside and outside the disclosure"
+  }
+}

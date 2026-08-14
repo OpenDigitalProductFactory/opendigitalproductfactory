@@ -9,6 +9,7 @@ import {
   STANCE_DIMENSION_MAP,
   STANCE_FORBIDDEN_DIMENSIONS,
   STANCE_MAX_MAGNITUDE,
+  projectStanceDimensionVector,
   type StanceAxisEdge,
 } from "./stance-dimension-map";
 
@@ -17,6 +18,22 @@ import {
 // be discovered when a derived vector starts scoring real decisions.
 
 describe("stance-dimension-map: the live map is well-formed", () => {
+  it("projects every stance into a persisted non-null vector", () => {
+    for (const key of STANCE_VECTOR_KEYS) {
+      const projected = projectStanceDimensionVector(key);
+      expect(projected.principleDimensions.length).toBeGreaterThan(0);
+      expect(Object.keys(projected.principleDimensionVector)).toEqual(
+        expect.arrayContaining(projected.principleDimensions),
+      );
+    }
+  });
+
+  it("projects the four constitutional alignment axes from declared stance purpose", () => {
+    const projected = projectStanceDimensionVector("growth-vs-stability");
+    expect(projected.principleDimensions).toEqual(
+      expect.arrayContaining(["mission_fit", "market_fit", "product_fit", "gtm_fit"]),
+    );
+  });
   it("passes every invariant (signs, caps, forbidden axes, rationales)", () => {
     expect(findStanceDimensionMapViolations()).toEqual([]);
   });

@@ -4,14 +4,12 @@ import {
   resolveProfileMaterialForOrg,
   scorePerspectiveMaterial,
 } from "./material";
-import {
-  createDecisionInteractionId,
-  findExistingDecisionInteraction,
-  persistDecisionInteraction,
-} from "./persistence";
+import { createDecisionInteractionId, findExistingDecisionInteraction, persistDecisionInteraction } from "./persistence";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 import { MARK_DPF_PLATFORM_PROFILE } from "./default-profile";
-import { resolveRecommendedOptionId } from "./option-recommendation";
+import { resolveGateRecommendedOptionId } from "./option-recommendation";
+import type { AlignmentCorpora } from "./alignment-criteria";
+import { applyConstitutionalAlignment } from "./constitutional-alignment-application";
 import {
   hasPrincipleConflict,
   orderedProfileChain,
@@ -476,6 +474,7 @@ export async function evaluatePerspectiveGate(input: {
   now?: Date;
   coverageGapRationale?: string;
   onComplete?: (interactionId: string) => Promise<void> | void;
+  alignmentCorpora?: AlignmentCorpora;
 }): Promise<{
   allowed: boolean;
   interactionId: string;
@@ -732,18 +731,16 @@ export async function evaluatePerspectiveGate(input: {
       : "Decision perspective coverage gap: no active profile or fallback profile has applicable material for Build Studio plan advancement.");
     evaluation.resolvedProfileChain = resolved.resolvedProfileChain;
   }
-
-  // BI-D88DFEEA Phase 1 / BI-6DCF772F. Recommend only when the gate supplied
-  // scored options AND the verdict is a path forward — the guard now lives in
-  // the shared resolveRecommendedOptionId helper so profession-gate applies it
-  // identically.
-  evaluation.recommendedOptionId = await resolveRecommendedOptionId({
+  if (isWwwd && input.alignmentCorpora) applyConstitutionalAlignment({
+    evaluation, question: input.question, corpora: input.alignmentCorpora,
+  });
+  evaluation.recommendedOptionId = await resolveGateRecommendedOptionId({
     db: input.db,
     scoredOptions: input.scoredOptions,
     organizationId: input.organizationId ?? null,
     outcomeType: evaluation.outcomeType,
+    constitutionalVerdict: evaluation.constitutionalAlignment?.verdict,
   });
-
   console.info(
     `[tool-trace] ${prefix}.evaluator.complete ${JSON.stringify({
       interactionId,
@@ -767,7 +764,10 @@ export async function evaluatePerspectiveGate(input: {
     phaseTo: input.phaseTo === undefined ? (input.build ? "build" : null) : input.phaseTo,
     gateKey,
     gateFallbackUsed: isWwwd && !orgProfileSelected,
-    outcomePayloadExtra: isWwwd ? { orgProfileSelected } : undefined,
+    outcomePayloadExtra: isWwwd ? {
+      orgProfileSelected, constitutionalAlignment: evaluation.constitutionalAlignment ?? null,
+      caller: input.caller ?? null,
+    } : undefined,
   });
 
   console.info(

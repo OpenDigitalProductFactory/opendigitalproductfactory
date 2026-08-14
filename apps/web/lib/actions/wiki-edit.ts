@@ -63,6 +63,9 @@ export type SaveWikiOverlayEditInput = {
    * that). Omitted = column left untouched on update.
    */
   metadata?: Record<string, unknown> | null;
+  /** Closed-axis projection for stance pages; carries evidence, never authority. */
+  principleDimensionVector?: Record<string, number>;
+  principleDimensions?: string[];
 };
 
 export type SaveWikiOverlayEditResult =
@@ -256,6 +259,12 @@ export async function saveWikiOverlayEdit(
       isKernel: false,
       abstract: input.abstract ?? null,
       ...(input.metadata !== undefined ? { metadata: input.metadata } : {}),
+      ...(input.principleDimensionVector !== undefined
+        ? { principleDimensionVector: input.principleDimensionVector }
+        : {}),
+      ...(input.principleDimensions !== undefined
+        ? { principleDimensions: input.principleDimensions }
+        : {}),
       kernelPageId: input.overridesKernelPageId ?? null,
       derivedFromKernelVersion: input.overridesKernelPageId
         ? readKernelVersionFromManifest()

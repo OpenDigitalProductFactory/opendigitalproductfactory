@@ -153,6 +153,9 @@ export function decisionInteractionRowToEvaluation(
     rationale: row.rationale ?? "",
     materialScores: [],
     sources,
+    ...(payload.constitutionalAlignment
+      ? { constitutionalAlignment: payload.constitutionalAlignment as DecisionPerspectiveEvaluationResult["constitutionalAlignment"] }
+      : {}),
   };
 }
 

@@ -148,6 +148,26 @@ export const PRINCIPLE_DIMENSION_SCOPE = {
     rationale:
       "YOUNG AXIS (landed 2026-07-23, BI-B5EA2FB2): 4 uses, 0% specialist-authored. Whether an operator can foresee what an action will do before authorizing it is a precondition of informed authorization everywhere, not a design-profession concern.",
   },
+  mission_fit: {
+    scope: "spine",
+    rationale:
+      "An action's fit with the organization's declared mission is shared constitutional currency across every profession, not permission to execute it.",
+  },
+  market_fit: {
+    scope: "spine",
+    rationale:
+      "The people and market an organization has chosen to serve constrain work in every profession and must remain independently vetoable.",
+  },
+  product_fit: {
+    scope: "spine",
+    rationale:
+      "Fit with the organization's declared offer and portfolio crosses profession boundaries even when a portfolio specialist supplies the evidence.",
+  },
+  gtm_fit: {
+    scope: "spine",
+    rationale:
+      "Fit with the organization's chosen route to market is shared business direction; specialist qualification supplies evidence but cannot widen authority.",
+  },
 
   // ── Profession-local (demoted; each projects back onto the spine) ─────────
   schema_grounding: {
@@ -351,6 +371,10 @@ export const PRINCIPLE_DIMENSION_SOURCING = {
   business_disruption: "basic",
   operator_effort: "basic",
   legibility_of_consequence: "basic",
+  mission_fit: "basic",
+  market_fit: "basic",
+  product_fit: "basic",
+  gtm_fit: "basic",
 } as const satisfies Record<PrincipleDimension, PrincipleDimensionSourcing>;
 
 /** The sourcing class of one axis. */

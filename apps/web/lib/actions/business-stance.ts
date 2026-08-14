@@ -13,6 +13,10 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@dpf/db";
 import { saveWikiOverlayEdit } from "@/lib/actions/wiki-edit";
 import { promoteStanceMaterial } from "@/lib/decision-perspective/stance-promotion";
+import {
+  projectDeclaredStanceAlignment,
+  type StanceAlignmentDimension,
+} from "@/lib/decision-perspective/stance-dimension-map";
 import { storeWikiPage } from "@/lib/wiki/embeddings";
 import {
   decisionAreaToDomainClass,
@@ -81,6 +85,15 @@ export async function publishBusinessStance(
   if (!domainClass) {
     return { ok: false, error: "Pick the kind of decisions this stance guides." };
   }
+  const alignmentByDecisionArea: Record<string, readonly StanceAlignmentDimension[]> = {
+    "customers-and-money": ["market_fit", "gtm_fit"],
+    "priorities-and-planning": ["mission_fit", "market_fit", "product_fit", "gtm_fit"],
+    "quality-and-craft": ["product_fit"],
+    "vendors-and-tools": ["product_fit", "gtm_fit"],
+  };
+  const projection = projectDeclaredStanceAlignment(
+    alignmentByDecisionArea[input.decisionArea] ?? [],
+  );
 
   const result = await saveWikiOverlayEdit({
     slug: validated.slug,
@@ -90,6 +103,7 @@ export async function publishBusinessStance(
     status: "published",
     abstract: validated.summary,
     changeSummary: "Business stance published via the WWWD editor",
+    ...projection,
   });
   if (!result.ok) {
     return { ok: false, error: result.error };
@@ -115,6 +129,7 @@ export async function publishBusinessStance(
       kernelVersion: null,
       organizationId: org.id,
       kernelPageId: null,
+      ...projection,
     });
   } catch {
     // best-effort; enforcement continues below

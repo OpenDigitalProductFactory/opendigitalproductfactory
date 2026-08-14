@@ -34,6 +34,8 @@ export type WorkRoomParticipantRole =
   | "accountable"
   | "coordinator"
   | "contributor"
+  | "specialist"
+  | "approver"
   | "reviewer"
   | "observer";
 

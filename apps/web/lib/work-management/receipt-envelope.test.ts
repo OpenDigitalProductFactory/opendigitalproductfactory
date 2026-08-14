@@ -115,6 +115,53 @@ describe("ReceiptEnvelope normalizers", () => {
     });
   });
 
+  it("carries Work Room shape, authority ladder, and decision receipt linkage", () => {
+    const envelope = fromToolExecutionReceipt({
+      id: "ter-shape", toolExecutionId: "te-shape",
+      receiptKind: "work-case-governed-action", receiptStatus: "valid",
+      executionStatus: "denied", inputFingerprint: "sha256:shape",
+      outputDigest: { verdict: "decline" }, createdAt: NOW,
+    }, {
+      caseRef: CASE_REF,
+      policyRefs: ["tak:wwwd-alignment"],
+      collaborationShape: {
+        collaborationShape: "escalation", authorityLadderLevel: "action",
+        requiredPrincipalRefs: ["PRN-COORD", "PRN-OWNER"],
+        decisionInteractionId: "DI-VETO",
+      },
+    });
+    expect(envelope.governance).toEqual({
+      collaborationShape: "escalation", authorityLadderLevel: "action",
+      requiredPrincipalRefs: ["PRN-COORD", "PRN-OWNER"],
+      decisionInteractionId: "DI-VETO",
+    });
+    expect(envelope.status).toBe("failed");
+  });
+
+  it("projects the GAID-bound TAK decision without hiding policy or qualification evidence", () => {
+    const envelope = fromToolExecutionReceipt({
+      id: "ter-tak", toolExecutionId: "te-tak",
+      receiptKind: "tak-consequential-action", receiptStatus: "valid",
+      executionStatus: "succeeded", inputFingerprint: "sha256:tak",
+      outputDigest: { governance: {
+        actor: { principalId: "PRN-1", gaid: "GAID-1", actorKind: "employee" },
+        gateDecision: "approve", decisionInteractionId: "DI-TAK", policyVersion: "wwwd:v2",
+        delegationChainId: "CHAIN-1",
+        qualification: { verdict: "approve", permissionGranted: false },
+        evidenceRefs: ["wiki:stance:v2", "wsid:marketing:v1"],
+        amendmentLineage: ["wiki:stance:v1", "wiki:stance:v2"],
+      } }, createdAt: NOW,
+    });
+    expect(envelope.tak).toEqual({
+      gateDecision: "approve", decisionInteractionId: "DI-TAK", policyVersion: "wwwd:v2",
+      gaid: "GAID-1", principalId: "PRN-1", delegationChainId: "CHAIN-1",
+      qualification: { verdict: "approve", permissionGranted: false },
+      evidenceRefs: ["wiki:stance:v2", "wsid:marketing:v1"],
+      amendmentLineage: ["wiki:stance:v1", "wiki:stance:v2"],
+    });
+    expect(envelope.policyRefs).toEqual(["wwwd:v2", "wiki:stance:v2", "wsid:marketing:v1"]);
+  });
+
   it("normalizes existing activity and evidence rows as observed-event receipts", () => {
     const envelopes = [
       fromWorkCapsuleActivity({

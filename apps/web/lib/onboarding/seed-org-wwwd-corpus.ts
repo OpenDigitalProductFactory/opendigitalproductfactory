@@ -36,6 +36,11 @@ import { prisma } from "@dpf/db";
 import { upsertWikiPage, appendRevision } from "@dpf/db/wiki-store";
 import { storeWikiPage, type StoreWikiPageInput } from "@/lib/wiki/embeddings";
 import { DECISION_DOMAIN_CLASSES, type DecisionDomainClass } from "@/lib/decision-perspective/types";
+import {
+  projectDeclaredStanceAlignment,
+  projectStanceDimensionVector,
+  type StanceDimensionProjection,
+} from "@/lib/decision-perspective/stance-dimension-map";
 import { suggestMission } from "./mission-suggestion";
 import { deriveExcellenceCorpus, excellenceCorpusToMarkdown } from "./excellence-corpus";
 import {
@@ -127,6 +132,8 @@ type SeedPage = {
    * become echo materials keyed `{profileId}:{slug}:{class}`.
    */
   bundles: DecisionDomainClass[];
+  /** Explicit stance-purpose projection into the shared decision axes. */
+  dimensionProjection?: StanceDimensionProjection;
   /** Set on the mission principle page so it is well-formed. */
   principle?: {
     principleTier: "core";
@@ -211,6 +218,7 @@ function buildPages(
         "\nWhen we decide \"what would we do?\", we weigh the interests of the people we serve first.",
       ].join("\n"),
       abstract: whoAbstract,
+      dimensionProjection: projectDeclaredStanceAlignment(["market_fit", "product_fit"]),
     },
     {
       slug: "org-how-we-decide",
@@ -227,6 +235,7 @@ function buildPages(
         `This is ${orgLabel}'s starting decision stance, derived from how this kind of business tends to operate. Refine it as the organization's own judgment is captured.`,
       ].join("\n"),
       abstract: profile.howWeDecide,
+      dimensionProjection: projectDeclaredStanceAlignment(["mission_fit", "gtm_fit"]),
     },
     {
       slug: "org-supply-chain",
@@ -244,6 +253,7 @@ function buildPages(
         `This is ${orgLabel}'s starting supplier and supply-chain stance, derived from how this kind of business typically runs. Refine it as actual suppliers, vendors, and purchasing rhythms are captured.`,
       ].join("\n"),
       abstract: profile.supplyChain,
+      dimensionProjection: projectDeclaredStanceAlignment(["product_fit", "gtm_fit"]),
     },
     {
       // Excellence Corpus (workstream B): the "what great looks like" primer, so
@@ -281,6 +291,7 @@ function buildPages(
         `This is ${orgLabel}'s starting stance, derived from how this kind of business tends to operate. Confirm or adjust it — a confirmed stance lets your AI coworkers act on it.`,
       ].join("\n"),
       abstract: v.stance,
+      dimensionProjection: projectStanceDimensionVector(key),
     });
   }
 
@@ -407,6 +418,7 @@ export async function seedOrgWwwdCorpus(
             principleDirection: page.principle.principleDirection,
           }
         : {}),
+      ...(page.dimensionProjection ?? {}),
     })) as { id: string };
 
     wikiPageIds.push(saved.id);
@@ -441,6 +453,7 @@ export async function seedOrgWwwdCorpus(
               principleAppliesTo: page.principle.principleAppliesTo,
             }
           : {}),
+        ...(page.dimensionProjection ?? {}),
       });
       if (!ok) embedded = false;
     }
