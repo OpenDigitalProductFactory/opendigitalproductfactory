@@ -73,23 +73,21 @@ export async function loadOrgAlignmentCorpora(
         revisions: { orderBy: { version: "desc" }, take: 1, select: { version: true } },
       },
     }) as Array<Record<string, unknown>>;
-    const [digitalRows, productRows] = await Promise.all([
-      db.digitalProduct?.findMany
-        ? db.digitalProduct.findMany({ select: { id: true, productId: true, name: true, description: true } })
-        : [],
-      db.product?.findMany
-        ? db.product.findMany({
-            where: { organizationId, effectiveTo: null },
-            select: { id: true, productId: true, name: true, description: true },
-          })
-        : [],
-    ]) as [Array<Record<string, unknown>>, Array<Record<string, unknown>>];
+    // Product is the organization-owned business portfolio. DigitalProduct is
+    // the install-global architecture catalog and must not enter a tenant's
+    // WWWD policy evaluation without an organization ownership relation.
+    const productRows = db.product?.findMany
+      ? await db.product.findMany({
+          where: { organizationId, effectiveTo: null },
+          select: { id: true, productId: true, name: true, description: true },
+        }) as Array<Record<string, unknown>>
+      : [];
     const gtmRows = wikiRows.filter((row) =>
       /how-we-decide|supply-chain|pricing|growth|who-we-serve/.test(String(row["slug"] ?? "")),
     );
     return {
       wwwd: evidence("wiki", wikiRows),
-      portfolio: evidence("product", [...digitalRows, ...productRows]),
+      portfolio: evidence("product", productRows),
       gtm: evidence("wiki", gtmRows),
     };
   } catch {

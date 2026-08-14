@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { MARK_DPF_PLATFORM_PROFILE } from "./default-profile";
-import { evaluateOrgBusinessDecisionGate } from "./org-business-gate";
+import { evaluateOrgBusinessDecisionGate, loadOrgAlignmentCorpora } from "./org-business-gate";
 import type {
   DecisionDomainClass,
   DecisionPerspectiveEvaluationResult,
@@ -69,6 +69,25 @@ const base = {
 };
 
 describe("evaluateOrgBusinessDecisionGate (BI-230C9EF7)", () => {
+  it("loads portfolio evidence only from the organization-owned Product model", async () => {
+    const digitalFindMany = vi.fn();
+    const productFindMany = vi.fn().mockResolvedValue([
+      { id: "p1", productId: "P-1", name: "Self-host support", description: "Subscription" },
+    ]);
+    const corpora = await loadOrgAlignmentCorpora({
+      wikiPage: { findMany: vi.fn().mockResolvedValue([]) },
+      digitalProduct: { findMany: digitalFindMany },
+      product: { findMany: productFindMany },
+    }, "org-123");
+    expect(digitalFindMany).not.toHaveBeenCalled();
+    expect(productFindMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: { organizationId: "org-123", effectiveTo: null },
+    }));
+    expect(corpora?.portfolio).toEqual([
+      expect.objectContaining({ ref: "product:P-1", text: expect.stringContaining("Self-host support") }),
+    ]);
+  });
+
   it("records a hard WWWD veto with its failing corpus and criterion", async () => {
     const db = makeDb();
     const result = await evaluateOrgBusinessDecisionGate({
