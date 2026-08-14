@@ -31,6 +31,17 @@ export interface ReceiptEnvelope {
     requiredPrincipalRefs: readonly string[];
     decisionInteractionId?: string;
   };
+  tak?: {
+    gateDecision: "approve" | "decline" | "escalate" | null;
+    decisionInteractionId: string | null;
+    policyVersion: string | null;
+    gaid: string | null;
+    principalId: string | null;
+    delegationChainId: string | null;
+    qualification: unknown;
+    evidenceRefs: readonly string[];
+    amendmentLineage: readonly string[];
+  };
   trace?: {
     traceId?: string;
     spanId?: string;
@@ -143,6 +154,28 @@ function enforcementModeFromReceiptKind(receiptKind: string): WorkCaseEnforcemen
   return /governed/i.test(receiptKind) ? "governed-action" : "observed-event";
 }
 
+function takEnvelope(outputDigest: unknown): ReceiptEnvelope["tak"] | undefined {
+  if (!outputDigest || typeof outputDigest !== "object") return undefined;
+  const governance = (outputDigest as Record<string, unknown>).governance;
+  if (!governance || typeof governance !== "object") return undefined;
+  const row = governance as Record<string, unknown>;
+  const actor = row.actor && typeof row.actor === "object" ? row.actor as Record<string, unknown> : {};
+  const verdict = ["approve", "decline", "escalate"].includes(String(row.gateDecision))
+    ? row.gateDecision as "approve" | "decline" | "escalate" : null;
+  return {
+    gateDecision: verdict,
+    decisionInteractionId: typeof row.decisionInteractionId === "string" ? row.decisionInteractionId : null,
+    policyVersion: typeof row.policyVersion === "string" ? row.policyVersion : null,
+    gaid: typeof actor.gaid === "string" ? actor.gaid : null,
+    principalId: typeof actor.principalId === "string" ? actor.principalId : null,
+    delegationChainId: typeof row.delegationChainId === "string" ? row.delegationChainId : null,
+    qualification: row.qualification ?? null,
+    evidenceRefs: Array.isArray(row.evidenceRefs) ? row.evidenceRefs.filter((ref): ref is string => typeof ref === "string") : [],
+    amendmentLineage: Array.isArray(row.amendmentLineage)
+      ? row.amendmentLineage.filter((ref): ref is string => typeof ref === "string") : [],
+  };
+}
+
 function observedEnvelope(input: {
   receiptId: string;
   sourceRef: WorkCaseSourceRef;
@@ -205,6 +238,7 @@ export function fromToolExecutionReceipt(
   row: ToolExecutionReceiptRow,
   options: ToolExecutionReceiptEnvelopeOptions = {},
 ): ReceiptEnvelope {
+  const tak = takEnvelope(row.outputDigest);
   return {
     receiptId: row.id,
     caseRef: options.caseRef,
@@ -221,8 +255,12 @@ export function fromToolExecutionReceipt(
     occurredAt: iso(row.createdAt),
     inputDigest: row.inputFingerprint,
     outputDigest: row.outputDigest,
-    policyRefs: options.policyRefs ?? [],
+    policyRefs: options.policyRefs ?? [
+      ...(tak?.policyVersion ? [tak.policyVersion] : []),
+      ...(tak?.evidenceRefs ?? []),
+    ],
     governance: options.collaborationShape,
+    tak,
     rawRef: {
       table: "ToolExecutionReceipt",
       id: row.id,

@@ -33,7 +33,11 @@ import {
   type ToolResult,
 } from "./mcp-tools";
 import { coerceMcpToolArgs } from "./mcp-arg-coercion";
-import { deriveAuditClassForTool, deriveCapabilityId } from "./tool-audit-helpers";
+import {
+  setGovernedToolAuditOverridesForTests,
+  updateGovernedToolAudit as updateAudit,
+  writeGovernedToolAudit,
+} from "./governed-tool-audit";
 import type { WorkCaseExecutionContext } from "./work-management/work-case-governance-hook";
 import type { AuthorizedSurfaceContext, AuthorizedSurfaceInvocation } from "@/lib/coworker/authorized-surface-execution-types";
 import {
@@ -45,7 +49,10 @@ import {
   type AlignmentGateDecision,
 } from "./tak/alignment-tool-gate";
 import {
+  finalizeConsequentialToolExecutionReceipt,
+  reserveConsequentialToolExecutionReceipt,
   setToolExecutionReceiptCreateOverrideForTests,
+  setToolExecutionReceiptUpdateOverrideForTests,
   writeToolExecutionReceipt,
 } from "./tak/tool-execution-receipt";
 import {
@@ -54,6 +61,10 @@ import {
   type PreconditionOrderingDecision,
 } from "./tak/precondition-ordering-gate";
 import { enforceTakPreexecution } from "./tak/preexecution-control";
+import {
+  setGaidActorResolverOverrideForTests,
+  type GaidActorResolver,
+} from "./tak/gaid-actor-envelope";
 
 export type GovernedExecuteSource =
   | "rest"
@@ -157,6 +168,8 @@ export type GovernedExecuteRejection =
   | "authority_evidence_unavailable"
   | "alignment_denied"
   | "alignment_escalation_required"
+  | "alignment_bypass_forbidden"
+  | "receipt_reservation_failed"
   | "precondition_denied"
   | "precondition_escalation_required";
 
@@ -221,7 +234,9 @@ export function _setGovernanceForTests(overrides: {
     ctx?: { agentId?: string; threadId?: string; routeContext?: string; taskRunId?: string },
   ) => Promise<ToolResult>) | null;
   toolExecutionCreate?: ((data: Record<string, unknown>) => Promise<unknown>) | null;
+  toolExecutionUpdate?: ((id: string, data: Record<string, unknown>) => Promise<unknown>) | null;
   toolExecutionReceiptCreate?: ((data: Record<string, unknown>) => Promise<unknown>) | null;
+  toolExecutionReceiptUpdate?: ((id: string, data: Record<string, unknown>) => Promise<unknown>) | null;
   resolveCoworkerAuthorityInput?: CoworkerAuthorityInputResolver | null;
   authorizationDecisionCreate?: AuthorizationDecisionCreate | null;
   authorityApprovalEnvelopeCreate?: AuthorityApprovalEnvelopeCreate | null;
@@ -230,16 +245,22 @@ export function _setGovernanceForTests(overrides: {
   lifecycleHooks?: ToolLifecycleHook[] | null;
   alignmentGate?: AlignmentGate | null;
   preconditionGate?: PreconditionGate | null;
+  gaidActorResolver?: GaidActorResolver | null;
 }): void {
   _resolveAgentGrants = overrides.resolveAgentGrants ?? null;
   _isAllowedByGrants = overrides.isAllowedByGrants ?? null;
   _executeToolOverride = overrides.executeTool ?? null;
-  _toolExecutionCreateOverride = overrides.toolExecutionCreate ?? null;
+  setGovernedToolAuditOverridesForTests({
+    create: overrides.toolExecutionCreate ?? null,
+    update: overrides.toolExecutionUpdate ?? null,
+  });
   setToolExecutionReceiptCreateOverrideForTests(overrides.toolExecutionReceiptCreate ?? null);
+  setToolExecutionReceiptUpdateOverrideForTests(overrides.toolExecutionReceiptUpdate ?? null);
   setCoworkerToolAuthorityOverridesForTests(overrides);
   _lifecycleHooks = overrides.lifecycleHooks ?? [];
   setAlignmentGateOverrideForTests(overrides.alignmentGate ?? null);
   setPreconditionGateOverrideForTests(overrides.preconditionGate ?? null);
+  setGaidActorResolverOverrideForTests(overrides.gaidActorResolver ?? null);
 }
 
 let _executeToolOverride:
@@ -255,11 +276,6 @@ let _executeToolOverride:
       },
     ) => Promise<ToolResult>)
   | null = null;
-
-let _toolExecutionCreateOverride:
-  | ((data: Record<string, unknown>) => Promise<unknown>)
-  | null = null;
-
 
 async function resolveGrants(agentId: string): Promise<string[]> {
   if (_resolveAgentGrants) return _resolveAgentGrants(agentId);
@@ -330,92 +346,8 @@ async function writeAudit(data: {
   alignmentDecision?: AlignmentGateDecision | null;
   preconditionDecision?: PreconditionOrderingDecision | null;
 }): Promise<{ id: string } | null> {
-  const auditClass = deriveAuditClassForTool(data.toolName);
-  const capabilityId = deriveCapabilityId(data.toolName);
-  const isMetricsOnly = auditClass === "metrics_only";
   const tool = findTool(data.toolName);
-  const auditedParams = redactWriteOnlyParameters(data.rawParams, tool?.inputSchema);
-  const row = {
-    threadId: data.context?.threadId ?? "",
-    agentId: data.context?.agentId ?? "unknown",
-    userId: data.userId,
-    taskRunId: data.context?.taskRunId ?? null,
-    toolName: data.toolName,
-    parameters: isMetricsOnly ? {} : ({
-      ...auditedParams,
-      ...(data.context?.surfaceInvocation ? { _surface: data.context.surfaceInvocation } : {}),
-      ...(data.alignmentDecision
-        ? {
-            _takAlignment: {
-              interactionId: data.alignmentDecision.interactionId,
-              verdict: data.alignmentDecision.verdict,
-              checks: data.alignmentDecision.alignment.checks,
-            },
-          }
-        : {}),
-      ...(data.preconditionDecision ? { _takPrecondition: data.preconditionDecision } : {}),
-    } as object),
-    result: isMetricsOnly ? {} : (data.result as unknown as object),
-    success: data.result.success,
-    executionMode: data.source,
-    routeContext: data.context?.routeContext ?? null,
-    durationMs: data.durationMs,
-    auditClass,
-    capabilityId,
-    summary: isMetricsOnly
-      ? `${data.toolName}: ${data.result.success ? "ok" : "failed"}` +
-        (data.durationMs ? ` (${data.durationMs}ms)` : "")
-      : null,
-    apiTokenId: data.context?.apiTokenId ?? null,
-    skillId: data.context?.skillId ?? null,
-    // EP-31815F97 S2: join this execution to its chain-of-custody when the
-    // executing coworker was delegated to; the human origin stays on userId.
-    delegationChainId: data.context?.delegationChainId ?? null,
-  };
-  try {
-    if (_toolExecutionCreateOverride) {
-      const created = await _toolExecutionCreateOverride(row);
-      return typeof (created as { id?: unknown } | undefined)?.id === "string"
-        ? { id: String((created as { id: string }).id) }
-        : null;
-    } else {
-      return await prisma.toolExecution.create({
-        data: row,
-        select: { id: true },
-      });
-    }
-  } catch (err) {
-    // Audit MUST NOT silently fail. Log with enough context to investigate
-    // without throwing back to the caller (which would mask successful tool
-    // execution).
-    // CodeQL #49 (js/tainted-format-string): tool/source names are user-influenced.
-    console.error(
-      "[governed-execute] audit write failed tool=%s source=%s: %s",
-      JSON.stringify(data.toolName),
-      JSON.stringify(data.source),
-      err instanceof Error ? JSON.stringify(err.message) : JSON.stringify(String(err)),
-    );
-    return null;
-  }
-}
-
-function redactWriteOnlyParameters(
-  value: Record<string, unknown>,
-  schema: Record<string, unknown> | undefined,
-): Record<string, unknown> {
-  const properties = schema?.properties && typeof schema.properties === "object"
-    ? schema.properties as Record<string, unknown>
-    : {};
-  return Object.fromEntries(Object.entries(value).map(([key, entry]) => {
-    const property = properties[key] && typeof properties[key] === "object"
-      ? properties[key] as Record<string, unknown>
-      : undefined;
-    if (property?.writeOnly === true) return [key, "[REDACTED]"];
-    if (entry && typeof entry === "object" && !Array.isArray(entry) && property?.properties) {
-      return [key, redactWriteOnlyParameters(entry as Record<string, unknown>, property)];
-    }
-    return [key, entry];
-  }));
+  return writeGovernedToolAudit({ ...data, tool });
 }
 
 function findTool(toolName: string): ToolDefinition | undefined {
@@ -526,6 +458,7 @@ export async function governedExecuteTool(
           toolName: args.toolName,
           context: args.context,
           consequential: true,
+          governedArgs: args,
         });
       }
       return result;
@@ -595,6 +528,7 @@ export async function governedExecuteTool(
             toolName: args.toolName,
             context: args.context,
             consequential: true,
+            governedArgs: args,
           });
         }
       }
@@ -630,6 +564,7 @@ export async function governedExecuteTool(
         toolName: args.toolName,
         context: args.context,
         consequential: true,
+        governedArgs: args,
       });
     }
     return hookRejection;
@@ -648,6 +583,35 @@ export async function governedExecuteTool(
   alignmentDecision = preexecution.alignmentDecision;
   preconditionDecision = preexecution.preconditionDecision;
   if (preexecution.result) return preexecution.result;
+
+  let reservedAuditId: string | null = null;
+  let reservedReceiptId: string | null = null;
+  if (consequence.consequential) {
+    const reservationResult: ToolResult = {
+      success: false, error: "execution_reserved", message: "Consequential execution awaiting side effect.",
+    };
+    const reservedAudit = await writeAudit({
+      toolName: args.toolName, rawParams: args.rawParams, result: reservationResult,
+      userId: args.userId, source: args.source, context: args.context, durationMs: 0,
+      alignmentDecision, preconditionDecision,
+    });
+    reservedAuditId = reservedAudit?.id ?? null;
+    const reservedReceipt = reservedAuditId
+      ? await reserveConsequentialToolExecutionReceipt({
+          auditRowId: reservedAuditId, args, alignmentDecision, preconditionDecision,
+        })
+      : null;
+    reservedReceiptId = reservedReceipt?.id ?? null;
+    if (!reservedAuditId || !reservedReceiptId) {
+      const failure = rejectionResult(
+        args.toolName,
+        "receipt_reservation_failed",
+        "the mandatory GAID receipt channel could not be reserved before execution",
+      );
+      if (reservedAuditId) await updateAudit(reservedAuditId, failure, 0);
+      return failure;
+    }
+  }
 
   const t0 = Date.now();
   let result: ToolResult;
@@ -745,18 +709,6 @@ export async function governedExecuteTool(
     durationMs,
   });
 
-  const auditRow = await writeAudit({
-    toolName: args.toolName,
-    rawParams: args.rawParams,
-    result,
-    userId: args.userId,
-    source: args.source,
-    context: args.context,
-    durationMs,
-    alignmentDecision,
-    preconditionDecision,
-  });
-
   const resultBuildId =
     result.data
     && typeof result.data === "object"
@@ -766,7 +718,31 @@ export async function governedExecuteTool(
   const shouldWriteReceipt = Boolean(
     resultBuildId || args.context?.workCase || consequence.consequential,
   );
-  if (auditRow?.id && shouldWriteReceipt) {
+  let auditRow: { id: string } | null = reservedAuditId ? { id: reservedAuditId } : null;
+  if (reservedAuditId && reservedReceiptId) {
+    await updateAudit(reservedAuditId, result, durationMs);
+    try {
+      await finalizeConsequentialToolExecutionReceipt({
+        receiptId: reservedReceiptId, result, toolName: args.toolName, args,
+        alignmentDecision, preconditionDecision, buildId: resultBuildId,
+      });
+    } catch (err) {
+      // The receipt was durably reserved before the side effect. Preserve the
+      // actual tool result; reconciliation can finalize the reserved envelope.
+      console.error(
+        "[governed-execute] reserved receipt finalization failed receipt=%s tool=%s: %s",
+        JSON.stringify(reservedReceiptId), JSON.stringify(args.toolName),
+        err instanceof Error ? JSON.stringify(err.message) : JSON.stringify(String(err)),
+      );
+    }
+  } else {
+    auditRow = await writeAudit({
+      toolName: args.toolName, rawParams: args.rawParams, result, userId: args.userId,
+      source: args.source, context: args.context, durationMs,
+      alignmentDecision, preconditionDecision,
+    });
+  }
+  if (auditRow?.id && shouldWriteReceipt && !reservedReceiptId) {
     await writeToolExecutionReceipt({
       auditRowId: auditRow.id,
       buildId: resultBuildId,
@@ -777,6 +753,7 @@ export async function governedExecuteTool(
       consequential: consequence.consequential,
       alignmentDecision,
       preconditionDecision,
+      governedArgs: args,
     });
   }
 

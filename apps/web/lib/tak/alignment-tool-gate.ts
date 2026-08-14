@@ -10,6 +10,8 @@ export type AlignmentGateDecision = {
   rationale: string;
   alignment: ConstitutionalAlignmentResult;
   specialistDelegation?: SpecialistAlignmentDelegationResult;
+  policyVersion?: string;
+  amendmentLineage?: string[];
 };
 export type AlignmentGate = (input: {
   organizationId?: string;
@@ -102,6 +104,8 @@ export async function runTakAlignmentGate(args: GovernedExecuteArgs): Promise<Al
         : `${result.evaluation.rationale} TAK-JSI specialist result: ${specialistDelegation.verdict}.`,
       alignment,
       specialistDelegation,
+      policyVersion: result.alignmentPolicyVersion,
+      amendmentLineage: result.amendmentLineage,
     };
   }
   const { extractAlignmentCriteria } = await import("@/lib/decision-perspective/alignment-criteria");

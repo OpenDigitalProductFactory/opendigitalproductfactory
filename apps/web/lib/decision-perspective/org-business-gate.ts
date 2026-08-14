@@ -17,6 +17,7 @@
 // measure agreement before any autonomy is released. Fail-closed: any resolver/evaluator
 // error escalates to a human and is still recorded.
 
+import { createHash } from "crypto";
 import { evaluatePerspectiveGate } from "./evaluator";
 import type { DecisionGateCaller } from "./evaluator";
 import { resolveProfileMaterialForOrg } from "./material";
@@ -33,13 +34,29 @@ import type { AlignmentCorpora, AlignmentEvidence } from "./alignment-criteria";
 type OrgBusinessGateClient = any;
 type GateEvaluator = (input: DecisionPerspectiveEvaluationInput) => DecisionPerspectiveEvaluationResult;
 
+export function alignmentPolicyVersion(corpora: AlignmentCorpora | undefined): string {
+  const canonical = Object.entries(corpora ?? {})
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([corpus, rows]) => [
+      corpus,
+      [...(rows ?? [])]
+        .map((row) => ({ ref: row.ref, text: row.text }))
+        .sort((left, right) => left.ref.localeCompare(right.ref)),
+    ]);
+  return `wwwd:${createHash("sha256").update(JSON.stringify(canonical)).digest("hex").slice(0, 24)}`;
+}
+
 function evidence(refPrefix: string, rows: Array<Record<string, unknown>>): AlignmentEvidence[] {
-  return rows.map((row, index) => ({
-    ref: `${refPrefix}:${String(row["slug"] ?? row["productId"] ?? row["id"] ?? index)}`,
-    text: [row["title"], row["name"], row["body"], row["description"]]
-      .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
-      .join("\n"),
-  })).filter((item) => item.text.length > 0);
+  return rows.map((row, index) => {
+    const revisions = Array.isArray(row["revisions"]) ? row["revisions"] as Array<Record<string, unknown>> : [];
+    const version = typeof revisions[0]?.["version"] === "number" ? `@v${revisions[0]["version"]}` : "";
+    return {
+      ref: `${refPrefix}:${String(row["slug"] ?? row["productId"] ?? row["id"] ?? index)}${version}`,
+      text: [row["title"], row["name"], row["body"], row["description"]]
+        .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+        .join("\n"),
+    };
+  }).filter((item) => item.text.length > 0);
 }
 
 /** Load the three existing org-owned corpora without creating a parallel store. */
@@ -51,7 +68,10 @@ export async function loadOrgAlignmentCorpora(
   try {
     const wikiRows = await db.wikiPage.findMany({
       where: { organizationId, status: "published", pageKind: { in: ["stance", "principle"] } },
-      select: { id: true, slug: true, title: true, body: true },
+      select: {
+        id: true, slug: true, title: true, body: true,
+        revisions: { orderBy: { version: "desc" }, take: 1, select: { version: true } },
+      },
     }) as Array<Record<string, unknown>>;
     const [digitalRows, productRows] = await Promise.all([
       db.digitalProduct?.findMany
@@ -85,6 +105,8 @@ export type OrgBusinessDecisionGateResult = {
   operatorMessage: string;
   /** True when the organization's OWN profile (not a platform fallback) decided. */
   orgProfileSelected: boolean;
+  alignmentPolicyVersion: string;
+  amendmentLineage: string[];
 };
 
 /**
@@ -154,5 +176,9 @@ export async function evaluateOrgBusinessDecisionGate(input: {
     evaluation: result.evaluation,
     operatorMessage: result.operatorMessage,
     orgProfileSelected: result.orgProfileSelected,
+    alignmentPolicyVersion: alignmentPolicyVersion(alignmentCorpora),
+    amendmentLineage: Array.from(new Set(
+      Object.values(alignmentCorpora ?? {}).flatMap((rows) => (rows ?? []).map((row) => row.ref)),
+    )).sort(),
   };
 }

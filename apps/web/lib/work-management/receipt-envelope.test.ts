@@ -138,6 +138,30 @@ describe("ReceiptEnvelope normalizers", () => {
     expect(envelope.status).toBe("failed");
   });
 
+  it("projects the GAID-bound TAK decision without hiding policy or qualification evidence", () => {
+    const envelope = fromToolExecutionReceipt({
+      id: "ter-tak", toolExecutionId: "te-tak",
+      receiptKind: "tak-consequential-action", receiptStatus: "valid",
+      executionStatus: "succeeded", inputFingerprint: "sha256:tak",
+      outputDigest: { governance: {
+        actor: { principalId: "PRN-1", gaid: "GAID-1", actorKind: "employee" },
+        gateDecision: "approve", decisionInteractionId: "DI-TAK", policyVersion: "wwwd:v2",
+        delegationChainId: "CHAIN-1",
+        qualification: { verdict: "approve", permissionGranted: false },
+        evidenceRefs: ["wiki:stance:v2", "wsid:marketing:v1"],
+        amendmentLineage: ["wiki:stance:v1", "wiki:stance:v2"],
+      } }, createdAt: NOW,
+    });
+    expect(envelope.tak).toEqual({
+      gateDecision: "approve", decisionInteractionId: "DI-TAK", policyVersion: "wwwd:v2",
+      gaid: "GAID-1", principalId: "PRN-1", delegationChainId: "CHAIN-1",
+      qualification: { verdict: "approve", permissionGranted: false },
+      evidenceRefs: ["wiki:stance:v2", "wsid:marketing:v1"],
+      amendmentLineage: ["wiki:stance:v1", "wiki:stance:v2"],
+    });
+    expect(envelope.policyRefs).toEqual(["wwwd:v2", "wiki:stance:v2", "wsid:marketing:v1"]);
+  });
+
   it("normalizes existing activity and evidence rows as observed-event receipts", () => {
     const envelopes = [
       fromWorkCapsuleActivity({
