@@ -196,6 +196,10 @@ services:
       DPF_HOST_INSTALL_PATH: ${DPF_HOST_INSTALL_PATH:-}
       DPF_HOST_PLATFORM: ${DPF_HOST_PLATFORM:-}
       DPF_HOST_ARCH: ${DPF_HOST_ARCH:-}
+      # Authoritative installer opt-in state for the main installation's
+      # supervised host Edge service. The portal combines this intent with
+      # live enrollment/heartbeat evidence; it never treats the flag as health.
+      DPF_EDGE_ENABLED: ${DPF_INCLUDE_EDGE:-0}
       DPF_STATE_DIR_HOST: ${DPF_STATE_DIR:-${HOME}/.dpf}
       DPF_RUNTIME_TRANSITION_SECRET_FILE_HOST: ${DPF_STATE_DIR:-${HOME}/.dpf}/runtime-transition.secret
       # Portal-side live-readiness checks run inside the container, where

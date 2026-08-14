@@ -24,6 +24,11 @@ import {
   EdgeNodesAdminClient,
   __test_HostAddressCell as HostAddressCell,
 } from "./EdgeNodesAdminClient";
+import type {
+  EdgeHealth,
+  EdgeReadinessCheck,
+  EdgeReadinessNextAction,
+} from "@/lib/edge-node/readiness";
 
 afterEach(() => {
   cleanup();
@@ -53,6 +58,16 @@ const BASE_NODE = {
   customerAccountName: "Acme Dental",
   customerSiteId: "site_hq",
   customerSiteName: "Headquarters",
+  health: "healthy" as EdgeHealth,
+  heartbeatAgeMs: 60_000,
+  nextAction: "none" as EdgeReadinessNextAction,
+  isMainInstallation: true,
+  readinessChecks: [
+    { key: "service", label: "Host service", status: "pass", detail: "Supervised host service is enrolled." },
+    { key: "trust", label: "Trust", status: "pass", detail: "Submissions are accepted." },
+    { key: "heartbeat", label: "Heartbeat", status: "pass", detail: "Heartbeat is current." },
+    { key: "capability:federation.discovery", label: "Nearby DPF discovery", status: "pass", detail: "Capability is enabled and healthy." },
+  ] as EdgeReadinessCheck[],
 };
 
 const BASE_TOKEN = {
@@ -173,7 +188,27 @@ describe("HostAddressCell", () => {
 });
 
 describe("EdgeNodesAdminClient customer/site scope", () => {
-  it("summarizes runtime mode and warns about container LAN visibility", () => {
+  it("shows this installation readiness before the fleet registry", () => {
+    render(
+      <EdgeNodesAdminClient
+        nodes={[BASE_NODE]}
+        tokens={[]}
+        customerAccounts={CUSTOMER_ACCOUNTS}
+        edgeEnabled
+        mainInstallationStatus="found"
+      />,
+    );
+
+    expect(screen.getByRole("heading", { name: "This DPF installation" })).toBeInTheDocument();
+    expect(screen.getAllByText("Healthy").length).toBeGreaterThan(0);
+    expect(screen.getByText("Nearby DPF discovery")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /open connections/i })).toHaveAttribute(
+      "href",
+      "/platform/federation-links",
+    );
+  });
+
+  it("summarizes derived health instead of the stored active field", () => {
     render(
       <EdgeNodesAdminClient
         nodes={[
@@ -183,6 +218,71 @@ describe("EdgeNodesAdminClient customer/site scope", () => {
             installMode: "container-vm",
             trustState: "trusted",
             status: "active",
+            health: "offline",
+            heartbeatAgeMs: 64 * 24 * 60 * 60 * 1000,
+            nextAction: "repair-service",
+            readinessChecks: [
+              { key: "heartbeat", label: "Heartbeat", status: "fail", detail: "The host service has missed the offline threshold." },
+            ],
+          },
+        ]}
+        tokens={[]}
+        customerAccounts={CUSTOMER_ACCOUNTS}
+        edgeEnabled
+        mainInstallationStatus="found"
+      />,
+    );
+
+    expect(screen.getByText("Fleet health")).toBeInTheDocument();
+    expect(screen.getByText("1 offline")).toBeInTheDocument();
+    expect(screen.queryByText("1 active")).not.toBeInTheDocument();
+    expect(screen.getByText("1 trusted")).toBeInTheDocument();
+    expect(screen.getAllByText("linux / container-vm").length).toBeGreaterThan(0);
+    expect(screen.getByText(/limited host-LAN visibility/i)).toBeInTheDocument();
+  });
+
+  it("keeps node health and trust visible as separate fleet columns", () => {
+    render(
+      <EdgeNodesAdminClient
+        nodes={[{ ...BASE_NODE, health: "degraded", trustState: "trusted" }]}
+        tokens={[]}
+        customerAccounts={CUSTOMER_ACCOUNTS}
+        edgeEnabled
+        mainInstallationStatus="found"
+      />,
+    );
+
+    expect(screen.getByRole("columnheader", { name: "Health" })).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "Trust" })).toBeInTheDocument();
+    expect(screen.getAllByText("Degraded").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("trusted").length).toBeGreaterThan(0);
+  });
+
+  it("shows readiness failures and next actions for multiple customer sites", () => {
+    render(
+      <EdgeNodesAdminClient
+        nodes={[
+          { ...BASE_NODE, isMainInstallation: false },
+          {
+            ...BASE_NODE,
+            id: "edge_2",
+            nodeId: "dpf-edge-2",
+            displayName: "Contoso Main Edge",
+            customerAccountId: "cust_contoso",
+            customerAccountName: "Contoso Clinic",
+            customerSiteId: "site_contoso_hq",
+            customerSiteName: "Main Office",
+            health: "degraded",
+            nextAction: "upgrade-node",
+            isMainInstallation: false,
+            readinessChecks: [
+              {
+                key: "version",
+                label: "Version",
+                status: "warning",
+                detail: "Node 0.1.0 differs from the current installation 0.2.0.",
+              },
+            ],
           },
         ]}
         tokens={[]}
@@ -190,10 +290,27 @@ describe("EdgeNodesAdminClient customer/site scope", () => {
       />,
     );
 
-    expect(screen.getByText("Runtime summary")).toBeInTheDocument();
-    expect(screen.getByText("1 trusted")).toBeInTheDocument();
-    expect(screen.getAllByText("linux / container-vm").length).toBeGreaterThan(0);
-    expect(screen.getByText(/limited host-LAN visibility/i)).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Edge fleet (2)" })).toBeInTheDocument();
+    expect(screen.getByText("Acme Dental / Headquarters")).toBeInTheDocument();
+    expect(screen.getByText("Contoso Clinic / Main Office")).toBeInTheDocument();
+    expect(screen.getByText("Node 0.1.0 differs from the current installation 0.2.0.")).toBeInTheDocument();
+    expect(screen.getByText("Upgrade node")).toBeInTheDocument();
+  });
+
+  it("shows a governed setup state when no main-installation node is proven", () => {
+    render(
+      <EdgeNodesAdminClient
+        nodes={[]}
+        tokens={[]}
+        customerAccounts={CUSTOMER_ACCOUNTS}
+        edgeEnabled={false}
+        mainInstallationStatus="missing"
+      />,
+    );
+
+    expect(screen.getByRole("heading", { name: "This DPF installation" })).toBeInTheDocument();
+    expect(screen.getByText("Setup required")).toBeInTheDocument();
+    expect(screen.getByText(/not enabled/i)).toBeInTheDocument();
   });
 
   it("renders customer/site scope badges for nodes and bootstrap tokens", () => {

@@ -16,6 +16,25 @@ order: 6
 
 An Edge Node is the host-resident trust and discovery component. It enrolls with the platform's Authority Core, heartbeats freshness, runs local collectors against the network it can reach, and submits results as governed evidence. Two surfaces matter to an operator: **enrollment / trust state** (managed in the portal) and **what the node can see from where it runs** (decided by the deployment mode below).
 
+## Start With This DPF Installation
+
+The first card on **Platform > Edge Nodes** answers whether the host component belonging to the current DPF installation is ready. It is intentionally separate from remote or customer nodes. The installer-issued enrollment identifies that node; hostnames and stored `active` labels do not.
+
+The card checks the supervised service, enrollment, trust, heartbeat freshness, platform version, and nearby-DPF discovery capability. Its health states mean:
+
+| Health | Meaning | Operator response |
+| --- | --- | --- |
+| **Setup required** | Edge was not enabled, or no local supervised service is enrolled. | Use the governed install or repair workflow with Edge enabled. |
+| **Starting** | Enrollment or the first heartbeat/approval is still completing. | Wait briefly, then review the named waiting check. |
+| **Healthy** | Trust, heartbeat, version, and required capabilities are current. | No action. |
+| **Degraded** | The node is reachable but a version, capability, or freshness check needs attention. | Follow the failed check; open **Connections** for nearby discovery. |
+| **Offline** | No heartbeat arrived inside the offline window. | Use the governed repair/self-upgrade workflow; do not trust recent discovery as current. |
+| **Quarantined / Revoked** | Trust policy intentionally blocks or permanently retires the node. | Review the recorded trust decision before restoring or replacing it. |
+
+Health and trust are different axes. A node can be trusted yet offline, or alive yet quarantined. The fleet table therefore shows both columns, plus the first failed readiness check and its next action, and derives health from live evidence rather than `EdgeNode.status` alone.
+
+Once Edge is enabled, each governed install or self-upgrade refreshes the checksum-bound native binary and its supervisor while preserving the enrolled machine identity. Replacement bytes are staged before the service stops, and a failed restart restores the prior binary. A platform version change does not issue a new bootstrap token.
+
 ## Deployment Modes
 
 The Edge Node ships in two runtimes. Pick the one that matches the host substrate — the installer auto-selects based on platform detection, and the choice can be overridden with `--mode=native|container|macvlan`.
@@ -62,7 +81,7 @@ What is **not** in place yet: the detector framework on the edge (Slice 1 of the
 
 ## Workflow
 
-1. Start from `/platform/edge-nodes` and confirm which nodes are enrolled, pending trust, stale, or rejected.
+1. Start from `/platform/edge-nodes` and confirm **This DPF installation** is healthy before relying on nearby discovery or the wider fleet.
 2. Approve trust only when the node identity, host, network placement, and intended collector scope are understood. Trust is one-way — once approved, the node's submissions become platform evidence.
 3. Review heartbeat and freshness before treating a discovery run as current. A stale heartbeat means the run is stale, regardless of how recent the row looks.
 4. For the host-level setup, follow the runbooks under `docs/install/`:

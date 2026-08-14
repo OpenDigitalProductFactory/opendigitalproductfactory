@@ -56,6 +56,23 @@ export function intentStyle(intent: Intent): IntentStyle {
  * (e.g. complaints) so each gets its own namespace.
  */
 export const STATUS_INTENT: Record<string, Record<string, Intent>> = {
+  // Edge operational health and operator-governed trust are deliberately
+  // separate axes. Both Edge Nodes and Connections consume these semantics.
+  edgeHealth: {
+    "setup-required": "neutral",
+    starting: "info",
+    healthy: "success",
+    degraded: "warning",
+    offline: "danger",
+    quarantined: "danger",
+    revoked: "neutral",
+  },
+  edgeTrust: {
+    pending: "warning",
+    trusted: "success",
+    quarantined: "danger",
+    revoked: "neutral",
+  },
   // Restaurant table capacity state (BI-7C95A586). Tables & Capacity page,
   // Workspace chips, and public booking all resolve here — one registry.
   restaurantCapacity: {

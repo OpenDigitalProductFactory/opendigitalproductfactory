@@ -654,14 +654,14 @@ function Set-DPFEnvFileValue {
     Set-Content -Path $Path -Value $envText -Encoding UTF8 -NoNewline
 }
 
-function Invoke-DPFEdgeNodeBootstrap {
+function Invoke-DPFEdgeNodeConvergence {
     param([Parameter(Mandatory)][string]$InstallDir)
 
     $edgeModule = Resolve-DPFNativeEdgeModulePath -InstallDir $InstallDir
     . $edgeModule
     $edgeComposeArgs = Get-DPFComposeArgs -InstallDir $InstallDir -IncludeEdge:$false
 
-    Write-Action "Bootstrapping bundled Edge Node..."
+    Write-Action "Converging this installation's Edge Node..."
     $portalReady = $false
     for ($i = 0; $i -lt 60; $i++) {
         try {
@@ -680,30 +680,38 @@ function Invoke-DPFEdgeNodeBootstrap {
         $portalContainer = "dpf-portal-1"
     }
 
-    $edgeToken = $null
-    try {
-        $tokenOutput = docker exec $portalContainer sh -c 'cd /app/apps/web-src && /app/node_modules/.pnpm/node_modules/.bin/tsx scripts/issue-edge-bootstrap-token.ts --ttl-minutes 30 --auto-approve' 2>$null
-        if ($LASTEXITCODE -eq 0 -and $tokenOutput) {
-            $lines = @($tokenOutput) | ForEach-Object { $_.ToString().Trim() } | Where-Object { $_ -ne "" }
-            $candidate = if ($lines.Count -gt 0) { $lines[-1] } else { "" }
-            if ($candidate -match "^dpfboot_") {
-                $edgeToken = $candidate
+    $stateRoot = if ($env:DPF_STATE_DIR) { $env:DPF_STATE_DIR } else { Join-Path $env:USERPROFILE ".dpf" }
+    $existingEnrollment = Test-Path -LiteralPath (Join-Path $stateRoot "edge-node\state.json")
+    $edgeToken = ""
+    if (-not $existingEnrollment) {
+        try {
+            $tokenOutput = docker exec $portalContainer sh -c 'cd /app/apps/web-src && /app/node_modules/.pnpm/node_modules/.bin/tsx scripts/issue-edge-bootstrap-token.ts --ttl-minutes 30 --auto-approve' 2>$null
+            if ($LASTEXITCODE -eq 0 -and $tokenOutput) {
+                $lines = @($tokenOutput) | ForEach-Object { $_.ToString().Trim() } | Where-Object { $_ -ne "" }
+                $candidate = if ($lines.Count -gt 0) { $lines[-1] } else { "" }
+                if ($candidate -match "^dpfboot_") {
+                    $edgeToken = $candidate
+                }
             }
+        } catch {
+            $edgeToken = ""
         }
-    } catch {
-        $edgeToken = $null
+
+        if (-not $edgeToken) {
+            Write-Warn "Bootstrap token issuance failed. Skipping Edge Node enrollment wiring."
+            Write-Warn "Use the portal Edge Nodes page to issue a token if you need to enroll this node manually."
+            return $false
+        }
     }
 
-    if (-not $edgeToken) {
-        Write-Warn "Bootstrap token issuance failed. Skipping Edge Node enrollment wiring."
-        Write-Warn "Use the portal Edge Nodes page to issue a token if you need to enroll this node manually."
-        return $false
+    if ($edgeToken) {
+        $envPath = Join-Path $InstallDir ".env"
+        Set-DPFEnvFileValue -Path $envPath -Key "DPF_BOOTSTRAP_TOKEN" -Value $edgeToken
+        Set-DPFEnvFileValue -Path $envPath -Key "DPF_EDGE_NODE_NAME" -Value ([System.Net.Dns]::GetHostName())
+        Write-OK "Bootstrap token wired into .env (auto-approve)"
+    } else {
+        Write-OK "Existing Edge enrollment found; preserving its machine identity"
     }
-
-    $envPath = Join-Path $InstallDir ".env"
-    Set-DPFEnvFileValue -Path $envPath -Key "DPF_BOOTSTRAP_TOKEN" -Value $edgeToken
-    Set-DPFEnvFileValue -Path $envPath -Key "DPF_EDGE_NODE_NAME" -Value ([System.Net.Dns]::GetHostName())
-    Write-OK "Bootstrap token wired into .env (auto-approve)"
     if (Install-DPFNativeEdgeNode -InstallDir $InstallDir -BootstrapToken $edgeToken -Version $Version) {
         $legacyComposeArgs = Get-DPFComposeArgs -InstallDir $InstallDir -IncludeEdge:$true
         docker compose @legacyComposeArgs stop edge-node 2>&1 | Out-Null
@@ -1620,6 +1628,11 @@ if (-not (Test-StepDone "started")) {
     $stateLib = Join-Path $DPF_DIR "scripts\installer\lib\state.ps1"
     if (-not (Test-Path -LiteralPath $stateLib)) { throw "capability_state_helper_missing" }
     . $stateLib
+    if ($WithEdge) { $env:DPF_INCLUDE_EDGE = '1' }
+    elseif ($NoEdge) { $env:DPF_INCLUDE_EDGE = '0' }
+    $resolvedEdgeEnabled = Resolve-DpfEdgeEnabled -InstallDir $DPF_DIR
+    $env:DPF_INCLUDE_EDGE = if ($resolvedEdgeEnabled) { '1' } else { '0' }
+    Set-DpfStateValue -Key "edge" -Value @{ enabled = $resolvedEdgeEnabled; mode = $(if ($resolvedEdgeEnabled) { "local" } else { $null }) }
     $capabilityProjection = Resolve-DpfCapabilityComposeProfiles -InstallDir $DPF_DIR
     $env:COMPOSE_PROFILES = (@($capabilityProjection.composeProfiles) -join ',')
     $coreComposeArgs = Get-DPFComposeArgs -InstallDir $DPF_DIR -IncludeEdge:$false -IncludeRelease:($InstallMode -eq "consumer")
@@ -1849,25 +1862,21 @@ if (-not (Test-StepDone "mcp_seed")) {
     Write-OK "Already running"
 }
 
-# Edge Node deploy gate (opt-in; BI-72CFF89D / edge-topology design section 5).
-# A local Edge Node is bundled + auto-enrolled ONLY when -WithEdge is passed
-# (or a prior install already enabled it -- .env carries the bootstrap token);
-# -NoEdge forces it off. Default OFF. Map a network from a different machine
-# instead via Admin > Platform Development > Edge Nodes.
-$dpfEdgeOptIn = $false
-if ($WithEdge) {
-    $dpfEdgeOptIn = $true
-} elseif (-not $NoEdge) {
-    $dpfEnvPath = Join-Path $DPF_DIR ".env"
-    if ((Test-Path -LiteralPath $dpfEnvPath) -and (Select-String -Path $dpfEnvPath -Pattern '^DPF_BOOTSTRAP_TOKEN=dpf' -Quiet)) {
-        $dpfEdgeOptIn = $true
-    }
-}
-if ($dpfEdgeOptIn -and (-not (Test-StepDone "edge_bootstrap"))) {
-    if (Invoke-DPFEdgeNodeBootstrap -InstallDir $DPF_DIR) {
+# Edge is an explicit, persistent capability choice. Once enabled, every
+# governed install/repair converges the native service and verified binary;
+# the progress marker is evidence of a past success, not a skip condition.
+$edgeStateLib = Join-Path $DPF_DIR "scripts\installer\lib\state.ps1"
+if (-not (Test-Path -LiteralPath $edgeStateLib)) { throw "capability_state_helper_missing" }
+. $edgeStateLib
+if ($WithEdge) { $env:DPF_INCLUDE_EDGE = '1' }
+elseif ($NoEdge) { $env:DPF_INCLUDE_EDGE = '0' }
+$dpfEdgeOptIn = Resolve-DpfEdgeEnabled -InstallDir $DPF_DIR
+Set-DpfStateValue -Key "edge" -Value @{ enabled = $dpfEdgeOptIn; mode = $(if ($dpfEdgeOptIn) { "local" } else { $null }) }
+if ($dpfEdgeOptIn) {
+    if (Invoke-DPFEdgeNodeConvergence -InstallDir $DPF_DIR) {
         Save-Progress "edge_bootstrap"
     } else {
-        Write-Warn "Bundled Edge Node bootstrap did not complete. The portal remains usable."
+        Write-Warn "Bundled Edge Node convergence did not complete. The portal remains usable."
     }
 } elseif (-not $dpfEdgeOptIn) {
     Write-OK "Edge Node not bundled (opt-in). Re-run with -WithEdge to add a local node, or add a node on another machine from Admin > Platform Development > Edge Nodes."

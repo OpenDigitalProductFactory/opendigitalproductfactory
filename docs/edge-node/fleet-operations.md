@@ -19,18 +19,14 @@ into a bottleneck or the edge into a second management platform.
 
 ## Node operational lifecycle
 
-A node's *operational* lifecycle is wider than its trust state:
+The portal keeps health and trust as independent axes:
 
-```
-created → pending → trusted → degraded → quarantined → revoked → retired
-```
+- **Health:** `setup-required`, `starting`, `healthy`, `degraded`, `offline`, `quarantined`, or `revoked`. Health is derived server-side from heartbeat age, capability reports, version compatibility, and trust; a stale stored `active` value never wins.
+- **Trust:** `pending`, `trusted`, `quarantined`, or `revoked`. These are durable, operator-governed `EdgeNode.trustState` values.
 
-- **pending / trusted / quarantined / revoked** are real `EdgeNode.trustState` values — operator-driven.
-- **degraded** is a health/observability concept (not a DB trust value): a node that is *trusted*
-  yet behind on version, missing a capability, failing a collector, over its cardinality budget, or
-  running on stale policy. Surface it on the fleet view; act on it before it becomes an incident.
-- **created → retired** bracket the row: a decommissioned node is revoked, then its row retained
-  for audit (its evidence stays scoped) or archived per retention policy.
+That distinction matters: a trusted node may be offline, and a quarantined node may still heartbeat. The Authority retains revoked rows and their scoped evidence for audit.
+
+The first fleet member is **This DPF installation**. Installer-issued auto-approval is its identity evidence. On Windows and macOS, every governed install/repair stages the verified native artifact, converges Task Scheduler/launchd supervision, restores the prior binary if restart fails, and reuses the existing machine enrollment. Remote MSP/customer nodes remain separately scoped by customer and site; each fleet row names its first failed readiness check and next action.
 
 ## Rollout (adding nodes at scale)
 
