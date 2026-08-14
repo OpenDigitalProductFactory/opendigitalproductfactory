@@ -123,6 +123,5 @@ export const coworkerMemoryPack: ToolPack = {
     record_working_note: (params, userId, context) => recordWorkingNoteHandler(params, userId, context),
     list_working_notes: (params, userId, context) => listWorkingNotesHandler(params, userId, context),
   },
-  // Ungated (self-scoped): no agent-grant gating, mirroring propose_improvement.
-  grants: {},
+  grants: { record_working_note: [], list_working_notes: [] },
 };

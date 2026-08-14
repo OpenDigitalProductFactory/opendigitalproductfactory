@@ -147,6 +147,5 @@ export const coworkerGoalPack: ToolPack = {
     list_task_goals: (params, userId, context) => listTaskGoalsHandler(params, userId, context),
     evaluate_task_goal: (params, userId, context) => evaluateTaskGoalHandler(params, userId, context),
   },
-  // Ungated (self-scoped): no agent-grant gating, mirroring coworker-memory.
-  grants: {},
+  grants: { set_task_goal: [], list_task_goals: [], evaluate_task_goal: [] },
 };

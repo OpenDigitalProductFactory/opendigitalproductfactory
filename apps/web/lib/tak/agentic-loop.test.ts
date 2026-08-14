@@ -705,7 +705,7 @@ describe("runAgenticLoop", () => {
     // config gap.
     const mockRoute = vi.mocked(routeAndCall);
     mockRoute.mockRejectedValueOnce(new Error(
-      "No eligible endpoints for task 'data-extraction': No eligible endpoints for task type 'data-extraction' with sensitivity 'internal'. 1 endpoint(s) excluded. (1 endpoint(s) excluded)",
+      "No eligible endpoints for task 'data-extraction': No eligible endpoints for task type 'data-extraction' with sensitivity 'internal'. Context window too small: 24576 < 32000. (1 endpoint(s) excluded)",
     ));
 
     const result = await runAgenticLoop({
@@ -714,10 +714,7 @@ describe("runAgenticLoop", () => {
       agentId: "scrum-master",
     });
 
-    expect(result.content).toContain("No AI model can handle this request right now");
-    expect(result.content).toContain("Providers & Routing");
-    expect(result.content).toContain("not necessarily a disconnected provider");
-    expect(result.content).toContain("data-policy or residency limits");
+    expect(result.content).toMatch(/No AI model.*24,576.*32,000.*served context.*larger-context model/s);
     expect(result.content).not.toContain("try again in about 30 seconds");
     expect(result.providerId).toBe("unknown");
     expect(result.modelId).toBe("unknown");

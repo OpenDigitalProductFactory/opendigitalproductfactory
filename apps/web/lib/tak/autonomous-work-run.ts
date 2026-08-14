@@ -413,6 +413,9 @@ export async function executeAutonomousAgenticLoop(input: {
   );
   const surfaceGuidanceOnly = surfaceGrounding.grounded
     && isAuthorizedSurfaceGuidanceRequest(lastUserRequest(input.chatHistory));
+  const authorizedGuidanceHighlights = "guidanceHighlights" in surfaceGrounding
+    ? surfaceGrounding.guidanceHighlights ?? []
+    : [];
   const toolsForProvider = surfaceGuidanceOnly ? undefined : input.toolsForProvider;
 
   // This is the single seam both interactive chat (interactionMode "chat") and
@@ -488,6 +491,20 @@ export async function executeAutonomousAgenticLoop(input: {
     } catch (err) {
       console.warn("[golden-triangle] coworker deliberation (unified seam) failed (fail-open):", err);
     }
+  }
+
+  // Prompt instructions are advisory; exact UX labels are contractual. A
+  // model can answer correctly in substance while paraphrasing away a field
+  // or composite action. Enforce the authorization-filtered surface summary
+  // after any deliberation pass so the final response cannot lose those facts.
+  if (surfaceGuidanceOnly && result.content) {
+    const { enforceAuthorizedSurfaceGuidanceCoverage } = await import(
+      "@/lib/coworker/authorized-surface-prompt-grounding"
+    );
+    result.content = enforceAuthorizedSurfaceGuidanceCoverage(
+      result.content,
+      authorizedGuidanceHighlights,
+    );
   }
 
   // Governed Hermes learning Slice 2: fire-and-forget reflection trigger.

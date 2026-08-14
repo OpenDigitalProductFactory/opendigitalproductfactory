@@ -4,6 +4,7 @@ import {
   isSameWorkCase,
   toWorkUnitFromCapsule,
   toWorkUnitFromWorkItem,
+  toWorkUnitFromTaskRun,
 } from "./work-unit";
 
 describe("WorkUnit adapters", () => {
@@ -15,18 +16,21 @@ describe("WorkUnit adapters", () => {
       backlogItemId: "BI-9",
       workItemId: "wi-1",
     });
-    expect(unit.carrier).toBe("work-capsule");
-    expect(unit.carrierId).toBe("WC-1");
-    expect(unit.caseRef).toEqual({ sourceType: "backlog-item", sourceId: "BI-9" });
-    expect(unit.workItemId).toBe("wi-1");
-    expect(unit.backlogItemId).toBe("BI-9");
+    expect(unit.identity.carrier).toBe("work-capsule");
+    expect(unit.identity.carrierId).toBe("WC-1");
+    expect(unit.identity.caseRef).toEqual({ sourceType: "backlog-item", sourceId: "BI-9" });
+    expect(unit.identity.workItemId).toBe("wi-1");
+    expect(unit.identity.backlogItemId).toBe("BI-9");
+    expect(unit.process.formula).toEqual(["frame", "propose", "collaborate", "review", "govern", "verify", "carry-over"]);
+    expect(unit.currentState.status).toBe("working");
+    expect(unit.carryOver.restartable).toBe(true);
   });
 
   it("leaves caseRef null for a capsule with no backlog item", () => {
     const unit = toWorkUnitFromCapsule({ capsuleId: "WC-2", title: "adhoc", status: "draft" });
-    expect(unit.caseRef).toBeNull();
-    expect(unit.backlogItemId).toBeNull();
-    expect(unit.workItemId).toBeNull();
+    expect(unit.identity.caseRef).toEqual({ sourceType: "work-capsule", sourceId: "WC-2" });
+    expect(unit.identity.backlogItemId).toBeNull();
+    expect(unit.identity.workItemId).toBeNull();
   });
 
   it("maps a backlog-item WorkItem to a unit whose anchor is itself", () => {
@@ -37,10 +41,10 @@ describe("WorkUnit adapters", () => {
       title: "Work on BI-9",
       status: "queued",
     });
-    expect(unit.carrier).toBe("work-item");
-    expect(unit.workItemId).toBe("wi-1");
-    expect(unit.backlogItemId).toBe("BI-9");
-    expect(unit.caseRef).toEqual({ sourceType: "backlog-item", sourceId: "BI-9" });
+    expect(unit.identity.carrier).toBe("work-item");
+    expect(unit.identity.workItemId).toBe("wi-1");
+    expect(unit.identity.backlogItemId).toBe("BI-9");
+    expect(unit.identity.caseRef).toEqual({ sourceType: "backlog-item", sourceId: "BI-9" });
   });
 
   it("does not treat a non-backlog WorkItem source as a backlog item", () => {
@@ -51,8 +55,30 @@ describe("WorkUnit adapters", () => {
       title: "deal",
       status: "active",
     });
-    expect(unit.backlogItemId).toBeNull();
-    expect(unit.caseRef).toEqual({ sourceType: "opportunity", sourceId: "OPP-3" });
+    expect(unit.identity.backlogItemId).toBeNull();
+    expect(unit.identity.caseRef).toEqual({ sourceType: "opportunity", sourceId: "OPP-3" });
+  });
+
+  it("adapts a TaskRun without inventing a second lifecycle", () => {
+    const unit = toWorkUnitFromTaskRun({
+      taskRunId: "TR-1",
+      title: "Validate rollout",
+      status: "input-required",
+      contextId: "BI-9",
+      initiatingAgentId: "release-manager",
+      currentAgentId: "ops-coordinator",
+    });
+    expect(unit.identity).toMatchObject({
+      carrier: "task-run",
+      carrierId: "TR-1",
+      caseRef: { sourceType: "backlog-item", sourceId: "BI-9" },
+      backlogItemId: "BI-9",
+    });
+    expect(unit.participants).toEqual({
+      accountableRef: "release-manager",
+      contributorRefs: ["ops-coordinator"],
+    });
+    expect(unit.currentState.status).toBe("input-required");
   });
 
   it("recognizes a capsule and a work-item as the same case via the shared anchor", () => {

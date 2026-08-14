@@ -10,7 +10,7 @@
 // dependency, simpler to test, and consumed by multiple downstream
 // surfaces.
 
-import { QDRANT_COLLECTIONS, upsertVectors, searchSimilar, deleteVectors } from "@dpf/db";
+import { QDRANT_COLLECTIONS, upsertVectors, searchSimilar, deleteVectors, prisma } from "@dpf/db";
 import { generateEmbedding } from "@/lib/inference/embedding";
 
 // ─── Constants ──────────────────────────────────────────────────────────────
@@ -123,6 +123,83 @@ export type SearchWikiPagesInput = {
   principleRingScope?: string[];
 };
 
+function lexicalTokens(value: string): string[] {
+  return [...new Set(value.toLowerCase().match(/[a-z0-9]+/g) ?? [])]
+    .filter((token) => token.length > 1);
+}
+
+/**
+ * Postgres truth fallback for a temporarily unavailable embedding provider.
+ * Doctrine retrieval must degrade in ranking quality, not disappear. Fetching a
+ * bounded published candidate set keeps tenant isolation and overlay masking in
+ * the database, then deterministic token ranking supplies the small result set.
+ */
+export async function searchWikiPagesLexically(
+  input: SearchWikiPagesInput,
+): Promise<WikiSearchResult[]> {
+  const where: Record<string, unknown> = {
+    status: "published",
+    ...(input.organizationId
+      ? { OR: [{ organizationId: input.organizationId }, { isKernel: true }] }
+      : { isKernel: true }),
+    ...(input.pageKinds?.length
+      ? { pageKind: { in: input.pageKinds } }
+      : input.pageKind ? { pageKind: input.pageKind } : {}),
+    ...(input.principleTier ? { principleTier: input.principleTier } : {}),
+    ...(input.principleAppliesTo ? { principleAppliesTo: { has: input.principleAppliesTo } } : {}),
+    ...(input.principlePublic !== undefined ? { principlePublic: input.principlePublic } : {}),
+  };
+  const rows = await prisma.wikiPage.findMany({
+    where,
+    select: {
+      id: true, slug: true, title: true, body: true, abstract: true, pageKind: true,
+      isKernel: true, organizationId: true, kernelPageId: true,
+      principleTier: true, principleAppliesTo: true, principleRingScope: true,
+      principleDimensions: true, principlePublic: true,
+    },
+    take: 250,
+  });
+  const tokens = lexicalTokens(input.query);
+  const phrase = input.query.trim().toLowerCase();
+  const ranked = rows.map((row) => {
+    const title = row.title.toLowerCase();
+    const slug = row.slug.toLowerCase();
+    const searchable = `${title} ${slug.replaceAll("-", " ")} ${(row.abstract ?? "").toLowerCase()} ${row.body.toLowerCase()}`;
+    const hits = tokens.reduce((sum, token) => sum + (searchable.includes(token) ? 1 : 0), 0);
+    const exactBoost = phrase && (title === phrase || slug.endsWith(phrase.replaceAll(" ", "-"))) ? 5 : 0;
+    return { row, rank: exactBoost + hits };
+  }).filter(({ rank }) => rank > 0);
+
+  // An org override masks its kernel source even if the lexical kernel score is higher.
+  const maskedKernelIds = new Set(ranked
+    .filter(({ row }) => row.organizationId === input.organizationId && row.kernelPageId)
+    .map(({ row }) => row.kernelPageId));
+  return ranked
+    .filter(({ row }) => !row.isKernel || !maskedKernelIds.has(row.id))
+    .sort((a, b) => Number(Boolean(b.row.organizationId)) - Number(Boolean(a.row.organizationId))
+      || b.rank - a.rank || a.row.slug.localeCompare(b.row.slug))
+    .slice(0, input.limit ?? 5)
+    .map(({ row, rank }) => ({
+      pageId: row.id,
+      slug: row.slug,
+      title: row.title,
+      pageKind: row.pageKind,
+      contentPreview: row.body.slice(0, 500),
+      isKernel: row.isKernel,
+      organizationId: row.organizationId,
+      kernelPageId: row.kernelPageId,
+      score: Math.min(1, rank / Math.max(1, tokens.length + 5)),
+      source: row.isKernel ? "kernel" : "org",
+      ...(row.pageKind === "principle" ? {
+        principleTier: row.principleTier ?? undefined,
+        principleAppliesTo: row.principleAppliesTo,
+        principleRingScope: row.principleRingScope,
+        principleDimensions: row.principleDimensions,
+        principlePublic: row.principlePublic,
+      } : {}),
+    }));
+}
+
 // ─── Write ──────────────────────────────────────────────────────────────────
 
 /**
@@ -233,10 +310,10 @@ export async function searchWikiPages(input: SearchWikiPagesInput): Promise<Wiki
     // and the exact fix. `make-silent-failures-observable`.
     console.error(
       "[searchWikiPages] embedding-provider-unavailable — query could not be " +
-        "embedded, returning no results (NOT an empty match). " +
+        "embedded; using Postgres lexical fallback. " +
         "Fix: docker model pull ai/nomic-embed-text-v1.5",
     );
-    return [];
+    return searchWikiPagesLexically(input);
   }
 
   const limit = input.limit ?? 5;

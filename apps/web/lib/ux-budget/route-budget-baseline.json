@@ -1620,15 +1620,15 @@
       "ariaSnapshot": "- link\n- banner\n  - link\n    - text\n    - paragraph\n      - text\n  - link\n  - button\n  - text\n  - button\n- complementary\n  - navigation\n    - group\n      - button\n      - button [pressed]\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n- main\n  - navigation\n    - link\n    - text\n  - heading [level=1]\n  - paragraph\n    - text\n    - strong\n      - text\n    - text\n    - strong\n      - text\n    - text\n    - code\n      - text\n    - text\n  - text\n  - table\n    - rowgroup\n      - row\n        - columnheader\n    - rowgroup\n      - row\n        - cell\n          - text"
     },
     "/platform/edge-nodes": {
-      "defaultVisibleWords": 235,
+      "defaultVisibleWords": 159,
       "leadBandWords": 0,
       "primaryActions": 1,
-      "visibleFields": 5,
-      "maxChoicesPerControl": 3,
+      "visibleFields": 0,
+      "maxChoicesPerControl": 0,
       "subLegibleControls": 0,
       "buriedPrimaryAction": 0,
       "axeViolations": 2,
-      "ariaSnapshot": "- link\n- banner\n  - link\n    - text\n    - paragraph\n      - text\n  - link\n  - button\n  - text\n  - button\n- complementary\n  - navigation\n    - group\n      - button\n      - button [pressed]\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n- main\n  - navigation\n    - link\n    - text\n  - heading [level=1]\n  - paragraph\n    - text\n  - heading [level=2]\n  - text\n  - paragraph\n    - text\n  - text\n  - heading [level=2]\n  - paragraph\n    - text\n    - strong\n      - text\n    - text\n  - text\n  - combobox\n    - option [selected]\n    - option\n  - text\n  - textbox\n  - text\n  - spinbutton\n  - text\n  - combobox\n    - option [selected]\n  - text\n  - combobox [disabled]\n    - option [selected]\n  - button\n  - heading [level=2]\n  - paragraph\n    - text\n  - heading [level=2]\n  - paragraph\n    - text"
+      "ariaSnapshot": "- link\n- banner\n  - link\n    - text\n    - paragraph\n      - text\n  - link\n  - button\n  - text\n  - button\n- complementary\n  - navigation\n    - group\n      - button\n      - button [pressed]\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n- main\n  - navigation\n    - link\n    - text\n  - heading [level=1]\n  - paragraph\n    - text\n  - heading [level=2]\n  - text\n  - link\n  - paragraph\n    - text\n  - heading [level=2]\n  - text\n  - paragraph\n    - text\n  - text\n  - group\n    - button\n    - paragraph\n      - text\n    - text\n    - combobox\n      - option [selected]\n      - option\n    - text\n    - textbox\n    - text\n    - spinbutton\n    - text\n    - combobox\n      - option [selected]\n    - text\n    - combobox [disabled]\n      - option [selected]\n    - button\n  - heading [level=2]\n  - paragraph\n    - text\n  - heading [level=2]\n  - paragraph\n    - text"
     },
     "/platform/federation-links": {
       "defaultVisibleWords": 335,

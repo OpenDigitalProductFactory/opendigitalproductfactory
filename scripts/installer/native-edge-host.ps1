@@ -32,19 +32,24 @@ function Install-DPFNativeEdgeNode {
         Write-Warn "Nearby discovery will work at $AuthorityUrl, but automatic pairing remains blocked until DPF_LAN_AUTHORITY_URL is certificate-valid HTTPS."
     }
 
-    $stateRoot = Join-Path $env:USERPROFILE ".dpf"
+    $stateRoot = if ($env:DPF_STATE_DIR) { $env:DPF_STATE_DIR } else { Join-Path $env:USERPROFILE ".dpf" }
     $binDir = Join-Path $stateRoot "bin"
     $stateDir = Join-Path $stateRoot "edge-node"
     $logDir = Join-Path $stateRoot "logs"
     $binary = Join-Path $binDir "dpf-edge-node.exe"
+    $binaryCandidate = "$binary.next"
+    $binaryBackup = "$binary.previous"
     $runner = Join-Path $stateRoot "run-edge-node.ps1"
     $asset = "dpf-edge-node-windows-amd64.exe"
     $checksumsAsset = "dpf-edge-node-checksums.sha256"
     $sourceBinary = Join-Path $InstallDir "services\edge-node-go\bin\$asset"
     New-Item -ItemType Directory -Force -Path $binDir, $stateDir, $logDir | Out-Null
 
+    # Acquire and verify the replacement while the current service stays online.
+    Remove-Item -LiteralPath $binaryCandidate -Force -ErrorAction SilentlyContinue
+
     if (Test-Path -LiteralPath $sourceBinary) {
-        Copy-Item -LiteralPath $sourceBinary -Destination $binary -Force
+        Copy-Item -LiteralPath $sourceBinary -Destination $binaryCandidate -Force
     } elseif ((Get-Command go.exe -ErrorAction SilentlyContinue) -and (Test-Path (Join-Path $InstallDir "services\edge-node-go\go.mod"))) {
         $oldGoos = $env:GOOS
         $oldGoarch = $env:GOARCH
@@ -54,7 +59,7 @@ function Install-DPFNativeEdgeNode {
             $env:GOARCH = "amd64"
             $env:CGO_ENABLED = "0"
             Push-Location (Join-Path $InstallDir "services\edge-node-go")
-            go build -trimpath -ldflags "-s -w -X main.Version=$Version" -o $binary ./cmd/dpf-edge-node
+            go build -trimpath -ldflags "-s -w -X main.Version=$Version" -o $binaryCandidate ./cmd/dpf-edge-node
             if ($LASTEXITCODE -ne 0) { throw "native_edge_build_failed" }
         } finally {
             Pop-Location
@@ -75,11 +80,20 @@ function Install-DPFNativeEdgeNode {
             $expected = ($checksumLine -split '\s+')[0].ToLowerInvariant()
             $actual = (Get-FileHash -Algorithm SHA256 -LiteralPath $downloadedBinary).Hash.ToLowerInvariant()
             if ($actual -cne $expected) { throw "native_edge_checksum_mismatch" }
-            Copy-Item -LiteralPath $downloadedBinary -Destination $binary -Force
+            Copy-Item -LiteralPath $downloadedBinary -Destination $binaryCandidate -Force
         } finally {
             Remove-Item -LiteralPath $temporary -Recurse -Force -ErrorAction SilentlyContinue
         }
     }
+
+    if (-not (Test-Path -LiteralPath $binaryCandidate -PathType Leaf)) { throw "native_edge_candidate_missing" }
+    # A running process holds the executable open on Windows. Release it only
+    # after the replacement is ready; registration/start below is idempotent.
+    Stop-ScheduledTask -TaskName "DPF-Native-Edge-Node" -ErrorAction SilentlyContinue
+    if (Test-Path -LiteralPath $binary -PathType Leaf) {
+        Copy-Item -LiteralPath $binary -Destination $binaryBackup -Force
+    }
+    Move-Item -LiteralPath $binaryCandidate -Destination $binary -Force
 
     $nodeName = [System.Net.Dns]::GetHostName()
     $escapedBinary = $binary.Replace("'", "''")
@@ -141,8 +155,17 @@ $actionEnvironment& '$escapedBinary' *>> '$($logDir.Replace("'", "''"))\edge-nod
     $trigger = New-ScheduledTaskTrigger -AtLogOn
     $principal = New-ScheduledTaskPrincipal -UserId ([System.Security.Principal.WindowsIdentity]::GetCurrent().Name) -LogonType Interactive
     $settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1)
-    Register-ScheduledTask -TaskName "DPF-Native-Edge-Node" -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Description "Run the DPF native Edge Node on host network interfaces." -Force | Out-Null
-    Start-ScheduledTask -TaskName "DPF-Native-Edge-Node"
+    try {
+        Register-ScheduledTask -TaskName "DPF-Native-Edge-Node" -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Description "Run the DPF native Edge Node on host network interfaces." -Force | Out-Null
+        Start-ScheduledTask -TaskName "DPF-Native-Edge-Node"
+    } catch {
+        if (Test-Path -LiteralPath $binaryBackup -PathType Leaf) {
+            Copy-Item -LiteralPath $binaryBackup -Destination $binary -Force
+            Start-ScheduledTask -TaskName "DPF-Native-Edge-Node" -ErrorAction SilentlyContinue
+            Write-Warn "Native Edge Node could not start after upgrade; the prior binary was restored."
+        }
+        throw
+    }
     Write-OK "Native Edge Node installed and supervised by Windows Task Scheduler"
     return $true
 }

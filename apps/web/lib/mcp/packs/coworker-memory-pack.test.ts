@@ -27,7 +27,7 @@ describe("coworkerMemoryPack shape", () => {
       "list_working_notes",
       "record_working_note",
     ]);
-    expect(coworkerMemoryPack.grants).toEqual({});
+    expect(coworkerMemoryPack.grants).toEqual({ record_working_note: [], list_working_notes: [] });
     expect(Object.keys(coworkerMemoryPack.handlers).sort()).toEqual([
       "list_working_notes",
       "record_working_note",

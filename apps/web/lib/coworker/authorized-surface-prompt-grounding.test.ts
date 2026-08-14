@@ -2,6 +2,7 @@ import type { SemanticSurfaceGraph, SurfacePrincipalContext } from "@dpf/types";
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  enforceAuthorizedSurfaceGuidanceCoverage,
   groundPromptWithAuthorizedSurface,
   isAuthorizedSurfaceGuidanceRequest,
 } from "./authorized-surface-prompt-grounding";
@@ -50,6 +51,25 @@ const graph: SemanticSurfaceGraph = {
 };
 
 describe("groundPromptWithAuthorizedSurface", () => {
+  it("appends exact authorized highlights when a model paraphrases away required UX labels", () => {
+    const response = enforceAuthorizedSurfaceGuidanceCoverage(
+      "Choose SNMP and enter the device IP and required credentials, then save and test it.",
+      graph.summary.highlights ?? [],
+    );
+
+    expect(response).toContain("AUTHORIZED SURFACE DETAILS");
+    expect(response).toContain(
+      "For SNMP choose SNMP (Generic), enter Target IP or Hostname and the write-only Community String, then use Save & Test.",
+    );
+  });
+
+  it("does not duplicate an exact authorized highlight already present in the answer", () => {
+    const exact = graph.summary.highlights?.[1] ?? "";
+    const response = enforceAuthorizedSurfaceGuidanceCoverage(exact, [exact]);
+
+    expect(response).toBe(exact);
+  });
+
   it("distinguishes read-only setup guidance from a request to operate the surface", () => {
     expect(isAuthorizedSurfaceGuidanceRequest("how should I setup this smtp discovery?")).toBe(true);
     expect(isAuthorizedSurfaceGuidanceRequest("what does Save & Test do here?")).toBe(true);
@@ -91,6 +111,7 @@ describe("groundPromptWithAuthorizedSurface", () => {
 
     expect(result.grounded).toBe(true);
     expect(result.sessionId).toBe("surface-session-1");
+    expect(result.guidanceHighlights).toEqual(graph.summary.highlights);
     expect(result.systemPrompt).toContain("CURRENT AUTHORIZED SURFACE — TRUSTED UX STATE");
     expect(result.systemPrompt).toContain("SNMP is the network-discovery method");
     expect(result.systemPrompt).toContain("Community String");

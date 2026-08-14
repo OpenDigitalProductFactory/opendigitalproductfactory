@@ -151,6 +151,23 @@ describe("backlog pack — handler behavior (delegation preserved)", () => {
     expect(db.backlogItemUpdate).not.toHaveBeenCalled();
   });
 
+  it("triage_backlog_item resolves a semantic duplicate target before writing the FK", async () => {
+    db.backlogItemFindUnique
+      .mockResolvedValueOnce({ id: "duplicate-row", itemId: "BI-DUP", status: "triaging" })
+      .mockResolvedValueOnce({ id: "canonical-row" });
+    db.backlogItemUpdate.mockResolvedValue({ itemId: "BI-DUP" });
+
+    const res = await backlogPack.handlers.triage_backlog_item(
+      { itemId: "BI-DUP", outcome: "duplicate", duplicateOfId: "BI-CANON", rationale: "Same work." },
+      "u1",
+    );
+
+    expect(res.success).toBe(true);
+    expect(db.backlogItemUpdate).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ duplicateOfId: "canonical-row" }),
+    }));
+  });
+
   it("size_backlog_item errors when the item is not found", async () => {
     db.backlogItemFindUnique.mockResolvedValue(null);
     const res = await backlogPack.handlers.size_backlog_item(

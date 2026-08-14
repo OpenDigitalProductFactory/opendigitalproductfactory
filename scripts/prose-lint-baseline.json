@@ -1488,7 +1488,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 32
+    "textMass": 27
   },
   "apps/web/app/(shell)/platform/federation-links/page.tsx": {
     "vocabulary": 0,
@@ -3868,7 +3868,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 8
+    "textMass": 6
   },
   "apps/web/components/build/BuildPhaseCostCard.tsx": {
     "vocabulary": 0,
@@ -3903,7 +3903,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 1,
-    "textMass": 395
+    "textMass": 390
   },
   "apps/web/components/build/BuildStudioCustodianCallout.tsx": {
     "vocabulary": 0,
@@ -5632,7 +5632,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 108
+    "textMass": 105
   },
   "apps/web/components/inventory/PortfolioQualityIssuesPanel.tsx": {
     "vocabulary": 0,
@@ -6873,12 +6873,19 @@
     "longSentences": 0,
     "textMass": 13
   },
+  "apps/web/components/platform/edge-nodes/EdgeFleetReadiness.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 56
+  },
   "apps/web/components/platform/edge-nodes/EdgeNodesAdminClient.tsx": {
     "vocabulary": 0,
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 1,
-    "textMass": 339
+    "textMass": 272
   },
   "apps/web/components/platform/federation-links/FederationLinksAdminClient.tsx": {
     "vocabulary": 0,

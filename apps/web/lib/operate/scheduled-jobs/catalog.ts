@@ -81,6 +81,18 @@ export interface ScheduledJobCatalogEntry {
 // Ordered roughly by operational prominence. core-locked jobs first.
 export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
   {
+    jobId: "index-integrity-sweep",
+    inngestId: "ops/index-integrity-sweep",
+    name: "Live database index integrity sweep",
+    purpose:
+      "Checks the persistent install database for btree-to-heap disagreement and blocking collation drift, then raises one deduplicated platform issue before ghost records reach users.",
+    cron: "30 5 * * *",
+    cadence: "Daily at 05:30",
+    category: "core",
+    tracksRunData: false,
+    runNowEvent: null,
+  },
+  {
     jobId: "build-pr-delivery-reconcile",
     inngestId: "build/pr-delivery-reconcile",
     name: "Build Studio PR delivery reconcile",

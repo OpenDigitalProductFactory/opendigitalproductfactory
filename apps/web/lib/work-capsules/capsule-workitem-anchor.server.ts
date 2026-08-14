@@ -4,6 +4,7 @@
  * See capsule-workitem-anchor.ts for the pure core and design reference.
  */
 import { prisma } from "@dpf/db";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 import {
   ensureCapsuleWorkItemAnchor,
@@ -45,9 +46,9 @@ function prismaAnchorPorts(): WorkItemAnchorPorts {
 }
 
 /**
- * Resolve-or-create the canonical WorkItem for a capsule's backlog item and link it.
- * Callers MUST treat failures as non-fatal (the capsule stays usable). Returns null
- * when there is no backlog item to anchor to.
+ * Resolve-or-create the canonical WorkItem for a capsule and link it. Backlog-backed
+ * capsules converge on the backlog case; ad-hoc capsules get a stable capsule case.
+ * Callers MUST treat failures as non-fatal (the capsule stays usable).
  */
 export async function ensureCapsuleWorkItemAnchorWithPrisma(args: {
   capsuleId: string;
@@ -60,4 +61,16 @@ export async function ensureCapsuleWorkItemAnchorWithPrisma(args: {
     backlogItemId: args.backlogItemId,
     title: args.title,
   });
+}
+
+/** Best-effort boundary used by capsule-originating tools. */
+export async function ensureCapsuleWorkItemAnchorNonFatal(
+  capsule: { capsuleId: string; backlogItemId: string | null; title: string },
+  action: string,
+): Promise<void> {
+  try {
+    await ensureCapsuleWorkItemAnchorWithPrisma(capsule);
+  } catch (error) {
+    console.warn(`[work-convergence] WorkItem anchor skipped for ${action} ${capsule.capsuleId}: ${getErrorMessage(error)}`);
+  }
 }

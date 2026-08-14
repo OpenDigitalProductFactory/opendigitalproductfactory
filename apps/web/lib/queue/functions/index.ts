@@ -107,6 +107,7 @@ import {
   dataControlOperationRecoveryRequested,
   dataControlOperationRecoveryScheduled,
 } from "./data-control-operation";
+import { indexIntegritySweep } from "./index-integrity-sweep";
 
 export const scheduledFunctions = [
   prometheusPoll,
@@ -168,6 +169,7 @@ export const scheduledFunctions = [
   demandReconciliationScheduled, // BI-44AA45BF: trusted-link demand projection, retry, and reconciliation every five minutes
   buildPrDeliveryReconcile, // BI-7C4FDBF5: exact-SHA Build Studio PR readiness, queue enrollment, and restart recovery
   dataControlOperationRecoveryScheduled, // BI-DG-014: durable cross-store data mutation recovery and reconciliation
+  indexIntegritySweep, // BI-D9C20A97: daily live-database btree/collation integrity sweep
   postmarkCallbackDispatchSweep,
 ];
 

@@ -10920,6 +10920,7 @@
       "anchors": [
         "use-this-doc-for",
         "what-an-edge-node-does",
+        "start-with-this-dpf-installation",
         "deployment-modes",
         "when-a-container-looks-like-it-works-but-doesnt",
         "adapters-and-what-they-discover",

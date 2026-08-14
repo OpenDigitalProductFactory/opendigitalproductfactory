@@ -141,6 +141,10 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       node("--test", "scripts/check-test-clock-bombs.test.mjs"),
       node("scripts/check-test-clock-bombs.mjs"),
     ]),
+    guard("work-unit-conformance-guard", "WorkUnit Conformance Guard", [
+      node("--test", "scripts/check-work-unit-conformance.test.mjs"),
+      node("scripts/check-work-unit-conformance.mjs"),
+    ]),
     guard("instruction-plane-guard", "Instruction Plane Guard", [
       node("--test", "scripts/check-instruction-plane-size.test.mjs"),
       node("scripts/check-instruction-plane-size.mjs"),
@@ -225,6 +229,9 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         // heartbeat liveness signal, and the root-clone fast-forward remedy.
         "scripts/lib/worktree-janitor-core.test.mjs",
         "scripts/lib/worktree-session-heartbeat.test.mjs",
+        // BI-DBAD1A1B: SessionEnd process matching accepts only the canonical
+        // worktree itself or descendants, never sibling worktrees/CI runners.
+        "scripts/hooks/session-reaper.test.mjs",
         "scripts/lib/root-clone-refresh.test.mjs",
         "scripts/lib/compose-safety.test.mjs",
         "scripts/lib/local-integration-ci.test.mjs",

@@ -4,6 +4,7 @@ const upsertVectors = vi.fn();
 const searchSimilar = vi.fn();
 const deleteVectors = vi.fn();
 const generateEmbedding = vi.fn();
+const wikiPageFindMany = vi.fn();
 
 vi.mock("@dpf/db", () => ({
   QDRANT_COLLECTIONS: {
@@ -14,6 +15,7 @@ vi.mock("@dpf/db", () => ({
   upsertVectors: (...args: unknown[]) => upsertVectors(...args),
   searchSimilar: (...args: unknown[]) => searchSimilar(...args),
   deleteVectors: (...args: unknown[]) => deleteVectors(...args),
+  prisma: { wikiPage: { findMany: (...args: unknown[]) => wikiPageFindMany(...args) } },
 }));
 
 vi.mock("@/lib/inference/embedding", () => ({
@@ -33,6 +35,7 @@ afterEach(() => {
   searchSimilar.mockReset();
   deleteVectors.mockReset();
   generateEmbedding.mockReset();
+  wikiPageFindMany.mockReset();
 });
 
 describe("storeWikiPage", () => {
@@ -452,10 +455,34 @@ describe("searchWikiPages: two-pass overlay-aware retrieval", () => {
     expect(results.every((r) => r.source === "org")).toBe(true);
   });
 
-  it("returns empty when embedding generation fails", async () => {
+  it("falls back to overlay-aware lexical doctrine retrieval when embedding generation fails", async () => {
     generateEmbedding.mockResolvedValueOnce(null);
-    const results = await searchWikiPages({ query: "q", organizationId: null });
-    expect(results).toEqual([]);
+    wikiPageFindMany.mockResolvedValueOnce([{
+      id: "wp-universal-work",
+      slug: "principles/universal-work-formula",
+      title: "Universal Work Formula",
+      body: "All work runs one invariant formula.",
+      abstract: "Vary context, temporal shape, and participants only.",
+      pageKind: "principle",
+      isKernel: true,
+      organizationId: null,
+      kernelPageId: null,
+      principleTier: "core",
+      principleAppliesTo: ["external_coding_agent"],
+      principleRingScope: [],
+      principleDimensions: ["architecture_alignment"],
+      principlePublic: true,
+    }]);
+    const results = await searchWikiPages({
+      query: "Universal Work Formula",
+      organizationId: null,
+      pageKind: "principle",
+    });
+    expect(results).toEqual([expect.objectContaining({
+      pageId: "wp-universal-work",
+      slug: "principles/universal-work-formula",
+      source: "kernel",
+    })]);
     expect(searchSimilar).not.toHaveBeenCalled();
   });
 
