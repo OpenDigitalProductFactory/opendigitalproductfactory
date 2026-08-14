@@ -10603,7 +10603,7 @@ model StorefrontBooking {
   storefrontId                String
   itemId                      String
   customerContactId           String?
-  customerEmail               String
+  customerEmail               String?
   customerName                String
   customerPhone               String?
   scheduledAt                 DateTime

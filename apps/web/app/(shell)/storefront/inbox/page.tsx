@@ -168,7 +168,7 @@ export default async function InboxPage() {
         id: booking.id,
         ref: booking.bookingRef,
         name: booking.customerName,
-        email: booking.customerEmail,
+        email: booking.customerEmail ?? "No email supplied",
         type: "booking",
         detail: when.whenLabel,
         createdAt: booking.createdAt.toISOString(),

@@ -214,6 +214,7 @@ describe("hospitality resource schedule management", () => {
         attributes: {
           shape: "booth",
           combinationGroup: "main-banquette",
+          bookingAccess: "online",
         },
         version: { increment: 1 },
       }),

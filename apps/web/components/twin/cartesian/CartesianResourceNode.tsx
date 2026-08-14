@@ -7,7 +7,7 @@ import { intentStyle } from "@/components/ui/report-kit/statusColors";
 import type { CartesianPlacementNodeData } from "@/lib/twin/cartesian-scene";
 
 type InteractivePlacementNodeData = CartesianPlacementNodeData & {
-  onActivate?: () => void;
+  onActivate?: (anchor: HTMLElement) => void;
 };
 
 function resourceRadius(data: InteractivePlacementNodeData): CSSProperties["borderRadius"] {
@@ -88,7 +88,7 @@ function CartesianResourceNodeImpl({ data, selected }: NodeProps) {
         aria-busy={node.pending || undefined}
         className="dpf-tap-target cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--dpf-accent)]"
         data-cog-suggested={node.cogSuggested || undefined}
-        onClick={node.onActivate}
+        onClick={(event) => node.onActivate?.(event.currentTarget)}
         style={style}
       >
         {content}

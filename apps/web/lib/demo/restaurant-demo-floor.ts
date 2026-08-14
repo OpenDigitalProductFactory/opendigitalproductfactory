@@ -64,15 +64,15 @@ export interface RestaurantDemoServerSectionPlan {
 }
 
 const TABLES: ReadonlyArray<Omit<RestaurantDemoTablePlan, "resourceId">> = [
-  { key: "table-1", label: "Aster 1", capacity: 4, serviceArea: "Main dining", status: "active", blockedReason: null, attributes: { shape: "round", combinationGroup: null, combinableWith: [] } },
-  { key: "table-2", label: "Aster 2", capacity: 4, serviceArea: "Main dining", status: "active", blockedReason: null, attributes: { shape: "round", combinationGroup: null, combinableWith: [] } },
-  { key: "table-3", label: "Aster 3", capacity: 2, serviceArea: "Main dining", status: "active", blockedReason: null, attributes: { shape: "square", combinationGroup: null, combinableWith: [] } },
-  { key: "table-4", label: "Aster 4", capacity: 4, serviceArea: "Main dining", status: "blocked", blockedReason: "Chair repair", attributes: { shape: "round", combinationGroup: null, combinableWith: [] } },
-  { key: "table-5", label: "Harvest 1", capacity: 4, serviceArea: "Main dining", status: "active", blockedReason: null, attributes: { shape: "rectangle", combinationGroup: "banquet-a", combinableWith: ["table-6"] } },
-  { key: "table-6", label: "Harvest 2", capacity: 4, serviceArea: "Main dining", status: "active", blockedReason: null, attributes: { shape: "rectangle", combinationGroup: "banquet-a", combinableWith: ["table-5"] } },
-  { key: "table-7", label: "Window 1", capacity: 2, serviceArea: "Window room", status: "active", blockedReason: null, attributes: { shape: "booth", combinationGroup: null, combinableWith: [] } },
-  { key: "table-8", label: "Window 2", capacity: 4, serviceArea: "Window room", status: "active", blockedReason: null, attributes: { shape: "booth", combinationGroup: null, combinableWith: [] } },
-  { key: "table-9", label: "Patio 1", capacity: 6, serviceArea: "Patio", status: "active", blockedReason: null, attributes: { shape: "rectangle", combinationGroup: null, combinableWith: [] } },
+  { key: "table-1", label: "Aster 1", capacity: 4, serviceArea: "Main dining", status: "active", blockedReason: null, attributes: { shape: "round", combinationGroup: null, combinableWith: [], bookingAccess: "online" } },
+  { key: "table-2", label: "Aster 2", capacity: 4, serviceArea: "Main dining", status: "active", blockedReason: null, attributes: { shape: "round", combinationGroup: null, combinableWith: [], bookingAccess: "online" } },
+  { key: "table-3", label: "Aster 3", capacity: 2, serviceArea: "Main dining", status: "active", blockedReason: null, attributes: { shape: "square", combinationGroup: null, combinableWith: [], bookingAccess: "in-house" } },
+  { key: "table-4", label: "Aster 4", capacity: 4, serviceArea: "Main dining", status: "blocked", blockedReason: "Chair repair", attributes: { shape: "round", combinationGroup: null, combinableWith: [], bookingAccess: "in-house" } },
+  { key: "table-5", label: "Harvest 1", capacity: 4, serviceArea: "Main dining", status: "active", blockedReason: null, attributes: { shape: "rectangle", combinationGroup: "banquet-a", combinableWith: ["table-6"], bookingAccess: "online" } },
+  { key: "table-6", label: "Harvest 2", capacity: 4, serviceArea: "Main dining", status: "active", blockedReason: null, attributes: { shape: "rectangle", combinationGroup: "banquet-a", combinableWith: ["table-5"], bookingAccess: "online" } },
+  { key: "table-7", label: "Window 1", capacity: 2, serviceArea: "Window room", status: "active", blockedReason: null, attributes: { shape: "booth", combinationGroup: null, combinableWith: [], bookingAccess: "online" } },
+  { key: "table-8", label: "Window 2", capacity: 4, serviceArea: "Window room", status: "active", blockedReason: null, attributes: { shape: "booth", combinationGroup: null, combinableWith: [], bookingAccess: "in-house" } },
+  { key: "table-9", label: "Patio 1", capacity: 6, serviceArea: "Patio", status: "active", blockedReason: null, attributes: { shape: "rectangle", combinationGroup: null, combinableWith: [], bookingAccess: "online" } },
 ];
 
 function at(now: Date, minutes: number): Date {

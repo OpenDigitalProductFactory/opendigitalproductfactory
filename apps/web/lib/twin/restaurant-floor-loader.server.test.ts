@@ -65,6 +65,7 @@ const resources = [
       shape: "round",
       combinationGroup: "main",
       combinableWith: [],
+      bookingAccess: "in-house",
     },
   },
 ];
@@ -218,6 +219,14 @@ describe("restaurant floor operational loader", () => {
         ],
       },
     ]);
+    expect(view.capacityTimeline?.[0]).toEqual({
+      startsAt: "2026-07-31T18:30:00.000Z",
+      endsAt: "2026-07-31T19:00:00.000Z",
+      reservationCount: 1,
+      reservedCovers: 2,
+      onlineOpen: 0,
+      inHouseOpen: 1,
+    });
   });
 
   it("excludes a later reservation from the immediate seating version", async () => {

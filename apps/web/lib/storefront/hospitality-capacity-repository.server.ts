@@ -1,5 +1,6 @@
 import { newId } from "@/lib/shared/new-id";
 import { loadStorefrontOperatingTimezone } from "./storefront-operating-timezone.server";
+import { parseRestaurantTableAttributes } from "./restaurant-table-attributes";
 
 import {
   evaluatePoolCapacity,
@@ -23,6 +24,7 @@ interface HospitalityCapacityDatabase {
       legacyServiceProviderId: string | null;
       status: string;
       capacity?: number;
+      attributes?: unknown;
       availability?: HospitalityAvailabilityWindow[];
     } | null>;
   };
@@ -51,17 +53,26 @@ export async function resolveHospitalityResourceForProvider(
     organizationId: string;
     storefrontId: string;
     providerId: string;
+    bookingAccess?: "online";
   },
 ) {
-  return database.hospitalityResource.findFirst({
+  const resource = await database.hospitalityResource.findFirst({
     where: {
       organizationId: input.organizationId,
       storefrontId: input.storefrontId,
       legacyServiceProviderId: input.providerId,
       status: "active",
     },
-    select: { id: true, legacyServiceProviderId: true, status: true },
+    select: { id: true, legacyServiceProviderId: true, status: true, attributes: true },
   });
+  if (
+    resource &&
+    input.bookingAccess === "online" &&
+    parseRestaurantTableAttributes(resource.attributes).bookingAccess !== "online"
+  ) {
+    return null;
+  }
+  return resource;
 }
 
 export async function allocateHospitalityCapacity(

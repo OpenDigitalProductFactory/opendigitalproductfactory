@@ -1,0 +1,21 @@
+{
+  "version": "1",
+  "decidedOption": "anchored-contextual-actions",
+  "decisionInteractionId": "DI-AF29C620D394",
+  "scope": {
+    "files": [
+      "apps/web/components/twin/restaurant/RestaurantFloorOperations.tsx",
+      "apps/web/components/twin/restaurant/RestaurantHostStandPanels.tsx",
+      "apps/web/components/twin/cartesian/CartesianResourceNode.tsx",
+      "apps/web/components/storefront-admin/HospitalityResourceManager.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "anchored-contextual-actions",
+      "persistent-side-panel",
+      "table-detail-route"
+    ]
+  }
+}

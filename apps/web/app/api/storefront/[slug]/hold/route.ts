@@ -109,6 +109,7 @@ export async function POST(
             organizationId: storefront.organizationId,
             storefrontId: storefront.id,
             providerId,
+            bookingAccess: "online",
           })
         : null;
 

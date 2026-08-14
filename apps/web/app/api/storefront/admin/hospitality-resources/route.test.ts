@@ -89,6 +89,7 @@ describe("hospitality table creation", () => {
         attributes: {
           shape: "booth",
           combinationGroup: "main-banquette",
+          bookingAccess: "online",
         },
       }),
       select: expect.objectContaining({ attributes: true }),
