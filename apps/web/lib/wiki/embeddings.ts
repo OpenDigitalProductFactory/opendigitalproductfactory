@@ -214,7 +214,10 @@ export async function searchWikiPagesLexically(
 export async function storeWikiPage(input: StoreWikiPageInput): Promise<boolean> {
   const embeddingInput = [input.abstract ?? "", input.body].filter(Boolean).join("\n\n");
   const truncated = embeddingInput.slice(0, MAX_EMBED_LENGTH);
-  const vector = await generateEmbedding(truncated);
+  // Docker Model Runner may evict an idle embedding model. The first request is
+  // the load-on-demand signal; retry exactly once so eviction self-heals while
+  // a real outage stays bounded and observable to the caller.
+  const vector = await generateEmbedding(truncated) ?? await generateEmbedding(truncated);
   if (!vector) return false;
 
   // Build the base payload first, then conditionally add principle-only
