@@ -55,6 +55,7 @@ export async function writeToolExecutionReceipt(data: {
       alignment: data.alignmentDecision ? {
         interactionId: data.alignmentDecision.interactionId,
         verdict: data.alignmentDecision.verdict,
+        specialistDelegation: data.alignmentDecision.specialistDelegation ?? null,
       } : null,
     }) },
     receiptKind: kind,

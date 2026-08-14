@@ -2,12 +2,14 @@ import { prisma } from "@dpf/db";
 
 import type { ConstitutionalAlignmentResult } from "@/lib/decision-perspective/alignment-criteria";
 import type { GovernedExecuteArgs } from "@/lib/mcp-governed-execute";
+import type { SpecialistAlignmentDelegationResult } from "./alignment-specialist-delegation";
 
 export type AlignmentGateDecision = {
   verdict: "approve" | "decline" | "escalate";
   interactionId: string;
   rationale: string;
   alignment: ConstitutionalAlignmentResult;
+  specialistDelegation?: SpecialistAlignmentDelegationResult;
 };
 export type AlignmentGate = (input: {
   organizationId?: string;
@@ -29,6 +31,15 @@ function alignmentStatement(toolName: string, params: Record<string, unknown>): 
   const values = fields.map((field) => params[field])
     .filter((value): value is string => typeof value === "string" && value.trim().length > 0);
   return `${toolName.replaceAll("_", " ")}: ${values.join(". ")}`;
+}
+
+export function composeAlignmentVerdicts(
+  alignment: ConstitutionalAlignmentResult["verdict"],
+  specialist: SpecialistAlignmentDelegationResult["verdict"],
+): AlignmentGateDecision["verdict"] {
+  if (alignment === "decline" || specialist === "decline") return "decline";
+  if (alignment === "escalate" || specialist === "escalate") return "escalate";
+  return "approve";
 }
 
 export async function runTakAlignmentGate(args: GovernedExecuteArgs): Promise<AlignmentGateDecision> {
@@ -73,12 +84,26 @@ export async function runTakAlignmentGate(args: GovernedExecuteArgs): Promise<Al
     },
   });
   const alignment = result.evaluation.constitutionalAlignment;
-  if (alignment) return {
-    verdict: alignment.verdict,
-    interactionId: result.interactionId,
-    rationale: result.evaluation.rationale,
-    alignment,
-  };
+  if (alignment) {
+    const { runAlignmentSpecialistDelegation } = await import("./alignment-specialist-delegation");
+    const specialistDelegation = await runAlignmentSpecialistDelegation({
+      alignment,
+      statement,
+      userId: args.userId,
+      coordinatorAgentId: args.context?.agentId ?? "tak-alignment-coordinator",
+      routeContext: args.context?.routeContext ?? `/tool/${args.toolName}`,
+    });
+    const verdict = composeAlignmentVerdicts(alignment.verdict, specialistDelegation.verdict);
+    return {
+      verdict,
+      interactionId: result.interactionId,
+      rationale: verdict === alignment.verdict
+        ? result.evaluation.rationale
+        : `${result.evaluation.rationale} TAK-JSI specialist result: ${specialistDelegation.verdict}.`,
+      alignment,
+      specialistDelegation,
+    };
+  }
   const { extractAlignmentCriteria } = await import("@/lib/decision-perspective/alignment-criteria");
   return {
     verdict: "escalate",
