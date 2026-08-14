@@ -1,0 +1,18 @@
+{
+  "version": "1",
+  "decidedOption": "inline-banner-plus-structured-detail",
+  "decisionInteractionId": "DI-D4015A9226A5",
+  "scope": {
+    "files": [
+      "apps/web/components/admin/EmailSettingsPanel.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "inline-banner-plus-structured-detail",
+      "inline-banner-message-only",
+      "modal-dialog-with-detail"
+    ]
+  }
+}
