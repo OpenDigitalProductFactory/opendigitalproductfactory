@@ -30,16 +30,14 @@ export async function resolveAgentRoomAccess(input: {
   workItem: { id: string; evidence: unknown; assignedToAgentId: string | null };
 }): Promise<AgentRoomAccessResult> {
   const principal = await ensureAgentPrincipalIdentity(input.agentId);
-  const agentPrincipalId = principal?.id ?? null;
+  // The room ref space is the canonical Principal.principalId (PRN) — the pure
+  // decision, the participant projection, and the policy refs all agree on it.
+  const agentPrincipalId = principal?.principalId ?? null;
   if (!agentPrincipalId) {
     return { decision: { level: "none", reason: "not-admitted" }, agentPrincipalId: null };
   }
 
-  const [clearanceRow, capsules, assignedPrincipal] = await Promise.all([
-    prisma.principal.findUnique({
-      where: { principalId: agentPrincipalId },
-      select: { sensitivityClearance: true },
-    }),
+  const [capsules, assignedPrincipal] = await Promise.all([
     prisma.workCapsule.findMany({
       where: { workItemId: input.workItem.id },
       select: {
@@ -53,19 +51,31 @@ export async function resolveAgentRoomAccess(input: {
       : Promise.resolve(null),
   ]);
 
+  // Clearance rides on the synced principal — no separate (and previously
+  // mis-keyed) lookup.
   const agentSensitivityClearance =
-    (clearanceRow?.sensitivityClearance as string[] | undefined) ?? [...DEFAULT_AGENT_CLEARANCE];
+    (principal?.sensitivityClearance as string[] | undefined) ?? [...DEFAULT_AGENT_CLEARANCE];
   const policy = readWorkspaceRoomPolicy(input.workItem.evidence);
 
-  const capsuleHolderRefs = capsules.flatMap((capsule) =>
+  // Capsule holder fields store the relational Principal.id (cuid); map them to
+  // the canonical PRN so a capsule executor matches the room ref space.
+  const capsuleHolderCuids = capsules.flatMap((capsule) =>
     [capsule.leaseHolderPrincipalId, capsule.createdByPrincipalId, capsule.requestedByPrincipalId]
       .filter((ref): ref is string => typeof ref === "string" && ref.length > 0),
   );
+  const capsuleHolderRefs = capsuleHolderCuids.length
+    ? (
+        await prisma.principal.findMany({
+          where: { id: { in: capsuleHolderCuids } },
+          select: { principalId: true },
+        })
+      ).map((row) => row.principalId)
+    : [];
 
   const actionPrincipalRefs = [
     ...(policy.actionPrincipalRefs ?? []),
     ...capsuleHolderRefs,
-    ...(assignedPrincipal?.id ? [assignedPrincipal.id] : []),
+    ...(assignedPrincipal?.principalId ? [assignedPrincipal.principalId] : []),
   ];
   const admittedPrincipalRefs = [...(policy.admittedPrincipalRefs ?? []), ...actionPrincipalRefs];
 
