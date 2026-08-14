@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const upsertVectors = vi.fn();
 const searchSimilar = vi.fn();
@@ -29,6 +29,10 @@ import {
 } from "./embeddings";
 
 const stub = (n: number) => new Array(n).fill(0).map((_, i) => i / n);
+
+beforeEach(() => {
+  wikiPageFindMany.mockResolvedValue([]);
+});
 
 afterEach(() => {
   upsertVectors.mockReset();
@@ -484,6 +488,42 @@ describe("searchWikiPages: two-pass overlay-aware retrieval", () => {
       source: "kernel",
     })]);
     expect(searchSimilar).not.toHaveBeenCalled();
+  });
+
+  it("falls back to Postgres when semantic search misses an existing published page", async () => {
+    generateEmbedding.mockResolvedValueOnce(stub(768));
+    searchSimilar.mockResolvedValueOnce([]);
+    wikiPageFindMany.mockResolvedValueOnce([{
+      id: "wp-universal-work",
+      slug: "principles/universal-work-formula",
+      title: "Universal Work Formula",
+      body: "All work runs one invariant formula.",
+      abstract: "Vary context, temporal shape, and participants only.",
+      pageKind: "principle",
+      isKernel: true,
+      organizationId: null,
+      kernelPageId: null,
+      principleTier: "core",
+      principleAppliesTo: ["external_coding_agent"],
+      principleRingScope: [],
+      principleDimensions: ["architecture_alignment"],
+      principlePublic: true,
+    }]);
+
+    const results = await searchWikiPages({
+      query: "Universal Work Formula",
+      organizationId: null,
+      pageKind: "principle",
+      principleAppliesTo: "external_coding_agent",
+    });
+
+    expect(searchSimilar).toHaveBeenCalledTimes(1);
+    expect(wikiPageFindMany).toHaveBeenCalledTimes(1);
+    expect(results).toEqual([expect.objectContaining({
+      pageId: "wp-universal-work",
+      slug: "principles/universal-work-formula",
+      source: "kernel",
+    })]);
   });
 
   it("includes pageKind filter when provided", async () => {

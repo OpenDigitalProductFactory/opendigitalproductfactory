@@ -436,7 +436,14 @@ export async function searchWikiPages(input: SearchWikiPagesInput): Promise<Wiki
   );
   const kernelResults = kernelRaw.map((r) => projectResult(r, "kernel"));
 
-  return [...orgResults, ...kernelResults].slice(0, limit);
+  const semanticResults = [...orgResults, ...kernelResults].slice(0, limit);
+  if (semanticResults.length === 0) {
+    // A healthy embedding provider does not prove the vector index contains
+    // every published Postgres row. Preserve Postgres as doctrine truth when
+    // Qdrant is stale, partially ingested, or missing an individual page.
+    return searchWikiPagesLexically(input);
+  }
+  return semanticResults;
 }
 
 // ─── Internal ───────────────────────────────────────────────────────────────
