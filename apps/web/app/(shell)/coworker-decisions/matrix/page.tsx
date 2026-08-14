@@ -11,6 +11,7 @@ import {
   buildMatrixDimensions,
   buildMatrixTierWeights,
 } from "@/lib/wiki/principle-matrix";
+import { STANCE_ALIGNMENT_DIMENSIONS } from "@/lib/decision-perspective/stance-dimension-map";
 
 export const dynamic = "force-dynamic";
 
@@ -21,6 +22,9 @@ export const metadata = {
 export default async function DecisionMatrixPage() {
   const dimensions = buildMatrixDimensions();
   const tierWeights = buildMatrixTierWeights();
+  const alignmentDimensionKeys = new Set<string>(STANCE_ALIGNMENT_DIMENSIONS);
+  const coreDimensions = dimensions.filter((d) => !alignmentDimensionKeys.has(d.key));
+  const alignmentDimensions = dimensions.filter((d) => alignmentDimensionKeys.has(d.key));
 
   // Live tally: how many published principles weigh on each axis. A near-empty
   // axis or a heavily-loaded one is where de-confliction/analysis tends to land.
@@ -34,6 +38,30 @@ export default async function DecisionMatrixPage() {
       countByDimension.set(dim, (countByDimension.get(dim) ?? 0) + 1);
     }
   }
+
+  const renderDimension = (d: (typeof dimensions)[number]) => {
+    const count = countByDimension.get(d.key) ?? 0;
+    return (
+      <li key={d.key} className="flex items-center gap-3 px-4 py-2.5">
+        <span className="text-sm text-[var(--dpf-text)] min-w-0 flex-1 truncate">
+          {d.label}
+        </span>
+        <span
+          className="rounded border px-2 py-0.5 text-[10px] uppercase tracking-wide shrink-0"
+          style={{
+            color: d.kind === "cost" ? "var(--dpf-warning)" : "var(--dpf-muted)",
+            borderColor:
+              d.kind === "cost" ? "var(--dpf-warning)" : "var(--dpf-border)",
+          }}
+        >
+          {d.kind}
+        </span>
+        <span className="text-xs text-[var(--dpf-muted)] shrink-0 w-24 text-right">
+          {count} principle{count !== 1 ? "s" : ""}
+        </span>
+      </li>
+    );
+  };
 
   return (
     <div className="max-w-4xl mx-auto py-6 px-4">
@@ -54,10 +82,9 @@ export default async function DecisionMatrixPage() {
           The decision matrix
         </h1>
         <p className="text-sm text-[var(--dpf-muted)]">
-          Every principle is scored on these axes, weighted by its tier. This is
-          the criteria your AI weighs — review it when the axes or weights
-          themselves need adjustment. The count shows how many principles pull on
-          each axis today.
+          Every principle is scored on these axes. This is the criteria your AI
+          weighs — review it when the axes or weights themselves need adjustment.
+          The count shows how many principles pull on each axis today.
         </p>
       </header>
 
@@ -66,31 +93,16 @@ export default async function DecisionMatrixPage() {
           Axes
         </h2>
         <ul className="divide-y divide-[var(--dpf-border)] rounded-lg border border-[var(--dpf-border)]">
-          {dimensions.map((d) => {
-            const count = countByDimension.get(d.key) ?? 0;
-            return (
-              <li key={d.key} className="flex items-center gap-3 px-4 py-2.5">
-                <span className="text-sm text-[var(--dpf-text)] min-w-0 flex-1 truncate">
-                  {d.label}
-                </span>
-                <span
-                  className="rounded border px-2 py-0.5 text-[10px] uppercase tracking-wide shrink-0"
-                  style={{
-                    color:
-                      d.kind === "cost" ? "var(--dpf-warning)" : "var(--dpf-muted)",
-                    borderColor:
-                      d.kind === "cost" ? "var(--dpf-warning)" : "var(--dpf-border)",
-                  }}
-                >
-                  {d.kind}
-                </span>
-                <span className="text-xs text-[var(--dpf-muted)] shrink-0 w-24 text-right">
-                  {count} principle{count !== 1 ? "s" : ""}
-                </span>
-              </li>
-            );
-          })}
+          {coreDimensions.map(renderDimension)}
         </ul>
+        <details className="mt-3 rounded-lg border border-[var(--dpf-border)]">
+          <summary className="cursor-pointer px-4 py-3 text-sm font-medium text-[var(--dpf-text)]">
+            Business alignment axes
+          </summary>
+          <ul className="divide-y divide-[var(--dpf-border)] border-t border-[var(--dpf-border)]">
+            {alignmentDimensions.map(renderDimension)}
+          </ul>
+        </details>
       </section>
 
       <section className="mb-8">

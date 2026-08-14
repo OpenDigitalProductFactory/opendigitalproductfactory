@@ -217,7 +217,10 @@ export async function storeWikiPage(input: StoreWikiPageInput): Promise<boolean>
   // Docker Model Runner may evict an idle embedding model. The first request is
   // the load-on-demand signal; retry exactly once so eviction self-heals while
   // a real outage stays bounded and observable to the caller.
-  const vector = await generateEmbedding(truncated) ?? await generateEmbedding(truncated);
+  let vector = await generateEmbedding(truncated);
+  if (!vector) {
+    vector = await generateEmbedding(truncated);
+  }
   if (!vector) return false;
 
   // Build the base payload first, then conditionally add principle-only
