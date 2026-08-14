@@ -3280,7 +3280,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 113
+    "textMass": 147
   },
   "apps/web/components/admin/ForkSetupPanel.tsx": {
     "vocabulary": 0,

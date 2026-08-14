@@ -102,15 +102,38 @@ describe("sendTestEmail", () => {
     await expect(sendTestEmail("not-an-email")).rejects.toThrow();
   });
 
-  it("refuses when email is not configured", async () => {
+  it("returns a not-configured result (does not throw) when email is unconfigured", async () => {
     vi.mocked(isEmailConfigured).mockResolvedValue(false);
-    await expect(sendTestEmail("x@y.com")).rejects.toThrow(/Save your SMTP settings/);
+    const r = await sendTestEmail("x@y.com");
+    expect(r).toEqual({ ok: false, message: expect.stringMatching(/Save your SMTP settings/) });
     expect(sendEmail).not.toHaveBeenCalled();
   });
 
   it("sends a test email when configured", async () => {
-    await sendTestEmail("x@y.com");
+    const r = await sendTestEmail("x@y.com");
+    expect(r).toEqual({ ok: true });
     expect(sendEmail).toHaveBeenCalledWith(expect.objectContaining({ to: "x@y.com" }));
+  });
+
+  it("returns the SMTP failure as data (not a thrown error) so it survives to the client", async () => {
+    // A production build would redact a THROWN server-action message; returning
+    // it as data is what keeps the real 535 reason readable (BI-6AA848A7).
+    vi.mocked(sendEmail).mockRejectedValueOnce(
+      Object.assign(new Error("Invalid login"), {
+        code: "EAUTH",
+        responseCode: 535,
+        command: "AUTH LOGIN",
+        response:
+          "535 5.7.139 Authentication unsuccessful, SmtpClientAuthentication is disabled for the Tenant. Visit https://aka.ms/smtp_auth_disabled",
+      }),
+    );
+    const r = await sendTestEmail("x@y.com");
+    expect(r.ok).toBe(false);
+    if (r.ok) throw new Error("expected failure");
+    expect(r.responseCode).toBe(535);
+    expect(r.command).toBe("AUTH LOGIN");
+    expect(r.remediationUrl).toBe("https://aka.ms/smtp_auth_disabled");
+    expect(r.message).toMatch(/SMTP AUTH/i);
   });
 });
 
