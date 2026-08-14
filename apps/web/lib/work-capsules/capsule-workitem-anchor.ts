@@ -16,6 +16,7 @@
 
 /** Canonical source type for a backlog-item-backed work case (source-registry.ts). */
 export const BACKLOG_ITEM_SOURCE_TYPE = "backlog-item";
+export const WORK_CAPSULE_SOURCE_TYPE = "work-capsule";
 
 export interface AnchorWorkItemCreateInput {
   sourceType: string;
@@ -53,16 +54,18 @@ export interface CapsuleWorkItemAnchorResult {
 }
 
 /**
- * Resolve-or-create the canonical WorkItem for the capsule's backlog item and link it.
- * Returns null when there is no backlog item to anchor to (nothing to do — safe no-op).
+ * Resolve-or-create the canonical WorkItem for the capsule and link it. Backlog-backed
+ * capsules share the backlog-item case; ad-hoc capsules use their own stable capsule id
+ * so no carrier can originate unaddressable work.
  */
 export async function ensureCapsuleWorkItemAnchor(
   args: EnsureCapsuleWorkItemAnchorArgs,
 ): Promise<CapsuleWorkItemAnchorResult | null> {
   const backlogItemId = args.backlogItemId ?? null;
-  if (!backlogItemId) return null;
+  const sourceType = backlogItemId ? BACKLOG_ITEM_SOURCE_TYPE : WORK_CAPSULE_SOURCE_TYPE;
+  const sourceId = backlogItemId ?? args.capsuleId;
 
-  const existing = await args.ports.findWorkItemBySource(BACKLOG_ITEM_SOURCE_TYPE, backlogItemId);
+  const existing = await args.ports.findWorkItemBySource(sourceType, sourceId);
   let workItemId: string;
   let created = false;
 
@@ -71,8 +74,8 @@ export async function ensureCapsuleWorkItemAnchor(
   } else {
     const queueId = await args.ports.resolveCanonicalQueueId();
     const workItem = await args.ports.createWorkItem({
-      sourceType: BACKLOG_ITEM_SOURCE_TYPE,
-      sourceId: backlogItemId,
+      sourceType,
+      sourceId,
       title: args.title,
       description: args.title,
       workerConstraint: {},

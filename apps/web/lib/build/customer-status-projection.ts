@@ -21,7 +21,8 @@
 // BuildActivity max(createdAt) by the FB-* buildId) and the BuildStudio.tsx
 // render are a deferred follow-up (need live-portal verification).
 
-import { projectWorkCaseState } from "@/lib/work-management/status-projection";
+import { projectWorkUnitState } from "@/lib/work-management/status-projection";
+import { toWorkUnitFromCapsule } from "@/lib/work-management/work-unit";
 import type { WorkCaseState } from "@/lib/work-management/case-types";
 import type { BuildPhase } from "@/lib/explore/feature-build-types";
 import { STALLED_BUILD_REAP_MS } from "@/lib/build/inert-build-reaper";
@@ -286,7 +287,11 @@ export function projectBuildStudioCustomerStatus(args: {
 
   const base: BuildStudioCustomerStatus = args.capsule
     ? (() => {
-        const projection = projectWorkCaseState({ capsule: args.capsule! });
+        const projection = projectWorkUnitState(toWorkUnitFromCapsule({
+          capsuleId: args.capsule!.capsuleId,
+          title: args.build.title,
+          status: args.capsule!.status,
+        }));
         const action = nextActionForState(projection.state);
         return {
           whatIsBeingBuilt: args.build.title,

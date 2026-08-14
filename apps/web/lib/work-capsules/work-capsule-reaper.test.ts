@@ -14,7 +14,9 @@ const { prismaMock } = vi.hoisted(() => ({
 vi.mock("@dpf/db", () => ({ prisma: prismaMock }));
 
 import {
+  reconcileTerminalCapsuleBacklogs,
   reapStaleWorkCapsules,
+  planTerminalBacklogReconciliation,
   selectReapCandidates,
   transitionCapsuleForTerminalBuild,
   type ReaperBuildSnapshot,
@@ -22,6 +24,89 @@ import {
 import type { CapsuleDb } from "./work-capsule-store";
 
 const NOW = new Date("2026-08-05T15:00:00.000Z");
+
+describe("planTerminalBacklogReconciliation (BI-C2EB2C6B)", () => {
+  it("reopens abandoned in-progress work and clears stale execution links", () => {
+    expect(planTerminalBacklogReconciliation({
+      backlogStatus: "in-progress",
+      activeBuildId: "fb-1",
+      buildPhase: "abandoned",
+      capsuleStatus: "abandoned",
+      hasCompletionEvidence: false,
+    })).toEqual(expect.objectContaining({
+      targetStatus: "open",
+      clearActiveBuild: true,
+      releaseClaim: true,
+      outcome: "retryable",
+    }));
+  });
+
+  it("never silently marks a complete execution done without governed evidence", () => {
+    const planned = planTerminalBacklogReconciliation({
+      backlogStatus: "in-progress",
+      activeBuildId: "fb-1",
+      buildPhase: "complete",
+      capsuleStatus: "complete",
+      hasCompletionEvidence: false,
+    });
+    expect(planned).toMatchObject({
+      targetStatus: null,
+      clearActiveBuild: true,
+      outcome: "awaiting-governed-completion",
+      completionEvidenceRequired: true,
+    });
+  });
+
+  it("is an idempotent no-op once terminal links are reconciled", () => {
+    expect(planTerminalBacklogReconciliation({
+      backlogStatus: "open",
+      activeBuildId: null,
+      buildPhase: "abandoned",
+      capsuleStatus: "abandoned",
+      hasCompletionEvidence: false,
+    })).toMatchObject({ changed: false });
+  });
+});
+
+describe("reconcileTerminalCapsuleBacklogs (BI-C2EB2C6B)", () => {
+  it("repairs a terminal abandoned capsule without inferring completion", async () => {
+    const db = {
+      workCapsule: {
+        findMany: vi.fn().mockResolvedValue([{ capsuleId: "WC-DEAD", status: "abandoned", backlogItemId: "BI-DEAD", featureBuildId: "FB-DEAD" }]),
+      },
+      featureBuild: {
+        findMany: vi.fn().mockResolvedValue([{ id: "FB-DEAD", phase: "abandoned" }]),
+      },
+      backlogItem: {
+        findFirst: vi.fn().mockResolvedValue({ id: "row-bi", itemId: "BI-DEAD", status: "in-progress", activeBuildId: "FB-DEAD" }),
+        update: vi.fn().mockResolvedValue({}),
+      },
+      backlogItemActivity: {
+        count: vi.fn().mockResolvedValue(0),
+        create: vi.fn().mockResolvedValue({}),
+      },
+    };
+
+    const result = await reconcileTerminalCapsuleBacklogs({
+      db: db as never,
+      dryRun: false,
+      now: NOW,
+    });
+
+    expect(result).toEqual({ scanned: 1, reconciled: 1 });
+    expect(db.backlogItem.update).toHaveBeenCalledWith({
+      where: { id: "row-bi" },
+      data: { activeBuildId: null, status: "open", claimStatus: "released" },
+    });
+    expect(db.backlogItemActivity.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        backlogItemId: "row-bi",
+        kind: "execution_reconciled",
+        payload: expect.objectContaining({ rule: "terminal execution never infers backlog done" }),
+      }),
+    }));
+  });
+});
 
 function capsule(overrides: Record<string, unknown> = {}) {
   return {

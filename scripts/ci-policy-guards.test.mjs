@@ -54,6 +54,7 @@ const EXPECTED_LEGACY_JOBS = [
   "test-clock-bomb-guard",
   "tool-surface-guard",
   "ux-fit-gate",
+  "work-unit-conformance-guard",
 ];
 
 function workflowJobBlock(workflow, jobId) {

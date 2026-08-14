@@ -49,6 +49,7 @@ import { clampToolResultForModel, resolveToolResultCharCap } from "./tool-result
 import { applyBacklogCreateClaimGuard } from "./backlog-create-claim-guard";
 import { assessToolSurface, computeToolSelectionAccuracy, contextEconomyTurnMetricFields } from "./context-economy-metrics";
 import { summarizeDroppedMessages } from "./compaction-digest";
+import { describeContextCapacityFailure } from "./context-capacity-failure";
 import {
   detectToolRefusedDespiteAvailability,
   appendToolRefusedRecoveryMessages,
@@ -61,8 +62,6 @@ export { detectToolRefusedDespiteAvailability } from "./tool-refused-recovery";
 // responds with text only (no tool calls), matching the Anthropic API pattern
 // where the loop runs until stop_reason === "end_turn". This limit only prevents
 // runaway loops. The model decides when it's done.
-// Safety nets — the loop exits naturally when the model responds with text-only.
-// These prevent infinite loops from bugs, not from normal workflows.
 // Safety ceiling — the loop exits naturally when the model responds with text-only
 // (no tool calls). This limit only catches true infinite loops from bugs.
 // The actual guardrails are: sandbox circuit breaker, repetition detector, duration
@@ -184,6 +183,9 @@ export function describeToolRouteFailure(
       "Providers & Routing to activate a tool-capable provider, then try again."
     );
   }
+
+  const contextCapacityFailure = describeContextCapacityFailure(msg);
+  if (contextCapacityFailure) return contextCapacityFailure;
 
   // Config/capacity gap: routing eliminated EVERY candidate (e.g. the cloud
   // provider's sign-in expired AND the bundled local model's context window is

@@ -1,5 +1,5 @@
 import { prisma } from "@dpf/db";
-import { ensureCapsuleWorkItemAnchorWithPrisma } from "@/lib/work-capsules/capsule-workitem-anchor.server";
+import { ensureCapsuleWorkItemAnchorNonFatal, ensureCapsuleWorkItemAnchorWithPrisma } from "@/lib/work-capsules/capsule-workitem-anchor.server";
 import { computeChangeImpactContract } from "@/lib/integrate/gate-context-bridge";
 import type { ToolResult } from "@/lib/mcp-tools";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
@@ -315,7 +315,7 @@ export async function adoptWorktreeTool(
     if (occupied) return occupied;
     throw error;
   }
-
+  await ensureCapsuleWorkItemAnchorNonFatal(capsule, "adopted");
   return {
     success: true,
     entityId: capsule.capsuleId,
@@ -636,7 +636,7 @@ export async function createWorkCapsuleTool(
     },
     actor: await actor(userId, context),
   });
-
+  await ensureCapsuleWorkItemAnchorNonFatal(capsule, "created");
   return {
     success: true,
     entityId: capsule.capsuleId,

@@ -141,6 +141,10 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       node("--test", "scripts/check-test-clock-bombs.test.mjs"),
       node("scripts/check-test-clock-bombs.mjs"),
     ]),
+    guard("work-unit-conformance-guard", "WorkUnit Conformance Guard", [
+      node("--test", "scripts/check-work-unit-conformance.test.mjs"),
+      node("scripts/check-work-unit-conformance.mjs"),
+    ]),
     guard("instruction-plane-guard", "Instruction Plane Guard", [
       node("--test", "scripts/check-instruction-plane-size.test.mjs"),
       node("scripts/check-instruction-plane-size.mjs"),

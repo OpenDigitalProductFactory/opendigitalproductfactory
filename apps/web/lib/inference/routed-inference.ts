@@ -473,6 +473,12 @@ export async function routeAndCall(
 
   if (!decision.selectedEndpoint) {
     persistFailedDecision();
+    const contextDetail = decision.excludedReasons
+      .filter((reason) => /context window too small/i.test(reason))
+      .join("; ");
+    const decisionReason = contextDetail
+      ? `${decision.reason} ${contextDetail}`
+      : decision.reason;
     // Local-only inference: fail LOUDLY and specifically rather than letting the
     // generic "no eligible endpoints" mask the real cause (cloud is disabled and
     // no local model qualified for this task's tier/capability/context).
@@ -485,13 +491,13 @@ export async function routeAndCall(
           `Local-only inference is ON, so cloud providers are excluded and routing will NOT silently fall back to cloud. ` +
           `Pull or enable a local model that meets this task's requirements (tool support, context window, quality tier), ` +
           `raise the model's context window in Build Runtime, or turn off local-only inference in Admin > AI > Providers & Routing. ` +
-          `Router detail: ${decision.reason}`,
+          `Router detail: ${decisionReason}`,
         decision.excludedCount,
       );
     }
     throw new NoEligibleEndpointsError(
       taskType,
-      decision.reason,
+      decisionReason,
       decision.excludedCount,
     );
   }
