@@ -16,8 +16,12 @@ import { prisma } from "@dpf/db";
 
 import type { ToolPack } from "@/lib/mcp/tool-pack";
 import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
+import { ensureAgentPrincipalIdentity, syncUserPrincipal } from "@/lib/identity/principal-linking";
+import { getCoworkerRoomEngagement } from "@/lib/work-management/coworker-room-engagement.server";
 import { heartbeatAgentWorkItemPresence } from "@/lib/work-management/room-agent-presence.server";
 import { postWorkItemComment, type PostCommentDb } from "@/lib/work-management/post-work-item-comment";
+import { appendRoomPolicyParticipant } from "@/lib/work-management/room-policy";
+import type { WorkRoomParticipantRole } from "@/lib/work-management/room-types";
 import { resolveAgentRoomAccess } from "@/lib/work-management/room-agent-access.server";
 import { decodeWorkCaseKey } from "@/lib/work-management/workspace-case-loader";
 
@@ -182,6 +186,107 @@ async function readRoomMessagesHandler(
   };
 }
 
+async function inviteRoomParticipantHandler(
+  params: Record<string, unknown>,
+  _userId: string,
+  context?: PackContext,
+): Promise<ToolResult> {
+  const agentId = context?.agentId;
+  if (!agentId) {
+    return { success: false, error: "invalid_caller", message: "invite_room_participant requires an acting coworker." };
+  }
+  const caseKey = str(params, "caseKey");
+  const inviteeAgentId = str(params, "agentId");
+  const inviteeUserId = str(params, "userId");
+  if (!caseKey || (!inviteeAgentId && !inviteeUserId)) {
+    return { success: false, error: "invalid_input", message: "caseKey and one of agentId | userId are required." };
+  }
+
+  const item = await resolveRoomWorkItem(caseKey);
+  if (!item) {
+    return { success: false, error: "not_found", message: `No Work Room found for ${caseKey}.` };
+  }
+
+  // Only a room member with action rights (the Coordinator, or an active participant) may invite.
+  const caller = await resolveAgentRoomAccess({
+    agentId,
+    requested: "action",
+    workItem: { id: item.id, evidence: item.evidence, assignedToAgentId: item.assignedToAgentId },
+  });
+  if (caller.decision.level !== "action") {
+    return {
+      success: false,
+      error: "forbidden",
+      message: `Only a room member with action rights (e.g. the Coordinator) can invite participants (${caller.decision.reason}).`,
+    };
+  }
+
+  let inviteePrincipalId: string | null = null;
+  let inviteeLabel = "A participant";
+  if (inviteeAgentId) {
+    const invitee = await ensureAgentPrincipalIdentity(inviteeAgentId);
+    inviteePrincipalId = invitee?.principalId ?? null;
+    inviteeLabel = invitee?.displayName?.trim() || "A coworker";
+  } else if (inviteeUserId) {
+    const invitee = await syncUserPrincipal(inviteeUserId);
+    inviteePrincipalId = invitee?.principalId ?? null;
+    inviteeLabel = invitee?.displayName?.trim() || "A teammate";
+  }
+  if (!inviteePrincipalId) {
+    return { success: false, error: "not_found", message: "The invitee's principal could not be resolved." };
+  }
+
+  const canAct = params["canAct"] !== false; // default: invited to participate (post), not merely observe
+  const roles: WorkRoomParticipantRole[] = ["contributor"];
+  const newEvidence = appendRoomPolicyParticipant(item.evidence, {
+    principalRef: inviteePrincipalId,
+    roles,
+    canAct,
+  });
+  await prisma.workItem.update({ where: { id: item.id }, data: { evidence: newEvidence as never } });
+
+  const commentDb: PostCommentDb = {
+    workItemMessage: { create: (args) => prisma.workItemMessage.create(args as never) },
+    notification: { create: (args) => prisma.notification.create(args as never) },
+  };
+  const canonicalSourceId = item.sourceId ?? item.itemId;
+  await postWorkItemComment({
+    db: commentDb,
+    workItemId: item.id,
+    workItemTitle: item.title,
+    roomRef: { caseKey, caseId: `${item.sourceType}:${canonicalSourceId}`, workItemId: item.itemId },
+    body: `Invited ${inviteeLabel} into the room${canAct ? "" : " (read-only)"}.`,
+    sender: { type: "agent", id: agentId, label: await agentLabel(agentId) },
+    roster: {},
+  });
+  if (inviteeAgentId) {
+    await heartbeatAgentWorkItemPresence({ workItemId: item.id, agentPrincipalId: inviteePrincipalId, label: inviteeLabel });
+  }
+
+  return {
+    success: true,
+    message: `Invited ${inviteeLabel} into ${caseKey}${canAct ? "" : " (read-only)"}.`,
+    data: { caseKey, principalRef: inviteePrincipalId, canAct },
+  };
+}
+
+async function getCoworkerRoomEngagementHandler(
+  params: Record<string, unknown>,
+  _userId: string,
+  context?: PackContext,
+): Promise<ToolResult> {
+  const targetAgentId = str(params, "agentId") ?? context?.agentId ?? null;
+  if (!targetAgentId) {
+    return { success: false, error: "invalid_input", message: "agentId is required (or call as a coworker)." };
+  }
+  const engagement = await getCoworkerRoomEngagement({ agentId: targetAgentId });
+  return {
+    success: true,
+    message: `${engagement.activeRoomCount} active Work Room(s) for ${targetAgentId}.`,
+    data: engagement as unknown as Record<string, unknown>,
+  };
+}
+
 const definitions: ToolDefinition[] = [
   {
     name: "post_room_message",
@@ -212,6 +317,37 @@ const definitions: ToolDefinition[] = [
     requiredCapability: "view_operations",
     sideEffect: false,
   },
+  {
+    name: "invite_room_participant",
+    description:
+      "Call a new participant into a Work Room on demand — invite an AI coworker (agentId) or a person (userId) into the room addressed by caseKey. Only a room member with action rights (e.g. the Coordinator) may invite. The invitee is admitted outcome-scoped to THIS room (content by default; canAct=true also lets them post). Records the join and, for a coworker, marks it present.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        caseKey: { type: "string", description: "The room's case key, e.g. backlog-item:BI-123 (sourceType:sourceId)." },
+        agentId: { type: "string", description: "Invite an AI coworker by agent id (provide agentId OR userId)." },
+        userId: { type: "string", description: "Invite a person by user id (provide agentId OR userId)." },
+        canAct: { type: "boolean", description: "Whether the invitee may post (true, default) or only read (false)." },
+      },
+      required: ["caseKey"],
+    },
+    requiredCapability: "view_operations",
+    sideEffect: true,
+  },
+  {
+    name: "get_coworker_room_engagement",
+    description:
+      "Coworker 360 utilization: which active Work Rooms an AI coworker is currently engaged in and its role in each (incl. Coordinator). Defaults to the calling coworker; pass agentId to inspect another. Presence-scoped (active rooms right now). Read-only.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        agentId: { type: "string", description: "Agent id to inspect. Defaults to the calling coworker." },
+      },
+      required: [],
+    },
+    requiredCapability: "view_operations",
+    sideEffect: false,
+  },
 ];
 
 export const roomMessagingPack: ToolPack = {
@@ -220,9 +356,13 @@ export const roomMessagingPack: ToolPack = {
   handlers: {
     post_room_message: (params, userId, context) => postRoomMessageHandler(params, userId, context),
     read_room_messages: (params, userId, context) => readRoomMessagesHandler(params, userId, context),
+    invite_room_participant: (params, userId, context) => inviteRoomParticipantHandler(params, userId, context),
+    get_coworker_room_engagement: (params, userId, context) => getCoworkerRoomEngagementHandler(params, userId, context),
   },
   grants: {
     post_room_message: ["work_room_write"],
     read_room_messages: ["work_room_read"],
+    invite_room_participant: ["work_room_write"],
+    get_coworker_room_engagement: ["work_room_read"],
   },
 };

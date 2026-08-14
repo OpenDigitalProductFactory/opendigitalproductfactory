@@ -204,6 +204,10 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   // admission is enforced separately (room-agent-access); these are the coarse caps.
   read_room_messages: ["work_room_read"],
   post_room_message: ["work_room_write"],
+  // EP-WORKROOM-COMMS: invite a participant on demand (write); 360 coworker
+  // room-engagement (read). Room admission/coordinator right enforced separately.
+  invite_room_participant: ["work_room_write"],
+  get_coworker_room_engagement: ["work_room_read"],
   create_work_capsule: ["work_capsule_write"],
   plan_capsule_worktree: ["work_capsule_write"],
   adopt_worktree: ["work_capsule_adopt"],

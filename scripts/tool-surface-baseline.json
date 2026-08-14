@@ -3,8 +3,8 @@
   "selectionCliff": 15,
   "entries": {
     "registry.toolDefinitions": {
-      "value": 374,
-      "reason": "Adds post_room_message and read_room_messages so an admitted AI coworker can post into and read a Work Room's message feed — the shared-room communication pattern (EP-WORKROOM-COMMS, BI-3F21C4D5/BI-4402DABB). They are distinct governed contracts: posting is a room-scoped write gated by outcome-scoped agent membership (room-agent-access) that also heartbeats presence, while reading is a content-gated feed read. No existing tool is addressed by a room caseKey or enforces per-room agent admission, so neither can carry these contracts.",
+      "value": 376,
+      "reason": "Adds invite_room_participant and get_coworker_room_engagement (EP-WORKROOM-COMMS). invite_room_participant is the on-demand membership WRITER — a governed action that admits a coworker or person into a room (Coordinator/action-rights gated), the write side no existing tool provides. get_coworker_room_engagement is the 360 coworker-utilization read — which active rooms a coworker is engaged in and its role — a per-coworker inversion of the room projection that no existing roster tool exposes. Both are distinct contracts within the room-messaging surface.",
       "recordedAt": "2026-08-13"
     },
     "registry.packFiles": {
