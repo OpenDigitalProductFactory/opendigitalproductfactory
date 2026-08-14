@@ -1,6 +1,6 @@
 # A Governance Gate on Consequential Tool Use (WWWD-grounded)
 
-**Date:** 2026-08-13 · **Origin:** Arcamanus dogfood (customer 0) · **Owner ask:** Mark Bodman
+**Date:** 2026-08-13 · **Origin:** customer-zero dogfood · **Owner ask:** platform owner
 **Supersedes the narrow scope of** BI-7E1F128A (which was "make the WWWD score discriminate by content"). That BI is a symptom; this spec is the mechanism.
 
 ## The pattern (generalized)
@@ -39,7 +39,7 @@ Because the gate is a TAK control, **every future consequential capability inher
 
 ## Problem
 
-The WWWD org business-decision path does not let the company's stated stance govern decisions. Live proof (Arcamanus, 2026-08-13): with an explicit stance *"we decline selling toasters to fishermen in Alaska…"* **embedded and semantically matched**, `evaluate_org_business_decision` still returns `stanceAlignment: approve` for the toaster. Root causes:
+The WWWD org business-decision path does not let the company's stated stance govern decisions. Live proof (customer-zero install, 2026-08-13): with an explicit stance *"we decline selling toasters to fishermen in Alaska…"* **embedded and semantically matched**, `evaluate_org_business_decision` still returns `stanceAlignment: approve` for the toaster. Root causes:
 
 1. **Wrong vectors.** The decision is scored on *operational* axes (`speed_to_value, reversibility, blast_radius, cognitive_load, governance_compliance, maintainability`). **None expresses strategic alignment** — mission fit, market fit, product fit, GTM fit. So "is this on-mission?" is not a dimension the scorer can weigh.
 2. **Stance content is not projected into criteria.** The `principleDimensionVector` / stance→dimension mechanism exists (BI-E1427A3E) but WWWD org stances (pageKind `stance`) are not projected into it — the stance is matched as an opaque blob, not decomposed into checkable criteria.

@@ -83,7 +83,7 @@ The implementation composes the existing axis registry, stance material, decisio
 
 - All affected Vitest suites pass from the batch worktree with the runner root confirmed.
 - `pnpm --filter web build` passes.
-- Canonical Arcamanus acceptance: toaster and coffee shop decline; MSP partner and self-host support approve; a specialist `create_digital_product` toaster attempt is blocked before mutation; every consequential attempt has a receipt.
+- Canonical customer-zero acceptance: toaster and coffee shop decline; MSP partner and self-host support approve; a specialist `create_digital_product` toaster attempt is blocked before mutation; every consequential attempt has a receipt.
 - Documentation impact: update the standards/conformance documentation only where implemented DPF conformance changes; do not rewrite TAK, GAID, or TAK-JSI ownership.
 
 ## Risks and rollback
