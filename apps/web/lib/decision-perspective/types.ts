@@ -219,6 +219,8 @@ export type DecisionPerspectiveEvaluationResult = {
   stanceAlignment?: "approve" | "decline" | "mixed" | "none";
   /** How question↔stance relevance was computed for this evaluation. */
   relevanceMethod?: "semantic" | "lexical";
+  /** Independent corpus checks; any rejected hard boundary vetoes aggregation. */
+  constitutionalAlignment?: import("./alignment-criteria").ConstitutionalAlignmentResult;
   rationale: string;
   materialScores: PerspectiveMaterialScore[];
   sources: Array<{

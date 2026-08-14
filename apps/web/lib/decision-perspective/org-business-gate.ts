@@ -28,9 +28,54 @@ import type {
   DecisionEvidenceItem,
   DecisionScoredOption,
 } from "./types";
+import type { AlignmentCorpora, AlignmentEvidence } from "./alignment-criteria";
 
 type OrgBusinessGateClient = any;
 type GateEvaluator = (input: DecisionPerspectiveEvaluationInput) => DecisionPerspectiveEvaluationResult;
+
+function evidence(refPrefix: string, rows: Array<Record<string, unknown>>): AlignmentEvidence[] {
+  return rows.map((row, index) => ({
+    ref: `${refPrefix}:${String(row["slug"] ?? row["productId"] ?? row["id"] ?? index)}`,
+    text: [row["title"], row["name"], row["body"], row["description"]]
+      .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+      .join("\n"),
+  })).filter((item) => item.text.length > 0);
+}
+
+/** Load the three existing org-owned corpora without creating a parallel store. */
+export async function loadOrgAlignmentCorpora(
+  db: any,
+  organizationId: string,
+): Promise<AlignmentCorpora | undefined> {
+  if (!db.wikiPage?.findMany) return undefined;
+  try {
+    const wikiRows = await db.wikiPage.findMany({
+      where: { organizationId, status: "published", pageKind: { in: ["stance", "principle"] } },
+      select: { id: true, slug: true, title: true, body: true },
+    }) as Array<Record<string, unknown>>;
+    const [digitalRows, productRows] = await Promise.all([
+      db.digitalProduct?.findMany
+        ? db.digitalProduct.findMany({ select: { id: true, productId: true, name: true, description: true } })
+        : [],
+      db.product?.findMany
+        ? db.product.findMany({
+            where: { organizationId, effectiveTo: null },
+            select: { id: true, productId: true, name: true, description: true },
+          })
+        : [],
+    ]) as [Array<Record<string, unknown>>, Array<Record<string, unknown>>];
+    const gtmRows = wikiRows.filter((row) =>
+      /how-we-decide|supply-chain|pricing|growth|who-we-serve/.test(String(row["slug"] ?? "")),
+    );
+    return {
+      wwwd: evidence("wiki", wikiRows),
+      portfolio: evidence("product", [...digitalRows, ...productRows]),
+      gtm: evidence("wiki", gtmRows),
+    };
+  } catch {
+    return undefined;
+  }
+}
 
 export type OrgBusinessDecisionGateResult = {
   /** True only when the org's own stance recommends/arbitrates the call. */
@@ -74,7 +119,12 @@ export async function evaluateOrgBusinessDecisionGate(input: {
   resolver?: typeof resolveProfileMaterialForOrg;
   now?: Date;
   recentOverrideCount?: number;
+  alignmentCorpora?: AlignmentCorpora;
 }): Promise<OrgBusinessDecisionGateResult> {
+  const alignmentCorpora = input.alignmentCorpora
+    ?? (input.organizationId
+      ? await loadOrgAlignmentCorpora(input.db, input.organizationId)
+      : undefined);
   const result = await evaluatePerspectiveGate({
     db: input.db,
     organizationId: input.organizationId ?? null,
@@ -95,6 +145,7 @@ export async function evaluateOrgBusinessDecisionGate(input: {
     resolver: input.resolver,
     now: input.now,
     recentOverrideCount: input.recentOverrideCount,
+    alignmentCorpora,
   });
 
   return {

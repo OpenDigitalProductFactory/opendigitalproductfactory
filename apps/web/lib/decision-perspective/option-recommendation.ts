@@ -101,3 +101,20 @@ export async function resolveRecommendedOptionId(input: {
   }
   return null;
 }
+
+/** Apply shared scoring, then honor a hard-veto option without averaging it. */
+export async function resolveGateRecommendedOptionId(input: {
+  db: CommandmentClient;
+  scoredOptions?: DecisionScoredOption[] | null;
+  organizationId?: string | null;
+  outcomeType: string;
+  constitutionalVerdict?: "approve" | "decline" | "escalate";
+}): Promise<string | null> {
+  const scored = await resolveRecommendedOptionId(input);
+  if (input.constitutionalVerdict !== "decline" || !input.scoredOptions?.length) {
+    return scored;
+  }
+  return input.scoredOptions.find((option) =>
+    /\b(decline|block|do not proceed|reject)\b/i.test(option.description),
+  )?.id ?? scored;
+}

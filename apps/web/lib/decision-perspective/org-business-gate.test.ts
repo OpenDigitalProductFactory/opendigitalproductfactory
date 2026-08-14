@@ -69,6 +69,32 @@ const base = {
 };
 
 describe("evaluateOrgBusinessDecisionGate (BI-230C9EF7)", () => {
+  it("records a hard WWWD veto with its failing corpus and criterion", async () => {
+    const db = makeDb();
+    const result = await evaluateOrgBusinessDecisionGate({
+      ...base,
+      question: "Sell toasters to Alaskan fishermen from dock kiosks",
+      db: db as never,
+      resolver: fakeResolver() as never,
+      evaluator: () => makeEval({ stanceAlignment: "approve" }),
+      alignmentCorpora: {
+        wwwd: [{ ref: "wiki:stance", text: "We serve MSPs. We decline toasters for fishermen in Alaska." }],
+        portfolio: [{ ref: "product:dpf", text: "Self-hosted software support subscription" }],
+        gtm: [{ ref: "wiki:gtm", text: "Open-source, assurance subscriptions, and MSP partners" }],
+      },
+    });
+
+    expect(result.evaluation.stanceAlignment).toBe("decline");
+    expect(result.evaluation.constitutionalAlignment?.veto).toMatchObject({
+      corpus: "wwwd",
+      criterion: "market",
+    });
+    const data = db.decisionInteraction.create.mock.calls[0]![0].data as Record<string, unknown>;
+    expect((data.outcomePayload as Record<string, unknown>).constitutionalAlignment).toEqual(
+      result.evaluation.constitutionalAlignment,
+    );
+  });
+
   it("decides from the org's own profile and records orgProfileSelected=true (no build context)", async () => {
     const db = makeDb();
     const result = await evaluateOrgBusinessDecisionGate({
