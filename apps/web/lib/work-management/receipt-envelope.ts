@@ -7,6 +7,7 @@ import type {
   WorkCaseRef,
   WorkCaseSourceRef,
 } from "./case-types";
+import type { WorkRoomShapeKey } from "./room-shapes";
 
 export type ReceiptEnvelopeStatus = "valid" | "invalid" | "observed" | "failed";
 
@@ -24,6 +25,12 @@ export interface ReceiptEnvelope {
   inputDigest?: string;
   outputDigest?: unknown;
   policyRefs: readonly string[];
+  governance?: {
+    collaborationShape: WorkRoomShapeKey;
+    authorityLadderLevel: "none" | "discover" | "content" | "action";
+    requiredPrincipalRefs: readonly string[];
+    decisionInteractionId?: string;
+  };
   trace?: {
     traceId?: string;
     spanId?: string;
@@ -58,6 +65,7 @@ export interface ToolExecutionReceiptEnvelopeOptions {
   caseRef?: WorkCaseRef;
   actionType?: WorkCaseActionVerb | string;
   policyRefs?: readonly string[];
+  collaborationShape?: ReceiptEnvelope["governance"];
 }
 
 export interface WorkCapsuleActivityRow {
@@ -214,6 +222,7 @@ export function fromToolExecutionReceipt(
     inputDigest: row.inputFingerprint,
     outputDigest: row.outputDigest,
     policyRefs: options.policyRefs ?? [],
+    governance: options.collaborationShape,
     rawRef: {
       table: "ToolExecutionReceipt",
       id: row.id,

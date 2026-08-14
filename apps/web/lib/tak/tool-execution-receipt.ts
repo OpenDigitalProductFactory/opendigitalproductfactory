@@ -5,6 +5,7 @@ import type { ToolResult } from "@/lib/mcp-tools";
 import type { AlignmentGateDecision } from "./alignment-tool-gate";
 import type { GovernedExecuteContext } from "@/lib/mcp-governed-execute";
 import { getWorkCaseAction } from "@/lib/work-management/action-registry";
+import { collaborationShapeForTool } from "./consequential-tool-policy";
 
 let createOverride: ((data: Record<string, unknown>) => Promise<unknown>) | null = null;
 export function setToolExecutionReceiptCreateOverrideForTests(
@@ -57,6 +58,7 @@ export async function writeToolExecutionReceipt(data: {
         verdict: data.alignmentDecision.verdict,
         specialistDelegation: data.alignmentDecision.specialistDelegation ?? null,
       } : null,
+      collaborationShape: data.consequential ? collaborationShapeForTool(data.toolName) : null,
     }) },
     receiptKind: kind,
     receiptStatus: data.result.success ? "valid" : "invalid",

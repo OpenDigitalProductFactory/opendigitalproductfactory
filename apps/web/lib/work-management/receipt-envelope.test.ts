@@ -115,6 +115,29 @@ describe("ReceiptEnvelope normalizers", () => {
     });
   });
 
+  it("carries Work Room shape, authority ladder, and decision receipt linkage", () => {
+    const envelope = fromToolExecutionReceipt({
+      id: "ter-shape", toolExecutionId: "te-shape",
+      receiptKind: "work-case-governed-action", receiptStatus: "valid",
+      executionStatus: "denied", inputFingerprint: "sha256:shape",
+      outputDigest: { verdict: "decline" }, createdAt: NOW,
+    }, {
+      caseRef: CASE_REF,
+      policyRefs: ["tak:wwwd-alignment"],
+      collaborationShape: {
+        collaborationShape: "escalation", authorityLadderLevel: "action",
+        requiredPrincipalRefs: ["PRN-COORD", "PRN-OWNER"],
+        decisionInteractionId: "DI-VETO",
+      },
+    });
+    expect(envelope.governance).toEqual({
+      collaborationShape: "escalation", authorityLadderLevel: "action",
+      requiredPrincipalRefs: ["PRN-COORD", "PRN-OWNER"],
+      decisionInteractionId: "DI-VETO",
+    });
+    expect(envelope.status).toBe("failed");
+  });
+
   it("normalizes existing activity and evidence rows as observed-event receipts", () => {
     const envelopes = [
       fromWorkCapsuleActivity({

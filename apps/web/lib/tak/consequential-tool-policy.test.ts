@@ -8,6 +8,7 @@ describe("consequential tool policy", () => {
       class: "routine-read",
       consequential: false,
       alignmentRequired: false,
+      collaborationShape: null,
       reason: "read-only",
     });
   });
@@ -17,6 +18,17 @@ describe("consequential tool policy", () => {
       toolName: "create_digital_product",
       tool: { sideEffect: true },
     }).consequential).toBe(true);
+    expect(classifyConsequentialTool({
+      toolName: "create_digital_product", tool: { sideEffect: true },
+    }).collaborationShape).toBe("specialist-alignment");
+  });
+
+  it.each([
+    ["send_quote", "outward-review"],
+    ["execute_change", "change-consequential"],
+  ])("binds %s to the %s Work Room shape", (toolName, collaborationShape) => {
+    expect(classifyConsequentialTool({ toolName, tool: { sideEffect: true } }).collaborationShape)
+      .toBe(collaborationShape);
   });
 
   it("does not charge ordinary bookkeeping mutations for an alignment check", () => {
