@@ -18,11 +18,12 @@ import * as crypto from "crypto";
 import { scanCustomerAccountDuplicates, scanCustomerContactDuplicates } from "./batch-scan";
 import { loadMatchConfig } from "./match-config";
 
-export type StewardTaskKind = "duplicate" | "stale";
+export type StewardTaskKind = "duplicate" | "stale" | "enrichment";
 export type StewardResolution =
   | "resolved_merged"
   | "resolved_distinct"
   | "resolved_refreshed"
+  | "resolved_enriched"
   | "dismissed";
 
 export type SweepSummary = {

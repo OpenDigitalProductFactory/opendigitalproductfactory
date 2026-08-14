@@ -16,6 +16,10 @@ export const PROACTIVITY_ACTIVITY_FAMILIES = [
   // EP-3516E23D: queue backpressure — a scarce-resource queue backing up past
   // its thresholds warrants a more assertive nudge to whoever manages it.
   "queue-health",
+  // BI-B2497DFB: thin prospect/account/contact intake — the coworker offers to
+  // enrich from public sources (permission + scope confirmed). Cadence only;
+  // the write still routes through the governed apply step.
+  "crm-record-enrichment",
 ] as const;
 export type ProactivityActivityFamily = (typeof PROACTIVITY_ACTIVITY_FAMILIES)[number];
 

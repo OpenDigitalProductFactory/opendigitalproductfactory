@@ -159,6 +159,13 @@ function explanationFor(input: ProactivityResolverInput, level: ProactivityLevel
     return "A compliance deadline is close enough to justify assertive reminders while keeping advice and filing approval-gated.";
   }
 
+  if (input.activityFamily === "crm-record-enrichment") {
+    if (level === "quiet") {
+      return "Quiet: store the record as entered and never volunteer enrichment — the human asks if they want it.";
+    }
+    return "A thin CRM record can be strengthened from public sources; offer to enrich (permission + scope confirmed) while the write stays governed and non-fabricating.";
+  }
+
   if (level === "balanced") {
     return "Balanced is the default proactivity level for useful follow-up without noisy repeated interruption.";
   }

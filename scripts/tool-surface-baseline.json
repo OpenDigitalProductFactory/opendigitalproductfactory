@@ -3,14 +3,14 @@
   "selectionCliff": 15,
   "entries": {
     "registry.toolDefinitions": {
-      "value": 376,
-      "reason": "Adds invite_room_participant and get_coworker_room_engagement (EP-WORKROOM-COMMS). invite_room_participant is the on-demand membership WRITER — a governed action that admits a coworker or person into a room (Coordinator/action-rights gated), the write side no existing tool provides. get_coworker_room_engagement is the 360 coworker-utilization read — which active rooms a coworker is engaged in and its role — a per-coworker inversion of the room projection that no existing roster tool exposes. Both are distinct contracts within the room-messaging surface.",
-      "recordedAt": "2026-08-13"
+      "value": 378,
+      "reason": "Adds propose_crm_enrichment and apply_crm_enrichment (BI-B2497DFB) — the two governed doors of proactive CRM enrichment (raise from the 376 that already includes EP-WORKROOM-COMMS's room tools). They are distinct contracts: propose is a non-destructive, scope-confirmed web-research stewardship step (grants web_search+crm_read) that files a steward proposal with the scant→enriched diff and no fabricated values; apply is the separate consequential CRM write (grant crm_write) that materializes an approved proposal with provenance. No existing tool carries either: enrich_customer_account is single-source own-website-only and files-but-never-applies, and the merge/steward tools resolve duplicates, not gap-fill enrichment.",
+      "recordedAt": "2026-08-14"
     },
     "registry.packFiles": {
-      "value": 90,
-      "reason": "Adds one focused room-messaging pack so the two Work Room communication tools, their work_room_read/work_room_write grants, and the outcome-scoped admission contract stay one bounded MCP surface. Reusing the work-capsules pack would conflate coding-carrier lifecycle with generic cross-work-type room messaging and blur the per-room agent-admission boundary. EP-WORKROOM-COMMS.",
-      "recordedAt": "2026-08-13"
+      "value": 91,
+      "reason": "Adds one focused crm-enrichment pack (BI-B2497DFB) so the propose/apply pair, their web_search/crm_read/crm_write grants, and the propose-vs-apply governance boundary stay one bounded MCP surface. Folding into mdm-stewardship (duplicate resolution) or crm-sales-pipeline (deal/quote lifecycle) would blur the distinct proactive-enrichment contract and its two-step permission model.",
+      "recordedAt": "2026-08-14"
     },
     "tier.coreToolNames": {
       "value": 30,
