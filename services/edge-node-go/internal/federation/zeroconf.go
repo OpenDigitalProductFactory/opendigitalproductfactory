@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/url"
@@ -29,11 +30,41 @@ type DiscoveryOptions struct {
 	Secret             []byte
 	RotationWindow     time.Duration
 	SubmissionInterval time.Duration
+	SubmissionRefresh  time.Duration
 	CapabilityVersion  string
 	OnReady            func()
 }
 
 type SubmitCandidates func(context.Context, []Candidate) error
+
+type candidateSubmissionGate struct {
+	lastPayload     string
+	lastSubmittedAt time.Time
+}
+
+func candidatePayload(candidates []Candidate) string {
+	payload, _ := json.Marshal(candidates)
+	return string(payload)
+}
+
+func (gate *candidateSubmissionGate) shouldSubmit(
+	candidates []Candidate,
+	now time.Time,
+	refreshInterval time.Duration,
+) bool {
+	if len(candidates) == 0 {
+		return false
+	}
+	if gate.lastPayload != candidatePayload(candidates) {
+		return true
+	}
+	return gate.lastSubmittedAt.IsZero() || now.Sub(gate.lastSubmittedAt) >= refreshInterval
+}
+
+func (gate *candidateSubmissionGate) markSubmitted(candidates []Candidate, now time.Time) {
+	gate.lastPayload = candidatePayload(candidates)
+	gate.lastSubmittedAt = now
+}
 
 // Run advertises this Authority and continuously browses for peers. It
 // binds the host's real multicast interfaces, so it belongs only in the native
@@ -63,7 +94,13 @@ func Run(ctx context.Context, opts DiscoveryOptions, submit SubmitCandidates) er
 	if opts.SubmissionInterval <= 0 {
 		opts.SubmissionInterval = 15 * time.Second
 	}
+	if opts.SubmissionRefresh <= 0 {
+		// Authority candidate rows expire after two minutes. Refreshing at
+		// ninety seconds retains margin without reposting every observation tick.
+		opts.SubmissionRefresh = 90 * time.Second
+	}
 	capabilityDigest := sha256.Sum256([]byte(opts.CapabilityVersion))
+	submissionGate := candidateSubmissionGate{}
 
 	for ctx.Err() == nil {
 		discoveryID := RotatingDiscoveryID(opts.Secret, time.Now(), opts.RotationWindow)
@@ -129,11 +166,16 @@ func Run(ctx context.Context, opts DiscoveryOptions, submit SubmitCandidates) er
 					snapshot = append(snapshot, found[key])
 				}
 				mu.Unlock()
+				now := time.Now()
+				if !submissionGate.shouldSubmit(snapshot, now, opts.SubmissionRefresh) {
+					continue
+				}
 				if err := submit(ctx, snapshot); err != nil && ctx.Err() == nil {
 					// Discovery is optional and eventually consistent. A failed
 					// snapshot must not stop heartbeat or host discovery.
 					continue
 				}
+				submissionGate.markSubmitted(snapshot, now)
 			}
 		}
 		submitTicker.Stop()

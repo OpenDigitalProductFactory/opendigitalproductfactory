@@ -90,6 +90,48 @@ describe("analyzeCallEfficiency (BI-A08EBAEC)", () => {
     expect(report.ledgerSufficiency.usable).toBe(true);
   });
 
+  it("suppresses healthy contractual edge cadence across machine principals", () => {
+    const start = Date.parse("2026-08-03T12:00:00.000Z");
+    const events: CallEfficiencyEvent[] = [];
+    for (const [agentId, offset] of [["edge-a", 0], ["edge-b", 5_000]] as const) {
+      for (let i = 0; i < 30; i++) {
+        events.push(ev({
+          id: `${agentId}-${i}`,
+          toolName: "edge.heartbeat",
+          threadId: "",
+          agentId,
+          apiTokenId: null,
+          executionMode: "edge-rest",
+          createdAt: new Date(start + offset + i * 60_000),
+        }));
+      }
+    }
+
+    const report = analyzeCallEfficiency(events, { highVolumeFloor: 25 });
+    expect(report.findings.some(
+      (finding) => finding.kind === "high_volume" && finding.toolName === "edge.heartbeat",
+    )).toBe(false);
+    expect(report.ledgerSufficiency.note).toContain("contractual machine cadence");
+  });
+
+  it("still flags a machine route that exceeds its contractual cadence", () => {
+    const start = Date.parse("2026-08-03T12:00:00.000Z");
+    const events = Array.from({ length: 30 }, (_, i) => ev({
+      id: `edge-fast-${i}`,
+      toolName: "edge.heartbeat",
+      threadId: "",
+      agentId: "edge-a",
+      apiTokenId: null,
+      executionMode: "edge-rest",
+      createdAt: new Date(start + i * 10_000),
+    }));
+
+    const report = analyzeCallEfficiency(events, { highVolumeFloor: 25 });
+    expect(report.findings.some(
+      (finding) => finding.kind === "high_volume" && finding.toolName === "edge.heartbeat",
+    )).toBe(true);
+  });
+
   it("reports insufficient ledger when volume is tiny", () => {
     const report = analyzeCallEfficiency([
       ev({ id: "a", toolName: "ping" }),
