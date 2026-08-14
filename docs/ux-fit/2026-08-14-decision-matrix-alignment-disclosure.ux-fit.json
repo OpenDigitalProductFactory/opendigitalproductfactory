@@ -9,7 +9,7 @@
   "evidence": {
     "kind": "sweep-measurement",
     "baselineComparison": "maintained",
-    "measurementRun": "source-local served-page DOM audit, reconciled with the prior CI route sweep shell baseline",
+    "measurementRun": "governed UX route sweep run 31849736737",
     "measured": {
       "/coworker-decisions/matrix": {
         "defaultVisibleWords": 292,
