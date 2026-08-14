@@ -25,6 +25,18 @@ This gate is not new machinery bolted on — it is the composition and wiring of
 
 So: **coordination layer** = WWWD org-alignment + orchestration + veto authority; **specialist layer** = JSI-qualified profile applying WSID craft to its corpus and returning a verdict. The toaster's "resounding no" is a coordination-level WWWD market/mission fail *and* a specialist-level WSID product-portfolio fail, either of which vetoes.
 
+## Standards conformance — the discipline that keeps this and future work in check
+
+This gate is not a bespoke feature; it is the **TAK action-gating control** for consequential tool use, and it must conform to the DPF **Trustworthy AI Agent Standards Family** (`docs/architecture/agent-standards-family.md`). Conformance is what keeps this work — and every capability built after it — coherent:
+
+- **TAK** (Trusted AI Kernel) owns *may this agent act, under whose authority, through which tools/data, with what oversight and evidence* — i.e. **action gating at execution**. This gate realizes that control for the WWWD×WSID **alignment** dimension.
+- **GAID** resolves the acting identity + operating profile and binds the **action receipt** back to the subject (the ledger entry).
+- **TAK-JSI** determines whether the delegated specialist's operating profile is **qualified** for the job / data scope / risk of the check.
+- **Composition rule (normative):** `GAID identity → JSI qualification → TAK intersection (authority × grants × route/workflow policy × data constraints × qualification ceiling) at execution → GAID receipt`. This gate slots in at the TAK step and consults the WWWD/WSID policy corpora.
+- **No-widening invariants (must hold):** a GAID claim is not authorization; a JSI qualification is not permission to act; a TAK permission is not evidence of competence. The gate must never let one layer widen another.
+
+Because the gate is a TAK control, **every future consequential capability inherits governance by passing through it** — the standards family is the check that keeps new work in line, not a one-off review.
+
 ## Problem
 
 The WWWD org business-decision path does not let the company's stated stance govern decisions. Live proof (Arcamanus, 2026-08-13): with an explicit stance *"we decline selling toasters to fishermen in Alaska…"* **embedded and semantically matched**, `evaluate_org_business_decision` still returns `stanceAlignment: approve` for the toaster. Root causes:
@@ -147,3 +159,27 @@ Substrate: DPF already carries both halves — value streams + EA (`/ea`, archet
 ## Non-goals
 - Not a change to the local model or infra (capacity is fine; embeddings load on demand).
 - Does not remove the safety escalation on genuine embedding-unavailability (keep the fail-safe from #4254).
+
+## Composition with existing epics (extend, do not duplicate)
+
+Substrate-verify first: much of this exists. This epic is the **integration + the missing alignment pieces**, not a rebuild.
+
+| Concern | Owned / advanced by | This epic adds |
+|---|---|---|
+| Authority intersection + execute gate | **EP-31815F97** (TAK/GAID realization) | the WWWD×WSID **alignment** check-family + veto, at the same execution point |
+| Work Room collaboration, Coordinator, GAID participants | **EP-WORKROOM-COMMS** | **shape binding** per gate pattern (routing / inclusion) |
+| JSI weighting / specialist routing | **EP-DECISION-TIER-REBALANCE**, EP-E431FC8A (done) | specialist **delegation for alignment** verdicts |
+| WWWD/WSID surface + altitude/context | **EP-0AF96937**, **EP-7B169558** | project stances into **alignment axes** + criteria-extraction |
+| Harness mechanics as governed primitives | **EP-CLAUDE-INSIDE-OUT** | the gate **as a harness primitive** on tool use |
+| Work graph (Case / Item / Capsule) | **EP-WORK-CONVERGENCE** | gate verdicts as Work Case receipts |
+
+## Decomposition (execution slices)
+
+1. **Alignment axes + stance→dimension projection** for `pageKind: stance` (extend BI-E1427A3E) — the "right vectors."
+2. **Criteria-extraction + veto** semantics in `option-recommendation` — subsumes **BI-7E1F128A**.
+3. **JSI specialist delegation** for corpus-fit verdicts via A2A (compose EP-DECISION-TIER-REBALANCE).
+4. **Write-time TAK interception** on consequential tool calls (compose EP-31815F97 execute gate).
+5. **Collaboration-shape binding** per gate pattern (compose EP-WORKROOM-COMMS).
+6. **Precondition/ordering** check grounded in value-stream↔data-model (EA mirror).
+7. **Embedding self-heal** — load-on-demand + back-fill skipped pages.
+8. **Uniform enforcement for human actors** + amend-not-bypass override + GAID ledger receipt.
