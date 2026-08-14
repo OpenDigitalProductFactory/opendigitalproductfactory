@@ -1,6 +1,6 @@
 # Integrated Email & Communications
 
-**Date:** 2026-08-14 · **Origin:** Arcamanus dogfood (customer 0) · **Owner ask:** Mark Bodman
+**Date:** 2026-08-14 · **Origin:** operator dogfood (customer 0) · **Owner ask:** operator/owner
 **Status:** Initial spec for evaluation · **Epic:** EP-EMAIL-COMMS (see backlog)
 
 ## Why this exists
@@ -36,7 +36,7 @@ Because burden B cannot be fully removed, the *right architecture depends on how
 ### Tier 1 — Email *client* integration + relayed transactional send  *(now; lowest risk, highest immediate value)*
 Connect the customer's **existing** mailbox (IMAP/SMTP/OAuth) into the workspace and Work Rooms: AI triage, drafting, reply, and outbound transactional mail (invoices, quotes, payment links, dunning, approvals, notifications) via a relay/provider.
 - **Substrate already present:** `CommunicationChannelBinding` (channel/provider/account → verified `Principal`) and `CommunicationChannelSession` already route inbound email → `WorkItem` (see `docs/architecture/work-room-participation-and-channel-continuity.md`). The 3-tier `smtp-config.ts` (DB settings → env → relay) already exists for outbound.
-- This gives DPF the entire email **UX + coworker surface** without owning a server. It is also exactly the path Arcamanus needs right now (SMTP2GO relay), so tier 1 is not throwaway.
+- This gives DPF the entire email **UX + coworker surface** without owning a server. It is also exactly the path this operator install needs right now (SMTP2GO relay), so tier 1 is not throwaway.
 
 ### Tier 2 — AI-managed self-hosted mailbox hosting (hybrid deliverability)  *(next; the differentiator)*
 Package a modern open-source mail server (Stalwart / Mailcow) as a **deployable DPF component** for storage + sovereignty (inbound, mailboxes, IMAP/JMAP, calendars/contacts), but **relay outbound through a reputable sender** so deliverability is *borrowed, not owned* (the hybrid pattern). The **AI mail-admin coworker** runs setup, DNS/DKIM, migration, spam, retention, and monitoring.
