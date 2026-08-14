@@ -23,6 +23,7 @@ import {
   startNearbyPairingAction,
 } from "@/lib/actions/federation-links";
 import type { NearbyFederationCandidate } from "@/lib/federation/nearby-candidates";
+import type { NearbyDiscoveryHealth } from "@/lib/edge-node/readiness";
 import { normalizeRecoveryAuthority } from "@/lib/federation/recovery-authority";
 import { FederationLinksTable } from "./FederationLinksTable";
 
@@ -43,12 +44,6 @@ export interface FederationLinkRow {
   offersIntroductions: boolean;
   acceptsIntroductions: boolean;
   createdAtISO: string;
-}
-
-export interface NearbyDiscoveryHealth {
-  status: "healthy" | "degraded" | "waiting" | "disabled" | "unavailable";
-  label: string;
-  detail: string;
 }
 
 export interface NearbyPairingRow {

@@ -238,6 +238,64 @@ export interface MainInstallationNodeSelection {
   candidateNodeIds: string[];
 }
 
+export interface NearbyDiscoveryHealth {
+  status: "healthy" | "degraded" | "waiting" | "disabled" | "unavailable";
+  label: string;
+  detail: string;
+}
+
+export function deriveNearbyDiscoveryHealth({
+  selection,
+  readiness,
+  discoveryCapability,
+}: {
+  selection: MainInstallationNodeSelection;
+  readiness: EdgeNodeReadiness | null;
+  discoveryCapability: EdgeReadinessCapability | null;
+}): NearbyDiscoveryHealth {
+  if (selection.status === "ambiguous") {
+    return {
+      status: "unavailable",
+      label: "Enrollment conflict",
+      detail:
+        "Multiple installer-managed Edge Nodes claim this installation. Review Edge Nodes before relying on nearby discovery.",
+    };
+  }
+  if (selection.status !== "found" || !readiness || !discoveryCapability) {
+    return {
+      status: "unavailable",
+      label: "Not set up",
+      detail: "The native Edge Node has not registered nearby discovery.",
+    };
+  }
+  if (discoveryCapability.mode !== "enabled" && discoveryCapability.mode !== "reporting-only") {
+    return {
+      status: "disabled",
+      label: "Paused",
+      detail: "Nearby discovery is disabled by the Authority.",
+    };
+  }
+  if (readiness.health === "healthy") {
+    return {
+      status: "healthy",
+      label: "Listening",
+      detail: "This installation is announcing and looking for nearby DPF installations.",
+    };
+  }
+  if (readiness.health === "starting") {
+    return {
+      status: "waiting",
+      label: "Starting",
+      detail: "Nearby discovery is enabled and waiting for its first health report.",
+    };
+  }
+  return {
+    status: "degraded",
+    label: "Needs attention",
+    detail: "Nearby discovery or its host service is stale or failing. Check the Edge fleet for the specific failed readiness check.",
+  };
+}
+
 function selection(
   candidates: EdgeReadinessNode[],
   basis: MainInstallationNodeSelection["basis"],

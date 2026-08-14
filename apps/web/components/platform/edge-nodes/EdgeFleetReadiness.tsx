@@ -144,10 +144,10 @@ export function MainInstallationReadiness({
   status: MainInstallationStatus;
 }) {
   const health: EdgeHealth = node?.health ?? "setup-required";
-  const setupDetail = !edgeEnabled
-    ? "Edge is not enabled for this installation. Re-run the governed installer with Edge enabled."
-    : status === "ambiguous"
-      ? "More than one installer-managed node claims this installation. Review the fleet before relying on discovery."
+  const setupDetail = status === "ambiguous"
+    ? "More than one installer-managed node claims this installation. Review the fleet before relying on discovery."
+    : !edgeEnabled
+      ? "Edge is not enabled for this installation. Re-run the governed installer with Edge enabled."
       : "Edge is enabled, but its supervised host service has not enrolled. Run the governed repair or self-upgrade path.";
 
   return (

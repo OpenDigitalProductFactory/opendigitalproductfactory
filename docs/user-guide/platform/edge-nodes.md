@@ -24,7 +24,7 @@ The card checks the supervised service, enrollment, trust, heartbeat freshness, 
 
 | Health | Meaning | Operator response |
 | --- | --- | --- |
-| **Setup required** | Edge was not enabled, or no local supervised service is enrolled. | Use the governed install or repair workflow with Edge enabled. |
+| **Setup required** | Edge was not enabled, no local supervised service is enrolled, or more than one installer-managed enrollment claims this installation. | Follow the card detail. For an enrollment conflict, review the fleet and retire or repair the obsolete enrollment before relying on nearby discovery. |
 | **Starting** | Enrollment or the first heartbeat/approval is still completing. | Wait briefly, then review the named waiting check. |
 | **Healthy** | Trust, heartbeat, version, and required capabilities are current. | No action. |
 | **Degraded** | The node is reachable but a version, capability, or freshness check needs attention. | Follow the failed check; open **Connections** for nearby discovery. |
@@ -32,6 +32,8 @@ The card checks the supervised service, enrollment, trust, heartbeat freshness, 
 | **Quarantined / Revoked** | Trust policy intentionally blocks or permanently retires the node. | Review the recorded trust decision before restoring or replacing it. |
 
 Health and trust are different axes. A node can be trusted yet offline, or alive yet quarantined. The fleet table therefore shows both columns, plus the first failed readiness check and its next action, and derives health from live evidence rather than `EdgeNode.status` alone.
+
+If **Connections** reports an **Enrollment conflict**, discovery may still be running, but the Authority cannot safely prove which installer-managed node belongs to this installation. DPF does not guess from the newest heartbeat or hostname; open **Edge Nodes**, identify the obsolete enrollment, and retire or repair it through the governed lifecycle.
 
 Once Edge is enabled, each governed install or self-upgrade refreshes the checksum-bound native binary and its supervisor while preserving the enrolled machine identity. Replacement bytes are staged before the service stops, and a failed restart restores the prior binary. A platform version change does not issue a new bootstrap token.
 
