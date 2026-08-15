@@ -158,3 +158,16 @@ export async function reconcileWikiEmbeddingsOnBoot(
     return null;
   }
 }
+
+/**
+ * Register the boot self-heal without blocking startup. Deferred because this is
+ * repair, not a boot precondition — it must never delay serving. Lives here
+ * rather than in `instrumentation.ts` so the scheduling policy sits beside the
+ * work it schedules.
+ */
+export function scheduleWikiEmbeddingReconcile(delayMs = 10_000): void {
+  if (process.env.NEXT_RUNTIME && process.env.NEXT_RUNTIME !== "nodejs") return;
+  setTimeout(() => {
+    void reconcileWikiEmbeddingsOnBoot();
+  }, delayMs).unref?.();
+}

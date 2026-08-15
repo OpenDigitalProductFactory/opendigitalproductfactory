@@ -1528,17 +1528,9 @@ export async function register() {
     // silent plaintext storage (data-at-rest vulnerability).
     // Dev mode short-circuits immediately; zero overhead outside production.
     // See docs/superpowers/specs/2026-04-24-github-auth-2fa-readiness-design.md
-    // ── Wiki embedding coverage self-heal (BI-ED117C82) ────────────────────
-    // BI-D4C1E05E's reconcile described itself as "wired into portal boot" but
-    // had no caller outside the maintainer script, so a partially embedded
-    // corpus stayed partial. Deferred and non-blocking: it is repair, not a
-    // boot precondition, and it must not delay serving.
-    setTimeout(() => {
-      void (async () => {
-        const { reconcileWikiEmbeddingsOnBoot } = await import("@/lib/wiki/embedding-reconciliation");
-        await reconcileWikiEmbeddingsOnBoot();
-      })();
-    }, 10_000);
+    // Wiki embedding coverage self-heal — deferred, non-blocking (BI-ED117C82).
+    const { scheduleWikiEmbeddingReconcile } = await import("@/lib/wiki/embedding-reconciliation");
+    scheduleWikiEmbeddingReconcile();
 
     const { assertCredentialEncryptionKeyIsSet } = await import("@/lib/govern/credential-crypto");
     await assertCredentialEncryptionKeyIsSet();
