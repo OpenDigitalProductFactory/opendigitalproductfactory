@@ -84,6 +84,11 @@ overrides:
 
 packageExtensionsChecksum: sha256-pFEExG4o57joHucsVi/dgGpp9BfdxYD7y4blLQUpCqI=
 
+patchedDependencies:
+  image-size@1.2.1:
+    hash: 4bb1072b86731b355f3817b3188b127fbf12c741940e2a14f664b4789a8bfac9
+    path: patches/image-size@1.2.1.patch
+
 importers:
 
   .:
@@ -15817,7 +15822,7 @@ snapshots:
 
   ignore@5.3.2: {}
 
-  image-size@1.2.1:
+  image-size@1.2.1(patch_hash=4bb1072b86731b355f3817b3188b127fbf12c741940e2a14f664b4789a8bfac9):
     dependencies:
       queue: 6.0.2
 
@@ -17158,7 +17163,7 @@ snapshots:
       flow-enums-runtime: 0.0.6
       graceful-fs: 4.2.11
       hermes-parser: 0.35.0
-      image-size: 1.2.1
+      image-size: 1.2.1(patch_hash=4bb1072b86731b355f3817b3188b127fbf12c741940e2a14f664b4789a8bfac9)
       invariant: 2.2.4
       jest-worker: 30.4.1
       jsc-safe-url: 0.2.4

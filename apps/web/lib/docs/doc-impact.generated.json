@@ -1667,6 +1667,9 @@
     "scripts/sbom/check-singleton-safety.mjs": [
       "docs/architecture/dependency-reduction-routine.md"
     ],
+    "scripts/sbom/image-size-icns-loop.test.mjs": [
+      "docs/architecture/dependency-reduction-routine.md"
+    ],
     "scripts/sbom/internalization-candidates.mjs": [
       "docs/architecture/dependency-reduction-routine.md"
     ],
@@ -2173,6 +2176,7 @@
       "scripts/sbom/check-new-dependencies.mjs",
       "scripts/sbom/check-sbom-drift.mjs",
       "scripts/sbom/check-singleton-safety.mjs",
+      "scripts/sbom/image-size-icns-loop.test.mjs",
       "scripts/sbom/internalization-candidates.mjs",
       "scripts/sbom/runtime-surface.mjs",
       "scripts/sbom/scan-dependencies.mjs"

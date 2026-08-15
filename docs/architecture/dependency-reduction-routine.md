@@ -108,6 +108,44 @@ re-scoped upstream to require 3.3.18 — the stale floor was caught by `pnpm
 scan:deps`, not by the Dependabot feed. Treat the OSV scan, not the alert list,
 as the authority on what is still vulnerable.
 
+### Owning a fix: `pnpm patch` when upstream is dead
+
+When a dependency is **archived with no patched release**, the ladder's last rung
+before "accept and live with it" is to **own the fix**. `pnpm patch <pkg>@<ver>`
+writes a reviewable diff to `patches/` and records it under
+`patchedDependencies:` in `pnpm-workspace.yaml`.
+
+Use it when *all* of these hold — otherwise prefer bumping or replacing:
+
+- upstream is archived/unresponsive **and** no fixed version exists anywhere;
+- the fix is small and self-contained (a bounds/termination guard, not a redesign);
+- you don't own the call site, so you can't just swap the package;
+- a **regression test** can prove the defect and prove the patch (test first — it
+  must fail against the stock package).
+
+Worked example: `image-size` (archived 2026-06-03 on GitHub *and* on its Codeberg
+revival; `metro` closed its own Dependabot issue as *not planned*). The ICNS
+parser's entry-walk loop never advances on a zero-length entry.
+`patches/image-size@1.2.1.patch` adds the guard, and
+`scripts/sbom/image-size-icns-loop.test.mjs` runs in the Dependency Scan workflow.
+
+**Two things to know before reaching for this:**
+
+1. **It does not clear the alert.** A patch doesn't change the version string, so
+   OSV/Dependabot still match `image-size@1.2.1`. The finding stays in
+   `sbom/vuln-baseline.json` — but the `reason` now says *patched*, not *tolerated*.
+   The risk is gone even though the row remains.
+2. **The patch is pinned to an exact version.** When the parent bumps the package,
+   the patch stops applying and pnpm fails loudly. That is the desired behaviour —
+   it forces a re-review rather than silently dropping your fix.
+
+**Never adopt an unvetted "community fork" to escape this.** The remediation shape
+is an override, which silently redirects *every* resolution of that name in the
+tree while bypassing the New Dependency Gate — maximum blast radius, minimum
+review. A fork that is days old, has no download history, has no provenance
+attestation, and is promoted by its own author via templated issues on major
+repos is a supply-chain approach vector, not a fix.
+
 ## Axis 3 — acquisition control (the New Dependency Gate)
 
 The cheapest moment to stop a bad package is when it *enters* the project.
