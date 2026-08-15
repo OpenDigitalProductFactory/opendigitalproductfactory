@@ -1,0 +1,26 @@
+{
+  "version": "1",
+  "decidedOption": "read-only-currency-table",
+  "scope": {
+    "files": [
+      "apps/web/app/(shell)/ops/stack-currency/page.tsx",
+      "apps/web/components/ops/StackCurrencyTable.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "sweep-measurement",
+    "baselineComparison": "new-route",
+    "measured": {
+      "/ops/stack-currency": {
+        "defaultVisibleWords": 115,
+        "leadBandWords": 0,
+        "primaryActions": 1,
+        "visibleFields": 0,
+        "maxChoicesPerControl": 0,
+        "subLegibleControls": 0,
+        "buriedPrimaryAction": 0,
+        "axeViolations": 0
+      }
+    }
+  }
+}

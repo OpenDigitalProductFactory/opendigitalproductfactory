@@ -1259,6 +1259,13 @@
     "longSentences": 0,
     "textMass": 8
   },
+  "apps/web/app/(shell)/ops/stack-currency/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 20
+  },
   "apps/web/app/(shell)/performance/loading.tsx": {
     "vocabulary": 0,
     "genericLabels": 0,
@@ -6066,7 +6073,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 11
+    "textMass": 13
   },
   "apps/web/components/owner-first/OwnerFirstSummary.tsx": {
     "vocabulary": 0,

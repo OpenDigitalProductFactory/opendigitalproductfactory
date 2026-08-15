@@ -10822,7 +10822,8 @@
         "promotions",
         "being-reached-when-you-are-away",
         "business-journeys",
-        "promoter-timeout"
+        "promoter-timeout",
+        "platform-stack-currency"
       ]
     },
     "docs/user-guide/operations/infrastructure-discovery.md": {
