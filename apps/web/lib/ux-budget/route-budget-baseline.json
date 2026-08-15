@@ -1202,7 +1202,7 @@
       "ariaSnapshot": "- heading [level=1]\n- paragraph\n  - text\n- text\n- textbox\n- button\n- paragraph\n  - text"
     },
     "/inventory": {
-      "defaultVisibleWords": 946,
+      "defaultVisibleWords": 949,
       "leadBandWords": 0,
       "primaryActions": 1,
       "visibleFields": 2,
@@ -1796,7 +1796,7 @@
       "ariaSnapshot": "- link\n- banner\n  - link\n    - text\n    - paragraph\n      - text\n  - link\n  - button\n  - text\n  - button\n- complementary\n  - navigation\n    - group\n      - button\n      - button [pressed]\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n- main\n  - navigation\n    - link\n    - text\n  - link\n  - paragraph\n    - text\n  - link\n  - heading [level=1]\n  - paragraph\n    - text\n  - heading [level=2]\n  - paragraph\n    - text\n  - button\n  - heading [level=2]\n  - table\n    - rowgroup\n      - row\n        - columnheader\n    - rowgroup\n  - heading [level=2]\n  - paragraph\n    - text\n  - table\n    - rowgroup\n      - row\n        - columnheader\n    - rowgroup\n      - row\n        - cell\n          - text\n        - cell\n          - combobox\n            - option\n            - option [selected]\n            - option\n        - cell\n          - text\n        - cell\n          - button\n  - heading [level=2]\n  - table\n    - rowgroup\n      - row\n        - columnheader\n    - rowgroup"
     },
     "/platform/tools/discovery": {
-      "defaultVisibleWords": 968,
+      "defaultVisibleWords": 971,
       "leadBandWords": 0,
       "primaryActions": 1,
       "visibleFields": 2,

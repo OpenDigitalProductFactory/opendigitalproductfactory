@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 634,
+  "pageCount": 635,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -4255,6 +4255,21 @@
         "examples",
         "when-this-does-not-apply",
         "see-also"
+      ]
+    },
+    "docs/founder-kernel/wiki/principles/trust-is-prospective-not-retrospective.md": {
+      "publicHref": "/founder-kernel/wiki/principles/trust-is-prospective-not-retrospective/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "rule",
+        "why",
+        "applies-to",
+        "how-to-apply",
+        "decision-dimensions",
+        "examples",
+        "sources"
       ]
     },
     "docs/founder-kernel/wiki/principles/universal-work-formula.md": {

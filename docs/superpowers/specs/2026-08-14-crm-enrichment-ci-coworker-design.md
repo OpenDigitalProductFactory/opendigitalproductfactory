@@ -136,21 +136,25 @@ source waterfall** → **grounded-or-blank + per-field provenance** → **compli
 human approves → `apply_crm_enrichment` → freshness note. This is the genuinely net-new artifact
 and the home of "what others do."
 
-## Tool hardening (optional, incremental — separate BI)
+## Tool hardening (BI-E2449835 — partially delivered)
 
-Fold the 4 market decisions the shipped tools don't yet *enforce* into
+Folding the 4 market decisions the shipped tools don't yet *enforce* into
 `apps/web/lib/crm/enrichment/`:
-- **Identity-resolution gate** (decision ①) in `enrichment-proposal.ts`: require an `anchor`
-  (domain or name+geo+corroborator) + per-finding `anchorAgreement`; drop findings that don't
-  agree; return a `matchScore` and refuse to file below threshold. *Today the tool trusts
-  coworker-supplied findings blindly — this is the biggest correctness gap.*
-- **Confidence + passage fields** (decision ②) on `EnrichmentFinding`
-  (`confidence`, `retrievedAt`, `supportingPassage`) and a check that categorical values are in a
-  taxonomy enum.
-- **Compliance risk-tier + suppression-list hook** (decision ③): tag each field
+- **Identity-resolution gate** (decision ①) — **DELIVERED.** `identity-resolution.ts` resolves the
+  record anchor and the researched anchor (explicit `anchor` param, else inferred from a `website`
+  finding), scores the match domain-first, and `enrichment-proposal.ts` **hard-blocks on a domain
+  conflict** (a same-named different company → nothing filed) and flags a `weak` match for human
+  confirmation at the review step. `propose_crm_enrichment` gained an `anchor` input and returns
+  `identity_conflict` on a block.
+- **Confidence + passage fields** (decision ②) — **DELIVERED (data).** `EnrichmentFinding` /
+  `EnrichmentFieldChange` carry `confidence`, `retrievedAt`, `supportingPassage`, threaded into the
+  proposal + task reasons for audit. *Remaining:* entailment check (value present in the passage)
+  and categorical taxonomy-enum validation.
+- **Compliance risk-tier + suppression-list hook** (decision ③) — *remaining.* Tag each field
   `firmographic | personal-contact`; personal-contact requires a lawful-basis flag and a
-  suppression-list miss before it may be proposed.
-- **Per-field freshness** (`retrievedAt` → staleness SLA) driving re-enrichment triggers.
+  suppression-list miss before it may be proposed (needs a suppression-list model).
+- **Per-field freshness** (decision, `retrievedAt` → staleness SLA) — *remaining;* the `retrievedAt`
+  field now exists to drive it.
 
 ## Config turn-on checklist (separate BI)
 
