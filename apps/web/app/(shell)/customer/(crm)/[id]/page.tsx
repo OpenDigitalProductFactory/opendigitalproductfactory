@@ -23,6 +23,8 @@ import {
 } from "@/lib/storefront/archetype-activation";
 import { getAccountStatusMeta } from "@/lib/crm/presentation";
 import { accountStatusToOvsmStage, ovsmStageLabel } from "@/lib/crm/account-value-stream";
+import { getAccountRetainSnapshot } from "@/lib/crm/retain-data";
+import { AccountRetainPanel } from "@/components/customer/AccountRetainPanel";
 import { formatRevenueAmount } from "@/lib/crm/revenue-cockpit";
 import { LocalTime } from "@/components/ui/LocalTime";
 import { getFinancialProfile } from "@dpf/finance-templates";
@@ -224,6 +226,10 @@ export default async function AccountDetailPage({
   const laborEconomics = billableTimeEnabled ? await getAccountLaborEconomics(id) : null;
 
   const statusMeta = getAccountStatusMeta(account.status);
+  // Retain-stage instrumentation: MRR / churn-risk / renewal for accounts in the recurring back-half.
+  const retainSnapshot = ["onboarding", "active", "at_risk", "suspended"].includes(account.status)
+    ? await getAccountRetainSnapshot(account.id)
+    : null;
   const managedItemDefaults = deriveCustomerConfigurationItemDefaults(
     readActivationProfile(storefrontConfig?.archetype?.activationProfile),
   );
@@ -304,6 +310,8 @@ export default async function AccountDetailPage({
       </div>
 
       <AccountLifecycleActions {...lifecycleContext} />
+
+      {retainSnapshot && <AccountRetainPanel snapshot={retainSnapshot} />}
 
       {laborEconomics && laborEconomics.billableHours > 0 && (
         <BillableTimeSection

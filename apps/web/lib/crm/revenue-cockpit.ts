@@ -43,6 +43,12 @@ export type RevenueCockpitInput = {
   staleOpportunityCount: number;
   /** Active support contracts whose renewalDate falls within the next 30 days. */
   renewalsDueSoonCount?: number;
+  /** Monthly Recurring Revenue from active recurring commitments (retain-stage instrumentation). */
+  mrr?: number;
+  /** Annual Recurring Revenue (MRR × 12). */
+  arr?: number;
+  /** Retain-stage accounts the health signal flags as at churn risk. */
+  atRiskAccountCount?: number;
   /** Customer invoices past their due date and not yet paid/void. */
   overdueInvoiceCount?: number;
   marketingWork: {
@@ -90,6 +96,17 @@ export function buildRevenueCockpitSummary(input: RevenueCockpitInput): RevenueC
       id: "overdue-invoices",
       label: `${overdueInvoices} invoice${overdueInvoices === 1 ? " is" : "s are"} past due — chase payment`,
       href: "/finance/invoices",
+      tone: "danger",
+    });
+  }
+
+  // Retention-first: protecting existing recurring revenue outranks new-lead triage.
+  const atRiskAccounts = input.atRiskAccountCount ?? 0;
+  if (atRiskAccounts > 0) {
+    attentionItems.push({
+      id: "accounts-at-risk",
+      label: `${atRiskAccounts} customer${atRiskAccounts === 1 ? " is" : "s are"} at churn risk — reach out before renewal`,
+      href: "/customer",
       tone: "danger",
     });
   }
@@ -144,8 +161,22 @@ export function buildRevenueCockpitSummary(input: RevenueCockpitInput): RevenueC
     });
   }
 
+  const mrr = input.mrr ?? 0;
   return {
     metrics: [
+      // Recurring revenue is the retain-stage center of gravity — lead with it when present.
+      ...(mrr > 0
+        ? [
+            {
+              id: "recurring-revenue",
+              label: "Recurring revenue",
+              value: formatRevenueAmount(mrr, currency),
+              detail: `${formatRevenueAmount(input.arr ?? mrr * 12, currency)} ARR`,
+              href: "/customer",
+              tone: "success" as CrmTone,
+            },
+          ]
+        : []),
       {
         id: "engagements",
         label: "Engagements",
