@@ -69,6 +69,18 @@ test("enrolls the five generators required by BI-48768E05", () => {
   }
 });
 
+test("enrolls the route-derived registry chain (BI-34D69270)", () => {
+  const ids = new Set(DERIVED_ARTIFACTS.map((e) => e.id));
+  // All four must be present, in dependency order, so a route change regenerates
+  // the whole chain at commit time (the #4295 latent-main-red class).
+  const chain = ["route-manifest", "route-audience", "route-shells", "page-purpose"];
+  for (const expected of chain) {
+    assert.ok(ids.has(expected), `missing registry entry: ${expected}`);
+  }
+  const order = DERIVED_ARTIFACTS.map((e) => e.id).filter((id) => chain.includes(id));
+  assert.deepEqual(order, chain, "route chain must be in dependency order (downstream reads upstream)");
+});
+
 test("sbom-baseline is registered with autoStage disabled (judgment call, not a pure function of sources)", () => {
   const entry = DERIVED_ARTIFACTS.find((e) => e.id === "sbom-baseline");
   assert.equal(entry.autoStage, false);

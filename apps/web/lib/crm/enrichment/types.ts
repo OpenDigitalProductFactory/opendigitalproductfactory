@@ -62,6 +62,37 @@ export type EnrichmentFinding = {
   sourceRef: string;
   /** 0..1 self-reported confidence; informational, not a gate. */
   confidence?: number;
+  /** ISO timestamp the value was observed — drives per-field freshness. */
+  retrievedAt?: string;
+  /** The passage the value was read from — provenance beyond the bare URL. */
+  supportingPassage?: string;
+};
+
+/**
+ * The identity "anchor" of a company record or a researched entity
+ * (BI-E2449835). Used to confirm the researched company is the SAME entity as
+ * the thin record before any field is harvested — a same-named different
+ * company is the classic way enrichment poisons a record.
+ */
+export type EnrichmentAnchor = {
+  domain?: string | null;
+  name?: string | null;
+  location?: string | null;
+};
+
+/**
+ * The result of comparing a record's anchor against a researched anchor.
+ * `conflict` (a domain mismatch) hard-blocks the proposal; `weak` proceeds but
+ * is surfaced for human confirmation at the review step.
+ */
+export type IdentityMatch = {
+  /** 0..1 confidence the two anchors are the same entity. */
+  score: number;
+  /** Signals that agreed, e.g. ["domain","name"]. */
+  agreements: string[];
+  /** Signals that conflicted, e.g. ["domain"]. */
+  conflicts: string[];
+  verdict: "agree" | "weak" | "conflict";
 };
 
 /**
@@ -108,6 +139,10 @@ export type EnrichmentFieldChange = {
   proposed: string;
   source: EnrichmentSourceKind;
   sourceRef: string;
+  /** Provenance tuple (BI-E2449835): carried from the finding for audit. */
+  confidence?: number;
+  retrievedAt?: string;
+  supportingPassage?: string;
 };
 
 /** A field the human asked to fill that could not be verified from any source. */
@@ -129,6 +164,18 @@ export type EnrichmentProposal = {
   /** Findings dropped by the no-fabrication guard (field + why). */
   rejected: Array<{ field: EnrichableField; value: string; reason: string }>;
   scope: EnrichmentScope;
+  /** Identity-resolution verdict (BI-E2449835). */
+  identity: IdentityMatch;
+  /**
+   * Set when the proposal was BLOCKED before harvesting because the researched
+   * entity does not match the record (a domain conflict — likely a same-named
+   * different company). When present, `changes` is empty and nothing is filed.
+   */
+  blocked?: {
+    reason: string;
+    recordAnchor: EnrichmentAnchor;
+    researchedAnchor: EnrichmentAnchor;
+  };
 };
 
 /** Structured `reasons` payload persisted on the enrichment MdmStewardTask. */

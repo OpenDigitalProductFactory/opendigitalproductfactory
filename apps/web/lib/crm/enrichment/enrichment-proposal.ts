@@ -13,8 +13,10 @@
  * files it to the steward queue and (on approval) applies it with provenance.
  */
 import { evaluateMaterializability } from "./no-fabrication";
+import { assessIdentity } from "./identity-resolution";
 import {
   type EnrichableField,
+  type EnrichmentAnchor,
   type EnrichmentFieldChange,
   type EnrichmentFinding,
   type EnrichmentGap,
@@ -31,6 +33,12 @@ export type BuildProposalInput = {
   current: Record<string, unknown>;
   findings: EnrichmentFinding[];
   scope: EnrichmentScope;
+  /**
+   * The identity the coworker resolved during research (domain it settled on,
+   * etc.). Optional — when omitted the anchor is inferred from a `website`
+   * finding. Used by the identity-resolution gate (BI-E2449835).
+   */
+  anchor?: EnrichmentAnchor | null;
 };
 
 function currentString(current: Record<string, unknown>, field: EnrichableField): string | null {
@@ -53,6 +61,31 @@ function sameValue(a: string | null, b: string): boolean {
  */
 export function buildEnrichmentProposal(input: BuildProposalInput): EnrichmentProposal {
   const { recordKind, recordId, current, scope } = input;
+
+  // Identity-resolution gate (BI-E2449835): confirm the researched entity is the
+  // SAME company as the record BEFORE harvesting anything. A domain conflict is
+  // decisive — refuse and file nothing (a same-named different company).
+  const { recordAnchor, researchedAnchor, match } = assessIdentity(current, input.findings, input.anchor);
+  if (match.verdict === "conflict") {
+    return {
+      recordKind,
+      recordId,
+      changes: [],
+      unresolvedGaps: [],
+      rejected: [],
+      scope,
+      identity: match,
+      blocked: {
+        reason:
+          `Identity conflict: the record's domain (${recordAnchor.domain ?? "?"}) does not match the ` +
+          `researched domain (${researchedAnchor.domain ?? "?"}). This looks like a different company ` +
+          `with a similar name — confirm the right company before enriching.`,
+        recordAnchor,
+        researchedAnchor,
+      },
+    };
+  }
+
   const allowedFields = new Set<EnrichableField>(
     scope.fields.filter((f) => (enrichableFieldsFor(recordKind) as readonly string[]).includes(f)),
   );
@@ -94,6 +127,9 @@ export function buildEnrichmentProposal(input: BuildProposalInput): EnrichmentPr
       proposed: finding.value.trim(),
       source: finding.source,
       sourceRef: finding.sourceRef,
+      ...(finding.confidence !== undefined ? { confidence: finding.confidence } : {}),
+      ...(finding.retrievedAt ? { retrievedAt: finding.retrievedAt } : {}),
+      ...(finding.supportingPassage ? { supportingPassage: finding.supportingPassage } : {}),
     });
   }
   changes.sort((a, b) => a.field.localeCompare(b.field));
@@ -115,5 +151,5 @@ export function buildEnrichmentProposal(input: BuildProposalInput): EnrichmentPr
   }
   unresolvedGaps.sort((a, b) => a.field.localeCompare(b.field));
 
-  return { recordKind, recordId, changes, unresolvedGaps, rejected, scope };
+  return { recordKind, recordId, changes, unresolvedGaps, rejected, scope, identity: match };
 }
