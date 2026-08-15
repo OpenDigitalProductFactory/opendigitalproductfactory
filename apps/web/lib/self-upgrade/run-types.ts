@@ -17,6 +17,8 @@ export type SelfUpgradeRunStatus =
   | "completing"
   | "rolled_back";
 
+import type { RunImpactDigest } from "@/lib/self-upgrade/impact/types";
+
 export type LatestRun = {
   runId: string;
   status: string;
@@ -30,6 +32,15 @@ export type LatestRun = {
   completionEvidence?: unknown;
   failureLog: string | null;
   createdAt: Date | string;
+  /** The impact summary this run carried, when one was recorded at launch. */
+  impactSummaryId?: string | null;
+  /**
+   * "What did this run carry?" — the headline + counts persisted with the run,
+   * so Run History answers which upgrade introduced a change instead of leaving
+   * an operator to correlate a SHA pair by hand. Null when no summary was
+   * recorded (a scheduled run that never generated one).
+   */
+  impact?: RunImpactDigest | null;
 };
 
 export type QuiescenceBlockerLine = {

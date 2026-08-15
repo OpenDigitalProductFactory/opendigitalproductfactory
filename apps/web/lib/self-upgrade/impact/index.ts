@@ -18,6 +18,7 @@ import { cacheKey, getCached, setCached } from "./cache";
 import {
   getPersistedSummary,
   getPersistedSummaryById,
+  getPersistedSummaryDigests,
   getPersistedSummaryRow,
   persistSummary,
 } from "./store";
@@ -277,6 +278,37 @@ export async function loadRunImpactDigest(
   if (!summary) return null;
   const headline = summary.phrased?.headline?.trim();
   return { counts: summary.counts, headline: headline ? headline : null };
+}
+
+/**
+ * Digests for a page of runs — "what did each past upgrade carry?".
+ *
+ * Keyed by the run's OWN `impactSummaryId` for the same reason
+ * `loadRunImpactDigest` is: a completed run must keep showing the changes IT
+ * applied, and a (lineage, target) re-derivation drifts as soon as the upstream
+ * target advances past that run's endpoints. One batched read for the whole
+ * page, projected in Postgres, so the history table does not fan out into a
+ * query per row or ship every item of every summary.
+ */
+export async function loadRunImpactDigests(
+  impactSummaryIds: Array<string | null | undefined>,
+): Promise<Map<string, RunImpactDigest>> {
+  const ids = impactSummaryIds.filter((id): id is string => !!id);
+  if (ids.length === 0) return new Map();
+  return getPersistedSummaryDigests(ids).catch(() => new Map());
+}
+
+/**
+ * The full persisted summary a given run carried — the item-level detail behind
+ * a Run History row, loaded on demand when the operator expands it. Returns
+ * null when the run recorded no summary (a scheduled run that never generated
+ * one) or the row has since been removed.
+ */
+export async function loadRunImpactSummary(
+  impactSummaryId: string | null | undefined,
+): Promise<UpgradeImpactSummary | null> {
+  if (!impactSummaryId) return null;
+  return getPersistedSummaryById(impactSummaryId).catch(() => null);
 }
 
 /**

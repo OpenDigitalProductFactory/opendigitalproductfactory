@@ -7,6 +7,7 @@ import { CoworkerActivityInspectionLink } from "./CoworkerActivityInspectionLink
 import UpgradeImpactPanel from "@/components/ops/UpgradeImpactPanel";
 import type { SummaryResult, RunImpactDigest } from "@/lib/self-upgrade/impact/types";
 import { UpgradeScopeRibbon } from "@/components/ops/UpgradeScopeRibbon";
+import { RunImpactDetail } from "@/components/ops/RunImpactDetail";
 import { StatusBadge } from "@/components/ui/report-kit";
 import { describeSkipReason } from "@/lib/self-upgrade/skip-reason";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
@@ -1097,6 +1098,21 @@ export default function SelfUpgradeClient({
                           >
                             {reasonText}
                           </span>
+                        </td>
+                      </tr>
+                    )}
+                    {/* What this run actually carried. A SHA pair cannot answer
+                        "which upgrade introduced this?" — the summary the run
+                        recorded can, and it is already persisted against the
+                        run. The item-level detail loads only when expanded. */}
+                    {run.impact && (
+                      <tr data-run-impact-for={run.runId}>
+                        <td />
+                        <td colSpan={3} className="px-3 pb-2 pt-0 align-top">
+                          <RunImpactDetail
+                            runId={run.runId}
+                            digest={run.impact}
+                          />
                         </td>
                       </tr>
                     )}

@@ -8,7 +8,7 @@ apps/web/components/agent/AgentMessageInput.tsx	1034
 apps/web/components/ea/EaCanvas.tsx	1047
 apps/web/components/inventory/TopologyGraph.tsx	1030
 apps/web/components/ops/SelfUpgradeClient.test.tsx	1118
-apps/web/components/ops/SelfUpgradeClient.tsx	1123
+apps/web/components/ops/SelfUpgradeClient.tsx	1139
 apps/web/components/platform/EffectivePermissionsPanel.tsx	844
 apps/web/components/platform/edge-nodes/EdgeNodesAdminClient.tsx	923
 apps/web/components/storefront/SlotBookingFlow.tsx	1015
@@ -22,12 +22,12 @@ apps/web/lib/actions/ai-providers.ts	914
 apps/web/lib/actions/build-governed.test.ts	1149
 apps/web/lib/actions/build.ts	1744
 apps/web/lib/actions/compliance.ts	867
-apps/web/lib/actions/crm.ts	1068
+apps/web/lib/actions/crm.ts	1043
 apps/web/lib/actions/ea.ts	918
 apps/web/lib/actions/mcp-tokens.test.ts	1254
 apps/web/lib/actions/platform-dev-config.ts	1254
-apps/web/lib/actions/promotions.self-upgrade.test.ts	1022
-apps/web/lib/actions/promotions.ts	948
+apps/web/lib/actions/promotions.self-upgrade.test.ts	1098
+apps/web/lib/actions/promotions.ts	994
 apps/web/lib/actions/tax-remittance.test.ts	1080
 apps/web/lib/actions/tax-remittance.ts	978
 apps/web/lib/ai-operations-map/load-map-data.test.ts	928

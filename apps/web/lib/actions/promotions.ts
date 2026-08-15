@@ -14,7 +14,16 @@ import { resolveTargetSha, isShaFresh } from "@/lib/self-upgrade/version";
 import { getDeployedSha } from "@/lib/self-upgrade/completion";
 import { getJobEngineHealth } from "@/lib/queue/job-engine-health";
 import { createRun, failRun, getLatestRun, getLatestSucceededRun } from "@/lib/self-upgrade/run-store";
-import { getCurrentImpactSummaryId, loadRunImpactDigest } from "@/lib/self-upgrade/impact";
+import {
+  getCurrentImpactSummaryId,
+  loadRunImpactDigest,
+  loadRunImpactDigests,
+  loadRunImpactSummary,
+} from "@/lib/self-upgrade/impact";
+import type {
+  RunImpactDigest,
+  UpgradeImpactSummary,
+} from "@/lib/self-upgrade/impact/types";
 import {
   isStoreOpen,
   isUpgradeWindowOpen,
@@ -532,6 +541,14 @@ export type SelfUpgradeRunDto = {
   completedAt: Date | null;
   failureLog: string | null;    // schema: failureLog (was: error)
   createdAt: Date;
+  /** The summary this run carried, when one was recorded at launch. */
+  impactSummaryId?: string | null;
+  /**
+   * "What did this run carry?" — headline + counts for the history row, so an
+   * adverse change can be traced back to the upgrade that introduced it without
+   * a DB read. Null when the run recorded no summary.
+   */
+  impact?: RunImpactDigest | null;
 };
 
 export async function listSelfUpgradeRuns(opts?: {
@@ -560,13 +577,42 @@ export async function listSelfUpgradeRuns(opts?: {
       completedAt: true,
       failureLog: true,
       createdAt: true,
+      impactSummaryId: true,
     },
   });
 
   const hasNext = rows.length > limit;
-  const runs = hasNext ? rows.slice(0, limit) : rows;
-  const nextCursor = hasNext ? runs[runs.length - 1].runId : null;
+  const page = hasNext ? rows.slice(0, limit) : rows;
+  const nextCursor = hasNext ? page[page.length - 1].runId : null;
+
+  // One batched, Postgres-projected read for the whole page — never a query per
+  // row, and never the full item list of every summary (see
+  // getPersistedSummaryDigests). Best-effort: a digest read failure leaves the
+  // rows as they were rather than failing the history table.
+  const digests = await loadRunImpactDigests(page.map((r) => r.impactSummaryId));
+  const runs = page.map((run) => ({
+    ...run,
+    impact: run.impactSummaryId ? (digests.get(run.impactSummaryId) ?? null) : null,
+  }));
+
   return { runs, nextCursor };
+}
+
+/**
+ * The item-level detail behind one Run History row, fetched only when the
+ * operator expands it. Read-only, ops-gated, and loaded by the run's OWN
+ * recorded summary id — so a completed run keeps reporting the changes it
+ * applied even after upstream has moved on.
+ */
+export async function getSelfUpgradeRunImpact(
+  runId: string,
+): Promise<UpgradeImpactSummary | null> {
+  await requireOpsAccess();
+  const run = await prisma.selfUpgradeRun.findUnique({
+    where: { runId },
+    select: { impactSummaryId: true },
+  });
+  return loadRunImpactSummary(run?.impactSummaryId ?? null);
 }
 
 export async function getSelfUpgradeStatus() {
