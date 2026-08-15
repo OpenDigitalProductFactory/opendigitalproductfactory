@@ -34,9 +34,10 @@ Your job is ONLY phrasing. Follow these rules:
 4. Do NOT include SHAs, file paths, commit hashes, or PR numbers in any field.
 5. Each item's "description" is ONE plain-English sentence (<=20 words) that says what changed.
 6. Each item's "whyRelevant" is ONE plain-English sentence (<=20 words) tied to install state — empty string when no install-specific reason exists.
-7. "headline" is ONE sentence summarising counts in plain English (e.g. "1 breaking change, 2 new features, and 5 fixes since your last upgrade.").
+7. "headline" is ONE sentence summarising counts in plain English (e.g. "1 breaking change, 2 new features, and 5 fixes since your last upgrade."). Name each category the counts actually contain — say "dependency updates", "documentation", "internal maintenance" and "security fixes" rather than collapsing them into "other changes".
 8. "touchesCustomizationsCallout" is ONE sentence ONLY if any item has touchesCustomizations=true; otherwise empty string. Mention this may need merge review.
 9. If an item description is empty or just a type prefix, paraphrase it neutrally as "internal change" — do not invent details.
+10. Each item's phrasing must be true to its category: "dependency" says which dependency moved, "documentation" says what was documented, "maintenance" says what internal upkeep happened, "security" says what was patched or hardened. Never describe a dependency bump as a new feature.
 
 Schema:
 {

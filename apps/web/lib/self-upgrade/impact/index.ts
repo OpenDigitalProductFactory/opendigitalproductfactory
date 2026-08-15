@@ -25,6 +25,7 @@ import { collectChangeSet } from "./change-set";
 import { collectInstallSignals } from "./install-signals";
 import { parseCommits } from "./conventional";
 import { countCategories } from "./classify";
+import { refineCategories } from "./refine";
 import { enrichPrs } from "./pr-enrich";
 import { orderByImpact, scoreCommits } from "./score";
 import { phraseSummary } from "./phrase";
@@ -184,14 +185,19 @@ export async function summarizeUpgradeImpact(
 
   // No commits but range was valid (e.g. fast-forward with no merge commits)
   // — still surface a usable summary with empty items.
-  const commits = parseCommits(raw);
-  const counts = countCategories(commits);
+  const parsed = parseCommits(raw);
   const signals = await loadInstallSignals();
 
-  const prNumbers = commits
+  const prNumbers = parsed
     .map((c) => c.prNumber)
     .filter((n): n is number => typeof n === "number");
   const enrichment = await enrich(prNumbers);
+
+  // Categories are settled only after PR enrichment — a `build(deps)` bump that
+  // closes an advisory is a security change, and only the PR says so. Counts
+  // MUST be taken after this pass or the headline and the badges disagree.
+  const commits = refineCategories(parsed, enrichment.byPr);
+  const counts = countCategories(commits);
 
   const scored = scoreCommits({
     commits,

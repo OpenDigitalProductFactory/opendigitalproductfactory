@@ -17,11 +17,26 @@
 // is grounded against. The LLM only PHRASES — never invents items, never
 // reorders, never changes categories.
 
+/**
+ * Operator-facing change buckets.
+ *
+ * `other` is the honest fallback for a subject we could not parse — NOT a
+ * catch-all. Docs, dependency bumps and internal maintenance each get their own
+ * bucket because they are different operator concerns: a dependency bump is a
+ * supply-chain event worth a second look, a docs commit is not, and lumping
+ * them together made the panel render a wall of identical "OTHER" badges while
+ * the headline could plainly say "1 documentation addition and 4 dependency
+ * updates".
+ */
 export type ChangeCategory =
   | "breaking"
+  | "security"
   | "feature"
   | "fix"
   | "performance"
+  | "dependency"
+  | "documentation"
+  | "maintenance"
   | "other";
 
 export type ConventionalType =
@@ -67,11 +82,21 @@ export type ParsedCommit = RawCommit & {
   category: ChangeCategory;
 };
 
+/**
+ * Per-category tallies. Every key is present on a freshly computed summary, but
+ * summaries persisted under the earlier (breaking/feature/fix/performance/other)
+ * taxonomy are replayed from JSON and carry only those keys — every reader must
+ * therefore treat a missing key as 0 rather than assume presence.
+ */
 export type ImpactCategoryCounts = {
   breaking: number;
+  security: number;
   feature: number;
   fix: number;
   performance: number;
+  dependency: number;
+  documentation: number;
+  maintenance: number;
   other: number;
   total: number;
 };
