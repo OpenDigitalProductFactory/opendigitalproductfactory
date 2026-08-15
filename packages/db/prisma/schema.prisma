@@ -8457,8 +8457,10 @@ model LifecycleEvent {
   governedThingId   String
   fromStage         String? // LifecycleStage | null
   toStage           String? // LifecycleStage | null
-  fromStatus        String? // LifecycleStatus | null
-  toStatus          String? // LifecycleStatus | null
+  fromStatus        String? // LifecycleStatus | null (closed canonical enum)
+  toStatus          String? // LifecycleStatus | null (closed canonical enum)
+  fromState         String? // open per-grammar StageState.key, NOT a canonical enum (lifecycle-grammar.ts)
+  toState           String? // open per-grammar StageState.key, NOT a canonical enum (lifecycle-grammar.ts)
   reason            String?        @db.Text
   evidenceRef       String? // pointer to corroborating evidence (discovery run, probe, etc.)
   actorPrincipalId  String?
