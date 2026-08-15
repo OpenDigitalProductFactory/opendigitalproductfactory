@@ -5,7 +5,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { buildTokenRegex, scan, parseBaseline, diff } from "./check-no-private-identity.mjs";
+import { buildTokenRegex, scan, parseBaseline, diff, scanStaged } from "./check-no-private-identity.mjs";
 
 // A fixture token that is NOT a real protected name, so the test never depends
 // on the live denylist.
@@ -62,5 +62,55 @@ test("diff flags a new file and a grown file, ignores a shrunk file", () => {
 test("diff is clean when everything is at or below baseline", () => {
   const { grew, fresh } = diff({ "a.md": 1 }, { "a.md": 2 });
   assert.equal(grew.length, 0);
+  assert.equal(fresh.length, 0);
+});
+
+// ─── Staged (pre-commit) tripwire — BI-C9E5E7D9 ──────────────────────────────
+
+test("scanStaged counts tokens per staged file and records the matched tokens", () => {
+  const re = buildTokenRegex(TOKENS);
+  const { counts, tokensByFile } = scanStaged(re, {
+    files: ["docs/spec.md", "apps/web/lib/x.ts"],
+    readBlob: (rel) =>
+      rel === "docs/spec.md" ? "AcmeCorp ships. acmecorp again." : "no token here",
+  });
+  assert.deepEqual(counts, { "docs/spec.md": 2 });
+  assert.deepEqual(tokensByFile["docs/spec.md"], ["acmecorp"]);
+});
+
+test("scanStaged honors SCAN_EXT / SCAN_DIRS / SELF_EXCLUDE like the CI scan", () => {
+  const re = buildTokenRegex(TOKENS);
+  const { counts } = scanStaged(re, {
+    files: [
+      "README.md",                                   // outside SCAN_DIRS → ignored
+      "docs/logo.png",                               // non-scannable ext → ignored
+      "scripts/private-identity-tokens.txt",         // self-exclude → ignored
+      "packages/db/notes.md",                        // scanned
+    ],
+    readBlob: () => "AcmeCorp",
+  });
+  assert.deepEqual(counts, { "packages/db/notes.md": 1 });
+});
+
+test("staged diff blocks a NEW file but allows a legitimately-baselined occurrence", () => {
+  const re = buildTokenRegex(TOKENS);
+  const { counts } = scanStaged(re, {
+    files: ["docs/new-leak.md", "docs/baselined.md"],
+    readBlob: () => "AcmeCorp",
+  });
+  const baseline = { "docs/baselined.md": 1 };
+  const { grew, fresh } = diff(counts, baseline);
+  assert.deepEqual(fresh, ["docs/new-leak.md (1)"]); // new file → blocked
+  assert.equal(grew.length, 0);                      // baselined occurrence → allowed
+});
+
+test("staged diff flags a grown count in an already-baselined file", () => {
+  const re = buildTokenRegex(TOKENS);
+  const { counts } = scanStaged(re, {
+    files: ["docs/baselined.md"],
+    readBlob: () => "AcmeCorp and AcmeCorp",
+  });
+  const { grew, fresh } = diff(counts, { "docs/baselined.md": 1 });
+  assert.deepEqual(grew, ["docs/baselined.md (1 -> 2)"]);
   assert.equal(fresh.length, 0);
 });

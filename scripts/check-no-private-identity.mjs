@@ -33,6 +33,7 @@
 import { readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { execFileSync } from "node:child_process";
 
 const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const TOKENS_PATH = join(REPO_ROOT, "scripts", "private-identity-tokens.txt");
@@ -145,6 +146,74 @@ function serialize(counts) {
   return `${keys.map((k) => `${k}\t${counts[k]}`).join("\n")}\n`;
 }
 
+// ─── Staged (pre-commit) mode ────────────────────────────────────────────────
+// The full scan above is the REQUIRED merge-gate backstop. This staged mode is
+// the earlier, faster tripwire (BI-C9E5E7D9): it scans ONLY the staged snapshot
+// of the files in this commit and compares against the same baseline, so a NEW
+// private-identity token is caught at `git commit` time — naming the file AND the
+// token — instead of at the late CI/merge gate after a full green run. Same
+// ratchet semantics: legitimate baselined occurrences never block.
+
+/** Staged file paths (repo-relative, forward slashes); added/copied/modified/renamed. */
+export function stagedFiles({ repoRoot = REPO_ROOT } = {}) {
+  let out;
+  try {
+    out = execFileSync(
+      "git",
+      ["diff", "--cached", "--name-only", "--diff-filter=ACMR", "-z"],
+      { cwd: repoRoot, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 },
+    );
+  } catch {
+    return [];
+  }
+  return out
+    .split("\0")
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .map((p) => p.replace(/\\/g, "/"));
+}
+
+/** Read a file's STAGED (index) content, not the working-tree copy. */
+function readStagedBlob(relPath, repoRoot) {
+  try {
+    return execFileSync("git", ["show", `:${relPath}`], {
+      cwd: repoRoot,
+      encoding: "utf8",
+      maxBuffer: 64 * 1024 * 1024,
+    });
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Per-file token counts + the distinct matched tokens, over the STAGED content of
+ * the given files (defaults to the current commit's staged files). Only files
+ * under the scanned trees with a scannable extension, minus the self-exclude set —
+ * exactly the CI scan's inclusion rules, so the two agree on what counts.
+ */
+export function scanStaged(regex, { repoRoot = REPO_ROOT, files, readBlob } = {}) {
+  const counts = {};
+  const tokensByFile = {};
+  if (!regex) return { counts, tokensByFile };
+  const read = readBlob ?? ((rel) => readStagedBlob(rel, repoRoot));
+  const list = files ?? stagedFiles({ repoRoot });
+  for (const rel of list) {
+    if (SELF_EXCLUDE.has(rel)) continue;
+    if (!SCAN_EXT.has(ext(rel))) continue;
+    if (!SCAN_DIRS.some((d) => rel === d || rel.startsWith(`${d}/`))) continue;
+    const body = read(rel);
+    if (body == null) continue;
+    regex.lastIndex = 0;
+    const matches = body.match(regex) ?? [];
+    if (matches.length > 0) {
+      counts[rel] = matches.length;
+      tokensByFile[rel] = [...new Set(matches.map((m) => m.toLowerCase()))];
+    }
+  }
+  return { counts, tokensByFile };
+}
+
 /** Parse `<path>\t<count>` lines; union-merge duplicates resolve to MAX. */
 export function parseBaseline(text) {
   const counts = {};
@@ -182,6 +251,43 @@ function main() {
     process.exit(1);
   }
   const regex = buildTokenRegex(tokenText);
+
+  // ── Staged tripwire (pre-commit): scan only this commit's staged files ──
+  if (process.argv.includes("--staged")) {
+    let baseline;
+    try {
+      baseline = parseBaseline(readFileSync(BASELINE_PATH, "utf8"));
+    } catch {
+      // No baseline yet (fresh clone / bootstrap): treat every occurrence as new.
+      baseline = {};
+    }
+    const { counts, tokensByFile } = scanStaged(regex);
+    const { grew, fresh } = diff(counts, baseline);
+    if (grew.length === 0 && fresh.length === 0) {
+      console.log("✓ No new private-identity tokens in the staged files.");
+      return;
+    }
+    console.error("");
+    console.error("ERROR: a protected private-identity token is in your staged changes.");
+    console.error("");
+    console.error("Caught at commit time (before push) so you can fix it now instead of");
+    console.error("after a full CI run. Genericize it — use an approved placeholder");
+    console.error("(operator, operator/owner, customer 0, this operator install). See");
+    console.error("docs/operations/oss-repo-identity-hygiene.md.");
+    console.error("");
+    for (const entry of [...fresh, ...grew]) {
+      const file = entry.split(" ")[0];
+      const toks = tokensByFile[file] ? ` — token(s): ${tokensByFile[file].join(", ")}` : "";
+      console.error(`  - ${entry}${toks}`);
+    }
+    console.error("");
+    console.error("If this reference is genuinely legitimate and operator-approved, run");
+    console.error("`node scripts/check-no-private-identity.mjs --update` to retighten the");
+    console.error("baseline and call it out in the PR description. To bypass in an");
+    console.error("emergency: DPF_SKIP_PRIVATE_IDENTITY_SCAN=1 git commit ...");
+    process.exit(1);
+  }
+
   const current = scan(regex);
 
   if (process.argv.includes("--update")) {
