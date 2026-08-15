@@ -1013,6 +1013,9 @@
     "apps/web/lib/tak/delegation-authority.ts": [
       "docs/prompts/a2a-coworker-substrate-prompt.md"
     ],
+    "apps/web/lib/tak/escalation-ladder.ts": [
+      "docs/platform-usability-standards.md"
+    ],
     "apps/web/lib/tak/prompt-assembler.ts": [
       "docs/architecture/agent-standards-dpf-conformance.md",
       "docs/platform-usability-standards.md"
@@ -2535,6 +2538,7 @@
       "apps/web/lib/shared/use-save-state.test.ts",
       "apps/web/lib/shared/use-save-state.ts",
       "apps/web/lib/shell/shell-action-contract.ts",
+      "apps/web/lib/tak/escalation-ladder.ts",
       "apps/web/lib/tak/prompt-assembler.ts",
       "apps/web/lib/ux-budget/measure.ts",
       "apps/web/lib/workforce/oversight-copy.ts",
