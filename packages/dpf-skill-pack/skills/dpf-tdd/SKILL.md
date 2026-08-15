@@ -1,6 +1,6 @@
 ---
 name: dpf-tdd
-description: "Use when building or fixing behavior in the DPF codebase and you want the test to define done before the code exists. Red-green-refactor, DPF-governed: for a bug/regression, write the failing test that reproduces it FIRST (generalizes security-fix-needs-regression-test-first); prove green functionally (a structural pass is not verification); never report a test passing you did not run. The DPF-native test-first discipline; replaces the retired upstream superpowers test-driven-development dependency."
+description: "Use for DPF test-first work. Write the failing behavior test first, make it green, refactor, then run the functional gate; never claim an unrun test passed."
 
 # Agent Skills standard fields (Surface A — Claude Code)
 disable-model-invocation: false

@@ -1,5 +1,4 @@
-import type { CapabilityKey } from "@/lib/permissions";
-import { can, type UserContext } from "@/lib/permissions";
+import { can, type CapabilityKey, type UserContext } from "@/lib/permissions";
 import { prisma } from "@dpf/db";
 import { ENTERPRISE_ARCHITECT_DISPLAY_NAME } from "@dpf/db/agent-identity";
 // Static import: executeTool is a hot path; dynamic import per call would hurt throughput.
@@ -39,9 +38,10 @@ import {
 } from "@/lib/integrate/sandbox/sandbox-admin-types";
 import { getToolMarketplaceReadiness } from "@/lib/actions/tool-marketplace-readiness";
 import { inferProviderIdFromRouteContext } from "@/lib/ai-provider-route-context";
+import type { AuthorizedSurfaceToolExecutionContext } from "@/lib/coworker/authorized-surface-execution-types";
 // ─── Types ───────────────────────────────────────────────────────────────────
 export type BuildPhaseTag = "ideate" | "plan" | "build" | "review" | "ship";
-type ToolExecutionContext = {
+export type ToolExecutionContext = AuthorizedSurfaceToolExecutionContext & {
   routeContext?: string;
   agentId?: string;
   threadId?: string;

@@ -39,9 +39,11 @@ Specs and PRs that add KPI tiles, report tables, engagement rollups, multi-adapt
 ## How To Apply
 
 1. **Authorize once** at the page/action/MCP tool boundary for the calling principal.
-2. **Join on canonical ids** — document the join path in the schema audit; do not invent parallel customer/org keys in the report layer.
-3. **Partial results** — when an adapter or source is unavailable, return structured partials (e.g. `raw.unsupported` / empty series + reason) so the UI can render what it has; never invent zeros that look like real metrics.
-4. **Compose report-kit** — `StatusBadge`, `DataTable`, `StatCard`, charts via the shared palette; status colors through `statusColors`.
+2. **Join on canonical ids** — document the join path in the schema audit. Normalize provider publication, thread, conversation, asset, and reply identifiers into the owning domain's canonical relationship before aggregation; never infer a join from incidental JSON metadata or invent parallel customer/org keys in the report layer.
+3. **Normalize at the adapter boundary** — an adapter emits provider-neutral domain facts and an explicit capability/maturity status. Maturity is an attribute of the same capability projection, not a parallel contract. Cross-channel KPI calculation, attribution, and joins belong to a shared domain read model or reporting service, not to a provider adapter, route, or page. The [channel capability rule](../../../architecture/orientation.md#channel-adapter-capabilities) remains the source for unsupported-operation signalling.
+4. **Return typed partials** — distinguish an expected no-match from an unavailable, failed, or stubbed source. Each partial identifies the source and carries an honest status and reason (for example `raw.unsupported` or an empty series plus reason); include freshness or retryability when the caller can act on it. Never invent zeros that look like real metrics.
+5. **Expose degradation** — propagate source status through the read model so user-facing surfaces and operational telemetry can show which sources are partial. When a stub becomes operational, update the adapter's capability/maturity projection; callers must not need a parallel recovery path or a rewritten aggregate.
+6. **Compose report-kit** — `StatusBadge`, `DataTable`, `StatCard`, charts via the shared palette; status colors through `statusColors`.
 
 ## Decision Dimensions
 
@@ -51,8 +53,13 @@ Specs and PRs that add KPI tiles, report tables, engagement rollups, multi-adapt
 
 ## Examples
 
+- **Positive:** A marketing performance loader authorizes once, resolves provider thread ids to canonical publications, asks adapters for normalized facts, and returns available metrics plus a labeled unavailable-source partial.
 - **Positive:** Delivery/Demand board loads via a server loader that scopes by principal and maps Prisma rows through pure view models; missing estimate columns fail soft to an empty board with a warn (not a 500).
 - **Counterexample:** A KPI card that imports a write-side CRM service from a client component and treats a failed channel fetch as zero revenue.
+
+## Boundary
+
+This principle owns reporting normalization, identity joins, aggregation placement, and partial-result propagation. It does not define provider method signatures, retry or timeout schedules, schema-migration/backfill strategy, or dashboard interaction timing; those remain explicit concerns of their owning integration, deployment, data, and UX contracts rather than being smuggled into a reporting read model.
 
 ## Sources
 

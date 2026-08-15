@@ -2,6 +2,11 @@
 // core math. Pure module — no I/O, no logging side effects. The Phase 2
 // Task 2.7 MCP handler is responsible for retrieving principles and
 // embeddings, then calling these primitives.
+
+import {
+  evaluateAutonomyEligibility,
+  measureFeatureCoverage,
+} from "./mcda-quality-gates";
 //
 // Spec: docs/superpowers/specs/2026-05-12-principles-as-wiki-kind-design.md §11
 // Plan: docs/superpowers/plans/2026-05-12-principles-as-wiki-kind.md (Phase 2 Tasks 2.5)
@@ -215,6 +220,39 @@ export type DecisionFlags = {
    * Optional so older stored result shapes remain valid.
    */
   insufficientSignal?: boolean;
+  /**
+   * BI-1D23EC26: true when any option has fewer than minFeatureKeys feature
+   * axes. Weak feature maps collapse structured discrimination — autonomy
+   * must not treat the result as unattended-safe.
+   */
+  featureCoverageWeak?: boolean;
+  /**
+   * BI-1D23EC26: true when ±ε one-at-a-time principle weight swings flip the
+   * recommended option (classic MCDA sensitivity). High-confidence claims
+   * require stability under this check.
+   */
+  sensitivityUnstable?: boolean;
+  /**
+   * BI-1D23EC26: true only when recommendation is high-confidence, coverage
+   * and structured signal are strong, sensitivity is stable, and no
+   * commandment conflict. Agents use this — not mere recommendation presence —
+   * as the unattended-proceed gate.
+   */
+  autonomyEligible?: boolean;
+  /** Blockers when autonomyEligible is false (machine-readable). */
+  autonomyBlockers?: string[];
+  /** Inspectable coverage metrics (optional; present on full decide() path). */
+  featureCoverage?: {
+    minKeys: number;
+    meanKeys: number;
+    minFeatureKeysRequired: number;
+    meanMissingDimensionRatio: number;
+  };
+  /** Inspectable sensitivity metrics (optional). */
+  sensitivity?: {
+    epsilon: number;
+    flippingPrincipleCount: number;
+  };
 };
 
 export type DecisionRecommendation = {
@@ -244,11 +282,23 @@ export type DecideConfig = {
    * without flagging routine small negatives.
    */
   commandmentConflictThreshold?: number;
+  /**
+   * BI-1D23EC26: minimum feature axes each option should score. Default 3.
+   * Below this, featureCoverageWeak fires and confidence is forced low.
+   */
+  minFeatureKeys?: number;
+  /**
+   * BI-1D23EC26: relative weight swing for sensitivity (±ε). Default 0.1.
+   * Set to 0 to skip the sensitivity pass (tests / hot paths).
+   */
+  sensitivityEpsilon?: number;
 };
 
 const DEFAULT_TIE_MARGIN = 0.2;
 const DEFAULT_SEMANTIC_FALLBACK_WARN_RATIO = 0.4;
 const DEFAULT_COMMANDMENT_CONFLICT_THRESHOLD = 0.5;
+const DEFAULT_MIN_FEATURE_KEYS = 3;
+const DEFAULT_SENSITIVITY_EPSILON = 0.1;
 
 /**
  * Top-level advisory decision call. Wraps buildOptionScores with the
@@ -268,6 +318,9 @@ export function decide(
   const commandmentConflictThreshold =
     config.commandmentConflictThreshold ??
     DEFAULT_COMMANDMENT_CONFLICT_THRESHOLD;
+  const minFeatureKeys = config.minFeatureKeys ?? DEFAULT_MIN_FEATURE_KEYS;
+  const sensitivityEpsilon =
+    config.sensitivityEpsilon ?? DEFAULT_SENSITIVITY_EPSILON;
 
   const scores = buildOptionScores(options, principles);
 
@@ -281,6 +334,10 @@ export function decide(
       commandmentConflict: false,
       commandmentConflictPrinciples: [],
       insufficientSignal: false,
+      featureCoverageWeak: true,
+      sensitivityUnstable: false,
+      autonomyEligible: false,
+      autonomyBlockers: ["no_recommendation"],
     };
     const reasoning =
       principles.length === 0
@@ -307,6 +364,10 @@ export function decide(
       commandmentConflict: false,
       commandmentConflictPrinciples: [],
       insufficientSignal: true,
+      featureCoverageWeak: true,
+      sensitivityUnstable: false,
+      autonomyEligible: false,
+      autonomyBlockers: ["insufficient_signal", "feature_coverage_weak"],
     };
     return {
       recommendation: null,
@@ -321,7 +382,7 @@ export function decide(
   const winner = ranked[0];
   const runnerUpComposite = ranked[1]?.composite ?? winner.composite;
   const margin = winner.composite - runnerUpComposite;
-  const confidence: "high" | "low" = margin < tieMargin ? "low" : "high";
+  let confidence: "high" | "low" = margin < tieMargin ? "low" : "high";
 
   // Coverage: ratio of semantic-mode contributions across all option × principle pairs.
   const totalContribs = scores.reduce((sum, s) => sum + s.contributions.length, 0);
@@ -333,6 +394,48 @@ export function decide(
   const structuredCoverage: "strong" | "weak" =
     semanticFallbackRatio > semanticWarnRatio ? "weak" : "strong";
 
+  // BI-1D23EC26: feature coverage (MCDA performance matrix completeness).
+  const featureCoverage = measureFeatureCoverage(
+    options,
+    scores,
+    minFeatureKeys,
+  );
+  const featureCoverageWeak = featureCoverage.weak;
+
+  // BI-1D23EC26: ±ε one-at-a-time principle weight sensitivity.
+  let sensitivityUnstable = false;
+  let flippingPrincipleIds: string[] = [];
+  if (sensitivityEpsilon > 0) {
+    const factors = [
+      1 + sensitivityEpsilon,
+      Math.max(0, 1 - sensitivityEpsilon),
+    ];
+    for (const p of principles) {
+      let flipped = false;
+      for (const factor of factors) {
+        const perturbed = principles.map((q) =>
+          q.id === p.id ? { ...q, weight: q.weight * factor } : q,
+        );
+        const alt = buildOptionScores(options, perturbed);
+        if (alt.length === 0) continue;
+        const altWinner = [...alt].sort((a, b) => b.composite - a.composite)[0]
+          ?.optionId;
+        if (altWinner && altWinner !== winner.optionId) {
+          flipped = true;
+          break;
+        }
+      }
+      if (flipped) flippingPrincipleIds.push(p.id);
+    }
+    sensitivityUnstable = flippingPrincipleIds.length > 0;
+  }
+
+  // Force low confidence when coverage/sensitivity fail — still recommend
+  // for human review, but never claim high-confidence autonomy.
+  if (featureCoverageWeak || sensitivityUnstable) {
+    confidence = "low";
+  }
+
   // Commandment conflict against the top option.
   const conflictingPrinciples = winner.contributions
     .filter(
@@ -342,13 +445,42 @@ export function decide(
     )
     .map((c) => c.principleId);
 
-  const flags: DecisionFlags = {
+  const recommendation = {
+    optionId: winner.optionId,
+    composite: winner.composite,
+    margin,
+    confidence,
+  };
+
+  const provisionalFlags: DecisionFlags = {
     tieMargin,
     semanticFallbackRatio,
     structuredCoverage,
     commandmentConflict: conflictingPrinciples.length > 0,
     commandmentConflictPrinciples: conflictingPrinciples,
     insufficientSignal: false,
+    featureCoverageWeak,
+    sensitivityUnstable,
+    featureCoverage: {
+      minKeys: featureCoverage.minKeys,
+      meanKeys: featureCoverage.meanKeys,
+      minFeatureKeysRequired: featureCoverage.minFeatureKeysRequired,
+      meanMissingDimensionRatio: featureCoverage.meanMissingDimensionRatio,
+    },
+    sensitivity: {
+      epsilon: sensitivityEpsilon,
+      flippingPrincipleCount: flippingPrincipleIds.length,
+    },
+  };
+
+  const autonomy = evaluateAutonomyEligibility({
+    recommendation,
+    flags: provisionalFlags,
+  });
+  const flags: DecisionFlags = {
+    ...provisionalFlags,
+    autonomyEligible: autonomy.eligible,
+    autonomyBlockers: autonomy.blockers,
   };
 
   // Reasoning: name the winner, the top two contributing principles, and
@@ -367,7 +499,7 @@ export function decide(
   }
   if (confidence === "low") {
     parts.push(
-      `Margin is below tieMargin (${tieMargin}); the call is close — recommend owner review before committing.`,
+      `Margin is below tieMargin (${tieMargin}) or MCDA quality gates failed — recommend owner review before committing.`,
     );
   }
   if (flags.commandmentConflict) {
@@ -380,15 +512,23 @@ export function decide(
       `Structured coverage is weak (${Math.round(semanticFallbackRatio * 100)}% semantic fallback). Consider supplying explicit dimension features on the options.`,
     );
   }
+  if (featureCoverageWeak) {
+    parts.push(
+      `Feature coverage is weak (min ${featureCoverage.minKeys} axes; need ≥${minFeatureKeys} per option). Unattended autonomy is blocked.`,
+    );
+  }
+  if (sensitivityUnstable) {
+    parts.push(
+      `Weight sensitivity unstable: ±${sensitivityEpsilon} swing on ${flippingPrincipleIds.length} principle(s) flips the winner. Do not auto-execute.`,
+    );
+  }
+  if (autonomy.eligible) {
+    parts.push(`Autonomy eligible: quality gates passed.`);
+  }
   const reasoning = parts.join(" ");
 
   return {
-    recommendation: {
-      optionId: winner.optionId,
-      composite: winner.composite,
-      margin,
-      confidence,
-    },
+    recommendation,
     scores,
     flags,
     reasoning,

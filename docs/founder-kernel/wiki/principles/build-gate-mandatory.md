@@ -5,7 +5,7 @@ status: published
 abstract: Work is not complete until unit tests pass, the production build succeeds, UX is verified, and any new migration applies cleanly.
 principleTier: commandment
 principleDirection: Pass all four Build Gate checks before declaring work complete.
-principleDimensionVector: {"governance_compliance": 0.9, "evidence_density": 0.8, "blast_radius": -0.6}
+principleDimensionVector: {"governance_compliance": 0.9, "evidence_density": 0.8, "blast_radius": -0.6, "long_term_maintainability": 0.55, "evidence_confidence": 0.65}
 principleAppliesTo:
   - in_platform_coworker
   - external_coding_agent

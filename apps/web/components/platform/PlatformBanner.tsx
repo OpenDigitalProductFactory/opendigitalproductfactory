@@ -28,7 +28,7 @@ import {
   RefreshCw,
   X,
 } from "lucide-react";
-import { useResilientEventSource } from "@/lib/hooks/useResilientEventSource";
+import { useSystemEvent } from "@/components/platform/SystemEventProvider";
 
 type BannerState =
   | { kind: "hidden" }
@@ -59,20 +59,10 @@ export function PlatformBanner(): React.ReactElement | null {
   const [state, setState] = useState<BannerState>({ kind: "hidden" });
   const [collapsed, setCollapsed] = useState(false);
 
-  // Resilient SSE: the shared hook adds the heartbeat watchdog that reaps a
-  // zombie connection after a portal rebuild (BI-864E83B0). Transient
-  // disconnects don't change banner state — the previous state persists and
-  // the hook reconnects underneath.
-  useResilientEventSource("/api/agent/system-stream", {
-    onMessage: (msg) => {
-      let event: SystemQuiescenceEvent;
-      try {
-        event = JSON.parse(msg.data) as SystemQuiescenceEvent;
-      } catch {
-        return;
-      }
-      if (event.type !== "system:quiescence") return;
-
+  // The shell-owned SystemEventProvider holds the one resilient system stream
+  // for this tab. Banner, readiness, and live-operation consumers fan out from
+  // it without consuming additional HTTP/1.1 connection slots.
+  useSystemEvent("system:quiescence", (event: SystemQuiescenceEvent) => {
       if (event.level === "draining") {
         setState({ kind: "preparing", runId: event.runId, swapEtaSeconds: event.swapEtaSeconds });
       } else if (event.level === "swapping") {
@@ -93,7 +83,6 @@ export function PlatformBanner(): React.ReactElement | null {
           setTimeout(() => setState({ kind: "hidden" }), 60_000);
         }
       }
-    },
   });
 
   useEffect(() => {

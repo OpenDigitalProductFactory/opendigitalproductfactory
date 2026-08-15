@@ -661,23 +661,13 @@ describe("governedExecuteTool — coworker read-baseline at execution time", () 
 
 describe("governedExecuteTool — Work Case receipt context", () => {
   const WORK_CASE_CONTEXT = {
-    caseRef: {
-      caseId: "backlog-item:BI-1",
-      sourceType: "backlog-item",
-      sourceId: "BI-1",
-    },
+    caseRef: { caseId: "backlog-item:BI-1", sourceType: "backlog-item", sourceId: "BI-1" },
     sourceKey: "backlog-item",
     action: "complete",
-    currentState: {
-      state: "active",
-      terminal: false,
-    },
+    currentState: { state: "active", terminal: false },
     envelope: {
       autonomyMode: "autonomous",
-      receiptPolicy: {
-        required: true,
-        kind: "governed-action",
-      },
+      receiptPolicy: { required: true, kind: "governed-action" },
     },
   } as const;
 
@@ -694,6 +684,7 @@ describe("governedExecuteTool — Work Case receipt context", () => {
   });
 
   it("mints a governed Work Case receipt for successful consequential actions", async () => {
+    const receiptUpdates: AuditRow[] = [];
     _setGovernanceForTests({
       resolveAgentGrants: async () => ["backlog_write"],
       isAllowedByGrants: () => true,
@@ -702,7 +693,12 @@ describe("governedExecuteTool — Work Case receipt context", () => {
         auditRows.push(data);
         return { id: "tool-exec-work-case-1" };
       },
-      toolExecutionReceiptCreate: captureAudit(receiptRows),
+      toolExecutionUpdate: async () => ({}),
+      toolExecutionReceiptCreate: async (data) => {
+        receiptRows.push(data); return { id: "receipt-work-case-1" };
+      },
+      toolExecutionReceiptUpdate: async (_id, data) => { receiptUpdates.push(data); },
+      gaidActorResolver: async () => ({ principalId: "PRN-1", gaid: "GAID-1", actorKind: "owner", actorRef: "user-1" }),
     });
 
     await governedExecuteTool({
@@ -710,9 +706,7 @@ describe("governedExecuteTool — Work Case receipt context", () => {
       rawParams: { itemId: "BI-1", status: "done" },
       userId: "user-1",
       userContext: NORMAL_USER,
-      context: {
-        workCase: WORK_CASE_CONTEXT,
-      },
+      context: { workCase: WORK_CASE_CONTEXT },
       source: "external-jsonrpc",
     });
 
@@ -720,15 +714,17 @@ describe("governedExecuteTool — Work Case receipt context", () => {
     expect(receiptRows[0]).toEqual(
       expect.objectContaining({
         buildId: null,
-        executionStatus: "succeeded",
+        executionStatus: "reserved",
         receiptKind: "work-case-governed-action",
-        receiptStatus: "valid",
+        receiptStatus: "reserved",
         toolExecutionId: "tool-exec-work-case-1",
       }),
     );
+    expect(receiptUpdates).toEqual([expect.objectContaining({ executionStatus: "succeeded", receiptStatus: "valid" })]);
   });
 
   it("mints an invalid governed Work Case receipt for failed consequential actions", async () => {
+    const receiptUpdates: AuditRow[] = [];
     _setGovernanceForTests({
       resolveAgentGrants: async () => ["backlog_write"],
       isAllowedByGrants: () => true,
@@ -743,7 +739,12 @@ describe("governedExecuteTool — Work Case receipt context", () => {
         auditRows.push(data);
         return { id: "tool-exec-work-case-2" };
       },
-      toolExecutionReceiptCreate: captureAudit(receiptRows),
+      toolExecutionUpdate: async () => ({}),
+      toolExecutionReceiptCreate: async (data) => {
+        receiptRows.push(data); return { id: "receipt-work-case-2" };
+      },
+      toolExecutionReceiptUpdate: async (_id, data) => { receiptUpdates.push(data); },
+      gaidActorResolver: async () => ({ principalId: "PRN-1", gaid: "GAID-1", actorKind: "owner", actorRef: "user-1" }),
     });
 
     await governedExecuteTool({
@@ -751,21 +752,20 @@ describe("governedExecuteTool — Work Case receipt context", () => {
       rawParams: { itemId: "BI-1", status: "done" },
       userId: "user-1",
       userContext: NORMAL_USER,
-      context: {
-        workCase: WORK_CASE_CONTEXT,
-      },
+      context: { workCase: WORK_CASE_CONTEXT },
       source: "external-jsonrpc",
     });
 
     expect(receiptRows).toHaveLength(1);
     expect(receiptRows[0]).toEqual(
       expect.objectContaining({
-        executionStatus: "failed",
+        executionStatus: "reserved",
         receiptKind: "work-case-governed-action",
-        receiptStatus: "invalid",
+        receiptStatus: "reserved",
         toolExecutionId: "tool-exec-work-case-2",
       }),
     );
+    expect(receiptUpdates).toEqual([expect.objectContaining({ executionStatus: "failed", receiptStatus: "invalid" })]);
   });
 });
 

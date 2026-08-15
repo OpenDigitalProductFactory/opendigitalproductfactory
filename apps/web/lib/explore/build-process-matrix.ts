@@ -476,6 +476,27 @@ export function deriveDeliverableSensitivity(
   return SENSITIVITY_RANK[keyword] >= SENSITIVITY_RANK[postureFloor] ? keyword : postureFloor;
 }
 
+/**
+ * Map deliverable sensitivity to the ROUTING provider-clearance contract.
+ * Founder ruling (2026-08-12): source-code generation is development work, while
+ * business data remains sensitive. Ordinary builds therefore use `development`;
+ * elevated/high briefs retain internal/confidential gates. Payload screening
+ * still runs, so this does not widen the data-leak surface.
+ */
+export function mapBuildDeliverableToRoutingSensitivity(
+  d: DeliverableSensitivity,
+): "development" | "internal" | "confidential" {
+  switch (d) {
+    case "high":
+      return "confidential";
+    case "elevated":
+      return "internal";
+    case "low":
+    default:
+      return "development";
+  }
+}
+
 // ─── Public API ─────────────────────────────────────────────────────────────
 
 /**

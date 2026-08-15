@@ -9,6 +9,7 @@ import {
   docsPathForRoute,
   docFileForDocsPath,
   computeImpact,
+  isDependencyOnlyChange,
 } from "./check-docs-impact.mjs";
 
 const SAMPLE_TS = `
@@ -102,4 +103,50 @@ test("computeImpact groups multiple routes onto one doc", () => {
   );
   assert.equal(impacted.size, 1);
   assert.equal(impacted.get("docs/user-guide/finance/index.md").length, 2);
+});
+
+// Dependency-manifest-only exemption — the Dependabot wedge (#4184–4188). A doc
+// may cite pnpm-lock.yaml/package.json, making them code->doc edges; the gate
+// must NOT then require a bot-unauthorable Docs-Impact-Decision trailer for a
+// diff that touches only dependency manifests.
+test("isDependencyOnlyChange: root lockfile-only diff is exempt", () => {
+  assert.equal(isDependencyOnlyChange(["pnpm-lock.yaml"]), true);
+});
+
+test("isDependencyOnlyChange: package.json + lockfile (every Dependabot PR shape) is exempt", () => {
+  // Exact file sets of #4184–4188.
+  assert.equal(isDependencyOnlyChange(["packages/db/package.json", "pnpm-lock.yaml"]), true); // #4184
+  assert.equal(isDependencyOnlyChange(["apps/mobile/package.json", "pnpm-lock.yaml"]), true); // #4185/#4188
+  assert.equal(isDependencyOnlyChange(["apps/web/package.json", "pnpm-lock.yaml"]), true); // #4186
+  assert.equal(
+    isDependencyOnlyChange(["apps/web/package.json", "packages/db/package.json", "pnpm-lock.yaml"]),
+    true,
+  ); // #4187
+});
+
+test("isDependencyOnlyChange: other package managers' lockfiles are exempt", () => {
+  assert.equal(isDependencyOnlyChange(["package-lock.json"]), true);
+  assert.equal(isDependencyOnlyChange(["yarn.lock", "package.json"]), true);
+  assert.equal(isDependencyOnlyChange(["npm-shrinkwrap.json"]), true);
+  assert.equal(isDependencyOnlyChange(["pnpm-workspace.yaml", "pnpm-lock.yaml"]), true);
+});
+
+test("isDependencyOnlyChange: a single source file alongside manifests defeats the exemption", () => {
+  // The abuse case: the exemption must NOT let real code ride along with a bump.
+  assert.equal(isDependencyOnlyChange(["pnpm-lock.yaml", "apps/web/lib/ai-inference.ts"]), false);
+  assert.equal(isDependencyOnlyChange(["package.json", "apps/web/app/(shell)/finance/invoices/page.tsx"]), false);
+});
+
+test("isDependencyOnlyChange: a doc file alongside manifests defeats the exemption", () => {
+  assert.equal(isDependencyOnlyChange(["pnpm-lock.yaml", "docs/user-guide/finance/index.md"]), false);
+});
+
+test("isDependencyOnlyChange: files merely named like manifests but nested elsewhere are not matched loosely", () => {
+  // "package.jsonc" / "my-package.json.bak" must not count as a manifest.
+  assert.equal(isDependencyOnlyChange(["config/package.jsonc"]), false);
+  assert.equal(isDependencyOnlyChange(["tools/my-package.json.bak"]), false);
+});
+
+test("isDependencyOnlyChange: an empty diff is not exempt (falls through to normal OK)", () => {
+  assert.equal(isDependencyOnlyChange([]), false);
 });

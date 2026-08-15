@@ -1,2 +1,49 @@
+# Local-CI / bounded production-build BuildKit daemon config.
+# Applied via `docker buildx create --buildkitd-config` for
+# `dpf-local-ci-buildkit-vN-S` builders (BI-CE6E2882, BI-C85D1B0A).
+#
+# Spec: docs/superpowers/specs/2026-08-10-buildkit-session-lifecycle-design.md
+#
+# GC policy (market-aligned):
+# - Docker Desktop's default docker driver uses ~20GB keep-storage class budgets.
+# - Self-managed docker-container builders do NOT inherit daemon.json GC unless
+#   configured here — without this file's GC block, cache grew past 100GB on dogfood.
+# - Prefer in-daemon GC over wipe-after-every-build (keeps incremental monorepo builds).
+
 [worker.oci]
+  # Cap concurrent RUN steps so a single local-CI build cannot own the whole host
+  # (pairs with the buildx driver-opt memory/cpu ceilings).
   max-parallelism = 4
+
+  # Enable continuous garbage collection while the daemon is running.
+  gc = true
+  # Floor: never reclaim below this while GC runs (keeps a useful warm set).
+  reservedSpace = "8GB"
+  # Ceiling: reclaim until usage is at or below this.
+  maxUsedSpace = "40GB"
+  # Leave free space on the Docker data disk for portal/postgres images.
+  minFreeSpace = "20GB"
+
+# Policy 1 — drop easy/regenerable cache that has gone stale first.
+[[worker.oci.gcpolicy]]
+  filters = ["type==source.local", "type==exec.cachemount", "type==source.git.checkout"]
+  keepDuration = "48h"
+  reservedSpace = "512MB"
+  maxUsedSpace = "8GB"
+
+# Policy 2 — age out unused records beyond 14 days within the budget.
+[[worker.oci.gcpolicy]]
+  keepDuration = "336h"
+  reservedSpace = "8GB"
+  maxUsedSpace = "40GB"
+
+# Policy 3 — unshared cache hard cap.
+[[worker.oci.gcpolicy]]
+  reservedSpace = "8GB"
+  maxUsedSpace = "40GB"
+
+# Policy 4 — last resort: any cache above the ceiling (including shared).
+[[worker.oci.gcpolicy]]
+  all = true
+  reservedSpace = "8GB"
+  maxUsedSpace = "40GB"

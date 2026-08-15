@@ -12,6 +12,7 @@ import { Prisma, prisma } from "@dpf/db";
 import { WikiPageList, type WikiPageListItem } from "@/components/wiki/WikiPageList";
 import { DecisionDisciplineHub } from "@/components/wiki/DecisionDisciplineHub";
 import { buildDisciplineCards } from "@/lib/wiki/decision-governance-hub";
+import { getOverlayEmbeddingCoverage } from "@/lib/wiki/overlay-embedding-coverage";
 import {
   WWMD_PLATFORM_PROFILE_ID,
   WWWD_ORGANIZATION_PROFILE_ID,
@@ -200,6 +201,13 @@ export default async function WikiBrowsePage({
     }),
   ]);
 
+  // BI-D4C1E05E: embedding coverage for this org's overlay pages. A published
+  // page counts in a decision only once it is EMBEDDED; surfacing published-vs-
+  // embedded stops "ACTIVE" from overstating readiness. Fail-open helper.
+  const embeddingCoverage = organizationId
+    ? await getOverlayEmbeddingCoverage(organizationId)
+    : null;
+
   const wwmdOpenReviews = countUniqueOpenReviews(wwmdOpenReviewRows as DecisionInteractionQueueRow[]);
   const wwwdOpenReviews = countUniqueOpenReviews(wwwdOpenReviewRows as DecisionInteractionQueueRow[]);
   const wsidOpenReviews = countUniqueOpenReviews(wsidOpenReviewRows as DecisionInteractionQueueRow[]);
@@ -301,6 +309,26 @@ export default async function WikiBrowsePage({
           are built from. Kernel pages ship with the platform; overlay pages live
           alongside.
         </p>
+        {embeddingCoverage && !embeddingCoverage.degraded && embeddingCoverage.published > 0 && (
+          <p
+            className={`text-xs mb-4 ${
+              embeddingCoverage.pending > 0
+                ? "text-[var(--dpf-warning)]"
+                : "text-[var(--dpf-muted)]"
+            }`}
+            title={
+              embeddingCoverage.pending > 0
+                ? `Published but not yet retrievable: ${embeddingCoverage.pendingSlugs.join(", ")}`
+                : undefined
+            }
+          >
+            Retrieval coverage: {embeddingCoverage.embedded}/{embeddingCoverage.published}{" "}
+            overlay pages embedded
+            {embeddingCoverage.pending > 0
+              ? ` · ${embeddingCoverage.pending} not yet counting (next upgrade embeds them).`
+              : " · all counting."}
+          </p>
+        )}
         <WikiPageList pages={pages} />
       </section>
     </div>

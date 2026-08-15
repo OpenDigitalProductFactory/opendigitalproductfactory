@@ -470,6 +470,22 @@ function loadBaseline(path: string): BaselineFile {
   return JSON.parse(readFileSync(path, "utf8")) as BaselineFile;
 }
 
+/**
+ * BI-EE6E0CFC — routes present in the committed baseline but missing from a
+ * freshly frozen measurement. A non-empty result means the refresh would
+ * silently delete ratchets and must be refused.
+ */
+export function findDroppedBaselineRoutes(
+  committed: BaselineFile | null | undefined,
+  frozen: BaselineFile,
+): string[] {
+  if (!committed?.routes) return [];
+  const frozenRoutes = new Set(Object.keys(frozen.routes ?? {}));
+  return Object.keys(committed.routes)
+    .filter((routePath) => !frozenRoutes.has(routePath))
+    .sort();
+}
+
 function routeArtifactSlug(routePath: string): string {
   return (
     routePath
@@ -633,9 +649,38 @@ async function main(): Promise<void> {
   }
 
   if (updateBaseline) {
+    // BI-EE6E0CFC: never emit a baseline that silently drops routes the
+    // committed file already watches. A refresh that shrinks coverage is not
+    // publishable — the documented "commit the artifact" path would delete
+    // ratchets for routes the sweep failed to measure (timeout, error, auth).
+    // Read once (no existsSync→write TOCTOU; CodeQL js/file-system-race).
+    const baselinePath = join(ROOT, BASELINE_REL);
+    const frozen = freezeBaseline(measurements, GENERATOR);
+    let committed: BaselineFile | null = null;
+    try {
+      committed = JSON.parse(readFileSync(baselinePath, "utf8")) as BaselineFile;
+    } catch (err) {
+      const code = err && typeof err === "object" && "code" in err ? String((err as { code?: unknown }).code) : "";
+      if (code !== "ENOENT") throw err;
+    }
+    if (committed) {
+      const dropped = findDroppedBaselineRoutes(committed, frozen);
+      if (dropped.length > 0) {
+        console.error(
+          `[ux-sweep] REFUSE TO SHRINK BASELINE — ${dropped.length} committed route(s) missing from this measurement run (BI-EE6E0CFC).`,
+        );
+        for (const routePath of dropped) {
+          console.error(`  - ${routePath}`);
+        }
+        console.error(
+          "Either fix the sweep so these routes measure, declare a sweepExclusionReason in the route-shell registry, or splice only the deliberately re-frozen route(s) rather than replacing the whole file.",
+        );
+        process.exit(1);
+      }
+    }
     writeFileSync(
-      join(ROOT, BASELINE_REL),
-      `${JSON.stringify(freezeBaseline(measurements, GENERATOR), null, 2)}\n`,
+      baselinePath,
+      `${JSON.stringify(frozen, null, 2)}\n`,
       "utf8",
     );
     console.error(`[ux-sweep] froze ${measurements.length} routes into ${BASELINE_REL}`);
@@ -650,6 +695,18 @@ async function main(): Promise<void> {
     console.error(
       "\n[ux-sweep] BLOCKED — a route regressed against its frozen baseline, or a net-new route exceeded its shell budget.",
     );
+    // BI-26DA1AEB residual: structureChanged failures used to strand authors who
+    // did not know the sanctioned re-freeze path exists (workflow_dispatch +
+    // update_baseline artifact, not a silent CI commit).
+    if (sweep.verdicts.some((v) => !v.ok && v.structureChanged)) {
+      console.error(
+        "\n[ux-sweep] structureChanged recovery (BI-26DA1AEB):\n" +
+          "  1. gh workflow run ux-route-sweep.yml --ref <branch> -f update_baseline=true\n" +
+          "  2. Download artifact ux-route-budget-baseline\n" +
+          "  3. Splice ONLY the deliberately re-frozen route(s) into the committed baseline (do not replace the whole file if routes are missing — BI-EE6E0CFC)\n" +
+          "  4. Commit under review. The baseline is a reviewed engineering act, not a CI auto-write.",
+      );
+    }
     process.exit(1);
   }
   console.error("[ux-sweep] OK");

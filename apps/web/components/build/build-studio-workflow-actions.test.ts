@@ -1261,6 +1261,28 @@ describe("deriveBuildStudioWorkflowAction — escalate-to-human (BI-A2F3FA9D)", 
   });
 });
 
+describe("deriveBuildStudioOperatorGuidance — terminal owner state", () => {
+  it("never presents a completed build as Working", () => {
+    const build = makeBuild({ phase: "complete" });
+    const action = deriveBuildStudioWorkflowAction({
+      build,
+      governedBacklogEnabled: true,
+    });
+    const guidance = deriveBuildStudioOperatorGuidance(action, build);
+
+    expect(guidance.status).toEqual({
+      kind: "complete",
+      label: "Complete",
+      intent: "success",
+    });
+    expect(guidance.nextSentence).toBe(
+      "The result and its evidence are ready to review.",
+    );
+    expect(guidance.nextLabel).toBeNull();
+    expect(guidance.useCoworkerForNext).toBe(false);
+  });
+});
+
 describe("deriveBuildStudioWorkflowAction — failed inference (BI-F0005EB0)", () => {
   function progressWithInferenceFailure(
     failure: BuildProgressVisibility["inferenceFailure"],
@@ -1286,7 +1308,7 @@ describe("deriveBuildStudioWorkflowAction — failed inference (BI-F0005EB0)", (
     } satisfies BuildProgressVisibility;
   }
 
-  it("surfaces retry-inference (danger) for a failed ideate inference instead of Waiting on evidence", () => {
+  it("surfaces transient inference failure as a capacity wait with an optional retry", () => {
     const action = deriveBuildStudioWorkflowAction({
       // designDoc null => the advance gate would otherwise fire with a disabledReason.
       build: makeBuild({ phase: "ideate", draftApprovedAt: new Date("2026-04-25T13:00:00Z"), designDoc: null, designReview: null }),
@@ -1297,9 +1319,26 @@ describe("deriveBuildStudioWorkflowAction — failed inference (BI-F0005EB0)", (
     expect(action.kind).toBe("retry-inference");
     expect(action.primaryLabel).toBe("Retry the AI call");
     expect(action.disabledReason).toBeNull();
-    expect(action.title).toMatch(/AI call failed/i);
+    expect(action.title).toMatch(/waiting for AI capacity/i);
     // Never leak the raw provider string into user-facing copy.
     expect(action.message).not.toMatch(/ECONNREFUSED|ConnectionRefused|API Error:/);
+    expect(deriveBuildStudioOperatorGuidance(action).status).toEqual({
+      kind: "waiting-capacity",
+      label: "Capacity wait",
+      intent: "info",
+    });
+    expect(deriveBuildStudioOperatorGuidance(action).nextSentence).toMatch(/retry when convenient/i);
+  });
+
+  it("keeps configuration failures distinct from transient capacity waits", () => {
+    const action = deriveBuildStudioWorkflowAction({
+      build: makeBuild({ phase: "ideate", draftApprovedAt: new Date("2026-04-25T13:00:00Z"), designDoc: null, designReview: null }),
+      governedBacklogEnabled: true,
+      progressVisibility: progressWithInferenceFailure({ failed: true, kind: "config", observedAt: "2026-07-05T11:59:00.000Z" }),
+    });
+
+    expect(action.kind).toBe("retry-inference");
+    expect(action.title).toMatch(/setup needs attention/i);
     expect(deriveBuildStudioOperatorGuidance(action).status.intent).toBe("danger");
   });
 

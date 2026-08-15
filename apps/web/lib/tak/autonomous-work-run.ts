@@ -9,6 +9,8 @@ import type { AgentEvent } from "@/lib/tak/agent-event-bus";
 import type { ResolvedDelegatedPosture } from "@/lib/proactivity/delegated-posture";
 import type { ProactivityPlan } from "@/lib/proactivity/proactivity-types";
 import { admitRuntimeGuardedWork } from "@/lib/platform-runtime/work-admission";
+import type { RouteSensitivity } from "@/lib/agent-sensitivity";
+import type { SurfaceMode, SurfacePrincipalContext } from "@dpf/types";
 
 /** Best-effort latest user-turn text, for the reviewer's context. */
 function lastUserRequest(history: ChatMessage[]): string {
@@ -35,8 +37,6 @@ export type AutonomousWorkRunRef = {
   contextId: string | null;
 };
 
-type AgentSensitivity = "public" | "internal" | "confidential" | "restricted";
-
 export type AutonomousWorkUserContext = {
   userId?: string;
   platformRole: string | null;
@@ -46,7 +46,7 @@ export type AutonomousWorkUserContext = {
 type AgentPromptInfo = {
   agentId?: string | null;
   systemPrompt: string;
-  sensitivity?: AgentSensitivity | null;
+  sensitivity?: RouteSensitivity | null;
   [key: string]: unknown;
 };
 
@@ -226,11 +226,15 @@ export async function resolveAutonomousWorkTools(input: {
   deferredTools: ToolDefinition[];
 }> {
   const { getAvailableTools, toolsToOpenAIFormat } = await import("@/lib/mcp-tools");
+  const { COWORKER_AUTHORIZED_SURFACE_BASELINE_GRANTS } = await import(
+    "@/lib/coworker/authorized-surface-coworker-contract"
+  );
   let authorized = await getAvailableTools(input.userContext, {
     mode: input.mode,
     externalAccessEnabled: input.externalAccessEnabled,
     unifiedMode: input.unifiedMode,
     agentId: input.agentId,
+    additionalGrants: COWORKER_AUTHORIZED_SURFACE_BASELINE_GRANTS,
   });
   if (input.authorityGrants !== undefined) {
     const { expandGrants, getToolGrantMapping } = await import("@/lib/tak/agent-grants");
@@ -249,8 +253,16 @@ export async function resolveAutonomousWorkTools(input: {
   // untouched: deferred tools stay authorized and loadable via load_tools.
   // Fail-open — any budget error falls back to the full authorized surface.
   try {
-    const { selectCoworkerToolBudget, deriveCoworkerToolCap, LOAD_TOOLS_TOOL, LOAD_TOOLS_TOOL_NAME } =
+    const {
+      selectCoworkerToolBudget,
+      deriveCoworkerToolCap,
+      LOAD_TOOLS_TOOL,
+      LOAD_TOOLS_TOOL_NAME,
+    } =
       await import("@/lib/actions/coworker-tool-budget");
+    const { AUTHORIZED_SURFACE_TOOL_NAMES } = await import(
+      "@/lib/coworker/authorized-surface-coworker-contract"
+    );
     const { getAgentToolGrantsAsync } = await import("@/lib/tak/agent-grants");
     const { resolveLocalServedContextTokens } = await import(
       "@/lib/inference/local-model-context-reconcile"
@@ -278,7 +290,7 @@ export async function resolveAutonomousWorkTools(input: {
       tools: authorized,
       roleGrants,
       pageActionNames: new Set(routeDomainToolNames),
-      alwaysIncludeNames: new Set([LOAD_TOOLS_TOOL_NAME]),
+      alwaysIncludeNames: new Set([LOAD_TOOLS_TOOL_NAME, ...AUTHORIZED_SURFACE_TOOL_NAMES]),
       cap: effectiveCap,
       intentQuery: input.intentQuery,
     });
@@ -310,7 +322,7 @@ export async function resolveAutonomousWorkTools(input: {
 export async function executeAutonomousAgenticLoop(input: {
   systemPrompt: string;
   chatHistory: ChatMessage[];
-  sensitivity: AgentSensitivity;
+  sensitivity: RouteSensitivity;
   tools: ToolDefinition[];
   toolsForProvider?: Array<Record<string, unknown>>;
   /** Authorized-but-not-attached tools forwarded to runAgenticLoop for on-demand
@@ -351,6 +363,15 @@ export async function executeAutonomousAgenticLoop(input: {
    * replies. See agentic-loop.ts param doc.
    */
   interactionMode?: "chat" | "autonomous";
+  /** Optional renderer-neutral surface identity for workroom/resource/task
+   * callers. Route-only browser and background callers are derived by default. */
+  surfaceContext?: {
+    mode?: SurfaceMode;
+    locale?: string;
+    timezone?: string;
+    organizationId?: string;
+    workContext?: SurfacePrincipalContext["workContext"];
+  };
   /** BI-80532D5C — divert side-effecting non-artifact tool calls to proposals
    *  (propose boundary). Forwarded verbatim to runAgenticLoop. */
   proposeSideEffects?: boolean;
@@ -388,6 +409,43 @@ export async function executeAutonomousAgenticLoop(input: {
     systemPrompt = grounding.systemPrompt;
   }
 
+  // Authorized Surface Contract: prehydrate the current semantic UX at the one
+  // seam shared by chat, workroom, scheduled, background, and external turns.
+  // This makes page truth available even when the selected model cannot call
+  // tools. The runtime applies the same principal/action authorization first;
+  // failures and uncovered routes leave the original prompt unchanged.
+  const { groundPromptWithAuthorizedSurface } = await import(
+    "@/lib/coworker/authorized-surface-prompt-grounding"
+  );
+  const authorizedToolNames = new Set([
+    ...input.tools.map((tool) => tool.name),
+    ...(input.deferredTools ?? []).map((tool) => tool.name),
+  ]);
+  const surfaceGrounding = await groundPromptWithAuthorizedSurface({
+    systemPrompt,
+    context: {
+      delegatingUserId: input.userId,
+      actingAgentId: input.agentId,
+      mode: input.surfaceContext?.mode ?? (input.interactionMode === "chat" ? "browser" : "background"),
+      locale: input.surfaceContext?.locale ?? "en-US",
+      timezone: input.surfaceContext?.timezone ?? "UTC",
+      route: input.routeContext,
+      ...(input.surfaceContext?.organizationId ? { organizationId: input.surfaceContext.organizationId } : {}),
+      ...(input.surfaceContext?.workContext ? { workContext: input.surfaceContext.workContext } : {}),
+    },
+    authorizedToolNames,
+  }).catch(() => ({ systemPrompt, grounded: false as const }));
+  systemPrompt = surfaceGrounding.systemPrompt;
+  const { isAuthorizedSurfaceGuidanceRequest } = await import(
+    "@/lib/coworker/authorized-surface-prompt-grounding"
+  );
+  const surfaceGuidanceOnly = surfaceGrounding.grounded
+    && isAuthorizedSurfaceGuidanceRequest(lastUserRequest(input.chatHistory));
+  const authorizedGuidanceHighlights = "guidanceHighlights" in surfaceGrounding
+    ? surfaceGrounding.guidanceHighlights ?? []
+    : [];
+  const toolsForProvider = surfaceGuidanceOnly ? undefined : input.toolsForProvider;
+
   // This is the single seam both interactive chat (interactionMode "chat") and
   // autonomous work (scheduled self-tasks, build phases, system tasks) flow
   // through. Tag the inference origin here so the admission gate in callProvider
@@ -395,33 +453,48 @@ export async function executeAutonomousAgenticLoop(input: {
   // interactive; everything else → autonomous (matching the "autonomous" default).
   const inferenceOrigin = input.interactionMode === "chat" ? "interactive" : "autonomous";
 
-  const result = await withInferenceOrigin(inferenceOrigin, () =>
-    runAgenticLoop({
-      systemPrompt,
-      chatHistory: input.chatHistory,
-      sensitivity: input.sensitivity,
-      tools: input.tools,
-      toolsForProvider: input.toolsForProvider,
-      deferredTools: input.deferredTools,
-      userId: input.userId,
-      routeContext: input.routeContext,
-      agentId: input.agentId,
-      threadId: input.threadId,
-      taskRunId: input.taskRunId,
-      apiTokenId: input.apiTokenId,
-      taskType: input.taskType,
-      effortWarrant: input.effortWarrant,
-      agentDisplayName: input.agentDisplayName,
-      buildPhase: input.buildPhase,
-      featureBuildId: input.featureBuildId,
-      activeSkillId: input.activeSkillId ?? null,
-      agentMessageId: input.agentMessageId ?? null,
-      interactionMode: input.interactionMode,
-      proposeSideEffects: input.proposeSideEffects ?? false,
-      ...(input.modelRequirements ? { modelRequirements: input.modelRequirements } : {}),
-      onProgress: input.onProgress,
-    }),
-  );
+  let result: Awaited<ReturnType<typeof runAgenticLoop>>;
+  try {
+    result = await withInferenceOrigin(inferenceOrigin, () =>
+      runAgenticLoop({
+        systemPrompt,
+        chatHistory: input.chatHistory,
+        sensitivity: input.sensitivity,
+        tools: input.tools,
+        toolsForProvider,
+        deferredTools: input.deferredTools,
+        userId: input.userId,
+        routeContext: input.routeContext,
+        agentId: input.agentId,
+        threadId: input.threadId,
+        taskRunId: input.taskRunId,
+        apiTokenId: input.apiTokenId,
+        taskType: input.taskType,
+        effortWarrant: input.effortWarrant,
+        agentDisplayName: input.agentDisplayName,
+        buildPhase: input.buildPhase,
+        featureBuildId: input.featureBuildId,
+        activeSkillId: input.activeSkillId ?? null,
+        agentMessageId: input.agentMessageId ?? null,
+        interactionMode: input.interactionMode,
+        proposeSideEffects: input.proposeSideEffects ?? false,
+        allowToolFreeInference: surfaceGuidanceOnly,
+        ...(input.modelRequirements ? { modelRequirements: input.modelRequirements } : {}),
+        onProgress: input.onProgress,
+      }),
+    );
+  } finally {
+    const { closeAuthorizedSurfacePromptGrounding } = await import(
+      "@/lib/coworker/authorized-surface-prompt-grounding"
+    );
+    await closeAuthorizedSurfacePromptGrounding(
+      "sessionId" in surfaceGrounding ? surfaceGrounding.sessionId : undefined,
+      {
+        delegatingUserId: input.userId,
+        actingAgentId: input.agentId,
+      },
+    );
+  }
 
   // EP-GOLDEN-TRIANGLE: leverage the rigor ladder. This is the SINGLE seam for both
   // chat and autonomous coworker turns. When the coworker's posture sits high on
@@ -446,6 +519,20 @@ export async function executeAutonomousAgenticLoop(input: {
     } catch (err) {
       console.warn("[golden-triangle] coworker deliberation (unified seam) failed (fail-open):", err);
     }
+  }
+
+  // Prompt instructions are advisory; exact UX labels are contractual. A
+  // model can answer correctly in substance while paraphrasing away a field
+  // or composite action. Enforce the authorization-filtered surface summary
+  // after any deliberation pass so the final response cannot lose those facts.
+  if (surfaceGuidanceOnly && result.content) {
+    const { enforceAuthorizedSurfaceGuidanceCoverage } = await import(
+      "@/lib/coworker/authorized-surface-prompt-grounding"
+    );
+    result.content = enforceAuthorizedSurfaceGuidanceCoverage(
+      result.content,
+      authorizedGuidanceHighlights,
+    );
   }
 
   // Governed Hermes learning Slice 2: fire-and-forget reflection trigger.
@@ -514,7 +601,7 @@ export async function executeAutonomousAgenticLoop(input: {
     }
   })();
 
-  return result;
+  return { ...result, authoritativeSurfaceEvidence: surfaceGuidanceOnly };
 }
 
 export async function executeAutonomousWorkTool(input: {

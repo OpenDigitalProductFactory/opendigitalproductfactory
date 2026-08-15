@@ -3,6 +3,7 @@ import { test } from "node:test";
 
 import {
   decide,
+  decideFileWrite,
   resolveAgainst,
   deriveCloneRoot,
   isUnderRootSharedArea,
@@ -127,6 +128,34 @@ test("allows root-clone git drift commands only with the explicit maintenance by
     }).block,
     false,
   );
+});
+
+test("blocks direct Write/Edit targets when a surface is accidentally rooted at the merge checkout", () => {
+  for (const toolName of ["Write", "Edit", "MultiEdit"]) {
+    const verdict = decideFileWrite({
+      toolName,
+      toolInput: { file_path: "apps/web/lib/routing/types.ts" },
+      cwd: MAIN,
+      isDir: mainGit,
+    });
+    assert.equal(verdict.block, true, toolName);
+    assert.match(verdict.reason, /root clone|worktree|BI-FFF58567/i);
+  }
+});
+
+test("allows direct writes inside a real sibling or nested worktree", () => {
+  assert.equal(decideFileWrite({
+    toolName: "Edit",
+    toolInput: { file_path: `${SIBLING}/apps/web/page.tsx` },
+    cwd: SIBLING,
+    isDir: noGit,
+  }).block, false);
+  assert.equal(decideFileWrite({
+    toolName: "Write",
+    toolInput: { file_path: `${NESTED}/apps/web/page.tsx` },
+    cwd: NESTED,
+    isDir: noGit,
+  }).block, false);
 });
 
 test("in a SIBLING worktree, normal deletes are allowed; a junctioned delete is still caught", () => {

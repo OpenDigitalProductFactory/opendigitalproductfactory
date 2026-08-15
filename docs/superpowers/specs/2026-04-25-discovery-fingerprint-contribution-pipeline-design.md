@@ -16,11 +16,19 @@ Implemented in the first slice:
 - repo-owned catalog fixture validation
 - persistence helpers for future observation ingestion and approval review
 
+Implemented in the runtime-integration slice (2026-08-14):
+
+- successful full discovery sweeps submit eligible active, global, non-seed rules
+  through the existing privacy-filtered contribution boundary
+- identical payloads coalesce by content hash while the retained redacted payload
+  and queued delivery state remain auditable in the canonical contribution ledger
+- draft, shadow, local, blocked-sensitive, and opted-out rules never cross the
+  install boundary automatically
+
 Deferred:
 
 - review queue UI
 - scheduled daily AI coworker triage
-- live discovery integration
 - contribution PR generation
 - automatic rule activation in runtime discovery
 

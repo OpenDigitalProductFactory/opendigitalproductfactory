@@ -23,6 +23,7 @@ import {
   type ProductIntelligenceScopeInput,
 } from "@/lib/product-management/product-intelligence-scope";
 import {
+  BUSINESS_ANALYSIS_WATCH_TASK_KIND,
   isScheduledAgentTaskKind,
   type ScheduledAgentTaskKind,
 } from "./agent-task-kind";
@@ -36,6 +37,7 @@ import {
   parseProductManagementPlaybookConfig,
   productManagementPlaybookScopeKind,
 } from "@/lib/product-management/product-management-playbook";
+import { parseBusinessAnalysisWatchConfig } from "@/lib/performance/business-analysis-watch";
 
 export type ScheduleAgentTaskInput = {
   agentId: string;
@@ -166,6 +168,25 @@ export async function scheduleAgentTaskFor(
           error instanceof Error
             ? error.message
             : "Invalid product-management playbook configuration.",
+      };
+    }
+  }
+  if (input.taskKind === BUSINESS_ANALYSIS_WATCH_TASK_KIND) {
+    if (!productScope) {
+      return {
+        success: false,
+        error: "Business analysis watches require an organization scope.",
+      };
+    }
+    try {
+      parseBusinessAnalysisWatchConfig(input.taskConfig);
+    } catch (error) {
+      return {
+        success: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : "Invalid business analysis watch configuration.",
       };
     }
   }

@@ -8,6 +8,11 @@
 | Epic | `EP-UPGRADE-LIFECYCLE` (rebuild-triggered; organizationally grouped) |
 | Related | `docs/superpowers/specs/2026-05-24-activity-quiescence-protocol-design.md` (server-side drain — adjacent, did NOT address client connection accounting) |
 
+> **Current application-layer contract:** this spec owns SSE transport liveness. Connection sharing,
+> targeted status rehydration, fallback reconciliation, and the prohibition on transport-owned
+> navigation are governed by
+> [`docs/architecture/background-operation-observation-contract.md`](../../architecture/background-operation-observation-contract.md).
+
 ## 1. Symptom
 
 Recurring, operator-reported (Mark, "yet again"): the `localhost:3000` portal URL stops loading in
@@ -81,10 +86,11 @@ dead, force-closed, and reconnected on a fresh socket via the existing backoff. 
 the zombie and frees the slot**, so the page self-heals within ~40s of a rebuild instead of needing
 a browser restart. The `dpf-hb` frame is consumed internally and never forwarded to consumers.
 
-### 3.3 Consumer migration (this PR)
+### 3.3 Consumer migration (historical implementation)
 
-The **always-on** consumers — `PlatformBanner` and `usePlatformReady` — now use the resilient hook
-(they share the same `/api/agent/system-stream` source). These are the streams that persist
+The **always-on** consumers — `PlatformBanner` and `usePlatformReady` — were migrated to the
+resilient hook. They now subscribe through one shell-owned `SystemEventProvider` connection to
+`/api/agent/system-stream`, rather than opening one connection per consumer. These are the streams that persist
 indefinitely and accumulate zombies, so they are the priority.
 
 The **transient** consumers (`AgentCoworkerPanel`, `BuildStudio`, `BrandExtractionSection`,

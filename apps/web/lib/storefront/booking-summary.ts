@@ -53,6 +53,18 @@ export type ReservationStatus =
   | "cancelled"
   | "needs-reschedule";
 
+/** Format an inbox intake instant in the business timezone before it crosses
+ *  the server/client boundary. Rendering the ISO value with the browser's
+ *  locale can disagree with the server near midnight and break hydration. */
+export function formatInboxCreatedDate(createdAt: Date, timezone: string): string {
+  return new Intl.DateTimeFormat("en-GB", {
+    timeZone: timezone,
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  }).format(createdAt);
+}
+
 /** Format a booking's scheduled instant for owner-facing surfaces, in the
  *  storefront's own timezone so "6:30 PM" is the guest's local slot. Pure given a
  *  fixed timezone (Intl is deterministic). */

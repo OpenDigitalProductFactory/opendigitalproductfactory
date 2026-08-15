@@ -1,7 +1,10 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { statfs } from "node:fs/promises";
 import { cpus, freemem } from "node:os";
+
+import { reconcileDeadLocalSandboxFence } from "./local-sandbox-fence.mjs";
+import { reconcileStaleLocalConvergenceLock } from "./local-convergence-lock.mjs";
 
 function finiteValues(values) {
   return values.filter((value) => typeof value === "number" && Number.isFinite(value));
@@ -40,30 +43,24 @@ function defaultDockerHealthy() {
   ).status === 0;
 }
 
-function defaultConvergenceActive(paths = []) {
-  return paths.some((path) => existsSync(path));
-}
-
-function processIsAlive(pid) {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (error) {
-    return error?.code === "EPERM";
-  }
+function defaultConvergenceActive(paths = [], deps = {}) {
+  return paths.some((path) => {
+    if (!existsSync(path)) return false;
+    const result = reconcileStaleLocalConvergenceLock({
+      path,
+      processAlive: deps.processAlive,
+      processIdentity: deps.processIdentity,
+    });
+    return result.status !== "absent" && result.status !== "reconciled";
+  });
 }
 
 function defaultFencesHealthy(paths = []) {
   for (const path of paths) {
     if (!existsSync(path)) continue;
     try {
-      const fence = JSON.parse(readFileSync(path, "utf8"));
-      if (
-        !fence
-        || typeof fence.token !== "string"
-        || !Number.isInteger(fence.pid)
-        || !processIsAlive(fence.pid)
-      ) {
+      const result = reconcileDeadLocalSandboxFence({ path });
+      if (!["absent", "live", "reconciled"].includes(result.status)) {
         return false;
       }
     } catch {
@@ -118,7 +115,10 @@ export async function sampleLocalCiHostPressure({
   const diskFreeBytes = deps.diskFreeBytes ?? defaultDiskFreeBytes;
   const dockerHealthy = deps.dockerHealthy ?? defaultDockerHealthy;
   const convergenceActive = deps.convergenceActive
-    ?? (() => defaultConvergenceActive(convergenceLockPaths));
+    ?? (() => defaultConvergenceActive(convergenceLockPaths, {
+      processAlive: deps.convergenceProcessAlive,
+      processIdentity: deps.convergenceProcessIdentity,
+    }));
   const fencesHealthy = deps.fencesHealthy
     ?? (() => defaultFencesHealthy(fencePaths));
   const evidenceHealthy = deps.evidenceIsolationHealthy

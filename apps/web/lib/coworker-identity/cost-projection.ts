@@ -170,6 +170,57 @@ export function summarizeCoworkerCost(input: SummarizeCoworkerCostInput): Cowork
   };
 }
 
+// ── Display helpers ──────────────────────────────────────────────────────────
+// Token-forward when inference is effectively free: on a local/free-inference
+// install the dollar cost rounds to $0 while the coworker used real tokens, so a
+// bare "$0.00" reads as "no activity". These lead with tokens in that case.
+
+export function fmtCostUsd(n: number): string {
+  return n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+export function fmtCostTokens(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(2)}M`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}k`;
+  return String(n);
+}
+
+/** Dollar cost rounds to $0 but real tokens were spent → free/local inference. */
+export function isCostEffectivelyFree(
+  summary: Pick<CoworkerCostSummary, "totalUsd" | "tokens">,
+): boolean {
+  return summary.totalUsd < 0.005 && summary.tokens > 0;
+}
+
+/** Any recorded usage in the window — drives the muted empty-state on the page. */
+export function hasCostActivity(
+  summary: Pick<CoworkerCostSummary, "totalUsd" | "tokens" | "drivers">,
+): boolean {
+  return summary.totalUsd > 0 || summary.tokens > 0 || summary.drivers.length > 0;
+}
+
+/** One-line collapsed summary for the Cost facet: token-forward when free. */
+export function costFacetSummary(summary: CoworkerCostSummary): string {
+  if (isCostEffectivelyFree(summary)) {
+    return `${fmtCostTokens(summary.tokens)} tokens · ${summary.window.days}d`;
+  }
+  return `$${fmtCostUsd(summary.totalUsd)} · ${summary.window.days}d`;
+}
+
+/** At-a-glance tile value/sub for cost: tokens headline when free, $ otherwise. */
+export function costGlance(summary: CoworkerCostSummary): { value: string; sub: string } {
+  if (isCostEffectivelyFree(summary)) {
+    return { value: `${fmtCostTokens(summary.tokens)} tok`, sub: "$0.00 · local" };
+  }
+  return {
+    value: `$${fmtCostUsd(summary.totalUsd)}`,
+    sub:
+      summary.deltaPct != null
+        ? `${summary.deltaPct > 0 ? "▲" : "▼"} ${Math.abs(summary.deltaPct)}%`
+        : "no prior",
+  };
+}
+
 /**
  * Fetch + summarize per-coworker cost. `agentId` is the BUSINESS id (AGT-*);
  * `slugId` is the loaded row's slug when present. Metering rows (TokenUsage,

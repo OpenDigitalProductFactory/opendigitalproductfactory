@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "description": "Born-bounded install resource budgets (BI-4F3AB6B3). Single source of truth for compose limits, WSL host ceilings, and the release gate that blocks uncapped always-on services.",
+  "host": {
+    "wsl": {
+      "memoryShareOfHost": 0.5,
+      "minMemoryGb": 8,
+      "maxMemoryGb": 32,
+      "leaveOsHeadroomGb": 8,
+      "processorShareOfHost": 0.75,
+      "minProcessors": 2,
+      "autoMemoryReclaim": "gradual"
+    }
+  },
+  "alwaysOnServices": {
+    "postgres": {
+      "memory": "2g",
+      "cpus": "2.0",
+      "rationale": "Primary system of record; bound to leave host headroom under concurrent builds."
+    },
+    "portal": {
+      "memory": "3g",
+      "cpus": "2.0",
+      "rationale": "Next.js production runtime; largest always-on app process."
+    }
+  },
+  "optionalProfileServices": {
+    "redis": {
+      "memory": "512m",
+      "cpus": "0.5",
+      "profiles": ["runtime-durable-automation"]
+    },
+    "dpf-tts": {
+      "memory": "2g",
+      "cpus": "2.0",
+      "profiles": ["runtime-local-speech", "tts"],
+      "notes": "BI-A0A0568F: keep profile-gated; do not promote to always-on. Idle-process elimination is the preferred long-term path."
+    }
+  }
+}

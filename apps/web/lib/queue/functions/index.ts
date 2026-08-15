@@ -42,6 +42,7 @@ import { wikiLint } from "./wiki-lint";
 import { gitPromotionSandboxVerification } from "./git-promotion-sandbox-verification";
 import { skillMetricsAggregator } from "./skill-metrics-aggregator";
 import { queueMetricsAggregator } from "./queue-metrics-aggregator";
+import { businessMetricsAggregator } from "./business-metrics-aggregator";
 import { skillCurator } from "./skill-curator";
 import { mcpCallEfficiencyScan } from "./mcp-call-efficiency-scan";
 import { a2aCollaborationHealthScan } from "./a2a-collaboration-health-scan";
@@ -107,6 +108,7 @@ import {
   dataControlOperationRecoveryRequested,
   dataControlOperationRecoveryScheduled,
 } from "./data-control-operation";
+import { indexIntegritySweep } from "./index-integrity-sweep";
 
 export const scheduledFunctions = [
   prometheusPoll,
@@ -128,6 +130,7 @@ export const scheduledFunctions = [
   wikiLint,
   skillMetricsAggregator,
   queueMetricsAggregator, // EP-3516E23D P1: hourly QueueTelemetryEvent → QueueMetricSnapshot rollup
+  businessMetricsAggregator, // BI-PLAN-005: hourly operational sources → owner/manager BusinessMetricRollup
   skillCurator,
   mcpCallEfficiencyScan, // BI-A08EBAEC: daily ToolExecution thrash/volume/failure findings → PlatformNotification
   a2aCollaborationHealthScan, // BI-3003EE63: daily A2A edge health (failed/blocked/stuck/orphan) — slice 1 analyze+log
@@ -167,6 +170,7 @@ export const scheduledFunctions = [
   demandReconciliationScheduled, // BI-44AA45BF: trusted-link demand projection, retry, and reconciliation every five minutes
   buildPrDeliveryReconcile, // BI-7C4FDBF5: exact-SHA Build Studio PR readiness, queue enrollment, and restart recovery
   dataControlOperationRecoveryScheduled, // BI-DG-014: durable cross-store data mutation recovery and reconciliation
+  indexIntegritySweep, // BI-D9C20A97: daily live-database btree/collation integrity sweep
   postmarkCallbackDispatchSweep,
 ];
 

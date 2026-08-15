@@ -275,6 +275,27 @@ export async function listQueuedNonprodEnvironmentLeases(input: {
   });
 }
 
+/**
+ * One registry snapshot for host-capacity arbitration. Active leases own the
+ * host now; queued leases reserve the next safe admission window. Keeping both
+ * states in one query prevents a provider from slipping between separate
+ * active/queued reads.
+ */
+export async function listCapacityReservingNonprodEnvironmentLeases(input: {
+  db?: LeaseDb;
+  now?: Date;
+}) {
+  const db = input.db ?? prisma;
+  const now = input.now ?? new Date();
+  return db.nonProductionEnvironmentLease.findMany({
+    where: {
+      status: { in: ["active", "queued"] },
+      expiresAt: { gt: now },
+    },
+    orderBy: [{ queuedAt: "asc" }, { id: "asc" }],
+  });
+}
+
 export type ClaimNonprodEnvironmentLeaseResult =
   | {
     status: "admitted";
@@ -325,7 +346,11 @@ export async function claimNonprodEnvironmentLease(input: {
     hostPressure: input.hostPressure,
     capacityBroker: input.capacityBroker,
     manifestSlotCount: NONPROD_SLOT_KEYS.length,
-    reserveBuildHeadroom: true,
+    // Only an exact local-CI runner claim consumes the declared builder and
+    // host-stage envelopes. Contributor previews share this FIFO/provider
+    // exclusion pool, but do not request a runner slot and must not reserve a
+    // build stage they never execute.
+    reserveAdmissionHeadroom: input.slotManifestVersion === 1,
     now,
   });
   const ttlMs = requestedTtlMs(now, input.expiresAt);
@@ -668,7 +693,7 @@ export async function renewNonprodEnvironmentLease(input: {
     hostPressure: input.hostPressure,
     capacityBroker: input.capacityBroker,
     manifestSlotCount: NONPROD_SLOT_KEYS.length,
-    reserveBuildHeadroom: false,
+    reserveAdmissionHeadroom: false,
     now,
   });
   return { status: "renewed", lease: updated, poolPolicy };

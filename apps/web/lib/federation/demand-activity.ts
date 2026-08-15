@@ -62,6 +62,16 @@ export interface DemandMirrorInput {
   payload: unknown;
 }
 
+export interface DemandDeliveryJobInput {
+  sourceId: string | null;
+  status: string;
+  attemptCount: number;
+  nextAttemptAt: Date | null;
+  lastAttemptAt: Date | null;
+  lastError: string | null;
+  completedAt: Date | null;
+}
+
 const LOCAL_INSTALLATION_LABEL = "This installation";
 
 /** Pull a safe, human-facing title out of the stored envelope payload. The
@@ -72,6 +82,11 @@ export function extractDemandTitle(payload: unknown): string {
     const p = payload as Record<string, unknown>;
     const direct = p.title;
     if (typeof direct === "string" && direct.trim()) return direct.trim();
+    const envelope = p.envelope;
+    if (envelope && typeof envelope === "object") {
+      const nested = (envelope as Record<string, unknown>).title;
+      if (typeof nested === "string" && nested.trim()) return nested.trim();
+    }
     const content = p.content;
     if (content && typeof content === "object") {
       const nested = (content as Record<string, unknown>).title;
@@ -102,12 +117,18 @@ function lastActivity(input: DemandMirrorInput): Date {
 export function toDemandSyncActivityRow(
   input: DemandMirrorInput,
   linkDisplayNameById: ReadonlyMap<string, string>,
+  deliveryJob?: DemandDeliveryJobInput,
 ): DemandSyncActivityRow {
   const peerLabel = linkDisplayNameById.get(input.federationLinkId) ?? "Unknown connection";
   const direction: DemandSyncDirection =
     input.canonicalSide === "local" ? "outbound" : "inbound";
   const originLabel = direction === "outbound" ? LOCAL_INSTALLATION_LABEL : peerLabel;
-  const status = deriveDemandSyncStatus(input);
+  const status = deliveryJob?.status === "failed"
+    ? "dead-lettered"
+    : deliveryJob?.status === "queued" || deliveryJob?.status === "in-progress"
+      ? deliveryJob.lastError ? "failed" : "pending"
+      : deriveDemandSyncStatus(input);
+  const jobActivity = deliveryJob?.lastAttemptAt ?? deliveryJob?.completedAt ?? null;
   return {
     mirrorId: input.mirrorId,
     recordType: input.recordType,
@@ -116,9 +137,9 @@ export function toDemandSyncActivityRow(
     originLabel,
     peerLabel,
     status,
-    detail: input.lastDeliveryError ?? input.conflictReason ?? null,
-    attempts: input.deliveryAttempts,
-    lastActivityISO: lastActivity(input).toISOString(),
+    detail: deliveryJob?.lastError ?? input.lastDeliveryError ?? input.conflictReason ?? null,
+    attempts: deliveryJob?.attemptCount ?? input.deliveryAttempts,
+    lastActivityISO: (jobActivity ?? lastActivity(input)).toISOString(),
   };
 }
 
@@ -126,9 +147,10 @@ export function toDemandSyncActivityRow(
 export function mapDemandSyncActivity(
   inputs: readonly DemandMirrorInput[],
   linkDisplayNameById: ReadonlyMap<string, string>,
+  deliveryJobByMirrorId: ReadonlyMap<string, DemandDeliveryJobInput> = new Map(),
 ): DemandSyncActivityRow[] {
   return inputs
-    .map((i) => toDemandSyncActivityRow(i, linkDisplayNameById))
+    .map((i) => toDemandSyncActivityRow(i, linkDisplayNameById, deliveryJobByMirrorId.get(i.mirrorId)))
     .sort((a, b) => b.lastActivityISO.localeCompare(a.lastActivityISO));
 }
 
@@ -140,7 +162,7 @@ export async function listRecentDemandSyncActivity(
 ): Promise<DemandSyncActivityRow[]> {
   const take = Math.min(Math.max(opts.take ?? 50, 1), 200);
   const mirrors = await prisma.federatedRecordMirror.findMany({
-    where: { recordType: "demand" },
+    where: { recordType: { in: ["demand", "demand-envelope", "demand-response", "demand-disposition"] } },
     orderBy: { updatedAt: "desc" },
     take,
     select: {
@@ -161,15 +183,26 @@ export async function listRecentDemandSyncActivity(
   });
 
   const linkIds = Array.from(new Set(mirrors.map((m) => m.federationLinkId)));
-  const links = linkIds.length
-    ? await prisma.federationLink.findMany({
+  const mirrorIds = mirrors.map((mirror) => mirror.mirrorId);
+  const [links, deliveryJobs] = await Promise.all([
+    linkIds.length ? prisma.federationLink.findMany({
         where: { linkId: { in: linkIds } },
         select: { linkId: true, principal: { select: { displayName: true } } },
-      })
-    : [];
+      }) : [],
+    mirrorIds.length ? prisma.workItem.findMany({
+      where: { sourceType: "federation-demand-delivery", sourceId: { in: mirrorIds } },
+      select: {
+        sourceId: true, status: true, attemptCount: true, nextAttemptAt: true,
+        lastAttemptAt: true, lastError: true, completedAt: true,
+      },
+    }) : [],
+  ]);
   const nameById = new Map<string, string>(
     links.map((l) => [l.linkId, l.principal?.displayName ?? l.linkId]),
   );
 
-  return mapDemandSyncActivity(mirrors, nameById);
+  const jobByMirrorId = new Map(
+    deliveryJobs.flatMap((job) => job.sourceId ? [[job.sourceId, job] as const] : []),
+  );
+  return mapDemandSyncActivity(mirrors, nameById, jobByMirrorId);
 }

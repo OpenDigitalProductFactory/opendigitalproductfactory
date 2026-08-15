@@ -18,7 +18,14 @@ export const OPERATIONAL_PRECEDENT_RE =
 export const SPEC_EVIDENCE_RE =
   /existing specs?\/plans? reviewed|specs?\/plans? reviewed|search_specs_and_plans|docs\/superpowers\/(?:specs|plans)\//i;
 export const CODE_EVIDENCE_RE =
-  /current code substrate reviewed|code substrate|code graph|search_code_graph|\brg\s+-n|apps\/web\/|packages\/[^/\s]+\/src\//i;
+  /current code substrate reviewed|code substrate|code graph|search_code_graph|mcp packs?|\brg\s+-n|apps\/web\/|packages\/[^/\s]+\//i;
+
+// The trivial escape hatch: a marker plus an explicit no-contract-change (or
+// "trivial") declaration carrying a parenthetical reason of at least 20
+// characters. Mirrors the OPERATIONAL_PRECEDENT no-precedent form so a genuinely
+// localized copy-only edit does not have to manufacture spec+code tokens.
+export const TRIVIAL_NO_CONTRACT_RE =
+  /(?:^|\n)\s*(?:#{1,6}\s*)?Design[ -]Grounding(?:-Decision)?:\s*(?:trivial|no[ -]contract[ -]change)\b[^\n]*\([^)\n]{20,}\)/i;
 
 const ATTESTATION_HELP = `## Design grounding
 
@@ -69,10 +76,28 @@ function git(...args) {
   }
 }
 
-export function hasDesignGroundingEvidence(text) {
+// Break the evidence check into its three independent conditions so the gate can
+// tell an author exactly which one is unmet instead of a single opaque failure.
+export function analyzeDesignGroundingEvidence(text) {
   const t = String(text ?? "");
   const marker = DESIGN_GROUNDING_RE.test(t) || DESIGN_GROUNDING_HEADING_RE.test(t);
-  return marker && SPEC_EVIDENCE_RE.test(t) && CODE_EVIDENCE_RE.test(t);
+  const spec = SPEC_EVIDENCE_RE.test(t);
+  const code = CODE_EVIDENCE_RE.test(t);
+  const trivial = TRIVIAL_NO_CONTRACT_RE.test(t);
+  // Full grounding needs marker + spec + code; the trivial path needs marker +
+  // an explicit no-contract-change declaration with a reason.
+  const ok = marker && (trivial || (spec && code));
+  const missing = [];
+  if (!marker) missing.push("marker");
+  if (!trivial) {
+    if (!spec) missing.push("spec-evidence");
+    if (!code) missing.push("code-evidence");
+  }
+  return { ok, marker, spec, code, trivial, missing };
+}
+
+export function hasDesignGroundingEvidence(text) {
+  return analyzeDesignGroundingEvidence(text).ok;
 }
 
 export function hasOperationalPrecedentEvidence(text) {
@@ -91,16 +116,37 @@ export function classifyChangedFiles(files) {
   };
 }
 
-export function decide({ changedFiles = [], evidenceText = "" } = {}) {
+// evidenceSources, when provided, lets the gate distinguish durable attestation
+// (PR body + commit trailers, which survive main absorbing a doc) from evidence
+// that lives only in a changed doc (which stops counting once main absorbs it,
+// because this gate reads docs from the base...HEAD diff). evidenceText remains
+// the backward-compatible single-string entry point for unit tests.
+export function decide({ changedFiles = [], evidenceText = "", evidenceSources = null } = {}) {
   const { designSensitive, physicalTwin } = classifyChangedFiles(changedFiles);
   if (designSensitive.length === 0) {
     return { ok: true, reason: "no-design-sensitive-files", designSensitive, physicalTwin };
   }
-  if (!hasDesignGroundingEvidence(evidenceText)) {
-    return { ok: false, reason: "missing-design-grounding", designSensitive, physicalTwin };
+
+  const durableText = evidenceSources
+    ? [evidenceSources.prBody, evidenceSources.commits].filter(Boolean).join("\n\n")
+    : evidenceText;
+  const diffDocText = evidenceSources ? String(evidenceSources.changedDocText ?? "") : "";
+  const combinedText = evidenceSources
+    ? [durableText, diffDocText].filter(Boolean).join("\n\n")
+    : evidenceText;
+
+  const analysis = analyzeDesignGroundingEvidence(combinedText);
+  if (!analysis.ok) {
+    return { ok: false, reason: "missing-design-grounding", missing: analysis.missing, analysis, designSensitive, physicalTwin };
   }
-  if (physicalTwin.length > 0 && !hasOperationalPrecedentEvidence(evidenceText)) {
-    return { ok: false, reason: "missing-operational-precedent", designSensitive, physicalTwin };
+
+  // The grounding evidence passed only because a changed doc carried it — flag it
+  // so the author moves the attestation to a durable trailer before main absorbs
+  // the doc and silently drops the evidence.
+  const warnDiffDocOnly = evidenceSources ? !analyzeDesignGroundingEvidence(durableText).ok : false;
+
+  if (physicalTwin.length > 0 && !hasOperationalPrecedentEvidence(combinedText)) {
+    return { ok: false, reason: "missing-operational-precedent", designSensitive, physicalTwin, warnDiffDocOnly };
   }
   return {
     ok: true,
@@ -109,6 +155,7 @@ export function decide({ changedFiles = [], evidenceText = "" } = {}) {
       : "design-grounding-evidence",
     designSensitive,
     physicalTwin,
+    warnDiffDocOnly,
   };
 }
 
@@ -140,15 +187,23 @@ function main() {
 
   const commits = git("log", `${base}..HEAD`, "--format=%B");
   const prBody = process.env.PR_BODY || "";
-  const evidenceText = [prBody, commits, readEvidenceFromChangedDocs(changedFiles)].join("\n\n");
+  const changedDocText = readEvidenceFromChangedDocs(changedFiles);
+  const evidenceSources = { prBody, commits, changedDocText };
 
-  const verdict = decide({ changedFiles, evidenceText });
+  const verdict = decide({ changedFiles, evidenceSources });
   if (verdict.ok) {
     if (verdict.reason === "no-design-sensitive-files") {
       console.log("[design-grounding-gate] No UX/workflow/queue/navigation/process-spine files changed — nothing to gate.");
     } else {
       console.log("[design-grounding-gate] Design-sensitive change carries design-grounding evidence. OK.");
       for (const f of verdict.designSensitive) console.log("  • " + f);
+      if (verdict.warnDiffDocOnly) {
+        console.warn("");
+        console.warn("[design-grounding-gate] WARNING — the only grounding attestation is in a changed doc.");
+        console.warn("This gate reads doc evidence from the base...HEAD diff, so the attestation STOPS");
+        console.warn("counting once main absorbs that doc. Put it in a durable place the gate always sees:");
+        console.warn("a commit-message trailer or the PR body (a 'Design-Grounding-Decision:' line).");
+      }
     }
     process.exit(0);
   }
@@ -170,17 +225,23 @@ function main() {
   console.error("These files affect UX, workflow, queues, navigation, attention, or the process spine:");
   for (const f of verdict.designSensitive) console.error("  • " + f);
   console.error("");
-  console.error("Before changing these surfaces, DPF requires the PR to state which existing");
-  console.error("specs/plans and current code substrate were reviewed. This prevents a new");
-  console.error("thread from inventing UX or queue behavior without first grounding in the");
-  console.error("platform architecture.");
+
+  // Tell the author exactly which of the three independent conditions is unmet,
+  // instead of a single opaque "missing evidence" verdict.
+  const a = verdict.analysis || { marker: false, spec: false, code: false };
+  const row = (ok, label, hint) =>
+    `  ${ok ? "✓" : "✗"} ${label.padEnd(14)} ${ok ? "found" : "MISSING — " + hint}`;
+  console.error("Evidence check — need marker + spec-evidence + code-evidence (or the trivial path below):");
+  console.error(row(a.marker, "marker", 'add a "Design-Grounding-Decision:" trailer, or a "## Design grounding" heading'));
+  console.error(row(a.spec, "spec-evidence", 'literal "specs/plans reviewed", or a docs/superpowers/(specs|plans)/… path'));
+  console.error(row(a.code, "code-evidence", 'literal "code substrate", or an apps/web/… or packages/<x>/… path'));
   console.error("");
-  console.error("Add this to the PR body, a commit message, or a touched durable doc:");
+  console.error("Accepted example (put in the PR body or a commit message, not only a diff-doc):");
   console.error("");
   console.error(ATTESTATION_HELP);
   console.error("");
-  console.error("For trivial no-contract-change edits, use:");
-  console.error("  Design-Grounding-Decision: reviewed <specs/code>; localized copy-only fix, no contract or routing change.");
+  console.error("Trivial no-contract-change path — marker + a reason of 20+ chars, no spec/code tokens needed:");
+  console.error("  Design-Grounding-Decision: no-contract-change (localized copy-only fix; no routing or contract change)");
   console.error("");
   process.exit(1);
 }

@@ -13,6 +13,7 @@ import {
 import type { WorkforceStatus, EmployeeProfileRecord, EmployeeProfileInput } from "@/lib/workforce-types";
 import type { AddressWithHierarchy } from "@/lib/address-types";
 import AddressSection from "@/components/employee/AddressSection";
+import { createClientOperationId } from "@/lib/client-operation-id";
 import { DatePicker } from "@/components/ui/DatePicker";
 import { EmailInput } from "@/components/ui/EmailInput";
 import { PhoneInput } from "@/components/ui/PhoneInput";
@@ -35,13 +36,15 @@ type Props = {
 
 function generateEmployeeId(): string {
   const ts = Date.now().toString(36).toUpperCase();
-  // CodeQL alert #72 (js/insecure-randomness): Math.random() is not
-  // cryptographically secure. The employee ID is a display string, not
-  // a secret — but using crypto.randomUUID() removes the alert AND
-  // prevents accidental copy-paste of this generator into a security
-  // context later. The 4-char slice keeps the same human-readable ID
-  // shape ("EMP-LXAB123-WXYZ").
-  const rand = globalThis.crypto.randomUUID().replace(/-/g, "").slice(0, 4).toUpperCase();
+  // Secure randomness without a secure-context requirement. The bare
+  // globalThis.crypto.randomUUID() used to throw ("randomUUID is not a
+  // function") on the LAN-hosted HTTP installs DPF supports — randomUUID is
+  // secure-context-only, so opening the portal over http://<lan-ip> crashed the
+  // whole People page. createClientOperationId() prefers randomUUID and falls
+  // back to getRandomValues (still cryptographically secure, no CodeQL
+  // js/insecure-randomness alert). The 4-char slice keeps the same
+  // human-readable ID shape ("EMP-LXAB123-WXYZ").
+  const rand = createClientOperationId().replace(/-/g, "").slice(0, 4).toUpperCase();
   return `EMP-${ts}-${rand}`;
 }
 

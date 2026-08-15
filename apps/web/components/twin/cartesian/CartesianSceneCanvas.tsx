@@ -77,7 +77,11 @@ export interface CartesianSceneCanvasProps {
   ariaLabel: string;
   bindings?: CartesianScenePresentationMap;
   persistence?: CartesianScenePersistence;
-  onActivate?: (placementId: string, entityRef: SceneEntityRef) => void;
+  onActivate?: (
+    placementId: string,
+    entityRef: SceneEntityRef,
+    anchor: HTMLElement,
+  ) => void;
   empty?: ReactNode;
   height?: number;
   className?: string;
@@ -101,10 +105,11 @@ function toFlowNodes(
             ...descriptor.data,
             ...(descriptor.data.interactive && onActivate
               ? {
-                  onActivate: () =>
+                  onActivate: (anchor: HTMLElement) =>
                     onActivate(
                       descriptor.data.placementId,
                       descriptor.data.entityRef,
+                      anchor,
                     ),
                 }
               : {}),

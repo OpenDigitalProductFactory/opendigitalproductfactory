@@ -1,5 +1,5 @@
 import { routeAndCall } from "@/lib/inference/routed-inference";
-import { listActiveNonprodEnvironmentLeases } from "@/lib/nonprod/environment-lease";
+import { inspectLocalProviderCapacity } from "@/lib/routing/local-provider-capacity";
 import { CHANGE_REVIEWER_ROUTE_AGENT } from "@/lib/tak/change-reviewer-route";
 import { parseSemanticReviewResponse, type SemanticReviewResult } from "./semantic-change-review";
 import type { SemanticChangeReviewDispatchContext } from "./semantic-change-review-operation";
@@ -31,25 +31,30 @@ function mergeReviewResults(results: SemanticReviewResult[]): SemanticReviewResu
 }
 
 async function localCiCapacityGuard(): Promise<SemanticReviewResult | null> {
-  try {
-    const activeLeases = await listActiveNonprodEnvironmentLeases({});
-    if (!activeLeases.some((lease) => lease.environmentKey === "local-integration-ci")) {
-      return null;
-    }
+  const capacity = await inspectLocalProviderCapacity();
+  if (capacity.available) return null;
+  if (capacity.reason === "local-ci-active-capacity-reservation") {
     return {
       decision: "inconclusive",
       issues: [],
       summary: "Semantic review deferred while governed local CI owns host capacity.",
       inconclusiveReason: "local-ci-active-capacity-reservation",
     };
-  } catch {
+  }
+  if (capacity.reason === "local-ci-queued-capacity-reservation") {
     return {
       decision: "inconclusive",
       issues: [],
-      summary: "Semantic review deferred because host-capacity ownership could not be verified.",
-      inconclusiveReason: "local-ci-capacity-reservation-unavailable",
+      summary: "Semantic review deferred so the established local-CI queue can claim the next safe host window.",
+      inconclusiveReason: "local-ci-queued-capacity-reservation",
     };
   }
+  return {
+    decision: "inconclusive",
+    issues: [],
+    summary: "Semantic review deferred because host-capacity ownership could not be verified.",
+    inconclusiveReason: "local-ci-capacity-reservation-unavailable",
+  };
 }
 
 /** Execute the governed Change Reviewer plus content-scoped specialist branches. */

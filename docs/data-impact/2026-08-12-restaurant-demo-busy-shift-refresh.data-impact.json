@@ -1,0 +1,44 @@
+{
+  "processSpineDecision": "Localized Restaurant demo data repair and existing-contract bugfix; no process-spine, route, or operator-documentation contract changed.",
+  "version": "1",
+  "accountableOwner": "data-steward",
+  "affectedCopies": [
+    "The platform-owned Restaurant demo's existing StorefrontBooking, StaffingShift, StaffingAssignment, HospitalityServiceTurn, HospitalityServiceTurnEvent, and HospitalityCapacityAllocation rows are refreshed into a recognizable busy shift using exact reserved demo identifiers.",
+    "The Workspace host stand continues to read the canonical Restaurant floor projection. No parallel fixture store, schema field, relationship, or derived persistence copy is introduced.",
+    "The guard migrations fail closed before any write when a reserved booking, staffing, turn, allocation, table-resource, provider, storefront, organization, or Restaurant-archetype identity does not match the exact platform demo corpus.",
+    "Operator-owned restaurant resources, bookings, staffing, layouts, service turns, allocations, availability, and customer data remain outside every selector."
+  ],
+  "migration": {
+    "name": "20260812102900_guard_restaurant_demo_busy_shift + 20260812102930_guard_restaurant_demo_resources + 20260812103000_refresh_restaurant_demo_busy_shift",
+    "backfill": "Data-only and demo-scoped. Two guard migrations first validate that all reserved demo identifiers resolve to the expected canonical Restaurant organization and table-resource graph and that no real booking, staffing, turn, or allocation row occupies a reserved id. The refresh then advances the existing reversible demo corpus to waiting, reserved, ordered, dirty, paid, and combined-table states, preserves released allocation history rather than deleting it, and recreates the two named server-section assignments. Reapplication is idempotent; no schema or operator-owned row is changed."
+  },
+  "tests": [
+    "packages/db/src/restaurant-demo-floor-migration.test.ts",
+    "apps/web/lib/demo/restaurant-demo-floor.test.ts",
+    "apps/web/components/twin/restaurant/RestaurantFloorOperations.test.tsx",
+    "apps/web/lib/actions/operating-hours.test.ts",
+    "apps/web/components/storefront/SlotBookingFlow.mobile.test.tsx"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:hospitality-service-turn#restaurant-demo-busy-shift-refresh",
+      "prismaModel": "HospitalityServiceTurn",
+      "lifecycleDisposition": "Existing service-turn lifecycle. Exact demo turns are refreshed in place, their versions advance, and prior active demo allocations transition to released with disposition evidence instead of being deleted.",
+      "fields": [
+        {
+          "fieldId": "data:hospitality-service-turn#demo-stage-assignment-and-allocation",
+          "resolution": "inherited",
+          "reason": "party stage, staffing assignment, service-turn events, and capacity allocations remain in their established canonical authorities",
+          "provenance": "authored Restaurant demo busy-shift plan, bounded by exact reserved demo identifiers and fail-closed guards"
+        }
+      ]
+    },
+    {
+      "kind": "projection",
+      "derivedContractId": "projection:restaurant-demo-live-floor-busy-shift",
+      "cleanupTest": "restaurant-demo-floor-migration.test.ts asserts the exact demo-only identity guards and retained allocation-history boundary.",
+      "reconciliationTest": "restaurant-demo-floor.test.ts and RestaurantFloorOperations.test.tsx prove the refreshed canonical state reaches the authored floor, server sections, action recommendations, and stale-conflict recovery."
+    }
+  ]
+}

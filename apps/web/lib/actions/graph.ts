@@ -28,6 +28,8 @@ export type GraphData = {
     osiLayer?: number | null;
     status?: string | null;
     ciType?: string | null;
+    sourceKind?: string | null;
+    lastObservedAt?: string | null;
   }>;
   links: Array<{
     source: string;
@@ -393,5 +395,9 @@ function infraCIToGraphNode(ci: GraphNode): GraphData["nodes"][0] {
     osiLayer,
     status,
     ciType,
+    sourceKind: (ci.properties?.sourceKind as string | undefined) ?? null,
+    lastObservedAt: ci.properties?.lastObservedAt instanceof Date
+      ? ci.properties.lastObservedAt.toISOString()
+      : (ci.properties?.lastObservedAt as string | undefined) ?? null,
   };
 }

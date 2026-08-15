@@ -3,6 +3,25 @@
 // Keyed by threadId. SSE endpoint subscribes, agentic loop emits.
 
 import type { TaskState } from "@/lib/tak/task-states";
+import type { SelfUpgradeRunStatus } from "@/lib/self-upgrade/run-types";
+
+export type SystemQuiescenceEvent = {
+  type: "system:quiescence";
+  level: "draining" | "swapping" | "cleared";
+  runId: string;
+  swapEtaSeconds: number | null;
+  deferReason: string | null;
+  deferSurface: string | null;
+  outcome: "draining" | "swapping" | "succeeded" | "deferred" | "aborted" | "failed";
+};
+
+export type SystemSelfUpgradeEvent = {
+  /** Durable state changed; consumers must rehydrate their read model. */
+  type: "system:self-upgrade";
+  runId: string;
+  status: SelfUpgradeRunStatus;
+  observedAt: string;
+};
 
 export type AgentEvent =
   // Attention Surface (EP-ATTENTION-SURFACE, BI-094A124F): a new pending-human
@@ -120,15 +139,8 @@ export type AgentEvent =
   // terminal transition (success | deferred | aborted | failed — outcome
   // distinguishes them) and is also consumed by suspended Inngest
   // functions waiting on platform.quiescence-cleared. Spec §7.1.
-  | {
-      type: "system:quiescence";
-      level: "draining" | "swapping" | "cleared";
-      runId: string;
-      swapEtaSeconds: number | null;
-      deferReason: string | null;
-      deferSurface: string | null;
-      outcome: "draining" | "swapping" | "succeeded" | "deferred" | "aborted" | "failed";
-    };
+  | SystemQuiescenceEvent
+  | SystemSelfUpgradeEvent;
 
 type Handler = (event: AgentEvent) => void;
 
@@ -144,7 +156,7 @@ function subscribe(threadId: string, handler: Handler): () => void {
 }
 
 function emit(threadId: string, event: AgentEvent): void {
-  subscribers.get(threadId)?.forEach((handler) => handler(event));
+  subscribers.get(threadId)?.forEach((handler) => deliver(handler, event));
 }
 
 // BI-QUIESCE-006 — system-namespace event registry separate from threadId
@@ -171,7 +183,17 @@ function broadcastSystem(event: AgentEvent): void {
   // forEach across the subscriber Map; in practice a single portal has
   // O(open-tabs) subscribers.
   for (const [, handlers] of subscribers) {
-    handlers.forEach((handler) => handler(event));
+    handlers.forEach((handler) => deliver(handler, event));
+  }
+}
+
+function deliver(handler: Handler, event: AgentEvent): void {
+  try {
+    handler(event);
+  } catch (error) {
+    // Event delivery is advisory. A broken observer must not prevent durable
+    // work or starve other subscribers of the same lifecycle notification.
+    console.error("[agent-event-bus] subscriber failed", error);
   }
 }
 

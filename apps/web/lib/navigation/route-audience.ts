@@ -148,6 +148,9 @@ export const ROUTE_AUDIENCE_OVERRIDES: Record<
   // EP-COWORKER-IDENTITY-360: the Coworker Identity 360 — an owner-facing per-
   // coworker detail surface, peer to People (/employee) and Customers (/customer).
   "/workforce/[agentId]": { audience: "owner", destinationKind: "detail" },
+  // The AI Coworkers directory landing (business-domain peer to People/Customers).
+  // section-home → an owner's cockpit shell, matching /employee and /customer.
+  "/workforce": { audience: "owner", destinationKind: "section-home" },
 };
 
 // ─── Classifier ──────────────────────────────────────────────────────────────

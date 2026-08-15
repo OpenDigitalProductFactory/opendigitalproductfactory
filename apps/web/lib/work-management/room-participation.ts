@@ -1,4 +1,5 @@
 import type { ActiveViewer } from "./work-item-presence";
+import { deriveRoomCoordinator } from "./room-coordinator";
 import type {
   WorkRoomParticipantRole,
   WorkRoomParticipantView,
@@ -145,5 +146,7 @@ export function projectWorkRoomParticipants(input: {
     });
   }
 
-  return [...projected.values()];
+  // EP-WORKROOM-COMMS (BI-5A7BC4B3): ensure the room has a single Coordinator —
+  // kept if named by policy/lineage, otherwise the accountable principal by default.
+  return deriveRoomCoordinator([...projected.values()]);
 }

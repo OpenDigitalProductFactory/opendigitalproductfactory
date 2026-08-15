@@ -121,6 +121,7 @@ DPF already has most of the hard plumbing this design needs:
 - Situational decision weighting: [`docs/superpowers/specs/2026-06-05-situational-aware-decision-weighting-design.md`](../superpowers/specs/2026-06-05-situational-aware-decision-weighting-design.md)
 - Routing/receipt substrate review: [`docs/architecture/2026-06-14-odysseus-review-depth-pass.md`](../architecture/2026-06-14-odysseus-review-depth-pass.md)
 - Agentic loop execution and governors: [`apps/web/lib/tak/agentic-loop.ts`](../../apps/web/lib/tak/agentic-loop.ts)
+- Product-surface perception and action: the [Authorized Surface Contract](../superpowers/specs/2026-08-08-authorized-surface-contract-design.md) supplies principal-filtered semantic state and governed actions to the same loop; the Golden Triangle changes model behavior, never the user's or coworker's authority.
 
 The design should therefore be written as **consolidate, compile, and surface**, not "create a new AI model-control system."
 

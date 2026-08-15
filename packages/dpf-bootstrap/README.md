@@ -27,6 +27,14 @@ repair collapses DPF's own duplicate block so the file can parse again, then the
 normal schema-aware planner owns the write. It never appends blindly and never
 deletes user-owned config.
 
+Codex and Claude Code are known lazy-tool hosts: they index an authorized MCP
+catalog and attach only task-relevant definitions to the model. Their generated
+DPF endpoints therefore carry the server's explicit `?tier=full` catalog hint.
+This is not a least-authority expansion—the server still grant-filters the list,
+and the host still owns model attachment. Grok, VS Code, Antigravity, and generic
+MCP clients keep the no-query endpoint and its lean core default. Re-running the
+bootstrap migrates an older no-tier Codex config idempotently.
+
 ## Public surface
 
 ```ts

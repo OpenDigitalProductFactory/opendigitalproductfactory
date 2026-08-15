@@ -1,0 +1,36 @@
+{
+  "version": "1",
+  "accountableOwner": "data-steward",
+  "affectedCopies": [
+    "Prisma-to-EA current-state data-model mirror for LeaveRequest",
+    "Employee time-off read model, which exposes the recommendation audit link without copying the DecisionInteraction rationale"
+  ],
+  "migration": {
+    "name": "20260812053500_add_leave_decision_interaction",
+    "backfill": "none — the source WWWD interaction did not exist for historical leave requests, so prior rows remain NULL rather than receiving fabricated audit links. The nullable additive column cannot invalidate existing data."
+  },
+  "tests": [
+    "apps/web/lib/workforce/leave/leave-decision-runtime.test.ts",
+    "apps/web/lib/workforce/leave/decide-proposal.test.ts",
+    "apps/web/lib/workforce/leave-data.test.ts"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:leave-request",
+      "prismaModel": "LeaveRequest",
+      "lifecycleDisposition": "employment record; unchanged — the audit link follows the parent LeaveRequest lifecycle and is removed with that request. No new independent retention clock or derived copy is introduced.",
+      "fields": [
+        {
+          "fieldId": "data:leave-request#decisionInteractionId",
+          "name": "decisionInteractionId",
+          "resolution": "inherited",
+          "reason": "Opaque link to the governed WWWD DecisionInteraction that produced the coworker's recommendation. It is sensitive because it connects an employment request to its decision rationale, but it stores no rationale or employee payload itself.",
+          "provenance": "Server-authored only by the propose_leave_decision orchestration after evaluateOrgBusinessDecisionGate returns a recorded interaction; NULL when a hard guard escalates before the gate.",
+          "flags": ["sensitive", "subject"],
+          "fieldPolicy": "organization-scoped employment-decision audit reference; never accepted from model output, never used to widen authority, and exposed only to the request subject or an authorized human approver"
+        }
+      ]
+    }
+  ]
+}

@@ -5,6 +5,10 @@ import { decodeDemandMirrorPayload } from "./demand-exchange";
 import { decodeDemandOutboxPayload } from "./demand-delivery";
 import type { FederationIdentity } from "./demand-identity";
 import { decryptPeerToken } from "./outbound";
+import {
+  scheduleFederationDeliveryJob,
+  type FederationDeliveryQueueDb,
+} from "./delivery-queue";
 
 interface DigestMirrorRow {
   mirrorId?: string;
@@ -21,7 +25,7 @@ interface DigestMirrorRow {
  *  genuinely-poison record stops thrashing once it has exhausted the cap. */
 export const MAX_DEMAND_REHEALS = 3;
 
-export interface DemandDigestDb {
+export interface DemandDigestDb extends FederationDeliveryQueueDb {
   federationLink?: {
     findMany(args: unknown): Promise<Array<{ linkId: string; peerAuthorityUrl: string; peerTokenEnc: string | null; role: string }>>;
   };
@@ -191,16 +195,15 @@ export async function reconcileDemandDigests(
             if (wasDeadLettered && (row.rehealCount ?? 0) >= MAX_DEMAND_REHEALS) continue;
             requeued++;
             await db.federatedRecordMirror.update!({ where: { mirrorId: row.mirrorId }, data: {
-              syncStatus: "pending", deliveryAttempts: 0, nextDeliveryAt: now,
-              lastDeliveryError: `reconciliation:${need.reason}`, deadLetteredAt: null,
+              syncStatus: "pending", deadLetteredAt: null,
               ...(wasDeadLettered ? { rehealCount: (row.rehealCount ?? 0) + 1 } : {}),
             } });
+            await scheduleFederationDeliveryJob(db, row.mirrorId!, now);
           } else {
             confirmed++;
             await db.federatedRecordMirror.update!({ where: { mirrorId: row.mirrorId }, data: {
               syncStatus: payload.activity === "dpf.demand.withdrawn" ? "withdrawn" : "synced",
-              acknowledgedVersion: row.version, lastSyncedAt: now, nextDeliveryAt: null,
-              lastDeliveryError: null, deadLetteredAt: null,
+              acknowledgedVersion: row.version, lastSyncedAt: now, deadLetteredAt: null,
             } });
           }
         }

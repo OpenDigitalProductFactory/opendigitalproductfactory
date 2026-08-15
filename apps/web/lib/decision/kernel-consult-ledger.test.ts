@@ -149,6 +149,8 @@ describe("recordKernelConsultInteraction", () => {
     expect(row.profileId).toBe("mark-dpf-platform");
     expect(row.profileVersionId).toBe("mark-dpf-platform-v1");
     expect(row.domainClass).toBe("kernel-consult");
+    // BI-FD7CBA06: external MCP consults must name their door for audit filters.
+    expect(row.gateKey).toBe("kernel-consult");
     expect(row.outcomeType).toBe("recommend");
     expect(row.question).toBe("Which storage approach should we take?");
     expect(row.options).toEqual(["option-a", "option-b"]);
@@ -158,6 +160,7 @@ describe("recordKernelConsultInteraction", () => {
     expect(payload.tool).toBe("principle_decide");
     expect(payload.recommendedOptionId).toBe("option-a");
     expect(payload.callingPopulation).toBe("external_coding_agent");
+    expect(payload.callingSurface).toBe("claude-code");
     expect(Array.isArray(payload.topContributors)).toBe(true);
   });
 

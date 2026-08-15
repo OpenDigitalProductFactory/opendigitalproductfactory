@@ -9,6 +9,91 @@ export const COWORKER_IDENTITY_PURPOSE_CONTRACTS: PurposeContractModule = [
   {
     schemaVersion: 1,
     status: "intent-ratified",
+    routePath: "/workforce",
+    intent: {
+      primaryUser: "An operator who wants to reach AI coworkers as identities from the same place they reach People and Customers.",
+      triggeringNeed:
+        "Finding a specific AI coworker, or browsing the workforce, without going into the platform-admin AI section — the coworker directory as a business-domain peer to the People and Customer directories.",
+      prerequisites: [
+        "Signed in with the view_platform capability.",
+        "At least one selectable coworker exists in the workforce registry.",
+      ],
+      job: "Browse or filter the AI coworkers and open one to see its identity.",
+      successOutcome:
+        "The operator sees the roster of coworkers with fitness-for-duty signals and opens one, landing on its Coworker Identity 360 at /workforce/[agentId].",
+      findability: {
+        parentArea: "AI Coworkers",
+        entryPoints: ["Business nav: AI Coworkers (beside People and Customers)"],
+        navigationLayer: "business section top-level",
+        discoveryCue: "An 'AI Coworkers' entry beside People and Customers.",
+        expectedPath: ["/workforce", "/workforce/[agentId]"],
+      },
+      contentRoles: {
+        defaultVisibleKeys: ["roster-list", "roster-filters"],
+        deferredRegions: [
+          {
+            key: "coworker-identity",
+            role: "A single coworker's identity 360.",
+            trigger: "Operator opens a coworker row.",
+          },
+        ],
+      },
+      familyConsistency: {
+        terminology: "Coworker-facing role names and plain-language work — never raw agent ids or tool names.",
+        actionLocation: "Filters sit above the roster; each row opens the coworker's identity.",
+        feedbackPrimitive: "Inline filtering; no native dialogs.",
+        disclosurePattern: "The roster shows by default; a coworker's full identity is one click away at /workforce/[agentId].",
+        returnBehavior: "Opening a coworker navigates to its identity; the back path returns to the filtered roster.",
+      },
+    },
+    stateScenarios: {
+      "has-coworkers": {
+        statePredicate: "At least one selectable coworker exists.",
+        stateSource: {
+          oracleKey: "route-owned-read-model",
+          sourceRef: "apps/web/lib/coworker-record/roster.ts#loadRoster",
+        },
+        essentialEvidenceKeys: ["roster-list"],
+        primaryExperience: { kind: "informational", messageKey: "workforce-directory.has-coworkers" },
+        prohibitedActionKeys: [],
+        completionSignal: "The roster lists coworkers, each row opening /workforce/[agentId].",
+        errorCorrection: "An empty roster states no coworkers are selectable rather than showing a blank list.",
+        recovery: { actionKey: "open-admin-overview", routePath: "/platform/ai/overview" },
+      },
+    },
+    taskProtocol: {
+      startRoute: "/workforce",
+      taskPrompt: "Find a coworker and open its identity.",
+      completionOracle: "The operator opens a coworker row and lands on /workforce/[agentId].",
+      falseSuccessConditions: [
+        "The operator is teleported into the platform-admin AI section instead of a coworker identity.",
+        "A raw agentId is shown instead of the role name.",
+      ],
+      acceptanceThresholds: [
+        "The roster is reachable from the business nav beside People and Customers.",
+        "Each row opens the coworker's identity at /workforce/[agentId].",
+      ],
+    },
+    ratifiedBy: { role: "owner", ref: "operator-request:mark-bodman-2026-08-11" },
+    reviewRef: "EP-COWORKER-IDENTITY-360",
+    intentEvidenceRefs: [
+      {
+        kind: "operator-request",
+        ref: "EP-COWORKER-IDENTITY-360",
+        summary:
+          "Founder asked to put AI Coworkers beside People and Customers (business nav) so employees reach coworkers as identities, not only via platform admin. Kernel decision DI-CB054DD6F79D.",
+      },
+      {
+        kind: "existing-behavior",
+        ref: "apps/web/app/(shell)/platform/ai/overview/page.tsx",
+        summary:
+          "The platform overview already renders the roster (loadRoster + RosterView) with admin health/coverage panels; this business directory reuses the same roster read-model without the admin panels.",
+      },
+    ],
+  },
+  {
+    schemaVersion: 1,
+    status: "intent-ratified",
     routePath: "/workforce/[agentId]",
     intent: {
       primaryUser: "A platform operator looking at one AI coworker as a first-class identity, the way they look at a person or a customer.",

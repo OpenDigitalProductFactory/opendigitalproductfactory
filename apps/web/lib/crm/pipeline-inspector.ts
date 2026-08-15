@@ -7,46 +7,26 @@ import {
   OPEN_OPPORTUNITY_STAGES,
 } from "./presentation";
 import { formatRevenueAmount } from "./revenue-cockpit";
+import { OPPORTUNITY_GRAMMAR } from "../lifecycle-grammars";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-const STAGE_STALE_THRESHOLDS_DAYS: Record<string, number> = {
-  qualification: 7,
-  discovery: 10,
-  proposal: 14,
-  negotiation: 10,
-};
+// Per-stage exit criteria + stale thresholds are the canonical lifecycle grammar's now
+// (BI-E55991E9): the opportunity grammar (lib/lifecycle-grammars.ts) is the single source, so
+// the CRM and any future lifecycle board read the same definitions. Derived here into the same
+// record shape this module has always used, preserving behaviour exactly (the default fallbacks
+// below in getStageExitCriteria/isStageStale are unchanged).
+const STAGE_STALE_THRESHOLDS_DAYS: Record<string, number> = Object.fromEntries(
+  OPPORTUNITY_GRAMMAR.stages
+    .filter((stage) => stage.staleAfterDays !== undefined)
+    .map((stage) => [stage.key, stage.staleAfterDays as number]),
+);
 
-const STAGE_EXIT_CRITERIA: Record<string, string[]> = {
-  qualification: [
-    "Buyer problem is clear",
-    "Account and primary contact are known",
-    "Value hypothesis is recorded",
-  ],
-  discovery: [
-    "Needs and success criteria captured",
-    "Stakeholders and blockers identified",
-    "Commercial fit is plausible",
-  ],
-  proposal: [
-    "Quote or proposal sent",
-    "Commercial owner identified",
-    "Budget and timeline confirmed",
-  ],
-  negotiation: [
-    "Decision process confirmed",
-    "Commercial objections resolved",
-    "Signature or close step scheduled",
-  ],
-  closed_won: [
-    "Order or onboarding path confirmed",
-    "Handoff owner recorded",
-  ],
-  closed_lost: [
-    "Lost reason recorded",
-    "Reusable learning captured",
-  ],
-};
+const STAGE_EXIT_CRITERIA: Record<string, string[]> = Object.fromEntries(
+  OPPORTUNITY_GRAMMAR.stages
+    .filter((stage) => stage.exitCriteria !== undefined)
+    .map((stage) => [stage.key, [...(stage.exitCriteria as readonly string[])]]),
+);
 
 const CRM_ADVISOR_BOUNDARY =
   "Do not create CRM records, update stages, send, or schedule anything. Return review notes or draft copy for operator approval.";

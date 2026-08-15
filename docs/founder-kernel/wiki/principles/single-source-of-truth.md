@@ -5,7 +5,7 @@ status: published
 abstract: Each rule, fact, or decision lives in exactly one place. Pointers, not copies.
 principleTier: commandment
 principleDirection: Author each rule, fact, or decision in exactly one place; reference everywhere else via pointer.
-principleDimensionVector: {"long_term_maintainability": 1.0, "schema_grounding": 0.7, "blast_radius": -0.5}
+principleDimensionVector: {"long_term_maintainability": 1.0, "schema_grounding": 0.7, "blast_radius": -0.5, "reusability": 0.55, "governance_compliance": 0.4}
 principleAppliesTo:
   - in_platform_coworker
   - external_coding_agent

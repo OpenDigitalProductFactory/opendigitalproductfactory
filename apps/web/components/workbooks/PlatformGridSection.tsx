@@ -14,21 +14,39 @@
 import { SurfaceViewSwitcher } from "./SurfaceViewSwitcher";
 import { SurfacePlatformGrid } from "./SurfacePlatformGrid";
 
-// Re-export the pure helper so a page can import the section + parser together.
-export { parseSurfaceView } from "@/lib/workbooks/surface-view";
+import type { SurfaceDataScope } from "@/lib/workbooks/surface-view";
+
+// Re-export pure helpers so a page can import the section + parsers together.
+export {
+  parseSurfaceDataScope,
+  parseSurfaceView,
+} from "@/lib/workbooks/surface-view";
 
 export function PlatformGridSection({
   entityType,
   view,
+  dataScope = "default",
 }: {
   entityType: string;
   /** the parsed view (parseSurfaceView); null = show the page's own list */
   view: "grid" | "board" | null;
+  /** registry default unless the URL explicitly selects all records */
+  dataScope?: SurfaceDataScope;
 }) {
   return (
     <>
-      <SurfaceViewSwitcher entityType={entityType} current={view ?? "list"} />
-      {view ? <SurfacePlatformGrid entityType={entityType} view={view} /> : null}
+      <SurfaceViewSwitcher
+        entityType={entityType}
+        current={view ?? "list"}
+        dataScope={dataScope}
+      />
+      {view ? (
+        <SurfacePlatformGrid
+          entityType={entityType}
+          view={view}
+          dataScope={dataScope}
+        />
+      ) : null}
     </>
   );
 }

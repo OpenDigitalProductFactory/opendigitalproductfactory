@@ -222,6 +222,18 @@ export const ARCHITECTURE_REVIEW_REFERENCES: ReadonlyArray<{
     covers: "the canonical deployment contracts every substrate must wrap",
   },
   {
+    label: "Unified connector kernel",
+    path: "docs/architecture/unified-connector-kernel.md",
+    covers:
+      "connector lifecycle, capability discovery, safe failures, third-party reads, backfill, and domain-adapter boundaries",
+  },
+  {
+    label: "Federation discovery and pairing",
+    path: "docs/superpowers/specs/2026-07-19-federated-demand-network-design.md",
+    covers:
+      "mDNS and DNS-SD discovery, authenticated pairing, routed discovery, topology, and distributed revision/conflict standards",
+  },
+  {
     label: "Archetype value streams",
     path: "docs/architecture/archetype-business-value-streams.md",
     covers:

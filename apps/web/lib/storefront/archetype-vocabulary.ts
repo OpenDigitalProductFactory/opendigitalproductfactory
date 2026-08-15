@@ -155,6 +155,12 @@ const VOCABULARY: Record<string, ArchetypeVocabulary> = {
     portalLabel: "Farm & Ranch Portal", stakeholderLabel: "Customers",
     teamLabel: "Farm & Ranch Team", inboxLabel: "Farm & Ranch Requests", agentName: "Farm & Ranch Steward",
   },
+  "manufacturing": {
+    itemsLabel: "Product Families & Capabilities", singleItemLabel: "Product or Capability", addButtonLabel: "Add product or capability",
+    categoryLabel: "Product Family", priceLabel: "Quoted Price",
+    portalLabel: "Customer & Supplier Portal", stakeholderLabel: "Customers",
+    teamLabel: "Engineering & Operations", inboxLabel: "Commercial & Engineering Requests", agentName: "Operations Coordinator",
+  },
 };
 
 const DEFAULT_VOCABULARY: ArchetypeVocabulary = {
@@ -282,6 +288,9 @@ const CATEGORY_SUGGESTIONS: Record<string, string[]> = {
   "dry-cleaning-plant-network": ["Dry Cleaning", "Laundry", "Pressing", "Alterations", "Pickup & Delivery"],
   "wash-and-fold-laundry": ["Wash & Fold", "Commercial Laundry", "Pickup & Delivery", "Subscriptions"],
   "alterations-tailoring": ["Alterations", "Repairs", "Fittings", "Hemming"],
+
+  // Manufacturing
+  "industrial-equipment-oem": ["Configured Equipment", "Standard Products", "Prototype & NPI", "Spares & Lifecycle Support"],
 };
 
 export function getCategorySuggestions(archetypeId: string | null | undefined): string[] {

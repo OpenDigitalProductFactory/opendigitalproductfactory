@@ -25,6 +25,21 @@ describe("isInfrastructureProduct", () => {
     expect(isInfrastructureProduct([{ entityType: "gateway", provenance: REAL }])).toBe(false);
   });
 
+  it("is true for a bare ARP placeholder even when its address is on the real LAN", () => {
+    expect(isInfrastructureProduct([{
+      entityType: "host",
+      provenance: REAL,
+      discoveredVia: "arp_scan",
+      hasResolvedIdentity: false,
+    }])).toBe(true);
+    expect(isInfrastructureProduct([{
+      entityType: "host",
+      provenance: REAL,
+      discoveredVia: "arp_scan",
+      hasResolvedIdentity: true,
+    }])).toBe(false);
+  });
+
   it("is false when there are no linked entities (seed/registered product)", () => {
     expect(isInfrastructureProduct([])).toBe(false);
   });
@@ -34,7 +49,7 @@ function makeDb(products: Array<{
   id: string;
   productId: string;
   name: string;
-  inventoryEntities: Array<{ id: string; entityType: string; name?: string | null; properties?: unknown }>;
+  inventoryEntities: Array<{ id: string; entityType: string; name?: string | null; properties?: unknown; catalogIdentityId?: string | null }>;
 }>) {
   return {
     digitalProduct: {
@@ -102,6 +117,19 @@ describe("reconcilePromotedProducts", () => {
     );
     expect(deletedIds).toContain("p_docker");
     expect(deletedIds).not.toContain("p_real");
+  });
+
+  it("demotes an existing bare ARP LAN Host product but keeps a fingerprint-resolved one", async () => {
+    const db = makeDb([
+      { id: "p_phantom", productId: "host-lan-host-192-168-0-42", name: "LAN Host 192.168.0.42", inventoryEntities: [{ id: "e1", entityType: "host", name: "LAN Host 192.168.0.42", properties: { discoveredVia: "arp_scan", address: "192.168.0.42" } }] },
+      { id: "p_known", productId: "device-ring", name: "Ring doorbell", inventoryEntities: [{ id: "e2", entityType: "host", name: "Ring doorbell", properties: { discoveredVia: "arp_scan", address: "192.168.0.43" }, catalogIdentityId: "catalog-ring" }] },
+    ]);
+
+    const summary = await reconcilePromotedProducts(db as never);
+
+    expect(summary.demoted).toBe(1);
+    expect(summary.kept).toBe(1);
+    expect(db.digitalProduct.delete).toHaveBeenCalledWith({ where: { id: "p_phantom" } });
   });
 
   it("is idempotent — a clean estate demotes nothing", async () => {

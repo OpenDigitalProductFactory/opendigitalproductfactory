@@ -61,6 +61,13 @@ describe("statusColors", () => {
     expect(resolveIntent("complaintStatus", "resolved")).toBe("success");
   });
 
+  it("keeps Edge health and trust as separate shared status domains", () => {
+    expect(resolveIntent("edgeHealth", "healthy")).toBe("success");
+    expect(resolveIntent("edgeHealth", "offline")).toBe("danger");
+    expect(resolveIntent("edgeTrust", "trusted")).toBe("success");
+    expect(resolveIntent("edgeTrust", "quarantined")).toBe("danger");
+  });
+
   it("maps owner decision impact tags through the shared intent registry", () => {
     expect(resolveIntent("ownerDecisionImpact", "money")).toBe("warning");
     expect(resolveIntent("ownerDecisionImpact", "public")).toBe("danger");
@@ -81,6 +88,13 @@ describe("statusColors", () => {
     expect(resolveIntent("selfUpgradeRun", "succeeded")).toBe("success");
     expect(resolveIntent("selfUpgradeRun", "failed")).toBe("danger");
     expect(resolveIntent("selfUpgradeRun", "skipped")).toBe("neutral");
+  });
+
+  it("maps archetype readiness tiers and evidence statuses", () => {
+    expect(resolveIntent("archetypeReadinessTier", "template-ready")).toBe("info");
+    expect(resolveIntent("archetypeReadinessTier", "sole-platform-ready")).toBe("success");
+    expect(resolveIntent("archetypeReadinessEvidence", "required")).toBe("warning");
+    expect(resolveIntent("archetypeReadinessEvidence", "merged")).toBe("success");
   });
 
   it("maps Work Room state, outcome health, and activity through shared domains", () => {

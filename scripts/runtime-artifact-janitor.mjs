@@ -15,6 +15,8 @@
 //       images should not exist at all once they age out.
 //   (b) stray compose projects — `dpf-<topic>` projects whose worktree is gone, plus any
 //       foreign (non-`dpf`) compose project, idle past the staleness threshold.
+//   (c) managed local-CI BuildKit builders — `dpf-local-ci-buildkit-vN-S` (BI-C85D1B0A):
+//       STOP idle current-policy builders (cache kept); REAP obsolete policy versions.
 //
 // USAGE
 //   node scripts/runtime-artifact-janitor.mjs [--apply] [--staleness-days N] [--json]
@@ -46,6 +48,16 @@ import { fileURLToPath } from "node:url";
 
 import { DEFAULT_STALENESS_DAYS, decideVolumeReclaim, planReap } from "./lib/runtime-artifact-janitor.mjs";
 import { deriveWorktreeComposeProjectName } from "./lib/compose-safety.mjs";
+import {
+  DEFAULT_IDLE_GRACE_MS,
+  buildxRmArgs,
+  buildxStopArgs,
+  isBuilderCoolDownEnabled,
+  parseManagedBuilderContainer,
+  planManagedBuilderLifecycle,
+} from "./lib/local-ci-builder-lifecycle.mjs";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 
 // ── Arg parse ────────────────────────────────────────────────────────────────
 function parseArgs(argv) {
@@ -210,6 +222,133 @@ function discoverLiveWorktreeProjectNames() {
   return names;
 }
 
+/**
+ * Current builderPolicy.version from the checked-in slot resource manifest.
+ * Fail-soft to 2 (the generation that introduced bounded builders) if unreadable.
+ */
+function readCurrentBuilderPolicyVersion() {
+  try {
+    const manifestPath = join(
+      dirname(fileURLToPath(import.meta.url)),
+      "..",
+      "apps",
+      "web",
+      "lib",
+      "nonprod",
+      "local-ci-slot-resources.json",
+    );
+    const raw = JSON.parse(readFileSync(manifestPath, "utf8"));
+    const version = Number(raw?.builderPolicy?.version);
+    if (Number.isInteger(version) && version > 0) return version;
+  } catch {
+    /* fall through */
+  }
+  return 2;
+}
+
+/**
+ * True when any local-CI owner fence file claims a live PID (slot still building).
+ * Fence paths live in the shared git dir: dpf-local-ci-owner-<slot>.json
+ */
+function discoverLocalCiFenceActive() {
+  try {
+    const common = runCapture("git", ["rev-parse", "--path-format=absolute", "--git-common-dir"]).trim();
+    if (!common) return false;
+    const listing = spawnSync(
+      process.platform === "win32" ? "cmd" : "ls",
+      process.platform === "win32"
+        ? ["/c", `dir /b "${common.replace(/\//g, "\\")}\\dpf-local-ci-owner-*.json" 2>nul`]
+        : ["-1", common],
+      { encoding: "utf8", shell: process.platform === "win32" },
+    );
+    const names = (listing.stdout || "")
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter((line) => /^dpf-local-ci-owner-.+\.json$/i.test(line) || line.includes("dpf-local-ci-owner-"));
+    // On non-Windows, filter the directory listing ourselves.
+    const fenceFiles = process.platform === "win32"
+      ? names
+      : names.filter((line) => /^dpf-local-ci-owner-.+\.json$/i.test(line));
+    for (const file of fenceFiles) {
+      const base = file.includes("dpf-local-ci-owner-")
+        ? file.slice(file.lastIndexOf("dpf-local-ci-owner-"))
+        : file;
+      try {
+        const raw = JSON.parse(readFileSync(join(common, base), "utf8"));
+        const pid = Number(raw?.pid ?? raw?.ownerPid);
+        if (!Number.isInteger(pid) || pid <= 0) continue;
+        try {
+          process.kill(pid, 0);
+          return true;
+        } catch {
+          /* stale fence */
+        }
+      } catch {
+        /* unreadable fence */
+      }
+    }
+  } catch {
+    /* no git / no fences */
+  }
+  return false;
+}
+
+/**
+ * Discover managed BuildKit builders from running/stopped buildx containers.
+ * Uses docker ps -a so stopped containers still appear for obsolete REAP.
+ */
+function discoverManagedBuilders(nowMs = Date.now()) {
+  const out = runCapture("docker", [
+    "ps",
+    "-a",
+    "--filter",
+    "name=buildx_buildkit_dpf-local-ci-buildkit-",
+    "--format",
+    "{{.Names}}\t{{.Status}}\t{{.CreatedAt}}",
+  ]);
+  const builders = [];
+  const seen = new Set();
+  for (const line of out.split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    const [containerName, status, createdAt] = trimmed.split("\t");
+    const parsed = parseManagedBuilderContainer(containerName);
+    if (!parsed || seen.has(parsed.builderName)) continue;
+    seen.add(parsed.builderName);
+    const createdMs = Date.parse(createdAt);
+    const running = /^Up\b/i.test(String(status ?? ""));
+    builders.push({
+      name: parsed.builderName,
+      container: containerName,
+      status,
+      running,
+      idleMs: Number.isFinite(createdMs) ? Math.max(0, nowMs - createdMs) : 0,
+    });
+  }
+  // Also list buildx names in case a builder is registered without a matching
+  // filter hit (bootstrap race). Status defaults to stopped if unknown.
+  try {
+    const ls = runCapture("docker", ["buildx", "ls", "--format", "{{.Name}}\t{{.StatusEndpoint}}"]);
+    for (const line of ls.split("\n")) {
+      const name = line.split("\t")[0]?.trim();
+      // Bare buildx names only — container path above already covers the common case.
+      const bare = name && /^dpf-local-ci-buildkit-v\d+-\d+$/i.test(name) ? name : null;
+      if (!bare || seen.has(bare)) continue;
+      seen.add(bare);
+      const statusText = line.split("\t")[1] ?? "";
+      builders.push({
+        name: bare,
+        status: statusText,
+        running: /running/i.test(statusText),
+        idleMs: 0,
+      });
+    }
+  } catch {
+    /* buildx ls optional */
+  }
+  return builders;
+}
+
 // ── Reaping (only under --apply) ──────────────────────────────────────────────
 function reapImage(repository) {
   const res = spawnSync("docker", ["rmi", repository], { encoding: "utf8" });
@@ -278,13 +417,18 @@ function main() {
     process.exit(0);
   }
 
+  const nowMs = Date.now();
   let buildImages;
   let composeProjects;
   let liveWorktreeProjectNames;
+  let managedBuilders;
+  let fenceActive = false;
   try {
     buildImages = discoverBuildImages();
     composeProjects = discoverComposeProjects();
     liveWorktreeProjectNames = discoverLiveWorktreeProjectNames();
+    managedBuilders = discoverManagedBuilders(nowMs);
+    fenceActive = discoverLocalCiFenceActive();
   } catch (err) {
     console.error(`[runtime-artifact-janitor] discovery failed: ${err.message}`);
     console.error("[runtime-artifact-janitor] (docker + git must be on PATH)");
@@ -295,11 +439,19 @@ function main() {
     buildImages,
     composeProjects,
     liveWorktreeProjectNames,
-    nowMs: Date.now(),
+    nowMs,
     stalenessDays: opts.stalenessDays,
   });
 
-  const applied = { images: [], projects: [] };
+  const builderPlan = planManagedBuilderLifecycle({
+    builders: managedBuilders,
+    currentPolicyVersion: readCurrentBuilderPolicyVersion(),
+    leaseOrFenceActive: fenceActive,
+    idleGraceMs: DEFAULT_IDLE_GRACE_MS,
+    coolDownEnabled: isBuilderCoolDownEnabled(process.env),
+  });
+
+  const applied = { images: [], projects: [], builders: [] };
   if (opts.apply) {
     for (const d of plan.imagesToReap) {
       const r = reapImage(d.image.repository);
@@ -308,6 +460,24 @@ function main() {
     for (const d of plan.projectsToReap) {
       const r = reapComposeProject(d.project.projectName);
       applied.projects.push({ projectName: d.project.projectName, ...r });
+    }
+    for (const d of builderPlan.toStop) {
+      const res = spawnSync("docker", buildxStopArgs(d.builder.name), { encoding: "utf8" });
+      applied.builders.push({
+        name: d.builder.name,
+        action: "STOP",
+        ok: res.status === 0,
+        detail: (res.status === 0 ? res.stdout : res.stderr || "").trim(),
+      });
+    }
+    for (const d of builderPlan.toReap) {
+      const res = spawnSync("docker", buildxRmArgs(d.builder.name), { encoding: "utf8" });
+      applied.builders.push({
+        name: d.builder.name,
+        action: "REAP",
+        ok: res.status === 0,
+        detail: (res.status === 0 ? res.stdout : res.stderr || "").trim(),
+      });
     }
   }
 
@@ -319,6 +489,8 @@ function main() {
           stalenessDays: plan.stalenessDays,
           imageDecisions: plan.imageDecisions,
           projectDecisions: plan.projectDecisions,
+          builderDecisions: builderPlan.decisions,
+          localCiFenceActive: fenceActive,
           applied,
         },
         null,
@@ -326,13 +498,13 @@ function main() {
       ),
     );
   } else {
-    renderText(plan, opts, applied);
+    renderText(plan, builderPlan, opts, applied, fenceActive);
   }
 
   process.exit(0);
 }
 
-function renderText(plan, opts, applied) {
+function renderText(plan, builderPlan, opts, applied, fenceActive) {
   const mode = opts.apply ? "APPLY" : "DRY RUN";
   console.log(
     `\nRuntime-artifact janitor — ${mode} (staleness=${plan.stalenessDays}d, ${new Date().toISOString()})\n`,
@@ -350,6 +522,14 @@ function renderText(plan, opts, applied) {
     console.log(`  ${d.verdict.padEnd(5)} ${d.project.projectName}  (${d.reason})`);
   }
 
+  console.log(
+    `\nManaged local-CI BuildKit builders (fence active=${fenceActive ? "yes" : "no"}):`,
+  );
+  if (builderPlan.decisions.length === 0) console.log("  (none found)");
+  for (const d of builderPlan.decisions) {
+    console.log(`  ${d.action.padEnd(5)} ${d.builder.name}  (${d.reason})`);
+  }
+
   if (opts.apply) {
     console.log("\nApplied:");
     for (const r of applied.images) {
@@ -364,10 +544,16 @@ function renderText(plan, opts, applied) {
         console.log(`    volumes kept — ${r.volumesSkippedReason}`);
       }
     }
+    for (const r of applied.builders) {
+      console.log(
+        `  ${r.ok ? `${r.action.toLowerCase()} builder ` : `FAILED ${r.action} builder `}${r.name}  ${r.detail}`,
+      );
+    }
   }
 
   console.log(
-    `\nSummary: ${plan.imagesToReap.length} image(s) + ${plan.projectsToReap.length} compose project(s) to reap.`,
+    `\nSummary: ${plan.imagesToReap.length} image(s) + ${plan.projectsToReap.length} compose project(s) to reap; `
+      + `${builderPlan.toStop.length} builder(s) to stop + ${builderPlan.toReap.length} obsolete builder(s) to remove.`,
   );
   if (!opts.apply) {
     console.log("(Dry run — nothing removed. Pass --apply to reap.)\n");

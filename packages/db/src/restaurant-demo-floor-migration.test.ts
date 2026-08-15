@@ -17,6 +17,41 @@ const privacyMigrationPath = fileURLToPath(
   ),
 );
 const privacySql = readFileSync(privacyMigrationPath, "utf8");
+const bookingCapacityMigrationPath = fileURLToPath(
+  new URL(
+    "../prisma/migrations/20260812070000_repair_restaurant_booking_capacity/migration.sql",
+    import.meta.url,
+  ),
+);
+const bookingCapacitySql = readFileSync(bookingCapacityMigrationPath, "utf8");
+const busyShiftRefreshPath = fileURLToPath(
+  new URL(
+    "../prisma/migrations/20260812103000_refresh_restaurant_demo_busy_shift/migration.sql",
+    import.meta.url,
+  ),
+);
+const busyShiftRefreshSql = readFileSync(busyShiftRefreshPath, "utf8");
+const busyShiftGuardPath = fileURLToPath(
+  new URL(
+    "../prisma/migrations/20260812102900_guard_restaurant_demo_busy_shift/migration.sql",
+    import.meta.url,
+  ),
+);
+const busyShiftGuardSql = readFileSync(busyShiftGuardPath, "utf8");
+const busyShiftResourceGuardPath = fileURLToPath(
+  new URL(
+    "../prisma/migrations/20260812102930_guard_restaurant_demo_resources/migration.sql",
+    import.meta.url,
+  ),
+);
+const busyShiftResourceGuardSql = readFileSync(busyShiftResourceGuardPath, "utf8");
+const actionableWalkInRepairPath = fileURLToPath(
+  new URL(
+    "../prisma/migrations/20260812152000_repair_restaurant_demo_actionable_walk_in/migration.sql",
+    import.meta.url,
+  ),
+);
+const actionableWalkInRepairSql = readFileSync(actionableWalkInRepairPath, "utf8");
 
 describe("restaurant demo floor migration", () => {
   it("targets only platform-owned demo restaurant rows", () => {
@@ -50,5 +85,67 @@ describe("restaurant demo floor migration", () => {
     expect(privacySql).toContain('"dietaryNotes" = NULL');
     expect(privacySql).toContain("^demo-restaurant-bk-[0-6]$");
     expect(privacySql).toContain("archetype.\"archetypeId\" = 'restaurant'");
+  });
+
+  it("projects demo tables into booking services without retaining generic providers", () => {
+    expect(bookingCapacitySql).toContain('INSERT INTO "ProviderService"');
+    expect(bookingCapacitySql).toContain('INSERT INTO "ProviderAvailability"');
+    expect(bookingCapacitySql).toContain('INSERT INTO "HospitalityResourceAvailability"');
+    expect(bookingCapacitySql).toContain("^demo-restaurant-prov-res-[0-8]$");
+    expect(bookingCapacitySql).toContain("archetype.\"archetypeId\" = 'restaurant'");
+    expect(bookingCapacitySql).toContain('DELETE FROM "ProviderService"');
+  });
+
+  it("keeps only the Restaurant demo roster durable and restores its busy-shift state", () => {
+    expect(busyShiftRefreshSql).toContain("TIMESTAMPTZ '2100-01-01 00:00:00+00'");
+    expect(busyShiftRefreshSql).toContain("^demo-restaurant-bk-[0-6]$");
+    expect(busyShiftRefreshSql).toContain("archetype.\"archetypeId\" = 'restaurant'");
+    expect(busyShiftRefreshSql).toContain("Restaurant demo busy shift refreshed");
+    expect(busyShiftRefreshSql).toContain("(0, 'waiting',   INTERVAL '0 minutes',    INTERVAL '-14 minutes')");
+    expect(busyShiftRefreshSql).toContain("(1, 'confirmed', INTERVAL '9 minutes',    INTERVAL '-120 minutes')");
+    expect(busyShiftRefreshSql).toContain("(3, 'dirty',   INTERVAL '-100 minutes', INTERVAL '-10 minutes', 1)");
+    expect(busyShiftRefreshSql).toContain("(5, 'paid',    INTERVAL '-84 minutes',  INTERVAL '6 minutes',  2)");
+    expect(busyShiftRefreshSql).toContain("(4, 'demo-restaurant-table-5')");
+    expect(busyShiftRefreshSql).toContain("(4, 'demo-restaurant-table-6')");
+    expect(busyShiftRefreshSql).toContain("'demo-restaurant-reservation-table-9'");
+    expect(busyShiftRefreshSql).not.toMatch(/DELETE FROM \"HospitalityCapacityAllocation\"/);
+  });
+
+  it("fails closed before the refresh when a reserved demo identifier belongs to other data", () => {
+    expect(busyShiftGuardPath).toContain("20260812102900_guard_restaurant_demo_busy_shift");
+    expect(busyShiftGuardPath.localeCompare(busyShiftRefreshPath)).toBeLessThan(0);
+    expect(busyShiftGuardSql.match(/RAISE EXCEPTION/g)).toHaveLength(5);
+    for (const reservedKind of ["booking", "shift", "assignment", "turn", "allocation"]) {
+      expect(busyShiftGuardSql).toContain(
+        `Reserved Restaurant demo ${reservedKind} identifiers are attached to non-demo data`,
+      );
+    }
+    expect(busyShiftGuardSql).toContain("^demo-restaurant-bk-[0-6]$");
+    expect(busyShiftGuardSql).toContain("^demo-restaurant-turn-[2-6]$");
+    expect(busyShiftGuardSql).toContain("archetype.\"archetypeId\" = 'restaurant'");
+    expect(busyShiftGuardSql).toContain("booking.\"organizationId\" = allocation.\"organizationId\"");
+    expect(busyShiftGuardSql).toContain("booking.\"storefrontId\" = allocation.\"storefrontId\"");
+  });
+
+  it("fails closed before refresh when a reserved table is not the exact demo provider resource", () => {
+    expect(busyShiftGuardPath.localeCompare(busyShiftResourceGuardPath)).toBeLessThan(0);
+    expect(busyShiftResourceGuardPath.localeCompare(busyShiftRefreshPath)).toBeLessThan(0);
+    expect(busyShiftResourceGuardSql).toContain("'demo-restaurant-table-1', 'demo-restaurant-prov-res-0'");
+    expect(busyShiftResourceGuardSql).toContain("'demo-restaurant-table-9', 'demo-restaurant-prov-res-8'");
+    expect(busyShiftResourceGuardSql).toContain("provider.\"storefrontId\" = resource.\"storefrontId\"");
+    expect(busyShiftResourceGuardSql).toContain("config.\"organizationId\" = resource.\"organizationId\"");
+    expect(busyShiftResourceGuardSql).toContain("archetype.\"archetypeId\" = 'restaurant'");
+    expect(busyShiftResourceGuardSql).toContain(
+      "Reserved Restaurant demo table identifiers are attached to non-demo data",
+    );
+  });
+
+  it("preserves a completed demo turn and creates a fresh actionable walk-in", () => {
+    expect(actionableWalkInRepairSql).toContain("demo-restaurant-bk-live-1");
+    expect(actionableWalkInRepairSql).toContain("stage IN ('closed', 'cancelled')");
+    expect(actionableWalkInRepairSql).toContain("Restaurant demo stale terminal allocation released");
+    expect(actionableWalkInRepairSql).toContain("INSERT INTO \"StorefrontBooking\"");
+    expect(actionableWalkInRepairSql).toContain("'waiting'");
+    expect(actionableWalkInRepairSql).not.toMatch(/DELETE FROM \"HospitalityServiceTurn(?:Event)?\"/);
   });
 });

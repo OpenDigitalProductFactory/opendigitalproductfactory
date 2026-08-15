@@ -14,6 +14,8 @@ import { LocalChangesLedger } from "@/components/ops/LocalChangesLedger";
 import { getLocalChangesLedger } from "@/lib/self-upgrade/local-changes-ledger";
 import { hasGovernedRecoveryPoint } from "@/lib/self-upgrade/rollback";
 import { NAV_MODE_COOKIE, resolveNavModeFromCookie, isSimpleNavMode } from "@/lib/navigation/nav-mode";
+import { SelfUpgradeLiveProvider } from "@/components/ops/SelfUpgradeLiveProvider";
+import type { SelfUpgradeStatusSnapshot } from "@/lib/self-upgrade/status-snapshot";
 
 export default async function SelfUpgradePage() {
   // BI-D43EB266: Self-Upgrade is the single operator entry point for "update
@@ -84,10 +86,30 @@ export default async function SelfUpgradePage() {
     },
     latestRun: null,
     latestRunImpact: null,
-    quiescence: { blockers: [] },
+    quiescence: {
+      level: "normal" as const,
+      runId: null,
+      enteredAt: new Date().toISOString(),
+      run: null,
+      blockersCapturedAt: null,
+      blockers: [],
+      verdict: null,
+    },
     admission: { mode: "uncapped" as const, limit: null, blockedBy: [] },
     cooldownUntil: null,
-    jobEngine: { healthy: false },
+    jobEngine: {
+      status: "unknown" as const,
+      detail: "Status temporarily unavailable.",
+      checkedAt: null,
+      watchdog: {
+        status: "unknown" as const,
+        detail: "Status temporarily unavailable.",
+        lastInvocationAt: null,
+        lastGatewayHitAt: null,
+        lastRecoveryAttemptAt: null,
+        lastRecoverySummary: null,
+      },
+    },
     platformVersion: {
       version: "unknown",
       publishedAt: new Date().toISOString(),
@@ -147,8 +169,16 @@ export default async function SelfUpgradePage() {
   );
   const navMode = resolveNavModeFromCookie((await cookies()).get(NAV_MODE_COOKIE)?.value);
   const simple = isSimpleNavMode(navMode);
+  const initialLiveSnapshot: SelfUpgradeStatusSnapshot = {
+    observedAt: new Date().toISOString(),
+    latestRun: effectiveStatus.latestRun,
+    quiescence: effectiveStatus.quiescence,
+    cooldownUntil: effectiveStatus.cooldownUntil,
+    jobEngine: effectiveStatus.jobEngine,
+  };
 
   return (
+    <SelfUpgradeLiveProvider initialSnapshot={initialLiveSnapshot}>
     <div>
       <div className="mb-6">
         <h1 className="text-xl font-bold text-[var(--dpf-text)]">Self-Upgrade</h1>
@@ -208,5 +238,6 @@ export default async function SelfUpgradePage() {
         </div>
       </details>
     </div>
+    </SelfUpgradeLiveProvider>
   );
 }

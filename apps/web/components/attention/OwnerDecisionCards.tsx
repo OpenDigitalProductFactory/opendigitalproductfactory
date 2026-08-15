@@ -8,6 +8,7 @@ import { ExpandableCard, StatusBadge } from "@/components/ui/report-kit";
 import { CoworkerProposalActions } from "./CoworkerProposalActions";
 import { ProactivityProposalActions } from "./ProactivityProposalActions";
 import { ResearchProposalActions } from "./ResearchProposalActions";
+import { LEAVE_DECISION_ROUTE } from "@/lib/workforce/leave/leave-decision-proposal-contract";
 
 export function OwnerDecisionCards({
   entries,
@@ -120,7 +121,7 @@ function DecisionActions({ entry }: { entry: OwnerAttentionEntry }) {
   if (entry.item.source === "agent-proposal" && /proactiv/i.test(entry.item.title)) {
     return <ProactivityProposalActions proposalId={entry.item.id.replace(/^agent-proposal:/, "")} />;
   }
-  if (entry.item.source === "agent-proposal") {
+  if (entry.item.source === "agent-proposal" && entry.item.deepLink !== LEAVE_DECISION_ROUTE) {
     return (
       <CoworkerProposalActions
         proposalId={entry.item.id.replace(/^agent-proposal:/, "")}

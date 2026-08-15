@@ -14,8 +14,11 @@
 //   - During the shadow window it does NOT write InventoryEntity.catalogIdentityId.
 //   - Repeated identical AI resolutions of the same entity promote a status='shadow'
 //     DiscoveryFingerprintRule (append-only lineage; the rule generalizes the signal).
-//   - Only a confidence >= autoApplyThreshold (0.97) resolution auto-applies the
-//     identity (writes catalogIdentityId + identityStatus='ai_resolved').
+//   - Only a confidence >= autoApplyThreshold (default 0.90) resolution auto-applies
+//     the identity (writes catalogIdentityId + identityStatus='ai_resolved'). The
+//     visible ai_resolved apply is deliberately a LOWER bar than rule promotion so a
+//     cheap/local model's correct-but-not-0.97 identifications reach the operator;
+//     promotion to a durable layer-0 rule stays gated by shadowPromotionThreshold.
 //   - A contradicting human_confirmed / human_corrected resolution demotes the shadow
 //     rule to 'rejected', and a human_confirmed InventoryEntity identity is NEVER
 //     overwritten (spec §4.1 / §6.3.1) — the scan excludes it and the auto-apply
@@ -27,6 +30,7 @@
 // request, the same governed-loop shape as catalog-enrichment-sweep.ts.
 //
 import { INVENTORY_ENTITY_CANONICAL_WHERE } from "./inventory-entity-lifecycle";
+import { isDockerOriginEntityKey } from "./docker-origin";
 // Pure orchestration over an injectable inference fn + client (no prisma import), so
 // it stays unit-testable with mocks — the governed apps/web runner wires the real
 // prisma + a routeAndCall(minimize_cost) inference fn (dynamic model discovery, no
@@ -35,6 +39,7 @@ import { INVENTORY_ENTITY_CANONICAL_WHERE } from "./inventory-entity-lifecycle";
 /** One unresolved InventoryEntity the AI fallback will attempt to identify. */
 export type UnresolvedEntityRow = {
   id: string;
+  entityKey: string;
   name: string;
   entityType: string;
   manufacturer: string | null;
@@ -102,8 +107,71 @@ const DEFAULTS = {
   maxInferenceTokens: 200_000,
   maxInferenceCalls: 25,
   shadowPromotionThreshold: 3,
-  autoApplyThreshold: 0.97,
+  // Auto-apply an AI identity (as the NON-authoritative `identityStatus='ai_resolved'`,
+  // recoverable and never overwriting a human_confirmed row) at this self-reported
+  // confidence. Lowered from 0.97 to 0.90 (BI: auto-identify calibration): cheap/local
+  // models — the common self-hosted default — correctly identify devices (Whirlpool
+  // appliance, Nest thermostat, Reolink camera, Ubiquiti AP…) but cluster their
+  // self-reported confidence at 0.90–0.96, so a 0.97 gate discarded ~100% of correct
+  // identifications and the estate stayed blank. Crucially this only governs the
+  // VISIBLE, reversible ai_resolved apply; promoting a finding into a durable layer-0
+  // rule stays gated by shadowPromotionThreshold (≥3 identical resolutions), so a
+  // lower apply bar cannot mint an authoritative rule from a single guess. Operators
+  // running a high-precision model can raise it via IDENTITY_INFERENCE_AUTO_APPLY_THRESHOLD.
+  autoApplyThreshold: 0.9,
 } as const;
+
+/**
+ * A proactive, operator-facing diagnostic derived from a run's own counters.
+ * The point (per operator feedback): a confidence-gate miscalibration is invisible
+ * — the identifier does its job, resolves devices, and silently discards them
+ * because their self-reported confidence sits just under the auto-apply bar. No
+ * user would ever know to inspect IdentityResolutionLog and compare a histogram to
+ * a threshold constant. So the run TELLS on itself.
+ */
+export type IdentityInferenceDiagnostic = {
+  code: "auto_apply_gate_starving_identifications";
+  severity: "warn";
+  message: string;
+  /** Machine-readable so a coworker/health surface can act, not just render prose. */
+  resolved: number;
+  applied: number;
+  applyRate: number;
+  autoApplyThreshold: number;
+};
+
+/**
+ * Detect the "resolving but not applying" signature: the model produced real
+ * identifications this run, yet almost none cleared the auto-apply gate. That is
+ * the fingerprint of a threshold set above the model's confidence band — exactly
+ * the hidden failure that leaves an estate blank while the identifier "works".
+ * Returns null when the run is healthy or too small to judge.
+ */
+export function diagnoseIdentityInference(
+  result: Pick<IdentityInferenceResult, "aiResolutionsLogged" | "autoApplied">,
+  autoApplyThreshold: number,
+  opts: { minResolutions?: number; lowApplyRate?: number } = {},
+): IdentityInferenceDiagnostic | null {
+  const minResolutions = opts.minResolutions ?? 5;
+  const lowApplyRate = opts.lowApplyRate ?? 0.2;
+  const { aiResolutionsLogged: resolved, autoApplied: applied } = result;
+  if (resolved < minResolutions) return null;
+  const applyRate = resolved === 0 ? 0 : applied / resolved;
+  if (applyRate >= lowApplyRate) return null;
+  return {
+    code: "auto_apply_gate_starving_identifications",
+    severity: "warn",
+    resolved,
+    applied,
+    applyRate,
+    autoApplyThreshold,
+    message:
+      `Device identifier resolved ${resolved} device(s) this run but auto-applied only ${applied} ` +
+      `(${Math.round(applyRate * 100)}%). Most identifications fell just below the auto-apply ` +
+      `confidence gate (${autoApplyThreshold}). Your model's confidence band is likely under that ` +
+      `bar — lower IDENTITY_INFERENCE_AUTO_APPLY_THRESHOLD so correct identifications reach the estate.`,
+  };
+}
 
 export type IdentityInferenceResult = {
   /** Total unresolved entities (for coverage reporting — a bounded run is not full coverage). */
@@ -120,6 +188,8 @@ export type IdentityInferenceResult = {
   shadowRulesPromoted: number;
   /** Entities auto-applied (confidence >= threshold → catalogIdentityId written). */
   autoApplied: number;
+  /** DPF-internal (docker-origin) candidates skipped so budget targets real estate. */
+  dpfInternalSkipped: number;
   /** Shadow rules demoted to 'rejected' by a contradicting human resolution. */
   shadowRulesDemoted: number;
   inferenceCalls: number;
@@ -305,6 +375,7 @@ export async function runIdentityInferenceFallback(
     aiResolutionsLogged: 0,
     shadowRulesPromoted: 0,
     autoApplied: 0,
+    dpfInternalSkipped: 0,
     shadowRulesDemoted: 0,
     inferenceCalls: 0,
     inferenceTokensSpent: 0,
@@ -340,6 +411,7 @@ export async function runIdentityInferenceFallback(
     take: scanLimit,
     select: {
       id: true,
+      entityKey: true,
       name: true,
       entityType: true,
       manufacturer: true,
@@ -359,6 +431,15 @@ export async function runIdentityInferenceFallback(
   const priorLogsByEntity = new Map<string, AiResolvedLogRow[]>();
   const toInfer: UnresolvedEntityRow[] = [];
   for (const entity of candidates) {
+    // The DPF install's own self-scan footprint (its Docker containers, bridge
+    // hosts, runtime) is not managed estate — it is the platform itself. Spending
+    // scarce inference budget identifying our own plumbing (redis, postgres, …)
+    // starves the real devices the operator cares about, so skip it here exactly
+    // as the estate views contain it. (Auto-identify calibration.)
+    if (entity.entityKey && isDockerOriginEntityKey(entity.entityKey, entity.name)) {
+      result.dpfInternalSkipped += 1;
+      continue;
+    }
     let priorLogs: AiResolvedLogRow[] = [];
     try {
       priorLogs = await db.identityResolutionLog.findMany({

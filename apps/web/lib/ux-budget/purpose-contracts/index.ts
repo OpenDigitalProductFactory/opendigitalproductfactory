@@ -5,16 +5,20 @@ import {
 
 export type PurposeContractModule = readonly PurposeContractSource[];
 
+import { ARCHETYPE_READINESS_PURPOSE_CONTRACTS } from "./archetype-readiness";
 import { GRAPH_EXPLORER_PURPOSE_CONTRACTS } from "./graph-explorer";
 import { RIGHT_NOW_PURPOSE_CONTRACTS } from "./right-now";
 import { RECRUITING_PIPELINE_PURPOSE_CONTRACTS } from "./recruiting-pipeline";
 import { COWORKER_IDENTITY_PURPOSE_CONTRACTS } from "./coworker-identity";
+import { STACK_CURRENCY_PURPOSE_CONTRACTS } from "./stack-currency";
 
 const CONTRACT_MODULES: readonly PurposeContractModule[] = [
+  ARCHETYPE_READINESS_PURPOSE_CONTRACTS,
   GRAPH_EXPLORER_PURPOSE_CONTRACTS,
   RIGHT_NOW_PURPOSE_CONTRACTS,
   RECRUITING_PIPELINE_PURPOSE_CONTRACTS,
   COWORKER_IDENTITY_PURPOSE_CONTRACTS,
+  STACK_CURRENCY_PURPOSE_CONTRACTS,
 ];
 
 export function buildPurposeContractSourceIndex(

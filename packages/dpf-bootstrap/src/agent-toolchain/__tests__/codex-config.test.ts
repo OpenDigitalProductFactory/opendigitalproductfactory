@@ -18,6 +18,7 @@ const withUserDisable = readFileSync(
 const REPO = "D:\\DPF";
 const CONFIG_PATH = "C:\\Users\\Test\\.codex\\config.toml";
 const LOCAL_ENDPOINT = "http://127.0.0.1:3000/api/mcp/v1";
+const LOCAL_FULL_ENDPOINT = `${LOCAL_ENDPOINT}?tier=full`;
 
 describe("planCodexConfig", () => {
   it("upserts [plugins.\"dpf-platform@personal\"] enabled=true on the operator-current fixture", () => {
@@ -218,7 +219,7 @@ describe("planCodexConfig", () => {
       mcp_servers: Record<string, { url?: string; bearer_token_env_var?: string; command?: string }>;
     };
     expect(parsed.mcp_servers.dpf).toEqual({
-      url: LOCAL_ENDPOINT,
+      url: LOCAL_FULL_ENDPOINT,
       bearer_token_env_var: "DPF_MCP_BEARER_TOKEN",
     });
     expect(parsed.mcp_servers.node_repl.command).toBe("node");
@@ -254,22 +255,22 @@ describe("planCodexConfig", () => {
     };
     expect(parsed.plugins["dpf-platform@personal"]).toEqual({ enabled: true });
     expect(parsed.mcp_servers["dpf"]).toEqual({
-      url: LOCAL_ENDPOINT,
+      url: LOCAL_FULL_ENDPOINT,
       bearer_token_env_var: "DPF_MCP_BEARER_TOKEN",
     });
   });
 
-  it("leaves the already-converged [mcp_servers.dpf] block untouched while disabling generic servers", () => {
-    // operatorRedacted already has [mcp_servers.dpf] at LOCAL_ENDPOINT, so the
-    // DPF transport is NOT re-upserted (no "upsert [mcp_servers.dpf]" in the
-    // rationale), but the generic servers ARE disabled.
+  it("migrates a legacy no-tier Codex endpoint while disabling generic servers", () => {
+    // A no-tier endpoint strands deferred tools in current Codex because its
+    // Streamable HTTP transport sends no User-Agent and does not refresh the
+    // top-level registry after list_changed. Bootstrap must converge it.
     const first = planCodexConfig(operatorRedacted, REPO, CONFIG_PATH, LOCAL_ENDPOINT);
     expect(first.writes).toHaveLength(1);
-    expect(first.rationale).not.toMatch(/upsert \[mcp_servers\.dpf\]/); // DPF transport already converged
-    const before = parse(operatorRedacted) as { mcp_servers: Record<string, unknown> };
-    const after = parse(first.writes[0].content) as { mcp_servers: Record<string, unknown> };
-    // The DPF server is byte-identical; generics are now disabled.
-    expect(after.mcp_servers["dpf"]).toEqual(before.mcp_servers["dpf"]);
+    expect(first.rationale).toMatch(/upsert \[mcp_servers\.dpf\]/);
+    const after = parse(first.writes[0].content) as {
+      mcp_servers: Record<string, { url?: string; enabled?: boolean }>;
+    };
+    expect(after.mcp_servers["dpf"].url).toBe(LOCAL_FULL_ENDPOINT);
     expect((after.mcp_servers["nanobanana-mcp"] as { enabled?: boolean }).enabled).toBe(false);
 
     const second = planCodexConfig(first.writes[0].content, REPO, CONFIG_PATH, LOCAL_ENDPOINT);
@@ -290,7 +291,7 @@ describe("planCodexConfig", () => {
     // Plugin intent preserved (still disabled), MCP block written.
     expect(parsed.plugins["dpf-platform@personal"].enabled).toBe(false);
     expect(parsed.mcp_servers["dpf"]).toEqual({
-      url: novelEndpoint,
+      url: `${novelEndpoint}?tier=full`,
       bearer_token_env_var: "DPF_MCP_BEARER_TOKEN",
     });
   });

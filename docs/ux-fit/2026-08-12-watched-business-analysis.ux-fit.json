@@ -1,0 +1,18 @@
+{
+  "version": "1",
+  "decidedOption": "local-performance-disclosure",
+  "decisionInteractionId": "DI-4F26E08C6222",
+  "scope": {
+    "files": [
+      "apps/web/components/performance/BusinessAnalysisWorkspace.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "local-performance-disclosure",
+      "separate-analysis-route",
+      "global-analysis-dashboard"
+    ]
+  }
+}

@@ -52,7 +52,7 @@ describe("classifyInferenceFailure", () => {
     ).toBe("config");
     expect(
       classifyInferenceFailure(
-        "No AI model can handle this request right now. This usually means your cloud AI providers are disconnected or their sign-in has expired, and the built-in local model can't fit this assistant's larger requests on its own. Open Platform > AI Operations > Providers & Routing to reconnect a provider — waiting won't clear this on its own.",
+        "No AI model can handle this request right now. No eligible model met this turn's routing requirements. The cause can be provider availability, data-policy or residency limits, capability requirements, or context size — not necessarily a disconnected provider. Open Platform > AI Operations > Providers & Routing to review the active route and provider status.",
       ),
     ).toBe("config");
   });

@@ -12,6 +12,8 @@ registry that grows with every AI capability erodes the local economy.
 The target is **domain-owned tool packs** that compose into the registry, with
 `mcp-tools.ts` reduced to a thin composition layer over time.
 
+`surface-pack.ts` is the cross-domain projection pack for the Authorized Surface Contract. Its six generic tools (`surface_list`, `surface_open`, `surface_snapshot`, `surface_query`, `surface_act`, and `surface_close`) stay together; domain packs continue to own the underlying business actions, and persistent surface actions dispatch back through the governed executor. This avoids both an unbounded page-specific tool inventory and a parallel execution path.
+
 ## The shape
 
 A [`ToolPack`](../../apps/web/lib/mcp/tool-pack.ts) bundles the three things that used to

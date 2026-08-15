@@ -45,6 +45,9 @@ export const TABLE_CLASSIFICATION: Record<string, TableSensitivity> = {
   // protocol dimensions only; explicitly excludes credentials, task ids,
   // GAIDs, prompts, arguments, and internal call-chain topology.
   McpProtocolTelemetry: "internal",
+  // Candidate company/device coordinates learned from trusted introducers are
+  // operator-only until independent SAS pairing establishes a relationship.
+  FederationIntroductionCandidate: "confidential",
   Portfolio: "internal",
   DigitalProduct: "internal",
   ProductLine: "internal",
@@ -152,6 +155,9 @@ export const TABLE_CLASSIFICATION: Record<string, TableSensitivity> = {
   BeautyResource: "internal",
   BeautyResourceService: "internal",
   BeautyResourceAvailability: "internal",
+  // Tenant-scoped aggregate values and model-level lineage only; the
+  // projection contract forbids customer, workforce, and financial records.
+  BusinessMetricRollup: "internal",
   ProviderService: "internal",
   ProviderAvailability: "internal",
   OnboardingChecklist: "internal",

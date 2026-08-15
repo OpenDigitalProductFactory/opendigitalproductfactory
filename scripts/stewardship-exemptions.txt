@@ -80,6 +80,7 @@ BeautyResourceAvailability  domain-lifecycle-managed  # Physical availability wi
 BeautyCapacityAllocation  domain-lifecycle-managed  # Append-preserving beauty capacity follows booking/hold and explicit release lifecycles; age-based deletion could erase live conflict and utilization evidence.
 HospitalityServiceTurn  domain-lifecycle-managed  # A turn closes through explicit service-stage transitions and follows its organization/booking lifecycle; an age sweep could remove a live or still-auditable dining-room turn.
 HospitalityServiceTurnEvent  domain-lifecycle-managed  # Append-only transition evidence follows its HospitalityServiceTurn cascade; independent aging would make seating, movement, and closure decisions unexplainable.
+BusinessMetricRollup  derived-projection  # Recomputed from canonical operational sources and cascaded with its organization; it is replaceable projection state, not an independently aged record.
 ProductOffering  domain-lifecycle-managed  # Organization-owned commercial packaging follows explicit offering status/effective-date actions and product cascade, never an age-based sweep.
 CatalogItem  domain-lifecycle-managed  # Canonical ways-to-buy follow explicit catalog status/effective-date actions and offering cascade, never an age-based sweep.
 ProductConfiguration  domain-lifecycle-managed  # Reusable configurations follow explicit publish/retire actions and catalog-item cascade, never an age-based sweep.
@@ -112,3 +113,4 @@ EvidenceReVerification  domain-lifecycle-managed  # Re-checks of a decision's ci
 JurisdictionCriteriaProfile  reference-data  # Operator-authored jurisdiction criteria packs (BI-B84CD2D3); versioned and superseded by a newer version, never aged out.
 MacVendorOui  reference-data  # IEEE OUI registry seeded from packages/db/data/oui.tsv (BI-9632B15B); replaced wholesale on reseed, never time-aged. A purge window would delete the lookup discovery depends on.
 McpToolSession  domain-lifecycle-managed  # short-TTL discovery state; rows are removed by their own expiresAt sweep (sweepExpiredToolSessions + lazy delete on read), not the retention engine
+FederationIntroductionCandidate  derived-projection  # Reconciled from a trusted introducer, expired/withdrawn by that exchange, and cascade-removed with its introducer link; it is never an independent source of trust.

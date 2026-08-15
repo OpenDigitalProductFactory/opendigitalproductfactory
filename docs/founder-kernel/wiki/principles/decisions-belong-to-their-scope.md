@@ -5,7 +5,7 @@ status: published
 abstract: Route every decision to the scope that owns it — platform to WWMD, the organization's business to WWWD, craft to WSID — and never let one scope's doctrine bind another as authority.
 principleTier: core
 principleDirection: Resolve each decision in its owning scope (WWMD platform / WWWD organization / WSID profession); cross-scope doctrine is advisory until the owning scope speaks.
-principleDimensionVector: {"governance_compliance": 0.8, "long_term_maintainability": 0.5, "blast_radius": -0.4}
+principleDimensionVector: {"governance_compliance": 0.8, "long_term_maintainability": 0.5, "blast_radius": -0.4, "customer_consent_state": 0.55, "schema_grounding": 0.45}
 principleAppliesTo:
   - in_platform_coworker
   - external_coding_agent

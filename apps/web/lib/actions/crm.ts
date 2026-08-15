@@ -2,6 +2,7 @@
 
 import { Prisma, prisma } from "@dpf/db";
 import { registerCustomerAccountSource } from "@/lib/mdm/crosswalk";
+import { resolveOrgLocale, type OrgLocaleClient } from "@/lib/org-locale/org-locale";
 import crypto from "crypto";
 import { STAGE_DEFAULT_PROBABILITY } from "@dpf/validators";
 import { revalidatePath } from "next/cache";
@@ -19,6 +20,7 @@ import {
   type DedupCheckResult,
   type DedupResolution,
 } from "@/lib/mdm/dedup-gate";
+import { qualifyAccountFromOpportunity, activateAccountFromWonDeal } from "@/lib/crm/account-lifecycle";
 
 import {
   searchCustomerSiteAddresses as searchCustomerSiteAddressesImpl,
@@ -111,7 +113,9 @@ export async function createCustomerAccount(
       website: input.website || null,
       industry: input.industry || null,
       notes: input.notes || null,
-      currency: "USD",
+      // Default to the org's configured base currency, not a hardcoded USD, so a
+      // non-USD operator's new accounts carry the right currency (BI-0D1FF269).
+      currency: (await resolveOrgLocale(prisma as unknown as OrgLocaleClient)).currency,
     },
   });
   await logSystemActivity(
@@ -590,7 +594,8 @@ export async function createOpportunity(input: {
       assignedToId: input.assignedToId || null,
       engagementId: input.engagementId || null,
       expectedValue: input.expectedValue ?? null,
-      currency: input.currency || "USD",
+      // Org base currency default when the caller omits one (BI-0D1FF269).
+      currency: input.currency || (await resolveOrgLocale(prisma as unknown as OrgLocaleClient)).currency,
       expectedClose: input.expectedClose
         ? new Date(input.expectedClose)
         : null,
@@ -613,6 +618,9 @@ export async function createOpportunity(input: {
       opportunityId: opportunity.id,
     },
   );
+
+  // Assistive: opening an opportunity qualifies the account (gated; no-ops if already further).
+  await qualifyAccountFromOpportunity(opportunity.accountId, opportunity.title);
 
   return opportunity;
 }
@@ -660,6 +668,9 @@ export async function advanceOpportunityStage(
       opportunityId: updated.id,
     },
   );
+
+  // Assistive: a won deal activates the account (authoritative business event; no-ops if active).
+  if (newStage === "closed_won") await activateAccountFromWonDeal(updated.accountId, updated.title);
 
   revalidatePath("/customer/opportunities");
   revalidatePath(`/customer/opportunities/${updated.id}`);
@@ -718,45 +729,13 @@ export async function closeOpportunity(
     },
   );
 
+  // Assistive: closing a deal WON activates the account (authoritative business event).
+  if (won) await activateAccountFromWonDeal(opp.accountId, opp.title);
+
   return opp;
 }
 
-// ─── Dormant Deal Detection ─────────────────────────────────────────────────
-
-const DORMANT_THRESHOLD_DAYS = 45;
-
-export async function flagDormantOpportunities() {
-  const threshold = new Date();
-  threshold.setDate(threshold.getDate() - DORMANT_THRESHOLD_DAYS);
-
-  const stale = await prisma.opportunity.findMany({
-    where: {
-      isDormant: false,
-      stage: { notIn: ["closed_won", "closed_lost"] },
-      stageChangedAt: { lt: threshold },
-    },
-    select: { id: true, accountId: true, contactId: true, title: true },
-  });
-
-  for (const opp of stale) {
-    await prisma.opportunity.update({
-      where: { id: opp.id },
-      data: { isDormant: true },
-    });
-
-    await logSystemActivity(
-      `Opportunity "${opp.title}" marked dormant (no stage change in ${DORMANT_THRESHOLD_DAYS} days)`,
-      {
-        type: "system",
-        accountId: opp.accountId,
-        contactId: opp.contactId || undefined,
-        opportunityId: opp.id,
-      },
-    );
-  }
-
-  return { flagged: stale.length };
-}
+// Opportunity maintenance (flagDormantOpportunities) moved to crm-opportunity-maintenance.ts.
 
 // ─── Quote Actions ──────────────────────────────────────────────────────────
 
@@ -795,7 +774,7 @@ export async function createQuote(input: {
 }) {
   const opp = await prisma.opportunity.findUnique({
     where: { id: input.opportunityId },
-    select: { id: true, accountId: true },
+    select: { id: true, accountId: true, currency: true },
   });
   if (!opp) throw new Error("Opportunity not found");
 
@@ -885,7 +864,9 @@ export async function createQuote(input: {
         discountValue,
         taxAmount,
         totalAmount,
-        currency: input.currency || "USD",
+        // A quote inherits its opportunity's currency for deal consistency, then
+        // the org base currency — never a hardcoded USD (BI-0D1FF269).
+        currency: input.currency || opp.currency || (await resolveOrgLocale(prisma as unknown as OrgLocaleClient)).currency,
         terms: input.terms?.trim() || null,
         notes: input.notes?.trim() || null,
         createdById: input.userId || null,

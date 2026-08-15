@@ -5,7 +5,7 @@ status: published
 abstract: PR only real, working functionality wired to live sources. Never ship hardcoded, placeholder, or fictional surfaces presented as real — unless a mock/stub IS the feature's stated intent, and then label it as such.
 principleTier: commandment
 principleDirection: Ship only functionality that is real and sourced from live state, code, or a genuine computation; never present hardcoded or fabricated values as real unless a mock/stub/fixture is the explicit, stated intent of the feature.
-principleDimensionVector: {"evidence_density": 0.9, "long_term_maintainability": 0.6, "governance_compliance": 0.5}
+principleDimensionVector: {"evidence_density": 0.9, "long_term_maintainability": 0.6, "governance_compliance": 0.5, "evidence_confidence": 0.7, "cost_efficiency": 0.4}
 principleAppliesTo:
   - in_platform_coworker
   - external_coding_agent

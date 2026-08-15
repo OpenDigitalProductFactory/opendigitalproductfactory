@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const discovery = vi.hoisted(() => ({
   triggerBootstrapDiscovery: vi.fn(),
   configureDiscoveryConnection: vi.fn(),
+  testDiscoveryConnection: vi.fn(),
 }));
 vi.mock("@/lib/actions/discovery", () => discovery);
 
@@ -40,6 +41,8 @@ const EXPECTED_TOOLS = [
   "enrich_digital_product",
   "request_re_enrichment",
   "configure_gateway_scan",
+  "configure_and_test_discovery_connection",
+  "list_discovery_connections",
 ];
 
 const EXPECTED_GRANTS: Record<string, string[]> = {
@@ -52,6 +55,8 @@ const EXPECTED_GRANTS: Record<string, string[]> = {
   enrich_digital_product: ["enrichment_write"],
   request_re_enrichment: ["enrichment_write"],
   configure_gateway_scan: ["agent_control_read"],
+  configure_and_test_discovery_connection: ["agent_control_read"],
+  list_discovery_connections: ["agent_control_read"],
 };
 
 beforeEach(() => {
@@ -59,7 +64,7 @@ beforeEach(() => {
 });
 
 describe("discovery-inventory pack — registration", () => {
-  it("exposes exactly the nine discovery/inventory tools", () => {
+  it("exposes the discovery/inventory tools including the human-equivalent configure-and-test outcome", () => {
     expect(discoveryInventoryPack.definitions.map((d) => d.name).sort()).toEqual([...EXPECTED_TOOLS].sort());
     expect(Object.keys(discoveryInventoryPack.handlers).sort()).toEqual([...EXPECTED_TOOLS].sort());
   });
@@ -76,7 +81,7 @@ describe("discovery-inventory pack — registration", () => {
       expect(byName[t].requiredCapability, t).toBe(
         t === "run_hive_scout_ingest" ? "manage_backlog" : "manage_provider_connections",
       );
-      expect(byName[t].sideEffect, t).toBe(true);
+      expect(byName[t].sideEffect, t).toBe(t !== "list_discovery_connections");
     }
     expect(byName.run_discovery_triage.executionMode).toBe("immediate");
     expect(byName.run_hive_scout_ingest.executionMode).toBe("immediate");
@@ -284,6 +289,46 @@ describe("discovery-inventory pack — handler behavior (delegation preserved)",
     expect(noName.error).toBe("missing_name");
     const noUrl = await discoveryInventoryPack.handlers.configure_gateway_scan({ name: "x" }, "u1");
     expect(noUrl.error).toBe("missing_endpoint_url");
+  });
+
+  it("configure_and_test_discovery_connection supports SNMP and returns the tested outcome without echoing the secret", async () => {
+    discovery.configureDiscoveryConnection.mockResolvedValue({ ok: true, connectionId: "conn-snmp" });
+    discovery.testDiscoveryConnection.mockResolvedValue({
+      ok: true,
+      status: "ok",
+      deviceCount: 3,
+      message: "Discovered 3 items",
+    });
+
+    const result = await discoveryInventoryPack.handlers.configure_and_test_discovery_connection({
+      name: "Core switch",
+      collectorType: "snmp",
+      endpointUrl: "192.168.1.1",
+      apiKey: "private-community",
+      configuration: { community: "private-community" },
+    }, "u1");
+
+    expect(result.success).toBe(true);
+    expect(result.message).toContain("SNMP discovery connection saved and tested");
+    expect(result.data).toMatchObject({ connectionId: "conn-snmp", status: "ok", deviceCount: 3 });
+    expect(JSON.stringify(result)).not.toContain("private-community");
+    expect(discovery.configureDiscoveryConnection).toHaveBeenCalledWith(expect.objectContaining({
+      collectorType: "snmp",
+      endpointUrl: "192.168.1.1",
+      apiKey: "private-community",
+    }));
+    expect(discovery.testDiscoveryConnection).toHaveBeenCalledWith("conn-snmp");
+  });
+
+  it("declares SNMP in both discovery connection schemas", () => {
+    for (const toolName of ["configure_gateway_scan", "configure_and_test_discovery_connection"]) {
+      const definition = discoveryInventoryPack.definitions.find((item) => item.name === toolName);
+      const schema = definition?.inputSchema as {
+        properties?: { collectorType?: { enum?: string[] } };
+      };
+      const collector = schema.properties?.collectorType;
+      expect(collector?.enum).toContain("snmp");
+    }
   });
 
   it("enrich_digital_product requires a digitalProductId", async () => {

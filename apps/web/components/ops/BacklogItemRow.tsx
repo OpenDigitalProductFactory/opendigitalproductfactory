@@ -13,7 +13,7 @@ import { type BacklogItemWithRelations } from "@/lib/backlog";
 import { resolveBacklogBuildActionState } from "@/lib/backlog-build-action-state";
 import { AGENT_NAME_MAP } from "@/lib/agent-routing";
 import { backlogItemOrigin, BACKLOG_ORIGIN_LABEL } from "@/lib/ops/backlog-origin";
-import { backlogItemLifecycleLabel } from "./backlogVisibility";
+import { backlogItemLifecycleLabel } from "@/lib/backlog-visibility";
 
 type Props = {
   item: BacklogItemWithRelations;

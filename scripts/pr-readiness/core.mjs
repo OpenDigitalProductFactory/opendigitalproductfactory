@@ -5,6 +5,7 @@ import {
   isPolicyGuardSelfTest,
 } from "../lib/ci-policy-guards.mjs";
 import { formatGateContextMarkdown } from "../lib/gate-context.mjs";
+import { isSignedOff } from "../lib/dco-signoff.mjs";
 import {
   PR_TRAILER_NAMES,
   SUPPORTED_PR_TRAILERS,
@@ -159,7 +160,7 @@ export function evaluateReadiness({ repo, gateResults = [], prBody = "", gateCon
       blockers.push("No diff against current origin/main; there is no PR payload to validate.");
     }
 
-    const unsigned = (repo.commits ?? []).filter((commit) => !/Signed-off-by:/i.test(commit.body ?? ""));
+    const unsigned = (repo.commits ?? []).filter((commit) => !isSignedOff(commit.body ?? ""));
     for (const commit of unsigned) {
       blockers.push(`Commit ${commit.sha.slice(0, 12)} (${commit.subject}) is missing DCO sign-off.`);
     }

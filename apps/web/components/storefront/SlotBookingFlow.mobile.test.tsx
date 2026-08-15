@@ -16,6 +16,7 @@ vi.mock("@/lib/storefront-actions", () => ({
 }));
 
 import { SlotBookingFlow } from "./SlotBookingFlow";
+import { submitBooking } from "@/lib/storefront-actions";
 
 // Tomorrow in local time — a clickable (non-past) calendar day. If tomorrow
 // rolls into the next month the test clicks "Next month" first.
@@ -115,5 +116,27 @@ describe("public booking mobile contract (390px floor)", () => {
     expect(screen.queryByLabelText(/preferred time/i)).toBeNull();
     expect(document.querySelector('input[type="date"]')).toBeNull();
     expect(document.querySelector('input[type="time"]')).toBeNull();
+  });
+
+  it("submits on LAN HTTP when randomUUID is unavailable", async () => {
+    vi.stubGlobal("crypto", {
+      getRandomValues: (bytes: Uint8Array) => bytes.fill(9),
+    });
+    vi.mocked(submitBooking).mockResolvedValueOnce({
+      success: false,
+      error: "Synthetic stop after idempotency assertion",
+    });
+
+    const dayButton = await renderFlowAtSlotStep();
+    fireEvent.click(dayButton);
+    fireEvent.click(await screen.findByRole("button", { name: `6:30 PM to 8:00 PM on ${tomorrowLabel}` }));
+    fireEvent.change(await screen.findByLabelText("Full name *"), { target: { value: "Taylor Guest" } });
+    fireEvent.change(screen.getByLabelText("Email address *"), { target: { value: "taylor@example.test" } });
+    fireEvent.click(screen.getByRole("button", { name: "Confirm booking" }));
+
+    await waitFor(() => expect(submitBooking).toHaveBeenCalledTimes(1));
+    expect(vi.mocked(submitBooking).mock.calls[0]?.[1].idempotencyKey).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+    );
   });
 });

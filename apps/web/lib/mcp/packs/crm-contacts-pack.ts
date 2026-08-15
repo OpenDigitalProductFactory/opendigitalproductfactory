@@ -37,8 +37,41 @@ const definitions: ToolDefinition[] = [
   },
 ];
 
+/** Proactive enrichment offer on thin contact intake (BI-B2497DFB, AC1). */
+async function buildCreatedContactEnrichmentOffer(
+  contact: { id: string; name: string | null; email: string },
+  params: Record<string, unknown>,
+  context?: { agentId?: string | null; routeContext?: string | null },
+) {
+  try {
+    const { buildEnrichmentOfferForIntake } = await import("@/lib/crm/enrichment/enrichment-offer");
+    const { resolveProactivityPlan } = await import("@/lib/proactivity/proactivity-resolver");
+    const plan = resolveProactivityPlan({
+      activityFamily: "crm-record-enrichment",
+      agentId: context?.agentId ?? null,
+      routeContext: context?.routeContext ?? null,
+    });
+    return buildEnrichmentOfferForIntake({
+      recordKind: "customer-contact",
+      recordId: contact.id,
+      recordLabel: contact.name ?? contact.email,
+      intake: {
+        firstName: params["firstName"],
+        lastName: params["lastName"],
+        jobTitle: params["jobTitle"],
+        phone: params["phone"],
+      },
+      plan,
+    });
+  } catch {
+    return null;
+  }
+}
+
 async function createCustomerContactTool(
   params: Record<string, unknown>,
+  _userId?: string,
+  context?: { agentId?: string | null; routeContext?: string | null },
 ): Promise<ToolResult> {
   const { createCustomerContact } = await import("@/lib/actions/customer-contacts");
   const str = (k: string) => (typeof params[k] === "string" ? (params[k] as string) : undefined);
@@ -75,13 +108,22 @@ async function createCustomerContactTool(
   }
 
   const c = result.contact;
+  const enrichmentOffer =
+    result.outcome === "existing" ? null : await buildCreatedContactEnrichmentOffer(c, params, context);
+  const offerMsg = enrichmentOffer ? ` ${enrichmentOffer.message}` : "";
   return {
     success: true,
     message:
       result.outcome === "existing"
         ? `Contact already exists: ${c.name ?? c.email} (${c.email}).`
-        : `Created contact ${c.name ?? c.email} (${c.email}).`,
-    data: { id: c.id, email: c.email, name: c.name, outcome: result.outcome },
+        : `Created contact ${c.name ?? c.email} (${c.email}).${offerMsg}`,
+    data: {
+      id: c.id,
+      email: c.email,
+      name: c.name,
+      outcome: result.outcome,
+      ...(enrichmentOffer ? { enrichmentOffer } : {}),
+    },
   };
 }
 

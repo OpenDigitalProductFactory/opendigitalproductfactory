@@ -114,3 +114,10 @@ dev/null/
 # Local-integration-CI runner verdict artifacts (never committed)
 .dpf-local-ci-*.json
 .dpf-sandbox-freshness.json
+
+# Worktree session heartbeat — a live session's liveness marker, refreshed every
+# turn and read by the fleet worktree janitor so it never reaps a worktree out from
+# under a live session (plan 2026-08-11-worktree-lifecycle-hygiene). Gitignored so
+# it never dirties the tree (which would muddy the janitor's dirty signal and block
+# a worktree's own Tier-A SessionEnd reap).
+.dpf-session-heartbeat.json

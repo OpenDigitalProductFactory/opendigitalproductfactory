@@ -34,8 +34,8 @@ import { FINANCE_INVOICE_DOCUMENT_ASSETS } from "./finance-invoice-document-asse
 import { RECRUITING_ASSETS } from "./recruiting-assets";
 import { DECISION_TRUST_ENVELOPE_ASSETS } from "./decision-trust-envelope-assets";
 import { MCP_ASSETS } from "./mcp-assets";
-
-// ─── Definitions (spec §6.1) ─────────────────────────────────────────────────
+import { FEDERATION_INTRODUCTION_ASSETS } from "./federation-introduction-assets";
+import { BUSINESS_PERFORMANCE_ASSETS } from "./business-performance-assets";
 export type FieldResolution = "inherited" | "governed" | "not-applicable";
 
 export type DataFieldDefinition = {
@@ -721,10 +721,10 @@ const SEED_ASSETS: readonly DataAssetDefinition[] = [
   ...BEAUTY_CAPACITY_ASSETS,
   ...LIFECYCLE_GOVERNANCE_ASSETS,
   ...STOCK_COVERAGE_ASSETS,
-  ...FINANCE_INVOICE_DOCUMENT_ASSETS,
+  ...FINANCE_INVOICE_DOCUMENT_ASSETS, ...BUSINESS_PERFORMANCE_ASSETS,
   ...PROCESSING_GOVERNANCE_ASSETS,
   ...RECRUITING_ASSETS,
-  ...DECISION_TRUST_ENVELOPE_ASSETS, ...MCP_ASSETS,
+  ...DECISION_TRUST_ENVELOPE_ASSETS, ...MCP_ASSETS, ...FEDERATION_INTRODUCTION_ASSETS,
    {
     id: "data:agent-conversation",
     physical: { prismaModel: "AgentMessage" },

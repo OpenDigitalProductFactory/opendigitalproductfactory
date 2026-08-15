@@ -1,9 +1,11 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const upsertVectors = vi.fn();
 const searchSimilar = vi.fn();
 const deleteVectors = vi.fn();
+const scrollPoints = vi.fn();
 const generateEmbedding = vi.fn();
+const wikiPageFindMany = vi.fn();
 
 vi.mock("@dpf/db", () => ({
   QDRANT_COLLECTIONS: {
@@ -14,6 +16,8 @@ vi.mock("@dpf/db", () => ({
   upsertVectors: (...args: unknown[]) => upsertVectors(...args),
   searchSimilar: (...args: unknown[]) => searchSimilar(...args),
   deleteVectors: (...args: unknown[]) => deleteVectors(...args),
+  scrollPoints: (...args: unknown[]) => scrollPoints(...args),
+  prisma: { wikiPage: { findMany: (...args: unknown[]) => wikiPageFindMany(...args) } },
 }));
 
 vi.mock("@/lib/inference/embedding", () => ({
@@ -25,14 +29,21 @@ import {
   searchWikiPages,
   storeWikiPage,
 } from "./embeddings";
+import { reconcilePublishedWikiEmbeddings } from "./embedding-reconciliation";
 
 const stub = (n: number) => new Array(n).fill(0).map((_, i) => i / n);
+
+beforeEach(() => {
+  wikiPageFindMany.mockResolvedValue([]);
+});
 
 afterEach(() => {
   upsertVectors.mockReset();
   searchSimilar.mockReset();
   deleteVectors.mockReset();
+  scrollPoints.mockReset();
   generateEmbedding.mockReset();
+  wikiPageFindMany.mockReset();
 });
 
 describe("storeWikiPage", () => {
@@ -185,8 +196,8 @@ describe("storeWikiPage", () => {
     expect(payload).not.toHaveProperty("principlePublic");
   });
 
-  it("returns false silently when the embedding model is unavailable", async () => {
-    generateEmbedding.mockResolvedValueOnce(null);
+  it("retries once when an idle-evicted embedding provider loads on demand", async () => {
+    generateEmbedding.mockResolvedValueOnce(null).mockResolvedValueOnce(stub(768));
 
     const ok = await storeWikiPage({
       pageId: "wp_1",
@@ -202,7 +213,20 @@ describe("storeWikiPage", () => {
       kernelPageId: null,
     });
 
+    expect(ok).toBe(true);
+    expect(generateEmbedding).toHaveBeenCalledTimes(2);
+    expect(upsertVectors).toHaveBeenCalledTimes(1);
+  });
+
+  it("retains fail-safe behavior when the embedding provider is genuinely unavailable", async () => {
+    generateEmbedding.mockResolvedValue(null);
+    const ok = await storeWikiPage({
+      pageId: "wp_outage", slug: "entities/outage", title: "Outage", body: "body",
+      abstract: null, pageKind: "entity", status: "published", isKernel: true,
+      kernelVersion: null, organizationId: null, kernelPageId: null,
+    });
     expect(ok).toBe(false);
+    expect(generateEmbedding).toHaveBeenCalledTimes(2);
     expect(upsertVectors).not.toHaveBeenCalled();
   });
 
@@ -226,6 +250,49 @@ describe("storeWikiPage", () => {
 
     const callArg = generateEmbedding.mock.calls[0][0] as string;
     expect(callArg.length).toBeLessThanOrEqual(8000);
+  });
+});
+
+describe("published wiki embedding reconciliation", () => {
+  it("idempotently backfills only published pages whose vector is missing", async () => {
+    scrollPoints.mockResolvedValue([{ id: 1, payload: { entityId: "wp-present" } }]);
+    wikiPageFindMany.mockResolvedValue([
+      {
+        id: "wp-present", slug: "entities/present", title: "Present", body: "body",
+        abstract: null, pageKind: "entity", status: "published", isKernel: true,
+        kernelVersion: null, organizationId: null, kernelPageId: null,
+        principleTier: null, principleAppliesTo: [], principleRingScope: [],
+        principleDimensionVector: null, principlePublic: null,
+      },
+      {
+        id: "wp-missing", slug: "entities/missing", title: "Missing", body: "body",
+        abstract: null, pageKind: "entity", status: "published", isKernel: true,
+        kernelVersion: null, organizationId: null, kernelPageId: null,
+        principleTier: null, principleAppliesTo: [], principleRingScope: [],
+        principleDimensionVector: null, principlePublic: null,
+      },
+    ]);
+    generateEmbedding.mockResolvedValue(stub(768));
+
+    const result = await reconcilePublishedWikiEmbeddings();
+    expect(result).toEqual({ scanned: 2, missing: 1, embedded: 1, failed: [] });
+    expect(upsertVectors).toHaveBeenCalledTimes(1);
+    expect(upsertVectors.mock.calls[0]?.[1]?.[0]?.id).toBe("wiki-page-wp-missing");
+  });
+
+  it("leaves a skipped page eligible for the next governed run", async () => {
+    scrollPoints.mockResolvedValue([]);
+    wikiPageFindMany.mockResolvedValue([{
+      id: "wp-retry", slug: "entities/retry", title: "Retry", body: "body",
+      abstract: null, pageKind: "entity", status: "published", isKernel: true,
+      kernelVersion: null, organizationId: null, kernelPageId: null,
+      principleTier: null, principleAppliesTo: [], principleRingScope: [],
+      principleDimensionVector: null, principlePublic: null,
+    }]);
+    generateEmbedding.mockResolvedValue(null);
+    expect(await reconcilePublishedWikiEmbeddings()).toMatchObject({ embedded: 0, failed: ["entities/retry"] });
+    generateEmbedding.mockReset().mockResolvedValue(stub(768));
+    expect(await reconcilePublishedWikiEmbeddings()).toMatchObject({ embedded: 1, failed: [] });
   });
 });
 
@@ -452,11 +519,71 @@ describe("searchWikiPages: two-pass overlay-aware retrieval", () => {
     expect(results.every((r) => r.source === "org")).toBe(true);
   });
 
-  it("returns empty when embedding generation fails", async () => {
+  it("falls back to overlay-aware lexical doctrine retrieval when embedding generation fails", async () => {
     generateEmbedding.mockResolvedValueOnce(null);
-    const results = await searchWikiPages({ query: "q", organizationId: null });
-    expect(results).toEqual([]);
+    wikiPageFindMany.mockResolvedValueOnce([{
+      id: "wp-universal-work",
+      slug: "principles/universal-work-formula",
+      title: "Universal Work Formula",
+      body: "All work runs one invariant formula.",
+      abstract: "Vary context, temporal shape, and participants only.",
+      pageKind: "principle",
+      isKernel: true,
+      organizationId: null,
+      kernelPageId: null,
+      principleTier: "core",
+      principleAppliesTo: ["external_coding_agent"],
+      principleRingScope: [],
+      principleDimensions: ["architecture_alignment"],
+      principlePublic: true,
+    }]);
+    const results = await searchWikiPages({
+      query: "Universal Work Formula",
+      organizationId: null,
+      pageKind: "principle",
+    });
+    expect(results).toEqual([expect.objectContaining({
+      pageId: "wp-universal-work",
+      slug: "principles/universal-work-formula",
+      source: "kernel",
+    })]);
     expect(searchSimilar).not.toHaveBeenCalled();
+  });
+
+  it("falls back to Postgres when semantic search misses an existing published page", async () => {
+    generateEmbedding.mockResolvedValueOnce(stub(768));
+    searchSimilar.mockResolvedValueOnce([]);
+    wikiPageFindMany.mockResolvedValueOnce([{
+      id: "wp-universal-work",
+      slug: "principles/universal-work-formula",
+      title: "Universal Work Formula",
+      body: "All work runs one invariant formula.",
+      abstract: "Vary context, temporal shape, and participants only.",
+      pageKind: "principle",
+      isKernel: true,
+      organizationId: null,
+      kernelPageId: null,
+      principleTier: "core",
+      principleAppliesTo: ["external_coding_agent"],
+      principleRingScope: [],
+      principleDimensions: ["architecture_alignment"],
+      principlePublic: true,
+    }]);
+
+    const results = await searchWikiPages({
+      query: "Universal Work Formula",
+      organizationId: null,
+      pageKind: "principle",
+      principleAppliesTo: "external_coding_agent",
+    });
+
+    expect(searchSimilar).toHaveBeenCalledTimes(1);
+    expect(wikiPageFindMany).toHaveBeenCalledTimes(1);
+    expect(results).toEqual([expect.objectContaining({
+      pageId: "wp-universal-work",
+      slug: "principles/universal-work-formula",
+      source: "kernel",
+    })]);
   });
 
   it("includes pageKind filter when provided", async () => {

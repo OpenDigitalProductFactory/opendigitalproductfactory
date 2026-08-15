@@ -892,7 +892,7 @@ describe("SelfUpgradeClient – upgrade activity", () => {
 
 describe("Latest Run card — human-readable upgrade scope", () => {
   const digest = {
-    counts: { breaking: 1, feature: 5, fix: 3, performance: 0, other: 0, total: 9 },
+    counts: { breaking: 1, security: 0, feature: 5, fix: 3, performance: 0, dependency: 0, documentation: 0, maintenance: 0, other: 0, total: 9 },
     headline: "Nine changes since your last upgrade, one breaking.",
   };
 
@@ -952,7 +952,7 @@ describe("Latest Run card — human-readable upgrade scope", () => {
         {...baseStatus}
         latestRun={makeRun("succeeded")}
         latestRunImpact={{
-          counts: { breaking: 0, feature: 2, fix: 1, performance: 0, other: 0, total: 3 },
+          counts: { breaking: 0, security: 0, feature: 2, fix: 1, performance: 0, dependency: 0, documentation: 0, maintenance: 0, other: 0, total: 3 },
           headline: null,
         }}
       />,
@@ -969,7 +969,7 @@ describe("Update-available banner — at-a-glance scope", () => {
     summary: {
       currentLineageSha: "a".repeat(40),
       targetSha: "b".repeat(40),
-      counts: { breaking: 2, feature: 4, fix: 1, performance: 0, other: 0, total: 7 },
+      counts: { breaking: 2, security: 0, feature: 4, fix: 1, performance: 0, dependency: 0, documentation: 0, maintenance: 0, other: 0, total: 7 },
       topItems: [],
       allItems: [],
       phrased: {

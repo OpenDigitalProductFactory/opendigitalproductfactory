@@ -152,6 +152,12 @@ async function evaluateOrgBusinessDecision(
       allowed: decision.allowed,
       outcomeType: decision.evaluation.outcomeType,
       confidenceScore: decision.evaluation.confidenceScore,
+      // Content-aware directional verdict (BI-7E1F128A): approve/decline/mixed/none
+      // and the [-1,1] alignment behind it, so an off-mission decision surfaces a
+      // confident decline and an on-mission one a confident approve.
+      stanceAlignment: decision.evaluation.stanceAlignment ?? null,
+      alignmentScore: decision.evaluation.alignmentScore ?? null,
+      relevanceMethod: decision.evaluation.relevanceMethod ?? null,
       orgProfileSelected: decision.orgProfileSelected,
       recommendedOptionId: decision.evaluation.recommendedOptionId ?? null,
       rationale: rationale.length > 500 ? `${rationale.slice(0, 500)}...` : rationale,

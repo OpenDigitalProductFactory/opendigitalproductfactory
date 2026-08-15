@@ -1,9 +1,6 @@
 import { cron } from "inngest";
 import { inngest } from "../inngest-client";
-import { getSelfUpgradeConfig, resolveSelfUpgradeHostIdentity } from "@/lib/self-upgrade/config";
-import { readFile } from "node:fs/promises";
-import { createHash } from "node:crypto";
-import { verifyInstallStateMigrationEnvelope } from "../../../../../scripts/lib/transition-signing.mjs";
+import { getSelfUpgradeConfig } from "@/lib/self-upgrade/config";
 import { isUpgradeWindowOpen } from "@/lib/self-upgrade/window";
 import { resolveAutoUpgradeWindow } from "@/lib/self-upgrade/auto-window";
 import { getActiveSelfUpgradeBlackout } from "@/lib/self-upgrade/blackout";
@@ -19,7 +16,13 @@ import { prepareUpgradeSource, defaultGitRunner } from "@/lib/self-upgrade/prepa
 // NOT be statically imported into this server bundle entrypoint (BI-98AF1066);
 // that is what the dynamic loadPromoterRuntime() below is for.
 import { PROMOTER_ALREADY_RUNNING_EXIT_CODE } from "@/lib/self-upgrade/promoter-exit-codes";
-import { resolveReadinessBackupHostPath, runCandidatePreflight } from "@/lib/self-upgrade/preflight";
+import {
+  resolveReadinessBackupHostPath,
+  runCandidatePreflight,
+  loadInstallStateSigningContext,
+  verifyMigrationHandoff,
+} from "@/lib/self-upgrade/preflight";
+import { evaluateHostMemoryGuard } from "@/lib/self-upgrade/host-memory-preflight";
 import { getDeployedSha, isFeatureBuildDeployed } from "@/lib/self-upgrade/completion";
 import {
   classifyBuildFailure,
@@ -339,12 +342,13 @@ export async function runSelfUpgrade(
     const head = await gitRun(buildRemoteHeadCommand({ hostSourcePath, remote, branch }).slice(1));
     upstreamSha = head.code === 0 ? head.stdout.trim() : null;
     if (!upstreamSha) return await skipAttempt("no-target");
-
     const lastOk = await getLatestSucceededRun();
     if (!params.dryRun && !params.force && lastOk?.targetSha === upstreamSha) {
-      return await skipAttempt("up-to-date", `up-to-date: ${upstreamSha}`, { upstreamSha });
+      const deployedSha = await getDeployedSha();
+      if (deployedSha?.toLowerCase() === upstreamSha.toLowerCase()) {
+        return await skipAttempt("up-to-date", `up-to-date: ${upstreamSha}`, { upstreamSha });
+      }
     }
-
     // Release-batching gate — ROUTINE triggers only (the scheduled cron and
     // agent-requested runs; see SelfUpgradeRunEventData.routine). Every upgrade
     // drains the portal, so upgrading on any single new commit costs one full
@@ -466,6 +470,18 @@ export async function runSelfUpgrade(
     return await skipAttempt("up-to-date", `up-to-date: ${builtStamp}`, { builtStamp });
   }
 
+  // Host-memory-headroom guard (SUR-BF75ED2A, 2026-08-11). The candidate promoter
+  // `docker build` is memory-heavy; under host exhaustion buildkit's context
+  // sender OOMs and the run dies at preflight. DEFER (skip + cooldown) rather than
+  // fail — the next cron tick retries once memory recovers. See host-memory-preflight.
+  if (!params.dryRun && !params.force) {
+    const guard = await evaluateHostMemoryGuard();
+    if (guard.defer) {
+      await recordCooldown(now, cooldownMinutes);
+      return await skipAttempt("host-memory-pressure", guard.reason, guard.extra);
+    }
+  }
+
   const run = params.runId
     ? await updateRunPlan(params.runId, {
         fromVersion: deployedSha ?? undefined,
@@ -489,21 +505,12 @@ export async function runSelfUpgrade(
   // Candidate-owned preflight. Resolve once, validate the embedded contract,
   // run readiness against that digest, persist evidence, and only then drain.
   // Undefined mode is the post-floor default; legacy-bootstrap is explicit.
-  let runtimeTransitionSecret: string | undefined;
-  let hostIdentity: ReturnType<typeof resolveSelfUpgradeHostIdentity> | undefined;
-  try {
-    if (!params.dryRun) {
-      const installStateBytes = await readFile("/dpf-state/install-state.json", "utf8");
-      runtimeTransitionSecret = (await readFile("/dpf-state/runtime-transition.secret", "utf8")).trim();
-      if (!runtimeTransitionSecret) throw new Error("runtime_transition_secret_empty");
-      hostIdentity = resolveSelfUpgradeHostIdentity(process.env, JSON.parse(installStateBytes.replace(/^\uFEFF/, "")));
-    }
-  } catch (error) {
-    const reason = `installer-state-repair-required: ${error instanceof Error ? error.message : "install_state_preparation_failed"}`;
-    await failRun(run.runId, reason);
-    await emitUpgradeEvent({ type: "upgrade.failed", runId: run.runId });
-    return { ok: false, status: "failed", runId: run.runId, reason: "installer-state-repair-required", excerpt: reason };
-  }
+  const emitFailure = (runId: string) => emitUpgradeEvent({ type: "upgrade.failed", runId });
+  const signingContext = await loadInstallStateSigningContext({
+    dryRun: params.dryRun, runId: run.runId, failRun, emitFailure,
+  });
+  if (!signingContext.ok) return { ok: false, status: "failed", runId: run.runId, reason: "installer-state-repair-required", excerpt: signingContext.reason };
+  const { runtimeTransitionSecret, hostIdentity } = signingContext;
   const preflight = await runCandidatePreflight({
     dryRun: params.dryRun, readinessMode: config.readinessMode, readinessOwner: config.readinessOwner,
     promoterImage: config.promoterImage, callerProtocolVersion: config.callerProtocolVersion,
@@ -513,29 +520,22 @@ export async function runSelfUpgrade(
     runId: run.runId, composeFiles: composeFiles ?? [], composeProject,
     healthUrl: config.healthUrl ?? process.env.PROMOTE_HEALTH_URL ?? "",
     runtime: loadPromoterRuntime, recordReadiness: recordPromoterReadiness, failRun,
-    emitFailure: async (runId) => emitUpgradeEvent({ type: "upgrade.failed", runId }),
+    emitFailure,
     hostIdentity, runtimeTransitionSecret,
   });
   if (!preflight.ok) {
+    // Back off so a residual preflight failure (an OOM under the guard floor, or a
+    // readiness refusal) doesn't re-attempt the heavy build every cron tick.
+    await recordCooldown(now, cooldownMinutes);
     return { ok: false, status: "failed", runId: run.runId, reason: preflight.reason };
   }
   const resolvedPromoterDigest = preflight.resolvedPromoterDigest;
   const migrationHandoff = preflight.migrationHandoff;
-  if (!params.dryRun) {
-    try {
-      if (!migrationHandoff || !resolvedPromoterDigest || !runtimeTransitionSecret || !hostIdentity) throw new Error("install_state_migration_handoff_missing");
-      const currentStateBytes = await readFile("/dpf-state/install-state.json", "utf8");
-      verifyInstallStateMigrationEnvelope(migrationHandoff.envelope, migrationHandoff.signature, runtimeTransitionSecret, {
-        runId: run.runId, promoterDigest: resolvedPromoterDigest,
-        sourceHash: createHash("sha256").update(currentStateBytes).digest("hex"), hostIdentity, now: Date.now(),
-      });
-    } catch (error) {
-      const reason = `installer-state-repair-required: ${error instanceof Error ? error.message : "install_state_migration_handoff_invalid"}`;
-      await failRun(run.runId, reason);
-      await emitUpgradeEvent({ type: "upgrade.failed", runId: run.runId });
-      return { ok: false, status: "failed", runId: run.runId, reason: "installer-state-repair-required", excerpt: reason };
-    }
-  }
+  const handoff = await verifyMigrationHandoff({
+    dryRun: params.dryRun, runId: run.runId, migrationHandoff, resolvedPromoterDigest,
+    runtimeTransitionSecret, hostIdentity, failRun, emitFailure,
+  });
+  if (!handoff.ok) return { ok: false, status: "failed", runId: run.runId, reason: "installer-state-repair-required", excerpt: handoff.reason };
 
   // BI-QUIESCE-010 keystone integration: replaces the single-signal
   // getPortalActivity check with the full Activity Quiescence Protocol

@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
+vi.mock("@/lib/queue/queue-telemetry", () => ({ recordQueueTransition: vi.fn().mockResolvedValue(undefined) }));
+
 import {
   computeDemandPayloadDigest,
   computeDemandResponseDigest,
@@ -60,6 +62,11 @@ function db(overrides: {
   });
   return {
     value: {
+      workQueue: { upsert: vi.fn().mockResolvedValue({ id: "queue-db-id" }) },
+      workItem: {
+        upsert: vi.fn().mockResolvedValue({ itemId: "job-1" }),
+        update: vi.fn(), updateMany: vi.fn(), findMany: vi.fn(),
+      },
       federationLink: {
         findUnique: vi.fn().mockResolvedValue({
           linkId: "link_1", peerAuthorityUrl: "https://peer.example", peerTokenEnc: "enc",
@@ -138,5 +145,64 @@ describe("handleIncomingDemandResponse", () => {
     await expect(handleIncomingDemandResponse(value, "link_1", response()))
       .resolves.toEqual({ action: "rejected", violations: ["response:unknown-envelope"] });
     expect(create).not.toHaveBeenCalled();
+  });
+
+  it("correlates an envelope past the first page (no silent take:1000 cliff)", async () => {
+    const demand = envelope();
+    const match = {
+      mirrorId: "m_hit",
+      localRecordRef: "BI-LOCAL-1",
+      payload: {
+        envelope: demand,
+        activity: "dpf.demand.proposed",
+        eventId: "evt",
+        queuedAt: demand.createdAt,
+      },
+    };
+    const create = vi.fn().mockResolvedValue({});
+    const findMany = vi.fn().mockImplementation((args: {
+      take: number;
+      cursor?: { mirrorId: string };
+      skip?: number;
+    }) => {
+      // Full first page of non-matches so the pager continues (length === take).
+      if (!args.cursor) {
+        return Promise.resolve(
+          Array.from({ length: args.take }, (_, i) => ({
+            mirrorId: `m_fill_${i}`,
+            localRecordRef: `BI-FILL-${i}`,
+            payload: {
+              envelope: {
+                ...demand,
+                envelopeId: `dem_other_${i}`,
+                originRecordRef: `ref_other_${i}`,
+              },
+              activity: "dpf.demand.proposed",
+              eventId: "evt",
+              queuedAt: demand.createdAt,
+            },
+          })),
+        );
+      }
+      return Promise.resolve([match]);
+    });
+    const value = {
+      workQueue: { upsert: vi.fn() },
+      workItem: { upsert: vi.fn(), update: vi.fn(), updateMany: vi.fn(), findMany: vi.fn() },
+      federationLink: { findUnique: vi.fn(), findMany: vi.fn() },
+      federatedRecordMirror: {
+        findUnique: vi.fn().mockResolvedValue(null),
+        findMany,
+        create,
+        update: vi.fn(),
+      },
+    } as unknown as DemandResponseDb;
+
+    await expect(handleIncomingDemandResponse(value, "link_1", response()))
+      .resolves.toMatchObject({ action: "created", responseId: "rsp_opaque" });
+    expect(findMany.mock.calls.length).toBeGreaterThanOrEqual(2);
+    expect(findMany.mock.calls[1][0]).toMatchObject({ cursor: { mirrorId: "m_fill_99" }, skip: 1 });
+    expect(create).toHaveBeenCalledTimes(1);
+    expect(create.mock.calls[0][0].data).toMatchObject({ localRecordRef: "BI-LOCAL-1" });
   });
 });

@@ -19,6 +19,7 @@ export type RestaurantFloorState = (typeof RESTAURANT_FLOOR_STATES)[number];
 
 export interface RestaurantFloorTableInput {
   id: string;
+  version?: number;
   label: string;
   capacity: number;
   serviceArea: string | null;
@@ -100,12 +101,14 @@ export interface RestaurantForwardAvailability {
 
 export interface RestaurantFloorTable {
   id: string;
+  version: number;
   label: string;
   capacity: number;
   serviceArea: string;
   shape: RestaurantTableShape;
   combinableWith: string[];
   combinationGroup: string | null;
+  bookingAccess: "online" | "in-house";
   combinedWith: string[];
   state: RestaurantFloorState;
   statusLabel: string;
@@ -369,12 +372,14 @@ export function deriveRestaurantFloor(
     const demand = occupancy ? demandById.get(occupancy.demandId) : undefined;
     return {
       id: table.id,
+      version: table.version ?? 1,
       label: table.label,
       capacity: table.capacity,
       serviceArea: table.serviceArea?.trim() || "Unassigned area",
       shape: attributes.shape,
       combinableWith: attributes.combinableWith,
       combinationGroup: attributes.combinationGroup,
+      bookingAccess: attributes.bookingAccess,
       combinedWith: occupancy
         ? occupancy.tableIds.filter((tableId) => tableId !== table.id)
         : [],

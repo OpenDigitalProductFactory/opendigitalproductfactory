@@ -6,6 +6,7 @@ vi.mock("@/lib/actions/finance", () => ({
 }));
 vi.mock("@dpf/db", () => {
   const prisma = {
+    businessProfile: { findFirst: vi.fn() },
     storefrontConfig: { findFirst: vi.fn() },
     storefrontInquiry: { create: vi.fn() },
     storefrontBooking: { create: vi.fn() },
@@ -382,6 +383,9 @@ describe("submitBooking (enhanced)", () => {
   });
 
   it("writes the structured hospitality resource and allocation in the booking transaction", async () => {
+    vi.mocked(prisma.businessProfile.findFirst).mockResolvedValue({
+      timezone: "America/Chicago",
+    } as never);
     vi.mocked(prisma.storefrontConfig.findFirst).mockResolvedValue(
       mockPublishedStorefront as never,
     );
@@ -415,6 +419,10 @@ describe("submitBooking (enhanced)", () => {
     });
 
     expect(result.success).toBe(true);
+    expect(prisma.businessProfile.findFirst).toHaveBeenCalledWith({
+      where: { isActive: true },
+      select: { timezone: true },
+    });
     expect(prisma.storefrontBooking.create).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({
@@ -433,6 +441,93 @@ describe("submitBooking (enhanced)", () => {
         demandRef: "BK-TESTREF",
         quantity: 4,
       }),
+    });
+  });
+
+  it("refuses a Restaurant booking when the selected provider has no table resource", async () => {
+    vi.mocked(prisma.storefrontConfig.findFirst).mockResolvedValue({
+      ...mockPublishedStorefront,
+      archetype: { archetypeId: "restaurant" },
+    } as never);
+    vi.mocked(prisma.hospitalityResource.findFirst).mockResolvedValue(null as never);
+
+    const result = await submitBooking("restaurant", {
+      itemId: "itm-1",
+      customerEmail: "a@b.com",
+      customerName: "Alice",
+      scheduledAt: new Date("2026-03-23T09:00:00Z"),
+      durationMinutes: 45,
+      providerId: "generic-provider",
+      covers: 4,
+    });
+
+    expect(result).toEqual({
+      success: false,
+      error: "That table is not available for reservations. Please choose another time.",
+    });
+    expect(prisma.storefrontBooking.create).not.toHaveBeenCalled();
+  });
+
+  it("refuses a Restaurant booking when no table provider is selected", async () => {
+    vi.mocked(prisma.storefrontConfig.findFirst).mockResolvedValue({
+      ...mockPublishedStorefront,
+      archetype: { archetypeId: "restaurant" },
+    } as never);
+
+    const result = await submitBooking("restaurant", {
+      itemId: "itm-1",
+      customerEmail: "a@b.com",
+      customerName: "Alice",
+      scheduledAt: new Date("2026-03-23T09:00:00Z"),
+      durationMinutes: 45,
+      covers: 4,
+    });
+
+    expect(result).toEqual({
+      success: false,
+      error: "That table is not available for reservations. Please choose another time.",
+    });
+    expect(prisma.storefrontBooking.create).not.toHaveBeenCalled();
+  });
+
+  it("returns a customer-safe error when party size exceeds table capacity", async () => {
+    vi.mocked(prisma.storefrontConfig.findFirst).mockResolvedValue({
+      ...mockPublishedStorefront,
+      archetype: { archetypeId: "restaurant" },
+    } as never);
+    vi.mocked(prisma.hospitalityResource.findFirst)
+      .mockResolvedValueOnce({
+        id: "table-1",
+        legacyServiceProviderId: "prov-1",
+        status: "active",
+      } as never)
+      .mockResolvedValueOnce({
+        id: "table-1",
+        legacyServiceProviderId: "prov-1",
+        status: "active",
+        capacity: 4,
+        availability: [],
+        storefront: { timezone: "UTC" },
+      } as never);
+    vi.mocked(prisma.hospitalityCapacityAllocation.findFirst).mockResolvedValue(null as never);
+    vi.mocked(prisma.storefrontBooking.create).mockResolvedValue({
+      id: "bk-1",
+      bookingRef: "BK-TESTREF",
+    } as never);
+
+    const result = await submitBooking("restaurant", {
+      itemId: "itm-1",
+      customerEmail: "a@b.com",
+      customerName: "Alice",
+      scheduledAt: new Date("2026-03-23T09:00:00Z"),
+      durationMinutes: 45,
+      providerId: "prov-1",
+      covers: 10,
+    });
+
+    expect(result).toEqual({
+      success: false,
+      error: "That table cannot seat this party. Please choose a smaller party or contact the venue.",
     });
   });
 

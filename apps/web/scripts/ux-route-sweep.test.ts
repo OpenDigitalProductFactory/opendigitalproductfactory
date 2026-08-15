@@ -5,6 +5,7 @@ import {
   DOM_SETTLE_EXPRESSION,
   captureAccessibilityStructure,
   executionOutcome,
+  findDroppedBaselineRoutes,
   uxSweepAxeOptions,
   waitForRouteDomToSettle,
   withIsolatedSweepPage,
@@ -25,6 +26,43 @@ describe("axe result collection", () => {
       },
       resultTypes: ["violations"],
     });
+  });
+});
+
+describe("findDroppedBaselineRoutes (BI-EE6E0CFC)", () => {
+  it("names committed routes absent from a freeze so refresh cannot silently shrink", () => {
+    const committed = {
+      bootstrapped: true,
+      generator: "test",
+      routes: {
+        "/workspace": {} as never,
+        "/ops/self-upgrade": {} as never,
+        "/admin/scheduled-jobs": {} as never,
+        "/platform": {} as never,
+      },
+    };
+    const frozen = {
+      bootstrapped: true,
+      generator: "test",
+      routes: {
+        "/platform": {} as never,
+      },
+    };
+    expect(findDroppedBaselineRoutes(committed, frozen)).toEqual([
+      "/admin/scheduled-jobs",
+      "/ops/self-upgrade",
+      "/workspace",
+    ]);
+  });
+
+  it("returns empty when freeze covers every committed route", () => {
+    const routes = { "/a": {} as never, "/b": {} as never };
+    expect(
+      findDroppedBaselineRoutes(
+        { bootstrapped: true, generator: "test", routes },
+        { bootstrapped: true, generator: "test", routes: { ...routes, "/c": {} as never } },
+      ),
+    ).toEqual([]);
   });
 });
 

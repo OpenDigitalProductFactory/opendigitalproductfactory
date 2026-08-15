@@ -1,19 +1,22 @@
 import { describe, it, expect } from "vitest";
 import type { ToolDefinition } from "@/lib/mcp-tools";
 import {
-  selectCoworkerToolBudget,
+  scoreToolIntentRelevance,
   selectLoadableTools,
+  tokenizeIntent,
+} from "@/lib/tak/tool-intent";
+import {
+  selectCoworkerToolBudget,
   deriveCoworkerToolCap,
   deriveSkillCatalogCap,
   capSkillCatalog,
-  scoreToolIntentRelevance,
-  tokenizeIntent,
   LOAD_TOOLS_TOOL,
   LOAD_TOOLS_TOOL_NAME,
   MAX_COWORKER_ATTACHED_TOOLS,
   MIN_COWORKER_ATTACHED_TOOLS,
   SKILL_CATALOG_CLIFF_CAP,
 } from "./coworker-tool-budget";
+import { AUTHORIZED_SURFACE_TOOL_NAMES } from "@/lib/coworker/authorized-surface-coworker-contract";
 
 describe("deriveCoworkerToolCap", () => {
   it("caps an exact 32k local window at the 15-tool accuracy cliff", () => {
@@ -139,6 +142,19 @@ describe("capSkillCatalog", () => {
 });
 
 describe("selectCoworkerToolBudget", () => {
+  it("keeps every authorized ASC protocol tool attached under the normal local cap", () => {
+    const surfaceTools = [...AUTHORIZED_SURFACE_TOOL_NAMES].map((name) => tool(name));
+    const tools = [...surfaceTools, ...Array.from({ length: 30 }, (_, i) => tool(`tail_${i}`))];
+    const { attached } = selectCoworkerToolBudget({
+      tools,
+      roleGrants: [],
+      alwaysIncludeNames: AUTHORIZED_SURFACE_TOOL_NAMES,
+      cap: 15,
+    });
+    const names = new Set(attached.map((entry) => entry.name));
+    for (const name of AUTHORIZED_SURFACE_TOOL_NAMES) expect(names.has(name)).toBe(true);
+    expect(attached.length).toBeLessThanOrEqual(15);
+  });
   it("bounds the TOTAL attached surface — essentials take priority within the cap, not on top of it", () => {
     // BI-CAP-F2D39F8F follow-through: essentials riding on top of the cap made
     // the attached set exceed the routing layer's local-fallback gate (cap 15 +

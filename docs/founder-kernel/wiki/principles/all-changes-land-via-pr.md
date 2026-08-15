@@ -5,7 +5,7 @@ status: published
 abstract: No direct pushes; every change lands via PR against main, and opening a PR means the branch is ready to merge.
 principleTier: commandment
 principleDirection: Land every change via PR review against main; never push directly; never open a PR before the branch is ready to merge.
-principleDimensionVector: {"governance_compliance": 1.0, "blast_radius": -0.6, "evidence_density": 0.5}
+principleDimensionVector: {"governance_compliance": 1.0, "blast_radius": -0.6, "evidence_density": 0.5, "long_term_maintainability": 0.55, "schema_grounding": 0.35}
 principleAppliesTo:
   - in_platform_coworker
   - external_coding_agent

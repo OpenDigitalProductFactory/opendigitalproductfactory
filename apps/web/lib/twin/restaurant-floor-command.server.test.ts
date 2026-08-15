@@ -173,6 +173,7 @@ describe("restaurant floor command adapter", () => {
       expect.objectContaining({
         resourceId: "table-1",
         serviceTurnId: "turn-1",
+        enforceResourceAvailability: false,
       }),
     );
     expect(allocateCapacity).toHaveBeenNthCalledWith(
@@ -181,6 +182,7 @@ describe("restaurant floor command adapter", () => {
       expect.objectContaining({
         resourceId: "table-2",
         serviceTurnId: "turn-1",
+        enforceResourceAvailability: false,
       }),
     );
     expect(transitionCapacity).toHaveBeenCalledTimes(2);
@@ -196,6 +198,35 @@ describe("restaurant floor command adapter", () => {
         status: "seated",
       },
     });
+  });
+
+  it("fails closed when a refreshed demand still owns a terminal service turn", async () => {
+    const { database, tx } = fixture();
+    const allocateCapacity = vi.fn();
+    const adapter = createRestaurantFloorCommandAdapter({
+      database,
+      organizationId: "org-1",
+      storefrontId: "store-1",
+      actorRef: "employee-1",
+      dependencies: {
+        createTurn: vi.fn().mockResolvedValue({
+          id: "turn-closed",
+          turnId: "HT-CLOSED",
+          stage: "closed",
+          version: 6,
+        }),
+        allocateCapacity,
+        transitionCapacity: vi.fn(),
+      },
+    });
+
+    await expect(adapter.executeAtomically(command())).resolves.toEqual({
+      status: "rejected",
+      reasonCode: "demand-turn-terminal",
+      message: "This party already completed service. Refresh the floor before seating another party.",
+    });
+    expect(allocateCapacity).not.toHaveBeenCalled();
+    expect(tx.storefrontBooking.updateMany).not.toHaveBeenCalled();
   });
 
   it("returns a version conflict before any write when facts changed", async () => {

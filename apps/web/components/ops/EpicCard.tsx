@@ -15,7 +15,7 @@ import {
   summarizeBacklogStatuses,
   visibleUnderActiveOnly,
   type BacklogStatusSummary,
-} from "./backlogVisibility";
+} from "@/lib/backlog-visibility";
 
 // Must stay in sync with OpsClient SortField / SortState
 export type EpicSortField = "title" | "status" | "progress" | "stories";

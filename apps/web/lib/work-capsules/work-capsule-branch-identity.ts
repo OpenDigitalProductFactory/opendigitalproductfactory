@@ -1,0 +1,141 @@
+import {
+  LEASE_TTL_MS,
+  type WorkCapsuleExecutorKind,
+  type WorkCapsuleScopeInput,
+  type WorkCapsuleStatus,
+} from "@/lib/work-capsules";
+import type { WorkCapsuleActor } from "./work-capsule-store-types";
+
+export type CapsuleAdoptionInput = {
+  title: string;
+  objective: string;
+  repositoryFullName: string;
+  headBranch: string;
+  worktreePath: string;
+  baseBranch?: string | null;
+  baseSha?: string | null;
+  headSha?: string | null;
+  executorKind?: WorkCapsuleExecutorKind | null;
+  executorRef?: string | null;
+  backlogItemId?: string | null;
+  epicId?: string | null;
+  scope?: WorkCapsuleScopeInput | null;
+};
+
+type BranchCapsuleRecord = {
+  id: string;
+  capsuleId: string;
+  status?: string | null;
+  archivedAt?: Date | string | null;
+  backlogItemId?: string | null;
+  executorKind?: WorkCapsuleExecutorKind | null;
+  executorRef?: string | null;
+  baseBranch?: string | null;
+  baseSha?: string | null;
+  headSha?: string | null;
+  headBranch?: string | null;
+};
+
+export const TERMINAL_CAPSULE_STATUSES: WorkCapsuleStatus[] = ["complete", "abandoned", "archived"];
+
+export function isTerminalCapsuleStatus(status: unknown): boolean {
+  return typeof status === "string" && (TERMINAL_CAPSULE_STATUSES as string[]).includes(status);
+}
+
+export function isExternalLeaseExecutor(
+  executorKind: WorkCapsuleExecutorKind | null | undefined,
+): boolean {
+  return (
+    executorKind === "codex-desktop" ||
+    executorKind === "claude-desktop" ||
+    executorKind === "grok-desktop" ||
+    executorKind === "antigravity-desktop" ||
+    executorKind === "human"
+  );
+}
+
+export function leaseUntil(now = new Date()): Date {
+  return new Date(now.getTime() + LEASE_TTL_MS);
+}
+
+export function isReusableLiveCapsule(
+  existing: Pick<BranchCapsuleRecord, "status" | "backlogItemId" | "executorRef">,
+  input: Pick<CapsuleAdoptionInput, "backlogItemId" | "executorRef">,
+): boolean {
+  if (isTerminalCapsuleStatus(existing.status)) return false;
+  const existingBi = existing.backlogItemId ?? null;
+  const incomingBi = input.backlogItemId ?? null;
+  if (existingBi == null) return true;
+  if (incomingBi != null && existingBi !== incomingBi) return false;
+  const existingSession = existing.executorRef ?? null;
+  const incomingSession = input.executorRef ?? null;
+  return existingSession == null || incomingSession == null || existingSession === incomingSession;
+}
+
+export class CapsuleBranchOccupiedError extends Error {
+  readonly capsuleId: string;
+  readonly status: string;
+  readonly backlogItemId: string | null;
+
+  constructor(existing: Pick<BranchCapsuleRecord, "capsuleId" | "status" | "backlogItemId" | "headBranch">) {
+    const status = existing.status ?? "unknown";
+    const backlogItemId = existing.backlogItemId ?? null;
+    super(
+      `Branch ${existing.headBranch ?? "unknown"} is already bound to Work Capsule ` +
+        `${existing.capsuleId} (${status}${backlogItemId ? `, ${backlogItemId}` : ""}). ` +
+        "Resume that capsule for the same backlog item or use a different branch.",
+    );
+    this.name = "CapsuleBranchOccupiedError";
+    this.capsuleId = existing.capsuleId;
+    this.status = status;
+    this.backlogItemId = backlogItemId;
+  }
+}
+
+export function planAbandonedCapsuleResume(args: {
+  existing: BranchCapsuleRecord | null;
+  input: CapsuleAdoptionInput;
+  actor: WorkCapsuleActor;
+  now: Date;
+}) {
+  const { existing, input, actor, now } = args;
+  if (
+    existing?.status !== "abandoned" ||
+    existing.archivedAt != null ||
+    existing.backlogItemId == null ||
+    existing.backlogItemId !== (input.backlogItemId ?? null)
+  ) {
+    return null;
+  }
+
+  return {
+    update: {
+      where: { capsuleId: existing.capsuleId },
+      data: {
+        status: "ready" as const,
+        title: input.title,
+        objective: input.objective,
+        baseBranch: input.baseBranch ?? existing.baseBranch ?? "main",
+        baseSha: input.baseSha ?? existing.baseSha ?? null,
+        headSha: input.headSha ?? existing.headSha ?? null,
+        worktreePath: input.worktreePath,
+        executorKind: input.executorKind ?? existing.executorKind ?? null,
+        executorRef: input.executorRef ?? existing.executorRef ?? null,
+        leaseHolderPrincipalId: isExternalLeaseExecutor(input.executorKind) ? actor.principalId : null,
+        leaseExpiresAt: isExternalLeaseExecutor(input.executorKind) ? leaseUntil(now) : null,
+        lastSyncedAt: now,
+      },
+    },
+    activity: {
+      workCapsuleId: existing.id,
+      kind: "adopted" as const,
+      summary: `Resumed ${existing.capsuleId} on ${input.headBranch}`,
+      payload: {
+        resumed: true,
+        previousStatus: "abandoned",
+        worktreePath: input.worktreePath,
+        executorRef: input.executorRef ?? null,
+      },
+    },
+  };
+}

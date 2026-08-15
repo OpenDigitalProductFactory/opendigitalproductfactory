@@ -67,6 +67,8 @@ dpf_native_edge_install() {
   local env_file="$state_root/edge-node.env"
   local launch_script="$state_root/run-edge-node.sh"
   local binary="$bin_dir/dpf-edge-node"
+  local binary_candidate="$binary.next"
+  local binary_backup="$binary.previous"
   local plist="$HOME/Library/LaunchAgents/local.dpf-edge-node.plist"
   local template="$repo_root/scripts/installer/macos-edge-node.plist.tmpl"
   local version="${DPF_NATIVE_EDGE_VERSION:-$(git -C "$repo_root" describe --tags --abbrev=0 2>/dev/null || echo latest)}"
@@ -102,13 +104,22 @@ dpf_native_edge_install() {
 
   mkdir -p "$bin_dir" "$edge_state_dir" "$log_dir" "$HOME/Library/LaunchAgents"
   chmod 0700 "$state_root" "$edge_state_dir"
-  _dpf_native_edge_acquire_macos "$repo_root" "$binary" "$version"
+  # Acquire and verify the replacement while the current service stays online.
+  rm -f "$binary_candidate"
+  _dpf_native_edge_acquire_macos "$repo_root" "$binary_candidate" "$version"
   # Integrity is checked before this host-local mutation. Clearing quarantine
   # and applying an ad-hoc signature lets launchd execute contributor builds
   # and unsigned community release artifacts; official Developer ID signing
   # can replace the ad-hoc signature without changing the installer contract.
-  xattr -d com.apple.quarantine "$binary" 2>/dev/null || true
-  codesign --force --sign - "$binary" >/dev/null
+  xattr -d com.apple.quarantine "$binary_candidate" 2>/dev/null || true
+  codesign --force --sign - "$binary_candidate" >/dev/null
+  # Release the running image only after the replacement is ready.
+  launchctl bootout "gui/$UID/local.dpf-edge-node" 2>/dev/null || true
+  if [ -f "$binary" ]; then
+    cp "$binary" "$binary_backup"
+    chmod 0755 "$binary_backup"
+  fi
+  mv "$binary_candidate" "$binary"
 
   {
     printf 'DPF_AUTHORITY_URL=%s\n' "$authority_url"
@@ -141,11 +152,16 @@ dpf_native_edge_install() {
   sed -e "s|@@DPF_EDGE_LAUNCH_SCRIPT@@|$launch_script|g" \
       -e "s|@@DPF_EDGE_LOG_DIR@@|$log_dir|g" "$template" > "$plist"
   chmod 0644 "$plist"
-  launchctl bootout "gui/$UID/local.dpf-edge-node" 2>/dev/null || true
   if launchctl bootstrap "gui/$UID" "$plist" 2>/dev/null; then
     ok "Native Edge Node installed and supervised by launchd"
   else
-    warn "Native Edge Node was installed but launchd could not start it. See $log_dir/edge-node.err.log."
+    if [ -f "$binary_backup" ]; then
+      mv "$binary_backup" "$binary"
+      launchctl bootstrap "gui/$UID" "$plist" 2>/dev/null || true
+      warn "Native Edge Node could not start after upgrade; the prior binary was restored. See $log_dir/edge-node.err.log."
+    else
+      warn "Native Edge Node was installed but launchd could not start it. See $log_dir/edge-node.err.log."
+    fi
     return 1
   fi
 }

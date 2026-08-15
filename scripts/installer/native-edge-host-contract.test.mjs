@@ -70,6 +70,53 @@ test("Docker Desktop installers retire the legacy container after native host in
   assert.match(windowsInstaller, /stop\s+edge-node/);
 });
 
+test("opted-in native Edge services converge on every governed install instead of a one-time progress marker", async () => {
+  const shellInstaller = await read("install-dpf.sh");
+  const windowsInstaller = await read("install-dpf.ps1");
+
+  assert.match(shellInstaller, /dpf_native_edge_converge/);
+  assert.match(shellInstaller, /edge-node\/state\.json/);
+  assert.match(windowsInstaller, /Invoke-DPFEdgeNodeConvergence/);
+  assert.match(windowsInstaller, /Resolve-DpfEdgeEnabled/);
+  assert.doesNotMatch(windowsInstaller, /\$dpfEdgeOptIn\s+-and\s+\(-not \(Test-StepDone "edge_bootstrap"\)\)/);
+});
+
+test("native host upgrades stop the supervisor before replacing its executable", async () => {
+  const shellInstaller = await read("scripts/installer/native-edge-host.sh");
+  const windowsInstaller = await read("scripts/installer/native-edge-host.ps1");
+
+  assert.ok(
+    shellInstaller.lastIndexOf('_dpf_native_edge_acquire_macos') <
+      shellInstaller.indexOf('launchctl bootout "gui/$UID/local.dpf-edge-node"') &&
+      shellInstaller.indexOf('launchctl bootout "gui/$UID/local.dpf-edge-node"') <
+        shellInstaller.indexOf('mv "$binary_candidate" "$binary"'),
+    "launchd must stay online during acquisition and release the old binary before replacement",
+  );
+  assert.ok(
+    windowsInstaller.indexOf('Copy-Item -LiteralPath $sourceBinary -Destination $binaryCandidate -Force') <
+      windowsInstaller.indexOf('Stop-ScheduledTask -TaskName "DPF-Native-Edge-Node"') &&
+      windowsInstaller.indexOf('Stop-ScheduledTask -TaskName "DPF-Native-Edge-Node"') <
+        windowsInstaller.indexOf('Move-Item -LiteralPath $binaryCandidate -Destination $binary -Force'),
+    "Task Scheduler must stay online during acquisition and release the old binary before replacement",
+  );
+});
+
+test("native host upgrades stage new bytes and retain a restorable prior binary", async () => {
+  const shellInstaller = await read("scripts/installer/native-edge-host.sh");
+  const windowsInstaller = await read("scripts/installer/native-edge-host.ps1");
+
+  assert.match(shellInstaller, /binary_candidate=.*\.next/);
+  assert.match(shellInstaller, /binary_backup=.*\.previous/);
+  assert.match(shellInstaller, /_dpf_native_edge_acquire_macos[^\n]+\$binary_candidate/);
+  assert.match(shellInstaller, /mv\s+"\$binary_candidate"\s+"\$binary"/);
+  assert.match(shellInstaller, /mv\s+"\$binary_backup"\s+"\$binary"/);
+
+  assert.match(windowsInstaller, /\$binaryCandidate\s*=.*\.next/);
+  assert.match(windowsInstaller, /\$binaryBackup\s*=.*\.previous/);
+  assert.match(windowsInstaller, /Move-Item\s+-LiteralPath\s+\$binaryCandidate\s+-Destination\s+\$binary/);
+  assert.match(windowsInstaller, /Copy-Item\s+-LiteralPath\s+\$binaryBackup\s+-Destination\s+\$binary/);
+});
+
 test("native host enrollment uses a LAN Authority URL and never silently claims trusted HTTPS", async () => {
   const shellInstaller = await read("scripts/installer/native-edge-host.sh");
   const windowsInstaller = await read("scripts/installer/native-edge-host.ps1");

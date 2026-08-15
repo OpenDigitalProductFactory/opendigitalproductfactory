@@ -5,7 +5,7 @@ status: published
 abstract: Before designing, find the existing standard. Cite sources. Recommend the standard unless you have a project-specific reason to deviate.
 principleTier: commandment
 principleDirection: Prefer existing standards with citations over bespoke designs invented for this task.
-principleDimensionVector: {"schema_grounding": 0.9, "long_term_maintainability": 0.7, "reusability": 0.6}
+principleDimensionVector: {"schema_grounding": 0.9, "long_term_maintainability": 0.7, "reusability": 0.6, "evidence_density": 0.75, "governance_compliance": 0.45}
 principleAppliesTo:
   - in_platform_coworker
   - external_coding_agent

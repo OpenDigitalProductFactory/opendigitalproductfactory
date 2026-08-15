@@ -40,11 +40,20 @@ The **Activity** stream distinguishes messages, asks, coworker handoffs, work ch
 People and AI coworkers appear together as named participants. Their room role and current work state are separate:
 
 - **Accountable** owns the room outcome.
-- **Contributor** performs or coordinates work.
+- **Coordinator** keeps the room on-task to its outcome—curating who is in the room, sequencing turns, and driving to a decision, close, or escalation. A room has exactly one Coordinator; it may be the same person or coworker as the Accountable, or a different one. When no one is named, the Accountable coordinates by default.
+- **Contributor** performs work in the room.
 - **Reviewer** verifies work or an outcome.
 - **Observer** follows the room without changing it.
 
 AI coworkers remain governed participants. Joining a room does not expand their authority, and a visible presence signal does not grant permission.
+
+An admitted coworker can **read the room's message feed and post into it**, and appears as present while it works. Whether a coworker may read or post is decided per room, scoped to that room's outcome and sensitivity—being admitted to one room grants nothing in another. A coworker working the room's underlying task (for example an external CLI session on the room's build) is admitted to that room as it joins.
+
+A room can also **call in new participants on demand**: a member with action rights (typically the Coordinator) can invite another coworker or a person into the room, either to participate or read-only. The invitee is admitted only to that room, for that room's outcome—never granted anything elsewhere.
+
+Across rooms, you can see **where each AI coworker is engaged**—which active rooms it is in and its role in each (including where it coordinates). This 360 view helps manage how coworkers are used and recognise the routine patterns worth pre-positioning them for.
+
+An authorized coworker can also open a relevant product surface from the room's work type, resources, or task intent—even when no browser page is rendered. These silent/headless surfaces use the same semantic fields, validation, and governed actions as the human browser or mobile view. Room membership still does not expand authority: the surface catalog and every action apply the human role, coworker grants, room/work context, token scope, and approval rules together.
 
 Open **Participants** to see why each person or coworker is in the room, what they are working on, their authority summary, and an AI coworker's accountable sponsor. Coworkers created by the active thread's governed lineage appear automatically; the room does not provide an unrestricted coworker picker.
 

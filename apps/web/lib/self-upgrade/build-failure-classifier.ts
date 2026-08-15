@@ -103,6 +103,16 @@ export type BuildFailureClass =
   // install cannot self-upgrade INTO #3282 — the fix is the documented
   // out-of-band crossing bootstrap, never a rebuild or a retry (BI-BE8BBDE9).
   | "install-state-migration-handoff-missing"
+  // The build/host step failed because the host (or the Docker VM) ran OUT OF
+  // MEMORY: buildkit's context sender OOMs on `readdirent … cannot allocate
+  // memory` (ENOMEM), or a container is OOMKilled, or Node's heap exhausts.
+  // Canonical case SUR-BF75ED2A (2026-08-11): the WSL2 VM (hard-capped 24GB) was
+  // thrashing during the candidate promoter build and the context load failed
+  // ENOMEM. Transient host pressure, NOT a main defect — the candidate build
+  // runs BEFORE any portal swap, so nothing was deployed. The governed path now
+  // DEFERS on a host-memory-headroom guard and retries after reclaim; a run that
+  // still reaches here should be retried once the host frees memory.
+  | "host-out-of-memory"
   | "unknown";
 
 export type BuildFailureClassification = {
@@ -158,6 +168,11 @@ const PNPM_OUTDATED_LOCKFILE = /ERR_PNPM_(OUTDATED_)?LOCKFILE|specifiers in the 
 // failures (e.g. prisma migrate unable to reach postgres) and must stay
 // unclassified rather than misdiagnosed as a dependency fetch.
 const PNPM_FETCH_ERROR = /ERR_PNPM_FETCH|ERR_PNPM_META_FETCH_FAIL|GET https:\/\/registry\.npmjs\.org\/[^\s]+: (?:ECONNREFUSED|ECONNRESET|ETIMEDOUT|EAI_AGAIN|ENETUNREACH|socket hang up)/i;
+// Host / Docker-VM out-of-memory. buildkit's context sender fails a getdents64
+// with `readdirent … cannot allocate memory` (ENOMEM); Docker kills an OOM
+// container with `OOMKilled`; Node exhausts its heap. Deliberately anchored on
+// these decisive OOM phrasings so an unrelated failure never gets swept in.
+const HOST_OUT_OF_MEMORY = /cannot allocate memory|OOMKilled|\bENOMEM\b|JavaScript heap out of memory/i;
 // runPromoter's marker when it kills a promoter that blew its wall-clock budget.
 const PROMOTER_TIMEOUT = /\[promoter-timeout\]/i;
 // Production wraps the terminal machine code in a human-readable diagnostic:
@@ -224,6 +239,24 @@ export function classifyBuildFailure(
   input: BuildFailureInput,
 ): BuildFailureClassification {
   const log = input.log ?? "";
+
+  // Host / VM out-of-memory FIRST. An OOM is a decisive environmental cause: it
+  // cancels whatever step was running, so any half-emitted trace — or the
+  // `promoter-readiness-failed:` / `promoter_candidate_build_failed:` wrapper the
+  // pipeline prepends — is noise, not the cause. Checked ahead of the readiness
+  // extraction below (which would otherwise short-circuit an OOM'd candidate
+  // build into the generic, unactionable `promoter-readiness-failed` class — the
+  // exact SUR-BF75ED2A mislabel this class fixes).
+  if (HOST_OUT_OF_MEMORY.test(log)) {
+    return {
+      class: "host-out-of-memory",
+      summary:
+        "The build failed because the host / Docker VM ran out of memory (`cannot allocate memory` / OOMKilled) — buildkit's context sender could not allocate a buffer to read the build context. Transient host pressure, NOT a main defect: the candidate build runs before any portal swap, so nothing was deployed and the running portal is untouched. Free host memory (WSL2 autoMemoryReclaim, or shed heavy consumers) and retry — the self-upgrade's host-memory-headroom guard now DEFERS instead of failing when MemAvailable is below the build floor, so a healthy retry happens automatically on the next cron tick.",
+      playbookLink: SPEC,
+      failingTrace: traceAround(log, HOST_OUT_OF_MEMORY),
+      isMainDefectVsEnvironment: "environment",
+    };
+  }
 
   const readinessFailure = log.match(PROMOTER_READINESS_FAILED);
   if (readinessFailure) {

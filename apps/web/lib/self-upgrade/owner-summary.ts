@@ -84,14 +84,10 @@ export interface OwnerReleaseInput {
     targetSha: string | null;
   } | null;
   latestRunImpact: {
-    counts: {
-      breaking: number;
-      feature: number;
-      fix: number;
-      performance: number;
-      other: number;
-      total: number;
-    };
+    // Only `breaking` and `total` are read here, so the shape stays permissive:
+    // a summary persisted under an older category taxonomy assigns cleanly and
+    // this builder never has to know the current bucket list.
+    counts: { total: number; breaking?: number } & Record<string, number | undefined>;
     headline: string | null;
   } | null;
   /**

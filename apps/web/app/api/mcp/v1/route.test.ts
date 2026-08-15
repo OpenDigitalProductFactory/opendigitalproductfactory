@@ -41,6 +41,7 @@ vi.mock("@/lib/tak/task-records", () => ({
 vi.mock("@dpf/db", () => ({
   prisma: {
     user: { findUnique: vi.fn() },
+    agent: { findFirst: vi.fn() },
     taskRun: {
       findFirst: vi.fn(),
       findUnique: vi.fn(),
@@ -55,6 +56,19 @@ vi.mock("@dpf/db", () => ({
   },
 }));
 
+// BI-HDLEMP-04: the agent-bound tools/list authority filter resolves the acting
+// agent's grants and the acting human's clearance. Override only those two seams
+// — keep the REAL grant mapping / expansion so the token-scope tests are
+// unaffected — and stub the effective-auth loader (it makes its own DB reads the
+// mock above doesn't model).
+vi.mock("@/lib/tak/agent-grants", async (importActual) => ({
+  ...(await importActual<typeof import("@/lib/tak/agent-grants")>()),
+  getAgentToolGrantsAsync: vi.fn(),
+}));
+vi.mock("@/lib/identity/load-effective-auth-context", () => ({
+  loadEffectiveAuthContext: vi.fn(),
+}));
+
 import { prisma } from "@dpf/db";
 import { resolveMcpApiToken } from "@/lib/auth/mcp-api-token";
 import { verifyMcpSessionToken } from "@/lib/mcp/session-token";
@@ -66,6 +80,8 @@ import {
   resolveAutonomousWorkTools,
 } from "@/lib/tak/autonomous-work-run";
 import { createTaskMessage } from "@/lib/tak/task-records";
+import { getAgentToolGrantsAsync } from "@/lib/tak/agent-grants";
+import { loadEffectiveAuthContext } from "@/lib/identity/load-effective-auth-context";
 import { GET, POST } from "./route";
 import { deriveCallerClient } from "@/lib/mcp/caller-client";
 
@@ -84,6 +100,9 @@ const executeLoopMock = executeAutonomousAgenticLoop as unknown as ReturnType<ty
 const resolveAgentMock = resolveAutonomousWorkAgent as unknown as ReturnType<typeof vi.fn>;
 const resolveToolsMock = resolveAutonomousWorkTools as unknown as ReturnType<typeof vi.fn>;
 const createTaskMessageMock = createTaskMessage as unknown as ReturnType<typeof vi.fn>;
+const agentFindFirstMock = prisma.agent.findFirst as unknown as ReturnType<typeof vi.fn>;
+const agentGrantsMock = getAgentToolGrantsAsync as unknown as ReturnType<typeof vi.fn>;
+const effectiveAuthMock = loadEffectiveAuthContext as unknown as ReturnType<typeof vi.fn>;
 
 function makeRequest(opts: {
   url?: string;
@@ -95,16 +114,17 @@ function makeRequest(opts: {
   forwardedProto?: string;
   forwardedHost?: string;
   hostHeader?: string;
-  userAgent?: string;
+  userAgent?: string | null;
   headers?: Record<string, string>;
 }): Request {
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   // Default the caller to Claude Code so tools/list returns the FULL granted
-  // surface (BI-88681BE0: tools/list defaults non-Claude-Code clients to the
-  // lean core tier). Tests asserting a specific tool is exposed assume the full
-  // surface; the client-aware default is covered explicitly below and in
-  // tool-tier.test.ts. Pass userAgent to exercise a different client.
-  headers["User-Agent"] = opts.userAgent ?? "claude-code/2.1 (test)";
+  // surface. Claude Code and Codex defer attachment host-side; the client-aware
+  // default is covered explicitly below and in tool-tier.test.ts. Pass
+  // userAgent to exercise a different client.
+  if (opts.userAgent !== null) {
+    headers["User-Agent"] = opts.userAgent ?? "claude-code/2.1 (test)";
+  }
   if (opts.bearer !== null && opts.bearer !== undefined) {
     headers["Authorization"] = `Bearer ${opts.bearer}`;
   }
@@ -149,6 +169,14 @@ beforeEach(() => {
   executeLoopMock.mockResolvedValue({ content: "Done.", executedTools: [] } as never);
   createTaskMessageMock.mockResolvedValue(undefined as never);
   enqueueRemoteTaskExecutionMock.mockResolvedValue(undefined);
+  // Agent-bound listing-authority seams (BI-HDLEMP-04). Defaults are only
+  // reached by agent-bound tokens; the agentId:null tests short-circuit before
+  // touching them.
+  agentFindFirstMock.mockResolvedValue({ sensitivity: "internal" } as never);
+  agentGrantsMock.mockResolvedValue([] as never);
+  effectiveAuthMock.mockResolvedValue({
+    sensitivityClearance: ["public", "internal", "confidential"],
+  } as never);
 });
 
 afterEach(() => {
@@ -565,10 +593,12 @@ describe("POST — initialize", () => {
     expect(body.result.protocolVersion).toBe("2024-11-05");
     expect(body.result.serverInfo.name).toBe("dpf-platform");
     expect(body.result.capabilities.tools).toBeDefined();
+    // Pre-Tasks fallback must NOT advertise tasks (breaks Grok Build 1.0.0 etc.).
+    expect(body.result.capabilities.tasks).toBeUndefined();
   });
 
   it("negotiates protocol version — echoes client version when supported", async () => {
-    for (const version of ["2024-11-05", "2025-03-26", "2025-11-25"]) {
+    for (const version of ["2024-11-05", "2025-03-26", "2025-06-18", "2025-11-25"]) {
       const res = await POST(
         makeRequest({
           bearer: "dpfmcp_X",
@@ -580,6 +610,51 @@ describe("POST — initialize", () => {
     }
   });
 
+  it("omits capabilities.tasks on pre-Tasks protocol versions (client-compat)", async () => {
+    // Includes Grok Build 1.0.0's negotiated version (2025-06-18).
+    for (const version of ["2024-11-05", "2025-03-26", "2025-06-18"]) {
+      const res = await POST(
+        makeRequest({
+          bearer: "dpfmcp_X",
+          body: {
+            jsonrpc: "2.0",
+            id: 1,
+            method: "initialize",
+            params: { protocolVersion: version },
+          },
+        }),
+      );
+      const body = await res.json();
+      expect(body.result.protocolVersion).toBe(version);
+      expect(body.result.capabilities.tools).toEqual({ listChanged: true });
+      expect(body.result.capabilities.tasks).toBeUndefined();
+    }
+  });
+
+  it("accepts MCP-Protocol-Version: 2025-06-18 on post-initialize calls (Grok)", async () => {
+    resolveMock.mockResolvedValue({
+      tokenId: "tok_grok",
+      userId: "u1",
+      agentId: null,
+      scopes: ["backlog_read"],
+      capability: "read",
+    });
+    const req = new Request("https://localhost/api/mcp/v1", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: "Bearer dpfmcp_X",
+        "User-Agent": "grok/1.0.0",
+        "MCP-Protocol-Version": "2025-06-18",
+      },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 2, method: "tools/list" }),
+    });
+    const res = await POST(req);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(Array.isArray(body.result.tools)).toBe(true);
+  });
+
   it("negotiates protocol version — falls back when client version is unknown", async () => {
     const res = await POST(
       makeRequest({
@@ -589,6 +664,8 @@ describe("POST — initialize", () => {
     );
     const body = await res.json();
     expect(body.result.protocolVersion).toBe("2024-11-05");
+    // Fallback is pre-Tasks — do not advertise tasks on the safe floor.
+    expect(body.result.capabilities.tasks).toBeUndefined();
   });
 });
 
@@ -635,7 +712,9 @@ describe("POST — tools/list", () => {
     const body = await res.json();
     expect(typeof body.result.serverInfo.description).toBe("string");
     expect(body.result.serverInfo.description.length).toBeGreaterThan(0);
-    expect(body.result.capabilities.tasks).toEqual({ list: true, cancel: true });
+    // Spec shape: tasks.list/.cancel are `object`, not boolean (a boolean
+    // fails strict client capability validation — Claude Code rejects init).
+    expect(body.result.capabilities.tasks).toEqual({ list: {}, cancel: {} });
   });
 
   it("rejects an unsupported MCP-Protocol-Version header with 400 (Slice 1)", async () => {
@@ -712,7 +791,7 @@ describe("POST — tools/list", () => {
     const res = await POST(
       makeRequest({
         bearer: "dpfmcp_X",
-        userAgent: "codex/1.0", // lean core tier — load_tools must still be present
+        userAgent: "codex/1.0", // full host catalog — load_tools must still be present
         body: { jsonrpc: "2.0", id: 42, method: "tools/list" },
       }),
     );
@@ -726,7 +805,7 @@ describe("POST — tools/list", () => {
     expect(loadTools?.inputSchema.properties).toHaveProperty("names");
   });
 
-  it("defaults a non-Claude-Code client to the lean core tier; ?tier=full opts back in (BI-88681BE0)", async () => {
+  it("gives lazy host registries the full catalog while generic hosts keep the lean core", async () => {
     resolveMock.mockResolvedValue({
       tokenId: "tok_c",
       userId: "u1",
@@ -737,34 +816,27 @@ describe("POST — tools/list", () => {
     const names = async (req: Request) =>
       ((await (await POST(req)).json()).result.tools as { name: string }[]).map((t) => t.name);
 
-    // Non-Claude-Code client, no explicit tier -> lean core surface.
-    const coreNames = await names(
+    // Codex needs the full authorized server catalog so its own lazy registry
+    // can search/attach deferred definitions without a mid-turn re-list.
+    const codexNames = await names(
       makeRequest({
         bearer: "dpfmcp_X",
         userAgent: "codex/1.0",
         body: { jsonrpc: "2.0", id: 20, method: "tools/list" },
       }),
     );
-    expect(coreNames).toContain("query_backlog"); // a core tool: present
-    // WWMD tools are core so Grok/Codex (no ToolSearch) can discover them.
-    expect(coreNames).toContain("wiki_query");
-    expect(coreNames).toContain("principle_decide");
-    // Still lean: bulk domain packs stay off the default list.
-    expect(coreNames).not.toContain("dispatch_consolidation_bet");
-
-    // Same non-CC client, explicit ?tier=full -> opts back into the full surface.
-    const fullNames = await names(
+    const codexCoreNames = await names(
       makeRequest({
         bearer: "dpfmcp_X",
         userAgent: "codex/1.0",
-        url: "http://localhost:3000/api/mcp/v1?tier=full",
+        url: "http://localhost:3000/api/mcp/v1?tier=core",
         body: { jsonrpc: "2.0", id: 21, method: "tools/list" },
       }),
     );
-    expect(fullNames).toContain("wiki_query");
-    expect(fullNames.length).toBeGreaterThan(coreNames.length);
+    expect(codexNames).toContain("wiki_query");
+    expect(codexNames.length).toBeGreaterThan(codexCoreNames.length);
 
-    // Grok UA also gets WWMD on core (peer of Codex).
+    // Grok has no proven host-side lazy registry, so it keeps the core floor.
     const grokNames = await names(
       makeRequest({
         bearer: "dpfmcp_X",
@@ -774,8 +846,9 @@ describe("POST — tools/list", () => {
     );
     expect(grokNames).toContain("principle_decide");
     expect(grokNames).toContain("wiki_query");
+    expect(grokNames).toEqual(codexCoreNames);
 
-    // Claude Code (default UA) keeps the full surface without opting in.
+    // Claude Code also keeps the full surface for its native ToolSearch.
     const ccNames = await names(
       makeRequest({
         bearer: "dpfmcp_X",
@@ -783,6 +856,89 @@ describe("POST — tools/list", () => {
       }),
     );
     expect(ccNames).toContain("wiki_query");
+    expect(ccNames).toEqual(codexNames);
+
+    // Current Codex Streamable HTTP requests omit User-Agent. The bootstrap's
+    // explicit tier therefore has to be sufficient on its own; without it an
+    // unidentified client correctly retains the generic core default.
+    const unidentifiedCoreNames = await names(
+      makeRequest({
+        bearer: "dpfmcp_X",
+        userAgent: null,
+        body: { jsonrpc: "2.0", id: 24, method: "tools/list" },
+      }),
+    );
+    const explicitFullNames = await names(
+      makeRequest({
+        bearer: "dpfmcp_X",
+        userAgent: null,
+        url: "http://localhost:3000/api/mcp/v1?tier=full",
+        body: { jsonrpc: "2.0", id: 25, method: "tools/list" },
+      }),
+    );
+    expect(unidentifiedCoreNames).toEqual(codexCoreNames);
+    expect(explicitFullNames).toEqual(codexNames);
+  });
+
+  // ─── BI-HDLEMP-04: agent-bound tools/list ⇄ tools/call authority parity ──
+  describe("agent-bound token: list is filtered by agent grants + clearance", () => {
+    const agentBoundToken = {
+      tokenId: "tok_agent",
+      userId: "u1",
+      agentId: "AGT-EMP",
+      scopes: ["backlog_read"],
+      capability: "read" as const,
+    };
+    const listNames = async () => {
+      const res = await POST(
+        makeRequest({
+          bearer: "dpfmcp_X",
+          body: { jsonrpc: "2.0", id: 70, method: "tools/list" },
+        }),
+      );
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      return (body.result.tools as { name: string }[]).map((t) => t.name);
+    };
+
+    it("lists a token-scoped tool the agent's grants also cover", async () => {
+      resolveMock.mockResolvedValue(agentBoundToken);
+      agentGrantsMock.mockResolvedValue(["backlog_read"] as never); // agent covers it
+      const names = await listNames();
+      expect(names).toContain("query_backlog");
+      expect(names).toContain("list_epics");
+    });
+
+    it("drops a token-scoped tool the agent's grants do NOT cover (list/call skew fix)", async () => {
+      resolveMock.mockResolvedValue(agentBoundToken);
+      agentGrantsMock.mockResolvedValue([] as never); // agent grants nothing
+      const names = await listNames();
+      expect(names).not.toContain("query_backlog");
+      expect(names).not.toContain("list_epics");
+      // The transport meta-tool is always present; only governed tools are gated.
+      expect(names).toContain("load_tools");
+    });
+
+    it("drops the whole agent-bound surface when clearance excludes the agent's sensitivity", async () => {
+      resolveMock.mockResolvedValue(agentBoundToken);
+      agentGrantsMock.mockResolvedValue(["backlog_read"] as never); // grant would allow…
+      agentFindFirstMock.mockResolvedValue({ sensitivity: "restricted" } as never);
+      effectiveAuthMock.mockResolvedValue({
+        sensitivityClearance: ["public", "internal", "confidential"], // …but no clearance
+      } as never);
+      const names = await listNames();
+      expect(names).not.toContain("query_backlog");
+      expect(names).toContain("load_tools");
+    });
+
+    it("drops the whole agent-bound surface when the acting agent cannot be resolved", async () => {
+      resolveMock.mockResolvedValue(agentBoundToken);
+      agentGrantsMock.mockResolvedValue(["backlog_read"] as never);
+      agentFindFirstMock.mockResolvedValue(null as never); // agent not active/found
+      const names = await listNames();
+      expect(names).not.toContain("query_backlog");
+      expect(names).toContain("load_tools");
+    });
   });
 
   // ─── Principles-as-wiki-kind Phase 2 Task 2.8 ───────────────────────────

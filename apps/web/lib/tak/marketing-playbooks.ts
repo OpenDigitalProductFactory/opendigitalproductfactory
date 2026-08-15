@@ -461,6 +461,30 @@ const CATEGORY_PLAYBOOKS: Record<string, MarketingPlaybook> = {
     agentSkills: ["Capacity-available campaign", "Peak-season readiness outreach", "Forwarder referral outreach", "Client performance review"],
   },
 
+  "manufacturing": {
+    primaryGoal: "Win and expand qualified industrial accounts with evidence of capability, quality, delivery performance, and lifecycle support",
+    stakeholders: "OEM buyers, plant engineers, operations leaders, distributors, integrators, sourcing teams, and service partners",
+    campaignTypes: [
+      "Application and product-family campaigns grounded in verified specifications",
+      "New-product-introduction and engineering-change announcements",
+      "Factory-capability stories with dated capacity and certification evidence",
+      "Quality and delivery-performance case studies with approved customer proof",
+      "Distributor, integrator, and manufacturer-representative enablement",
+      "Replacement, spare-parts, and lifecycle-support outreach",
+      "Trade-show and technical-webinar campaigns for qualified buying teams",
+    ],
+    contentTone: "Technical, specific, evidence-led, and careful about performance or compliance claims",
+    keyMetrics: [
+      "Qualified opportunity conversion",
+      "Request-for-quote response and win rate",
+      "Pipeline by product family and application",
+      "Distributor and integrator sourced revenue",
+      "Repeat orders and lifecycle-support attach rate",
+    ],
+    ctaLanguage: ["Discuss your application", "Request a quote", "Review specifications", "Talk with an engineer"],
+    agentSkills: ["Application campaign brief", "Capability case study", "Distributor enablement kit", "Lifecycle-support campaign"],
+  },
+
   "fabric-care-services": {
     primaryGoal: "Drive repeat garment care and fill plant capacity through trust, convenience, and ready-promise reliability",
     stakeholders: "Households, local professionals, small business accounts, route customers, satellite-store customers",

@@ -24,6 +24,7 @@ import {
 import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/actions/shared/guards";
 import { promoteCraftOverrideOnPublish } from "@/lib/wiki/craft-override-promotion";
+import { embedPublishedOverlayPage } from "@/lib/wiki/embed-published-overlay";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -205,6 +206,21 @@ export async function publishWikiOverlayPages(
           origin: "wiki-publish",
         });
         if (promotion) craftPromotions.push(promotion);
+
+        // BI-D4C1E05E: embed the newly-published page so it is retrievable by
+        // the decision engine — the same embed seam every publish path shares.
+        await embedPublishedOverlayPage({
+          page: {
+            id: row.id,
+            slug: row.slug,
+            title: row.title,
+            body: row.body,
+            abstract: row.abstract,
+            pageKind: row.pageKind,
+          },
+          organizationId: org.id,
+          origin: "wiki-publish",
+        });
       }
       revalidatePath(`/coworker-decisions/${row.slug}`);
     }

@@ -27,6 +27,7 @@ import {
   handleTasksUpdate,
   isTerminalTaskStatus,
   mcpTaskStateForWire,
+  shouldAdvertiseTasksCapability,
   tasksExtensionNegotiated,
   tasksLifecycleEnabled,
 } from "./tasks-lifecycle";
@@ -214,5 +215,20 @@ describe("official Tasks application service", () => {
       }),
     }));
     expect(db.update.mock.calls[0]?.[0]?.data.status).toBeUndefined();
+  });
+
+  it("advertises tasks only on Tasks-aware protocol versions when the flag is on", () => {
+    const prev = process.env.MCP_TASKS_LIFECYCLE;
+    delete process.env.MCP_TASKS_LIFECYCLE;
+    // Pre-Tasks clients (Grok Build 1.0.0 → 2025-06-18, older SDKs) — never advertise.
+    expect(shouldAdvertiseTasksCapability("2024-11-05")).toBe(false);
+    expect(shouldAdvertiseTasksCapability("2025-03-26")).toBe(false);
+    expect(shouldAdvertiseTasksCapability("2025-06-18")).toBe(false);
+    // Tasks-aware negotiation may advertise.
+    expect(shouldAdvertiseTasksCapability("2025-11-25")).toBe(true);
+    process.env.MCP_TASKS_LIFECYCLE = "off";
+    expect(shouldAdvertiseTasksCapability("2025-11-25")).toBe(false);
+    if (prev === undefined) delete process.env.MCP_TASKS_LIFECYCLE;
+    else process.env.MCP_TASKS_LIFECYCLE = prev;
   });
 });

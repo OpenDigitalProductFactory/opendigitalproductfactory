@@ -140,5 +140,5 @@ export const effortContextPack: ToolPack = {
     record_effort_context: (params, userId, context) => recordEffortContextHandler(params, userId, context),
     read_effort_context: (params, userId, context) => readEffortContextHandler(params, userId, context),
   },
-  grants: {},
+  grants: { record_effort_context: [], read_effort_context: [] },
 };

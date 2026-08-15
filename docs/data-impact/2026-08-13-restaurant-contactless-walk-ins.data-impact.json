@@ -1,0 +1,33 @@
+{
+  "version": "1",
+  "accountableOwner": "storefront-experience",
+  "affectedCopies": [
+    "StorefrontBooking.customerEmail: optional guest contact shown on the organization-scoped storefront inbox and Restaurant host-stand read model; no parallel persisted copy"
+  ],
+  "migration": {
+    "name": "20260814003000_allow_contactless_walk_in_bookings",
+    "backfill": "none — the migration only removes the NOT NULL constraint; existing email values and bookings remain unchanged"
+  },
+  "tests": [
+    "apps/web/lib/twin/restaurant-floor-actions.test.ts",
+    "apps/web/lib/twin/restaurant-floor-loader.server.test.ts"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:storefront-booking",
+      "prismaModel": "StorefrontBooking",
+      "lifecycleDisposition": "retained for the life of the parent StorefrontBooking and removed with it; optionality adds no new retention surface",
+      "fields": [
+        {
+          "fieldId": "data:storefront-booking#customerEmail",
+          "resolution": "governed",
+          "reason": "email remains subject contact data when supplied, but an in-person walk-in must not require or fabricate it",
+          "provenance": "guest-supplied on public booking flows or omitted by an authenticated host for an in-person walk-in",
+          "flags": ["subject", "sensitive"],
+          "fieldPolicy": "organization-scoped; visible only on the owning booking and authorized owner operations surfaces; optional absence renders as no email supplied"
+        }
+      ]
+    }
+  ]
+}

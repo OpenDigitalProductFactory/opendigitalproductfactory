@@ -123,10 +123,11 @@ export async function createHospitalityServiceTurn(
         startedAt: input.startedAt,
         expectedEndAt: input.expectedEndAt,
         version: 1,
+        // The nested relation inherits both serviceTurnId and organizationId
+        // from this parent. Supplying either relation scalar is invalid here.
         events: {
           create: {
             eventId: `HTE-${newId(12).toUpperCase()}`,
-            organizationId: input.organizationId,
             idempotencyKey: input.idempotencyKey,
             eventType: "stage-transition",
             fromStage: null,

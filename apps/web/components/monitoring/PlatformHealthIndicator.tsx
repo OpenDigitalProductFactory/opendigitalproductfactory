@@ -18,16 +18,16 @@ import {
 import { useAlertQuery } from "./useAlertQuery";
 import { SHELL_TAP_TARGET_CLASS } from "@/lib/shell/shell-action-contract";
 
-type HealthState = "healthy" | "warning" | "critical" | "offline";
+type HealthState = "healthy" | "warning" | "critical" | "offline" | "not-configured";
 
 export function PlatformHealthIndicator() {
   const [open, setOpen] = useState(false);
-  const { alerts: allAlerts, offline } = useAlertQuery();
+  const { alerts: allAlerts, offline, notConfigured } = useAlertQuery();
   const platformAlerts = getPlatformImpactAlerts(allAlerts);
   const telemetryAlerts = getTelemetryTargetAlerts(allAlerts);
   const alerts = [...platformAlerts, ...telemetryAlerts];
 
-  const health = deriveHealthState(offline, platformAlerts, telemetryAlerts);
+  const health = deriveHealthState(offline, notConfigured, platformAlerts, telemetryAlerts);
   const dotTone = healthToTone(health);
 
   const label = healthLabel(health, platformAlerts.length, telemetryAlerts.length);
@@ -47,7 +47,7 @@ export function PlatformHealthIndicator() {
           style={{ backgroundColor: TONE_COLOR[dotTone] }}
           aria-hidden="true"
         />
-        {health !== "healthy" && health !== "offline" && (
+        {health !== "healthy" && health !== "offline" && health !== "not-configured" && (
           <span className="text-[10px] text-[var(--dpf-muted)]">
             {alerts.length > 0 ? alerts.length : ""}
           </span>
@@ -67,6 +67,17 @@ export function PlatformHealthIndicator() {
                 aria-hidden="true"
               />
             </div>
+
+            {health === "not-configured" && (
+              <div className="px-3 py-4 text-xs text-[var(--dpf-muted)] text-center">
+                Monitoring is not configured on this install.
+                <br />
+                <span className="text-[10px]">
+                  Connect a Prometheus or Loki endpoint to see platform metrics
+                  and alerts.
+                </span>
+              </div>
+            )}
 
             {health === "offline" && (
               <div className="px-3 py-4 text-xs text-[var(--dpf-muted)] text-center">
@@ -153,9 +164,13 @@ export function PlatformHealthIndicator() {
 
 function deriveHealthState(
   offline: boolean,
+  notConfigured: boolean,
   platformAlerts: MonitoringAlert[],
   telemetryAlerts: MonitoringAlert[],
 ): HealthState {
+  // "Not configured" wins over "offline": if the install never wired up a
+  // monitoring stack, unreachability is expected, not an outage (BI-63FF58D2).
+  if (notConfigured) return "not-configured";
   if (offline) return "offline";
   if (platformAlerts.some((alert) => alert.labels.severity === "critical")) return "critical";
   if (platformAlerts.length > 0 || telemetryAlerts.length > 0) return "warning";
@@ -166,6 +181,7 @@ function healthToTone(health: HealthState): Tone {
   if (health === "healthy") return "success";
   if (health === "critical") return "critical";
   if (health === "warning") return "warning";
+  // offline + not-configured both render neutral (no alarm).
   return "neutral";
 }
 
@@ -175,6 +191,7 @@ function healthLabel(
   telemetryAlertCount: number,
 ): string {
   if (health === "healthy") return "All systems healthy";
+  if (health === "not-configured") return "Monitoring not configured";
   if (health === "offline") return "Monitoring offline";
   if (health === "critical") {
     return `${platformAlertCount} platform alert${platformAlertCount !== 1 ? "s" : ""} firing`;

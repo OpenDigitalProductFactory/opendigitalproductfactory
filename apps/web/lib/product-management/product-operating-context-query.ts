@@ -11,7 +11,7 @@ import {
   buildProductIntelligenceProjectionWhere,
   buildScheduledProductIntelligenceVisibilityWhere,
 } from "./product-intelligence-scope";
-import { SCHEDULED_AGENT_TASK_KINDS } from "@/lib/operate/scheduled-jobs/agent-task-kind";
+import { PRODUCT_SCHEDULED_TASK_KINDS } from "./product-scheduled-task-kinds";
 import { buildProductManagementProjectionWhere } from "./product-management-scope";
 import { mapDemandRows } from "@/lib/demand/demand-data";
 import { projectProductObjective } from "./outcomes";
@@ -153,7 +153,7 @@ export async function loadProductOperatingContext(input: {
     fullProfile
       ? db.scheduledAgentTask.findMany({
           where: {
-            taskKind: { in: [...SCHEDULED_AGENT_TASK_KINDS] },
+            taskKind: { in: [...PRODUCT_SCHEDULED_TASK_KINDS] },
             ...scheduledIntelligenceWhere,
           },
           orderBy: [{ nextRunAt: "asc" }, { taskId: "asc" }],

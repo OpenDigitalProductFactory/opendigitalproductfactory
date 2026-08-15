@@ -11,7 +11,7 @@
 // classes in spec §6.4. New members are a reviewed governance change, never ad hoc.
 
 import type { MasterDataDomain } from "@/lib/mdm/domain-registry";
-import type { RouteSensitivity } from "@/lib/tak/agent-sensitivity";
+import type { PrincipalSensitivity } from "@dpf/db/principal-sensitivity";
 
 // ─── Stable logical identifiers (survive physical renames) ───────────────────
 
@@ -64,8 +64,8 @@ export function parseDataFieldId(id: DataFieldId): { assetId: DataAssetId; local
 
 // ─── Independent classification axes (spec §6.1) ─────────────────────────────
 
-/** Sensitivity mirrors the existing route/agent taxonomy — one shared anchor. */
-export type DataSensitivity = RouteSensitivity; // public | internal | confidential | restricted
+/** Business-data sensitivity remains the persisted four-level confidentiality axis. */
+export type DataSensitivity = PrincipalSensitivity;
 export const ALL_DATA_SENSITIVITIES = [
   "public",
   "internal",

@@ -29,6 +29,7 @@ vi.mock("@/lib/actions/federation-links", () => ({
   revokeFederationLinkAction: vi.fn(),
   setFederationDiscoveryEnabledAction: mockSetDiscovery,
   setFederationLinkEnvironmentAction: mockSetEnvironment,
+  setFederationIntroducerPolicyAction: vi.fn(),
   startNearbyPairingAction: mockStartPairing,
   pollNearbyPairingAction: mockPollPairing,
   approveNearbyPairingAction: mockApprovePairing,
@@ -62,9 +63,29 @@ describe("FederationLinksAdminClient nearby setup", () => {
   it("shows nearby candidates without treating them as trusted", () => {
     render(<FederationLinksAdminClient rows={[]} nearbyCandidates={[secureCandidate]} />);
 
-    expect(screen.getByText("DPF found nearby")).toBeTruthy();
+    expect(screen.getByText("DPF installations available")).toBeTruthy();
     expect(screen.getByText("Not connected")).toBeTruthy();
     expect(screen.getByText(/TLS will be verified before any invitation is sent/)).toBeTruthy();
+  });
+
+  it("presents an introduced candidate by name and states that trust is not transferred", () => {
+    render(<FederationLinksAdminClient rows={[]} nearbyCandidates={[{
+      ...secureCandidate,
+      displayName: "Founder hub",
+      source: "introducer",
+      introducedBy: "Trusted reseller",
+      relationshipHint: "channel-upstream",
+    }]} />);
+
+    expect(screen.getByText("Founder hub")).toBeTruthy();
+    expect(screen.getByText(/Introduced by Trusted reseller; trust is not transferred/)).toBeTruthy();
+  });
+
+  it("keeps raw invitation and address fields inside explicit recovery options", () => {
+    render(<FederationLinksAdminClient rows={[]} />);
+    const recovery = screen.getByText("Recovery and advanced connection options").closest("details");
+    expect(recovery?.hasAttribute("open")).toBe(false);
+    expect(screen.getByLabelText("Installation host, IP, or origin")).toBeTruthy();
   });
 
   it("shows an incoming request with the matching code and canonical projection summary", () => {
@@ -136,6 +157,8 @@ describe("FederationLinksAdminClient channel setup", () => {
   it("offers a reseller/founder channel without implying exclusivity", () => {
     render(<FederationLinksAdminClient rows={[]} />);
 
+    fireEvent.click(screen.getByText("Recovery and advanced connection options"));
+
     fireEvent.change(screen.getByLabelText("Relationship preset"), {
       target: { value: "channel" },
     });
@@ -153,6 +176,7 @@ describe("FederationLinksAdminClient channel setup", () => {
       linkId: "FL-1", displayName: "Founder development peer", role: "channel-upstream", linkState: "trusted",
       peerAuthorityUrl: "https://peer.example", peerOrganizationRef: null, approvedLocal: true, approvedPeer: true,
       sharedSlices: ["demand"], sharedRetention: "standard", environmentClass: "development",
+      offersIntroductions: false, acceptsIntroductions: false,
       createdAtISO: "2026-07-20T00:00:00.000Z",
     }]} />);
 

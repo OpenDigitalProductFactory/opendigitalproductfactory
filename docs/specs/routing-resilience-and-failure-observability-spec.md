@@ -54,6 +54,7 @@ The material repo anchors are:
   - `rateLimitRetried`, `overloadRetried`, and `transientRetried` are scoped to one `callWithFallbackChain()` invocation.
   - The `rate_limit` branch waits up to 60 seconds for the selected endpoint before falling through.
   - Error outcomes are recorded as `RouteOutcome.latencyMs = 0`, so the route outcome row captures the failed attempt but not the wait that preceded the next attempt.
+  - A typed local-CI capacity deferral skips a local endpoint without degrading it and preserves an eligible cloud fallback. The policy uses lease ownership; it does not infer RAM consumption from Docker's displayed model residency or conflate GPU VRAM, WSL/shared memory, and Windows physical-memory telemetry.
 - `apps/web/lib/routing/pipeline-v2.ts`
   - `getExclusionReasonV2()` allows both `active` and `degraded` endpoints through the hard filter.
   - Cost-per-success ranking then applies the normal endpoint scoring path.

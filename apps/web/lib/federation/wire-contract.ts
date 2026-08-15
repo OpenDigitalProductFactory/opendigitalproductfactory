@@ -16,6 +16,7 @@ export const FederationEnrollBody = z.object({
    *  back (approval relay + demand push). Optional for backward compatibility:
    *  an older connector omits it and the link stays one-directional. */
   callbackToken: z.string().min(1).max(400).optional(),
+  peerDeviceId: z.string().regex(/^did_[a-f0-9]{64}$/).optional(),
   metadata: z.record(z.string(), z.unknown()).optional(),
 });
 

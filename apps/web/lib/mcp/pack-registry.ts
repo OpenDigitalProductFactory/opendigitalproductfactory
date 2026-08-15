@@ -17,6 +17,7 @@
 
 import { composeToolPacks } from "./tool-registry";
 import { deliberationSiemPack } from "./packs/deliberation-siem-pack";
+import { roomMessagingPack } from "./packs/room-messaging-pack";
 import { runtimeCoordinationPack } from "./packs/runtime-coordination-pack";
 import { workCapsulesPack } from "./packs/work-capsules-pack";
 import { workbooksPack } from "./packs/workbooks-pack";
@@ -41,11 +42,13 @@ import { coworkerGoalPack } from "./packs/coworker-goal-pack";
 import { subagentFanoutPack } from "./packs/subagent-fanout-pack";
 import { mdmStewardshipPack } from "./packs/mdm-stewardship-pack";
 import { crmContactsPack } from "./packs/crm-contacts-pack";
+import { crmEnrichmentPack } from "./packs/crm-enrichment-pack";
 import { storefrontActivityPack } from "./packs/storefront-activity-pack";
 import { stockCoveragePack } from "./packs/stock-coverage-pack";
 import { queueAwarenessPack } from "./packs/queue-awareness-pack";
 import { documentPack } from "./packs/document-pack";
 import { screenPack } from "./packs/screen-pack";
+import { surfacePack } from "./packs/surface-pack";
 import { nonprodLeasePack } from "./packs/nonprod-lease-pack";
 import { knowledgePack } from "./packs/knowledge-pack";
 import { demandScoringPack } from "./packs/demand-scoring-pack";
@@ -66,6 +69,7 @@ import { marketingOpsPack } from "./packs/marketing-ops-pack";
 import { coworkerCapabilityPack } from "./packs/coworker-capability-pack";
 import { coworkerBacklogLensPack } from "./packs/coworker-backlog-lens-pack";
 import { recruitingPipelinePack } from "./packs/recruiting-pipeline-pack";
+import { leaveDecisionPack } from "./packs/leave-decision-pack";
 import { publicWebDesignPack } from "./packs/public-web-design-pack";
 import { projectFilesPack } from "./packs/project-files-pack";
 import { sorReadPack } from "./packs/sor-read-pack";
@@ -100,6 +104,7 @@ import { gateContextPack } from "./packs/gate-context-pack";
 
 export const TOOL_PACK_REGISTRY = composeToolPacks([
   deliberationSiemPack,
+  roomMessagingPack,
   runtimeCoordinationPack,
   workCapsulesPack,
   workbooksPack,
@@ -123,11 +128,13 @@ export const TOOL_PACK_REGISTRY = composeToolPacks([
   subagentFanoutPack,
   mdmStewardshipPack,
   crmContactsPack,
+  crmEnrichmentPack,
   storefrontActivityPack,
   stockCoveragePack,
   queueAwarenessPack,
   documentPack,
   screenPack,
+  surfacePack,
   nonprodLeasePack,
   knowledgePack,
   demandScoringPack,
@@ -148,6 +155,7 @@ export const TOOL_PACK_REGISTRY = composeToolPacks([
   coworkerCapabilityPack,
   coworkerBacklogLensPack,
   recruitingPipelinePack,
+  leaveDecisionPack,
   publicWebDesignPack,
   projectFilesPack,
   grokSigninPack,

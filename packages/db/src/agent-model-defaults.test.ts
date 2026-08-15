@@ -12,6 +12,11 @@ describe("agent model config defaults", () => {
     expect(byId.get("finance-agent")?.minimumTier).toBe("strong");
     expect(byId.get("licensing-specialist")?.minimumCapabilities?.toolUse).toBe(true);
     expect(byId.get("licensing-specialist")?.minimumTier).toBe("strong");
+    expect(byId.get("time-off-advisor")).toMatchObject({
+      minimumTier: "adequate",
+      minimumCapabilities: { toolUse: true },
+      minimumContextTokens: 16000,
+    });
   });
 
   it("converges a stale system-owned row to the current declaration", () => {

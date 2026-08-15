@@ -133,6 +133,28 @@ if [ -n "$STAGED_FILES" ]; then
   fi
 fi
 
+# ─── Guard 3b: staged private-identity tripwire (BI-C9E5E7D9) ────────────────
+# The REQUIRED merge gate (check-no-private-identity in Policy Guards (source))
+# already blocks a real operator/customer/person name from spreading into the OSS
+# repo — but only at CI time, after a full green run, forcing a late scrub commit
+# and a queue re-run. This runs the SAME guard against the STAGED snapshot only,
+# so a leak is caught here, at commit time, naming the file + token. Staged-only
+# keeps it fast (sub-second). Skip: DPF_SKIP_PRIVATE_IDENTITY_SCAN=1.
+
+if [ -n "$STAGED_FILES" ]; then
+  if [ "$DPF_SKIP_PRIVATE_IDENTITY_SCAN" = "1" ]; then
+    echo "[pre-commit] DPF_SKIP_PRIVATE_IDENTITY_SCAN=1 - skipping staged private-identity scan."
+  else
+    if ! node scripts/check-no-private-identity.mjs --staged; then
+      echo ""
+      echo "Commit rejected. A protected private-identity token is in your staged changes."
+      echo "Genericize it (see the placeholder convention above), then re-stage the file."
+      echo ""
+      exit 1
+    fi
+  fi
+fi
+
 # ─── Guard 5: schema regression ─────────────────────────────────────────────
 # When schema.prisma is staged, run the same reorder-tolerant set-based
 # check the CI workflow uses (.github/workflows/schema-regression-guard.yml

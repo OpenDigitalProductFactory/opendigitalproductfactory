@@ -1,4 +1,21 @@
+import { createHash } from "node:crypto";
+import { spawnSync } from "node:child_process";
+
 export const LOCAL_SEMANTIC_REVIEW_GATE_SCHEMA_VERSION = "semantic-change-review-local-gate.v1";
+export const SEMANTIC_DIFF_MAX_BUFFER = 256 * 1024 * 1024;
+
+export function readGitDiffDigest(mergeBase, spawn = spawnSync) {
+  const diff = spawn("git", ["diff", "--binary", mergeBase, "HEAD"], {
+    encoding: null,
+    maxBuffer: SEMANTIC_DIFF_MAX_BUFFER,
+  });
+  if (diff.error?.code === "ENOBUFS") {
+    throw new Error("git diff exceeded the 256 MiB safety limit; split or remove oversized artifacts before review");
+  }
+  if (diff.error) throw new Error(`git diff could not start: ${diff.error.message ?? String(diff.error)}`);
+  if (diff.status !== 0) throw new Error(diff.stderr?.toString().trim() || `git diff exited ${diff.status}`);
+  return createHash("sha256").update(diff.stdout).digest("hex");
+}
 
 const IDENTITY_FIELDS = [
   "branch",

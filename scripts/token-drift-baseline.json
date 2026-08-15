@@ -45,7 +45,7 @@
     "motion": 0
   },
   "apps/web/app/(shell)/admin/scheduled-jobs/ScheduledJobsClient.tsx": {
-    "type": 11,
+    "type": 9,
     "spacing": 0,
     "motion": 0
   },
@@ -275,7 +275,7 @@
     "motion": 0
   },
   "apps/web/app/(shell)/employee/page.tsx": {
-    "type": 6,
+    "type": 1,
     "spacing": 0,
     "motion": 0
   },
@@ -524,11 +524,6 @@
     "spacing": 0,
     "motion": 0
   },
-  "apps/web/app/(shell)/platform/tools/built-ins/page.tsx": {
-    "type": 1,
-    "spacing": 0,
-    "motion": 0
-  },
   "apps/web/app/(shell)/platform/tools/catalog/page.tsx": {
     "type": 12,
     "spacing": 0,
@@ -685,7 +680,7 @@
     "motion": 0
   },
   "apps/web/components/admin/SkillsCatalogView.tsx": {
-    "type": 8,
+    "type": 3,
     "spacing": 0,
     "motion": 0
   },
@@ -860,7 +855,7 @@
     "motion": 0
   },
   "apps/web/components/build/BuildStudio.tsx": {
-    "type": 22,
+    "type": 15,
     "spacing": 0,
     "motion": 0
   },
@@ -1069,8 +1064,13 @@
     "spacing": 0,
     "motion": 0
   },
+  "apps/web/components/customer/AccountAdminActions.tsx": {
+    "type": 5,
+    "spacing": 0,
+    "motion": 0
+  },
   "apps/web/components/customer/AccountLifecycleActions.tsx": {
-    "type": 2,
+    "type": 3,
     "spacing": 0,
     "motion": 0
   },
@@ -1126,6 +1126,11 @@
   },
   "apps/web/components/customer/QuoteShareLink.tsx": {
     "type": 2,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/customer/RemoveOpportunityButton.tsx": {
+    "type": 4,
     "spacing": 0,
     "motion": 0
   },
@@ -1235,7 +1240,7 @@
     "motion": 0
   },
   "apps/web/components/employee/LeavePanel.tsx": {
-    "type": 10,
+    "type": 2,
     "spacing": 0,
     "motion": 0
   },
@@ -1260,7 +1265,7 @@
     "motion": 0
   },
   "apps/web/components/employee/OrgChartView.tsx": {
-    "type": 6,
+    "type": 5,
     "spacing": 0,
     "motion": 0
   },
@@ -1454,13 +1459,8 @@
     "spacing": 0,
     "motion": 0
   },
-  "apps/web/components/inventory/ConfigureConnectionInline.tsx": {
-    "type": 2,
-    "spacing": 0,
-    "motion": 0
-  },
   "apps/web/components/inventory/DiscoveryOperationsPage.tsx": {
-    "type": 7,
+    "type": 4,
     "spacing": 0,
     "motion": 0
   },
@@ -1485,7 +1485,7 @@
     "motion": 0
   },
   "apps/web/components/inventory/PortfolioQualityIssuesPanel.tsx": {
-    "type": 4,
+    "type": 3,
     "spacing": 0,
     "motion": 0
   },
@@ -1505,7 +1505,7 @@
     "motion": 0
   },
   "apps/web/components/inventory/SubnetGroupedInventoryPanel.tsx": {
-    "type": 7,
+    "type": 9,
     "spacing": 0,
     "motion": 0
   },
@@ -1565,7 +1565,7 @@
     "motion": 0
   },
   "apps/web/components/monitoring/PlatformHealthIndicator.tsx": {
-    "type": 5,
+    "type": 6,
     "spacing": 0,
     "motion": 0
   },
@@ -1585,7 +1585,7 @@
     "motion": 0
   },
   "apps/web/components/ops/BacklogItemRow.tsx": {
-    "type": 19,
+    "type": 18,
     "spacing": 0,
     "motion": 0
   },
@@ -1594,13 +1594,8 @@
     "spacing": 0,
     "motion": 0
   },
-  "apps/web/components/ops/DemandBoard.tsx": {
-    "type": 14,
-    "spacing": 0,
-    "motion": 0
-  },
   "apps/web/components/ops/EpicCard.tsx": {
-    "type": 12,
+    "type": 11,
     "spacing": 0,
     "motion": 0
   },
@@ -1645,17 +1640,12 @@
     "motion": 0
   },
   "apps/web/components/ops/SelfUpgradeClient.tsx": {
-    "type": 2,
+    "type": 1,
     "spacing": 0,
     "motion": 0
   },
   "apps/web/components/ops/UpgradeImpactPanel.tsx": {
     "type": 2,
-    "spacing": 0,
-    "motion": 0
-  },
-  "apps/web/components/platform/A2aInteractionsPanel.tsx": {
-    "type": 15,
     "spacing": 0,
     "motion": 0
   },
@@ -1671,11 +1661,6 @@
   },
   "apps/web/components/platform/AgentCardSupervisorPanel.tsx": {
     "type": 14,
-    "spacing": 0,
-    "motion": 0
-  },
-  "apps/web/components/platform/AiOperationsMap.tsx": {
-    "type": 43,
     "spacing": 0,
     "motion": 0
   },
@@ -1745,7 +1730,7 @@
     "motion": 0
   },
   "apps/web/components/platform/coworker-service-catalog/CoworkerCatalogView.tsx": {
-    "type": 3,
+    "type": 2,
     "spacing": 0,
     "motion": 0
   },
@@ -1976,11 +1961,6 @@
   },
   "apps/web/components/twin/CapacityChips.tsx": {
     "type": 1,
-    "spacing": 0,
-    "motion": 0
-  },
-  "apps/web/components/twin/CogBanner.tsx": {
-    "type": 3,
     "spacing": 0,
     "motion": 0
   },

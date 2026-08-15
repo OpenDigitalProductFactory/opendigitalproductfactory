@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const findUniqueMock = vi.fn();
 const upsertMock = vi.fn();
+const queryRawMock = vi.fn();
 
 vi.mock("@dpf/db", () => ({
   prisma: {
@@ -9,11 +10,17 @@ vi.mock("@dpf/db", () => ({
       findUnique: (...a: unknown[]) => findUniqueMock(...a),
       upsert: (...a: unknown[]) => upsertMock(...a),
     },
+    $queryRaw: (...a: unknown[]) => queryRawMock(...a),
   },
   Prisma: {},
 }));
 
-import { getPersistedSummary, getPersistedSummaryRow, persistSummary } from "./store";
+import {
+  getPersistedSummary,
+  getPersistedSummaryDigests,
+  getPersistedSummaryRow,
+  persistSummary,
+} from "./store";
 import type { UpgradeImpactSummary } from "./types";
 
 const LINEAGE = "a".repeat(40);
@@ -23,7 +30,7 @@ function summary(overrides: Partial<UpgradeImpactSummary> = {}): UpgradeImpactSu
   return {
     currentLineageSha: LINEAGE,
     targetSha: TARGET,
-    counts: { breaking: 0, feature: 1, fix: 0, performance: 0, other: 0, total: 1 },
+    counts: { breaking: 0, security: 0, feature: 1, fix: 0, performance: 0, dependency: 0, documentation: 0, maintenance: 0, other: 0, total: 1 },
     topItems: [],
     allItems: [],
     phrased: null,
@@ -37,6 +44,7 @@ function summary(overrides: Partial<UpgradeImpactSummary> = {}): UpgradeImpactSu
 beforeEach(() => {
   findUniqueMock.mockReset();
   upsertMock.mockReset();
+  queryRawMock.mockReset();
 });
 
 describe("impact store", () => {
@@ -82,5 +90,36 @@ describe("impact store", () => {
     expect(arg.create.generatedAt).toBeInstanceOf(Date);
     // update overwrites the blob in place (idempotent recompute).
     expect(arg.update.summary).toMatchObject({ targetSha: TARGET });
+  });
+
+  // The Run History table needs two fields per row. Reading the whole `summary`
+  // JSON to get them would haul every item of every summary on the page, so the
+  // projection happens in Postgres.
+  it("getPersistedSummaryDigests projects counts + headline and keys by id", async () => {
+    queryRawMock.mockResolvedValue([
+      { id: "UIS-1", counts: { breaking: 1, total: 4 }, headline: " Four changes. " },
+      { id: "UIS-2", counts: { breaking: 0, total: 2 }, headline: null },
+    ]);
+    const out = await getPersistedSummaryDigests(["UIS-1", "UIS-2"]);
+    expect(out.get("UIS-1")).toEqual({
+      counts: { breaking: 1, total: 4 },
+      headline: "Four changes.",
+    });
+    expect(out.get("UIS-2")?.headline).toBeNull();
+  });
+
+  it("getPersistedSummaryDigests de-duplicates ids and skips the query when empty", async () => {
+    expect((await getPersistedSummaryDigests([])).size).toBe(0);
+    expect(queryRawMock).not.toHaveBeenCalled();
+
+    queryRawMock.mockResolvedValue([]);
+    await getPersistedSummaryDigests(["UIS-1", "UIS-1", ""]);
+    // Tagged-template call: values are passed as trailing args, never inlined.
+    expect(queryRawMock.mock.calls[0]!.slice(1)).toEqual([["UIS-1"]]);
+  });
+
+  it("getPersistedSummaryDigests drops a row whose counts are unreadable", async () => {
+    queryRawMock.mockResolvedValue([{ id: "UIS-3", counts: null, headline: "x" }]);
+    expect((await getPersistedSummaryDigests(["UIS-3"])).size).toBe(0);
   });
 });

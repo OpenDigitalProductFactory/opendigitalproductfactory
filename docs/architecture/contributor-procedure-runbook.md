@@ -76,6 +76,7 @@ Runbook skill: `dpf-clear-dependabot-alerts`. Posture / prune / vendoring strate
 - **For final-task-in-epic work:** include "run `pnpm --filter web build` and fix any errors" plus the required UX verification path. **Instruct the subagent to route that build through the shared local-CI convergence sandbox (`claim_nonprod_environment_lease(environmentKey="local-integration-ci")`) or the canonical local install — not inside the worktree itself.** (See §5 "Where each gate runs" and [kernel principle](../founder-kernel/wiki/principles/worktree-is-source-control-not-runtime.md).)
 - **For UI work:** include the Theme-Aware Styling rules from §11. Without them, components ignore the platform's branding system.
 - **For any implementation work:** include "perform a documentation impact check; update the relevant docs surface or record a concrete no-docs-needed attestation before claiming done."
+- **For governed product surfaces:** register or update the Authorized Surface Contract from the same shared read model that renders the human UX. Keep persistent actions behind `governedExecuteTool`, mark secrets write-only, and run the DOM/accessibility conformance plus governed-surface guard. A route name or raw DOM scrape is not sufficient page knowledge.
 
 ## 14. Release Testing
 

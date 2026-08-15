@@ -5,6 +5,7 @@
 // in, Turbopack could not remap `./x.js` → `./x.ts`. (EP-8DC217EB BET-3.)
 export * from "./client-credentials";
 export * from "./credential-crypto";
+export * from "./mcp-catalog-tier";
 export * from "./oauth-refresh";
 export * from "./redact";
 export * from "./tool-call-audit";

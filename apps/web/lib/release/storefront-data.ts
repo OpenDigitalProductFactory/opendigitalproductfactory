@@ -1,7 +1,7 @@
 import { cache } from "react";
 import { prisma } from "@dpf/db";
 import type { FormField } from "@dpf/storefront-templates";
-import { resolveOperatingHoursTimezone } from "@/lib/operating-hours-types";
+import { loadStorefrontOperatingTimezone } from "@/lib/storefront/storefront-operating-timezone.server";
 import { listOwnerMedia, mediaAssetUrl } from "@/lib/media";
 import { getCurrencySymbol } from "@/lib/finance/currency-symbol";
 import type {
@@ -206,11 +206,7 @@ export const getPublicStorefront = cache(async function getPublicStorefront(
   // Resolve through the same helper the Operating Hours settings page uses so the
   // calendar label always matches what the operator sees there (UTC on a fresh
   // install), never the stale config default.
-  const businessProfile = await prisma.businessProfile.findFirst({
-    where: { isActive: true },
-    select: { timezone: true },
-  });
-  const resolvedTimezone = resolveOperatingHoursTimezone(businessProfile?.timezone);
+  const resolvedTimezone = await loadStorefrontOperatingTimezone(prisma);
 
   // Confirmed regulatory display obligations for the "disclosures" section
   // (BI-5D9DCDE6 spec §9.3). D5 honesty rule: only obligations whose parent

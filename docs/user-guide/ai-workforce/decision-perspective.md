@@ -25,6 +25,7 @@ The full design lives in three specs:
 - `docs/superpowers/specs/2026-05-17-wwmd-decision-perspective-kernel-design.md` — the kernel
 - `docs/superpowers/specs/2026-05-19-wwmd-mcp-exposure-design.md` — the MCP tool
 - `docs/superpowers/specs/2026-05-19-persona-voice-layer-wwtd-design.md` — voice and WWTD profile kinds
+- `docs/superpowers/specs/2026-08-13-wwwd-constitutional-alignment-gate.md` — consequential-action WWWD×WSID enforcement
 
 ## What Decision Perspective Does
 
@@ -40,6 +41,14 @@ When a coworker or external MCP client hits a decision point that doesn't have a
 | `defer` | The active profile lacks enough material to frame even a recommended direction. | The question is captured as a profile gap so future curation can close it. |
 
 Every invocation writes a `DecisionInteraction` row recording the active profile version, the source materials cited, the confidence score, the chosen outcome, and the rationale text. This is the audit ledger — auditors and operators reconstruct "what perspective governed this decision, and on what evidence" from it.
+
+### Consequential Action Alignment
+
+For a consequential tool call, Decision Perspective is a pre-execution control rather than optional advice. The gate extracts the proposed market, customer, product, geography, and go-to-market motion, then checks them independently against the organization's published WWWD stance, organization-owned product portfolio, and GTM evidence. An explicit hard boundary in any required corpus vetoes the action; positive signals elsewhere cannot average the veto away.
+
+Product and GTM checks may use a qualified WSID specialist, but qualification never grants permission. The ordinary TAK intersection still requires the actor's authority, tool grants, workflow policy, data constraints, and preconditions. Owners and employees pass through the same control as coworkers.
+
+There is no alignment bypass flag. To permit an action that the current stance rejects, an owner deliberately amends and publishes the WWWD stance, producing a new policy version, and submits the action for a fresh decision. Every consequential verdict is recorded as a GAID-bound receipt showing the actor, decision interaction, policy version, delegation and qualification evidence, cited sources, and amendment lineage. For an approved action, the receipt channel is reserved before the side effect; if it cannot be reserved, the action does not run.
 
 ### The Confidence Model
 
@@ -189,7 +198,7 @@ Use **founder review** when a WWMD platform decision needs a missing principle, 
 A coworker chat opened alongside `/coworker-decisions` can now read the same governance state the page renders, so "what should we do about these open reviews?" is answered from data rather than a request to paste the screen:
 
 - **Page context.** When the user is on `/coworker-decisions`, the coworker's prompt is injected with the Decision Governance summary — open-review counts per discipline (WWMD / WWWD / WSID), decisions recorded in the last 30 days, governing-material counts, and the most recent unresolved reviews with their questions and decision-canvas links. This is the `/coworker-decisions` route-context provider in `apps/web/lib/tak/route-context.ts`.
-- **Perception by construction.** Only a handful of routes carry a bespoke provider like the one above; every other route (the large majority) now falls through to a **default provider** that names the page the user is on and steers the coworker to read via its tools rather than ask the user to paste the screen. So a coworker is never *fully* blind to which page it is looking at — a route without a bespoke summary degrades to page-identity context, not to nothing.
+- **Perception by construction.** Governed product surfaces are migrating to the renderer-neutral Authorized Surface Contract, which projects the same shared read model to browser, mobile, workroom/headless, and external MCP consumers. A default route provider may still name an uncovered legacy page, but route identity is not page knowledge: when semantic state is unavailable the coworker must say so and must not guess. Decision Governance remains covered by its shared queue read model and governed tool while its full ASC projection is migrated.
 - **The `list_open_decision_reviews` tool.** A read-only, `registry_read`-baseline tool (so every coworker inherits it) that returns the full open-review queue — each item's discipline, unresolved reason, gap detail, suggested action, and decision-canvas link — projected through the same `apps/web/lib/founder-review/queue.ts` the Founder Review workspace uses. A coworker reads the queue and **recommends** a resolution; **resolving** a deferred/escalated review stays an owner action taken in the Founder Review workspace (Human-in-the-Loop at Phase Boundaries).
 
 ## Boundaries

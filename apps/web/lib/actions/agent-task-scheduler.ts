@@ -43,6 +43,8 @@ import { proposeProductIntelligenceWatch } from "@/lib/product-management/produc
 import {
   PRODUCT_MANAGEMENT_PLAYBOOK_TASK_KIND,
 } from "@/lib/product-management/product-management-playbook";
+import { BUSINESS_ANALYSIS_WATCH_TASK_KIND } from "@/lib/operate/scheduled-jobs/agent-task-kind";
+import { executeBusinessAnalysisWatchRun } from "@/lib/performance/business-analysis-watch-run";
 import {
   completeProductManagementPlaybookRun,
   prepareProductManagementPlaybookRun,
@@ -227,6 +229,11 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
         })
         .catch(() => {});
     }
+    return;
+  }
+
+  if (task.taskKind === BUSINESS_ANALYSIS_WATCH_TASK_KIND) {
+    await executeBusinessAnalysisWatchRun(task);
     return;
   }
 

@@ -5,7 +5,7 @@ status: published
 abstract: Use paid AI capacity for governed value, not empty activity.
 principleTier: core
 principleDirection: Convert available capacity into reviewed work, evidence, learning, and platform improvement.
-principleDimensionVector: {"capacity_utilization": 1.0, "governance_compliance": 0.6, "human_cognitive_load": -0.3}
+principleDimensionVector: {"capacity_utilization": 1.0, "governance_compliance": 0.6, "human_cognitive_load": -0.3, "cost_efficiency": 0.7, "evidence_density": 0.55, "speed_to_value": 0.5}
 principleAppliesTo:
   - in_platform_coworker
   - external_coding_agent

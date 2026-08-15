@@ -717,7 +717,11 @@ writeFileSync(process.env.DPF_LOCAL_CI_METADATA_FILE, JSON.stringify({
   });
   assert.match(evidenceCall.params.arguments.evidence.expiresAt, /^\d{4}-\d{2}-\d{2}T/);
   const state = JSON.parse(readFileSync(join(temp, "dpf-local-ci-gate.json"), "utf8"));
-  assert.equal(state.expiresAt, evidenceCall.params.arguments.evidence.expiresAt);
+  assert.equal(state.leaseExpiresAt, evidenceCall.params.arguments.evidence.expiresAt);
+  assert.ok(
+    Date.parse(state.expiresAt) >= Date.parse(state.recordedAt) + 23 * 60 * 60_000,
+    "published PASS validity must outlive the short active lease",
+  );
   assert.deepEqual(state.resilience, evidenceCall.params.arguments.evidence.resilience);
 });
 
@@ -1244,7 +1248,8 @@ shellContractTest("local-ci-runner.mjs unshallows the root clone before merging 
   const calls = readFileSync(callsFile, "utf8");
   assert.match(calls, /fake-root\|rev-parse --is-shallow-repository/);
   assert.match(calls, /fake-root\|fetch --unshallow origin/);
-  assert.match(result.stdout, /root clone is shallow.*BI-AA2201B0/);
+  // BI-8304AB09: message now goes through git-shallow-preflight (still cites BI-AA2201B0).
+  assert.match(result.stdout, /SHALLOW.*BI-(?:8304AB09|AA2201B0)/i);
   // Stub git doesn't understand `rev-parse --verify`, so the script dies
   // resolving the candidate sha next — proving the unshallow step ran
   // BEFORE any merge attempt, without needing to fake the whole pipeline.

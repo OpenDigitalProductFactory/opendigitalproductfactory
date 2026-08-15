@@ -22,6 +22,7 @@ function inquiry(overrides: Record<string, unknown> = {}) {
     type: "inquiry",
     detail: "I want to run product ops on DPF.",
     createdAt: "2026-07-20T10:00:00.000Z",
+    createdLabel: "20/07/2026",
     providerName: null,
     status: "",
     backlogItemId: null,
@@ -45,6 +46,7 @@ function booking(overrides: Record<string, unknown> = {}) {
     type: "booking",
     detail: "Wednesday, July 22",
     createdAt: "2026-07-20T10:00:00.000Z",
+    createdLabel: "20/07/2026",
     providerName: null,
     status: "pending",
     backlogItemId: null,
@@ -56,6 +58,24 @@ function booking(overrides: Record<string, unknown> = {}) {
     ...overrides,
   };
 }
+
+describe("StorefrontInbox hydration-safe dates", () => {
+  it("renders the server-projected business date without client locale formatting", () => {
+    const entry = booking({
+      createdAt: "2026-08-13T03:53:56.000Z",
+      createdLabel: "12/08/2026",
+    });
+    render(
+      <StorefrontInbox
+        entries={[entry]}
+        defaultDigitalProduct={defaultDigitalProduct}
+      />,
+    );
+
+    expect(screen.getByText("12/08/2026")).toBeTruthy();
+    expect(screen.queryByText("13/08/2026")).toBeNull();
+  });
+});
 
 function stubFetch(response: { ok: boolean; body?: Record<string, unknown> }) {
   const fetchMock = vi.fn(async () => ({
@@ -233,6 +253,7 @@ function order(overrides: Record<string, unknown> = {}) {
     type: "order",
     detail: "$32",
     createdAt: "2026-07-29T10:00:00.000Z",
+    createdLabel: "29/07/2026",
     providerName: null,
     status: "pending",
     backlogItemId: null,
@@ -264,6 +285,8 @@ describe("StorefrontInbox — order rows", () => {
     );
     // The row's forward action follows the new status without a reload.
     expect(screen.getByRole("button", { name: /mark ready ORD-0001/i })).toBeTruthy();
+    expect(screen.getByText(/next: in preparation — mark it ready when it's done/i)).toBeTruthy();
+    expect(screen.queryByText(/next: accept this order to start preparing it/i)).toBeNull();
   });
 
   it("offers Mark ready then Mark fulfilled along the lane", () => {

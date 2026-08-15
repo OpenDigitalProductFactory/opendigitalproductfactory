@@ -35,6 +35,8 @@ export interface EnrollWithPeerInput {
   displayName: string;
   localOrganizationId?: string | null;
   peerOrganizationRef?: string | null;
+  localDeviceId?: string | null;
+  peerDeviceId?: string | null;
   fetchImpl?: typeof fetch;
 }
 
@@ -69,6 +71,7 @@ export async function enrollWithPeer(input: EnrollWithPeerInput): Promise<Enroll
       peerAuthorityUrl: input.localAuthorityUrl,
       displayName: input.displayName,
       callbackToken: callback.plaintext,
+      ...(input.localDeviceId ? { peerDeviceId: input.localDeviceId } : {}),
       ...(input.localOrganizationId ? { peerOrganizationRef: input.localOrganizationId } : {}),
     },
     // Operator-initiated connect: allow a private-LAN peer over http without the
@@ -110,6 +113,7 @@ export async function enrollWithPeer(input: EnrollWithPeerInput): Promise<Enroll
         role: ourRole,
         peerAuthorityUrl: input.peerAuthorityUrl,
         peerOrganizationRef: input.peerOrganizationRef ?? null,
+        peerDeviceId: input.peerDeviceId ?? null,
         localOrganizationId: input.localOrganizationId ?? null,
         linkState: "pending",
         // Outbound token (peer-issued) encrypted at rest, so we can call them.

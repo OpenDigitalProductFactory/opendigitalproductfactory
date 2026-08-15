@@ -10,8 +10,20 @@
 import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
 import type { ToolPack } from "../tool-pack";
 import { prisma } from "@dpf/db";
-import { EXCLUDE_TOMBSTONED } from "@dpf/db/customer-lifecycle";
+import {
+  CUSTOMER_ACCOUNT_STATUSES,
+  CUSTOMER_TOMBSTONE_STATUSES,
+  EXCLUDE_TOMBSTONED,
+} from "@dpf/db/customer-lifecycle";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
+
+// The full canonical account-lifecycle set an operator may set, minus the two system-managed
+// tombstones (`superseded` = merge tombstone; `archived` = its own action). Surfaced here so
+// create_customer_account exposes the whole lifecycle (BI-9078F4EE), not a hard-coded 4 —
+// derived from the canonical union, no new enum invented.
+const SETTABLE_ACCOUNT_STATUSES: string[] = CUSTOMER_ACCOUNT_STATUSES.filter(
+  (status) => !(CUSTOMER_TOMBSTONE_STATUSES as readonly string[]).includes(status),
+);
 
 const definitions: ToolDefinition[] = [
   {
@@ -81,7 +93,7 @@ const definitions: ToolDefinition[] = [
         name: { type: "string", description: "Company / account name. The ONLY required field." },
         website: { type: "string", description: "Optional website URL — include when known; it strengthens duplicate detection." },
         industry: { type: "string", description: "Optional industry." },
-        status: { type: "string", description: "Optional: prospect (default) | active | at_risk | closed." },
+        status: { type: "string", enum: SETTABLE_ACCOUNT_STATUSES, description: "Optional account-lifecycle status (default prospect). Full lifecycle: prospect → qualified → onboarding → active, plus at_risk / suspended / closed. Tombstones (superseded/archived) are system-managed and not settable here." },
         notes: { type: "string", description: "Optional free-text notes." },
         duplicateResolution: { type: "string", description: "Optional duplicate decision after a duplicates_found response: `use-existing:<accountId>` to reuse that account, or `confirm-new` to create anyway once the user confirms it is a different company." },
         duplicateReason: { type: "string", description: "Required with duplicateResolution `confirm-new`: one line on why this is not a duplicate (audited)." },
@@ -257,9 +269,56 @@ async function listQuotesTool(params: Record<string, unknown>): Promise<ToolResu
   return { success: true, message: `${quotes.length} quote(s):\n${lines.join("\n")}`, data: { quotes } };
 }
 
-async function createCustomerAccountTool(params: Record<string, unknown>): Promise<ToolResult> {
+/**
+ * Proactive enrichment offer on thin account intake (BI-B2497DFB, AC1). Pure +
+ * proactivity-bound: silent at quiet, offers at balanced/assertive. Never
+ * throws — an offer is a nicety, not part of the create contract.
+ */
+async function buildCreatedAccountEnrichmentOffer(
+  account: { id: string; name: string },
+  params: Record<string, unknown>,
+  context?: { agentId?: string | null; routeContext?: string | null },
+) {
+  try {
+    const { buildEnrichmentOfferForIntake } = await import("@/lib/crm/enrichment/enrichment-offer");
+    const { resolveProactivityPlan } = await import("@/lib/proactivity/proactivity-resolver");
+    const plan = resolveProactivityPlan({
+      activityFamily: "crm-record-enrichment",
+      agentId: context?.agentId ?? null,
+      routeContext: context?.routeContext ?? null,
+    });
+    return buildEnrichmentOfferForIntake({
+      recordKind: "customer-account",
+      recordId: account.id,
+      recordLabel: account.name,
+      intake: {
+        name: account.name,
+        website: params["website"],
+        industry: params["industry"],
+        notes: params["notes"],
+      },
+      plan,
+    });
+  } catch {
+    return null;
+  }
+}
+
+async function createCustomerAccountTool(
+  params: Record<string, unknown>,
+  _userId?: string,
+  context?: { agentId?: string | null; routeContext?: string | null },
+): Promise<ToolResult> {
   const name = typeof params["name"] === "string" ? params["name"].trim() : "";
   if (!name) return { success: false, error: "missing_name", message: "name is required to create a customer account." };
+  const requestedStatus = typeof params["status"] === "string" ? params["status"].trim() : "";
+  if (requestedStatus && !SETTABLE_ACCOUNT_STATUSES.includes(requestedStatus)) {
+    return {
+      success: false,
+      error: "invalid_status",
+      message: `"${requestedStatus}" is not a settable account status. Choose one of: ${SETTABLE_ACCOUNT_STATUSES.join(", ")}.`,
+    };
+  }
   const { createCustomerAccount } = await import("@/lib/actions/crm");
   const rawResolution = typeof params["duplicateResolution"] === "string" ? params["duplicateResolution"].trim() : "";
   const duplicateReason = typeof params["duplicateReason"] === "string" ? params["duplicateReason"].trim() : "";
@@ -299,7 +358,9 @@ async function createCustomerAccountTool(params: Record<string, unknown>): Promi
     if (result.outcome === "existing") {
       return { success: true, message: `Reused existing customer account "${account.name}" (${account.accountId}) instead of creating a duplicate. Use its id ${account.id} as accountId downstream.`, data: { accountId: account.id, accountRef: account.accountId, reusedExisting: true } };
     }
-    return { success: true, message: `Created customer account "${account.name}" (${account.accountId}). Use its id ${account.id} as accountId when creating an opportunity.`, data: { accountId: account.id, accountRef: account.accountId } };
+    const enrichmentOffer = await buildCreatedAccountEnrichmentOffer(account, params, context);
+    const offerMsg = enrichmentOffer ? ` ${enrichmentOffer.message}` : "";
+    return { success: true, message: `Created customer account "${account.name}" (${account.accountId}). Use its id ${account.id} as accountId when creating an opportunity.${offerMsg}`, data: { accountId: account.id, accountRef: account.accountId, ...(enrichmentOffer ? { enrichmentOffer } : {}) } };
   } catch (err) {
     const msg = getErrorMessage(err);
     return { success: false, error: "create_failed", message: `create_customer_account failed: ${msg}` };

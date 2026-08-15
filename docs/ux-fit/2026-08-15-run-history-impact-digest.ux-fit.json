@@ -1,0 +1,18 @@
+{
+  "version": "1",
+  "decidedOption": "digest-plus-lazy-disclosure",
+  "decisionInteractionId": "DI-E3CC179DC0C2",
+  "scope": {
+    "files": [
+      "apps/web/components/ops/RunImpactDetail.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "digest-only",
+      "digest-plus-lazy-disclosure",
+      "full-inline-list"
+    ]
+  }
+}

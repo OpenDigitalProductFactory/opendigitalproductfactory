@@ -2,7 +2,10 @@
 import { useState } from "react";
 import { confirmDialog, promptDialog } from "@/components/ui/Dialog";
 import { reservationActionLabel } from "@/lib/storefront/booking-summary";
-import { type OrderStatus } from "@/lib/storefront/order-lifecycle";
+import {
+  nextActionForOrder,
+  type OrderStatus,
+} from "@/lib/storefront/order-lifecycle";
 
 type Entry = {
   id: string;
@@ -12,6 +15,7 @@ type Entry = {
   type: string;
   detail: string;
   createdAt: string;
+  createdLabel: string;
   providerName: string | null;
   status: string;
   backlogItemId?: string | null;
@@ -32,15 +36,15 @@ const TYPE_LABELS: Record<string, string> = {
 };
 
 const STATUS_STYLES: Record<string, { background: string; color: string }> = {
-  pending: { background: "rgba(245,158,11,0.15)", color: "var(--dpf-warning)" },
+  pending: { background: "color-mix(in srgb, var(--dpf-warning) 15%, transparent)", color: "var(--dpf-warning)" },
   confirmed: { background: "color-mix(in srgb, var(--dpf-success) 15%, transparent)", color: "var(--dpf-success)" },
-  completed: { background: "rgba(79,70,229,0.15)", color: "var(--dpf-accent)" },
+  completed: { background: "color-mix(in srgb, var(--dpf-accent) 15%, transparent)", color: "var(--dpf-accent)" },
   cancelled: { background: "color-mix(in srgb, var(--dpf-error) 15%, transparent)", color: "var(--dpf-error)" },
-  "needs-reschedule": { background: "rgba(249,115,22,0.15)", color: "#f97316" },
+  "needs-reschedule": { background: "color-mix(in srgb, var(--dpf-warning) 15%, transparent)", color: "var(--dpf-warning)" },
   // Order fulfilment lane (BI-115E0D1F).
-  accepted: { background: "rgba(79,70,229,0.15)", color: "var(--dpf-accent)" },
+  accepted: { background: "color-mix(in srgb, var(--dpf-accent) 15%, transparent)", color: "var(--dpf-accent)" },
   ready: { background: "color-mix(in srgb, var(--dpf-success) 15%, transparent)", color: "var(--dpf-success)" },
-  fulfilled: { background: "rgba(79,70,229,0.15)", color: "var(--dpf-accent)" },
+  fulfilled: { background: "color-mix(in srgb, var(--dpf-accent) 15%, transparent)", color: "var(--dpf-accent)" },
 };
 
 // The owner-facing verb that moves an order forward from each lane status.
@@ -260,7 +264,7 @@ export function StorefrontInbox({
             onClick={() => { setTypeFilter(t); setProviderFilter("all"); }}
             aria-pressed={typeFilter === t}
             aria-label={`Filter requests: ${t === "all" ? "All" : TYPE_LABELS[t]}`}
-            className={`dpf-tap-target border border-[var(--dpf-border)] ${typeFilter === t ? "bg-[var(--dpf-accent)] text-white" : ""}`}
+            className={`dpf-tap-target border border-[var(--dpf-border)] ${typeFilter === t ? "bg-[var(--dpf-accent)] text-[var(--dpf-on-accent,var(--dpf-surface-1))]" : ""}`}
             style={{
               padding: "4px 12px",
               borderRadius: 4,
@@ -327,12 +331,12 @@ export function StorefrontInbox({
                 <StatusBadge status={statusOverride[e.id] ?? e.status} />
               )}
               {e.type === "booking" && e.providerName && (
-                <span className="text-[var(--dpf-accent)]" style={{ fontSize: 11, padding: "1px 7px", borderRadius: 10, background: "rgba(79,70,229,0.12)" }}>
+                <span className="text-[var(--dpf-accent)]" style={{ fontSize: 11, padding: "1px 7px", borderRadius: 10, background: "color-mix(in srgb, var(--dpf-accent) 12%, transparent)" }}>
                   {e.providerName}
                 </span>
               )}
               <span className="text-[var(--dpf-muted)]" style={{ fontSize: 11, marginLeft: "auto" }}>
-                {new Date(e.createdAt).toLocaleDateString("en-GB")}
+                {e.createdLabel}
               </span>
             </div>
             <div style={{ fontSize: 13 }}>{e.name ?? "Anonymous"} · {e.email}</div>
@@ -363,9 +367,11 @@ export function StorefrontInbox({
                   {e.itemName ?? "Order"}
                   {e.detail && <span className="text-[var(--dpf-muted)]" style={{ fontWeight: 400 }}> · {e.detail}</span>}
                 </div>
-                {e.nextAction && (
+                {(statusOverride[e.id] || e.nextAction) && (
                   <div style={{ fontSize: 12, color: "var(--dpf-accent)" }}>
-                    Next: {e.nextAction}
+                    Next: {statusOverride[e.id]
+                      ? nextActionForOrder(statusOverride[e.id])
+                      : e.nextAction}
                   </div>
                 )}
               </div>

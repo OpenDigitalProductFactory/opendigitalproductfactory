@@ -5,8 +5,52 @@ import {
   projectWorkRoomDiscovery,
   projectWorkRoomParticipants,
 } from "./room-participation";
+import {
+  bindWorkRoomShape,
+  getWorkRoomShape,
+  WORK_ROOM_SHAPE_KEYS,
+} from "./room-shapes";
 
 describe("Work Room participation", () => {
+  it("registers the five consequential collaboration shapes", () => {
+    expect(WORK_ROOM_SHAPE_KEYS).toEqual([
+      "specialist-alignment", "approval-sign-off", "outward-review",
+      "change-consequential", "escalation",
+    ]);
+    expect(getWorkRoomShape("specialist-alignment")).toMatchObject({
+      authorityLadderLevel: "action",
+      inclusionOrder: ["coordinator", "specialist", "approver"],
+    });
+  });
+
+  it.each(["person", "agent"] as const)(
+    "requires the same specialist-alignment roles for a %s initiator",
+    (kind) => {
+      const binding = bindWorkRoomShape({
+        shape: "specialist-alignment",
+        initiator: { principalRef: "PRN-INIT", kind },
+        participants: {
+          coordinator: "PRN-COORD", specialist: "PRN-SPECIALIST", approver: "PRN-OWNER",
+        },
+        sensitivityCeiling: "confidential",
+      });
+      expect(binding.requiredParticipants.map((participant) => participant.role))
+        .toEqual(["coordinator", "specialist", "approver"]);
+      expect(binding.authorityLadderLevel).toBe("action");
+      expect(binding.stepUpRequired).toBe(true);
+      expect(binding.gaps).toEqual([]);
+    },
+  );
+
+  it("fails closed when a shape-required participant is absent", () => {
+    expect(bindWorkRoomShape({
+      shape: "outward-review",
+      initiator: { principalRef: "PRN-INIT", kind: "person" },
+      participants: { coordinator: "PRN-INIT", specialist: "PRN-BRAND" },
+      sensitivityCeiling: "internal",
+    })).toMatchObject({ allowed: false, gaps: ["approver"] });
+  });
+
   it("keeps an unauthorized room non-discoverable", () => {
     expect(authorizeWorkRoomAccess({
       requested: "content",

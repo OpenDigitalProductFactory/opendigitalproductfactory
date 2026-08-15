@@ -51,6 +51,9 @@ const ROOT_GIT_STATE_GUIDANCE =
   "Root clone git state mutation blocked (BI-B6AF69E1). The install/root clone must stay on main and clean; active work belongs in a sibling worktree such as D:/DPF-worktrees/<topic>. Raw `git switch`, `git checkout`, `git reset`, `git pull`, `git merge`, or `git rebase` in the root clone moves the checkout before the pre-commit guard can help and is how sessions strand D:/DPF on feature branches with uncommitted work. " +
   "Use scripts/new-dev-worktree.sh (or the surface worktree command) for feature work. If this is verified root-clone maintenance, prefix the command with DPF_ALLOW_ROOT_CLONE_MUTATION=1.";
 
+const ROOT_FILE_WRITE_GUIDANCE =
+  "Direct file write into the shared root clone blocked (BI-FFF58567). The surface is currently rooted at the install/merge checkout, so a relative Write/Edit target would place feature bytes in D:/DPF instead of its claimed worktree. Re-establish the session in D:/DPF-worktrees/<topic> and retry there. Preserve any existing root edits through the governed recovery workflow; do not stash or discard them.";
+
 const INSTALL_THROUGH_JUNCTION_GUIDANCE =
   "Package install through a JUNCTIONED node_modules blocked (BI-1C1483C6). This worktree's node_modules is a link to the shared root clone, so an install here writes THROUGH it into D:/DPF — the mechanism that previously gutted the root clone (1198 deleted sources). " +
   "To make this worktree compile-ready without touching the root, use the managed bootstrap: `node scripts/lib/bootstrap-worktree-deps.mjs .` (shared pnpm store, --frozen-lockfile, never junctions). " +
@@ -268,6 +271,34 @@ export function isRootCloneGitStateMutation(seg, cwd, isDir = () => false) {
   return cloneRoot !== null && target === cloneRoot;
 }
 
+const FILE_WRITE_TOOL_NAMES = new Set(["Write", "Edit", "MultiEdit"]);
+
+function fileWriteTargets(toolInput) {
+  if (!toolInput || typeof toolInput !== "object") return [];
+  const direct = toolInput.file_path ?? toolInput.filePath ?? toolInput.path;
+  const targets = typeof direct === "string" ? [direct] : [];
+  if (Array.isArray(toolInput.files)) {
+    for (const file of toolInput.files) {
+      const value = file?.file_path ?? file?.filePath ?? file?.path;
+      if (typeof value === "string") targets.push(value);
+    }
+  }
+  return targets;
+}
+
+export function decideFileWrite({ toolName, toolInput, cwd = "", env = {}, isDir = () => false }) {
+  if (!FILE_WRITE_TOOL_NAMES.has(toolName)) return { block: false };
+  if (env.DPF_ALLOW_ROOT_CLONE_MUTATION === "1") return { block: false };
+  const cloneRoot = deriveCloneRoot(cwd, isDir);
+  if (!cloneRoot || norm(cwd) !== cloneRoot) return { block: false };
+  for (const target of fileWriteTargets(toolInput)) {
+    if (isUnderRootSharedArea(resolveAgainst(cwd, target), cloneRoot)) {
+      return { block: true, reason: ROOT_FILE_WRITE_GUIDANCE };
+    }
+  }
+  return { block: false };
+}
+
 // ── decision ─────────────────────────────────────────────────────────────────
 
 /**
@@ -344,9 +375,19 @@ function main() {
   if (payload === null) process.exit(0); // fail open on read/parse error
   if (!inDpfWorkspace(payload.cwd)) process.exit(0); // DPF-scoped global hook: enforce only inside a DPF checkout
 
-  if (!isShellTool(payload.toolName)) process.exit(0);
-  const command = shellCommandFromInput(payload.toolInput);
   const cwd = payload.cwd ?? process.cwd();
+  if (!isShellTool(payload.toolName)) {
+    const fileVerdict = decideFileWrite({
+      toolName: payload.toolName,
+      toolInput: payload.toolInput,
+      cwd,
+      env: process.env,
+      isDir: realIsDir,
+    });
+    if (fileVerdict.block) emitDeny(fileVerdict.reason);
+    process.exit(0);
+  }
+  const command = shellCommandFromInput(payload.toolInput);
   const verdict = decide({ command, cwd, env: process.env, isSymlink: realIsSymlink, isDir: realIsDir });
   if (!verdict.block) process.exit(0);
 

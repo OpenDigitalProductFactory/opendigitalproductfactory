@@ -49,13 +49,21 @@ jobs:
           fetch-depth: 0
       - name: Decide whether heavy CI is needed
         id: decide
+        # BI-9E5E6063: prefer a live merge-base over a potentially stale
+        # pull_request.base.sha so evidence planning does not mis-scope the PR.
         env:
           EVENT_NAME: ${{ github.event_name }}
-          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          EVENT_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
           set -euo pipefail
           PLAN_PATH="$RUNNER_TEMP/ci-evidence-plan.json"
+          git fetch --quiet origin main 2>/dev/null || true
+          FRESH_BASE="$(git merge-base HEAD origin/main 2>/dev/null || true)"
+          BASE_SHA="${FRESH_BASE:-${EVENT_BASE:-origin/main}}"
+          if [ -n "${EVENT_BASE:-}" ] && [ -n "${FRESH_BASE:-}" ] && [ "$EVENT_BASE" != "$FRESH_BASE" ]; then
+            echo "::notice::event base ($EVENT_BASE) disagrees with merge-base ($FRESH_BASE) — using the fresh one. See BI-9E5E6063."
+          fi
           git fetch --no-tags --quiet origin "$BASE_SHA" 2>/dev/null || true
           node scripts/ci-evidence-plan.mjs \
             --event "$EVENT_NAME" \

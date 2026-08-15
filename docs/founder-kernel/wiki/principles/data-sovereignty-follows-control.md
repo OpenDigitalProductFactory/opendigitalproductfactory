@@ -5,7 +5,7 @@ status: published
 abstract: For regulated and sovereign workloads, protection from foreign legal reach follows the corporate control and jurisdiction of the operating entity — not where the data physically sits. Design for ownership and control; let the deployment substrate, not a SaaS dependency, set the achievable sovereignty tier.
 principleTier: core
 principleDirection: Treat the operating entity's ownership and governing law as the sovereignty gate. Prefer self-hosted, open-source, locally-inferenced deployment on customer-controlled (or EU-owned) infrastructure over any foreign-controlled managed service for sovereign workloads.
-principleDimensionVector: {"governance_compliance": 0.9, "blast_radius": -0.7, "long_term_maintainability": 0.6}
+principleDimensionVector: {"governance_compliance": 0.9, "blast_radius": -0.7, "long_term_maintainability": 0.6, "data_privacy": 0.9, "operational_independence": 0.75, "vendor_lock_in": -0.8}
 principleAppliesTo:
   - in_platform_coworker
   - external_coding_agent

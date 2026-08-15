@@ -17,6 +17,7 @@
 //   - Delete button with confirm step
 
 import { useState, useTransition } from "react";
+import { RelativeTime } from "@/components/ui/RelativeTime";
 import {
   deleteDiscoveryConnection,
   rerunDiscoveryConnection,
@@ -44,19 +45,6 @@ const TONE_STYLES: Record<"ok" | "warn" | "err" | "muted", { bg: string; fg: str
   err:   { bg: "var(--dpf-state-error)",   fg: "var(--dpf-error)" },
   muted: { bg: "var(--dpf-surface-2)",     fg: "var(--dpf-muted)" },
 };
-
-function formatTimestamp(iso: string | null): string {
-  if (!iso) return "never";
-  const date = new Date(iso);
-  const diffMs = Date.now() - date.getTime();
-  const diffMin = Math.floor(diffMs / 60_000);
-  if (diffMin < 1) return "just now";
-  if (diffMin < 60) return `${diffMin}m ago`;
-  const diffHr = Math.floor(diffMin / 60);
-  if (diffHr < 24) return `${diffHr}h ago`;
-  const diffDay = Math.floor(diffHr / 24);
-  return `${diffDay}d ago`;
-}
 
 export function SavedConnectionRow({ connection }: Props) {
   const [mode, setMode] = useState<"view" | "editing" | "confirming-delete">("view");
@@ -160,7 +148,7 @@ export function SavedConnectionRow({ connection }: Props) {
             {connection.collectorType} · {connection.endpointUrl}
           </p>
           <p className="mt-1 text-[11px] text-[var(--dpf-muted)]">
-            Last tested {formatTimestamp(connection.lastTestedAt)}
+            Last tested <RelativeTime value={connection.lastTestedAt} />
             {connection.lastTestMessage && (
               <span className="ml-1">— {connection.lastTestMessage}</span>
             )}

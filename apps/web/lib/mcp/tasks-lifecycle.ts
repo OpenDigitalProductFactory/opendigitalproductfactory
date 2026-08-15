@@ -58,6 +58,32 @@ const TASK_SELECT = {
   completedAt: true,
 } as const;
 
+/**
+ * Protocol revisions that define the standard Tasks capability
+ * (`capabilities.tasks` + tasks/get|result|list|cancel).
+ *
+ * Tasks arrived with MCP 2025-11-25. Advertising them on older negotiated
+ * versions (2024-11-05 / 2025-03-26 / 2025-06-18) breaks clients whose
+ * InitializeResult deserializers reject unknown capability keys — observed on
+ * Grok Build 1.0.0 as
+ * `expect initialized result, but received: Some(CustomResult(...))`.
+ * Advertise only when the negotiated version is Tasks-aware so pre-Tasks
+ * clients (Grok, older Claude/Codex SDKs, etc.) can still complete handshake.
+ */
+export const MCP_TASKS_PROTOCOL_VERSIONS = Object.freeze(["2025-11-25"] as const);
+
+/**
+ * Whether initialize may include `capabilities.tasks` for this negotiated
+ * protocol version. Feature-flag off OR a pre-Tasks protocol → false.
+ * Pure (aside from the env flag) so route tests and client-compat suites share it.
+ */
+export function shouldAdvertiseTasksCapability(negotiatedProtocolVersion: string): boolean {
+  if (!tasksLifecycleEnabled()) return false;
+  return (MCP_TASKS_PROTOCOL_VERSIONS as readonly string[]).includes(negotiatedProtocolVersion);
+}
+
+// A2A/DPF ↔ MCP-spec state spelling. Internal enum (ops-map, watchdog) is
+// untouched; we only adapt at the wire boundary (design §3).
 const DPF_TO_MCP_STATE: Record<string, string> = {
   submitted: "working",
   working: "working",

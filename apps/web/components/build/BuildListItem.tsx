@@ -7,6 +7,10 @@ import {
 } from "./build-studio-layout";
 import { FleetDensityBar } from "./FleetDensityBar";
 import type { BuildQueueState } from "./QueueStateBadge";
+import {
+  ownerStateBadgeLabel,
+  type BuildStudioOwnerState,
+} from "@/lib/build/owner-status-reconciliation";
 
 export type BuildListItemDensity = "comfortable" | "fleet";
 
@@ -25,6 +29,8 @@ type BuildListItemProps = {
   queueState?: BuildQueueState;
   /** Render "Needs you" as the row status when true. Fleet density only. */
   needsAttention?: boolean;
+  /** Canonical selected-build owner state; takes priority over queue heuristics. */
+  ownerState?: BuildStudioOwnerState | null;
 };
 
 function formatUpdatedAt(value: Date | string) {
@@ -46,6 +52,7 @@ export function BuildListItem({
   density = "comfortable",
   queueState,
   needsAttention = false,
+  ownerState = null,
 }: BuildListItemProps) {
   if (density === "fleet") {
     return (
@@ -58,6 +65,7 @@ export function BuildListItem({
         onDelete={onDelete}
         queueState={queueState ?? { kind: "idle" }}
         needsAttention={needsAttention}
+        ownerState={ownerState}
       />
     );
   }
@@ -135,6 +143,7 @@ type FleetRowProps = {
   onDelete: () => void;
   queueState: BuildQueueState;
   needsAttention: boolean;
+  ownerState: BuildStudioOwnerState | null;
 };
 
 type FleetRowStatus = {
@@ -159,11 +168,34 @@ function statusClassName(intent: "info" | "warning" | "danger" | "success" | "ne
   return `${base} border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] text-[var(--dpf-muted)]`;
 }
 
+function ownerStateIntent(
+  state: BuildStudioOwnerState,
+): "info" | "warning" | "danger" | "success" | "neutral" {
+  switch (state) {
+    case "working": return "info";
+    case "complete": return "success";
+    case "failed":
+    case "blocked": return "danger";
+    case "waiting-capacity":
+    case "waiting-owner":
+    case "inconclusive": return "warning";
+    case "not-started": return "neutral";
+  }
+}
+
 function deriveFleetRowStatus(
   build: FeatureBuildRow,
   queueState: BuildQueueState,
   needsAttention: boolean,
+  ownerState: BuildStudioOwnerState | null,
 ): FleetRowStatus {
+  if (ownerState) {
+    return {
+      label: ownerStateBadgeLabel(ownerState),
+      className: statusClassName(ownerStateIntent(ownerState)),
+    };
+  }
+
   if (needsAttention) {
     return { label: "Needs you", className: statusClassName("danger") };
   }
@@ -207,8 +239,9 @@ function FleetDensityRow({
   onDelete,
   queueState,
   needsAttention,
+  ownerState,
 }: FleetRowProps) {
-  const status = deriveFleetRowStatus(build, queueState, needsAttention);
+  const status = deriveFleetRowStatus(build, queueState, needsAttention, ownerState);
   return (
     <div
       data-testid={BUILD_STUDIO_TEST_IDS.buildListItem}

@@ -23,6 +23,8 @@ order: 1
 
 The wiki is authoritative for governed platform knowledge that has been imported, authored, linted, and published. It is not a substitute for runtime state, backlog state, or source code when those are the current evidence source.
 
+A page only counts in a coworker's decision once it is **embedded** for retrieval, which normally happens the moment you publish it. The Governing material section of `/coworker-decisions` shows a **retrieval coverage** line — how many of your published overlay pages are embedded — so "published" can never overstate "counting". If a page is published but not yet embedded (for example, if the embedding service was briefly unavailable when you published), it is flagged there, and the platform re-embeds it automatically on the next upgrade.
+
 ## AI Coworker Support
 
 Coworkers can retrieve wiki context, propose edits, and use principles as governance context. They must keep source-backed knowledge separate from guesses and should surface missing citations as stewardship issues.

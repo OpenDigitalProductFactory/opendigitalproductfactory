@@ -83,6 +83,7 @@ export interface EnrollFederationInput {
    *  outbound token (peerTokenEnc) so we can relay our approval and push demand
    *  back to them — the mutual half of the handshake. */
   callbackToken?: string | null;
+  peerDeviceId?: string | null;
   metadata?: Record<string, unknown>;
 }
 
@@ -165,6 +166,7 @@ export async function enrollFederationLink(
         role: ourRole,
         peerAuthorityUrl: input.peerAuthorityUrl,
         peerOrganizationRef: input.peerOrganizationRef ?? null,
+        peerDeviceId: input.peerDeviceId ?? null,
         localOrganizationId: input.localOrganizationId ?? null,
         // Dual approval: both null at enrollment; trusted only after both approve.
         linkState: "pending",

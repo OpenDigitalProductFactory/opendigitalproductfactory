@@ -13,11 +13,11 @@ test("the checked-in FPAW standard reconciles with every canonical invariant", (
   const result = analyzeFPAW(core, catalog, currentInventory());
   assert.deepEqual(result.errors, []);
   assert.deepEqual(result.metrics, {
-    categories: 24,
-    leaves: 106,
-    itemTemplates: 570,
+    categories: 25,
+    leaves: 107,
+    itemTemplates: 574,
     matrixFamilies: 10,
-    matrixCells: 240,
+    matrixCells: 250,
     deviations: 34,
     coreRequirements: 175,
     catalogRequirements: 18,
@@ -224,9 +224,9 @@ test("the checker requires seven non-empty worked specimens bound to canonical l
 
 test("the checker detects stale implementation inventory counts", () => {
   assertRejected(
-    core.replace("106 unique leaf archetypes with 570 item", "106 unique leaf archetypes with 569 item"),
+    core.replace("107 unique leaf archetypes with 574 item", "107 unique leaf archetypes with 573 item"),
     catalog,
-    /source inventory .* does not match 24\/106\/570/,
+    /source inventory .* does not match 25\/107\/574/,
   );
 });
 

@@ -127,4 +127,12 @@ describe("deriveOperationalValueStream — representative archetypes", () => {
     expect(ovs.trustGates).toContain("member-equitable-allocation");
     expect(ovs.stages.map((s) => s.key)).toContain("return-inspect");
   });
+
+  it("industrial equipment OEM: steady production throughput with strict customer-estate separation", () => {
+    const ovs = ovsmFor("industrial-equipment-oem");
+
+    expect(ovs.capacityUnit).toBe("service-throughput");
+    expect(ovs.demandSignature).toBe("steady");
+    expect(ovs.trustGates).toContain("strict-estate-separation");
+  });
 });

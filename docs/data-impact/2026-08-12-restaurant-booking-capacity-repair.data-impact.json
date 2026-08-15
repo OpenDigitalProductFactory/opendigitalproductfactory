@@ -1,0 +1,42 @@
+{
+  "version": "1",
+  "accountableOwner": "data-steward",
+  "affectedCopies": [
+    "The platform-owned Restaurant demo's existing ServiceProvider rows are linked to its existing booking items through ProviderService so the slot engine routes reservations through authored table resources.",
+    "The exact demo Restaurant table providers and HospitalityResource rows receive availability only when they have none; confirmed BusinessProfile hours win, otherwise the canonical Restaurant 11:00-22:00 template is used.",
+    "Generic ProviderService links are removed only for Restaurant booking items in a storefront that contains the exact demo-table provider corpus, and only when that provider has no active table resource.",
+    "No schema field or relationship is added. Operator-owned providers, resources, schedules, bookings, holds, and availability remain outside the migration selector."
+  ],
+  "migration": {
+    "name": "20260812070000_repair_restaurant_booking_capacity",
+    "backfill": "Data-only and demo-scoped. Inserts missing booking-service and availability projections for providerId values matching ^demo-restaurant-prov-res-[0-8]$ under the Restaurant leaf. Existing provider/resource availability is preserved. The bounded DELETE removes only non-table ProviderService links for booking items in that same demo-backed Restaurant storefront; it does not delete providers, items, bookings, holds, resources, or allocation history. Reapplication is idempotent."
+  },
+  "tests": [
+    "packages/db/src/restaurant-demo-floor-migration.test.ts",
+    "apps/web/lib/actions/operating-hours.test.ts",
+    "apps/web/lib/release/storefront-actions.test.ts",
+    "apps/web/app/api/storefront/[slug]/hold/route.test.ts"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:hospitality-resource#restaurant-booking-capacity-repair",
+      "prismaModel": "HospitalityResource",
+      "lifecycleDisposition": "Existing Restaurant table-resource lifecycle. The migration adds missing service and availability projections for exact platform demo identifiers while preserving operator-owned and already-configured rows.",
+      "fields": [
+        {
+          "fieldId": "data:hospitality-resource#legacy-provider-availability-projection",
+          "resolution": "inherited",
+          "reason": "legacyServiceProviderId, ProviderService, ProviderAvailability, and HospitalityResourceAvailability are existing compatibility and capacity authorities; this repair reconnects the existing demo corpus without introducing another copy.",
+          "provenance": "canonical Restaurant template defaults or owner-confirmed BusinessProfile hours, bounded by exact demo provider identifiers"
+        }
+      ]
+    },
+    {
+      "kind": "projection",
+      "derivedContractId": "projection:restaurant-table-booking-availability",
+      "cleanupTest": "restaurant-demo-floor-migration.test.ts asserts the exact demo-only provider selector and generic-provider link removal boundary.",
+      "reconciliationTest": "operating-hours.test.ts proves confirmed hours reach both provider and table-resource availability; storefront-actions and hold route tests prove Restaurant bookings cannot bypass a table resource."
+    }
+  ]
+}

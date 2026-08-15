@@ -157,6 +157,38 @@ export const observerFindings = new Counter({
   registers: [metricsRegistry],
 });
 
+// ─── Authorized Surface Contract ───────────────────────────────────────────
+
+export const authorizedSurfaceOperations = new Counter({
+  name: "dpf_authorized_surface_operations_total",
+  help: "Authorized Surface operations by protocol operation, outcome, and execution mode",
+  labelNames: ["operation", "outcome", "mode", "surface_id"] as const,
+  registers: [metricsRegistry],
+});
+
+export const authorizedSurfaceLatency = new Histogram({
+  name: "dpf_authorized_surface_duration_seconds",
+  help: "Authorized Surface projection/query/action latency",
+  labelNames: ["operation", "mode", "surface_id"] as const,
+  buckets: [0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5],
+  registers: [metricsRegistry],
+});
+
+export const authorizedSurfaceGraphNodes = new Histogram({
+  name: "dpf_authorized_surface_graph_nodes",
+  help: "Number of semantic nodes returned by an Authorized Surface projection/query",
+  labelNames: ["operation", "mode", "surface_id"] as const,
+  buckets: [1, 5, 10, 25, 50, 100, 250, 500],
+  registers: [metricsRegistry],
+});
+
+export const authorizedSurfaceCompatibilityFallbacks = new Counter({
+  name: "dpf_authorized_surface_compatibility_fallbacks_total",
+  help: "Legacy screen/page perception fallbacks when no complete ASC projection is available",
+  labelNames: ["adapter", "reason", "route"] as const,
+  registers: [metricsRegistry],
+});
+
 // ─── EP-INF-UTIL-001: Utility Inference Metrics ────────────────────────────
 
 export const utilityInferenceOps = new Counter({
