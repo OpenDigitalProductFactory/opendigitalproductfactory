@@ -8,11 +8,14 @@ export type DeviceVisual = {
   label: string;
 };
 
+const NETWORK_BLUE = "#38bdf8";
+
 export const DEVICE_VISUALS: Record<string, DeviceVisual> = {
+  wan_uplink:      { symbol: "\u2726", color: NETWORK_BLUE, size: 8, label: "WAN / Internet" },
   router:          { symbol: "\u25B3", color: "#f472b6", size: 8, label: "Router" },
   gateway:         { symbol: "\u25B3", color: "#f472b6", size: 8, label: "Gateway" },
   switch:          { symbol: "\u25C7", color: "#a78bfa", size: 7, label: "Switch" },
-  access_point:    { symbol: "\u25CE", color: "#38bdf8", size: 7, label: "Access Point" },
+  access_point:    { symbol: "\u25CE", color: NETWORK_BLUE, size: 7, label: "Access Point" },
   network_client:  { symbol: "\u25CF", color: "#22d3ee", size: 4, label: "Client" },
   subnet:          { symbol: "\u25A2", color: "#fbbf24", size: 6, label: "Subnet" },
   vlan:            { symbol: "\u25AC", color: "#fb923c", size: 5, label: "VLAN" },
@@ -25,10 +28,10 @@ export const DEVICE_VISUALS: Record<string, DeviceVisual> = {
   application:     { symbol: "\u25C6", color: "#4ade80", size: 5, label: "Application" },
   database:        { symbol: "\u25A3", color: "#c084fc", size: 6, label: "Database" },
   ai_service:      { symbol: "\u2606", color: "#e879f9", size: 6, label: "AI Service" },
-  network_device:  { symbol: "\u25CF", color: "#38bdf8", size: 5, label: "Network Device" },
+  network_device:  { symbol: "\u25CF", color: NETWORK_BLUE, size: 5, label: "Network Device" },
 };
 
-const DEFAULT_VISUAL: DeviceVisual = { symbol: "\u25CF", color: "#38bdf8", size: 5, label: "Unknown" };
+const DEFAULT_VISUAL: DeviceVisual = { symbol: "\u25CF", color: NETWORK_BLUE, size: 5, label: "Unknown" };
 
 export function getDeviceVisual(ciType: string | undefined | null): DeviceVisual {
   if (!ciType) return DEFAULT_VISUAL;
@@ -43,4 +46,12 @@ export const LEGEND_ENTRIES: Array<{ ciType: string; visual: DeviceVisual }> = [
   { ciType: "network_client", visual: DEVICE_VISUALS.network_client! },
   { ciType: "subnet", visual: DEVICE_VISUALS.subnet! },
   { ciType: "container", visual: DEVICE_VISUALS.container! },
+];
+
+export const PHYSICAL_LEGEND_ENTRIES: Array<{ ciType: string; visual: DeviceVisual }> = [
+  { ciType: "wan_uplink", visual: DEVICE_VISUALS.wan_uplink! },
+  { ciType: "router", visual: DEVICE_VISUALS.router! },
+  { ciType: "switch", visual: DEVICE_VISUALS.switch! },
+  { ciType: "access_point", visual: DEVICE_VISUALS.access_point! },
+  { ciType: "network_client", visual: DEVICE_VISUALS.network_client! },
 ];

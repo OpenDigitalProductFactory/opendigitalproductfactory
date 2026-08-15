@@ -143,16 +143,16 @@ vi.mock("@/lib/graph/use-graph-layout", () => ({
 
 vi.mock("@/lib/graph/device-icons", () => ({
   LEGEND_ENTRIES: [],
+  PHYSICAL_LEGEND_ENTRIES: [],
   getDeviceVisual: () => null,
 }));
 
-const topologyGraphModule = await import("@/components/inventory/TopologyGraph");
+const { TopologyGraph } = await import("@/components/inventory/TopologyGraph");
 const {
-  TopologyGraph,
   createScopeToken,
   resolveDisplayedGraphData,
   resolveSubnetScopeState,
-} = topologyGraphModule;
+} = await import("@/lib/graph/topology-graph-state");
 
 const graphData: GraphData = {
   nodes: [

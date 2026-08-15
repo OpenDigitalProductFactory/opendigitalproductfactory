@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import type { GraphData } from "@/lib/actions/graph";
 import type { LayoutResult, ViewConfig } from "./types";
 import { computeHierarchicalLayout } from "./layout-hierarchical";
+import { computePhysicalTopologyLayout } from "./layout-physical";
 import { computeRadialLayout } from "./layout-radial";
 import { computeSwimLaneLayout } from "./layout-swimlane";
 
@@ -41,14 +42,18 @@ export function useGraphLayout(
 
     switch (view.layout) {
       case "hierarchical": {
-        const roots = detectRoots(filtered, view);
         if (!isCancelled) {
-          setResult(
-            computeHierarchicalLayout(filtered, {
-              direction: view.direction,
-              rootIds: roots,
-            }),
-          );
+          if (view.name === "network-topology") {
+            setResult(computePhysicalTopologyLayout(filtered));
+          } else {
+            const roots = detectRoots(filtered, view);
+            setResult(
+              computeHierarchicalLayout(filtered, {
+                direction: view.direction,
+                rootIds: roots,
+              }),
+            );
+          }
         }
         break;
       }

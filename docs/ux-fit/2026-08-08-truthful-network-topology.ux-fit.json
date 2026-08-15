@@ -4,7 +4,7 @@
   "decisionInteractionId": "DI-1709E09FD759",
   "scope": {
     "files": [
-      "apps/web/components/inventory/TopologyIntegritySummary.tsx"
+      "apps/web/components/inventory/TopologyGraph.tsx"
     ]
   },
   "evidence": {

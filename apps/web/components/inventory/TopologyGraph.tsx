@@ -2,15 +2,17 @@
 
 import { useRef, useEffect, useState, useCallback, useMemo, useTransition } from "react";
 import { getImpactData, getDependencyAuditData, type GraphData } from "@/lib/actions/graph";
-import { hasSubnetScopeNode } from "@/lib/graph/scope-helpers";
 import type { GraphViewName, PositionedNode, LayoutResult } from "@/lib/graph/types";
 import { VIEW_CONFIGS, resolveViewForTaxonomy } from "@/lib/graph/view-config";
 import { useGraphLayout } from "@/lib/graph/use-graph-layout";
-import { getDeviceVisual, LEGEND_ENTRIES } from "@/lib/graph/device-icons";
+import { getDeviceVisual } from "@/lib/graph/device-icons";
 import { isDockerOriginNode } from "@/lib/graph/docker-filter";
-import { describeGraphScope, filterBySubnet, filterGraphData } from "@/lib/graph/subnet-scope";
+import { describeGraphScope } from "@/lib/graph/subnet-scope";
 import { projectPhysicalTopology } from "@/lib/graph/physical-topology";
+import { createScopeToken, isResetScopeKey, isSubnetSelectorKey, resolveDisplayedGraphData, resolveSubnetScopeState } from "@/lib/graph/topology-graph-state";
+import { usePhysicalTopologyViewport } from "@/lib/graph/use-physical-topology-viewport";
 import { TopologyIntegritySummary } from "@/components/inventory/TopologyIntegritySummary";
+import { TopologyLegend } from "@/components/inventory/TopologyLegend";
 import { OSI_LAYER_NAMES, SHOW_DOCKER_STORAGE_KEY, TOPOLOGY_GRAPH_LIVE_REGION_PROPS } from "@/lib/graph/topology-constants";
 
 // ─── Constants ──────────────────────────────────────────────────────────────
@@ -41,78 +43,6 @@ type Props = {
 };
 
 type SimNode = PositionedNode & { vx?: number; vy?: number };
-
-export function createScopeToken(
-  sequence: number,
-  selectedView: GraphViewName,
-  activeSubnetId: string | null,
-) {
-  return `${selectedView}:${activeSubnetId ?? "all"}:${sequence}`;
-}
-
-export function resolveSubnetScopeState(
-  graph: GraphData,
-  selectedView: GraphViewName,
-  activeSubnetId: string | null,
-): {
-  graphData: GraphData;
-  activeSubnetId: string | null;
-  invalidScope: boolean;
-} {
-  if (selectedView !== "subnet-topology" || !activeSubnetId) {
-    return {
-      graphData: graph,
-      activeSubnetId: null,
-      invalidScope: false,
-    };
-  }
-
-  if (!hasSubnetScopeNode(graph, activeSubnetId)) {
-    return {
-      graphData: graph,
-      activeSubnetId: null,
-      invalidScope: true,
-    };
-  }
-
-  return {
-    graphData: filterBySubnet(graph, activeSubnetId),
-    activeSubnetId,
-    invalidScope: false,
-  };
-}
-
-export function resolveDisplayedGraphData(
-  graph: GraphData,
-  selectedView: GraphViewName,
-  activeSubnetId: string | null,
-  focusNodeId: string | null,
-  maxHops: number,
-  hideDocker = false,
-) {
-  const viewConfig = VIEW_CONFIGS[selectedView];
-  const projectedGraph = selectedView === "network-topology"
-    ? projectPhysicalTopology(graph).data
-    : graph;
-  const scopeState = resolveSubnetScopeState(projectedGraph, selectedView, activeSubnetId);
-
-  return filterGraphData(scopeState.graphData, {
-    focusNodeId,
-    maxHops,
-    selectedView,
-    subnetFilter: "all",
-    viewConfig,
-    hideDocker,
-  });
-}
-
-export function isResetScopeKey(key: string) {
-  return key === "Enter" || key === " ";
-}
-
-export function isSubnetSelectorKey(key: string) {
-  return key === "Enter" || key === " ";
-}
 
 // ─── Theme palette ──────────────────────────────────────────────────────────
 // Canvas pixels don't inherit CSS variables, so we resolve theme tokens at
@@ -205,11 +135,7 @@ export function TopologyGraph({ data, defaultView, taxonomyNodeId, initialFocusN
   const [isPending, startTransition] = useTransition();
   const [dynamicData, setDynamicData] = useState<GraphData | null>(null);
   const effectiveData = useMemo(() => dynamicData ?? data, [dynamicData, data]);
-  const physicalProjection = useMemo(() => projectPhysicalTopology(effectiveData), [effectiveData]);
 
-  // Show Docker-origin nodes? Default off — Docker subnets/containers are
-  // noise for the external-of-platform viewpoint operators usually want.
-  // Persisted to localStorage so opt-ins survive across sessions.
   const [showDocker, setShowDocker] = useState<boolean>(() => {
     if (typeof window === "undefined") return false;
     return window.localStorage.getItem(SHOW_DOCKER_STORAGE_KEY) === "1";
@@ -251,6 +177,7 @@ export function TopologyGraph({ data, defaultView, taxonomyNodeId, initialFocusN
     () => resolveDisplayedGraphData(effectiveData, selectedView, activeSubnetId, focusNodeId, maxHops, hideDocker),
     [effectiveData, selectedView, activeSubnetId, focusNodeId, maxHops, hideDocker],
   );
+  const physicalProjection = useMemo(() => projectPhysicalTopology(filteredData), [filteredData]);
 
   // Layout computation
   const layoutResult = useGraphLayout(filteredData, viewConfig, focusNodeId, dimensions, scopeToken);
@@ -260,6 +187,8 @@ export function TopologyGraph({ data, defaultView, taxonomyNodeId, initialFocusN
     () => availableSubnets.find((subnet) => subnet.id === activeSubnetId) ?? null,
     [availableSubnets, activeSubnetId],
   );
+
+  const fitPhysicalTopology = usePhysicalTopologyViewport(layoutResult, dimensions, selectedView, setZoom, setPan);
 
   // Force simulation state (only for exploration view)
   const nodesRef = useRef<SimNode[]>([]);
@@ -515,12 +444,14 @@ export function TopologyGraph({ data, defaultView, taxonomyNodeId, initialFocusN
       const dv = ciType ? getDeviceVisual(ciType) : null;
       const nodeColor = dv?.color ?? node.color;
       const radius = (dv?.size ?? node.size ?? 4) * (isHovered || isFocus ? 1.5 : 1);
+      const topologyVisualScale = selectedView === "network-topology" ? Math.max(zoom, 0.65) : 1;
+      const renderRadius = radius / topologyVisualScale;
 
       ctx.globalAlpha = hoveredNode && !isHovered && !isFocus ? 0.3 : 1;
 
       if (dv && node.label === "InfraCI") {
         // Draw device-type symbol instead of circle
-        const fontSize = Math.max(12, radius * 2.5);
+        const fontSize = Math.max(12, radius * 2.5) / topologyVisualScale;
         ctx.font = `${fontSize}px -apple-system, sans-serif`;
         ctx.fillStyle = nodeColor;
         ctx.textAlign = "center";
@@ -530,7 +461,7 @@ export function TopologyGraph({ data, defaultView, taxonomyNodeId, initialFocusN
       } else {
         // Default circle for non-InfraCI nodes
         ctx.beginPath();
-        ctx.arc(node.x, node.y, radius, 0, Math.PI * 2);
+        ctx.arc(node.x, node.y, renderRadius, 0, Math.PI * 2);
         ctx.fillStyle = nodeColor;
         ctx.fill();
       }
@@ -539,21 +470,26 @@ export function TopologyGraph({ data, defaultView, taxonomyNodeId, initialFocusN
         ctx.strokeStyle = palette.focusRing;
         ctx.lineWidth = 2;
         ctx.beginPath();
-        ctx.arc(node.x, node.y, radius + 3, 0, Math.PI * 2);
+        ctx.arc(node.x, node.y, renderRadius + 3 / topologyVisualScale, 0, Math.PI * 2);
         ctx.stroke();
       }
 
       ctx.globalAlpha = 1;
 
-      if (isHovered || isFocus || (dv?.size ?? node.size) >= 6 || !isPositioned) {
-        ctx.font = `${isHovered || isFocus ? 11 : 9}px -apple-system, sans-serif`;
+      const showPhysicalLabel = selectedView === "network-topology" && zoom >= 0.55;
+      if (isHovered || isFocus || showPhysicalLabel || (dv?.size ?? node.size) >= 6 || !isPositioned) {
+        const labelSize = (isHovered || isFocus ? 11 : 9) / topologyVisualScale;
+        const label = showPhysicalLabel && node.name.length > 18
+          ? `${node.name.slice(0, 17)}\u2026`
+          : node.name;
+        ctx.font = `${labelSize}px -apple-system, sans-serif`;
         ctx.fillStyle = isHovered || isFocus ? palette.labelHover : palette.label;
         ctx.textAlign = "center";
-        ctx.fillText(node.name, node.x, node.y - radius - 6);
+        ctx.fillText(label, node.x, node.y - renderRadius - 6 / topologyVisualScale);
       }
     }
     ctx.restore();
-  }, [dimensions, hoveredNode, focusNodeId, layoutResult, filteredData.links, isForceLayout, zoom, pan, palette]);
+  }, [dimensions, hoveredNode, focusNodeId, layoutResult, filteredData.links, isForceLayout, zoom, pan, palette, selectedView, viewConfig.layout]);
 
   // ─── Initialize force simulation nodes ────────────────────────────────
   useEffect(() => {
@@ -880,14 +816,7 @@ export function TopologyGraph({ data, defaultView, taxonomyNodeId, initialFocusN
             <div className="h-8 w-8 animate-spin rounded-full border-2 border-[var(--dpf-accent)] border-t-transparent" />
           </div>
         )}
-        <div className="absolute bottom-2 left-2 flex flex-wrap gap-x-3 gap-y-1 text-[9px] text-[var(--dpf-muted)]">
-          {LEGEND_ENTRIES.map((entry) => (
-            <span key={entry.ciType} className="flex items-center gap-1">
-              <span style={{ color: entry.visual.color, fontSize: 11 }}>{entry.visual.symbol}</span>
-              {entry.visual.label}
-            </span>
-          ))}
-        </div>
+        <TopologyLegend physical={selectedView === "network-topology"} />
         <div className="absolute bottom-2 right-2 text-[9px] text-[var(--dpf-muted)] flex items-center gap-2">
           <span>
             {displayNodes.length} nodes / {displayLinks.length} edges
@@ -897,7 +826,9 @@ export function TopologyGraph({ data, defaultView, taxonomyNodeId, initialFocusN
           {(zoom !== 1 || pan.x !== 0 || pan.y !== 0) && (
             <button
               type="button"
-              onClick={() => { setZoom(1); setPan({ x: 0, y: 0 }); }}
+              onClick={selectedView === "network-topology"
+                ? fitPhysicalTopology
+                : () => { setZoom(1); setPan({ x: 0, y: 0 }); }}
               className="text-[9px] text-[var(--dpf-muted)] hover:text-[var(--dpf-text)] underline"
             >
               reset
@@ -905,7 +836,7 @@ export function TopologyGraph({ data, defaultView, taxonomyNodeId, initialFocusN
           )}
         </div>
         {!focusNodeId && (
-          <div className="absolute bottom-2 left-2 text-[9px] text-[var(--dpf-muted)]">
+          <div className="absolute top-2 right-2 text-[9px] text-[var(--dpf-muted)]">
             Scroll to zoom / Shift-drag to pan / Click to focus
           </div>
         )}
