@@ -1235,10 +1235,7 @@ export async function deleteFeatureBuild(buildId: string): Promise<void> {
   const build = await prisma.featureBuild.findUnique({ where: { buildId } });
   if (!build) throw new Error("Build not found");
   if (build.createdById !== userId) throw new Error("Forbidden");
-
-  const { assertFeatureBuildGovernanceDeletable } = await import("@/lib/backlog/initiative-governance-deletion");
-  await assertFeatureBuildGovernanceDeletable(buildId);
-
+  await (await import("@/lib/backlog/initiative-governance-deletion")).assertFeatureBuildGovernanceDeletable(buildId);
   // Delete related records first (foreign key constraints)
   await prisma.phaseHandoff.deleteMany({ where: { buildId } });
   await prisma.buildActivity.deleteMany({ where: { buildId } });

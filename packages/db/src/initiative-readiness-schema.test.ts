@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
+import { TABLE_CLASSIFICATION } from "./table-classification";
 
 const schema = readFileSync(new URL("../prisma/schema.prisma", import.meta.url), "utf8");
 const migration = readFileSync(
@@ -44,6 +45,10 @@ describe("initiative readiness persistence", () => {
     expect(schema).toMatch(/documentBlob\s+DocumentBlob\?.*onDelete: Restrict/);
     expect(migration).toContain("initiative_artifact_retention_pin_shape");
     expect(migration).toContain('dv."contentBlobId" IS NOT DISTINCT FROM NEW."documentBlobId"');
+  });
+
+  it("classifies the permanent retention-pin metadata as confidential", () => {
+    expect(TABLE_CLASSIFICATION.InitiativeArtifactRetentionPin).toBe("confidential");
   });
 
   it("keeps governance records and pins append-only while ordinary activity remains deletable", () => {

@@ -14,20 +14,14 @@ import {
   normalizeBranchTaxonomy,
   normalizeWorkCapsuleScopeInput,
   parseScopeClaims,
-  parseWorkIntentDeclared,
   type ScopeClaim,
-  type WorkCapsuleActivityKind,
   type WorkCapsuleBranchTaxonomy,
   type WorkCapsuleEvidenceKind,
   type WorkCapsuleExecutorKind,
   type WorkCapsuleScopeInput,
   type WorkCapsuleSource,
   type WorkCapsuleStatus,
-  type WorkIntent,
-  type WorkIntentDeclared,
 } from "@/lib/work-capsules";
-import { revalidatePortalContext } from "@/lib/portal-context/invalidation";
-import { publishRecordedWorkCapsuleActivity } from "@/lib/work-capsules/activity-events";
 import { admitRuntimeGuardedWork } from "@/lib/platform-runtime/work-admission";
 import { planCapsuleChangeImpact, type CapsuleChangeImpactContract } from "./change-impact-contract";
 import {
@@ -41,9 +35,11 @@ import {
   type CapsuleAdoptionInput,
 } from "./work-capsule-branch-identity";
 import type { CapsuleDb, WorkCapsuleActor } from "./work-capsule-store-types";
+import { recordWorkCapsuleActivity as recordActivity } from "./work-capsule-activity-store";
 
 export type { CapsuleDb, WorkCapsuleActor } from "./work-capsule-store-types";
 export { CapsuleBranchOccupiedError } from "./work-capsule-branch-identity";
+export { declareWorkCapsuleIntent } from "./work-capsule-intent-store";
 
 type CapsuleCreateInput = {
   title: string;
@@ -103,75 +99,6 @@ async function admitCapsuleWork(db: CapsuleDb, guard: `work-capsule:${string}`):
   // Prisma transaction supplies these three admission members.
   if (!db.$queryRaw || !db.platformCapability || !db.runtimeCapabilityTransition) return;
   await admitRuntimeGuardedWork(db as never, guard);
-}
-
-async function recordActivity(
-  db: CapsuleDb,
-  input: {
-    workCapsuleId: string;
-    kind: WorkCapsuleActivityKind;
-    summary: string;
-    payload?: Record<string, unknown>;
-    actor: WorkCapsuleActor;
-  },
-) {
-  const activity = await db.workCapsuleActivity.create({
-    data: {
-      workCapsuleId: input.workCapsuleId,
-      kind: input.kind,
-      summary: input.summary,
-      payload: input.payload ?? {},
-      recordedById: input.actor.userId,
-      recordedByAgentId: input.actor.agentId,
-    },
-  });
-  publishRecordedWorkCapsuleActivity(input.workCapsuleId, activity?.id);
-  revalidatePortalContext();
-  return activity;
-}
-
-export async function declareWorkCapsuleIntent(args: {
-  db: CapsuleDb;
-  capsuleId: string;
-  intent: WorkIntent;
-  policyVersion: string;
-  subject: WorkIntentDeclared["subject"];
-  actor: WorkCapsuleActor;
-}) {
-  const payload = parseWorkIntentDeclared({
-    schemaVersion: 1,
-    intent: args.intent,
-    policyVersion: args.policyVersion,
-    subject: args.subject,
-  });
-  if (!payload.ok) throw new Error(payload.error);
-  const capsule = await args.db.workCapsule.findUnique({
-    where: { capsuleId: args.capsuleId },
-    select: { id: true, backlogItemId: true, epicId: true, featureBuildId: true, taskRunId: true },
-  });
-  if (!capsule) throw new Error(`Work Capsule ${args.capsuleId} not found`);
-  const binding = args.subject.kind === "backlog-item"
-    ? capsule.backlogItemId
-    : args.subject.kind === "epic"
-      ? capsule.epicId
-      : args.subject.kind === "feature-build"
-        ? capsule.featureBuildId
-        : capsule.taskRunId;
-  if (binding !== args.subject.id) {
-    throw new Error(`Work intent subject does not match Work Capsule ${args.capsuleId}.`);
-  }
-  return recordActivity(args.db, {
-    workCapsuleId: capsule.id,
-    kind: "work-intent-declared",
-    summary: `Work intent declared: ${payload.intent}`,
-    payload: {
-      schemaVersion: payload.schemaVersion,
-      intent: payload.intent,
-      policyVersion: payload.policyVersion,
-      subject: payload.subject,
-    },
-    actor: args.actor,
-  });
 }
 
 export async function createWorkCapsule(args: {

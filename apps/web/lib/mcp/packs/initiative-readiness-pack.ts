@@ -40,10 +40,8 @@ const artifactRefSchema = {
   required: ["kind"],
 };
 
-const definitions: ToolDefinition[] = Object.entries(LANES).map(([name, lane]) => ({
-  name,
-  description: `Record authenticated initiative evidence for only these gate lanes: ${lane.gates.join(", ")}. Artifact identity, digest, subject, author, reviewer, and authority are server resolved.`,
-  inputSchema: {
+function inputSchemaFor(name: string, lane: Lane): ToolDefinition["inputSchema"] {
+  return {
     type: "object",
     properties: {
       itemId: { type: "string", description: "Governed BacklogItem ID (BI-*)." },
@@ -96,11 +94,65 @@ const definitions: ToolDefinition[] = Object.entries(LANES).map(([name, lane]) =
     required: name === "record_initiative_evidence"
       ? ["itemId", "reason"]
       : ["itemId", "gate", "decision", "artifactRef", "reason", "findings", "resolvedFindingRefs"],
+  };
+}
+
+function definitionBase(lane: Lane): Omit<ToolDefinition, "name" | "inputSchema"> {
+  return {
+    description: `Record authenticated initiative evidence for only these gate lanes: ${lane.gates.join(", ")}. Artifact identity, digest, subject, author, reviewer, and authority are server resolved.`,
+    requiredCapability: lane.capability,
+    executionMode: "immediate",
+    sideEffect: true,
+  };
+}
+
+const definitions: ToolDefinition[] = [
+  {
+    name: "record_initiative_evidence",
+    inputSchema: inputSchemaFor("record_initiative_evidence", LANES.record_initiative_evidence),
+    ...definitionBase(LANES.record_initiative_evidence),
   },
-  requiredCapability: lane.capability,
-  executionMode: "immediate",
-  sideEffect: true,
-}));
+  {
+    name: "record_initiative_design_review",
+    inputSchema: inputSchemaFor("record_initiative_design_review", LANES.record_initiative_design_review),
+    ...definitionBase(LANES.record_initiative_design_review),
+  },
+  {
+    name: "record_initiative_architecture_review",
+    inputSchema: inputSchemaFor("record_initiative_architecture_review", LANES.record_initiative_architecture_review),
+    ...definitionBase(LANES.record_initiative_architecture_review),
+  },
+  {
+    name: "record_initiative_data_review",
+    inputSchema: inputSchemaFor("record_initiative_data_review", LANES.record_initiative_data_review),
+    ...definitionBase(LANES.record_initiative_data_review),
+  },
+  {
+    name: "record_initiative_ux_review",
+    inputSchema: inputSchemaFor("record_initiative_ux_review", LANES.record_initiative_ux_review),
+    ...definitionBase(LANES.record_initiative_ux_review),
+  },
+  {
+    name: "record_initiative_security_review",
+    inputSchema: inputSchemaFor("record_initiative_security_review", LANES.record_initiative_security_review),
+    ...definitionBase(LANES.record_initiative_security_review),
+  },
+  {
+    name: "record_initiative_compliance_review",
+    inputSchema: inputSchemaFor("record_initiative_compliance_review", LANES.record_initiative_compliance_review),
+    ...definitionBase(LANES.record_initiative_compliance_review),
+  },
+  {
+    name: "record_initiative_domain_review",
+    inputSchema: inputSchemaFor("record_initiative_domain_review", LANES.record_initiative_domain_review),
+    ...definitionBase(LANES.record_initiative_domain_review),
+  },
+  {
+    name: "record_initiative_archetype_review",
+    inputSchema: inputSchemaFor("record_initiative_archetype_review", LANES.record_initiative_archetype_review),
+    ...definitionBase(LANES.record_initiative_archetype_review),
+  },
+];
 
 function parseFindings(value: unknown): Array<{ issue: string; severity: "critical" | "important" }> | null {
   if (!Array.isArray(value)) return null;

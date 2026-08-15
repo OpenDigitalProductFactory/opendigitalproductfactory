@@ -104,7 +104,7 @@ export async function DELETE(
     if (e instanceof ApiError) return e.toResponse();
     if (e instanceof Error && "code" in e && e.code === "INITIATIVE_GOVERNANCE_RETENTION") {
       return NextResponse.json(
-        { code: "INITIATIVE_GOVERNANCE_RETENTION", message: "This initiative has permanent governance evidence and must be archived or deferred instead." },
+        { code: "INITIATIVE_GOVERNANCE_RETENTION", message: e.message },
         { status: 409 },
       );
     }

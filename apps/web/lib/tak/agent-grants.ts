@@ -2,6 +2,7 @@
 import agentRegistryData from "../../../../packages/db/data/agent_registry.json";
 import { AUTHORIZED_SURFACE_TOOL_GRANTS } from "@/lib/coworker/authorized-surface-coworker-contract";
 import { PRODUCT_MANAGEMENT_TOOL_GRANTS } from "./product-management-tool-grants";
+import { INITIATIVE_READINESS_TOOL_GRANTS } from "./initiative-readiness-tool-grants";
 const agentRegistry = agentRegistryData as { agents: Array<Record<string, unknown>> };
 /**
  * Implications between agent grant categories. A grant on the left of the
@@ -181,9 +182,7 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   retire_backlog_item: ["backlog_write"],
   link_backlog_item_to_epic: ["backlog_write"],
   search_specs_and_plans: ["spec_plan_read", "backlog_read"],
-  // Build-scoped evidence recording — refactored to the finer `build_evidence`
-  // grant (BI-B2F7ABF5). Backwards-compat preserved by GRANT_IMPLICATIONS
-  // (backlog_write → build_evidence).
+  // Build-scoped evidence uses build_evidence; backlog_write implies it for compatibility (BI-B2F7ABF5).
   record_execution_evidence: ["build_evidence"],
   // Non-build evidence stays on backlog_write because it coordinates the whole backlog surface.
   record_external_development_evidence: ["backlog_write"],
@@ -191,15 +190,7 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   record_semantic_review_outcome: ["backlog_write"],
   record_local_integration_result: ["backlog_write"],
   record_functional_failure_evidence: ["backlog_write"],
-  record_initiative_evidence: ["initiative_evidence_write"],
-  record_initiative_design_review: ["initiative_design_review"],
-  record_initiative_architecture_review: ["initiative_architecture_review"],
-  record_initiative_data_review: ["initiative_data_review"],
-  record_initiative_ux_review: ["initiative_ux_review"],
-  record_initiative_security_review: ["initiative_security_review"],
-  record_initiative_compliance_review: ["initiative_compliance_review"],
-  record_initiative_domain_review: ["initiative_domain_review"],
-  record_initiative_archetype_review: ["initiative_archetype_review"],
+  ...INITIATIVE_READINESS_TOOL_GRANTS,
   get_next_recommended_work: ["backlog_read"],
   // Read-only coworker-roster discovery-by-intent (BI-5FB59BC6); returns ids/
   // names to then pass to request_coworker/summon_coworker.
