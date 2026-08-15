@@ -1731,7 +1731,8 @@
       "publishedPublic": true,
       "publishedPortal": false,
       "anchors": [
-        "architecture-orientation"
+        "architecture-orientation",
+        "channel-adapter-capabilities"
       ]
     },
     "docs/architecture/package-boundaries.md": {
@@ -3976,6 +3977,7 @@
         "how-to-apply",
         "decision-dimensions",
         "examples",
+        "boundary",
         "sources"
       ]
     },
