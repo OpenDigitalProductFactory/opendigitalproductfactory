@@ -11,7 +11,7 @@ const view: OwnerChangeView = {
   outcome: "Customers can change a booking without calling.",
   now: "Checking the work",
   next: "Review proof before release.",
-  health: "ready",
+  ownerState: "working",
   brief: null,
   proof: {
     requestedOutcome: "Customers can change a booking without calling.",

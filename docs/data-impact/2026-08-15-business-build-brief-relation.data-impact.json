@@ -1,0 +1,32 @@
+{
+  "version": "1",
+  "accountableOwner": "platform-architecture",
+  "affectedCopies": [
+    "No data copy is added. The existing BusinessBuildBrief.featureBuildId value becomes an enforced nullable relation to the canonical FeatureBuild record."
+  ],
+  "migration": {
+    "name": "20260731230000_relate_business_build_brief",
+    "backfill": "Existing valid links are preserved. Any historical featureBuildId that does not resolve to FeatureBuild.id is set to null before the nullable foreign key is added."
+  },
+  "tests": [
+    "packages/db/src/business-build-brief-schema.test.ts",
+    "apps/web/lib/explore/feature-build-data.test.ts",
+    "apps/web/lib/build/owner-change-view.test.ts"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:business-build-brief",
+      "prismaModel": "BusinessBuildBrief",
+      "lifecycleDisposition": "Business intent record; unchanged. The relation makes its existing owning Change explicit and uses ON DELETE SET NULL so brief evidence survives build removal.",
+      "fields": [
+        {
+          "fieldId": "data:business-build-brief#featureBuildId",
+          "resolution": "inherited",
+          "reason": "The existing nullable identifier is now constrained to the canonical FeatureBuild primary key; no new subject or sensitive data is introduced.",
+          "provenance": "Existing BusinessBuildBrief authoring and legacy FeatureBuild brief conversion paths."
+        }
+      ]
+    }
+  ]
+}
