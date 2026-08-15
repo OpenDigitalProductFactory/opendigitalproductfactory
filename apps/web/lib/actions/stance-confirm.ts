@@ -101,9 +101,12 @@ export async function confirmStanceVectors(input: {
           changeSummary: "Stance confirmed by the owner (How you decide)",
           createdById: userId,
         });
-        // Deliberation layer (best-effort); the material below is the enforcement.
+        // Deliberation layer; the material below is the enforcement, so a failed
+        // embed never rolls back the confirm. BI-D4C1E05E: it must NOT be a
+        // SILENT skip — log loudly so the reembed reconcile's self-heal is a
+        // known follow-up rather than an undiagnosed governance gap.
         try {
-          await storeWikiPage({
+          const embedded = await storeWikiPage({
             pageId: saved.id,
             slug,
             title,
@@ -117,8 +120,20 @@ export async function confirmStanceVectors(input: {
             kernelPageId: null,
             ...projectStanceDimensionVector(vector.key),
           });
-        } catch {
-          // best-effort
+          if (!embedded) {
+            console.error(
+              `[embed-published-overlay] EMBED-SKIPPED slug=${slug} origin=stance-confirm — ` +
+                "confirmed stance was NOT embedded (embedding provider unavailable); invisible to " +
+                "wiki_query / principle_decide until the reembed reconcile runs. " +
+                "Fix: docker model pull ai/nomic-embed-text-v1.5",
+            );
+          }
+        } catch (err) {
+          console.error(
+            `[embed-published-overlay] EMBED-FAILED slug=${slug} origin=stance-confirm: ` +
+              `${(err as Error).message}. Stance confirmed but not embedded; the reembed ` +
+              "reconcile will self-heal it on the next upgrade boot.",
+          );
         }
       }
 

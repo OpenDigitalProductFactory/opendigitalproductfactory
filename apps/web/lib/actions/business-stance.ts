@@ -17,7 +17,6 @@ import {
   projectDeclaredStanceAlignment,
   type StanceAlignmentDimension,
 } from "@/lib/decision-perspective/stance-dimension-map";
-import { storeWikiPage } from "@/lib/wiki/embeddings";
 import {
   decisionAreaToDomainClass,
   validateBusinessStance,
@@ -114,26 +113,13 @@ export async function publishBusinessStance(
     return { ok: false, error: "No organization is configured for this install." };
   }
 
-  // Deliberation layer (best-effort): the gate-live material below is the
-  // enforcement; a failed embed only weakens retrieval context.
-  try {
-    await storeWikiPage({
-      pageId: result.pageId,
-      slug: validated.slug,
-      title: validated.title,
-      body: validated.body,
-      abstract: validated.summary,
-      pageKind: "stance",
-      status: "published",
-      isKernel: false,
-      kernelVersion: null,
-      organizationId: org.id,
-      kernelPageId: null,
-      ...projection,
-    });
-  } catch {
-    // best-effort; enforcement continues below
-  }
+  // BI-D4C1E05E: embedding now happens inside saveWikiOverlayEdit (the shared
+  // publish-path embed seam) on the status→published transition above, so no
+  // separate storeWikiPage call is needed here. It would only double-embed:
+  // storeWikiPage writes principle-payload fields exclusively for
+  // pageKind === "principle", so the stance-alignment `projection` is dropped by
+  // the embed regardless of caller — it flows to the Postgres dimension column
+  // via the saveWikiOverlayEdit upsert, not the vector payload.
 
   const promoted = await promoteStanceMaterial({
     db: prisma,

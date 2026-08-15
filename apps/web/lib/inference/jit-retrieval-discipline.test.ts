@@ -27,6 +27,7 @@ const ALLOWED_EMBEDDING_CALLERS: ReadonlySet<string> = new Set([
   "apps/web/lib/inference/semantic-memory.ts", // conversation / platform / capability memory
   "apps/web/lib/documents/embeddings.ts", // uploaded documents
   "apps/web/lib/wiki/embeddings.ts", // WWMD/WWWD corpus pages
+  "apps/web/lib/wiki/embed-published-overlay.ts", // BI-D4C1E05E: the shared publish-path embed seam — embeds published wiki-overlay KNOWLEDGE pages (stances/overlays) via storeWikiPage, never an operational record
   "apps/web/lib/wiki/lint.ts", // corpus dedup similarity
   "apps/web/lib/wiki/principle-similarity.ts", // principle-vector similarity
   "apps/web/lib/mcp/packs/principle-decide-pack.ts", // principle-direction + semantic-decision knowledge

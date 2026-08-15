@@ -65,7 +65,15 @@ async function main(): Promise<void> {
     }
   }
 
-  const result = await reconcilePublishedWikiEmbeddings({ kind: flags.kind, dryRun: flags.dryRun });
+  // Full-corpus reembed: this maintainer/boot self-heal must cover EVERY published
+  // page, not the default fire-and-forget page window (BI-D4C1E05E). Pass an
+  // effectively-unbounded limit so no unembedded page is skipped.
+  const FULL_CORPUS_LIMIT = 1_000_000;
+  const result = await reconcilePublishedWikiEmbeddings({
+    kind: flags.kind,
+    dryRun: flags.dryRun,
+    limit: FULL_CORPUS_LIMIT,
+  });
 
   console.info(
     `[reembed-wiki-store] scanned=${result.scanned} missing=${result.missing} ` +
