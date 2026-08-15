@@ -11,7 +11,48 @@ import {
   formatReadinessBanner,
   diagnoseUnprovisionedFailure,
   bootstrapWorktreeDeps,
+  resolvePinnedPnpmInvocation,
+  classifyIgnoredBuilds,
+  dependencyPolicyReviewKey,
 } from "./bootstrap-worktree-deps.mjs";
+
+test("pnpm 11 delegates to the repository pin instead of overriding it", () => {
+  assert.deepEqual(
+    resolvePinnedPnpmInvocation("pnpm", "11.19.0", "10.33.2", ["install", "--frozen-lockfile"]),
+    { command: "pnpm", args: ["with", "10.33.2", "install", "--frozen-lockfile"], version: "10.33.2", mode: "pinned-shim" },
+  );
+  assert.deepEqual(
+    resolvePinnedPnpmInvocation("pnpm", "10.33.2", "10.33.2", ["ls"]),
+    { command: "pnpm", args: ["ls"], version: "10.33.2", mode: "host-match" },
+  );
+});
+
+test("dependency-policy review identity coalesces exact base/package/reason matches only", () => {
+  const base = { baseSha: "abc123", packageName: "sharp", version: "1.2.3", errorCode: "ignored-build" };
+  assert.equal(
+    dependencyPolicyReviewKey(base),
+    "dependency-policy:abc123:sharp@1.2.3:ignored-build",
+  );
+  assert.notEqual(
+    dependencyPolicyReviewKey(base),
+    dependencyPolicyReviewKey({ ...base, baseSha: "def456" }),
+  );
+  assert.notEqual(
+    dependencyPolicyReviewKey(base),
+    dependencyPolicyReviewKey({ ...base, version: "2.0.0" }),
+  );
+});
+
+test("ignored-build readiness fails closed when pnpm reports an unclassified script", () => {
+  assert.deepEqual(classifyIgnoredBuilds("Automatically ignored builds during installation: None"), {
+    ok: true,
+    packages: [],
+  });
+  assert.deepEqual(classifyIgnoredBuilds("Automatically ignored builds during installation:\n  sharp@1.2.3"), {
+    ok: false,
+    packages: ["sharp@1.2.3"],
+  });
+});
 
 test("compile-ready ONLY when deps resolved AND the cheap gate passes", () => {
   assert.equal(classifyReadiness({ hasNodeModules: true, depProbeOk: true, gateOk: true }), "compile-ready");
@@ -174,10 +215,19 @@ test("ordinary type errors are never relabelled as environmental", () => {
 test("bootstrapWorktreeDeps reports a managed install launch failure instead of silently relabelling it node_modules_missing", () => {
   const result = bootstrapWorktreeDeps("C:/worktrees/topic", {
     exists: () => false,
-    execute: () => ({
+    pinnedPnpmVersion: "10.33.2",
+    execute: (_command, args) => args[0] === "--version" ? {
+      ok: true,
+      command: "pnpm",
+      args,
+      status: 0,
+      signal: null,
+      stdout: "11.19.0\n",
+      stderr: "",
+    } : ({
       ok: false,
       command: "C:\\Windows\\System32\\cmd.exe",
-      args: ["/d", "/s", "/c", "pnpm install --prefer-offline --frozen-lockfile"],
+      args: ["/d", "/s", "/c", "pnpm with 10.33.2 install --prefer-offline --frozen-lockfile"],
       error: { name: "Error", code: "EINVAL", message: "spawnSync pnpm.cmd EINVAL" },
       status: null,
       signal: null,
@@ -191,7 +241,7 @@ test("bootstrapWorktreeDeps reports a managed install launch failure instead of 
   assert.deepEqual(result.failure, {
     phase: "install",
     command: "C:\\Windows\\System32\\cmd.exe",
-    args: ["/d", "/s", "/c", "pnpm install --prefer-offline --frozen-lockfile"],
+    args: ["/d", "/s", "/c", "pnpm with 10.33.2 install --prefer-offline --frozen-lockfile"],
     status: null,
     signal: null,
     error: { name: "Error", code: "EINVAL", message: "spawnSync pnpm.cmd EINVAL" },

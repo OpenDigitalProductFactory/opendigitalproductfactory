@@ -40,6 +40,7 @@
     "./local-model-capabilities": "./src/local-model-capabilities.ts",
     "./provider-compliance-source-registry": "./src/provider-compliance-source-registry.ts",
     "./hive-contribution-settings": "./src/hive-contribution-settings.ts",
+    "./device-fingerprint-contribution": "./src/device-fingerprint-contribution.ts",
     "./location-normalize": "./src/location-normalize.ts",
     "./eu-jurisdictions": "./src/eu-jurisdictions.ts",
     "./sovereignty-assessment": "./src/sovereignty-assessment.ts",

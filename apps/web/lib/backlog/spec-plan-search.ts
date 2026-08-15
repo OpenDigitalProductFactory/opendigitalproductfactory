@@ -4,6 +4,7 @@ export type SpecPlanKind = "spec" | "plan";
 
 export type SpecPlanResult = {
   path: string;
+  sourceRoot: string;
   kind: SpecPlanKind;
   title: string;
   date: string | null;
@@ -53,6 +54,24 @@ function repoRoot(): string {
   const cwdResolved = path.resolve(/*turbopackIgnore: true*/ cwd);
   const docsMarker = path.join(/*turbopackIgnore: true*/ cwdResolved, "docs", "superpowers");
   if (existsSyncCached(docsMarker)) return cwdResolved;
+
+  // A canonical install keeps the bytes that are actually eligible for
+  // self-upgrade under .upgrade-workspace. The host checkout beside it may be
+  // stale, so it must not win merely because it also contains docs/.
+  const configuredRoot = process.env.DPF_REPO_ROOT;
+  if (configuredRoot) {
+    const resolvedConfiguredRoot = path.resolve(/*turbopackIgnore: true*/ configuredRoot);
+    const deployedRoot = path.join(
+      /*turbopackIgnore: true*/ resolvedConfiguredRoot,
+      ".upgrade-workspace",
+    );
+    if (existsSyncCached(path.join(/*turbopackIgnore: true*/ deployedRoot, "docs", "superpowers"))) {
+      return deployedRoot;
+    }
+    if (existsSyncCached(path.join(/*turbopackIgnore: true*/ resolvedConfiguredRoot, "docs", "superpowers"))) {
+      return resolvedConfiguredRoot;
+    }
+  }
   // apps/web/<...> dev scenarios — climb to repo root.
   const climbed = path.resolve(/*turbopackIgnore: true*/ cwdResolved, "..", "..");
   return climbed;
@@ -203,6 +222,7 @@ export async function searchSpecsAndPlans(
 
       results.push({
         path: relPath,
+        sourceRoot: root,
         kind: dir.kind,
         title: entry.title,
         date: entry.date,

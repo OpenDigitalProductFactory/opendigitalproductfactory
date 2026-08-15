@@ -232,5 +232,103 @@
     "negativeFixtures": [
       { "name": "apple-not-samsung", "evidenceFamilies": ["mac_oui"], "normalizedEvidence": { "vendor": "apple, inc." } }
     ]
+  },
+  {
+    "ruleKey": "estate:google-client",
+    "status": "active",
+    "scope": "global",
+    "source": "seed",
+    "requiredEvidenceFamilies": ["mac_oui"],
+    "matchExpression": { "all": [{ "type": "contains", "path": "vendor", "value": "google" }] },
+    "resolvedIdentity": { "kind": "device", "name": "Google connected endpoint", "vendor": "Google", "deviceClass": "client_endpoint" },
+    "taxonomyNodeId": "foundational/compute/client_and_end_user_compute",
+    "identityConfidence": 0.9,
+    "taxonomyConfidence": 0.94,
+    "positiveFixtures": [{ "name": "google-oui", "evidenceFamilies": ["mac_oui"], "normalizedEvidence": { "vendor": "google, inc.", "vendorRole": "device" } }],
+    "negativeFixtures": [{ "name": "amazon-not-google", "evidenceFamilies": ["mac_oui"], "normalizedEvidence": { "vendor": "amazon technologies" } }]
+  },
+  {
+    "ruleKey": "estate:roku-client",
+    "status": "active",
+    "scope": "global",
+    "source": "seed",
+    "requiredEvidenceFamilies": ["mac_oui"],
+    "matchExpression": { "all": [{ "type": "contains", "path": "vendor", "value": "roku" }] },
+    "resolvedIdentity": { "kind": "device", "name": "Roku media endpoint", "vendor": "Roku", "deviceClass": "client_endpoint" },
+    "taxonomyNodeId": "foundational/compute/client_and_end_user_compute",
+    "identityConfidence": 0.96,
+    "taxonomyConfidence": 0.94,
+    "positiveFixtures": [{ "name": "roku-oui", "evidenceFamilies": ["mac_oui"], "normalizedEvidence": { "vendor": "roku, inc.", "vendorRole": "device" } }],
+    "negativeFixtures": [{ "name": "google-not-roku", "evidenceFamilies": ["mac_oui"], "normalizedEvidence": { "vendor": "google" } }]
+  },
+  {
+    "ruleKey": "estate:sonos-speaker",
+    "status": "active",
+    "scope": "global",
+    "source": "seed",
+    "requiredEvidenceFamilies": ["mac_oui"],
+    "matchExpression": { "all": [{ "type": "contains", "path": "vendor", "value": "sonos" }] },
+    "resolvedIdentity": { "kind": "device", "name": "Sonos smart speaker", "vendor": "Sonos", "deviceClass": "smart_speaker" },
+    "taxonomyNodeId": "foundational/network_management/voice",
+    "identityConfidence": 0.97,
+    "taxonomyConfidence": 0.95,
+    "positiveFixtures": [{ "name": "sonos-oui", "evidenceFamilies": ["mac_oui"], "normalizedEvidence": { "vendor": "sonos, inc.", "vendorRole": "device" } }],
+    "negativeFixtures": [{ "name": "roku-not-sonos", "evidenceFamilies": ["mac_oui"], "normalizedEvidence": { "vendor": "roku" } }]
+  },
+  {
+    "ruleKey": "estate:ring-security",
+    "status": "active",
+    "scope": "global",
+    "source": "seed",
+    "requiredEvidenceFamilies": ["mac_oui"],
+    "matchExpression": { "all": [{ "type": "contains", "path": "vendor", "value": "ring" }] },
+    "resolvedIdentity": { "kind": "device", "name": "Ring security camera / doorbell", "vendor": "Ring", "deviceClass": "doorbell_camera" },
+    "taxonomyNodeId": "foundational/building_management/security_and_surveillance",
+    "identityConfidence": 0.96,
+    "taxonomyConfidence": 0.96,
+    "positiveFixtures": [{ "name": "ring-oui", "evidenceFamilies": ["mac_oui"], "normalizedEvidence": { "vendor": "ring llc", "vendorRole": "device" } }],
+    "negativeFixtures": [{ "name": "wyze-not-ring", "evidenceFamilies": ["mac_oui"], "normalizedEvidence": { "vendor": "wyze labs" } }]
+  },
+  {
+    "ruleKey": "estate:wyze-security",
+    "status": "active",
+    "scope": "global",
+    "source": "seed",
+    "requiredEvidenceFamilies": ["mac_oui"],
+    "matchExpression": { "all": [{ "type": "contains", "path": "vendor", "value": "wyze" }] },
+    "resolvedIdentity": { "kind": "device", "name": "Wyze security camera", "vendor": "Wyze", "deviceClass": "security_camera" },
+    "taxonomyNodeId": "foundational/building_management/security_and_surveillance",
+    "identityConfidence": 0.93,
+    "taxonomyConfidence": 0.96,
+    "positiveFixtures": [{ "name": "wyze-oui", "evidenceFamilies": ["mac_oui"], "normalizedEvidence": { "vendor": "wyze labs, inc.", "vendorRole": "device" } }],
+    "negativeFixtures": [{ "name": "ring-not-wyze", "evidenceFamilies": ["mac_oui"], "normalizedEvidence": { "vendor": "ring llc" } }]
+  },
+  {
+    "ruleKey": "estate:synology-client",
+    "status": "active",
+    "scope": "global",
+    "source": "seed",
+    "requiredEvidenceFamilies": ["mac_oui"],
+    "matchExpression": { "all": [{ "type": "contains", "path": "vendor", "value": "synology" }] },
+    "resolvedIdentity": { "kind": "device", "name": "Synology network-attached storage", "vendor": "Synology", "deviceClass": "nas" },
+    "taxonomyNodeId": "foundational/data_and_storage_management/online_storage",
+    "identityConfidence": 0.97,
+    "taxonomyConfidence": 0.96,
+    "positiveFixtures": [{ "name": "synology-oui", "evidenceFamilies": ["mac_oui"], "normalizedEvidence": { "vendor": "synology incorporated", "vendorRole": "device" } }],
+    "negativeFixtures": [{ "name": "qnap-not-synology", "evidenceFamilies": ["mac_oui"], "normalizedEvidence": { "vendor": "qnap systems" } }]
+  },
+  {
+    "ruleKey": "estate:raspberry-pi-client",
+    "status": "active",
+    "scope": "global",
+    "source": "seed",
+    "requiredEvidenceFamilies": ["mac_oui"],
+    "matchExpression": { "all": [{ "type": "contains", "path": "vendor", "value": "raspberry pi" }] },
+    "resolvedIdentity": { "kind": "device", "name": "Raspberry Pi endpoint", "vendor": "Raspberry Pi", "deviceClass": "client_endpoint" },
+    "taxonomyNodeId": "foundational/compute/client_and_end_user_compute",
+    "identityConfidence": 0.96,
+    "taxonomyConfidence": 0.94,
+    "positiveFixtures": [{ "name": "raspberry-pi-oui", "evidenceFamilies": ["mac_oui"], "normalizedEvidence": { "vendor": "raspberry pi trading ltd", "vendorRole": "device" } }],
+    "negativeFixtures": [{ "name": "intel-not-rpi", "evidenceFamilies": ["mac_oui"], "normalizedEvidence": { "vendor": "intel corporate" } }]
   }
 ]

@@ -43,7 +43,13 @@ type ReconcileDb = {
       id: string;
       productId: string;
       name: string;
-      inventoryEntities: Array<{ id: string; entityType: string; name?: string | null; properties?: unknown }>;
+      inventoryEntities: Array<{
+        id: string;
+        entityType: string;
+        name?: string | null;
+        properties?: unknown;
+        catalogIdentityId?: string | null;
+      }>;
     }>>;
     delete(args: { where: { id: string } }): Promise<unknown>;
   };
@@ -66,12 +72,20 @@ type ReconcileDb = {
  * is host/network.
  */
 export function isInfrastructureProduct(
-  linkedEntities: ReadonlyArray<{ entityType: string; provenance: EstateProvenance }>,
+  linkedEntities: ReadonlyArray<{
+    entityType: string;
+    provenance: EstateProvenance;
+    discoveredVia?: string | null;
+    hasResolvedIdentity?: boolean;
+  }>,
 ): boolean {
   return (
     linkedEntities.length > 0 &&
     linkedEntities.every(
-      (e) => isNonProductEntityType(e.entityType) && e.provenance === "platform_internal",
+      (e) =>
+        isNonProductEntityType(e.entityType) &&
+        (e.provenance === "platform_internal" ||
+          (/^arp(?:_scan|_table)?$/i.test(e.discoveredVia ?? "") && !e.hasResolvedIdentity)),
     )
   );
 }
@@ -99,7 +113,13 @@ export async function reconcilePromotedProducts(
       name: true,
       inventoryEntities: {
         where: INVENTORY_ENTITY_CANONICAL_WHERE,
-        select: { id: true, entityType: true, name: true, properties: true },
+        select: {
+          id: true,
+          entityType: true,
+          name: true,
+          properties: true,
+          catalogIdentityId: true,
+        },
       },
     },
   });
@@ -109,6 +129,8 @@ export async function reconcilePromotedProducts(
       const props = (e.properties ?? {}) as Record<string, unknown>;
       return {
         entityType: e.entityType,
+        discoveredVia: typeof props.discoveredVia === "string" ? props.discoveredVia : null,
+        hasResolvedIdentity: Boolean(e.catalogIdentityId),
         provenance: classifyEstateProvenance({
           discoveredVia: typeof props.discoveredVia === "string" ? props.discoveredVia : null,
           addressHint:
