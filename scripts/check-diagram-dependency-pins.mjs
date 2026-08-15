@@ -2,7 +2,7 @@
 
 import { readFile } from "node:fs/promises";
 
-const expectedRootDependency = '"@mermaid-js/mermaid-cli": "11.15.0"';
+const expectedRootDependency = '"@mermaid-js/mermaid-cli": "11.16.0"';
 const expectedOverrides = [
   "mermaid: '11.16.1'",
   "'@mermaid-js/mermaid-zenuml': '0.2.2'",

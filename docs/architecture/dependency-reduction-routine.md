@@ -75,11 +75,38 @@ component against OSV.dev and writes `sbom/dependency-scan.{json,md}`.
   Dependabot/CodeQL dismiss-with-reason. Each entry needs a real `reason`; an
   `expires` date makes the finding **re-surface** after that date, forcing
   periodic re-review.
-- **Current state.** 1 finding: `js-yaml@3.14.2` (moderate DoS, CVE-2026-53550) —
-  accepted: it is a build-time transitive via `gray-matter` parsing our own
-  repo-controlled `.md` files (trusted input), and the fix is a breaking js-yaml
-  major `gray-matter` doesn't support (consistent with prior dismissal #74). The
-  ~30 security `overrides` in `pnpm-workspace.yaml` already floor the rest.
+- **Current state.** The accepted set lives in `sbom/vuln-baseline.json` (read it
+  rather than trusting a count here); it currently holds the two `image-size`
+  advisories, accepted as no-fix-available + not-reachable + build-time-only.
+  The security `overrides` in `pnpm-workspace.yaml` floor the rest.
+
+### The remediation ladder (when a floor won't work)
+
+The default fix for a transitive CVE is an override floor. Two cases break that,
+and both have cost a session before:
+
+1. **No patched version exists.** If the advisory's vulnerable range covers
+   *every published release* (Dependabot reports `first_patched_version: null`),
+   there is nothing to floor to. Climb the ladder instead: **floor → bump the
+   parent that pulls it → remove the parent → accept in `vuln-baseline.json`**.
+   Check whether a newer major of the *parent* dropped the dependency outright —
+   e.g. `extract-zip` (GHSA-jmr9-qjv8-65gv) has no fix and is unmaintained, but
+   `@puppeteer/browsers` 3.0.0 replaced it with `modern-tar`, so bumping
+   `puppeteer` to ^25 removed the vulnerable package from the tree entirely.
+   Only accept in the baseline once the ladder is genuinely exhausted.
+2. **The package is only an auto-installed peer.** pnpm `overrides` do **not**
+   govern auto-installed peer dependencies. Editing the override and regenerating
+   silently changes nothing (`regen-lockfile.mjs` reports the package unchanged).
+   Declare the package explicitly in the owning `package.json` so the floor binds
+   — which then also trips the New Dependency Gate (Axis 3), so vet and
+   acknowledge it in the same PR.
+
+**A closed alert does not stay fixed.** Advisories get revised: the patched range
+can move *after* a floor lands, and because the original alert is already closed
+no new one fires. `nanoid` GHSA-2v37-7h3g-55p8 was floored to 3.3.17, then
+re-scoped upstream to require 3.3.18 — the stale floor was caught by `pnpm
+scan:deps`, not by the Dependabot feed. Treat the OSV scan, not the alert list,
+as the authority on what is still vulnerable.
 
 ## Axis 3 — acquisition control (the New Dependency Gate)
 

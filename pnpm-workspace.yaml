@@ -85,6 +85,16 @@ overrides:
   '@floating-ui/react-dom': '2.1.8'
   '@floating-ui/react': '0.27.19'
   '@floating-ui/utils': '0.2.11'
+  # extract-zip <= 2.0.1: GHSA-jmr9-qjv8-65gv unvalidated symlink path traversal
+  # (Dependabot #153, high). extract-zip has NO patched release — 2.0.1 is the
+  # latest published version and the package is unmaintained (last publish
+  # 2023-03). The only remediation is to remove it from the tree: its sole
+  # parent is @puppeteer/browsers, which dropped extract-zip in 3.0.0 (it now
+  # unpacks via modern-tar). @puppeteer/browsers 3.x first ships in puppeteer
+  # 25.x, so floor puppeteer to ^25. Dev-only transitive of
+  # @mermaid-js/mermaid-cli (diagram rendering); the CLI's peer range widened to
+  # '^23 || ^24 || ^25' in 11.16.0, which this commit adopts in lockstep.
+  puppeteer: '^25'
   # js-yaml GHSA-5p4m-2wfm-xmqj (high): special-character handling flaw. Both
   # supported major lines resolve to a vulnerable transitive copy, so each is
   # floored to its patched release independently.
