@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { ingestWorkRoomChannelEvent, type RoomChannelIngressDb } from "./room-channel-ingress";
+import { ingestWorkroomChannelEvent, type RoomChannelIngressDb } from "./room-channel-ingress";
 
 function database(overrides: Partial<RoomChannelIngressDb> = {}): RoomChannelIngressDb {
   return {
@@ -29,7 +29,7 @@ function database(overrides: Partial<RoomChannelIngressDb> = {}): RoomChannelIng
 describe("Work Room channel ingress", () => {
   it("resolves identity and room context before writing one canonical activity", async () => {
     const upsert = vi.fn(async () => undefined);
-    const result = await ingestWorkRoomChannelEvent({
+    const result = await ingestWorkroomChannelEvent({
       db: database({
         workItemMessage: { findUnique: async () => null, upsert },
       }),
@@ -55,7 +55,7 @@ describe("Work Room channel ingress", () => {
         channel: "teams",
         structuredPayload: expect.objectContaining({
           externalEventId: "microsoft-graph:evt-1",
-          workRoom: expect.objectContaining({ caseId: "booking:BK-1" }),
+          workroom: expect.objectContaining({ caseId: "booking:BK-1" }),
         }),
       }),
     }));
@@ -63,7 +63,7 @@ describe("Work Room channel ingress", () => {
 
   it("quarantines an unresolved external identity without loading room content", async () => {
     const loadSession = vi.fn(async () => null);
-    const result = await ingestWorkRoomChannelEvent({
+    const result = await ingestWorkroomChannelEvent({
       db: database({
         communicationChannelBinding: { findFirst: async () => null },
         communicationChannelSession: { findFirst: loadSession },
@@ -86,7 +86,7 @@ describe("Work Room channel ingress", () => {
 
   it("does not write a duplicate provider event", async () => {
     const upsert = vi.fn(async () => undefined);
-    const result = await ingestWorkRoomChannelEvent({
+    const result = await ingestWorkroomChannelEvent({
       db: database({
         workItemMessage: {
           findUnique: async () => ({ messageId: "microsoft-graph:evt-1" }),

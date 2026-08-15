@@ -10,20 +10,20 @@ import {
   type WorkCaseReadModelEvidenceInput,
 } from "./case-read-model";
 import {
-  buildWorkRoomView,
-  type WorkRoomActivityInput,
+  buildWorkroomView,
+  type WorkroomActivityInput,
 } from "./room-read-model";
 import {
-  projectStoredWorkRoomOutcomePackets,
+  projectStoredWorkroomOutcomePackets,
   projectWorkItemCycleCarriers,
-  WORK_ROOM_OUTCOME_MESSAGE_TYPE,
+  WORKROOM_OUTCOME_MESSAGE_TYPE,
 } from "./room-cycle-adapter";
 import {
-  selectCompletedWorkRoomCycles,
-  selectCurrentWorkRoomCycle,
+  selectCompletedWorkroomCycles,
+  selectCurrentWorkroomCycle,
 } from "./room-cycle";
-import type { WorkRoomStructure } from "./room-structure";
-import type { WorkRoomParticipantView, WorkRoomView } from "./room-types";
+import type { WorkroomStructure } from "./room-structure";
+import type { WorkroomParticipantView, WorkroomView } from "./room-types";
 import { getWorkCaseSourceEntry } from "./source-registry";
 import { fromWorkItemMessage } from "./receipt-envelope";
 import {
@@ -119,12 +119,12 @@ export type WorkspaceRoomAuthContext = {
  * Resolves the value-stream + lifecycle STRUCTURE of the room's subject. Injected
  * (like `participantLoader`) so this loader keeps its narrow prisma client and stays
  * off the CRM models — the caller wires a full-prisma resolver
- * (`resolveWorkRoomStructureForCase`). Returns null for subjects with no binding.
+ * (`resolveWorkroomStructureForCase`). Returns null for subjects with no binding.
  */
-export type WorkRoomStructureLoader = (ref: {
+export type WorkroomStructureLoader = (ref: {
   sourceType: string;
   sourceId: string;
-}) => Promise<WorkRoomStructure | null>;
+}) => Promise<WorkroomStructure | null>;
 
 export type WorkspaceRoomParticipantLoader = (input: {
   workItemId: string;
@@ -135,7 +135,7 @@ export type WorkspaceRoomParticipantLoader = (input: {
   status: string;
   now: Date;
   policyParticipants: readonly WorkspaceRoomPolicyParticipant[];
-}) => Promise<WorkRoomParticipantView[]>;
+}) => Promise<WorkroomParticipantView[]>;
 
 export type WorkspaceWorkCaseListItem = {
   caseId: string;
@@ -181,7 +181,7 @@ export type WorkspaceWorkCaseDetailView = {
   // Transitional compatibility seam. The loader always returns the room
   // projection; the optional marker lets the existing detail component remain
   // unchanged until BI-32E26F62 replaces its composition on the same route.
-  room?: WorkRoomView;
+  room?: WorkroomView;
 };
 
 function iso(value: Date | string | null | undefined): string | null {
@@ -352,12 +352,12 @@ function evidenceFromMessages(messages: WorkspaceWorkItemMessageRecord[]): WorkC
 function roomActivitiesFromMessages(
   item: WorkspaceWorkItemRecord,
   messages: WorkspaceWorkItemMessageRecord[],
-): WorkRoomActivityInput[] {
+): WorkroomActivityInput[] {
   return messages.map((message) => ({
     sourceEventId: message.messageId,
     // Free text remains a message. Only the canonical structured lifecycle
     // journal can project a cycle boundary event.
-    kind: message.messageType === WORK_ROOM_OUTCOME_MESSAGE_TYPE
+    kind: message.messageType === WORKROOM_OUTCOME_MESSAGE_TYPE
       ? "cycle-closed"
       : message.messageType === "work-room-cycle-opened"
         ? "cycle-opened"
@@ -390,7 +390,7 @@ function roomReceiptsFromMessages(
 ) {
   return messages.flatMap((message) => {
     if (!message.id || !message.structuredPayload) return [];
-    if (!["work-room-cycle-opened", WORK_ROOM_OUTCOME_MESSAGE_TYPE].includes(message.messageType)) return [];
+    if (!["work-room-cycle-opened", WORKROOM_OUTCOME_MESSAGE_TYPE].includes(message.messageType)) return [];
     return [fromWorkItemMessage({
       id: message.id,
       messageId: message.messageId,
@@ -420,7 +420,7 @@ export async function loadWorkspaceWorkCaseDetail({
   userId: string;
   authContext?: WorkspaceRoomAuthContext;
   participantLoader?: WorkspaceRoomParticipantLoader;
-  structureLoader?: WorkRoomStructureLoader;
+  structureLoader?: WorkroomStructureLoader;
   now?: Date;
 }): Promise<WorkspaceWorkCaseDetailView | null> {
   const decoded = decodeWorkCaseKey(caseKey);
@@ -499,16 +499,16 @@ export async function loadWorkspaceWorkCaseDetail({
   });
   const sourceEntry = getWorkCaseSourceEntry(item.sourceType);
   const currentCycle = sourceEntry
-    ? selectCurrentWorkRoomCycle(item.sourceType, cycleCandidates)
+    ? selectCurrentWorkroomCycle(item.sourceType, cycleCandidates)
     : null;
   const completedCycles = sourceEntry
-    ? selectCompletedWorkRoomCycles(item.sourceType, cycleCandidates)
+    ? selectCompletedWorkroomCycles(item.sourceType, cycleCandidates)
     : [];
-  const storedPackets = projectStoredWorkRoomOutcomePackets(messages);
+  const storedPackets = projectStoredWorkroomOutcomePackets(messages);
   const structure = structureLoader
     ? await structureLoader({ sourceType: source.sourceType, sourceId: source.sourceId })
     : null;
-  const room = buildWorkRoomView({
+  const room = buildWorkroomView({
     caseKey,
     detail,
     structure,

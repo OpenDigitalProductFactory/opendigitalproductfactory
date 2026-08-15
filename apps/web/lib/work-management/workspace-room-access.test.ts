@@ -10,7 +10,7 @@ describe("Workspace Work Room access", () => {
     const item = {
       assignedToUserId: "user-2",
       evidence: [{
-        workRoomPolicy: {
+        workroomPolicy: {
           admittedPrincipalRefs: ["PRN-1"],
           actionPrincipalRefs: [],
           sensitivityCeiling: "internal",
@@ -56,8 +56,8 @@ describe("Workspace Work Room access", () => {
       item: {
         assignedToUserId: "user-2",
         evidence: [
-          { workRoomPolicy: { admittedPrincipalRefs: ["PRN-1"], sensitivityCeiling: "internal" } },
-          { workRoomPolicy: { admittedPrincipalRefs: [], sensitivityCeiling: "confidential" } },
+          { workroomPolicy: { admittedPrincipalRefs: ["PRN-1"], sensitivityCeiling: "internal" } },
+          { workroomPolicy: { admittedPrincipalRefs: [], sensitivityCeiling: "confidential" } },
         ],
       },
       userId: "user-1",
@@ -70,7 +70,7 @@ describe("Workspace Work Room access", () => {
   });
 
   it("parses explicitly named participants separately from access admission", () => {
-    expect(readWorkspaceRoomPolicy([{ workRoomPolicy: {
+    expect(readWorkspaceRoomPolicy([{ workroomPolicy: {
       admittedPrincipalRefs: ["PRN-REVIEWER"],
       participants: [{
         principalRef: "PRN-REVIEWER",

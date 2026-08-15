@@ -464,10 +464,10 @@
     "apps/web/components/workspace/WorkCaseDetailView.tsx": [
       "docs/user-guide/workspace/work-rooms.md"
     ],
-    "apps/web/components/workspace/work-room/WorkRoomCycles.tsx": [
+    "apps/web/components/workspace/workroom/WorkroomCycles.tsx": [
       "docs/user-guide/workspace/work-rooms.md"
     ],
-    "apps/web/components/workspace/work-room/WorkRoomParticipants.tsx": [
+    "apps/web/components/workspace/workroom/WorkroomParticipants.tsx": [
       "docs/user-guide/workspace/work-rooms.md"
     ],
     "apps/web/design/tokens-utilities.test.ts": [
@@ -2777,8 +2777,8 @@
       "apps/web/app/(shell)/workspace/my-queue/page.tsx",
       "apps/web/components/workspace/WorkCaseAttentionLens.tsx",
       "apps/web/components/workspace/WorkCaseDetailView.tsx",
-      "apps/web/components/workspace/work-room/WorkRoomCycles.tsx",
-      "apps/web/components/workspace/work-room/WorkRoomParticipants.tsx",
+      "apps/web/components/workspace/workroom/WorkroomCycles.tsx",
+      "apps/web/components/workspace/workroom/WorkroomParticipants.tsx",
       "apps/web/lib/work-management/room-channel-continuity.ts",
       "apps/web/lib/work-management/room-channel-ingress.ts",
       "apps/web/lib/work-management/room-participation.ts",

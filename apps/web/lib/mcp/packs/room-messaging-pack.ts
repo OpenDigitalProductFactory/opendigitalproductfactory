@@ -21,7 +21,7 @@ import { getCoworkerRoomEngagement } from "@/lib/work-management/coworker-room-e
 import { heartbeatAgentWorkItemPresence } from "@/lib/work-management/room-agent-presence.server";
 import { postWorkItemComment, type PostCommentDb } from "@/lib/work-management/post-work-item-comment";
 import { appendRoomPolicyParticipant } from "@/lib/work-management/room-policy";
-import type { WorkRoomParticipantRole } from "@/lib/work-management/room-types";
+import type { WorkroomParticipantRole } from "@/lib/work-management/room-types";
 import { resolveAgentRoomAccess } from "@/lib/work-management/room-agent-access.server";
 import { decodeWorkCaseKey } from "@/lib/work-management/workspace-case-loader";
 
@@ -237,7 +237,7 @@ async function inviteRoomParticipantHandler(
   }
 
   const canAct = params["canAct"] !== false; // default: invited to participate (post), not merely observe
-  const roles: WorkRoomParticipantRole[] = ["contributor"];
+  const roles: WorkroomParticipantRole[] = ["contributor"];
   const newEvidence = appendRoomPolicyParticipant(item.evidence, {
     principalRef: inviteePrincipalId,
     roles,

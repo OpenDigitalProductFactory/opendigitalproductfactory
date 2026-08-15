@@ -3,9 +3,9 @@ import {
   type WorkCaseActionVerb,
 } from "./case-types";
 import type {
-  WorkRoomCycleView,
-  WorkRoomMode,
-  WorkRoomOutcomePacketCategory,
+  WorkroomCycleView,
+  WorkroomMode,
+  WorkroomOutcomePacketCategory,
 } from "./room-types";
 
 export const WORK_CASE_WORK_ITEM_SOURCE_TYPES = [
@@ -43,10 +43,10 @@ export interface WorkCaseReceiptPolicy {
 }
 
 export interface WorkCaseRoomProjectionPolicy {
-  mode: WorkRoomMode;
-  cycleCarrierPrecedence: readonly WorkRoomCycleView["carrierKind"][];
+  mode: WorkroomMode;
+  cycleCarrierPrecedence: readonly WorkroomCycleView["carrierKind"][];
   outcomePacket: {
-    requiredCategories: readonly WorkRoomOutcomePacketCategory[];
+    requiredCategories: readonly WorkroomOutcomePacketCategory[];
   };
 }
 

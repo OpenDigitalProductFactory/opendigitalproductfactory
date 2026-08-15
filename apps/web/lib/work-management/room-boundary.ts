@@ -5,13 +5,13 @@ import {
   roomText,
 } from "./room-projection-utils";
 import type {
-  WorkRoomBoundaryGap,
-  WorkRoomBoundaryView,
-  WorkRoomContextView,
-  WorkRoomParticipantView,
+  WorkroomBoundaryGap,
+  WorkroomBoundaryView,
+  WorkroomContextView,
+  WorkroomParticipantView,
 } from "./room-types";
 
-export type WorkRoomBoundaryInput = Omit<WorkRoomBoundaryView, "gaps">;
+export type WorkroomBoundaryInput = Omit<WorkroomBoundaryView, "gaps">;
 
 const BOUNDARY_GAP_ORDER = [
   "purpose",
@@ -25,12 +25,12 @@ const BOUNDARY_GAP_ORDER = [
   "measures",
   "time-boundary",
   "closure-rule",
-] as const satisfies readonly WorkRoomBoundaryGap[];
+] as const satisfies readonly WorkroomBoundaryGap[];
 
 function timeBoundary(input: {
   detail: WorkCaseDetail;
-  boundary?: Partial<WorkRoomBoundaryInput>;
-}): WorkRoomBoundaryView["timeBoundary"] {
+  boundary?: Partial<WorkroomBoundaryInput>;
+}): WorkroomBoundaryView["timeBoundary"] {
   return {
     dueAt: roomText(
       input.boundary?.timeBoundary?.dueAt ?? input.detail.summary.dueAt,
@@ -42,14 +42,14 @@ function timeBoundary(input: {
   };
 }
 
-export function buildWorkRoomBoundary(input: {
+export function buildWorkroomBoundary(input: {
   detail: WorkCaseDetail;
-  boundary?: Partial<WorkRoomBoundaryInput>;
-  participants: readonly WorkRoomParticipantView[];
-  context: WorkRoomContextView;
+  boundary?: Partial<WorkroomBoundaryInput>;
+  participants: readonly WorkroomParticipantView[];
+  context: WorkroomContextView;
   contextProvided: boolean;
-}): WorkRoomBoundaryView {
-  const boundary: Omit<WorkRoomBoundaryView, "gaps"> = {
+}): WorkroomBoundaryView {
+  const boundary: Omit<WorkroomBoundaryView, "gaps"> = {
     purpose: roomText(input.boundary?.purpose),
     outcome: roomText(input.boundary?.outcome),
     scopeIncluded: roomStrings(input.boundary?.scopeIncluded),
@@ -67,7 +67,7 @@ export function buildWorkRoomBoundary(input: {
       input.boundary?.sourceRefs ?? input.detail.summary.sourceRefs,
     ),
   };
-  const missing = new Set<WorkRoomBoundaryGap>();
+  const missing = new Set<WorkroomBoundaryGap>();
   if (!boundary.purpose) missing.add("purpose");
   if (!boundary.outcome) missing.add("outcome");
   if (

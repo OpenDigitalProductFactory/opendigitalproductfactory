@@ -1,10 +1,10 @@
 import { GitBranch, Lock, Milestone, Unlock } from "lucide-react";
 
 import { StatusBadge } from "@/components/ui/report-kit";
-import type { WorkRoomStructure } from "@/lib/work-management/room-structure";
+import type { WorkroomStructure } from "@/lib/work-management/room-structure";
 
 type Props = {
-  structure: WorkRoomStructure | null;
+  structure: WorkroomStructure | null;
 };
 
 const BAND_INTENT: Record<string, "neutral" | "success" | "warning"> = {
@@ -18,7 +18,7 @@ const BAND_INTENT: Record<string, "neutral" | "success" | "warning"> = {
  * collaboration happens within (EP-WORKROOM-COMMS / EP-VSL-SURFACE fold). Renders
  * nothing when the subject has no value-stream/lifecycle binding.
  */
-export function WorkRoomStructurePanel({ structure }: Props) {
+export function WorkroomStructurePanel({ structure }: Props) {
   if (!structure || (!structure.valueStream && !structure.lifecycle)) return null;
   const { valueStream, lifecycle } = structure;
 

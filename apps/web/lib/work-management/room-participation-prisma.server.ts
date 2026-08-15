@@ -4,9 +4,9 @@ import { projectParticipants } from "@/lib/tak/conversation-participants";
 
 import { filterActivePresence, type PresenceRow } from "./work-item-presence";
 import {
-  projectWorkRoomParticipants,
-  type WorkRoomConversationParticipant,
-  type WorkRoomParticipantAssignment,
+  projectWorkroomParticipants,
+  type WorkroomConversationParticipant,
+  type WorkroomParticipantAssignment,
 } from "./room-participation";
 import type { WorkspaceRoomParticipantLoader } from "./workspace-case-loader";
 
@@ -35,7 +35,7 @@ function toWorkState(state: string): "working" | "waiting" | "idle" | "unknown" 
   return "unknown";
 }
 
-export const loadPrismaWorkRoomParticipants: WorkspaceRoomParticipantLoader = async (input) => {
+export const loadPrismaWorkroomParticipants: WorkspaceRoomParticipantLoader = async (input) => {
   const lineage = input.assignedThreadId
     ? await projectParticipants(input.assignedThreadId, { ownerAgentId: input.assignedToAgentId })
     : [];
@@ -107,7 +107,7 @@ export const loadPrismaWorkRoomParticipants: WorkspaceRoomParticipantLoader = as
     })),
     input.now.getTime(),
   );
-  const assignments: WorkRoomParticipantAssignment[] = [];
+  const assignments: WorkroomParticipantAssignment[] = [];
 
   const policyPrincipalByRef = new Map(
     policyPrincipals.map((principal) => [principal.principalId, principal]),
@@ -166,7 +166,7 @@ export const loadPrismaWorkRoomParticipants: WorkspaceRoomParticipantLoader = as
     });
   }
 
-  const conversationParticipants: WorkRoomConversationParticipant[] = lineage.flatMap((participant) => {
+  const conversationParticipants: WorkroomConversationParticipant[] = lineage.flatMap((participant) => {
     if (!participant.principalResolved) return [];
     const principal = principalByAlias.get(`agent:${participant.agentId}`);
     if (!principal) return [];
@@ -190,5 +190,5 @@ export const loadPrismaWorkRoomParticipants: WorkspaceRoomParticipantLoader = as
     }];
   });
 
-  return projectWorkRoomParticipants({ assignments, conversationParticipants, presence });
+  return projectWorkroomParticipants({ assignments, conversationParticipants, presence });
 };

@@ -1,17 +1,17 @@
 import { describe, expect, it } from "vitest";
 
-import { buildWorkRoomOutcomePacket } from "./outcome-packet";
+import { buildWorkroomOutcomePacket } from "./outcome-packet";
 import {
-  completeWorkRoomCycle,
-  applyWorkRoomCarryOver,
-  openWorkRoomCycle,
-  type WorkRoomCycleParentRecord,
-  type WorkRoomCycleStoreDb,
-  type WorkRoomCycleStoreMessage,
+  completeWorkroomCycle,
+  applyWorkroomCarryOver,
+  openWorkroomCycle,
+  type WorkroomCycleParentRecord,
+  type WorkroomCycleStoreDb,
+  type WorkroomCycleStoreMessage,
 } from "./room-cycle-store";
-import type { WorkRoomCycleWorkItemRecord } from "./room-cycle-adapter";
+import type { WorkroomCycleWorkItemRecord } from "./room-cycle-adapter";
 
-const room: WorkRoomCycleParentRecord = {
+const room: WorkroomCycleParentRecord = {
   id: "room-row",
   itemId: "ROOM-WEEKLY-CASH",
   sourceType: "scheduled",
@@ -28,10 +28,10 @@ const room: WorkRoomCycleParentRecord = {
 };
 
 function harness() {
-  const cycles: WorkRoomCycleWorkItemRecord[] = [];
-  const messages: WorkRoomCycleStoreMessage[] = [];
+  const cycles: WorkroomCycleWorkItemRecord[] = [];
+  const messages: WorkroomCycleStoreMessage[] = [];
   let next = 1;
-  const db: WorkRoomCycleStoreDb = {
+  const db: WorkroomCycleStoreDb = {
     withinRoomLock: async (_roomWorkItemId, callback) => callback({
       getRoom: async () => room,
       listCycles: async () => cycles,
@@ -88,7 +88,7 @@ function policy() {
   };
 }
 
-function openInput(db: WorkRoomCycleStoreDb, cycleKey = "2026-W31") {
+function openInput(db: WorkroomCycleStoreDb, cycleKey = "2026-W31") {
   return {
     db,
     roomWorkItemId: room.id,
@@ -110,7 +110,7 @@ function openInput(db: WorkRoomCycleStoreDb, cycleKey = "2026-W31") {
 describe("Work Room cycle store", () => {
   it("opens one bounded child WorkItem and emits a governed lifecycle receipt", async () => {
     const state = harness();
-    const result = await openWorkRoomCycle(openInput(state.db));
+    const result = await openWorkroomCycle(openInput(state.db));
 
     expect(result.idempotent).toBe(false);
     expect(state.cycles).toHaveLength(1);
@@ -127,17 +127,17 @@ describe("Work Room cycle store", () => {
 
   it("makes retries idempotent and rejects a second active logical cycle", async () => {
     const state = harness();
-    await openWorkRoomCycle(openInput(state.db));
-    expect((await openWorkRoomCycle(openInput(state.db))).idempotent).toBe(true);
-    await expect(openWorkRoomCycle(openInput(state.db, "2026-W32")))
+    await openWorkroomCycle(openInput(state.db));
+    expect((await openWorkroomCycle(openInput(state.db))).idempotent).toBe(true);
+    await expect(openWorkroomCycle(openInput(state.db, "2026-W32")))
       .rejects.toMatchObject({ reason: "active_cycle_exists" });
     expect(state.cycles).toHaveLength(1);
   });
 
   it("seals completion in an append-only Outcome Packet and reuses it on retry", async () => {
     const state = harness();
-    const opened = await openWorkRoomCycle(openInput(state.db));
-    const packet = buildWorkRoomOutcomePacket({
+    const opened = await openWorkroomCycle(openInput(state.db));
+    const packet = buildWorkroomOutcomePacket({
       sourceKey: "scheduled",
       outcomeState: "achieved",
       summary: "Weekly cash review completed.",
@@ -159,19 +159,19 @@ describe("Work Room cycle store", () => {
       now: new Date("2026-08-01T16:00:00.000Z"),
     };
 
-    expect((await completeWorkRoomCycle(input)).idempotent).toBe(false);
+    expect((await completeWorkroomCycle(input)).idempotent).toBe(false);
     expect(state.cycles[0]?.status).toBe("completed");
     expect(state.messages.at(-1)).toMatchObject({
       messageType: "work-room-outcome-packet",
       structuredPayload: { packet },
     });
-    expect((await completeWorkRoomCycle(input)).idempotent).toBe(true);
+    expect((await completeWorkroomCycle(input)).idempotent).toBe(true);
     expect(state.messages).toHaveLength(2);
   });
 
   it("creates carry-over work once and attaches it to the target cycle", async () => {
     const state = harness();
-    await openWorkRoomCycle(openInput(state.db, "2026-W32"));
+    await openWorkroomCycle(openInput(state.db, "2026-W32"));
     const commands = [{
       kind: "attach-to-cycle" as const,
       summary: "Recheck late payment",
@@ -180,13 +180,13 @@ describe("Work Room cycle store", () => {
       idempotencyKey: "carry:late-payment",
     }];
 
-    const first = await applyWorkRoomCarryOver({
+    const first = await applyWorkroomCarryOver({
       db: state.db,
       roomWorkItemId: room.id,
       commands,
       actor: { type: "user", id: "user-finance" },
     });
-    const second = await applyWorkRoomCarryOver({
+    const second = await applyWorkroomCarryOver({
       db: state.db,
       roomWorkItemId: room.id,
       commands,

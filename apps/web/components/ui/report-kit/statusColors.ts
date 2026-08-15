@@ -440,14 +440,14 @@ export const STATUS_INTENT: Record<string, Record<string, Intent>> = {
     closed: "neutral",
     cancelled: "neutral",
   },
-  workRoomOutcomeHealth: {
+  workroomOutcomeHealth: {
     "on-track": "success",
     "at-risk": "warning",
     blocked: "danger",
     idle: "neutral",
     unknown: "neutral",
   },
-  workRoomActivity: {
+  workroomActivity: {
     message: "neutral",
     ask: "warning",
     "coworker-joined": "accent",

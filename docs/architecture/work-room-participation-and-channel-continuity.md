@@ -1,6 +1,6 @@
-# Work Room Participation and Channel Continuity
+# Workroom Participation and Channel Continuity
 
-Work Room is an application projection over the canonical Work Case and its existing source records. This slice adds no identity, room, membership, or channel table.
+Workroom is an application projection over the canonical Work Case and its existing source records. This slice adds no identity, room, membership, or channel table.
 
 ## Design grounding
 
@@ -8,7 +8,7 @@ Work Room is an application projection over the canonical Work Case and its exis
   - `docs/superpowers/plans/2026-07-26-work-rooms-collaboration.md`
   - `docs/superpowers/specs/2026-04-22-enterprise-auth-directory-federation-design.md`
 - Current code substrate reviewed:
-  - Work Case and Work Room projection, Workspace case loader, Work Item presence, conversation-participant lineage, effective authorization context, Principal aliases, and communication bindings/sessions.
+  - Work Case and Workroom projection, Workspace case loader, Work Item presence, conversation-participant lineage, effective authorization context, Principal aliases, and communication bindings/sessions.
 - Source of truth:
   - Work Case and its source records own work state; `Principal`/`PrincipalAlias` own identity and authority; `CommunicationChannelBinding` and `CommunicationChannelSession` own external identity and room attachment.
 - Decision:
@@ -44,4 +44,4 @@ External providers remain adapters to DPF, not alternate room authorities. The g
 
 Unresolved identity or room context is quarantined before activity persistence. Capability flags produce an explicit degraded result. Confidential or higher consequential requests require step-up authentication. Delivery acknowledgement and action completion remain separate facts; this ingress records external activity and never marks a governed action complete.
 
-Teams, Slack, and other providers consume this shared contract. Provider-specific feature work does not belong in the Work Room projection.
+Teams, Slack, and other providers consume this shared contract. Provider-specific feature work does not belong in the Workroom projection.

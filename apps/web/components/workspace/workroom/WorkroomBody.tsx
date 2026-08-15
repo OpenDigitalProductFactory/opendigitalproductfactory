@@ -10,24 +10,24 @@ import { EmptyState, Notice, StatusBadge } from "@/components/ui/report-kit";
 import { WorkItemCommentBox } from "@/components/workspace/WorkItemCommentBox";
 import type { WorkspaceWorkCaseDetailView } from "@/lib/work-management/workspace-case-loader";
 import type {
-  WorkRoomActivityView,
-  WorkRoomBoundaryGap,
-  WorkRoomView,
+  WorkroomActivityView,
+  WorkroomBoundaryGap,
+  WorkroomView,
 } from "@/lib/work-management/room-types";
 
 import {
   ACTIVITY_KIND_LABEL,
   roomLabel,
 } from "./presentation";
-import { WorkRoomCycles } from "./WorkRoomCycles";
-import { WorkRoomParticipants } from "./WorkRoomParticipants";
+import { WorkroomCycles } from "./WorkroomCycles";
+import { WorkroomParticipants } from "./WorkroomParticipants";
 
 type Props = {
   detail: WorkspaceWorkCaseDetailView;
-  room: WorkRoomView;
+  room: WorkroomView;
 };
 
-const BOUNDARY_GAP_LABEL: Record<WorkRoomBoundaryGap, string> = {
+const BOUNDARY_GAP_LABEL: Record<WorkroomBoundaryGap, string> = {
   purpose: "Purpose not defined",
   outcome: "Outcome not defined",
   scope: "Scope not defined",
@@ -41,7 +41,7 @@ const BOUNDARY_GAP_LABEL: Record<WorkRoomBoundaryGap, string> = {
   "closure-rule": "Closure rule not defined",
 };
 
-function ActivityEvent({ event }: { event: WorkRoomActivityView }) {
+function ActivityEvent({ event }: { event: WorkroomActivityView }) {
   const label = ACTIVITY_KIND_LABEL[event.kind];
 
   return (
@@ -54,7 +54,7 @@ function ActivityEvent({ event }: { event: WorkRoomActivityView }) {
       </span>
       <div className="min-w-0">
         <div className="flex flex-wrap items-center gap-2">
-          <StatusBadge domain="workRoomActivity" status={event.kind} label={label} variant="soft" />
+          <StatusBadge domain="workroomActivity" status={event.kind} label={label} variant="soft" />
           {event.occurredAt ? (
             <LocalTime value={event.occurredAt} mode="datetime" className="text-xs text-[var(--dpf-muted)]" />
           ) : null}
@@ -67,7 +67,7 @@ function ActivityEvent({ event }: { event: WorkRoomActivityView }) {
   );
 }
 
-function BoundaryNotice({ room }: { room: WorkRoomView }) {
+function BoundaryNotice({ room }: { room: WorkroomView }) {
   if (!room.projection.incompleteBoundary) return null;
 
   const gaps = room.boundary.gaps.map((gap) => BOUNDARY_GAP_LABEL[gap]);
@@ -85,14 +85,14 @@ function BoundaryNotice({ room }: { room: WorkRoomView }) {
   );
 }
 
-function ContextPanels({ room }: { room: WorkRoomView }) {
+function ContextPanels({ room }: { room: WorkroomView }) {
   const decisions = room.activity.filter((event) =>
     event.kind === "decision-proposed" || event.kind === "decision-resolved",
   );
 
   return (
     <div className="space-y-3">
-      <WorkRoomParticipants room={room} />
+      <WorkroomParticipants room={room} />
 
       <section aria-label="Work" className="rounded-xl border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)]">
         <details>
@@ -191,12 +191,12 @@ function RoomDetails({ detail, room }: Props) {
   );
 }
 
-export function WorkRoomBody({ detail, room }: Props) {
+export function WorkroomBody({ detail, room }: Props) {
   return (
     <>
       <BoundaryNotice room={room} />
 
-      <WorkRoomCycles room={room} />
+      <WorkroomCycles room={room} />
 
       <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1.65fr)_minmax(18rem,0.75fr)]">
         <section

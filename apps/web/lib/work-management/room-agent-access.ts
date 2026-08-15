@@ -3,7 +3,7 @@
  *
  * EP-WORKROOM-COMMS (BI-AD057F18). A room's membership may be all-people,
  * all-agent, or mixed; an agent joins/posts/reads only for THAT room's outcome,
- * scoped by exposure + rights. This reuses the human `authorizeWorkRoomAccess`
+ * scoped by exposure + rights. This reuses the human `authorizeWorkroomAccess`
  * decision (none < discover < content < action) — the ref space is the canonical
  * `Principal.principalId`, and presence never grants authority.
  *
@@ -13,13 +13,13 @@
  * Design of record: docs/superpowers/specs/2026-08-12-work-room-multi-agent-communication-substrate-design.md §1
  */
 import {
-  authorizeWorkRoomAccess,
-  type WorkRoomAccessDecision,
-  type WorkRoomAccessLevel,
+  authorizeWorkroomAccess,
+  type WorkroomAccessDecision,
+  type WorkroomAccessLevel,
 } from "./room-participation";
 
 export interface AuthorizeAgentRoomAccessInput {
-  requested: Exclude<WorkRoomAccessLevel, "none">;
+  requested: Exclude<WorkroomAccessLevel, "none">;
   agentPrincipalRef: string | null;
   agentSensitivityClearance: readonly string[];
   /** Principals allowed to READ the room (content): policy-admitted + everyone who can act. */
@@ -37,10 +37,10 @@ export interface AuthorizeAgentRoomAccessInput {
  */
 export function authorizeAgentRoomAccess(
   input: AuthorizeAgentRoomAccessInput,
-): WorkRoomAccessDecision {
+): WorkroomAccessDecision {
   const assignedPrincipalRefs =
     input.requested === "action" ? input.actionPrincipalRefs : input.admittedPrincipalRefs;
-  return authorizeWorkRoomAccess({
+  return authorizeWorkroomAccess({
     requested: input.requested,
     principalRef: input.agentPrincipalRef,
     assignedPrincipalRefs,
@@ -53,8 +53,8 @@ export function authorizeAgentRoomAccess(
 
 /** True when the decision grants at least the requested level (not degraded to discover/none). */
 export function grantsRequested(
-  decision: WorkRoomAccessDecision,
-  requested: Exclude<WorkRoomAccessLevel, "none">,
+  decision: WorkroomAccessDecision,
+  requested: Exclude<WorkroomAccessLevel, "none">,
 ): boolean {
   return decision.level === requested;
 }

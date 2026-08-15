@@ -32,11 +32,11 @@ describe("appendRoomPolicyParticipant", () => {
   });
 
   it("appends (latest-wins) without clobbering prior evidence", () => {
-    const prior = [{ workRoomCycle: { boundary: 1 } }, { workRoomPolicy: { admittedPrincipalRefs: ["PRN-a"], actionPrincipalRefs: ["PRN-a"], discoverablePrincipalRefs: [], sensitivityCeiling: "internal", participants: [] } }];
+    const prior = [{ workroomCycle: { boundary: 1 } }, { workroomPolicy: { admittedPrincipalRefs: ["PRN-a"], actionPrincipalRefs: ["PRN-a"], discoverablePrincipalRefs: [], sensitivityCeiling: "internal", participants: [] } }];
     const out = appendRoomPolicyParticipant(prior, { principalRef: "PRN-b", roles: ["contributor"], canAct: true });
     // prior entries preserved
     expect(out.length).toBe(prior.length + 1);
-    expect(out[0]).toEqual({ workRoomCycle: { boundary: 1 } });
+    expect(out[0]).toEqual({ workroomCycle: { boundary: 1 } });
     // latest policy now admits both a (carried) and b (new)
     const policy = latestPolicy(out);
     expect(policy.admittedPrincipalRefs).toEqual(expect.arrayContaining(["PRN-a", "PRN-b"]));
