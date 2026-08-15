@@ -13,8 +13,8 @@ importers:
   .:
     dependencies:
       '@puppeteer/browsers':
-        specifier: 3.0.6
-        version: 3.0.6
+        specifier: 3.1.0
+        version: 3.1.0
       ffmpeg-static:
         specifier: 5.3.0
         version: 5.3.0
@@ -25,8 +25,8 @@ importers:
         specifier: 3.15.0
         version: 3.15.0
       hyperframes:
-        specifier: 0.7.96
-        version: 0.7.96
+        specifier: 0.7.107
+        version: 0.7.107
 
 packages:
 
@@ -202,8 +202,8 @@ packages:
       '@modelcontextprotocol/sdk':
         optional: true
 
-  '@hono/node-server@2.1.0':
-    resolution: {integrity: sha512-XovyyCCnBzW+zKu+z/zq8hwNs4KOR5rEMAOxo2f40Q5xoOI37IMm6MIg2COOUtUApo0i6850MTBKH2u4QLGIqg==}
+  '@hono/node-server@2.1.1':
+    resolution: {integrity: sha512-ELuehkj5VCBdgEw9zs+ivkKwyzzUCSQuE96YmiPvn1ECBoZCczbFXJLeEGMTYjphP6gydh4pHMqEYPVMYUVgQg==}
     engines: {node: '>=20'}
     peerDependencies:
       hono: ^4.12.34
@@ -401,8 +401,8 @@ packages:
   '@protobufjs/utf8@1.1.2':
     resolution: {integrity: sha512-b1UQwcEZ4yCnMCD8DAL1VlbvBJE9/IX4FTIp7BG1xYpf29SLazLSrqUkj4w7Y5y7cCVP6E5tcqqcI0xemPkHug==}
 
-  '@puppeteer/browsers@3.0.6':
-    resolution: {integrity: sha512-B/gKoqlFkzhvzsI6jo9K1cZz9o5ypviVv/xu8CwA4grZzyVwN+XfkT+tu8T1zrauuEXv6VhS2oGX+6NL95WcKA==}
+  '@puppeteer/browsers@3.1.0':
+    resolution: {integrity: sha512-RDLpio3fH/qrj5k4DVY6eyiN8tCS0Zovd/6jW//n605oeqkWcUjn+3k+9ZtZBnbwMpsu0F7xDIiKXvVmG5c5Bw==}
     engines: {node: '>=22.12.0'}
     hasBin: true
     peerDependencies:
@@ -414,8 +414,8 @@ packages:
       yauzl:
         optional: true
 
-  '@puppeteer/browsers@3.1.0':
-    resolution: {integrity: sha512-RDLpio3fH/qrj5k4DVY6eyiN8tCS0Zovd/6jW//n605oeqkWcUjn+3k+9ZtZBnbwMpsu0F7xDIiKXvVmG5c5Bw==}
+  '@puppeteer/browsers@3.2.0':
+    resolution: {integrity: sha512-LlBrE8oqGfU7b1Nk2d5Q1SbuPhZxTj0cJEMDPEws28OjNMELlflekmPPuf4FnK03x0ZRjKaYwJElUcKK4kyqJA==}
     engines: {node: '>=22.12.0'}
     hasBin: true
     peerDependencies:
@@ -451,8 +451,8 @@ packages:
     resolution: {integrity: sha512-MnA+YT8fwfJPgBx3m60MNqakm30XOkyIoH1y6huTQvC0PwZG7ki8NacLBcrPbNoo8vEZy7Jpuk7+jMO+CUovTQ==}
     engines: {node: '>= 14'}
 
-  ansi-regex@6.2.2:
-    resolution: {integrity: sha512-Bq3SmSpyFHaWjPk8If9yc6svM8c56dB5BAtW4Qbw5jHTwwXXcTLoRMkpDJp6VL0XzlWaCHTXrkFURMYmD0sLqg==}
+  ansi-regex@6.3.0:
+    resolution: {integrity: sha512-WpDfL7NO6j7tH88IDBNVdUJxDh9nmCteAVW9dsep846XdwF4naCBK+/tGLX3KJgcpgMRXCFlTM2hKGoK9FsdrQ==}
     engines: {node: '>=12'}
 
   ansi-styles@6.2.3:
@@ -553,8 +553,8 @@ packages:
   detect-node@2.1.0:
     resolution: {integrity: sha512-T0NIuQpnTvFDATNuHN5roPwSBG83rFsuO+MXXH9/3N1eFbn4wcPjttvjMLEPWJ0RGUYgQE7cGgS3tNxbqCGM7g==}
 
-  devtools-protocol@0.0.1653615:
-    resolution: {integrity: sha512-pGVkY3T/qXxAp2nFPodwYqOevk6ncNMSmvL8QfRCx5ZWGd6Vor7AFNmyaA8Zs6uJyP1QAfjuLandCgvSix1BNA==}
+  devtools-protocol@0.0.1666840:
+    resolution: {integrity: sha512-gCcO42XCHKEs7Ag0S7aGYsnJ7hlgrO3qderYqeiY0Eqk+0GFfuvT13IA0hHreJTa2KCdDVyGMeOhdMNmrrTjVg==}
 
   dfa@1.2.0:
     resolution: {integrity: sha512-ED3jP8saaweFTjeGX8HQPjeC1YYyZs98jGNZx6IiBvxW7JG5v492kamAQB3m2wop07CvU/RQmzcKr6bgcC5D/Q==}
@@ -617,8 +617,8 @@ packages:
     resolution: {integrity: sha512-buewHzMvYL29jdeQTVILecSaZKnt/RJWjoZCF5OW60Z67/GmSLBkOFM7qh1PI3zFNtJbaZL5eQu1vLfazOwj4g==}
     engines: {node: '>=12.20.0'}
 
-  gaxios@7.3.0:
-    resolution: {integrity: sha512-RB5vLV+vvQeoFPCX4QMK6/hjVkbIamPp1QSUD0CiZcnj12qbpiL+pLbYtgD+oZkWl0tl9z+o2Utp+MpM3QRhBA==}
+  gaxios@7.3.1:
+    resolution: {integrity: sha512-kB3rzJV7d9juLZh8/56QTXCwQfxyhdOMdyYk1HdQKFtF8TJTDTZQJtixWIwXdE9Jji91mC41DUNpjleo4L4eAQ==}
     engines: {node: '>=18'}
 
   gcp-metadata@8.1.2:
@@ -663,8 +663,8 @@ packages:
   has-property-descriptors@1.0.2:
     resolution: {integrity: sha512-55JNKuIW+vq4Ke1BjOTjM2YctQIvCT7GFzHwmfZPGo5wnrgkid0YQtnAleFSqumZm4az3n2BS+erby5ipJdgrg==}
 
-  hono@4.13.1:
-    resolution: {integrity: sha512-kdJoFVv2xmayw6cY09H7AbMJMt8Jn5jdlEdXsP7AGBdF2DIptVlKlOLKXP41yPip4/a3yQPv9gVcJYI8YY04dw==}
+  hono@4.13.2:
+    resolution: {integrity: sha512-JydRilDRkYBQMt9qR9U92mXxmbGqsqSn/IKOrh4e7/gEbn+0zSr8igTu0obwJoNGN4sez28DIql7FBHWydoJpA==}
     engines: {node: '>=16.9.0'}
 
   http-response-object@3.0.2:
@@ -678,8 +678,8 @@ packages:
     resolution: {integrity: sha512-vK9P5/iUfdl95AI+JVyUuIcVtd4ofvtrOr3HNtM2yxC9bnMbEdp3x01OhQNnjb8IJYi38VlTE3mBXwcfvywuSw==}
     engines: {node: '>= 14'}
 
-  hyperframes@0.7.96:
-    resolution: {integrity: sha512-HneEJQSgpRl/90PuAx49rJPZ1waCN9fJN6h4/MFNZZwDiuctMgkmAbkQ8jKreaR5LIv7hFUKoHqG3JJd1nq5SQ==}
+  hyperframes@0.7.107:
+    resolution: {integrity: sha512-n42AOFT4j/DLhmg4pNODJ7Xw43/FHeSjtAPcN/Zz0pOzlj+ZKUf7eJAasluX3zCy46TJORJygSvu6XNh+2d7Zg==}
     engines: {node: '>=22'}
     hasBin: true
 
@@ -736,6 +736,10 @@ packages:
 
   modern-tar@0.7.7:
     resolution: {integrity: sha512-t9VmxaqrmANnEOBhpSDI6HD192Ge48k8vmWqQQL7hSFEqHEYwZbbsu49+aKLWZeRvFs3j1pMhXOqqF4kPlvjkQ==}
+    engines: {node: '>=18.0.0'}
+
+  modern-tar@0.8.4:
+    resolution: {integrity: sha512-gN54ddmyzEg10orwZ2u4OOv+bjpMWdIl5jIkodK97bMq8QBSL5c0D7YX0lT1Ooz+99S7+PvFbnxzdjgHo1r41g==}
     engines: {node: '>=18.0.0'}
 
   ms@2.1.3:
@@ -800,8 +804,8 @@ packages:
     resolution: {integrity: sha512-/FPD0nUc9jH6rfFjji9IBqOz4pcSE3CsT1m7Ep6Mdb0LxSUMj8hgl6GomOvZzpNpAqqGaXA0P3VSrZLFzIhQrw==}
     engines: {node: '>=12.0.0'}
 
-  puppeteer-core@25.5.0:
-    resolution: {integrity: sha512-XPNT0dQJtphqQ4I29zxlG4IIPbg1iEHAQKWuQgtMJGXjACV77pZSmJvDi51IIIfd+DTKICcopJwUx4upVQ4XbA==}
+  puppeteer-core@25.7.0:
+    resolution: {integrity: sha512-wgBBj7dU5ceGyoT2PCrJpkYOhxPY8mDOmcSKZP92Cj5GgqQ3kv/UxzawnOLxiYuupe4bDf/yiQm3bzs/1nI0rQ==}
     engines: {node: '>=22.12.0'}
 
   readable-stream@3.6.2:
@@ -1051,9 +1055,9 @@ snapshots:
       - utf-8-validate
     optional: true
 
-  '@hono/node-server@2.1.0(hono@4.13.1)':
+  '@hono/node-server@2.1.1(hono@4.13.2)':
     dependencies:
-      hono: 4.13.1
+      hono: 4.13.2
 
   '@img/colour@1.1.0': {}
 
@@ -1194,14 +1198,14 @@ snapshots:
   '@protobufjs/utf8@1.1.2':
     optional: true
 
-  '@puppeteer/browsers@3.0.6':
+  '@puppeteer/browsers@3.1.0':
     dependencies:
       modern-tar: 0.7.7
       yargs: 18.1.0
 
-  '@puppeteer/browsers@3.1.0':
+  '@puppeteer/browsers@3.2.0':
     dependencies:
-      modern-tar: 0.7.7
+      modern-tar: 0.8.4
       yargs: 18.1.0
 
   '@swc/helpers@0.5.23':
@@ -1229,7 +1233,7 @@ snapshots:
   agent-base@7.1.4:
     optional: true
 
-  ansi-regex@6.2.2: {}
+  ansi-regex@6.3.0: {}
 
   ansi-styles@6.2.3: {}
 
@@ -1257,9 +1261,9 @@ snapshots:
 
   chownr@3.0.0: {}
 
-  chromium-bidi@17.0.2(devtools-protocol@0.0.1653615):
+  chromium-bidi@17.0.2(devtools-protocol@0.0.1666840):
     dependencies:
-      devtools-protocol: 0.0.1653615
+      devtools-protocol: 0.0.1666840
       mitt: 3.0.1
       zod: 3.25.76
 
@@ -1314,7 +1318,7 @@ snapshots:
 
   detect-node@2.1.0: {}
 
-  devtools-protocol@0.0.1653615: {}
+  devtools-protocol@0.0.1666840: {}
 
   dfa@1.2.0: {}
 
@@ -1405,7 +1409,7 @@ snapshots:
       fetch-blob: 3.2.0
     optional: true
 
-  gaxios@7.3.0:
+  gaxios@7.3.1:
     dependencies:
       extend: 3.0.2
       https-proxy-agent: 7.0.6
@@ -1416,7 +1420,7 @@ snapshots:
 
   gcp-metadata@8.1.2:
     dependencies:
-      gaxios: 7.3.0
+      gaxios: 7.3.1
       google-logging-utils: 1.1.3
       json-bigint: 1.0.0
     transitivePeerDependencies:
@@ -1447,7 +1451,7 @@ snapshots:
     dependencies:
       base64-js: 1.5.1
       ecdsa-sig-formatter: 1.0.11
-      gaxios: 7.3.0
+      gaxios: 7.3.1
       gcp-metadata: 8.1.2
       google-logging-utils: 1.1.3
       jws: 4.0.1
@@ -1466,7 +1470,7 @@ snapshots:
     dependencies:
       es-define-property: 1.0.1
 
-  hono@4.13.1: {}
+  hono@4.13.2: {}
 
   http-response-object@3.0.2:
     dependencies:
@@ -1487,10 +1491,10 @@ snapshots:
       - supports-color
     optional: true
 
-  hyperframes@0.7.96:
+  hyperframes@0.7.107:
     dependencies:
-      '@hono/node-server': 2.1.0(hono@4.13.1)
-      '@puppeteer/browsers': 3.0.6
+      '@hono/node-server': 2.1.1(hono@4.13.2)
+      '@puppeteer/browsers': 3.1.0
       adm-zip: 0.6.0
       citty: 0.2.2
       compare-versions: 6.1.1
@@ -1498,13 +1502,13 @@ snapshots:
       esbuild: 0.25.12
       fontkit: 2.0.4
       giget: 3.3.1
-      hono: 4.13.1
+      hono: 4.13.2
       ignore: 5.3.2
       onnxruntime-node: 1.21.1
       open: 10.2.0
       postcss: 8.5.26
       prettier: 3.9.6
-      puppeteer-core: 25.5.0
+      puppeteer-core: 25.7.0
       sharp: 0.35.3
     optionalDependencies:
       '@google/genai': 1.52.0
@@ -1567,6 +1571,8 @@ snapshots:
   mitt@3.0.1: {}
 
   modern-tar@0.7.7: {}
+
+  modern-tar@0.8.4: {}
 
   ms@2.1.3: {}
 
@@ -1636,11 +1642,11 @@ snapshots:
       long: 5.3.2
     optional: true
 
-  puppeteer-core@25.5.0:
+  puppeteer-core@25.7.0:
     dependencies:
-      '@puppeteer/browsers': 3.1.0
-      chromium-bidi: 17.0.2(devtools-protocol@0.0.1653615)
-      devtools-protocol: 0.0.1653615
+      '@puppeteer/browsers': 3.2.0
+      chromium-bidi: 17.0.2(devtools-protocol@0.0.1666840)
+      devtools-protocol: 0.0.1666840
       typed-query-selector: 2.12.2
       webdriver-bidi-protocol: 0.4.2
       ws: 8.21.3
@@ -1735,7 +1741,7 @@ snapshots:
 
   strip-ansi@7.2.0:
     dependencies:
-      ansi-regex: 6.2.2
+      ansi-regex: 6.3.0
 
   tar@7.5.22:
     dependencies:
