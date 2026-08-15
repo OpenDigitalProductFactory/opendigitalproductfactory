@@ -34,7 +34,7 @@
     "@dpf/storefront-templates": "workspace:*",
     "@dpf/types": "workspace:*",
     "@dpf/validators": "workspace:*",
-    "@floating-ui/react": "^0.27.19",
+    "@floating-ui/react": "^0.27.20",
     "@fullcalendar/core": "^6.1.21",
     "@fullcalendar/daygrid": "^6.1.21",
     "@fullcalendar/interaction": "^6.1.21",
