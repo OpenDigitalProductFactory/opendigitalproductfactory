@@ -100,4 +100,53 @@ describe("enrichment proposal builder (AC3/AC5/AC6)", () => {
     );
     expect(proposal.unresolvedGaps.some((g) => g.field === "website")).toBe(false);
   });
+
+  it("BLOCKS on a domain conflict — harvests nothing (identity gate, BI-E2449835)", () => {
+    const proposal = buildEnrichmentProposal({
+      recordKind: "customer-account",
+      recordId: "ACCT-1",
+      current: { name: "Acme IT", website: "https://acme-it.com" },
+      findings: [
+        { field: "website", value: "https://acme-industrial.com", source: "web-search", sourceRef: "serp:1" },
+        { field: "industry", value: "Manufacturing", source: "website", sourceRef: "https://acme-industrial.com" },
+      ],
+      scope: { sources: ["website", "web-search"], fields: ["website", "industry"] },
+    });
+    expect(proposal.identity.verdict).toBe("conflict");
+    expect(proposal.blocked).toBeDefined();
+    expect(proposal.changes).toHaveLength(0);
+  });
+
+  it("proceeds and marks identity 'agree' when the domain matches", () => {
+    const proposal = buildEnrichmentProposal({
+      recordKind: "customer-account",
+      recordId: "ACCT-1",
+      current: { name: "Acme IT", website: "https://acme-it.com" },
+      findings: [{ field: "industry", value: "IT Services", source: "website", sourceRef: "https://acme-it.com/about" }],
+      scope: { sources: ["website"], fields: ["industry"] },
+      anchor: { domain: "acme-it.com" },
+    });
+    expect(proposal.blocked).toBeUndefined();
+    expect(proposal.identity.verdict).toBe("agree");
+    expect(proposal.changes.find((c) => c.field === "industry")).toBeDefined();
+  });
+
+  it("carries the provenance tuple (confidence/retrievedAt/passage) into the change", () => {
+    const proposal = buildEnrichmentProposal(
+      base([
+        {
+          field: "industry",
+          value: "Managed IT Services",
+          source: "website",
+          sourceRef: "https://teamlogicit.com",
+          confidence: 0.9,
+          retrievedAt: "2026-08-15",
+          supportingPassage: "TeamLogic IT provides managed IT services",
+        },
+      ]),
+    );
+    const change = proposal.changes.find((c) => c.field === "industry");
+    expect(change).toMatchObject({ confidence: 0.9, retrievedAt: "2026-08-15" });
+    expect(change?.supportingPassage).toMatch(/managed IT services/i);
+  });
 });

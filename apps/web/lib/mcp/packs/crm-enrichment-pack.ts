@@ -19,6 +19,7 @@ import {
   ENRICHMENT_SOURCE_KINDS,
   enrichableFieldsFor,
   type EnrichableField,
+  type EnrichmentAnchor,
   type EnrichmentFinding,
   type EnrichmentRecordKind,
   type EnrichmentScope,
@@ -29,7 +30,7 @@ const definitions: ToolDefinition[] = [
   {
     name: "propose_crm_enrichment",
     description:
-      "File a proactive enrichment proposal for a thin customer account or contact. Call this AFTER the human has agreed to enrichment and confirmed scope (which sources, which fields). Pass the facts you researched from public sources (each with its source + citation) as `findings`; the tool drops anything masked/partial/placeholder (never fabricates), computes the before→after diff, cites every field, and files the proposal to the data-steward queue. Nothing is written to the record here — apply it with apply_crm_enrichment after the human reviews the diff. Unverifiable fields are returned as gaps to confirm.",
+      "File a proactive enrichment proposal for a thin customer account or contact. Call this AFTER the human has agreed to enrichment and confirmed scope (which sources, which fields). Pass the identity you resolved as `anchor` (the company's domain — the strongest key — plus name/location) and the facts you researched as `findings` (each with its source + citation). The tool first CONFIRMS the researched company is the same entity as the record: if the record's own domain conflicts with your researched domain it REFUSES (a same-named different company); a weak match is filed but flagged for you to double-check. It then drops anything masked/partial/placeholder (never fabricates), computes the before→after diff, cites every field, and files the proposal to the data-steward queue. Nothing is written to the record here — apply it with apply_crm_enrichment after the human reviews the diff. Unverifiable fields are returned as gaps to confirm.",
     inputSchema: {
       type: "object",
       properties: {
@@ -39,6 +40,15 @@ const definitions: ToolDefinition[] = [
           description: "Which record is being enriched. Defaults to customer-account.",
         },
         recordId: { type: "string", description: "CustomerAccount.id or CustomerContact.id." },
+        anchor: {
+          type: "object",
+          description: "The identity you resolved for the researched company — used to confirm it matches the record before harvesting. Domain is the strongest key.",
+          properties: {
+            domain: { type: "string", description: "The company's own domain, e.g. acme.com (no scheme/path)." },
+            name: { type: "string" },
+            location: { type: "string" },
+          },
+        },
         scope: {
           type: "object",
           description: "The human-confirmed scope: which public sources and which fields you may touch.",
@@ -53,7 +63,7 @@ const definitions: ToolDefinition[] = [
         },
         findings: {
           type: "array",
-          description: "Researched facts to propose. Each: field, value, source (website|linkedin|web-search), sourceRef (URL/citation), optional confidence 0..1.",
+          description: "Researched facts to propose. Each: field, value, source (website|linkedin|web-search), sourceRef (URL/citation), optional confidence 0..1, optional retrievedAt (ISO date), optional supportingPassage (the text the value was read from).",
           items: {
             type: "object",
             properties: {
@@ -62,6 +72,8 @@ const definitions: ToolDefinition[] = [
               source: { type: "string", enum: ["website", "linkedin", "web-search"] },
               sourceRef: { type: "string" },
               confidence: { type: "number" },
+              retrievedAt: { type: "string" },
+              supportingPassage: { type: "string" },
             },
             required: ["field", "value", "source", "sourceRef"],
           },
@@ -121,9 +133,19 @@ function parseFindings(raw: unknown): EnrichmentFinding[] {
       source: source as EnrichmentSourceKind,
       sourceRef,
       ...(typeof o["confidence"] === "number" ? { confidence: o["confidence"] } : {}),
+      ...(typeof o["retrievedAt"] === "string" ? { retrievedAt: o["retrievedAt"] } : {}),
+      ...(typeof o["supportingPassage"] === "string" ? { supportingPassage: o["supportingPassage"] } : {}),
     });
   }
   return out;
+}
+
+function parseAnchor(raw: unknown): EnrichmentAnchor | null {
+  if (!raw || typeof raw !== "object") return null;
+  const o = raw as Record<string, unknown>;
+  const str = (k: string) => (typeof o[k] === "string" && o[k].trim().length > 0 ? o[k].trim() : null);
+  const anchor: EnrichmentAnchor = { domain: str("domain"), name: str("name"), location: str("location") };
+  return anchor.domain || anchor.name || anchor.location ? anchor : null;
 }
 
 const proposeCrmEnrichmentTool: ToolPackHandler = async (params, _userId, context) => {
@@ -142,6 +164,7 @@ const proposeCrmEnrichmentTool: ToolPackHandler = async (params, _userId, contex
     };
   }
   const findings = parseFindings(params["findings"]);
+  const anchor = parseAnchor(params["anchor"]);
 
   const { loadRecordForEnrichment, fileEnrichmentProposal } = await import("@/lib/crm/enrichment/enrichment-service");
   const { buildEnrichmentProposal } = await import("@/lib/crm/enrichment/enrichment-proposal");
@@ -158,7 +181,19 @@ const proposeCrmEnrichmentTool: ToolPackHandler = async (params, _userId, contex
     current: record.current,
     findings,
     scope,
+    anchor,
   });
+
+  // Identity-resolution gate (BI-E2449835): a domain conflict means the research
+  // is about a different, similarly-named company — refuse and file nothing.
+  if (proposal.blocked) {
+    return {
+      success: false,
+      error: "identity_conflict",
+      message: `Not filed for "${record.label}" — ${proposal.blocked.reason}`,
+      data: { blocked: proposal.blocked, identity: proposal.identity },
+    };
+  }
 
   const plan = resolveProactivityPlan({
     activityFamily: "crm-record-enrichment",
@@ -172,6 +207,10 @@ const proposeCrmEnrichmentTool: ToolPackHandler = async (params, _userId, contex
     });
     const diff = proposal.changes.map((c) => `${c.field}: ${c.current ?? "∅"} → "${c.proposed}" (${c.source})`).join("; ");
     const gaps = proposal.unresolvedGaps.map((g) => g.field).join(", ");
+    const identityWarning =
+      proposal.identity.verdict === "weak"
+        ? ` ⚠ Identity only weakly confirmed (match ${Math.round(proposal.identity.score * 100)}%, agreed on: ${proposal.identity.agreements.join("+") || "none"}) — double-check this is the right company before applying.`
+        : "";
     if (!taskId) {
       return {
         success: true,
@@ -186,7 +225,8 @@ const proposeCrmEnrichmentTool: ToolPackHandler = async (params, _userId, contex
         `${diff ? ` [${diff}]` : ""}` +
         `${proposal.rejected.length ? `; dropped ${proposal.rejected.length} unverifiable/masked value(s)` : ""}` +
         `${gaps ? `; confirm-what's-needed: ${gaps}` : ""}. ` +
-        `Review the diff, then apply with apply_crm_enrichment taskId "${taskId}" — nothing written yet.`,
+        `Review the diff, then apply with apply_crm_enrichment taskId "${taskId}" — nothing written yet.` +
+        identityWarning,
       data: { proposal, taskId },
     };
   } catch (err) {
