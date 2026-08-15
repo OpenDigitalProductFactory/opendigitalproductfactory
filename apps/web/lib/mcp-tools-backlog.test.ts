@@ -527,7 +527,7 @@ describe("backlog MCP tool execution", () => {
     });
   });
 
-  it("retire_backlog_item marks duplicate items as deferred with canonical linkage and activity", async () => {
+  it("retire_backlog_item marks duplicate items as retired with canonical linkage and activity", async () => {
     const duplicateRow = {
       id: "duplicate-row-1",
       itemId: "BI-DUP",
@@ -546,7 +546,7 @@ describe("backlog MCP tool execution", () => {
       .mockResolvedValueOnce(canonicalRow);
     mockPrisma.backlogItem.update.mockResolvedValue({
       itemId: "BI-DUP",
-      status: "deferred",
+      status: "retired",
       completedAt: new Date("2026-04-29T12:00:00.000Z"),
     });
     mockPrisma.backlogItem.count.mockResolvedValue(0);
@@ -568,7 +568,7 @@ describe("backlog MCP tool execution", () => {
       expect.objectContaining({
         where: { id: "duplicate-row-1" },
         data: expect.objectContaining({
-          status: "deferred",
+          status: "retired",
           triageOutcome: "duplicate",
           duplicateOfId: "canonical-row-1",
           resolution: "Superseded by the canonical implemented item.",
@@ -604,7 +604,7 @@ describe("backlog MCP tool execution", () => {
     mockPrisma.backlogItem.findUnique.mockResolvedValue(fixtureRow);
     mockPrisma.backlogItem.update.mockResolvedValue({
       itemId: "BI-FIXTURE",
-      status: "deferred",
+      status: "retired",
       completedAt: new Date("2026-04-29T12:00:00.000Z"),
     });
 
@@ -624,7 +624,7 @@ describe("backlog MCP tool execution", () => {
       expect.objectContaining({
         where: { id: "fixture-row-1" },
         data: expect.objectContaining({
-          status: "deferred",
+          status: "retired",
           triageOutcome: "discard",
           duplicateOfId: null,
           resolution: "Verification fixture, not product work.",

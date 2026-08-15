@@ -47,7 +47,7 @@ Use describe_model to look up existing model fields -- never guess.
 
 String enum fields (status, type) MUST use canonical values from CLAUDE.md:
 - Epic.status: "open", "in-progress", "done"
-- BacklogItem.status: "open", "in-progress", "done", "deferred"
+- BacklogItem.status: "open", "in-progress", "done", "deferred", "retired"
 - BacklogItem.type: "portfolio", "product"
 Hyphens, not underscores. Never invent synonyms.`;
 

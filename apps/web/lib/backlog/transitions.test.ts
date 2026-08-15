@@ -30,6 +30,7 @@ describe("isLegalTransition", () => {
     expect(isLegalTransition("triaging", "deferred")).toBe(true);
     expect(isLegalTransition("triaging", "in-progress")).toBe(false);
     expect(isLegalTransition("triaging", "done")).toBe(false);
+    expect(isLegalTransition("triaging", "retired")).toBe(true);
   });
 
   it("permits open ↔ in-progress and forward to done/deferred", () => {
@@ -45,6 +46,16 @@ describe("isLegalTransition", () => {
     expect(isLegalTransition("deferred", "open")).toBe(true);
     expect(isLegalTransition("deferred", "in-progress")).toBe(true);
     expect(isLegalTransition("deferred", "done")).toBe(false);
+  });
+
+  it("keeps retired terminal but explicitly reversible for correction", () => {
+    expect(isLegalTransition("open", "retired")).toBe(true);
+    expect(isLegalTransition("in-progress", "retired")).toBe(true);
+    expect(isLegalTransition("deferred", "retired")).toBe(true);
+    expect(isLegalTransition("retired", "open")).toBe(true);
+    expect(isLegalTransition("retired", "triaging")).toBe(true);
+    expect(isLegalTransition("retired", "in-progress")).toBe(false);
+    expect(isLegalTransition("retired", "done")).toBe(false);
   });
 
   it("permits reopen from done to open or triaging", () => {
@@ -67,6 +78,10 @@ describe("requiresAdminGrant", () => {
     expect(requiresAdminGrant("done", "open")).toBe(true);
     expect(requiresAdminGrant("done", "in-progress")).toBe(true);
     expect(requiresAdminGrant("done", "deferred")).toBe(true);
+  });
+  it("flags any move out of retired", () => {
+    expect(requiresAdminGrant("retired", "open")).toBe(true);
+    expect(requiresAdminGrant("retired", "triaging")).toBe(true);
   });
   it("does not flag the done → done no-op", () => {
     expect(requiresAdminGrant("done", "done")).toBe(false);

@@ -263,7 +263,7 @@ function EpicCardImpl({ epic, sort, activeOnly, onEdit, onItemEdit, focusedItemI
 }
 
 const STATUS_MIX_PARTS: Array<{
-  key: keyof Pick<BacklogStatusSummary, "triaging" | "open" | "inProgress" | "done" | "deferred">;
+  key: keyof Pick<BacklogStatusSummary, "triaging" | "open" | "inProgress" | "done" | "deferred" | "retired">;
   label: string;
   className: string;
 }> = [
@@ -272,6 +272,7 @@ const STATUS_MIX_PARTS: Array<{
   { key: "inProgress", label: "in progress", className: "text-[var(--dpf-accent)]" },
   { key: "done", label: "done", className: "text-[var(--dpf-success)]" },
   { key: "deferred", label: "deferred", className: "text-[var(--dpf-muted)]" },
+  { key: "retired", label: "retired", className: "text-[var(--dpf-muted)]" },
 ];
 
 function EpicStatusMix({ summary }: { summary: BacklogStatusSummary }) {
@@ -300,6 +301,8 @@ function TerminalStatusText({ summary }: { summary: BacklogStatusSummary }) {
       {summary.done > 0 ? `${summary.done} done` : ""}
       {summary.done > 0 && summary.deferred > 0 ? " · " : ""}
       {summary.deferred > 0 ? `${summary.deferred} deferred` : ""}
+      {(summary.done > 0 || summary.deferred > 0) && summary.retired > 0 ? " · " : ""}
+      {summary.retired > 0 ? `${summary.retired} retired` : ""}
     </>
   );
 }

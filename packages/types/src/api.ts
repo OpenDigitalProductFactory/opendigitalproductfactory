@@ -83,7 +83,7 @@ export interface CreateBacklogItemRequest {
 export interface UpdateBacklogItemRequest {
   title?: string;
   body?: string;
-  status?: "open" | "in-progress" | "done" | "deferred";
+  status?: "open" | "in-progress" | "done" | "deferred" | "retired";
   priority?: number;
   epicId?: string | null;
 }

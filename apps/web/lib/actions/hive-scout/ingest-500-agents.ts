@@ -8,7 +8,9 @@
 // - Re-parses the live upstream README on every run (no hardcoded catalog).
 // - Idempotent: re-runs never create duplicate BacklogItems. Dedupe key is
 //   a stable hash of the source URL encoded into BacklogItem.itemId.
-// - Canonical enums (see CLAUDE.md): type "portfolio", status "open"|"deferred".
+// - Canonical backlog statuses: mapped suggestions are open; unmapped or
+//   ambiguous suggestions enter triaging rather than becoming unattributed
+//   deferrals.
 //
 // This module is the orchestrator; the cohesive pieces live alongside it:
 // - catalog-readme.ts — upstream README parsing
@@ -117,7 +119,7 @@ export interface IngestResult {
   reviewLatencyMs?: number | null;
   created: number;
   duplicates: number;
-  deferred: number;
+  needsReview: number;
   createdItemIds?: string[];
 }
 
@@ -204,7 +206,7 @@ export async function runHiveScoutIngest(
   const reviewClassificationByIndustry: ReviewClassificationBreakdown = {};
   let created = 0;
   let duplicates = 0;
-  let deferred = 0;
+  let needsReview = 0;
   const createdItemIds: string[] = [];
   const candidates: Array<{ entry: CatalogEntry; itemId: string; match: ValueStreamMatch }> = [];
 
@@ -351,10 +353,10 @@ export async function runHiveScoutIngest(
     }
 
     const match = applyReviewToMatch(candidate.match, review);
-    const status = match.confidence === "mapped" ? "open" : "deferred";
+    const status = match.confidence === "mapped" ? "open" : "triaging";
     const reviewRequiresHuman = review?.classification === "needs_human_review";
-    const finalStatus = reviewRequiresHuman ? "deferred" : status;
-    if (finalStatus === "deferred") deferred++;
+    const finalStatus = reviewRequiresHuman ? "triaging" : status;
+    if (finalStatus === "triaging") needsReview++;
 
     // Upsert a citable RawSource for the catalog entry. Idempotent on
     // sourceKey — repeat runs do not create duplicate rows. organizationId
@@ -433,7 +435,7 @@ export async function runHiveScoutIngest(
     reviewLatencyMs,
     created,
     duplicates,
-    deferred,
+    needsReview,
     createdItemIds,
   };
 }

@@ -47,7 +47,7 @@ type HiveScoutSummaryPayload = {
     created: number;
     duplicates: number;
     skippedByReview: number;
-    deferred: number;
+    needsReview: number;
     reviewFailed: number;
     reviewBatchSize: number;
     reviewBatchUtilization: number;
@@ -230,7 +230,9 @@ export function extractHiveScoutSummary(
       created: asNumber(scoutTool.result.data.created) ?? 0,
       duplicates: asNumber(scoutTool.result.data.duplicates) ?? 0,
       skippedByReview: asNumber(scoutTool.result.data.skippedByReview) ?? 0,
-      deferred: asNumber(scoutTool.result.data.deferred) ?? 0,
+      needsReview: asNumber(scoutTool.result.data.needsReview)
+        ?? asNumber(scoutTool.result.data.deferred)
+        ?? 0,
       reviewFailed: asNumber(scoutTool.result.data.reviewFailed) ?? 0,
       reviewBatchSize: asNumber(scoutTool.result.data.reviewBatchSize) ?? 0,
       reviewBatchUtilization: asNumber(scoutTool.result.data.reviewBatchUtilization) ?? 0,
@@ -262,7 +264,7 @@ export function extractHiveScoutSummary(
     `review-rejections=${payload.metrics.skippedByReview}`,
     `review-schema-drops=${payload.metrics.reviewSchemaDropCount}`,
     `review-cache-hits=${payload.metrics.reviewCacheHits}`,
-    `deferred=${payload.metrics.deferred}`,
+    `needs-review=${payload.metrics.needsReview}`,
   ].join(" ");
 
   const threadMessage = [

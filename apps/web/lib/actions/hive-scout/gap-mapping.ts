@@ -12,7 +12,7 @@ const ITEM_ID_PREFIX = "HS";
 // A starter mapping from catalog-industry labels to IT4IT value-stream names
 // as seeded into `EaReferenceModelElement` (kind="value_stream"). Entries are
 // only included when the industry clearly aligns with an IT4IT stream. Any
-// industry not found here is filed as status="deferred" with
+// industry not found here is filed as status="triaging" with
 // VALUE_STREAM_CONFIDENCE="needs-mapping" so a human completes the mapping
 // before the item is prioritised — per the spec's ambiguity rule.
 const INDUSTRY_TO_VALUE_STREAM: Record<string, string> = {
@@ -66,7 +66,7 @@ export interface ValueStreamMatch {
  * Returns `confidence: "mapped"` when a starter-mapping entry exists AND the
  * stream is present in the seeded `EaReferenceModelElement` catalog.
  * Otherwise `confidence: "needs-mapping"`, which forces the BacklogItem into
- * the `deferred` status for human review.
+ * the `triaging` status for human review.
  */
 export function mapIndustryToStream(
   industry: string,

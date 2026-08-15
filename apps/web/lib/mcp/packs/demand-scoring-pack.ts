@@ -195,7 +195,7 @@ const definitions: ToolDefinition[] = [
   {
     name: "merge_backlog_items",
     description:
-      "Merge a duplicate backlog item into a canonical one: the duplicate's reach (occurrenceCount) is added to the canonical item so signal concentrates rather than fragments, and the duplicate is retired (status=deferred, duplicateOfId set to the canonical item). Audited.",
+      "Merge a duplicate backlog item into a canonical one: the duplicate's reach (occurrenceCount) is added to the canonical item so signal concentrates rather than fragments, and the duplicate is retired (status=retired, duplicateOfId set to the canonical item). Audited.",
     inputSchema: {
       type: "object",
       properties: {

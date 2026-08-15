@@ -51,10 +51,17 @@ export async function handleUpdateBacklogItem(
         message: "Items in triaging must be moved out via triage_backlog_item so the decision is recorded with rationale.",
       };
     }
+    if (params["status"] === "deferred" || params["status"] === "retired") {
+      return {
+        success: false,
+        error: "use_update_backlog_item_status",
+        message: "Use update_backlog_item_status for deferred or retired lifecycle decisions so required evidence and deferral metadata are audited.",
+      };
+    }
     data["status"] = params["status"];
     // Track completion date
-    const isTerminal = params["status"] === "done" || params["status"] === "deferred";
-    const wasTerminal = existing.status === "done" || existing.status === "deferred";
+    const isTerminal = params["status"] === "done" || params["status"] === "retired";
+    const wasTerminal = existing.status === "done" || existing.status === "retired";
     if (isTerminal && !wasTerminal) {
       data["completedAt"] = new Date();
     } else if (!isTerminal && wasTerminal) {

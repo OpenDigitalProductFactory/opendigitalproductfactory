@@ -62,7 +62,7 @@ describe("recordCorrectiveRecoveryEvidence", () => {
     expect(findMany).toHaveBeenCalledWith(expect.objectContaining({
       where: {
         source: "self-upgrade-failure",
-        status: { notIn: ["done", "deferred"] },
+        status: { notIn: ["done", "deferred", "retired"] },
       },
     }));
     expect(activityFindMany).toHaveBeenCalledWith(expect.objectContaining({

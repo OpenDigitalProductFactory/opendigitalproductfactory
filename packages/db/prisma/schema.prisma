@@ -331,6 +331,7 @@ model Principal {
   authorityMode                       String?
   sensitivityClearance                PrincipalSensitivity[]              @default([public])
   aliases                             PrincipalAlias[]
+  deferredBacklogItems                BacklogItem[]                       @relation("BacklogDeferralOwner")
   sponsorPrincipal                    Principal?                          @relation("PrincipalSponsor", fields: [sponsorPrincipalId], references: [id])
   sponsoredPrincipals                 Principal[]                         @relation("PrincipalSponsor")
   communicationChannelBindings        CommunicationChannelBinding[]
@@ -2190,10 +2191,18 @@ model BacklogItem {
   claimedByAgentId        String?
   claimedAt               DateTime?
   claimStatus             String?
+  // Governed active-deferral projection (DI-03B7564E648A). History remains in
+  // BacklogItemActivity; these fields answer why/when/who without replaying it.
+  deferReason             String?
+  deferTrigger            String?
+  deferReviewAt           DateTime?
+  deferOwnerPrincipalId   String?
+  deferredAt              DateTime?
   upstreamIssueNumber     Int?
   upstreamIssueUrl        String?
   upstreamSyncedAt        DateTime?
   accountableEmployee     EmployeeProfile?              @relation("ItemAccountable", fields: [accountableEmployeeId], references: [id])
+  deferOwnerPrincipal     Principal?                    @relation("BacklogDeferralOwner", fields: [deferOwnerPrincipalId], references: [id], onDelete: SetNull)
   activeBuild             FeatureBuild?                 @relation("BacklogItemActiveBuild", fields: [activeBuildId], references: [id])
   activeEpic              Epic?                         @relation("BacklogItemActiveEpic", fields: [activeEpicId], references: [id])
   originatingEpic         Epic?                         @relation("EpicOriginatingItem")
@@ -2220,6 +2229,8 @@ model BacklogItem {
   @@index([businessProductId])
   @@index([status])
   @@index([status, updatedAt])
+  @@index([status, deferReviewAt])
+  @@index([deferOwnerPrincipalId, status])
   @@index([portfolioId, demandScore])
   @@index([demandStage])
   @@index([scopeKind])

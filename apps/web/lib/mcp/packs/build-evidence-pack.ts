@@ -341,7 +341,7 @@ async function recordFunctionalFailureEvidenceHandler(
     item = await prisma.backlogItem.findFirst({
       where: {
         source: "functional-test-failure",
-        status: { notIn: ["done", "deferred"] },
+        status: { notIn: ["done", "deferred", "retired"] },
         body: { contains: `failureFingerprint: ${failureFingerprint}` },
       },
       select: { id: true, itemId: true, occurrenceCount: true },

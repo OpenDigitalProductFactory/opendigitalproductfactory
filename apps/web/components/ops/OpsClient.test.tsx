@@ -159,11 +159,11 @@ describe("OpsClient", () => {
     expect(html).not.toContain("2 completed");
   });
 
-  it("labels a deferred duplicate as a retired duplicate when terminal rows are reviewed", () => {
+  it("labels a retired duplicate distinctly from parked work", () => {
     const html = renderToStaticMarkup(
       <BacklogItemRow
         item={item({
-          status: "deferred",
+          status: "retired",
           triageOutcome: "duplicate",
           completedAt: now,
         })}

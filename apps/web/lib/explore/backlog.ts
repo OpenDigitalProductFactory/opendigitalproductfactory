@@ -20,6 +20,9 @@ export type BacklogItemInput = {
   archetypeIds?: string[];
   scopeRationale?: string;
   lifecycleTags?: string[];
+  deferReason?: string;
+  deferTrigger?: string;
+  deferReviewAt?: string;
 };
 
 export type BacklogItemWithRelations = {
@@ -67,6 +70,12 @@ export type BacklogItemWithRelations = {
   // Ownership — who has actively claimed this item. Drives the "mine vs
   // company-wide" scope split in the Needs-you-next band (BI-01CC2356).
   claimedById?: string | null;
+  deferReason?: string | null;
+  deferTrigger?: string | null;
+  deferReviewAt?: Date | null;
+  deferOwnerPrincipalId?: string | null;
+  deferredAt?: Date | null;
+  deferOwnerPrincipal?: { principalId: string; displayName: string } | null;
 };
 
 export type DigitalProductSelect = {
@@ -164,6 +173,16 @@ export function validateBacklogInput(input: BacklogItemInput): string | null {
   if (input.scopeKind && !BACKLOG_SCOPE_KIND_VALUES.includes(input.scopeKind)) {
     return "Invalid scope kind";
   }
+  if (input.status === "deferred") {
+    if (!input.deferReason?.trim()) return "Why this item is deferred is required";
+    if (!input.deferTrigger?.trim()) return "A resume trigger is required";
+    if (!input.deferReviewAt || Number.isNaN(new Date(input.deferReviewAt).getTime())) {
+      return "A valid deferral review date is required";
+    }
+    if (new Date(input.deferReviewAt).getTime() <= Date.now()) {
+      return "The deferral review date must be in the future";
+    }
+  }
   return null;
 }
 
@@ -191,6 +210,7 @@ export const BACKLOG_STATUS_VALUES = [
   "in-progress",
   "done",
   "deferred",
+  "retired",
 ] as const;
 export type BacklogStatus = (typeof BACKLOG_STATUS_VALUES)[number];
 
@@ -307,6 +327,7 @@ export const BACKLOG_STATUS_COLOURS: Record<string, string> = {
   "in-progress": "#fb923c",
   "done":        "#4ade80",
   "deferred":    "#8888a0",
+  "retired":     "var(--dpf-muted)",
 };
 
 /** Epic status badge colours (inline styles). */
