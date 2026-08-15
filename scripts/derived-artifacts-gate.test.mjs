@@ -6,7 +6,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { planRegenerate, evaluatePushExemption, evaluateCheckAll } from "./derived-artifacts-gate.mjs";
+import {
+  planRegenerate,
+  evaluatePushExemption,
+  evaluateCheckAll,
+  resolveArtifactInvocation,
+} from "./derived-artifacts-gate.mjs";
 
 const DOC_INDEX = {
   id: "doc-index",
@@ -122,5 +127,23 @@ test("evaluateCheckAll reports every entry's check result", () => {
       ["doc-index", true],
       ["sbom-baseline", false],
     ],
+  );
+});
+
+test("Windows artifact checks route pnpm through ComSpec", () => {
+  assert.deepEqual(
+    resolveArtifactInvocation(["pnpm", "--filter", "web", "run", "check:route-manifest"], {
+      platform: "win32",
+      env: { ComSpec: "C:\\Windows\\System32\\cmd.exe" },
+    }),
+    {
+      command: "C:\\Windows\\System32\\cmd.exe",
+      args: [
+        "/d",
+        "/s",
+        "/c",
+        "pnpm --filter web run check:route-manifest",
+      ],
+    },
   );
 });

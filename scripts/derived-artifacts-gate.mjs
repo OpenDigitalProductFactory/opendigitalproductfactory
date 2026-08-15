@@ -31,6 +31,7 @@ import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { DERIVED_ARTIFACTS, affectedEntries } from "./lib/derived-artifacts-registry.mjs";
+import { resolveHostCommandInvocation } from "./lib/host-command-invocation.mjs";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -95,6 +96,14 @@ export function evaluateCheckAll(registry = DERIVED_ARTIFACTS, runCheck = () => 
   return registry.map((entry) => ({ entry, ok: runCheck(entry) }));
 }
 
+/** Keep artifact commands shell-free except for Windows command shims. */
+export function resolveArtifactInvocation(
+  argv,
+  options = {},
+) {
+  return resolveHostCommandInvocation(argv[0], argv.slice(1), options);
+}
+
 // ── IO-touching implementations used by the CLI ────────────────────────────
 
 function git(args) {
@@ -122,12 +131,22 @@ function binaryAvailable(name) {
 }
 
 function runCommand(argv) {
-  execFileSync(argv[0], argv.slice(1), { cwd: REPO_ROOT, stdio: "inherit" });
+  const invocation = resolveArtifactInvocation(argv);
+  execFileSync(invocation.command, invocation.args, {
+    cwd: REPO_ROOT,
+    stdio: "inherit",
+    windowsVerbatimArguments: process.platform === "win32",
+  });
 }
 
 function runCheckLive(entry) {
   try {
-    execFileSync(entry.check[0], entry.check.slice(1), { cwd: REPO_ROOT, stdio: "pipe" });
+    const invocation = resolveArtifactInvocation(entry.check);
+    execFileSync(invocation.command, invocation.args, {
+      cwd: REPO_ROOT,
+      stdio: "pipe",
+      windowsVerbatimArguments: process.platform === "win32",
+    });
     return true;
   } catch {
     return false;
