@@ -12,14 +12,14 @@
 import { prisma } from "@dpf/db";
 
 import { ensureAgentPrincipalIdentity } from "@/lib/identity/principal-linking";
-import type { WorkRoomParticipantRole } from "./room-types";
+import type { WorkroomParticipantRole } from "./room-types";
 import { PRESENCE_ACTIVE_WINDOW_MS } from "./work-item-presence";
 import { encodeWorkCaseKey } from "./workspace-case-loader";
 import { readWorkspaceRoomPolicy } from "./workspace-room-access";
 
 export interface CoworkerRoomEngagementRoom {
   caseKey: string;
-  roles: WorkRoomParticipantRole[];
+  roles: WorkroomParticipantRole[];
   coordinator: boolean;
   activeNow: boolean;
 }
@@ -64,7 +64,7 @@ export async function getCoworkerRoomEngagement(input: {
   const rooms: CoworkerRoomEngagementRoom[] = items.map((item) => {
     const policy = readWorkspaceRoomPolicy(item.evidence);
     const mine = (policy.participants ?? []).find((participant) => participant.principalRef === principalRef);
-    const roles = (mine?.roles ?? []) as WorkRoomParticipantRole[];
+    const roles = (mine?.roles ?? []) as WorkroomParticipantRole[];
     return {
       caseKey: encodeWorkCaseKey({ sourceType: item.sourceType, sourceId: item.sourceId ?? item.itemId }),
       roles,

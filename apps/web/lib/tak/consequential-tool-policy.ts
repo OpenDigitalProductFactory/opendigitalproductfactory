@@ -1,7 +1,7 @@
 import type { ToolDefinition } from "@/lib/mcp-tools";
 import { getWorkCaseAction } from "@/lib/work-management/action-registry";
 import type { WorkCaseExecutionContext } from "@/lib/work-management/work-case-governance-hook";
-import type { WorkRoomShapeKey } from "@/lib/work-management/room-shapes";
+import type { WorkroomShapeKey } from "@/lib/work-management/room-shapes";
 
 export const CONSEQUENCE_CLASSES = ["routine-read", "ordinary-mutation", "consequential-mutation"] as const;
 export type ConsequenceClass = (typeof CONSEQUENCE_CLASSES)[number];
@@ -11,7 +11,7 @@ export type ConsequentialToolClassification = {
   consequential: boolean;
   alignmentRequired: boolean;
   preconditionRequired: boolean;
-  collaborationShape: WorkRoomShapeKey | null;
+  collaborationShape: WorkroomShapeKey | null;
   reason: "read-only" | "ordinary-side-effect" | "explicit-policy" | "work-case-consequential";
 };
 
@@ -29,7 +29,7 @@ export const ALIGNMENT_CONSEQUENTIAL_TOOL_NAMES = [
 const EXPLICIT = new Set<string>(ALIGNMENT_CONSEQUENTIAL_TOOL_NAMES);
 const PRECONDITION = new Set(["transition_employee_status"]);
 
-export function collaborationShapeForTool(toolName: string): WorkRoomShapeKey | null {
+export function collaborationShapeForTool(toolName: string): WorkroomShapeKey | null {
   if (["create_digital_product", "create_product", "create_product_line", "create_marketing_campaign", "launch_campaign"]
     .includes(toolName)) return "specialist-alignment";
   if (["publish_storefront", "send_quote", "send_invoice"].includes(toolName)) return "outward-review";

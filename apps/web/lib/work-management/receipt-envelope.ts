@@ -7,7 +7,7 @@ import type {
   WorkCaseRef,
   WorkCaseSourceRef,
 } from "./case-types";
-import type { WorkRoomShapeKey } from "./room-shapes";
+import type { WorkroomShapeKey } from "./room-shapes";
 
 export type ReceiptEnvelopeStatus = "valid" | "invalid" | "observed" | "failed";
 
@@ -26,7 +26,7 @@ export interface ReceiptEnvelope {
   outputDigest?: unknown;
   policyRefs: readonly string[];
   governance?: {
-    collaborationShape: WorkRoomShapeKey;
+    collaborationShape: WorkroomShapeKey;
     authorityLadderLevel: "none" | "discover" | "content" | "action";
     requiredPrincipalRefs: readonly string[];
     decisionInteractionId?: string;

@@ -1,12 +1,12 @@
 import { Prisma, prisma } from "@dpf/db";
 
 import type {
-  WorkRoomCycleParentRecord,
-  WorkRoomCycleStoreDb,
-  WorkRoomCycleStoreTx,
+  WorkroomCycleParentRecord,
+  WorkroomCycleStoreDb,
+  WorkroomCycleStoreTx,
 } from "./room-cycle-store";
 
-function txAdapter(tx: Prisma.TransactionClient): WorkRoomCycleStoreTx {
+function txAdapter(tx: Prisma.TransactionClient): WorkroomCycleStoreTx {
   return {
     getRoom: async (workItemId) => tx.workItem.findUnique({
       where: { id: workItemId },
@@ -25,7 +25,7 @@ function txAdapter(tx: Prisma.TransactionClient): WorkRoomCycleStoreTx {
         assignedToUserId: true,
         assignedToAgentId: true,
       },
-    }) as Promise<WorkRoomCycleParentRecord | null>,
+    }) as Promise<WorkroomCycleParentRecord | null>,
     listCycles: (workItemId) => tx.workItem.findMany({
       where: { parentItemId: workItemId },
       select: {
@@ -82,7 +82,7 @@ function txAdapter(tx: Prisma.TransactionClient): WorkRoomCycleStoreTx {
   };
 }
 
-export const prismaWorkRoomCycleDb: WorkRoomCycleStoreDb = {
+export const prismaWorkroomCycleDb: WorkroomCycleStoreDb = {
   withinRoomLock: (workItemId, callback) => prisma.$transaction(async (tx) => {
     await tx.$queryRaw<Array<{ id: string }>>(
       Prisma.sql`SELECT "id" FROM "WorkItem" WHERE "id" = ${workItemId} FOR UPDATE`,

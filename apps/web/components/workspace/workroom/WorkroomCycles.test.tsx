@@ -2,11 +2,11 @@ import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
-import type { WorkRoomView } from "@/lib/work-management/room-types";
+import type { WorkroomView } from "@/lib/work-management/room-types";
 
-import { WorkRoomCycles } from "./WorkRoomCycles";
+import { WorkroomCycles } from "./WorkroomCycles";
 
-function room(): WorkRoomView {
+function room(): WorkroomView {
   const packet = {
     outcomeState: "partially-achieved" as const,
     summary: "Last week closed with one follow-up.",
@@ -61,9 +61,9 @@ function room(): WorkRoomView {
   };
 }
 
-describe("WorkRoomCycles", () => {
+describe("WorkroomCycles", () => {
   it("puts the current boundary before completed Outcome Packets", () => {
-    const html = renderToStaticMarkup(<WorkRoomCycles room={room()} />);
+    const html = renderToStaticMarkup(<WorkroomCycles room={room()} />);
 
     expect(html).toContain("Current cycle");
     expect(html).toContain("Review cash position and assign exceptions.");
@@ -76,7 +76,7 @@ describe("WorkRoomCycles", () => {
   it("shows healthy-idle guidance for a standing room without a current cycle", () => {
     const value = room();
     value.currentCycle = null;
-    const html = renderToStaticMarkup(<WorkRoomCycles room={value} />);
+    const html = renderToStaticMarkup(<WorkroomCycles room={value} />);
 
     expect(html).toContain("Ready for the next cycle");
     expect(html).toContain("healthy and idle");
@@ -85,6 +85,6 @@ describe("WorkRoomCycles", () => {
   it("does not add cycle chrome to finite rooms", () => {
     const value = room();
     value.mode = "finite";
-    expect(renderToStaticMarkup(<WorkRoomCycles room={value} />)).toBe("");
+    expect(renderToStaticMarkup(<WorkroomCycles room={value} />)).toBe("");
   });
 });

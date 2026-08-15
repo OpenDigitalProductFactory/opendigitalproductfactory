@@ -1,13 +1,13 @@
 import { describe, expect, it } from "vitest";
 
-import { buildWorkRoomOutcomePacket, WorkRoomOutcomePacketError } from "./outcome-packet";
+import { buildWorkroomOutcomePacket, WorkroomOutcomePacketError } from "./outcome-packet";
 
 const receipt = { kind: "receipt" as const, id: "R-1", sourceType: "tool-execution" };
 const evidence = { kind: "runtime-verification" as const, id: "RV-1", status: "passed" };
 
 describe("Work Room Outcome Packets", () => {
   it("uses source policy for required categories while allowing optional categories to stay empty", () => {
-    const packet = buildWorkRoomOutcomePacket({
+    const packet = buildWorkroomOutcomePacket({
       sourceKey: "scheduled",
       outcomeState: "achieved",
       summary: "Weekly cash position reviewed and exceptions assigned.",
@@ -28,20 +28,20 @@ describe("Work Room Outcome Packets", () => {
   });
 
   it("rejects a standing packet that omits a source-required category", () => {
-    expect(() => buildWorkRoomOutcomePacket({
+    expect(() => buildWorkroomOutcomePacket({
       sourceKey: "scheduled",
       outcomeState: "partially-achieved",
       summary: "Review completed without verification.",
       facts: [{ category: "receipts", sourceRef: receipt, provenance: "canonical" }],
       accountablePrincipalRef: "prn-finance-owner",
       completedAt: "2026-08-01T10:00:00.000Z",
-    })).toThrowError(expect.objectContaining<Partial<WorkRoomOutcomePacketError>>({ reason: "missing_required_category" }));
+    })).toThrowError(expect.objectContaining<Partial<WorkroomOutcomePacketError>>({ reason: "missing_required_category" }));
   });
 
   it.each(["decisions", "artifacts", "evidence"] as const)(
     "does not let raw chat satisfy the %s field",
     (category) => {
-      expect(() => buildWorkRoomOutcomePacket({
+      expect(() => buildWorkroomOutcomePacket({
         sourceKey: "scheduled",
         outcomeState: "achieved",
         summary: "A chat message claimed the cycle was done.",
@@ -52,12 +52,12 @@ describe("Work Room Outcome Packets", () => {
         ],
         accountablePrincipalRef: "prn-finance-owner",
         completedAt: "2026-08-01T10:00:00.000Z",
-      })).toThrowError(expect.objectContaining<Partial<WorkRoomOutcomePacketError>>({ reason: "raw_chat_not_durable" }));
+      })).toThrowError(expect.objectContaining<Partial<WorkroomOutcomePacketError>>({ reason: "raw_chat_not_durable" }));
     },
   );
 
   it("requires every unresolved item to carry an explicit disposition", () => {
-    expect(() => buildWorkRoomOutcomePacket({
+    expect(() => buildWorkroomOutcomePacket({
       sourceKey: "scheduled",
       outcomeState: "partially-achieved",
       summary: "One exception remains.",
@@ -68,6 +68,6 @@ describe("Work Room Outcome Packets", () => {
       unresolvedWork: [{ summary: "Investigate variance", ownerRef: null, disposition: "later" as never }],
       accountablePrincipalRef: "prn-finance-owner",
       completedAt: "2026-08-01T10:00:00.000Z",
-    })).toThrowError(expect.objectContaining<Partial<WorkRoomOutcomePacketError>>({ reason: "invalid_unresolved_disposition" }));
+    })).toThrowError(expect.objectContaining<Partial<WorkroomOutcomePacketError>>({ reason: "invalid_unresolved_disposition" }));
   });
 });

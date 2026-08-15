@@ -9,7 +9,7 @@
 import { prisma } from "@dpf/db";
 
 import { bridgeTaskNodeToWorkItem } from "@/lib/queue/bridges/task-node-bridge";
-import { WORK_ROOM_OUTCOME_MESSAGE_TYPE } from "@/lib/work-management/room-cycle-adapter";
+import { WORKROOM_OUTCOME_MESSAGE_TYPE } from "@/lib/work-management/room-cycle-adapter";
 import { buildDeliberationOutcomeSeal, verdictNeedsEscalation } from "./deliberation-room";
 
 /** Accountable ref for a machine-sealed deliberation verdict (a system record; a human reviews the room). */
@@ -44,7 +44,7 @@ export async function sealDeliberationOnRoom(input: {
 
   // Idempotent: don't re-seal a room that already carries an outcome packet.
   const existing = await prisma.workItemMessage.findFirst({
-    where: { workItemId: workItem.id, messageType: WORK_ROOM_OUTCOME_MESSAGE_TYPE },
+    where: { workItemId: workItem.id, messageType: WORKROOM_OUTCOME_MESSAGE_TYPE },
     select: { messageId: true },
   });
 
@@ -63,7 +63,7 @@ export async function sealDeliberationOnRoom(input: {
       data: {
         workItemId: workItem.id,
         senderType: "system",
-        messageType: WORK_ROOM_OUTCOME_MESSAGE_TYPE,
+        messageType: WORKROOM_OUTCOME_MESSAGE_TYPE,
         body: packet.summary,
         structuredPayload: storedPayload as never,
         channel: "in-app",

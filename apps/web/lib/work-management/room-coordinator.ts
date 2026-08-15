@@ -11,22 +11,22 @@
  *
  * Design of record: docs/superpowers/specs/2026-08-12-work-room-multi-agent-communication-substrate-design.md §2
  */
-import type { WorkRoomParticipantView } from "./room-types";
+import type { WorkroomParticipantView } from "./room-types";
 
-export type WorkRoomParticipantErrorReason = "multiple_active_coordinators";
+export type WorkroomParticipantErrorReason = "multiple_active_coordinators";
 
-export class WorkRoomParticipantError extends Error {
-  constructor(readonly reason: WorkRoomParticipantErrorReason, message: string) {
+export class WorkroomParticipantError extends Error {
+  constructor(readonly reason: WorkroomParticipantErrorReason, message: string) {
     super(message);
-    this.name = "WorkRoomParticipantError";
+    this.name = "WorkroomParticipantError";
   }
 }
 
-function isCoordinator(participant: WorkRoomParticipantView): boolean {
+function isCoordinator(participant: WorkroomParticipantView): boolean {
   return participant.roles.includes("coordinator");
 }
 
-function isAccountable(participant: WorkRoomParticipantView): boolean {
+function isAccountable(participant: WorkroomParticipantView): boolean {
   return participant.roles.includes("accountable");
 }
 
@@ -36,11 +36,11 @@ function isAccountable(participant: WorkRoomParticipantView): boolean {
  * Coordinator; more than one is a defect, not a merge.
  */
 export function selectRoomCoordinator(
-  participants: readonly WorkRoomParticipantView[],
-): WorkRoomParticipantView | null {
+  participants: readonly WorkroomParticipantView[],
+): WorkroomParticipantView | null {
   const coordinators = participants.filter(isCoordinator);
   if (coordinators.length > 1) {
-    throw new WorkRoomParticipantError(
+    throw new WorkroomParticipantError(
       "multiple_active_coordinators",
       "A Work Room can have only one active Coordinator.",
     );
@@ -58,8 +58,8 @@ export function selectRoomCoordinator(
  * Pure: returns a new array; participant objects are copied only when changed.
  */
 export function deriveRoomCoordinator(
-  participants: readonly WorkRoomParticipantView[],
-): WorkRoomParticipantView[] {
+  participants: readonly WorkroomParticipantView[],
+): WorkroomParticipantView[] {
   // Validates single-coordinator and short-circuits when one is already named.
   if (selectRoomCoordinator(participants)) {
     return [...participants];

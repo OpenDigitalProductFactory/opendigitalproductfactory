@@ -3,7 +3,7 @@
  *
  * Harmonizes the deliberation/debate pattern onto the Work Room substrate: a
  * finished deliberation becomes a finite `task-node` room whose verdict is sealed
- * as a durable WorkRoomOutcomePacket, referencing the canonical DeliberationOutcome
+ * as a durable WorkroomOutcomePacket, referencing the canonical DeliberationOutcome
  * (satisfies raw_chat_not_durable). A real consensus seals `achieved`/
  * `partially-achieved`; no-consensus/insufficient-evidence seals `not-achieved` —
  * the signal an operator reviews (and the alternate close = escalation).
@@ -13,15 +13,15 @@
  * message. Design of record:
  * docs/superpowers/specs/2026-08-12-work-room-multi-agent-communication-substrate-design.md §3
  */
-import { WORK_ROOM_OUTCOME_MESSAGE_TYPE } from "../work-management/room-cycle-adapter";
-import { buildWorkRoomOutcomePacket } from "../work-management/outcome-packet";
-import type { WorkRoomOutcomePacket } from "../work-management/room-types";
+import { WORKROOM_OUTCOME_MESSAGE_TYPE } from "../work-management/room-cycle-adapter";
+import { buildWorkroomOutcomePacket } from "../work-management/outcome-packet";
+import type { WorkroomOutcomePacket } from "../work-management/room-types";
 
 /** The registry sourceKey a deliberation room projects through (finite, evidence-only). */
 export const DELIBERATION_ROOM_SOURCE_KEY = "task-node";
 
 /** Map a deliberation consensus state to a room outcome state. */
-export function mapConsensusToOutcomeState(consensusState: string): WorkRoomOutcomePacket["outcomeState"] {
+export function mapConsensusToOutcomeState(consensusState: string): WorkroomOutcomePacket["outcomeState"] {
   switch (consensusState) {
     case "consensus":
       return "achieved";
@@ -51,20 +51,20 @@ export interface DeliberationRoomSealInput {
 }
 
 export interface StoredDeliberationOutcome {
-  kind: typeof WORK_ROOM_OUTCOME_MESSAGE_TYPE;
+  kind: typeof WORKROOM_OUTCOME_MESSAGE_TYPE;
   version: 1;
   cycleKey: string;
   carrierId: string;
-  packet: WorkRoomOutcomePacket;
+  packet: WorkroomOutcomePacket;
 }
 
 /**
  * Build the sealed outcome packet + the stored-message payload for a deliberation
- * verdict. Pure — throws WorkRoomOutcomePacketError on an invalid packet (e.g. a
+ * verdict. Pure — throws WorkroomOutcomePacketError on an invalid packet (e.g. a
  * raw-chat evidence ref), never here.
  */
 export function buildDeliberationOutcomeSeal(input: DeliberationRoomSealInput): {
-  packet: WorkRoomOutcomePacket;
+  packet: WorkroomOutcomePacket;
   storedPayload: StoredDeliberationOutcome;
 } {
   const outcomeState = mapConsensusToOutcomeState(input.consensusState);
@@ -72,7 +72,7 @@ export function buildDeliberationOutcomeSeal(input: DeliberationRoomSealInput): 
     input.mergedRecommendation.trim() ||
     `Deliberation ${input.deliberationRunId} reached ${input.consensusState}.`;
 
-  const packet = buildWorkRoomOutcomePacket({
+  const packet = buildWorkroomOutcomePacket({
     sourceKey: DELIBERATION_ROOM_SOURCE_KEY,
     outcomeState,
     summary,
@@ -90,7 +90,7 @@ export function buildDeliberationOutcomeSeal(input: DeliberationRoomSealInput): 
   return {
     packet,
     storedPayload: {
-      kind: WORK_ROOM_OUTCOME_MESSAGE_TYPE,
+      kind: WORKROOM_OUTCOME_MESSAGE_TYPE,
       version: 1,
       cycleKey: input.deliberationRunId,
       carrierId: input.adjudicatorTaskNodeId,

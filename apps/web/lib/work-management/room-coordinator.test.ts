@@ -3,15 +3,15 @@ import { describe, expect, it } from "vitest";
 import {
   deriveRoomCoordinator,
   selectRoomCoordinator,
-  WorkRoomParticipantError,
+  WorkroomParticipantError,
 } from "./room-coordinator";
-import type { WorkRoomParticipantRole, WorkRoomParticipantView } from "./room-types";
+import type { WorkroomParticipantRole, WorkroomParticipantView } from "./room-types";
 
 function participant(
   principalRef: string,
-  roles: WorkRoomParticipantRole[],
-  kind: WorkRoomParticipantView["kind"] = "person",
-): WorkRoomParticipantView {
+  roles: WorkroomParticipantRole[],
+  kind: WorkroomParticipantView["kind"] = "person",
+): WorkroomParticipantView {
   return {
     principalRef,
     displayName: principalRef,
@@ -39,11 +39,11 @@ describe("selectRoomCoordinator", () => {
 
   it("throws on more than one active coordinator", () => {
     const two = [participant("user:1", ["coordinator"]), participant("agent:9", ["coordinator"], "agent")];
-    expect(() => selectRoomCoordinator(two)).toThrow(WorkRoomParticipantError);
+    expect(() => selectRoomCoordinator(two)).toThrow(WorkroomParticipantError);
     try {
       selectRoomCoordinator(two);
     } catch (error) {
-      expect((error as WorkRoomParticipantError).reason).toBe("multiple_active_coordinators");
+      expect((error as WorkroomParticipantError).reason).toBe("multiple_active_coordinators");
     }
   });
 });

@@ -1,8 +1,8 @@
 import type {
-  WorkRoomActivityKind,
+  WorkroomActivityKind,
 } from "@/lib/work-management/room-types";
 
-export const ACTIVITY_KIND_LABEL: Record<WorkRoomActivityKind, string> = {
+export const ACTIVITY_KIND_LABEL: Record<WorkroomActivityKind, string> = {
   message: "Message",
   ask: "Input needed",
   "coworker-joined": "Coworker joined",

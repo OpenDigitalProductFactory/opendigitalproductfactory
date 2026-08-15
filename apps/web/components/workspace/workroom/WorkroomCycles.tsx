@@ -8,12 +8,12 @@ import {
 import { LocalTime } from "@/components/ui/LocalTime";
 import { EmptyState, StatusBadge } from "@/components/ui/report-kit";
 import type {
-  WorkRoomCycleView,
-  WorkRoomOutcomePacket,
-  WorkRoomView,
+  WorkroomCycleView,
+  WorkroomOutcomePacket,
+  WorkroomView,
 } from "@/lib/work-management/room-types";
 
-function OutcomePacketSummary({ packet }: { packet: WorkRoomOutcomePacket }) {
+function OutcomePacketSummary({ packet }: { packet: WorkroomOutcomePacket }) {
   const durableCount = packet.decisionRefs.length
     + packet.artifactRefs.length
     + packet.actionRefs.length
@@ -48,7 +48,7 @@ function OutcomePacketSummary({ packet }: { packet: WorkRoomOutcomePacket }) {
   );
 }
 
-function CurrentCycle({ cycle }: { cycle: WorkRoomCycleView }) {
+function CurrentCycle({ cycle }: { cycle: WorkroomCycleView }) {
   return (
     <section aria-labelledby="work-room-current-cycle-title" className="rounded-xl border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)]">
       <div className="flex flex-wrap items-start justify-between gap-3 border-b border-[var(--dpf-border)] px-4 py-3">
@@ -98,7 +98,7 @@ function CurrentCycle({ cycle }: { cycle: WorkRoomCycleView }) {
   );
 }
 
-function CompletedCycles({ cycles }: { cycles: readonly WorkRoomCycleView[] }) {
+function CompletedCycles({ cycles }: { cycles: readonly WorkroomCycleView[] }) {
   if (cycles.length === 0) return null;
 
   return (
@@ -136,7 +136,7 @@ function CompletedCycles({ cycles }: { cycles: readonly WorkRoomCycleView[] }) {
   );
 }
 
-export function WorkRoomCycles({ room }: { room: WorkRoomView }) {
+export function WorkroomCycles({ room }: { room: WorkroomView }) {
   if (room.mode !== "standing") return null;
 
   return (

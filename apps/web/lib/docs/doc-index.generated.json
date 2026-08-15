@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 636,
+  "pageCount": 637,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -2137,7 +2137,7 @@
       "publishedPublic": true,
       "publishedPortal": false,
       "anchors": [
-        "work-room-participation-and-channel-continuity",
+        "workroom-participation-and-channel-continuity",
         "design-grounding",
         "authorization-boundary",
         "participant-projection",
@@ -2158,6 +2158,20 @@
         "decision-rules",
         "links-to-live-work",
         "maintenance"
+      ]
+    },
+    "docs/architecture/workroom-vocabulary-boundary.md": {
+      "publicHref": "/architecture/workroom-vocabulary-boundary/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "workroom-vocabulary-boundary",
+        "the-three-layers",
+        "naming-rules",
+        "a-known-tension-accepted-deliberately",
+        "what-is-deliberately-not-renamed-yet",
+        "related"
       ]
     },
     "docs/business-types/_readability-report.md": {

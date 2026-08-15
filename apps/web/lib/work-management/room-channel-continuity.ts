@@ -1,15 +1,15 @@
-export type CanonicalWorkRoomRef = {
+export type CanonicalWorkroomRef = {
   caseKey: string;
   caseId: string;
   workItemId: string;
 };
 
-export function buildCanonicalWorkRoomMetadata(room: CanonicalWorkRoomRef) {
-  return { workRoom: room };
+export function buildCanonicalWorkroomMetadata(room: CanonicalWorkroomRef) {
+  return { workroom: room };
 }
 
 export function buildRoomChannelEnvelope(input: {
-  room: CanonicalWorkRoomRef;
+  room: CanonicalWorkroomRef;
   portalOrigin: string;
   summary: string;
 }) {
@@ -17,7 +17,7 @@ export function buildRoomChannelEnvelope(input: {
   return {
     summary: input.summary,
     deepLink: `${origin}/workspace/cases/${input.room.caseKey}`,
-    metadata: buildCanonicalWorkRoomMetadata(input.room),
+    metadata: buildCanonicalWorkroomMetadata(input.room),
   };
 }
 
@@ -26,7 +26,7 @@ type InboundRoomEventInput = {
   providerEventId: string;
   externalSubject: string;
   resolvedPrincipalRef: string | null;
-  room: CanonicalWorkRoomRef | null;
+  room: CanonicalWorkroomRef | null;
   body: string;
   requestedAction: string | null;
   sensitivity: string;
@@ -48,7 +48,7 @@ export type NormalizedInboundRoomEvent =
       status: "accepted";
       eventId: string;
       principalRef: string;
-      room: CanonicalWorkRoomRef;
+      room: CanonicalWorkroomRef;
       activity: { kind: "external-event"; summary: string };
       requestedAction: string | null;
       deliveryAcknowledged: false;

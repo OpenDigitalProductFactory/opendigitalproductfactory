@@ -1,11 +1,11 @@
 import { ShieldCheck, Users } from "lucide-react";
 
 import { Notice, StatusBadge } from "@/components/ui/report-kit";
-import type { WorkRoomView } from "@/lib/work-management/room-types";
+import type { WorkroomView } from "@/lib/work-management/room-types";
 
 import { roomLabel } from "./presentation";
 
-export function WorkRoomParticipants({ room }: { room: WorkRoomView }) {
+export function WorkroomParticipants({ room }: { room: WorkroomView }) {
   const hasUnavailableCoworker = room.participants.some(
     (participant) => participant.kind === "agent" && participant.presence === "unknown",
   );

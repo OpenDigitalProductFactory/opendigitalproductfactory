@@ -7,11 +7,11 @@ import type {
   WorkCaseState,
 } from "./case-types";
 import type { ReceiptEnvelope } from "./receipt-envelope";
-import type { WorkRoomStructure } from "./room-structure";
+import type { WorkroomStructure } from "./room-structure";
 
-export type WorkRoomMode = "finite" | "standing";
+export type WorkroomMode = "finite" | "standing";
 
-export type WorkRoomActivityKind =
+export type WorkroomActivityKind =
   | "message"
   | "ask"
   | "coworker-joined"
@@ -31,7 +31,7 @@ export type WorkRoomActivityKind =
   | "cycle-closed"
   | "cycle-carried-over";
 
-export type WorkRoomParticipantRole =
+export type WorkroomParticipantRole =
   | "accountable"
   | "coordinator"
   | "contributor"
@@ -40,20 +40,20 @@ export type WorkRoomParticipantRole =
   | "reviewer"
   | "observer";
 
-export type WorkRoomParticipantWorkState =
+export type WorkroomParticipantWorkState =
   | "working"
   | "waiting"
   | "idle"
   | "unknown";
 
-export type WorkRoomOutcomePacketCategory =
+export type WorkroomOutcomePacketCategory =
   | "decisions"
   | "artifacts"
   | "actions"
   | "receipts"
   | "evidence";
 
-export interface WorkRoomOutcomePacket {
+export interface WorkroomOutcomePacket {
   outcomeState:
     | "achieved"
     | "partially-achieved"
@@ -77,7 +77,7 @@ export interface WorkRoomOutcomePacket {
   sourceRefs: WorkCaseSourceRef[];
 }
 
-export type WorkRoomBoundaryGap =
+export type WorkroomBoundaryGap =
   | "purpose"
   | "outcome"
   | "scope"
@@ -90,7 +90,7 @@ export type WorkRoomBoundaryGap =
   | "time-boundary"
   | "closure-rule";
 
-export interface WorkRoomBoundaryView {
+export interface WorkroomBoundaryView {
   purpose: string | null;
   outcome: string | null;
   scopeIncluded: string[];
@@ -106,11 +106,11 @@ export interface WorkRoomBoundaryView {
     stopConditionSummary: string | null;
   };
   closureRuleSummary: string | null;
-  gaps: WorkRoomBoundaryGap[];
+  gaps: WorkroomBoundaryGap[];
   sourceRefs: WorkCaseSourceRef[];
 }
 
-export interface WorkRoomCycleView {
+export interface WorkroomCycleView {
   cycleKey: string;
   carrierKind: "work-item" | "work-capsule" | "task-run";
   carrierId: string;
@@ -122,16 +122,16 @@ export interface WorkRoomCycleView {
   stopConditions: string[];
   measureSummary: string | null;
   status: "open" | "verifying" | "closed" | "carried-over";
-  outcomePacket: WorkRoomOutcomePacket | null;
+  outcomePacket: WorkroomOutcomePacket | null;
   sourceRefs: WorkCaseSourceRef[];
 }
 
-export interface WorkRoomParticipantView {
+export interface WorkroomParticipantView {
   principalRef: string;
   displayName: string;
   kind: "person" | "agent" | "system" | "external";
-  roles: WorkRoomParticipantRole[];
-  workState: WorkRoomParticipantWorkState;
+  roles: WorkroomParticipantRole[];
+  workState: WorkroomParticipantWorkState;
   presence: "active" | "idle" | "away" | "unknown";
   currentWorkSummary: string | null;
   enteredReason: string | null;
@@ -141,9 +141,9 @@ export interface WorkRoomParticipantView {
   sourceRefs: WorkCaseSourceRef[];
 }
 
-export interface WorkRoomActivityView {
+export interface WorkroomActivityView {
   eventId: string;
-  kind: WorkRoomActivityKind;
+  kind: WorkroomActivityKind;
   occurredAt: string | null;
   actorRef: WorkCaseActorRef | null;
   summary: string;
@@ -155,7 +155,7 @@ export interface WorkRoomActivityView {
   };
 }
 
-export interface WorkRoomWorkView {
+export interface WorkroomWorkView {
   nextAction: string;
   attentionRequired: boolean;
   attentionReason: string | null;
@@ -166,43 +166,43 @@ export interface WorkRoomWorkView {
   sourceRefs: WorkCaseSourceRef[];
 }
 
-export interface WorkRoomContextView {
+export interface WorkroomContextView {
   refs: WorkCaseSourceRef[];
   digest: string | null;
   sensitivityCeiling: string | null;
 }
 
-export interface WorkRoomOutcomeView {
+export interface WorkroomOutcomeView {
   statement: string | null;
-  packet: WorkRoomOutcomePacket | null;
+  packet: WorkroomOutcomePacket | null;
   health: "on-track" | "at-risk" | "blocked" | "idle" | "unknown" | null;
   sourceRefs: WorkCaseSourceRef[];
 }
 
-export interface WorkRoomView {
+export interface WorkroomView {
   roomKey: string;
   caseRef: WorkCaseRef;
   title: string;
   purpose: string | null;
-  mode: WorkRoomMode;
+  mode: WorkroomMode;
   state: WorkCaseState;
-  outcome: WorkRoomOutcomeView;
-  boundary: WorkRoomBoundaryView;
-  currentCycle: WorkRoomCycleView | null;
-  completedCycles: WorkRoomCycleView[];
-  participants: WorkRoomParticipantView[];
-  activity: WorkRoomActivityView[];
-  work: WorkRoomWorkView;
-  context: WorkRoomContextView;
+  outcome: WorkroomOutcomeView;
+  boundary: WorkroomBoundaryView;
+  currentCycle: WorkroomCycleView | null;
+  completedCycles: WorkroomCycleView[];
+  participants: WorkroomParticipantView[];
+  activity: WorkroomActivityView[];
+  work: WorkroomWorkView;
+  context: WorkroomContextView;
   receipts: ReceiptEnvelope[];
   sourceRefs: WorkCaseSourceRef[];
   /**
    * The value stream + lifecycle the room's SUBJECT sits in — the structure the
    * collaboration happens within. Null when the subject has no value-stream/lifecycle
    * binding (e.g. a platform-development subject not on the customer OVSM). Resolved by
-   * the loader via `resolveWorkRoomStructure` and passed pre-resolved (DB-free build).
+   * the loader via `resolveWorkroomStructure` and passed pre-resolved (DB-free build).
    */
-  structure: WorkRoomStructure | null;
+  structure: WorkroomStructure | null;
   projection: {
     confidence: WorkCaseProjectionConfidence;
     incompleteBoundary: boolean;

@@ -8399,35 +8399,35 @@
     "longSentences": 0,
     "textMass": 39
   },
-  "apps/web/components/workspace/work-room/WorkRoomBody.tsx": {
+  "apps/web/components/workspace/workroom/WorkroomBody.tsx": {
     "vocabulary": 0,
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
     "textMass": 37
   },
-  "apps/web/components/workspace/work-room/WorkRoomCycles.tsx": {
+  "apps/web/components/workspace/workroom/WorkroomCycles.tsx": {
     "vocabulary": 0,
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
     "textMass": 39
   },
-  "apps/web/components/workspace/work-room/WorkRoomHeader.tsx": {
+  "apps/web/components/workspace/workroom/WorkroomHeader.tsx": {
     "vocabulary": 0,
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
     "textMass": 46
   },
-  "apps/web/components/workspace/work-room/WorkRoomParticipants.tsx": {
+  "apps/web/components/workspace/workroom/WorkroomParticipants.tsx": {
     "vocabulary": 0,
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
     "textMass": 31
   },
-  "apps/web/components/workspace/work-room/WorkRoomStructurePanel.tsx": {
+  "apps/web/components/workspace/workroom/WorkroomStructurePanel.tsx": {
     "vocabulary": 0,
     "genericLabels": 0,
     "readability": 0,

@@ -1,11 +1,11 @@
 import type { WorkCaseSourceRef } from "./case-types";
-import type { WorkRoomCycleCarrierCandidate } from "./room-cycle";
-import type { WorkRoomOutcomePacket } from "./room-types";
+import type { WorkroomCycleCarrierCandidate } from "./room-cycle";
+import type { WorkroomOutcomePacket } from "./room-types";
 
-export const WORK_ROOM_CYCLE_EVIDENCE_KIND = "work-room-cycle";
-export const WORK_ROOM_OUTCOME_MESSAGE_TYPE = "work-room-outcome-packet";
+export const WORKROOM_CYCLE_EVIDENCE_KIND = "work-room-cycle";
+export const WORKROOM_OUTCOME_MESSAGE_TYPE = "work-room-outcome-packet";
 
-export interface WorkRoomCycleWorkItemRecord {
+export interface WorkroomCycleWorkItemRecord {
   id: string;
   itemId: string;
   sourceType: string;
@@ -21,14 +21,14 @@ export interface WorkRoomCycleWorkItemRecord {
   completedAt?: Date | string | null;
 }
 
-export interface WorkRoomCycleMessageRecord {
+export interface WorkroomCycleMessageRecord {
   messageId: string;
   messageType: string;
   structuredPayload?: unknown;
 }
 
 interface StoredCycleBoundary {
-  kind: typeof WORK_ROOM_CYCLE_EVIDENCE_KIND;
+  kind: typeof WORKROOM_CYCLE_EVIDENCE_KIND;
   version: 1;
   cycleKey: string;
   trigger: string;
@@ -42,11 +42,11 @@ interface StoredCycleBoundary {
 }
 
 interface StoredOutcomePacket {
-  kind: typeof WORK_ROOM_OUTCOME_MESSAGE_TYPE;
+  kind: typeof WORKROOM_OUTCOME_MESSAGE_TYPE;
   version: 1;
   cycleKey: string;
   carrierId: string;
-  packet: WorkRoomOutcomePacket;
+  packet: WorkroomOutcomePacket;
 }
 
 function record(value: unknown): Record<string, unknown> | null {
@@ -69,11 +69,11 @@ function sourceRefs(value: unknown): WorkCaseSourceRef[] | null {
   return refs.length === value.length ? refs : null;
 }
 
-export function parseStoredWorkRoomCycle(value: unknown): StoredCycleBoundary | null {
+export function parseStoredWorkroomCycle(value: unknown): StoredCycleBoundary | null {
   const container = record(value);
-  const candidate = record(container?.workRoomCycle ?? value);
+  const candidate = record(container?.workroomCycle ?? value);
   if (
-    candidate?.kind !== WORK_ROOM_CYCLE_EVIDENCE_KIND
+    candidate?.kind !== WORKROOM_CYCLE_EVIDENCE_KIND
     || candidate.version !== 1
     || typeof candidate.cycleKey !== "string"
     || typeof candidate.trigger !== "string"
@@ -86,7 +86,7 @@ export function parseStoredWorkRoomCycle(value: unknown): StoredCycleBoundary | 
   const context = sourceRefs(candidate.contextRefs);
   if (!stops || !context) return null;
   return {
-    kind: WORK_ROOM_CYCLE_EVIDENCE_KIND,
+    kind: WORKROOM_CYCLE_EVIDENCE_KIND,
     version: 1,
     cycleKey: candidate.cycleKey,
     trigger: candidate.trigger,
@@ -100,7 +100,7 @@ export function parseStoredWorkRoomCycle(value: unknown): StoredCycleBoundary | 
   };
 }
 
-function looksLikeOutcomePacket(value: unknown): value is WorkRoomOutcomePacket {
+function looksLikeOutcomePacket(value: unknown): value is WorkroomOutcomePacket {
   const candidate = record(value);
   return Boolean(
     candidate
@@ -112,10 +112,10 @@ function looksLikeOutcomePacket(value: unknown): value is WorkRoomOutcomePacket 
   );
 }
 
-export function parseStoredWorkRoomOutcome(value: unknown): StoredOutcomePacket | null {
+export function parseStoredWorkroomOutcome(value: unknown): StoredOutcomePacket | null {
   const candidate = record(value);
   if (
-    candidate?.kind !== WORK_ROOM_OUTCOME_MESSAGE_TYPE
+    candidate?.kind !== WORKROOM_OUTCOME_MESSAGE_TYPE
     || candidate.version !== 1
     || typeof candidate.cycleKey !== "string"
     || typeof candidate.carrierId !== "string"
@@ -124,40 +124,40 @@ export function parseStoredWorkRoomOutcome(value: unknown): StoredOutcomePacket 
   return candidate as unknown as StoredOutcomePacket;
 }
 
-export function projectStoredWorkRoomOutcomePackets(
-  messages: readonly WorkRoomCycleMessageRecord[],
-): WorkRoomOutcomePacket[] {
+export function projectStoredWorkroomOutcomePackets(
+  messages: readonly WorkroomCycleMessageRecord[],
+): WorkroomOutcomePacket[] {
   return messages
     .flatMap((message) => {
-      if (message.messageType !== WORK_ROOM_OUTCOME_MESSAGE_TYPE) return [];
-      const stored = parseStoredWorkRoomOutcome(message.structuredPayload);
+      if (message.messageType !== WORKROOM_OUTCOME_MESSAGE_TYPE) return [];
+      const stored = parseStoredWorkroomOutcome(message.structuredPayload);
       return stored ? [stored.packet] : [];
     })
     .sort((left, right) => right.completedAt.localeCompare(left.completedAt));
 }
 
 function projectedStatus(
-  item: WorkRoomCycleWorkItemRecord,
+  item: WorkroomCycleWorkItemRecord,
   boundary: StoredCycleBoundary,
-): WorkRoomCycleCarrierCandidate["status"] {
+): WorkroomCycleCarrierCandidate["status"] {
   if (item.status === "completed") return boundary.carriedOver ? "carried-over" : "closed";
   if (item.status === "verifying") return "verifying";
   return "open";
 }
 
 export function projectWorkItemCycleCarriers(input: {
-  items: readonly WorkRoomCycleWorkItemRecord[];
-  messages: readonly WorkRoomCycleMessageRecord[];
-}): WorkRoomCycleCarrierCandidate[] {
-  const packets = new Map<string, WorkRoomOutcomePacket>();
+  items: readonly WorkroomCycleWorkItemRecord[];
+  messages: readonly WorkroomCycleMessageRecord[];
+}): WorkroomCycleCarrierCandidate[] {
+  const packets = new Map<string, WorkroomOutcomePacket>();
   for (const message of input.messages) {
-    if (message.messageType !== WORK_ROOM_OUTCOME_MESSAGE_TYPE) continue;
-    const stored = parseStoredWorkRoomOutcome(message.structuredPayload);
+    if (message.messageType !== WORKROOM_OUTCOME_MESSAGE_TYPE) continue;
+    const stored = parseStoredWorkroomOutcome(message.structuredPayload);
     if (stored) packets.set(`${stored.cycleKey}:${stored.carrierId}`, stored.packet);
   }
 
   return input.items.flatMap((item) => {
-    const boundary = parseStoredWorkRoomCycle(item.evidence);
+    const boundary = parseStoredWorkroomCycle(item.evidence);
     if (!boundary) return [];
     const packet = packets.get(`${boundary.cycleKey}:${item.itemId}`) ?? null;
     return [{

@@ -139,7 +139,7 @@ outcome is "someone will pick this up later"; handing one to an operator who ask
 without first trying to reach a colleague who could move the work, is the conversational form of the
 dead-end button. Coworkers are a team that can reach each other directly, so filing is the last rung
 of an ordered ladder — re-route to the specialist who owns the area, consult a peer for one bounded
-question, convene the parties in a work room, and only then file, naming who was tried. The contract
+question, convene the parties in a workroom, and only then file, naming who was tried. The contract
 is assembled into every coworker's prompt from `platform-identity/escalation-ladder`
 (`apps/web/lib/tak/escalation-ladder.ts`), and a turn that files without attempting a rung above it
 offers the escalation instead of ending the thread. Full rationale in

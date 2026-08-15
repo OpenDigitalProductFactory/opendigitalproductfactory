@@ -1,17 +1,17 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  resolveWorkRoomStructure,
-  workRoomStructureSubjectFor,
+  resolveWorkroomStructure,
+  workroomStructureSubjectFor,
 } from "./room-structure";
 
-describe("resolveWorkRoomStructure", () => {
+describe("resolveWorkroomStructure", () => {
   it("returns null for a null subject (no value-stream/lifecycle binding)", () => {
-    expect(resolveWorkRoomStructure(null)).toBeNull();
+    expect(resolveWorkroomStructure(null)).toBeNull();
   });
 
   it("folds an opportunity subject onto its OVSM stage + lifecycle grammar", () => {
-    const structure = resolveWorkRoomStructure({ kind: "opportunity", stage: "qualification" });
+    const structure = resolveWorkroomStructure({ kind: "opportunity", stage: "qualification" });
     expect(structure).not.toBeNull();
     expect(structure?.valueStream).not.toBeNull();
     expect(structure?.lifecycle?.grammarKey).toBe("opportunity");
@@ -21,13 +21,13 @@ describe("resolveWorkRoomStructure", () => {
   });
 
   it("folds a customer-account subject onto its OVSM stage + lifecycle grammar", () => {
-    const structure = resolveWorkRoomStructure({ kind: "customer-account", status: "active" });
+    const structure = resolveWorkroomStructure({ kind: "customer-account", status: "active" });
     expect(structure?.lifecycle?.grammarKey).toBe("customer-account");
     expect(structure?.valueStream?.label.length ?? 0).toBeGreaterThan(0);
   });
 
   it("derives advancement gates from the current stage with a typed allow/refuse per target", () => {
-    const structure = resolveWorkRoomStructure({ kind: "opportunity", stage: "qualification" });
+    const structure = resolveWorkroomStructure({ kind: "opportunity", stage: "qualification" });
     const gates = structure?.lifecycle?.nextGates ?? [];
     expect(gates.length).toBeGreaterThan(0);
     for (const gate of gates) {
@@ -40,9 +40,9 @@ describe("resolveWorkRoomStructure", () => {
   });
 });
 
-describe("workRoomStructureSubjectFor", () => {
+describe("workroomStructureSubjectFor", () => {
   it("maps an opportunity source with a stage to an opportunity subject", () => {
-    expect(workRoomStructureSubjectFor({ sourceType: "opportunity", opportunityStage: "proposal" })).toEqual({
+    expect(workroomStructureSubjectFor({ sourceType: "opportunity", opportunityStage: "proposal" })).toEqual({
       kind: "opportunity",
       stage: "proposal",
     });
@@ -50,7 +50,7 @@ describe("workRoomStructureSubjectFor", () => {
 
   it("maps account-backed sources with a status to a customer-account subject", () => {
     for (const sourceType of ["engagement", "activity", "booking", "storefront-booking"]) {
-      expect(workRoomStructureSubjectFor({ sourceType, accountStatus: "at_risk" })).toEqual({
+      expect(workroomStructureSubjectFor({ sourceType, accountStatus: "at_risk" })).toEqual({
         kind: "customer-account",
         status: "at_risk",
       });
@@ -58,8 +58,8 @@ describe("workRoomStructureSubjectFor", () => {
   });
 
   it("returns null when the subject stage/status is missing or the source has no binding", () => {
-    expect(workRoomStructureSubjectFor({ sourceType: "opportunity", opportunityStage: null })).toBeNull();
-    expect(workRoomStructureSubjectFor({ sourceType: "backlog-item" })).toBeNull();
-    expect(workRoomStructureSubjectFor({ sourceType: "work-capsule" })).toBeNull();
+    expect(workroomStructureSubjectFor({ sourceType: "opportunity", opportunityStage: null })).toBeNull();
+    expect(workroomStructureSubjectFor({ sourceType: "backlog-item" })).toBeNull();
+    expect(workroomStructureSubjectFor({ sourceType: "work-capsule" })).toBeNull();
   });
 });

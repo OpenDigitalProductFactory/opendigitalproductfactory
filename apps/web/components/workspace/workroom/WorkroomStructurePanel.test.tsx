@@ -2,19 +2,19 @@ import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
-import { resolveWorkRoomStructure } from "@/lib/work-management/room-structure";
+import { resolveWorkroomStructure } from "@/lib/work-management/room-structure";
 
-import { WorkRoomStructurePanel } from "./WorkRoomStructurePanel";
+import { WorkroomStructurePanel } from "./WorkroomStructurePanel";
 
-describe("WorkRoomStructurePanel", () => {
+describe("WorkroomStructurePanel", () => {
   it("renders nothing when the subject has no structure", () => {
-    const html = renderToStaticMarkup(<WorkRoomStructurePanel structure={null} />);
+    const html = renderToStaticMarkup(<WorkroomStructurePanel structure={null} />);
     expect(html).toBe("");
   });
 
   it("surfaces the value stream, lifecycle stage/state, and advancement gates", () => {
-    const structure = resolveWorkRoomStructure({ kind: "opportunity", stage: "qualification" });
-    const html = renderToStaticMarkup(<WorkRoomStructurePanel structure={structure} />);
+    const structure = resolveWorkroomStructure({ kind: "opportunity", stage: "qualification" });
+    const html = renderToStaticMarkup(<WorkroomStructurePanel structure={structure} />);
     expect(html).toContain("Value stream");
     expect(html).toContain("Lifecycle");
     // Labels may carry "&" which HTML-escapes; assert on a special-char-free token.

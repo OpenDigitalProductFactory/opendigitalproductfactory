@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { parseStoredWorkRoomOutcome } from "../work-management/room-cycle-adapter";
+import { parseStoredWorkroomOutcome } from "../work-management/room-cycle-adapter";
 import {
   buildDeliberationOutcomeSeal,
   mapConsensusToOutcomeState,
@@ -44,7 +44,7 @@ describe("buildDeliberationOutcomeSeal", () => {
     expect(packet.evidenceRefs).toEqual([{ kind: "evidence", id: "DOUT-1" }]);
     expect(packet.accountablePrincipalRef).toBe("system:deliberation");
     // The stored payload round-trips through the room-outcome message parser.
-    expect(parseStoredWorkRoomOutcome(storedPayload)?.packet.outcomeState).toBe("achieved");
+    expect(parseStoredWorkroomOutcome(storedPayload)?.packet.outcomeState).toBe("achieved");
     expect(storedPayload.carrierId).toBe(BASE.adjudicatorTaskNodeId);
     expect(storedPayload.cycleKey).toBe("DRUN-1");
   });
