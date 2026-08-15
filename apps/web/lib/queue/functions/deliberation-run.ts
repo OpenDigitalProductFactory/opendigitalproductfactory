@@ -18,6 +18,7 @@
 
 import { inngest } from "../inngest-client";
 import { gateAtEntry } from "../quiescence-gates";
+import { sealDeliberationOnRoom } from "@/lib/deliberation/deliberation-room-bridge.server";
 
 /* -------------------------------------------------------------------------- */
 /* Public input                                                               */
@@ -75,6 +76,7 @@ export async function runDeliberation(input: RunDeliberationInput): Promise<void
       branchNodes: {
         select: {
           id: true,
+          taskNodeId: true,
           workerRole: true,
           status: true,
           routeDecision: true,
@@ -320,6 +322,23 @@ export async function runDeliberation(input: RunDeliberationInput): Promise<void
       where: { id: adj.id },
       data: { status: "completed", completedAt: new Date() },
     });
+  }
+
+  // EP-DELIBERATION-ROOMS (BI-F8C5444A): seal the verdict onto a finite Work Room,
+  // NON-FATALLY — the deliberation stands even if room-sealing fails.
+  try {
+    const adjudicator = adjudicatorBranches[0];
+    if (adjudicator?.taskNodeId) {
+      await sealDeliberationOnRoom({
+        deliberationRunId: run.id,
+        adjudicatorTaskNodeId: adjudicator.taskNodeId,
+        consensusState: compactSummary.consensusState,
+      });
+    }
+  } catch (err) {
+    console.warn(
+      `[deliberation-run] room seal skipped for ${run.id}: ${err instanceof Error ? err.message : String(err)}`,
+    );
   }
 
   await pushThreadProgress(input.threadId, input.taskRunId, {
