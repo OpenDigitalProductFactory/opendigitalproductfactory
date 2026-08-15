@@ -5956,6 +5956,13 @@
     "longSentences": 0,
     "textMass": 41
   },
+  "apps/web/components/ops/ImpactItemRow.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 10
+  },
   "apps/web/components/ops/ImprovementsClient.tsx": {
     "vocabulary": 0,
     "genericLabels": 0,
@@ -6026,6 +6033,13 @@
     "longSentences": 0,
     "textMass": 47
   },
+  "apps/web/components/ops/RunImpactDetail.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 21
+  },
   "apps/web/components/ops/SelfUpgradeClient.tsx": {
     "vocabulary": 0,
     "genericLabels": 0,
@@ -6066,7 +6080,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 1,
-    "textMass": 88
+    "textMass": 78
   },
   "apps/web/components/ops/backlog-form-assist.ts": {
     "vocabulary": 0,

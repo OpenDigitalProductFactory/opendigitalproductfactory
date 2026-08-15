@@ -21,6 +21,7 @@ vi.mock("@dpf/db", () => ({
     selfUpgradeRun: {
       create: vi.fn(),
       findMany: vi.fn(),
+      findUnique: vi.fn(),
     },
   },
 }));
@@ -54,6 +55,8 @@ vi.mock("@/lib/self-upgrade/run-store", () => ({
 vi.mock("@/lib/self-upgrade/impact", () => ({
   getCurrentImpactSummaryId: vi.fn().mockResolvedValue(null),
   loadRunImpactDigest: vi.fn().mockResolvedValue(null),
+  loadRunImpactDigests: vi.fn().mockResolvedValue(new Map()),
+  loadRunImpactSummary: vi.fn().mockResolvedValue(null),
 }));
 
 vi.mock("@/lib/self-upgrade/window", () => ({
@@ -162,7 +165,11 @@ import { getSelfUpgradeConfig } from "@/lib/self-upgrade/config";
 import { resolveTargetSha, isShaFresh } from "@/lib/self-upgrade/version";
 import { getDeployedSha } from "@/lib/self-upgrade/completion";
 import { createRun, getLatestRun, getLatestSucceededRun } from "@/lib/self-upgrade/run-store";
-import { getCurrentImpactSummaryId } from "@/lib/self-upgrade/impact";
+import {
+  getCurrentImpactSummaryId,
+  loadRunImpactDigests,
+  loadRunImpactSummary,
+} from "@/lib/self-upgrade/impact";
 import { isUpgradeWindowOpen, nextUpgradeWindowOpen } from "@/lib/self-upgrade/window";
 import { resolveAutoUpgradeWindow, nextAutoWindowOpen } from "@/lib/self-upgrade/auto-window";
 import { getActiveSelfUpgradeBlackout } from "@/lib/self-upgrade/blackout";
@@ -171,6 +178,7 @@ import { inngest } from "@/lib/queue/inngest-client";
 import { revalidatePath } from "next/cache";
 import { runSelfUpgradeRollback, SelfUpgradeRollbackError } from "@/lib/self-upgrade/rollback";
 import {
+  getSelfUpgradeRunImpact,
   getSelfUpgradeStatus,
   listSelfUpgradeRuns,
   rollbackSelfUpgrade,
@@ -688,6 +696,74 @@ describe("listSelfUpgradeRuns – pagination", () => {
     expect(prisma.selfUpgradeRun.findMany).toHaveBeenCalledWith(
       expect.objectContaining({ orderBy: { createdAt: "desc" } }),
     );
+  });
+});
+
+// BI-F7A591AF: a history row identified only by a SHA pair could not answer
+// "which upgrade introduced this?". Each row now carries the digest of the
+// summary the run recorded — batched, never a query per row.
+describe("listSelfUpgradeRuns – per-run impact digest", () => {
+  it("attaches each run's own digest, keyed by its recorded summary id", async () => {
+    vi.mocked(prisma.selfUpgradeRun.findMany).mockResolvedValue(
+      [
+        { ...mockRunRow1, impactSummaryId: "UIS-1" },
+        { ...mockRunRow2, impactSummaryId: null },
+      ] as never,
+    );
+    vi.mocked(loadRunImpactDigests).mockResolvedValue(
+      new Map([["UIS-1", { counts: { total: 4 }, headline: "Four changes." }]]) as never,
+    );
+
+    const result = await listSelfUpgradeRuns({ limit: 20 });
+
+    expect(loadRunImpactDigests).toHaveBeenCalledTimes(1);
+    expect(loadRunImpactDigests).toHaveBeenCalledWith(["UIS-1", null]);
+    expect(result.runs[0]!.impact).toMatchObject({ headline: "Four changes." });
+    // A run that recorded no summary reports null rather than borrowing another's.
+    expect(result.runs[1]!.impact).toBeNull();
+  });
+
+  it("asks for digests only for the page it returns, not the lookahead row", async () => {
+    vi.mocked(prisma.selfUpgradeRun.findMany).mockResolvedValue(
+      [
+        { ...mockRunRow1, impactSummaryId: "UIS-1" },
+        { ...mockRunRow2, impactSummaryId: "UIS-2" },
+      ] as never,
+    );
+    vi.mocked(loadRunImpactDigests).mockResolvedValue(new Map() as never);
+
+    await listSelfUpgradeRuns({ limit: 1 });
+
+    expect(loadRunImpactDigests).toHaveBeenCalledWith(["UIS-1"]);
+  });
+});
+
+describe("getSelfUpgradeRunImpact", () => {
+  it("loads the full summary by the run's OWN recorded id", async () => {
+    vi.mocked(prisma.selfUpgradeRun.findUnique).mockResolvedValue(
+      { impactSummaryId: "UIS-9" } as never,
+    );
+    vi.mocked(loadRunImpactSummary).mockResolvedValue({ targetSha: "b" } as never);
+
+    const out = await getSelfUpgradeRunImpact("SUR-AAAA0001");
+
+    expect(loadRunImpactSummary).toHaveBeenCalledWith("UIS-9");
+    expect(out).toMatchObject({ targetSha: "b" });
+  });
+
+  it("returns null for a run that recorded no summary", async () => {
+    vi.mocked(prisma.selfUpgradeRun.findUnique).mockResolvedValue(
+      { impactSummaryId: null } as never,
+    );
+    vi.mocked(loadRunImpactSummary).mockResolvedValue(null as never);
+
+    expect(await getSelfUpgradeRunImpact("SUR-BBBB0002")).toBeNull();
+    expect(loadRunImpactSummary).toHaveBeenCalledWith(null);
+  });
+
+  it("rejects users without view_operations permission", async () => {
+    vi.mocked(can).mockReturnValue(false);
+    await expect(getSelfUpgradeRunImpact("SUR-AAAA0001")).rejects.toThrow("Unauthorized");
   });
 });
 
