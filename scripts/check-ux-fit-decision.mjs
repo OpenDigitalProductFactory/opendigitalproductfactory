@@ -405,6 +405,67 @@ function lines(out) {
   return out.split("\n").map((s) => s.trim()).filter(Boolean);
 }
 
+// User-visible copy in a line: quoted string literals and JSX text nodes. This is
+// what the UX budget actually measures, so it is what decides whether a moved file
+// introduced a new surface.
+function visibleCopy(line) {
+  const out = new Set();
+  // A module specifier is not user copy — `import … from "@/components/…"` changes
+  // with every file move and would otherwise read as new on-screen text.
+  if (/^\s*[+-]?\s*(import|export)\b.*\bfrom\b/.test(line)) return out;
+  for (const m of line.matchAll(/["'`]([^"'`]{2,})["'`]/g)) {
+    const text = m[1].trim();
+    if (text.includes("/") || text.startsWith("@")) continue; // path-like, not copy
+    out.add(text);
+  }
+  for (const m of line.matchAll(/>\s*([A-Za-z][^<>{}]{2,})\s*</g)) out.add(m[1].trim());
+  return out;
+}
+
+/**
+ * Paths that arrived at their location by a `git mv` that introduced NO new
+ * user-visible copy.
+ *
+ * Rename detection alone is not enough and a raw similarity threshold is the wrong
+ * instrument: renaming a frequently-repeated identifier can push a byte-identical
+ * move down to ~90% similarity, while a genuinely new control can sit above it.
+ * What the gate cares about is whether a new surface appeared, so compare the copy:
+ * if every string/JSX text on the added side already existed on the removed side,
+ * the move is the same control at a new path. Anything that adds copy still has to
+ * prove its fit. Returns the NEW paths.
+ */
+export function collectCopyPreservingRenames(base, runGit = git) {
+  const out = new Set();
+  const raw = runGit(
+    "diff",
+    "--name-status",
+    "--find-renames=50%",
+    `${base}...HEAD`,
+    "--",
+    "apps/web/**/*.tsx",
+  );
+  for (const line of raw.split("\n")) {
+    const parts = line.trim().split(/\t+/);
+    if (parts.length !== 3 || !/^R\d*$/.test(parts[0])) continue;
+    const [, oldPath, newPath] = parts;
+    const body = runGit("diff", "--find-renames=50%", `${base}...HEAD`, "--", oldPath, newPath);
+    const added = new Set();
+    const removed = new Set();
+    for (const l of body.split("\n")) {
+      if (l.startsWith("+++") || l.startsWith("---")) continue;
+      if (l.startsWith("+")) for (const c of visibleCopy(l)) added.add(c);
+      else if (l.startsWith("-")) for (const c of visibleCopy(l)) removed.add(c);
+    }
+    // Compare normalized: a rename re-cases and re-spaces the same words
+    // ("Work Room" -> "Workroom", workRoomX -> workroomX). Text that survives
+    // normalization as new IS new copy and still needs measured evidence.
+    const norm = (s) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
+    const removedNorm = new Set([...removed].map(norm));
+    if ([...added].every((c) => removedNorm.has(norm(c)))) out.add(newPath);
+  }
+  return out;
+}
+
 function main() {
   const base = assertSafeRef(process.env.BASE_SHA || "origin/main", "BASE_SHA");
   // BI-1ADD56FC: never write .git/shallow into a full shared clone (breaks worktrees).
@@ -417,10 +478,18 @@ function main() {
     lines(git("diff", "--name-only", "--diff-filter=A", `${base}...HEAD`, "--", "apps/web/**/*.tsx")),
   );
 
+  // A moved file is the SAME control at a new path, not a new one. Without rename
+  // detection `git mv` reads as delete+add, so a pure rename would demand fresh
+  // measured UX evidence for a screen nobody changed. Forgiven only when the move
+  // introduced no new user-visible copy; a move that also added a surface still
+  // has to prove its fit.
+  const renamedFiles = collectCopyPreservingRenames(base);
+
   const impactingFiles = [];
   const reasons = new Map();
   for (const f of changed) {
     const safePath = assertSafePath(f);
+    if (renamedFiles.has(safePath)) continue;
     const isNewRoute = ROUTE_FILE_RE.test(safePath) && addedFiles.has(safePath);
     const added = git("diff", `${base}...HEAD`, "--", safePath)
       .split("\n")
