@@ -256,14 +256,14 @@ describe("projectOwnerChangeView", () => {
       status: {
         lifecyclePosition: "Waiting for your decision",
         nextAction: "Choose whether to release this change.",
-        needsYou: true,
+        ownerState: "waiting-owner",
       },
     });
 
     expect(view).toMatchObject({
       now: "Waiting for your decision",
       next: "Choose whether to release this change.",
-      health: "needs-you",
+      ownerState: "waiting-owner",
       pendingDecisionId: "DI-OWNER-1",
     });
   });
@@ -273,15 +273,15 @@ describe("projectOwnerChangeView", () => {
     ["plan", "Shaping the approach", "working"],
     ["build", "Building the change", "working"],
     ["review", "Checking the work", "working"],
-    ["ship", "Ready for a release decision", "ready"],
-    ["complete", "Live", "live"],
-    ["failed", "Blocked by a problem", "blocked"],
-    ["abandoned", "Work stopped", "blocked"],
-  ] as const)("maps the %s lifecycle to owner status and health", (phase, now, health) => {
+    ["ship", "Ready for a release decision", "working"],
+    ["complete", "Live", "complete"],
+    ["failed", "Blocked by a problem", "failed"],
+    ["abandoned", "Work stopped", "failed"],
+  ] as const)("maps the %s lifecycle to a fallback owner state", (phase, now, ownerState) => {
     const view = projectOwnerChangeView({ build: build({ phase }) });
 
     expect(view.now).toBe(now);
-    expect(view.health).toBe(health);
+    expect(view.ownerState).toBe(ownerState);
   });
 
   it("prioritizes an owner decision over an otherwise active lifecycle", () => {
@@ -290,11 +290,11 @@ describe("projectOwnerChangeView", () => {
       status: {
         lifecyclePosition: "Waiting for your decision",
         nextAction: "Choose the preferred approach.",
-        needsYou: true,
+        ownerState: "waiting-owner",
       },
     });
 
-    expect(view.health).toBe("needs-you");
+    expect(view.ownerState).toBe("waiting-owner");
     expect(view.now).toBe("Waiting for your decision");
     expect(view.next).toBe("Choose the preferred approach.");
   });
@@ -305,10 +305,23 @@ describe("projectOwnerChangeView", () => {
       status: {
         lifecyclePosition: "Waiting for governed release",
         nextAction: "Wait for governed release and live-version evidence.",
-        needsYou: false,
+        ownerState: "waiting-capacity",
       },
     });
 
-    expect(view.health).toBe("waiting");
+    expect(view.ownerState).toBe("waiting-capacity");
+  });
+
+  it("uses the canonical owner state instead of re-interpreting owner copy", () => {
+    const view = projectOwnerChangeView({
+      build: build({ phase: "build" }),
+      status: {
+        lifecyclePosition: "Working through the queued checks",
+        nextAction: "Wait while Build Studio continues.",
+        ownerState: "working",
+      },
+    });
+
+    expect(view.ownerState).toBe("working");
   });
 });

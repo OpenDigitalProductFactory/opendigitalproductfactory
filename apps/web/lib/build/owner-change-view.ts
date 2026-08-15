@@ -2,6 +2,7 @@ import type { BuildStudioCustomerStatus } from "./customer-status-projection";
 import { normalizeVerificationOutput } from "./verification-output";
 import type { BuildPhase, FeatureBuildRow } from "@/lib/feature-build-types";
 import type { BusinessBuildBrief } from "./business-build-brief";
+import type { BuildStudioOwnerState } from "./owner-status-reconciliation";
 
 export const OWNER_PROOF_STATES = [
   "passed",
@@ -34,7 +35,7 @@ export type OwnerChangeView = {
   outcome: string;
   now: string;
   next: string;
-  health: "working" | "waiting" | "needs-you" | "blocked" | "ready" | "live";
+  ownerState: BuildStudioOwnerState;
   brief: BusinessBuildBrief | null;
   proof: OwnerProofPacket;
   pendingDecisionId: string | null;
@@ -44,7 +45,7 @@ export type OwnerChangeView = {
 
 const EVIDENCE_WRITE_GRACE_MS = 5 * 60 * 1000;
 
-type OwnerStatus = Pick<BuildStudioCustomerStatus, "lifecyclePosition" | "nextAction" | "needsYou">;
+type OwnerStatus = Pick<BuildStudioCustomerStatus, "lifecyclePosition" | "nextAction" | "ownerState">;
 
 export function projectOwnerChangeView(input: {
   build: FeatureBuildRow;
@@ -69,7 +70,7 @@ export function projectOwnerChangeView(input: {
     outcome,
     now: status?.lifecyclePosition ?? fallbackNow(build.phase),
     next: status?.nextAction ?? fallbackNext(build.phase),
-    health: projectHealth(build.phase, status),
+    ownerState: status?.ownerState ?? fallbackOwnerState(build.phase),
     brief: build.businessBuildBrief ?? null,
     proof: {
       requestedOutcome: outcome,
@@ -195,17 +196,9 @@ function isOlderThanBuild(observedAt: string | null, updatedAt: Date): boolean {
     && observedTime + EVIDENCE_WRITE_GRACE_MS < updatedAt.getTime();
 }
 
-function projectHealth(phase: BuildPhase, status?: OwnerStatus | null): OwnerChangeView["health"] {
-  if (status?.needsYou) return "needs-you";
-  if (
-    status
-    && (/\b(waiting|queued)\b/i.test(status.lifecyclePosition) || /^wait\b/i.test(status.nextAction))
-  ) {
-    return "waiting";
-  }
-  if (phase === "complete") return "live";
-  if (phase === "ship") return "ready";
-  if (phase === "failed" || phase === "abandoned") return "blocked";
+function fallbackOwnerState(phase: BuildPhase): BuildStudioOwnerState {
+  if (phase === "complete") return "complete";
+  if (phase === "failed" || phase === "abandoned") return "failed";
   return "working";
 }
 

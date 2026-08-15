@@ -268,19 +268,6 @@ export function BuildStudio({
     sandboxPort: build.sandboxPort,
     lastActivityAt: build.updatedAt,
   })));
-  const ownerChangeView = activeBuild
-    ? projectOwnerChangeView({
-      build: activeBuild,
-      status: customerStatuses[activeBuild.id],
-      previewDrivingBuildId: drivingBuild?.buildCode ?? null,
-    })
-    : null;
-  const ownerPreviewUrl =
-    ownerChangeView?.preview.drivingThisChange
-    && drivingBuild
-    && isValidSandboxPort(drivingBuild.sandboxPort)
-      ? `http://localhost:${drivingBuild.sandboxPort}`
-      : null;
   const branchBadge = resolveBuildStudioBranchBadge({
     submissionBranchShortId,
     buildTitle: activeBuild?.title ?? null,
@@ -336,6 +323,19 @@ export function BuildStudio({
         progress: progressVisibility,
       })
     : null;
+  const ownerChangeView = activeBuild
+    ? projectOwnerChangeView({
+      build: activeBuild,
+      status: ownerStatus,
+      previewDrivingBuildId: drivingBuild?.buildCode ?? null,
+    })
+    : null;
+  const ownerPreviewUrl =
+    ownerChangeView?.preview.drivingThisChange
+    && drivingBuild
+    && isValidSandboxPort(drivingBuild.sandboxPort)
+      ? `http://localhost:${drivingBuild.sandboxPort}`
+      : null;
   const ownerStateIsTerminal = ownerStatus?.ownerState === "complete"
     || ownerStatus?.ownerState === "failed";
   const workflowAction = activeBuild && !ownerStateIsTerminal

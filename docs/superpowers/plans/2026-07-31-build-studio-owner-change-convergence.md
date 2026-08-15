@@ -1,7 +1,8 @@
 ---
 title: Build Studio Owner Change Convergence Implementation Plan
 date: 2026-07-31
-status: planned
+updated: 2026-08-15
+status: in progress - current-main reconciliation applied
 owner: platform
 backlogItem: BI-A40C8A70
 spec: docs/superpowers/specs/2026-06-12-build-studio-owner-improvement-experience-design.md
@@ -20,6 +21,22 @@ Outcome -> Change -> visible work -> Needs You -> preview -> proof -> release ->
 ```
 
 This plan does not create a new Improvements product. Workspace/coworker remains the owner front door, `/workspace/inbox` remains the only Needs You queue, and `/build` remains the owner-readable Change detail.
+
+### 1.1 Current-main reconciliation - 2026-08-15
+
+The five-slice delivery graph remains valid, but later platform work changed the implementation boundary. This table is the current execution authority; historical local commits and completed adjacent BIs are not evidence that a slice shipped.
+
+| Slice or adjacent item | Current state | Reconciled decision |
+| --- | --- | --- |
+| Phase A - `BI-8B601F2F` | In progress. The implementation branch was rebased onto `ca95c7f88aa`; the relation, selected-Change brief, proof packet, and accessibility work are still absent from `main`. | Finish as one Phase A PR. Consume the canonical owner state from #4249; do not restore a second health/status interpreter. |
+| Owner state - `BI-62075FF9` | Done in PR #4249 (`49079d71ec7`) with canonical-runtime UX and merged-tree CI evidence. | Treat `owner-status-reconciliation.ts` as the sole owner-state seam. Do not duplicate this item in Phase A. |
+| Long-running state - `BI-78499309` | Reopened on 2026-08-15 after genuine provider-outage recovery activity made idle builds appear active. | Remains independently owned by the 2026-08-12 owner-state plan. Phase A may display its projection but does not repair its runtime/liveness source. |
+| Phase B - `BI-1BBFE3E2` | Open. Build Studio captures some `DecisionInteraction` records, but there is no complete idempotent owner-gate resolver shared across `/build`, Attention, and mobile. | Re-audit against the canonical lifecycle grammar from PR #4289, then persist one gate identity per logical owner decision. Lifecycle grammar is not a substitute for decision persistence. |
+| Phase C - `BI-DC63D163` | Open. `/build?v=2`, `BuildStudioV2`, and `build-studio-demo.ts` remain production-reachable. | Execute after Phase A lands and parity is verified. Remove the route switch and demo-only code rather than extending it. |
+| Phase D - `BI-98A7B589` | Deferred. The separate archetype-aware mobile companion design has not landed on `main`; SDK maintenance since August 1 does not deliver Today / Needs You. | Keep deferred until Phase B and mobile identity, channel-binding, deep-link, and durable offline prerequisites are accepted. Reuse the DAP cross-process inbox; no mobile-only decision store. |
+| Phase E - `BI-3CBF6A99` | Open and still dependent on deferred `BI-96812FC2`. Watched-analysis work in PR #4233 is adjacent evidence infrastructure, not Build Studio outcome closure. | Do not start until the HX re-measurement contract is live. Reuse outcome observations and stable improvement signals. |
+
+Recommended remaining order: finish Phase A; retire V2; deliver the DecisionInteraction gate identity; then unblock mobile and outcome follow-up only through their named prerequisites. The umbrella `BI-A40C8A70` remains open until integrated canonical-runtime evidence proves the complete journey.
 
 ## 2. Current Substrate
 
@@ -91,7 +108,7 @@ Likely files:
 ### 4.2 Owner projection
 
 1. Add a pure `OwnerChangeView` projector under `apps/web/lib/build/`.
-2. Derive Outcome, Now, Next, health, preview posture, pending decision ID, and proof states from canonical records.
+2. Derive Outcome, Now, Next, canonical `ownerState`, preview posture, pending decision ID, and proof states from canonical records. Consume `owner-status-reconciliation.ts`; do not infer another status from owner copy.
 3. Use closed evidence states: `passed`, `failed`, `not-applicable`, `not-recorded`, `stale`.
 4. Never infer a pass from phase position, missing output, or optimistic UI state.
 5. Unit-test every phase, health overlay, missing/stale evidence, and cross-build isolation.
