@@ -47,6 +47,7 @@ import { persistExecutionPlan, loadExecutionPlan } from "./execution-plan-store"
 import { estimateContextTokens, classifyContextPressure, deriveCompactionCaps } from "./context-pressure";
 import { clampToolResultForModel, resolveToolResultCharCap } from "./tool-result-budget";
 import { applyBacklogCreateClaimGuard } from "./backlog-create-claim-guard";
+import { applyEscalationLadderGuard } from "./escalation-ladder";
 import { assessToolSurface, computeToolSelectionAccuracy, contextEconomyTurnMetricFields } from "./context-economy-metrics";
 import { summarizeDroppedMessages } from "./compaction-digest";
 import { describeContextCapacityFailure } from "./context-capacity-failure";
@@ -2186,7 +2187,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
             ? `${trimmed}\n\n${buildUnsavedAdviceNote(routeContext)}`
             : trimmed;
           return {
-            content: applyBacklogCreateClaimGuard(base, executedTools),
+            content: applyEscalationLadderGuard(applyBacklogCreateClaimGuard(base, executedTools), executedTools),
             providerId: result.providerId,
             modelId: result.modelId,
             downgraded: result.downgraded,
@@ -2424,8 +2425,8 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
       if (trimmed.length === 0 && bestPreNudgeContent.length > 0) {
         console.log(`[agentic-loop] recovering pre-nudge content (${bestPreNudgeContent.length} chars)`);
       }
-      const finalContent = applyBacklogCreateClaimGuard(
-        trimmed.length > 0 ? result.content : (bestPreNudgeContent || result.content), executedTools);
+      const finalContent = applyEscalationLadderGuard(applyBacklogCreateClaimGuard(
+        trimmed.length > 0 ? result.content : (bestPreNudgeContent || result.content), executedTools), executedTools);
       logTurnSummary(result.providerId, result.modelId);
       return {
         content: finalContent,

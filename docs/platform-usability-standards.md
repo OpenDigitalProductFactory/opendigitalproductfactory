@@ -134,6 +134,17 @@ such as “Resolve” or “De-conflict” on an audit-only detail is a failed w
 empty-state copy. The canonical contract and benchmark evidence are in
 [`decision-governance-surface-redesign-design.md` §10](superpowers/specs/2026-07-04-decision-governance-surface-redesign-design.md#10-addendum-2026-08-08-bi-76eedee8-findings-must-carry-an-achievable-outcome).
 
+The same contract governs a coworker conversation. A filed backlog id is an action whose promised
+outcome is "someone will pick this up later"; handing one to an operator who asked for help *now*,
+without first trying to reach a colleague who could move the work, is the conversational form of the
+dead-end button. Coworkers are a team that can reach each other directly, so filing is the last rung
+of an ordered ladder — re-route to the specialist who owns the area, consult a peer for one bounded
+question, convene the parties in a work room, and only then file, naming who was tried. The contract
+is assembled into every coworker's prompt from `platform-identity/escalation-ladder`
+(`apps/web/lib/tak/escalation-ladder.ts`), and a turn that files without attempting a rung above it
+offers the escalation instead of ending the thread. Full rationale in
+[`coworker-escalation-ladder-design.md`](superpowers/specs/2026-08-15-coworker-escalation-ladder-design.md).
+
 Repeated detector or consultation events are audit occurrences, not automatically separate units
 of operator work. A queue must project one item per deterministic work identity, disclose how many
 occurrences it represents, and make one successful disposition clear every still-open occurrence
