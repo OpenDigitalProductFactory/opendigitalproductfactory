@@ -7,7 +7,7 @@ epic: EP-0AF96937
 
 # Decision review honesty and doctrine retrieval
 
-Three defects found while draining a live operator review queue on 2026-08-15.
+Four defects found while draining a live operator review queue on 2026-08-15.
 They present as one symptom — "the AI keeps asking me things it should already
 know, and asking twice" — but have separate causes, so they are separate BIs on
 one branch.
@@ -16,12 +16,13 @@ one branch.
 
 - Decision: decomposed
 - Parent: BI-F5F2869D
-- Dependencies: BI-932C2A81 depends on BI-F5F2869D landing first — clustering must not re-impose the domain split that fix removes.
+- Dependencies: BI-932C2A81 depends on BI-F5F2869D landing first — clustering must not re-impose the domain split that fix removes. BI-ED117C82 underwrites both: each degrades to lexical when a page is unembedded.
 - Rationale: one branch because all three touch the same retrieval/presentation path and share the relevance primitive; splitting them would force three rebases over the same files.
 - Mappings:
   - honest-unresolved-reason -> BI-38658E6B
   - domain-as-prior -> BI-F5F2869D
   - semantic-review-clustering -> BI-932C2A81
+  - embedding-coverage-self-heal -> BI-ED117C82
 
 ## Evidence
 
@@ -97,18 +98,47 @@ resolve.
 `DecisionInteraction` rows (they stay as audit history), or widen what one
 answer resolves during an embedding outage.
 
+## 4. BI-ED117C82 — a self-heal that was never wired
+
+`reconcilePublishedWikiEmbeddings` has carried a comment since BI-D4C1E05E
+saying it is "the fleet self-heal wired into portal boot". It was not wired to
+anything: the only callers were `scripts/reembed-wiki-store.ts` and its tests.
+Live on 2026-08-15, a published org stance carried no vector (16 of 17 embedded)
+on a portal booted long after the page was authored.
+
+Two fixes:
+
+- **Honesty.** With the provider down every page fails for one reason, and the
+  run returned `embedded:0, failed:[]` — indistinguishable from a healthy corpus
+  needing nothing. It now detects the outage up front and reports
+  `providerUnavailable`, listing the pages it could not reach.
+- **Wiring.** `reconcileWikiEmbeddingsOnBoot` runs deferred and non-blocking on
+  the nodejs runtime, scans the full corpus rather than a bounded slice, and
+  logs coverage as a NUMBER. It never throws out of the boot hook.
+
+This underwrites §2 and §3: an unembedded stance degrades relevance to lexical,
+and the BI-7E1F128A fail-safe then escalates by design, so a silent embedding
+gap reaches the operator as "the AI keeps asking me things it should know".
+
+**May NOT do:** block boot, loop/retry inside the hook (retry belongs to the
+next boot or the maintainer script), or log a clean pass it did not achieve.
+
 ## Verification
 
-- 515 tests green across `lib/decision`, `lib/decision-perspective`,
-  `lib/founder-review`, `lib/actions`, and the review route.
+- Tests green across `lib/decision`, `lib/decision-perspective`,
+  `lib/founder-review`, `lib/actions`, `lib/wiki`, and the review route. The
+  embedding-unavailable fallback is exercised by the suite, not assumed.
 - Pre-commit guards: secret scan, private-identity scan, migration safety,
-  scoped typecheck.
+  scoped typecheck, derived-artifact regeneration.
 - Outstanding: functional verification on the live install requires the
   migration applied and the portal image rebuilt. Until then §2 is proven by
   unit test only, and the live queue would still escalate the MSP question.
 
-## Out of scope
+## Still open
 
-BI-ED117C82 (boot re-embed self-heal and an in-product repair path for a
-partially embedded corpus) is filed and not addressed here. It matters more
-after §2 and §3, because both degrade to lexical when embeddings are missing.
+The BI also asks for an in-product repair path — an admin action or MCP tool for
+a partially embedded corpus — because `dpf-portal-1` ships neither the
+maintainer script nor `tsx`, and `dpf-postgres-1` exposes no host port, so
+today the documented repair cannot be run from inside or outside the container.
+The boot hook narrows the window but does not close that gap; it remains on
+BI-ED117C82.
