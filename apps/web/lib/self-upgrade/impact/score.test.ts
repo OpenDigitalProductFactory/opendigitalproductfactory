@@ -28,24 +28,48 @@ function commits(...subjects: ParsedCommit[]): ParsedCommit[] {
 }
 
 describe("scoreCommits — base weights", () => {
-  it("ranks breaking > feature > perf > fix > other when nothing matches install state", () => {
+  it("ranks breaking > feature > perf > fix > dependency > docs > maintenance when nothing matches install state", () => {
     const c = commits(
       parseCommit(raw("feat!: bk")),
       parseCommit(raw("feat: f")),
       parseCommit(raw("perf: p")),
       parseCommit(raw("fix: x")),
+      parseCommit(raw("build(deps): bump thing")),
+      parseCommit(raw("docs: d")),
       parseCommit(raw("chore: o")),
     );
     const scored = scoreCommits({ commits: c, signals: emptySignals, enrichmentByPr: new Map() });
-    // base weights: 100, 50, 30, 25, 8
-    expect(scored.map((s) => s.score)).toEqual([100, 50, 30, 25, 8]);
+    // base weights: 100, 50, 30, 25, 12, 6, 5
+    expect(scored.map((s) => s.score)).toEqual([100, 50, 30, 25, 12, 6, 5]);
     expect(scored.map((s) => s.reasons[0]!.kind)).toEqual([
       "breaking-change",
       "base-weight",
       "base-weight",
       "base-weight",
       "base-weight",
+      "base-weight",
+      "base-weight",
     ]);
+  });
+
+  // A security fix must outrank anything an operator merely asked for — it is
+  // the one bucket besides `breaking` they should never scroll past.
+  it("weights a security change above a feature", () => {
+    const c = commits(parseCommit(raw("fix: patch the disclosed vulnerability")));
+    const [scored] = scoreCommits({
+      commits: c,
+      signals: emptySignals,
+      enrichmentByPr: new Map(),
+    });
+    // The subject alone does not promote — refineCategories owns that pass —
+    // so score the already-refined category directly.
+    expect(scored!.score).toBe(25);
+    const promoted = scoreCommits({
+      commits: [{ ...c[0]!, category: "security" }],
+      signals: emptySignals,
+      enrichmentByPr: new Map(),
+    });
+    expect(promoted[0]!.score).toBe(80);
   });
 });
 

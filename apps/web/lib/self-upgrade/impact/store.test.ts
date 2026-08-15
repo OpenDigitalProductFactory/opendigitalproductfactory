@@ -23,7 +23,7 @@ function summary(overrides: Partial<UpgradeImpactSummary> = {}): UpgradeImpactSu
   return {
     currentLineageSha: LINEAGE,
     targetSha: TARGET,
-    counts: { breaking: 0, feature: 1, fix: 0, performance: 0, other: 0, total: 1 },
+    counts: { breaking: 0, security: 0, feature: 1, fix: 0, performance: 0, dependency: 0, documentation: 0, maintenance: 0, other: 0, total: 1 },
     topItems: [],
     allItems: [],
     phrased: null,

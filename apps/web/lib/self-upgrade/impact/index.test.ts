@@ -57,7 +57,7 @@ function storedSummary(
   return {
     currentLineageSha: "a".repeat(40),
     targetSha: "b".repeat(40),
-    counts: { breaking: 0, feature: 1, fix: 0, performance: 0, other: 0, total: 1 },
+    counts: { breaking: 0, security: 0, feature: 1, fix: 0, performance: 0, dependency: 0, documentation: 0, maintenance: 0, other: 0, total: 1 },
     topItems: [],
     allItems: [],
     phrased: null,
@@ -294,6 +294,42 @@ describe("summarizeUpgradeImpact — orchestrator", () => {
     });
     expect(out.ok).toBe(true);
   });
+
+  // The categories a commit subject can prove are settled before enrichment;
+  // "this bump closes an advisory" is only knowable from the PR. Counts are
+  // therefore taken AFTER the refinement pass — if they were taken before, the
+  // headline would say "dependency update" while the badge said "security".
+  it("counts categories after PR enrichment refines them", async () => {
+    const out = await summarizeUpgradeImpact({ skipPhrasing: true }, {
+      loadCurrentLineageSha: async () => "a".repeat(40),
+      loadTargetSha: async () => "b".repeat(40),
+      loadInstallSignals: async () => SIGNALS,
+      loadChangeSet: async () => [
+        rawCommit("build(deps): bump nanoid (#77)", [], "1".repeat(40)),
+        rawCommit("build(deps): bump next (#78)", [], "2".repeat(40)),
+        rawCommit("docs: explain the gate (#79)", [], "3".repeat(40)),
+      ],
+      enrichPrs: async () => ({
+        reachable: true,
+        enriched: 1,
+        byPr: new Map([
+          [77, { prNumber: 77, title: "Bump nanoid", labels: ["security"], body: null }],
+        ]),
+      }),
+      phraseSummary: async () => null,
+    });
+    expect(out.ok).toBe(true);
+    if (!out.ok) return;
+    expect(out.summary.counts).toMatchObject({
+      security: 1,
+      dependency: 1,
+      documentation: 1,
+      other: 0,
+      total: 3,
+    });
+    // …and the promoted item outranks the routine bump in the ordered list.
+    expect(out.summary.topItems[0]!.category).toBe("security");
+  });
 });
 
 describe("loadPersistedImpactSummary", () => {
@@ -331,7 +367,7 @@ describe("loadRunImpactDigest", () => {
   it("returns counts + headline from the run's own summary id", async () => {
     getPersistedSummaryByIdMock.mockResolvedValue(
       storedSummary({
-        counts: { breaking: 1, feature: 5, fix: 3, performance: 0, other: 0, total: 9 },
+        counts: { breaking: 1, security: 0, feature: 5, fix: 3, performance: 0, dependency: 0, documentation: 0, maintenance: 0, other: 0, total: 9 },
         phrased: {
           headline: "Nine changes, one breaking.",
           itemPhrasings: [],
@@ -342,7 +378,7 @@ describe("loadRunImpactDigest", () => {
     const out = await loadRunImpactDigest("UIS-42");
     expect(getPersistedSummaryByIdMock).toHaveBeenCalledWith("UIS-42");
     expect(out).toEqual({
-      counts: { breaking: 1, feature: 5, fix: 3, performance: 0, other: 0, total: 9 },
+      counts: { breaking: 1, security: 0, feature: 5, fix: 3, performance: 0, dependency: 0, documentation: 0, maintenance: 0, other: 0, total: 9 },
       headline: "Nine changes, one breaking.",
     });
   });

@@ -14,12 +14,22 @@ import type { ImpactCategoryCounts } from "./types";
  * answer to "how big is this upgrade?" that a raw SHA pair never gave.
  */
 export function formatImpactCounts(counts: ImpactCategoryCounts): string {
+  // Summaries persisted under the earlier taxonomy carry only the original five
+  // keys, so every read is `?? 0` — a missing key is "none of those", never NaN.
+  const n = (value: number | undefined): number => value ?? 0;
   const parts: string[] = [];
-  if (counts.breaking > 0) parts.push(`${counts.breaking} breaking`);
-  if (counts.feature > 0) parts.push(`${counts.feature} new`);
-  if (counts.performance > 0) parts.push(`${counts.performance} perf`);
-  if (counts.fix > 0) parts.push(`${counts.fix} fix${counts.fix === 1 ? "" : "es"}`);
-  if (counts.other > 0) parts.push(`${counts.other} other`);
+  const push = (count: number, label: string) => {
+    if (count > 0) parts.push(`${count} ${label}`);
+  };
+  push(n(counts.breaking), "breaking");
+  push(n(counts.security), "security");
+  push(n(counts.feature), "new");
+  push(n(counts.performance), "perf");
+  push(n(counts.fix), `fix${n(counts.fix) === 1 ? "" : "es"}`);
+  push(n(counts.dependency), "dependency");
+  push(n(counts.documentation), "docs");
+  push(n(counts.maintenance), "internal");
+  push(n(counts.other), "other");
   if (parts.length === 0) {
     return `${counts.total} change${counts.total === 1 ? "" : "s"}`;
   }
