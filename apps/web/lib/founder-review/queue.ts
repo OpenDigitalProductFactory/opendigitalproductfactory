@@ -6,7 +6,15 @@ export type FounderReviewUnresolvedReason =
   | "evidence-gap"
   | "domain-gap"
   | "ownership-gap"
-  | "volunteers-dilemma";
+  | "volunteers-dilemma"
+  // BI-38658E6B. The five reasons above are what a WRITER records. The four
+  // below are what the queue DERIVES when no reason was recorded — previously
+  // every such row was labelled "principle-gap", which asserted a doctrine gap
+  // the payload itself contradicted (`coverageGap: false`).
+  | "principle-conflict"
+  | "confidence-below-threshold"
+  | "relevance-degraded"
+  | "unknown";
 
 // Re-export the canonical perspective type from PR #1343 so callers in this
 // module don't need a second import. `null` represents "neither WWMD nor
@@ -44,6 +52,13 @@ const ACTION_BY_REASON: Record<FounderReviewUnresolvedReason, string> = {
   "domain-gap": "Route to domain owner",
   "ownership-gap": "Assign an accountable owner",
   "volunteers-dilemma": "Choose the responsible volunteer path",
+  // Deliberately NOT "write a stance". The gate found and applied doctrine; the
+  // lever is the confidence policy, so pointing at more doctrine would send the
+  // operator to the one remedy that cannot move the score (BI-F5F2869D).
+  "principle-conflict": "Resolve the conflicting stances",
+  "confidence-below-threshold": "Answer it and review the confidence policy",
+  "relevance-degraded": "Restore the embedding layer",
+  "unknown": "Open the decision canvas",
 };
 
 const LABEL_BY_REASON: Record<FounderReviewUnresolvedReason, string> = {
@@ -52,8 +67,16 @@ const LABEL_BY_REASON: Record<FounderReviewUnresolvedReason, string> = {
   "domain-gap": "Domain gap",
   "ownership-gap": "Ownership gap",
   "volunteers-dilemma": "Volunteer's dilemma",
+  "principle-conflict": "Principle conflict",
+  "confidence-below-threshold": "Below confidence threshold",
+  "relevance-degraded": "Embeddings unavailable",
+  "unknown": "Reason not recorded",
 };
 
+/**
+ * Reasons a WRITER may record. A string outside this set is not coerced into a
+ * plausible-looking reason — it derives from the payload or reports `unknown`.
+ */
 const KNOWN_REASONS = new Set<FounderReviewUnresolvedReason>([
   "principle-gap",
   "evidence-gap",
@@ -144,10 +167,46 @@ function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
 }
 
-function normalizeReason(value: unknown): FounderReviewUnresolvedReason {
-  return typeof value === "string" && KNOWN_REASONS.has(value as FounderReviewUnresolvedReason)
-    ? value as FounderReviewUnresolvedReason
-    : "principle-gap";
+/**
+ * Derive why a decision is unresolved from the evidence the gate actually
+ * recorded (BI-38658E6B).
+ *
+ * The previous implementation coerced every unrecognised or absent
+ * `unresolvedReason` to `"principle-gap"`, which rendered as
+ * "Clarify operating policy". Live rows disproved that: DI-B4E7DCC2D028 carried
+ * `coverageGap: false` with three current, on-point stances — including a
+ * promoted ruling on the same question — and still told the owner to write the
+ * doctrine they had already written. After BI-7E1F128A made confidence
+ * relevance-weighted, that advice is not just unhelpful but misdirecting: more
+ * stance material can move the score by zero.
+ *
+ * Precedence runs most-specific-first. `coverageGap` is the only signal that
+ * means what the old fallback claimed, so it alone keeps the doctrine wording.
+ * When nothing is recorded we say so rather than guess.
+ */
+export function deriveUnresolvedReason(payload: Record<string, unknown>): FounderReviewUnresolvedReason {
+  const recorded = payload.unresolvedReason;
+  if (typeof recorded === "string" && KNOWN_REASONS.has(recorded as FounderReviewUnresolvedReason)) {
+    return recorded as FounderReviewUnresolvedReason;
+  }
+
+  // A real absence of applicable material — the one case that IS a doctrine gap.
+  if (payload.coverageGap === true) return "principle-gap";
+
+  // Conflict before confidence: a mixed/conflicting corpus is not a low score,
+  // and telling the owner to "review the confidence policy" would hide the clash.
+  if (payload.principleConflict === true || payload.stanceAlignment === "mixed") {
+    return "principle-conflict";
+  }
+
+  // The BI-7E1F128A fail-safe escalates on lexical relevance regardless of
+  // score, so this must not be reported as a confidence or doctrine problem —
+  // the lever is the embedding layer, not the corpus.
+  if (payload.relevanceMethod === "lexical") return "relevance-degraded";
+
+  if (typeof payload.confidenceScore === "number") return "confidence-below-threshold";
+
+  return "unknown";
 }
 
 function actionForReason(
@@ -162,7 +221,7 @@ function actionForReason(
 
 export function projectFounderReviewCandidate(row: DecisionInteractionQueueRow) {
   const payload = asRecord(row.outcomePayload);
-  const unresolvedReason = normalizeReason(payload.unresolvedReason);
+  const unresolvedReason = deriveUnresolvedReason(payload);
   // Default a missing profile to WWMD: the founder-review queue predates the
   // WWWD profile and a row with no profile is historically a Mark decision.
   const perspective: WikiPerspective = perspectiveForProfile(row.profile) ?? "wwmd";

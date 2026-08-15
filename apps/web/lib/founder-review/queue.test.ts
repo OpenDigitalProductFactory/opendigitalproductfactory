@@ -171,3 +171,89 @@ describe("isFounderActionable (BI-6EC1EE25)", () => {
     ).toBe(true);
   });
 });
+
+// BI-38658E6B — never synthesise "Principle gap". When `unresolvedReason` is
+// absent the reason must be DERIVED from the payload that is present, because
+// the fallback told operators to "clarify operating policy" on rows whose own
+// payload recorded `coverageGap: false` — i.e. the doctrine was found and
+// applied. Post-BI-7E1F128A that advice is actively wrong: adding stance
+// material moves a relevance-weighted score by an amount that can be zero.
+describe("unresolved reason is derived, never invented (BI-38658E6B)", () => {
+  function orgRow(payload: Record<string, unknown>): DecisionInteractionQueueRow {
+    return {
+      interactionId: "DI-DERIVE",
+      question: "Should we restore the lapsed subscription?",
+      options: [],
+      outcomeType: "escalate",
+      outcomePayload: payload,
+      buildId: null,
+      taskRunId: null,
+      routeContext: "/coworker-business",
+      createdAt: new Date("2026-08-15T12:00:00.000Z"),
+      profile: { profileId: "profile-org", name: "Operator perspective", kind: "organization" },
+    };
+  }
+
+  it("an explicitly recorded reason still wins", () => {
+    const c = projectFounderReviewCandidate(orgRow({ unresolvedReason: "evidence-gap" }));
+    expect(c.unresolvedReason).toBe("evidence-gap");
+  });
+
+  it("coverageGap:true is a genuine doctrine gap and keeps the policy wording", () => {
+    const c = projectFounderReviewCandidate(orgRow({ coverageGap: true, materialCount: 0 }));
+    expect(c.unresolvedReason).toBe("principle-gap");
+    expect(c.primaryActionLabel).toBe("Clarify operating policy");
+  });
+
+  // The live regression: DI-B4E7DCC2D028 carried exactly this payload and was
+  // labelled "Principle gap → Clarify operating policy" while the corpus already
+  // held a promoted ruling on the same question.
+  it("coverageGap:false with a low score reports confidence, NOT a principle gap", () => {
+    const c = projectFounderReviewCandidate(orgRow({
+      coverageGap: false,
+      principleConflict: false,
+      confidenceScore: 0.35,
+      materialCount: 3,
+    }));
+    expect(c.unresolvedReason).toBe("confidence-below-threshold");
+    expect(c.unresolvedReasonLabel).toBe("Below confidence threshold");
+    expect(c.primaryActionLabel).not.toBe("Clarify operating policy");
+  });
+
+  it("a lexical relevance fallback is reported as a degraded retrieval layer", () => {
+    const c = projectFounderReviewCandidate(orgRow({
+      coverageGap: false,
+      confidenceScore: 0.5,
+      relevanceMethod: "lexical",
+      stanceAlignment: "approve",
+    }));
+    expect(c.unresolvedReason).toBe("relevance-degraded");
+    expect(c.unresolvedReasonLabel).toBe("Embeddings unavailable");
+  });
+
+  it("conflicting stance directions are reported as a conflict, not a gap", () => {
+    const c = projectFounderReviewCandidate(orgRow({
+      coverageGap: false,
+      stanceAlignment: "mixed",
+      confidenceScore: 0.6,
+    }));
+    expect(c.unresolvedReason).toBe("principle-conflict");
+  });
+
+  it("principleConflict:true is a conflict even without stanceAlignment", () => {
+    const c = projectFounderReviewCandidate(orgRow({ coverageGap: false, principleConflict: true }));
+    expect(c.unresolvedReason).toBe("principle-conflict");
+  });
+
+  it("an empty payload is labelled unknown rather than guessed", () => {
+    const c = projectFounderReviewCandidate(orgRow({}));
+    expect(c.unresolvedReason).toBe("unknown");
+    expect(c.unresolvedReasonLabel).toBe("Reason not recorded");
+    expect(c.primaryActionLabel).toBe("Open the decision canvas");
+  });
+
+  it("an unrecognised reason string is unknown, not silently principle-gap", () => {
+    const c = projectFounderReviewCandidate(orgRow({ unresolvedReason: "something-new" }));
+    expect(c.unresolvedReason).toBe("unknown");
+  });
+});
