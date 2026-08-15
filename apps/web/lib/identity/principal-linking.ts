@@ -440,6 +440,31 @@ export function principalKindForContact(input: {
   return "customer";
 }
 
+/**
+ * Resolve-or-mint a LOCAL mirrored Principal for a FOREIGN (cross-install) GAID
+ * (EP-WORKROOM-COMMS Phase 2, BI-4CA4FCE5). The mirrored principal carries a `gaid`
+ * alias whose issuer is the FOREIGN namespace (never the empty INTERNAL_ISSUER), so
+ * it can never collide with a local agent's GAID. This is how an external agent is
+ * admitted to a room by its canonical PRN without any direct remote write — the
+ * sovereignty boundary lives in the A2A ingress/mirror layer, not here.
+ */
+export async function ensureFederatedRoomPrincipal(input: {
+  foreignGaid: string;
+  /** The foreign install's issuer namespace (must be non-empty; not INTERNAL_ISSUER). */
+  issuer: string;
+  displayName?: string | null;
+  db?: PrincipalDb;
+}): Promise<SyncedPrincipal> {
+  if (!input.issuer || input.issuer === INTERNAL_ISSUER) {
+    throw new Error("A federated (foreign) GAID must carry a non-empty foreign issuer namespace.");
+  }
+  return upsertPrincipalForAliases(input.db ?? prisma, {
+    kind: "external-agent",
+    displayName: input.displayName?.trim() || input.foreignGaid,
+    aliases: [{ aliasType: "gaid", aliasValue: input.foreignGaid, issuer: input.issuer }],
+  });
+}
+
 export async function ensureAgentPrincipalIdentity(
   agentId: string,
   db: PrincipalDb = prisma,
