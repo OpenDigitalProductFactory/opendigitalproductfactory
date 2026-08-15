@@ -1,19 +1,36 @@
-# Claim a workroom before you work
+---
+title: Claim a Workroom Before You Work
+slug: claim-a-workroom-before-you-work
+pageKind: principle
+status: published
+abstract: The unit of WIP is the Workroom, not the Build Studio build. Every surface — Claude Code, Codex CLI, Grok and the embedded Build Studio — claims one before working, because a build is one surface's execution while the Workroom is the durable claim that holds the lease, the branch and the evidence.
+principleTier: rule
+principleDirection: Claim a Workroom before starting work on any surface, including the external CLIs; work that advances without a claim holds no lease, names no backlog item, and is invisible to coordination.
+principleDimensionVector: {"governance_compliance": 0.9, "evidence_density": 0.7, "long_term_maintainability": 0.5, "blast_radius": -0.4}
+principleAppliesTo:
+  - in_platform_coworker
+  - external_coding_agent
+  - human
+principleRingScope:
+  - ring-2-workflow
+  - external-coordination
+principleConsumerArchetype: universal
+principleConsumerContexts:
+  - build-studio
+  - engineering-flow
+  - mcp
+---
 
-**Tier:** rule
-**Applies to:** every delivery surface — Claude Code, Codex CLI, Grok, and the
-embedded Build Studio.
-
-## The rule
+## Rule
 
 The unit of WIP is the **Workroom**, not the Build Studio build. Claim one before
 you work, on every surface, including the external CLIs.
 
 Founder-directed 2026-06-26.
 
-## Why the unit is the workroom and not the build
+## Why the unit is the Workroom and not the build
 
-A build is one surface's execution of work. The workroom is the durable claim: it
+A build is one surface's execution of work. The Workroom is the durable claim: it
 names the backlog item, holds the lease, records the branch and worktree, and
 carries the evidence a gate later reads. Anchoring WIP to a build would make work
 invisible whenever it ran anywhere else — which is most of it, since the four
@@ -30,7 +47,7 @@ and the room are one concept rather than two. Governed by `EP-WORK-CONVERGENCE`
 ⟦runtime: the MCP tools still carry their original `*_capsule_*` names behind an
 alias window, and the Prisma field vocabulary (`workCapsuleId`, `capsuleId`, the
 `WC-*` keys) is unchanged — `BI-0702869B` and `BI-C2C16582` retire those. Prefer
-the workroom vocabulary in prose; expect the old names at the tool and column
+the Workroom vocabulary in prose; expect the old names at the tool and column
 boundary until those ship.⟧
 
 ## What this rule does not yet enforce
