@@ -424,6 +424,7 @@ export const STATUS_INTENT: Record<string, Record<string, Intent>> = {
     "in-progress": "accent",
     done: "success",
     deferred: "neutral",
+    retired: "neutral",
   },
   // Workspace Work Room semantics. These domains are shared by the My Work
   // lens and room detail shell so neither surface carries a private color map.

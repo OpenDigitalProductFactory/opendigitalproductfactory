@@ -74,7 +74,7 @@ export async function captureCorrectiveFailureBI(
     const existing = await prisma.backlogItem.findFirst({
       where: {
         source: input.source,
-        status: { notIn: ["done", "deferred"] },
+        status: { notIn: ["done", "deferred", "retired"] },
         body: { contains: `failureFingerprint: ${fingerprint}` },
       },
       select: { id: true, itemId: true },
@@ -130,7 +130,7 @@ export async function recordCorrectiveRecoveryEvidence(input: {
     const items = await prisma.backlogItem.findMany({
       where: {
         source: input.source,
-        status: { notIn: ["done", "deferred"] },
+        status: { notIn: ["done", "deferred", "retired"] },
       },
       select: { id: true, itemId: true, body: true },
     });

@@ -72,6 +72,13 @@ function BacklogItemRowImpl({ item, onEdit, focused = false }: Props) {
 
   const buildAction = resolveBacklogBuildActionState(item);
   const lifecycleLabel = backlogItemLifecycleLabel(item);
+  const deferralReviewDue = item.status === "deferred" && item.deferReviewAt
+    ? new Date(item.deferReviewAt).getTime() <= Date.now()
+    : false;
+  const deferralComplete = Boolean(
+    item.deferReason && item.deferTrigger && item.deferReviewAt
+      && item.deferOwnerPrincipalId && item.deferredAt,
+  );
 
   return (
     <div
@@ -137,7 +144,7 @@ function BacklogItemRowImpl({ item, onEdit, focused = false }: Props) {
           target="_blank"
           rel="noreferrer"
           className="shrink-0 text-[9px] text-[var(--dpf-accent)] hover:underline px-1"
-          title="Filed with the project team"
+          title="Project issue"
         >
           GH #{item.upstreamIssueNumber}
         </a>
@@ -150,7 +157,9 @@ function BacklogItemRowImpl({ item, onEdit, focused = false }: Props) {
           lifecycleLabel === "retired duplicate"
             ? "Retired because another backlog item is the canonical record."
             : item.status === "deferred"
-              ? "Not active and not completed. It remains deferred until someone reopens it; there is no automatic resume date."
+              ? deferralComplete
+                ? "Deferred with review policy."
+                : "Needs deferral review."
               : undefined
         }
       >
@@ -161,6 +170,25 @@ function BacklogItemRowImpl({ item, onEdit, focused = false }: Props) {
           uppercase={false}
         />
       </span>
+
+      {item.status === "deferred" ? (
+        <div className="w-full rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-2 text-dpf-caption text-[var(--dpf-muted)]">
+          {deferralComplete ? (
+            <div className="grid gap-1 sm:grid-cols-2 lg:grid-cols-4">
+              <span><strong className="text-[var(--dpf-text)]">Reason:</strong> {item.deferReason}</span>
+              <span><strong className="text-[var(--dpf-text)]">Trigger:</strong> {item.deferTrigger}</span>
+              <span><strong className="text-[var(--dpf-text)]">Owner:</strong> {item.deferOwnerPrincipal?.displayName ?? "Unknown principal"}</span>
+              <span className={deferralReviewDue ? "text-[var(--dpf-error)]" : undefined}>
+                <strong className="text-[var(--dpf-text)]">Review:</strong>{" "}
+                <LocalTime value={item.deferReviewAt ?? null} />
+                {deferralReviewDue ? " · overdue" : ""}
+              </span>
+            </div>
+          ) : (
+            <span className="text-[var(--dpf-error)]">Incomplete deferral · review needed</span>
+          )}
+        </div>
+      ) : null}
 
       {/* Actions */}
       <div className="shrink-0 flex items-center gap-1">
@@ -199,8 +227,8 @@ function BacklogItemRowImpl({ item, onEdit, focused = false }: Props) {
                 onClick={handleEscalate}
                 disabled={isPending}
                 className="text-[10px] text-[var(--dpf-muted)] hover:text-[var(--dpf-accent)] px-1"
-                aria-label="Report to project team"
-                title="Open a GitHub issue with the project team"
+                aria-label="Report issue"
+                title="Open project issue"
               >
                 {isPending ? "…" : "report"}
               </button>

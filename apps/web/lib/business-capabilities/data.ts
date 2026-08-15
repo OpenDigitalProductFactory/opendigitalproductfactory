@@ -150,7 +150,8 @@ function toBacklogTraceStatus(status: string | null | undefined): BacklogTraceSt
     status === "open" ||
     status === "in-progress" ||
     status === "done" ||
-    status === "deferred"
+    status === "deferred" ||
+    status === "retired"
   ) {
     return status;
   }

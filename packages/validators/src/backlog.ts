@@ -48,7 +48,7 @@ export const createBacklogItemSchema = z.object({
 export const updateBacklogItemSchema = z.object({
   title: z.string().min(1).max(200).optional(),
   body: z.string().max(10000).optional(),
-  status: z.enum(["open", "in-progress", "done", "deferred"]).optional(),
+  status: z.enum(["open", "in-progress", "done", "deferred", "retired"]).optional(),
   priority: z.number().int().min(0).max(999).optional(),
   epicId: z.string().nullable().optional(),
   scopeKind: scopeKindSchema.nullable().optional(),

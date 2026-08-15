@@ -10,7 +10,7 @@ Operations is the delivery backlog for the platform. It tracks the work items, e
 
 ## Key Concepts
 
-- **Backlog Items** — Individual units of work with a status, priority, epic, and owner. Items move through triaging, open, in-progress, done, or deferred.
+- **Backlog Items** — Individual units of work with a status, priority, epic, and owner. Items move through triaging, open, in-progress, done, deferred, or retired.
 - **Epics** — Groups of related backlog items that together deliver a meaningful outcome. The list shows the item mix by status and calculates progress from items marked done only.
 - **Archetype Scope** — Planning metadata that indicates whether work is platform-wide, common across businesses, or specific to an archetype category or leaf archetype. This helps separate market-specific gaps from common finance, workforce, identity, and platform substrate work.
 - **Priority** — Items are ranked by priority to make the most important work visible. Priorities can be adjusted as circumstances change.
@@ -33,31 +33,38 @@ Operations is the delivery backlog for the platform. It tracks the work items, e
 
 ## Reading Epic Progress
 
-Each epic row separates active, done, and deferred work. For example, `1 open ·
-16 done · 2 deferred` means exactly that: 16 items are complete, two are not
-currently planned, and one remains active. Deferred work does not increase the
+Each epic row separates active, deferred, done, and retired work. For example,
+`1 open · 2 deferred · 16 done · 3 retired` means exactly that: 16 items are
+complete, two remain wanted but parked, three were intentionally closed without
+delivery, and one remains active. Deferred and retired work do not increase the
 done count.
 
-**Active only** is enabled by default. It hides done and deferred item rows when
-you expand an epic, while the row-level status mix stays visible. Turn it off to
-inspect terminal items.
+**Active only** is enabled by default. It hides deferred, done, and retired item
+rows when you expand an epic, while the row-level status mix stays visible. Turn
+it off to inspect parked and terminal items.
 
 The same default follows you when you switch from **List** to **Grid** or
 **Board**. Grid and Board load active work first so closed history does not slow
 the initial view. Choose **All items** beside the view controls when you need
-done and deferred records; that choice remains in the page URL for sharing or
-refreshing.
+deferred, done, and retired records; that choice remains in the page URL for
+sharing or refreshing.
 
 - **Triaging** — Waiting for an intake decision.
 - **Open** — Accepted work that has not started.
 - **In progress** — Work is actively underway.
 - **Done** — Completed work; this is the only status counted as done in epic progress.
-- **Deferred** — Not active and not complete. It remains deferred until someone explicitly reopens it; there is no automatic resume date.
+- **Deferred** — Parked but still wanted. A deferral records why it is parked,
+  what event should resume it, who owns that decision, and when it must be
+  reviewed. Deferred work still keeps its epic open. An overdue review is shown
+  on the item so parked work cannot disappear silently.
+- **Retired** — Terminal history for work intentionally closed without delivery,
+  such as an obsolete request, discarded proposal, or duplicate. Retirement is
+  applied through the governed triage or retirement action rather than the
+  general item editor.
 
-A deferred item classified as discarded is labeled **discarded**. A duplicate
-is labeled **retired duplicate**; the other backlog item is the canonical
-record, so the duplicate is intentionally retained for history without being
-counted as completed.
+A retired duplicate is labeled **retired duplicate**; the other backlog item is
+the canonical record, so the duplicate is retained for history without being
+counted as completed. Retired items no longer keep an epic open.
 
 ## Shared Demand
 

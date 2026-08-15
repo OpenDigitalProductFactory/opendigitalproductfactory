@@ -247,7 +247,7 @@ describe("runHiveScoutIngest ambiguity review", () => {
     expect(created).toEqual([
       {
         title: "Coworker archetype: Meeting Notes Agent (Productivity)",
-        status: "deferred",
+        status: "triaging",
       },
     ]);
   });
@@ -418,7 +418,7 @@ describe("runHiveScoutIngest ambiguity review", () => {
     expect(result.reviewCacheHits).toBe(1);
     expect(result.skippedByReview).toBe(1);
     expect(result.created).toBe(1);
-    expect(created).toEqual([{ status: "deferred" }]);
+    expect(created).toEqual([{ status: "triaging" }]);
   });
 
   it("treats fully cached review batches as successful review metrics", async () => {
@@ -665,7 +665,7 @@ describe("runHiveScoutIngest ambiguity review", () => {
         })),
     });
 
-    expect(result.deferred).toBe(1);
+    expect(result.needsReview).toBe(1);
     expect(activities[0].payload.ambiguityReview).toMatchObject({
       classification: "needs_human_review",
       rationale: "injection attempt",

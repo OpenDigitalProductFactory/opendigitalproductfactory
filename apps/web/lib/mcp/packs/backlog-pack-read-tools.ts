@@ -2,11 +2,77 @@ import type { ToolResult } from "@/lib/mcp-tools";
 import { resolveEpicRowId, resolveListLimit } from "./backlog-read-helpers";
 import { addScopeFilters, backlogScopeSelect, scopeData } from "./backlog-scope-metadata";
 
+function addDeferralFilters(where: Record<string, unknown>, params: Record<string, unknown>): ToolResult | null {
+  const conformance = params["deferralConformance"];
+  if (conformance === "compliant") {
+    where["status"] = "deferred";
+    where["deferReason"] = { not: null };
+    where["deferTrigger"] = { not: null };
+    where["deferReviewAt"] = { not: null };
+    where["deferOwnerPrincipalId"] = { not: null };
+    where["deferredAt"] = { not: null };
+  } else if (conformance === "nonconformant") {
+    where["status"] = "deferred";
+    where["OR"] = [
+      { deferReason: null },
+      { deferTrigger: null },
+      { deferReviewAt: null },
+      { deferOwnerPrincipalId: null },
+      { deferredAt: null },
+    ];
+  }
+  if (typeof params["deferralReviewDueBefore"] === "string") {
+    const dueBefore = new Date(params["deferralReviewDueBefore"] as string);
+    if (Number.isNaN(dueBefore.getTime())) {
+      return { success: false, error: "invalid_deferral_review_due_before", message: "deferralReviewDueBefore must be an ISO-8601 timestamp" };
+    }
+    where["status"] = "deferred";
+    where["deferReviewAt"] = { lte: dueBefore };
+  }
+  return null;
+}
+
+const deferralSelect = {
+  deferReason: true,
+  deferTrigger: true,
+  deferReviewAt: true,
+  deferOwnerPrincipalId: true,
+  deferredAt: true,
+  deferOwnerPrincipal: { select: { principalId: true, displayName: true } },
+} as const;
+
+function deferralData(item: {
+  status: string;
+  deferReason: string | null;
+  deferTrigger: string | null;
+  deferReviewAt: Date | null;
+  deferOwnerPrincipalId: string | null;
+  deferredAt: Date | null;
+  deferOwnerPrincipal: { principalId: string; displayName: string } | null;
+}) {
+  if (item.status !== "deferred") return null;
+  const conformant = Boolean(
+    item.deferReason && item.deferTrigger && item.deferReviewAt
+      && item.deferOwnerPrincipalId && item.deferredAt,
+  );
+  return {
+    reason: item.deferReason,
+    trigger: item.deferTrigger,
+    reviewAt: item.deferReviewAt?.toISOString() ?? null,
+    deferredAt: item.deferredAt?.toISOString() ?? null,
+    owner: item.deferOwnerPrincipal,
+    conformant,
+    reviewDue: item.deferReviewAt ? item.deferReviewAt.getTime() <= Date.now() : null,
+  };
+}
+
 export async function queryBacklog(params: Record<string, unknown>): Promise<ToolResult> {
   const { prisma } = await import("@dpf/db");
   const where: Record<string, unknown> = {};
   const epicWhere: Record<string, unknown> = {};
   if (typeof params["status"] === "string") where["status"] = params["status"];
+  const deferralFilterError = addDeferralFilters(where, params);
+  if (deferralFilterError) return deferralFilterError;
   addScopeFilters(where, params);
   addScopeFilters(epicWhere, params);
   const epicRowId = await resolveEpicRowId(prisma, params["epicId"]);
@@ -16,7 +82,7 @@ export async function queryBacklog(params: Record<string, unknown>): Promise<Too
   if (epicRowId !== undefined) where["epicId"] = epicRowId;
   const limit = resolveListLimit(params["limit"]);
 
-  const [items, matching, epics, epicTotal, open, inProgress, done] = await Promise.all([
+  const [items, matching, epics, epicTotal, open, inProgress, done, deferred, retired] = await Promise.all([
     prisma.backlogItem.findMany({
       where,
       orderBy: [{ priority: "asc" }, { updatedAt: "desc" }],
@@ -28,6 +94,7 @@ export async function queryBacklog(params: Record<string, unknown>): Promise<Too
         type: true,
         priority: true,
         updatedAt: true,
+        ...deferralSelect,
         ...backlogScopeSelect,
         epic: { select: { epicId: true } },
       },
@@ -49,13 +116,15 @@ export async function queryBacklog(params: Record<string, unknown>): Promise<Too
     prisma.backlogItem.count({ where: { status: "open" } }),
     prisma.backlogItem.count({ where: { status: "in-progress" } }),
     prisma.backlogItem.count({ where: { status: "done" } }),
+    prisma.backlogItem.count({ where: { status: "deferred" } }),
+    prisma.backlogItem.count({ where: { status: "retired" } }),
   ]);
 
   return {
     success: true,
-    message: `Backlog: ${open} open, ${inProgress} in-progress, ${done} done. Showing ${items.length} of ${matching} matching item(s), ${epics.length} of ${epicTotal} epic(s).`,
+    message: `Backlog: ${open} open, ${inProgress} in-progress, ${deferred} deferred, ${done} done, ${retired} retired. Showing ${items.length} of ${matching} matching item(s), ${epics.length} of ${epicTotal} epic(s).`,
     data: {
-      summary: { open, inProgress, done },
+      summary: { open, inProgress, deferred, done, retired },
       total: matching,
       truncated: items.length < matching,
       epicTotal,
@@ -72,6 +141,7 @@ export async function queryBacklog(params: Record<string, unknown>): Promise<Too
         status: i.status,
         type: i.type,
         priority: i.priority,
+        deferral: deferralData(i),
         ...scopeData(i),
         epicId: i.epic?.epicId ?? null,
       })),
@@ -83,6 +153,8 @@ export async function listEpics(params: Record<string, unknown>): Promise<ToolRe
   const { prisma } = await import("@dpf/db");
   const where: Record<string, unknown> = {};
   if (typeof params["status"] === "string") where["status"] = params["status"];
+  const deferralFilterError = addDeferralFilters(where, params);
+  if (deferralFilterError) return deferralFilterError;
   addScopeFilters(where, params);
   const limit = resolveListLimit(params["limit"]);
   const epicTotal = await prisma.epic.count({ where });
@@ -110,16 +182,19 @@ export async function listEpics(params: Record<string, unknown>): Promise<ToolRe
       const open = e.items.filter((it) => it.status === "open").length;
       const inProgress = e.items.filter((it) => it.status === "in-progress").length;
       const done = e.items.filter((it) => it.status === "done").length;
+      const triaging = e.items.filter((it) => it.status === "triaging").length;
+      const deferred = e.items.filter((it) => it.status === "deferred").length;
+      const retired = e.items.filter((it) => it.status === "retired").length;
       return {
         epicId: e.epicId,
         title: e.title,
         status: e.status,
         priority: e.priority,
         ...scopeData(e),
-        itemCount: { total, open, inProgress, done },
+        itemCount: { total, triaging, open, inProgress, deferred, done, retired },
         hasSpec: refIndex.specs.has(e.epicId) || refIndex.plans.has(e.epicId),
         updatedAt: e.updatedAt.toISOString(),
-        _hasOpen: open + inProgress > 0,
+        _hasOpen: triaging + open + inProgress + deferred > 0,
       };
     })
     .filter((row) => (wantOpenItems ? row._hasOpen : true))
@@ -142,6 +217,8 @@ export async function listBacklogItems(params: Record<string, unknown>): Promise
   if (typeof params["type"] === "string") where["type"] = params["type"];
   if (typeof params["workType"] === "string") where["workType"] = params["workType"];
   if (typeof params["source"] === "string") where["source"] = params["source"];
+  const deferralFilterError = addDeferralFilters(where, params);
+  if (deferralFilterError) return deferralFilterError;
   addScopeFilters(where, params);
   const epicRowId = await resolveEpicRowId(prisma, params["epicId"]);
   if (epicRowId === null) {
@@ -177,6 +254,7 @@ export async function listBacklogItems(params: Record<string, unknown>): Promise
       activeBuildId: true,
       updatedAt: true,
       triageOutcome: true,
+      ...deferralSelect,
       epic: { select: { epicId: true } },
       activeBuild: { select: { phase: true, draftApprovedAt: true } },
     },
@@ -196,6 +274,7 @@ export async function listBacklogItems(params: Record<string, unknown>): Promise
     demandScoreFramework: i.demandScoreFramework,
     ...scopeData(i),
     triageOutcome: i.triageOutcome,
+    deferral: deferralData(i),
     epicId: i.epic?.epicId ?? null,
     hasActiveBuild: i.activeBuildId != null,
     lifecycleLabel: deriveLifecycleLabel({
@@ -222,6 +301,7 @@ export async function getBacklogItem(params: Record<string, unknown>): Promise<T
   const item = await prisma.backlogItem.findUnique({
     where: { itemId: itemIdRaw },
     include: {
+      deferOwnerPrincipal: { select: { principalId: true, displayName: true } },
       epic: { select: { epicId: true, title: true, status: true } },
       digitalProduct: { select: { productId: true, name: true } },
       organization: { select: { orgId: true, slug: true, name: true } },
@@ -270,6 +350,7 @@ export async function getBacklogItem(params: Record<string, unknown>): Promise<T
       priority: item.priority,
       effortSize: item.effortSize,
       triageOutcome: item.triageOutcome,
+      deferral: deferralData(item),
       ...scopeData(item),
       body: item.body ?? null,
       createdAt: item.createdAt.toISOString(),
