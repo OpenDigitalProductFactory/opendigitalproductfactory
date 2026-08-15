@@ -5016,6 +5016,7 @@
         "idempotence-guarantee",
         "agent-toolchain-only-update",
         "where-state-lives",
+        "installation-operating-intent-and-environment-class",
         "diagnostics",
         "show-substrate-flag",
         "dpf-doctor",

@@ -3,9 +3,9 @@ import { readFileSync } from "node:fs";
 import { test } from "node:test";
 
 const RETIRED_STT_DIGEST =
-  "hwdsl2/whisper-server@sha256:120e4b7835898715d97b16e54e991e5226535fdfad506863a3b9cd4dd6d6377f";
-const CURRENT_STT_DIGEST =
   "hwdsl2/whisper-server@sha256:0b03ecb54c8247cd4fe42e808746f36f44eff7998dc45018554c50252975e29f";
+const CURRENT_STT_DIGEST =
+  "hwdsl2/whisper-server@sha256:166a8c04e2687608a116372e92f11bfda3e963f3c1dbf390a7c820db0f45887b";
 const MANIFEST_GUARD =
   "node scripts/release/verify-compose-image-manifests.mjs --mode release --platform linux --only digest-pinned";
 

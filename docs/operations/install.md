@@ -184,6 +184,14 @@ session start.
 
 Bearer tokens never appear in this file. The `transcript` field is routed through `redactTranscriptForPersistence` before write; the `mcpReadiness` and `smokeTest` shapes are bearer-free by contract. If you find a bearer-shaped substring in this file on any install, it is a security regression — see `BI-4B17051B` for the contract.
 
+## Installation operating intent and environment class
+
+Per EP-1FABA22D (BI-A9F60372), `install-state.json` (v2 schema) captures the canonical local host environment class and pre-DB bootstrap intent envelope:
+
+- **`environmentClass`** — `"production"`, `"development"`, `"test"`, or `null`. Installer state is the canonical source of truth for the local host's environment fact; `FederationLink.environmentClass` is canonical for peer link facts.
+- **`bootstrapIntent`** — Pre-DB envelope recorded by the installer before runtime database availability. On portal runtime boot, `absorbBootstrapIntent` idempotently ingests this envelope into `PlatformConfig` under key `installation.operating-intent.v1` with `status: "suggested"` and marks `absorbedAt`.
+- **Purpose Confirmation Invariant** — Expressing operating purpose (`operate-organization`, `evolve-dpf`, `deliver-managed-services`, `grow-channel`, `participate-community`) configures platform productivity and compiles work; it **never grants identity, trust, authority, qualification, or permission**.
+
 ## Diagnostics
 
 ### `--show-substrate` flag
@@ -209,9 +217,11 @@ For the avoidance of doubt, the installer:
 
 ## See also
 
+- Spec: [`docs/superpowers/specs/2026-08-08-purpose-aware-installation-ecosystem-productivity-design.md`](../superpowers/specs/2026-08-08-purpose-aware-installation-ecosystem-productivity-design.md)
+- Plan: [`docs/superpowers/plans/2026-08-08-purpose-aware-installation-ecosystem-productivity.md`](../superpowers/plans/2026-08-08-purpose-aware-installation-ecosystem-productivity.md)
 - Spec: [`docs/superpowers/specs/2026-05-26-agent-toolchain-bootstrap-design.md`](../superpowers/specs/2026-05-26-agent-toolchain-bootstrap-design.md)
 - Plan: [`docs/superpowers/plans/2026-05-26-agent-toolchain-bootstrap.md`](../superpowers/plans/2026-05-26-agent-toolchain-bootstrap.md)
 - Skill pack: [`packages/dpf-skill-pack/README.md`](../../packages/dpf-skill-pack/README.md)
 - Planning library: [`packages/dpf-bootstrap/README.md`](../../packages/dpf-bootstrap/README.md)
 - State schema: [`scripts/installer/install-state.schema.json`](../../scripts/installer/install-state.schema.json)
-- Backlog: BI-4B17051B (EP-INSTALL-HARDENING-2026-05-23)
+- Backlog: BI-A9F60372 (EP-1FABA22D), BI-4B17051B (EP-INSTALL-HARDENING-2026-05-23)

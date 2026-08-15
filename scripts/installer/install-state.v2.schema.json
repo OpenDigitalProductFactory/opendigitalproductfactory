@@ -249,6 +249,64 @@
         }
       },
       "additionalProperties": false
+    },
+    "environmentClass": {
+      "type": ["string", "null"],
+      "enum": ["production", "development", "test", null],
+      "description": "Canonical host environment class (EP-1FABA22D / Contract 12). Installer state is canonical for the local host fact; FederationLink.environmentClass is canonical for peer link facts."
+    },
+    "bootstrapIntent": {
+      "type": ["object", "null"],
+      "description": "Pre-DB installation operating intent envelope recorded by the installer before runtime database availability. Absorbed idempotently into PlatformConfig installation.operating-intent.v1 at runtime boot.",
+      "required": ["schemaVersion", "primaryPurpose", "confidence", "recordedAt"],
+      "properties": {
+        "schemaVersion": { "const": 1 },
+        "primaryPurpose": {
+          "type": "string",
+          "enum": [
+            "operate-organization",
+            "evolve-dpf",
+            "deliver-managed-services",
+            "grow-channel",
+            "participate-community"
+          ]
+        },
+        "secondaryPurposes": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "operate-organization",
+              "evolve-dpf",
+              "deliver-managed-services",
+              "grow-channel",
+              "participate-community"
+            ]
+          },
+          "uniqueItems": true
+        },
+        "relationshipIntents": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "same-organization",
+              "service-provider",
+              "channel",
+              "community-peer"
+            ]
+          },
+          "uniqueItems": true
+        },
+        "pairedProductionInstallationRef": { "type": ["string", "null"] },
+        "confidence": {
+          "type": "string",
+          "enum": ["high", "medium", "low"]
+        },
+        "recordedAt": { "type": "string", "format": "date-time" },
+        "absorbedAt": { "type": ["string", "null"], "format": "date-time" }
+      },
+      "additionalProperties": false
     }
   },
   "additionalProperties": false
