@@ -21,7 +21,7 @@
     "expo": "~56.0.18",
     "expo-camera": "~57.0.3",
     "expo-linking": "^56.0.16",
-    "expo-local-authentication": "~56.0.5",
+    "expo-local-authentication": "~57.0.2",
     "expo-location": "~56.0.22",
     "expo-notifications": "~56.0.22",
     "expo-router": "~56.2.17",
