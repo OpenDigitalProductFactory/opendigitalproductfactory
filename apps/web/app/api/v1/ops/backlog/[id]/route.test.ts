@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
+  authenticateRequest: vi.fn(),
   findUnique: vi.fn(),
   deleteItem: vi.fn(),
   assertDeletable: vi.fn(),
@@ -11,18 +12,33 @@ vi.mock("@dpf/db", () => ({
     backlogItem: { findUnique: mocks.findUnique, delete: mocks.deleteItem },
   },
 }));
-vi.mock("@/lib/api/auth-middleware", () => ({ authenticateRequest: vi.fn(async () => ({ user: { id: "user-1" } })) }));
+vi.mock("@/lib/api/auth-middleware", () => ({ authenticateRequest: mocks.authenticateRequest }));
 vi.mock("@/lib/backlog/initiative-governance-deletion", () => ({
   assertBacklogItemGovernanceDeletable: mocks.assertDeletable,
 }));
 
 import { DELETE } from "./route";
+import { apiError } from "@/lib/api/error";
 
 describe("DELETE /api/v1/ops/backlog/:id initiative retention", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.authenticateRequest.mockResolvedValue({ user: { id: "user-1" } });
     mocks.findUnique.mockResolvedValue({ id: "bi-row" });
     mocks.deleteItem.mockResolvedValue({ id: "bi-row" });
+  });
+
+  it("stops before backlog access when authentication fails", async () => {
+    mocks.authenticateRequest.mockRejectedValueOnce(apiError("UNAUTHORIZED", "Unauthorized", 401));
+
+    const response = await DELETE(new Request("http://localhost/api/v1/ops/backlog/bi-row", { method: "DELETE" }), {
+      params: Promise.resolve({ id: "bi-row" }),
+    });
+
+    expect(response.status).toBe(401);
+    expect(mocks.findUnique).not.toHaveBeenCalled();
+    expect(mocks.assertDeletable).not.toHaveBeenCalled();
+    expect(mocks.deleteItem).not.toHaveBeenCalled();
   });
 
   it("returns a stable conflict and does not delete permanent governance evidence", async () => {
