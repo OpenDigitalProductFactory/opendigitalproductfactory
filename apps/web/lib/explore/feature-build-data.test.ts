@@ -55,6 +55,7 @@ vi.mock("@/lib/design-intelligence", () => ({
 import { Prisma, prisma } from "@dpf/db";
 import {
   getExecutionEpicRollups,
+  getFeatureBuildById,
   getFeatureBuildForContext,
   getFeatureBuilds,
 } from "./feature-build-data";
@@ -78,6 +79,54 @@ describe("getFeatureBuilds", () => {
         }),
       }),
     );
+  });
+
+  it("loads and projects only the business brief linked to the selected build", async () => {
+    vi.mocked(prisma.featureBuild.findUnique).mockResolvedValue({
+      id: "feature-build-row-a",
+      buildId: "FB-CHANGE-A",
+      title: "Make booking changes easier",
+      phase: "plan",
+      plan: null,
+      brief: null,
+      digitalProduct: null,
+      originator: null,
+      decisionInteractions: [],
+      businessBuildBrief: {
+        briefId: "BBB-CHANGE-A",
+        status: "accepted",
+        intakeSource: "user_conversation",
+        capabilityPackId: null,
+        businessOutcome: "Customers can change a booking without calling.",
+        affectedPeople: [{ kind: "persona", label: "Customer" }],
+        affectedWorkflow: "Booking changes",
+        sourceEvidence: [],
+        successSignals: ["Fewer change calls"],
+        constraints: [],
+        businessInterpretation: null,
+        technicalInterpretation: {},
+        riskProfile: {},
+        openQuestions: [],
+        confidence: "high",
+      },
+    } as never);
+
+    const result = await getFeatureBuildById("FB-CHANGE-A");
+
+    expect(prisma.featureBuild.findUnique).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { buildId: "FB-CHANGE-A" },
+        select: expect.objectContaining({
+          businessBuildBrief: expect.objectContaining({ select: expect.any(Object) }),
+        }),
+      }),
+    );
+    expect(result?.businessBuildBrief).toMatchObject({
+      briefId: "BBB-CHANGE-A",
+      title: "Make booking changes easier",
+      businessOutcome: "Customers can change a booking without calling.",
+      affectedPeople: ["Customer"],
+    });
   });
 });
 

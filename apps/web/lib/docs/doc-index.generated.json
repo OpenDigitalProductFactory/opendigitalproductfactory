@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 635,
+  "pageCount": 636,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -11245,6 +11245,17 @@
         "access-and-other-channels",
         "finite-and-standing-rooms",
         "incomplete-or-unavailable-rooms"
+      ]
+    },
+    "docs/ux-fit/2026-07-31-build-studio-owner-brief-proof-design-grounding.md": {
+      "publicHref": "/ux-fit/2026-07-31-build-studio-owner-brief-proof-design-grounding/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "build-studio-owner-brief-and-proof-design-grounding",
+        "design-grounding",
+        "2026-08-15-reconciliation"
       ]
     }
   }

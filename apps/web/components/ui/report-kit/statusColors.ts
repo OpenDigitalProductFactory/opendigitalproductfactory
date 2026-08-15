@@ -73,6 +73,15 @@ export const STATUS_INTENT: Record<string, Record<string, Intent>> = {
     quarantined: "danger",
     revoked: "neutral",
   },
+  // Build Studio owner proof. Missing, stale, failed, and not-applicable stay
+  // visually distinct so absence is never mistaken for a pass.
+  ownerProof: {
+    passed: "success",
+    failed: "danger",
+    "not-applicable": "neutral",
+    "not-recorded": "warning",
+    stale: "warning",
+  },
   // Restaurant table capacity state (BI-7C95A586). Tables & Capacity page,
   // Workspace chips, and public booking all resolve here — one registry.
   restaurantCapacity: {

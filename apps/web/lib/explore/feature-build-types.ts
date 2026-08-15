@@ -468,7 +468,6 @@ export type ScoutResult = {
   executionApproach: "single-build" | "epic-decompose" | "requires-epic";
   scoutDurationMs: number;
 };
-
 // "abandoned" is a TERMINAL phase the escalate-to-human path writes
 // (escalate-build-to-human.ts) when Build Studio cannot self-repair a build and
 // hands it to a human: WIP is freed, the originating BI is parked as "deferred",
@@ -489,6 +488,7 @@ export type FeatureBuildRow = {
   parentEpicId?: string | null;
   originatingBacklogItemId: string | null;
   brief: FeatureBrief | null;
+  businessBuildBrief?: import("@/lib/build/business-build-brief").BusinessBuildBrief | null;
   plan: Record<string, unknown> | null;
   phase: BuildPhase;
   sandboxId: string | null;
@@ -520,6 +520,7 @@ export type FeatureBuildRow = {
   scoutFindings: ScoutResult | null;
   uxTestResults: Array<{ step: string; passed: boolean; screenshotUrl: string | null; error: string | null }> | null;
   uxVerificationStatus: UxVerificationStatus | null;
+  evidenceObservedAt?: import("@/lib/build/owner-change-evidence").OwnerEvidenceObservedAt;
   accountableEmployeeId: string | null;
   claimedByAgentId: string | null;
   claimedAt: Date | null;
@@ -552,7 +553,6 @@ export type FeatureBuildRow = {
   happyPathState: HappyPathState;
   decisionInteraction?: DecisionInteractionGateView | null;
 };
-
 export type FeaturePackRow = {
   id: string;
   packId: string;

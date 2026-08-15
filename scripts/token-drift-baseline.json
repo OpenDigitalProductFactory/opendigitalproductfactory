@@ -729,7 +729,7 @@
     "spacing": 1,
     "motion": 0
   },
-  "apps/web/components/build-studio/BusinessBriefPanel.tsx": {
+  "apps/web/components/build/BusinessBriefPanel.tsx": {
     "type": 19,
     "spacing": 0,
     "motion": 0

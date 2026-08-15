@@ -1,0 +1,20 @@
+{
+  "version": "1",
+  "decidedOption": "workspace-front-door-owner-readable-build-detail",
+  "decisionInteractionId": "DI-2D164CC7A6C2",
+  "scope": {
+    "files": [
+      "apps/web/components/build/BuildStudio.tsx",
+      "apps/web/components/build/BusinessBriefPanel.tsx",
+      "apps/web/components/build/OwnerChangeProofPanel.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "workspace-front-door-owner-readable-build-detail",
+      "build-studio-as-owner-front-door",
+      "new-improvements-product"
+    ]
+  }
+}
