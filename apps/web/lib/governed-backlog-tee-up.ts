@@ -157,7 +157,7 @@ type GovernedBacklogTeeUpTx = {
   backlogItemActivity: {
     create(args: any): Promise<any>;
   };
-  workCapsule: {
+  workroom: {
     create(args: any): Promise<any>;
     findUnique(args: any): Promise<any>;
     findFirst?(args: any): Promise<any>;
@@ -172,7 +172,7 @@ type GovernedBacklogTeeUpTx = {
   storefrontConfig?: {
     findFirst(args: any): Promise<any>;
   };
-  workCapsuleActivity: {
+  workroomActivity: {
     create(args: any): Promise<any>;
   };
   platformIssueReport: {

@@ -2283,7 +2283,12 @@ model BacklogItemActivity {
   @@index([kind, recordedAt(sort: Desc)])
 }
 
-model WorkCapsule {
+/// The Workroom is the canonical unit of what we claim and where we work
+/// (founder-directed 2026-08-15, renamed from WorkCapsule). @@map retains the
+/// physical table name so this rename is metadata-only over live rows; the
+/// physical move, the `capsuleId` semantic key and the workCapsuleId/capsule
+/// FIELD vocabulary are separate phases — this phase renames model identity only.
+model Workroom {
   id                      String                   @id @default(cuid())
   capsuleId               String                   @unique
   title                   String
@@ -2335,7 +2340,7 @@ model WorkCapsule {
   updatedAt               DateTime                 @updatedAt
   lastSyncedAt            DateTime?
   archivedAt              DateTime?
-  activities              WorkCapsuleActivity[]
+  activities              WorkroomActivity[]
   runtimeTargets          RuntimeTarget[]
   runtimeVerifications    RuntimeVerification[]
   externalEvidence        ExternalEvidenceRecord[]
@@ -2356,22 +2361,24 @@ model WorkCapsule {
   @@index([leaseExpiresAt])
   @@index([requestedByPrincipalId])
   @@index([workItemId])
+  @@map("WorkCapsule")
 }
 
-model WorkCapsuleActivity {
-  id                String      @id @default(cuid())
+model WorkroomActivity {
+  id                String   @id @default(cuid())
   workCapsuleId     String
   kind              String
   summary           String
-  payload           Json        @default("{}")
-  recordedAt        DateTime    @default(now())
+  payload           Json     @default("{}")
+  recordedAt        DateTime @default(now())
   recordedById      String?
   recordedByAgentId String?
   toolExecutionId   String?
-  capsule           WorkCapsule @relation(fields: [workCapsuleId], references: [id], onDelete: Cascade)
+  capsule           Workroom @relation(fields: [workCapsuleId], references: [id], onDelete: Cascade)
 
   @@index([workCapsuleId, recordedAt(sort: Desc)])
   @@index([kind, recordedAt(sort: Desc)])
+  @@map("WorkCapsuleActivity")
 }
 
 model RuntimeTarget {
@@ -2401,7 +2408,7 @@ model RuntimeTarget {
   sandbox                Sandbox?              @relation(fields: [sandboxId], references: [id], onDelete: SetNull)
   slot                   SandboxSlot?          @relation(fields: [slotId], references: [id], onDelete: SetNull)
   verifications          RuntimeVerification[]
-  workCapsule            WorkCapsule?          @relation(fields: [workCapsuleId], references: [id], onDelete: SetNull)
+  workCapsule            Workroom?             @relation(fields: [workCapsuleId], references: [id], onDelete: SetNull)
 
   @@index([kind, status])
   @@index([workCapsuleId])
@@ -2435,7 +2442,7 @@ model RuntimeVerification {
   featureBuild            FeatureBuild?          @relation(fields: [featureBuildId], references: [id], onDelete: SetNull)
   gitPromotionCandidate   GitPromotionCandidate? @relation(fields: [gitPromotionCandidateId], references: [id], onDelete: SetNull)
   runtimeTarget           RuntimeTarget?         @relation(fields: [runtimeTargetId], references: [id], onDelete: SetNull)
-  workCapsule             WorkCapsule?           @relation(fields: [workCapsuleId], references: [id], onDelete: SetNull)
+  workCapsule             Workroom?              @relation(fields: [workCapsuleId], references: [id], onDelete: SetNull)
 
   @@index([runtimeTargetId, createdAt(sort: Desc)])
   @@index([featureBuildId, kind, status])
@@ -6199,7 +6206,7 @@ model UserFact {
 // BI-23A65B81 (EP-8C706944 P3): shared working context for a multi-coworker,
 // multi-session EFFORT outside Build Studio. Substrate-verify finding: PhaseHandoff
 // is build-phase-scoped (FK to a FeatureBuild) and actively used by the BS phase
-// machine; WorkCapsule is a single-executor, single-lease unit of WIP. Neither
+// machine; the Workroom is a single-executor, single-lease unit of WIP. Neither
 // models context shared across many coworkers over an effort's lifetime, so the
 // kernel decision (DI-F69AE978B70C) sanctioned exactly this one new concept.
 // Keyed by a free effortKey (e.g. "epic:EP-XXX", "bi:BI-YYY"); any participating
@@ -7005,17 +7012,17 @@ model ExternalEvidenceRecord {
   buildId               String?
   taskRunId             String?
   // EP-WORK-CONVERGENCE Phase 1 (BI-D6FA8641): bind external evidence to the
-  // durable WorkCapsule with producer identity, so external Claude/Codex/Grok
+  // durable Workroom with producer identity, so external Claude/Codex/Grok
   // work rolls up onto the capsule timeline. All nullable — additive, no
-  // backfill required to migrate. executorKind mirrors WorkCapsule.executorKind;
-  // recordedBy* mirror WorkCapsuleActivity's producer-identity fields.
+  // backfill required to migrate. executorKind mirrors Workroom.executorKind;
+  // recordedBy* mirror WorkroomActivity's producer-identity fields.
   workCapsuleId         String?
   executorKind          String?
   recordedByPrincipalId String?
   recordedByAgentId     String?
   createdAt             DateTime     @default(now())
   actorUser             User         @relation(fields: [actorUserId], references: [id], onDelete: Cascade)
-  workCapsule           WorkCapsule? @relation(fields: [workCapsuleId], references: [id], onDelete: SetNull)
+  workCapsule           Workroom? @relation(fields: [workCapsuleId], references: [id], onDelete: SetNull)
 
   @@index([actorUserId, createdAt])
   @@index([routeContext, operationType])
@@ -13653,7 +13660,7 @@ model WorkItem {
   a2aTaskId                     String?
   messages                      WorkItemMessage[]
   presence                      WorkItemPresence[]
-  capsules                      WorkCapsule[]          @relation("WorkCapsuleWorkItem")
+  capsules                      Workroom[]             @relation("WorkCapsuleWorkItem")
   governedDataControlOperations DataControlOperation[] @relation("DataControlOperationGovernedCase")
   routingDecision               Json?
   // Generic retry scheduling owned by the canonical queue. Domain mirrors keep

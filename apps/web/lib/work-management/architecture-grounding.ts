@@ -164,7 +164,7 @@ export const WORK_CASE_ARCHITECTURE_ELEMENTS = [
     elementId: "SM-WC-LIFECYCLE",
     elementType: "state_machine",
     name: "Work Case lifecycle",
-    description: "Company-facing lifecycle projected from WorkItem, WorkCapsule, decisions, and verification state.",
+    description: "Company-facing lifecycle projected from WorkItem, Workroom, decisions, and verification state.",
     implementationStatus: "partially-implemented",
     itValueStreams: ["operate", "consume", "integrate", "deploy", "release"],
   },

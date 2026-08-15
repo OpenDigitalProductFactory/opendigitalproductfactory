@@ -110,7 +110,7 @@ export const WORK_CAPSULE_ACTIVITY_KINDS = [
   "archived",
   "superseded",
   // BI-C41AB195: human-legible agent-session activities (Linear AgentActivity
-  // pattern). The WorkCapsule IS the teammate session; these are what the
+  // pattern). The Workroom IS the teammate session; these are what the
   // executor is thinking/doing/asking, rolled up onto one item's timeline.
   "thought",
   "action",

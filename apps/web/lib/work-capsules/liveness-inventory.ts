@@ -32,7 +32,7 @@ const INVENTORY_SELECT = {
 } as const;
 
 type InventoryDb = {
-  workCapsule: { findMany(args: unknown): Promise<any[]> };
+  workroom: { findMany(args: unknown): Promise<any[]> };
   featureBuild: { findMany(args: unknown): Promise<any[]> };
 };
 
@@ -53,7 +53,7 @@ export async function loadCapsuleLivenessInventory(
   args: { where: Record<string, unknown>; take: number },
   now: Date = new Date(),
 ): Promise<{ capsulesAll: Array<Record<string, unknown>>; livenessSummary: CapsuleLivenessSummary }> {
-  const rows = await db.workCapsule.findMany({
+  const rows = await db.workroom.findMany({
     where: args.where,
     orderBy: { updatedAt: "desc" },
     take: args.take,

@@ -6,7 +6,7 @@ const db = vi.hoisted(() => ({
 }));
 vi.mock("@dpf/db", () => ({
   prisma: {
-    workCapsule: { findFirst: (...args: unknown[]) => db.capsuleFindFirst(...args) },
+    workroom: { findFirst: (...args: unknown[]) => db.capsuleFindFirst(...args) },
     externalEvidenceRecord: { findMany: (...args: unknown[]) => db.evidenceFindMany(...args) },
   },
 }));

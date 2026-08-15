@@ -135,7 +135,7 @@ const definitions: ToolDefinition[] = [
   {
     name: "claim_backlog_item_for_work",
     description:
-      "Claim a BacklogItem for work by binding it to the worktree + branch + session you are starting in (soft claim-at-start). Creates, reuses+late-binds, or resumes the durable abandoned WorkCapsule for the same BI and branch, then stamps the BI claim so a directly-working agent's BI no longer looks unclaimed to a parallel session. A branch bound to a different BI returns branch_occupied and preserves its history. Advisory, NOT a lock: if the BI already has active work elsewhere the call still binds this location but returns a non-blocking conflict — it does not steal the existing claim. Multiple branches per BI are expected and are not a conflict.",
+      "Claim a BacklogItem for work by binding it to the worktree + branch + session you are starting in (soft claim-at-start). Creates, reuses+late-binds, or resumes the durable abandoned Workroom for the same BI and branch, then stamps the BI claim so a directly-working agent's BI no longer looks unclaimed to a parallel session. A branch bound to a different BI returns branch_occupied and preserves its history. Advisory, NOT a lock: if the BI already has active work elsewhere the call still binds this location but returns a non-blocking conflict — it does not steal the existing claim. Multiple branches per BI are expected and are not a conflict.",
     inputSchema: {
       type: "object",
       properties: {

@@ -102,7 +102,7 @@ type Props = {
   /**
    * BI-BB13B599: plain, capsule-derived customer-mode status per build, keyed by
    * the build's cuid `id`. Projected server-side so the active build's status
-   * band reads the WorkCapsule projection (capturing external Claude/Codex/Grok
+   * band reads the Workroom projection (capturing external Claude/Codex/Grok
    * work) without pulling the projection into the client bundle.
    */
   customerStatuses?: Record<string, BuildStudioCustomerStatus>;

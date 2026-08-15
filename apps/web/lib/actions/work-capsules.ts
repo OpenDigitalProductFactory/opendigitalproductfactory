@@ -93,7 +93,7 @@ async function loadAdoptableRows(repoRoot: string, adoptedBranches: Set<string>)
 export async function getWorkControlData() {
   await requireBuildAccess();
 
-  const capsules = await prisma.workCapsule.findMany({
+  const capsules = await prisma.workroom.findMany({
     orderBy: { updatedAt: "desc" },
     take: 100,
     select: {
@@ -205,7 +205,7 @@ export async function createGovernedWorkAction(input: {
 
 export async function getCapsuleDetail(capsuleId: string) {
   await requireBuildAccess();
-  return prisma.workCapsule.findUnique({
+  return prisma.workroom.findUnique({
     where: { capsuleId },
     include: {
       activities: {

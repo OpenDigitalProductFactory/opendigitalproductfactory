@@ -10,7 +10,7 @@ vi.mock("@/lib/auth", () => ({ auth: mocks.auth }));
 vi.mock("@dpf/db", () => ({
   prisma: {
     featureBuild: { findUnique: mocks.featureBuildFindUnique },
-    workCapsule: { findMany: vi.fn() },
+    workroom: { findMany: vi.fn() },
     buildActivity: { groupBy: vi.fn() },
   },
 }));

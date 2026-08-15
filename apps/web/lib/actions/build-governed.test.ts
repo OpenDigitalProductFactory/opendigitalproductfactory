@@ -41,13 +41,13 @@ const { mockAuth, mockPrisma } = vi.hoisted(() => ({
     backlogItemActivity: {
       create: vi.fn(),
     },
-    workCapsule: {
+    workroom: {
       create: vi.fn(),
       findUnique: vi.fn(),
       // BI-937128F6: unified WIP query reads active capsules across surfaces.
       findMany: vi.fn(),
     },
-    workCapsuleActivity: {
+    workroomActivity: {
       create: vi.fn(),
     },
     // BI-937128F6: unified WIP query reads the active shared nonprod leases.
@@ -195,14 +195,14 @@ describe("governed build start approvals", () => {
     mockPrisma.employeeProfile.findFirst.mockResolvedValue(null);
     mockPrisma.calendarEvent.upsert.mockResolvedValue({});
     mockPrisma.backlogItemActivity.create.mockResolvedValue({});
-    mockPrisma.workCapsule.findUnique.mockResolvedValue(null);
-    mockPrisma.workCapsule.findMany.mockResolvedValue([]);
+    mockPrisma.workroom.findUnique.mockResolvedValue(null);
+    mockPrisma.workroom.findMany.mockResolvedValue([]);
     mockPrisma.nonProductionEnvironmentLease.findMany.mockResolvedValue([]);
-    mockPrisma.workCapsule.create.mockResolvedValue({
+    mockPrisma.workroom.create.mockResolvedValue({
       id: "capsule-row-direct",
       capsuleId: "WC-DIRECT1",
     });
-    mockPrisma.workCapsuleActivity.create.mockResolvedValue({});
+    mockPrisma.workroomActivity.create.mockResolvedValue({});
     mockPrisma.$transaction.mockImplementation(async (callback) => callback(mockPrisma));
     mockPrisma.businessBuildBrief.findUnique.mockResolvedValue({ status: "accepted" });
     mockPrisma.businessBuildBrief.upsert.mockResolvedValue({});
@@ -265,7 +265,7 @@ describe("governed build start approvals", () => {
 
     if (!result.ok) throw new Error(`expected success, got: ${result.error}`);
     expect(result.buildId).toMatch(/^FB-[A-F0-9]{8}$/);
-    expect(mockPrisma.workCapsule.create).toHaveBeenCalledWith(
+    expect(mockPrisma.workroom.create).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({
           source: "build-studio",
@@ -339,7 +339,7 @@ describe("governed build start approvals", () => {
     expect(result.error).toContain("3 builds in progress");
     // Rejected before any DB write — no build row, no work capsule.
     expect(mockPrisma.featureBuild.create).not.toHaveBeenCalled();
-    expect(mockPrisma.workCapsule.create).not.toHaveBeenCalled();
+    expect(mockPrisma.workroom.create).not.toHaveBeenCalled();
   });
 
   it("updateFeatureBrief writes the legacy brief and backfills the BusinessBuildBrief contract", async () => {

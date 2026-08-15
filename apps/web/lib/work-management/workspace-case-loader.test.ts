@@ -45,7 +45,7 @@ function prismaFor(items: WorkItemFixture[], detail: WorkItemFixture | null = it
         },
       ],
     },
-    workCapsule: {
+    workroom: {
       findMany: async () => [],
     },
   };
@@ -235,7 +235,7 @@ describe("workspace Work Case loader", () => {
           createdAt: new Date("2026-08-01T16:00:00.000Z"),
         }],
       },
-      workCapsule: {
+      workroom: {
         findMany: async () => [],
       },
     };
@@ -272,7 +272,7 @@ describe("workspace Work Case loader", () => {
           throw new Error("Messages must not load for an inaccessible room.");
         },
       },
-      workCapsule: {
+      workroom: {
         findMany: async () => [],
       },
     };

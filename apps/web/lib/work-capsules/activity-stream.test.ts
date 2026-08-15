@@ -8,7 +8,7 @@ import {
 
 const at = new Date("2026-07-14T04:00:00.000Z");
 
-describe("WorkCapsule activity stream projection", () => {
+describe("Workroom activity stream projection", () => {
   it("serializes agent-session entries with JSON-safe recordedAt", () => {
     expect(
       serializeAgentSessionEntry({
@@ -31,10 +31,10 @@ describe("WorkCapsule activity stream projection", () => {
 
   it("loads a replay snapshot scoped to the public capsule id", async () => {
     const db = {
-      workCapsule: {
+      workroom: {
         findUnique: vi.fn().mockResolvedValue({ id: "cm-work-1" }),
       },
-      workCapsuleActivity: {
+      workroomActivity: {
         findMany: vi.fn().mockResolvedValue([
           {
             id: "act-1",
@@ -54,11 +54,11 @@ describe("WorkCapsule activity stream projection", () => {
       limit: 10,
     });
 
-    expect(db.workCapsule.findUnique).toHaveBeenCalledWith({
+    expect(db.workroom.findUnique).toHaveBeenCalledWith({
       where: { capsuleId: "WC-123" },
       select: { id: true },
     });
-    expect(db.workCapsuleActivity.findMany).toHaveBeenCalledWith({
+    expect(db.workroomActivity.findMany).toHaveBeenCalledWith({
       where: { workCapsuleId: "cm-work-1" },
       orderBy: { recordedAt: "desc" },
       take: 10,
@@ -78,17 +78,17 @@ describe("WorkCapsule activity stream projection", () => {
 
   it("returns null when the capsule does not exist", async () => {
     const db = {
-      workCapsule: { findUnique: vi.fn().mockResolvedValue(null) },
-      workCapsuleActivity: { findMany: vi.fn(), findFirst: vi.fn() },
+      workroom: { findUnique: vi.fn().mockResolvedValue(null) },
+      workroomActivity: { findMany: vi.fn(), findFirst: vi.fn() },
     };
     await expect(loadInitialAgentSessionEntries({ db, capsuleId: "missing" })).resolves.toBeNull();
-    expect(db.workCapsuleActivity.findMany).not.toHaveBeenCalled();
+    expect(db.workroomActivity.findMany).not.toHaveBeenCalled();
   });
 
   it("loads one pushed activity only when it belongs to the subscribed capsule", async () => {
     const db = {
-      workCapsule: { findUnique: vi.fn() },
-      workCapsuleActivity: {
+      workroom: { findUnique: vi.fn() },
+      workroomActivity: {
         findMany: vi.fn(),
         findFirst: vi.fn().mockResolvedValue({
           id: "act-2",
@@ -106,7 +106,7 @@ describe("WorkCapsule activity stream projection", () => {
       activityId: "act-2",
     });
 
-    expect(db.workCapsuleActivity.findFirst).toHaveBeenCalledWith({
+    expect(db.workroomActivity.findFirst).toHaveBeenCalledWith({
       where: { id: "act-2", workCapsuleId: "cm-work-1" },
     });
     expect(entry).toMatchObject({ id: "act-2", label: "Did", summary: "Ran the test" });

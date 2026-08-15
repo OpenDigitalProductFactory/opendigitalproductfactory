@@ -232,7 +232,7 @@ export async function reapInertStuckBuilds(
       );
       await releaseSandboxForTerminalBuild(c.buildId, { deleteBranch: false }).catch(() => {});
       // WS9 (BI-CBAAEA94): a terminal build must not leave a zombie "working"
-      // WorkCapsule behind — that is the surface that reads as active and gets
+      // Workroom behind — that is the surface that reads as active and gets
       // silently duplicated. Transition the attached capsule in the same tick.
       const { transitionCapsuleForTerminalBuild } = await import(
         "@/lib/work-capsules/work-capsule-reaper"

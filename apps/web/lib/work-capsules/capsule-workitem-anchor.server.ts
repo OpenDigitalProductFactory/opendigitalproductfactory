@@ -37,7 +37,7 @@ function prismaAnchorPorts(): WorkItemAnchorPorts {
     createWorkItem: (data) =>
       prisma.workItem.create({ data: data as never, select: { id: true } }),
     setCapsuleWorkItem: async (capsuleId, workItemId) => {
-      await prisma.workCapsule.updateMany({
+      await prisma.workroom.updateMany({
         where: { OR: [{ capsuleId }, { id: capsuleId }] },
         data: { workItemId },
       });

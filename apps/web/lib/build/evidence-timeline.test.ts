@@ -118,8 +118,8 @@ describe("loadBuildEvidenceTimelineEvents", () => {
     const db = {
       externalEvidenceRecord: { findMany: externalFindMany },
       runtimeVerification: { findMany: runtimeFindMany },
-      workCapsule: { findFirst: capsuleFindFirst },
-      workCapsuleActivity: { findMany: capsuleActivityFindMany },
+      workroom: { findFirst: capsuleFindFirst },
+      workroomActivity: { findMany: capsuleActivityFindMany },
     } as unknown as EvidenceTimelineDb;
 
     const events = await loadBuildEvidenceTimelineEvents({
@@ -152,8 +152,8 @@ describe("loadBuildEvidenceTimelineEvents", () => {
     const db = {
       externalEvidenceRecord: { findMany: externalFindMany },
       runtimeVerification: { findMany: vi.fn(async () => [] as unknown[]) },
-      workCapsule: { findFirst: vi.fn(async () => null) },
-      workCapsuleActivity: { findMany: vi.fn(async () => [] as unknown[]) },
+      workroom: { findFirst: vi.fn(async () => null) },
+      workroomActivity: { findMany: vi.fn(async () => [] as unknown[]) },
     } as unknown as EvidenceTimelineDb;
 
     await loadBuildEvidenceTimelineEvents({
@@ -172,8 +172,8 @@ describe("loadBuildEvidenceTimelineEvents", () => {
     const db = {
       externalEvidenceRecord: { findMany: vi.fn(async () => [] as unknown[]) },
       runtimeVerification: { findMany: vi.fn(async () => [] as unknown[]) },
-      workCapsule: { findFirst: vi.fn(async () => null) },
-      workCapsuleActivity: { findMany: capsuleActivityFindMany },
+      workroom: { findFirst: vi.fn(async () => null) },
+      workroomActivity: { findMany: capsuleActivityFindMany },
     } as unknown as EvidenceTimelineDb;
 
     const events = await loadBuildEvidenceTimelineEvents({

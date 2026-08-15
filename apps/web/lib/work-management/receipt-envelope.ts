@@ -276,7 +276,7 @@ export function fromWorkCapsuleActivity(row: WorkCapsuleActivityRow): ReceiptEnv
       id: row.workCapsuleId,
       status: row.kind,
     },
-    rawRef: { table: "WorkCapsuleActivity", id: row.id },
+    rawRef: { table: "WorkroomActivity", id: row.id },
     summary: row.summary,
     occurredAt: row.recordedAt,
     outputDigest: row.payload,

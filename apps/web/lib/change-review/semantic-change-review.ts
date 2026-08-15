@@ -3,7 +3,7 @@
  *
  * This module deliberately has no Build Studio, Prisma, GitHub, or inference
  * dependency. Authoring surfaces create the same receipt; persistence adapters
- * can store it in the existing ExternalEvidenceRecord and WorkCapsuleActivity
+ * can store it in the existing ExternalEvidenceRecord and WorkroomActivity
  * streams without adding another finding or receipt table.
  */
 

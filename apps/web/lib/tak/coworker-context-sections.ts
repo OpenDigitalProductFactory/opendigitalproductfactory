@@ -48,7 +48,7 @@ export async function resolveRouteBuildId(input: {
   if (!resolvedBuildId && input.routeContext.startsWith("/build")) {
     const capsuleMatch = input.routeContext.match(/\/build\/work\/(WC-[A-Z0-9]+)/);
     if (capsuleMatch) {
-      const capsule = await prisma.workCapsule.findUnique({
+      const capsule = await prisma.workroom.findUnique({
         where: { capsuleId: capsuleMatch[1] },
         select: { featureBuildId: true },
       });

@@ -1044,7 +1044,7 @@ export async function sendMessage(input: {
       // ideate-phase capsule's coworker context.
       const capsuleMatch = input.routeContext.match(/\/build\/work\/(WC-[A-Z0-9]+)/);
       if (capsuleMatch) {
-        const capsule = await prisma.workCapsule.findUnique({
+        const capsule = await prisma.workroom.findUnique({
           where: { capsuleId: capsuleMatch[1] },
           select: { featureBuildId: true },
         });

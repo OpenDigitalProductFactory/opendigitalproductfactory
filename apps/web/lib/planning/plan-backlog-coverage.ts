@@ -157,7 +157,7 @@ export type CheckPlanBacklogCoverageResult =
   | Extract<PlanBacklogCoverageValidation, { ok: false }>;
 
 export type BranchPlanBacklogGateDb = {
-  workCapsule: {
+  workroom: {
     findFirst: (args: Record<string, unknown>) => Promise<{ backlogItemId: string | null } | null>;
   };
   backlogItem: PlanBacklogCoverageDb["backlogItem"];
@@ -175,8 +175,8 @@ export async function checkBranchPlanBacklogGate(args: {
   | { ok: false; required: true; code: "decomposition-decision-required" | "receipt-invalid"; error: string; itemId: string }
 > {
   const db: BranchPlanBacklogGateDb = args.db ?? {
-    workCapsule: {
-      findFirst: prisma.workCapsule.findFirst.bind(prisma.workCapsule) as unknown as BranchPlanBacklogGateDb["workCapsule"]["findFirst"],
+    workroom: {
+      findFirst: prisma.workroom.findFirst.bind(prisma.workroom) as unknown as BranchPlanBacklogGateDb["workroom"]["findFirst"],
     },
     backlogItem: {
       findUnique: prisma.backlogItem.findUnique.bind(prisma.backlogItem) as unknown as BranchPlanBacklogGateDb["backlogItem"]["findUnique"],
@@ -186,7 +186,7 @@ export async function checkBranchPlanBacklogGate(args: {
       findFirst: prisma.backlogItemActivity.findFirst.bind(prisma.backlogItemActivity) as unknown as BranchPlanBacklogGateDb["backlogItemActivity"]["findFirst"],
     },
   };
-  const capsule = await db.workCapsule.findFirst({
+  const capsule = await db.workroom.findFirst({
     where: { headBranch: args.branchName, status: { in: ["draft", "active", "blocked"] } },
     orderBy: { updatedAt: "desc" },
     select: { backlogItemId: true },

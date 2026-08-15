@@ -17,7 +17,7 @@ const {
   mockListLocalBranches: vi.fn(),
   mockPlanCapsuleWorkspace: vi.fn(),
   mockPrisma: {
-    workCapsule: {
+    workroom: {
       findMany: vi.fn(),
       findUnique: vi.fn(),
     },
@@ -50,7 +50,7 @@ describe("getWorkControlData", () => {
       user: { id: "user-1", platformRole: "HR-100", isSuperuser: true },
     });
     mockCan.mockReturnValue(true);
-    mockPrisma.workCapsule.findMany.mockResolvedValue([]);
+    mockPrisma.workroom.findMany.mockResolvedValue([]);
     mockScanGitWorktrees.mockResolvedValue([]);
     mockGetWorktreeDirtySummary.mockResolvedValue({ modifiedCount: 0, untrackedCount: 0 });
   });
@@ -64,7 +64,7 @@ describe("getWorkControlData", () => {
   });
 
   it("filters scanner output by already-adopted branches", async () => {
-    mockPrisma.workCapsule.findMany.mockResolvedValue([
+    mockPrisma.workroom.findMany.mockResolvedValue([
       {
         capsuleId: "WC-1",
         title: "Already adopted",
@@ -113,7 +113,7 @@ describe("getWorkControlData", () => {
       }),
     ]);
     expect(mockGetWorktreeDirtySummary).toHaveBeenCalledWith("D:/DPF-orphan");
-    expect(mockPrisma.workCapsule.findMany).toHaveBeenCalledWith(expect.objectContaining({
+    expect(mockPrisma.workroom.findMany).toHaveBeenCalledWith(expect.objectContaining({
       select: expect.objectContaining({
         decisionScope: true,
         portfolioRole: true,
@@ -222,7 +222,7 @@ describe("getCapsuleDetail", () => {
   });
 
   it("loads a capsule and recent activity for the detail route", async () => {
-    mockPrisma.workCapsule.findUnique.mockResolvedValue({
+    mockPrisma.workroom.findUnique.mockResolvedValue({
       capsuleId: "WC-DETAIL",
       title: "Detail",
       activities: [],
@@ -232,7 +232,7 @@ describe("getCapsuleDetail", () => {
     const result = await getCapsuleDetail("WC-DETAIL");
 
     expect(result).toEqual(expect.objectContaining({ capsuleId: "WC-DETAIL" }));
-    expect(mockPrisma.workCapsule.findUnique).toHaveBeenCalledWith(expect.objectContaining({
+    expect(mockPrisma.workroom.findUnique).toHaveBeenCalledWith(expect.objectContaining({
       where: { capsuleId: "WC-DETAIL" },
     }));
   });

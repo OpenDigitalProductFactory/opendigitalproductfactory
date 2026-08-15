@@ -7,7 +7,7 @@
 // (wip-cap.ts decideUnifiedWip / assertUnifiedWipCapacity) gates on.
 //
 // Why bs-sandbox pressure comes from FeatureBuild, not build-studio capsules:
-//   A build-studio WorkCapsule is created in "working" status
+//   A build-studio Workroom is created in "working" status
 //   (work-capsules/build-studio-attachment.ts) and its status is NOT transitioned
 //   to a terminal value when the build finishes — capture-build-pr.ts stamps the
 //   PR onto the capsule but leaves its status "working". Counting build-studio
@@ -16,7 +16,7 @@
 //   occupancy, and ONLY build-studio work contends on the sandbox
 //   (unified-wip.contendsOnBsSandbox), so sourcing bs-sandbox pressure from the
 //   active FeatureBuild count keeps the BS gate byte-for-byte as it is today.
-//   Every OTHER surface registers a WorkCapsule, which IS the authoritative unit
+//   Every OTHER surface registers a Workroom, which IS the authoritative unit
 //   of WIP for the non-sandbox pools (shared-lease / host-worktree).
 
 import {
@@ -39,7 +39,7 @@ export interface UnifiedWipDb {
   featureBuild: {
     count(args: unknown): Promise<number>;
   };
-  workCapsule: {
+  workroom: {
     findMany(args: unknown): Promise<
       Array<{
         executorKind: string | null;
@@ -77,7 +77,7 @@ export async function loadActiveUnifiedWip(
         parentEpicId: null,
       },
     }),
-    db.workCapsule.findMany({
+    db.workroom.findMany({
       where: {
         status: { notIn: [...TERMINAL_CAPSULE_STATUSES] },
         archivedAt: null,
@@ -103,7 +103,7 @@ export async function loadActiveUnifiedWip(
   const items: ActiveWipItem[] = [
     // bs-sandbox contenders — one item per active BS build.
     ...Array.from({ length: activeBsBuilds }, () => ({ executorKind: "build-studio" })),
-    // every other surface — one item per active WorkCapsule.
+    // every other surface — one item per active Workroom.
     ...capsules.map((c) => ({
       executorKind: c.executorKind ?? "dpf-native",
       holdsSharedLease:

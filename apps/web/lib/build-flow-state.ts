@@ -333,7 +333,7 @@ async function deriveUpstreamFork(
   }
 
   if (prUrl) {
-    const capsule = await prisma.workCapsule.findFirst({
+    const capsule = await prisma.workroom.findFirst({
       where: {
         featureBuildId: buildRowId,
         ...(prNumber ? { pullRequestNumber: prNumber } : {}),

@@ -8,7 +8,7 @@ vi.mock("@dpf/db", () => ({
     buildActivity:     { findFirst: vi.fn() },
     productVersion:    { findMany: vi.fn() },
     changePromotion:   { updateMany: vi.fn() },
-    workCapsule:       { findFirst: vi.fn() },
+    workroom:       { findFirst: vi.fn() },
   },
 }));
 
@@ -81,7 +81,7 @@ function mockPack(pack: { packId: string; prUrl: string | null; prNumber: number
   const manifest = pack?.manifest as { prUrl?: string; prNumber?: number } | undefined;
   const resolvedPrUrl = pack?.prUrl ?? manifest?.prUrl ?? null;
   const resolvedPrNumber = pack?.prNumber ?? manifest?.prNumber ?? null;
-  vi.mocked(prisma.workCapsule.findFirst).mockResolvedValue(
+  vi.mocked(prisma.workroom.findFirst).mockResolvedValue(
     resolvedPrUrl
       ? ({
           workspaceState: writeBuildPrDeliveryState({}, {
@@ -214,7 +214,7 @@ describe("getBuildFlowState — upstream PR fork", () => {
     mockBuild({ phase: "ship" });
     const prUrl = "https://github.com/org/repo/pull/42";
     mockPack({ packId: "FP-1", prUrl, prNumber: 42 });
-    vi.mocked(prisma.workCapsule.findFirst).mockResolvedValue({
+    vi.mocked(prisma.workroom.findFirst).mockResolvedValue({
       workspaceState: writeBuildPrDeliveryState({}, {
         ...createBuildPrDeliveryState({ repository: "org/repo", prNumber: 42, prUrl }),
         status: "queued",
