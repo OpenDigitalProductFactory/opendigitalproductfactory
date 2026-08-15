@@ -112,7 +112,7 @@ When you face an open question with 2+ architecturally-distinct options inside t
    - **`ledger.recorded`** → if `true`, keep `ledger.interactionId` (DI-*) and continue with [`dpf-record-decision-outcome`](../dpf-record-decision-outcome/SKILL.md). If `false`, name `ledger.reason` to the operator.
    - Math identity: scoring is **weighted-sum MCDA (WSM)**, not Saaty AHP eigenvectors. See `docs/superpowers/research/2026-08-10-decision-vector-science-and-corpus-adequacy.md`.
 
-5. **Surface the ledger, not just the answer.** Report chosen option, top contributors, `autonomyEligible`, blockers, and the **DI id**. Operator ratifies when autonomy is not eligible. Then run `dpf-record-decision-outcome` so the capsule (if any) points at the same DI.
+5. **Surface the ledger, not just the answer.** Report chosen option, top contributors, `autonomyEligible`, blockers, and the **DI id**. Operator ratifies when autonomy is not eligible. Then run `dpf-record-decision-outcome` so the workroom (if any) points at the same DI.
 ## Output template
 
 ```

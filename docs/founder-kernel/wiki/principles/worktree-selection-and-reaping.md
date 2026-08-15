@@ -3,9 +3,9 @@ title: Worktree Selection and Reaping
 slug: worktree-selection-and-reaping
 pageKind: principle
 status: published
-abstract: The two interactive host surfaces (Claude Code, Codex) share ONE canonical worktree location — the dedicated sibling dir D:/DPF-worktrees/<topic>, not .claude/worktrees/ nesting. Every worktree is born governed (topic branch off origin/main, MCP seeded, capsule claim) and is reaped when idle or done.
+abstract: The two interactive host surfaces (Claude Code, Codex) share ONE canonical worktree location — the dedicated sibling dir D:/DPF-worktrees/<topic>, not .claude/worktrees/ nesting. Every worktree is born governed (topic branch off origin/main, MCP seeded, workroom claim) and is reaped when idle or done.
 principleTier: contextual
-principleDirection: Create host-surface worktrees only at the canonical sibling location D:/DPF-worktrees/<topic>, born governed (topic branch off origin/main, MCP config seeded, compose project isolated, capsule claimed); reap idle/done worktrees, their branches, their CI images, and any stray compose project so the count stays bounded.
+principleDirection: Create host-surface worktrees only at the canonical sibling location D:/DPF-worktrees/<topic>, born governed (topic branch off origin/main, MCP config seeded, compose project isolated, workroom claimed); reap idle/done worktrees, their branches, their CI images, and any stray compose project so the count stays bounded.
 principleDimensionVector: {"long_term_maintainability": 0.8, "governance_compliance": 0.6, "blast_radius": -0.5, "capacity_utilization": 0.5}
 principleAppliesTo:
   - external_coding_agent
@@ -27,7 +27,7 @@ Every worktree is **born governed**:
 - MCP config + agent toolchain seeded (`dpf-bootstrap-agent-toolchain`), `COMPOSE_PROJECT_NAME=dpf-<topic>` set, readiness marker written.
 - A worktree without a `WorkCapsule` claim is an **orphan** by definition.
 
-Every worktree has a lifecycle — `active` (claimed capsule, live heartbeat), `idle` (no heartbeat past threshold), or `done` (branch merged/abandoned) — and the janitor reaps `idle`/`done` worktrees, their branches, their per-branch CI images, and any stray compose project. The target is a **bounded** worktree count, not the 119 observed on 2026-06-05.
+Every worktree has a lifecycle — `active` (claimed workroom, live heartbeat), `idle` (no heartbeat past threshold), or `done` (branch merged/abandoned) — and the janitor reaps `idle`/`done` worktrees, their branches, their per-branch CI images, and any stray compose project. The target is a **bounded** worktree count, not the 119 observed on 2026-06-05.
 
 ## Why
 
@@ -37,7 +37,7 @@ On 2026-06-05 the live install carried 119 worktrees in two conflicting conventi
 
 - Create host-surface worktrees at `D:/DPF-worktrees/<topic>` with a topic branch off `origin/main`. Treat the nested `.claude/worktrees/` form as a hard error to be migrated, not a second valid convention.
 - Configure both clients (Claude Code worktree base, Codex worktree trust base) to point at the canonical sibling location.
-- Seed MCP + toolchain immediately after creation; claim a capsule before doing work.
+- Seed MCP + toolchain immediately after creation; claim a workroom before doing work.
 - Let the worktree/runtime janitor reap `idle`/`done` worktrees, branches, CI images, and stray compose projects. Do not hoard worktrees "for reference."
 - The `active` liveness signal is a real, gitignored session heartbeat (`.dpf-session-heartbeat.json`, refreshed every turn), and it **outranks** reap eligibility: the janitor keeps any worktree with a fresh heartbeat even when it is otherwise merged+clean (Tier-A) — never reap a worktree out from under a live session. A worktree mid-merge (`MERGE_HEAD`) with no live heartbeat is quarantined and flagged, not silently left or reaped.
 - Keep the shared **root clone** fast-forwarded to `origin/main` (the `root-clone-freshness` SessionStart hook does this, ff-only): a stale root blocks every junctioned worktree's pregate, so root freshness is fleet hygiene, not a per-worktree concern.

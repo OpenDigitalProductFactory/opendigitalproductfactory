@@ -66,13 +66,13 @@ Result is `{ recommendation, confidence, perPrincipleLedger, ... }`. Persist the
 
 ---
 
-### 1.3 Capsule vs FeatureBuild vs Sandbox vs RuntimeTarget — pick the right substrate
+### 1.3 Workroom vs FeatureBuild vs Sandbox vs RuntimeTarget — pick the right substrate
 
 **What.** Four overlapping-but-distinct primitives. Choosing the wrong one creates a parallel substrate that must be reconciled forever.
 
 | Primitive | Schema | What it represents | Owner of writes |
 |---|---|---|---|
-| `WorkCapsule` ([schema.prisma:1014](../../packages/db/prisma/schema.prisma:1014)) | Soft lease on a body of work; tracks heartbeat, claim, release | Concurrency coordination — "who is working on this right now" | Whoever claims the capsule (PAR — see §1.4) |
+| `WorkCapsule` ([schema.prisma:1014](../../packages/db/prisma/schema.prisma:1014)) | Soft lease on a body of work; tracks heartbeat, claim, release | Concurrency coordination — "who is working on this right now" | Whoever claims the workroom (PAR — see §1.4) |
 | `FeatureBuild` ([schema.prisma:4279](../../packages/db/prisma/schema.prisma:4279)) | A Build Studio build through Ideate → Plan → Build → Review → Ship; owns `designDoc`, `buildPlan`, `phaseRuns`, `dispatchAttempts`, `phaseHandoffs` | Procedural workflow state for one feature | Build Studio orchestrator + sub-agents |
 | `Sandbox` ([schema.prisma:4585](../../packages/db/prisma/schema.prisma:4585)) | Isolated container + workspace where code is actually authored and tested | Ephemeral execution environment for a FeatureBuild | Sandbox lifecycle controller |
 | `RuntimeTarget` ([schema.prisma:1086](../../packages/db/prisma/schema.prisma:1086)) + `RuntimeVerification` ([schema.prisma:1122](../../packages/db/prisma/schema.prisma:1122)) | Deployment / runtime status of a long-lived service; verification events attach here | Operational truth — "is this thing running and verified" | Deploy + verification pipelines |

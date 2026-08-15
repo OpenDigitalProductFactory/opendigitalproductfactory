@@ -38,7 +38,7 @@ Creates are covered by [`dpf-worktree-per-session`](../dpf-worktree-per-session/
 |------|--------|------------------|
 | **Primary reaper** — this session's worktree on **SessionEnd** when Tier-A (merged + clean). Never on `Stop`: that fires every turn, and a live tree becomes Tier-A the moment its own PR merges (BI-E5D810B8) | Client hooks (`worktree-session-hygiene.mjs`) | No — automatic when dpf-platform / global hooks are installed |
 | **Fleet soak** — scheduled observe / optional Tier-A, sandbox leftover GC | Portal Inngest (`ops/worktree-janitor`, `ops/sandbox-build-gc`) + env flags | No — enable flags; do not hand-cron |
-| **WorkCapsule reaper** — transition dead capsule *records* (lease expired / build terminal / idle) `working`→`abandoned`; the DB half of hygiene (WS9) | Portal Inngest (`ops/taskrun-watchdog` tick) + `DPF_WORKCAPSULE_REAPER_*` flags | No — enable flags; observe via `list_work_capsules staleOnly=true` |
+| **Workroom reaper** — transition dead workroom *records* (lease expired / build terminal / idle) `working`→`abandoned`; the DB half of hygiene (WS9) | Portal Inngest (`ops/taskrun-watchdog` tick) + `DPF_WORKCAPSULE_REAPER_*` flags | No — enable flags; observe via `list_work_capsules staleOnly=true` |
 | **Exceptional reclaim** — live Tier-A bulk prune, force-delete locked dirs, kill locking shells | Operator + explicit "go" | Only after dry-run report + operator approval |
 
 Primary design: multi-client governance parity (BI-42FA7DD8, BI-8BD61C30, BI-A4BEFE99). Spec/plan under `docs/superpowers/*2026-07-26-multi-client-governance-parity*`.
@@ -51,8 +51,8 @@ Primary design: multi-client governance parity (BI-42FA7DD8, BI-8BD61C30, BI-A4B
 | `DPF_WORKTREE_JANITOR_AUTO_REAP` | off | When `1` **and** ENABLED, live **Tier A only** |
 | `DPF_SANDBOX_BUILD_GC_ENABLED` | off | When `1`, daily GC for terminal/orphan `.builds/*` |
 | `DPF_SANDBOX_BUILD_GC_DELETE_BRANCHES` | off | When `1` **and** ENABLED, also age-delete `build/*` past grace |
-| `DPF_WORKCAPSULE_REAPER_ENABLED` | off | When `1`, the taskrun-watchdog tick **scans** for dead WorkCapsules (observe-only unless AUTO_REAP) |
-| `DPF_WORKCAPSULE_REAPER_AUTO_REAP` | off | When `1` **and** ENABLED, live-transition dead capsules `working`→`abandoned` (reversible; DB-only) |
+| `DPF_WORKCAPSULE_REAPER_ENABLED` | off | When `1`, the taskrun-watchdog tick **scans** for dead Workrooms (observe-only unless AUTO_REAP) |
+| `DPF_WORKCAPSULE_REAPER_AUTO_REAP` | off | When `1` **and** ENABLED, live-transition dead workrooms `working`→`abandoned` (reversible; DB-only) |
 
 Wire via host `.env` and/or gitignored `docker-compose.override.yml` on the **portal** service, then recreate portal so `printenv` shows the flags. Do not set AUTO_REAP or BRANCH delete until observe-only soak looks clean.
 
@@ -152,16 +152,16 @@ Prefer flag-enabled scheduled GC. Manual one-shot only with go:
 - Keep currently checked-out / non-terminal (`review`, `building`, …) branches.
 - `git worktree prune` inside sandbox if a dir was deleted out from under git.
 
-### F. Stale WorkCapsule records (the DB half of the sprawl — WS9 / BI-CBAAEA94)
+### F. Stale Workroom records (the DB half of the sprawl — WS9 / BI-CBAAEA94)
 
-Disk hygiene reaps *worktrees and sandboxes*; this reaps the **WorkCapsule row** — the coordination record that shows on the Work Control board and in `list_work_capsules`. They drift apart: a Build Studio capsule is born at the daily 14:00 governed-backlog tee-up and, if its build stalls, is never written again, so `updatedAt` freezes at `...T14:00:00` while `status` still says `working`. Dozens of dead capsules then **read as active**, jam the Build Studio WIP cap, and become the mechanism by which work is silently duplicated.
+Disk hygiene reaps *worktrees and sandboxes*; this reaps the **Workroom row** — the coordination record that shows on the Work Control board and in `list_work_capsules`. They drift apart: a Build Studio workroom is born at the daily 14:00 governed-backlog tee-up and, if its build stalls, is never written again, so `updatedAt` freezes at `...T14:00:00` while `status` still says `working`. Dozens of dead workrooms then **read as active**, jam the Build Studio WIP cap, and become the mechanism by which work is silently duplicated.
 
-**`updatedAt` is not liveness.** True liveness (`apps/web/lib/work-capsules/liveness.ts`) is derived from signals that only advance with real work: an open PR, a lease-backed executor's `leaseExpiresAt` (external Claude/Codex/Grok), the linked build's phase + activity (a null-lease BS capsule's only real signal), and `lastSyncedAt`. The board, `list_work_capsules` (see its `livenessSummary` and `staleOnly=true`), and the reaper all share that one classifier.
+**`updatedAt` is not liveness.** True liveness (`apps/web/lib/work-capsules/liveness.ts`) is derived from signals that only advance with real work: an open PR, a lease-backed executor's `leaseExpiresAt` (external Claude/Codex/Grok), the linked build's phase + activity (a null-lease BS workroom's only real signal), and `lastSyncedAt`. The board, `list_work_capsules` (see its `livenessSummary` and `staleOnly=true`), and the reaper all share that one classifier.
 
 - **Observe (always safe):** `list_work_capsules staleOnly=true` — the reap-candidate set, each with a `liveness` verdict and the `trueLivenessAt` that proves it. No writes.
-- **Governed reaper** (`apps/web/lib/work-capsules/work-capsule-reaper.ts`) runs on the taskrun-watchdog tick: observe-only when `DPF_WORKCAPSULE_REAPER_ENABLED=1`, live only with `DPF_WORKCAPSULE_REAPER_AUTO_REAP=1`. It transitions dead capsules `working`→`abandoned`.
-- **DB-only, so junction-safe:** the reaper never touches the filesystem. Reaping the capsule record does **not** delete the worktree — that stays for `worktree-janitor` / section C after its own explicit go. Abandon is reversible: re-promote the backlog item or re-adopt the branch.
-- A terminal build now abandons its attached capsule in the same watchdog tick (no zombie `working` capsule left behind).
+- **Governed reaper** (`apps/web/lib/work-capsules/work-capsule-reaper.ts`) runs on the taskrun-watchdog tick: observe-only when `DPF_WORKCAPSULE_REAPER_ENABLED=1`, live only with `DPF_WORKCAPSULE_REAPER_AUTO_REAP=1`. It transitions dead workrooms `working`→`abandoned`.
+- **DB-only, so junction-safe:** the reaper never touches the filesystem. Reaping the workroom record does **not** delete the worktree — that stays for `worktree-janitor` / section C after its own explicit go. Abandon is reversible: re-promote the backlog item or re-adopt the branch.
+- A terminal build now abandons its attached workroom in the same watchdog tick (no zombie `working` workroom left behind).
 
 ## Per-worktree caches and links that make a fresh worktree look broken
 

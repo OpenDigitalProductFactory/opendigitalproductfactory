@@ -58,7 +58,7 @@ Open **Admin > Hive Contributions** to review result-only contributions received
 from trusted reseller channels. The intake record is saved before any GitHub
 operation. It may contain a code result, verification evidence, DCO/provenance,
 attribution, and a review recommendation; source backlog items, priorities,
-estimates, discussions, work capsules, and customer-private context are rejected
+estimates, discussions, workrooms, and customer-private context are rejected
 before persistence.
 
 Choose **Accept** to approve the result and attempt delivery to the configured

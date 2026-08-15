@@ -77,7 +77,7 @@ Choose the relationship preset that matches the connection:
 - **Same organization** for installations operated by the same company.
 - **Service provider / customer** for a reseller or managed-service relationship, then select which side manages the other.
 
-Only the minimum shared projection crosses an approved link. Local backlog detail, work capsules, private plans, attachments, and customer context remain on their originating installation. Either side can pause or revoke the connection.
+Only the minimum shared projection crosses an approved link. Local backlog detail, workrooms, private plans, attachments, and customer context remain on their originating installation. Either side can pause or revoke the connection.
 
 Classify every connection as **production**, **development**, or **test** in the
 Connections table. New or unclassified links fail safely to development.

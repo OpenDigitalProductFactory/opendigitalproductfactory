@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 635,
+  "pageCount": 636,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -1239,7 +1239,7 @@
         "1-dpf-novel-patterns",
         "11-gearinterface-canonical-observation-envelope-at-every-ring-boundary",
         "12-wwmd-consultation-principledecide-against-the-founder-kernel",
-        "13-capsule-vs-featurebuild-vs-sandbox-vs-runtimetarget-pick-the-right-substrate",
+        "13-workroom-vs-featurebuild-vs-sandbox-vs-runtimetarget-pick-the-right-substrate",
         "14-propose-acknowledge-reassign-par-concurrent-session-ownership-protocol",
         "15-governance-approves-evidence-not-provenance",
         "2-dpf-anti-patterns-defaults-the-kernel-forbids",
@@ -2074,7 +2074,7 @@
       "anchors": [
         "unified-development-activity-tracking",
         "the-structure",
-        "one-unit-of-work-the-workcapsule",
+        "one-unit-of-work-the-workroom",
         "how-each-surface-is-captured",
         "what-you-see",
         "why-this-works",
@@ -3167,6 +3167,19 @@
         "what-to-do-instead",
         "anti-pattern",
         "related-principles"
+      ]
+    },
+    "docs/founder-kernel/wiki/principles/claim-a-workroom-before-you-work.md": {
+      "publicHref": "/founder-kernel/wiki/principles/claim-a-workroom-before-you-work/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "rule",
+        "why-the-unit-is-the-workroom-and-not-the-build",
+        "the-name",
+        "what-this-rule-does-not-yet-enforce",
+        "related"
       ]
     },
     "docs/founder-kernel/wiki/principles/classify-ambiguous-requests-before-acting.md": {
