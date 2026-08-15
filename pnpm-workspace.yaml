@@ -39,10 +39,14 @@ overrides:
   node-forge: '1.4.0'
   postcss: '^8.5.18'
   uuid: '^14.0.0'
-  # nanoid < 3.3.17: GHSA-2v37-7h3g-55p8 (Dependabot #152, high) — predictable
-  # output when given a non-integer size. Only the 3.x line resolved vulnerable
-  # (3.3.16); the 5.x line is unaffected, so scope the floor to 3.x.
-  'nanoid@<3.3.17': '^3.3.17'
+  # nanoid GHSA-2v37-7h3g-55p8 / CVE-2026-67213 (Dependabot #152, high) —
+  # originally reported as predictable output for a non-integer size and floored
+  # to 3.3.17. The advisory was since revised: custom generators can loop
+  # indefinitely when size is zero, and the patched releases moved to 3.3.18 /
+  # 5.1.6, so the old 3.3.17 floor no longer clears it (caught by the OSV
+  # dependency scan, not by a new Dependabot alert). Raise the 3.x floor to
+  # 3.3.18. The 5.x line already resolves 5.1.16 (> 5.1.6), so it stays unfloored.
+  'nanoid@<3.3.18': '^3.3.18'
   # dompurify <= 3.4.12: GHSA-55q2-fjhq-7xh7 (Dependabot #148, medium) — mXSS via
   # nesting-depth handling. Transitive (mermaid pulls dompurify ^3.3.3). Floor to
   # the patched 3.4.13.
