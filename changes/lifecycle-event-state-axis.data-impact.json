@@ -1,0 +1,28 @@
+{
+  "version": "1",
+  "accountableOwner": "Mark Bodman (markdbodman@gmail.com)",
+  "summary": "BI-E55991E9 (EP-VSL-SURFACE foundational grammar). Add two nullable columns fromState/toState to the existing universal append-only LifecycleEvent ledger so it records the in-stage STATE axis of the canonical lifecycle grammar (apps/web/lib/lifecycle-grammar.ts), enabling two-axis reporting (count-by-stage AND state-within-stage). Additive, non-destructive: two new nullable columns only, no changes to existing rows and no backfill — existing rows keep NULL state and remain valid. The columns hold an open per-grammar StageState.key (not a canonical enum), never personal data: a StageState.key is a platform lifecycle-stage identifier (e.g. 'at_risk', 'qualified', 'open'), not tenant or subject data. The row's actor is already an opaque Principal id via the pre-existing actorPrincipalId column (unchanged). Migration: 20260815000000_add_lifecycle_event_state_axis (ADD COLUMN ... TEXT, both nullable).",
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "LifecycleEvent",
+      "lifecycleDisposition": "domain-lifecycle-managed",
+      "fields": [
+        {
+          "name": "fromState",
+          "resolution": "not-applicable",
+          "reason": "In-stage StageState.key at the start of a lifecycle transition. A platform lifecycle-stage-state identifier (open per-grammar string, e.g. 'at_risk'), not personal data and not tied to a data subject. Nullable and backfill-free; existing rows keep NULL.",
+          "provenance": "Set by recordLifecycleTransition (apps/web/lib/lifecycle/lifecycle-transition.ts) from the grammar-resolved (stage,state) point of the entity before the transition. No external source of data.",
+          "flags": []
+        },
+        {
+          "name": "toState",
+          "resolution": "not-applicable",
+          "reason": "In-stage StageState.key after a lifecycle transition. Same platform-identifier nature as fromState; not personal data. Nullable and backfill-free.",
+          "provenance": "Set by recordLifecycleTransition from the grammar-resolved (stage,state) point of the entity after the transition. No external source of data.",
+          "flags": []
+        }
+      ]
+    }
+  ]
+}
