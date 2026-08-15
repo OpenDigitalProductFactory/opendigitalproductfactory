@@ -196,12 +196,20 @@ No schema migration is planned: existing `DiscoveryConnection`, `DiscoveryRun`, 
 
 Documentation is required because the current UniFi guide claims the edge already renders the real network, which the installed runtime disproves.
 
+## Design grounding
+
+- Existing specs/plans reviewed: this implementation plan and its accepted truthful physical topology design.
+- Current code substrate reviewed: physical projection, hierarchical layout, viewport transforms, canvas rendering, and the live UniFi graph output.
+- Source of truth: canonical inventory entities and relationships; the layout changes display direction and coordinates only.
+- Decision: complete the accepted physical hierarchy contract with a compact, automatically fitted topology projection.
+
 ## Implementation record
 
 Implemented on `fix/truthful-network-topology` as one atomic repair. The final shape preserves the design decisions while making these execution-level adjustments:
 
 - HTTP test servers replaced checked-in vendor fixtures, keeping real network identifiers and payloads out of the repository while covering official pagination, device detail, clients, and bounded legacy fallback.
 - The physical read model filters and orients canonical graph data before layout, so no change to the generic layout engine or subnet-scoping helper was required.
+- Canonical-runtime review after the official UniFi evidence repair exposed that the initial projection had not actually implemented its specified display orientation: child-to-parent facts rendered clients above the gateway, and Dagre placed every client on one clipped row. The physical read model now orients and deduplicates display edges, while a topology-specific layout wraps clients beneath their observed AP/switch and automatically fits the first viewport. Canonical facts remain unchanged.
 - Source kind and observation freshness are projected through `discovery-sync.ts` and `graph-sync.ts`; the UI does not query UniFi-specific persistence.
 - Shared topology constants and the UniFi TLS-aware fetch helper were extracted to keep changed modules within repository size limits.
 - No migration was required; the existing discovery, inventory, attribution, and graph contracts were sufficient.
