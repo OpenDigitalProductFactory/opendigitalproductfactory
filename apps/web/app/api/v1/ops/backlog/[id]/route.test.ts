@@ -41,13 +41,16 @@ describe("DELETE /api/v1/ops/backlog/:id initiative retention", () => {
     expect(mocks.deleteItem).not.toHaveBeenCalled();
   });
 
-  it("returns a stable conflict and does not delete permanent governance evidence", async () => {
+  it("authenticates before returning a stable conflict for permanent governance evidence", async () => {
     mocks.assertDeletable.mockRejectedValue(Object.assign(new Error("retained"), { code: "INITIATIVE_GOVERNANCE_RETENTION" }));
     const response = await DELETE(new Request("http://localhost/api/v1/ops/backlog/bi-row", { method: "DELETE" }), {
       params: Promise.resolve({ id: "bi-row" }),
     });
     expect(response.status).toBe(409);
     await expect(response.json()).resolves.toMatchObject({ code: "INITIATIVE_GOVERNANCE_RETENTION" });
+    expect(mocks.authenticateRequest.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.assertDeletable.mock.invocationCallOrder[0],
+    );
     expect(mocks.deleteItem).not.toHaveBeenCalled();
   });
 

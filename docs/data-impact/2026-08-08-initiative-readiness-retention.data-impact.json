@@ -7,9 +7,16 @@
     "WorkCapsule activity projection",
     "Managed-document blob retention and storage-GC path"
   ],
+  "privacyAssessment": {
+    "personalData": false,
+    "sensitivity": "confidential control-plane evidence",
+    "dataSubjectRights": "not-applicable — the new pin stores only server-derived artifact digests, opaque artifact locators, and foreign-key identities; it does not store people, contact details, or data-subject content",
+    "reviewDisposition": "No GDPR/CCPA data-subject workflow is introduced. Existing artifact content remains governed by its owning BuildArtifactRevision, DocumentVersion, or DocumentBlob policy; the pin adds permanent evidence preservation without copying artifact bytes."
+  },
   "migration": {
     "name": "20260809023000_initiative_gate_activity_shape",
-    "backfill": "Additive and existing-data compatible. BacklogItemActivity.gateKey is nullable for ordinary legacy activities, while a database shape constraint requires every new initiative_gate_receipt to carry a gate and prohibits gate keys on other activity kinds. InitiativeArtifactRetentionPin starts empty and is populated only atomically with new approved baselines. The new WorkCapsuleActivity and BacklogItemActivity indexes cover existing rows without rewriting their meaning. No existing row, column, or enum value is removed or overwritten. Conditional triggers affect only newly governed activity kinds, work-intent activities, and artifacts referenced by a retention pin; ordinary backlog activity and unpinned artifacts retain their existing lifecycle."
+    "backfill": "Additive and existing-data compatible. BacklogItemActivity.gateKey is nullable for ordinary legacy activities, while a database shape constraint requires every new initiative_gate_receipt to carry a gate and prohibits gate keys on other activity kinds. InitiativeArtifactRetentionPin starts empty and is populated only atomically with new approved baselines. The new WorkCapsuleActivity and BacklogItemActivity indexes cover existing rows without rewriting their meaning. No existing row, column, or enum value is removed or overwritten. Conditional triggers affect only newly governed activity kinds, work-intent activities, and artifacts referenced by a retention pin; ordinary backlog activity and unpinned artifacts retain their existing lifecycle.",
+    "rollback": "DPF migrations are forward-only. Deployment validation applies this additive migration to an existing-data-compatible schema; recovery uses a subsequent corrective migration rather than destructive down SQL. Shape constraints and transaction-level tests fail closed before invalid governance evidence can be committed."
   },
   "tests": [
     "packages/db/src/initiative-readiness-schema.test.ts",
