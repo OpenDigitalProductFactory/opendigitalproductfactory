@@ -118,6 +118,8 @@ type OfficialClient = {
   ipAddress?: string;
   name?: string;
   hostname?: string;
+  access?: { deviceId?: string; type?: string; port?: number } | null;
+  uplinkDeviceId?: string;
   connectedDeviceId?: string;
   connectedDevice?: { id?: string };
   type?: string;
@@ -264,13 +266,62 @@ async function officialGetAll<T>(
 }
 
 function officialDeviceMapping(device: OfficialDevice) {
+  const model = device.model?.toLowerCase() ?? "";
+  if (/(ucg|udm|uxg|gateway)/.test(model)) return DEVICE_TYPE_MAP.udm;
+  if (/^(uap|u6|u7)/.test(model)) return DEVICE_TYPE_MAP.uap;
+  if (/^(us-|usw)/.test(model)) return DEVICE_TYPE_MAP.usw;
   const features = (device.features ?? []).map((feature) => feature.toLowerCase());
-  if (features.some((feature) => feature.includes("gateway"))) return DEVICE_TYPE_MAP.udm;
+  if (features.some((feature) => feature.includes("gateway") || feature.includes("routing"))) {
+    return DEVICE_TYPE_MAP.udm;
+  }
   if (features.some((feature) => feature.includes("switch"))) return DEVICE_TYPE_MAP.usw;
   if (features.some((feature) => feature.includes("accesspoint") || feature.includes("access_point"))) {
     return DEVICE_TYPE_MAP.uap;
   }
   return DEFAULT_DEVICE_MAPPING;
+}
+function appendWanHealthEvidence(input: {
+  source: NonNullable<DiscoveredItemInput["sourceKind"]>;
+  site: string;
+  wanHealth: UnifiHealthSubsystem;
+  gatewayRef?: string;
+  items: DiscoveredItemInput[];
+  relationships: DiscoveredRelationshipInput[];
+}) {
+  const { source, site, wanHealth, gatewayRef, items, relationships } = input;
+  const ispName = wanHealth.isp_name ?? wanHealth.isp_organization ?? null;
+  const wanRef = `unifi-wan:${site}:wan`;
+  items.push({
+    sourceKind: source,
+    itemType: "wan_uplink",
+    name: ispName ? `${ispName} (WAN)` : "Internet Uplink (WAN)",
+    externalRef: wanRef,
+    naturalKey: wanRef,
+    confidence: 0.95,
+    attributes: {
+      ispName,
+      ispOrganization: wanHealth.isp_organization ?? null,
+      wanIp: wanHealth.wan_ip ?? null,
+      linkStatus: wanHealth.status ?? null,
+      latencyMs: wanHealth.latency ?? null,
+      uptimeSeconds: wanHealth.uptime ?? null,
+      throughputDownBps: wanHealth.xput_down ?? null,
+      throughputUpBps: wanHealth.xput_up ?? null,
+      osiLayer: 3,
+      osiLayerName: "network",
+      protocolFamily: "ipv4",
+    },
+  });
+  if (gatewayRef) {
+    relationships.push({
+      sourceKind: source,
+      relationshipType: "UPLINKS_TO",
+      fromExternalRef: gatewayRef,
+      toExternalRef: wanRef,
+      confidence: 0.95,
+      attributes: { ispName, linkStatus: wanHealth.status ?? null },
+    });
+  }
 }
 
 async function collectOfficialUnifiDiscovery(
@@ -306,6 +357,7 @@ async function collectOfficialUnifiDiscovery(
   const software: DiscoveredSoftwareInput[] = [];
   const warnings: string[] = [];
   const idToRef = new Map<string, string>();
+  const macToRef = new Map<string, string>();
 
   for (const device of devices) {
     const mac = device.macAddress?.toLowerCase();
@@ -316,6 +368,7 @@ async function collectOfficialUnifiDiscovery(
     const ref = `unifi-device:${mac}`;
     const mapping = officialDeviceMapping(device);
     idToRef.set(device.id, ref);
+    macToRef.set(mac, ref);
     items.push({
       sourceKind: source,
       itemType: mapping.itemType,
@@ -400,7 +453,10 @@ async function collectOfficialUnifiDiscovery(
             osiLayerName: "network",
           },
         });
-        const parentId = client.connectedDeviceId ?? client.connectedDevice?.id;
+        const parentId = client.access?.deviceId
+          ?? client.uplinkDeviceId
+          ?? client.connectedDeviceId
+          ?? client.connectedDevice?.id;
         const parentRef = parentId ? idToRef.get(parentId) : undefined;
         if (parentRef) {
           relationships.push({
@@ -409,11 +465,29 @@ async function collectOfficialUnifiDiscovery(
             fromExternalRef: ref,
             toExternalRef: parentRef,
             confidence: 0.85,
-            attributes: { connectionType: client.type ?? "unknown" },
+            attributes: {
+              connectionType: client.type ?? client.access?.type ?? "unknown",
+              remotePort: client.access?.port,
+            },
           });
         }
       }
     }
+  }
+
+  const healthResult = await unifiGet<UnifiHealthSubsystem>("stat/health", deps);
+  const wanHealth = (healthResult.data ?? []).find((subsystem) => subsystem.subsystem === "wan");
+  if (wanHealth) {
+    const gatewayRef = (wanHealth.gw_mac && macToRef.get(wanHealth.gw_mac.toLowerCase()))
+      ?? idToRef.get(devices.find((device) => officialDeviceMapping(device).itemType === "router")?.id ?? "");
+    appendWanHealthEvidence({
+      source,
+      site: deps.site,
+      wanHealth,
+      gatewayRef,
+      items,
+      relationships,
+    });
   }
 
   return { supported: true, output: { items, relationships, software, warnings } };
@@ -550,15 +624,6 @@ export async function collectUnifiDiscovery(
   }
 
   // ── Internet Uplink (the WAN hop) ─────────────────────────────
-  // Everything above stops at the LAN edge: AP -> switch -> gateway. The hop the
-  // business actually depends on — gateway -> ISP (Starlink here) — was never
-  // modelled, so "are we online, and which hop broke?" was unanswerable. The
-  // `wan` health subsystem is the only place the controller reports it.
-  //
-  // Identity is anchored on the site + WAN designation, never on `wan_ip`: a
-  // Starlink CGNAT address changes routinely, and keying on it would mint a new
-  // uplink entity per address change (the churn pattern that produced thousands
-  // of orphaned rows elsewhere in discovery).
   const healthResult = await unifiGet<UnifiHealthSubsystem>("stat/health", resolvedDeps);
   if (healthResult.error) {
     warnings.push("unifi_partial:health");
@@ -569,32 +634,6 @@ export async function collectUnifiDiscovery(
   );
 
   if (wanHealth) {
-    const ispName = wanHealth.isp_name ?? wanHealth.isp_organization ?? null;
-    const wanRef = `unifi-wan:${resolvedDeps.site}:wan`;
-    items.push({
-      sourceKind: source,
-      itemType: "wan_uplink",
-      // Name the uplink after the ISP so the operator sees the dependency they
-      // actually have ("Starlink (WAN)") rather than an opaque port label.
-      name: ispName ? `${ispName} (WAN)` : "Internet Uplink (WAN)",
-      externalRef: wanRef,
-      naturalKey: wanRef,
-      confidence: 0.95,
-      attributes: {
-        ispName,
-        ispOrganization: wanHealth.isp_organization ?? null,
-        wanIp: wanHealth.wan_ip ?? null,
-        linkStatus: wanHealth.status ?? null,
-        latencyMs: wanHealth.latency ?? null,
-        uptimeSeconds: wanHealth.uptime ?? null,
-        throughputDownBps: wanHealth.xput_down ?? null,
-        throughputUpBps: wanHealth.xput_up ?? null,
-        osiLayer: 3,
-        osiLayerName: "network",
-        protocolFamily: "ipv4",
-      },
-    });
-
     // Complete the chain: gateway -> internet uplink. Prefer the gateway the
     // controller itself attributes the uplink to (`gw_mac`); fall back to the
     // routing device when the controller omits it.
@@ -602,20 +641,14 @@ export async function collectUnifiDiscovery(
       ?? macToRef.get(
         devices.find((device) => mapDeviceType(device.type).itemType === "router")?.mac ?? "",
       );
-
-    if (gatewayRef) {
-      relationships.push({
-        sourceKind: source,
-        relationshipType: "UPLINKS_TO",
-        fromExternalRef: gatewayRef,
-        toExternalRef: wanRef,
-        confidence: 0.95,
-        attributes: {
-          ispName,
-          linkStatus: wanHealth.status ?? null,
-        },
-      });
-    }
+    appendWanHealthEvidence({
+      source,
+      site: resolvedDeps.site,
+      wanHealth,
+      gatewayRef,
+      items,
+      relationships,
+    });
   }
 
   // ── Fetch VLANs ───────────────────────────────────────────────
