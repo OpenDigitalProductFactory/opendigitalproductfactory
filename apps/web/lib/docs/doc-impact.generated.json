@@ -740,12 +740,18 @@
     "apps/web/lib/marketing/archetype-fit.ts": [
       "docs/platform-usability-standards.md"
     ],
+    "apps/web/lib/marketing/channels/contracts.ts": [
+      "docs/architecture/unified-connector-kernel.md"
+    ],
     "apps/web/lib/marketing/channels/email-postmark/responder.ts": [
       "docs/architecture/2026-06-14-ai-cockpit-sysml-architecture-note.md",
       "docs/architecture/2026-06-14-odysseus-review-depth-pass.md"
     ],
     "apps/web/lib/marketing/scheduler.ts": [
       "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md"
+    ],
+    "apps/web/lib/marketing/utm.ts": [
+      "docs/architecture/unified-connector-kernel.md"
     ],
     "apps/web/lib/mcp-governed-execute.ts": [
       "docs/architecture/ai-agent-meta-model.md",
@@ -2285,6 +2291,8 @@
     ],
     "docs/architecture/unified-connector-kernel.md": [
       "apps/web/lib/integrations/connectors/index.ts",
+      "apps/web/lib/marketing/channels/contracts.ts",
+      "apps/web/lib/marketing/utm.ts",
       "scripts/check-no-provider-local-connector-lifecycle.mjs"
     ],
     "docs/architecture/vector-decisioning-and-jsi.md": [
