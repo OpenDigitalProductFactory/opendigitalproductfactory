@@ -5110,6 +5110,8 @@
       "anchors": [
         "oss-repo-identity-hygiene",
         "what-is-and-isnt-allowed",
+        "approved-placeholders-write-these-from-the-first-draft",
+        "caught-at-commit-time-not-just-at-ci",
         "how-it-is-enforced",
         "the-ratchet",
         "when-the-guard-fails-on-your-pr",

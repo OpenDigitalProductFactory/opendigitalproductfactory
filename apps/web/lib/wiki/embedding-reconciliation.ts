@@ -17,7 +17,18 @@ export async function reconcilePublishedWikiEmbeddings(input: {
   limit?: number;
   dryRun?: boolean;
 } = {}): Promise<WikiEmbeddingReconciliationResult> {
-  const limit = Math.max(1, Math.min(input.limit ?? DEFAULT_PAGE_LIMIT, DEFAULT_PAGE_LIMIT));
+  // BI-D4C1E05E: this reconcile is now the fleet self-heal wired into portal boot,
+  // so its page limit must be RAISABLE (the maintainer/boot path passes a full-corpus
+  // limit). The default stays DEFAULT_PAGE_LIMIT for the fire-and-forget recall
+  // callers that want it bounded — but the old unraisable `Math.min(..., 500)` cap
+  // would have left any install with >500 published pages self-healing only an
+  // arbitrary subset, permanently skipping the unembedded stance that motivated
+  // this BI. Order by `updatedAt desc` so a just-authored (most-recently-touched)
+  // unembedded page is covered first when a limit does bite. The point scan is
+  // scaled to the page limit so a large corpus doesn't falsely re-embed already-
+  // embedded pages (an incomplete point set only wastes work — it never misses a
+  // genuinely-missing page).
+  const limit = Math.max(1, input.limit ?? DEFAULT_PAGE_LIMIT);
   const [pages, points] = await Promise.all([
     prisma.wikiPage.findMany({
       where: { status: "published", ...(input.kind ? { pageKind: input.kind } : {}) },
@@ -28,11 +39,11 @@ export async function reconcilePublishedWikiEmbeddings(input: {
         principleRingScope: true, principleDimensionVector: true, principlePublic: true,
       },
       take: limit,
-      orderBy: { id: "asc" },
+      orderBy: { updatedAt: "desc" },
     }),
     scrollPoints(QDRANT_COLLECTIONS.WIKI_PAGES, {
       must: [{ key: "entityType", match: { value: "wiki-page" } }],
-    }, VECTOR_SCAN_LIMIT),
+    }, Math.max(VECTOR_SCAN_LIMIT, limit)),
   ]);
   const present = new Set(points
     .map((point) => point.payload.entityId)

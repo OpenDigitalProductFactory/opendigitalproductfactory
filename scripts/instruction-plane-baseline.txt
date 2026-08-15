@@ -1,4 +1,4 @@
-AGENTS.md	23096
+AGENTS.md	23791
 CLAUDE.md	194
 CONVENTIONS.md	244
-extracted:dpf-skill-pack-descriptions	14307
+extracted:dpf-skill-pack-descriptions	14160

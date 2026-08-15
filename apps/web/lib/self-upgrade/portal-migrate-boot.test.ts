@@ -170,7 +170,10 @@ describe.skipIf(!BASH_OK)("portal-migrate-boot.sh (BI-5322D025)", () => {
       const log = r.stdout;
       expect(log.indexOf("prisma migrate deploy")).toBeLessThan(log.indexOf("scripts/sync-provider-registry.ts"));
       expect(log.indexOf("scripts/sync-provider-registry.ts")).toBeLessThan(log.indexOf("scripts/reconcile-catalog-capabilities.ts"));
-      expect(log.indexOf("scripts/reconcile-catalog-capabilities.ts")).toBeLessThan(log.indexOf("BOOT_MARKER"));
+      // BI-D4C1E05E: the wiki embedding self-heal runs after the catalog reconcile
+      // and before the server starts.
+      expect(log.indexOf("scripts/reconcile-catalog-capabilities.ts")).toBeLessThan(log.indexOf("scripts/reembed-wiki-store.ts"));
+      expect(log.indexOf("scripts/reembed-wiki-store.ts")).toBeLessThan(log.indexOf("BOOT_MARKER"));
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
@@ -211,6 +214,31 @@ describe.skipIf(!BASH_OK)("portal-migrate-boot.sh (BI-5322D025)", () => {
       });
       expect(r.status, bootDiagnostics(r)).toBe(0); // boot still succeeds
       expect(r.stderr).toContain("catalog capability reconciliation failed");
+      expect(r.stdout).toContain("BOOT_MARKER"); // server WAS started despite the failure
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  }, TIMEOUT_MS);
+
+  it("DEGRADES OPEN — still starts the server when wiki embedding self-heal fails", () => {
+    // BI-D4C1E05E: a drifted wiki vector index is a degraded retrieval state, not a
+    // correctness hazard for serving the portal, and the embedding provider may be
+    // legitimately unreachable at boot (the reembed script exits 1 in that case). So
+    // reembed-wiki-store.ts failing must NOT block boot — same degrade-open contract
+    // as the model-catalog reconcile, and the write-path embed keeps new publishes
+    // covered in the meantime.
+    const root = mkdtempSync(join(tmpdir(), "dpf-pmb-"));
+    try {
+      const appDir = join(root, "app");
+      mkdirSync(appDir, { recursive: true });
+      const r = run({
+        appDir,
+        fakeBin: makeFakeBin(root),
+        pnpmExit: 0,
+        pnpmFailMatch: "scripts/reembed-wiki-store.ts",
+      });
+      expect(r.status, bootDiagnostics(r)).toBe(0); // boot still succeeds
+      expect(r.stderr).toContain("wiki embedding self-heal did not reach full coverage");
       expect(r.stdout).toContain("BOOT_MARKER"); // server WAS started despite the failure
     } finally {
       rmSync(root, { recursive: true, force: true });

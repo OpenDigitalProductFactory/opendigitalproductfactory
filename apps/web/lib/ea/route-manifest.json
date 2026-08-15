@@ -1,6 +1,6 @@
 {
   "generator": "apps/web/scripts/build-route-manifest.ts",
-  "routeCount": 623,
+  "routeCount": 624,
   "routes": [
     {
       "routePath": "/",
@@ -5402,6 +5402,16 @@
       ],
       "dynamicParams": [],
       "file": "apps/web/app/(shell)/ops/self-upgrade/page.tsx"
+    },
+    {
+      "routePath": "/ops/stack-currency",
+      "kind": "page",
+      "segments": [
+        "ops",
+        "stack-currency"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/ops/stack-currency/page.tsx"
     },
     {
       "routePath": "/performance",

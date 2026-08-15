@@ -57,6 +57,26 @@ if ! pnpm --filter @dpf/db exec tsx scripts/reconcile-catalog-capabilities.ts; t
   echo "[portal-boot] WARN: catalog capability reconciliation failed — starting with the existing model catalog (see error above)" >&2
 fi
 
+# BI-D4C1E05E — self-heal the wiki vector store on every upgrade boot.
+# A self-upgrade merges upstream main and rebuilds, but published stances/overlay
+# pages that were authored while an earlier build never embedded them stay
+# invisible to the decision engine (wiki_query / principle_decide) until a manual
+# reembed. This step embeds only the MISSING pages (reconcilePublishedWikiEmbeddings
+# is coverage-gap-based and idempotent), so it is a cheap no-op once coverage is
+# complete and a loud, self-verifying self-heal when it is not.
+#
+# NON-FATAL, exactly like the catalog reconcile above: the embedding provider
+# (Docker Model Runner) may legitimately be unreachable at boot, and the script
+# EXITS 1 in that case (fail-loud precondition) — but a drifted vector index is a
+# DEGRADED retrieval state, not a correctness hazard for serving the portal, and
+# the next boot (or a manual reembed) closes the gap. Blocking boot on the embed
+# provider would crash-loop the portal the same way blocking on the model catalog
+# did (#318). Failures are logged; the write-path embed (this same BI) keeps new
+# publishes covered in the meantime.
+if ! pnpm --filter web exec tsx scripts/reembed-wiki-store.ts; then
+  echo "[portal-boot] WARN: wiki embedding self-heal did not reach full coverage — embedding provider may be unavailable; new publishes still embed on the write-path, and the next boot retries (see error above)" >&2
+fi
+
 # BET-5 (BI-A1E864A5 / BI-922EBB99 / BI-2A3BE4D7): the one-time Neo4j+Qdrant → Postgres boot
 # backfill was retired here once the fleet completed migration (zero un-migrated installs).
 # The platform runs Postgres-only; new installs never provision the legacy stores. The

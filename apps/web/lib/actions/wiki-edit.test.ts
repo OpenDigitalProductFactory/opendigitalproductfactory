@@ -17,6 +17,12 @@ vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 
 // BI-8AC24F3D: mocked so the callsite wiring is what is under test here; the
 // helper's own contract is covered in lib/wiki/craft-override-promotion.test.ts.
+// BI-D4C1E05E: mock the shared embed seam so these action tests don't reach the
+// real storeWikiPage → generateEmbedding network path. The seam's own contract is
+// covered in lib/wiki/embed-published-overlay.test.ts.
+vi.mock("@/lib/wiki/embed-published-overlay", () => ({
+  embedPublishedOverlayPage: vi.fn().mockResolvedValue({ embedded: true, slug: "x" }),
+}));
 vi.mock("@/lib/wiki/craft-override-promotion", () => ({
   promoteCraftOverrideOnPublish: vi.fn().mockResolvedValue(null),
 }));
@@ -437,16 +443,27 @@ describe("saveWikiOverlayEdit — craft-override promotion", () => {
         page: expect.objectContaining({ id: "wp_craft", slug: craftSlug, pageKind: "heuristic" }),
       }),
     );
+    // BI-D4C1E05E: publishing also embeds the page via the shared seam.
+    const { embedPublishedOverlayPage } = await import("@/lib/wiki/embed-published-overlay");
+    expect(embedPublishedOverlayPage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        origin: "wiki-edit",
+        organizationId: "org_test",
+        page: expect.objectContaining({ id: "wp_craft", slug: craftSlug }),
+      }),
+    );
   });
 
-  it("does NOT promote when the save leaves the page in draft", async () => {
+  it("does NOT promote or embed when the save leaves the page in draft", async () => {
     const { promoteCraftOverrideOnPublish } = await import("@/lib/wiki/craft-override-promotion");
+    const { embedPublishedOverlayPage } = await import("@/lib/wiki/embed-published-overlay");
     stubExistingCraftPage("draft");
     stubUpdateResult("draft");
 
     await save("draft");
 
     expect(promoteCraftOverrideOnPublish).not.toHaveBeenCalled();
+    expect(embedPublishedOverlayPage).not.toHaveBeenCalled();
   });
 
   it("does NOT re-promote when editing a page that was ALREADY published", async () => {

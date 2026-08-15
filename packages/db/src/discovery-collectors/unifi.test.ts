@@ -176,7 +176,7 @@ describe("collectUnifiDiscovery", () => {
         }
         if (path.endsWith("/integration/v1/sites/site-1/devices")) {
           return Response.json({ data: [
-            { id: "gw-1", macAddress: "aa:bb:cc:dd:ee:01", ipAddress: "192.168.0.1", name: "Cloud Gateway Ultra", model: "UCG-Ultra", firmwareVersion: "4.1.13", features: ["gateway"] },
+            { id: "gw-1", macAddress: "aa:bb:cc:dd:ee:01", ipAddress: "192.168.0.1", name: "Cloud Gateway Ultra", model: "UCG-Ultra", firmwareVersion: "4.1.13", features: ["switching"] },
             { id: "sw-1", macAddress: "aa:bb:cc:dd:ee:02", ipAddress: "192.168.0.2", name: "US 8 PoE 150W", model: "US-8-150W", firmwareVersion: "7.1.26", features: ["switching"] },
             { id: "ap-1", macAddress: "aa:bb:cc:dd:ee:03", ipAddress: "192.168.0.3", name: "U7 Pro", model: "U7-Pro", firmwareVersion: "8.0.24", features: ["accessPoint"] },
           ] });
@@ -202,7 +202,91 @@ describe("collectUnifiDiscovery", () => {
       expect.objectContaining({ relationshipType: "CONNECTS_TO", fromExternalRef: "unifi-device:aa:bb:cc:dd:ee:03", toExternalRef: "unifi-device:aa:bb:cc:dd:ee:02" }),
     ]));
     expect(result.warnings).toEqual([]);
-    expect(seen.some((path) => path.includes("/proxy/network/api/s/"))).toBe(false);
+    expect(seen.filter((path) => path.includes("/proxy/network/api/s/"))).toEqual([
+      "/proxy/network/api/s/default/stat/health",
+    ]);
+  });
+
+  it("links official API clients to the UniFi device named by access evidence", async () => {
+    const deps = makeDeps({
+      discoverClients: true,
+      fetchFn: async (url: string | URL) => {
+        const path = new URL(String(url)).pathname;
+        if (path.endsWith("/integration/v1/sites")) {
+          return Response.json({ data: [{ id: "site-1", name: "Default" }] });
+        }
+        if (path.endsWith("/integration/v1/sites/site-1/devices")) {
+          return Response.json({ data: [
+            { id: "gw-1", macAddress: "aa:bb:cc:dd:ee:01", name: "Cloud Gateway Ultra", model: "UCG-Ultra", features: ["switching"] },
+            { id: "ap-1", macAddress: "aa:bb:cc:dd:ee:03", name: "U7 Pro", model: "U7-Pro", features: ["accessPoint"] },
+          ] });
+        }
+        if (path.endsWith("/integration/v1/sites/site-1/devices/gw-1")) {
+          return Response.json({ id: "gw-1" });
+        }
+        if (path.endsWith("/integration/v1/sites/site-1/devices/ap-1")) {
+          return Response.json({ id: "ap-1", uplink: { deviceId: "gw-1" } });
+        }
+        if (path.endsWith("/integration/v1/sites/site-1/clients")) {
+          return Response.json({ data: [{
+            id: "client-1",
+            macAddress: "11:22:33:44:55:02",
+            name: "Laptop",
+            type: "WIRELESS",
+            access: { deviceId: "ap-1", type: "DEFAULT" },
+          }] });
+        }
+        return new Response("Not Found", { status: 404 });
+      },
+    });
+
+    const result = await collectUnifiDiscovery({ sourceKind: "unifi" }, deps);
+
+    expect(result.relationships).toContainEqual(expect.objectContaining({
+      relationshipType: "CONNECTS_TO",
+      fromExternalRef: "unifi-client:11:22:33:44:55:02",
+      toExternalRef: "unifi-device:aa:bb:cc:dd:ee:03",
+    }));
+  });
+
+  it("enriches an official API topology with the controller WAN subsystem", async () => {
+    const deps = makeDeps({
+      fetchFn: async (url: string | URL) => {
+        const path = new URL(String(url)).pathname;
+        if (path.endsWith("/integration/v1/sites")) {
+          return Response.json({ data: [{ id: "site-1", name: "Default" }] });
+        }
+        if (path.endsWith("/integration/v1/sites/site-1/devices")) {
+          return Response.json({ data: [{
+            id: "gw-1",
+            macAddress: "aa:bb:cc:dd:ee:01",
+            name: "Cloud Gateway Ultra",
+            model: "UCG-Ultra",
+            features: ["switching"],
+          }] });
+        }
+        if (path.endsWith("/integration/v1/sites/site-1/devices/gw-1")) {
+          return Response.json({ id: "gw-1" });
+        }
+        if (path.endsWith("/proxy/network/api/s/default/stat/health")) {
+          return Response.json(makeHealth());
+        }
+        return new Response("Not Found", { status: 404 });
+      },
+    });
+
+    const result = await collectUnifiDiscovery({ sourceKind: "unifi" }, deps);
+
+    expect(result.items).toContainEqual(expect.objectContaining({
+      itemType: "wan_uplink",
+      name: "Starlink (WAN)",
+      externalRef: "unifi-wan:default:wan",
+    }));
+    expect(result.relationships).toContainEqual(expect.objectContaining({
+      relationshipType: "UPLINKS_TO",
+      fromExternalRef: "unifi-device:aa:bb:cc:dd:ee:01",
+      toExternalRef: "unifi-wan:default:wan",
+    }));
   });
 
   it("does not hide an official API authentication failure behind legacy fallback", async () => {
