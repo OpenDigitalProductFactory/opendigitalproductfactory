@@ -105,6 +105,11 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       node("scripts/check-build-script-policy.mjs"),
       node("--test", "scripts/check-build-script-policy.test.mjs"),
       node("--test", "scripts/check-root-script-runtime.test.mjs"),
+      // A `patchedDependencies` entry whose patch file never reaches the Docker
+      // build context fails `pnpm install` with ENOENT and breaks every image
+      // build (SUR-8AB3353C, regression from #4321).
+      node("scripts/check-docker-patch-context.mjs"),
+      node("--test", "scripts/check-docker-patch-context.test.mjs"),
     ]),
     guard("bundle-boundary-guard", "Bundle Boundary Guard", [
       node("scripts/check-bundle-boundaries.mjs"),

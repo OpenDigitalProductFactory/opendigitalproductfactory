@@ -85,6 +85,12 @@ sync_image_source_to_workspace() {
          "$WORKSPACE/apps/web/tsconfig.tsbuildinfo" \
          "$WORKSPACE/packages/db/generated"
   cp -r /app/scripts/. "$WORKSPACE/scripts/"
+  # pnpm-workspace.yaml `patchedDependencies` resolves patch paths against the
+  # workspace root, so the patches must land alongside it — otherwise
+  # install_workspace_dependencies below exits non-zero on a missing patch file
+  # (SUR-8AB3353C). Replace rather than merge so a removed patch does not linger.
+  rm -rf "$WORKSPACE/patches"
+  cp -r /app/patches "$WORKSPACE/" 2>/dev/null || true
   cp /app/pnpm-workspace.yaml "$WORKSPACE/" 2>/dev/null || true
   cp /app/pnpm-lock.yaml "$WORKSPACE/" 2>/dev/null || true
   cp /app/package.json "$WORKSPACE/" 2>/dev/null || true

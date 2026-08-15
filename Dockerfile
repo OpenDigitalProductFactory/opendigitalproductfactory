@@ -41,6 +41,13 @@ COPY packages/integration-shared/package.json ./packages/integration-shared/
 COPY packages/storefront-templates/package.json ./packages/storefront-templates/
 COPY packages/types/package.json ./packages/types/
 COPY packages/validators/package.json ./packages/validators/
+# pnpm-workspace.yaml `patchedDependencies` names patch files by repo-relative
+# path. pnpm resolves them against the workspace root, so every stage that runs
+# `pnpm install` needs them in the build context — without this COPY the install
+# exits 254 with ENOENT on the patch file (SUR-8AB3353C, regression from #4321).
+# The `build` and `init` stages are FROM deps and share WORKDIR /app, so they
+# inherit /app/patches from this layer; only the runner stage needs its own copy.
+COPY patches/ ./patches/
 RUN pnpm install --frozen-lockfile
 
 # ─── Stage 3: build ───────────────────────────────────────────────────────────
@@ -202,6 +209,11 @@ COPY --from=build /app/apps/web/public ./apps/web/public
 COPY --from=init /app/packages ./packages
 COPY --from=init /app/node_modules ./node_modules
 COPY --from=init /app/pnpm-workspace.yaml /app/pnpm-lock.yaml /app/package.json /app/tsconfig.base.json /app/.gitignore ./
+# The workspace bootstrap in docker-entrypoint.sh copies these root manifests to
+# /workspace and runs `pnpm install` there. pnpm-workspace.yaml carries the
+# `patchedDependencies` directive, so the patch files must travel with it or that
+# runtime install fails the same way the image build did (SUR-8AB3353C).
+COPY --from=init /app/patches ./patches
 COPY --from=init /app/scripts ./scripts
 # Checked-in registries read by the packaged gate-context generator. Preserve
 # their repository-relative paths because the generator is also the CLI source
@@ -261,7 +273,7 @@ COPY version.json ./version.json
 # Decoupling it from DPF_VERSION is the fix for BI-C8E90A79 — a stamped label
 # can no longer mask which source was built. Exclusions keep it reproducible
 # across builds of the same source (node_modules / .next / generated / tsbuildinfo).
-RUN (find /app/apps/web-src /app/packages-src /app/scripts /app/docs/professions -type f \
+RUN (find /app/apps/web-src /app/packages-src /app/scripts /app/docs/professions /app/patches -type f \
       -not -path '*/node_modules/*' \
       -not -path '*/.pnpm-store/*' \
       -not -path '*/.next/*' \
