@@ -59,3 +59,13 @@ export function isResetScopeKey(key: string) {
 }
 
 export const isSubnetSelectorKey = isResetScopeKey;
+
+export function shouldShowViewportReset(
+  selectedView: GraphViewName,
+  hasViewportInteraction: boolean,
+  zoom: number,
+  pan: { x: number; y: number },
+) {
+  if (selectedView === "network-topology") return hasViewportInteraction;
+  return zoom !== 1 || pan.x !== 0 || pan.y !== 0;
+}

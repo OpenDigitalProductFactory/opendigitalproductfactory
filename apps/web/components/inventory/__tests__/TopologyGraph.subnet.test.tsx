@@ -152,6 +152,7 @@ const {
   createScopeToken,
   resolveDisplayedGraphData,
   resolveSubnetScopeState,
+  shouldShowViewportReset,
 } = await import("@/lib/graph/topology-graph-state");
 
 const graphData: GraphData = {
@@ -299,6 +300,12 @@ describe("TopologyGraph subnet scope", () => {
     expect(createScopeToken(1, "subnet-topology", "subnet-a")).not.toBe(
       createScopeToken(2, "subnet-topology", "subnet-b"),
     );
+  });
+
+  it("hides reset for automatic physical fitting until the operator moves the viewport", () => {
+    expect(shouldShowViewportReset("network-topology", false, 0.72, { x: 18, y: 12 })).toBe(false);
+    expect(shouldShowViewportReset("network-topology", true, 0.72, { x: 18, y: 12 })).toBe(true);
+    expect(shouldShowViewportReset("exploration", false, 0.72, { x: 18, y: 12 })).toBe(true);
   });
 
   it("rapidly switching subnets passes only the latest scoped graph and token to layout", () => {

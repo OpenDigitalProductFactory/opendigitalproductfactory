@@ -9,7 +9,7 @@ import { getDeviceVisual } from "@/lib/graph/device-icons";
 import { isDockerOriginNode } from "@/lib/graph/docker-filter";
 import { describeGraphScope } from "@/lib/graph/subnet-scope";
 import { projectPhysicalTopology } from "@/lib/graph/physical-topology";
-import { createScopeToken, isResetScopeKey, isSubnetSelectorKey, resolveDisplayedGraphData, resolveSubnetScopeState } from "@/lib/graph/topology-graph-state";
+import { createScopeToken, isResetScopeKey, isSubnetSelectorKey, resolveDisplayedGraphData, resolveSubnetScopeState, shouldShowViewportReset } from "@/lib/graph/topology-graph-state";
 import { usePhysicalTopologyViewport } from "@/lib/graph/use-physical-topology-viewport";
 import { TopologyIntegritySummary } from "@/components/inventory/TopologyIntegritySummary";
 import { TopologyLegend } from "@/components/inventory/TopologyLegend";
@@ -124,6 +124,7 @@ export function TopologyGraph({ data, defaultView, taxonomyNodeId, initialFocusN
   // Pan and zoom state
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [hasViewportInteraction, setHasViewportInteraction] = useState(false);
   const isPanningRef = useRef(false);
   const panStartRef = useRef({ x: 0, y: 0, panX: 0, panY: 0 });
 
@@ -189,6 +190,10 @@ export function TopologyGraph({ data, defaultView, taxonomyNodeId, initialFocusN
   );
 
   const fitPhysicalTopology = usePhysicalTopologyViewport(layoutResult, dimensions, selectedView, setZoom, setPan);
+
+  useEffect(() => {
+    setHasViewportInteraction(false);
+  }, [scopeToken, selectedView]);
 
   // Force simulation state (only for exploration view)
   const nodesRef = useRef<SimNode[]>([]);
@@ -569,6 +574,7 @@ export function TopologyGraph({ data, defaultView, taxonomyNodeId, initialFocusN
 
     // Handle panning via middle-click or left-click drag
     if (isPanningRef.current) {
+      setHasViewportInteraction(true);
       setPan({
         x: panStartRef.current.panX + (e.clientX - panStartRef.current.x),
         y: panStartRef.current.panY + (e.clientY - panStartRef.current.y),
@@ -604,6 +610,7 @@ export function TopologyGraph({ data, defaultView, taxonomyNodeId, initialFocusN
       const mouseX = e.clientX - rect.left;
       const mouseY = e.clientY - rect.top;
       const zoomFactor = e.deltaY < 0 ? 1.1 : 0.9;
+      setHasViewportInteraction(true);
       setZoom((prev) => {
         const next = Math.max(0.2, Math.min(5, prev * zoomFactor));
         setPan((p) => ({
@@ -823,12 +830,17 @@ export function TopologyGraph({ data, defaultView, taxonomyNodeId, initialFocusN
             {isSubnetScoped ? " / scoped" : ""}
           </span>
           <span>{Math.round(zoom * 100)}%</span>
-          {(zoom !== 1 || pan.x !== 0 || pan.y !== 0) && (
+          {shouldShowViewportReset(selectedView, hasViewportInteraction, zoom, pan) && (
             <button
               type="button"
-              onClick={selectedView === "network-topology"
-                ? fitPhysicalTopology
-                : () => { setZoom(1); setPan({ x: 0, y: 0 }); }}
+              onClick={() => {
+                if (selectedView === "network-topology") fitPhysicalTopology();
+                else {
+                  setZoom(1);
+                  setPan({ x: 0, y: 0 });
+                }
+                setHasViewportInteraction(false);
+              }}
               className="text-[9px] text-[var(--dpf-muted)] hover:text-[var(--dpf-text)] underline"
             >
               reset
