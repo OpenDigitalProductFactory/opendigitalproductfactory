@@ -1,6 +1,5 @@
-// Canonical MCP JSON-RPC transport for external agents. It composes the
-// governed tool/task services; the in-portal /api/mcp/* REST seam is separate.
-// Auth is a DPF PAT or a short-lived internal MCP session token.
+// Canonical MCP JSON-RPC transport for external agents; composes governed tool/task services.
+// The in-portal REST seam is separate. Auth is a DPF PAT or a short-lived session token.
 
 import {
   resolveMcpApiToken,
@@ -72,11 +71,9 @@ type ResolvedAuth = ResolvedMcpToken & {
   source: "pat" | "session-jwt";
 };
 
-// Versions we can speak, newest first. We echo back the version the client
-// requested when it is in this list so older clients connect. Include every
-// wire revision clients actually send — Grok Build 1.0.0 negotiates
-// `2025-06-18` and re-sends it as `MCP-Protocol-Version` on tools/list; omitting
-// it made initialize fall back but then 400'd subsequent calls.
+// Supported versions, newest first. Echo recognized requests so older clients connect.
+// Grok Build 1.0.0 re-sends `2025-06-18` on tools/list; omitting it made
+// initialize fall back but then reject subsequent calls.
 // Tasks capability is ONLY advertised on 2025-11-25 (see shouldAdvertiseTasksCapability).
 const SUPPORTED_PROTOCOL_VERSIONS = [
   "2025-11-25",
@@ -89,7 +86,6 @@ const SERVER_NAME = "dpf-platform";
 const SERVER_VERSION = "1.0.0";
 const BASE_MCP_INSTRUCTIONS = MCP_PROGRESSIVE_DISCLOSURE_INSTRUCTIONS;
 
-// JSON-RPC 2.0 standard error codes
 const JSONRPC_PARSE_ERROR = -32700;
 const JSONRPC_INVALID_REQUEST = -32600;
 const JSONRPC_METHOD_NOT_FOUND = -32601;
@@ -241,12 +237,8 @@ async function loadUserContext(userId: string): Promise<UserContext> {
   };
 }
 
-// Tool is included in tools/list iff:
-//   1. The user has the tool's required capability (defense-in-depth)
-//   2. The token's scopes intersect the tool's required grants
-//   3. (When token is bound to an agent) the agent's grants permit it — but
-//      the wrapper handles this on tools/call; for the listing we just use
-//      the token scopes since the agent-grant filter is identical at runtime.
+// Listing and call execution share layered authority: human capability, token grants,
+// plus agent-bound grants and sensitivity clearance.
 function tokenCanUseTool(
   tool: ToolDefinition,
   token: ResolvedMcpToken,
