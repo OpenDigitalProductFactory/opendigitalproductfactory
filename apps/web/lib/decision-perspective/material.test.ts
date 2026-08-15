@@ -1,11 +1,16 @@
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  isMaterialApplicable,
   resolveProfileMaterial,
   resolveOrgProfileId,
   resolveProfileMaterialForOrg,
 } from "./material";
-import { PLAN_READINESS_DOMAIN_CLASS } from "./types";
+import {
+  CROSS_DOMAIN_MATERIAL_TAG,
+  PLAN_READINESS_DOMAIN_CLASS,
+  type PerspectiveMaterial,
+} from "./types";
 
 describe("resolveProfileMaterial", () => {
   it("walks profile fallback order and returns the first profile with applicable material", async () => {
@@ -68,10 +73,20 @@ describe("resolveProfileMaterial", () => {
     expect(result.materials[0].domainClass).toBe(PLAN_READINESS_DOMAIN_CLASS);
     expect(result.materials[0].direction).toBe("support");
     expect(result.materials[0].evidenceGrade).toBe("B");
+    // BI-F5F2869D: the query is no longer a bare `domainClass` equality. It must
+    // mirror isMaterialApplicable — own class OR an explicit topic tag OR the
+    // cross-domain tag — otherwise the DB re-imposes the hard gate and the
+    // additive tag is dead code.
     expect(db.perspectiveMaterial.findMany).toHaveBeenNthCalledWith(
       2,
       expect.objectContaining({
-        where: expect.objectContaining({ domainClass: PLAN_READINESS_DOMAIN_CLASS }),
+        where: expect.objectContaining({
+          OR: [
+            { domainClass: PLAN_READINESS_DOMAIN_CLASS },
+            { domains: { has: PLAN_READINESS_DOMAIN_CLASS } },
+            { domains: { has: CROSS_DOMAIN_MATERIAL_TAG } },
+          ],
+        }),
       }),
     );
   });
@@ -236,5 +251,60 @@ describe("resolveProfileMaterialForOrg (BI-230C9EF7)", () => {
     expect(findUnique).toHaveBeenCalledWith(
       expect.objectContaining({ where: { profileId: "custom-fallback" } }),
     );
+  });
+});
+
+// BI-F5F2869D — doctrine eligibility must not be hard-gated by an exact
+// domainClass match. The live regression: the owner's own ruling on "offer a
+// self-hosted support subscription through MSP partners" is filed under
+// plan-readiness; the MSP question arrived as risk-assessment; the ruling was
+// excluded before relevance ever ran and the decision escalated with its answer
+// already in the corpus.
+describe("isMaterialApplicable — additive domain tags (BI-F5F2869D)", () => {
+  function material(overrides: Partial<PerspectiveMaterial>): PerspectiveMaterial {
+    return {
+      materialId: "m-1",
+      profileId: "org-perspective-1",
+      sourceType: "stance",
+      sourceRef: {},
+      summary: "Offer a self-hosted support subscription through MSP partners.",
+      domainClass: PLAN_READINESS_DOMAIN_CLASS,
+      direction: "support",
+      domains: [PLAN_READINESS_DOMAIN_CLASS],
+      freshness: "current",
+      evidenceGrade: "A",
+      confidenceWeight: 1,
+      reviewStatus: "approved",
+      promotionState: "promoted",
+      lastValidatedAt: null,
+      ...overrides,
+    } as PerspectiveMaterial;
+  }
+
+  it("still matches its own domainClass", () => {
+    expect(isMaterialApplicable(material({}), PLAN_READINESS_DOMAIN_CLASS)).toBe(true);
+  });
+
+  it("does NOT leak into an unrelated domain without a tag", () => {
+    // Widening eligibility must not become "everything is always applicable".
+    expect(isMaterialApplicable(material({}), "risk-assessment")).toBe(false);
+  });
+
+  it("matches a domain it explicitly declares as a topic tag", () => {
+    const m = material({ domains: [PLAN_READINESS_DOMAIN_CLASS, "risk-assessment"] });
+    expect(isMaterialApplicable(m, "risk-assessment")).toBe(true);
+  });
+
+  it("matches every business domain when tagged cross-domain", () => {
+    const m = material({ domains: [PLAN_READINESS_DOMAIN_CLASS, CROSS_DOMAIN_MATERIAL_TAG] });
+    expect(isMaterialApplicable(m, "risk-assessment")).toBe(true);
+    expect(isMaterialApplicable(m, "architecture-tradeoff")).toBe(true);
+    expect(isMaterialApplicable(m, "professional-practice")).toBe(true);
+  });
+
+  it("tolerates material with no tags at all", () => {
+    const m = material({ domains: undefined as unknown as string[] });
+    expect(isMaterialApplicable(m, PLAN_READINESS_DOMAIN_CLASS)).toBe(true);
+    expect(isMaterialApplicable(m, "risk-assessment")).toBe(false);
   });
 });
