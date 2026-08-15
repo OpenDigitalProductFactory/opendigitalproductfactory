@@ -20,7 +20,7 @@ export async function resolvePortalEvidence(work: WorkProjection, db: PortalCont
   const capsuleId = work.capsule?.capsuleId;
   if (capsuleId) {
     const rows = await safelyReadActivities(() =>
-      db.workCapsuleActivity.findMany({
+      db.workroomActivity.findMany({
         where: { capsule: { capsuleId } },
         orderBy: { recordedAt: "desc" },
         take: 5,

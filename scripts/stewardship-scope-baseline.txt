@@ -465,8 +465,6 @@ WikiPage
 WikiPageLink
 WikiPageRevision
 WikiPageSource
-WorkCapsule
-WorkCapsuleActivity
 WorkEngagement
 WorkEngagementActivity
 WorkItem
@@ -483,3 +481,5 @@ WorkbookShare
 WorkbookTable
 WorkbookView
 WorkforceCandidateFact
+Workroom
+WorkroomActivity

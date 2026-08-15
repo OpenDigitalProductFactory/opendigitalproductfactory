@@ -1,4 +1,4 @@
-// BI-C41AB195: render a WorkCapsule's activity rows as a teammate "agent session"
+// BI-C41AB195: render a Workroom's activity rows as a teammate "agent session"
 // feed — what an AI coworker (or peer) is doing on the work item, in plain
 // language. Typed agent activities (thought/action/question/response/error) read
 // prominently; lifecycle plumbing is muted context.

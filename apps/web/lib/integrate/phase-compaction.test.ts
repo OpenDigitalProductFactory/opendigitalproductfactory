@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 vi.mock("@/lib/inference/routed-inference", () => ({
   routeAndCall: vi.fn().mockResolvedValue({
     content:
-      "• Database schema extended with WorkCapsule model\n" +
+      "• Database schema extended with Workroom model\n" +
       "• REST endpoints designed at /api/work-capsules\n" +
       "• Auth pattern confirmed: uses existing auth() middleware\n" +
       "• Open: need to confirm FK relationship with FeatureBuild",
@@ -45,7 +45,7 @@ describe("compactPhase", () => {
   it("embeds the LLM summary in the handoff content", async () => {
     const messages = makePhaseMessages(5);
     const result = await compactPhase("implement", messages);
-    expect(result.content as string).toContain("WorkCapsule model");
+    expect(result.content as string).toContain("Workroom model");
   });
 
   it("returns a fallback message when routeAndCall throws", async () => {

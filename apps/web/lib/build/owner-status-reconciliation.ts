@@ -43,7 +43,7 @@ export function reconcileBuildStudioCustomerStatus(args: {
     evidence: ownerSafeStatusEvidence(args.status.evidence),
   };
 
-  // The WorkCapsule projection is the durable authority when it has already
+  // The Workroom projection is the durable authority when it has already
   // reached a terminal state. FeatureBuild.phase and dispatch rows can lag that
   // transition, so stale in-flight evidence must never resurrect stopped work.
   const projectedOwnerState = ownerStateFromStatus(status);

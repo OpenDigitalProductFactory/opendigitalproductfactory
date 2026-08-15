@@ -103,7 +103,7 @@ describe("createLiveMergeGateAdapters.listReadyRemediationPRs", () => {
           { itemId: "BI-1", title: "Remediate hono", body: "Observed: hono@4.12.19\nPatched: >=4.12.25\n[origin:assuranceFinding:fk]", activeBuildId: "cuid-b1" },
         ],
       },
-      workCapsule: { findMany: async () => [{ featureBuildId: "cuid-b1", pullRequestNumber: 123, pullRequestUrl: "https://gh/pr/123" }] },
+      workroom: { findMany: async () => [{ featureBuildId: "cuid-b1", pullRequestNumber: 123, pullRequestUrl: "https://gh/pr/123" }] },
       featureBuild: { findMany: async () => [{ id: "cuid-b1", buildId: "FB-1" }] },
     };
     const adapters = await createLiveMergeGateAdapters({ prisma: prisma as never, actuationEnabled: false });
@@ -137,7 +137,7 @@ describe("createLiveMergeGateAdapters.armAutoMerge (P2.2b)", () => {
   function tokenPrisma() {
     return {
       backlogItem: { findMany: async () => [] },
-      workCapsule: { findMany: async () => [] },
+      workroom: { findMany: async () => [] },
       featureBuild: { findMany: async () => [] },
       credentialEntry: { findUnique: async () => ({ secretRef: "ghtok", status: "active" }) },
       platformDevConfig: { findUnique: async () => ({ upstreamRemoteUrl: "https://github.com/o/r" }) },

@@ -66,11 +66,11 @@ const mockPrisma = {
   backlogItemActivity: {
     create: vi.fn(),
   },
-  workCapsule: {
+  workroom: {
     create: vi.fn(),
     findUnique: vi.fn(),
   },
-  workCapsuleActivity: {
+  workroomActivity: {
     create: vi.fn(),
   },
   platformIssueReport: {
@@ -95,12 +95,12 @@ describe("governed backlog tee-up", () => {
       backlogTeeUpDailyCap: 2,
     });
     mockPrisma.backlogItemActivity.create.mockResolvedValue({});
-    mockPrisma.workCapsule.findUnique.mockResolvedValue(null);
-    mockPrisma.workCapsule.create.mockResolvedValue({
+    mockPrisma.workroom.findUnique.mockResolvedValue(null);
+    mockPrisma.workroom.create.mockResolvedValue({
       id: "capsule-row-1",
       capsuleId: "WC-BUILD01",
     });
-    mockPrisma.workCapsuleActivity.create.mockResolvedValue({});
+    mockPrisma.workroomActivity.create.mockResolvedValue({});
     mockPrisma.featureBuild.update.mockResolvedValue({});
     mockPrisma.platformIssueReport.findUnique.mockResolvedValue(null);
     mockPrisma.platformIssueReport.findFirst.mockResolvedValue(null);
@@ -375,7 +375,7 @@ describe("governed backlog tee-up", () => {
         }),
       }),
     );
-    expect(mockPrisma.workCapsule.create).toHaveBeenCalledWith(
+    expect(mockPrisma.workroom.create).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({
           source: "build-studio",
@@ -498,7 +498,7 @@ describe("governed backlog tee-up", () => {
         expect(result.capsuleId).toBe("WC-BUILD01");
       }
       expect(mockPrisma.epic.create).not.toHaveBeenCalled();
-      expect(mockPrisma.workCapsule.create).toHaveBeenCalledWith(
+      expect(mockPrisma.workroom.create).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({
             source: "build-studio",

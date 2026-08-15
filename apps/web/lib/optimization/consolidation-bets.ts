@@ -99,7 +99,7 @@ export const CONSOLIDATION_BETS: readonly ConsolidationBet[] = [
       models: [
         "BacklogItem",
         "Epic",
-        "WorkCapsule",
+        "Workroom",
         "FeatureBuild",
         "TaskRun",
         "WorkItem",

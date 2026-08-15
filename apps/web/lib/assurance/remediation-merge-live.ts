@@ -125,7 +125,7 @@ export async function fetchOsvClean(
 /* eslint-disable @typescript-eslint/no-explicit-any */
 type LiveMergeGatePrisma = {
   backlogItem: { findMany(args: any): Promise<any[]> };
-  workCapsule: { findMany(args: any): Promise<any[]> };
+  workroom: { findMany(args: any): Promise<any[]> };
   featureBuild: { findMany(args: any): Promise<any[]> };
 };
 /* eslint-enable @typescript-eslint/no-explicit-any */
@@ -173,7 +173,7 @@ export async function createLiveMergeGateAdapters(deps: LiveMergeGateDeps): Prom
       if (bis.length === 0) return [];
 
       const buildPks = bis.map((b) => b.activeBuildId).filter((v): v is string => typeof v === "string");
-      const capsules = await prisma.workCapsule.findMany({
+      const capsules = await prisma.workroom.findMany({
         where: { featureBuildId: { in: buildPks }, pullRequestNumber: { not: null } },
         select: { featureBuildId: true, pullRequestNumber: true, pullRequestUrl: true },
       });

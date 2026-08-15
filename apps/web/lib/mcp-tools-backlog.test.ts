@@ -34,7 +34,7 @@ const { mockPrisma, mockInngest } = vi.hoisted(() => ({
     buildActivity: {
       create: vi.fn(),
     },
-    workCapsule: {
+    workroom: {
       create: vi.fn(),
       findFirst: vi.fn(),
       findUnique: vi.fn(),
@@ -42,7 +42,7 @@ const { mockPrisma, mockInngest } = vi.hoisted(() => ({
       // BI-937128F6: unified WIP query reads active capsules across surfaces.
       findMany: vi.fn(),
     },
-    workCapsuleActivity: {
+    workroomActivity: {
       create: vi.fn(),
     },
     // BI-937128F6: unified WIP query reads the active shared nonprod leases.
@@ -101,14 +101,14 @@ describe("backlog MCP tool execution", () => {
       governedBacklogEnabled: true,
       backlogTeeUpDailyCap: 3,
     });
-    mockPrisma.workCapsule.findUnique.mockResolvedValue(null);
-    mockPrisma.workCapsule.findMany.mockResolvedValue([]);
+    mockPrisma.workroom.findUnique.mockResolvedValue(null);
+    mockPrisma.workroom.findMany.mockResolvedValue([]);
     mockPrisma.nonProductionEnvironmentLease.findMany.mockResolvedValue([]);
-    mockPrisma.workCapsule.create.mockResolvedValue({
+    mockPrisma.workroom.create.mockResolvedValue({
       id: "capsule-row-1",
       capsuleId: "WC-BUILD-1234",
     });
-    mockPrisma.workCapsuleActivity.create.mockResolvedValue({});
+    mockPrisma.workroomActivity.create.mockResolvedValue({});
     mockPrisma.epic.findMany.mockResolvedValue([]);
     mockPrisma.employeeProfile.findFirst.mockResolvedValue(null);
     mockPrisma.backlogItemActivity.create.mockResolvedValue({});

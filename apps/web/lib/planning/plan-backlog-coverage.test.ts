@@ -196,7 +196,7 @@ describe("checkBranchPlanBacklogGate", () => {
     const result = await checkBranchPlanBacklogGate({
       branchName: "fix/xlarge-plan",
       db: {
-        workCapsule: { findFirst: vi.fn(async () => ({ backlogItemId: "BI-PARENT" })) },
+        workroom: { findFirst: vi.fn(async () => ({ backlogItemId: "BI-PARENT" })) },
         backlogItem: {
           findUnique: vi.fn(async () => ({ id: "parent-row", itemId: "BI-PARENT", effortSize: "xlarge" })),
           findMany: vi.fn(async () => []),
@@ -211,7 +211,7 @@ describe("checkBranchPlanBacklogGate", () => {
     const result = await checkBranchPlanBacklogGate({
       branchName: "fix/small-plan",
       db: {
-        workCapsule: { findFirst: vi.fn(async () => ({ backlogItemId: "BI-PARENT" })) },
+        workroom: { findFirst: vi.fn(async () => ({ backlogItemId: "BI-PARENT" })) },
         backlogItem: {
           findUnique: vi.fn(async () => ({ id: "parent-row", itemId: "BI-PARENT", effortSize: "large" })),
           findMany: vi.fn(async () => []),

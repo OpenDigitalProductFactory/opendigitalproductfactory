@@ -1,6 +1,6 @@
 // apps/web/lib/work-capsules/work-capsule-reaper.ts
 //
-// WS9 (BI-CBAAEA94 / EP-PROCESS-SPINE) — the governed WorkCapsule reaper.
+// WS9 (BI-CBAAEA94 / EP-PROCESS-SPINE) — the governed Workroom reaper.
 //
 // The liveness contract (liveness.ts) makes a dead capsule READ as dead on every
 // surface. This reaper makes the STORED status catch up: a capsule whose lease
@@ -185,7 +185,7 @@ export async function reconcileTerminalCapsuleBacklogs(args: {
   now?: Date;
 }): Promise<{ scanned: number; reconciled: number }> {
   if (!args.db.backlogItem || !args.db.backlogItemActivity) return { scanned: 0, reconciled: 0 };
-  const capsules = await args.db.workCapsule.findMany({
+  const capsules = await args.db.workroom.findMany({
     where: {
       status: { in: [...TERMINAL_STATUSES] },
       backlogItemId: { not: null },
@@ -283,7 +283,7 @@ export async function reapStaleWorkCapsules(args: {
   const idleMs = args.idleMs ?? WORK_CAPSULE_IDLE_STALE_MS;
   const dryRun = args.dryRun ?? true;
 
-  const capsules: ReaperCapsuleRow[] = await args.db.workCapsule.findMany({
+  const capsules: ReaperCapsuleRow[] = await args.db.workroom.findMany({
     where: { status: { in: NON_TERMINAL_STATUSES }, archivedAt: null },
     select: {
       capsuleId: true,
@@ -336,7 +336,7 @@ export async function reapStaleWorkCapsules(args: {
         capsuleId: candidate.capsuleId,
         status: "abandoned",
         reason:
-          `Auto-abandoned by the governed WorkCapsule reaper (WS9/BI-CBAAEA94): ${candidate.reason} ` +
+          `Auto-abandoned by the governed Workroom reaper (WS9/BI-CBAAEA94): ${candidate.reason} ` +
           "Re-promote the backlog item or re-adopt the branch to resume. Worktree left untouched.",
         actor,
         now,
@@ -361,7 +361,7 @@ export async function reapStaleWorkCapsules(args: {
 
 /**
  * Close the loop when a Build Studio build is abandoned/completed: transition its
- * attached WorkCapsule out of `working` so a terminal build never leaves a zombie
+ * attached Workroom out of `working` so a terminal build never leaves a zombie
  * "working" capsule behind (the largest slice of the WS9 sprawl). Best-effort and
  * idempotent — a missing or already-terminal capsule is a no-op. Called from the
  * inert-build reaper inside the same watchdog tick that abandons the build, so
@@ -375,7 +375,7 @@ export async function transitionCapsuleForTerminalBuild(
 ): Promise<boolean> {
   const { prisma } = await import("@dpf/db");
   const db = prisma as unknown as CapsuleDb;
-  const capsule = await db.workCapsule.findFirst({
+  const capsule = await db.workroom.findFirst({
     where: {
       idempotencyKey: `build-studio:${buildId}`,
       status: { notIn: [...TERMINAL_STATUSES] },

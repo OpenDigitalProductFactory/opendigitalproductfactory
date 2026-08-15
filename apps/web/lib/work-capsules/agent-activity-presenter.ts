@@ -1,4 +1,4 @@
-// BI-C41AB195 (EP-WORK-CONVERGENCE): present a WorkCapsule's activity rows as a
+// BI-C41AB195 (EP-WORK-CONVERGENCE): present a Workroom's activity rows as a
 // human-legible "agent session" feed — the teammate timeline a person reads to
 // see what an AI coworker (or a peer) is doing on the work item, instead of raw
 // logs. The typed agent activities (thought / action / question / response /

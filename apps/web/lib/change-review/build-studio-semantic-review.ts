@@ -44,7 +44,7 @@ export async function reviewBuildStudioAssembledChange(args: {
   sandboxState: BuildSandboxState | null;
 }): Promise<BuildStudioSemanticReviewResult> {
   const mode = reviewMode();
-  const capsule = await prisma.workCapsule.findFirst({
+  const capsule = await prisma.workroom.findFirst({
     where: { featureBuildId: args.build.id, archivedAt: null },
     select: { id: true, capsuleId: true },
     orderBy: { updatedAt: "desc" },

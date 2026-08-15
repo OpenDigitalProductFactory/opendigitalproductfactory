@@ -38,7 +38,7 @@ export async function resolveAgentRoomAccess(input: {
   }
 
   const [capsules, assignedPrincipal] = await Promise.all([
-    prisma.workCapsule.findMany({
+    prisma.workroom.findMany({
       where: { workItemId: input.workItem.id },
       select: {
         leaseHolderPrincipalId: true,

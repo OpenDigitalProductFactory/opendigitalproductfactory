@@ -369,7 +369,7 @@ const recordExternalDevelopmentEvidence: ToolPackHandler = async (params, userId
 
   // Durable auto-capture (EP-UNIFIED-TRACKING / BI-636A11B3): recording evidence
   // (which AGENTS.md §17 asks external agents to do) also makes the session a
-  // tracked WorkCapsule, so its work appears in the cross-surface activity view
+  // tracked Workroom, so its work appears in the cross-surface activity view
   // without a manual adopt_worktree. Idempotent per externalSessionId; best-effort
   // — a capture failure must never fail the evidence write.
   let capturedCapsuleId: string | null = null;

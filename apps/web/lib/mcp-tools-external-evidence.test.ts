@@ -13,7 +13,7 @@ const mockPrisma = {
     create: vi.fn(),
     update: vi.fn(),
   },
-  workCapsule: {
+  workroom: {
     findMany: vi.fn(async () => []),
     findFirst: vi.fn(async () => null),
   },

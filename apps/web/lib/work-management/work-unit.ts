@@ -1,6 +1,6 @@
 /**
  * The WorkUnit contract — the invariant projection every durable work carrier
- * (WorkCapsule, WorkItem, TaskRun) satisfies, so the Universal Work Formula is
+ * (Workroom, WorkItem, TaskRun) satisfies, so the Universal Work Formula is
  * expressed once and the carriers are just adapters into it.
  *
  * EP-WORK-CONVERGENCE (BI-5659D187). Pure module: no DB, no imports. The variation
@@ -114,7 +114,7 @@ export interface CapsuleWorkUnitInput {
   workItemId?: string | null;
 }
 
-/** Adapter: a coding WorkCapsule → WorkUnit. */
+/** Adapter: a coding Workroom → WorkUnit. */
 export function toWorkUnitFromCapsule(input: CapsuleWorkUnitInput): WorkUnit {
   const backlogItemId = input.backlogItemId ?? null;
   return unit({

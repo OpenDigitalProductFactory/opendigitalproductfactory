@@ -109,7 +109,7 @@ describe("resolvePortalContextEnvelopeUncached", () => {
     expect(envelope.promptDigest).toContain("Attention: no_active_build(info)");
   });
 
-  it("resolves explicit buildId through landed WorkCapsule.featureBuildId linkage", async () => {
+  it("resolves explicit buildId through landed Workroom.featureBuildId linkage", async () => {
     const db = createDbMock({
       featureBuild: {
         id: "build-row-1",
@@ -179,7 +179,7 @@ describe("resolvePortalContextEnvelopeUncached", () => {
     expect(envelope.work.epic?.epicId).toBe("EP-CAPSULE");
     expect(envelope.work.taskRun?.taskRunId).toBe("TR-123");
     expect(envelope.authority.proposalModeActive).toBe(true);
-    expect(db.workCapsule.findFirst).toHaveBeenCalledWith(
+    expect(db.workroom.findFirst).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { featureBuildId: "build-row-1" },
       }),
@@ -355,7 +355,7 @@ describe("resolvePortalContextEnvelopeUncached", () => {
         status: "working",
       },
     });
-    db.workCapsule.findFirst.mockRejectedValueOnce(new Error("capsule source offline"));
+    db.workroom.findFirst.mockRejectedValueOnce(new Error("capsule source offline"));
 
     const envelope = await resolvePortalContextEnvelopeUncached(
       { pathname: "/build", routeContext: "/build", buildId: "FB-123" },
@@ -446,7 +446,7 @@ function createDbMock(overrides: {
     featureBuild: {
       findUnique: vi.fn().mockResolvedValue(overrides.featureBuild ?? null),
     },
-    workCapsule: {
+    workroom: {
       findUnique: vi.fn().mockResolvedValue(overrides.capsule ?? null),
       findFirst: vi.fn().mockResolvedValue(overrides.capsule ?? null),
     },
@@ -466,7 +466,7 @@ function createDbMock(overrides: {
     agent: {
       findMany: vi.fn().mockResolvedValue(overrides.agents ?? []),
     },
-    workCapsuleActivity: {
+    workroomActivity: {
       findMany: vi.fn().mockResolvedValue([]),
     },
     backlogItemActivity: {

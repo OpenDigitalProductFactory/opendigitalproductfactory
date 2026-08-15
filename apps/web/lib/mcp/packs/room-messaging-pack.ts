@@ -4,7 +4,7 @@
  * Lets an admitted AI coworker POST a message into a Work Room and READ the room's
  * recent feed — the shared-room communication pattern that starts to replace
  * discrete point-to-point coordination. The room is resolved from a caseKey (an
- * external CLI executor reaches its own room via the WorkCapsule→workItemId anchor);
+ * external CLI executor reaches its own room via the Workroom→workItemId anchor);
  * admission is decided by room-agent-access (outcome-scoped, clearance-checked);
  * posting also heartbeats the agent's presence, which is how the CLI "joins".
  *

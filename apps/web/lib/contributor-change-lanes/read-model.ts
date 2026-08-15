@@ -30,7 +30,7 @@ import type {
 
 type ReadModelDb = Pick<
   typeof prisma,
-  | "workCapsule"
+  | "workroom"
   | "runtimeTarget"
   | "runtimeVerification"
   | "nonProductionEnvironmentLease"
@@ -274,7 +274,7 @@ async function readWorkCapsules(
   now: Date,
 ): Promise<WorkCapsuleSnapshot[]> {
   try {
-    const rows = await db.workCapsule.findMany({
+    const rows = await db.workroom.findMany({
       where: { status: { notIn: ["archived"] } },
       orderBy: { updatedAt: "desc" },
       take: 250,

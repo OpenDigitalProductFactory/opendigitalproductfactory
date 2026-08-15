@@ -16,10 +16,10 @@ type ActivityRow = {
 };
 
 type ActivityStreamDb = {
-  workCapsule: {
+  workroom: {
     findUnique(args: unknown): Promise<{ id: string } | null>;
   };
-  workCapsuleActivity: {
+  workroomActivity: {
     findMany(args: unknown): Promise<ActivityRow[]>;
     findFirst(args: unknown): Promise<ActivityRow | null>;
   };
@@ -37,13 +37,13 @@ export async function loadInitialAgentSessionEntries(args: {
   capsuleId: string;
   limit?: number;
 }): Promise<{ workCapsuleId: string; entries: WorkCapsuleActivityStreamEntry[] } | null> {
-  const capsule = await args.db.workCapsule.findUnique({
+  const capsule = await args.db.workroom.findUnique({
     where: { capsuleId: args.capsuleId },
     select: { id: true },
   });
   if (!capsule) return null;
 
-  const rows = await args.db.workCapsuleActivity.findMany({
+  const rows = await args.db.workroomActivity.findMany({
     where: { workCapsuleId: capsule.id },
     orderBy: { recordedAt: "desc" },
     take: args.limit ?? 25,
@@ -60,7 +60,7 @@ export async function loadAgentSessionEntryByActivityId(args: {
   workCapsuleId: string;
   activityId: string;
 }): Promise<WorkCapsuleActivityStreamEntry | null> {
-  const row = await args.db.workCapsuleActivity.findFirst({
+  const row = await args.db.workroomActivity.findFirst({
     where: { id: args.activityId, workCapsuleId: args.workCapsuleId },
   });
   if (!row) return null;

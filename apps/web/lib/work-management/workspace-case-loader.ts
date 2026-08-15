@@ -104,7 +104,7 @@ export type WorkspaceCasePrismaClient = {
   workItemMessage: {
     findMany(args: unknown): Promise<WorkspaceWorkItemMessageRecord[]>;
   };
-  workCapsule: {
+  workroom: {
     findMany(args: unknown): Promise<WorkspaceWorkCapsuleRecord[]>;
   };
 };
@@ -464,7 +464,7 @@ export async function loadWorkspaceWorkCaseDetail({
     }) ?? Promise.resolve([]),
     // EP-WORK-CONVERGENCE (BI-650994D7): join the capsule(s) anchored to this WorkItem
     // so a coding carrier surfaces in its case instead of as a disjoint row.
-    prismaClient.workCapsule.findMany({
+    prismaClient.workroom.findMany({
       where: { workItemId: item.id },
       select: { capsuleId: true, status: true, title: true },
       orderBy: [{ updatedAt: "desc" }],

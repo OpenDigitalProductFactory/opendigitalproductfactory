@@ -54,7 +54,7 @@ export async function resolvePortalWork(input: PortalContextInput, db: PortalCon
   let capsule: WorkCapsuleRow | null = null;
 
   if (input.capsuleId) {
-    capsule = await db.workCapsule.findUnique({
+    capsule = await db.workroom.findUnique({
       where: { capsuleId: input.capsuleId },
     });
     if (capsule?.featureBuildId) {
@@ -63,7 +63,7 @@ export async function resolvePortalWork(input: PortalContextInput, db: PortalCon
   } else if (input.buildId) {
     build = await db.featureBuild.findUnique({ where: { buildId: input.buildId } });
     if (build) {
-      capsule = await db.workCapsule.findFirst({
+      capsule = await db.workroom.findFirst({
         where: { featureBuildId: build.id },
       });
       if (!capsule) {

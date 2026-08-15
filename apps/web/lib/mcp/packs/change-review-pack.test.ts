@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   prisma: {
-    workCapsule: { findUnique: vi.fn() },
+    workroom: { findUnique: vi.fn() },
     externalEvidenceRecord: { findFirst: vi.fn() },
   },
   recordExternalEvidence: vi.fn(),
@@ -20,7 +20,7 @@ import { changeReviewPack } from "./change-review-pack";
 describe("change-review MCP pack", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.prisma.workCapsule.findUnique.mockResolvedValue({ id: "capsule-row-1" });
+    mocks.prisma.workroom.findUnique.mockResolvedValue({ id: "capsule-row-1" });
     mocks.recordExternalEvidence.mockResolvedValue({ id: "outcome-evidence-1" });
   });
 

@@ -97,7 +97,7 @@ describe("CapabilityMaturityAssessment prisma schema", () => {
         portfolioId: portfolio.id,
         taxonomyNodeId: taxonomyNode.id,
         parityChecklistEvidence: [],
-        existingPrimitives: ["WorkCapsule"],
+        existingPrimitives: ["Workroom"],
         maturityGaps: ["mandatory wrapper"],
         evidenceSources: [],
         hiveMindSignals: [],

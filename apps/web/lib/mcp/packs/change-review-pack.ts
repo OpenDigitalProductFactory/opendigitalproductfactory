@@ -138,7 +138,7 @@ const reviewSemanticChange: ToolPackHandler = async (params, userId, context): P
     };
   }
 
-  const capsule = await prisma.workCapsule.findUnique({
+  const capsule = await prisma.workroom.findUnique({
     where: { capsuleId },
     select: { id: true },
   });
@@ -257,7 +257,7 @@ const recordSemanticReviewOutcome: ToolPackHandler = async (params, userId, cont
     typeof params.ciPassed !== "boolean" || typeof params.merged !== "boolean") {
     return { success: false, error: "invalid_input", message: "Capsule, receipt, surface, PR number, and terminal GitHub/CI state are required." };
   }
-  const capsule = await prisma.workCapsule.findUnique({ where: { capsuleId }, select: { id: true } });
+  const capsule = await prisma.workroom.findUnique({ where: { capsuleId }, select: { id: true } });
   if (!capsule) return { success: false, error: "capsule_not_found", message: `Work Capsule ${capsuleId} was not found.` };
   const receiptRow = await prisma.externalEvidenceRecord.findFirst({
     where: { id: receiptId, workCapsuleId: capsule.id, operationType: "semantic-change-review.receipt" },
