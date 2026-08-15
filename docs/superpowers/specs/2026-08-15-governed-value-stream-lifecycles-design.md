@@ -93,12 +93,35 @@ The gate outcome (allow / amend / veto) and its evidence are written as one `Lif
 
 The **default orchestrator is the COO** coworker; a value stream may name a specialist (e.g. a procurement lead for source-to-pay, a customer-success lead for retain). The orchestrator is accountable for driving entities through the stream and invoking each transition's gate.
 
-**Recurring processes coordinate through Work Rooms** (EP-WORKROOM-COMMS): a recurring-process instance runs in its own work room with the orchestrator as Coordinator; participants (agents + humans) join outcome-scoped; each stage transition and its gate happen in-room, so the room *is* the coordination and evidence surface. **Sub-processes spawn child work rooms** — a step that fans out into a sub-outcome opens a child room, forming interactive, process-coordinated outcomes that roll their result back to the parent. `coordination: "work-room"` on the definition declares this; other streams may use `"queue"` (scarce-resource queue substrate) or `"inline"`.
+**Recurring processes coordinate through Work Rooms** (EP-WORKROOM-COMMS): a recurring-process instance runs in its own work room (a `WorkCase`) with the orchestrator as Coordinator; participants (agents + humans) join outcome-scoped; each stage transition and its gate happen in-room, so the room *is* the coordination and evidence surface. **Sub-processes spawn child work rooms** — a step that fans out into a sub-outcome opens a child room, forming interactive, process-coordinated outcomes that roll their result back to the parent. `coordination: "work-room"` on the definition declares this; other streams may use `"queue"` (scarce-resource queue substrate) or `"inline"`.
+
+### 5.1 Triggers — a gated transition IS the trigger; the proactivity dial decides auto-vs-surface
+
+The orchestrator does not need a new proactivity engine — it **binds to the one that exists**. The load-bearing insight: an entity reaching an **exit-ready state** (or going **overdue**) at a gated transition is a *detectable need*. What happens next is governed by the existing per-coworker proactivity dial — `ProactivityLevel` (quiet · balanced · assertive) × `ActionBoundary` (`advise` · `propose` · `preauthorized`), resolved into a `ProactivityPlan` + delegated posture (`lib/proactivity/*`), tunable at `/coworker-decisions/proactivity`:
+- **`preauthorized`** → the orchestrator auto-fires the gate (principle_decide), advances the stream, and writes the evidence — autonomous.
+- **`propose`** → surfaces an attention item with a one-click advance for the operator.
+- **`advise`** → surfaced for visibility only.
+
+The four trigger sources, each mapped to substrate that already exists (bind, do not rebuild):
+
+| Trigger | Substrate | Binding |
+|---|---|---|
+| **Time** | `ScheduledAgentTask` + the `*/5` Inngest cron → `executeScheduledAgentTask` → `createAutonomousWorkRun({trigger:"scheduled"})` (the only path that auto-spawns agent work today) | a recurring-process instance ticks on a schedule (renewal/dunning cycle checks) |
+| **User request** | `POST /api/v1/agent/message` (user→coworker) + `summon_coworker`/`request_coworker` | the operator asks the COO to open or advance a stream |
+| **Incoming message** | `ingestWorkRoomChannelEvent` appends an external message to a Work Room by channel binding — **wired substrate with no HTTP caller today** (live inbound email only persists + hands to the marketing responder) | a customer reply during a cycle routes into that instance's room — **requires wiring the inbound→room transport (a named gap)** |
+| **Detected need** | pull-based **attention sources** (`lib/attention/sources/*`, ~18) surfaced on inbox/cockpit load; **no central act-loop** — detection queues for a human except via the scheduled cron | add a **value-stream attention source** that detects due/overdue gated transitions, governed by the `actionBoundary` above |
+
+### 5.2 Visibility — current-state board, the room, the "needs you" inbox
+
+Three surfaces make a value stream and its position visible, reusing existing homes:
+- **Current-state board** (the primary gap). Today value streams render only as a static EA **diagram** (`/ea/value-streams` → `/ea/views/[id]` chevron canvas) with no work-in-stage counts, and **no page reads `LifecycleEvent`/`getLifecycleSummary` for an estate-wide current-state view** (the only `LifecycleEvent` UI is a per-employee timeline). The board reads `getLifecycleSummary(grammarKey)` — count-by-stage AND state-within-stage (on-track/blocked/ready) — turning the diagram into a live operations board.
+- **The Work Room** is the per-instance surface (participants, transitions, gate decisions, messages) — reached today only via the my-queue lens / portal cases / deep link; a **rooms/instances index** makes an instance discoverable.
+- **The "needs you" inbox** (`/workspace/inbox` + `OperatorCockpit`) is where `propose`/`advise` gate items land as attention items, alongside the ~18 existing sources.
 
 ## 6. Evidence & audit — internal improvement + external regulatory
 
 Every gate firing and every stage/state transition appends to the evidence spine (`LifecycleEvent` + decision audit record). Two rollups consume it:
-- **Internal improvement**: per-stream flow metrics — count-by-stage, state-within-stage (on-track/blocked/ready), cycle time, gate pass/veto rates, bottleneck detection. This finally *measures* the value streams that today are "drawn but not measured."
+- **Internal improvement**: per-stream flow metrics — count-by-stage, state-within-stage (on-track/blocked/ready), cycle time, gate pass/veto rates, bottleneck detection — surfaced through the §5.2 current-state board off `getLifecycleSummary`. This finally *measures* the value streams that today are "drawn but not measured."
 - **External regulatory attestation**: a defensible, replayable trail — for any entity, the sequence of transitions, who/what decided each gate, on what criteria and evidence, at what altitude. The `ValueStreamDefinition` doubles as the control catalogue an auditor reads: here are the gates, here is the evidence each requires.
 
 ## 7. Non-goals
@@ -110,10 +133,10 @@ Every gate firing and every stage/state transition appends to the evidence spine
 ## 8. Decomposition (BIs)
 
 1. **`ValueStreamDefinition` contract + registry** (foundational): the type, a registry mirroring `LIFECYCLE_GRAMMARS`, `validateValueStream` (every stage in the grammar; every gated transition names criteria + evidence; orchestrator role resolves), and re-expression of the already-surfaced streams (customer/OVSM, backbone/IT4IT, tech-currency) as definitions.
-2. **Transition→gate binding**: wire `transitions[].gate` to principle_decide at the recordLifecycleTransition seam, writing the gate decision + evidence to the ledger.
-3. **Recurring-process value stream on Work Rooms**: the first concrete stream — renewal/dunning/retain cycle, orchestrated by the COO in a work room, with child-room spawning for sub-processes.
-4. **COO orchestrator binding**: resolve `defaultOrchestrator` to the COO coworker (or a specialist) and give it the drive-the-stream capability.
-5. **Audit rollups**: per-stream flow metrics (internal) + the regulatory attestation view (external) off the evidence spine.
+2. **Transition→gate binding + value-stream attention source**: wire `transitions[].gate` to principle_decide at the recordLifecycleTransition seam, writing the gate decision + evidence to the ledger; add a value-stream **attention source** (`lib/attention/sources/*`) that detects due/overdue gated transitions and, governed by the proactivity `actionBoundary`, auto-fires (`preauthorized`), proposes (one-click attention item), or advises (§5.1).
+3. **Recurring-process value stream on Work Rooms**: the first concrete stream — renewal/dunning/retain cycle, orchestrated by the COO in a work room, ticked by a `ScheduledAgentTask`, with child-room spawning for sub-processes **and wiring the inbound-message→room transport** (`ingestWorkRoomChannelEvent`, currently caller-less) so an incoming message routes into the instance's room (§5.1).
+4. **COO orchestrator binding**: resolve `defaultOrchestrator` to the COO coworker (or a specialist) and give it the drive-the-stream capability across all four triggers.
+5. **Current-state board + audit rollups**: the §5.2 live current-state board reading `getLifecycleSummary` (count-by-stage + state-within-stage — the primary visibility gap), plus a rooms/instances index, per-stream flow metrics (internal), and the regulatory attestation view (external) off the evidence spine.
 6. **Follow-on streams**: source-to-pay, order-to-cash, per-archetype OVSM formalization — each a definition.
 
 ## Backlog Coverage
