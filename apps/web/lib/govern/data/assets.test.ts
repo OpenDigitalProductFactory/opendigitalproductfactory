@@ -369,4 +369,17 @@ describe("seeded registry", () => {
       projectionOverride: "masked-content",
     });
   });
+
+  it("governs MCP protocol measurements as bounded internal telemetry", () => {
+    expect(lookupAsset(DATA_ASSET_REGISTRY, "data:mcp-protocol-telemetry")).toMatchObject({
+      physical: { prismaModel: "McpProtocolTelemetry" },
+      domain: "platform-operations",
+      categories: ["telemetry"],
+      sensitivity: "internal",
+      lifecycleClass: "telemetry-bounded",
+      residencyClass: "local-only",
+      projectionClass: "metadata",
+      subjectLocators: [],
+    });
+  });
 });

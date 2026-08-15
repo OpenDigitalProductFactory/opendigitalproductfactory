@@ -34,4 +34,28 @@ export const MCP_ASSETS: readonly DataAssetDefinition[] = [
     classification: CLASSIFICATION,
     fields: [],
   },
+  {
+    // Aggregate protocol compatibility and resource measurements. This model
+    // deliberately records no message payload, credential, token id, GAID, user,
+    // or organization identifier; it is operational telemetry rather than an
+    // interaction transcript or identity ledger.
+    id: "data:mcp-protocol-telemetry",
+    physical: { prismaModel: "McpProtocolTelemetry" },
+    domain: "platform-operations",
+    ownerRole: "platform-operator",
+    stewardRole: "data-steward",
+    categories: ["telemetry"],
+    sensitivity: "internal",
+    criticality: "low",
+    subjectLocators: [],
+    lifecycleClass: "telemetry-bounded",
+    purposeCapabilities: ["platform-operations", "product-analytics"],
+    residencyClass: "local-only",
+    projectionClass: "metadata",
+    classification: {
+      ...CLASSIFICATION,
+      effectiveFrom: "2026-08-15",
+    },
+    fields: [],
+  },
 ];

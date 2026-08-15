@@ -48,7 +48,11 @@ describe("heartbeat()", () => {
     expect(mockUpdateMany).toHaveBeenCalledWith({
       // Accepts both "working" (canonical) and "active" (legacy) — see
       // heartbeat.ts inline comment.
-      where: { taskRunId: "TR-2", status: { in: ["working", "active"] } },
+      where: {
+        taskRunId: "TR-2",
+        status: { in: ["working", "active"] },
+        cancellationRequestedAt: null,
+      },
       data: { lastHeartbeatAt: expect.any(Date) },
     });
   });
