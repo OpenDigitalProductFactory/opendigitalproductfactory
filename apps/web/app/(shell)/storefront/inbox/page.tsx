@@ -3,12 +3,19 @@ import { redirect } from "next/navigation";
 import { StorefrontInbox } from "@/components/storefront-admin/StorefrontInbox";
 import { getOrgSettings } from "@/lib/actions/currency";
 import { getCurrencySymbol } from "@/lib/finance/currency-symbol";
-import { formatReservationWhen, nextActionForReservation } from "@/lib/storefront/booking-summary";
+import {
+  formatInboxCreatedDate,
+  formatReservationWhen,
+  nextActionForReservation,
+} from "@/lib/storefront/booking-summary";
 import { nextActionForOrder, summarizeOrderItems } from "@/lib/storefront/order-lifecycle";
+import { loadStorefrontOperatingTimezone } from "@/lib/storefront/storefront-operating-timezone.server";
 
 export default async function InboxPage() {
-  const config = await prisma.storefrontConfig.findFirst({ select: { id: true, timezone: true } });
+  const config = await prisma.storefrontConfig.findFirst({ select: { id: true } });
   if (!config) redirect("/storefront/setup");
+
+  const operatingTimezone = await loadStorefrontOperatingTimezone(prisma);
 
   const [inquiries, bookings, orders, donations, providerList, digitalProducts, orgSettings] = await Promise.all([
     prisma.storefrontInquiry.findMany({
@@ -110,6 +117,7 @@ export default async function InboxPage() {
     type: string;
     detail: string;
     createdAt: string;
+    createdLabel: string;
     providerName: string | null;
     status: string;
     backlogItemId?: string | null;
@@ -146,6 +154,7 @@ export default async function InboxPage() {
       type: "inquiry",
       detail: inquiry.message ?? "",
       createdAt: inquiry.createdAt.toISOString(),
+      createdLabel: formatInboxCreatedDate(inquiry.createdAt, operatingTimezone),
       providerName: null,
       status: "",
       backlogItemId:
@@ -154,15 +163,16 @@ export default async function InboxPage() {
         ) ?? null,
     })),
     ...bookings.map((booking) => {
-      const when = formatReservationWhen(booking.scheduledAt, config.timezone);
+      const when = formatReservationWhen(booking.scheduledAt, operatingTimezone);
       return {
         id: booking.id,
         ref: booking.bookingRef,
         name: booking.customerName,
-        email: booking.customerEmail,
+        email: booking.customerEmail ?? "No email supplied",
         type: "booking",
         detail: when.whenLabel,
         createdAt: booking.createdAt.toISOString(),
+        createdLabel: formatInboxCreatedDate(booking.createdAt, operatingTimezone),
         providerName: booking.provider?.name ?? null,
         status: booking.status,
         itemName: itemNameById.get(booking.itemId) ?? null,
@@ -186,6 +196,7 @@ export default async function InboxPage() {
         type: "order",
         detail: `${currencySymbol}${order.totalAmount.toString()}`,
         createdAt: order.createdAt.toISOString(),
+        createdLabel: formatInboxCreatedDate(order.createdAt, operatingTimezone),
         providerName: null,
         status: order.status,
         itemName: itemSummary,
@@ -200,6 +211,7 @@ export default async function InboxPage() {
       type: "donation",
       detail: `${currencySymbol}${donation.amount.toString()}`,
       createdAt: donation.createdAt.toISOString(),
+      createdLabel: formatInboxCreatedDate(donation.createdAt, operatingTimezone),
       providerName: null,
       status: "",
     })),

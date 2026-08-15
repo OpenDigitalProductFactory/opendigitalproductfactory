@@ -624,33 +624,64 @@ func runSweep(ctx context.Context, cfg *config.Config, client *api.Client, st *s
 //     that finally surfaces the OTHER devices on the LAN (Amazon
 //     Echo, Reolink cameras, Kasa switches, etc.) when the binary
 //     runs natively on Windows/macOS rather than inside Docker.
+//  3. Authority-scoped adapters — LAN-local vendor APIs such as UniFi.
+//     Credentials remain Authority-owned and are released only to the
+//     authenticated trusted edge through GET /api/v1/edge/adapters.
 func submitSweep(ctx context.Context, cfg *config.Config, client *api.Client, st *state.EdgeNodeState) error {
 	hostResult := collect.HostInfo()
 	arpResult := collect.ArpNeighbors()
+	unifiResult := collect.Result{}
+	adapterResponse, adapterErr := client.FetchAdapters(ctx, st.NodeToken)
+	if adapterErr != nil {
+		unifiResult.Warnings = append(unifiResult.Warnings, "adapters_fetch_failed:"+adapterErr.Error())
+	} else {
+		unifiConfigs := make([]collect.UnifiConfig, 0, len(adapterResponse.Adapters))
+		for _, adapter := range adapterResponse.Adapters {
+			if adapter.CollectorType != "unifi" {
+				continue
+			}
+			unifiConfigs = append(unifiConfigs, collect.UnifiConfig{
+				ConnectionID:    adapter.ID,
+				ControllerURL:   adapter.EndpointURL,
+				APIKey:          adapter.APIKey,
+				Site:            adapter.Configuration.Site,
+				DiscoverClients: adapter.Configuration.DiscoverClients,
+				TLSInsecure:     adapter.Configuration.TLSInsecure,
+			})
+		}
+		unifiResult = collect.CollectUnifi(ctx, unifiConfigs)
+	}
 
 	// Convert []collect.Item → []any so the SubmissionEnvelope's typed
 	// `[]any` accepts them. The JSON marshal layer produces identical
 	// bytes either way; the indirection only matters at the Go type
 	// level.
-	items := make([]any, 0, len(hostResult.Items)+len(arpResult.Items))
+	items := make([]any, 0, len(hostResult.Items)+len(arpResult.Items)+len(unifiResult.Items))
 	for _, item := range hostResult.Items {
 		items = append(items, item)
 	}
 	for _, item := range arpResult.Items {
 		items = append(items, item)
 	}
+	for _, item := range unifiResult.Items {
+		items = append(items, item)
+	}
 
-	rels := make([]any, 0, len(hostResult.Relationships)+len(arpResult.Relationships))
+	rels := make([]any, 0, len(hostResult.Relationships)+len(arpResult.Relationships)+len(unifiResult.Relationships))
 	for _, rel := range hostResult.Relationships {
 		rels = append(rels, rel)
 	}
 	for _, rel := range arpResult.Relationships {
 		rels = append(rels, rel)
 	}
+	for _, rel := range unifiResult.Relationships {
+		rels = append(rels, rel)
+	}
 
-	warnings := make([]string, 0, len(hostResult.Warnings)+len(arpResult.Warnings))
+	warnings := make([]string, 0, len(hostResult.Warnings)+len(arpResult.Warnings)+len(unifiResult.Warnings))
 	warnings = append(warnings, hostResult.Warnings...)
 	warnings = append(warnings, arpResult.Warnings...)
+	warnings = append(warnings, unifiResult.Warnings...)
 
 	envelope := api.SubmissionEnvelope{
 		RunKey:        uuid.NewString(),

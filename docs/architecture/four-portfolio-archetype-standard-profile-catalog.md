@@ -2,7 +2,7 @@
 
 **Standard:** [Four-Portfolio Archetype and AI Workforce Operating Standard](four-portfolio-archetype-ai-workforce-operating-standard.md)
 **Catalog version:** Candidate 0.1.0
-**Inventory snapshot:** 2026-08-01 — 24 categories, 106 unique implemented leaves
+**Inventory snapshot:** 2026-08-08 — 25 categories, 107 unique implemented leaves
 **Archetype source:** `packages/storefront-templates/src/archetypes/` at
 `4b40416fefb787389a06c2afdf252764cfdffc81`
 **Authority boundary:** the storefront-template archetype registry owns category and leaf identity;
@@ -173,6 +173,7 @@ Each row states the base profile. Leaf deltas in Section 5 refine, but do not re
 | `warehousing-fulfilment` (4) | custody, storage and handling—not client goods; dock → receive/store → pick/pack → dispatch → meter/bill | docks, racks, client stock, carriers, labor/equipment capacity | segregation, counts, cold-chain, bonded/customs, custody and discrepancy |
 | `fabric-care-services` (3) | service on customer-owned garments; receive/tag → route/process → ready promise → return/claim | garments, claim tickets, plant/bays, routes, chemicals | chain of custody, care labels, damage/delay, solvent/environmental and alteration fit |
 | `agriculture-ranching` (3) | crops, forage, livestock and bounded field/custom services; observe → plan → ready → execute/record → harvest/sell/service → review | land/fields/pastures, herds/animals, seasonal labor, equipment/implements, material lots, suppliers and custom operators | animal welfare/veterinary authority, pesticide/environment, withdrawal/food-feed trace, worker/machine safety, market uncertainty and human approval |
+| `manufacturing` (1) | configured and standard industrial equipment, prototypes, spares and support; qualify → engineer/release → make/test → ship → support | production lines, cells, stations, people, equipment, tooling, material, WIP and suppliers | worker/machine safety, engineering release, quality disposition, traceability and no implied industrial-control authority |
 
 ## 5. Leaf-delta register
 
@@ -462,6 +463,12 @@ category baseline or the source archetype definition.
 - `cattle-ranch` — herd/group and individual identity, breeding/calving, health/treatment/withdrawal,
   movement, forage/water, working-animal support and evidence-bounded market readiness.
 
+### 5.25 Manufacturing (1)
+
+- `industrial-equipment-oem` — configured and standard equipment, engineering release, material and
+  production readiness, routed work, inspection/test, serialized delivery, spares and lifecycle
+  support; operational visibility never implies PLC, robot, safety-system, or machine-control authority.
+
 ## 6. Shared and specialized AI-coworker families
 
 The unit of reuse is a stable DigitalProduct/profile-family activity/authority/evidence contract, not a
@@ -560,6 +567,7 @@ authoritative identifiers.
 | `warehousing-fulfilment` | `required` | `required` | `required` | `specialized-profile-required` | `required` | `specialized-profile-required` | `specialized-profile-required` | `specialized-profile-required` | `specialized-profile-required` | `required` |
 | `fabric-care-services` | `required` | `required` | `recommended` | `specialized-profile-required` | `required` | `specialized-profile-required` | `specialized-profile-required` | `specialized-profile-required` | `specialized-profile-required` | `required` |
 | `agriculture-ranching` | `specialized-profile-required` | `required` | `specialized-profile-required` | `specialized-profile-required` | `specialized-profile-required` | `specialized-profile-required` | `specialized-profile-required` | `specialized-profile-required` | `specialized-profile-required` | `required` |
+| `manufacturing` | `required` | `required` | `recommended` | `specialized-profile-required` | `required` | `specialized-profile-required` | `required` | `specialized-profile-required` | `specialized-profile-required` | `required` |
 
 ### 6.3 Activity, authority, and evidence rationale
 
@@ -593,6 +601,7 @@ versioned category/leaf contract rather than an ungoverned persona prompt.
 | `warehousing-fulfilment` | schedule docks, receive/store, allocate/pick/pack, transfer custody, and meter/bill | `CW-CUSTODY`, specialized by `CW-COLD-CHAIN` for temperature-controlled work; no autonomous discrepancy, customs/bonded, or unsafe-temperature release | client/item/lot, quantity, location, custody event, temperature/condition, pick/ship, discrepancy, carrier proof, and meter |
 | `fabric-care-services` | receive/tag, route/process, monitor chemicals/condition, promise readiness, and return/resolve claims | `CW-CUSTODY` plus process/chemical controls; cold-chain semantics do not apply by default | garment/owner, receipt/condition, process/batch, chemical control, route, ready promise, return, damage, and acceptance |
 | `agriculture-ranching` | observe and compare seasonal land, crop/forage, animal, equipment, material, provider, weather, market and obligation state; propose bounded next work | `CW-AGRICULTURAL-OPERATIONS`; no autonomous pesticide/veterinary determination, market sale, spend or service commitment, filing/message, machine command, or safety release | organization and land/field/herd/animal/equipment/material/provider identity; dated plan/actual work; source/as-of/freshness/uncertainty; qualification, approval, outcome and incident evidence |
+| `manufacturing` | qualify demand, release product definition and work, coordinate constrained production flow, inspect/test, ship and support | manufacturing specialization of `CW-OPERATIONS`, `CW-LEGAL-COMPLIANCE`, `CW-WORKFORCE`, and `CW-RECORDS-DATA`; no autonomous engineering release, quality disposition, machine command, safety release, or irreversible production action | product/BOM/routing revision, released work, material/lot, equipment/station state, performer qualification, WIP/genealogy, inspection/test, deviation approval, shipment and service evidence |
 
 ### 6.4 Leaf deviations
 
@@ -899,14 +908,14 @@ alone are not implementation evidence.
 
 ## 9. Current DPF coverage baseline
 
-The baseline is intentionally multi-dimensional. It must not be summarized as “106 archetypes
+The baseline is intentionally multi-dimensional. It must not be summarized as “107 archetypes
 complete.”
 
 | Dimension | 2026-08-01 source evidence | Standard interpretation |
 |---|---|---|
-| identity | 24 categories / 106 unique leaves / 570 item templates | inventory exists and is test-enforced |
-| activation | 68 explicit profiles; 38 missing | missing profiles are coverage Gaps, not generic conformance |
-| four portfolios | 65 explicit decompositions; 41 missing/legacy | all four roots are not yet explicit for every leaf |
+| identity | 25 categories / 107 unique leaves / 574 item templates | inventory exists and is test-enforced |
+| activation | 69 explicit profiles; 38 missing | missing profiles are coverage Gaps, not generic conformance |
+| four portfolios | 66 explicit decompositions; 41 missing/legacy | all four roots are not yet explicit for every leaf |
 | Product mix | 2 explicit leaves | derived item-template Product lines are provisional evidence |
 | business ValueStream | every leaf can derive a projection | Stage work/resource/actor/evidence semantics remain thin |
 | lifecycle metadata | 59 leaves contain legacy Request-to-Fulfill metadata; 30 explicit decompositions contain no other lifecycle label | invalid as proof of an external lifecycle binding; requires source-authorized reassessment |
@@ -914,11 +923,11 @@ complete.”
 | AI coworkers | 70 agent definitions: 19 active, 50 defined and one draft `farm-ranch-steward` | category applicability is defined in Section 6; an agent definition is not a conforming coworker profile or deployment |
 | coworker services | 2 of 11 service seeds declare an archetype | empty coverage remains unknown, not universal |
 | physical dispatch | rich typed overlay; zero built-in configured profiles | generic fallbacks are unverified |
-| trust | 30 leaves derive one or more trust gates; 76 do not | absence is a control-coverage Gap, not not-applicable |
-| supply/material | 11 of 24 categories covered by supplier/goods manifest | remaining categories require applicable/no-applicability evidence |
+| trust | 31 leaves derive one or more trust gates; 76 do not | absence is a control-coverage Gap, not not-applicable |
+| supply/material | 12 of 25 categories covered by supplier/goods manifest | remaining categories require applicable/no-applicability evidence |
 | outcomes | 6 specialized metric-pack registrations exist; 5 target current leaves and `independent-hotel` is orphaned from the current registry | generic metrics and an orphaned registration cannot prove industry outcomes or leaf deployment |
 | readiness | all category caps are `template-ready` | no blanket operational, connector, regulated, or sole-platform claim |
-| completeness floor | 3 of 24 categories meet the current Tier-2 floor | the current checker reports 21 grandfathered category gaps |
+| completeness floor | 4 of 25 categories meet the current Tier-2 floor | the current checker reports 21 grandfathered category gaps |
 
 ### 9.1 Highest-priority cross-catalog gaps
 

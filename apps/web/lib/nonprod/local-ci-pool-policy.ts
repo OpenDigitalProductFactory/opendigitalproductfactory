@@ -95,6 +95,62 @@ export function localCiBuildHeadroomCapacity(input: {
   return capacity;
 }
 
+/**
+ * Admission reserves measured demand plus margin. The builder's memoryBytes
+ * remains the hard runtime ceiling; an absent or invalid calibration falls
+ * back to that ceiling so incomplete evidence can never make admission looser.
+ */
+export function localCiBuilderAdmissionReserveBytes(input: {
+  hardCeilingBytes: number;
+  calibratedReserveBytes: number;
+}): number {
+  if (!Number.isFinite(input.hardCeilingBytes) || input.hardCeilingBytes <= 0) {
+    return 0;
+  }
+  if (
+    !Number.isFinite(input.calibratedReserveBytes)
+    || input.calibratedReserveBytes <= 0
+  ) {
+    return input.hardCeilingBytes;
+  }
+  return Math.min(input.hardCeilingBytes, input.calibratedReserveBytes);
+}
+
+/**
+ * Number of host-native stage slots that can start without spending the
+ * configured continuation floor. The floor is the active-stage safety fence;
+ * the stage envelope is predictable Node/TypeScript/Vitest growth that must be
+ * reserved before admission rather than discovered by killing the stage.
+ */
+export function localCiHostStageHeadroomCapacity(input: {
+  availableMemoryBytes: number;
+  minAvailableMemoryBytes: number;
+  hostStageMemoryBytes: number;
+  manifestCapacity: number;
+}): number {
+  if (
+    !Number.isFinite(input.availableMemoryBytes)
+    || input.availableMemoryBytes < 0
+    || !Number.isFinite(input.minAvailableMemoryBytes)
+    || input.minAvailableMemoryBytes < 0
+    || !Number.isFinite(input.hostStageMemoryBytes)
+    || input.hostStageMemoryBytes <= 0
+    || !Number.isFinite(input.manifestCapacity)
+    || input.manifestCapacity < 1
+  ) {
+    return 0;
+  }
+
+  const reservableBytes = Math.max(
+    0,
+    input.availableMemoryBytes - input.minAvailableMemoryBytes,
+  );
+  return Math.min(
+    Math.floor(input.manifestCapacity),
+    Math.floor(reservableBytes / input.hostStageMemoryBytes),
+  );
+}
+
 type PolicyEnv = Record<string, string | undefined>;
 type PlatformConfigReader = {
   findUnique: (args: {
@@ -279,7 +335,7 @@ export function resolveLocalCiPoolPolicy(input: {
   configValue: unknown;
   host: LocalCiHostPressure;
   manifestSlotCount: number;
-  reserveBuildHeadroom?: boolean;
+  reserveAdmissionHeadroom?: boolean;
   env?: PolicyEnv;
   now?: Date;
 }): ResolvedLocalCiPoolPolicy {
@@ -316,8 +372,12 @@ export function resolveLocalCiPoolPolicy(input: {
     });
   }
 
-  if (input.reserveBuildHeadroom) {
-    const builderMemoryBytes = localCiSlotResources.builderPolicy.memoryBytes;
+  if (input.reserveAdmissionHeadroom) {
+    const builderMemoryBytes = localCiBuilderAdmissionReserveBytes({
+      hardCeilingBytes: localCiSlotResources.builderPolicy.memoryBytes,
+      calibratedReserveBytes:
+        localCiSlotResources.builderPolicy.admissionReserveBytes,
+    });
     const hostBuildCapacity = localCiBuildHeadroomCapacity({
       dockerAvailableMemoryBytes:
         input.host.dockerAvailableMemoryBytes ?? Number.NaN,
@@ -335,12 +395,36 @@ export function resolveLocalCiPoolPolicy(input: {
         config,
       });
     }
+    const hostStageCapacity = localCiHostStageHeadroomCapacity({
+      availableMemoryBytes: input.host.availableMemoryBytes ?? Number.NaN,
+      minAvailableMemoryBytes: config.ceilings.minAvailableMemoryBytes,
+      hostStageMemoryBytes: localCiSlotResources.hostStagePolicy.memoryBytes,
+      manifestCapacity,
+    });
+    if (hostStageCapacity === 0) {
+      return unavailable({
+        source,
+        requestedCapacity,
+        manifestCapacity,
+        reason: "host-stage-headroom-low",
+        config,
+      });
+    }
     if (hostBuildCapacity === 1 && requestedCapacity === 2) {
       return singleton({
         source,
         requestedCapacity,
         manifestCapacity,
         reason: "host-build-capacity-one",
+        config,
+      });
+    }
+    if (hostStageCapacity === 1 && requestedCapacity === 2) {
+      return singleton({
+        source,
+        requestedCapacity,
+        manifestCapacity,
+        reason: "host-stage-capacity-one",
         config,
       });
     }

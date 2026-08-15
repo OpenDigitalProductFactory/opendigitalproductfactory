@@ -522,7 +522,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 89
+    "textMass": 88
   },
   "apps/web/app/(shell)/coworker-decisions/page.tsx": {
     "vocabulary": 0,
@@ -592,7 +592,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 100
+    "textMass": 104
   },
   "apps/web/app/(shell)/customer/(crm)/engagements/page.tsx": {
     "vocabulary": 0,
@@ -606,7 +606,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 34
+    "textMass": 48
   },
   "apps/web/app/(shell)/customer/(crm)/opportunities/[id]/page.tsx": {
     "vocabulary": 0,
@@ -760,7 +760,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 98
+    "textMass": 97
   },
   "apps/web/app/(shell)/employee/recruiting/page.tsx": {
     "vocabulary": 0,
@@ -1231,13 +1231,6 @@
     "longSentences": 0,
     "textMass": 94
   },
-  "apps/web/app/(shell)/ops/page.tsx": {
-    "vocabulary": 0,
-    "genericLabels": 0,
-    "readability": 0,
-    "longSentences": 0,
-    "textMass": 34
-  },
   "apps/web/app/(shell)/ops/patches/page.tsx": {
     "vocabulary": 0,
     "genericLabels": 0,
@@ -1266,6 +1259,13 @@
     "longSentences": 0,
     "textMass": 8
   },
+  "apps/web/app/(shell)/ops/stack-currency/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 18
+  },
   "apps/web/app/(shell)/performance/loading.tsx": {
     "vocabulary": 0,
     "genericLabels": 0,
@@ -1278,7 +1278,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 37
+    "textMass": 25
   },
   "apps/web/app/(shell)/platform/ai/agent/[agentId]/page.tsx": {
     "vocabulary": 0,
@@ -1342,13 +1342,6 @@
     "readability": 0,
     "longSentences": 0,
     "textMass": 154
-  },
-  "apps/web/app/(shell)/platform/ai/decisions/[interactionId]/page.tsx": {
-    "vocabulary": 0,
-    "genericLabels": 0,
-    "readability": 0,
-    "longSentences": 0,
-    "textMass": 3
   },
   "apps/web/app/(shell)/platform/ai/founder-review/page.tsx": {
     "vocabulary": 0,
@@ -1434,6 +1427,13 @@
     "longSentences": 0,
     "textMass": 69
   },
+  "apps/web/app/(shell)/platform/archetype-readiness/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 29
+  },
   "apps/web/app/(shell)/platform/audit/authority/page.tsx": {
     "vocabulary": 0,
     "genericLabels": 0,
@@ -1495,14 +1495,14 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 32
+    "textMass": 27
   },
   "apps/web/app/(shell)/platform/federation-links/page.tsx": {
     "vocabulary": 0,
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 29
+    "textMass": 24
   },
   "apps/web/app/(shell)/platform/federation-proposals/page.tsx": {
     "vocabulary": 0,
@@ -1964,7 +1964,14 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 42
+    "textMass": 48
+  },
+  "apps/web/app/(shell)/workforce/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 23
   },
   "apps/web/app/(shell)/workspace/calendar/page.tsx": {
     "vocabulary": 0,
@@ -3051,6 +3058,34 @@
     "longSentences": 0,
     "textMass": 4
   },
+  "apps/web/app/api/v1/surfaces/[sessionId]/act/route.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 6
+  },
+  "apps/web/app/api/v1/surfaces/[sessionId]/client-state/route.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 23
+  },
+  "apps/web/app/api/v1/surfaces/[sessionId]/route.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 12
+  },
+  "apps/web/app/api/v1/surfaces/route.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 10
+  },
   "apps/web/app/api/v1/upload/route.ts": {
     "vocabulary": 0,
     "genericLabels": 0,
@@ -3252,7 +3287,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 113
+    "textMass": 147
   },
   "apps/web/components/admin/ForkSetupPanel.tsx": {
     "vocabulary": 0,
@@ -3840,7 +3875,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 8
+    "textMass": 6
   },
   "apps/web/components/build/BuildPhaseCostCard.tsx": {
     "vocabulary": 0,
@@ -3875,7 +3910,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 1,
-    "textMass": 395
+    "textMass": 390
   },
   "apps/web/components/build/BuildStudioCustodianCallout.tsx": {
     "vocabulary": 0,
@@ -4486,12 +4521,26 @@
     "longSentences": 0,
     "textMass": 34
   },
+  "apps/web/components/customer/AccountAdminActions.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 14
+  },
   "apps/web/components/customer/AccountLifecycleActions.tsx": {
     "vocabulary": 0,
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 12
+    "textMass": 16
+  },
+  "apps/web/components/customer/AccountRetainPanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 18
   },
   "apps/web/components/customer/AcquisitionSignalRouter.tsx": {
     "vocabulary": 0,
@@ -4653,6 +4702,13 @@
     "readability": 0,
     "longSentences": 0,
     "textMass": 3
+  },
+  "apps/web/components/customer/RemoveOpportunityButton.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 5
   },
   "apps/web/components/customer/RevenueCockpit.tsx": {
     "vocabulary": 0,
@@ -4939,7 +4995,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 4
+    "textMass": 2
   },
   "apps/web/components/employee/HrUserLifecyclePanel.tsx": {
     "vocabulary": 0,
@@ -4953,7 +5009,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 21
+    "textMass": 16
   },
   "apps/web/components/employee/LifecycleEventPanel.tsx": {
     "vocabulary": 0,
@@ -5541,14 +5597,14 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 64
+    "textMass": 45
   },
   "apps/web/components/inventory/ConfigureConnectionInline.tsx": {
     "vocabulary": 0,
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 40
+    "textMass": 48
   },
   "apps/web/components/inventory/DataEnrichmentHelpNote.tsx": {
     "vocabulary": 0,
@@ -5562,7 +5618,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 120
+    "textMass": 117
   },
   "apps/web/components/inventory/DiscoveryRunSummary.tsx": {
     "vocabulary": 0,
@@ -5590,7 +5646,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 108
+    "textMass": 105
   },
   "apps/web/components/inventory/PortfolioQualityIssuesPanel.tsx": {
     "vocabulary": 0,
@@ -5611,7 +5667,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 10
+    "textMass": 12
   },
   "apps/web/components/inventory/SavedConnectionsPanel.tsx": {
     "vocabulary": 0,
@@ -5625,14 +5681,21 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 36
+    "textMass": 41
   },
   "apps/web/components/inventory/TopologyGraph.tsx": {
     "vocabulary": 0,
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 161
+    "textMass": 176
+  },
+  "apps/web/components/inventory/TopologyIntegritySummary.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 6
   },
   "apps/web/components/knowledge/KnowledgeArticleActions.tsx": {
     "vocabulary": 0,
@@ -5751,7 +5814,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 22
+    "textMass": 41
   },
   "apps/web/components/monitoring/PortalHealthSummary.tsx": {
     "vocabulary": 0,
@@ -5893,6 +5956,13 @@
     "longSentences": 0,
     "textMass": 41
   },
+  "apps/web/components/ops/ImpactItemRow.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 10
+  },
   "apps/web/components/ops/ImprovementsClient.tsx": {
     "vocabulary": 0,
     "genericLabels": 0,
@@ -5963,6 +6033,13 @@
     "longSentences": 0,
     "textMass": 47
   },
+  "apps/web/components/ops/RunImpactDetail.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 21
+  },
   "apps/web/components/ops/SelfUpgradeClient.tsx": {
     "vocabulary": 0,
     "genericLabels": 0,
@@ -6003,7 +6080,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 1,
-    "textMass": 88
+    "textMass": 78
   },
   "apps/web/components/ops/backlog-form-assist.ts": {
     "vocabulary": 0,
@@ -6017,7 +6094,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 11
+    "textMass": 13
   },
   "apps/web/components/owner-first/OwnerFirstSummary.tsx": {
     "vocabulary": 0,
@@ -6039,6 +6116,27 @@
     "readability": 0,
     "longSentences": 0,
     "textMass": 19
+  },
+  "apps/web/components/performance/BusinessAnalysisWorkspace.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 154
+  },
+  "apps/web/components/performance/BusinessPerformanceDashboard.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 108
+  },
+  "apps/web/components/performance/PerformanceTrendPanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 38
   },
   "apps/web/components/platform/ActivityRoutingPresentation.tsx": {
     "vocabulary": 0,
@@ -6111,6 +6209,20 @@
     "textMass": 2
   },
   "apps/web/components/platform/AiReadinessSummaryPanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 4
+  },
+  "apps/web/components/platform/ArchetypeReadinessMatrixPanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 27
+  },
+  "apps/web/components/platform/ArchetypeReadinessMatrixTable.tsx": {
     "vocabulary": 0,
     "genericLabels": 0,
     "readability": 0,
@@ -6642,6 +6754,20 @@
     "longSentences": 0,
     "textMass": 20
   },
+  "apps/web/components/platform/coworker-identity/ShareIdentity.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 32
+  },
+  "apps/web/components/platform/coworker-identity/TeamsFacetPanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 13
+  },
   "apps/web/components/platform/coworker-record/CapabilitiesEditor.tsx": {
     "vocabulary": 0,
     "genericLabels": 0,
@@ -6775,19 +6901,33 @@
     "longSentences": 0,
     "textMass": 13
   },
+  "apps/web/components/platform/edge-nodes/EdgeFleetReadiness.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 56
+  },
   "apps/web/components/platform/edge-nodes/EdgeNodesAdminClient.tsx": {
     "vocabulary": 0,
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 1,
-    "textMass": 339
+    "textMass": 272
   },
   "apps/web/components/platform/federation-links/FederationLinksAdminClient.tsx": {
     "vocabulary": 0,
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 326
+    "textMass": 309
+  },
+  "apps/web/components/platform/federation-links/FederationLinksTable.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 24
   },
   "apps/web/components/platform/federation-links/OrganizationJoinPanel.tsx": {
     "vocabulary": 0,
@@ -6899,7 +7039,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 104
+    "textMass": 106
   },
   "apps/web/components/platform/service-desk/ServiceTicketsTable.tsx": {
     "vocabulary": 0,
@@ -7431,7 +7571,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 120
+    "textMass": 151
   },
   "apps/web/components/storefront-admin/ItemFormDialog.tsx": {
     "vocabulary": 0,
@@ -7753,7 +7893,14 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 218
+    "textMass": 239
+  },
+  "apps/web/components/twin/restaurant/RestaurantHostStandPanels.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 35
   },
   "apps/web/components/twin/rooms/RoomsOperations.tsx": {
     "vocabulary": 0,
@@ -7789,6 +7936,13 @@
     "readability": 0,
     "longSentences": 0,
     "textMass": 54
+  },
+  "apps/web/components/ui/RelativeTime.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 3
   },
   "apps/web/components/ui/Spinner.tsx": {
     "vocabulary": 0,
@@ -8203,6 +8357,13 @@
     "longSentences": 0,
     "textMass": 29
   },
+  "apps/web/components/workspace/InstallationPurposePanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 54
+  },
   "apps/web/components/workspace/PlatformReadinessMatrix.tsx": {
     "vocabulary": 0,
     "genericLabels": 0,
@@ -8265,5 +8426,12 @@
     "readability": 0,
     "longSentences": 0,
     "textMass": 31
+  },
+  "apps/web/components/workspace/work-room/WorkRoomStructurePanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 4
   }
 }

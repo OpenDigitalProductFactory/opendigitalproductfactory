@@ -1,5 +1,6 @@
 // Direct JSON import — bundler resolves this at build time, works in both dev and Docker standalone
 import agentRegistryData from "../../../../packages/db/data/agent_registry.json";
+import { AUTHORIZED_SURFACE_TOOL_GRANTS } from "@/lib/coworker/authorized-surface-coworker-contract";
 import { PRODUCT_MANAGEMENT_TOOL_GRANTS } from "./product-management-tool-grants";
 const agentRegistry = agentRegistryData as { agents: Array<Record<string, unknown>> };
 /**
@@ -32,6 +33,10 @@ export const GRANT_IMPLICATIONS: Readonly<Record<string, readonly string[]>> = {
   // `browser_read` (navigate / extract / screenshot). One-way, as ever —
   // `browser_read` alone never implies the drive grant.
   browser_drive: ["browser_read"],
+  // EP-WORKROOM-COMMS (BI-4402DABB): a coworker that can write a work capsule (the
+  // executors that claim/work rooms, incl. the external CLIs) may post to the room
+  // it is admitted to. One-way — work_room_write never implies capsule write.
+  work_capsule_write: ["work_room_write"],
   // CRM drafting (crm_write) implies CRM inspection (crm_read): a coworker that
   // can draft an opportunity or quote can always read the accounts/pipeline it
   // is drafting against. One-way — crm_read alone never implies crm_write.
@@ -64,7 +69,6 @@ export function expandGrants(grants: readonly string[]): string[] {
   }
   return Array.from(expanded);
 }
-
 /**
  * Read-only baseline every coworker holds, regardless of its agent-specific
  * grants. Encodes the platform design criterion (operator, 2026-06-06,
@@ -96,19 +100,19 @@ export const COWORKER_READ_BASELINE_GRANTS: readonly string[] = [
   "document_read",
   "code_graph_read",
   "work_capsule_read",
+  // EP-WORKROOM-COMMS (BI-3F21C4D5): every coworker may read a room it is admitted
+  // to (room admission is the real gate; this is the baseline capability).
+  "work_room_read",
 ];
-
-/**
- * Maps platform tool names to agent grant categories.
- * A tool is allowed if the agent has ANY of the grants it maps to —
- * directly OR via GRANT_IMPLICATIONS expansion (see expandGrants).
- * Tools not in this map are DENIED by default — every tool must have an entry.
- *
- * Exported so the MCP-authority SysML reconcile (apps/web/lib/ea/reconcile-mcp-authority.ts)
- * can project this authority surface into the EA graph at runtime without parsing
- * source. The coworker-tool-grant audit still regex-parses the source form.
- */
+/** Maps tools to grants. [] means identity-scoped universal access; absence means deny. */
 export const TOOL_TO_GRANTS: Record<string, string[]> = {
+  record_working_note: [],
+  list_working_notes: [],
+  record_effort_context: [],
+  read_effort_context: [],
+  set_task_goal: [],
+  list_task_goals: [],
+  evaluate_task_goal: [],
   // Browser-driving (namespaced MCP, server slug `mcp-browser-use`) —
   // EP-BROWSER-DRIVE, spec 2026-06-05 §8.2 (Verdict 5). These are the
   // platform-visible `<serverId>__<toolName>` names (see mcp-server-tools.ts
@@ -205,6 +209,14 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   // Work Capsule control harness (spec 2026-05-14)
   list_work_capsules: ["work_capsule_read"],
   get_work_capsule: ["work_capsule_read"],
+  // EP-WORKROOM-COMMS (BI-3F21C4D5): read/post a Work Room's message feed. Room
+  // admission is enforced separately (room-agent-access); these are the coarse caps.
+  read_room_messages: ["work_room_read"],
+  post_room_message: ["work_room_write"],
+  // EP-WORKROOM-COMMS: invite a participant on demand (write); 360 coworker
+  // room-engagement (read). Room admission/coordinator right enforced separately.
+  invite_room_participant: ["work_room_write"],
+  get_coworker_room_engagement: ["work_room_read"],
   create_work_capsule: ["work_capsule_write"],
   plan_capsule_worktree: ["work_capsule_write"],
   adopt_worktree: ["work_capsule_adopt"],
@@ -609,6 +621,10 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   list_mdm_steward_tasks: ["crm_read"],
   enrich_customer_account: ["web_search"],
   run_data_steward: ["crm_write"],
+  // Proactive CRM enrichment (BI-B2497DFB): propose is web-research stewardship
+  // inside the CRM-read envelope; apply is the consequential CRM write.
+  propose_crm_enrichment: ["web_search", "crm_read"],
+  apply_crm_enrichment: ["crm_write"],
 
   // Security Operations / SIEM (EP-SOVEREIGN-SOC). Writes are propose-only +
   // coworkerArtifact; siem_investigate/siem_tune/incident_respond imply siem_read.
@@ -730,10 +746,10 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   // Recruiting pipeline lens (BI-E64D11AE) — unified native + Greenhouse funnel.
   get_recruiting_pipeline: ["consumer_read", "registry_read"],
 
-  // Workforce staffing (EP-WORKFORCE-OPS / BI-4AD09A35) read surface.
+  // Workforce staffing + propose-only leave-decision surfaces.
   list_staffing_demand: ["registry_read"],
   get_staffing_coverage: ["registry_read"],
-
+  propose_leave_decision: ["consumer_read", "registry_read"],
   // ─── Pseudo-User Contract: screen_* view-command family (BI-DF6079E9) ─────
   // Three finer grants (coworker_screen_read / drive / fill) carry the view-
   // command surface. screen_scroll_to is read-class per the chief-architect
@@ -752,6 +768,7 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   screen_propose_action:   ["coworker_screen_drive"],
   screen_dispatch_action:  ["coworker_screen_drive"],
   screen_set_input:        ["coworker_screen_fill"],
+  ...AUTHORIZED_SURFACE_TOOL_GRANTS,
 };
 
 /**
@@ -852,6 +869,7 @@ export function isToolAllowedByGrants(
     console.warn(`[agent-grants] Tool ${JSON.stringify(toolName)} has no TOOL_TO_GRANTS entry — denied by default`);
     return false;
   }
+  if (requiredGrants.length === 0) return true;
   // Expand the agent's grants through GRANT_IMPLICATIONS, then check that the
   // expanded set includes at least one of the required grants.
   const expanded = expandGrants(agentGrants);

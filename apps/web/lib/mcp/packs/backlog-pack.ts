@@ -19,11 +19,7 @@
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 import { handleUpdateBacklogItem } from "@/lib/mcp-handlers/update-backlog-item";
 import { updateBuildHappyPathState } from "@/lib/mcp/build-tool-helpers";
-import {
-  optionalStringParam,
-  stringArrayParam,
-  validScopeKind,
-} from "./backlog-scope-metadata";
+import { optionalStringParam, stringArrayParam, validScopeKind } from "./backlog-scope-metadata";
 import { getBacklogItem, listBacklogItems, listEpics, queryBacklog } from "./backlog-pack-read-tools";
 import type { BacklogIngestInput } from "@/lib/operate/backlog-ingest";
 import type { ToolResult } from "@/lib/mcp-tools";
@@ -31,6 +27,7 @@ import type { ToolPack, ToolPackHandler } from "../tool-pack";
 import { tryAcquireBacklogClaimAtomic } from "@/lib/backlog/claim-on-start";
 import { normalizeCompletionEvidenceManifest } from "@/lib/backlog/completion-evidence-policy";
 import { backlogPackDefinitions as definitions } from "./backlog-pack-definitions";
+import { resolveDuplicateBacklogRowId } from "@/lib/backlog/duplicate-resolution";
 // ── Handlers (case bodies moved verbatim) ───────────────────────────────────
 
 async function createBacklogItem(
@@ -172,10 +169,13 @@ async function triageBacklogItem(params: Record<string, unknown>): Promise<ToolR
     return { success: false, error: "reason is required for defer/discard outcomes", message: "reason is required for defer/discard outcomes" };
   }
 
-  const nextStatus =
-    outcome === "build" || outcome === "runbook" || outcome === "coworker-task"
-      ? "open"
-      : "deferred";
+  const duplicateRef = typeof params["duplicateOfId"] === "string" ? params["duplicateOfId"] : "";
+  const duplicateRowId = outcome === "duplicate" ? await resolveDuplicateBacklogRowId(prisma, duplicateRef) : null;
+  if (outcome === "duplicate" && !duplicateRowId) {
+    return { success: false, error: "duplicate_not_found", message: `Canonical item ${duplicateRef} not found` };
+  }
+
+  const nextStatus = outcome === "build" || outcome === "runbook" || outcome === "coworker-task" ? "open" : "deferred";
 
   await prisma.backlogItem.update({
     where: { itemId },
@@ -183,7 +183,7 @@ async function triageBacklogItem(params: Record<string, unknown>): Promise<ToolR
       status: nextStatus,
       triageOutcome: outcome,
       effortSize: typeof params["effortSize"] === "string" ? params["effortSize"] : null,
-      duplicateOfId: typeof params["duplicateOfId"] === "string" ? params["duplicateOfId"] : null,
+      duplicateOfId: duplicateRowId,
       resolution: rationale,
       abandonReason: typeof params["reason"] === "string" ? params["reason"] : null,
     },
@@ -237,15 +237,14 @@ async function retireBacklogItem(
 
     let canonicalRowId: string | null = null;
     if (outcome === "duplicate") {
-      const canonical = await tx.backlogItem.findUnique({ where: { itemId: duplicateOfId } });
-      if (!canonical) {
+      canonicalRowId = await resolveDuplicateBacklogRowId(tx, duplicateOfId);
+      if (!canonicalRowId) {
         return {
           success: false,
           error: "duplicate_not_found",
           message: `Canonical item ${duplicateOfId} not found`,
         } satisfies ToolResult;
       }
-      canonicalRowId = canonical.id;
     }
 
     const updated = await tx.backlogItem.update({

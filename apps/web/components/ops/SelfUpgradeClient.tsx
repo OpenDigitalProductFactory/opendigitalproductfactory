@@ -7,6 +7,7 @@ import { CoworkerActivityInspectionLink } from "./CoworkerActivityInspectionLink
 import UpgradeImpactPanel from "@/components/ops/UpgradeImpactPanel";
 import type { SummaryResult, RunImpactDigest } from "@/lib/self-upgrade/impact/types";
 import { UpgradeScopeRibbon } from "@/components/ops/UpgradeScopeRibbon";
+import { RunImpactDetail } from "@/components/ops/RunImpactDetail";
 import { StatusBadge } from "@/components/ui/report-kit";
 import { describeSkipReason } from "@/lib/self-upgrade/skip-reason";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
@@ -14,6 +15,8 @@ import { isExpectedDuringSwap } from "@/lib/self-upgrade/is-expected-during-swap
 import { SelfUpgradeReadiness } from "@/components/ops/SelfUpgradeReadiness";
 import { BuildStamps } from "@/components/ops/BuildStamps";
 import type { LatestRun, QuiescenceActivity } from "@/lib/self-upgrade/run-types";
+import { useOptionalSelfUpgradeLive } from "@/components/ops/SelfUpgradeLiveProvider";
+
 type RecoveryPointSummary = {
   status: string;
   members: Array<{ target: string; runId: string | null; status: string }>;
@@ -249,11 +252,11 @@ export default function SelfUpgradeClient({
   targetSha,
   isFresh,
   releaseBatch,
-  latestRun,
+  latestRun: initialLatestRun,
   latestRunImpact,
-  quiescence,
+  quiescence: initialQuiescence,
   admission,
-  cooldownUntil,
+  cooldownUntil: initialCooldownUntil,
   history,
   historyNextCursor,
   initialImpactSummary,
@@ -261,6 +264,10 @@ export default function SelfUpgradeClient({
   mergePoints,
 }: Props) {
   const router = useRouter();
+  const live = useOptionalSelfUpgradeLive();
+  const latestRun = live?.snapshot.latestRun ?? initialLatestRun;
+  const quiescence = live?.snapshot.quiescence ?? initialQuiescence;
+  const cooldownUntil = live?.snapshot.cooldownUntil ?? initialCooldownUntil;
   const [isRollbackPending, startRollbackTransition] = useTransition();
   // A recovery-point restore can swap this portal out from under the
   // operator's own request (same class of disconnect as a forced upgrade —
@@ -298,11 +305,10 @@ export default function SelfUpgradeClient({
   const showActivity =
     draining || cooldownActive || (!!deferredRun && (quiescence?.blockers.length ?? 0) > 0);
 
+  const queuedRun = latestRun?.status === "queued" || latestRun?.status === "pending";
+
   // True once the worker has actually picked the upgrade up — the run is running
   // or the portal is draining/swapping for the swap.
-  const queuedRun = latestRun?.status === "queued" || latestRun?.status === "pending";
-  const upgradeInFlight = queuedRun || latestRun?.status === "running" || draining;
-
   // Once a run is actually running, project when it should finish from the
   // median duration of past successful runs, anchored to this run's start. Null
   // until there's history to learn from or until the run is running with a
@@ -312,16 +318,6 @@ export default function SelfUpgradeClient({
     latestRun?.status === "running" && latestRun.startedAt && estimatedDurationMs != null
       ? new Date(latestRun.startedAt).getTime() + estimatedDurationMs
       : null;
-
-  // Keep the read-only detail panel (Latest Run, run history, activity) in
-  // sync while an upgrade is in flight or a rollback swap is reconnecting —
-  // both are derived server state, not local trigger state, so this poll
-  // needs no dependency on SelfUpgradeTriggerControl's own justQueued.
-  useEffect(() => {
-    if (!upgradeInFlight && !restarting) return;
-    const interval = setInterval(() => router.refresh(), 4_000);
-    return () => clearInterval(interval);
-  }, [upgradeInFlight, restarting, router]);
 
   // Drop the reconnect banner once the swapped-in portal actually answers with
   // fresh data. We snapshot the server-derived signature at the moment the swap
@@ -376,11 +372,15 @@ export default function SelfUpgradeClient({
   // Enter the calm "applying / reconnecting" state after the swap severed this
   // page's own request. Snapshot the current signature so the clear effect can
   // detect when the swapped-in portal returns fresh data, and keep the status
-  // poll alive so the page reconnects on its own.
+  // observer reconciling so the page reconnects on its own.
   function enterRestarting() {
     restartBaselineRef.current = serverSignature();
     setRestarting(true);
-    router.refresh();
+    if (live) {
+      void live.refresh();
+    } else {
+      router.refresh();
+    }
   }
 
   // BI-F2C53237: build the promoter engine image in place when self-upgrade
@@ -1098,6 +1098,21 @@ export default function SelfUpgradeClient({
                           >
                             {reasonText}
                           </span>
+                        </td>
+                      </tr>
+                    )}
+                    {/* What this run actually carried. A SHA pair cannot answer
+                        "which upgrade introduced this?" — the summary the run
+                        recorded can, and it is already persisted against the
+                        run. The item-level detail loads only when expanded. */}
+                    {run.impact && (
+                      <tr data-run-impact-for={run.runId}>
+                        <td />
+                        <td colSpan={3} className="px-3 pb-2 pt-0 align-top">
+                          <RunImpactDetail
+                            runId={run.runId}
+                            digest={run.impact}
+                          />
                         </td>
                       </tr>
                     )}

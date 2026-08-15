@@ -375,6 +375,14 @@ export {
   type NormalizedSoftwareEvidence,
 } from "./discovery-normalize";
 export {
+  loadDiscoveryAttributionInputs,
+  type DiscoveryAttributionInputs,
+} from "./discovery-attribution-inputs";
+export {
+  backfillDiscoveryAttribution,
+  type AttributionBackfillReport,
+} from "./discovery-attribution-backfill";
+export {
   attributeInventoryEntity,
   buildDiscoveryDescriptor,
   evaluateInventoryQuality,
@@ -508,6 +516,7 @@ export * from "./inventory-asset-bridge";
 export * from "./inventory-entity-lifecycle";
 export * from "./inventory-entity-heap-integrity";
 export * from "./inventory-entity-merge-references";
+export * from "./docker-origin";
 export * from "./device-placement";
 export * from "./portfolio-sources";
 export * from "./backlog-portfolio";
@@ -522,6 +531,7 @@ export * from "./device-catalog";
 // NFT pattern. The helper is test-only — import it directly from
 // `./discovery-fingerprint-catalog` in tests, not via the barrel.
 export * from "./discovery-fingerprint-store";
+export * from "./installation-operating-intent";
 
 // Contributor-inventory-sync ScheduledJob constants — shared between the
 // seed helper and the apps/web Inngest runner so the heartbeat row's name +

@@ -22,10 +22,19 @@ jobs:
         with:
           fetch-depth: 0
       - id: paths
+        # BI-9E5E6063: github.event.pull_request.base.sha can go stale against a
+        # fast-moving main and does not self-refresh. Recompute merge-base when
+        # full history is available (fetch-depth:0 above).
         env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          EVENT_BASE: ${{ github.event.pull_request.base.sha }}
         run: |
           if [ "${{ github.event_name }}" = "pull_request" ]; then
+            git fetch --quiet origin main
+            FRESH_BASE="$(git merge-base HEAD origin/main 2>/dev/null || true)"
+            BASE_SHA="${FRESH_BASE:-$EVENT_BASE}"
+            if [ -n "$EVENT_BASE" ] && [ -n "$FRESH_BASE" ] && [ "$EVENT_BASE" != "$FRESH_BASE" ]; then
+              echo "::notice::github.event.pull_request.base.sha ($EVENT_BASE) disagrees with merge-base ($FRESH_BASE) — using the fresh one. See BI-9E5E6063."
+            fi
             paths=$(git diff --name-only "$BASE_SHA" "$GITHUB_SHA")
             node scripts/self-upgrade-sensitive-paths.mjs $paths >> "$GITHUB_OUTPUT"
           else
@@ -70,14 +79,27 @@ jobs:
             | tee "$DPF_N1_EVIDENCE/signed-promotion-rollback.tap"
       - name: Resolve N-1 baseline
         id: baseline
+        # BI-9E5E6063: prefer a live merge-base over a potentially stale
+        # pull_request.base.sha event field.
         env:
           PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
-          if [ -n "$PR_NUMBER" ] && [ -n "$PR_BASE_SHA" ]; then
+          if [ -n "$PR_NUMBER" ]; then
+            git fetch --quiet origin main
+            FRESH_BASE="$(git merge-base HEAD origin/main 2>/dev/null || true)"
+            BASE_SHA="${FRESH_BASE:-$PR_BASE_SHA}"
+            if [ -z "$BASE_SHA" ]; then
+              echo "should_run=false" >> "$GITHUB_OUTPUT"
+              printf '%s\n' '{"result":"skipped","reason":"no-resolvable-base-sha"}' > "$DPF_N1_EVIDENCE/n-minus-one-evidence.json"
+              exit 0
+            fi
+            if [ -n "$PR_BASE_SHA" ] && [ -n "$FRESH_BASE" ] && [ "$PR_BASE_SHA" != "$FRESH_BASE" ]; then
+              echo "::notice::PR base.sha ($PR_BASE_SHA) disagrees with merge-base ($FRESH_BASE) — using the fresh one. See BI-9E5E6063."
+            fi
             echo "should_run=true" >> "$GITHUB_OUTPUT"
             echo "pr_number=$PR_NUMBER" >> "$GITHUB_OUTPUT"
-            echo "base_sha=$PR_BASE_SHA" >> "$GITHUB_OUTPUT"
+            echo "base_sha=$BASE_SHA" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           latest="$(gh api "repos/$GITHUB_REPOSITORY/pulls?state=open&base=main&sort=updated&direction=desc&per_page=1" --jq '.[0] | [.number, .base.sha] | @tsv')"

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { auth } from "@/lib/auth";
 import { apiErrorResponse } from "@/lib/api/error";
 import { readCoworkerA2aTask } from "@/lib/coworker-service-catalog/a2a-tasks";
 
@@ -12,6 +13,8 @@ type RouteContext = {
 };
 
 export async function GET(_request: Request, context: RouteContext): Promise<Response> {
+  const session = await auth();
+  if (!session?.user) return apiErrorResponse("UNAUTHORIZED", "Unauthorized", 401);
   const { taskId } = await context.params;
   const task = await readCoworkerA2aTask(taskId);
   if (!task) return apiErrorResponse("NOT_FOUND", "Task not found", 404);

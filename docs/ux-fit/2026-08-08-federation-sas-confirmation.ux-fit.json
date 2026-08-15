@@ -1,0 +1,29 @@
+{
+  "version": "1",
+  "decidedOption": "explicit-codes-match",
+  "decisionInteractionId": "DI-773208A4D66A",
+  "scope": {
+    "files": [
+      "apps/web/components/platform/federation-links/FederationLinksAdminClient.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "explicit-codes-match",
+      "auto-confirm-on-display",
+      "generic-approve"
+    ],
+    "fitDecision": "fits-with-guardrails",
+    "owningArea": "Platform",
+    "routeFamily": "/platform/federation-links",
+    "primaryPersona": "founder or platform operator connecting another installation without needing to understand cryptographic protocol details",
+    "navigationLayer": "contextual action",
+    "reuseConvergence": "reuses the existing pairing card, confirmDialog, InlineBusy, and StatusBadge; no new route, dashboard, or component family",
+    "sourceTruth": "FederationPairingSession.matchingCode, sasConfirmedAtLocal, and sasConfirmedAtPeer through the existing pairing actions",
+    "emptyFailureBehavior": "the action exists only for a live outgoing six-digit pairing; rejection stays on the same card with an actionable error and no trust authority is issued",
+    "aiBoundary": "no prompt send or coworker action",
+    "accessibility": "The explicit native button names its result, exposes shared pending feedback through InlineBusy, and the surrounding pairing region already announces state changes politely.",
+    "responsive": "The action remains in the existing wrapping pairing card and uses the established compact button layout without a new navigation or fixed-width surface."
+  }
+}

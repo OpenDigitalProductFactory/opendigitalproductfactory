@@ -56,6 +56,16 @@ vi.mock("@dpf/db", () => ({
 vi.mock("@/lib/hr/compensation-data", () => ({
   getEmployeeCompensationRows: vi.fn().mockResolvedValue([]),
 }));
+vi.mock("@/lib/leave-data", () => ({
+  getLeavePolicies: vi.fn().mockResolvedValue([]),
+  getLeaveBalances: vi.fn().mockResolvedValue([]),
+  getLeaveRequests: vi.fn().mockResolvedValue([]),
+}));
+vi.mock("@/components/employee/LeavePanel", () => ({
+  LeavePanel: ({ isManager }: { isManager: boolean }) => (
+    <section>Time off {isManager ? "manager review" : "employee view"}</section>
+  ),
+}));
 vi.mock("@/components/employee/CompensationPanel", () => ({
   CompensationPanel: () => <section>Pay</section>,
 }));
@@ -355,5 +365,13 @@ describe("EmployeePage", () => {
 
     expect(html).toContain("Employee directory");
     expect(html).toContain("HR user lifecycle");
+  });
+
+  it("mounts the existing leave controls as the local Time off view", async () => {
+    const html = renderToStaticMarkup(
+      await EmployeePage({ searchParams: Promise.resolve({ view: "timeoff" }) }),
+    );
+    expect(html).toContain("Time off manager review");
+    expect(html).not.toContain("Employee directory");
   });
 });

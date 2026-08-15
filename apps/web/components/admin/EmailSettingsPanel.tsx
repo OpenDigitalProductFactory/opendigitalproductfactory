@@ -40,11 +40,20 @@ export function EmailSettingsPanel({ status }: Props) {
   const [testTo, setTestTo] = useState("");
   const [hint, setHint] = useState<EmailProviderSuggestion | null>(null);
   const [msg, setMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
+  // Structured detail from a failed test-send (response code, raw SMTP message,
+  // remediation link) — rendered inline so an operator can self-diagnose.
+  const [testError, setTestError] = useState<{
+    responseCode?: number;
+    command?: string;
+    serverResponse?: string;
+    remediationUrl?: string;
+  } | null>(null);
 
   // AI-assisted setup: detect the operator's own provider from the org domain
   // and pre-fill host/port/secure so they only have to paste one credential.
   const detect = () => {
     setMsg(null);
+    setTestError(null);
     startDetect(async () => {
       try {
         const s = await suggestEmailProvider();
@@ -73,6 +82,7 @@ export function EmailSettingsPanel({ status }: Props) {
 
   const save = () => {
     setMsg(null);
+    setTestError(null);
     startSave(async () => {
       try {
         await saveEmailConfig({
@@ -94,11 +104,25 @@ export function EmailSettingsPanel({ status }: Props) {
 
   const test = () => {
     setMsg(null);
+    setTestError(null);
     startTest(async () => {
       try {
-        await sendTestEmail(testTo.trim());
-        setMsg({ kind: "ok", text: `Test email sent to ${testTo.trim()}.` });
+        const result = await sendTestEmail(testTo.trim());
+        if (result.ok) {
+          setMsg({ kind: "ok", text: `Test email sent to ${testTo.trim()}.` });
+        } else {
+          // The action returns SMTP failures as data (not a thrown error) so the
+          // real message survives production redaction — surface it inline.
+          setMsg({ kind: "err", text: result.message });
+          setTestError({
+            responseCode: result.responseCode,
+            command: result.command,
+            serverResponse: result.serverResponse,
+            remediationUrl: result.remediationUrl,
+          });
+        }
       } catch (e) {
+        // Only authorization/validation errors still throw here.
         setMsg({ kind: "err", text: e instanceof Error ? e.message : "Failed to send test email." });
       }
     });
@@ -284,6 +308,53 @@ export function EmailSettingsPanel({ status }: Props) {
             {msg.text}
           </p>
         )}
+
+        {/* Structured SMTP failure detail — response code, the server's own
+            message, and a remediation link — so the operator can self-diagnose
+            without digging through server logs. */}
+        {testError &&
+          (testError.responseCode ||
+            testError.serverResponse ||
+            testError.remediationUrl) && (
+            <div className="mt-2 p-3 rounded bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)] text-dpf-caption text-[var(--dpf-muted)] space-y-1">
+              {(testError.responseCode || testError.command) && (
+                <p>
+                  {testError.responseCode && (
+                    <span>
+                      Server response code:{" "}
+                      <span className="font-mono text-[var(--dpf-text)]">
+                        {testError.responseCode}
+                      </span>
+                    </span>
+                  )}
+                  {testError.responseCode && testError.command && " · "}
+                  {testError.command && (
+                    <span>
+                      at{" "}
+                      <span className="font-mono text-[var(--dpf-text)]">
+                        {testError.command}
+                      </span>
+                    </span>
+                  )}
+                </p>
+              )}
+              {testError.serverResponse && (
+                <p className="font-mono text-[var(--dpf-text)] break-words">
+                  {testError.serverResponse}
+                </p>
+              )}
+              {testError.remediationUrl && (
+                <a
+                  href={testError.remediationUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-[var(--dpf-accent)] underline inline-block"
+                >
+                  How to fix this →
+                </a>
+              )}
+            </div>
+          )}
       </div>
     </div>
   );

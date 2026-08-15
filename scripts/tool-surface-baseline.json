@@ -3,14 +3,14 @@
   "selectionCliff": 15,
   "entries": {
     "registry.toolDefinitions": {
-      "value": 363,
-      "reason": "Adds find_coworker — read-only coworker-roster discovery-by-intent (the A2A-plane twin of load_tools). No existing tool carries it: request_coworker/summon_coworker are ACTION verbs that require an exact agentId/slug, so a model that doesn't already know the roster cannot route work. find_coworker returns the matching coworkers' ids so those action tools become usable. BI-5FB59BC6.",
-      "recordedAt": "2026-08-08"
+      "value": 378,
+      "reason": "Adds propose_crm_enrichment and apply_crm_enrichment (BI-B2497DFB) — the two governed doors of proactive CRM enrichment (raise from the 376 that already includes EP-WORKROOM-COMMS's room tools). They are distinct contracts: propose is a non-destructive, scope-confirmed web-research stewardship step (grants web_search+crm_read) that files a steward proposal with the scant→enriched diff and no fabricated values; apply is the separate consequential CRM write (grant crm_write) that materializes an approved proposal with provenance. No existing tool carries either: enrich_customer_account is single-source own-website-only and files-but-never-applies, and the merge/steward tools resolve duplicates, not gap-fill enrichment.",
+      "recordedAt": "2026-08-14"
     },
     "registry.packFiles": {
-      "value": 87,
-      "reason": "Adds recruiting-pipeline-pack.ts (the get_recruiting_pipeline pack) — the Absorb coworker surface over the shared recruiting read-model. One pack, one tool; reuses lib/recruiting/pipeline-read-model.ts rather than adding read logic. BI-E64D11AE.",
-      "recordedAt": "2026-08-06"
+      "value": 91,
+      "reason": "Adds one focused crm-enrichment pack (BI-B2497DFB) so the propose/apply pair, their web_search/crm_read/crm_write grants, and the propose-vs-apply governance boundary stay one bounded MCP surface. Folding into mdm-stewardship (duplicate resolution) or crm-sales-pipeline (deal/quote lifecycle) would blur the distinct proactive-enrichment contract and its two-step permission model.",
+      "recordedAt": "2026-08-14"
     },
     "tier.coreToolNames": {
       "value": 30,

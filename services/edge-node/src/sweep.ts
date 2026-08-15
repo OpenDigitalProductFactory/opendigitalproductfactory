@@ -204,6 +204,7 @@ export async function runSweepLoop(opts: SweepRunnerOptions): Promise<void> {
           apiKey: row.apiKey,
           site: row.configuration.site,
           tlsInsecure: row.configuration.tlsInsecure,
+          discoverClients: row.configuration.discoverClients,
         }));
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);

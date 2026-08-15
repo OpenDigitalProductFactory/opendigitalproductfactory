@@ -19,6 +19,22 @@ updates:
     labels:
       - "dependencies"
       - "javascript"
+  # BI-32F2BE47: probe has its own lockfile; security alerts fire but UPDATE PRs
+  # never did because only directory "/" was declared. Same cooldown as root.
+  - package-ecosystem: "npm"
+    directory: "/scripts/probes/marketing-media"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 2
+    cooldown:
+      default-days: 5
+      semver-major-days: 14
+      semver-minor-days: 7
+      semver-patch-days: 3
+    labels:
+      - "dependencies"
+      - "javascript"
+      - "probe"
     groups:
       minor-and-patch:
         update-types:
@@ -87,13 +103,14 @@ updates:
       # then be free to propose.
       - dependency-name: "react-data-grid"
         versions: ["7.0.0-alpha.*", "7.0.0-canary.*", "7.0.0-beta.60"]
-      # Mermaid is pinned to an exact line (11.15.0) and enforced by the
-      # Diagram Dependency Pin Guard (scripts/check-diagram-dependency-pins.mjs):
-      # package.json must retain "@mermaid-js/mermaid-cli": "11.15.0", the
-      # pnpm-workspace override pins `mermaid: '11.15.0'`, and the lockfile guard
+      # Mermaid is pinned to an exact line and enforced by the Diagram
+      # Dependency Pin Guard (scripts/check-diagram-dependency-pins.mjs):
+      # package.json must retain "@mermaid-js/mermaid-cli": "11.16.0", the
+      # pnpm-workspace override pins `mermaid: '11.16.1'`, and the lockfile guard
       # rejects newer @zenuml/@mermaid-zenuml transitives. Dependabot bumps here
-      # (e.g. 11.15.0 → 11.16.0) always fail that gate, so block them — the pin
-      # moves deliberately in lockstep with the guard, not via Dependabot.
+      # always fail that gate, so block them — the pin moves deliberately in
+      # lockstep with the guard, not via Dependabot. (11.15.0 → 11.16.0 moved
+      # that way to widen the puppeteer peer range to ^25 for GHSA-jmr9-qjv8-65gv.)
       - dependency-name: "@mermaid-js/mermaid-cli"
       - dependency-name: "mermaid"
       # @floating-ui/* is pinned via pnpm-workspace overrides and the same

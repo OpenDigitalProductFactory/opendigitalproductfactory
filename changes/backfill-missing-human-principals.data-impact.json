@@ -1,0 +1,49 @@
+{
+  "version": "1",
+  "accountableOwner": "Mark Bodman (markdbodman@gmail.com)",
+  "summary": "BI-4150F4D6. Migration 20260812110000_backfill_missing_human_principals creates Principal(kind='human') + PrincipalAlias rows for existing User/EmployeeProfile records that lack them, because three human-creation paths omitted principal sync and the one-time April backfill is forward-only. This introduces NO new information: every value is re-projected from already-governed party records (User.email, EmployeeProfile.employeeId/userId/displayName/status, User.isSuperuser) into the canonical Principal identity spine — exactly what the runtime helpers (syncUserPrincipal/syncEmployeePrincipal) already do for new rows. Idempotent; inserts zero rows on an already-complete DB. The code paths are fixed in the same change so the gap does not recur.",
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "Principal",
+      "lifecycleDisposition": "retain-for-party-lifetime",
+      "fields": [
+        {
+          "name": "displayName",
+          "resolution": "inherited",
+          "reason": "The human's display name, copied from the source EmployeeProfile.displayName (or User.email fallback). Governance is inherited from that party record; the backfill collects nothing new and creates no second home for the value.",
+          "provenance": "EmployeeProfile.displayName / User.email of the same install-local human. No external or new source.",
+          "flags": []
+        },
+        {
+          "name": "kind",
+          "resolution": "not-applicable",
+          "reason": "Constant discriminator 'human' for the party class; not personal data.",
+          "provenance": "Literal in the migration, matching the runtime helpers.",
+          "flags": []
+        },
+        {
+          "name": "sensitivityClearance",
+          "resolution": "not-applicable",
+          "reason": "Operational authorization clearance array. For superuser-linked principals the installation-owner floor (public/internal/confidential) is appended to mirror resolvePrincipalSensitivityClearance; not a data-subject attribute.",
+          "provenance": "Derived from User.isSuperuser of the linked account.",
+          "flags": []
+        }
+      ]
+    },
+    {
+      "kind": "model",
+      "assetId": "PrincipalAlias",
+      "lifecycleDisposition": "retain-for-party-lifetime",
+      "fields": [
+        {
+          "name": "aliasValue",
+          "resolution": "inherited",
+          "reason": "Identifier bridging a Principal to its existing User/EmployeeProfile — the User id, the EmployeeProfile employeeId, or the lowercased email. Every value already exists on the source party record; the alias is a typed join, not new collection. Governance inherited from the source.",
+          "provenance": "User.id / EmployeeProfile.employeeId / User.email (lowercased) of the same install-local human.",
+          "flags": []
+        }
+      ]
+    }
+  ]
+}

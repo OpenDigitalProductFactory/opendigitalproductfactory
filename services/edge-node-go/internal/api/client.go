@@ -159,6 +159,52 @@ func (c *Client) post(ctx context.Context, path, token string, body, out any) er
 	return nil
 }
 
+// get is the authenticated read-only transport used by Authority-owned edge
+// configuration endpoints. Keeping it beside post gives both paths the same
+// timeout, response-size cap, and structured HTTP error semantics.
+func (c *Client) get(ctx context.Context, path, token string, out any) error {
+	ctx, cancel := context.WithTimeout(ctx, c.timeout)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.base+path, nil)
+	if err != nil {
+		return fmt.Errorf("build request for %s: %w", path, err)
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := c.hc.Do(req)
+	if err != nil {
+		return fmt.Errorf("get %s: %w", path, err)
+	}
+	defer resp.Body.Close()
+
+	respBytes, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if err != nil {
+		return fmt.Errorf("read response for %s: %w", path, err)
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		var errBody AuthorityErrorBody
+		_ = json.Unmarshal(respBytes, &errBody)
+		msg := errBody.Message
+		if msg == "" {
+			if len(respBytes) > 0 && len(respBytes) < 256 {
+				msg = string(respBytes)
+			} else {
+				msg = fmt.Sprintf("authority returned %d for %s", resp.StatusCode, path)
+			}
+		}
+		return &HTTPError{Status: resp.StatusCode, ErrorCode: errBody.Error, Message: msg}
+	}
+	if out == nil {
+		return nil
+	}
+	if err := json.Unmarshal(respBytes, out); err != nil {
+		return fmt.Errorf("decode response for %s: %w", path, err)
+	}
+	return nil
+}
+
 // Health verifies the portal independently of an organization bootstrap
 // script's exit status. It intentionally accepts only a successful HTTP status;
 // response content is not persisted as action evidence.

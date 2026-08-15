@@ -311,7 +311,7 @@
     {
       "professionKey": "hr-people-ops",
       "label": "HR / People Operations",
-      "roles": ["hr-specialist"],
+      "roles": ["hr-specialist", "time-off-advisor"],
       "contextSlugs": ["compliance"],
       "sources": [
         {
@@ -794,6 +794,61 @@
         "external-agent-catalog-reconnaissance",
         "gap-detection",
         "governed-backlog-suggestion"
+      ]
+    },
+    {
+      "professionKey": "market-research",
+      "label": "Market Research & Competitive Intelligence",
+      "roles": ["market-research-analyst"],
+      "contextSlugs": ["customer"],
+      "sources": [
+        {
+          "name": "G2 software reviews & pricing (public)",
+          "url": "https://www.g2.com/",
+          "licenseClass": "licensed"
+        },
+        {
+          "name": "Capterra software directory (public)",
+          "url": "https://www.capterra.com/",
+          "licenseClass": "licensed"
+        }
+      ],
+      "coverageChecklist": [
+        "replaceable-stack-analysis",
+        "spend-sizing-from-public-pricing",
+        "switching-risk-assessment",
+        "opportunity-grounded-brief"
+      ]
+    },
+    {
+      "professionKey": "manufacturing-operations",
+      "label": "Manufacturing Operations",
+      "roles": [
+        "manufacturing-ops-coordinator",
+        "manufacturing-data-steward",
+        "manufacturing-compliance-officer",
+        "manufacturing-finance-controller"
+      ],
+      "contextSlugs": ["manufacturing", "production-flow", "quality", "industrial-operations"],
+      "sources": [
+        {
+          "name": "ISA-95 Standard — Enterprise-Control System Integration overview",
+          "url": "https://www.isa.org/standards-and-publications/isa-standards/isa-95-standard",
+          "licenseClass": "licensed"
+        },
+        {
+          "name": "NIST SP 800-82 Rev. 3 — Guide to Operational Technology Security",
+          "url": "https://csrc.nist.gov/pubs/sp/800/82/r3/final",
+          "licenseClass": "open"
+        }
+      ],
+      "coverageChecklist": [
+        "isa-95-enterprise-site-area-line-cell-equipment-hierarchy",
+        "production-order-and-job-operation-state",
+        "material-equipment-and-labor-constraint-visibility",
+        "inspection-hold-rework-and-release-authority",
+        "wip-genealogy-and-observation-provenance",
+        "ot-read-only-boundary-and-stale-signal-handling"
       ]
     }
   ]

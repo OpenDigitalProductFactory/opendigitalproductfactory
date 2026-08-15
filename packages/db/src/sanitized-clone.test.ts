@@ -20,6 +20,7 @@ import {
   runWithDestinationCleanup,
   insertRowsWithReplicationDisabled,
   resolveCompatibleCopyColumns,
+  sanitizeConfidentialRow,
 } from "./sanitized-clone";
 
 describe("obfuscation", () => {
@@ -47,6 +48,16 @@ describe("obfuscation", () => {
   it("handles null/undefined fields", () => {
     expect(obfuscateField(null, "name", 1)).toBeNull();
     expect(obfuscateField(undefined, "name", 1)).toBeUndefined();
+  });
+
+  it("invalidates copied password hashes instead of preserving a live credential", () => {
+    const sanitized = sanitizeConfidentialRow(
+      { id: "user-1", passwordHash: "$2b$10$live-production-hash" },
+      1,
+    );
+
+    expect(sanitized.passwordHash).not.toBe("$2b$10$live-production-hash");
+    expect(sanitized.passwordHash).toMatch(/^\$2a\$10\$devhashplaceholder/);
   });
 });
 
@@ -326,6 +337,7 @@ describe("table classification helpers", () => {
   it("restricted tables should be skipped", () => {
     expect(shouldSkipTable("CredentialEntry")).toBe(true);
     expect(shouldSkipTable("ApiToken")).toBe(true);
+    expect(shouldSkipTable("UserGroup")).toBe(true);
   });
 
   it("keeps provider connections with their restricted provider parent", () => {

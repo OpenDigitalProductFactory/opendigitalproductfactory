@@ -3,9 +3,19 @@
   "builderPolicy": {
     "version": 2,
     "memoryBytes": 17179869184,
+    "admissionReserveBytes": 10737418240,
+    "admissionCalibration": {
+      "version": 1,
+      "observedHighWaterBytes": 8589934592,
+      "safetyMarginBytes": 2147483648
+    },
     "cpuQuota": 800000,
     "cpuPeriod": 100000,
     "maxParallelism": 4
+  },
+  "hostStagePolicy": {
+    "version": 1,
+    "memoryBytes": 8589934592
   },
   "slots": {
     "slot-0": {

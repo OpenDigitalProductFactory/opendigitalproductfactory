@@ -7,6 +7,8 @@ import {
 } from "@dpf/db/federated-demand-contract";
 
 import { decodeDemandOutboxPayload, type DemandDeliveryDb } from "./demand-delivery";
+import { scheduleFederationDeliveryJob } from "./delivery-queue";
+import { findFirstMirrorAcrossPages } from "./mirror-page";
 
 interface DispositionDb extends DemandDeliveryDb {
   federatedRecordMirror: DemandDeliveryDb["federatedRecordMirror"] & {
@@ -82,14 +84,12 @@ export async function queueFounderDispositionNotices(
       syncStatus: "pending",
       version,
       payload: { envelope: notice, activity: "dpf.demand.dispositioned", eventId: id, queuedAt: now.toISOString() },
-      deliveryAttempts: 0,
-      nextDeliveryAt: now,
-      lastDeliveryError: null,
       deadLetteredAt: null,
     };
-    if (existing) await db.federatedRecordMirror.update({ where: { mirrorId: existing.mirrorId }, data });
+    const mirrorId = existing?.mirrorId ?? `fdno_${id.slice(4)}`;
+    if (existing) await db.federatedRecordMirror.update({ where: { mirrorId }, data });
     else await db.federatedRecordMirror.create({ data: {
-      mirrorId: `fdno_${id.slice(4)}`,
+      mirrorId,
       federationLinkId: route.federationLinkId,
       recordType: "demand-disposition",
       canonicalSide: "local",
@@ -97,6 +97,7 @@ export async function queueFounderDispositionNotices(
       peerRecordRef: null,
       ...data,
     } });
+    await scheduleFederationDeliveryJob(db, mirrorId, now);
     queued++;
   }
   return { queued };
@@ -110,17 +111,21 @@ export async function handleIncomingDemandDisposition(
 ) {
   const violations = validateDemandDispositionNoticeV1(notice);
   if (violations.length > 0) return { action: "rejected" as const, violations };
-  const shared = await db.federatedRecordMirror.findMany({
-    where: { federationLinkId: linkId, recordType: "demand-envelope", canonicalSide: "local" },
-    select: { payload: true },
-    take: 1_000,
-  });
-  const known = shared.some((row) => {
-    const payload = decodeDemandOutboxPayload(row.payload);
-    return payload?.envelope.specVersion === "dpf.demand/1"
-      && payload.envelope.envelopeId === notice.envelopeId
-      && payload.envelope.originInstallationId === notice.originInstallationId;
-  });
+  // Page the local envelope inventory (BI-72C3FBA2) — silent take:1_000 dropped
+  // envelopes past the first batch on busy federation links.
+  const known = await findFirstMirrorAcrossPages(
+    (args) => db.federatedRecordMirror.findMany(args),
+    {
+      where: { federationLinkId: linkId, recordType: "demand-envelope", canonicalSide: "local" },
+      select: { payload: true, mirrorId: true },
+    },
+    (row) => {
+      const payload = decodeDemandOutboxPayload(row.payload);
+      return payload?.envelope.specVersion === "dpf.demand/1"
+        && payload.envelope.envelopeId === notice.envelopeId
+        && payload.envelope.originInstallationId === notice.originInstallationId;
+    },
+  );
   if (!known) return { action: "rejected" as const, violations: ["notice:unknown-envelope"] };
   const where = { federationLinkId_recordType_peerRecordRef: {
     federationLinkId: linkId,

@@ -14,6 +14,8 @@ import { resolveFederationIdentity, type FederationIdentityDb } from "./demand-i
 import { reconcileDemandDigests } from "./demand-digest";
 import { SAME_ORG_LOCAL_ONLY_SENSITIVITIES } from "./cross-org-sharing";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
+import { syncFederationIntroductions, type IntroductionExchangeDb } from "./introduction-exchange";
+import type { FederationDeliveryQueueDb } from "./delivery-queue";
 
 interface ReconciliationLink {
   linkId: string;
@@ -34,7 +36,7 @@ interface ReconciliationBacklogItem {
   digitalProduct: { productId: string } | null;
 }
 
-export interface DemandReconciliationDb extends FederationIdentityDb {
+export interface DemandReconciliationDb extends FederationIdentityDb, FederationDeliveryQueueDb {
   federationLink: {
     findMany(args: unknown): Promise<ReconciliationLink[]>;
   };
@@ -52,10 +54,20 @@ export function relationshipPresetForRole(role: string): FederationRelationshipP
   return null;
 }
 
+const FEDERATED_DEMAND_ORIGIN_LINE = /^\[origin:federatedDemand:[^\]\r\n]+\]$/;
+
+function isFederatedDemandOriginMarkerLine(line: string): boolean {
+  return FEDERATED_DEMAND_ORIGIN_LINE.test(line.trim());
+}
+
+export function hasFederatedDemandOriginMarker(body: string | null): boolean {
+  return (body ?? "").split(/\r?\n/).some(isFederatedDemandOriginMarkerLine);
+}
+
 function shareSafeSummary(body: string | null, title: string): string {
   const withoutMarkers = (body ?? "")
-    .split("\n")
-    .filter((line) => !line.trim().startsWith("[origin:"))
+    .split(/\r?\n/)
+    .filter((line) => !isFederatedDemandOriginMarkerLine(line))
     .join("\n")
     .trim();
   return withoutMarkers || title;
@@ -76,6 +88,7 @@ export async function runDemandReconciliation(
     queueWithdrawal?: typeof queueDemandWithdrawal;
     reconcileDigests?: typeof reconcileDemandDigests;
     dispatch?: typeof dispatchDueDemand;
+    syncIntroductions?: typeof syncFederationIntroductions;
     now?: Date;
   } = {},
 ) {
@@ -105,16 +118,19 @@ export async function runDemandReconciliation(
         // Open work only. A closed item is excluded here, drops out of
         // eligibleIds below, and is withdrawn from the peer. See BI-8A8C1D3A.
         status: { in: [...FEDERATION_SYNCABLE_BACKLOG_STATUSES] },
-        NOT: { body: { contains: "[origin:federatedDemand:" } },
       },
       select: {
         itemId: true, title: true, body: true, workType: true, occurrenceCount: true,
         createdAt: true, updatedAt: true, digitalProduct: { select: { productId: true } },
       },
     });
-    const eligibleIds = new Set(items.map((item) => item.itemId));
+    // Parse the governed marker as a complete standalone line. A broad SQL
+    // substring predicate both drops NULL bodies and mistakes explanatory prose
+    // for an adopted peer envelope.
+    const eligibleItems = items.filter((item) => !hasFederatedDemandOriginMarker(item.body));
+    const eligibleIds = new Set(eligibleItems.map((item) => item.itemId));
     for (const link of automaticLinks) {
-      for (const item of items) {
+      for (const item of eligibleItems) {
         // Fault-isolate each item: a single item that throws (envelope violation,
         // transient DB error) must NOT abort the whole cycle and strand every item
         // after it — the same "one bad record can't strand the batch" lesson as the
@@ -170,5 +186,10 @@ export async function runDemandReconciliation(
     ? await (deps.reconcileDigests ?? reconcileDemandDigests)(db, identity, { now })
     : { linksChecked: 0, requeued: 0, confirmed: 0, failedLinks: 0 };
   const delivery = await (deps.dispatch ?? dispatchDueDemand)(db, { now });
-  return { links: links.length, projected, unchanged, withdrawn, failed, digest, delivery };
+  const introductions = deps.syncIntroductions
+    ? await deps.syncIntroductions(db as unknown as IntroductionExchangeDb, { now })
+    : "federationIntroductionCandidate" in (db as object)
+      ? await syncFederationIntroductions(db as unknown as IntroductionExchangeDb, { now })
+      : { linksChecked: 0, candidates: 0, rejected: 0, failed: 0 };
+  return { links: links.length, projected, unchanged, withdrawn, failed, digest, delivery, introductions };
 }

@@ -19,6 +19,17 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import update_agent_toolchain as updater
 
 
+class McpCatalogTierTest(unittest.TestCase):
+    def test_adds_full_tier_without_dropping_existing_query(self) -> None:
+        self.assertEqual(
+            updater.with_mcp_catalog_tier(
+                "https://mcp.example.test/api/mcp/v1?tenant=demo&tier=core",
+                "full",
+            ),
+            "https://mcp.example.test/api/mcp/v1?tenant=demo&tier=full",
+        )
+
+
 class WriteTextIfChangedTest(unittest.TestCase):
     def test_writes_lf_bytes_and_is_idempotent(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -369,7 +380,10 @@ class UpdateAgentToolchainTest(unittest.TestCase):
             self.assertEqual(data["model"], "gpt-5.5")
             self.assertFalse(data["plugins"]["dpf-platform@personal"]["enabled"])
             self.assertNotIn("dpf-platform", data["plugins"])
-            self.assertEqual(data["mcp_servers"]["dpf"]["url"], "https://mcp.example.test/api/mcp/v1")
+            self.assertEqual(
+                data["mcp_servers"]["dpf"]["url"],
+                "https://mcp.example.test/api/mcp/v1?tier=full",
+            )
 
     @unittest.skipIf(tomllib is None, "tomllib requires Python 3.11+")
     def test_disables_competitive_codex_plugins_without_deleting_user_config(self) -> None:

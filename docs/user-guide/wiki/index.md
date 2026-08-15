@@ -23,6 +23,8 @@ order: 1
 
 The wiki is authoritative for governed platform knowledge that has been imported, authored, linted, and published. It is not a substitute for runtime state, backlog state, or source code when those are the current evidence source.
 
+A page only counts in a coworker's decision once it is **embedded** for retrieval, which normally happens the moment you publish it. The Governing material section of `/coworker-decisions` shows a **retrieval coverage** line — how many of your published overlay pages are embedded — so "published" can never overstate "counting". If a page is published but not yet embedded (for example, if the embedding service was briefly unavailable when you published), it is flagged there, and the platform re-embeds it automatically on the next upgrade.
+
 ## AI Coworker Support
 
 Coworkers can retrieve wiki context, propose edits, and use principles as governance context. They must keep source-backed knowledge separate from guesses and should surface missing citations as stewardship issues.
@@ -45,11 +47,11 @@ Rows marked **escalate** or **defer** carry an "awaiting review" chip until a hu
 
 Neither outcome silently blocks work. The coworker that asked handled its own moment and moved on; the one exception is a Build Studio build paused at a decision gate, and that row says so. The log header totals what is waiting per tier, and each decision's drill-in now explains, in plain language, what its outcome means, whether anything is waiting on you, and the next steps with links.
 
-Do not work the log line by line. Review & adjust groups the waiting rows into themes; answering a theme once — or adding a stance or craft guidance that covers it — teaches your AI so that question stops needing a human.
+Do not work the log line by line. Review & adjust groups the waiting rows into themes; answering a theme once — or adding a stance or craft guidance that covers it — teaches your AI so that question stops needing a human. Exact repeated asks appear once with a matching-ask count. Marking that item reviewed or dismissed applies the same disposition to every exact match, so the completed cluster leaves the queue while each original interaction remains in the audit ledger.
 
 ## Review & Adjust Findings
 
-`/coworker-decisions/review` surfaces findings over the accumulating decision ledger so you can keep governance sharp without reading every row: conflicting principles, gaps where the doctrine has no settled answer yet, a canonical decision that quietly drifted under a doctrine change, and stale decision material.
+`/coworker-decisions/review` surfaces findings over the accumulating decision ledger so you can keep governance sharp without reading every row: conflicting principles, gaps where the doctrine has no settled answer yet, a canonical decision that quietly drifted under a doctrine change, and stale decision material. It shows only findings with enough recorded context and a real owner action. Open a finding to see the specific evidence, why it needs attention, the available resolution, and what completion will change. Empty or internal-only records stay in audit history instead of becoming unusable work.
 
 **Weight-adjustment proposals** are a fifth finding type: when your recorded decisions in one class systematically separate from the kernel's recommendation on a specific axis (e.g. consistently favoring speed over long-term maintainability), the platform proposes adjusting how much that axis should weigh — never automatically. Each proposal shows the axis, direction, how many decisions it's based on, and how consistent the pattern is. Accept it to record it at the same `ruled` authority a real human ruling on stance material reaches, or reject it (with an optional reason) so it stops resurfacing. Accepting does not yet change any live decision score by itself — it is evidence the platform is confident enough to name, not an automatic rule change.
 

@@ -5,7 +5,7 @@ status: published
 abstract: Remember decisions and rationale; re-derive details from source.
 principleTier: core
 principleDirection: Store decisions, rationale, and discovered constraints; never raw transcripts.
-principleDimensionVector: {"long_term_maintainability": 0.7, "schema_grounding": 0.5, "speed_to_value": 0.4}
+principleDimensionVector: {"long_term_maintainability": 0.7, "schema_grounding": 0.5, "speed_to_value": 0.4, "data_privacy": 0.7, "capacity_utilization": 0.45}
 principleAppliesTo:
   - in_platform_coworker
   - external_coding_agent

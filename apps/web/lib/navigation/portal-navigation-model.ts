@@ -74,13 +74,7 @@ export type PortalShellNavEntry = PortalNavEntry & {
   sectionKey: PortalShellSectionKey;
 };
 
-const platformSectionSiblings = [
-  "/platform",
-  "/platform/identity",
-  "/platform/ai",
-  "/platform/tools",
-  "/platform/audit",
-] as const;
+const platformSectionSiblings = ["/platform", "/platform/archetype-readiness", "/platform/identity", "/platform/ai", "/platform/tools", "/platform/audit"] as const;
 
 function platformAiRoute(
   key: string,
@@ -239,6 +233,27 @@ export const PORTAL_NAV_ROUTES: readonly PortalNavRecord[] = [
     shellNav: {
       sectionKey: "business",
       description: "Human users, contractors, and workforce records.",
+    },
+  },
+  {
+    // EP-COWORKER-IDENTITY-360 (DI-CB054DD6F79D): AI coworkers as identities,
+    // beside People and Customers in the business section — not only inside the
+    // platform-admin "AI Workforce" tooling. Lands on the existing directory;
+    // each coworker's identity lives at /workforce/[agentId].
+    key: "ai_coworkers",
+    label: "AI Coworkers",
+    path: "/workforce",
+    parentPath: "/workforce",
+    domain: "business",
+    audienceModes: ["operator"],
+    // Directory landing, like People (/employee). NB: the shell/page-purpose
+    // destinationKind comes from ROUTE_AUDIENCE_OVERRIDES (section-home →
+    // cockpit), which is a DIFFERENT enum from PortalDestinationKind here.
+    destinationKind: "domain-home",
+    capabilityKey: "view_platform",
+    shellNav: {
+      sectionKey: "business",
+      description: "Your AI coworkers as identities — what they do, cost, engagements, and skills.",
     },
   },
   {
@@ -494,6 +509,7 @@ export const PORTAL_NAV_ROUTES: readonly PortalNavRecord[] = [
     },
     sectionSiblings: platformSectionSiblings,
   },
+  { key: "platform-archetype-readiness", label: "Archetype Readiness", path: "/platform/archetype-readiness", parentPath: "/platform", domain: "platform", audienceModes: ["operator"], destinationKind: "section-page", capabilityKey: "view_platform" },
   {
     key: "platform-schedule",
     label: "Schedule",

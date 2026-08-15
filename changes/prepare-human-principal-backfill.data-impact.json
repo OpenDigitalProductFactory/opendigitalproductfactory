@@ -1,0 +1,35 @@
+{
+  "version": "1",
+  "accountableOwner": "Mark Bodman (markdbodman@gmail.com)",
+  "summary": "BI-2BD99239. Migration 20260812105900_prepare_human_principal_backfill projects the same existing User and EmployeeProfile identity data as the immutable 20260812110000 backfill, but correlates each source row by its stable identifier so shared email/displayName values cannot fan out into duplicate PrincipalAlias keys. It collects no new information, changes no source data, and is idempotent through the canonical alias key.",
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "Principal",
+      "lifecycleDisposition": "retain-for-party-lifetime",
+      "fields": [
+        {
+          "name": "displayName",
+          "resolution": "inherited",
+          "reason": "Copied from the existing User.email or EmployeeProfile.displayName for the same human; the repair changes correlation, not collection or governance.",
+          "provenance": "Existing install-local User or EmployeeProfile row selected by stable source identity.",
+          "flags": []
+        }
+      ]
+    },
+    {
+      "kind": "model",
+      "assetId": "PrincipalAlias",
+      "lifecycleDisposition": "retain-for-party-lifetime",
+      "fields": [
+        {
+          "name": "aliasValue",
+          "resolution": "inherited",
+          "reason": "Canonical typed bridge to an existing User.id or EmployeeProfile.employeeId; no new identifier is introduced.",
+          "provenance": "Existing install-local User.id or EmployeeProfile.employeeId.",
+          "flags": []
+        }
+      ]
+    }
+  ]
+}

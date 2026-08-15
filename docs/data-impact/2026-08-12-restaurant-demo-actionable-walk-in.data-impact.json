@@ -1,0 +1,27 @@
+{
+  "processSpineDecision": "Localized Restaurant demo integrity repair and command fail-closed guard; no process-spine, route, or operator-documentation contract changed.",
+  "version": "1",
+  "accountableOwner": "data-steward",
+  "affectedCopies": [
+    "The platform-owned Restaurant demo preserves its completed demo walk-in service-turn and event history while releasing only allocations that still point at that terminal turn.",
+    "A fresh demo-only walk-in demand is derived from the existing Restaurant fixture so the canonical host stand remains actionable without reopening a completed service-turn aggregate.",
+    "The seating command rejects a demand whose canonical service turn is already closed or cancelled before allocating capacity or updating its booking.",
+    "Operator-owned bookings, turns, events, allocations, tables, staffing, and customer data remain outside the exact reserved demo identifiers and Restaurant-archetype guard."
+  ],
+  "migration": {
+    "name": "20260812152000_repair_restaurant_demo_actionable_walk_in",
+    "backfill": "Data-only and demo-scoped. The migration fails closed if either new reserved identifier is attached to non-demo data, releases any active allocation linked to the terminal demo walk-in turn, preserves that turn and its events, and inserts one fresh waiting demand only when the original demo walk-in has a closed or cancelled turn."
+  },
+  "tests": [
+    "packages/db/src/restaurant-demo-floor-migration.test.ts",
+    "apps/web/lib/twin/restaurant-floor-command.server.test.ts"
+  ],
+  "changes": [
+    {
+      "kind": "projection",
+      "derivedContractId": "projection:restaurant-demo-actionable-walk-in",
+      "cleanupTest": "restaurant-demo-floor-migration.test.ts asserts terminal history is retained, stale terminal allocation is released, and a fresh waiting booking is inserted behind exact demo guards.",
+      "reconciliationTest": "restaurant-floor-command.server.test.ts proves a terminal service turn cannot receive new seating capacity or booking writes."
+    }
+  ]
+}

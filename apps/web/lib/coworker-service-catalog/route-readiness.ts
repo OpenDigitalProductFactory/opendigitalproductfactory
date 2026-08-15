@@ -78,6 +78,7 @@ export type CoworkerRouteReadiness = {
 };
 
 const SENSITIVITY_LEVELS = new Set<SensitivityLevel>([
+  "development",
   "public",
   "internal",
   "confidential",

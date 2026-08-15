@@ -39,6 +39,8 @@ On 2026-06-05 the live install carried 119 worktrees in two conflicting conventi
 - Configure both clients (Claude Code worktree base, Codex worktree trust base) to point at the canonical sibling location.
 - Seed MCP + toolchain immediately after creation; claim a capsule before doing work.
 - Let the worktree/runtime janitor reap `idle`/`done` worktrees, branches, CI images, and stray compose projects. Do not hoard worktrees "for reference."
+- The `active` liveness signal is a real, gitignored session heartbeat (`.dpf-session-heartbeat.json`, refreshed every turn), and it **outranks** reap eligibility: the janitor keeps any worktree with a fresh heartbeat even when it is otherwise merged+clean (Tier-A) — never reap a worktree out from under a live session. A worktree mid-merge (`MERGE_HEAD`) with no live heartbeat is quarantined and flagged, not silently left or reaped.
+- Keep the shared **root clone** fast-forwarded to `origin/main` (the `root-clone-freshness` SessionStart hook does this, ff-only): a stale root blocks every junctioned worktree's pregate, so root freshness is fleet hygiene, not a per-worktree concern.
 
 ## Decision Dimensions
 

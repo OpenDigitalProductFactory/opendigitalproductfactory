@@ -13,6 +13,7 @@ import { DuplicateAccountsPanel } from "@/components/customer/DuplicateAccountsP
 import { RevenueCockpit } from "@/components/customer/RevenueCockpit";
 import { CustomerStatusBadge } from "@/components/customer/CustomerStatusBadge";
 import { buildRevenueCockpitSummary } from "@/lib/crm/revenue-cockpit";
+import { getWorkspaceRetainMetrics } from "@/lib/crm/retain-data";
 import {
   CRM_TONE_CLASSES,
   getAccountStatusMeta,
@@ -22,14 +23,22 @@ import {
   classifyAccountAttention,
   sortAccountsByAttention,
 } from "@/lib/crm/account-attention";
-import { PlatformGridSection, parseSurfaceView } from "@/components/workbooks/PlatformGridSection";
+import {
+  PlatformGridSection,
+  parseSurfaceDataScope,
+  parseSurfaceView,
+} from "@/components/workbooks/PlatformGridSection";
 
 export default async function CustomerPage({
   searchParams,
 }: {
-  searchParams?: Promise<{ view?: string }>;
+  searchParams?: Promise<{ view?: string; dataScope?: string }>;
 }) {
-  const view = parseSurfaceView((await searchParams)?.view);
+  const sp = await searchParams;
+  const view = parseSurfaceView(sp?.view);
+  const dataScope = parseSurfaceDataScope(sp?.dataScope);
+  // Kick off the retain rollup in parallel with the main batch (avoids a serial round-trip).
+  const retainPromise = getWorkspaceRetainMetrics();
   const [
     accounts,
     engagementCounts,
@@ -125,7 +134,11 @@ export default async function CustomerPage({
     }),
   ]);
 
+  const retain = await retainPromise;
   const revenueSummary = buildRevenueCockpitSummary({
+    mrr: retain.mrr,
+    arr: retain.arr,
+    atRiskAccountCount: retain.churnRiskOutreachCount,
     engagementCounts: engagementCounts.map((item) => ({
       status: item.status,
       count: item._count,
@@ -240,7 +253,11 @@ export default async function CustomerPage({
 
           <DuplicateAccountsPanel />
 
-          <PlatformGridSection entityType="customer_account" view={view} />
+          <PlatformGridSection
+            entityType="customer_account"
+            view={view}
+            dataScope={dataScope}
+          />
 
           {!view && (
             <>

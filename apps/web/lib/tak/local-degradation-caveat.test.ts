@@ -35,6 +35,24 @@ describe("local-degradation caveat (BI-C0F180E8)", () => {
     ).toBe(false);
   });
 
+  it("does NOT call a local answer unverified when the authorized surface was prehydrated", () => {
+    expect(
+      shouldCaveatLocalDegradation({
+        providerId: "local",
+        executedToolCount: 0,
+        authoritativeSurfaceEvidence: true,
+        content: substantive,
+      }),
+    ).toBe(false);
+    expect(
+      applyLocalDegradationCaveat(substantive, {
+        providerId: "local",
+        executedToolCount: 0,
+        authoritativeSurfaceEvidence: true,
+      }),
+    ).toBe(substantive);
+  });
+
   it("does NOT double-caveat an answer that already owns up to running degraded", () => {
     const honest = "This turn ran on the bundled local model, so I couldn't check live data.";
     expect(

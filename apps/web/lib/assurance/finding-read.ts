@@ -42,9 +42,11 @@ type FindingSummaryRow = {
   findingKind: string;
 };
 
+type FindingSummaryPageRow = FindingSummaryRow & { id?: string };
+
 type FindingSummaryDb = {
   assuranceFinding?: {
-    findMany(args: unknown): Promise<FindingSummaryRow[]>;
+    findMany(args: unknown): Promise<FindingSummaryPageRow[]>;
   };
 };
 
@@ -95,19 +97,42 @@ async function getActiveFindingSummary(
 ): Promise<AssuranceFindingSummary> {
   if (!db.assuranceFinding) return emptyFindingSummary();
 
-  const rows = await db.assuranceFinding.findMany({
-    where: {
-      ...where,
-      status: { notIn: CLOSED_STATUSES },
-    },
-    select: {
-      policySeverity: true,
-      releaseImpact: true,
-      status: true,
-      findingKind: true,
-    },
-    take: 1000,
-  });
+  // BI-72C3FBA2: page the full open-finding set. A silent take:1000 under-counted
+  // severity summaries once a build/product crossed the first batch.
+  const pageSize = 500;
+  const rows: FindingSummaryRow[] = [];
+  let cursorId: string | undefined;
+  for (;;) {
+    const batch = await db.assuranceFinding.findMany({
+      where: {
+        ...where,
+        status: { notIn: CLOSED_STATUSES },
+      },
+      select: {
+        id: true,
+        policySeverity: true,
+        releaseImpact: true,
+        status: true,
+        findingKind: true,
+      },
+      orderBy: { id: "asc" },
+      take: pageSize,
+      ...(cursorId ? { cursor: { id: cursorId }, skip: 1 } : {}),
+    });
+    if (batch.length === 0) break;
+    for (const row of batch) {
+      rows.push({
+        policySeverity: row.policySeverity,
+        releaseImpact: row.releaseImpact,
+        status: row.status,
+        findingKind: row.findingKind,
+      });
+    }
+    if (batch.length < pageSize) break;
+    const lastId = batch[batch.length - 1]?.id;
+    if (!lastId) break;
+    cursorId = lastId;
+  }
 
   return summarize(rows);
 }

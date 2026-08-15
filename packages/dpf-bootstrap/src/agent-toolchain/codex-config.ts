@@ -27,6 +27,7 @@
  */
 
 import { parse, stringify } from "smol-toml";
+import { withDpfMcpCatalogTier } from "@dpf/integration-shared/mcp-catalog-tier";
 
 export type CodexConfigConvergenceChange = {
   /** Substrate kind that changed. */
@@ -214,8 +215,10 @@ function isGenericPlugin(pluginId: string): boolean {
  * - `repoRoot` is the absolute path of the contributor's DPF clone/worktree.
  *   Added to the trust list and recorded in the rationale.
  * - `configPath` is the absolute path where the plan would write back.
- * - `mcpEndpoint` is the `/api/mcp/v1` URL. When omitted, the MCP block is left
- *   untouched (back-compat with callers that only manage the plugin block).
+ * - `mcpEndpoint` is the base `/api/mcp/v1` URL. Codex is a known lazy host, so
+ *   the planner converges it to the explicit `tier=full` programmatic catalog;
+ *   the host still decides which tools attach to the model. When omitted, the
+ *   MCP block is left untouched (back-compat with plugin-only callers).
  *
  * Returns zero writes when the file is unparseable, zero writes when the whole
  * profile already conforms, and a single full-file write otherwise. Every block
@@ -259,7 +262,11 @@ export function planCodexConfig(
     | { url?: string; bearer_token_env_var?: string }
     | undefined;
   const wantMcp = typeof mcpEndpoint === "string" && mcpEndpoint.length > 0;
-  const mcpConverged = !wantMcp || mcpBlockConverged(existingMcp, mcpEndpoint!);
+  const desiredMcpEndpoint = wantMcp
+    ? withDpfMcpCatalogTier(mcpEndpoint!, "full")
+    : undefined;
+  const mcpConverged =
+    !wantMcp || mcpBlockConverged(existingMcp, desiredMcpEndpoint!);
 
   // --- Compute convergence deltas (idempotent, conservative) ----------------
 
@@ -344,7 +351,10 @@ export function planCodexConfig(
   if ((wantMcp && !mcpConverged) || genericMcpToDisable.length > 0) {
     const nextMcpServers: Record<string, unknown> = { ...mcpServers };
     if (wantMcp && !mcpConverged) {
-      nextMcpServers["dpf"] = { ...(existingMcp ?? {}), ...desiredMcpServerBlock(mcpEndpoint!) };
+      nextMcpServers["dpf"] = {
+        ...(existingMcp ?? {}),
+        ...desiredMcpServerBlock(desiredMcpEndpoint!),
+      };
       rationaleParts.push("upsert [mcp_servers.dpf]");
     }
     for (const name of genericMcpToDisable) {

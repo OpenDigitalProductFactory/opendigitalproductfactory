@@ -53,6 +53,12 @@ services:
       dockerfile: docker/postgres/Dockerfile
     restart: unless-stopped
     logging: *default-logging
+    # BI-4F3AB6B3: born-bounded always-on ceiling (config/install-resource-budgets.json).
+    deploy:
+      resources:
+        limits:
+          memory: 2g
+          cpus: "2.0"
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-dpf}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-dpf_dev}
@@ -114,6 +120,12 @@ services:
         DPF_PLATFORM_VERSION: ${DPF_PLATFORM_VERSION:-}
     restart: unless-stopped
     logging: *default-logging
+    # BI-4F3AB6B3: born-bounded always-on ceiling (config/install-resource-budgets.json).
+    deploy:
+      resources:
+        limits:
+          memory: 3g
+          cpus: "2.0"
     ports:
       - "3000:3000"
       - "1455:3000"  # OpenAI Codex OAuth callback (shared client requires this port)
@@ -184,6 +196,10 @@ services:
       DPF_HOST_INSTALL_PATH: ${DPF_HOST_INSTALL_PATH:-}
       DPF_HOST_PLATFORM: ${DPF_HOST_PLATFORM:-}
       DPF_HOST_ARCH: ${DPF_HOST_ARCH:-}
+      # Authoritative installer opt-in state for the main installation's
+      # supervised host Edge service. The portal combines this intent with
+      # live enrollment/heartbeat evidence; it never treats the flag as health.
+      DPF_EDGE_ENABLED: ${DPF_INCLUDE_EDGE:-0}
       DPF_STATE_DIR_HOST: ${DPF_STATE_DIR:-${HOME}/.dpf}
       DPF_RUNTIME_TRANSITION_SECRET_FILE_HOST: ${DPF_STATE_DIR:-${HOME}/.dpf}/runtime-transition.secret
       # Portal-side live-readiness checks run inside the container, where
@@ -191,6 +207,9 @@ services:
       # helpers at the mounted host source so verify_live_install_readiness can
       # decide CAN-TEST vs MUST-ADVANCE without depending on github.com.
       DPF_REPO_ROOT: /host-dpf
+      # Runtime policy generators must resolve from the deployed image before
+      # the mutable host checkout so their rule bytes match DEPLOYED_SHA.
+      DPF_RUNTIME_REPO_ROOT: /app
       # Host path used by the governed PostgreSQL recovery-point workflow.
       DPF_BACKUPS_HOST_PATH: ${DPF_BACKUPS_HOST_PATH:-}
       DPF_SELF_UPGRADE_HOST_SOURCE_MOUNT: /host-dpf
@@ -241,6 +260,17 @@ services:
       # explicit per-install operator opt-in after a clean observe soak.
       DPF_WORKTREE_JANITOR_ENABLED: ${DPF_WORKTREE_JANITOR_ENABLED:-1}
       DPF_SANDBOX_BUILD_GC_ENABLED: ${DPF_SANDBOX_BUILD_GC_ENABLED:-1}
+      # WS9 governed WorkCapsule reaper (BI-CBAAEA94): transitions dead capsules
+      # (lease-expired / linked-build-terminal / idle-past-floor) working->abandoned
+      # so abandoned work stops reading as active on the board and jamming the WIP
+      # cap. Delivered HERE (base compose), not override-only: an override-only flag
+      # is dropped when the self-upgrade promoter recreates the portal, which is why
+      # the WS9 sprawl re-accumulated after it first shipped. Same soak model as the
+      # janitors above — ENABLED defaults ON = observe-only (logs would-reap, no DB
+      # writes); AUTO_REAP is the live/reversible actuation and stays OFF until a
+      # per-install operator opt-in via .env.
+      DPF_WORKCAPSULE_REAPER_ENABLED: ${DPF_WORKCAPSULE_REAPER_ENABLED:-1}
+      DPF_WORKCAPSULE_REAPER_AUTO_REAP: ${DPF_WORKCAPSULE_REAPER_AUTO_REAP:-0}
       # Runtime-artifact janitor (BI-DBF3F426 / BI-A55BE432): reaps orphaned
       # per-branch CI images + stray compose projects INCLUDING their named
       # volumes — the dominant local-disk leak (dead dpf-<topic> dev stacks
@@ -566,6 +596,7 @@ services:
       DATABASE_URL: postgresql://dpf:dpf_dev@dev-postgres:5432/dpf
       PRODUCTION_DATABASE_URL: postgresql://dpf:${POSTGRES_PASSWORD:-dpf_dev}@postgres:5432/dpf
       DPF_ENVIRONMENT: dev
+      CONTRIBUTOR_PREVIEW_PASSWORD: ${CONTRIBUTOR_PREVIEW_PASSWORD:-}
     volumes: *dev-workspace-volumes
     depends_on:
       dev-postgres:
@@ -596,6 +627,8 @@ services:
       DPF_DEV_PORTAL_WORKSPACE_ROOT: /workspace
       AUTH_SECRET: dev_secret_change_me
       AUTH_TRUST_HOST: "true"
+      AUTH_URL: http://localhost:3001
+      PUBLIC_URL: http://localhost:3001
       CREDENTIAL_ENCRYPTION_KEY: dev_only_key_not_for_production_0000
       UPLOAD_STORAGE_PATH: /workspace/data/uploads
     depends_on:
@@ -933,6 +966,8 @@ services:
   # Compatibility alias selects the full local-speech closure:
   #   docker compose --profile tts up
   dpf-tts:
+    # BI-A0A0568F: profile-gated only (never always-on). See
+    # docs/architecture/2026-08-09-tts-idle-process-elimination.md.
     image: ${DPF_TTS_IMAGE:-travisvn/chatterbox-tts-api:v0.1.0}
     profiles: ["runtime-local-speech", "tts"]
     restart: unless-stopped
@@ -946,6 +981,9 @@ services:
       TTS_MODEL: ${TTS_CHATTERBOX_MODEL:-turbo}
     deploy:
       resources:
+        limits:
+          memory: 2g
+          cpus: "2.0"
         reservations:
           devices:
             - driver: nvidia

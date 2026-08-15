@@ -88,6 +88,10 @@ export default function PromotionsClient({ promotions }: { promotions: Promotion
       // If promoter started, poll for status updates every 5s
       if (result.success && result.step === "started") {
         setDeployResult({ promotionId, success: true, message: "Deployment in progress..." });
+        // background-observation-contract-exception BI-B8F44BF7
+        // This legacy deployment surface is the ratcheted baseline. New
+        // interval-driven route refreshes are rejected by the architecture
+        // fitness test; this one is removed when the linked migration lands.
         const poll = setInterval(() => { router.refresh(); }, 5_000);
         // Stop polling after 10 minutes (promoter timeout)
         setTimeout(() => clearInterval(poll), 10 * 60 * 1000);

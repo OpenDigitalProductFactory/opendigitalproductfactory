@@ -179,4 +179,17 @@ export const ARCHETYPE_SUPPLY_MANIFEST: Partial<
       { name: "Parts Fluids Tires & Implement Wear Items", description: "Critical spares and maintenance materials whose absence can close a field or harvest window." },
     ],
   },
+  "manufacturing": {
+    suppliers: [
+      { name: "Qualified Materials & Components Supplier", description: "Approved-source metals, polymers, electrical components, bearings, fasteners, and subassemblies with lead time, revision, lot, certificate, and change-notice controls." },
+      { name: "Contract Process & Finishing Supplier", description: "Qualified machining, coating, heat treatment, molding, winding, fabrication, or other outside processing tied to a released specification and acceptance evidence." },
+      { name: "Calibration Test & Laboratory Service", description: "Traceable calibration, environmental or compliance testing, and specialist laboratory capacity required to release product and equipment." },
+      { name: "Production Equipment Tooling & Maintenance Supplier", description: "Machines, fixtures, tooling, spares, controls support, and maintenance services whose readiness constrains released work." },
+      { name: "Freight Packaging & Customs Partner", description: "Export packaging, carrier capacity, customs documentation, and delivery handling for serialized industrial products and spares." },
+    ],
+    goods: [
+      { name: "Raw Material Components & Subassemblies", description: "Lot-, revision-, and status-controlled inputs linked to demand, supplier commitments, inspection state, and production consumption." },
+      { name: "Tooling Fixtures Gauges & Critical Spares", description: "Controlled production resources and maintenance spares whose identity, calibration, condition, and location determine usable capacity." },
+    ],
+  },
 };

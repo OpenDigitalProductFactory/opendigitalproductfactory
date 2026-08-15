@@ -112,7 +112,7 @@ const definitions: ToolDefinition[] = [
   },
   {
     name: "adopt_worktree",
-    description: "Adopt an existing local branch/worktree pair into a Work Capsule without creating a new worktree.",
+    description: "Adopt an existing local branch/worktree pair into a Work Capsule without creating a new worktree. A branch has one durable capsule identity; an incompatible terminal or foreign binding returns branch_occupied instead of overwriting history.",
     inputSchema: {
       type: "object",
       properties: {
@@ -135,7 +135,7 @@ const definitions: ToolDefinition[] = [
   {
     name: "claim_backlog_item_for_work",
     description:
-      "Claim a BacklogItem for work by binding it to the worktree + branch + session you are starting in (soft claim-at-start). Creates or reuses+late-binds the WorkCapsule for the branch and stamps the BI claim so a directly-working agent's BI no longer looks unclaimed to a parallel session. Advisory, NOT a lock: if the BI already has active work elsewhere the call still binds this location but returns a non-blocking conflict — it does not steal the existing claim. Multiple branches per BI are expected and are not a conflict.",
+      "Claim a BacklogItem for work by binding it to the worktree + branch + session you are starting in (soft claim-at-start). Creates, reuses+late-binds, or resumes the durable abandoned WorkCapsule for the same BI and branch, then stamps the BI claim so a directly-working agent's BI no longer looks unclaimed to a parallel session. A branch bound to a different BI returns branch_occupied and preserves its history. Advisory, NOT a lock: if the BI already has active work elsewhere the call still binds this location but returns a non-blocking conflict — it does not steal the existing claim. Multiple branches per BI are expected and are not a conflict.",
     inputSchema: {
       type: "object",
       properties: {
@@ -181,7 +181,10 @@ const definitions: ToolDefinition[] = [
   },
   {
     name: "heartbeat_capsule",
-    description: "Renew the active lease for a Work Capsule so other agents can see that work is in flight.",
+    description:
+      "Renew the active lease for a Work Capsule so other agents can see that work is in flight. " +
+      "Heartbeat on a human-scale cadence (between stages / few minutes), not every tool call. " +
+      "If the lease is already expired, re-claim or abandon — do not thrash heartbeat.",
     inputSchema: {
       type: "object",
       properties: {
@@ -209,7 +212,13 @@ const definitions: ToolDefinition[] = [
   },
   {
     name: "release_capsule_scope",
-    description: "Release previously claimed Work Capsule scope items by kind and value.",
+    description:
+      "Release previously claimed Work Capsule scope items by kind and value. " +
+      "Requires capsuleId (WC-*) plus claims: [{kind, value}, ...] matching prior claim_capsule_scope entries. " +
+      "Call once per handoff with the full claim set — do not release item-by-item in a loop. " +
+      "Do NOT retry on invalid_input — fix the payload (claims must be a non-empty array of {kind,value}). " +
+      "Do NOT call for an abandoned/unknown capsule (retryable: false). " +
+      "If nothing matched, success still returns (idempotent no-op on empty released set).",
     inputSchema: {
       type: "object",
       properties: {
@@ -220,11 +229,11 @@ const definitions: ToolDefinition[] = [
             type: "object",
             properties: {
               kind: { type: "string", enum: ["path", "module", "package", "route", "skill", "prompt"] },
-              value: { type: "string", description: "Scope value to release." },
+              value: { type: "string", description: "Scope value to release (exact match to the prior claim)." },
             },
             required: ["kind", "value"],
           },
-          description: "Scope claims to release.",
+          description: "Scope claims to release — array required, not a single object.",
         },
       },
       required: ["capsuleId", "claims"],
@@ -274,7 +283,9 @@ const definitions: ToolDefinition[] = [
   {
     name: "start_external_work",
     description:
-      "Register that you are STARTING work on an external session — before any evidence — so a tracked Work Capsule exists immediately and the session is visible to other agents instead of appearing only after the first result. Idempotent per session (or per repo+branch when a worktree is supplied); summary is optional at start.",
+      "Register that you are STARTING work on an external session — before any evidence — so a tracked Work Capsule exists immediately and the session is visible to other agents instead of appearing only after the first result. " +
+      "Idempotent per session (or per repo+branch when a worktree is supplied); summary is optional at start. " +
+      "Call once at session start — re-calling with the same session/worktree is a no-op, not a progress signal.",
     inputSchema: {
       type: "object",
       properties: {

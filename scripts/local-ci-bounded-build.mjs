@@ -13,6 +13,14 @@ import {
   validateBuilderInspection,
 } from "./lib/local-ci-bounded-builder.mjs";
 import {
+  buildxRmArgs,
+  buildxStopArgs,
+  decidePostBuildCoolDown,
+  isBuilderCoolDownEnabled,
+  isManagedBuilderName,
+  parseManagedBuilderName,
+} from "./lib/local-ci-builder-lifecycle.mjs";
+import {
   EXIT_CONTROL_PLANE_STARVATION,
   establishHealthyControlPlane,
   monitorControlPlane,
@@ -115,7 +123,65 @@ function inspectBuilder(builder) {
   return { status: "present", inspection };
 }
 
-function ensureBoundedBuilder(builder) {
+/**
+ * List managed local-CI builder names from `docker buildx ls`.
+ * Best-effort: a listing failure returns [] so ensure can still create.
+ */
+function listManagedBuilderNames() {
+  const listed = runDocker(["buildx", "ls", "--format", "{{.Name}}"], 15_000);
+  if (listed.status !== 0) return [];
+  return (listed.stdout || "")
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((name) => isManagedBuilderName(name));
+}
+
+/**
+ * Remove builders from older/newer policy generations so only the current
+ * `builderPolicy.version` remains (BI-C85D1B0A). Never throws — a stuck rm
+ * must not block a green path that can still use the current builder.
+ */
+function reapObsoletePolicyBuilders(builder, log = () => {}) {
+  const current = parseManagedBuilderName(builder.name);
+  if (!current) return;
+  for (const name of listManagedBuilderNames()) {
+    const parsed = parseManagedBuilderName(name);
+    if (!parsed || parsed.policyVersion === current.policyVersion) continue;
+    const removed = runDocker(buildxRmArgs(name), 120_000);
+    if (removed.status === 0) {
+      log(`reaped obsolete builder ${name} (current policy v${current.policyVersion})`);
+    } else {
+      log(
+        `failed to reap obsolete builder ${name}: ${(removed.stderr || removed.stdout || "").trim()}`,
+      );
+    }
+  }
+}
+
+/**
+ * Session cool-down: stop the BuildKit daemon after the build so multi-GiB
+ * idle RSS is not held forever. Disk cache stays (buildx stop, not rm).
+ */
+function coolDownBuilder(builder, log = () => {}) {
+  const decision = decidePostBuildCoolDown(builder, {
+    coolDownEnabled: isBuilderCoolDownEnabled(process.env),
+  });
+  if (decision.action !== "STOP") {
+    log(`cool-down skipped: ${decision.reason}`);
+    return;
+  }
+  const stopped = runDocker(buildxStopArgs(builder.name), 60_000);
+  if (stopped.status === 0) {
+    log(`stopped builder ${builder.name} (session cool-down; cache retained)`);
+  } else {
+    log(
+      `cool-down stop failed for ${builder.name}: ${(stopped.stderr || stopped.stdout || "").trim()}`,
+    );
+  }
+}
+
+function ensureBoundedBuilder(builder, log = () => {}) {
+  reapObsoletePolicyBuilders(builder, log);
   let observed = inspectBuilder(builder);
   if (observed.status === "absent") {
     const created = runDocker(buildxCreateArgs(builder, BUILDKIT_CONFIG), 120_000);
@@ -395,8 +461,12 @@ async function main() {
     return EXIT_CONTROL_PLANE_STARVATION;
   }
 
+  const lifecycleLog = (message) => {
+    process.stdout.write(`[local-ci-bounded-build] lifecycle: ${message}\n`);
+  };
+
   try {
-    ensureBoundedBuilder(builder);
+    ensureBoundedBuilder(builder, lifecycleLog);
   } catch (error) {
     const payload = {
       schemaVersion: 1,
@@ -415,105 +485,114 @@ async function main() {
     return EXIT_CONTROL_PLANE_STARVATION;
   }
 
-  const args = buildxBuildArgs({ builder, tag, context: "." });
-  const child = spawn("docker", args, {
-    stdio: ["ignore", "pipe", "pipe"],
-    windowsHide: true,
-    shell: false,
-    detached: process.platform !== "win32",
-  });
-  let childComplete = false;
-  let childExit = null;
-  let buildOutput = "";
-  const capture = (stream, destination) => {
-    stream.on("data", (chunk) => {
-      destination.write(chunk);
-      buildOutput = `${buildOutput}${chunk}`.slice(-32_000);
-    });
-  };
-  capture(child.stdout, process.stdout);
-  capture(child.stderr, process.stderr);
-  const closed = new Promise((resolve) => {
-    child.once("error", () => {
-      childComplete = true;
-      childExit = 1;
-      resolve();
-    });
-    child.once("close", (code) => {
-      childComplete = true;
-      childExit = code ?? 1;
-      resolve();
-    });
-  });
-  const watchdog = await monitorControlPlane({
-    sample: () => probeControlPlane(controlPlanePostgresProbe),
-    isComplete: () => childComplete,
-    onSample: (sample) => stageReceipt.heartbeat({
-      phase: "production-build",
-      childPid: child.pid ?? null,
-      controlPlane: sample,
-      outputTail: buildOutput.slice(-4_000),
-    }),
-  });
-  let termination = null;
-  if (watchdog.status === "blocked_control_plane_starvation" && !childComplete) {
-    const command = terminateProcessTreeCommand(child.pid);
-    const stopped = spawnSync(command.command, command.args, {
-      encoding: "utf8",
+  let exitCode = 1;
+  try {
+    const args = buildxBuildArgs({ builder, tag, context: "." });
+    const child = spawn("docker", args, {
+      stdio: ["ignore", "pipe", "pipe"],
       windowsHide: true,
-      timeout: 15_000,
+      shell: false,
+      detached: process.platform !== "win32",
     });
-    termination = { status: stopped.status, signal: stopped.signal || null };
-  }
-  await closed;
-  const buildOutcome = classifyBoundedBuildExit({
-    exitCode: childExit,
-    output: buildOutput,
-  });
-  const finalStatus = watchdog.status === "blocked_control_plane_starvation"
-    ? watchdog.status
-    : buildOutcome.status;
-  const failures = watchdog.status === "blocked_control_plane_starvation"
-    ? watchdog.failures
-    : buildOutcome.failures;
-  const payload = {
-    schemaVersion: 1,
-    status: finalStatus,
-    phase: "production-build",
-    startedAt,
-    completedAt: new Date().toISOString(),
-    identity,
-    policy,
-    failures,
-    samples: [...preflight.samples, ...watchdog.samples],
-    buildExitCode: childExit,
-    termination,
-    artifact: finalStatus === "healthy"
-      ? { imageTag: tag, imageId: localImageId(tag) }
-      : null,
-  };
-  writeEvidence(evidencePath, payload);
-  const receiptStatus = canonicalStageReceiptStatus(finalStatus);
-  stageReceipt.complete(receiptStatus, payload);
-  if (finalStatus === "blocked_control_plane_starvation") {
-    process.stderr.write(`[local-ci-bounded-build] ${finalStatus} ${failures.join(",")}\n`);
-    return EXIT_CONTROL_PLANE_STARVATION;
-  }
-  // Retention runs ONLY on a green build, so the slot always keeps a working
-  // image: the one just produced supersedes the slot's older images. Gating on
-  // success is what makes this safe — reaping after a failure would delete the
-  // last image that actually worked. Best-effort by construction; it must never
-  // turn a passing build red.
-  if (finalStatus === "healthy") {
-    reapSupersededSlotImages({
-      slotKey,
-      keepTag: tag,
-      listImages: listLocalImageTags,
-      removeImage: removeLocalImage,
-      log: (message) => process.stdout.write(`[local-ci-bounded-build] retention: ${message}\n`),
+    let childComplete = false;
+    let childExit = null;
+    let buildOutput = "";
+    const capture = (stream, destination) => {
+      stream.on("data", (chunk) => {
+        destination.write(chunk);
+        buildOutput = `${buildOutput}${chunk}`.slice(-32_000);
+      });
+    };
+    capture(child.stdout, process.stdout);
+    capture(child.stderr, process.stderr);
+    const closed = new Promise((resolve) => {
+      child.once("error", () => {
+        childComplete = true;
+        childExit = 1;
+        resolve();
+      });
+      child.once("close", (code) => {
+        childComplete = true;
+        childExit = code ?? 1;
+        resolve();
+      });
     });
+    const watchdog = await monitorControlPlane({
+      sample: () => probeControlPlane(controlPlanePostgresProbe),
+      isComplete: () => childComplete,
+      onSample: (sample) => stageReceipt.heartbeat({
+        phase: "production-build",
+        childPid: child.pid ?? null,
+        controlPlane: sample,
+        outputTail: buildOutput.slice(-4_000),
+      }),
+    });
+    let termination = null;
+    if (watchdog.status === "blocked_control_plane_starvation" && !childComplete) {
+      const command = terminateProcessTreeCommand(child.pid);
+      const stopped = spawnSync(command.command, command.args, {
+        encoding: "utf8",
+        windowsHide: true,
+        timeout: 15_000,
+      });
+      termination = { status: stopped.status, signal: stopped.signal || null };
+    }
+    await closed;
+    const buildOutcome = classifyBoundedBuildExit({
+      exitCode: childExit,
+      output: buildOutput,
+    });
+    const finalStatus = watchdog.status === "blocked_control_plane_starvation"
+      ? watchdog.status
+      : buildOutcome.status;
+    const failures = watchdog.status === "blocked_control_plane_starvation"
+      ? watchdog.failures
+      : buildOutcome.failures;
+    const payload = {
+      schemaVersion: 1,
+      status: finalStatus,
+      phase: "production-build",
+      startedAt,
+      completedAt: new Date().toISOString(),
+      identity,
+      policy,
+      failures,
+      samples: [...preflight.samples, ...watchdog.samples],
+      buildExitCode: childExit,
+      termination,
+      artifact: finalStatus === "healthy"
+        ? { imageTag: tag, imageId: localImageId(tag) }
+        : null,
+    };
+    writeEvidence(evidencePath, payload);
+    const receiptStatus = canonicalStageReceiptStatus(finalStatus);
+    stageReceipt.complete(receiptStatus, payload);
+    if (finalStatus === "blocked_control_plane_starvation") {
+      process.stderr.write(`[local-ci-bounded-build] ${finalStatus} ${failures.join(",")}\n`);
+      exitCode = EXIT_CONTROL_PLANE_STARVATION;
+    } else {
+      // Retention runs ONLY on a green build, so the slot always keeps a working
+      // image: the one just produced supersedes the slot's older images. Gating on
+      // success is what makes this safe — reaping after a failure would delete the
+      // last image that actually worked. Best-effort by construction; it must never
+      // turn a passing build red.
+      if (finalStatus === "healthy") {
+        reapSupersededSlotImages({
+          slotKey,
+          keepTag: tag,
+          listImages: listLocalImageTags,
+          removeImage: removeLocalImage,
+          log: (message) => process.stdout.write(`[local-ci-bounded-build] retention: ${message}\n`),
+        });
+      }
+      exitCode = buildOutcome.exitCode;
+    }
+  } finally {
+    // BI-C85D1B0A: always cool down the session builder so multi-GiB BuildKit
+    // RSS is not held after pregate/self-upgrade builds (cache retained).
+    coolDownBuilder(builder, lifecycleLog);
   }
-  return buildOutcome.exitCode;
+  return exitCode;
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {

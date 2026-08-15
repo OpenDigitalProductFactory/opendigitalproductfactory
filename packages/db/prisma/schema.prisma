@@ -2330,6 +2330,7 @@ model WorkCapsule {
   executorRef             String?
   backlogItemId           String?
   epicId                  String?
+  workItemId              String?
   featureBuildId          String?
   taskRunId               String?
   gitPromotionCandidateId String?
@@ -2374,6 +2375,7 @@ model WorkCapsule {
   runtimeTargets          RuntimeTarget[]
   runtimeVerifications    RuntimeVerification[]
   externalEvidence        ExternalEvidenceRecord[]
+  workItem                WorkItem?                @relation("WorkCapsuleWorkItem", fields: [workItemId], references: [id], onDelete: SetNull)
 
   @@index([status, updatedAt])
   @@index([backlogItemId])
@@ -2389,6 +2391,7 @@ model WorkCapsule {
   @@index([sandboxId])
   @@index([leaseExpiresAt])
   @@index([requestedByPrincipalId])
+  @@index([workItemId])
 }
 
 model WorkCapsuleActivity {
@@ -4725,6 +4728,7 @@ model Organization {
   storefrontConfig                  StorefrontConfig?
   stockItems                        StockItem[]
   operationalSceneLayouts           OperationalSceneLayout[]
+  businessMetricRollups              BusinessMetricRollup[]            @relation("BusinessMetricRollupOrganization")
   hospitalityResources              HospitalityResource[]              @relation("HospitalityResourceOrganization")
   hospitalityCapacityPools          HospitalityCapacityPool[]          @relation("HospitalityCapacityPoolOrganization")
   hospitalityResourceAvailability   HospitalityResourceAvailability[]  @relation("HospitalityAvailabilityOrganization")
@@ -8504,8 +8508,10 @@ model LifecycleEvent {
   governedThingId   String
   fromStage         String? // LifecycleStage | null
   toStage           String? // LifecycleStage | null
-  fromStatus        String? // LifecycleStatus | null
-  toStatus          String? // LifecycleStatus | null
+  fromStatus        String? // LifecycleStatus | null (closed canonical enum)
+  toStatus          String? // LifecycleStatus | null (closed canonical enum)
+  fromState         String? // open per-grammar StageState.key, NOT a canonical enum (lifecycle-grammar.ts)
+  toState           String? // open per-grammar StageState.key, NOT a canonical enum (lifecycle-grammar.ts)
   reason            String?        @db.Text
   evidenceRef       String? // pointer to corroborating evidence (discovery run, probe, etc.)
   actorPrincipalId  String?
@@ -9021,6 +9027,7 @@ model LeaveRequest {
   approverEmployeeId String?
   approvedAt         DateTime?
   rejectionReason    String?
+  decisionInteractionId String?
   createdAt          DateTime         @default(now())
   updatedAt          DateTime         @updatedAt
   approver           EmployeeProfile? @relation("LeaveApprovals", fields: [approverEmployeeId], references: [id])
@@ -10649,7 +10656,7 @@ model StorefrontBooking {
   storefrontId                String
   itemId                      String
   customerContactId           String?
-  customerEmail               String
+  customerEmail               String?
   customerName                String
   customerPhone               String?
   scheduledAt                 DateTime
@@ -13656,6 +13663,9 @@ model WorkItem {
   itemId                        String                 @unique @default(cuid())
   sourceType                    String
   sourceId                      String?
+  // Idempotent adapter-owned identity for queue jobs whose source must have at
+  // most one live WorkItem (for example federation-demand:<mirrorId>).
+  sourceKey                     String?                @unique
   title                         String
   description                   String                 @db.Text
   urgency                       String                 @default("routine")
@@ -13683,8 +13693,15 @@ model WorkItem {
   a2aTaskId                     String?
   messages                      WorkItemMessage[]
   presence                      WorkItemPresence[]
+  capsules                      WorkCapsule[]          @relation("WorkCapsuleWorkItem")
   governedDataControlOperations DataControlOperation[] @relation("DataControlOperationGovernedCase")
   routingDecision               Json?
+  // Generic retry scheduling owned by the canonical queue. Domain mirrors keep
+  // domain/version state; they do not grow their own transport scheduler.
+  attemptCount                  Int                    @default(0)
+  nextAttemptAt                 DateTime?
+  lastAttemptAt                 DateTime?
+  lastError                     String?                @db.Text
   completedAt                   DateTime?
   createdAt                     DateTime               @default(now())
   updatedAt                     DateTime               @updatedAt
@@ -13695,6 +13712,7 @@ model WorkItem {
   @@index([teamId, status])
   @@index([parentItemId])
   @@index([sourceType, sourceId])
+  @@index([status, nextAttemptAt])
   @@index([urgency, status])
   @@index([dueAt])
 }
@@ -13886,6 +13904,49 @@ model QueueMetricSnapshot {
   @@unique([queueKey, period])
   @@index([queueKey, period])
   @@index([period])
+}
+
+enum BusinessMetricAvailability {
+  available
+  unavailable
+}
+
+enum PerformanceMetricUnit {
+  count
+  currency
+  percent
+  rate
+  duration
+}
+
+/// Tenant-scoped, definition-versioned historical metric read model. Source
+/// systems remain authoritative; this table exists so owner/manager reads never
+/// run historical aggregation on the operational hot path.
+model BusinessMetricRollup {
+  id                  String   @id @default(cuid())
+  organizationId      String
+  metricKey           String
+  periodStart         DateTime
+  periodEnd           DateTime
+  timezone            String
+  dimensionsHash      String
+  dimensions          Json
+  value               Decimal? @db.Decimal(20, 6)
+  unit                PerformanceMetricUnit
+  availability        BusinessMetricAvailability
+  unavailableReason   String?
+  definitionVersion   String
+  sourceWatermark     DateTime
+  sourceLineage       Json
+  computedAt          DateTime @default(now())
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  organization Organization @relation("BusinessMetricRollupOrganization", fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, metricKey, periodStart, periodEnd, dimensionsHash, definitionVersion], map: "business_metric_rollup_identity")
+  @@index([organizationId, periodStart, periodEnd])
+  @@index([organizationId, metricKey, sourceWatermark])
 }
 
 // ─── Prompt Templates ─────────────────────────────────────────────────────────
@@ -14930,6 +14991,7 @@ model FederationLink {
   // Stable pseudonymous installation identity learned from an authenticated
   // digest exchange. Used for route-loop checks; never derived from hostname.
   peerInstallationId    String?
+  peerDeviceId          String?
   localOrganizationId   String?
   // Trust state — derived from the approval/revoke/quarantine timestamps below.
   linkState             String    @default("pending")
@@ -14956,18 +15018,54 @@ model FederationLink {
   authorityBindingId    String?
   metadata              Json?
   enrolledAt            DateTime?
+  // Introductions exchange candidate coordinates only over an already-trusted
+  // link. Each direction is explicit; neither flag transfers trust.
+  offersIntroductions   Boolean   @default(false)
+  acceptsIntroductions  Boolean   @default(false)
   createdAt             DateTime  @default(now())
   updatedAt             DateTime  @updatedAt
 
-  principal       Principal                  @relation("FederationLinkIdentity", fields: [principalId], references: [id], onDelete: Cascade)
-  bootstrapTokens FederationBootstrapToken[] @relation("FederationBootstrapConsumer")
-  partnerAccount  PartnerAccount?
+  principal              Principal                         @relation("FederationLinkIdentity", fields: [principalId], references: [id], onDelete: Cascade)
+  bootstrapTokens        FederationBootstrapToken[]        @relation("FederationBootstrapConsumer")
+  partnerAccount         PartnerAccount?
+  introductionCandidates FederationIntroductionCandidate[] @relation("FederationIntroducerLink")
 
   @@index([linkState])
   @@index([role])
   @@index([tokenHash])
   @@index([peerOrganizationRef])
   @@index([peerInstallationId])
+  @@index([peerDeviceId])
+}
+
+// Durable review candidates learned from one trusted introducer. This is not a
+// trust table: pairing still runs through FederationPairingSession and the only
+// durable relationship authority is FederationLink.
+model FederationIntroductionCandidate {
+  id                     String    @id @default(cuid())
+  introductionId         String    @unique
+  introducerLinkId       String
+  installationId         String
+  deviceId               String
+  displayName            String
+  authorityUrl           String
+  relationshipHint       String
+  introducedByPath       String[]
+  hopCount               Int
+  firstSeenAt            DateTime  @default(now())
+  lastSeenAt             DateTime  @default(now())
+  expiresAt              DateTime
+  withdrawnAt            DateTime?
+  dismissedAt            DateTime?
+  pairedFederationLinkId String?
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
+
+  introducerLink FederationLink @relation("FederationIntroducerLink", fields: [introducerLinkId], references: [linkId], onDelete: Cascade)
+
+  @@unique([introducerLinkId, installationId])
+  @@index([expiresAt, withdrawnAt, dismissedAt])
+  @@index([installationId])
 }
 
 // Single-use invitation, mirrors BootstrapToken. The inviting peer issues a
@@ -15008,7 +15106,14 @@ model FederationPairingSession {
   status                String    @default("pending")
   relationshipPreset    String    @default("same-organization")
   projectionTemplateKey String    @default("same-organization")
+  offeredRole            String    @default("same-org-peer")
   matchingCode          String
+  // Versioned SAS commit/reveal transcript. Ephemeral private material and
+  // nonces are encrypted while the exchange is in flight and cleared after
+  // reveal; public identity/reveal facts remain for auditability.
+  sasState              Json?
+  sasConfirmedAtLocal   DateTime?
+  sasConfirmedAtPeer    DateTime?
   pairingSecretHash     String?   @unique
   pairingSecretEnc      String?
   peerAuthorityUrl      String

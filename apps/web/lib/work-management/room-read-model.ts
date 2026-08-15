@@ -46,6 +46,11 @@ export interface BuildWorkRoomViewInput {
   outcomeHealth?: WorkRoomOutcomeView["health"];
   receipts?: readonly ReceiptEnvelope[];
   sourceHealth?: WorkRoomView["projection"]["sourceHealth"];
+  /**
+   * The subject's value-stream + lifecycle structure, pre-resolved by the loader via
+   * `resolveWorkRoomStructure` (kept out of this pure build, like `sourceHealth`).
+   */
+  structure?: WorkRoomView["structure"];
 }
 
 function primarySourceRef(detail: WorkCaseDetail): WorkCaseSourceRef {
@@ -168,6 +173,7 @@ export function buildWorkRoomView(
     context,
     receipts: [...(input.receipts ?? [])],
     sourceRefs,
+    structure: input.structure ?? null,
     projection: {
       confidence: projectionConfidence(source, health, boundary.gaps),
       incompleteBoundary: boundary.gaps.length > 0,

@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const db = vi.hoisted(() => ({
+  userFindUnique: vi.fn(),
   departmentFindFirst: vi.fn(),
   departmentFindMany: vi.fn(),
   positionFindMany: vi.fn(),
@@ -13,9 +14,11 @@ const db = vi.hoisted(() => ({
   employmentEventCreate: vi.fn(),
   leavePolicyCreate: vi.fn(),
   transaction: vi.fn(),
+  syncEmployeePrincipal: vi.fn(),
 }));
 vi.mock("@dpf/db", () => ({
   prisma: {
+    user: { findUnique: (...a: unknown[]) => db.userFindUnique(...a) },
     department: {
       findFirst: (...a: unknown[]) => db.departmentFindFirst(...a),
       findMany: (...a: unknown[]) => db.departmentFindMany(...a),
@@ -36,6 +39,9 @@ vi.mock("@dpf/db", () => ({
     $transaction: (...a: unknown[]) => db.transaction(...a),
   },
 }));
+vi.mock("@/lib/identity/principal-linking", () => ({
+  syncEmployeePrincipal: (...a: unknown[]) => db.syncEmployeePrincipal(...a),
+}));
 
 import { workforcePack } from "./workforce-pack";
 import { isToolAllowedByGrants } from "@/lib/tak/agent-grants";
@@ -51,6 +57,9 @@ const EXPECTED_TOOLS = [
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // Default: principal sync resolves. Individual tests override to assert the
+  // call or to simulate a sync failure (BI-4150F4D6).
+  db.syncEmployeePrincipal.mockResolvedValue({ id: "prn-default" });
 });
 
 describe("workforce pack — registration", () => {
@@ -97,11 +106,47 @@ describe("workforce pack — handler behavior (delegation preserved)", () => {
     expect(res.data).toEqual({ positions: [{ id: "POS-1", title: "Engineer", jobFamily: "Tech" }] });
   });
 
-  it("query_employees reports the empty state when none match", async () => {
+  it("query_employees reports the empty state when none match (superuser: unrestricted)", async () => {
+    db.userFindUnique.mockResolvedValue({ isSuperuser: true });
     db.employeeFindMany.mockResolvedValue([]);
     const res = await workforcePack.handlers.query_employees({ search: "nobody" }, "u1");
     expect(res.success).toBe(true);
     expect(res.message).toContain("No employees found matching your criteria.");
+    // Superuser is unrestricted — no manager-scope tree read, just the one query.
+    expect(db.employeeFindMany).toHaveBeenCalledOnce();
+    const where = db.employeeFindMany.mock.calls[0][0].where;
+    expect(where.id).toBeUndefined(); // no row-scope filter for a superuser
+  });
+
+  it("query_employees row-scopes a non-superuser to self ∪ direct ∪ indirect reports (BI-HDLEMP-05)", async () => {
+    db.userFindUnique.mockResolvedValue({ isSuperuser: false });
+    // Org tree: mgr manages r1 and r2; r2 manages r3 (indirect for mgr).
+    db.employeeFindMany
+      .mockResolvedValueOnce([
+        { id: "mgr", userId: "u-mgr", managerEmployeeId: null },
+        { id: "r1", userId: "u-r1", managerEmployeeId: "mgr" },
+        { id: "r2", userId: "u-r2", managerEmployeeId: "mgr" },
+        { id: "r3", userId: "u-r3", managerEmployeeId: "r2" },
+        { id: "other", userId: "u-other", managerEmployeeId: null },
+      ])
+      .mockResolvedValueOnce([]);
+    await workforcePack.handlers.query_employees({}, "u-mgr");
+    // Second findMany is the actual employee query; it must carry the row filter.
+    const where = db.employeeFindMany.mock.calls[1][0].where;
+    expect([...where.id.in].sort()).toEqual(["mgr", "r1", "r2", "r3"].sort());
+    expect(where.id.in).not.toContain("other");
+  });
+
+  it("query_employees returns empty for a non-superuser who is neither employee nor manager, without querying", async () => {
+    db.userFindUnique.mockResolvedValue({ isSuperuser: false });
+    // The acting user backs no EmployeeProfile → no visible rows.
+    db.employeeFindMany.mockResolvedValueOnce([
+      { id: "a", userId: "u-a", managerEmployeeId: null },
+    ]);
+    const res = await workforcePack.handlers.query_employees({}, "u-nobody");
+    expect(res.success).toBe(true);
+    expect(res.data).toEqual({ employees: [] });
+    // Only the manager-scope tree read happened; the row query was short-circuited.
     expect(db.employeeFindMany).toHaveBeenCalledOnce();
   });
 
@@ -128,6 +173,35 @@ describe("workforce pack — handler behavior (delegation preserved)", () => {
     const arg = db.employeeCreate.mock.calls[0][0] as { data: { status: string; employmentEvents: { create: { actorUserId: string } } } };
     expect(arg.data.status).toBe("active");
     expect(arg.data.employmentEvents.create.actorUserId).toBe("actor-42");
+  });
+
+  // BI-4150F4D6: the MCP create_employee path must sync a human Principal, same
+  // as the governed People-screen path — otherwise MCP-onboarded people end up
+  // identity-incomplete.
+  it("create_employee syncs a human Principal for the new employee", async () => {
+    db.employeeFindFirst.mockResolvedValue(null);
+    db.employeeCreate.mockResolvedValue({ id: "emp-cuid-1", employeeId: "EMP-NEW", displayName: "Grace Hopper" });
+    db.syncEmployeePrincipal.mockResolvedValue({ id: "prn-1" });
+    const res = await workforcePack.handlers.create_employee(
+      { firstName: "Grace", lastName: "Hopper", status: "active" },
+      "actor-42",
+    );
+    expect(res.success).toBe(true);
+    expect(db.syncEmployeePrincipal).toHaveBeenCalledWith("emp-cuid-1");
+  });
+
+  // A principal-sync failure must not orphan the created employee — the create
+  // still succeeds and the backfill migration is the net.
+  it("create_employee still succeeds when principal sync fails", async () => {
+    db.employeeFindFirst.mockResolvedValue(null);
+    db.employeeCreate.mockResolvedValue({ id: "emp-cuid-2", employeeId: "EMP-NEW2", displayName: "Ada Lovelace" });
+    db.syncEmployeePrincipal.mockRejectedValue(new Error("boom"));
+    const res = await workforcePack.handlers.create_employee(
+      { firstName: "Ada", lastName: "Lovelace", status: "active" },
+      "actor-42",
+    );
+    expect(res.success).toBe(true);
+    expect(res.entityId).toBe("EMP-NEW2");
   });
 
   it("transition_employee_status errors when the employee is not found", async () => {

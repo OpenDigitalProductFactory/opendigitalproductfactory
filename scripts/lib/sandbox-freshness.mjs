@@ -294,6 +294,65 @@ export function shouldForceConvergenceAfterInstall(evaluation) {
   ].includes(failure.kind));
 }
 
+/**
+ * Decide whether the convergence ladder should escalate to a heavier repair
+ * (force install -> node_modules reset -> fresh store). Two independent signals:
+ *
+ *  1. the freshness re-check still shows tracked dependency drift
+ *     (shouldForceConvergenceAfterInstall), OR
+ *  2. the convergence install itself FAILED (non-zero exit). A frozen-lockfile
+ *     install that exits non-zero after a dependency-version bump is the
+ *     stale-bin / broken-postinstall signature (BI-675D9085): e.g. a
+ *     node_modules/.bin/prisma symlink left pointing at a removed 7.9.0 build
+ *     after a 7.9.0->7.9.1 bump. The critical-package links can ALL resolve to
+ *     the locked version (so signal 1 is silent and the re-check is green) while
+ *     the install can't complete — the exact gap that stranded the old ladder at
+ *     sandbox_drift and demanded a manual `rm -rf node_modules`. Escalating on a
+ *     failed install lets the clean reset self-heal it. This subsumes the
+ *     optional "MODULE_NOT_FOUND on a *.bin target" signature without parsing
+ *     installer stderr, which the inherited-stdio install does not capture.
+ */
+export function shouldEscalateConvergence(evaluation, lastAttempt) {
+  if (shouldForceConvergenceAfterInstall(evaluation)) return true;
+  return Boolean(lastAttempt) && lastAttempt.attempted === true && (lastAttempt.exitCode ?? 0) !== 0;
+}
+
+/**
+ * Parse the `packages:` list out of a pnpm-workspace.yaml. Returns the raw
+ * glob/literal entries (e.g. "apps/*", "packages/*", "services/adp"). Pure text
+ * parsing — no YAML dependency — matching the rest of this module. The preflight
+ * expands these against the filesystem to find each workspace package's
+ * node_modules for the clean-reset escalation (root + package node_modules).
+ */
+export function parseWorkspacePackageGlobs(workspaceYamlText) {
+  if (!workspaceYamlText) return [];
+  const lines = workspaceYamlText.split("\n");
+  const globs = [];
+  let inPackages = false;
+  for (const line of lines) {
+    if (/^packages:\s*$/.test(line)) {
+      inPackages = true;
+      continue;
+    }
+    if (!inPackages) continue;
+    // Blank lines and full-line comments are not the end of the block — a
+    // comment at column 0 between two entries must NOT drop the rest of the
+    // list (that would leave those packages' node_modules un-reset — a partial
+    // recurrence of the very drift this repairs).
+    if (/^\s*$/.test(line) || /^\s*#/.test(line)) continue;
+    // Any other non-indented line is a new top-level key: end of the block.
+    if (/^\S/.test(line)) break;
+    const entry = line.match(/^\s+-\s+(.+?)\s*$/);
+    if (!entry) continue;
+    let raw = entry[1].trim();
+    // Strip an inline trailing comment on an unquoted entry ("apps/* # note").
+    if (!/^['"]/.test(raw)) raw = raw.replace(/\s+#.*$/, "").trim();
+    const value = raw.replace(/^['"]|['"]$/g, "").trim();
+    if (value && !value.startsWith("!")) globs.push(value);
+  }
+  return globs;
+}
+
 /** Exit codes for the preflight CLI — deliberately distinct from a product build failure (1). */
 export const EXIT_GREEN = 0;
 export const EXIT_USAGE = 2;

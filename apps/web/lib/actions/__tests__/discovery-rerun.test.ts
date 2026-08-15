@@ -20,6 +20,7 @@ vi.mock("@dpf/db", () => ({
   prisma: mockPrisma,
   normalizeDiscoveredFacts: mockNormalize,
   persistBootstrapDiscoveryRun: mockPersistRun,
+  loadDiscoveryAttributionInputs: vi.fn(async () => ({})),
 }));
 
 vi.mock("@/lib/auth", () => ({
@@ -127,7 +128,11 @@ describe("rerunDiscoveryConnection", () => {
     mockPrisma.discoveryConnection.findUnique.mockResolvedValue(baseConnection);
     mockDecryptSecret.mockReturnValue("plain-api-key");
     mockBuildDeps.mockReturnValue({ fetchFn: vi.fn() });
-    mockCollectUnifi.mockResolvedValue({ items: [], relationships: [], warnings: [] });
+    mockCollectUnifi.mockResolvedValue({
+      items: [{ observedKey: "unifi:aa:bb:cc:dd:ee:ff", itemType: "router" }],
+      relationships: [],
+      warnings: [],
+    });
     mockNormalize.mockReturnValue({ entities: [], relationships: [] });
     mockPersistRun.mockResolvedValue({
       runId: "run-abc",
@@ -155,5 +160,47 @@ describe("rerunDiscoveryConnection", () => {
       expect.anything(),
       expect.objectContaining({ trigger: "manual_connection" }),
     );
+  });
+
+  it("uses a unique run key for every rerun while preserving the connection source", async () => {
+    mockAuth.mockResolvedValue(authorizedSession);
+    mockCan.mockReturnValue(true);
+    mockPrisma.discoveryConnection.findUnique.mockResolvedValue(baseConnection);
+    mockDecryptSecret.mockReturnValue("plain-api-key");
+    mockBuildDeps.mockReturnValue({ fetchFn: vi.fn() });
+    mockCollectUnifi.mockResolvedValue({
+      items: [{ observedKey: "unifi:aa:bb:cc:dd:ee:ff", itemType: "router" }],
+      relationships: [],
+      warnings: [],
+    });
+    mockNormalize.mockReturnValue({ entities: [], relationships: [] });
+    mockPersistRun.mockResolvedValue({
+      runId: "run-abc",
+      createdEntities: 0,
+      updatedEntities: 0,
+      staleEntities: 0,
+      createdRelationships: 0,
+      updatedRelationships: 0,
+      staleRelationships: 0,
+      createdIssues: 0,
+    });
+    mockPrisma.discoveryConnection.update.mockResolvedValue({ ...baseConnection });
+
+    await rerunDiscoveryConnection("conn-1");
+    await rerunDiscoveryConnection("conn-1");
+
+    const firstRunMeta = mockPersistRun.mock.calls[0]?.[2];
+    const secondRunMeta = mockPersistRun.mock.calls[1]?.[2];
+
+    expect(firstRunMeta).toMatchObject({
+      sourceSlug: baseConnection.connectionKey,
+      trigger: "manual_connection",
+    });
+    expect(secondRunMeta).toMatchObject({
+      sourceSlug: baseConnection.connectionKey,
+      trigger: "manual_connection",
+    });
+    expect(firstRunMeta.runKey).not.toBe(baseConnection.connectionKey);
+    expect(secondRunMeta.runKey).not.toBe(firstRunMeta.runKey);
   });
 });

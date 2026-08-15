@@ -60,6 +60,7 @@ export type MacClassification = {
  */
 const MODULE_VENDOR_PATTERNS: readonly { label: string; test: RegExp }[] = [
   { label: "Espressif", test: /espressif/i },
+  { label: "LG Innotek", test: /lg[\s-]?innotek/i },
   { label: "Sichuan AI-Link", test: /ai[\s-]?link|sichuan/i },
   { label: "FN-Link", test: /fn[\s-]?link/i },
   { label: "Tuya", test: /\btuya\b/i },

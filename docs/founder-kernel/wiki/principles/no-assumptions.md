@@ -5,7 +5,7 @@ status: published
 abstract: Ambiguous terms and requests must be resolved by inspecting the environment, not by matching against project context or prior knowledge.
 principleTier: commandment
 principleDirection: Inspect observable state before acting on any term or request that could refer to more than one thing.
-principleDimensionVector: {"schema_grounding": 0.9, "long_term_maintainability": 0.7, "speed_to_value": -0.2}
+principleDimensionVector: {"schema_grounding": 0.9, "long_term_maintainability": 0.7, "speed_to_value": -0.2, "evidence_confidence": 0.85, "evidence_density": 0.75}
 principleAppliesTo:
   - in_platform_coworker
   - external_coding_agent

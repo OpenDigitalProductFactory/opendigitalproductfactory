@@ -28,6 +28,10 @@ export const CONNECTOR_AUTH_KINDS = [
 export const CONNECTOR_CALLBACK_KINDS = ["none", "oauth", "webhook"] as const;
 
 const nonemptyIdentifier = z.string().trim().min(1);
+const capabilityIdentifier = nonemptyIdentifier.regex(
+  /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*(?:\.[a-z][a-z0-9]*(?:-[a-z0-9]+)*)+$/,
+  "Capability identifiers must use lowercase dot-separated namespaces",
+);
 
 const retryPolicySchema = z
   .object({
@@ -44,7 +48,7 @@ const retryPolicySchema = z
 const operationSchema = z
   .object({
     id: nonemptyIdentifier,
-    capability: nonemptyIdentifier,
+    capability: capabilityIdentifier,
     retry: retryPolicySchema,
   })
   .strict();
@@ -71,7 +75,7 @@ export const connectorDefinitionSchema = z
     schemaVersion: z.literal(1),
     key: nonemptyIdentifier,
     displayName: z.string().trim().min(1),
-    capabilities: z.array(nonemptyIdentifier).min(1),
+    capabilities: z.array(capabilityIdentifier).min(1),
     auth: z
       .object({ kind: z.enum(CONNECTOR_AUTH_KINDS) })
       .strict(),

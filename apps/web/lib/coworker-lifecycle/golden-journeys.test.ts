@@ -32,6 +32,13 @@ describe("golden journeys (EP-COWORKER-LIFECYCLE Phase 2)", () => {
     expect(journey?.prompt).toContain("Do not create, modify, or delete");
   });
 
+  it("certifies the Time-off Advisor on a read-only workforce fact", () => {
+    const [journey] = journeysForCoworker("time-off-advisor");
+    expect(journey?.kind).toBe("curated");
+    expect(journey?.prompt).toContain("query_employees");
+    expect(journey?.prompt).toContain("Do not create, modify, or delete");
+  });
+
   it("a coworker without curated journeys falls back to the derived probe", () => {
     const journeys = journeysForCoworker("dispatcher");
     expect(journeys).toEqual([derivedReadProbe("dispatcher")]);

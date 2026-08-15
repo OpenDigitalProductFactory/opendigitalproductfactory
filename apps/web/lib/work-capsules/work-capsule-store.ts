@@ -1,6 +1,5 @@
 import { randomUUID } from "node:crypto";
 import {
-  LEASE_TTL_MS,
   STATUS_OVERRIDE_TTL_MS,
   buildCapsuleBranchName,
   buildCapsuleSlug,
@@ -31,9 +30,20 @@ import { revalidatePortalContext } from "@/lib/portal-context/invalidation";
 import { publishRecordedWorkCapsuleActivity } from "@/lib/work-capsules/activity-events";
 import { admitRuntimeGuardedWork } from "@/lib/platform-runtime/work-admission";
 import { planCapsuleChangeImpact, type CapsuleChangeImpactContract } from "./change-impact-contract";
+import {
+  CapsuleBranchOccupiedError,
+  isExternalLeaseExecutor,
+  isReusableLiveCapsule,
+  isTerminalCapsuleStatus,
+  leaseUntil,
+  planAbandonedCapsuleResume,
+  TERMINAL_CAPSULE_STATUSES,
+  type CapsuleAdoptionInput,
+} from "./work-capsule-branch-identity";
 import type { CapsuleDb, WorkCapsuleActor } from "./work-capsule-store-types";
 
 export type { CapsuleDb, WorkCapsuleActor } from "./work-capsule-store-types";
+export { CapsuleBranchOccupiedError } from "./work-capsule-branch-identity";
 
 type CapsuleCreateInput = {
   title: string;
@@ -51,22 +61,6 @@ type CapsuleCreateInput = {
   // BI-B24F96D0: principal who commissioned the work (Requester), distinct from
   // the creating actor. Optional.
   requestedByPrincipalId?: string | null;
-};
-
-type CapsuleAdoptionInput = {
-  title: string;
-  objective: string;
-  repositoryFullName: string;
-  headBranch: string;
-  worktreePath: string;
-  baseBranch?: string | null;
-  baseSha?: string | null;
-  headSha?: string | null;
-  executorKind?: WorkCapsuleExecutorKind | null;
-  executorRef?: string | null;
-  backlogItemId?: string | null;
-  epicId?: string | null;
-  scope?: WorkCapsuleScopeInput | null;
 };
 
 type CapsuleEvidenceInput = {
@@ -94,20 +88,6 @@ type CapsuleWorkspacePlanInput = {
 
 function nextCapsuleId(): string {
   return `WC-${randomUUID().replace(/-/g, "").slice(0, 8).toUpperCase()}`;
-}
-
-function leaseUntil(now = new Date()): Date {
-  return new Date(now.getTime() + LEASE_TTL_MS);
-}
-
-function isExternalLeaseExecutor(executorKind: WorkCapsuleExecutorKind | null | undefined): boolean {
-  return (
-    executorKind === "codex-desktop" ||
-    executorKind === "claude-desktop" ||
-    executorKind === "grok-desktop" ||
-    executorKind === "antigravity-desktop" ||
-    executorKind === "human"
-  );
 }
 
 function isUniqueViolation(error: unknown): boolean {
@@ -276,14 +256,30 @@ export async function adoptWorktreeCapsule(args: {
   }
   const scope = normalizeWorkCapsuleScopeInput(args.input.scope);
 
+  // The schema deliberately owns one capsule identity per (repository, branch).
+  // Read that row regardless of lifecycle: an abandoned same-BI capsule is the
+  // durable identity to resume, while a foreign/terminal identity must refuse
+  // instead of falling through to an impossible duplicate create (BI-E363A524).
   const existing = await args.db.workCapsule.findFirst({
     where: {
       repositoryFullName: args.input.repositoryFullName,
       headBranch: args.input.headBranch,
-      archivedAt: null,
     },
+    orderBy: { updatedAt: "desc" },
   });
-  if (existing) {
+
+  const now = new Date();
+  const resumePlan = planAbandonedCapsuleResume({ existing, input: args.input, actor: args.actor, now });
+  if (resumePlan) {
+    return inTransaction(args.db, async (tx) => {
+      await admitCapsuleWork(tx, "work-capsule:external-adoption");
+      const resumed = await tx.workCapsule.update(resumePlan.update);
+      await recordActivity(tx, { ...resumePlan.activity, actor: args.actor });
+      return resumed;
+    });
+  }
+
+  if (existing && isReusableLiveCapsule(existing, args.input)) {
     // Late-bind (BI-7D20BFDF): a branch adopted before its BacklogItem was known
     // has a null backlogItemId. When a claim now supplies one, bind the existing
     // capsule instead of leaving the work orphaned — this is what lets a worktree
@@ -297,6 +293,9 @@ export async function adoptWorktreeCapsule(args: {
             ...(args.input.epicId && existing.epicId == null ? { epicId: args.input.epicId } : {}),
             ...(args.input.executorRef && existing.executorRef == null
               ? { executorRef: args.input.executorRef }
+              : {}),
+            ...(args.input.worktreePath && existing.worktreePath !== args.input.worktreePath
+              ? { worktreePath: args.input.worktreePath }
               : {}),
           },
         });
@@ -313,8 +312,10 @@ export async function adoptWorktreeCapsule(args: {
     }
     return existing;
   }
+  if (existing) {
+    throw new CapsuleBranchOccupiedError(existing);
+  }
 
-  const now = new Date();
   try {
     return await inTransaction(args.db, async (tx) => {
       await admitCapsuleWork(tx, "work-capsule:external-adoption");
@@ -366,10 +367,11 @@ export async function adoptWorktreeCapsule(args: {
         where: {
           repositoryFullName: args.input.repositoryFullName,
           headBranch: args.input.headBranch,
-          archivedAt: null,
         },
+        orderBy: { updatedAt: "desc" },
       });
-      if (winner) return winner;
+      if (winner && isReusableLiveCapsule(winner, args.input)) return winner;
+      if (winner) throw new CapsuleBranchOccupiedError(winner);
     }
     throw error;
   }
@@ -835,10 +837,6 @@ export class ScopeOverlapError extends Error {
   }
 }
 
-// A capsule in one of these statuses no longer holds its scope — its claims are
-// inert and never conflict with a fresh claim.
-const TERMINAL_CAPSULE_STATUSES: WorkCapsuleStatus[] = ["complete", "abandoned", "archived"];
-
 // `edit` is an exclusive intent: two `edit` claims on the same scope conflict, as
 // does an `edit` against a `read`. Two `read` claims coexist (non-exclusive).
 function intentsConflict(a: ScopeClaim["intent"], b: ScopeClaim["intent"]): boolean {
@@ -942,6 +940,16 @@ export async function claimWorkCapsuleScope(args: {
     where: { capsuleId: args.capsuleId },
   });
   if (!capsule) throw new Error(`Work Capsule ${args.capsuleId} not found`);
+
+  // BI-95E37EA1: never append scope claims to a terminal or foreign capsule.
+  // The abandoned-main false-success path used to land claims on an unrelated
+  // WC; refuse here so even a stale capsuleId cannot pollute its audit trail.
+  if (isTerminalCapsuleStatus(capsule.status) || capsule.archivedAt != null) {
+    throw new Error(
+      `Work Capsule ${args.capsuleId} is ${capsule.status ?? "terminal"} and cannot accept scope claims. ` +
+        "Claim a live capsule (or re-run claim_backlog_item_for_work to mint a fresh one).",
+    );
+  }
 
   // Capsule-first enforcement: refuse to claim scope already held by another
   // active capsule unless the caller explicitly forces it. This is the lock that

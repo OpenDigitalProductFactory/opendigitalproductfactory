@@ -51,6 +51,11 @@ export const PRINCIPLE_FINDING_KIND_OPTIONS: PrincipleFindingKindOption[] = [
 
   // ─── Warns (do not block) ───────────────────────────────────────────────
   {
+    value: "principle-sparse-vector",
+    label: "Sparse vector",
+    blocking: false,
+  },
+  {
     value: "principle-tier-weight-mismatch",
     label: "Tier-weight mismatch",
     blocking: false,

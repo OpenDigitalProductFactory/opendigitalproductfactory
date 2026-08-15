@@ -441,7 +441,13 @@ describe("createAutonomousWorkRun", () => {
     });
     expect(mcpTools.getAvailableTools).toHaveBeenCalledWith(
       { userId: "user-1", platformRole: null, isSuperuser: true },
-      { mode: "act", agentId: "inventory-specialist" },
+      {
+        mode: "act",
+        agentId: "inventory-specialist",
+        externalAccessEnabled: undefined,
+        unifiedMode: undefined,
+        additionalGrants: ["coworker_screen_read", "coworker_screen_drive"],
+      },
     );
   });
 
@@ -470,6 +476,29 @@ describe("createAutonomousWorkRun", () => {
         agentId: "inventory-specialist",
         threadId: "thread-1",
       }),
+    );
+  });
+
+  it("preserves development as a routing sensitivity through the unified loop", async () => {
+    const agentic = await import("@/lib/tak/agentic-loop");
+    vi.mocked(agentic.runAgenticLoop).mockResolvedValue({ content: "Done.", executedTools: [] } as never);
+
+    const { executeAutonomousAgenticLoop } = await import("./autonomous-work-run");
+
+    await executeAutonomousAgenticLoop({
+      systemPrompt: "You are helpful.",
+      chatHistory: [{ role: "user", content: "Implement the change." }],
+      sensitivity: "development",
+      tools: [],
+      toolsForProvider: [],
+      userId: "user-1",
+      routeContext: "/build",
+      agentId: "build-specialist",
+      threadId: "thread-1",
+    });
+
+    expect(agentic.runAgenticLoop).toHaveBeenCalledWith(
+      expect.objectContaining({ sensitivity: "development" }),
     );
   });
 

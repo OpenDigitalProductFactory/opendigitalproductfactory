@@ -92,6 +92,23 @@ describe("agentEventBus.subscribeSystem + broadcastSystem", () => {
     ub();
   });
 
+  it("isolates subscriber failures so later observers still receive the event", () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const failing = agentEventBus.subscribeSystem(() => {
+      throw new Error("broken observer");
+    });
+    const survivor = vi.fn();
+    const surviving = agentEventBus.subscribeSystem(survivor);
+
+    expect(() => agentEventBus.broadcastSystem(sampleSystemEvent)).not.toThrow();
+    expect(survivor).toHaveBeenCalledWith(sampleSystemEvent);
+    expect(consoleError).toHaveBeenCalledOnce();
+
+    failing();
+    surviving();
+    consoleError.mockRestore();
+  });
+
   it("ALSO fans out to per-thread subscribers (legacy compatibility)", () => {
     // Legacy SSE consumers subscribe to their own threadId and have no
     // knowledge of the system channel. broadcastSystem must reach them

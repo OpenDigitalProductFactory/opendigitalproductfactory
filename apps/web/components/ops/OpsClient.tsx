@@ -7,7 +7,7 @@ import { BacklogItemRow } from "./BacklogItemRow";
 import { EpicCard, type EpicSort } from "./EpicCard";
 import { EpicPanel } from "./EpicPanel";
 import { OperatorTriageBand } from "./OperatorTriageBand";
-import { summarizeBacklogStatuses, visibleUnderActiveOnly } from "./backlogVisibility";
+import { summarizeBacklogStatuses, visibleUnderActiveOnly } from "@/lib/backlog-visibility";
 import { FilterBar, type FacetDef } from "@/components/ui/report-kit";
 import { backlogItemOrigin, BACKLOG_ORIGIN_FILTERS } from "@/lib/ops/backlog-origin";
 import type {

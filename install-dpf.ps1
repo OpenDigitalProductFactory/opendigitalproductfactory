@@ -654,14 +654,14 @@ function Set-DPFEnvFileValue {
     Set-Content -Path $Path -Value $envText -Encoding UTF8 -NoNewline
 }
 
-function Invoke-DPFEdgeNodeBootstrap {
+function Invoke-DPFEdgeNodeConvergence {
     param([Parameter(Mandatory)][string]$InstallDir)
 
     $edgeModule = Resolve-DPFNativeEdgeModulePath -InstallDir $InstallDir
     . $edgeModule
     $edgeComposeArgs = Get-DPFComposeArgs -InstallDir $InstallDir -IncludeEdge:$false
 
-    Write-Action "Bootstrapping bundled Edge Node..."
+    Write-Action "Converging this installation's Edge Node..."
     $portalReady = $false
     for ($i = 0; $i -lt 60; $i++) {
         try {
@@ -680,30 +680,38 @@ function Invoke-DPFEdgeNodeBootstrap {
         $portalContainer = "dpf-portal-1"
     }
 
-    $edgeToken = $null
-    try {
-        $tokenOutput = docker exec $portalContainer sh -c 'cd /app/apps/web-src && /app/node_modules/.pnpm/node_modules/.bin/tsx scripts/issue-edge-bootstrap-token.ts --ttl-minutes 30 --auto-approve' 2>$null
-        if ($LASTEXITCODE -eq 0 -and $tokenOutput) {
-            $lines = @($tokenOutput) | ForEach-Object { $_.ToString().Trim() } | Where-Object { $_ -ne "" }
-            $candidate = if ($lines.Count -gt 0) { $lines[-1] } else { "" }
-            if ($candidate -match "^dpfboot_") {
-                $edgeToken = $candidate
+    $stateRoot = if ($env:DPF_STATE_DIR) { $env:DPF_STATE_DIR } else { Join-Path $env:USERPROFILE ".dpf" }
+    $existingEnrollment = Test-Path -LiteralPath (Join-Path $stateRoot "edge-node\state.json")
+    $edgeToken = ""
+    if (-not $existingEnrollment) {
+        try {
+            $tokenOutput = docker exec $portalContainer sh -c 'cd /app/apps/web-src && /app/node_modules/.pnpm/node_modules/.bin/tsx scripts/issue-edge-bootstrap-token.ts --ttl-minutes 30 --auto-approve' 2>$null
+            if ($LASTEXITCODE -eq 0 -and $tokenOutput) {
+                $lines = @($tokenOutput) | ForEach-Object { $_.ToString().Trim() } | Where-Object { $_ -ne "" }
+                $candidate = if ($lines.Count -gt 0) { $lines[-1] } else { "" }
+                if ($candidate -match "^dpfboot_") {
+                    $edgeToken = $candidate
+                }
             }
+        } catch {
+            $edgeToken = ""
         }
-    } catch {
-        $edgeToken = $null
+
+        if (-not $edgeToken) {
+            Write-Warn "Bootstrap token issuance failed. Skipping Edge Node enrollment wiring."
+            Write-Warn "Use the portal Edge Nodes page to issue a token if you need to enroll this node manually."
+            return $false
+        }
     }
 
-    if (-not $edgeToken) {
-        Write-Warn "Bootstrap token issuance failed. Skipping Edge Node enrollment wiring."
-        Write-Warn "Use the portal Edge Nodes page to issue a token if you need to enroll this node manually."
-        return $false
+    if ($edgeToken) {
+        $envPath = Join-Path $InstallDir ".env"
+        Set-DPFEnvFileValue -Path $envPath -Key "DPF_BOOTSTRAP_TOKEN" -Value $edgeToken
+        Set-DPFEnvFileValue -Path $envPath -Key "DPF_EDGE_NODE_NAME" -Value ([System.Net.Dns]::GetHostName())
+        Write-OK "Bootstrap token wired into .env (auto-approve)"
+    } else {
+        Write-OK "Existing Edge enrollment found; preserving its machine identity"
     }
-
-    $envPath = Join-Path $InstallDir ".env"
-    Set-DPFEnvFileValue -Path $envPath -Key "DPF_BOOTSTRAP_TOKEN" -Value $edgeToken
-    Set-DPFEnvFileValue -Path $envPath -Key "DPF_EDGE_NODE_NAME" -Value ([System.Net.Dns]::GetHostName())
-    Write-OK "Bootstrap token wired into .env (auto-approve)"
     if (Install-DPFNativeEdgeNode -InstallDir $InstallDir -BootstrapToken $edgeToken -Version $Version) {
         $legacyComposeArgs = Get-DPFComposeArgs -InstallDir $InstallDir -IncludeEdge:$true
         docker compose @legacyComposeArgs stop edge-node 2>&1 | Out-Null
@@ -858,45 +866,94 @@ if ((Test-StepDone "wsl2_partial") -and -not (Test-StepDone "wsl2")) {
     Save-Progress "wsl2"
 }
 
-# Cap WSL2's built-in crash-dump collector (Microsoft Learn: "Advanced settings
-# configuration in WSL", maxCrashDumpCount under [wsl2]). Left uncapped, every
-# ephemeral process that aborts inside a WSL-backed Docker container writes a
-# dump to %LOCALAPPDATA%\Temp\wsl-crashes with no automatic cleanup -- observed
-# reaching 60GB+ and filling the system drive on a dev box running many
-# parallel containerized builds. Runs on every install/reinstall pass (not
-# gated behind Test-StepDone) so it backfills existing installs whose
-# .wslconfig predates this fix, but never overwrites an operator's own
-# explicit choice for this key.
+# Born-bounded WSL2 ceilings (BI-4F3AB6B3) + crash-dump retention.
+# Microsoft Learn: "Advanced settings configuration in WSL" under [wsl2].
+# Runs on every install/reinstall pass (not gated behind Test-StepDone) so it
+# backfills existing installs, but never overwrites an operator's own explicit
+# choice for any key. Sizing mirrors scripts/check-compose-resource-budgets.mjs
+# sizeWslCeilings() / config/install-resource-budgets.json host.wsl policy.
 $wslConfigPath = Join-Path $env:USERPROFILE ".wslconfig"
 $crashDumpCap = 2
-$wslConfigChanged = $false
-if (Test-Path $wslConfigPath) {
-    $wslConfigLines = @(Get-Content -LiteralPath $wslConfigPath)
-    # NOTE: "-notmatch" against an array filters to non-matching elements (almost
-    # always truthy) rather than testing "no element matches" -- use a positive
-    # -match filter and check its Count instead.
-    if (@($wslConfigLines -match "^\s*maxCrashDumpCount\s*=").Count -eq 0) {
-        if (@($wslConfigLines -match "^\s*\[wsl2\]\s*$").Count -gt 0) {
-            # Insert right after the [wsl2] section header.
+$wslMemoryShare = 0.5
+$wslMinMemoryGb = 8
+$wslMaxMemoryGb = 32
+$wslLeaveOsHeadroomGb = 8
+$wslProcessorShare = 0.75
+$wslMinProcessors = 2
+$wslAutoMemoryReclaim = "gradual"
+
+$hostRamGb = [math]::Floor((Get-CimInstance Win32_ComputerSystem).TotalPhysicalMemory / 1GB)
+$hostCpus = (Get-CimInstance Win32_ComputerSystem).NumberOfLogicalProcessors
+if (-not $hostRamGb -or $hostRamGb -le 0) { $hostRamGb = 16 }
+if (-not $hostCpus -or $hostCpus -le 0) { $hostCpus = 4 }
+
+$shareGb = [math]::Floor($hostRamGb * $wslMemoryShare)
+$headroomCapped = [math]::Floor($hostRamGb - $wslLeaveOsHeadroomGb)
+$wslMemoryGb = [math]::Min([math]::Min($shareGb, $headroomCapped), $wslMaxMemoryGb)
+$wslMemoryGb = [math]::Max($wslMemoryGb, [math]::Min($wslMinMemoryGb, $headroomCapped))
+if ($wslMemoryGb -lt 1) { $wslMemoryGb = 1 }
+$wslProcessors = [math]::Floor($hostCpus * $wslProcessorShare)
+$wslProcessors = [math]::Max($wslMinProcessors, $wslProcessors)
+$wslProcessors = [math]::Min($hostCpus, $wslProcessors)
+
+# Keys we may insert when absent. Operator-authored values are never replaced.
+$wslDesiredKeys = [ordered]@{
+    "maxCrashDumpCount" = "$crashDumpCap"
+    "memory"            = "${wslMemoryGb}GB"
+    "processors"        = "$wslProcessors"
+    "autoMemoryReclaim" = $wslAutoMemoryReclaim
+}
+
+function Add-WslConfigKeysIfMissing {
+    param(
+        [string]$Path,
+        [System.Collections.Specialized.OrderedDictionary]$Desired
+    )
+    $changed = $false
+    $added = New-Object System.Collections.Generic.List[string]
+    if (Test-Path -LiteralPath $Path) {
+        $lines = @(Get-Content -LiteralPath $Path)
+    } else {
+        $lines = @()
+    }
+
+    foreach ($key in $Desired.Keys) {
+        # NOTE: "-notmatch" against an array filters elements; use Count on -match.
+        if (@($lines -match ("^\s*" + [regex]::Escape($key) + "\s*=")).Count -gt 0) {
+            continue
+        }
+        $entry = "$key=$($Desired[$key])"
+        if (@($lines -match "^\s*\[wsl2\]\s*$").Count -gt 0) {
             $newLines = New-Object System.Collections.Generic.List[string]
-            foreach ($line in $wslConfigLines) {
+            $inserted = $false
+            foreach ($line in $lines) {
                 $newLines.Add($line)
-                if ($line -match "^\s*\[wsl2\]\s*$") {
-                    $newLines.Add("maxCrashDumpCount=$crashDumpCap")
+                if (-not $inserted -and $line -match "^\s*\[wsl2\]\s*$") {
+                    $newLines.Add($entry)
+                    $inserted = $true
                 }
             }
-            Set-Content -LiteralPath $wslConfigPath -Value $newLines
+            $lines = @($newLines)
+        } elseif ($lines.Count -eq 0) {
+            $lines = @("[wsl2]", $entry)
         } else {
-            Add-Content -LiteralPath $wslConfigPath -Value @("", "[wsl2]", "maxCrashDumpCount=$crashDumpCap")
+            $lines = @($lines) + @("", "[wsl2]", $entry)
         }
-        $wslConfigChanged = $true
+        $added.Add($entry)
+        $changed = $true
     }
-} else {
-    Set-Content -LiteralPath $wslConfigPath -Value @("[wsl2]", "maxCrashDumpCount=$crashDumpCap")
-    $wslConfigChanged = $true
+
+    if ($changed) {
+        Set-Content -LiteralPath $Path -Value $lines
+    }
+    return @{ Changed = $changed; Added = $added }
 }
-if ($wslConfigChanged) {
-    Write-OK "Capped WSL crash-dump retention (maxCrashDumpCount=$crashDumpCap) in .wslconfig"
+
+$wslResult = Add-WslConfigKeysIfMissing -Path $wslConfigPath -Desired $wslDesiredKeys
+if ($wslResult.Changed) {
+    Write-OK ("Born-bounded WSL ceilings written to .wslconfig (host {0}GB RAM / {1} CPUs): {2}" -f $hostRamGb, $hostCpus, ($wslResult.Added -join ", "))
+    Write-Host "  Note: .wslconfig is inert until the next 'wsl --shutdown' (stops containers)." -ForegroundColor Yellow
+    Write-Host "  Sweep in-flight pregate/local-CI work before cycling WSL (BI-4F3AB6B3)." -ForegroundColor Yellow
 }
 
 # --- Step 3: Docker Desktop ---------------------------------------------------
@@ -1571,6 +1628,11 @@ if (-not (Test-StepDone "started")) {
     $stateLib = Join-Path $DPF_DIR "scripts\installer\lib\state.ps1"
     if (-not (Test-Path -LiteralPath $stateLib)) { throw "capability_state_helper_missing" }
     . $stateLib
+    if ($WithEdge) { $env:DPF_INCLUDE_EDGE = '1' }
+    elseif ($NoEdge) { $env:DPF_INCLUDE_EDGE = '0' }
+    $resolvedEdgeEnabled = Resolve-DpfEdgeEnabled -InstallDir $DPF_DIR
+    $env:DPF_INCLUDE_EDGE = if ($resolvedEdgeEnabled) { '1' } else { '0' }
+    Set-DpfStateValue -Key "edge" -Value @{ enabled = $resolvedEdgeEnabled; mode = $(if ($resolvedEdgeEnabled) { "local" } else { $null }) }
     $capabilityProjection = Resolve-DpfCapabilityComposeProfiles -InstallDir $DPF_DIR
     $env:COMPOSE_PROFILES = (@($capabilityProjection.composeProfiles) -join ',')
     $coreComposeArgs = Get-DPFComposeArgs -InstallDir $DPF_DIR -IncludeEdge:$false -IncludeRelease:($InstallMode -eq "consumer")
@@ -1800,25 +1862,21 @@ if (-not (Test-StepDone "mcp_seed")) {
     Write-OK "Already running"
 }
 
-# Edge Node deploy gate (opt-in; BI-72CFF89D / edge-topology design section 5).
-# A local Edge Node is bundled + auto-enrolled ONLY when -WithEdge is passed
-# (or a prior install already enabled it -- .env carries the bootstrap token);
-# -NoEdge forces it off. Default OFF. Map a network from a different machine
-# instead via Admin > Platform Development > Edge Nodes.
-$dpfEdgeOptIn = $false
-if ($WithEdge) {
-    $dpfEdgeOptIn = $true
-} elseif (-not $NoEdge) {
-    $dpfEnvPath = Join-Path $DPF_DIR ".env"
-    if ((Test-Path -LiteralPath $dpfEnvPath) -and (Select-String -Path $dpfEnvPath -Pattern '^DPF_BOOTSTRAP_TOKEN=dpf' -Quiet)) {
-        $dpfEdgeOptIn = $true
-    }
-}
-if ($dpfEdgeOptIn -and (-not (Test-StepDone "edge_bootstrap"))) {
-    if (Invoke-DPFEdgeNodeBootstrap -InstallDir $DPF_DIR) {
+# Edge is an explicit, persistent capability choice. Once enabled, every
+# governed install/repair converges the native service and verified binary;
+# the progress marker is evidence of a past success, not a skip condition.
+$edgeStateLib = Join-Path $DPF_DIR "scripts\installer\lib\state.ps1"
+if (-not (Test-Path -LiteralPath $edgeStateLib)) { throw "capability_state_helper_missing" }
+. $edgeStateLib
+if ($WithEdge) { $env:DPF_INCLUDE_EDGE = '1' }
+elseif ($NoEdge) { $env:DPF_INCLUDE_EDGE = '0' }
+$dpfEdgeOptIn = Resolve-DpfEdgeEnabled -InstallDir $DPF_DIR
+Set-DpfStateValue -Key "edge" -Value @{ enabled = $dpfEdgeOptIn; mode = $(if ($dpfEdgeOptIn) { "local" } else { $null }) }
+if ($dpfEdgeOptIn) {
+    if (Invoke-DPFEdgeNodeConvergence -InstallDir $DPF_DIR) {
         Save-Progress "edge_bootstrap"
     } else {
-        Write-Warn "Bundled Edge Node bootstrap did not complete. The portal remains usable."
+        Write-Warn "Bundled Edge Node convergence did not complete. The portal remains usable."
     }
 } elseif (-not $dpfEdgeOptIn) {
     Write-OK "Edge Node not bundled (opt-in). Re-run with -WithEdge to add a local node, or add a node on another machine from Admin > Platform Development > Edge Nodes."

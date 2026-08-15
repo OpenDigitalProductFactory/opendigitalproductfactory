@@ -27,6 +27,7 @@ import {
 
 import type { CollectorOutput } from "./discovery-types";
 import { normalizeDiscoveredFacts } from "./discovery-normalize";
+import { loadDiscoveryAttributionInputs } from "./discovery-attribution-inputs";
 import { resolveDiscoveryScopeFromIds } from "./discovery-scope";
 
 export type SubmittedDiscoveryRunInput = {
@@ -69,10 +70,21 @@ export async function persistSubmittedDiscoveryRun(
     customerSiteId: input.customerSiteId,
   });
 
+  // Load the taxonomy tree + active fingerprint rules so a device is identified
+  // + placed the same way it would be on the bootstrap path. Without this, every
+  // edge-submitted ARP host fell through to the coarse `host -> /servers` rule
+  // with no resolved identity (BI-BAF38ED3). `db` is the real prisma client at
+  // runtime (the edge route passes `prisma`); loadDiscoveryAttributionInputs
+  // degrades to no-op inputs for a client that cannot answer the queries.
+  const attributionInputs = await loadDiscoveryAttributionInputs(db);
+
   // Normalize the submitted CollectorOutput. The same code path the
   // bootstrap collectors feed; the agent's job is to emit a valid
   // CollectorOutput, not to pre-normalize.
-  const normalized = normalizeDiscoveredFacts(input.submittedOutput, { discoveryScope });
+  const normalized = normalizeDiscoveredFacts(input.submittedOutput, {
+    discoveryScope,
+    ...attributionInputs,
+  });
 
   // Source slug encodes "this came from edge-node X" so admins can
   // filter discovered items by submission origin without joining

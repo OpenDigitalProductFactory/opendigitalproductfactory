@@ -117,7 +117,7 @@ describe("formatOrgContextInstructions (BI-HDLEMP-02)", () => {
     expect(formatOrgContextInstructions(BASE, null)).toBe(BASE);
   });
 
-  it("renders mission, archetype, locale, doctrine, and the decisionDomain directive", async () => {
+  it("renders mission, archetype, locale, doctrine, and the decision-routing directive", async () => {
     const out = formatOrgContextInstructions(BASE, await bundleFor());
     expect(out.startsWith(BASE)).toBe(true);
     expect(out).toContain("Acme Clinic");
@@ -126,9 +126,12 @@ describe("formatOrgContextInstructions (BI-HDLEMP-02)", () => {
     expect(out).toContain("es-MX");
     expect(out).toContain("MXN");
     expect(out).toContain("MX");
-    // The directive that activates the BI-HDLEMP-01 routing engine.
-    expect(out).toContain('decisionDomain="org-business"');
-    expect(out).toContain('decisionDomain="platform-development"');
+    // BI-HDLEMP-07: the directive names the working gates — business decisions to
+    // evaluate_org_business_decision (reaches WWWD), platform to principle_decide.
+    expect(out).toContain("evaluate_org_business_decision");
+    expect(out).toContain("principle_decide");
+    // And must NOT reference the decisionDomain param principle_decide ignores.
+    expect(out).not.toContain("decisionDomain");
   });
 
   it("keeps the model-facing text provenance-free (no BI/Phase/paths)", async () => {

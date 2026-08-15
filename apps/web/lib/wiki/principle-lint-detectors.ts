@@ -230,6 +230,55 @@ export function detectPrincipleMissingVector(input: {
   return findings;
 }
 
+// ─── 4b. principle-sparse-vector (BI-6006E35D) ──────────────────────────────
+
+/** Commandments need enough independent axes to discriminate (rank, not count). */
+export const COMMANDMENT_MIN_VECTOR_KEYS = 4;
+/** Core principles recommended floor for structured discrimination. */
+export const CORE_MIN_VECTOR_KEYS = 3;
+
+/**
+ * Sparse dimension vectors collapse the decision space onto a few axes.
+ * Warn when a commandment or core principle declares a non-empty vector
+ * with fewer than the floor of non-zero keys (BI-6006E35D / MCDA rank).
+ */
+export function detectPrincipleSparseVector(input: {
+  pages: LintPrincipleWikiPage[];
+}): LintFinding[] {
+  const findings: LintFinding[] = [];
+  for (const page of principlePages(input.pages)) {
+    const v = page.principleDimensionVector;
+    if (v === null) continue;
+    const keyCount = Object.keys(v).length;
+    if (keyCount === 0) continue; // missing-vector detector owns empty
+
+    if (page.principleTier === "commandment" && keyCount < COMMANDMENT_MIN_VECTOR_KEYS) {
+      findings.push(
+        baseFinding(page, "principle-sparse-vector", "warn", false, {
+          tier: page.principleTier,
+          keyCount,
+          minKeys: COMMANDMENT_MIN_VECTOR_KEYS,
+          message:
+            `Commandment vector has only ${keyCount} axis key(s); recommend ≥${COMMANDMENT_MIN_VECTOR_KEYS} ` +
+            "so structured scoring can discriminate options (BI-6006E35D).",
+        }),
+      );
+    } else if (page.principleTier === "core" && keyCount < CORE_MIN_VECTOR_KEYS) {
+      findings.push(
+        baseFinding(page, "principle-sparse-vector", "warn", false, {
+          tier: page.principleTier,
+          keyCount,
+          minKeys: CORE_MIN_VECTOR_KEYS,
+          message:
+            `Core principle vector has only ${keyCount} axis key(s); recommend ≥${CORE_MIN_VECTOR_KEYS} ` +
+            "for structured discrimination (BI-6006E35D).",
+        }),
+      );
+    }
+  }
+  return findings;
+}
+
 // ─── 5. principle-vector-dimension-mismatch ─────────────────────────────────
 
 /**
@@ -368,6 +417,7 @@ export function runPrincipleDetectors(input: {
     ...detectPrincipleMissingAppliesTo(input),
     ...detectPrincipleMissingDirection(input),
     ...detectPrincipleMissingVector(input),
+    ...detectPrincipleSparseVector(input),
     ...detectPrincipleVectorDimensionMismatch(input),
     ...detectPrincipleUnknownDimension(input),
     ...detectPrincipleTierWeightMismatch(input),

@@ -108,8 +108,8 @@ When adding a skill to this pack:
 
 The `.claude-plugin/plugin.json` manifest turns this directory into an installable Claude Code plugin. The `.codex-plugin/plugin.json` manifest exposes the same skills package to Codex. Claude auto-loads `hooks/hooks.json`; Grok and Antigravity declare it in their manifests. Codex's current plugin manifest schema does not accept a `hooks` field, so the dependency-free updater installs the same governance guards through `~/.codex/hooks.json`. MCP wiring is likewise converged by the updater per client rather than declared in the Codex manifest:
 
-- `claude.mcp.json` — Claude Code MCP descriptor using `${DPF_MCP_URL:-http://127.0.0.1:3000/api/mcp/v1}` and `${DPF_MCP_BEARER_TOKEN:-}`.
-- `codex.mcp.json` — Codex MCP descriptor using local `http://127.0.0.1:3000/api/mcp/v1` plus `bearer_token_env_var = "DPF_MCP_BEARER_TOKEN"`.
+- `claude.mcp.json` — Claude Code MCP descriptor using the explicit lazy-host default `${DPF_MCP_URL:-http://127.0.0.1:3000/api/mcp/v1?tier=full}` and `${DPF_MCP_BEARER_TOKEN:-}`.
+- `codex.mcp.json` — Codex MCP descriptor using local `http://127.0.0.1:3000/api/mcp/v1?tier=full` plus `bearer_token_env_var = "DPF_MCP_BEARER_TOKEN"`. `full` populates Codex's programmatic registry; Codex still attaches only task-relevant tools to the model.
 - `grok.mcp.json` — Grok MCP descriptor (TOML-compatible) using the same `DPF_MCP_BEARER_TOKEN` env-var pattern. Config location is platform-specific:
   - macOS/Linux: `~/.grok/config.toml` (or `<project>/.grok/config.toml`)
   - Windows: `%USERPROFILE%\.grok\config.toml` (or `%APPDATA%\grok\config.toml` — confirm with the Grok CLI on your system)

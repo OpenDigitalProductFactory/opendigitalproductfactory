@@ -74,6 +74,25 @@ export function SubnetGroupedInventoryPanel({
         </div>
       </div>
 
+      {groups.dpfInstance.present && (
+        <div className="mt-3 flex items-center justify-between rounded-lg border border-white/10 bg-[var(--dpf-surface-2)] px-3 py-2">
+          <div className="flex items-center gap-2">
+            <span aria-hidden className="text-base">📦</span>
+            <div>
+              <p className="text-sm font-medium text-[var(--dpf-text)]">This DPF instance</p>
+              <p className="text-[11px] text-[var(--dpf-muted)]">
+                {groups.dpfInstance.entityCount} internal components contained
+                {groups.dpfInstance.containerCount > 0 && ` · ${groups.dpfInstance.containerCount} containers`}
+                {groups.dpfInstance.hostCount > 0 && ` · ${groups.dpfInstance.hostCount} hosts`}
+              </p>
+            </div>
+          </div>
+          <span className="rounded-full bg-[var(--dpf-surface-1)] px-2 py-0.5 text-[10px] uppercase tracking-[0.1em] text-[var(--dpf-muted)]">
+            Platform internal
+          </span>
+        </div>
+      )}
+
       <div className="mt-4 space-y-2">
         {visibleSubnets.map((group) => (
           <SubnetSection

@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   runIdentityInferenceFallback,
   demoteHumanContradictedShadowRules,
+  diagnoseIdentityInference,
   identityKeyForProposal,
   type IdentityInferenceClient,
   type IdentityInferenceFn,
@@ -62,6 +63,7 @@ function makeDb(seed: {
           .slice(0, take ?? entities.length)
           .map((e) => ({
             id: e.id,
+            entityKey: e.entityKey,
             name: e.name,
             entityType: e.entityType,
             manufacturer: e.manufacturer,
@@ -170,6 +172,7 @@ function makeDb(seed: {
 function entity(id: string, over: Partial<EntityRow> = {}): EntityRow {
   return {
     id,
+    entityKey: over.entityKey ?? `entity:${id}`,
     name: over.name ?? `entity-${id}`,
     entityType: over.entityType ?? "application",
     manufacturer: over.manufacturer ?? null,
@@ -264,7 +267,68 @@ describe("runIdentityInferenceFallback — shadow window", () => {
   });
 });
 
-// ─── auto-apply at >= 0.97 ───────────────────────────────────────────────────
+// ─── calibrated default: a correct cheap-model identification reaches the estate ──
+
+describe("runIdentityInferenceFallback — calibrated auto-apply default", () => {
+  it("auto-applies a 0.95 identification under the default gate (regression: cheap-model band)", async () => {
+    // The live failure: a local model correctly identified Whirlpool/Nest/Ubiquiti
+    // devices at 0.91-0.96, and the old 0.97 gate discarded 100% of them. The
+    // calibrated 0.90 default must apply them.
+    const { db, entities } = makeDb({ entities: [entity("e1")] });
+    const result = await runIdentityInferenceFallback(
+      db,
+      inferAll(() => ({ manufacturer: "Whirlpool", product: "Connected Appliance", confidence: 0.95 })),
+    );
+    expect(result.autoApplied).toBe(1);
+    expect(entities[0].catalogIdentityId).not.toBeNull();
+    expect(entities[0].identityStatus).toBe("ai_resolved");
+  });
+
+  it("still withholds a genuinely low-confidence (0.85) identification", async () => {
+    const { db, entities } = makeDb({ entities: [entity("e1")] });
+    const result = await runIdentityInferenceFallback(
+      db,
+      inferAll(() => ({ manufacturer: "Acme", product: "Mystery", confidence: 0.85 })),
+    );
+    expect(result.autoApplied).toBe(0);
+    expect(entities[0].catalogIdentityId).toBeNull();
+  });
+
+  it("skips DPF-internal (docker-origin) candidates so budget targets real estate", async () => {
+    const { db } = makeDb({
+      entities: [
+        entity("c1", { entityKey: "container:bd02d3f03235", name: "bd02d3f03235" }),
+        entity("h1", { entityKey: "organization:internal:host:arp:88E712000091", name: "Whirlpool 192.168.0.91" }),
+      ],
+    });
+    const result = await runIdentityInferenceFallback(
+      db,
+      inferAll(() => ({ manufacturer: "X", product: "Y", confidence: 0.95 })),
+    );
+    expect(result.dpfInternalSkipped).toBe(1);
+    // Only the real device was inferred; the container was never sent to the model.
+    expect(result.entitiesInferred).toBe(1);
+  });
+});
+
+describe("diagnoseIdentityInference", () => {
+  it("fires when the run resolved many but applied almost none (gate too high)", () => {
+    const d = diagnoseIdentityInference({ aiResolutionsLogged: 20, autoApplied: 1 }, 0.97);
+    expect(d).not.toBeNull();
+    expect(d?.code).toBe("auto_apply_gate_starving_identifications");
+    expect(d?.message).toContain("0.97");
+  });
+
+  it("stays silent on a healthy run (most identifications applied)", () => {
+    expect(diagnoseIdentityInference({ aiResolutionsLogged: 20, autoApplied: 18 }, 0.9)).toBeNull();
+  });
+
+  it("stays silent when there is too little signal to judge", () => {
+    expect(diagnoseIdentityInference({ aiResolutionsLogged: 2, autoApplied: 0 }, 0.97)).toBeNull();
+  });
+});
+
+// ─── auto-apply at high confidence ───────────────────────────────────────────
 
 describe("runIdentityInferenceFallback — auto-apply", () => {
   it("writes catalogIdentityId + identityStatus at confidence >= 0.97", async () => {

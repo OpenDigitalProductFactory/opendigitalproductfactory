@@ -28,6 +28,31 @@ private config. See
 [Customer 0 Pre-Install Readiness](customer-zero-preinstall-readiness.md) for a
 worked example of a doc written this way.
 
+### Approved placeholders (write these from the first draft)
+
+Reach for one of these from the first draft — never the real name — so a dogfood
+or operator spec is genericized *before* it is ever staged:
+
+| Instead of the real… | Write |
+| --- | --- |
+| operator / customer-0 organization name | **`operator`**, **`customer 0`**, or **`the operator's organization`** |
+| owner / founder person name | **`operator/owner`** or **`the owner`** |
+| this specific install | **`this operator install`** or **`your install`** |
+| the publishing legal entity | **`the publishing entity`** |
+
+These placeholders read the same on every install and never trip the guard, so a
+spec written with them is portable OSS documentation by construction.
+
+### Caught at commit time, not just at CI
+
+The same `check-no-private-identity` guard also runs as a **pre-commit tripwire**
+against your **staged** files (`.githooks/pre-commit`, `--staged` mode). A new
+protected token is rejected at `git commit` — naming the file *and* the token —
+so you fix it immediately instead of discovering it after a full green CI run and
+a late scrub commit. The staged tripwire respects the same baseline (legitimate
+audited occurrences never block), and the required CI gate remains the
+authoritative backstop. Emergency bypass: `DPF_SKIP_PRIVATE_IDENTITY_SCAN=1`.
+
 ## How it is enforced
 
 Two scanners run on every PR; they cover different risks and have different
@@ -36,7 +61,7 @@ teeth:
 | Scanner | Catches | Runs at | Blocks merge? |
 | --- | --- | --- | --- |
 | gitleaks (`secrets-scan.yml`) | secret-**shaped** content — keys, tokens, credentials | pre-commit + CI | No — advisory only |
-| **check-no-private-identity** (Repo Guard Loop) | protected-identity **names/tokens** | CI (required) | **Yes** |
+| **check-no-private-identity** (Repo Guard Loop) | protected-identity **names/tokens** | **pre-commit (staged tripwire) + CI (required)** | **Yes** (at CI) |
 
 An organization *name* is not secret-shaped, so gitleaks does not catch it — that
 is the gap that let a real customer identity into a docs PR once. Because the

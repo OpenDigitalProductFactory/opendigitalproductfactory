@@ -11,6 +11,9 @@ import {
   detectPrincipleMissingAppliesTo,
   detectPrincipleMissingDirection,
   detectPrincipleMissingVector,
+  detectPrincipleSparseVector,
+  COMMANDMENT_MIN_VECTOR_KEYS,
+  CORE_MIN_VECTOR_KEYS,
   detectPrincipleVectorDimensionMismatch,
   detectPrincipleUnknownDimension,
   detectPrincipleTierWeightMismatch,
@@ -230,6 +233,83 @@ describe("detectPrincipleMissingVector", () => {
       ],
     });
     expect(findings).toEqual([]);
+  });
+});
+
+describe("detectPrincipleSparseVector (BI-6006E35D densify floors)", () => {
+  it("uses commandment floor ≥4 and core floor ≥3", () => {
+    expect(COMMANDMENT_MIN_VECTOR_KEYS).toBe(4);
+    expect(CORE_MIN_VECTOR_KEYS).toBe(3);
+  });
+
+  it("warns when a commandment has a non-empty vector below the floor", () => {
+    const findings = detectPrincipleSparseVector({
+      pages: [
+        makePrinciplePage({
+          principleTier: "commandment",
+          principleDimensionVector: {
+            long_term_maintainability: 1.0,
+            schema_grounding: 0.5,
+            blast_radius: -0.3,
+          },
+        }),
+      ],
+    });
+    expect(findings).toHaveLength(1);
+    expect(findings[0].findingKind).toBe("principle-sparse-vector");
+    expect(findings[0].severity).toBe("warn");
+    expect(findings[0].detail).toMatchObject({
+      blocksPublish: false,
+      keyCount: 3,
+      minKeys: 4,
+    });
+  });
+
+  it("does not warn when a commandment meets the floor", () => {
+    const findings = detectPrincipleSparseVector({
+      pages: [
+        makePrinciplePage({
+          principleTier: "commandment",
+          principleDimensionVector: {
+            long_term_maintainability: 1.0,
+            schema_grounding: 0.5,
+            blast_radius: -0.3,
+            evidence_density: 0.4,
+          },
+        }),
+      ],
+    });
+    expect(findings).toEqual([]);
+  });
+
+  it("warns core principles below three keys but not at three", () => {
+    const thin = detectPrincipleSparseVector({
+      pages: [
+        makePrinciplePage({
+          principleTier: "core",
+          principleDimensionVector: {
+            cost_efficiency: 0.7,
+            reusability: 0.4,
+          },
+        }),
+      ],
+    });
+    expect(thin).toHaveLength(1);
+    expect(thin[0].detail).toMatchObject({ keyCount: 2, minKeys: 3 });
+
+    const ok = detectPrincipleSparseVector({
+      pages: [
+        makePrinciplePage({
+          principleTier: "core",
+          principleDimensionVector: {
+            cost_efficiency: 0.7,
+            reusability: 0.4,
+            evidence_density: 0.5,
+          },
+        }),
+      ],
+    });
+    expect(ok).toEqual([]);
   });
 });
 

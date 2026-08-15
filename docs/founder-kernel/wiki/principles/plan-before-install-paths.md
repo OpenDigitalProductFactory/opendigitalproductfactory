@@ -5,7 +5,7 @@ status: published
 abstract: A symptom on one install is usually a defect for every install. Use writing-plans for anything touching setup, seeds, or shared templates.
 principleTier: contextual
 principleDirection: Plan before editing install / seed / template paths; the change ripples across every install.
-principleDimensionVector: {"blast_radius": -0.7, "long_term_maintainability": 0.4, "governance_compliance": 0.3}
+principleDimensionVector: {"blast_radius": -0.7, "long_term_maintainability": 0.4, "governance_compliance": 0.3, "business_disruption": -0.65, "reversibility": 0.45}
 principleAppliesTo:
   - in_platform_coworker
   - external_coding_agent

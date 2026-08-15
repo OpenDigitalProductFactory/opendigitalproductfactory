@@ -121,7 +121,7 @@ export type NormalizeDiscoveryOptions = {
   fingerprintAutoApplyThreshold?: number;
 };
 
-const DEFAULT_FINGERPRINT_AUTO_APPLY = 0.9;
+export const DEFAULT_FINGERPRINT_AUTO_APPLY = 0.9;
 
 /**
  * Layer-0 fingerprint attribution: if the item's day-one signals confidently

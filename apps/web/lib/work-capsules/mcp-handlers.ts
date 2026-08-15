@@ -1,4 +1,5 @@
 import { prisma } from "@dpf/db";
+import { ensureCapsuleWorkItemAnchorNonFatal, ensureCapsuleWorkItemAnchorWithPrisma } from "@/lib/work-capsules/capsule-workitem-anchor.server";
 import { computeChangeImpactContract } from "@/lib/integrate/gate-context-bridge";
 import type { ToolResult } from "@/lib/mcp-tools";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
@@ -46,7 +47,7 @@ import {
 } from "./work-capsule-store";
 import { listLocalBranches } from "./git-scanner";
 import { providerToExecutorKind, ensureExternalSessionCapsule } from "./external-session-capture";
-
+import { branchOccupiedResult, invalidScopeResult } from "./mcp-result-errors";
 type ToolContext = {
   routeContext?: string;
   agentId?: string;
@@ -112,18 +113,9 @@ function parseScopeInput(params: Record<string, unknown>): WorkCapsuleScopeInput
   };
 }
 
-function invalidScopeResult(error: unknown): ToolResult {
-  return {
-    success: false,
-    error: "invalid_scope",
-    message: error instanceof Error ? error.message : "Invalid Work Capsule scope metadata.",
-  };
-}
-
 function workCapsuleDb(): CapsuleDb {
   return prisma as unknown as CapsuleDb;
 }
-
 async function renewLeaseAfterCapsuleWrite(capsuleId: string, currentActor: WorkCapsuleActor) {
   return heartbeatWorkCapsule({
     db: workCapsuleDb(),
@@ -300,23 +292,30 @@ export async function adoptWorktreeTool(
     return invalidScopeResult(error);
   }
 
-  const capsule = await adoptWorktreeCapsule({
-    db: workCapsuleDb(),
-    input: {
-      title,
-      objective,
-      repositoryFullName,
-      headBranch,
-      worktreePath,
-      baseBranch: stringParam(params, "baseBranch") ?? null,
-      baseSha: stringParam(params, "baseSha") ?? null,
-      headSha: stringParam(params, "headSha") ?? null,
-      executorKind: validatedExecutorKind,
-      scope: parseScopeInput(params),
-    },
-    actor: await actor(userId, context),
-  });
-
+  let capsule;
+  try {
+    capsule = await adoptWorktreeCapsule({
+      db: workCapsuleDb(),
+      input: {
+        title,
+        objective,
+        repositoryFullName,
+        headBranch,
+        worktreePath,
+        baseBranch: stringParam(params, "baseBranch") ?? null,
+        baseSha: stringParam(params, "baseSha") ?? null,
+        headSha: stringParam(params, "headSha") ?? null,
+        executorKind: validatedExecutorKind,
+        scope: parseScopeInput(params),
+      },
+      actor: await actor(userId, context),
+    });
+  } catch (error) {
+    const occupied = branchOccupiedResult(error);
+    if (occupied) return occupied;
+    throw error;
+  }
+  await ensureCapsuleWorkItemAnchorNonFatal(capsule, "adopted");
   return {
     success: true,
     entityId: capsule.capsuleId,
@@ -366,6 +365,23 @@ export async function claimBacklogItemForWorkTool(
       actor: await actor(userId, context),
     });
 
+    // EP-WORK-CONVERGENCE (BI-650994D7): anchor the capsule to the single canonical
+    // WorkItem for its backlog item, NON-FATALLY — the claim stands even if this fails,
+    // so capsule and case never split into two rows for one job.
+    try {
+      await ensureCapsuleWorkItemAnchorWithPrisma({
+        capsuleId: result.capsuleId,
+        backlogItemId: result.backlogItemId,
+        title: `Work on ${result.backlogItemId}`,
+      });
+    } catch (anchorError) {
+      console.warn(
+        `[work-convergence] WorkItem anchor skipped for ${result.capsuleId}: ${
+          anchorError instanceof Error ? anchorError.message : "unknown"
+        }`,
+      );
+    }
+
     const base = `Bound ${result.backlogItemId} to ${result.headBranch} (${result.capsuleId}).`;
     let message: string;
     if (result.conflict) {
@@ -395,6 +411,8 @@ export async function claimBacklogItemForWorkTool(
       data: result,
     };
   } catch (error) {
+    const occupied = branchOccupiedResult(error);
+    if (occupied) return occupied;
     const detail = error instanceof Error ? error.message : "Unknown failure";
     if (/not found/i.test(detail)) {
       return { success: false, error: "not_found", message: detail };
@@ -503,34 +521,66 @@ export async function releaseCapsuleScopeTool(
   context: ToolContext,
 ): Promise<ToolResult> {
   const capsuleId = stringParam(params, "capsuleId");
+  // BI-MCP-EFF-6EBA2407: agents passed a single claim object or empty array and
+  // looped on generic invalid_input — spell the contract and do not invite retry.
+  if (!Array.isArray(params.claims)) {
+    return {
+      success: false,
+      error: "invalid_input",
+      message:
+        "release_capsule_scope requires claims as a non-empty array of {kind, value}. " +
+        "Example: { capsuleId: \"WC-…\", claims: [{ kind: \"path\", value: \"apps/web/lib/foo.ts\" }] }. " +
+        "Do NOT retry the same malformed payload (retryable: false).",
+      data: { retryable: false },
+    };
+  }
   const claims = parseReleaseInputs(params);
   if (!capsuleId || !claims) {
     return {
       success: false,
       error: "invalid_input",
-      message: "capsuleId and at least one valid scope claim release are required.",
+      message:
+        "capsuleId (WC-*) and at least one valid scope claim release are required " +
+        "(each claim needs kind in path|module|package|route|skill|prompt and a non-empty value). " +
+        "Do NOT retry without fixing the payload (retryable: false).",
+      data: { retryable: false },
     };
   }
 
   const db = workCapsuleDb();
-  const renewedCapsule = await runAutoRenewedCapsuleWrite({
-    capsuleId,
-    userId,
-    context,
-    write: (currentActor) => releaseWorkCapsuleScope({
-      db,
+  try {
+    const renewedCapsule = await runAutoRenewedCapsuleWrite({
       capsuleId,
-      claims,
-      actor: currentActor,
-    }),
-  });
+      userId,
+      context,
+      write: (currentActor) => releaseWorkCapsuleScope({
+        db,
+        capsuleId,
+        claims,
+        actor: currentActor,
+      }),
+    });
 
-  return {
-    success: true,
-    entityId: renewedCapsule.capsuleId,
-    message: `Released ${claims.length} scope item(s) for ${renewedCapsule.capsuleId}.`,
-    data: { capsule: renewedCapsule },
-  };
+    return {
+      success: true,
+      entityId: renewedCapsule.capsuleId,
+      message: `Released ${claims.length} scope item(s) for ${renewedCapsule.capsuleId}.`,
+      data: { capsule: renewedCapsule },
+    };
+  } catch (error) {
+    const detail = getErrorMessage(error);
+    if (/not found/i.test(detail)) {
+      return {
+        success: false,
+        error: "not_found",
+        message:
+          `${detail} Do NOT retry release_capsule_scope for an unknown/abandoned capsule — ` +
+          "list_work_capsules or get_work_capsule first (retryable: false).",
+        data: { retryable: false },
+      };
+    }
+    throw error;
+  }
 }
 
 export async function createWorkCapsuleTool(
@@ -586,7 +636,7 @@ export async function createWorkCapsuleTool(
     },
     actor: await actor(userId, context),
   });
-
+  await ensureCapsuleWorkItemAnchorNonFatal(capsule, "created");
   return {
     success: true,
     entityId: capsule.capsuleId,

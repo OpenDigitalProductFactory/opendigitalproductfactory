@@ -120,6 +120,26 @@ collapsed subtree back into the measured scope. Moving professional detail behin
 disclosure is the sanctioned fix for a surface over budget, and the budget measures it
 that way.
 
+### Operator finding actionability
+
+An alert, exception, conflict, or finding is not operator work merely because a detector emitted
+it. It enters an action queue only when it is **open, specific, evidenced, owned, executable, and
+verifiable**. Resolved, withdrawn, context-free, and already-executed internal records remain
+available in audit history; they do not become cards asking a person to act.
+
+Navigation and action are different contracts. A detail link may explain a historical record. An
+action must carry one complete label + destination + promised-outcome object, and the destination
+must expose the control or owning workflow capable of producing that outcome. A dead-end button
+such as “Resolve” or “De-conflict” on an audit-only detail is a failed workflow, not acceptable
+empty-state copy. The canonical contract and benchmark evidence are in
+[`decision-governance-surface-redesign-design.md` §10](superpowers/specs/2026-07-04-decision-governance-surface-redesign-design.md#10-addendum-2026-08-08-bi-76eedee8-findings-must-carry-an-achievable-outcome).
+
+Repeated detector or consultation events are audit occurrences, not automatically separate units
+of operator work. A queue must project one item per deterministic work identity, disclose how many
+occurrences it represents, and make one successful disposition clear every still-open occurrence
+with that identity atomically. Do not use opaque semantic similarity to propagate a person's
+business ruling; near-matches require an explicit review or merge decision.
+
 **Enforcement splits by route age, not by axis.**
 
 - **Net-new routes — absolute budgets block from day one.** A pure ratchet freezes
@@ -221,6 +241,7 @@ consequence banner; a form that re-implements these is a defect (BI-8E74C749).
 3. **Required/optional state** — exposed visibly (`*` / `(optional)`) **and** to AT (`aria-required`, the native `required` attribute, and an SR-only "(required)").
 4. **Correct `autocomplete`** — `username`/`email` for identifiers, `current-password` for sign-in, `new-password` for set/confirm/temporary passwords, `name`/`tel`, and the `address-line1`/`address-level1`/`address-level2`/`postal-code`/`country` tokens for addresses. Use `off` only for admin-entered credentials for *another* user, and one-off date/time pickers.
 5. **Inline validation** — field-level errors set `aria-invalid` and render through `FormField`'s described `role="alert"` region, not only a form-level banner.
+6. **Semantic projection attributes** — typed primitives forward applicable native control attributes, including `data-surface-node-id`, to the actual `<input>` or `<select>`. Put Authorized Surface identifiers on the interactive control—not a wrapper—so DOM/accessibility conformance can prove that the rendered UX is a projection of the governed semantic contract.
 
 **Mutating submits** show pending → success/failure through `SubmitButton` + `FormStatus` (never a silent recolor or a bare text swap).
 
@@ -296,6 +317,22 @@ Every asynchronous action MUST show a visible, consistent activity indicator. A 
 - Motion is honored against the OS **Reduce Motion** preference via a global `@media (prefers-reduced-motion: reduce)` block in `globals.css` — spinners and shimmer fall back to a static, legible resting state. Don't reintroduce unguarded keyframe animations.
 
 **Rollout:** the primitives are the canonical replacement for the hand-rolled indicators catalogued across the portal; migrate opportunistically and when touching a surface. A CI ratchet — `scripts/check-no-hand-rolled-loading.mjs`, run by the repo guard loop — freezes the remaining sites at a per-file baseline and **fails any new `animate-spin`/`animate-pulse` outside `components/ui/`** (migrate a surface, then `--update` to retighten). Semantic **status dots** (e.g. a pulsing health indicator) are state, not loading, and are out of this pattern — but still inherit the reduced-motion guard.
+
+## Multi-source data states
+
+A dashboard or report that combines providers must expose the truth of each source rather than collapse every outcome into “no data.” Its read model carries source identity, freshness or observation time, and one of `loading`, `ready`, `empty`, `stale`, or `failed`; a partial result is the aggregate condition where at least one source is usable and at least one is stale or failed.
+
+| Condition | Presentation | Recovery |
+|---|---|---|
+| All requested sources completed with zero records | `EmptyState` with the applied scope and time window | Change filters or connect a source |
+| One or more sources failed and none is usable | Error `Alert`/`AlertBox`; never an empty state | Plain-language reason and manual Retry |
+| Some sources are usable | Keep usable facts visible; show a prominent partial-data notice and per-source status/freshness | Retry only the failed sources |
+| A previously successful source is beyond its declared freshness window | Keep the last confirmed value visibly marked stale | Refresh without blanking the confirmed value |
+| Capability is unsupported, stubbed, or not connected | Name that condition; do not present fabricated zeroes | Link to the owning connection or capability path when actionable |
+
+The owning interaction defines and tests its latency budget; there is no platform-wide “5 seconds means timeout” constant that is honest for every provider and report. A user-facing request has a bounded deadline. Automatic retry is allowed once only for a safe, idempotent transient failure and remains inside that deadline; rate-limit guidance is respected. Otherwise recovery is explicit and operator-triggered. Background work shows durable progress instead of holding a page request open.
+
+State changes use one persistent status region with `aria-live="polite"` so assistive technology announces recovery and repeated failures without recreating the live region; an immediate blocking failure uses the shared assertive alert primitive. This follows [WAI-ARIA live-region guidance](https://www.w3.org/WAI/WCAG22/Techniques/aria/ARIA19). Color is never the sole partial/stale/error indicator.
 
 ## Progressive Disclosure
 

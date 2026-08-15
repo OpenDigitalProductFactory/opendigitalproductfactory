@@ -15,6 +15,10 @@ export interface NearbyFederationCandidateInput {
 }
 
 export interface NearbyFederationCandidate extends NearbyFederationCandidateInput {
+  displayName?: string;
+  source?: "lan" | "introducer";
+  introducedBy?: string;
+  relationshipHint?: string;
   observedAt: string;
   expiresAt: string;
   automaticPairing: AutomaticPairingReadiness;
@@ -103,6 +107,7 @@ export function recordNearbyFederationCandidates(input: {
     const key = `${candidate.discoveryId}\u0000${endpoint}`;
     candidates.set(key, {
       ...candidate,
+      source: "lan",
       endpoint,
       edgeNodeId: input.edgeNodeId,
       observedAt: input.observedAt.toISOString(),

@@ -9,6 +9,31 @@ import {
   DECISION_INTERACTION_GATE_SELECT,
   decisionInteractionRowToGateView,
 } from "@/lib/decision-perspective/view-model";
+import {
+  loadBuildStudioCustomerStatuses,
+  type CapsuleFindManyDelegate,
+  type CustomerStatusBuild,
+} from "@/lib/build/customer-status-loader";
+import type { BuildStudioCustomerStatus } from "@/lib/build/customer-status-projection";
+
+export async function getFeatureBuildCustomerStatus(
+  buildId: string,
+): Promise<BuildStudioCustomerStatus | null> {
+  const session = await auth();
+  if (!session?.user?.id) return null;
+
+  const build = await prisma.featureBuild.findUnique({
+    where: { buildId },
+    select: { id: true, buildId: true, title: true, phase: true, updatedAt: true },
+  });
+  if (!build) return null;
+
+  const statuses = await loadBuildStudioCustomerStatuses(
+    prisma as unknown as CapsuleFindManyDelegate,
+    [{ ...build, phase: build.phase as CustomerStatusBuild["phase"] }],
+  );
+  return statuses[build.id] ?? null;
+}
 
 export async function getFeatureBuild(buildId: string): Promise<FeatureBuildRow | null> {
   const session = await auth();

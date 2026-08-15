@@ -217,6 +217,103 @@ function resolvePortfolioSlug(node: TaxonomyNodeCandidate): string | null {
   return root || null;
 }
 
+/**
+ * A `host` is only a confident "server / compute node" when a real OS/compute
+ * signal corroborates it. The host collector reports one (os / platform /
+ * kernel / uptime …); a network sweep (ARP/UniFi) reports only a vendor + MAC.
+ *
+ * Why this gate exists: the coarse `host -> /servers` rule used to fire on ANY
+ * host at 0.98 confidence. Combined with the fingerprint layer not running on
+ * the ingestion paths, every real-network device (a Whirlpool appliance, an
+ * Echo, a Nest) was filed as a confidently-identified "server". Now that the
+ * fingerprint layer runs first, a host WITHOUT a compute signal that reaches
+ * this heuristic means the fingerprint layer already MISSED — so it must not be
+ * masked as a confident server. It falls through to heuristic scoring, which
+ * routes an unidentified device to `needs_review`. (BI-BAF38ED3.)
+ */
+const HOST_COMPUTE_SIGNAL_KEYS = [
+  "os",
+  "osname",
+  "os_name",
+  "operatingsystem",
+  "operating_system",
+  "platform",
+  "kernel",
+  "kernelversion",
+  "osversion",
+  "os_version",
+  "distro",
+  "distribution",
+  "uptime",
+  "uptimeseconds",
+  "cpucount",
+  "cpucores",
+  "memorybytes",
+  "hostrole",
+  "serverrole",
+];
+
+export function hostHasComputeSignal(input: InventoryAttributionInput): boolean {
+  const itemType = (input.itemType ?? input.entityType).toLowerCase();
+  // An explicitly typed server/compute item is a compute host by definition.
+  if (itemType.includes("server") || itemType.includes("compute") || itemType.includes("vm")
+    || itemType.includes("virtual_machine") || itemType.includes("hypervisor")) {
+    return true;
+  }
+  const properties = input.properties;
+  if (!properties || typeof properties !== "object") {
+    return false;
+  }
+  const keys = Object.keys(properties as Record<string, unknown>);
+  return keys.some((key) => {
+    const value = (properties as Record<string, unknown>)[key];
+    // A present-but-empty signal key (null / "" ) does not corroborate compute.
+    if (value === null || value === undefined || value === "") {
+      return false;
+    }
+    return HOST_COMPUTE_SIGNAL_KEYS.includes(key.toLowerCase());
+  });
+}
+
+// Property keys that mark a row as observed by a network sweep (ARP / UniFi /
+// SNMP) — i.e. "seen on the wire" by its MAC/OUI vendor, as opposed to a host
+// the bootstrap host-collector ran on (which reports os/hostname, not raw MAC).
+const NETWORK_SWEEP_EVIDENCE_KEYS = ["mac", "macaddress", "mac_address", "vendor", "oui_vendor", "vendoroui", "oui"];
+
+/**
+ * True when a `host` is an UNIDENTIFIED network-sweep device: it carries
+ * OUI/MAC network-sweep evidence (so it was seen on the wire, not run by the
+ * host collector) yet has no corroborating compute signal. Such a row reaching
+ * the coarse heuristic means the fingerprint layer already MISSED it, so it must
+ * not be filed as a confident `/servers` — it belongs in needs_review.
+ *
+ * A bootstrap/host-collector host (os/hostname, no raw MAC) and a corroborated
+ * compute host both return false and keep the servers default. (BI-BAF38ED3.)
+ */
+export function isUnidentifiedNetworkSweepHost(input: InventoryAttributionInput): boolean {
+  const entityType = (input.entityType ?? "").toLowerCase();
+  const itemType = (input.itemType ?? input.entityType ?? "").toLowerCase();
+  const isHostLike = entityType === "host" || itemType === "host" || entityType === "network_client";
+  if (!isHostLike) {
+    return false;
+  }
+  if (hostHasComputeSignal(input)) {
+    return false;
+  }
+  const properties = input.properties;
+  if (!properties || typeof properties !== "object") {
+    return false;
+  }
+  const props = properties as Record<string, unknown>;
+  return Object.keys(props).some((key) => {
+    const value = props[key];
+    if (value === null || value === undefined || value === "") {
+      return false;
+    }
+    return NETWORK_SWEEP_EVIDENCE_KEYS.includes(key.toLowerCase());
+  });
+}
+
 function findRuleMatch(
   input: InventoryAttributionInput,
   taxonomyNodes: TaxonomyNodeCandidate[],
@@ -229,8 +326,14 @@ function findRuleMatch(
   let ruleId: string | undefined;
 
   if (input.entityType === "host" || itemType === "host") {
-    node = matchByNodeId((nodeId) => nodeId.endsWith("/servers"));
-    ruleId = node ? "foundational_host_servers" : undefined;
+    // Default a host to servers UNLESS it is an unidentified network-sweep
+    // device (vendor + MAC, no OS, no fingerprint match) — that would be the
+    // fingerprint layer's miss masquerading as a confident server. Such a host
+    // falls through to heuristic scoring -> needs_review (BI-BAF38ED3).
+    if (!isUnidentifiedNetworkSweepHost(input)) {
+      node = matchByNodeId((nodeId) => nodeId.endsWith("/servers"));
+      ruleId = node ? "foundational_host_servers" : undefined;
+    }
   } else if (itemType.includes("docker") || itemType.includes("container")) {
     node = matchByNodeId((nodeId) => nodeId.includes("container_platform"));
     ruleId = node ? "container_platform_runtime" : undefined;

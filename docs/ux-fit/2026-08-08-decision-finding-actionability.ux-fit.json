@@ -1,0 +1,27 @@
+{
+  "version": "1",
+  "decidedOption": "actionability-contract",
+  "decisionInteractionId": "DI-259D90CF912B",
+  "scope": {
+    "files": [
+      "apps/web/app/(shell)/coworker-decisions/decisions/[interactionId]/page.tsx",
+      "apps/web/app/(shell)/coworker-decisions/decisions/page.tsx",
+      "apps/web/app/(shell)/coworker-decisions/review/page.tsx",
+      "apps/web/app/(shell)/platform/ai/decisions/[interactionId]/page.tsx",
+      "apps/web/components/wiki/OrgDecisionCaptureList.tsx",
+      "apps/web/lib/actions/org-decision-capture.ts",
+      "apps/web/lib/decision/review-identity.ts",
+      "apps/web/lib/governance/finding-contract.ts",
+      "apps/web/lib/wiki/decision-help.ts",
+      "apps/web/lib/wiki/decision-review-findings.ts"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "display-patch",
+      "canonical-resolution-route",
+      "actionability-contract"
+    ]
+  }
+}

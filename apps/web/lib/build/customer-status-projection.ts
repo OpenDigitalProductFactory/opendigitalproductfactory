@@ -21,11 +21,13 @@
 // BuildActivity max(createdAt) by the FB-* buildId) and the BuildStudio.tsx
 // render are a deferred follow-up (need live-portal verification).
 
-import { projectWorkCaseState } from "@/lib/work-management/status-projection";
+import { projectWorkUnitState } from "@/lib/work-management/status-projection";
+import { toWorkUnitFromCapsule } from "@/lib/work-management/work-unit";
 import type { WorkCaseState } from "@/lib/work-management/case-types";
 import type { BuildPhase } from "@/lib/explore/feature-build-types";
 import { STALLED_BUILD_REAP_MS } from "@/lib/build/inert-build-reaper";
 import { readBuildPrDeliveryState } from "@/lib/build/build-pr-delivery-state";
+import type { BuildStudioOwnerState } from "@/lib/build/owner-status-reconciliation";
 
 export interface BuildStudioCustomerStatus {
   /** Plain restatement of what is being built (the build title). */
@@ -44,6 +46,12 @@ export interface BuildStudioCustomerStatus {
   owner: string;
   /** True when the work is waiting on the human (surfaces "Needs you"). */
   needsYou: boolean;
+  /** Canonical cause-oriented state for the owner-facing first viewport. */
+  ownerState?: BuildStudioOwnerState;
+  /** Persisted-duration copy; never an ETA. */
+  elapsedLabel?: string;
+  /** Bounded expectation and safe leave/return guidance. */
+  expectation?: string;
 }
 
 const NEEDS_YOU_STATES: ReadonlySet<WorkCaseState> = new Set([
@@ -279,7 +287,11 @@ export function projectBuildStudioCustomerStatus(args: {
 
   const base: BuildStudioCustomerStatus = args.capsule
     ? (() => {
-        const projection = projectWorkCaseState({ capsule: args.capsule! });
+        const projection = projectWorkUnitState(toWorkUnitFromCapsule({
+          capsuleId: args.capsule!.capsuleId,
+          title: args.build.title,
+          status: args.capsule!.status,
+        }));
         const action = nextActionForState(projection.state);
         return {
           whatIsBeingBuilt: args.build.title,

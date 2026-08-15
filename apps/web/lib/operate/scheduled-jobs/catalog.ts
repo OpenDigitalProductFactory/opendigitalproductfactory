@@ -81,6 +81,18 @@ export interface ScheduledJobCatalogEntry {
 // Ordered roughly by operational prominence. core-locked jobs first.
 export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
   {
+    jobId: "index-integrity-sweep",
+    inngestId: "ops/index-integrity-sweep",
+    name: "Live database index integrity sweep",
+    purpose:
+      "Checks the persistent install database for btree-to-heap disagreement and blocking collation drift, then raises one deduplicated platform issue before ghost records reach users.",
+    cron: "30 5 * * *",
+    cadence: "Daily at 05:30",
+    category: "core",
+    tracksRunData: false,
+    runNowEvent: null,
+  },
+  {
     jobId: "build-pr-delivery-reconcile",
     inngestId: "build/pr-delivery-reconcile",
     name: "Build Studio PR delivery reconcile",
@@ -549,6 +561,18 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
       "Rolls up the QueueTelemetryEvent stream into per-queue QueueMetricSnapshot rows (wait/process/cycle time, throughput, first-pass yield). Without it, queue flow metrics never materialise for tiles or the coworker surface.",
     cron: "7 * * * *",
     cadence: "Hourly at :07",
+    category: "editable",
+    tracksRunData: false,
+    runNowEvent: null,
+  },
+  {
+    jobId: "business-metrics-aggregator",
+    inngestId: "business/metrics-aggregator",
+    name: "Business metrics aggregator",
+    purpose:
+      "Builds tenant-scoped owner/manager performance snapshots from canonical operational evidence. The Performance view stays fast and preserves its last valid snapshot when a refresh fails.",
+    cron: "17 * * * *",
+    cadence: "Hourly at :17",
     category: "editable",
     tracksRunData: false,
     runNowEvent: null,

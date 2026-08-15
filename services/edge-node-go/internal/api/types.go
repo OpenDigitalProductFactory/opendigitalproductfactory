@@ -67,6 +67,31 @@ type AuthorityErrorBody struct {
 	Message string `json:"message,omitempty"`
 }
 
+// AdapterConfiguration is the non-secret behavior policy attached to a
+// DiscoveryConnection and returned only to its trusted, scope-matched edge.
+type AdapterConfiguration struct {
+	Site            string `json:"site"`
+	DiscoverClients bool   `json:"discoverClients"`
+	TLSInsecure     bool   `json:"tlsInsecure"`
+}
+
+// AdapterConfig mirrors one row from GET /api/v1/edge/adapters.
+type AdapterConfig struct {
+	ID            string               `json:"id"`
+	ConnectionKey string               `json:"connectionKey"`
+	Name          string               `json:"name"`
+	CollectorType string               `json:"collectorType"`
+	EndpointURL   string               `json:"endpointUrl"`
+	APIKey        string               `json:"apiKey"`
+	Configuration AdapterConfiguration `json:"configuration"`
+}
+
+// AdaptersResponse is the trusted edge adapter configuration envelope.
+type AdaptersResponse struct {
+	OK       bool            `json:"ok"`
+	Adapters []AdapterConfig `json:"adapters"`
+}
+
 // SubmissionEnvelope mirrors the shape services/edge-node/src/sweep.ts
 // builds for POST /api/v1/edge/discovery-runs. The Authority side
 // (apps/web/app/api/v1/edge/discovery-runs/route.ts) validates this

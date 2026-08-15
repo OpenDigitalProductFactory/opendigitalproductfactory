@@ -70,17 +70,79 @@ The checklist returned by the door is authoritative; it covers, in order:
 2. `HARDCODED_COWORKER_GRANTS` in the same file — the DURABLE grant source
    (DB grant rows are re-seeded from this map on every boot)
 3. Route binding: `ROUTE_AGENT_MAP` persona (`apps/web/lib/tak/agent-routing.ts`)
-   + sensitivity mirror in `route-context-map.ts`
+   + sensitivity mirror in `route-context-map.ts`. **Prefer an EXISTING page route
+   that has no persona yet** (see Step 2.5) — a new top-level route triggers a
+   large gate cascade for no benefit; the coworker is summonable everywhere either
+   way.
 4. Model floor row in `packages/db/src/agent-model-defaults.ts`
-5. Profession family in `docs/professions/registry.json`
+5. Profession family in `docs/professions/registry.json` — AND a seeded corpus
+   page `docs/professions/<professionKey>/wiki/<slug>.md` (frontmatter: title,
+   pageKind, status, abstract, professionCompetencyLevel, sources). The coverage
+   lint (`resolve-profession-profile.test.ts`) fails a family with an empty wiki
+   dir. Set `contextSlugs` to the route slug the persona binds.
 6. Optional: curated golden journey
    (`apps/web/lib/coworker-lifecycle/golden-journeys.ts` — otherwise the derived
    read-probe certifies it), service-catalog offer, self-task entry
 
 The conformance gate (`apps/web/lib/coworker-lifecycle/
 coworker-definition-conformance.test.ts`) fails CI naming any missing axis. Do
-NOT extend the baseline for a new coworker — complete the definition. Finish
-with `dpf-pr-with-dco`.
+NOT extend the baseline for a new coworker — complete the definition.
+
+## Step 2.5 — The CI gates BEYOND the conformance gate
+
+The conformance test is necessary but NOT sufficient — several other required
+checks fail on a new coworker and the conformance test says nothing about them.
+Handle these in the same PR or the PR bounces:
+
+- **Route choice is the biggest lever.** Binding the persona to a **new top-level
+  route** cascades into five more gates (below). Bind instead to an EXISTING page
+  route that currently has no `ROUTE_AGENT_MAP` entry (e.g. a CRM sub-page like
+  `/customer/opportunities` for a research coworker): longest-prefix match makes
+  your persona win there, and you touch NONE of the new-route machinery. The
+  coworker is summonable globally regardless of route. Only create a new
+  route/page when the coworker genuinely needs its own surface.
+
+- **Grant-source consistency** (`packages/db/src/coworker-grant-consistency.test.ts`,
+  a `Unit Tests (packages)` shard): a seed-defined coworker's
+  `HARDCODED_COWORKER_GRANTS` "diverge" from the `agent_registry.json` mirror
+  (which has no entry for it). Add the agentId to `KNOWN_GRANT_DIVERGENCES` in
+  `packages/db/src/coworker-grant-consistency.ts` — the sanctioned "seed is the
+  runtime grant source; the JSON mirror is intentionally not duplicated" record.
+  **This shard usually does NOT run in the local-CI pregate, so it fails only on
+  GitHub** — check it explicitly (`pnpm --filter @dpf/db exec vitest run
+  src/coworker-grant-consistency.test.ts`) before you push.
+
+- **Seed Contribution Fit** (`scripts/check-seed-fit-decision.mjs`): adding to
+  `COWORKER_AGENT_SEEDS` requires a `Seed-Fit-Decision: <value>` trailer in the
+  **PR BODY** (not a commit trailer) or a `seed-fit:<value>` label. Values:
+  global-default | archetype-scoped | vertical-scoped | parameterize-first |
+  install-local-only | reject-as-seed. A broadly-useful coworker → `global-default`.
+
+- **ONLY if you added a new route/page** — regenerate + register each, or CI fails:
+  - `pnpm --filter web build:route-manifest`  (Route Manifest Freshness)
+  - `pnpm --filter web build:route-shells`     (route-shell registry)
+  - `pnpm --filter web build:page-purpose`     — a net-new route also needs a
+    ratified/quarantined Page Purpose contract in `apps/web/lib/ux-budget/purpose-contracts/`
+  - Navigation inventory gate (`apps/web/lib/ea/navigation-inventory-gate.test.ts`):
+    the route's top-level segment must be in the nav model or `KNOWN_NAV_TOPLEVEL`
+  - UX-Fit manifest `docs/ux-fit/<date>-<slug>.ux-fit.json` (propose-n-pick with a
+    `principle_decide` interactionId, or a sweep-measurement)
+
+- **UX Route Budget Sweep** (GitHub runtime check, not in the local pregate):
+  adding a coworker adds it to the GLOBAL coworker selector, so every route's
+  sweep sees "choices in one control: N → N+1" and a few more words — a regression
+  against the frozen budget baseline on many routes at once. Recovery is a
+  reviewed baseline re-freeze (BI-26DA1AEB): `gh workflow run ux-route-sweep.yml
+  --ref <branch> -f update_baseline=true`, download the `ux-route-budget-baseline`
+  artifact, splice ONLY the affected routes into
+  `apps/web/lib/ux-budget/route-budget-baseline.json` (never wholesale-replace),
+  and commit. Expect this whenever you add a coworker.
+
+- **Standard doc gates** (same as any PR): Spec/Plan/Doc (a plan under
+  `docs/superpowers/plans/`), Docs-Impact (`Docs-Impact-Decision:` trailer or the
+  route's user-guide page), design-grounding.
+
+Then finish with `dpf-pr-with-dco`.
 
 ## Step 3 — Certify
 

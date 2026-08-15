@@ -6,6 +6,7 @@ import {
   deriveBuildProcessSize,
   deriveBuildProcessType,
   deriveDeliverableSensitivity,
+  mapBuildDeliverableToRoutingSensitivity,
   describePolicy,
   getModelTier,
   getProcessPolicy,
@@ -460,3 +461,18 @@ const _typeCheck = (): BuildProcessType => "feature";
 const _sizeCheck = (): BuildProcessSize => "medium";
 void _typeCheck;
 void _sizeCheck;
+
+describe("mapBuildDeliverableToRoutingSensitivity", () => {
+  // Founder ruling (2026-08-12): platform source-code generation is development
+  // work, not internal business data. Ordinary builds route at the least-
+  // sensitive `development` tier so connected frontier cloud dev tools (cleared for
+  // public, never internal business data) are eligible; builds whose brief
+  // signals real business-data sensitivity keep the internal/confidential gates.
+  it("maps low deliverable sensitivity to development (unblocks cloud dev tools)", () => {
+    expect(mapBuildDeliverableToRoutingSensitivity("low")).toBe("development");
+  });
+  it("escalates elevated to internal and high to confidential", () => {
+    expect(mapBuildDeliverableToRoutingSensitivity("elevated")).toBe("internal");
+    expect(mapBuildDeliverableToRoutingSensitivity("high")).toBe("confidential");
+  });
+});

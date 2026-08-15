@@ -14,12 +14,18 @@ For the broader product framing, see [Market Archetypes And Coworkers](../market
 
 ## How It Works
 
-The AI coworker is available on every page via the floating button in the bottom-right corner. It understands:
+The AI coworker is available on every page via the floating button in the bottom-right corner. Covered product surfaces publish an **Authorized Surface**: the same labels, help, current values, validation, and actions that drive the human experience, filtered through your role and the coworker's narrower authority. This works with or without an open browser.
+
+It understands:
 
 - **What page you're on** — it knows the domain context (compliance, HR, operations, etc.)
 - **What business archetype is active** — customer-facing and internal language should follow the selected archetype where that surface has been configured
-- **What data is visible** — it can read the current page's content
-- **What actions are available** — it has tools specific to the current area
+- **What data is visible** — it reads the authorized semantic surface, including rows that are virtualized or not currently mounted in the browser
+- **What actions are available** — it sees only actions allowed by your role, its grants, the current work context, token scope, and approval policy
+
+The coworker does not use raw page HTML as authority. If a surface is not yet covered, stale, or unavailable, it should say that rather than inventing fields or asking you to describe a panel it claims exists. Legacy pages may still provide a smaller route summary while migration continues.
+
+For example, **Estate Discovery** publishes its real Discovery Method, target, credential state, validation, connection status, and **Save & Test** outcome. It knows that **SNMP** discovers network devices and **SMTP** configures outbound email elsewhere; the community string remains write-only and is never repeated back.
 
 ## Quick Actions
 

@@ -132,4 +132,16 @@ describe("resolveEvidenceRecovery", () => {
       resolveEvidenceRecovery({ required: false, authoritativeToolExecutions: 0, content: fabricated, recoveryNudgesUsed: 0 }).kind,
     ).toBe("pass");
   });
+
+  it("accepts prehydrated authorized-surface evidence without requiring a second tool call", () => {
+    expect(
+      resolveEvidenceRecovery({
+        required: true,
+        authoritativeToolExecutions: 0,
+        authoritativeSurfaceEvidence: true,
+        content: fabricated,
+        recoveryNudgesUsed: 0,
+      }).kind,
+    ).toBe("pass");
+  });
 });

@@ -20,6 +20,13 @@ import {
   highestSeverity,
 } from "./severity";
 
+export interface GovernanceFindingAction {
+  kind: "navigate" | "execute";
+  label: string;
+  href: string;
+  outcome: string;
+}
+
 /** Which stream produced a finding. */
 export const GOVERNANCE_FINDING_SOURCES = [
   "wiki-lint",
@@ -43,11 +50,10 @@ export interface GovernanceFinding {
   detail: string;
   /** How many underlying items this rolls up (gap clusters, case detections). */
   count: number;
-  /** Deep-link to the source surface, when applicable. */
-  href?: string | null;
-  /** The action the finding invites, when the source offers one. */
-  actionLabel?: string | null;
-  actionHref?: string | null;
+  /** Read-only detail destination, when applicable. */
+  detailHref?: string | null;
+  /** A complete, outcome-bearing action; null means the adapter failed closed. */
+  action?: GovernanceFindingAction | null;
 }
 
 // ── Narrow source views (structural — avoid importing the whole source modules,
@@ -63,13 +69,12 @@ export interface LintFindingView {
 
 export interface ReviewFindingView {
   id: string;
-  findingClass: "conflict" | "gap" | "staleness";
+  findingClass: "conflict" | "gap" | "staleness" | "drift" | "weight-proposal";
   title: string;
   detail: string;
   count: number;
-  href: string | null;
-  actionLabel: string;
-  actionHref: string;
+  detailHref: string | null;
+  action?: GovernanceFindingAction;
 }
 
 export interface AssuranceFindingView {
@@ -95,10 +100,16 @@ function reviewClassSeverity(findingClass: ReviewFindingView["findingClass"]): G
     case "conflict":
       return "high";
     case "staleness":
+    case "drift":
       return "medium";
     default:
       return "low"; // gap
   }
+}
+
+function completeAction(action: GovernanceFindingAction | undefined): GovernanceFindingAction | null {
+  if (!action) return null;
+  return action.label.trim() && action.href.trim() && action.outcome.trim() ? action : null;
 }
 
 export function fromLintFinding(finding: LintFindingView): GovernanceFinding {
@@ -122,9 +133,8 @@ export function fromReviewFinding(finding: ReviewFindingView): GovernanceFinding
     title: finding.title,
     detail: finding.detail,
     count: finding.count,
-    href: finding.href,
-    actionLabel: finding.actionLabel,
-    actionHref: finding.actionHref,
+    detailHref: finding.detailHref,
+    action: completeAction(finding.action),
   };
 }
 
@@ -149,7 +159,7 @@ export function fromSecurityCase(view: SecurityCaseView): GovernanceFinding {
     title: view.title,
     detail: "",
     count: view.detectionCount ?? 1,
-    href: view.href ?? null,
+    detailHref: view.href ?? null,
   };
 }
 

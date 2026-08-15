@@ -26,7 +26,17 @@ export type DecisionOutcomeType = typeof DECISION_OUTCOME_TYPES[number];
 // so an operator scanning WWMD can distinguish an unattended hourly cron
 // mutation from a human-initiated Build Studio phase advance — which is the
 // whole reason the gate is recorded separately from the profile (BI-BB2E585C).
-export const DECISION_GATE_KEYS = ["build-studio", "backlog-triage", "org-business", "profession"] as const;
+// `kernel-consult` is the MCP `principle_decide` door (external agents +
+// coworkers). It is WWMD platform doctrine, but a distinct door so operators
+// can measure external-agent adoption separately from Build Studio / triage
+// (BI-FD7CBA06).
+export const DECISION_GATE_KEYS = [
+  "build-studio",
+  "backlog-triage",
+  "kernel-consult",
+  "org-business",
+  "profession",
+] as const;
 export type DecisionGateKey = typeof DECISION_GATE_KEYS[number];
 
 export const DECISION_DOMAIN_CLASSES = ["plan-readiness", "architecture-tradeoff", "risk-assessment", "professional-practice", "kernel-consult"] as const;
@@ -153,6 +163,17 @@ export type DecisionPerspectiveEvaluationInput = {
   riskTier: DecisionRiskTier;
   evidence?: DecisionEvidenceItem[];
   recentOverrideCount?: number;
+  /**
+   * Per-material relevance ∈ [0,1] to `question` (BI-7E1F128A), keyed by
+   * materialId. Computed async upstream (semantic embeddings with lexical
+   * fallback) and passed into this synchronous evaluator so scoring is
+   * content-aware without the evaluator itself doing IO. When omitted, every
+   * applicable material is treated as fully relevant (legacy coverage-only
+   * behaviour).
+   */
+  relevanceByMaterialId?: Map<string, number>;
+  /** How `relevanceByMaterialId` was computed, echoed onto the result. */
+  relevanceMethod?: "semantic" | "lexical";
 };
 
 export type DecisionPerspectiveEvaluationResult = {
@@ -182,6 +203,24 @@ export type DecisionPerspectiveEvaluationResult = {
    * recommending a path forward.
    */
   recommendedOptionId?: string | null;
+  /**
+   * Net directional pull of the stance material that is RELEVANT to this
+   * question (BI-7E1F128A), in [-1, 1]: +1 = the relevant stance wholly supports
+   * the decision, -1 = it wholly opposes it, 0 = no directional signal or a
+   * support/oppose conflict. Undefined on the legacy coverage-only path.
+   */
+  alignmentScore?: number;
+  /**
+   * The directional verdict derived from `alignmentScore`: `approve` when the
+   * org's relevant stance supports the decision, `decline` when it opposes it,
+   * `mixed` when relevant support and oppose material conflict, `none` when no
+   * relevant stance speaks to it.
+   */
+  stanceAlignment?: "approve" | "decline" | "mixed" | "none";
+  /** How question↔stance relevance was computed for this evaluation. */
+  relevanceMethod?: "semantic" | "lexical";
+  /** Independent corpus checks; any rejected hard boundary vetoes aggregation. */
+  constitutionalAlignment?: import("./alignment-criteria").ConstitutionalAlignmentResult;
   rationale: string;
   materialScores: PerspectiveMaterialScore[];
   sources: Array<{

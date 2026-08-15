@@ -14,6 +14,8 @@
 import { randomUUID } from "node:crypto";
 
 import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
+import { employeeScopeVisibleIds, type EmployeeVisibilityScope } from "@/lib/govern/manager-scope";
+import { resolveManagerScope } from "@/lib/identity/load-effective-auth-context";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
 
 const definitions: ToolDefinition[] = [
@@ -115,8 +117,44 @@ const definitions: ToolDefinition[] = [
   },
 ];
 
-async function queryEmployees(params: Record<string, unknown>): Promise<ToolResult> {
+// Row-scope the employee list to the acting human's manager visibility so an
+// agent sees exactly the employees the person could open individually. This is
+// the list-time dual of the coworker-authority `subject-scope-denied` gate,
+// which already scopes id-addressed employee tools (transition_employee_status,
+// etc.) via canAccessEmployeeScope; the list historically bypassed it because
+// deriveCoworkerAuthoritySubject resolves a list call to the `platform` subject.
+// Superusers stay unrestricted (the installation-owner path). Uses the same
+// resolveManagerScope the effective-auth loader uses, so the two never diverge.
+async function resolveEmployeeVisibility(userId: string): Promise<EmployeeVisibilityScope> {
   const { prisma } = await import("@dpf/db");
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { isSuperuser: true },
+  });
+  if (user?.isSuperuser) {
+    return employeeScopeVisibleIds({ isSuperuser: true, employeeId: null, managerScope: null });
+  }
+  const employees = await prisma.employeeProfile.findMany({
+    select: { id: true, userId: true, managerEmployeeId: true },
+  });
+  const scope = resolveManagerScope(employees, userId);
+  return employeeScopeVisibleIds({
+    isSuperuser: false,
+    employeeId: scope?.employeeId ?? null,
+    managerScope: scope
+      ? { directReportIds: scope.directReportIds, indirectReportIds: scope.indirectReportIds }
+      : null,
+  });
+}
+
+async function queryEmployees(params: Record<string, unknown>, userId: string): Promise<ToolResult> {
+  const { prisma } = await import("@dpf/db");
+  const visibility = await resolveEmployeeVisibility(userId);
+  // A scoped caller with no visible employees (not an employee, manages no one)
+  // can never match a row — short-circuit before hitting the DB with `id in []`.
+  if (!visibility.unrestricted && visibility.visibleProfileIds.length === 0) {
+    return { success: true, message: "No employees found matching your criteria.", data: { employees: [] } };
+  }
   const searchTerm = typeof params["search"] === "string" ? params["search"].trim() : undefined;
   const deptFilter = typeof params["department"] === "string" ? params["department"].trim() : undefined;
   const statusFilter = typeof params["status"] === "string" ? params["status"] : undefined;
@@ -140,6 +178,8 @@ async function queryEmployees(params: Record<string, unknown>): Promise<ToolResu
 
   const employees = await prisma.employeeProfile.findMany({
     where: {
+      // Manager-scope row filter (skipped for unrestricted/superuser callers).
+      ...(visibility.unrestricted ? {} : { id: { in: visibility.visibleProfileIds } }),
       ...(searchTerm ? {
         OR: [
           { displayName: { contains: searchTerm, mode: "insensitive" } },
@@ -310,6 +350,16 @@ async function createEmployee(params: Record<string, unknown>, userId: string): 
       },
     },
   });
+
+  // Identity spine: every human-creation path must produce a linked human
+  // Principal, same as the governed People-screen createEmployeeProfile path
+  // (BI-4150F4D6). syncEmployeePrincipal is idempotent; a sync failure must not
+  // orphan the created employee, so it is best-effort and logged.
+  const { syncEmployeePrincipal } = await import("@/lib/identity/principal-linking");
+  await syncEmployeePrincipal(employee.id).catch((err: unknown) => {
+    console.error("[workforce-pack.createEmployee] principal sync failed", err);
+  });
+
   return {
     success: true,
     entityId: employee.employeeId,
@@ -394,7 +444,7 @@ async function proposeLeavePolicy(params: Record<string, unknown>): Promise<Tool
 }
 
 const handlers: Record<string, ToolPackHandler> = {
-  query_employees: (params) => queryEmployees(params),
+  query_employees: (params, userId) => queryEmployees(params, userId),
   list_departments: () => listDepartments(),
   list_positions: () => listPositions(),
   create_employee: (params, userId) => createEmployee(params, userId),

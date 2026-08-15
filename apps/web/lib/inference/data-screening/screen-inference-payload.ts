@@ -105,13 +105,20 @@ export function screenInferencePayload(
     transformation: prior?.transformation ?? "none",
   });
 
-  const originalSensitivity = normalizeSensitivity(input.routeContext?.sensitivity);
+  const originalSensitivity = normalizeRoutingSensitivity(input.routeContext?.sensitivity);
+  const declaredPayloadSensitivity = originalSensitivity === "development"
+    ? "public"
+    : originalSensitivity;
   // A verified projection transform changes the payload being routed, not the
   // source/output classification retained in the receipt. Caller sensitivity
   // is still a floor and can never be lowered here.
   const routedPayloadSensitivity = prior
     ? "internal"
-    : classification.overallSensitivity;
+    : originalSensitivity === "development" &&
+        governedData === undefined &&
+        classification.dataClasses.every((dataClass) => dataClass === "source-code")
+      ? "public"
+      : classification.overallSensitivity;
   const sensitivity = strongestSensitivity(originalSensitivity, routedPayloadSensitivity);
   const maskRequired = policy.obligations.some((obligation) => obligation.kind === "mask");
   const routeEffect = policy.effect === "deny" ||
@@ -188,12 +195,11 @@ export function screenInferencePayload(
       // the record instead of only re-derivable by re-composing the payload.
       // Levels, never values: rawPayloadStored stays false.
       //
-      // declaredSensitivity is always present: normalizeSensitivity defaults a
-      // missing/unrecognised route label to "internal", and that default is
-      // exactly what the floor above used — so recording it unconditionally
-      // reports the value routing actually applied.
+      // declaredSensitivity is the business-data floor applied by screening.
+      // `development` stays available to endpoint routing, but maps to `public`
+      // here because it is not itself a business-data confidentiality level.
       measuredSensitivity: routedPayloadSensitivity,
-      declaredSensitivity: originalSensitivity,
+      declaredSensitivity: declaredPayloadSensitivity,
       sensitivityFloorApplied: sensitivity !== routedPayloadSensitivity,
       rawPayloadStored: false,
     },
@@ -202,7 +208,8 @@ export function screenInferencePayload(
   };
 }
 
-function normalizeSensitivity(value: string | undefined): RequestContract["sensitivity"] {
+function normalizeRoutingSensitivity(value: string | undefined): RequestContract["sensitivity"] {
+  if (value === "development") return value;
   return value === "public" ||
     value === "internal" ||
     value === "confidential" ||
@@ -215,6 +222,9 @@ function strongestSensitivity(
   left: RequestContract["sensitivity"],
   right: InferencePayloadSensitivity,
 ): RequestContract["sensitivity"] {
+  if (left === "development") {
+    return right === "public" ? "development" : right;
+  }
   return SENSITIVITY_RANK[left] >= SENSITIVITY_RANK[right] ? left : right;
 }
 

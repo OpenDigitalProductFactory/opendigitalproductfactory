@@ -463,12 +463,17 @@ export const chatAdapter: ExecutionAdapterHandler = {
     let outputTokens: number;
     let cacheCreationInputTokens: number | undefined;
     let cacheReadInputTokens: number | undefined;
+    // Provider stop signal → normalized truncation flag. The agentic loop reads
+    // this to avoid returning a max_tokens-truncated fragment as a final answer
+    // (BI-1D144CC1). Each branch below maps its provider-specific value.
+    let truncated = false;
 
     if (isAnthropic(providerId)) {
       // Anthropic response
       const contentBlocks = data.content as Array<{ type?: string; text?: string; id?: string; name?: string; input?: Record<string, unknown> }> | undefined;
       text = contentBlocks?.filter((b) => b.type === "text").map((b) => b.text ?? "").join("") ?? "";
       toolCalls = extractAnthropicToolCalls(contentBlocks ?? []);
+      truncated = data.stop_reason === "max_tokens";
 
       const usage = (data.usage as Record<string, number>) ?? {};
       inputTokens = usage.input_tokens ?? 0;
@@ -503,6 +508,9 @@ export const chatAdapter: ExecutionAdapterHandler = {
       }
       text = textParts.join("\n");
 
+      truncated = candidates?.[0] != null
+        && (candidates[0] as { finishReason?: string }).finishReason === "MAX_TOKENS";
+
       const usageMetadata = (data.usageMetadata as Record<string, number>) ?? {};
       inputTokens = usageMetadata.promptTokenCount ?? 0;
       outputTokens = usageMetadata.candidatesTokenCount ?? 0;
@@ -516,6 +524,10 @@ export const chatAdapter: ExecutionAdapterHandler = {
       }> | undefined;
       const outputText = typeof data.output_text === "string" ? data.output_text : undefined;
       text = extractResponsesText(output, outputText);
+      // Responses API signals truncation via status="incomplete" +
+      // incomplete_details.reason="max_output_tokens".
+      truncated = data.status === "incomplete"
+        && (data.incomplete_details as { reason?: string } | undefined)?.reason === "max_output_tokens";
 
       const usage = typeof data.usage === "object" && data.usage !== null
         ? data.usage as Record<string, number>
@@ -525,14 +537,17 @@ export const chatAdapter: ExecutionAdapterHandler = {
 
     } else {
       // OpenAI-compatible response
-      const msg = (data.choices as Array<{
+      const choice = (data.choices as Array<{
+        finish_reason?: string;
         message?: {
           content?: string;
           reasoning?: string;
           tool_calls?: Array<{ id?: string; function?: { name?: string; arguments?: string } }>;
         };
-      }>)?.[0]?.message;
+      }>)?.[0];
+      const msg = choice?.message;
       text = msg?.content || msg?.reasoning || "";
+      truncated = choice?.finish_reason === "length";
 
       if (msg?.tool_calls && msg.tool_calls.length > 0) {
         // Structured tool calls (standard OpenAI format)
@@ -577,6 +592,7 @@ export const chatAdapter: ExecutionAdapterHandler = {
       toolCalls,
       usage: { inputTokens, outputTokens, cacheCreationInputTokens, cacheReadInputTokens },
       inferenceMs,
+      truncated,
       ...(openRouterRoutingEvidence
         ? { raw: { openRouterRoutingEvidence } }
         : {}),

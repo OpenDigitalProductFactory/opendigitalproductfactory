@@ -13,6 +13,7 @@
 
 import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
 import type { LocalCiHostPressure } from "@/lib/nonprod/local-ci-pool-policy";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
 
 // Per-key trimmed string coercer — a copy of the inline helper the former switch
@@ -93,7 +94,10 @@ const hostPressureSchema = {
 const definitions: ToolDefinition[] = [
   {
     name: "list_nonprod_environment_leases",
-    description: "List admitted and queued nonproduction environment leases so agents can reuse governed shared localhost environments instead of starting unmanaged servers.",
+    description:
+      "List admitted and queued nonproduction environment leases so agents can reuse governed shared localhost environments instead of starting unmanaged servers. " +
+      "Call once before claim/release decisions; do not poll this tool in a tight loop. " +
+      "Cache the result for the current decision step; re-list only after a claim/release/renew you initiated.",
     inputSchema: {
       type: "object",
       properties: {},
@@ -133,7 +137,11 @@ const definitions: ToolDefinition[] = [
   },
   {
     name: "claim_nonprod_environment_lease",
-    description: "Request admission to a governed shared nonproduction environment for preview, UX verification, or local integration. Reusing claimKey returns the same durable queue entry.",
+    description:
+      "Request admission to a governed shared nonproduction environment for preview, UX verification, or local integration. " +
+      "Reusing claimKey returns the same durable queue entry (idempotent wait). " +
+      "Do not claim in a tight loop without a stable claimKey. " +
+      "When queued, wait and renew with the returned leaseId — do not open a second claim for the same session purpose.",
     inputSchema: {
       type: "object",
       properties: {
@@ -172,11 +180,18 @@ const definitions: ToolDefinition[] = [
   },
   {
     name: "release_nonprod_environment_lease",
-    description: "Release a governed shared nonproduction environment lease after verification is complete or blocked.",
+    description:
+      "Release a governed shared nonproduction environment lease after verification is complete or blocked. " +
+      "Requires the exact leaseId returned by claim_nonprod_environment_lease (not environmentKey alone). " +
+      "Idempotent on already-released/cancelled leases — do not thrash release after success. " +
+      "On nonprod_lease_not_found: do NOT retry — list_nonprod_environment_leases and use a live leaseId (retryable: false).",
     inputSchema: {
       type: "object",
       properties: {
-        leaseId: { type: "string" },
+        leaseId: {
+          type: "string",
+          description: "Lease id from claim_nonprod_environment_lease (e.g. NPEL-…), not the environmentKey.",
+        },
       },
       required: ["leaseId"],
     },
@@ -187,7 +202,11 @@ const definitions: ToolDefinition[] = [
   },
   {
     name: "renew_nonprod_environment_lease",
-    description: "Heartbeat an active shared nonproduction environment lease, optionally binding its assigned slot before host mutation. Only the owning session can renew, and a lapsed lease is not revivable.",
+    description:
+      "Heartbeat an active shared nonproduction environment lease, optionally binding its assigned slot before host mutation. " +
+      "Only the owning session can renew, and a lapsed lease is not revivable. " +
+      "Renew on a human-scale cadence (on gate stages / ~minutes), not every few seconds. " +
+      "On owner mismatch or not_found: stop retrying; re-claim with claimKey if work continues.",
     inputSchema: {
       type: "object",
       properties: {
@@ -385,18 +404,42 @@ async function releaseNonprodEnvironmentLeaseHandler(params: Record<string, unkn
     return {
       success: false,
       error: "missing_required",
-      message: "leaseId is required",
+      // BI-MCP-EFF-85398F73: stop blind retries without a real leaseId.
+      message:
+        "leaseId is required (the id returned by claim_nonprod_environment_lease). " +
+        "Do NOT pass environmentKey alone. Do NOT retry without a leaseId (retryable: false).",
+      data: { retryable: false },
     };
   }
-  const lease = await releaseNonprodEnvironmentLease({ leaseId });
-  return {
-    success: true,
-    entityId: lease.leaseId,
-    message: lease.status === "cancelled"
-      ? `Cancelled queued nonproduction environment lease ${lease.leaseId}.`
-      : `Released nonproduction environment lease ${lease.leaseId}.`,
-    data: { lease },
-  };
+  try {
+    const lease = await releaseNonprodEnvironmentLease({ leaseId });
+    return {
+      success: true,
+      entityId: lease.leaseId,
+      message: lease.status === "cancelled"
+        ? `Cancelled queued nonproduction environment lease ${lease.leaseId}.`
+        : `Released nonproduction environment lease ${lease.leaseId}.`,
+      data: { lease },
+    };
+  } catch (error) {
+    const detail = getErrorMessage(error);
+    if (detail === "nonprod_lease_not_found") {
+      return {
+        success: false,
+        error: "not_found",
+        message:
+          `No nonprod lease ${leaseId}. Call list_nonprod_environment_leases for live ids; ` +
+          "do NOT retry the same leaseId (retryable: false).",
+        data: { retryable: false, leaseId },
+      };
+    }
+    return {
+      success: false,
+      error: "release_failed",
+      message: `Could not release lease ${leaseId}: ${detail}. Do not blind-retry (retryable: false).`,
+      data: { retryable: false, leaseId },
+    };
+  }
 }
 
 async function renewNonprodEnvironmentLeaseHandler(params: Record<string, unknown>): Promise<ToolResult> {

@@ -16,6 +16,8 @@
  * tests; keep the two in lockstep.
  */
 
+import { withDpfMcpCatalogTier } from "@dpf/integration-shared/mcp-catalog-tier";
+
 // Mirrors MCP_BEARER_TOKEN_ENV_VAR in apps/web/lib/auth/mcp-setup-snippets.ts.
 const MCP_BEARER_TOKEN_ENV_VAR = "DPF_MCP_BEARER_TOKEN";
 
@@ -56,12 +58,13 @@ export function mcpClientConfigPaths(repoRoot: string): {
 }
 
 function claudeCodeContent(mcpEndpoint: string): string {
+  const lazyHostEndpoint = withDpfMcpCatalogTier(mcpEndpoint, "full");
   return JSON.stringify(
     {
       mcpServers: {
         dpf: {
           type: "http",
-          url: mcpEndpoint,
+          url: lazyHostEndpoint,
           headers: { Authorization: `Bearer \${${MCP_BEARER_TOKEN_ENV_VAR}}` },
         },
       },

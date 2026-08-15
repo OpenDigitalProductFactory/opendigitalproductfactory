@@ -4,8 +4,13 @@
 // (the conventional layout), with an optional hint and consequence-aware error.
 // Wiring mirrors FormField: htmlFor/id, aria-describedby, role="alert" error.
 
-import { useId, type ReactNode } from "react";
+import { useId, type InputHTMLAttributes, type ReactNode } from "react";
 import { cx, fieldErrorClass, fieldHintClass } from "./styles";
+
+type NativeCheckboxProps = Omit<
+  InputHTMLAttributes<HTMLInputElement>,
+  "id" | "name" | "type" | "checked" | "onChange" | "disabled" | "className"
+>;
 
 export type CheckboxFieldProps = {
   name: string;
@@ -16,7 +21,7 @@ export type CheckboxFieldProps = {
   error?: ReactNode;
   disabled?: boolean;
   className?: string;
-};
+} & NativeCheckboxProps;
 
 export function CheckboxField({
   name,
@@ -27,6 +32,7 @@ export function CheckboxField({
   error,
   disabled,
   className,
+  ...inputProps
 }: CheckboxFieldProps) {
   const uid = useId();
   const id = `${uid}-${name}`;
@@ -38,6 +44,7 @@ export function CheckboxField({
     <div className={cx("flex flex-col gap-1", className)}>
       <div className="flex items-start gap-2">
         <input
+          {...inputProps}
           id={id}
           name={name}
           type="checkbox"

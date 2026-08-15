@@ -98,6 +98,25 @@ COPY monitoring/ ./monitoring/
 COPY scripts/backup-postgres.sh ./scripts/
 COPY scripts/restore-postgres.sh ./scripts/
 COPY scripts/postgres-trial-restore.sh ./scripts/
+# Work Capsule change-impact planning executes the canonical gate-context CLI
+# at runtime. Package its exact transitive source closure into the image so a
+# mutable /host-dpf checkout can never substitute different rule bytes.
+COPY scripts/gate-context.mjs ./scripts/
+COPY scripts/check-design-grounding-decision.mjs ./scripts/
+COPY scripts/check-data-impact.mjs ./scripts/
+COPY scripts/lib/gate-context.mjs ./scripts/lib/
+COPY scripts/lib/ci-evidence-plan.mjs ./scripts/lib/
+COPY scripts/lib/derived-artifacts-registry.mjs ./scripts/lib/
+COPY scripts/lib/gate-sensitivity.mjs ./scripts/lib/
+COPY scripts/lib/seed-fit-gate.mjs ./scripts/lib/
+COPY scripts/lib/pr-trailer-contract.mjs ./scripts/lib/
+COPY scripts/lib/module-size-scope.mjs ./scripts/lib/
+COPY scripts/lib/ci-policy-guards.mjs ./scripts/lib/
+COPY scripts/lib/host-command-invocation.mjs ./scripts/lib/
+COPY scripts/lib/git-fetch-shared-safe.mjs ./scripts/lib/
+COPY scripts/module-size-baseline.txt ./scripts/
+COPY scripts/prose-lint-baseline.json ./scripts/
+COPY scripts/style-drift-baseline.json ./scripts/
 COPY apps/web/ ./apps/web/
 COPY packages/ ./packages/
 COPY prompts/ ./prompts/
@@ -184,6 +203,12 @@ COPY --from=init /app/packages ./packages
 COPY --from=init /app/node_modules ./node_modules
 COPY --from=init /app/pnpm-workspace.yaml /app/pnpm-lock.yaml /app/package.json /app/tsconfig.base.json /app/.gitignore ./
 COPY --from=init /app/scripts ./scripts
+# Checked-in registries read by the packaged gate-context generator. Preserve
+# their repository-relative paths because the generator is also the CLI source
+# of truth and deliberately has no portal-only path branch.
+COPY --from=init /app/config/ci-evidence-policy.json ./config/
+COPY --from=init /app/config/seed-content-paths.json ./config/
+COPY --from=init /app/apps/web/lib/ux-budget/route-budget-baseline.json ./apps/web/lib/ux-budget/
 COPY --from=init /dpf-release-assets /dpf-release-assets
 # Managed operational scripts (backup/restore/trial-restore) are invoked at
 # runtime by the backup runners. They are committed from a Windows checkout,

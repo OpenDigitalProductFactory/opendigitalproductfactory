@@ -8,6 +8,7 @@ import {
   type CrmTone,
 } from "@/lib/crm/presentation";
 import { formatRevenueAmount } from "@/lib/crm/revenue-cockpit";
+import { EXCLUDE_TOMBSTONED } from "@dpf/db/customer-lifecycle";
 import { OwnerFirstSummaryBand } from "@/components/owner-first/OwnerFirstSummary";
 import { loadOwnerFirstContext } from "@/lib/owner-first/context";
 import { buildWorkspaceStorefrontSummary } from "@/lib/owner-first/domain-summary";
@@ -43,12 +44,22 @@ export default async function FunnelPage() {
   ]);
 
   // CRM pipeline stages
-  const [engagements, opportunities] = await Promise.all([
+  const [engagements, opportunities, accountsByStatus] = await Promise.all([
     prisma.engagement.groupBy({ by: ["status"], _count: true }),
     prisma.opportunity.groupBy({ by: ["stage"], _count: true, _sum: { expectedValue: true } }),
+    prisma.customerAccount.groupBy({ by: ["status"], _count: true, where: EXCLUDE_TOMBSTONED }),
   ]);
 
   const totalInteractions = bookings + inquiries + orders + donations;
+  // Direct + reseller leads: accounts in the early relationship lifecycle (prospect/qualified).
+  // These feed the top of funnel when there is no published storefront, so a direct- or
+  // reseller-sourced pipeline is represented instead of a storefront we don't have (BI-9078F4EE).
+  const accountCount = (status: string) =>
+    accountsByStatus.find((a) => a.status === status)?._count ?? 0;
+  const directLeads = accountCount("prospect") + accountCount("qualified");
+  const hasStorefrontActivity = totalInteractions > 0;
+  // Top of funnel is storefront interactions when a storefront is active, else direct/reseller leads.
+  const topOfFunnel = hasStorefrontActivity ? totalInteractions : directLeads;
   const totalEngagements = engagements.reduce((s, e) => s + e._count, 0);
   const openOpps = opportunities.filter((o) =>
     OPEN_OPPORTUNITY_STAGES.includes(o.stage as (typeof OPEN_OPPORTUNITY_STAGES)[number]),
@@ -59,8 +70,8 @@ export default async function FunnelPage() {
   const wonValue = Number(opportunities.find((o) => o.stage === "closed_won")?._sum?.expectedValue ?? 0);
 
   // Conversion rates
-  const convToEngagement = totalInteractions > 0
-    ? ((totalEngagements / totalInteractions) * 100).toFixed(0)
+  const convToEngagement = topOfFunnel > 0
+    ? ((totalEngagements / topOfFunnel) * 100).toFixed(0)
     : null;
   const convToOpp = totalEngagements > 0
     ? (((totalOpenOpps + closedWon + closedLost) / totalEngagements) * 100).toFixed(0)
@@ -76,22 +87,32 @@ export default async function FunnelPage() {
   const primaryCount = ctaType === "booking" ? bookings : ctaType === "purchase" ? orders : ctaType === "donation" ? donations : inquiries;
 
   // Funnel stages data
+  const topWidthBase = Math.max(topOfFunnel, 1);
   const funnelStages = [
-    {
-      label: "Storefront Interactions",
-      count: totalInteractions,
-      detail: `${ctaLabel}: ${primaryCount}`,
-      convLabel: null as string | null,
-      tone: "accent" as CrmTone,
-      width: 100,
-    },
+    hasStorefrontActivity
+      ? {
+          label: "Storefront Interactions",
+          count: totalInteractions,
+          detail: `${ctaLabel}: ${primaryCount}`,
+          convLabel: null as string | null,
+          tone: "accent" as CrmTone,
+          width: 100,
+        }
+      : {
+          label: "Direct & Reseller Leads",
+          count: directLeads,
+          detail: `Prospects: ${accountCount("prospect")}, Qualified: ${accountCount("qualified")}`,
+          convLabel: null as string | null,
+          tone: "accent" as CrmTone,
+          width: 100,
+        },
     {
       label: "Engagements",
       count: totalEngagements,
       detail: engagements.map((e) => `${e.status}: ${e._count}`).join(", ") || "none",
       convLabel: convToEngagement ? `${convToEngagement}% conversion` : null,
       tone: "attention" as CrmTone,
-      width: totalInteractions > 0 ? Math.max(15, (totalEngagements / totalInteractions) * 100) : 15,
+      width: topOfFunnel > 0 ? Math.max(15, (totalEngagements / topOfFunnel) * 100) : 15,
     },
     {
       label: "Opportunities",
@@ -99,7 +120,7 @@ export default async function FunnelPage() {
       detail: openOpps.map((o) => `${o.stage}: ${o._count}`).join(", ") || "none",
       convLabel: convToOpp ? `${convToOpp}% conversion` : null,
       tone: "info" as CrmTone,
-      width: totalInteractions > 0 ? Math.max(10, ((totalOpenOpps + closedWon + closedLost) / Math.max(totalInteractions, 1)) * 100) : 10,
+      width: topOfFunnel > 0 ? Math.max(10, ((totalOpenOpps + closedWon + closedLost) / topWidthBase) * 100) : 10,
     },
     {
       label: "Closed Won",
@@ -107,7 +128,7 @@ export default async function FunnelPage() {
       detail: wonValue > 0 ? `Value: ${formatRevenueAmount(wonValue, baseCurrency)}` : "no revenue yet",
       convLabel: winRate ? `${winRate}% win rate` : null,
       tone: "success" as CrmTone,
-      width: totalInteractions > 0 ? Math.max(5, (closedWon / Math.max(totalInteractions, 1)) * 100) : 5,
+      width: topOfFunnel > 0 ? Math.max(5, (closedWon / topWidthBase) * 100) : 5,
     },
   ];
 
@@ -258,9 +279,14 @@ export default async function FunnelPage() {
         </>
       )}
 
-      {totalInteractions === 0 && (
+      {topOfFunnel === 0 && totalOpenOpps + closedWon + closedLost === 0 && (
         <p className="text-sm text-[var(--dpf-muted)] mt-4">
-          No storefront interactions in the last 30 days. Set up and publish your storefront to start receiving customer interactions.
+          No pipeline yet. Add an account or publish a storefront to begin.
+        </p>
+      )}
+      {topOfFunnel > 0 && !hasStorefrontActivity && (
+        <p className="text-xs text-[var(--dpf-muted)] mt-4">
+          Top of funnel: direct &amp; reseller leads (accounts in early lifecycle stages).
         </p>
       )}
     </div>

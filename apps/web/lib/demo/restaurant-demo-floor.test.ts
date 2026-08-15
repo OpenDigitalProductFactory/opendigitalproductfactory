@@ -68,10 +68,11 @@ describe("buildRestaurantDemoFloorPlan", () => {
   });
 
   it("creates two published server sections with every table assigned once", () => {
+    const now = new Date("2026-08-08T18:00:00.000Z");
     const plan = buildRestaurantDemoFloorPlan({
       bookings,
       employees,
-      now: new Date("2026-08-08T18:00:00.000Z"),
+      now,
       timezone: "America/Chicago",
     });
 
@@ -82,5 +83,10 @@ describe("buildRestaurantDemoFloorPlan", () => {
     ]);
     expect(plan.serverSections.flatMap((section) => section.tableKeys).sort())
       .toEqual(plan.tables.map((table) => table.key).sort());
+    expect(
+      plan.serverSections.every(
+        (section) => section.endAt.getTime() - now.getTime() > 365 * 24 * 60 * 60_000,
+      ),
+    ).toBe(true);
   });
 });

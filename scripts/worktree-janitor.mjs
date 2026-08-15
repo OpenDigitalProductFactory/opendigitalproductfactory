@@ -33,6 +33,10 @@ import {
   isLiveReapEligible,
   summarizeDecisions,
 } from "./lib/worktree-janitor-core.mjs";
+import {
+  isWorktreeSessionLive,
+  heartbeatTtlMs,
+} from "./lib/worktree-session-heartbeat.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const DEFAULT_GRACE = 14;
@@ -166,6 +170,13 @@ function isDirty(wtPath) {
   return r.ok && r.stdout.length > 0;
 }
 
+/** True when a merge is in progress in this worktree (MERGE_HEAD present). For a
+ *  linked worktree MERGE_HEAD lives in its per-worktree git dir, so ask git. */
+function isMidMerge(wtPath) {
+  const r = runGit(["rev-parse", "-q", "--verify", "MERGE_HEAD"], wtPath);
+  return r.ok && r.stdout.length > 0;
+}
+
 function ageDays(wtPath) {
   const r = runGit(["log", "-1", "--format=%ct"], wtPath);
   if (!r.ok || !r.stdout) return 0;
@@ -214,19 +225,23 @@ function pathHasLease(leasePayload, wtPath) {
   return leasePayload.includes(wtPath) || leasePayload.includes(norm);
 }
 
-function gatherFacts(root, entry, prIndex, leasePayload) {
+function gatherFacts(root, entry, prIndex, leasePayload, ttlMs) {
   const wtPath = entry.path;
   const branch = entry.detached ? null : entry.branch;
+  const isRoot = path.resolve(wtPath) === path.resolve(root);
   return {
     path: wtPath,
     branch,
-    isRoot: path.resolve(wtPath) === path.resolve(root),
+    isRoot,
     pinned: existsSync(path.join(wtPath, ".worktree-pinned")),
     hasActiveLease: pathHasLease(leasePayload, wtPath),
     hasOpenPr: branch ? prIndex.open.has(branch) : false,
     merged: branch ? isMerged(root, branch, prIndex) : false,
     dirty: branch ? isDirty(wtPath) : false,
     ageDays: branch ? ageDays(wtPath) : 0,
+    // Liveness + abandoned-merge signals — never checked on the root clone.
+    hasLiveSession: branch && !isRoot ? isWorktreeSessionLive(wtPath, { ttlMs }) : false,
+    midMerge: branch && !isRoot ? isMidMerge(wtPath) : false,
   };
 }
 
@@ -275,12 +290,13 @@ function main(argv = process.argv.slice(2)) {
   const entries = listWorktrees(root);
   const prIndex = loadPrBranchIndex();
   const leasePayload = loadLeasePaths();
+  const ttlMs = heartbeatTtlMs(process.env);
   const policy = args.tierAOnly ? "tier-a-only" : "all";
   const decisions = [];
   const removals = [];
 
   for (const entry of entries) {
-    const facts = gatherFacts(root, entry, prIndex, leasePayload);
+    const facts = gatherFacts(root, entry, prIndex, leasePayload, ttlMs);
     const { verdict, reason, tier } = classifyWorktree(facts, { graceDays: args.graceDays });
     const row = {
       path: facts.path,
@@ -291,6 +307,8 @@ function main(argv = process.argv.slice(2)) {
       ageDays: facts.ageDays,
       merged: facts.merged,
       dirty: facts.dirty,
+      hasLiveSession: facts.hasLiveSession,
+      midMerge: facts.midMerge,
     };
     decisions.push(row);
 
@@ -323,9 +341,13 @@ function main(argv = process.argv.slice(2)) {
   for (const d of decisions) {
     console.log(`  ${d.verdict.padEnd(12)} ${d.path}  (${d.reason})`);
   }
+  for (const p of summary.flaggedPaths ?? []) {
+    console.log(`  [flag]  abandoned mid-merge (MERGE_HEAD, no live session): ${p} — quarantined, never auto-reaped`);
+  }
   console.log(
     `\nSummary: TierA=${summary.counts.PRUNE_TIER_A} TierB=${summary.counts.PRUNE_TIER_B} ` +
-      `KEEP=${summary.counts.KEEP} SKIP=${summary.counts.SKIP} PINNED=${summary.counts.PINNED}`,
+      `KEEP=${summary.counts.KEEP} SKIP=${summary.counts.SKIP} PINNED=${summary.counts.PINNED} ` +
+      `FLAG_ABANDONED_MERGE=${summary.counts.FLAG_ABANDONED_MERGE ?? 0}`,
   );
   if (args.dryRun) console.log("\n(Dry run — nothing removed. Pass --live to prune.)\n");
   process.exit(0);

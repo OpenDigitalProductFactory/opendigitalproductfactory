@@ -1,0 +1,21 @@
+{
+  "version": "1",
+  "decidedOption": "progressive-disclosure-inline-governed",
+  "decisionInteractionId": "DI-85DDEEE554CF",
+  "scope": {
+    "files": [
+      "apps/web/components/customer/AccountAdminActions.tsx",
+      "apps/web/components/customer/RemoveOpportunityButton.tsx",
+      "apps/web/components/customer/AccountLifecycleActions.tsx",
+      "apps/web/app/(shell)/customer/(crm)/[id]/page.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "progressive-disclosure-inline-governed",
+      "dedicated-account-admin-page",
+      "raw-status-textbox-and-hard-delete"
+    ]
+  }
+}

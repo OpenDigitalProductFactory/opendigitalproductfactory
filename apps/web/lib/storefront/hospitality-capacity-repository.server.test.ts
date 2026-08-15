@@ -13,6 +13,9 @@ import {
 
 function database(overrides: Record<string, unknown> = {}) {
   return {
+    businessProfile: {
+      findFirst: vi.fn(async () => ({ timezone: "UTC" })),
+    },
     hospitalityResource: {
       findFirst: vi.fn(async () => ({
         id: "table-1",
@@ -68,8 +71,38 @@ describe("hospitality capacity repository", () => {
         legacyServiceProviderId: "provider-1",
         status: "active",
       },
-      select: { id: true, legacyServiceProviderId: true, status: true },
+      select: { id: true, legacyServiceProviderId: true, status: true, attributes: true },
     });
+  });
+
+  it("excludes in-house tables from public provider resolution", async () => {
+    const db = database({
+      hospitalityResource: {
+        findFirst: vi.fn(async () => ({
+          id: "table-1",
+          legacyServiceProviderId: "provider-1",
+          status: "active",
+          attributes: { shape: "round", bookingAccess: "in-house" },
+        })),
+      },
+    });
+
+    await expect(
+      resolveHospitalityResourceForProvider(db, {
+        organizationId: "org-1",
+        storefrontId: "storefront-1",
+        providerId: "provider-1",
+        bookingAccess: "online",
+      }),
+    ).resolves.toBeNull();
+
+    await expect(
+      resolveHospitalityResourceForProvider(db, {
+        organizationId: "org-1",
+        storefrontId: "storefront-1",
+        providerId: "provider-1",
+      }),
+    ).resolves.toEqual(expect.objectContaining({ id: "table-1" }));
   });
 
   it("creates a discrete allocation with a stable idempotency boundary", async () => {
@@ -162,6 +195,117 @@ describe("hospitality capacity repository", () => {
       }),
     ).rejects.toBeInstanceOf(HospitalityCapacityConflictError);
     expect(create).not.toHaveBeenCalled();
+  });
+
+  it("allows an authenticated service turn to extend beyond the last public bookable start", async () => {
+    const create = vi.fn(async ({ data }: { data: Record<string, unknown> }) => ({
+      id: "allocation-row",
+      version: 1,
+      ...data,
+    }));
+    const db = database({
+      businessProfile: {
+        findFirst: vi.fn(async () => ({ timezone: "America/Chicago" })),
+      },
+      hospitalityResource: {
+        findFirst: vi.fn(async () => ({
+          id: "table-1",
+          legacyServiceProviderId: "provider-1",
+          status: "active",
+          capacity: 4,
+          availability: [{
+            kind: "available",
+            days: [3],
+            startTime: "11:00",
+            endTime: "22:00",
+            date: null,
+          }],
+        })),
+      },
+      hospitalityCapacityAllocation: {
+        findFirst: vi.fn(async () => null),
+        findMany: vi.fn(async () => []),
+        create,
+        updateMany: vi.fn(async () => ({ count: 0 })),
+      },
+    });
+
+    await expect(
+      allocateHospitalityCapacity(db, {
+        organizationId: "org-1",
+        storefrontId: "storefront-1",
+        resourceId: "table-1",
+        poolId: null,
+        demandType: "booking",
+        demandRef: "BK-WALK-IN",
+        bookingId: "booking-walk-in",
+        bookingHoldId: null,
+        serviceTurnId: "turn-1",
+        startsAt: new Date("2026-08-13T02:17:00.000Z"),
+        // clock-bomb-guard: allow pure historical interval fixture has no wall-clock dependency
+        endsAt: new Date("2026-08-13T03:47:00.000Z"),
+        quantity: 1,
+        idempotencyKey: "seat:booking-walk-in:table-1",
+        enforceResourceAvailability: false,
+      }),
+    ).resolves.toEqual(expect.objectContaining({ demandRef: "BK-WALK-IN" }));
+    expect(create).toHaveBeenCalledTimes(1);
+  });
+
+  it("evaluates a Restaurant table schedule in the operator's Chicago timezone", async () => {
+    const create = vi.fn(async ({ data }: { data: Record<string, unknown> }) => ({
+      id: "allocation-row",
+      version: 1,
+      ...data,
+    }));
+    const db = database({
+      businessProfile: {
+        findFirst: vi.fn(async () => ({ timezone: "America/Chicago" })),
+      },
+      hospitalityResource: {
+        findFirst: vi.fn(async () => ({
+          id: "table-1",
+          legacyServiceProviderId: "provider-1",
+          status: "active",
+          capacity: 4,
+          availability: [
+            {
+              kind: "available",
+              days: [3],
+              startTime: "11:00",
+              endTime: "22:00",
+              date: null,
+            },
+          ],
+          storefront: { timezone: "Europe/London" },
+        })),
+      },
+      hospitalityCapacityAllocation: {
+        findFirst: vi.fn(async () => null),
+        findMany: vi.fn(async () => []),
+        create,
+        updateMany: vi.fn(async () => ({ count: 0 })),
+      },
+    });
+
+    await expect(
+      allocateHospitalityCapacity(db, {
+        organizationId: "org-1",
+        storefrontId: "storefront-1",
+        resourceId: "table-1",
+        poolId: null,
+        demandType: "booking",
+        demandRef: "BK-CHICAGO",
+        bookingId: "booking-chicago",
+        bookingHoldId: null,
+        startsAt: new Date("2026-08-13T00:31:27.615Z"),
+        // clock-bomb-guard: allow pure interval fixture has no wall-clock dependency
+        endsAt: new Date("2026-08-13T02:01:27.615Z"),
+        quantity: 1,
+        idempotencyKey: "booking:booking-chicago",
+      }),
+    ).resolves.toEqual(expect.objectContaining({ demandRef: "BK-CHICAGO" }));
+    expect(create).toHaveBeenCalledTimes(1);
   });
 
   it("rejects party demand above a discrete resource's seat capacity", async () => {

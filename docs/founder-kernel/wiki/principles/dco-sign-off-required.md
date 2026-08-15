@@ -5,7 +5,7 @@ status: published
 abstract: Every commit carries a Signed-off-by trailer attesting to the Developer Certificate of Origin.
 principleTier: commandment
 principleDirection: Sign every commit with the Developer Certificate of Origin trailer.
-principleDimensionVector: {"governance_compliance": 1.0, "public_safety": 0.7, "evidence_density": 0.4}
+principleDimensionVector: {"governance_compliance": 1.0, "public_safety": 0.7, "evidence_density": 0.5, "long_term_maintainability": 0.4, "blast_radius": -0.35}
 principleAppliesTo:
   - in_platform_coworker
   - external_coding_agent
@@ -36,6 +36,8 @@ In-platform coworkers (Build Studio's authored commits), external coding agents 
 ## How To Apply
 
 The mechanical step is `git commit -s -m "<message>"`. The DCO bot checks every commit in a PR and surfaces failures with a link to the certificate text. When you forget — and you will, eventually — fix it by rewriting the unsigned commits: `git rebase --signoff <base>` adds the trailer to every commit since `<base>`, then force-push. Don't merge-bypass; the bot is right and the alternative is a downstream audit problem.
+
+The bot runs *after* the push, so a missing sign-off — classically a corrupted or auto-generated MERGE commit — otherwise turns the PR red minutes later. The pre-push gate now catches it host-native, before the push leaves the worktree: `.githooks/pre-push-gate` runs `scripts/pre-push-dco-check.mjs` (`pnpm dco:check`) over `origin/main..HEAD`, merges included, and refuses the push if any commit lacks the trailer. Same predicate as `pnpm pr:ready`. See [`docs/architecture/build-gate-runbook.md`](../../../architecture/build-gate-runbook.md) for the full gate wiring.
 
 ## Decision Dimensions
 

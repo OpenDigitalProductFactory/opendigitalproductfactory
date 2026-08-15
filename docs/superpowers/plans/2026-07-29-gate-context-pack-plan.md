@@ -68,6 +68,12 @@ found by this slice's first drift-guard run and fixed in the same change.
   product failure, matching the pregate-preflight degradation contract.
 - The readiness report renders the prospective gate-context checklist before
   its pass/fail verdict for the exact `origin/main...HEAD` diff.
+- The portal runtime executes the generator closure packaged in its own image
+  before considering a development workspace or host-checkout fallback. The
+  runner preserves the generator's repository-relative source and registry
+  paths, and a closure test follows every local import from
+  `scripts/gate-context.mjs` into the Dockerfile contract. A mutable host
+  checkout must never substitute older rule bytes for the deployed portal.
 - Trailer parsing and prospective trailer guidance consume one canonical
   trailer-name contract.
 - The shared external-agent PR skill and GitHub template instruct authors to

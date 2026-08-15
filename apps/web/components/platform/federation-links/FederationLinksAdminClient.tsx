@@ -10,6 +10,7 @@ import { StatusBadge } from "@/components/ui/report-kit";
 import {
   approveFederationLinkAction,
   approveNearbyPairingAction,
+  confirmNearbyPairingAction,
   denyNearbyPairingAction,
   enrollWithPeerAction,
   issueFederationBootstrapAction,
@@ -18,9 +19,13 @@ import {
   revokeFederationLinkAction,
   setFederationDiscoveryEnabledAction,
   setFederationLinkEnvironmentAction,
+  setFederationIntroducerPolicyAction,
   startNearbyPairingAction,
 } from "@/lib/actions/federation-links";
 import type { NearbyFederationCandidate } from "@/lib/federation/nearby-candidates";
+import type { NearbyDiscoveryHealth } from "@/lib/edge-node/readiness";
+import { normalizeRecoveryAuthority } from "@/lib/federation/recovery-authority";
+import { FederationLinksTable } from "./FederationLinksTable";
 
 export interface FederationLinkRow {
   linkId: string;
@@ -36,13 +41,9 @@ export interface FederationLinkRow {
   /** Retention class the peer applies to what we share. */
   sharedRetention: string;
   environmentClass: "production" | "development" | "test";
+  offersIntroductions: boolean;
+  acceptsIntroductions: boolean;
   createdAtISO: string;
-}
-
-export interface NearbyDiscoveryHealth {
-  status: "healthy" | "degraded" | "waiting" | "disabled" | "unavailable";
-  label: string;
-  detail: string;
 }
 
 export interface NearbyPairingRow {
@@ -56,10 +57,11 @@ export interface NearbyPairingRow {
   sharedSlices: string[];
   retentionClass: string;
   staysLocal: string[];
+  sasConfirmedAtLocal?: boolean;
+  sasConfirmedAtPeer?: boolean;
 }
-
 type Flash = { kind: "success" | "error"; text: string } | null;
-
+const PEER_CONFIRMATION_WAIT = "Waiting for the other installation…";
 export function FederationLinksAdminClient({
   rows,
   nearbyCandidates = [],
@@ -110,6 +112,8 @@ export function FederationLinksAdminClient({
       sharedSlices: result.projectionSummary.sharedSlices,
       retentionClass: result.projectionSummary.retentionClass,
       staysLocal: result.projectionSummary.staysLocal,
+      sasConfirmedAtLocal: false,
+      sasConfirmedAtPeer: false,
     };
   }
 
@@ -137,7 +141,6 @@ export function FederationLinksAdminClient({
     }, 3_000);
     return () => window.clearTimeout(timer);
   }, [isPending, pairingRows, router]);
-
   async function selectNearbyCandidate(candidate: NearbyFederationCandidate) {
     if (candidate.automaticPairing === "blocked-insecure-transport") return;
     const confirmed = await confirmDialog({
@@ -160,12 +163,11 @@ export function FederationLinksAdminClient({
       setFlash({ kind: "success", text: "Secure setup started. Confirm the same code on both installations." });
     });
   }
-
   async function onApprovePairing(row: NearbyPairingRow) {
     const confirmed = await confirmDialog({
-      title: "Approve this installation",
-      message: `Approve ${row.peerDisplayName} only if it shows the same code ${row.matchingCode} and you accept the sharing summary. The connection still remains pending until both installations approve it.`,
-      confirmLabel: "Approve this installation",
+      title: "Confirm codes match",
+      message: `Continue with ${row.peerDisplayName} only if its screen shows ${row.matchingCode} and you accept the sharing summary. Trust is not granted until both installations confirm.`,
+      confirmLabel: "Codes match — approve",
     });
     if (!confirmed) return;
     startTransition(async () => {
@@ -176,7 +178,24 @@ export function FederationLinksAdminClient({
       if (result.ok) router.refresh();
     });
   }
-
+  async function onConfirmOutgoingPairing(row: NearbyPairingRow) {
+    const confirmed = await confirmDialog({
+      title: "Confirm codes match",
+      message: `Only continue if ${row.peerDisplayName} shows ${row.matchingCode}. Stop if the code differs.`,
+      confirmLabel: "Codes match — continue",
+    });
+    if (!confirmed) return;
+    startTransition(async () => {
+      const result = await confirmNearbyPairingAction(row.pairingId);
+      if (!result.ok) {
+        setFlash({ kind: "error", text: `Code confirmation failed: ${result.message}` });
+        return;
+      }
+      setActivePairing({ ...row, sasConfirmedAtLocal: true, status: result.status === "approved" ? "approved" : row.status });
+      setFlash({ kind: "success", text: "Confirmed here. Waiting for the other installation." });
+      router.refresh();
+    });
+  }
   async function onDenyPairing(row: NearbyPairingRow) {
     const reason = await promptDialog({
       title: "Deny this installation",
@@ -193,7 +212,6 @@ export function FederationLinksAdminClient({
       if (result.ok) router.refresh();
     });
   }
-
   function setNearbyDiscovery(enabled: boolean) {
     setFlash(null);
     startTransition(async () => {
@@ -213,9 +231,14 @@ export function FederationLinksAdminClient({
 
   function onConnect() {
     setFlash(null);
+    const normalized = normalizeRecoveryAuthority(peerUrl);
+    if (!normalized.ok) {
+      setFlash({ kind: "error", text: normalized.message });
+      return;
+    }
     startTransition(async () => {
       const result = await enrollWithPeerAction({
-        peerAuthorityUrl: peerUrl.trim(),
+        peerAuthorityUrl: normalized.authorityUrl,
         bootstrapToken: peerToken.trim(),
         displayName: peerName.trim() || "Peer deployment",
       });
@@ -319,6 +342,20 @@ export function FederationLinksAdminClient({
     });
   }
 
+  function onIntroducerPolicy(row: FederationLinkRow, field: "offersIntroductions" | "acceptsIntroductions", checked: boolean) {
+    setFlash(null);
+    startTransition(async () => {
+      const result = await setFederationIntroducerPolicyAction(row.linkId, {
+        offersIntroductions: field === "offersIntroductions" ? checked : row.offersIntroductions,
+        acceptsIntroductions: field === "acceptsIntroductions" ? checked : row.acceptsIntroductions,
+      });
+      setFlash(result.ok
+        ? { kind: "success", text: `Introduction policy updated for ${row.displayName}. Discovery candidates never inherit trust.` }
+        : { kind: "error", text: `Introduction policy failed: ${result.message}` });
+      if (result.ok) router.refresh();
+    });
+  }
+
   return (
     <div className="space-y-6">
       {flash && (
@@ -341,7 +378,7 @@ export function FederationLinksAdminClient({
         <div className="flex flex-wrap items-start justify-between gap-2">
           <div>
             <h2 className="text-sm font-semibold text-[var(--dpf-text)]">
-              {nearbyCandidates.length > 0 ? "DPF found nearby" : "Nearby DPF installations"}
+              {nearbyCandidates.length > 0 ? "DPF installations available" : "Find DPF installations"}
             </h2>
             <p className="mt-0.5 text-xs text-[var(--dpf-muted)]">
               Discovery is only a setup suggestion. A connection starts only after both
@@ -395,7 +432,7 @@ export function FederationLinksAdminClient({
         </p>
         {nearbyCandidates.length === 0 ? (
           <p className="mt-3 rounded border p-3 text-sm text-[var(--dpf-muted)]" style={{ borderColor: "var(--dpf-border)", backgroundColor: "var(--dpf-surface-2)" }}>
-            No nearby DPF installations are visible right now. You can still use an invitation below.
+            No DPF installations are visible right now. Discovery and trusted introducers refresh automatically. Recovery options are available below.
           </p>
         ) : (
           <div className="mt-3 space-y-2">
@@ -408,9 +445,14 @@ export function FederationLinksAdminClient({
                   style={{ borderColor: "var(--dpf-border)", backgroundColor: "var(--dpf-surface-2)" }}
                 >
                   <div>
-                    <p className="font-mono text-xs text-[var(--dpf-text)]">{candidate.endpoint}</p>
+                    <p className="text-sm font-semibold text-[var(--dpf-text)]">
+                      {candidate.displayName ?? "Nearby DPF installation"}
+                    </p>
+                    <p className="mt-0.5 font-mono text-xs text-[var(--dpf-muted)]">{candidate.endpoint}</p>
                     <p className="mt-1 text-xs text-[var(--dpf-muted)]">
-                      <span className="font-medium">Not connected</span> · {secure
+                      <span className="font-medium">Not connected</span>
+                      {candidate.source === "introducer" && <> · Introduced by {candidate.introducedBy ?? "a trusted connection"}; trust is not transferred.</>}
+                      {candidate.relationshipHint && <> · Suggested relationship: {candidate.relationshipHint}.</>} · {secure
                         ? "TLS will be verified before any invitation is sent."
                         : "Automatic pairing is blocked because this endpoint is not HTTPS."}
                     </p>
@@ -460,7 +502,7 @@ export function FederationLinksAdminClient({
                   <p><span className="font-medium text-[var(--dpf-text)]">Shares:</span> {pairing.sharedSlices.join(", ")} · retain: {pairing.retentionClass}</p>
                   <p className="mt-1"><span className="font-medium text-[var(--dpf-text)]">Stays here:</span> {pairing.staysLocal.join(", ")}</p>
                 </div>
-                {pairing.direction === "incoming" && pairing.status === "pending" && (
+                {pairing.direction === "incoming" && pairing.status === "pending" && !pairing.sasConfirmedAtLocal && (
                   <div className="mt-3 flex flex-wrap gap-2">
                     <button
                       type="button"
@@ -469,7 +511,7 @@ export function FederationLinksAdminClient({
                       className="rounded px-3 py-1.5 text-sm font-medium text-[var(--dpf-bg)] disabled:opacity-50"
                       style={{ backgroundColor: "var(--dpf-accent)" }}
                     >
-                      {isPending ? <InlineBusy label="Approving…" tone="current" /> : "Approve this installation"}
+                      {isPending ? <InlineBusy label="Confirming…" tone="current" /> : "Codes match — approve"}
                     </button>
                     <button
                       type="button"
@@ -482,20 +524,40 @@ export function FederationLinksAdminClient({
                     </button>
                   </div>
                 )}
-                {pairing.direction === "outgoing" && (pairing.status === "pending" || pairing.status === "approved") && (
-                  <div className="mt-3"><InlineBusy label="Checking for approval…" /></div>
+                {pairing.direction === "incoming" && pairing.status === "pending" && pairing.sasConfirmedAtLocal &&
+                  <div className="mt-3"><InlineBusy label={PEER_CONFIRMATION_WAIT} /></div>}
+                {pairing.direction === "outgoing" && pairing.status === "pending" && !pairing.sasConfirmedAtLocal && (
+                  <button
+                    type="button"
+                    data-dpf-primary-action
+                    disabled={isPending}
+                    onClick={() => onConfirmOutgoingPairing(pairing)}
+                    className="mt-3 rounded px-3 py-1.5 text-sm font-medium text-[var(--dpf-bg)] disabled:opacity-50"
+                    style={{ backgroundColor: "var(--dpf-accent)" }}
+                  >
+                    {isPending ? <InlineBusy label="Confirming…" tone="current" /> : "Codes match — continue"}
+                  </button>
                 )}
+                {pairing.direction === "outgoing" && (pairing.status === "approved" || pairing.sasConfirmedAtLocal) &&
+                  <div className="mt-3"><InlineBusy label={PEER_CONFIRMATION_WAIT} /></div>}
               </div>
             ))}
           </div>
         )}
       </section>
 
-      {/* Issue invitation */}
-      <div
+      <details
         className="rounded border p-4"
         style={{ borderColor: "var(--dpf-border)", backgroundColor: "var(--dpf-surface-1)" }}
       >
+        <summary className="cursor-pointer text-sm font-semibold text-[var(--dpf-text)]">
+          Recovery and advanced connection options
+        </summary>
+        <p className="mt-1 text-xs text-[var(--dpf-muted)]">
+          Use these only when discovery or a trusted introducer cannot reach the other installation.
+        </p>
+      {/* Issue invitation */}
+      <div className="mt-4 rounded border p-4" style={{ borderColor: "var(--dpf-border)", backgroundColor: "var(--dpf-surface-2)" }}>
         <h2 className="text-sm font-semibold text-[var(--dpf-text)]">Invite a peer deployment</h2>
         <p className="mt-0.5 text-xs text-[var(--dpf-muted)]">
           Issue a single-use invitation token. The peer redeems it at <code>POST /api/v1/federation/enroll</code>.
@@ -600,8 +662,8 @@ export function FederationLinksAdminClient({
 
       {/* Connect to a peer (outbound enroll) */}
       <div
-        className="rounded border p-4"
-        style={{ borderColor: "var(--dpf-border)", backgroundColor: "var(--dpf-surface-1)" }}
+        className="mt-4 rounded border p-4"
+        style={{ borderColor: "var(--dpf-border)", backgroundColor: "var(--dpf-surface-2)" }}
       >
         <h2 className="text-sm font-semibold text-[var(--dpf-text)]">Connect to a peer</h2>
         <p className="mt-0.5 text-xs text-[var(--dpf-muted)]">
@@ -609,7 +671,7 @@ export function FederationLinksAdminClient({
         </p>
         <div className="mt-3 flex flex-wrap items-end gap-3">
           <label className="text-xs text-[var(--dpf-muted)]">
-            Peer URL
+            Installation host, IP, or origin
             <input
               value={peerUrl}
               onChange={(e) => setPeerUrl(e.target.value)}
@@ -649,120 +711,17 @@ export function FederationLinksAdminClient({
           </button>
         </div>
       </div>
+      </details>
 
-      {/* Links table */}
-      <p className="text-xs text-[var(--dpf-muted)]">
-        <span className="font-medium text-[var(--dpf-text)]">Shared scope</span> is exactly what crosses each
-        link to the peer — the minimum-necessary projection enforced at egress. Nothing outside it leaves this
-        deployment.
-      </p>
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr style={{ borderBottom: "1px solid var(--dpf-border)" }}>
-              <th className="p-2 text-left text-[var(--dpf-muted)]">Peer</th>
-              <th className="p-2 text-left text-[var(--dpf-muted)]">Role</th>
-              <th className="p-2 text-left text-[var(--dpf-muted)]">State</th>
-              <th className="p-2 text-left text-[var(--dpf-muted)]">Approvals</th>
-              <th className="p-2 text-left text-[var(--dpf-muted)]">Shared scope</th>
-              <th className="p-2 text-left text-[var(--dpf-muted)]">Environment</th>
-              <th className="p-2 text-left text-[var(--dpf-muted)]">Peer URL</th>
-              <th className="p-2 text-left text-[var(--dpf-muted)]">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.length === 0 && (
-              <tr>
-                <td colSpan={8} className="p-4 text-center text-[var(--dpf-muted)]">
-                  No federation links yet. Invite a peer above, or accept an invitation from one.
-                </td>
-              </tr>
-            )}
-            {rows.map((row) => (
-              <tr key={row.linkId} style={{ borderBottom: "1px solid var(--dpf-border)" }}>
-                <td className="p-2 text-[var(--dpf-text)]">
-                  {row.displayName}
-                  {row.peerOrganizationRef && (
-                    <span className="ml-1 text-xs text-[var(--dpf-muted)]">({row.peerOrganizationRef})</span>
-                  )}
-                </td>
-                <td className="p-2 text-[var(--dpf-muted)]">{row.role}</td>
-                <td className="p-2">
-                  <StatusBadge domain="federationLinkState" status={row.linkState} />
-                </td>
-                <td className="p-2 text-xs text-[var(--dpf-muted)]">
-                  ours {row.approvedLocal ? "✓" : "—"} · peer {row.approvedPeer ? "✓" : "—"}
-                </td>
-                <td className="p-2 text-xs">
-                  <div className="flex flex-wrap gap-1">
-                    {row.sharedSlices.map((s) => (
-                      <span
-                        key={s}
-                        className="rounded px-1.5 py-0.5 text-[var(--dpf-text)]"
-                        style={{ backgroundColor: "var(--dpf-surface-2)", border: "1px solid var(--dpf-border)" }}
-                      >
-                        {s}
-                      </span>
-                    ))}
-                  </div>
-                  <span className="mt-0.5 block text-[var(--dpf-muted)]">retain: {row.sharedRetention}</span>
-                </td>
-                <td className="p-2">
-                  <select
-                    aria-label={`Environment for ${row.displayName}`}
-                    value={row.environmentClass}
-                    disabled={isPending || row.linkState === "revoked"}
-                    onChange={(event) => onEnvironment(row, event.target.value as FederationLinkRow["environmentClass"])}
-                    className="rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-2 py-1 text-xs text-[var(--dpf-text)] disabled:opacity-50"
-                  >
-                    <option value="production">production</option>
-                    <option value="development">development</option>
-                    <option value="test">test</option>
-                  </select>
-                </td>
-                <td className="p-2 font-mono text-xs text-[var(--dpf-muted)]">{row.peerAuthorityUrl}</td>
-                <td className="p-2">
-                  <div className="flex flex-wrap gap-1">
-                    {row.linkState === "pending" && (
-                      <button
-                        type="button"
-                        onClick={() => onApprove(row)}
-                        disabled={isPending}
-                        className="rounded px-2 py-1 text-xs font-medium text-[var(--dpf-bg)] disabled:opacity-50"
-                        style={{ backgroundColor: "var(--dpf-success)" }}
-                      >
-                        Approve
-                      </button>
-                    )}
-                    {(row.linkState === "pending" || row.linkState === "trusted") && (
-                      <button
-                        type="button"
-                        onClick={() => onQuarantine(row)}
-                        disabled={isPending}
-                        className="rounded px-2 py-1 text-xs font-medium text-[var(--dpf-bg)] disabled:opacity-50"
-                        style={{ backgroundColor: "var(--dpf-warning)" }}
-                      >
-                        Quarantine
-                      </button>
-                    )}
-                    {row.linkState !== "revoked" && (
-                      <button
-                        type="button"
-                        onClick={() => onRevoke(row)}
-                        disabled={isPending}
-                        className="rounded px-2 py-1 text-xs font-medium text-[var(--dpf-bg)] disabled:opacity-50"
-                        style={{ backgroundColor: "var(--dpf-error)" }}
-                      >
-                        Revoke
-                      </button>
-                    )}
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <FederationLinksTable
+        rows={rows}
+        isPending={isPending}
+        onApprove={onApprove}
+        onQuarantine={onQuarantine}
+        onRevoke={onRevoke}
+        onEnvironment={onEnvironment}
+        onIntroducerPolicy={onIntroducerPolicy}
+      />
     </div>
   );
 }

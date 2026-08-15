@@ -482,6 +482,7 @@ export async function executeRestaurantMoveCommand(input: {
             endsAt,
             quantity: 1,
             idempotencyKey: `${command.idempotencyKey}:${resourceId}`,
+            enforceResourceAvailability: false,
           }),
         );
         await dependencies.transitionCapacity(transaction as never, {

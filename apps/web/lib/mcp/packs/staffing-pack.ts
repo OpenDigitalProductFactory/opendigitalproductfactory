@@ -12,6 +12,10 @@
 // Handlers lazy-import Prisma so the pack stays a thin, tree-shakeable module.
 
 import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
+import {
+  getStaffingCoverage as loadStaffingCoverage,
+  type StaffingCoverageClient,
+} from "@/lib/workforce/staffing/staffing-coverage";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
 
 const definitions: ToolDefinition[] = [
@@ -92,40 +96,13 @@ async function getStaffingCoverage(params: Record<string, unknown>): Promise<Too
     return { success: false, error: "organizationId is required", message: "Provide an organizationId" };
   }
   const { prisma } = await import("@dpf/db");
-  const demands = await prisma.staffingDemand.findMany({
-    where: { organizationId, status: { not: "cancelled" } },
-    select: {
-      demandId: true,
-      minQuantity: true,
-      targetQuantity: true,
-      status: true,
-      shifts: {
-        select: {
-          requiredQuantity: true,
-          assignments: {
-            where: { lifecycle: { in: ["confirmed", "completed"] } },
-            select: { id: true },
-          },
-        },
-      },
-    },
+  const result = await loadStaffingCoverage(prisma as unknown as StaffingCoverageClient, {
+    organizationId,
   });
-  const coverage = demands.map((d) => {
-    const assigned = d.shifts.reduce((sum, s) => sum + s.assignments.length, 0);
-    const required = d.targetQuantity ?? d.minQuantity;
-    return {
-      demandId: d.demandId,
-      required,
-      assigned,
-      covered: assigned >= required,
-      status: d.status,
-    };
-  });
-  const uncovered = coverage.filter((c) => !c.covered).length;
   return {
     success: true,
-    message: `${coverage.length} demand record(s); ${uncovered} not yet fully covered.`,
-    data: { coverage, uncoveredCount: uncovered },
+    message: `${result.coverage.length} demand record(s); ${result.uncoveredCount} not yet fully covered.`,
+    data: result,
   };
 }
 

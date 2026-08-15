@@ -30,7 +30,10 @@ const definitions: ToolDefinition[] = [
   {
     name: "principle_decide",
     description:
-      "Advisory only. Score a set of options against the governance principles in scope for the calling population, and return a recommendation plus a per-principle contribution ledger. Uses commandments from Postgres (always included) and relevant core/contextual principles from semantic search. Does not execute the recommended option; the caller retains authority. Use when you have two or more options and want to surface which governance principles pull which way.",
+      "Advisory only. Score a set of options against the governance principles in scope for the calling population, and return a recommendation plus a per-principle contribution ledger. " +
+      "Uses commandments from Postgres (always included) and relevant core/contextual principles from semantic search. Does not execute the recommended option; the caller retains authority. " +
+      "Use when you have two or more options and want to surface which governance principles pull which way. " +
+      "Call once per distinct option set — do not re-score identical options hoping for a different winner.",
     inputSchema: {
       type: "object",
       properties: {
@@ -275,6 +278,14 @@ async function principleDecide(
     PRINCIPLE_DECIDE_DEFAULTS.contextualSimilarityThreshold;
   const semanticWarnRatio =
     PRINCIPLE_DECIDE_DEFAULTS.semanticFallbackWarnRatio;
+  const minFeatureKeys =
+    typeof params["minFeatureKeys"] === "number"
+      ? params["minFeatureKeys"]
+      : PRINCIPLE_DECIDE_DEFAULTS.minFeatureKeys;
+  const sensitivityEpsilon =
+    typeof params["sensitivityEpsilon"] === "number"
+      ? params["sensitivityEpsilon"]
+      : PRINCIPLE_DECIDE_DEFAULTS.sensitivityEpsilon;
 
   const org = await prisma.organization
     .findFirst({ select: { id: true } })
@@ -632,6 +643,8 @@ async function principleDecide(
   const result = decide(decisionOptions, cappedPrinciples, {
     tieMargin,
     semanticFallbackWarnRatio: semanticWarnRatio,
+    minFeatureKeys,
+    sensitivityEpsilon,
   });
 
   // BI-E1FB2307: resolve which decision-perspective profile governs this
@@ -680,38 +693,25 @@ async function principleDecide(
     }
   }
 
-  const usable =
-    !result.flags.insufficientSignal &&
-    result.recommendation !== null &&
-    !retrievalDegraded;
-  const degradedAdvisory =
-    "EMBEDDING PROVIDER UNAVAILABLE — only commandment-tier principles were consulted; " +
-    "core and contextual retrieval returned nothing because the query could not be embedded, " +
-    "NOT because no relevant principle exists. Treat this as an incomplete consult, not a verdict. " +
-    "Restore the provider (docker model pull ai/nomic-embed-text-v1.5), then re-run.";
-  const signalQuality = {
-    usable,
-    insufficientSignal: result.flags.insufficientSignal,
+  // BI-1D23EC26: signalQuality + summary extracted to keep this pack under LOC ceiling.
+  const {
+    buildPrincipleDecideSignalQuality,
+    buildPrincipleDecideSummary,
+  } = await import("@/lib/decision/principle-decide-signal-quality");
+  const signalQuality = buildPrincipleDecideSignalQuality({
+    result,
     retrievalDegraded,
-    structuredCoverage: result.flags.structuredCoverage,
-    semanticFallbackRatio: result.flags.semanticFallbackRatio,
     optionsWithFeatures,
     optionCount: decisionOptions.length,
-    advisory: usable
-      ? null
-      : retrievalDegraded
-        ? degradedAdvisory
-        : optionsWithFeatures === 0
-          ? "NO OPTION SUPPLIED `features`, so every principle scored exactly 0. Governance commandments carry full dimension vectors, so scoring takes the structured path and the semantic fallback never fires for them. Re-call with a features map per option — this is not a neutral or tie result."
-          : "Signal was too weak to recommend. Widen per-option `features` coverage across the dimensions the applied principles actually weigh (see each contribution's missingDimensions), or decide by human judgement.",
-  };
-
-  const summary = usable
-    ? `Recommends ${result.recommendation!.optionId} (confidence: ${result.recommendation!.confidence}, composite ${result.recommendation!.composite.toFixed(3)}; governing profile: ${governingProfile.governingProfileKind})`
-    : retrievalDegraded
-      ? `NO RECOMMENDATION — signalQuality.retrievalDegraded=true. ${degradedAdvisory}`
-      : `NO RECOMMENDATION — signalQuality.usable=false. ${result.reasoning} ${signalQuality.advisory}`;
-
+  });
+  const usable = signalQuality.usable;
+  const summary = buildPrincipleDecideSummary({
+    usable,
+    retrievalDegraded,
+    result,
+    signalQuality,
+    governingProfileKind: governingProfile.governingProfileKind,
+  });
   // Persist the consult to the DecisionInteraction ledger so the decision
   // governance hub can audit that the gate is in use (per-tier log at
   // /coworker-decisions/decisions). Fail-open: a ledger outage never blocks the
@@ -746,6 +746,10 @@ async function principleDecide(
       usable: signalQuality.usable,
       optionsWithFeatures: signalQuality.optionsWithFeatures,
       optionCount: signalQuality.optionCount,
+      // BI-1D23EC26 — autonomy + MCDA quality (persisted for audit)
+      autonomyEligible: signalQuality.autonomyEligible,
+      featureCoverageWeak: signalQuality.featureCoverageWeak,
+      sensitivityUnstable: signalQuality.sensitivityUnstable,
     },
     // Trust-envelope: persist evidence citations onto the ledger row and seal
     // the decision into the append-only hash chain (BI-EA97E5CD / BI-81CC5D8E).

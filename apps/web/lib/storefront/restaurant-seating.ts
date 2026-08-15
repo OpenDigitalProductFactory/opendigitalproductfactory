@@ -47,6 +47,23 @@ function intervalsOverlap(
   );
 }
 
+export function restaurantSeatingAllocationsForInterval(input: {
+  allocations: readonly RestaurantSeatingAllocationFact[];
+  startsAt: Date;
+  endsAt: Date;
+}): RestaurantSeatingAllocationFact[] {
+  return input.allocations.filter(
+    (allocation) =>
+      LIVE_ALLOCATION_LIFECYCLES.has(allocation.lifecycle) &&
+      intervalsOverlap(
+        allocation.startsAt,
+        allocation.endsAt,
+        input.startsAt,
+        input.endsAt,
+      ),
+  );
+}
+
 function pairCanCombine(
   left: RestaurantSeatingResourceFact,
   right: RestaurantSeatingResourceFact,
@@ -109,20 +126,13 @@ export function evaluateRestaurantSeating(input: {
   }
 
   const selectedIds = new Set(input.resources.map((resource) => resource.id));
-  const conflict = input.allocations.find(
+  const conflict = restaurantSeatingAllocationsForInterval(input).find(
     (allocation) =>
       allocation.resourceId != null &&
       selectedIds.has(allocation.resourceId) &&
       !(
         input.demandRef !== undefined &&
         allocation.demandRef === input.demandRef
-      ) &&
-      LIVE_ALLOCATION_LIFECYCLES.has(allocation.lifecycle) &&
-      intervalsOverlap(
-        allocation.startsAt,
-        allocation.endsAt,
-        input.startsAt,
-        input.endsAt,
       ),
   );
   if (conflict) {

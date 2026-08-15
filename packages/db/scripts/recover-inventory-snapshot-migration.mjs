@@ -7,6 +7,11 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import pg from "pg";
 
 import {
+  inspectUnresolvedMigrations,
+  verifyExactMigrationRolledBack,
+} from "./lib/failed-migration-ledger.mjs";
+
+import {
   classifyInventorySnapshotRecovery,
   INVENTORY_SNAPSHOT_MIGRATION,
 } from "./lib/inventory-snapshot-migration-recovery.mjs";
@@ -23,27 +28,7 @@ function fail(message) {
 }
 
 export async function inspectRecoveryState(client) {
-  let unresolvedMigrations;
-  try {
-    const result = await client.query(
-      `SELECT
-         id,
-         migration_name AS "migrationName",
-         checksum,
-         applied_steps_count AS "appliedStepsCount",
-         logs
-       FROM "_prisma_migrations"
-       WHERE finished_at IS NULL
-         AND rolled_back_at IS NULL
-       ORDER BY started_at, id`,
-    );
-    unresolvedMigrations = result.rows;
-  } catch (error) {
-    if (error?.code === "42P01") {
-      return { unresolvedMigrations: [], snapshotEffectCount: 0 };
-    }
-    throw error;
-  }
+  const unresolvedMigrations = await inspectUnresolvedMigrations(client);
 
   if (unresolvedMigrations.length === 0) {
     return { unresolvedMigrations, snapshotEffectCount: 0 };
@@ -61,24 +46,10 @@ export async function inspectRecoveryState(client) {
 }
 
 export async function verifyRolledBackMigration(client, migrationId) {
-  const result = await client.query(
-    `SELECT
-       count(*) FILTER (
-         WHERE id = $1
-           AND migration_name = $2
-           AND rolled_back_at IS NOT NULL
-           AND finished_at IS NULL
-       )::int AS "verifiedRows",
-       count(*) FILTER (
-         WHERE finished_at IS NULL
-           AND rolled_back_at IS NULL
-       )::int AS "unresolvedRows"
-     FROM "_prisma_migrations"`,
-    [migrationId, INVENTORY_SNAPSHOT_MIGRATION],
-  );
-  return (
-    Number(result.rows[0]?.verifiedRows ?? 0) === 1
-    && Number(result.rows[0]?.unresolvedRows ?? 0) === 0
+  return verifyExactMigrationRolledBack(
+    client,
+    migrationId,
+    INVENTORY_SNAPSHOT_MIGRATION,
   );
 }
 

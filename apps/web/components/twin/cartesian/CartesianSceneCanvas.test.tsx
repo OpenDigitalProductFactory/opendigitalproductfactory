@@ -190,7 +190,7 @@ describe("CartesianSceneCanvas", () => {
     expect(onActivate).toHaveBeenCalledWith("table-1", {
       kind: "table",
       id: "resource-1",
-    });
+    }, expect.any(HTMLElement));
     expect(
       screen.getByRole("list", { name: "Dining room layout details" }),
     ).toHaveTextContent("Table 1: Turning soon — Free in 8 minutes");
@@ -234,7 +234,7 @@ describe("CartesianSceneCanvas", () => {
     expect(onActivate).toHaveBeenCalledWith("table-1", {
       kind: "table",
       id: "resource-1",
-    });
+    }, expect.any(HTMLElement));
   });
 
   it("has no mutation or activation affordance in read-only mode", () => {

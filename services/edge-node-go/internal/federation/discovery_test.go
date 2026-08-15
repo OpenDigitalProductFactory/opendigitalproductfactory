@@ -97,3 +97,45 @@ func TestRunRejectsAuthorityPortOutsideUint16(t *testing.T) {
 		}
 	}
 }
+
+func TestCandidateSubmissionGateSkipsEmptySnapshots(t *testing.T) {
+	gate := candidateSubmissionGate{}
+	if gate.shouldSubmit(nil, time.Unix(1_720_000_000, 0), 90*time.Second) {
+		t.Fatal("empty candidate snapshot should not be submitted")
+	}
+}
+
+func TestCandidateSubmissionGateSubmitsChangesAndRefreshesBeforeTTL(t *testing.T) {
+	now := time.Unix(1_720_000_000, 0)
+	refresh := 90 * time.Second
+	first := []Candidate{{DiscoveryID: "peer-a", Endpoint: "https://peer-a.local:3000"}}
+	changed := []Candidate{{DiscoveryID: "peer-b", Endpoint: "https://peer-b.local:3000"}}
+	gate := candidateSubmissionGate{}
+
+	if !gate.shouldSubmit(first, now, refresh) {
+		t.Fatal("first non-empty snapshot should be submitted")
+	}
+	gate.markSubmitted(first, now)
+	if gate.shouldSubmit(first, now.Add(15*time.Second), refresh) {
+		t.Fatal("unchanged snapshot should be suppressed before refresh interval")
+	}
+	if !gate.shouldSubmit(changed, now.Add(30*time.Second), refresh) {
+		t.Fatal("changed snapshot should be submitted on the next observation tick")
+	}
+	if !gate.shouldSubmit(first, now.Add(refresh), refresh) {
+		t.Fatal("unchanged snapshot should refresh before the Authority TTL")
+	}
+}
+
+func TestCandidateSubmissionGateRetriesWhenSubmissionWasNotMarkedSuccessful(t *testing.T) {
+	now := time.Unix(1_720_000_000, 0)
+	snapshot := []Candidate{{DiscoveryID: "peer-a", Endpoint: "https://peer-a.local:3000"}}
+	gate := candidateSubmissionGate{}
+
+	if !gate.shouldSubmit(snapshot, now, 90*time.Second) {
+		t.Fatal("first attempt should submit")
+	}
+	if !gate.shouldSubmit(snapshot, now.Add(15*time.Second), 90*time.Second) {
+		t.Fatal("failed attempt must remain eligible on the next observation tick")
+	}
+}

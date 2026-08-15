@@ -1,7 +1,6 @@
 // apps/web/lib/agentic-loop.ts
 // Agentic execution loop: LLM calls tools iteratively until it responds with text only.
 // This is the core behavioral difference between a chatbot and an agent.
-
 import { routeAndCall, type RoutedInferenceResult } from "@/lib/routed-inference";
 import {
   detectRepeatedToolCall,
@@ -11,7 +10,8 @@ import {
 } from "@/lib/tak/runtime-issues";
 import { isRedundantReaskQuestion } from "@/lib/tak/conversation-intent";
 import { PLATFORM_TOOLS, toolsToOpenAIFormat, type ToolDefinition, type ToolResult } from "@/lib/mcp-tools";
-import { LOAD_TOOLS_TOOL_NAME, selectLoadableTools } from "@/lib/actions/coworker-tool-budget";
+import { createAuthorizedSurfaceTurnGovernance } from "@/lib/coworker/authorized-surface-execution-context";
+import { LOAD_TOOLS_TOOL_NAME, selectLoadableTools } from "@/lib/tak/tool-intent";
 import {
   classifyEvidenceRequirement,
   resolveEvidenceRecovery,
@@ -26,8 +26,9 @@ import { interceptToolCallAsProposal } from "@/lib/proactivity/propose-intercept
 import { agentEventBus } from "./agent-event-bus";
 import { TIER_MINIMUM_DIMENSIONS, type QualityTier } from "../routing/quality-tiers";
 import {
-  DEFAULT_MINIMUM_CAPABILITIES,
   DEFAULT_MINIMUM_CONTEXT_TOKENS,
+  resolveTurnGroundedGuidanceRoute,
+  resolveTurnMinimumCapabilities,
 } from "@/lib/routing/agent-capability-types";
 import { extractToolCalls } from "@/lib/routing/extract-tool-calls";
 import type { AgentMinimumCapabilities } from "@/lib/routing/agent-capability-types";
@@ -48,6 +49,7 @@ import { clampToolResultForModel, resolveToolResultCharCap } from "./tool-result
 import { applyBacklogCreateClaimGuard } from "./backlog-create-claim-guard";
 import { assessToolSurface, computeToolSelectionAccuracy, contextEconomyTurnMetricFields } from "./context-economy-metrics";
 import { summarizeDroppedMessages } from "./compaction-digest";
+import { describeContextCapacityFailure } from "./context-capacity-failure";
 import {
   detectToolRefusedDespiteAvailability,
   appendToolRefusedRecoveryMessages,
@@ -60,8 +62,6 @@ export { detectToolRefusedDespiteAvailability } from "./tool-refused-recovery";
 // responds with text only (no tool calls), matching the Anthropic API pattern
 // where the loop runs until stop_reason === "end_turn". This limit only prevents
 // runaway loops. The model decides when it's done.
-// Safety nets — the loop exits naturally when the model responds with text-only.
-// These prevent infinite loops from bugs, not from normal workflows.
 // Safety ceiling — the loop exits naturally when the model responds with text-only
 // (no tool calls). This limit only catches true infinite loops from bugs.
 // The actual guardrails are: sandbox circuit breaker, repetition detector, duration
@@ -184,22 +184,22 @@ export function describeToolRouteFailure(
     );
   }
 
+  const contextCapacityFailure = describeContextCapacityFailure(msg);
+  if (contextCapacityFailure) return contextCapacityFailure;
+
   // Config/capacity gap: routing eliminated EVERY candidate (e.g. the cloud
   // provider's sign-in expired AND the bundled local model's context window is
   // too small for this coworker's larger requests). This reaches here as a plain
   // "No eligible endpoints for task type '…'" with no `toolUse` token, so the
   // branch above misses it and — before this fix — it fell through to the generic
   // "temporarily unavailable, try again in 30 seconds" below. That is a LIE for a
-  // config gap: nothing changes on retry. Tell the operator the truth and the one
-  // lever that actually clears it. Check AFTER the tool-capability branch so its
-  // more specific wording still wins for the capability-floor case.
   if (/No eligible endpoints/i.test(msg)) {
     return (
-      "No AI model can handle this request right now. This usually means your cloud " +
-      "AI providers are disconnected or their sign-in has expired, and the built-in " +
-      "local model can't fit this assistant's larger requests on its own. Open " +
-      "Platform > AI Operations > Providers & Routing to reconnect a provider — " +
-      "waiting won't clear this on its own."
+      "No AI model can handle this request right now. No eligible model met this " +
+      "turn's routing requirements. The cause can be provider availability, data-policy " +
+      "or residency limits, capability requirements, or context size — not necessarily " +
+      "a disconnected provider. Open Platform > AI Operations > Providers & Routing " +
+      "to review the active route and provider status."
     );
   }
 
@@ -988,17 +988,21 @@ function reviewFailMessage(t: { name: string; result: { success: boolean; data?:
   return `Your previous ${artifact} was REJECTED by ${t.name}. Reason: ${detail.slice(0, 200)}. Regenerate the content addressing this specific gap before calling saveBuildEvidence again — submitting identical arguments will be rejected the same way and the run will be stopped.`;
 }
 
-/**
- * Annotate tool descriptions with session-aware hints based on what the agent
- * has already tried. Inspired by Claude Code's dynamic tool description system.
- * Mutates nothing — returns a new array.
- */
-export function enrichToolDescriptions(
-  toolsForProvider: Array<Record<string, unknown>>,
-  executedTools: Array<{ name: string; args?: Record<string, unknown>; result: { success: boolean; error?: string; data?: Record<string, unknown>; message?: string } }>,
-): Array<Record<string, unknown>> {
-  if (executedTools.length === 0) return toolsForProvider;
+type ExecutedToolRecord = {
+  name: string;
+  args?: Record<string, unknown>;
+  result: { success: boolean; error?: string; data?: Record<string, unknown>; message?: string };
+};
 
+/**
+ * Compute session-aware tool signals from what the agent has already tried:
+ * a per-tool last-error map (cleared once that tool later succeeds) and a
+ * sticky content-level review-veto map (cleared only by a passing review).
+ * Pure — mutates nothing.
+ */
+function computeToolSessionSignals(
+  executedTools: Array<ExecutedToolRecord>,
+): { failures: Map<string, string>; reviewVetoes: Map<string, string> } {
   // Build failure map: tool name → last error. If a tool succeeded after
   // failing, clear the warning — the tool recovered.
   const failures = new Map<string, string>();
@@ -1025,24 +1029,55 @@ export function enrichToolDescriptions(
       failures.delete(t.name);
     }
   }
+  return { failures, reviewVetoes };
+}
 
-  if (failures.size === 0 && reviewVetoes.size === 0) return toolsForProvider;
+/**
+ * Build a per-turn "session tool notes" user message from what the agent has
+ * already tried, or null when there is nothing to warn about.
+ *
+ * BI-56804810 — this REPLACES annotating tool `description` fields in place.
+ * Anthropic's prompt-cache prefix is ordered tools → system → messages, so the
+ * stable system-prefix cache breakpoint (see routing/anthropic-cache.ts) also
+ * covers the tools block. The previous approach appended
+ * `[WARNING …]` / `[REVIEW REJECTION …]` strings into tool descriptions every
+ * turn, so once any tool failed or was review-vetoed the tools block changed on
+ * nearly every subsequent turn — busting the cached tools+system prefix and
+ * re-billing it at full input rate (vs ~0.1x cache reads) for the rest of the
+ * session. Emitting the identical signal as a message keeps the tools block
+ * byte-identical turn-over-turn so the cache actually hits; the message sits
+ * AFTER the cached prefix, where its per-turn churn carries no cache cost, and
+ * the model still gets the "don't blindly retry" guidance just as well.
+ *
+ * Provider-agnostic: the hint reaches every provider through the messages tail,
+ * so no per-provider branching is needed; only Anthropic gets the extra cache
+ * benefit, and the local served-model path is unaffected.
+ */
+export function buildToolSessionHintMessage(
+  executedTools: Array<ExecutedToolRecord>,
+): string | null {
+  if (executedTools.length === 0) return null;
 
-  return toolsForProvider.map((tool) => {
-    const name = tool.name as string;
-    const lastError = failures.get(name);
-    const veto = reviewVetoes.get(name);
-    if (!lastError && !veto) return tool;
+  const { failures, reviewVetoes } = computeToolSessionSignals(executedTools);
+  if (failures.size === 0 && reviewVetoes.size === 0) return null;
 
-    const desc = tool.description as string;
-    const warning = veto
-      ? `[REVIEW REJECTION: ${veto}]`
-      : `[WARNING: This tool failed earlier in this session with: "${lastError}". Consider a different approach or different arguments.]`;
-    return {
-      ...tool,
-      description: `${desc} ${warning}`,
-    };
-  });
+  const lines: string[] = [];
+  for (const [name, veto] of reviewVetoes) {
+    lines.push(`- ${name}: [REVIEW REJECTION: ${veto}]`);
+  }
+  for (const [name, lastError] of failures) {
+    lines.push(
+      `- ${name}: [WARNING: This tool failed earlier in this session with: "${lastError}". ` +
+        `Consider a different approach or different arguments.]`,
+    );
+  }
+
+  return (
+    "[Session tool notes — based on tool calls you already made this session. " +
+    "Do not blindly re-issue the same call with the same arguments; address the note first:\n" +
+    lines.join("\n") +
+    "]"
+  );
 }
 
 function truncateMessageContent(content: string, maxChars: number, label: string): string {
@@ -1118,9 +1153,11 @@ export type RunAgenticLoopParams = {
 
   chatHistory: ChatMessage[];
   systemPrompt: string;
-  sensitivity: "public" | "internal" | "confidential" | "restricted";
+  sensitivity: import("@/lib/agent-sensitivity").RouteSensitivity;
   tools: ToolDefinition[];
   toolsForProvider: Array<Record<string, unknown>> | undefined;
+  /** Read-only turn already grounded in authorized semantic state. */
+  allowToolFreeInference?: boolean;
   /**
    * Authorized-but-not-attached tools (EP-COWORKER-INTERACTIVITY, BI-6A745E3C).
    * The chat coworker path right-sizes the per-turn attached set and passes the
@@ -1288,26 +1325,20 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
   let hasResolvedSkillInvocation = false;
   const interactionMode: "chat" | "autonomous" = params.interactionMode ?? "autonomous";
   const proposeSideEffects = params.proposeSideEffects ?? false;
-
   const userContext = await resolveUserContext(userId);
 
-  // EP-INF-012: Load admin-configured model assignment for this agent.
-  // DB config takes precedence over code defaults in modelRequirements.
+  // Admin DB configuration takes precedence over registry defaults.
   const agentModelConfig = await prisma.agentModelConfig.findUnique({ where: { agentId } }).catch(() => null);
 
-  // EP-AGENT-CAP-002: Read capability floor from agent config.
-  // Null DB value = use system default { toolUse: true }.
-  // {} DB value = passive agent, no floor.
   const rawMinCaps = agentModelConfig?.minimumCapabilities as AgentMinimumCapabilities | null | undefined;
-  const baseMinimumCapabilities: AgentMinimumCapabilities =
-    rawMinCaps !== null && rawMinCaps !== undefined ? rawMinCaps : DEFAULT_MINIMUM_CAPABILITIES;
-  // When the turn carries an image (a pasted/attached screenshot becomes an
-  // `image_url` content block on the user message), require a vision-capable
-  // endpoint so routing never lands the image on a text-only model. Mirrors the
-  // visual-cognitive-load precedent's `minimumCapabilities: { imageInput: true }`
-  // floor — selects any vision endpoint (local DMR first), no provider pin. When
-  // none is configured the floor fails and routeAndCall surfaces a graceful
-  // degraded reply rather than silently dropping the image.
+  const turnToolPosture = {
+    allowToolFreeInference: params.allowToolFreeInference === true,
+    hasProviderTools: Boolean(toolsForProvider?.length),
+    requireTools: Boolean(requireTools),
+  };
+  const baseMinimumCapabilities = resolveTurnMinimumCapabilities(rawMinCaps, {
+    ...turnToolPosture,
+  });
   const turnCarriesImage = chatHistory.some(
     (m) =>
       Array.isArray(m.content) &&
@@ -1321,11 +1352,16 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
   const agentMinimumContextTokens: number =
     agentModelConfig?.minimumContextTokens ?? DEFAULT_MINIMUM_CONTEXT_TOKENS;
 
-  // Resolve effective config: DB row > code defaults > nothing
   const effectiveConfig = resolveEffectiveAgentRouteConfig({
     agentModelConfig,
     modelRequirements,
   });
+  const turnRoute = resolveTurnGroundedGuidanceRoute(
+    taskType ?? "conversation",
+    effectiveConfig.minimumDimensions,
+    turnToolPosture,
+  );
+  effectiveConfig.minimumDimensions = turnRoute.minimumDimensions;
 
   // BI-E8BCA547 — spend-aware routing. Check the agent's live daily spend once
   // per turn and, when it is near the budget, bias the routing budget class
@@ -1359,7 +1395,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
   // Build routeAndCall options once (reused every iteration)
   const routeOptions = {
     ...(toolsForProvider ? { tools: toolsForProvider } : {}),
-    taskType: taskType ?? "conversation",
+    taskType: turnRoute.taskType,
     ...effectiveConfig,
     ...(requireTools ? { requireTools: true } : {}),
     ...(agentDisplayName ? { agentDisplayName } : {}),
@@ -1434,6 +1470,11 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
   const noProgressNudgedSigs = new Set<string>();
   let fabricationRetries = 0;
   let frustrationCount = 0;
+  // BI-1D144CC1: bounded continue-generation budget for max_tokens-truncated
+  // turns. A truncation stop is not a natural end_turn; we ask the model to
+  // finish (up to this many times) before falling through to the best partial.
+  const MAX_TRUNCATION_CONTINUES = 2;
+  let truncationContinues = 0;
   // Evidence-integrity gate (INV-1). Decide once whether this turn's answer
   // depends on live operational state (a route with authoritative domain tools +
   // a live-state question); the terminal guard in the zero-tool branch enforces
@@ -1693,13 +1734,6 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
       messages = [...messages, { role: "user" as const, content: buildNoProgressNudgeMessage(approaching) }];
     }
 
-    // Dynamic tool descriptions: annotate tools that failed earlier in this session
-    // Inspired by Claude Code's session-aware tool description system.
-    const enrichedRouteOptions = {
-      ...routeOptions,
-      ...(routeOptions.tools ? { tools: enrichToolDescriptions(routeOptions.tools as Array<Record<string, unknown>>, executedTools) } : {}),
-    };
-
     // EP-INF-009b: All inference goes through V2 routing pipeline
     inferenceCallCount++;
     // Assemble the compacted, plan-reminded context once (it was built twice,
@@ -1728,6 +1762,14 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
         ),
       );
     }
+    // Session tool notes ride in the messages tail — AFTER the cached
+    // tools→system prefix — instead of mutating tool descriptions, so the
+    // Anthropic prompt-cache prefix stays byte-identical turn-over-turn even
+    // after a tool fails or is review-vetoed. See buildToolSessionHintMessage.
+    const toolSessionHint = buildToolSessionHintMessage(executedTools);
+    const messagesForCall = toolSessionHint
+      ? [...assembledMessages, { role: "user" as const, content: toolSessionHint }]
+      : assembledMessages;
     let result: RoutedInferenceResult;
     try {
       // BI-e299d4d3 — wrap the slow inference with withHeartbeatTicker.
@@ -1740,18 +1782,18 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
         const { withHeartbeatTicker } = await import("@/lib/observability/heartbeat");
         result = await withHeartbeatTicker(taskRunId, () =>
           routeAndCall(
-            assembledMessages,
+            messagesForCall,
             systemPrompt,
             sensitivity,
-            { ...enrichedRouteOptions, previousResponseId },
+            { ...routeOptions, previousResponseId },
           ),
         );
       } else {
         result = await routeAndCall(
-          assembledMessages,
+          messagesForCall,
           systemPrompt,
           sensitivity,
-          { ...enrichedRouteOptions, previousResponseId },
+          { ...routeOptions, previousResponseId },
         );
       }
     } catch (routeErr) {
@@ -1814,6 +1856,39 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
         `toolCalls=0 contentLen=${trimmed.length} nudges=${continuationNudges} ` +
         `executedTools=${executedTools.length} content=${JSON.stringify(trimmed.slice(0, 200))}`,
       );
+
+      // BI-1D144CC1: truncation stop. The provider cut generation off at the
+      // output-token ceiling (stop_reason=max_tokens / finish_reason=length /
+      // MAX_TOKENS / Responses incomplete). A reply that ends without a tool call
+      // because it RAN OUT OF TOKENS is not a natural end_turn — returning its
+      // partial text as the final answer is the defect this guards. Ask the model
+      // to finish (bounded) BEFORE the "why did you stop" contract/fabrication/
+      // nudge guards run: we already know why it stopped, so those diagnostics
+      // would misfire. This realizes the stop_reason==="end_turn" contract the
+      // loop's own header comment claims but never enforced.
+      if (result.truncated && truncationContinues < MAX_TRUNCATION_CONTINUES) {
+        truncationContinues++;
+        // Never regress below today's behaviour: keep the longest partial as the
+        // fallback answer in case a continuation returns empty.
+        if (trimmed.length > bestPreNudgeContent.length) bestPreNudgeContent = trimmed;
+        console.warn(
+          `[agentic-loop] response truncated at output-token ceiling with no tool call; ` +
+          `continuing generation (${truncationContinues}/${MAX_TRUNCATION_CONTINUES}). ` +
+          `thread=${JSON.stringify(threadId)} iter=${iteration}`,
+        );
+        messages = [
+          ...messages,
+          { role: "assistant" as const, content: result.content },
+          {
+            role: "user" as const,
+            content:
+              "Your previous response was cut off because it reached the output length limit " +
+              "before you finished. Provide the COMPLETE answer now in a single response — be " +
+              "more concise so it fits within the limit. Do not rely on the truncated version.",
+          },
+        ];
+        continue;
+      }
 
       // Build-specialist Operator Contract clause 2.6 — platform-side guards.
       // Detect contract violations the LLM cannot self-report. Each guard
@@ -1932,11 +2007,8 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
 
       // Evidence-integrity gate (INV-1). When this turn's answer depends on live
       // operational state and NO authoritative tool ran, the model's factual
-      // prose is unverifiable (the Scrum Master fabrication). Nudge once for a
-      // tool, then refuse rather than surface a guess. The nudge re-runs the
-      // normal iteration (no tool_choice/fallback-chain change), so recovery can
-      // never silently escalate to a paid provider (INV-4). load_tools is a
-      // meta-tool, not evidence.
+      // prose is unverifiable. Nudge once for a tool, then refuse rather than
+      // guess. Recovery cannot escalate providers (INV-4); load_tools is not evidence.
       if (evidenceRequirement.required && trimmed.length > 0) {
         const authoritativeToolExecutions = executedTools.filter(
           (t) => t.result?.success && t.name !== LOAD_TOOLS_TOOL_NAME,
@@ -1944,6 +2016,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
         const recovery = resolveEvidenceRecovery({
           required: true,
           authoritativeToolExecutions,
+          authoritativeSurfaceEvidence: params.allowToolFreeInference,
           content: trimmed,
           recoveryNudgesUsed: evidenceRecoveryNudges,
         });
@@ -2596,7 +2669,9 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
             // time (BI-FD7E4D72) — otherwise a coworker whose own grants lack a
             // baseline read grant gets the tool attached but rejected on call.
             // Autonomous turns leave this false, so their authority is unchanged.
-            coworkerReadBaseline: interactionMode === "chat", externalAccessEnabled: toolDef.requiresExternalAccess || undefined,
+            coworkerReadBaseline: interactionMode === "chat",
+            ...createAuthorizedSurfaceTurnGovernance({ interactionMode, apiTokenId, route: routeContext, chatHistory }),
+            externalAccessEnabled: toolDef.requiresExternalAccess || undefined,
             // BI-F4A30FCB (Dale dogfood 2026-05-24): plumb the build the
             // user is messaging from into tool context so phase-scoped
             // tools (start_ideate_research, start_scout_research) can
@@ -2733,4 +2808,3 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
     executionPlan,
   };
 }
-

@@ -3,6 +3,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   auth: vi.fn(),
   executeTool: vi.fn(),
+  approveLeaveRequest: vi.fn(),
+  rejectLeaveRequest: vi.fn(),
   can: vi.fn(),
   prisma: {
     agentActionProposal: {
@@ -29,6 +31,10 @@ vi.mock("@/lib/permissions", () => ({ can: mocks.can }));
 vi.mock("@/lib/mcp-tools", () => ({
   PLATFORM_TOOLS: [{ name: "create_backlog_item", requiredCapability: "manage_backlog" }],
   executeTool: mocks.executeTool,
+}));
+vi.mock("@/lib/actions/leave", () => ({
+  approveLeaveRequest: mocks.approveLeaveRequest,
+  rejectLeaveRequest: mocks.rejectLeaveRequest,
 }));
 
 import { approveProposal, rejectProposal } from "./proposals";
@@ -62,6 +68,38 @@ describe("proposal actions", () => {
     mocks.prisma.userFact.update.mockResolvedValue({});
     mocks.prisma.userFact.create.mockResolvedValue({});
     mocks.executeTool.mockResolvedValue({ success: true, entityId: "BI-1", message: "Created" });
+    mocks.approveLeaveRequest.mockResolvedValue({ success: true });
+    mocks.rejectLeaveRequest.mockResolvedValue({ success: true });
+  });
+
+  it("routes leave approval through the governed human leave action", async () => {
+    mocks.prisma.agentActionProposal.findUnique.mockResolvedValue({
+      proposalId: "AP-LEAVE",
+      status: "proposed",
+      actionType: "leave.decide",
+      parameters: { requestId: "LR-1", recommendation: "approve", rationale: "Coverage is sufficient." },
+      agentId: "time-off-advisor",
+      threadId: "thread-1",
+    });
+
+    expect(await approveProposal("AP-LEAVE")).toEqual({ success: true });
+    expect(mocks.approveLeaveRequest).toHaveBeenCalledWith("LR-1");
+    expect(mocks.executeTool).not.toHaveBeenCalled();
+  });
+
+  it("routes leave rejection through the governed human leave action", async () => {
+    mocks.prisma.agentActionProposal.findUnique.mockResolvedValue({
+      proposalId: "AP-LEAVE",
+      status: "proposed",
+      actionType: "leave.decide",
+      parameters: { requestId: "LR-1", recommendation: "deny", rationale: "Coverage is insufficient." },
+      agentId: "time-off-advisor",
+      threadId: "thread-1",
+    });
+
+    expect(await rejectProposal("AP-LEAVE", "Manager declined")).toEqual({ success: true });
+    expect(mocks.rejectLeaveRequest).toHaveBeenCalledWith("LR-1", "Manager declined");
+    expect(mocks.executeTool).not.toHaveBeenCalled();
   });
 
   it("approves proactivity changes by persisting a scoped preference override without executing a tool", async () => {

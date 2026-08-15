@@ -20,18 +20,30 @@ import {
   releaseHospitalityCapacityByDemand,
   resolveHospitalityResourceForProvider,
 } from "@/lib/storefront/hospitality-capacity-repository.server";
+import { HospitalityCapacityConflictError } from "@/lib/storefront/hospitality-capacity";
 
 /** Sentinel: the hold token was missing/expired when re-checked inside the
  *  booking transaction. Thrown to abort the transaction and surface a clean
  *  message without leaking a partial write. */
 class BookingHoldInvalidError extends Error {}
+class RestaurantTableUnavailableError extends Error {}
 
 async function getPublishedStorefront(slug: string) {
   const config = await prisma.storefrontConfig.findFirst({
     where: { organization: { slug }, isPublished: true },
-    select: { id: true, organizationId: true },
+    select: {
+      id: true,
+      organizationId: true,
+      archetype: { select: { archetypeId: true } },
+    },
   });
-  return config ?? null;
+  return config
+    ? {
+        id: config.id,
+        organizationId: config.organizationId,
+        storefrontArchetypeId: config.archetype?.archetypeId ?? null,
+      }
+    : null;
 }
 
 function makeRef(prefix: string) {
@@ -313,9 +325,17 @@ export async function submitBooking(
             organizationId: storefront.organizationId,
             storefrontId: storefront.id,
             providerId: data.providerId,
+            bookingAccess: "online",
           },
         );
         hospitalityResourceId = resource?.id ?? null;
+      }
+
+      if (
+        storefront.storefrontArchetypeId === "restaurant" &&
+        !hospitalityResourceId
+      ) {
+        throw new RestaurantTableUnavailableError();
       }
 
       if (holdToken && hospitalityResourceId) {
@@ -432,6 +452,18 @@ export async function submitBooking(
   } catch (err) {
     if (err instanceof BookingHoldInvalidError) {
       return { success: false, error: "Invalid or expired hold" };
+    }
+    if (err instanceof RestaurantTableUnavailableError) {
+      return {
+        success: false,
+        error: "That table is not available for reservations. Please choose another time.",
+      };
+    }
+    if (err instanceof HospitalityCapacityConflictError) {
+      return {
+        success: false,
+        error: "That table cannot seat this party. Please choose a smaller party or contact the venue.",
+      };
     }
     if (isExclusionViolation(err)) {
       return { success: false, error: "That time slot is no longer available" };

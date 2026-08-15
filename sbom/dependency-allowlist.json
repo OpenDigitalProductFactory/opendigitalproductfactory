@@ -914,6 +914,16 @@
       ],
       "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
     },
+    "puppeteer": {
+      "added": "2026-08-15",
+      "workspaces": [
+        "."
+      ],
+      "kinds": [
+        "dev"
+      ],
+      "note": "Promoted from transitive to declared dev dep to make the pnpm override bind (overrides do not govern auto-installed peers) — removes extract-zip GHSA-jmr9-qjv8-65gv, Dependabot #153. NOT new supply-chain surface: already in the tree as a dev transitive of @mermaid-js/mermaid-cli. Vetted: Apache-2.0; maintained by the Google Chrome DevTools team (google-wombot); npm SLSA provenance attestation present; ~11.5M weekly downloads; OSV clean at 25.7.0. Dev/build-time only (diagram rendering); browser postinstall stays disabled via allowBuilds."
+    },
     "react": {
       "added": "2026-06-21",
       "workspaces": [

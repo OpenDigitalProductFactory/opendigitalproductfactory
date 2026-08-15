@@ -1,9 +1,9 @@
 {
   "schemaVersion": 1,
   "generator": "apps/web/scripts/build-page-purpose.ts",
-  "pageRouteCount": 321,
+  "pageRouteCount": 324,
   "draftCount": 317,
-  "ratifiedCount": 4,
+  "ratifiedCount": 7,
   "quarantinedCount": 0,
   "routes": [
     {
@@ -2326,6 +2326,151 @@
     },
     {
       "schemaVersion": 1,
+      "status": "intent-ratified",
+      "routePath": "/ops/stack-currency",
+      "derived": {
+        "audience": "admin",
+        "destinationKind": "advanced-diagnostic",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": false,
+        "sweepExclusionReason": "wall-clock-collection"
+      },
+      "intent": {
+        "primaryUser": "A platform operator or founder checking the currency of the platform's own technology stack.",
+        "triggeringNeed": "Seeing which of our own runtimes and frameworks are current, approaching end of life, or unsupported — without reading manifests or chasing vendor EOL schedules — and distinct from the discovered customer estate.",
+        "prerequisites": [
+          "Signed in with access to the Operations Runtime & Releases family.",
+          "The curated platform-stack definition is maintained in apps/web/lib/ops/platform-stack.ts."
+        ],
+        "job": "Scan the platform's own key components, read each one's currency status on the canonical Currency axis, and see which components need an upgrade path.",
+        "successOutcome": "The operator can name any component's current version and currency status, and identify which components are approaching or past end of life (or lack a recorded EOL date) for the upgrade roadmap.",
+        "findability": {
+          "parentArea": "Operations",
+          "entryPoints": [
+            "/ops",
+            "Operations > Runtime & Releases > Stack Currency"
+          ],
+          "navigationLayer": "Ops secondary nav, Runtime & Releases group",
+          "discoveryCue": "A 'Stack Currency' tab in the Runtime & Releases group next to Patches.",
+          "expectedPath": [
+            "/ops",
+            "/ops/stack-currency"
+          ]
+        },
+        "contentRoles": {
+          "defaultVisibleKeys": [
+            "lead-summary",
+            "stack-currency-table"
+          ],
+          "deferredRegions": [
+            {
+              "key": "upgrade-actionable-notice",
+              "role": "A notice counting components that are approaching or past end of life and need an upgrade path.",
+              "trigger": "Rendered only when at least one component is in an actionable currency state."
+            },
+            {
+              "key": "unsourced-notice",
+              "role": "A prompt to record support/EOL dates for components whose currency cannot yet be computed.",
+              "trigger": "Rendered only when at least one component has no recorded EOL date."
+            }
+          ]
+        },
+        "familyConsistency": {
+          "terminology": "Use the canonical Currency-axis names (current / approaching-eol / unsupported / end-of-life) and 'EOL not sourced' for undated components; speak in currency and upgrade-path language.",
+          "actionLocation": "Navigation stays in the Ops Runtime & Releases tab row; the page itself is read-only and table-oriented.",
+          "feedbackPrimitive": "Inline report badges and notices communicate currency status; there are no dialogs or destructive actions.",
+          "disclosurePattern": "Lead summary and the currency table are visible on arrival; the actionable-upgrade and unsourced notices appear only when their condition holds.",
+          "returnBehavior": "The operator returns to the discovered-estate view through the sibling Patches tab in the same Runtime & Releases family."
+        }
+      },
+      "stateScenarios": {
+        "stack-readable": {
+          "statePredicate": "The curated platform-stack definition contains component records.",
+          "stateSource": {
+            "oracleKey": "route-owned-read-model",
+            "sourceRef": "apps/web/lib/ops/platform-stack.ts#PLATFORM_STACK"
+          },
+          "essentialEvidenceKeys": [
+            "component-count",
+            "currency-status",
+            "stack-currency-table"
+          ],
+          "primaryExperience": {
+            "kind": "informational",
+            "messageKey": "stack-currency.stack-readable"
+          },
+          "prohibitedActionKeys": [
+            "edit-currency-status"
+          ],
+          "completionSignal": "Every curated component appears with a current version and a resolved currency status (including 'EOL not sourced').",
+          "errorCorrection": "Stale versions or missing EOL dates are corrected in the curated platform-stack source, not copied into the page.",
+          "recovery": {
+            "actionKey": "open-patches",
+            "routePath": "/ops/patches"
+          }
+        },
+        "upgrade-needed": {
+          "statePredicate": "At least one component is approaching-eol, unsupported, or end-of-life.",
+          "stateSource": {
+            "oracleKey": "route-owned-read-model",
+            "sourceRef": "apps/web/lib/ops/platform-stack.ts#assessPlatformStack"
+          },
+          "essentialEvidenceKeys": [
+            "actionable-count",
+            "currency-status",
+            "support-ends-date"
+          ],
+          "primaryExperience": {
+            "kind": "informational",
+            "messageKey": "stack-currency.upgrade-needed"
+          },
+          "prohibitedActionKeys": [
+            "auto-upgrade-component"
+          ],
+          "completionSignal": "Components needing an upgrade path are visibly flagged with their currency status and support-end date.",
+          "errorCorrection": "The operator follows the flagged component to the upgrade roadmap; the board never mutates the stack itself.",
+          "recovery": {
+            "actionKey": "open-patches",
+            "routePath": "/ops/patches"
+          }
+        }
+      },
+      "taskProtocol": {
+        "startRoute": "/ops/stack-currency",
+        "taskPrompt": "Find whether any platform component is approaching or past end of life, and name one that lacks a recorded EOL date.",
+        "completionOracle": "The currency table shows each component's status, with actionable components flagged and undated ones shown as 'EOL not sourced'.",
+        "falseSuccessConditions": [
+          "The operator reports a component as current when its status is 'EOL not sourced' (no date recorded).",
+          "A customer-estate patch finding is described as part of the platform's own stack.",
+          "The page renders component names but no currency status per component."
+        ],
+        "acceptanceThresholds": [
+          "The board is found from the Ops Runtime & Releases navigation path.",
+          "The cited currency status matches the assessPlatformStack result for that component.",
+          "The distinction between our own stack and the discovered customer estate (Patches) is preserved."
+        ]
+      },
+      "ratifiedBy": {
+        "role": "owner",
+        "ref": "operator-request:ep-vsl-surface-2026-08-15"
+      },
+      "reviewRef": "BI-6328BCA6",
+      "intentEvidenceRefs": [
+        {
+          "kind": "operator-request",
+          "ref": "EP-VSL-SURFACE",
+          "summary": "Owner asked to surface the tech-stack lifecycle the platform is subject to as a live board off the canonical Currency axis."
+        },
+        {
+          "kind": "existing-behavior",
+          "ref": "apps/web/lib/lifecycle.ts#deriveCurrency",
+          "summary": "The Currency axis and deriveCurrency already exist as the canonical substrate; this board is their operator-facing own-stack consumer."
+        }
+      ]
+    },
+    {
+      "schemaVersion": 1,
       "status": "draft",
       "routePath": "/performance",
       "derived": {
@@ -2727,6 +2872,150 @@
         "confidence": "high",
         "sweepEligible": true
       }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "intent-ratified",
+      "routePath": "/platform/archetype-readiness",
+      "derived": {
+        "audience": "admin",
+        "destinationKind": "advanced-diagnostic",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      },
+      "intent": {
+        "primaryUser": "A platform operator or founder reviewing which business archetype claims are currently supportable.",
+        "triggeringNeed": "Separating template-ready coverage from higher operational, connector, regulated, and sole-platform claims without reading package code or architecture memos.",
+        "prerequisites": [
+          "Signed in with access to the Platform Overview family.",
+          "The archetype readiness matrix has been maintained in @dpf/storefront-templates."
+        ],
+        "job": "Scan every archetype category, identify the highest earned claim tier, and see which evidence blocks higher claims.",
+        "successOutcome": "The operator can name the current claim tier for a category and cite the BI, epic, or evidence reference that blocks the next unsupported claim.",
+        "findability": {
+          "parentArea": "Platform",
+          "entryPoints": [
+            "/platform",
+            "Platform > Overview > Archetype Readiness"
+          ],
+          "navigationLayer": "Platform secondary nav, Overview family",
+          "discoveryCue": "An 'Archetype Readiness' item in the Overview family next to the Platform Hub and Schedule.",
+          "expectedPath": [
+            "/platform",
+            "/platform/archetype-readiness"
+          ]
+        },
+        "contentRoles": {
+          "defaultVisibleKeys": [
+            "lead-summary",
+            "open-claim-table-action"
+          ],
+          "deferredRegions": [
+            {
+              "key": "readiness-matrix",
+              "role": "KPI counts, claim-gate notice, and per-type highest claim tier with blockers and evidence.",
+              "trigger": "Operator expands 'All claims' or uses Open the table."
+            },
+            {
+              "key": "tier-definitions",
+              "role": "Detailed tier meanings for template-ready, ops-ready, connector-ready, regulated-ready, and sole-platform-ready claims.",
+              "trigger": "Operator expands 'Tier list'."
+            }
+          ]
+        },
+        "familyConsistency": {
+          "terminology": "Use the readiness-tier names from the shared matrix and speak in claim/evidence language, not sales promises.",
+          "actionLocation": "Navigation stays in the Platform Overview tab row; the page itself is read-only and table-oriented.",
+          "feedbackPrimitive": "Inline report badges and notices communicate claim status; there are no dialogs or destructive actions.",
+          "disclosurePattern": "Lead summary and open-table action are visible on arrival; counts, gate notice, matrix, and tier list expand on demand so net-new reading-grade and word budgets pass with platform chrome included.",
+          "returnBehavior": "The operator returns to the Platform Hub through the same Overview navigation family."
+        }
+      },
+      "stateScenarios": {
+        "matrix-readable": {
+          "statePredicate": "The shared archetype readiness matrix contains category records.",
+          "stateSource": {
+            "oracleKey": "route-owned-read-model",
+            "sourceRef": "packages/storefront-templates/src/archetype-readiness.ts#ARCHETYPE_READINESS_MATRIX"
+          },
+          "essentialEvidenceKeys": [
+            "category-count",
+            "claim-gate-notice",
+            "readiness-matrix"
+          ],
+          "primaryExperience": {
+            "kind": "informational",
+            "messageKey": "archetype-readiness.matrix-readable"
+          },
+          "prohibitedActionKeys": [
+            "edit-readiness-tier"
+          ],
+          "completionSignal": "Every matrix category appears with a highest claim tier and at least one blocking evidence reference when higher claims are blocked.",
+          "errorCorrection": "Missing or stale readiness rows are corrected in the shared matrix source, not copied into the page.",
+          "recovery": {
+            "actionKey": "open-platform-hub",
+            "routePath": "/platform"
+          }
+        },
+        "sole-platform-blocked": {
+          "statePredicate": "At least one category is below the sole-platform-ready tier.",
+          "stateSource": {
+            "oracleKey": "route-owned-read-model",
+            "sourceRef": "apps/web/components/platform/ArchetypeReadinessMatrixPanel.tsx#buildArchetypeReadinessRows"
+          },
+          "essentialEvidenceKeys": [
+            "sole-platform-ready-count",
+            "blocked-higher-claims",
+            "evidence-refs"
+          ],
+          "primaryExperience": {
+            "kind": "informational",
+            "messageKey": "archetype-readiness.sole-platform-blocked"
+          },
+          "prohibitedActionKeys": [
+            "claim-sole-platform-ready"
+          ],
+          "completionSignal": "The blocked tier badges and evidence references make the unsupported higher claim visible without changing the matrix.",
+          "errorCorrection": "The operator follows the named BI or epic evidence reference before making a higher public or sales claim.",
+          "recovery": {
+            "actionKey": "review-tier-definitions",
+            "routePath": "/platform/archetype-readiness"
+          }
+        }
+      },
+      "taskProtocol": {
+        "startRoute": "/platform/archetype-readiness",
+        "taskPrompt": "Find the current readiness claim for Food and Hospitality and name one blocker for a higher claim.",
+        "completionOracle": "The readiness table shows Food and Hospitality with its highest claim tier and a blocking evidence reference for a higher tier.",
+        "falseSuccessConditions": [
+          "The operator repeats the architecture-review conclusion without reading the matrix row.",
+          "A template-ready category is described as sole-platform-ready because the blocker badges were ignored.",
+          "The page renders counts but no category-specific evidence reference is cited."
+        ],
+        "acceptanceThresholds": [
+          "The target category is found from the Platform Overview navigation path.",
+          "The cited tier matches the shared ARCHETYPE_READINESS_MATRIX value.",
+          "The cited blocker is visible in the table or tier definitions without inspecting source code."
+        ]
+      },
+      "ratifiedBy": {
+        "role": "owner",
+        "ref": "operator-request:mark-bodman-2026-07-31"
+      },
+      "reviewRef": "BI-1A222A7A",
+      "intentEvidenceRefs": [
+        {
+          "kind": "operator-request",
+          "ref": "BI-1A222A7A",
+          "summary": "Operator asked for the platform adequacy finding to become a durable, readable surface rather than thread-only analysis."
+        },
+        {
+          "kind": "existing-behavior",
+          "ref": "packages/storefront-templates/src/archetype-readiness.ts",
+          "summary": "The readiness tiers, matrix, and claim gate already exist as typed substrate and need an operator-facing consumer."
+        }
+      ]
     },
     {
       "schemaVersion": 1,
@@ -4295,6 +4584,113 @@
         "sweepEligible": false,
         "sweepExclusionReason": "dynamic-fixture-required"
       }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "intent-ratified",
+      "routePath": "/workforce",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "section-home",
+        "shell": "cockpit",
+        "confidence": "high",
+        "sweepEligible": true
+      },
+      "intent": {
+        "primaryUser": "An operator who wants to reach AI coworkers as identities from the same place they reach People and Customers.",
+        "triggeringNeed": "Finding a specific AI coworker, or browsing the workforce, without going into the platform-admin AI section — the coworker directory as a business-domain peer to the People and Customer directories.",
+        "prerequisites": [
+          "Signed in with the view_platform capability.",
+          "At least one selectable coworker exists in the workforce registry."
+        ],
+        "job": "Browse or filter the AI coworkers and open one to see its identity.",
+        "successOutcome": "The operator sees the roster of coworkers with fitness-for-duty signals and opens one, landing on its Coworker Identity 360 at /workforce/[agentId].",
+        "findability": {
+          "parentArea": "AI Coworkers",
+          "entryPoints": [
+            "Business nav: AI Coworkers (beside People and Customers)"
+          ],
+          "navigationLayer": "business section top-level",
+          "discoveryCue": "An 'AI Coworkers' entry beside People and Customers.",
+          "expectedPath": [
+            "/workforce",
+            "/workforce/[agentId]"
+          ]
+        },
+        "contentRoles": {
+          "defaultVisibleKeys": [
+            "roster-list",
+            "roster-filters"
+          ],
+          "deferredRegions": [
+            {
+              "key": "coworker-identity",
+              "role": "A single coworker's identity 360.",
+              "trigger": "Operator opens a coworker row."
+            }
+          ]
+        },
+        "familyConsistency": {
+          "terminology": "Coworker-facing role names and plain-language work — never raw agent ids or tool names.",
+          "actionLocation": "Filters sit above the roster; each row opens the coworker's identity.",
+          "feedbackPrimitive": "Inline filtering; no native dialogs.",
+          "disclosurePattern": "The roster shows by default; a coworker's full identity is one click away at /workforce/[agentId].",
+          "returnBehavior": "Opening a coworker navigates to its identity; the back path returns to the filtered roster."
+        }
+      },
+      "stateScenarios": {
+        "has-coworkers": {
+          "statePredicate": "At least one selectable coworker exists.",
+          "stateSource": {
+            "oracleKey": "route-owned-read-model",
+            "sourceRef": "apps/web/lib/coworker-record/roster.ts#loadRoster"
+          },
+          "essentialEvidenceKeys": [
+            "roster-list"
+          ],
+          "primaryExperience": {
+            "kind": "informational",
+            "messageKey": "workforce-directory.has-coworkers"
+          },
+          "prohibitedActionKeys": [],
+          "completionSignal": "The roster lists coworkers, each row opening /workforce/[agentId].",
+          "errorCorrection": "An empty roster states no coworkers are selectable rather than showing a blank list.",
+          "recovery": {
+            "actionKey": "open-admin-overview",
+            "routePath": "/platform/ai/overview"
+          }
+        }
+      },
+      "taskProtocol": {
+        "startRoute": "/workforce",
+        "taskPrompt": "Find a coworker and open its identity.",
+        "completionOracle": "The operator opens a coworker row and lands on /workforce/[agentId].",
+        "falseSuccessConditions": [
+          "The operator is teleported into the platform-admin AI section instead of a coworker identity.",
+          "A raw agentId is shown instead of the role name."
+        ],
+        "acceptanceThresholds": [
+          "The roster is reachable from the business nav beside People and Customers.",
+          "Each row opens the coworker's identity at /workforce/[agentId]."
+        ]
+      },
+      "ratifiedBy": {
+        "role": "owner",
+        "ref": "operator-request:mark-bodman-2026-08-11"
+      },
+      "reviewRef": "EP-COWORKER-IDENTITY-360",
+      "intentEvidenceRefs": [
+        {
+          "kind": "operator-request",
+          "ref": "EP-COWORKER-IDENTITY-360",
+          "summary": "Founder asked to put AI Coworkers beside People and Customers (business nav) so employees reach coworkers as identities, not only via platform admin. Kernel decision DI-CB054DD6F79D."
+        },
+        {
+          "kind": "existing-behavior",
+          "ref": "apps/web/app/(shell)/platform/ai/overview/page.tsx",
+          "summary": "The platform overview already renders the roster (loadRoster + RosterView) with admin health/coverage panels; this business directory reuses the same roster read-model without the admin panels."
+        }
+      ]
     },
     {
       "schemaVersion": 1,

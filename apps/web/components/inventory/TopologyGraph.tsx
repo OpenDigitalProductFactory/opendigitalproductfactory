@@ -9,8 +9,9 @@ import { useGraphLayout } from "@/lib/graph/use-graph-layout";
 import { getDeviceVisual, LEGEND_ENTRIES } from "@/lib/graph/device-icons";
 import { isDockerOriginNode } from "@/lib/graph/docker-filter";
 import { describeGraphScope, filterBySubnet, filterGraphData } from "@/lib/graph/subnet-scope";
-
-const SHOW_DOCKER_STORAGE_KEY = "dpf:topology:show-docker";
+import { projectPhysicalTopology } from "@/lib/graph/physical-topology";
+import { TopologyIntegritySummary } from "@/components/inventory/TopologyIntegritySummary";
+import { OSI_LAYER_NAMES, SHOW_DOCKER_STORAGE_KEY, TOPOLOGY_GRAPH_LIVE_REGION_PROPS } from "@/lib/graph/topology-constants";
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
@@ -28,16 +29,6 @@ const LINK_COLORS: Record<string, string> = {
   LISTENS_ON: "#6ee7b7",
   CARRIED_BY: "#c084fc",
   CONNECTS_TO: "#fb7185",
-};
-
-const OSI_LAYER_NAMES: Record<number, string> = {
-  7: "Application",
-  6: "Presentation",
-  5: "Session",
-  4: "Transport",
-  3: "Network",
-  2: "Data Link",
-  1: "Physical",
 };
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -100,7 +91,10 @@ export function resolveDisplayedGraphData(
   hideDocker = false,
 ) {
   const viewConfig = VIEW_CONFIGS[selectedView];
-  const scopeState = resolveSubnetScopeState(graph, selectedView, activeSubnetId);
+  const projectedGraph = selectedView === "network-topology"
+    ? projectPhysicalTopology(graph).data
+    : graph;
+  const scopeState = resolveSubnetScopeState(projectedGraph, selectedView, activeSubnetId);
 
   return filterGraphData(scopeState.graphData, {
     focusNodeId,
@@ -119,11 +113,6 @@ export function isResetScopeKey(key: string) {
 export function isSubnetSelectorKey(key: string) {
   return key === "Enter" || key === " ";
 }
-
-export const TOPOLOGY_GRAPH_LIVE_REGION_PROPS = {
-  "aria-live": "polite",
-  "aria-atomic": "true",
-} as const;
 
 // ─── Theme palette ──────────────────────────────────────────────────────────
 // Canvas pixels don't inherit CSS variables, so we resolve theme tokens at
@@ -216,6 +205,7 @@ export function TopologyGraph({ data, defaultView, taxonomyNodeId, initialFocusN
   const [isPending, startTransition] = useTransition();
   const [dynamicData, setDynamicData] = useState<GraphData | null>(null);
   const effectiveData = useMemo(() => dynamicData ?? data, [dynamicData, data]);
+  const physicalProjection = useMemo(() => projectPhysicalTopology(effectiveData), [effectiveData]);
 
   // Show Docker-origin nodes? Default off — Docker subnets/containers are
   // noise for the external-of-platform viewpoint operators usually want.
@@ -497,7 +487,7 @@ export function TopologyGraph({ data, defaultView, taxonomyNodeId, initialFocusN
         focusNodeId === source.id ||
         focusNodeId === target.id;
 
-      const linkColor = LINK_COLORS[link.type] ?? "#555566";
+      const linkColor = link.type === "UPLINKS_TO" ? LINK_COLORS.DEPENDS_ON : LINK_COLORS[link.type] ?? "#555566";
       ctx.strokeStyle = isHighlighted ? linkColor : hexWithAlpha(linkColor, palette.edgeAlpha);
       ctx.lineWidth = isHighlighted ? 2 : palette.isDark ? 0.7 : 1;
       ctx.beginPath();
@@ -852,6 +842,10 @@ export function TopologyGraph({ data, defaultView, taxonomyNodeId, initialFocusN
       {/* View description */}
       <p className="text-[9px] text-[var(--dpf-muted)] mb-2">{viewConfig.description}</p>
 
+      {selectedView === "network-topology" && (
+        <TopologyIntegritySummary integrity={physicalProjection.integrity} />
+      )}
+
       {/* ─── Canvas ──────────────────────────────────────────────────── */}
       <div className="relative w-full h-full">
         <canvas
@@ -874,6 +868,11 @@ export function TopologyGraph({ data, defaultView, taxonomyNodeId, initialFocusN
         {!isForceLayout && layoutResult == null && (
           <div className="absolute inset-0 flex items-center justify-center text-xs text-[var(--dpf-muted)]">
             Updating graph...
+          </div>
+        )}
+        {selectedView === "network-topology" && filteredData.nodes.length === 0 && (
+          <div className="absolute inset-0 flex items-center justify-center px-8 text-center text-xs text-[var(--dpf-muted)]">
+            No physical topology is available. Verify the UniFi connection and run discovery. Use Subnet Inventory for address membership.
           </div>
         )}
         {isPending && (

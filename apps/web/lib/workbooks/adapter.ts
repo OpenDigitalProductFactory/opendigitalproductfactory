@@ -74,6 +74,23 @@ export interface DataSourceAdapter {
   getCapabilities(ctx: AdapterContext): GridCapabilities;
 }
 
+/**
+ * The embedded grid owns filtering/sorting/grouping over one bounded client
+ * dataset. Ask an adapter for that bound once; repeatedly paging an adapter that
+ * materializes its source per call multiplies the same database work.
+ */
+export function queryBoundedRowsOnce(
+  adapter: DataSourceAdapter,
+  tableId: string,
+  opts: { filters: DataSourceFilter; sort: SortSpec[]; limit: number },
+): Promise<PagedRows> {
+  return adapter.queryRows(tableId, {
+    filters: opts.filters,
+    sort: opts.sort,
+    pagination: { cursor: null, limit: opts.limit },
+  });
+}
+
 class GridRegistry {
   private adapters = new Map<string, DataSourceAdapter>();
 

@@ -4,7 +4,7 @@ import { phraseSummary } from "./phrase";
 import type { ImpactCategoryCounts, ImpactItem, InstallSignals } from "./types";
 
 const emptyCounts: ImpactCategoryCounts = {
-  breaking: 0, feature: 0, fix: 0, performance: 0, other: 0, total: 0,
+  breaking: 0, security: 0, feature: 0, fix: 0, performance: 0, dependency: 0, documentation: 0, maintenance: 0, other: 0, total: 0,
 };
 
 const emptySignals: InstallSignals = {

@@ -37,12 +37,36 @@ const ATTESTATION_RE = /Docs-Impact-Decision:/i;
 const PAGE_FILE_RE = /^apps\/web\/app\/.*\/page\.tsx$/;
 const EXCLUDE_RE = /\.(test|spec|stories)\.tsx$/;
 
+// Dependency-manifest files: package manifests, lockfiles, and the workspace
+// catalog. A change whose ENTIRE diff is these carries no source (.ts/.tsx/.js)
+// and no doc (.md) file, so there is nothing for a *docs* gate to enforce.
+// A doc may cite pnpm-lock.yaml / package.json (they become code->doc edges in
+// doc-impact.generated.json), which used to flag every dependency bump as an
+// "impacting change" needing a Docs-Impact-Decision trailer — a trailer a bot
+// author (e.g. Dependabot) structurally cannot add, wedging every bump PR.
+// The exemption reads the evidence (the file set), not the author, so it applies
+// identically to any surface. It cannot smuggle a source or doc edit past this
+// gate: any non-manifest file in the diff makes the set non-manifest and the
+// gate runs in full. Other guards (build-script-policy, lockfile age, …) still
+// run on these files — only the *docs* concern is short-circuited.
+const DEPENDENCY_MANIFEST_RE =
+  /(^|\/)(package\.json|package-lock\.json|npm-shrinkwrap\.json|yarn\.lock|pnpm-lock\.yaml|pnpm-workspace\.yaml)$/;
+
+/** True iff the diff is non-empty and EVERY file is a dependency-manifest file. */
+export function isDependencyOnlyChange(changedFiles) {
+  return changedFiles.length > 0 && changedFiles.every((f) => DEPENDENCY_MANIFEST_RE.test(f));
+}
+
 // Command-injection hygiene (mirrors check-ux-fit-decision.mjs): pin the ref /
 // path character sets so a forged CI value can't smuggle git option flags or
 // shell metachars through execFile. Path set includes Next route punctuation
-// — route groups `(shell)` and dynamic/catch-all `[id]` / `[[...slug]]`.
+// — route groups `(shell)` and dynamic/catch-all `[id]` / `[[...slug]]` — and
+// `@`, which appears in scoped package dirs and in pnpm's patch filenames
+// (`patches/image-size@1.2.1.patch`). `@` is not a shell metachar and these
+// values are passed via execFile (no shell), so the injection surface is
+// unchanged; the leading-`-` option-smuggling guard below is the real control.
 const REF_RE = /^[A-Za-z0-9._\-/]{1,200}$/;
-const PATH_RE = /^[A-Za-z0-9._\-/()[\]]+$/;
+const PATH_RE = /^[A-Za-z0-9._\-/()[\]@]+$/;
 
 function assertSafeRef(ref, label) {
   if (!REF_RE.test(ref) || ref.startsWith("-")) throw new Error(`[docs-impact-gate] refusing unsafe ${label}: ${JSON.stringify(ref)}`);
@@ -129,6 +153,15 @@ function main() {
   const changed = git("diff", "--name-only", `${base}...HEAD`)
     .split("\n").map((s) => s.trim()).filter(Boolean);
   for (const f of changed) assertSafePath(f);
+
+  // Dependency-manifest-only diffs (lockfile / package.json bumps, e.g. from
+  // Dependabot) carry no source or doc file, so a docs gate has nothing to
+  // enforce. Short-circuit before route/code impact so a bot bump — which
+  // cannot author a Docs-Impact-Decision trailer — is not structurally wedged.
+  if (isDependencyOnlyChange(changed)) {
+    console.log("[docs-impact-gate] Dependency-manifest-only change (no source or doc files) — nothing for a docs gate to enforce. OK.");
+    process.exit(0);
+  }
 
   if (!fs.existsSync(ROUTE_MAP_TS)) {
     console.log("[docs-impact-gate] docs-route-map.ts not found — skipping.");

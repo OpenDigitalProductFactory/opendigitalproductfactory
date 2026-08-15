@@ -50,6 +50,7 @@ import {
   currentInferenceOrigin,
   engineKeyForProvider,
 } from "./inference-admission";
+import { assertProviderDispatchCapacity } from "@/lib/routing/local-provider-capacity";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -118,6 +119,8 @@ export type InferenceResult = {
   toolCalls?: Array<{ id: string; name: string; arguments: Record<string, unknown> }>;
   /** Responses API: chain subsequent calls with this ID for conversation state. */
   responseId?: string;
+  /** True when the provider stopped at the output-token ceiling (BI-1D144CC1). */
+  truncated?: boolean;
   /**
    * Verbatim provider response body (matches AdapterResult.raw). Optional —
    * adapters may leave it undefined when nothing useful exists beyond `content`.
@@ -452,6 +455,11 @@ export async function callProvider(
     buildId?: string | null;
   },
 ): Promise<InferenceResult> {
+  // Host capacity is a dispatch constraint, not a routing hint. Enforce it at
+  // the shared adapter boundary so direct, agentic, evaluation and fallback
+  // callers cannot start a local model while governed local CI owns the host.
+  await assertProviderDispatchCapacity(providerId);
+
   // 0. EP-COST-001 Phase 2 — pre-call budget gate.
   // Check the agent's daily token budget before dispatching. If the agent has
   // consumed ≥100% of its registry limit today, throw a billing error so the
@@ -695,6 +703,7 @@ export async function callProvider(
     inferenceMs: result.inferenceMs,
     ...(result.toolCalls.length > 0 && { toolCalls: result.toolCalls }),
     responseId: result.responseId,
+    truncated: result.truncated ?? false,
     // Adapters may set result.raw (e.g. transcription adapter for Whisper
     // verbose_json segments). Passed through verbatim; undefined when absent.
     ...(result.raw !== undefined && { raw: result.raw }),

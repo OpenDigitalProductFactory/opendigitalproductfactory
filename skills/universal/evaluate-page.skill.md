@@ -33,7 +33,10 @@ Do not use this for general page summaries; use `analyze-page` instead. Do not u
 
 1. Find the component code for the current route.
 2. Read the page and imported components before judging behavior.
-3. Run the live audit when `evaluate_page` is available.
+3. Run the live audit with `evaluate_page` **once**, only when the browser-use sidecar is expected to be up:
+   - Pass an **absolute** URL reachable from the sidecar network (service hostname inside Docker; not host-only `localhost` from a Windows/macOS agent).
+   - If the tool returns `success=false` with DEGRADED, NOT-RUN, `browser_use_unavailable`, `missing_url`, or `retryable: false` — **stop**. Do not retry the same args (BI-MCP-EFF-71D7229F: blind retries were ~97% of failures).
+   - Fall back to code-only review and state clearly that live audit did not run.
 4. Merge code-level and live findings, deduplicating repeated issues.
 5. Prioritize accessibility, keyboard, contrast, layout stability, labels, and empty/error states.
 6. Create backlog items by category only when findings are real and actionable.
@@ -52,6 +55,7 @@ Do not use this for general page summaries; use `analyze-page` instead. Do not u
 
 - Do not flag stylistic preferences as defects.
 - Do not claim live audit coverage if the tool was unavailable.
+- Never loop `evaluate_page` on identical inputs after a failure — fix URL/sidecar or continue without live evidence.
 - Use exact file paths or visible elements when possible.
 - Group many similar issues into one backlog item per category.
 

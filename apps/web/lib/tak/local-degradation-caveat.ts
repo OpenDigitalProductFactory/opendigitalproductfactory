@@ -32,11 +32,13 @@ const ALREADY_FLAGS_DEGRADATION = /bundled local model|paid AI providers|briefly
 export function shouldCaveatLocalDegradation(opts: {
   providerId: string;
   executedToolCount: number;
+  authoritativeSurfaceEvidence?: boolean;
   content: string;
 }): boolean {
-  const { providerId, executedToolCount, content } = opts;
+  const { providerId, executedToolCount, authoritativeSurfaceEvidence, content } = opts;
   if (providerId !== LOCAL_PROVIDER_ID) return false; // a strong paid backup is trustworthy
   if (executedToolCount > 0) return false; // it actually used tools — not a blind answer
+  if (authoritativeSurfaceEvidence) return false; // current authorization-filtered UX state was injected
   if (!content.trim()) return false; // nothing to caveat
   if (ALREADY_FLAGS_DEGRADATION.test(content)) return false; // already honest
   return true;
@@ -48,7 +50,7 @@ export function shouldCaveatLocalDegradation(opts: {
  */
 export function applyLocalDegradationCaveat(
   content: string,
-  opts: { providerId: string; executedToolCount: number },
+  opts: { providerId: string; executedToolCount: number; authoritativeSurfaceEvidence?: boolean },
 ): string {
   return shouldCaveatLocalDegradation({ ...opts, content })
     ? `${LOCAL_UNVERIFIED_CAVEAT}\n\n${content}`

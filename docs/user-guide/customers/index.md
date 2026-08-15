@@ -59,8 +59,12 @@ The section navigation is permission-aware:
 - **Quotes** (`/customer/quotes`) — quote status, validity, line items, acceptance,
   and the resulting order.
 - **Orders** (`/customer/sales-orders`) — accepted commercial commitments.
-- **Sales Funnel** (`/customer/funnel`) — the last 30 days of Storefront
-  interactions flowing into engagements, opportunities, and won work.
+- **Sales Funnel** (`/customer/funnel`) — the pipeline flowing into engagements,
+  opportunities, and won work. When a storefront is published, the top of the
+  funnel is the last 30 days of storefront interactions; when it is not, the top
+  of the funnel is fed by your **direct and reseller leads** (accounts in the
+  early prospect/qualified lifecycle stages), so a direct- or channel-sourced
+  pipeline is represented without a storefront.
 - **Marketing** (`/customer/marketing`) — acquisition strategy, campaigns,
   approval queues, publishing, and proposed automation. This tab requires the
   marketing capability and is covered in [Marketing](marketing.md).
@@ -85,6 +89,13 @@ route rather than exposing a read-only version.
 Simple navigation intentionally emphasizes today's work. Full navigation exposes
 the wider CRM structure. A saved grid view still opens the detailed surface
 directly.
+
+When you switch Accounts or Pipeline from **List** to **Grid** or **Board**, the
+domain's working scope follows you. Accounts show current customers rather than
+superseded merge tombstones; Pipeline shows open qualification-through-
+negotiation work. Use **All customers** or **All opportunities** beside the view
+controls to include history. This scope is separate from personal saved grid
+sorting, grouping, and column choices, and remains in the URL.
 
 ## Capture and Qualify a Lead
 
@@ -160,6 +171,14 @@ Account detail is the relationship history, not just a contact card. It includes
 - customer sites, nested sublocations, and managed configuration items;
 - lifecycle attention, evidence source, renewal/end-of-support dates, and
   archetype-specific charge models;
+- the account's **value-stream position** — where the relationship sits in the
+  operational value stream (Capture → Qualify → Deliver → Retain), shown next to
+  its status. Opening an opportunity moves a prospect to *qualified*, and winning
+  a deal activates the account; you can always override the status from **Edit**;
+- for active, recurring customers, a **Retain** panel — recurring revenue
+  (MRR/ARR), a churn-risk health signal, and the next renewal date, with a prompt
+  to reach out before an at-risk account churns. The revenue cockpit rolls the
+  same recurring revenue and at-risk count up across the workspace;
 - approved billable-time economics where the selected business profile enables
   that workflow.
 
@@ -167,6 +186,26 @@ Merge duplicate accounts from the account page only after comparing contacts,
 history, and the intended surviving record. A merged account is retained as a
 superseded tombstone and excluded from normal lists; **Unmerge** is available
 when the merge itself was wrong.
+
+### Correct or Retire an Account
+
+You can keep the record truthful from the account page itself, without touching
+the database:
+
+- **Edit** — change the account name, status, industry, website, and notes. Use
+  the status field to reclassify a mislabelled record — for example move an
+  account that was set to **Active** in error back to **Prospect**.
+- **Archive** — retire an account with no surviving successor. It is hidden from
+  active account lists but keeps its full history and stays reachable by direct
+  link, so you can change its status back later. Nothing is deleted.
+- **Remove an opportunity** — strip a fabricated or erroneous opportunity
+  entirely, with a confirm step. If the opportunity already has quotes, void
+  those quotes first and then remove it.
+- **Cancel a support contract** — cancel a subscription from the contract card
+  when the deal it represents is not real.
+
+Every one of these actions is recorded on the account timeline, so a correction
+is auditable rather than silent.
 
 ## Evidence and Recovery Checklist
 
@@ -187,6 +226,21 @@ If the pipeline looks wrong, work backward through the chain: order → quote �
 opportunity → engagement → source signal. Correct the earliest inaccurate record
 and then reconcile downstream statuses. Do not create replacement records merely
 to make a dashboard count look right.
+
+## Market Intelligence — research a prospect on request
+
+The **Market Research Analyst** coworker (on the **Opportunities** page, and
+summonable from anywhere) researches a prospect or market segment on request: the
+software tools they likely use, what those tools cost, and which of them the
+platform could replace. It reads your CRM opportunities and accounts (read-only)
+to ground the brief, researches the public web, and returns a **cited** brief tied
+to a specific opportunity.
+
+Ask it things like "research the likely software stack for this prospect and what
+we can replace," or "size the replaceable spend for my strongest opportunity." It
+never presents an unsourced number as fact — every figure is cited to a source it
+retrieved, or clearly labelled as an estimate range. Use it to size the core
+pitch (how many tools the platform consolidates) before a sales conversation.
 
 ## Related Guides
 

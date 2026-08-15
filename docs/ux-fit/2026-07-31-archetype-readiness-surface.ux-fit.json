@@ -1,0 +1,21 @@
+{
+  "version": "1",
+  "decidedOption": "platform-overview-subpage",
+  "decisionInteractionId": "DI-899975251014",
+  "scope": {
+    "files": [
+      "apps/web/app/(shell)/platform/archetype-readiness/page.tsx",
+      "apps/web/components/platform/ArchetypeReadinessMatrixPanel.tsx"
+    ]
+  },
+
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "platform-overview-subpage",
+      "ai-readiness-console-tab",
+      "docs-only-manual-review"
+    ],
+    "summary": "Platform Overview subpage keeps business archetype claimability separate from AI runtime readiness while consuming the existing readiness matrix source of truth."
+  }
+}

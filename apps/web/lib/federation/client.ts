@@ -167,18 +167,29 @@ export async function sendDemandToPeer(
   demandEnvelope: unknown,
   options: { eventId?: string; now?: Date } = {},
 ): Promise<PeerPostResult> {
+  const cloudEvent = toCloudEvent({
+    id: options.eventId ?? `${target.linkId}:${activity}:${Date.now()}`,
+    source: "/dpf",
+    type: activity,
+    time: (options.now ?? new Date()).toISOString(),
+    linkId: target.linkId,
+    data: demandEnvelope,
+  });
+  const inbox = await postToPeer({
+    peerAuthorityUrl: target.peerAuthorityUrl,
+    linkToken: target.linkToken,
+    path: "/api/v1/federation/inbox",
+    cloudEvent,
+    sameOrgLan: target.sameOrgLan ?? false,
+    ...(target.fetchImpl ? { fetchImpl: target.fetchImpl } : {}),
+  });
+  // Rolling-upgrade compatibility only: older peers predate the inbox alias.
+  if (inbox.status !== 404) return inbox;
   return postToPeer({
     peerAuthorityUrl: target.peerAuthorityUrl,
     linkToken: target.linkToken,
     path: "/api/v1/federation/demand",
-    cloudEvent: toCloudEvent({
-      id: options.eventId ?? `${target.linkId}:${activity}:${Date.now()}`,
-      source: "/dpf",
-      type: activity,
-      time: (options.now ?? new Date()).toISOString(),
-      linkId: target.linkId,
-      data: demandEnvelope,
-    }),
+    cloudEvent,
     sameOrgLan: target.sameOrgLan ?? false,
     ...(target.fetchImpl ? { fetchImpl: target.fetchImpl } : {}),
   });

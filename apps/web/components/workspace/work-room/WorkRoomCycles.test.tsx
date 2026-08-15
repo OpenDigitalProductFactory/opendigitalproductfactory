@@ -56,6 +56,7 @@ function room(): WorkRoomView {
     participants: [], activity: [],
     work: { nextAction: "Continue work", attentionRequired: false, attentionReason: null, blockingActorKind: null, activeCapsuleRefs: [], activeTaskRunSummary: null, terminal: false, sourceRefs: [] },
     context: { refs: [], digest: null, sensitivityCeiling: "high" }, receipts: [], sourceRefs: [],
+    structure: null,
     projection: { confidence: "high", incompleteBoundary: false, sourceHealth: "ok" },
   };
 }

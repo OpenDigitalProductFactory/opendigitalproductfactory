@@ -420,7 +420,12 @@ describe("generated route-shell registry", () => {
     // 197 -> 198: /employee/recruiting (BI-9CC44DC7) is sweep-eligible — a read-only
     // recruiting funnel over getRecruitingPipeline with a requisition filter; it renders
     // no wall-clock or live-orchestration state, only the deduped pipeline read model.
-    expect(registry.routes.filter((route) => route.sweepEligible)).toHaveLength(198);
+    // 198 -> 199: /platform/archetype-readiness is a static operator matrix sourced
+    // from storefront-template metadata, so it is safe for the generic sweep.
+    // 199 -> 200: /workforce (EP-COWORKER-IDENTITY-360) — the AI Coworkers directory,
+    // a business-domain peer to /employee and /customer, reusing the roster read-model;
+    // static, no wall-clock or live-orchestration state, so it is sweep-eligible.
+    expect(registry.routes.filter((route) => route.sweepEligible)).toHaveLength(200);
     // 110 -> 113: the three exclusions above. Product Direction then adds seven
     // explicitly classified dynamic routes, bringing the combined total to 120.
     // 120 -> 121: /platform/ai/operations-map.
@@ -430,7 +435,9 @@ describe("generated route-shell registry", () => {
     // 360 detail page is a dynamic ([agentId]) route the generator auto-excludes with
     // reason "dynamic-fixture-required": the sweep cannot render it without a per-coworker
     // fixture, so it is not measured (not a live-state exclusion, a fixture one).
-    expect(registry.routes.filter((route) => !route.sweepEligible)).toHaveLength(123);
+    // 123 -> 124: /ops/stack-currency (BI-6328BCA6) joins the wall-clock exclusions — it
+    // renders currency relative to `now` (approaching-eol window, daysUntilEol).
+    expect(registry.routes.filter((route) => !route.sweepEligible)).toHaveLength(124);
   });
 
   it("keeps contextual sweep exclusions explicit, valid, and non-stale", () => {

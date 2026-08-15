@@ -1,185 +1,203 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import {
   configureDiscoveryConnection,
   testDiscoveryConnection,
 } from "@/lib/actions/discovery";
+import {
+  endpointForCollector,
+  normalizeDiscoveryEndpoint,
+  type DiscoveryCollectorType,
+} from "@/lib/discovery-connection/endpoint";
+import {
+  choosePreselectedGateway,
+  type GatewayCandidate,
+} from "@/lib/discovery-connection/gateway-candidate";
+import {
+  CheckboxField,
+  FormStatus,
+  SelectField,
+  SubmitButton,
+  TextField,
+} from "@/components/ui/form";
 
 type ExistingConnection = {
-  /** DiscoveryConnection.id — present means edit by id (URL changes allowed). */
   id: string;
   collectorType: string;
   site?: string;
   tlsInsecure?: boolean;
-  /** True if the row already has an encrypted API key; lets the form show "leave blank to keep". */
   hasApiKey: boolean;
 };
 
 type Props = {
+  gatewayCandidates?: GatewayCandidate[];
   gatewayEntityId?: string;
   gatewayAddress?: string;
   gatewayName: string;
   onComplete: () => void;
-  /**
-   * When set, the form starts in edit mode: collectorType + site + endpoint are pre-filled
-   * and the API key field becomes optional (omitted on save = keep existing).
-   */
   existing?: ExistingConnection;
+};
+
+type ConnectionStatus = "idle" | "saving" | "testing" | "success" | "error";
+
+type ConnectionConfiguration = {
+  site?: string;
+  discoverClients?: boolean;
+  tlsInsecure?: boolean;
+  community?: string;
+  subnet?: string;
 };
 
 const COLLECTOR_TYPES = [
   { value: "unifi", label: "Ubiquiti UniFi" },
   { value: "snmp", label: "SNMP (Generic)" },
-  { value: "arp_scan", label: "Network Scan (ARP)" },
-] as const;
+  { value: "arp_scan", label: "ARP scan" },
+];
 
-function trimTrailingSlashes(value: string): string {
-  let end = value.length;
-  while (end > 0 && value.charCodeAt(end - 1) === 0x2f /* "/" */) end--;
-  return value.slice(0, end);
-}
-
-function stripScheme(value: string): string {
-  if (value.startsWith("https://")) return value.slice(8);
-  if (value.startsWith("http://")) return value.slice(7);
-  if (value.startsWith("HTTPS://")) return value.slice(8);
-  if (value.startsWith("HTTP://")) return value.slice(7);
-  return value;
-}
-
-function stripPath(value: string): string {
-  const slashIndex = value.indexOf("/");
-  return slashIndex >= 0 ? value.slice(0, slashIndex) : value;
-}
-
-function isIpv4Octet(value: string): boolean {
-  if (value.length === 0 || value.length > 3) return false;
-  for (const char of value) {
-    if (char < "0" || char > "9") return false;
-  }
-  const octet = Number(value);
-  return octet >= 0 && octet <= 255;
-}
-
-function toIpv4Subnet(value: string): string {
-  const host = stripPath(stripScheme(trimTrailingSlashes(value.trim())));
-  if (host.includes("/")) return host;
-  const parts = host.split(".");
-  if (parts.length !== 4 || !parts.every(isIpv4Octet)) return "";
-  return `${parts[0]}.${parts[1]}.${parts[2]}.0/24`;
-}
-
-function isIpv4Cidr(value: string): boolean {
-  const [ip, cidr, extra] = value.trim().split("/");
-  if (!ip || !cidr || extra !== undefined) return false;
-  const prefix = Number(cidr);
-  if (!Number.isInteger(prefix) || prefix < 16 || prefix > 32) return false;
-  const parts = ip.split(".");
-  return parts.length === 4 && parts.every(isIpv4Octet);
-}
-
-function defaultEndpointForCollector(collectorType: string, gatewayAddress?: string): string {
-  const raw = gatewayAddress?.trim();
-  if (!raw) return "";
-  if (collectorType === "unifi") return raw.startsWith("http") ? trimTrailingSlashes(raw) : `https://${raw}`;
-  if (collectorType === "snmp") return stripPath(stripScheme(trimTrailingSlashes(raw)));
-  if (collectorType === "arp_scan") return toIpv4Subnet(raw);
-  return raw;
+function asCollectorType(value: string): DiscoveryCollectorType {
+  return value === "snmp" || value === "arp_scan" ? value : "unifi";
 }
 
 function formatConnectionFeedback(status: string, fallback?: string): string {
   switch (status) {
     case "unifi_tls_error":
-      return "The UniFi controller appears to use a self-signed certificate. Enable self-signed certificate support for this closed LAN, or install a trusted certificate on the controller.";
+      return "The UniFi gateway appears to use a self-signed certificate. Allow it for this trusted closed LAN, or install a trusted certificate on the gateway.";
     case "unifi_auth_failed":
-      return "The UniFi controller rejected the API key. Rotate the key in UniFi OS and paste the new value here.";
+      return "The UniFi gateway rejected the API key. Rotate the key in UniFi OS and paste the new value here.";
     case "unifi_unreachable":
-      return "The portal could not reach the UniFi controller from this host. Check the controller URL and local network reachability.";
+      return "DPF could not reach this UniFi gateway from the portal host. Check local network reachability.";
     default:
       return fallback ?? status;
   }
 }
 
+function fallbackCandidate(
+  gatewayEntityId: string | undefined,
+  gatewayAddress: string | undefined,
+  gatewayName: string,
+): GatewayCandidate[] {
+  if (!gatewayAddress) return [];
+  const canonicalEndpoint = endpointForCollector("unifi", gatewayAddress);
+  return [{
+    entityId: gatewayEntityId ?? "detected-gateway",
+    entityKey: gatewayEntityId ?? gatewayAddress,
+    name: gatewayName,
+    address: gatewayAddress,
+    manufacturer: null,
+    model: null,
+    confidence: null,
+    evidence: ["Detected on the local network"],
+    recommendedCollector: "unifi",
+    recommendation: "DPF detected this gateway on the local network.",
+    canonicalEndpoint,
+    matchesDetectedGateway: true,
+    usable: canonicalEndpoint !== null,
+  }];
+}
+
+function gatewayOptionLabel(candidate: GatewayCandidate): string {
+  const identity = [candidate.manufacturer, candidate.model].filter(Boolean).join(" ");
+  return [candidate.name, identity || null, candidate.address].filter(Boolean).join(" — ");
+}
+
 export function ConfigureConnectionInline({
+  gatewayCandidates,
   gatewayEntityId,
   gatewayAddress,
   gatewayName,
   onComplete,
   existing,
 }: Props) {
-  const isEditMode = !!existing;
-  const [collectorType, setCollectorType] = useState(existing?.collectorType ?? "unifi");
-  const [endpointUrl, setEndpointUrl] = useState(
-    defaultEndpointForCollector(existing?.collectorType ?? "unifi", gatewayAddress),
+  const candidates = useMemo(
+    () => gatewayCandidates ?? fallbackCandidate(gatewayEntityId, gatewayAddress, gatewayName),
+    [gatewayCandidates, gatewayEntityId, gatewayAddress, gatewayName],
   );
+  const initialSelection = choosePreselectedGateway(candidates);
+  const initialCandidate = candidates.find((candidate) => candidate.entityId === initialSelection);
+  const [selectedGatewayId, setSelectedGatewayId] = useState(initialSelection ?? "");
+  const [collectorType, setCollectorType] = useState(
+    asCollectorType(existing?.collectorType ?? initialCandidate?.recommendedCollector ?? "unifi"),
+  );
+  const [manualEndpoint, setManualEndpoint] = useState(gatewayAddress ?? "");
+  const [manualMode, setManualMode] = useState(false);
   const [apiKey, setApiKey] = useState("");
   const [site, setSite] = useState(existing?.site ?? "default");
   const [tlsInsecure, setTlsInsecure] = useState(existing?.tlsInsecure ?? false);
-  const [status, setStatus] = useState<"idle" | "saving" | "testing" | "success" | "error">("idle");
+  const [status, setStatus] = useState("idle" as ConnectionStatus);
   const [message, setMessage] = useState("");
+  const [fieldError, setFieldError] = useState("");
   const [isPending, startTransition] = useTransition();
 
+  const selectedCandidate = candidates.find((candidate) => candidate.entityId === selectedGatewayId);
   const isUnifi = collectorType === "unifi";
   const isSnmp = collectorType === "snmp";
   const isArpScan = collectorType === "arp_scan";
+  const keyRequired = isUnifi && !(existing && existing.hasApiKey);
+  const selectedEndpoint = selectedCandidate?.address
+    ? endpointForCollector(collectorType, selectedCandidate.address)
+    : null;
+  const endpointInput = manualMode || !selectedEndpoint ? manualEndpoint : selectedEndpoint;
 
-  // API key requirement is relaxed in edit mode when one already exists:
-  // omitting it on save preserves the stored ciphertext (server-side upsert
-  // only overwrites `encryptedApiKey` when a new value is supplied).
-  const keyRequired = isUnifi && !(isEditMode && existing?.hasApiKey);
+  const selectGateway = (entityId: string) => {
+    const candidate = candidates.find((item) => item.entityId === entityId);
+    setSelectedGatewayId(entityId);
+    setManualMode(false);
+    setFieldError("");
+    setMessage("");
+    setStatus("idle");
+    if (candidate) setCollectorType(candidate.recommendedCollector);
+  };
+
+  const changeCollector = (value: string) => {
+    const next = asCollectorType(value);
+    setCollectorType(next);
+    const derived = selectedCandidate?.address
+      ? endpointForCollector(next, selectedCandidate.address)
+      : null;
+    setManualEndpoint(derived ?? "");
+    setManualMode(next !== "unifi");
+    setFieldError("");
+    setMessage("");
+    setStatus("idle");
+  };
 
   const handleSave = () => {
-    if (keyRequired && (!endpointUrl || !apiKey)) {
-      setMessage("Controller URL and API key are required");
+    if (!selectedCandidate && !manualMode) {
+      setMessage("Choose a gateway before saving this connection.");
       setStatus("error");
       return;
     }
-    if (isUnifi && !keyRequired && !endpointUrl) {
-      setMessage("Controller URL is required");
+    const normalized = normalizeDiscoveryEndpoint(endpointInput, collectorType);
+    if (!normalized.ok) {
+      setFieldError(normalized.error);
       setStatus("error");
       return;
     }
-    if (isSnmp && !endpointUrl) {
-      setMessage("Target IP address is required");
-      setStatus("error");
-      return;
-    }
-    if (isArpScan && !endpointUrl) {
-      setMessage("Subnet is required (e.g., 192.168.0.0/24)");
-      setStatus("error");
-      return;
-    }
-    if (isArpScan && !isIpv4Cidr(endpointUrl)) {
-      setMessage("Subnet must be CIDR notation, for example 192.168.0.0/24");
+    if (keyRequired && !apiKey) {
+      setMessage("Enter the UniFi API key for this gateway.");
       setStatus("error");
       return;
     }
 
+    setFieldError("");
     startTransition(async () => {
       setStatus("saving");
       setMessage("");
-
-      const configuration: Record<string, unknown> = {};
-      if (isUnifi) {
-        configuration.site = site;
-        configuration.discoverClients = true;
-        configuration.tlsInsecure = tlsInsecure;
-      }
+      const configuration: ConnectionConfiguration = {};
+      if (isUnifi) Object.assign(configuration, { site, discoverClients: true, tlsInsecure });
       if (isSnmp) configuration.community = apiKey || "public";
-      if (isArpScan) configuration.subnet = endpointUrl;
+      if (isArpScan) configuration.subnet = normalized.value;
 
       const result = await configureDiscoveryConnection({
         ...(existing?.id ? { id: existing.id } : {}),
-        gatewayEntityId,
-        name: isArpScan ? `Subnet ${endpointUrl}` : gatewayName,
+        gatewayEntityId: manualMode ? undefined : selectedCandidate?.entityId,
+        name: isArpScan
+          ? `Subnet ${normalized.value}`
+          : selectedCandidate?.name ?? gatewayName,
         collectorType,
-        endpointUrl,
-        // In edit mode without a fresh key, send undefined so the server-side
-        // upsert keeps the existing encryptedApiKey.
-        apiKey: isUnifi
-          ? (apiKey || undefined)
-          : isSnmp ? apiKey || "public" : undefined,
+        endpointUrl: normalized.value,
+        apiKey: isUnifi ? (apiKey || undefined) : isSnmp ? apiKey || "public" : undefined,
         configuration,
       });
 
@@ -189,154 +207,177 @@ export function ConfigureConnectionInline({
         return;
       }
 
-      // Test the connection
       setStatus("testing");
-      setMessage("Saved. Testing connection...");
-
+      setMessage("Saved. Testing connection…");
       const testResult = await testDiscoveryConnection(result.connectionId);
       if (!testResult.ok) {
         setStatus("error");
         setMessage(formatConnectionFeedback("error", testResult.error));
         return;
       }
-
-      if (testResult.status === "ok") {
-        setStatus("success");
-        setMessage(
-          `Connected. Discovered ${testResult.deviceCount ?? 0} device(s). The next discovery sweep will pull full topology.`,
-        );
-        setTimeout(onComplete, 3000);
-      } else {
+      if (testResult.status !== "ok") {
         setStatus("error");
-        setMessage(formatConnectionFeedback(testResult.status, testResult.message ?? "Connection test failed"));
+        setMessage(formatConnectionFeedback(testResult.status, testResult.message));
+        return;
       }
+      setStatus("success");
+      setMessage(`Connected. Discovered ${testResult.deviceCount ?? 0} device(s).`);
+      setTimeout(onComplete, 3000);
     });
   };
 
   return (
-    <div className="mt-4 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-4 space-y-3">
+    <div
+      className="mt-4 space-y-4 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-4"
+      data-surface-node-id="connection.form"
+    >
       <p className="text-xs font-medium uppercase tracking-[0.16em] text-[var(--dpf-muted)]">
-        Configure Discovery Connection
+        Gateway connection
       </p>
 
+      {candidates.length > 1 && (
+        <SelectField
+          name="gateway"
+          data-surface-node-id="connection.gateway"
+          label="Gateway"
+          value={selectedGatewayId}
+          onValueChange={selectGateway}
+          placeholder="Choose a gateway"
+          options={candidates.map((candidate) => ({
+            value: candidate.entityId,
+            label: gatewayOptionLabel(candidate),
+            disabled: !candidate.usable,
+          }))}
+          hint={selectedCandidate?.recommendation ?? "Choose by device name, manufacturer, model, and local address."}
+          required
+        />
+      )}
+      {candidates.length <= 1 && selectedCandidate && (
+        <section className="rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-3" aria-label="Selected gateway">
+          <p className="font-medium text-[var(--dpf-text)]">{selectedCandidate.name}</p>
+          {(selectedCandidate.manufacturer || selectedCandidate.model) && (
+            <p className="text-sm text-[var(--dpf-muted)]">
+              {[selectedCandidate.manufacturer, selectedCandidate.model].filter(Boolean).join(" · ")}
+            </p>
+          )}
+          {selectedCandidate.address && (
+            <p className="mt-1 text-xs text-[var(--dpf-muted)]">
+              Local address <span className="font-mono text-[var(--dpf-text)]">{selectedCandidate.address}</span>
+            </p>
+          )}
+          <p className="mt-1 text-xs text-[var(--dpf-muted)]">{selectedCandidate.recommendation}</p>
+        </section>
+      )}
+      {candidates.length <= 1 && !selectedCandidate && (
+        <p className="rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-3 text-sm text-[var(--dpf-muted)]">
+          No gateway identified. Use manual recovery below.
+        </p>
+      )}
+
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-        <label className="block">
-          <span className="text-xs text-[var(--dpf-muted)]">Discovery Method</span>
-          <select
-            value={collectorType}
-            onChange={(e) => {
-              const nextCollectorType = e.target.value;
-              setCollectorType(nextCollectorType);
-              setEndpointUrl(defaultEndpointForCollector(nextCollectorType, gatewayAddress));
-              setStatus("idle");
-              setMessage("");
-            }}
-            className="mt-1 block w-full rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-3 py-1.5 text-sm text-[var(--dpf-text)]"
-          >
-            {COLLECTOR_TYPES.map((ct) => (
-              <option key={ct.value} value={ct.value}>
-                {ct.label}
-              </option>
-            ))}
-          </select>
-        </label>
-
+        <SelectField
+          name="discovery-method"
+          data-surface-node-id="connection.method"
+          label="Discovery Method"
+          value={collectorType}
+          onValueChange={changeCollector}
+          options={COLLECTOR_TYPES}
+        />
         {isUnifi && (
-          <label className="block">
-            <span className="text-xs text-[var(--dpf-muted)]">Site</span>
-            <input
-              type="text"
-              value={site}
-              onChange={(e) => setSite(e.target.value)}
-              placeholder="default"
-              className="mt-1 block w-full rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-3 py-1.5 text-sm text-[var(--dpf-text)]"
-            />
-          </label>
+          <TextField name="site" data-surface-node-id="connection.site" label="Site" value={site} onValueChange={setSite} placeholder="default" />
         )}
-
         {isSnmp && (
-          <label className="block">
-            <span className="text-xs text-[var(--dpf-muted)]">Community String</span>
-            <input
-              type="text"
-              value={apiKey}
-              onChange={(e) => setApiKey(e.target.value)}
-              placeholder="public"
-              className="mt-1 block w-full rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-3 py-1.5 text-sm text-[var(--dpf-text)]"
-            />
-          </label>
+          <TextField
+            name="community-string"
+            data-surface-node-id="connection.community"
+            label="Community String"
+            type="password"
+            value={apiKey}
+            onValueChange={setApiKey}
+            autoComplete="new-password"
+            placeholder="public"
+          />
         )}
       </div>
 
-      <label className="block">
-        <span className="text-xs text-[var(--dpf-muted)]">
-          {isUnifi ? "Controller URL" : isSnmp ? "Target IP or Hostname" : "Subnet to scan"}
-        </span>
-        <input
-          type={isUnifi ? "url" : "text"}
-          value={endpointUrl}
-          onChange={(e) => setEndpointUrl(e.target.value)}
-          placeholder={isUnifi ? "https://192.168.0.1" : isSnmp ? "192.168.0.1" : "192.168.0.0/24"}
-          className="mt-1 block w-full rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-3 py-1.5 text-sm text-[var(--dpf-text)]"
+      {isSnmp && (
+        <p className="text-xs leading-5 text-[var(--dpf-muted)]">
+          SNMP discovers network devices. SMTP sends outbound email and is configured elsewhere.
+        </p>
+      )}
+
+      {isUnifi ? (
+        <details className="rounded-md border border-[var(--dpf-border)] px-3 py-2">
+          <summary data-surface-node-id="connection.manual-recovery" className="cursor-pointer text-sm font-medium text-[var(--dpf-accent)]">
+            Manual gateway
+          </summary>
+          <div className="mt-3">
+            <TextField
+              name="gateway-address"
+              data-surface-node-id="connection.target"
+              label="Gateway address"
+              value={manualEndpoint}
+              onValueChange={(value) => {
+                setManualEndpoint(value);
+                setManualMode(true);
+                setFieldError("");
+              }}
+              hint="Enter a host or IP address. A scheme and port are optional."
+              error={fieldError}
+              placeholder="192.168.0.1"
+            />
+          </div>
+        </details>
+      ) : (
+        <TextField
+          name="discovery-endpoint"
+          data-surface-node-id="connection.target"
+          label={isSnmp ? "Target IP or Hostname" : "Subnet to scan"}
+          value={endpointInput}
+          onValueChange={(value) => {
+            setManualEndpoint(value);
+            setManualMode(true);
+            setFieldError("");
+          }}
+          error={fieldError}
+          placeholder={isSnmp ? "192.168.0.1" : "192.168.0.0/24"}
         />
-      </label>
-
-      {isUnifi && (
-        <label className="block">
-          <span className="text-xs text-[var(--dpf-muted)]">
-            API Key{!keyRequired && <span className="ml-1 text-[10px]">(leave blank to keep existing)</span>}
-          </span>
-          <input
-            type="password"
-            value={apiKey}
-            onChange={(e) => setApiKey(e.target.value)}
-            placeholder={keyRequired ? "Paste your UniFi OS API key" : "•••••••••••••••• (stored)"}
-            className="mt-1 block w-full rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-3 py-1.5 text-sm text-[var(--dpf-text)]"
-          />
-        </label>
       )}
 
       {isUnifi && (
-        <label className="flex items-start gap-3 rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-3">
-          <input
-            type="checkbox"
-            checked={tlsInsecure}
-            onChange={(e) => setTlsInsecure(e.target.checked)}
-            className="mt-0.5 h-4 w-4 rounded border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] accent-[var(--dpf-accent)]"
-          />
-          <span className="min-w-0">
-            <span className="block text-xs font-medium text-[var(--dpf-text)]">
-              Allow self-signed controller certificate
-            </span>
-            <span className="mt-0.5 block text-[11px] leading-4 text-[var(--dpf-muted)]">
-              Use for trusted closed-LAN UniFi appliances that do not have a public certificate.
-            </span>
-          </span>
-        </label>
+        <TextField
+          name="api-key"
+          data-surface-node-id="connection.community"
+          label={keyRequired ? "API Key" : "API Key (leave blank to keep existing)"}
+          type="password"
+          value={apiKey}
+          onValueChange={setApiKey}
+          autoComplete="off"
+          placeholder={keyRequired ? "Paste your UniFi OS API key" : "Stored securely"}
+          required={keyRequired}
+        />
       )}
 
-      <div className="flex items-center gap-3">
-        <button
-          onClick={handleSave}
-          disabled={isPending}
-          className="rounded-md bg-[var(--dpf-accent)] px-4 py-1.5 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
-        >
-          {isPending ? "Connecting..." : "Save & Test"}
-        </button>
+      {isUnifi && (
+        <CheckboxField
+          name="tls-insecure"
+          data-surface-node-id="connection.tls-insecure"
+          label="Allow self-signed certificate"
+          checked={tlsInsecure}
+          onCheckedChange={setTlsInsecure}
+          hint="Use only for a trusted closed-LAN UniFi appliance without a public certificate."
+        />
+      )}
 
-        {message && (
-          <p
-            className={`text-xs ${
-              status === "success"
-                ? "text-[var(--dpf-success)]"
-                : status === "error"
-                  ? "text-[var(--dpf-error)]"
-                  : "text-[var(--dpf-muted)]"
-            }`}
-          >
-            {message}
-          </p>
-        )}
+      <div className="flex flex-wrap items-center gap-3">
+        <SubmitButton data-surface-node-id="connection.save-and-test" type="button" onClick={handleSave} pending={isPending} pendingLabel="Connecting…">
+          Save &amp; Test
+        </SubmitButton>
+        <FormStatus
+          error={status === "error" ? message : null}
+          success={status === "success" ? message : null}
+        />
+        {status === "testing" && <p className="text-sm text-[var(--dpf-muted)]">{message}</p>}
       </div>
     </div>
   );

@@ -60,6 +60,10 @@ backlog item.
 5. Open the regulation detail and confirm the source, obligation count, owners,
    control coverage, and any **Source needed** warning.
 
+The Obligations **List**, **Grid**, and **Board** views all begin with active
+obligations. In Grid or Board, choose **All obligations** beside the view
+controls when reviewing inactive history. The scope is retained in the URL.
+
 ## Decisions And Consequences
 
 - **Deactivate** marks a regulation inactive; it does not erase the record.

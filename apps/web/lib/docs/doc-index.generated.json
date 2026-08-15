@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 626,
+  "pageCount": 634,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -325,6 +325,51 @@
         "gap-analysis-by-platform-adequacy-dimension",
         "guardrails-for-future-agents",
         "recovery-notes"
+      ]
+    },
+    "docs/architecture/2026-08-09-portal-architecture-hardening-findings.md": {
+      "publicHref": "/architecture/2026-08-09-portal-architecture-hardening-findings/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "portal-architecture-hardening-findings",
+        "1-purpose",
+        "2-method",
+        "3-evidence-base-prior-review-lineage",
+        "31-what-moved-since-2026-06-22-2026-07-27",
+        "4-executive-verdict",
+        "5-quality-dimension-findings",
+        "51-stability",
+        "52-scalability",
+        "53-reliability-incl-resilience-recoverability",
+        "54-upgradeability",
+        "55-supportability-incl-operability-maintainability",
+        "56-security-data-protection-related",
+        "57-observability-related",
+        "58-ai-action-integrity-signature-risk",
+        "59-maintainability-evolvability-related",
+        "6-best-in-class-comparison",
+        "7-architectural-drift-inventory",
+        "8-prioritized-hardening-recommendations",
+        "9-assumed-limits",
+        "10-spot-check-claims-verification-anchors",
+        "11-conclusion"
+      ]
+    },
+    "docs/architecture/2026-08-09-tts-idle-process-elimination.md": {
+      "publicHref": "/architecture/2026-08-09-tts-idle-process-elimination/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "tts-idle-process-elimination-bi-a0a0568f",
+        "problem",
+        "options-considered",
+        "decision",
+        "evidence-hooks",
+        "acceptance-mapping",
+        "related"
       ]
     },
     "docs/architecture/GAID.md": {
@@ -813,6 +858,21 @@
         "current-boundaries"
       ]
     },
+    "docs/architecture/background-operation-observation-contract.md": {
+      "publicHref": "/architecture/background-operation-observation-contract/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "background-operation-observation-contract",
+        "required-architecture",
+        "page-refresh-policy",
+        "platform-primitives",
+        "failure-semantics",
+        "review-and-verification-checklist",
+        "standards-and-precedent"
+      ]
+    },
     "docs/architecture/backlog-and-planning-runbook.md": {
       "publicHref": "/architecture/backlog-and-planning-runbook/",
       "portalHref": null,
@@ -851,6 +911,8 @@
         "verification-readiness-classification",
         "compose-project-isolation",
         "freshness-a-stale-worktree-base-is-a-landmine",
+        "root-clone-freshness-the-shared-root-must-stay-on-current-main",
+        "reaping-safety-a-live-sessions-worktree-is-never-reaped",
         "rebasing-on-a-shallow-clone-never-a-bare-git-rebase-originmain",
         "housekeeping"
       ]
@@ -1143,6 +1205,8 @@
         "sbom-generation",
         "axis-1-reduction-efficiency",
         "axis-2-vulnerability-lifecycle-the-local-dependabot-equivalent",
+        "the-remediation-ladder-when-a-floor-wont-work",
+        "owning-a-fix-pnpm-patch-when-upstream-is-dead",
         "axis-3-acquisition-control-the-new-dependency-gate",
         "why-this-shape-wwmd",
         "doctrine-rent-vs-own-and-validate-the-rent",
@@ -1457,6 +1521,7 @@
         "522-warehousing-and-fulfilment-4",
         "523-fabric-care-services-3",
         "524-agriculture-and-ranching-3",
+        "525-manufacturing-1",
         "6-shared-and-specialized-ai-coworker-families",
         "61-controlled-activity-applicability-and-ai-realization-states",
         "62-category-applicability-matrix",
@@ -1656,7 +1721,10 @@
         "read-contract",
         "command-contract",
         "performance-and-evidence",
-        "reuse-boundary"
+        "reuse-boundary",
+        "historical-performance-boundary",
+        "watched-analysis",
+        "design-grounding"
       ]
     },
     "docs/architecture/orientation.md": {
@@ -1665,7 +1733,8 @@
       "publishedPublic": true,
       "publishedPortal": false,
       "anchors": [
-        "architecture-orientation"
+        "architecture-orientation",
+        "channel-adapter-capabilities"
       ]
     },
     "docs/architecture/package-boundaries.md": {
@@ -1737,6 +1806,20 @@
         "scope-and-exclusions",
         "completion-evidence",
         "what-success-means"
+      ]
+    },
+    "docs/architecture/principle-decide-mcda-identity.md": {
+      "publicHref": "/architecture/principle-decide-mcda-identity/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "principledecide-math-identity-mcda",
+        "what-the-scorer-is",
+        "what-it-is-not",
+        "autonomy-gate-bi-1d23ec26",
+        "operator-surfaces",
+        "design-grounding"
       ]
     },
     "docs/architecture/product-demand-activation.md": {
@@ -1971,7 +2054,11 @@
         "unified-connector-kernel",
         "ownership-boundary",
         "connector-definition",
+        "capability-identity-and-discovery",
         "credentials-state-and-health",
+        "safe-failures-across-layers",
+        "third-party-reads-caches-and-historical-gaps",
+        "marketing-channel-domain-contract",
         "durable-audit-and-callback-delivery",
         "enforcement",
         "adding-or-migrating-a-connector",
@@ -2399,9 +2486,9 @@
         "step-3-the-edge-node-picks-it-up-automatically",
         "editing-or-rotating-the-key",
         "what-the-adapter-emits",
-        "unifi-managed-devices-slice-a-statdevice",
-        "connected-clients-slice-b-statsta",
-        "independent-failure-handling",
+        "unifi-managed-devices-official-sitesdevicesdevice-details-routes",
+        "connected-clients-official-site-clients-route",
+        "failure-and-fallback-handling",
         "troubleshooting",
         "whats-not-in-this-slice",
         "reference"
@@ -3896,6 +3983,7 @@
         "how-to-apply",
         "decision-dimensions",
         "examples",
+        "boundary",
         "sources"
       ]
     },
@@ -4167,6 +4255,17 @@
         "examples",
         "when-this-does-not-apply",
         "see-also"
+      ]
+    },
+    "docs/founder-kernel/wiki/principles/universal-work-formula.md": {
+      "publicHref": "/founder-kernel/wiki/principles/universal-work-formula/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "the-formula-is-invariant",
+        "only-three-axes-vary",
+        "the-review-altitude-check"
       ]
     },
     "docs/founder-kernel/wiki/principles/verify-substrate-before-proposing-new.md": {
@@ -5013,6 +5112,8 @@
       "anchors": [
         "oss-repo-identity-hygiene",
         "what-is-and-isnt-allowed",
+        "approved-placeholders-write-these-from-the-first-draft",
+        "caught-at-commit-time-not-just-at-ci",
         "how-it-is-enforced",
         "the-ratchet",
         "when-the-guard-fails-on-your-pr",
@@ -5187,6 +5288,7 @@
         "design-token-scales-l0",
         "ux-budgets-l2",
         "design-grounding",
+        "operator-finding-actionability",
         "contrast-requirements",
         "form-elements",
         "user-facing-form-contract-mandatory",
@@ -5195,6 +5297,7 @@
         "allowed-hex-usage",
         "component-checklist",
         "async-activity-loading-states",
+        "multi-source-data-states",
         "progressive-disclosure",
         "choice-load-is-disclosure-too-bi-d6135b88",
         "readability-plain-language",
@@ -6566,6 +6669,29 @@
         "see-also"
       ]
     },
+    "docs/professions/manufacturing-operations/wiki/production-flow-and-quality-holds.md": {
+      "publicHref": "/professions/manufacturing-operations/wiki/production-flow-and-quality-holds/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "heuristic",
+        "human-authority",
+        "sources"
+      ]
+    },
+    "docs/professions/market-research/wiki/replaceable-stack-and-spend-analysis.md": {
+      "publicHref": "/professions/market-research/wiki/replaceable-stack-and-spend-analysis/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "what-this-covers",
+        "how-to-analyse-a-prospects-stack",
+        "the-hard-rule-cite-every-number",
+        "output"
+      ]
+    },
     "docs/professions/marketing/wiki/agriculture-evidence-led-market-positioning.md": {
       "publicHref": "/professions/marketing/wiki/agriculture-evidence-led-market-positioning/",
       "portalHref": null,
@@ -7818,6 +7944,7 @@
         "step-3-monitor-the-chain",
         "step-4-verify-postgres-only-done-criteria",
         "if-it-fails-anyway-recovery",
+        "failure-class-host-out-of-memory-candidate-build-enomem",
         "failure-class-migration-unique-violation-p3018-23505",
         "references"
       ]
@@ -9538,6 +9665,15 @@
         "pbi-inv-04-near-zero-config-email-ai-assisted-own-provider-setup-bundled-relay-tier"
       ]
     },
+    "docs/testing/performance-live-acceptance.md": {
+      "publicHref": "/testing/performance-live-acceptance/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "populated-performance-live-acceptance"
+      ]
+    },
     "docs/testing/pr-health.md": {
       "publicHref": "/testing/pr-health/",
       "portalHref": null,
@@ -9779,6 +9915,7 @@
         "oauth-sign-in",
         "device-code-sign-in-xai-grok",
         "none",
+        "local-capacity-during-platform-verification",
         "how-oauth-works",
         "choosing-the-right-method",
         "business-safe-review",
@@ -9826,6 +9963,7 @@
       "anchors": [
         "what-this-covers",
         "what-decision-perspective-does",
+        "consequential-action-alignment",
         "the-confidence-model",
         "the-inheritance-chain",
         "profile-kinds",
@@ -10336,7 +10474,9 @@
         "work-an-opportunity",
         "quote-accept-and-fulfil",
         "maintain-the-account-record",
+        "correct-or-retire-an-account",
         "evidence-and-recovery-checklist",
+        "market-intelligence-research-a-prospect-on-request",
         "related-guides"
       ]
     },
@@ -10686,7 +10826,8 @@
         "promotions",
         "being-reached-when-you-are-away",
         "business-journeys",
-        "promoter-timeout"
+        "promoter-timeout",
+        "platform-stack-currency"
       ]
     },
     "docs/user-guide/operations/infrastructure-discovery.md": {
@@ -10778,6 +10919,7 @@
         "use-this-doc-for",
         "what-discovery-does",
         "configure-a-connection-safely",
+        "work-with-the-discovery-coworker",
         "review-a-run",
         "promotion-and-follow-up",
         "what-to-watch"
@@ -10791,6 +10933,7 @@
       "anchors": [
         "use-this-doc-for",
         "what-an-edge-node-does",
+        "start-with-this-dpf-installation",
         "deployment-modes",
         "when-a-container-looks-like-it-works-but-doesnt",
         "adapters-and-what-they-discover",

@@ -40,6 +40,7 @@ import {
 const THIS_FILE = fileURLToPath(import.meta.url);
 const SCRIPT_DIR = dirname(THIS_FILE);
 export const WINDOWS_WRAPPER_TERMINATED_STATUS = 4294967295;
+const DEFAULT_LEASE_WAIT_SECONDS = 7200;
 
 // Host-side guard parity preflight (BI-D35433FB): run the deterministic CI
 // policy guards before lease admission so a doomed gate never occupies a
@@ -74,6 +75,46 @@ function argValue(args, flag) {
   const index = args.indexOf(flag);
   if (index < 0) return "";
   return args[index + 1] || "";
+}
+
+function leaseWaitSeconds(args, env) {
+  const configured = argValue(args, "--lease-wait-seconds")
+    || env.DPF_GATE_LEASE_WAIT_SECONDS
+    || String(DEFAULT_LEASE_WAIT_SECONDS);
+  const seconds = Number(configured);
+  return Number.isFinite(seconds) && seconds >= 0
+    ? seconds
+    : DEFAULT_LEASE_WAIT_SECONDS;
+}
+
+export function createQueuedGateRevivalWindow({
+  args = [],
+  env = process.env,
+  nowMs = Date.now(),
+} = {}) {
+  return {
+    startedAtMs: nowMs,
+    deadlineMs: nowMs + leaseWaitSeconds(args, env) * 1000,
+  };
+}
+
+export function gateArgsForQueuedRevivalWindow({
+  args = [],
+  window,
+  nowMs = Date.now(),
+} = {}) {
+  const remainingMs = window?.deadlineMs - nowMs;
+  if (!Number.isFinite(remainingMs) || remainingMs <= 0) return null;
+
+  const remainingSeconds = String(Math.ceil(remainingMs / 1000));
+  const nextArgs = [...args];
+  const flagIndex = nextArgs.indexOf("--lease-wait-seconds");
+  if (flagIndex >= 0) {
+    nextArgs[flagIndex + 1] = remainingSeconds;
+  } else {
+    nextArgs.push("--lease-wait-seconds", remainingSeconds);
+  }
+  return nextArgs;
 }
 
 function gitText(gitArgs, { cwd, spawnSyncImpl = spawnSync } = {}) {
@@ -471,6 +512,62 @@ export async function recoverInterruptedGate({
   return { recovered: false, reason: "no-running-state" };
 }
 
+export async function runGateWithQueuedRevival({
+  args = [],
+  useShell = false,
+  env = process.env,
+  now = () => Date.now(),
+  spawnSyncImpl = spawnSync,
+  reviveInterruptedQueuedGateImpl = reviveInterruptedQueuedGate,
+  recoverInterruptedGateImpl = recoverInterruptedGate,
+  stderr = process.stderr,
+} = {}) {
+  let result;
+  let queuedRevivals = 0;
+  const queueRevivalWindow = createQueuedGateRevivalWindow({
+    args,
+    env,
+    nowMs: now(),
+  });
+
+  for (;;) {
+    const invocationArgs = queuedRevivals === 0
+      ? args
+      : gateArgsForQueuedRevivalWindow({
+        args,
+        window: queueRevivalWindow,
+        nowMs: now(),
+      });
+    if (!invocationArgs) {
+      await recoverInterruptedGateImpl({ args, result });
+      stderr.write("pregate: original bounded local-CI admission window elapsed; no further queued gate revival will be started.\n");
+      return { result, queuedRevivals, timedOut: true };
+    }
+
+    if (useShell) {
+      stderr.write("pregate: DPF_PREGATE_FORCE_SH=1 set — routing through compatibility shell entry point.\n");
+      result = spawnSyncImpl("sh", [join(SCRIPT_DIR, "gate-worktree.sh"), ...invocationArgs], { stdio: "inherit" });
+    } else {
+      stderr.write("pregate: routing through the Node-native gate (scripts/gate-worktree.mjs).\n");
+      result = spawnSyncImpl(process.execPath, [join(SCRIPT_DIR, "gate-worktree.mjs"), ...invocationArgs], { stdio: "inherit" });
+    }
+
+    if (result.error || (result.status ?? 1) === 0) {
+      return { result, queuedRevivals, timedOut: false };
+    }
+    if (now() < queueRevivalWindow.deadlineMs) {
+      const revived = await reviveInterruptedQueuedGateImpl({ args, result });
+      if (revived.revived) {
+        queuedRevivals += 1;
+        stderr.write(`pregate: queued gate revival ${queuedRevivals}; continuing within the original bounded admission window without losing FIFO position.\n`);
+        continue;
+      }
+    }
+    await recoverInterruptedGateImpl({ args, result });
+    return { result, queuedRevivals, timedOut: false };
+  }
+}
+
 async function main() {
   // BI-B1065D41: `pnpm run pregate | head -5` must survive head exiting. Both
   // this wrapper and the gate it spawns need the tolerance — the gate inherits
@@ -523,37 +620,12 @@ async function main() {
   }
 
   const useShell = shouldUseShell();
-
-  let result;
-  let queuedRevivals = 0;
-  const maxQueuedRevivals = Number.parseInt(process.env.DPF_PREGATE_MAX_QUEUE_REVIVALS || "6", 10);
-  for (;;) {
-    if (useShell) {
-      process.stderr.write("pregate: DPF_PREGATE_FORCE_SH=1 set — routing through compatibility shell entry point.\n");
-      result = spawnSync("sh", [join(SCRIPT_DIR, "gate-worktree.sh"), ...args], { stdio: "inherit" });
-    } else {
-      process.stderr.write("pregate: routing through the Node-native gate (scripts/gate-worktree.mjs).\n");
-      result = spawnSync(process.execPath, [join(SCRIPT_DIR, "gate-worktree.mjs"), ...args], { stdio: "inherit" });
-    }
-
-    if (result.error) {
-      process.stderr.write(`pregate: failed to launch gate: ${result.error.message}\n`);
-      process.exit(1);
-    }
-    const status = result.status ?? 1;
-    if (status === 0) break;
-    if (queuedRevivals < maxQueuedRevivals) {
-      const revived = await reviveInterruptedQueuedGate({ args, result });
-      if (revived.revived) {
-        queuedRevivals += 1;
-        process.stderr.write(`pregate: queued gate revival ${queuedRevivals}/${maxQueuedRevivals}; continuing without losing FIFO position.\n`);
-        continue;
-      }
-    }
-    await recoverInterruptedGate({ args, result });
-    process.exit(status);
+  const { result } = await runGateWithQueuedRevival({ args, useShell });
+  if (result?.error) {
+    process.stderr.write(`pregate: failed to launch gate: ${result.error.message}\n`);
+    process.exit(1);
   }
-  process.exit(0);
+  process.exit(result?.status ?? 1);
 }
 
 // Guard against side effects on import (e.g. from tests importing routing

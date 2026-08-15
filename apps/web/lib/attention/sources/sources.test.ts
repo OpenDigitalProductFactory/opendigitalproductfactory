@@ -205,6 +205,30 @@ describe("agentProposalToAttentionItem", () => {
     expect(item.deepLink).toBe("/platform/ai/operations-map");
   });
 
+  it("routes a leave recommendation to the human-owned time-off decision surface", () => {
+    const item = agentProposalToAttentionItem({
+      proposalId: "AP-LEAVE",
+      actionType: "leave.decide",
+      agentId: "time-off-advisor",
+      parameters: {
+        requestId: "LR-1",
+        recommendation: "escalate",
+        rationale: "Coverage would fall below the recorded cushion.",
+        guardReasons: ["Coverage needs human review."],
+      },
+      proposedAt: new Date("2026-08-12T07:00:00.000Z"),
+    });
+
+    expect(item.title).toBe("Review time-off recommendation");
+    expect(item.context).toBe("Coverage would fall below the recorded cushion.");
+    expect(item.deepLink).toBe("/employee?view=timeoff");
+    expect(item.actions).toContainEqual({
+      kind: "open-in-context",
+      label: "Review time off",
+      href: "/employee?view=timeoff",
+    });
+  });
+
   it("projects a proactivity change proposal with why-now context and a bounded review action", () => {
     const item = agentProposalToAttentionItem({
       proposalId: "AP-PROACTIVE",

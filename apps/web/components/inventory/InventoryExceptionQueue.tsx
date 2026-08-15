@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { LocalTime } from "@/components/ui/LocalTime";
 import {
   acceptTriageRecommendation,
   dismissEntity,
@@ -66,7 +67,7 @@ type QueueSectionConfig = {
 const SECTIONS: QueueSectionConfig[] = [
   {
     key: "humanReview",
-    title: "Employee review",
+    title: "Review",
     description: "Ambiguous items with enough evidence to review, but not enough certainty to act on automatically.",
     emptyLabel: "No items are waiting on employee review.",
   },
@@ -93,18 +94,6 @@ const SECTIONS: QueueSectionConfig[] = [
 function formatPercent(value: number | null | undefined): string {
   if (typeof value !== "number") return "n/a";
   return `${Math.round(value * 100)}%`;
-}
-
-function formatDate(value: string): string {
-  const date = new Date(value);
-  return Number.isNaN(date.getTime())
-    ? value
-    : date.toLocaleString("en-US", {
-        month: "short",
-        day: "numeric",
-        hour: "numeric",
-        minute: "2-digit",
-      });
 }
 
 function getEvidenceSummary(row: TriageRow): string {
@@ -177,7 +166,7 @@ export function InventoryExceptionQueue({ queues }: Props) {
           </p>
           <div>
             <h2 className="text-lg font-semibold text-[var(--dpf-text)]">
-              Discovery taxonomy review
+              Taxonomy review
             </h2>
             <p className="mt-1 max-w-3xl text-sm text-[var(--dpf-muted)]">
               Review what discovery can place automatically, what needs more signals, and where the taxonomy itself needs to grow.
@@ -187,7 +176,7 @@ export function InventoryExceptionQueue({ queues }: Props) {
         <div className="grid min-w-[16rem] grid-cols-2 gap-2 self-stretch text-sm">
           <div className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-bg)] px-3 py-2">
             <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--dpf-muted)]">
-              Active gaps
+              Gaps
             </div>
             <div className="mt-1 text-lg font-semibold text-[var(--dpf-text)]">
               {queues.metrics.total}
@@ -195,7 +184,7 @@ export function InventoryExceptionQueue({ queues }: Props) {
           </div>
           <div className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-bg)] px-3 py-2">
             <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--dpf-muted)]">
-              With decisions
+              Decided
             </div>
             <div className="mt-1 text-lg font-semibold text-[var(--dpf-text)]">
               {queues.metrics.withDecision}
@@ -303,8 +292,8 @@ export function InventoryExceptionQueue({ queues }: Props) {
                                 {decision?.outcome?.replace(/-/g, " ") ?? "untriaged"}
                               </span>
                             </div>
-                            <div>Last seen: {formatDate(row.lastSeenAt)}</div>
-                            <div>First seen: {formatDate(row.firstSeenAt)}</div>
+                            <div>Last seen: <LocalTime value={row.lastSeenAt} /></div>
+                            <div>First seen: <LocalTime value={row.firstSeenAt} /></div>
                           </div>
 
                           <div className="flex flex-wrap gap-2">

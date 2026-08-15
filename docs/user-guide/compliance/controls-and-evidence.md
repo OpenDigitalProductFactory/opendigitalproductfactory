@@ -39,6 +39,11 @@ document from being mistaken for an operating control.
    can still be partially effective, ineffective, or not assessed.
 5. Review linked risks and the next review date.
 
+The Controls **List**, **Grid**, and **Board** views all begin with active
+controls. In Grid or Board, choose **All controls** beside the view controls to
+include inactive history. The scope is part of the URL, so a shared or refreshed
+link keeps the intended dataset.
+
 ## Record Evidence
 
 1. Create an evidence record with a clear title and evidence type.

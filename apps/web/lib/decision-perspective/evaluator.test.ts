@@ -318,3 +318,127 @@ describe("evaluateDecisionPerspective", () => {
     expect(result.domainClass).toBe("professional-practice");
   });
 });
+
+// BI-7E1F128A: the WWWD evaluator must discriminate by decision CONTENT. With a
+// per-material relevance map (computed upstream from question↔stance similarity),
+// an off-mission decision (a relevant `oppose` stance) yields a confident DECLINE
+// and an on-mission one (a relevant `support` stance) a confident APPROVE — where
+// the legacy coverage path returned an identical confidence + escalate for both.
+describe("content-aware directional scoring (BI-7E1F128A)", () => {
+  const declineStance = material({
+    materialId: "markets-we-decline",
+    summary: "We decline off-mission consumer-hardware ventures outside our software focus.",
+    direction: "oppose",
+    confidenceWeight: 0.9,
+  });
+  const supportStance = material({
+    materialId: "partner-network",
+    summary: "We go to market through a certified reseller and MSP partner network.",
+    direction: "support",
+    confidenceWeight: 0.7,
+  });
+  const twoStances = baseInput({
+    materials: [declineStance, supportStance],
+    riskTier: "medium",
+  });
+
+  it("recommends DECLINING when the relevant stance opposes the decision", () => {
+    const result = evaluateDecisionPerspective({
+      ...twoStances,
+      question: "Should we sell toasters to fishermen from kiosks on Alaskan docks?",
+      relevanceByMaterialId: new Map([["markets-we-decline", 1], ["partner-network", 0]]),
+      relevanceMethod: "semantic",
+    });
+    expect(result.stanceAlignment).toBe("decline");
+    expect(result.outcomeType).toBe("recommend");
+    expect(result.alignmentScore).toBeLessThan(0);
+    expect(result.confidenceScore).toBeGreaterThan(0);
+  });
+
+  it("recommends APPROVING when the relevant stance supports the decision", () => {
+    const result = evaluateDecisionPerspective({
+      ...twoStances,
+      question: "Should we onboard an MSP as a certified reseller partner?",
+      relevanceByMaterialId: new Map([["markets-we-decline", 0], ["partner-network", 1]]),
+      relevanceMethod: "semantic",
+    });
+    expect(result.stanceAlignment).toBe("approve");
+    expect(result.outcomeType).toBe("recommend");
+    expect(result.alignmentScore).toBeGreaterThan(0);
+  });
+
+  it("produces OPPOSITE verdicts and different confidence for the two decisions (the core fix)", () => {
+    const decline = evaluateDecisionPerspective({
+      ...twoStances,
+      relevanceByMaterialId: new Map([["markets-we-decline", 1], ["partner-network", 0]]),
+    });
+    const approve = evaluateDecisionPerspective({
+      ...twoStances,
+      relevanceByMaterialId: new Map([["markets-we-decline", 0], ["partner-network", 1]]),
+    });
+    expect(decline.stanceAlignment).toBe("decline");
+    expect(approve.stanceAlignment).toBe("approve");
+    expect(decline.confidenceScore).not.toEqual(approve.confidenceScore);
+  });
+
+  it("escalates when relevant support and oppose material conflict (mixed)", () => {
+    const result = evaluateDecisionPerspective({
+      ...twoStances,
+      relevanceByMaterialId: new Map([["markets-we-decline", 1], ["partner-network", 1]]),
+    });
+    expect(result.stanceAlignment).toBe("mixed");
+    expect(result.outcomeType).toBe("escalate");
+  });
+
+  it("escalates when no stance is relevant to the question", () => {
+    const result = evaluateDecisionPerspective({
+      ...twoStances,
+      relevanceByMaterialId: new Map([["markets-we-decline", 0], ["partner-network", 0]]),
+    });
+    expect(result.outcomeType).toBe("defer");
+  });
+
+  it("LEGACY path (no relevance) returns the SAME confidence + escalate for both — the bug this fixes", () => {
+    const a = evaluateDecisionPerspective({ ...twoStances, question: "off-mission?" });
+    const b = evaluateDecisionPerspective({ ...twoStances, question: "on-mission?" });
+    expect(a.confidenceScore).toEqual(b.confidenceScore);
+    expect(a.outcomeType).toBe("escalate");
+    expect(b.outcomeType).toBe("escalate");
+    expect(a.stanceAlignment).toBeUndefined();
+  });
+
+  // BI-7E1F128A follow-up: when the embedding layer is down, relevance is scored
+  // by coarse lexical overlap. That signal is too imprecise to drive a confident
+  // directional verdict — on the live install it spuriously matched a support
+  // stance and confidently APPROVED an off-mission decision, strictly worse than
+  // escalating. On the lexical fallback the gate must revert to escalate (the
+  // safe pre-fix behavior) regardless of the apparent direction.
+  it("FAIL-SAFE: lexical relevance escalates even when the apparent stance APPROVES", () => {
+    const semantic = evaluateDecisionPerspective({
+      ...twoStances,
+      question: "Should we onboard an MSP as a certified reseller partner?",
+      relevanceByMaterialId: new Map([["markets-we-decline", 0], ["partner-network", 1]]),
+      relevanceMethod: "semantic",
+    });
+    const lexical = evaluateDecisionPerspective({
+      ...twoStances,
+      question: "Should we onboard an MSP as a certified reseller partner?",
+      relevanceByMaterialId: new Map([["markets-we-decline", 0], ["partner-network", 1]]),
+      relevanceMethod: "lexical",
+    });
+    // Same inputs, only the relevance METHOD differs: semantic acts, lexical asks.
+    expect(semantic.outcomeType).toBe("recommend");
+    expect(lexical.outcomeType).toBe("escalate");
+    expect(lexical.relevanceMethod).toBe("lexical");
+  });
+
+  it("FAIL-SAFE: lexical relevance escalates even when the apparent stance DECLINES", () => {
+    const lexical = evaluateDecisionPerspective({
+      ...twoStances,
+      question: "Should we sell toasters to fishermen from kiosks on Alaskan docks?",
+      relevanceByMaterialId: new Map([["markets-we-decline", 1], ["partner-network", 0]]),
+      relevanceMethod: "lexical",
+    });
+    expect(lexical.outcomeType).toBe("escalate");
+  });
+});

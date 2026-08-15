@@ -56,6 +56,23 @@ export function intentStyle(intent: Intent): IntentStyle {
  * (e.g. complaints) so each gets its own namespace.
  */
 export const STATUS_INTENT: Record<string, Record<string, Intent>> = {
+  // Edge operational health and operator-governed trust are deliberately
+  // separate axes. Both Edge Nodes and Connections consume these semantics.
+  edgeHealth: {
+    "setup-required": "neutral",
+    starting: "info",
+    healthy: "success",
+    degraded: "warning",
+    offline: "danger",
+    quarantined: "danger",
+    revoked: "neutral",
+  },
+  edgeTrust: {
+    pending: "warning",
+    trusted: "success",
+    quarantined: "danger",
+    revoked: "neutral",
+  },
   // Restaurant table capacity state (BI-7C95A586). Tables & Capacity page,
   // Workspace chips, and public booking all resolve here — one registry.
   restaurantCapacity: {
@@ -142,6 +159,14 @@ export const STATUS_INTENT: Record<string, Record<string, Intent>> = {
     suspended: "danger",
     offboarding: "warning",
     inactive: "neutral",
+  },
+  // Human-owned leave approval lifecycle. AI recommendations are rendered on
+  // a separate axis so a recommendation can never masquerade as a decision.
+  leaveRequest: {
+    pending: "warning",
+    approved: "success",
+    rejected: "danger",
+    cancelled: "neutral",
   },
   // Decision governance ledger (DecisionInteraction.outcomeType / riskTier).
   decisionOutcome: {
@@ -449,6 +474,23 @@ export const STATUS_INTENT: Record<string, Record<string, Intent>> = {
     attention: "warning",
     blocked: "danger",
     unknown: "neutral",
+  },
+  // Archetype claim-readiness gate (BI-1A222A7A). Tiers and evidence states
+  // are shared by the operator matrix and any future docs/sales claim surfaces.
+  archetypeReadinessTier: {
+    "template-ready": "info",
+    "ops-ready": "accent",
+    "connector-ready": "warning",
+    "regulated-ready": "warning",
+    "sole-platform-ready": "success",
+  },
+  archetypeReadinessEvidence: {
+    planned: "neutral",
+    open: "warning",
+    "in-progress": "info",
+    done: "success",
+    merged: "success",
+    required: "warning",
   },
   // Field-dispatch job lifecycle (dispatch board). Mirrors FIELD_DISPATCH_JOB_STATUSES
   // in @dpf/validators (packages/validators/src/field-dispatch.ts). `needs-review` is the exception

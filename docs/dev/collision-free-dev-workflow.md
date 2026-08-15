@@ -11,23 +11,26 @@ skill — made into a single command.
 
 ## Why the root clone eats your work
 
-The root clone at the canonical path (`~/dpf`) is **shared mutable state**. Two
-independent actors rewrite its working tree and HEAD without coordinating with
-your editor:
+The root clone at the canonical path (`~/dpf`) is **shared release state**. It
+is intentionally not an isolated development workspace:
 
-1. **The self-upgrade loop.** `apps/web/lib/self-upgrade/prepare-source.ts` builds
-   each upgrade by running, on the root clone:
-   `git fetch` → `git checkout dpf/install` → `git merge --no-ff <upstream>`.
-   It *defers* when the root has **tracked** uncommitted changes (good), but it
-   still moves the branch under you, and it deliberately **ignores untracked
-   files** — so brand-new files (a new component, a new spec) are not protected.
+1. **The self-upgrade loop owns canonical source refs.**
+   `apps/web/lib/self-upgrade/prepare-source.ts` fetches upstream and prepares
+   `dpf/install` in the isolated `.upgrade-workspace/` clone. When the install
+   has no local content delta, it advances to the exact canonical upstream SHA;
+   when private/local content exists, it creates an honest `--no-ff` merge.
+   The prepared ref is pushed back to the host clone **ref-only**, so the
+   operator's checked-out working tree is not reset. This isolation protects
+   the root checkout, but self-upgrade still owns the clone as release source
+   authority; feature work does not belong there.
 2. **Other concurrent agent sessions.** Each one may `git checkout <its-branch>`
    and `git reset` the root to do its own work. Observed in the reflog as
    `checkout: moving from <branchA> to <branchB>` followed by `reset: moving to HEAD`.
 
-Either one will roll back or discard work that lives only in the root's working
-tree. A **linked worktree has its own working tree and HEAD**, so neither actor
-touches it. That is the whole fix.
+An active checkout or reset by another actor can roll back or discard work that
+lives only in the root's working tree. A **linked worktree has its own working
+tree and HEAD**, so other sessions and release-ref movement do not touch it.
+That is the whole fix.
 
 ## The workflow
 
@@ -70,4 +73,5 @@ work immediately.
 ## What this is NOT
 
 It does not change the self-upgrade. The self-upgrade is *correct* to own the
-root — that is its job. This workflow keeps **your** work out of its way.
+host clone's canonical release refs and use an isolated preparation workspace.
+This workflow keeps **your** work out of that shared release authority.

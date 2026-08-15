@@ -2646,7 +2646,7 @@
       "tier": "specialist",
       "value_stream": "integrate",
       "role": "builder",
-      "capability_domain": "User-facing build coworker for the /build route. Guides through five build phases \u00e2\u20ac\u201d Ideate > Plan > Build > Review > Ship. Decomposition, test-driven thinking, pattern reuse, codebase awareness, and documentation impact. Distinct from the AGT-BUILD implementation specialists and AGT-904 documentation specialist participation inside Build Studio.",
+      "capability_domain": "User-facing build coworker for the /build route. Guides through five build phases \u2014 Ideate > Plan > Build > Review > Ship. Decomposition, test-driven thinking, pattern reuse, codebase awareness, and documentation impact. Distinct from the AGT-BUILD implementation specialists and AGT-904 documentation specialist participation inside Build Studio.",
       "human_supervisor_id": "HR-200",
       "hitl_tier_default": 1,
       "delegates_to": [
@@ -2760,7 +2760,7 @@
       "tier": "specialist",
       "value_stream": "consume",
       "role": "specialist",
-      "capability_domain": "Customer Success Manager. Customer journey mapping, friction detection, adoption analysis, service-level monitoring. Sees the platform through service consumers' eyes \u00e2\u20ac\u201d accounts, satisfaction signals, friction points.",
+      "capability_domain": "Customer Success Manager. Customer journey mapping, friction detection, adoption analysis, service-level monitoring. Sees the platform through service consumers' eyes \u2014 accounts, satisfaction signals, friction points.",
       "human_supervisor_id": "HR-100",
       "hitl_tier_default": 1,
       "delegates_to": [],
@@ -2897,7 +2897,7 @@
       "tier": "specialist",
       "value_stream": "cross-cutting",
       "role": "operator",
-      "capability_domain": "First-run onboarding COO. Walks new platform owners through initial setup with personalised, business-context-aware conversation. Distinct from AGT-ORCH-000 (the standing COO) \u00e2\u20ac\u201d runs only for /setup wizard, has its own grants and model tier per bootstrap-first-run.ts.",
+      "capability_domain": "First-run onboarding COO. Walks new platform owners through initial setup with personalised, business-context-aware conversation. Distinct from AGT-ORCH-000 (the standing COO) \u2014 runs only for /setup wizard, has its own grants and model tier per bootstrap-first-run.ts.",
       "human_supervisor_id": "HR-000",
       "hitl_tier_default": 0,
       "delegates_to": [
@@ -2946,7 +2946,7 @@
       "tier": "specialist",
       "value_stream": "integrate",
       "role": "operator",
-      "capability_domain": "Scrum Master / delivery flow coordinator. Work as a stream through a delivery pipeline \u00e2\u20ac\u201d backlog items, epics, velocity, blockers, WIP limits. WSJF priority sorting, scope control, epic health.",
+      "capability_domain": "Scrum Master / delivery flow coordinator. Work as a stream through a delivery pipeline \u2014 backlog items, epics, velocity, blockers, WIP limits. WSJF priority sorting, scope control, epic health.",
       "human_supervisor_id": "HR-200",
       "hitl_tier_default": 1,
       "delegates_to": [],
@@ -3437,6 +3437,41 @@
           "registry_read",
           "web_search"
         ]
+      }
+    },
+    {
+      "agent_id": "AGT-WS-TIME-OFF",
+      "agent_name": "time-off-advisor",
+      "tier": "specialist",
+      "value_stream": "operate",
+      "role": "specialist",
+      "capability_domain": "Time-off Advisor. Propose-only review of pending leave against balance, overlapping staffing coverage, hard policy rails, and the organization's recorded business-decision stance; the accountable human always decides.",
+      "human_supervisor_id": "HR-100",
+      "hitl_tier_default": 1,
+      "delegates_to": [],
+      "escalates_to": "AGT-WS-HR",
+      "it4it_sections": ["5.4 Operate Value Stream", "6.2.5 Workforce FC"],
+      "status": "draft",
+      "config_profile": {
+        "model_binding": {
+          "model_id": null,
+          "temperature": 0.2,
+          "max_tokens": 8192
+        },
+        "execution_runtime": {
+          "type": "in_process",
+          "timeout_seconds": 300
+        },
+        "token_budget": {
+          "daily_limit": 100000,
+          "per_task_limit": 20000
+        },
+        "memory": {
+          "type": "persistent",
+          "backend": null
+        },
+        "concurrency_limit": 2,
+        "tool_grants": ["consumer_read", "registry_read"]
       }
     }
   ]

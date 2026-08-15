@@ -16,6 +16,11 @@ vi.mock("@dpf/db", () => ({
 }));
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
+// BI-D4C1E05E: mock the shared embed seam so batch-publish tests don't reach the
+// real storeWikiPage → generateEmbedding network path (covered in its own test).
+vi.mock("@/lib/wiki/embed-published-overlay", () => ({
+  embedPublishedOverlayPage: vi.fn().mockResolvedValue({ embedded: true, slug: "x" }),
+}));
 
 import { auth } from "@/lib/auth";
 import { prisma } from "@dpf/db";

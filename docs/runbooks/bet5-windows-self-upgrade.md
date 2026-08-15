@@ -147,6 +147,41 @@ These should not occur once the promoter is rebuilt from current `main`, but for
   `bet5_pgvector_foundation` record; if you need to do it by hand,
   `docker exec ... prisma migrate resolve --rolled-back 20260714110000_bet5_pgvector_foundation`.
 
+## Failure class: host-out-of-memory (candidate build ENOMEM)
+
+The candidate promoter `docker build` — run at the **preflight** stage, *before* quiescence, while the
+portal is still fully active — fails during build-context load with:
+
+```
+error from sender: readdirent /host-dpf/.upgrade-workspace/scripts: cannot allocate memory
+```
+
+Canonical case **SUR-BF75ED2A (2026-08-11)**: the WSL2 VM (hard-capped 24 GB in `.wslconfig`) was
+thrashing — swap in use, `MemFree` ~467 MB — so buildkit's context sender could not allocate a kernel
+buffer to enumerate the build context and the build aborted (`promoter_candidate_build_failed` →
+`promoter-readiness-failed` → run `failed`). It died **before any portal swap**, so the running portal
+was never touched — a **safe** failure, not a bad deploy.
+
+**This is host pressure, not a code defect.** The candidate build is the most memory-intensive step and
+it runs *hot* (portal live) by design, so that a failed build never causes pointless downtime — but that
+means it competes for memory with all 30 active surfaces. Quiescence (which stops activity for the
+swap/migrate) happens *after* this build and does not free memory for it.
+
+**Prevention (shipped):** a **host-memory-headroom guard** now runs before the candidate build
+(`apps/web/lib/self-upgrade/host-memory-preflight.ts`, wired in `runSelfUpgrade`). When genuinely-available
+memory is below the build floor (default 2 GiB) it **DEFERS the run** — `skipped` with reason
+`host-memory-pressure`, plus a cooldown — instead of launching a doomed build; the next hourly cron retries
+once memory recovers (WSL2 `autoMemoryReclaim=gradual`). The floor is measured against **MemAvailable**
+(reclaimable-inclusive), *not* MemFree, so a busy-but-healthy host with large page cache is never starved —
+the guard fires only under real exhaustion. It fails **open** when memory is unmeasurable, so it can never
+wedge upgrades on a host whose meminfo cannot be read.
+
+**Recovery for a run that already failed this way:** none needed — nothing was deployed. Free host memory
+(let `autoMemoryReclaim` run, or shed heavy consumers / parallel Build Studio load) and re-trigger, or just
+let the next cron tick retry. The `build-failure-classifier` now labels this class `host-out-of-memory`
+(environment), so the failure surfaces as retryable rather than the old generic
+`promoter-readiness-failed (unclassified)`.
+
 ## Failure class: migration-unique-violation (P3018 + 23505)
 
 A data migration's bulk UPDATE/INSERT hits `duplicate key value violates unique constraint` and the
@@ -170,6 +205,15 @@ columns/indexes exist in the DB):
   `_dpfObservationSnapshot` exists, and the candidate carries the exact committed `11:58`
   quarantine migration. It verifies that same row after resolution before normal deploy. Any
   mismatch fails closed before the portal swap and requires the evidence-led decision below.
+- **Exact human-principal alias collision**
+  (`20260812110000_backfill_missing_human_principals`): the promoter automatically marks the row
+  rolled back only when it is the sole unresolved migration, the row id and immutable migration
+  checksum match, the failure is SQLSTATE `23505` on
+  `PrincipalAlias_aliasType_aliasValue_issuer_key`, `applied_steps_count = 0`, and the candidate
+  carries the exact preceding collision-preparation migration. It verifies the same ledger row
+  after resolution, then normal deploy applies the preparation migration before retrying the
+  immutable backfill. A different migration, checksum, constraint, SQLSTATE, step count, or
+  corrective file fails closed before the portal swap.
 - **Schema half-applied** (columns/index present): `prisma migrate resolve --applied <name>` — NOT
   `--rolled-back`, which would re-run the `ADD COLUMN` and fail `already exists`.
 - **Nothing applied** (`applied_steps_count = 0`, no DDL landed): fix the root cause (de-duplicate,

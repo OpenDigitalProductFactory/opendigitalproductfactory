@@ -23,8 +23,22 @@ The main rail separates two different decisions:
   layout alone.
 - **Performance** answers “how is the business doing over time, and what is
   driving the result?” It is available only to authorized owners and operations
-  managers. If historical sources are not configured, it says so instead of
-  displaying placeholder zeroes.
+  managers. The dashboard reads precomputed local-business-day snapshots so it
+  does not slow current Operations work. Use the period choices to compare days,
+  open a metric's **How this is calculated** disclosure to inspect its definition,
+  version, source owner, and model-level lineage, or follow **Open source
+  operations** to investigate the underlying work. The **Trends** section lets
+  you switch among the headline measures; its chart has a **View trend as a
+  table** alternative with the same period values. The **Owner brief** ranks the
+  largest observed changes, identifies headline gaps that deserve review, and
+  says plainly when connected lineage cannot yet prove why a result changed. It
+  never labels movement good or bad without a target and business context. The
+  freshness badge uses the oldest contributing source update, so one current
+  metric cannot hide a stale sibling; a failed refresh keeps the previous valid
+  result instead of replacing it with zeroes. Metrics whose canonical source is
+  not connected say **Not available** and explain what is missing. **Export this
+  period** downloads only aggregate metrics for the selected period, not customer,
+  employee, booking, or physical-resource records.
 
 Performance is a separate main destination, not a tab inside Operations. Simple
 navigation keeps the day-to-day Operations surface and hides the manager view;

@@ -12,7 +12,9 @@ import type { ChangeCategory, ConventionalType, ParsedCommit, RawCommit } from "
 // `type(scope)!: description (#1234)` — scope and `!` and `(#nn)` optional.
 // We intentionally accept a permissive scope ([^)]+) so multi-word scopes
 // like `(self-upgrade)` and `(web,infra)` both parse.
-const CONVENTIONAL_RE = /^(?<type>[a-z]+)(?:\((?<scope>[^)]+)\))?(?<bang>!)?:\s+(?<body>.+?)$/;
+// Case-insensitive on the type token: a `Fix: …` subject is the same change as
+// `fix: …`, and the type is lower-cased before lookup.
+const CONVENTIONAL_RE = /^(?<type>[A-Za-z]+)(?:\((?<scope>[^)]+)\))?(?<bang>!)?:\s+(?<body>.+?)$/;
 const TRAILING_PR_RE = /\s*\(#(\d+)\)\s*$/;
 
 const KNOWN_TYPES: ReadonlySet<ConventionalType> = new Set<ConventionalType>([
@@ -20,16 +22,54 @@ const KNOWN_TYPES: ReadonlySet<ConventionalType> = new Set<ConventionalType>([
   "test", "build", "ci", "style", "revert",
 ]);
 
-/** Map a Conventional type + breaking marker to an ImpactCategory bucket. */
-export function categoryFor(type: ConventionalType, breaking: boolean): ChangeCategory {
+// Spelling variants DPF actually emits upstream (`doc(skill): …` appears 16
+// times in the last 400 commits on main). Normalised to the canonical type so
+// they never fall through to `unknown` and get filed as unparseable.
+const TYPE_ALIASES: Readonly<Record<string, ConventionalType>> = {
+  doc: "docs",
+  feature: "feat",
+  bugfix: "fix",
+};
+
+// Dependency bumps arrive as `build(deps)` / `build(deps-dev)` — the scope, not
+// the type, is what separates "we upgraded React" from "we changed the build".
+// Dependabot's group PRs use the same scope shape.
+const DEPENDENCY_SCOPE_RE = /^deps(-dev)?$/;
+
+/**
+ * Map a Conventional type + breaking marker (+ scope, where the scope is what
+ * distinguishes the bucket) to an operator-facing category.
+ *
+ * The `security` bucket is NOT derivable from the subject grammar alone — it
+ * comes from PR labels / advisory references and is applied later by
+ * `refineCategories` (./refine), after PR enrichment.
+ */
+export function categoryFor(
+  type: ConventionalType,
+  breaking: boolean,
+  scope: string | null = null,
+): ChangeCategory {
   if (breaking) return "breaking";
+  const scopeText = (scope ?? "").trim().toLowerCase();
   switch (type) {
     case "feat": return "feature";
     case "fix": return "fix";
     case "perf": return "performance";
-    // refactor / docs / chore / test / build / ci / style / revert / unknown
-    // all aggregate as "other" — the headline groups them together, but the
-    // per-item scoring keeps refactors visible if they touch a customized path.
+    case "docs": return "documentation";
+    case "build":
+      return DEPENDENCY_SCOPE_RE.test(scopeText) ? "dependency" : "maintenance";
+    // refactor / chore / test / ci / style / revert are internal upkeep: real
+    // work, but nothing an operator acts on. They stay visible (and can still
+    // outrank on score when they touch a customized path) under one honest
+    // label instead of sharing a bucket with docs and dependency bumps.
+    case "refactor":
+    case "chore":
+    case "test":
+    case "ci":
+    case "style":
+    case "revert":
+      return "maintenance";
+    // Unparseable subject — we genuinely do not know. Say so.
     default: return "other";
   }
 }
@@ -64,10 +104,13 @@ export function parseCommit(raw: RawCommit): ParsedCommit {
     };
   }
 
-  const rawType = m.groups["type"]!;
-  const type: ConventionalType = (KNOWN_TYPES as ReadonlySet<string>).has(rawType)
-    ? (rawType as ConventionalType)
-    : "unknown";
+  const rawType = m.groups["type"]!.toLowerCase();
+  const aliased = TYPE_ALIASES[rawType];
+  const type: ConventionalType =
+    aliased ??
+    ((KNOWN_TYPES as ReadonlySet<string>).has(rawType)
+      ? (rawType as ConventionalType)
+      : "unknown");
   const scope = m.groups["scope"] ?? null;
   const breaking = m.groups["bang"] === "!";
   const description = m.groups["body"]!.trim();
@@ -79,7 +122,7 @@ export function parseCommit(raw: RawCommit): ParsedCommit {
     breaking,
     description,
     prNumber,
-    category: categoryFor(type, breaking),
+    category: categoryFor(type, breaking, scope),
   };
 }
 

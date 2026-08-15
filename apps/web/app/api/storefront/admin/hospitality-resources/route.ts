@@ -82,6 +82,7 @@ export async function POST(request: NextRequest) {
     shape?: string;
     combinationGroup?: string | null;
     combinableWith?: unknown[];
+    bookingAccess?: string;
   };
   const label = body.label?.trim();
   if (!body.storefrontId || !label || !validCapacity(body.capacity)) {
@@ -95,6 +96,7 @@ export async function POST(request: NextRequest) {
     shape: body.shape ?? "round",
     combinationGroup: body.combinationGroup ?? null,
     combinableWith: body.combinableWith ?? [],
+    bookingAccess: body.bookingAccess ?? "online",
   });
   if (!attributes.ok) {
     return apiErrorResponse("INVALID_ARGUMENT", attributes.error, 400);

@@ -42,13 +42,15 @@ describe("parseExplicitTier", () => {
 });
 
 describe("defaultTierForClient", () => {
-  it("keeps Claude Code on full (it defers the catalogue client-side)", () => {
+  it("keeps hosts with native lazy tool attachment on full", () => {
     expect(defaultTierForClient("claude-code/2.1")).toBe("full");
     expect(defaultTierForClient("claude-code")).toBe("full");
     expect(defaultTierForClient("Claude-Code/9")).toBe("full");
+    expect(defaultTierForClient("codex/1.0")).toBe("full");
+    expect(defaultTierForClient("codex-cli/0.9.4")).toBe("full");
+    expect(defaultTierForClient("codex-desktop/2026.8")).toBe("full");
   });
-  it("defaults every other / unknown client to the lean core surface", () => {
-    expect(defaultTierForClient("codex/1.0")).toBe("core");
+  it("defaults clients without proven lazy attachment and unknown callers to core", () => {
     expect(defaultTierForClient("grok/2")).toBe("core");
     expect(defaultTierForClient("some-customer-agent")).toBe("core");
     expect(defaultTierForClient(undefined)).toBe("core");
@@ -66,7 +68,7 @@ describe("resolveEffectiveTier", () => {
   });
   it("falls back to the client default when no explicit tier is given", () => {
     expect(resolveEffectiveTier(null, "claude-code/2")).toBe("full");
-    expect(resolveEffectiveTier(undefined, "codex/1")).toBe("core");
+    expect(resolveEffectiveTier(undefined, "codex/1")).toBe("full");
     expect(resolveEffectiveTier("", undefined)).toBe("core");
   });
 });
@@ -175,6 +177,24 @@ describe("Phase 2 — resolveLoadToolsSelection", () => {
   it("selects by case-insensitive query over name and description", () => {
     const sel = resolveLoadToolsSelection(GRANTED, { query: "QUOTE" });
     expect(sel.map((t) => t.name).sort()).toEqual(["create_quote", "list_quotes"]);
+  });
+
+  it("selects by natural-language intent instead of requiring one contiguous substring", () => {
+    const granted = [
+      ...GRANTED,
+      {
+        name: "claim_backlog_item_for_work",
+        description:
+          "Claim a backlog item for work by binding it to the current branch, worktree, and session.",
+      },
+    ];
+
+    const sel = resolveLoadToolsSelection(granted, {
+      query: "claim a backlog item and bind it to my worktree",
+    });
+
+    expect(sel.map((t) => t.name)).toContain("claim_backlog_item_for_work");
+    expect(sel.map((t) => t.name)).not.toContain("create_quote");
   });
 
   it("de-duplicates when names and query overlap, preserving grant order", () => {

@@ -27,7 +27,7 @@ function grant(overrides: Partial<StaffingDelegation> = {}): StaffingDelegation 
 
 describe("authority boundary", () => {
   it("lets the coworker prepare/refresh proposals unattended (Phase 1)", () => {
-    for (const action of ["prepare_proposal", "refresh_proposal"] as const) {
+    for (const action of ["prepare_proposal", "refresh_proposal", "prepare_leave_decision"] as const) {
       const v = authorizeStaffingAction({
         action,
         actor: { kind: "agent", agentId: "staffing-coworker" },
@@ -37,6 +37,25 @@ describe("authority boundary", () => {
       expect(v.allowed).toBe(true);
       expect(requiresHumanApproval(action)).toBe(false);
     }
+  });
+
+  it("keeps leave recommendation separate from the human-only leave decision", () => {
+    const propose = authorizeStaffingAction({
+      action: "prepare_leave_decision",
+      actor: { kind: "agent", agentId: "time-off-advisor" },
+      organizationId: "org-1",
+      now: NOW,
+    });
+    const decide = authorizeStaffingAction({
+      action: "decide_leave",
+      actor: { kind: "agent", agentId: "time-off-advisor" },
+      organizationId: "org-1",
+      now: NOW,
+    });
+    expect(propose.allowed).toBe(true);
+    expect(requiresHumanApproval("prepare_leave_decision")).toBe(false);
+    expect(decide.allowed).toBe(false);
+    expect(requiresHumanApproval("decide_leave")).toBe(true);
   });
 
   it("forbids the coworker from publishing without a delegation", () => {

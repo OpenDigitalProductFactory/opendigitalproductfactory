@@ -10,6 +10,16 @@ import {
   type EmailConfigInput,
   type EmailProviderSuggestion,
 } from "@/lib/shared/email-config-core";
+import { interpretSmtpError, type SmtpErrorInfo } from "@/lib/shared/smtp-error";
+
+// Result of a test-send. We RETURN failures as data instead of throwing so the
+// actionable SMTP detail survives to the client: in a production build Next.js
+// redacts thrown server-action error messages ("…omitted in production builds"),
+// which is exactly what turned a 535 SMTP-AUTH-disabled failure into an
+// unreadable Server Components error (BI-6AA848A7). Authorization/validation
+// still throw — those are programmer/permission errors, not operator-fixable
+// SMTP outcomes.
+export type SendTestEmailResult = { ok: true } | ({ ok: false } & SmtpErrorInfo);
 
 // NOTE: every export of a "use server" module must be an async function — the
 // server-action compiler collects ALL exports into ensureServerEntryExports([...])
@@ -41,20 +51,29 @@ export async function suggestEmailProvider(): Promise<EmailProviderSuggestion> {
 
 const testEmailSchema = z.object({ to: z.string().trim().email() });
 
-export async function sendTestEmail(to: string): Promise<{ ok: true }> {
+export async function sendTestEmail(to: string): Promise<SendTestEmailResult> {
   await requireManageEmailConfig();
   const { to: recipient } = testEmailSchema.parse({ to });
 
   if (!(await isEmailConfigured())) {
-    throw new Error("Save your SMTP settings before sending a test email.");
+    return {
+      ok: false,
+      message: "Save your SMTP settings before sending a test email.",
+    };
   }
 
-  await sendEmail({
-    to: recipient,
-    subject: "DPF test email",
-    text: "This is a test email from DPF. If you received it, outbound email is configured correctly.",
-    html: "<p>This is a test email from DPF.</p><p>If you received it, your outbound email (SMTP) is configured correctly.</p>",
-  });
+  try {
+    await sendEmail({
+      to: recipient,
+      subject: "DPF test email",
+      text: "This is a test email from DPF. If you received it, outbound email is configured correctly.",
+      html: "<p>This is a test email from DPF.</p><p>If you received it, your outbound email (SMTP) is configured correctly.</p>",
+    });
+  } catch (err) {
+    // Never let a failed test crash the Server Component render — surface the
+    // real SMTP failure to the operator inline instead (BI-6AA848A7).
+    return { ok: false, ...interpretSmtpError(err) };
+  }
 
   return { ok: true };
 }

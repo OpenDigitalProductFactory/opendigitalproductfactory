@@ -36,6 +36,7 @@ if [ -n "$HOOK_EVENT" ] && [ "$HOOK_EVENT" != "SessionEnd" ]; then exit 0; fi
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 INSTALL_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+. "$SCRIPT_DIR/lib/session-reaper-path.sh"
 WORKTREE_PATH="${CWD:-$INSTALL_ROOT}"
 # Trim trailing slash for substring matching.
 WORKTREE_PATH="${WORKTREE_PATH%/}"
@@ -75,8 +76,10 @@ if command -v ps >/dev/null 2>&1; then
   # one of the sidecar binaries. Self-PID is excluded.
   SELF_PID=$$
   PIDS="$(ps -ww -eo pid=,args= 2>/dev/null \
-    | grep -F -- "$WORKTREE_PATH" \
     | grep -E '(^| )([^ ]*/)?(node|node_repl|npx)( |$)' \
+    | while IFS= read -r _line; do
+        dpf_process_line_matches_worktree "$_line" "$WORKTREE_PATH" && printf '%s\n' "$_line"
+      done \
     | awk '{print $1}')"
   for _pid in $PIDS; do
     [ "$_pid" = "$SELF_PID" ] && continue

@@ -5,7 +5,7 @@ status: published
 abstract: Topic branches named by intent. Bundling unrelated changes makes review harder and rollback worse.
 principleTier: core
 principleDirection: Scope each branch and PR to one concern; bundle nothing extra.
-principleDimensionVector: {"long_term_maintainability": 0.6, "governance_compliance": 0.5, "blast_radius": -0.5}
+principleDimensionVector: {"long_term_maintainability": 0.6, "governance_compliance": 0.5, "blast_radius": -0.4, "human_cognitive_load": -0.45, "evidence_density": 0.35}
 principleAppliesTo:
   - in_platform_coworker
   - external_coding_agent

@@ -37,17 +37,17 @@ Use the Platform area to supervise AI operations, Edge Nodes, integrations, iden
 
 Open **Platform > Connections** to find nearby DPF installations or connect by invitation. A nearby result is only a setup suggestion: it never creates trust or shares backlog data by itself. Both installations must approve a connection before any shared demand or disposition can cross it.
 
-The page reports whether the native Edge Node is listening for nearby installations. If discovery is not set up, paused, or unhealthy, use the Edge Nodes link to review its authority and network status. Invitation-based setup remains available when local-network discovery cannot be used.
+The page reports whether the native Edge Node is listening for nearby installations. If discovery is not set up, paused, unhealthy, or blocked by an **Enrollment conflict**, use the Edge Nodes link to review its authority and network status. An enrollment conflict means that more than one installer-managed node claims this installation; DPF will not guess which node is authoritative. Invitation-based setup remains available when local-network discovery cannot be used.
 
 For another installation owned by the same organization, choose **Set up this
 DPF**. Automatic setup is available only when both installations advertise a
 private/local HTTPS address whose certificate is trusted by the other host.
-Confirm that both screens show the same matching code and the same **Shares / Stays
-here** summary, then approve on the receiving installation. DPF exchanges and
-redeems a short-lived invitation, but the resulting connection remains pending
-until an authorized operator independently approves the connection on both
-installations. The matching code is only a visual check; it is never a password
-or bearer credential.
+Both screens display the same six-digit code and **Shares / Stays here** summary.
+Compare the digits directly, then choose **Codes match** on each installation.
+A different code can mean that the connection is being intercepted: stop and
+start setup again. DPF does not issue connection authority until authorized
+operators on both installations confirm the match. The code authenticates this
+one short-lived setup exchange; it is never a password or bearer credential.
 
 When the second installation does not yet trust the organization's private
 HTTPS authority, use **Connect your own installations** on the Connections

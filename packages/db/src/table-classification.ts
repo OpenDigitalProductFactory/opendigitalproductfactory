@@ -41,6 +41,9 @@ export const TABLE_CLASSIFICATION: Record<string, TableSensitivity> = {
   // Per-token deferred-tool-loading discovery state: tool names + token id, no
   // PII. Short-TTL, swept by its own expiry (see stewardship-exemptions.txt).
   McpToolSession: "internal",
+  // Candidate company/device coordinates learned from trusted introducers are
+  // operator-only until independent SAS pairing establishes a relationship.
+  FederationIntroductionCandidate: "confidential",
   Portfolio: "internal",
   DigitalProduct: "internal",
   ProductLine: "internal",
@@ -148,6 +151,9 @@ export const TABLE_CLASSIFICATION: Record<string, TableSensitivity> = {
   BeautyResource: "internal",
   BeautyResourceService: "internal",
   BeautyResourceAvailability: "internal",
+  // Tenant-scoped aggregate values and model-level lineage only; the
+  // projection contract forbids customer, workforce, and financial records.
+  BusinessMetricRollup: "internal",
   ProviderService: "internal",
   ProviderAvailability: "internal",
   OnboardingChecklist: "internal",
@@ -179,7 +185,6 @@ export const TABLE_CLASSIFICATION: Record<string, TableSensitivity> = {
   // observations for LL144/four-fifths bias audit. PII — obfuscate before any copy.
   ProtectedMonitoringObservation: "confidential",
   User: "confidential",
-  UserGroup: "confidential",
   CustomerContact: "confidential",
   SocialIdentity: "confidential",
   AccountInvite: "confidential",
@@ -285,6 +290,9 @@ export const TABLE_CLASSIFICATION: Record<string, TableSensitivity> = {
   // -- restricted (16) --
   PasswordResetToken: "restricted",
   PlatformRole: "restricted",
+  // Memberships require PlatformRole, so retaining them while roles are
+  // omitted creates authorization references that can never be resolved.
+  UserGroup: "restricted",
   CredentialEntry: "restricted",
   DataPolicyException: "restricted",
   OAuthPendingFlow: "restricted",

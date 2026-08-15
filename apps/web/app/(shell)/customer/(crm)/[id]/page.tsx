@@ -13,6 +13,8 @@ import { AddContactButton } from "@/components/customer/AddContactButton";
 import { ContactNotificationPrefs } from "@/components/customer/ContactNotificationPrefs";
 import { MergeCustomerAccountButton } from "@/components/customer/MergeCustomerAccountButton";
 import { UnmergeCustomerAccountButton } from "@/components/customer/UnmergeCustomerAccountButton";
+import { AccountAdminActions } from "@/components/customer/AccountAdminActions";
+import { RemoveOpportunityButton } from "@/components/customer/RemoveOpportunityButton";
 import { loadCustomerEstateSummary } from "@/lib/customer-estate/account-estate-summary";
 import type { TechnologySourceType } from "@/lib/customer-estate/lifecycle-evaluation";
 import {
@@ -20,6 +22,9 @@ import {
   readActivationProfile,
 } from "@/lib/storefront/archetype-activation";
 import { getAccountStatusMeta } from "@/lib/crm/presentation";
+import { accountStatusToOvsmStage, ovsmStageLabel } from "@/lib/crm/account-value-stream";
+import { getAccountRetainSnapshot } from "@/lib/crm/retain-data";
+import { AccountRetainPanel } from "@/components/customer/AccountRetainPanel";
 import { formatRevenueAmount } from "@/lib/crm/revenue-cockpit";
 import { LocalTime } from "@/components/ui/LocalTime";
 import { getFinancialProfile } from "@dpf/finance-templates";
@@ -197,6 +202,7 @@ export default async function AccountDetailPage({
     contractableOrder: contractableOrderRow,
     contract: contractRow
       ? {
+          id: contractRow.id,
           subscriptionRef: contractRow.subscriptionRef,
           planName: contractRow.planName,
           status: contractRow.status,
@@ -220,6 +226,10 @@ export default async function AccountDetailPage({
   const laborEconomics = billableTimeEnabled ? await getAccountLaborEconomics(id) : null;
 
   const statusMeta = getAccountStatusMeta(account.status);
+  // Retain-stage instrumentation: MRR / churn-risk / renewal for accounts in the recurring back-half.
+  const retainSnapshot = ["onboarding", "active", "at_risk", "suspended"].includes(account.status)
+    ? await getAccountRetainSnapshot(account.id)
+    : null;
   const managedItemDefaults = deriveCustomerConfigurationItemDefaults(
     readActivationProfile(storefrontConfig?.archetype?.activationProfile),
   );
@@ -269,9 +279,29 @@ export default async function AccountDetailPage({
           <div className="flex items-center gap-2">
             <h1 className="text-xl font-bold text-[var(--dpf-text)]">{account.name}</h1>
             <CustomerStatusBadge label={statusMeta.label} tone={statusMeta.tone} />
+            {account.status !== "superseded" && account.status !== "archived" && (
+              <span
+                className="rounded-full border border-[var(--dpf-border)] px-2 py-0.5 text-xs text-[var(--dpf-muted)]"
+                title="Operational value stream stage"
+              >
+                Value stream · {ovsmStageLabel(accountStatusToOvsmStage(account.status))}
+              </span>
+            )}
           </div>
           {account.status !== "superseded" && (
-            <MergeCustomerAccountButton accountId={account.id} accountName={account.name} />
+            <div className="flex items-center gap-2">
+              <AccountAdminActions
+                account={{
+                  id: account.id,
+                  name: account.name,
+                  status: account.status,
+                  industry: account.industry,
+                  website: account.website,
+                  notes: account.notes,
+                }}
+              />
+              <MergeCustomerAccountButton accountId={account.id} accountName={account.name} />
+            </div>
           )}
         </div>
         <p className="text-[10px] font-mono text-[var(--dpf-muted)]">
@@ -280,6 +310,8 @@ export default async function AccountDetailPage({
       </div>
 
       <AccountLifecycleActions {...lifecycleContext} />
+
+      {retainSnapshot && <AccountRetainPanel snapshot={retainSnapshot} />}
 
       {laborEconomics && laborEconomics.billableHours > 0 && (
         <BillableTimeSection
@@ -516,22 +548,26 @@ export default async function AccountDetailPage({
               </h2>
               <div className="space-y-2">
                 {opportunities.map((o) => (
-                  <Link
+                  <div
                     key={o.id}
-                    href={`/customer/opportunities/${o.id}`}
-                    className="block p-3 rounded-lg bg-[var(--dpf-surface-1)] border border-[var(--dpf-border)] hover:bg-[var(--dpf-surface-2)]"
+                    className="p-3 rounded-lg bg-[var(--dpf-surface-1)] border border-[var(--dpf-border)] hover:bg-[var(--dpf-surface-2)]"
                   >
-                    <p className="text-xs text-[var(--dpf-text)]">{o.title}</p>
-                    <div className="flex items-center gap-2 mt-1">
-                      <span className="text-[9px] text-[var(--dpf-muted)]">{o.stage}</span>
-                      <span className="text-[9px] text-[var(--dpf-muted)]">{o.probability}%</span>
-                      {o.expectedValue && (
-                        <span className="text-[9px] font-mono text-[var(--dpf-text)]">
-                          {formatRevenueAmount(Number(o.expectedValue), o.currency)}
-                        </span>
-                      )}
+                    <div className="flex items-start justify-between gap-2">
+                      <Link href={`/customer/opportunities/${o.id}`} className="block min-w-0 flex-1">
+                        <p className="text-xs text-[var(--dpf-text)]">{o.title}</p>
+                        <div className="flex items-center gap-2 mt-1">
+                          <span className="text-[9px] text-[var(--dpf-muted)]">{o.stage}</span>
+                          <span className="text-[9px] text-[var(--dpf-muted)]">{o.probability}%</span>
+                          {o.expectedValue && (
+                            <span className="text-[9px] font-mono text-[var(--dpf-text)]">
+                              {formatRevenueAmount(Number(o.expectedValue), o.currency)}
+                            </span>
+                          )}
+                        </div>
+                      </Link>
+                      <RemoveOpportunityButton opportunityId={o.id} opportunityTitle={o.title} />
                     </div>
-                  </Link>
+                  </div>
                 ))}
               </div>
             </div>

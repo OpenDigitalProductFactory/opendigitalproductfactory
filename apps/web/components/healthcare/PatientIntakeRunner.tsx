@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react
 import Link from "next/link";
 
 import { Notice, StatusBadge } from "@/components/ui/report-kit";
+import { createClientOperationId } from "@/lib/client-operation-id";
 import type { FormFieldDefinition } from "@dpf/types";
 
 type IntakeForm = {
@@ -179,7 +180,7 @@ export function PatientIntakeRunner({ packetId }: { packetId: string }) {
         method: "PUT",
         headers: { "content-type": "application/json", "x-intake-resume-token": grant.token },
         body: JSON.stringify({
-          idempotencyKey: crypto.randomUUID(), expectedVersion: versions[form.formId] ?? null,
+          idempotencyKey: createClientOperationId(), expectedVersion: versions[form.formId] ?? null,
           sourceMode: "patient-web", answers: formAnswers, dataCategories: form.dataCategories,
         }),
       });

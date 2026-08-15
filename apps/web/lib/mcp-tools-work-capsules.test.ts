@@ -295,6 +295,39 @@ describe("work capsule MCP tools", () => {
     }));
   });
 
+  it("adopt_worktree returns an actionable branch conflict instead of a raw tool failure", async () => {
+    mockPrisma.workCapsule.findFirst.mockResolvedValue({
+      id: "row-existing",
+      capsuleId: "WC-EXISTING",
+      status: "abandoned",
+      backlogItemId: "BI-OTHER",
+      headBranch: "fix/recovery",
+    });
+
+    const { executeTool } = await import("./mcp-tools");
+    const result = await executeTool("adopt_worktree", {
+      title: "Adopt recovery branch",
+      objective: "Recover useful work.",
+      repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory",
+      headBranch: "fix/recovery",
+      worktreePath: "D:/DPF-recovery",
+      executorKind: "codex-desktop",
+    }, "user-1", { agentId: "codex" });
+
+    expect(result).toMatchObject({
+      success: false,
+      error: "branch_occupied",
+      data: {
+        capsuleId: "WC-EXISTING",
+        status: "abandoned",
+        backlogItemId: "BI-OTHER",
+      },
+    });
+    expect(result.message).toMatch(/Resume that capsule.*or use a different branch/i);
+    expect(mockPrisma.workCapsule.create).not.toHaveBeenCalled();
+    expect(mockPrisma.workCapsule.update).not.toHaveBeenCalled();
+  });
+
   it("plan_capsule_worktree persists the planned workspace", async () => {
     mockPrisma.workCapsule.findUnique.mockResolvedValue({
       id: "row-1",

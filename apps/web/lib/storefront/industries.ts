@@ -23,6 +23,7 @@ export const INDUSTRY_OPTIONS = [
   { value: "warehousing-fulfilment", label: "Warehousing & Fulfilment" },
   { value: "fabric-care-services", label: "Fabric Care Services" },
   { value: "agriculture-ranching", label: "Agriculture & Ranching" },
+  { value: "manufacturing", label: "Manufacturing & Industrial OEM" },
 ] as const;
 
 export type IndustrySlug = (typeof INDUSTRY_OPTIONS)[number]["value"];

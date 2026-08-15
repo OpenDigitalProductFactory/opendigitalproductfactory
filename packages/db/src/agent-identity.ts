@@ -83,6 +83,7 @@ export const COWORKER_SLUG_TO_CANONICAL_AGENT_ID: Readonly<Record<string, string
   "inventory-specialist": "AGT-WS-INVENTORY",
   "ea-architect": "AGT-WS-EA",
   "hr-specialist": "AGT-WS-HR",
+  "time-off-advisor": "AGT-WS-TIME-OFF",
   "customer-advisor": "AGT-WS-CUSTOMER",
   "marketing-specialist": "AGT-WS-MARKETING",
   "ops-coordinator": "AGT-WS-OPS",
