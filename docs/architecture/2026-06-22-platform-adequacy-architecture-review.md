@@ -65,7 +65,7 @@ DPF has unusually strong governance primitives for a young SMB platform:
 - MCP token scopes and tool grants.
 - `ToolExecution` receipts.
 - Role/capability filtered navigation.
-- Work capsules and evidence-gated delivery doctrine.
+- Work workrooms and evidence-gated delivery doctrine.
 - Deployment contracts for lifecycle, identity, secrets, observability, edge nodes, and provider routing.
 - Master-data management design that avoids duplicating canonical customer/product/supplier records.
 

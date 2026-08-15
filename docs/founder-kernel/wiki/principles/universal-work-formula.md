@@ -47,6 +47,6 @@ A work type differs from another **only** along:
 
 A difference between two work types that is **not** {context, temporal, participant} is duplication and must be removed; a difference that **is** one of those three is a registry entry, not code. When reviewing a new work type or a new projector/status/lifecycle, ask: **"Is this a variation-axis registry entry, or a forked formula?"** A forked formula fails the check.
 
-The `WorkUnit` contract (`apps/web/lib/work-management/work-unit.ts`) is the single shape every durable carrier (WorkCapsule, WorkItem, TaskRun) adapts into, so the formula is enforced, not merely intended.
+The `WorkUnit` contract (`apps/web/lib/work-management/work-unit.ts`) is the single shape every durable carrier (Workroom, WorkItem, TaskRun) adapts into, so the formula is enforced, not merely intended.
 
 Design of record: `docs/superpowers/specs/2026-08-12-work-model-convergence-addendum-common-work-formula-design.md`. Kernel ledger DI-BF10BF48EED5 (contract-and-gate approach).

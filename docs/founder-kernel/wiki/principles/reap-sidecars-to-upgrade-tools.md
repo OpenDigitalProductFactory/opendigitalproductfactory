@@ -3,9 +3,9 @@ title: Reap Sidecars to Upgrade Tools
 slug: reap-sidecars-to-upgrade-tools
 pageKind: principle
 status: published
-abstract: A session is a claimed capsule; session end reaps its sidecars (app-server, node_repl, npx MCP children). Upgrading Claude Code / Codex is a first-class operator-triggered quiesce-reap-upgrade routine — orphaned sidecars must never pin a tool against update.
+abstract: A session is a claimed workroom; session end reaps its sidecars (app-server, node_repl, npx MCP children). Upgrading Claude Code / Codex is a first-class operator-triggered quiesce-reap-upgrade routine — orphaned sidecars must never pin a tool against update.
 principleTier: contextual
-principleDirection: Tie sidecar lifecycle to the session capsule — reap app-server, node_repl, and MCP children at session end; upgrade the interactive tools via an operator-triggered quiesce-reap-upgrade routine, never by leaving orphaned children to pin the installer.
+principleDirection: Tie sidecar lifecycle to the session workroom — reap app-server, node_repl, and MCP children at session end; upgrade the interactive tools via an operator-triggered quiesce-reap-upgrade routine, never by leaving orphaned children to pin the installer.
 principleDimensionVector: {"long_term_maintainability": 0.7, "capacity_utilization": 0.6, "governance_compliance": 0.5, "operational_independence": 0.5}
 principleAppliesTo:
   - external_coding_agent
@@ -19,7 +19,7 @@ principleConsumerContexts:
 
 ## Rule
 
-A surface session **is** a claimed capsule, and **session end is a reap**. When a session ends (or its capsule is released), its sidecars — `app-server`, `node_repl`, and any npx MCP children — are terminated. No three-generation orphan accumulation.
+A surface session **is** a claimed workroom, and **session end is a reap**. When a session ends (or its workroom is released), its sidecars — `app-server`, `node_repl`, and any npx MCP children — are terminated. No three-generation orphan accumulation.
 
 Upgrading the interactive tools (Claude Code, Codex, including the WindowsApps Store package) is a **first-class operator-triggered routine**: a *quiesce-for-tooling-upgrade* procedure that drains/clears active surface sessions, reaps sidecars, allows the update, then resumes. Upgrading the *tools* gets the same treatment as upgrading the *platform* (the governed self-upgrade lifecycle) — it is a routine, sustained operation, not a re-architecture.
 
@@ -31,7 +31,7 @@ Authority for the upgrade is **operator-triggered** (spec §7 Q2): it composes [
 
 ## How To Apply
 
-- Bind sidecar lifetime to the session capsule; extend the `SessionEnd` hook to terminate sidecars and release any held lease/capsule.
+- Bind sidecar lifetime to the session workroom; extend the `SessionEnd` hook to terminate sidecars and release any held lease/capsule.
 - Wire the **DPF MCP only**; do not auto-spawn generic npx MCP servers per session — they are the orphan source.
 - Run the quiesce-reap-upgrade routine on operator trigger: drain active sessions, reap sidecars, update the tool, resume. Never leave orphaned children to block the next upgrade.
 - Treat a tool that "can't update" as a reaping failure to diagnose, not a tolerated state.
@@ -40,7 +40,7 @@ Authority for the upgrade is **operator-triggered** (spec §7 Q2): it composes [
 
 - `long_term_maintainability: 0.7` — tools that upgrade cleanly stay current; orphan-pinned tools rot.
 - `capacity_utilization: 0.6` — reaping reclaims dozens of stranded host processes.
-- `governance_compliance: 0.5` — session = capsule = reap is the enforceable contract.
+- `governance_compliance: 0.5` — session = workroom = reap is the enforceable contract.
 - `operational_independence: 0.5` — the operator can upgrade on demand instead of fighting orphans.
 
 ## Related

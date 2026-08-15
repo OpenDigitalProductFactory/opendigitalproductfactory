@@ -69,12 +69,12 @@ DPF lesson:
 
 Odysseus sessions carry model and endpoint choices, ownership, RAG/document state, archive/folder/important state, message count, and compaction behavior. Threads are not just a message list; they are durable work contexts.
 
-DPF should adopt this principle while preserving its own Work Capsule and backlog architecture. A DPF coworker thread should know its context, model routing, memory mode, and authority level, but it should not become the only source of truth for work execution.
+DPF should adopt this principle while preserving its own Workroom and backlog architecture. A DPF coworker thread should know its context, model routing, memory mode, and authority level, but it should not become the only source of truth for work execution.
 
 DPF lesson:
 
 - Thread metadata should include model policy, privacy/memory state, attached sources, active mode, tool authority, compaction state, and last model receipt.
-- Work Capsules, backlog items, execution evidence, and decisions should remain canonical records outside the chat transcript.
+- Workrooms, backlog items, execution evidence, and decisions should remain canonical records outside the chat transcript.
 
 ### 4. Local Model Fit Is a Product Experience
 
@@ -190,11 +190,11 @@ Recommended thread metadata:
 | `fallbackEvents` | Structured provider/model fallback records. |
 | `memoryMode` | Normal, no-memory/private, scoped-memory, or explicit-source-only. |
 | `toolAuthority` | Which tool categories are enabled for the thread. |
-| `attachedSources` | Documents, records, backlog items, Work Capsules, or knowledge entries. |
+| `attachedSources` | Documents, records, backlog items, Workrooms, or knowledge entries. |
 | `compactionState` | Summary status, token budget, and compaction model receipt. |
 | `decisionLinks` | Links to durable decision/evidence records. |
 
-Important boundary: thread content can explain work, but Work Capsules, backlog state, execution evidence, and architectural decisions should remain canonical records outside the transcript.
+Important boundary: thread content can explain work, but Workrooms, backlog state, execution evidence, and architectural decisions should remain canonical records outside the transcript.
 
 ## Local vs Frontier Model Policy
 
@@ -422,7 +422,7 @@ Source of truth:
 - AI routing policy and provider capability records for model decisions.
 - Principal/tool grants for authority.
 - Knowledge records for sources and memory.
-- Work Capsules/backlog/evidence tables for execution state.
+- Workrooms/backlog/evidence tables for execution state.
 
 Empty and failure states:
 

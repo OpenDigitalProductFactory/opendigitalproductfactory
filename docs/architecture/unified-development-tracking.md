@@ -26,20 +26,20 @@ flowchart TD
 
 The four surfaces are **peers, not a hierarchy** — none is privileged, and work never depends on any one of them being healthy. They all advance the same evidence‑gated lifecycle (`ideate → plan → build → review → ship`), right‑sized to the work.
 
-## One unit of work: the WorkCapsule
+## One unit of work: the Workroom
 
-Every effort — a Build Studio build, a Claude Code session, a Codex or Grok run — is represented by a single **WorkCapsule**. The capsule is *executor‑agnostic*: it does not matter which surface did the work. It holds the effort's identity — its branch, worktree, pull request, lifecycle status, scope claims, and a lease (so two agents do not collide on the same work).
+Every effort — a Build Studio build, a Claude Code session, a Codex or Grok run — is represented by a single **Workroom**. The workroom is *executor‑agnostic*: it does not matter which surface did the work. It holds the effort's identity — its branch, worktree, pull request, lifecycle status, scope claims, and a lease (so two agents do not collide on the same work).
 
-Because the capsule is the shared unit, every surface's work lands in the same place.
+Because the workroom is the shared unit, every surface's work lands in the same place.
 
 ## How each surface is captured
 
-| Surface | How it becomes a tracked capsule |
+| Surface | How it becomes a tracked workroom |
 | --- | --- |
-| **Build Studio** | Auto‑attaches a capsule when a build starts. |
-| **Claude Code / Codex / Grok** | Three ways, in order of least effort: (1) **auto‑capture** — recording development evidence, which agents are asked to do at phase boundaries, creates the capsule automatically; (2) **adopt** an existing branch/worktree; (3) **claim** a capsule explicitly at work‑start. |
+| **Build Studio** | Auto‑attaches a workroom when a build starts. |
+| **Claude Code / Codex / Grok** | Three ways, in order of least effort: (1) **auto‑capture** — recording development evidence, which agents are asked to do at phase boundaries, creates the workroom automatically; (2) **adopt** an existing branch/worktree; (3) **claim** a workroom explicitly at work‑start. |
 
-Capture degrades gracefully: if the coordination plane is briefly unreachable, the agent still works and the capsule reconciles afterward — work never blocks on the tracker.
+Capture degrades gracefully: if the coordination plane is briefly unreachable, the agent still works and the workroom reconciles afterward — work never blocks on the tracker.
 
 ## What you see
 
