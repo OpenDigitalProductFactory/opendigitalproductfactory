@@ -10,8 +10,20 @@
 import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
 import type { ToolPack } from "../tool-pack";
 import { prisma } from "@dpf/db";
-import { EXCLUDE_TOMBSTONED } from "@dpf/db/customer-lifecycle";
+import {
+  CUSTOMER_ACCOUNT_STATUSES,
+  CUSTOMER_TOMBSTONE_STATUSES,
+  EXCLUDE_TOMBSTONED,
+} from "@dpf/db/customer-lifecycle";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
+
+// The full canonical account-lifecycle set an operator may set, minus the two system-managed
+// tombstones (`superseded` = merge tombstone; `archived` = its own action). Surfaced here so
+// create_customer_account exposes the whole lifecycle (BI-9078F4EE), not a hard-coded 4 —
+// derived from the canonical union, no new enum invented.
+const SETTABLE_ACCOUNT_STATUSES: string[] = CUSTOMER_ACCOUNT_STATUSES.filter(
+  (status) => !(CUSTOMER_TOMBSTONE_STATUSES as readonly string[]).includes(status),
+);
 
 const definitions: ToolDefinition[] = [
   {
@@ -81,7 +93,7 @@ const definitions: ToolDefinition[] = [
         name: { type: "string", description: "Company / account name. The ONLY required field." },
         website: { type: "string", description: "Optional website URL — include when known; it strengthens duplicate detection." },
         industry: { type: "string", description: "Optional industry." },
-        status: { type: "string", description: "Optional: prospect (default) | active | at_risk | closed." },
+        status: { type: "string", enum: SETTABLE_ACCOUNT_STATUSES, description: "Optional account-lifecycle status (default prospect). Full lifecycle: prospect → qualified → onboarding → active, plus at_risk / suspended / closed. Tombstones (superseded/archived) are system-managed and not settable here." },
         notes: { type: "string", description: "Optional free-text notes." },
         duplicateResolution: { type: "string", description: "Optional duplicate decision after a duplicates_found response: `use-existing:<accountId>` to reuse that account, or `confirm-new` to create anyway once the user confirms it is a different company." },
         duplicateReason: { type: "string", description: "Required with duplicateResolution `confirm-new`: one line on why this is not a duplicate (audited)." },
@@ -299,6 +311,14 @@ async function createCustomerAccountTool(
 ): Promise<ToolResult> {
   const name = typeof params["name"] === "string" ? params["name"].trim() : "";
   if (!name) return { success: false, error: "missing_name", message: "name is required to create a customer account." };
+  const requestedStatus = typeof params["status"] === "string" ? params["status"].trim() : "";
+  if (requestedStatus && !SETTABLE_ACCOUNT_STATUSES.includes(requestedStatus)) {
+    return {
+      success: false,
+      error: "invalid_status",
+      message: `"${requestedStatus}" is not a settable account status. Choose one of: ${SETTABLE_ACCOUNT_STATUSES.join(", ")}.`,
+    };
+  }
   const { createCustomerAccount } = await import("@/lib/actions/crm");
   const rawResolution = typeof params["duplicateResolution"] === "string" ? params["duplicateResolution"].trim() : "";
   const duplicateReason = typeof params["duplicateReason"] === "string" ? params["duplicateReason"].trim() : "";

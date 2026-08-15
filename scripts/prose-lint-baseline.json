@@ -207,7 +207,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 8
+    "textMass": 6
   },
   "apps/web/app/(shell)/admin/page.tsx": {
     "vocabulary": 0,
@@ -522,7 +522,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 89
+    "textMass": 88
   },
   "apps/web/app/(shell)/coworker-decisions/page.tsx": {
     "vocabulary": 0,
@@ -592,7 +592,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 100
+    "textMass": 104
   },
   "apps/web/app/(shell)/customer/(crm)/engagements/page.tsx": {
     "vocabulary": 0,
@@ -606,7 +606,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 34
+    "textMass": 48
   },
   "apps/web/app/(shell)/customer/(crm)/opportunities/[id]/page.tsx": {
     "vocabulary": 0,
@@ -1495,7 +1495,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 29
+    "textMass": 24
   },
   "apps/web/app/(shell)/platform/federation-proposals/page.tsx": {
     "vocabulary": 0,

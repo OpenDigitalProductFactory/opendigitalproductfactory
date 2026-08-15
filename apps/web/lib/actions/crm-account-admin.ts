@@ -11,6 +11,8 @@ import { prisma } from "@dpf/db";
 import { revalidatePath } from "next/cache";
 import { CUSTOMER_ACCOUNT_STATUSES } from "@dpf/db/customer-lifecycle";
 import { requireCapability } from "./shared/guards";
+import { recordLifecycleTransition } from "@/lib/lifecycle/lifecycle-transition";
+import { resolveCustomerAccountPoint } from "@/lib/lifecycle-grammars";
 import { logSystemActivity } from "@/lib/crm/crm-activity";
 import { customerAccountNormalizedColumns } from "@/lib/mdm/dedup-gate";
 
@@ -75,6 +77,19 @@ export async function updateCustomerAccount(input: {
   });
 
   const statusChanged = input.status !== undefined && input.status !== existing.status;
+  if (statusChanged) {
+    // Record the operator's lifecycle transition on the universal ledger with the in-stage
+    // state axis (two-axis reporting). Authoritative: the operator holds operate_customer and
+    // may set any settable status, so this is not gated by grammar readiness.
+    await recordLifecycleTransition({
+      governedThingKind: "CustomerAccount",
+      governedThingId: updated.id,
+      from: resolveCustomerAccountPoint(existing.status),
+      to: resolveCustomerAccountPoint(input.status as string),
+      reason: `Operator changed account status ${existing.status} → ${input.status}`,
+      authoritative: true,
+    });
+  }
   await logSystemActivity(
     statusChanged
       ? `Account "${updated.name}" status changed from ${existing.status} to ${input.status}`

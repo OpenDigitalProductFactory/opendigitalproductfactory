@@ -20,6 +20,7 @@ import {
   type DedupCheckResult,
   type DedupResolution,
 } from "@/lib/mdm/dedup-gate";
+import { qualifyAccountFromOpportunity, activateAccountFromWonDeal } from "@/lib/crm/account-lifecycle";
 
 import {
   searchCustomerSiteAddresses as searchCustomerSiteAddressesImpl,
@@ -618,6 +619,9 @@ export async function createOpportunity(input: {
     },
   );
 
+  // Assistive: opening an opportunity qualifies the account (gated; no-ops if already further).
+  await qualifyAccountFromOpportunity(opportunity.accountId, opportunity.title);
+
   return opportunity;
 }
 
@@ -664,6 +668,9 @@ export async function advanceOpportunityStage(
       opportunityId: updated.id,
     },
   );
+
+  // Assistive: a won deal activates the account (authoritative business event; no-ops if active).
+  if (newStage === "closed_won") await activateAccountFromWonDeal(updated.accountId, updated.title);
 
   revalidatePath("/customer/opportunities");
   revalidatePath(`/customer/opportunities/${updated.id}`);
@@ -722,45 +729,13 @@ export async function closeOpportunity(
     },
   );
 
+  // Assistive: closing a deal WON activates the account (authoritative business event).
+  if (won) await activateAccountFromWonDeal(opp.accountId, opp.title);
+
   return opp;
 }
 
-// ─── Dormant Deal Detection ─────────────────────────────────────────────────
-
-const DORMANT_THRESHOLD_DAYS = 45;
-
-export async function flagDormantOpportunities() {
-  const threshold = new Date();
-  threshold.setDate(threshold.getDate() - DORMANT_THRESHOLD_DAYS);
-
-  const stale = await prisma.opportunity.findMany({
-    where: {
-      isDormant: false,
-      stage: { notIn: ["closed_won", "closed_lost"] },
-      stageChangedAt: { lt: threshold },
-    },
-    select: { id: true, accountId: true, contactId: true, title: true },
-  });
-
-  for (const opp of stale) {
-    await prisma.opportunity.update({
-      where: { id: opp.id },
-      data: { isDormant: true },
-    });
-
-    await logSystemActivity(
-      `Opportunity "${opp.title}" marked dormant (no stage change in ${DORMANT_THRESHOLD_DAYS} days)`,
-      {
-        type: "system",
-        accountId: opp.accountId,
-        contactId: opp.contactId || undefined,
-        opportunityId: opp.id,
-      },
-    );
-  }
-
-  return { flagged: stale.length };
-}
+// Opportunity maintenance (flagDormantOpportunities) moved to crm-opportunity-maintenance.ts.
 
 // ─── Quote Actions ──────────────────────────────────────────────────────────
 

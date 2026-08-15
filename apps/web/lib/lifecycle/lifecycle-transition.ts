@@ -46,6 +46,13 @@ export type RecordLifecycleTransitionInput = {
   evidenceRef?: string | null;
   actorPrincipalId?: string | null;
   toolExecutionId?: string | null;
+  /**
+   * Skip the canAdvance readiness gate for an AUTHORITATIVE transition — an operator override
+   * or a business-authoritative event (e.g. a closed-won deal activating an account) that is
+   * allowed to jump stages. Point VALIDITY is still enforced (both points must be real states),
+   * so authoritative never means unvalidated.
+   */
+  authoritative?: boolean;
 };
 
 export type RecordLifecycleTransitionResult =
@@ -80,7 +87,7 @@ export async function recordLifecycleTransition(
           };
         }
       }
-      if (input.from && input.to && input.from.stage !== input.to.stage) {
+      if (!input.authoritative && input.from && input.to && input.from.stage !== input.to.stage) {
         const check = canAdvance(grammar, input.from, input.to.stage);
         if (!check.allowed) {
           return { ok: false, reason: check.reason ?? "illegal lifecycle advancement" };

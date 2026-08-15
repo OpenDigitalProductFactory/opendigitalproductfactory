@@ -22,6 +22,7 @@ import {
   readActivationProfile,
 } from "@/lib/storefront/archetype-activation";
 import { getAccountStatusMeta } from "@/lib/crm/presentation";
+import { accountStatusToOvsmStage, ovsmStageLabel } from "@/lib/crm/account-value-stream";
 import { formatRevenueAmount } from "@/lib/crm/revenue-cockpit";
 import { LocalTime } from "@/components/ui/LocalTime";
 import { getFinancialProfile } from "@dpf/finance-templates";
@@ -272,6 +273,14 @@ export default async function AccountDetailPage({
           <div className="flex items-center gap-2">
             <h1 className="text-xl font-bold text-[var(--dpf-text)]">{account.name}</h1>
             <CustomerStatusBadge label={statusMeta.label} tone={statusMeta.tone} />
+            {account.status !== "superseded" && account.status !== "archived" && (
+              <span
+                className="rounded-full border border-[var(--dpf-border)] px-2 py-0.5 text-xs text-[var(--dpf-muted)]"
+                title="Operational value stream stage"
+              >
+                Value stream · {ovsmStageLabel(accountStatusToOvsmStage(account.status))}
+              </span>
+            )}
           </div>
           {account.status !== "superseded" && (
             <div className="flex items-center gap-2">
