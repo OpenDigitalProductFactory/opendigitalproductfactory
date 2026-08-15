@@ -318,6 +318,22 @@ Every asynchronous action MUST show a visible, consistent activity indicator. A 
 
 **Rollout:** the primitives are the canonical replacement for the hand-rolled indicators catalogued across the portal; migrate opportunistically and when touching a surface. A CI ratchet — `scripts/check-no-hand-rolled-loading.mjs`, run by the repo guard loop — freezes the remaining sites at a per-file baseline and **fails any new `animate-spin`/`animate-pulse` outside `components/ui/`** (migrate a surface, then `--update` to retighten). Semantic **status dots** (e.g. a pulsing health indicator) are state, not loading, and are out of this pattern — but still inherit the reduced-motion guard.
 
+## Multi-source data states
+
+A dashboard or report that combines providers must expose the truth of each source rather than collapse every outcome into “no data.” Its read model carries source identity, freshness or observation time, and one of `loading`, `ready`, `empty`, `stale`, or `failed`; a partial result is the aggregate condition where at least one source is usable and at least one is stale or failed.
+
+| Condition | Presentation | Recovery |
+|---|---|---|
+| All requested sources completed with zero records | `EmptyState` with the applied scope and time window | Change filters or connect a source |
+| One or more sources failed and none is usable | Error `Alert`/`AlertBox`; never an empty state | Plain-language reason and manual Retry |
+| Some sources are usable | Keep usable facts visible; show a prominent partial-data notice and per-source status/freshness | Retry only the failed sources |
+| A previously successful source is beyond its declared freshness window | Keep the last confirmed value visibly marked stale | Refresh without blanking the confirmed value |
+| Capability is unsupported, stubbed, or not connected | Name that condition; do not present fabricated zeroes | Link to the owning connection or capability path when actionable |
+
+The owning interaction defines and tests its latency budget; there is no platform-wide “5 seconds means timeout” constant that is honest for every provider and report. A user-facing request has a bounded deadline. Automatic retry is allowed once only for a safe, idempotent transient failure and remains inside that deadline; rate-limit guidance is respected. Otherwise recovery is explicit and operator-triggered. Background work shows durable progress instead of holding a page request open.
+
+State changes use one persistent status region with `aria-live="polite"` so assistive technology announces recovery and repeated failures without recreating the live region; an immediate blocking failure uses the shared assertive alert primitive. This follows [WAI-ARIA live-region guidance](https://www.w3.org/WAI/WCAG22/Techniques/aria/ARIA19). Color is never the sole partial/stale/error indicator.
+
 ## Progressive Disclosure
 
 Choose the disclosure construct by the relationship between its summary and
