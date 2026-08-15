@@ -22,6 +22,7 @@ import {
   selectCompletedWorkRoomCycles,
   selectCurrentWorkRoomCycle,
 } from "./room-cycle";
+import type { WorkRoomStructure } from "./room-structure";
 import type { WorkRoomParticipantView, WorkRoomView } from "./room-types";
 import { getWorkCaseSourceEntry } from "./source-registry";
 import { fromWorkItemMessage } from "./receipt-envelope";
@@ -113,6 +114,17 @@ export type WorkspaceRoomAuthContext = {
   sensitivityClearance: readonly string[];
   isSuperuser: boolean;
 };
+
+/**
+ * Resolves the value-stream + lifecycle STRUCTURE of the room's subject. Injected
+ * (like `participantLoader`) so this loader keeps its narrow prisma client and stays
+ * off the CRM models — the caller wires a full-prisma resolver
+ * (`resolveWorkRoomStructureForCase`). Returns null for subjects with no binding.
+ */
+export type WorkRoomStructureLoader = (ref: {
+  sourceType: string;
+  sourceId: string;
+}) => Promise<WorkRoomStructure | null>;
 
 export type WorkspaceRoomParticipantLoader = (input: {
   workItemId: string;
@@ -400,6 +412,7 @@ export async function loadWorkspaceWorkCaseDetail({
   userId,
   authContext,
   participantLoader,
+  structureLoader,
   now = new Date(),
 }: {
   prismaClient: WorkspaceCasePrismaClient;
@@ -407,6 +420,7 @@ export async function loadWorkspaceWorkCaseDetail({
   userId: string;
   authContext?: WorkspaceRoomAuthContext;
   participantLoader?: WorkspaceRoomParticipantLoader;
+  structureLoader?: WorkRoomStructureLoader;
   now?: Date;
 }): Promise<WorkspaceWorkCaseDetailView | null> {
   const decoded = decodeWorkCaseKey(caseKey);
@@ -491,9 +505,13 @@ export async function loadWorkspaceWorkCaseDetail({
     ? selectCompletedWorkRoomCycles(item.sourceType, cycleCandidates)
     : [];
   const storedPackets = projectStoredWorkRoomOutcomePackets(messages);
+  const structure = structureLoader
+    ? await structureLoader({ sourceType: source.sourceType, sourceId: source.sourceId })
+    : null;
   const room = buildWorkRoomView({
     caseKey,
     detail,
+    structure,
     boundary: {
       purpose: item.description,
       outcome: null,

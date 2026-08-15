@@ -2,6 +2,7 @@ import { AlertTriangle, ArrowLeft, Clock, Users } from "lucide-react";
 
 import { LocalTime } from "@/components/ui/LocalTime";
 import { Notice, StatusBadge } from "@/components/ui/report-kit";
+import { WorkRoomStructurePanel } from "@/components/workspace/work-room/WorkRoomStructurePanel";
 import type { WorkspaceWorkCaseListItem } from "@/lib/work-management/workspace-case-loader";
 import type { WorkRoomView } from "@/lib/work-management/room-types";
 
@@ -118,6 +119,8 @@ export function WorkRoomHeader({ room, summary }: Props) {
             {room.outcome.statement ?? "Outcome not defined"}
           </p>
         </section>
+
+        <WorkRoomStructurePanel structure={room.structure} />
 
         <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
           <section aria-label="Attention" className="rounded-lg border border-[var(--dpf-border)] p-3">

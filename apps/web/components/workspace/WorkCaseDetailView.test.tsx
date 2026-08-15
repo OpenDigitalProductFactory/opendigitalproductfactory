@@ -108,6 +108,7 @@ const room: WorkRoomView = {
     { kind: "source", id: "BK-1", sourceType: "booking" },
     { kind: "work-item", id: "WI-1", status: "awaiting-input" },
   ],
+  structure: null,
   projection: {
     confidence: "high",
     incompleteBoundary: false,
