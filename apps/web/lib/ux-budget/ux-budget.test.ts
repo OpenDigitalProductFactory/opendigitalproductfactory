@@ -435,7 +435,9 @@ describe("generated route-shell registry", () => {
     // 360 detail page is a dynamic ([agentId]) route the generator auto-excludes with
     // reason "dynamic-fixture-required": the sweep cannot render it without a per-coworker
     // fixture, so it is not measured (not a live-state exclusion, a fixture one).
-    expect(registry.routes.filter((route) => !route.sweepEligible)).toHaveLength(123);
+    // 123 -> 124: /ops/stack-currency (BI-6328BCA6) joins the wall-clock exclusions — it
+    // renders currency relative to `now` (approaching-eol window, daysUntilEol).
+    expect(registry.routes.filter((route) => !route.sweepEligible)).toHaveLength(124);
   });
 
   it("keeps contextual sweep exclusions explicit, valid, and non-stale", () => {

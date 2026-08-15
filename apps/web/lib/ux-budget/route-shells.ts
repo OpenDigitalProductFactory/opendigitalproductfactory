@@ -199,6 +199,12 @@ export const ROUTE_SWEEP_EXCLUSIONS = {
   // instrument here for the identical reasons. Remove alongside the others once
   // the fixture pins the clock and isolates platform state (BI-0C6C2153).
   "/platform/ai/right-now": "wall-clock-collection",
+  // /ops/stack-currency (BI-6328BCA6) renders wall-clock-relative currency: deriveCurrency
+  // classifies each component against `now` (approaching-eol within 180 days) and shows
+  // daysUntilEol, so its frozen ariaSnapshot flips on untouched code once EOL dates are
+  // recorded. Excluded for the same reason as the other wall-clock routes; becomes eligible
+  // when the sweep fixture pins the clock.
+  "/ops/stack-currency": "wall-clock-collection",
 } as const satisfies Record<string, RouteSweepExclusionReason>;
 
 export type RouteShellPolicy = {
