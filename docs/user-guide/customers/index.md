@@ -175,6 +175,10 @@ Account detail is the relationship history, not just a contact card. It includes
   operational value stream (Capture → Qualify → Deliver → Retain), shown next to
   its status. Opening an opportunity moves a prospect to *qualified*, and winning
   a deal activates the account; you can always override the status from **Edit**;
+- for active, recurring customers, a **Retain** panel — recurring revenue
+  (MRR/ARR), a churn-risk health signal, and the next renewal date, with a prompt
+  to reach out before an at-risk account churns. The revenue cockpit rolls the
+  same recurring revenue and at-risk count up across the workspace;
 - approved billable-time economics where the selected business profile enables
   that workflow.
 
