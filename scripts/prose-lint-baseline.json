@@ -1264,7 +1264,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 20
+    "textMass": 18
   },
   "apps/web/app/(shell)/performance/loading.tsx": {
     "vocabulary": 0,
@@ -8412,5 +8412,12 @@
     "readability": 0,
     "longSentences": 0,
     "textMass": 31
+  },
+  "apps/web/components/workspace/work-room/WorkRoomStructurePanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 4
   }
 }

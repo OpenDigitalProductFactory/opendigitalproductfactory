@@ -7,6 +7,7 @@ import type {
   WorkCaseState,
 } from "./case-types";
 import type { ReceiptEnvelope } from "./receipt-envelope";
+import type { WorkRoomStructure } from "./room-structure";
 
 export type WorkRoomMode = "finite" | "standing";
 
@@ -195,6 +196,13 @@ export interface WorkRoomView {
   context: WorkRoomContextView;
   receipts: ReceiptEnvelope[];
   sourceRefs: WorkCaseSourceRef[];
+  /**
+   * The value stream + lifecycle the room's SUBJECT sits in — the structure the
+   * collaboration happens within. Null when the subject has no value-stream/lifecycle
+   * binding (e.g. a platform-development subject not on the customer OVSM). Resolved by
+   * the loader via `resolveWorkRoomStructure` and passed pre-resolved (DB-free build).
+   */
+  structure: WorkRoomStructure | null;
   projection: {
     confidence: WorkCaseProjectionConfidence;
     incompleteBoundary: boolean;
