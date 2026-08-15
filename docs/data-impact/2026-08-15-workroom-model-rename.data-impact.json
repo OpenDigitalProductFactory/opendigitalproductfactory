@@ -1,0 +1,40 @@
+{
+  "version": "1",
+  "accountableOwner": "data-architect",
+  "affectedCopies": [
+    "WorkCapsule physical table (unchanged, reached via @@map)",
+    "WorkCapsuleActivity physical table (unchanged, reached via @@map)",
+    "WorkCase status projection that fuses WorkItem + Workroom + DecisionInteraction + RuntimeVerification",
+    "Build Studio capsule status projection",
+    "Contributor change-lanes read model"
+  ],
+  "migration": {
+    "name": "none-required",
+    "backfill": "No migration and no backfill. Prisma models WorkCapsule and WorkCapsuleActivity are renamed to Workroom and WorkroomActivity, each carrying @@map to its original physical table name, so `prisma migrate diff --from-schema <old> --to-schema <new> --script` emits nothing and exits 0. The 285 live rows are untouched, no column is added, dropped, retyped or rewritten, and rollback is a source-only revert with no data step."
+  },
+  "tests": [
+    "packages/db/scripts/schema-regression-guard.test.ts",
+    "apps/web/lib/work-capsules/work-capsule-store.test.ts",
+    "apps/web/lib/work-capsules/work-capsule-reaper.test.ts",
+    "apps/web/lib/work-management/workspace-case-loader.test.ts",
+    "apps/web/lib/build/capture-build-pr.test.ts",
+    "apps/web/lib/build/customer-status-loader.test.ts",
+    "apps/web/lib/runtime-coordination/runtime-targets.test.ts"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:workroom#model-rename",
+      "prismaModel": "Workroom",
+      "lifecycleDisposition": "Logical rename only. The model keeps @@map(\"WorkCapsule\"), so the physical table, its rows, its columns and its retention posture are identical before and after. The grandfathered stewardship-scope entry is carried across the rename in place rather than re-declared, keeping the gap count unchanged at 474 grandfathered / 116 stewarded across 590 models; no new retention disposition is invented, because the retention engine executes PURGE_POLICIES and a fabricated window on live work records would delete them. Rollback is forward-safe and data-free.",
+      "fields": []
+    },
+    {
+      "kind": "model",
+      "assetId": "data:workroom-activity#model-rename",
+      "prismaModel": "WorkroomActivity",
+      "lifecycleDisposition": "Logical rename only. Keeps @@map(\"WorkCapsuleActivity\"). The immutable activity history is preserved byte-for-byte; no field is renamed in this phase, including the workCapsuleId foreign key, which stays until the field-vocabulary phase (BI-C2C16582).",
+      "fields": []
+    }
+  ]
+}
