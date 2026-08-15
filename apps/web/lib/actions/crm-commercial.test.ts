@@ -40,6 +40,9 @@ vi.mock("@dpf/db", () => ({
     activity: {
       create: vi.fn(),
     },
+    lifecycleEvent: {
+      create: vi.fn(),
+    },
   },
 }));
 
@@ -84,6 +87,8 @@ beforeEach(() => {
   vi.clearAllMocks();
   // Dedup gate candidate fetch: default to "no similar rows".
   vi.mocked(prisma.$queryRaw).mockResolvedValue([]);
+  // Lifecycle ledger write (updateCustomerAccount records a status transition).
+  vi.mocked(prisma.lifecycleEvent.create).mockResolvedValue({ id: "evt-1" } as never);
 });
 
 describe("createQuote commercial lineage", () => {

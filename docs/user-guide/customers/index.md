@@ -59,8 +59,12 @@ The section navigation is permission-aware:
 - **Quotes** (`/customer/quotes`) — quote status, validity, line items, acceptance,
   and the resulting order.
 - **Orders** (`/customer/sales-orders`) — accepted commercial commitments.
-- **Sales Funnel** (`/customer/funnel`) — the last 30 days of Storefront
-  interactions flowing into engagements, opportunities, and won work.
+- **Sales Funnel** (`/customer/funnel`) — the pipeline flowing into engagements,
+  opportunities, and won work. When a storefront is published, the top of the
+  funnel is the last 30 days of storefront interactions; when it is not, the top
+  of the funnel is fed by your **direct and reseller leads** (accounts in the
+  early prospect/qualified lifecycle stages), so a direct- or channel-sourced
+  pipeline is represented without a storefront.
 - **Marketing** (`/customer/marketing`) — acquisition strategy, campaigns,
   approval queues, publishing, and proposed automation. This tab requires the
   marketing capability and is covered in [Marketing](marketing.md).
@@ -167,6 +171,10 @@ Account detail is the relationship history, not just a contact card. It includes
 - customer sites, nested sublocations, and managed configuration items;
 - lifecycle attention, evidence source, renewal/end-of-support dates, and
   archetype-specific charge models;
+- the account's **value-stream position** — where the relationship sits in the
+  operational value stream (Capture → Qualify → Deliver → Retain), shown next to
+  its status. Opening an opportunity moves a prospect to *qualified*, and winning
+  a deal activates the account; you can always override the status from **Edit**;
 - approved billable-time economics where the selected business profile enables
   that workflow.
 
