@@ -20,8 +20,10 @@ vi.mock("@dpf/db", () => ({
   prisma: { wikiPage: { findMany: (...args: unknown[]) => wikiPageFindMany(...args) } },
 }));
 
+const isEmbeddingAvailable = vi.fn(async () => true);
 vi.mock("@/lib/inference/embedding", () => ({
   generateEmbedding: (...args: unknown[]) => generateEmbedding(...args),
+  isEmbeddingAvailable: () => isEmbeddingAvailable(),
 }));
 
 import {
@@ -29,7 +31,10 @@ import {
   searchWikiPages,
   storeWikiPage,
 } from "./embeddings";
-import { reconcilePublishedWikiEmbeddings } from "./embedding-reconciliation";
+import {
+  reconcilePublishedWikiEmbeddings,
+  reconcileWikiEmbeddingsOnBoot,
+} from "./embedding-reconciliation";
 
 const stub = (n: number) => new Array(n).fill(0).map((_, i) => i / n);
 
@@ -594,5 +599,83 @@ describe("searchWikiPages: two-pass overlay-aware retrieval", () => {
     expect(filter.must).toEqual(
       expect.arrayContaining([{ key: "pageKind", match: { value: "stance" } }]),
     );
+  });
+});
+
+// BI-ED117C82 — the reconcile described itself as "wired into portal boot" since
+// BI-D4C1E05E but had no caller outside the maintainer script, so a partially
+// embedded corpus stayed partial. A live install was found with a published org
+// stance carrying no vector on a portal booted long after it was authored.
+describe("wiki embedding boot self-heal (BI-ED117C82)", () => {
+  const page = {
+    id: "wp-1", slug: "stances/how-we-decide", title: "How we decide", body: "body",
+    abstract: null, pageKind: "stance", status: "published", isKernel: false,
+    kernelVersion: null, organizationId: "org-1", kernelPageId: null,
+    principleTier: null, principleAppliesTo: [], principleRingScope: [],
+    principleDimensionVector: null, principlePublic: null,
+  };
+
+  beforeEach(() => {
+    isEmbeddingAvailable.mockReset().mockResolvedValue(true);
+  });
+
+  it("reports a provider outage instead of a clean pass", async () => {
+    scrollPoints.mockResolvedValue([]);
+    wikiPageFindMany.mockResolvedValue([page]);
+    isEmbeddingAvailable.mockResolvedValue(false);
+
+    const result = await reconcilePublishedWikiEmbeddings();
+
+    // The regression: this used to return embedded:0 / failed:[] — identical to
+    // "nothing needed doing" — so a total no-op looked like a healthy corpus.
+    expect(result.providerUnavailable).toBe(true);
+    expect(result.missing).toBe(1);
+    expect(result.failed).toEqual(["stances/how-we-decide"]);
+    expect(upsertVectors).not.toHaveBeenCalled();
+  });
+
+  it("does not claim an outage when nothing is missing", async () => {
+    scrollPoints.mockResolvedValue([{ payload: { entityId: "wp-1" } }]);
+    wikiPageFindMany.mockResolvedValue([page]);
+    isEmbeddingAvailable.mockResolvedValue(false);
+
+    const result = await reconcilePublishedWikiEmbeddings();
+    expect(result.providerUnavailable).toBeUndefined();
+    expect(result.missing).toBe(0);
+  });
+
+  it("warns with a coverage NUMBER and names the outage on the boot path", async () => {
+    scrollPoints.mockResolvedValue([]);
+    wikiPageFindMany.mockResolvedValue([page]);
+    isEmbeddingAvailable.mockResolvedValue(false);
+    const logger = { log: vi.fn(), warn: vi.fn(), error: vi.fn() };
+
+    await reconcileWikiEmbeddingsOnBoot(logger);
+
+    expect(logger.warn).toHaveBeenCalledTimes(1);
+    const message = logger.warn.mock.calls[0]![0] as string;
+    expect(message).toContain("0/1");
+    expect(message).toContain("not a clean pass");
+    expect(logger.log).not.toHaveBeenCalled();
+  });
+
+  it("logs coverage on a healthy run", async () => {
+    scrollPoints.mockResolvedValue([]);
+    wikiPageFindMany.mockResolvedValue([page]);
+    generateEmbedding.mockResolvedValue(stub(768));
+    const logger = { log: vi.fn(), warn: vi.fn(), error: vi.fn() };
+
+    await reconcileWikiEmbeddingsOnBoot(logger);
+
+    expect(logger.warn).not.toHaveBeenCalled();
+    expect(logger.log.mock.calls[0]![0]).toContain("1/1");
+  });
+
+  it("never throws out of the boot hook", async () => {
+    wikiPageFindMany.mockRejectedValue(new Error("db down"));
+    const logger = { log: vi.fn(), warn: vi.fn(), error: vi.fn() };
+
+    await expect(reconcileWikiEmbeddingsOnBoot(logger)).resolves.toBeNull();
+    expect(logger.error).toHaveBeenCalled();
   });
 });

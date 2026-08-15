@@ -41,6 +41,14 @@ export type DecisionGateKey = typeof DECISION_GATE_KEYS[number];
 
 export const DECISION_DOMAIN_CLASSES = ["plan-readiness", "architecture-tradeoff", "risk-assessment", "professional-practice", "kernel-consult"] as const;
 export type DecisionDomainClass = typeof DECISION_DOMAIN_CLASSES[number];
+
+/**
+ * Topic tag on `PerspectiveMaterial.domains` marking material that governs every
+ * business domain class rather than one bucket (BI-F5F2869D). Lives here, on the
+ * shared leaf, so `material.ts` (which reads it) and `stance-promotion.ts`
+ * (which writes it) need no import between them.
+ */
+export const CROSS_DOMAIN_MATERIAL_TAG = "all-business-domains";
 export const PLAN_READINESS_DOMAIN_CLASS = "plan-readiness" satisfies DecisionDomainClass;
 
 export const PERSPECTIVE_MATERIAL_FRESHNESS = ["current", "stale", "superseded", "contradicted"] as const;
