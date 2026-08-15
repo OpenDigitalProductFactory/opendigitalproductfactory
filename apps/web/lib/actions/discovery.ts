@@ -1,5 +1,7 @@
 "use server";
 
+import { randomUUID } from "node:crypto";
+
 import {
   executeBootstrapDiscovery,
   loadDiscoveryAttributionInputs,
@@ -463,7 +465,7 @@ export async function rerunDiscoveryConnection(connectionId: string): Promise<Re
     prisma as never,
     normalized,
     {
-      runKey: conn.connectionKey,
+      runKey: `${conn.connectionKey}:${randomUUID()}`,
       sourceSlug: conn.connectionKey,
       trigger: "manual_connection",
     },
