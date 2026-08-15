@@ -234,13 +234,20 @@ export function validateOperatingIntent(raw: unknown): IntentValidationResult {
     if (!isInstallationIntentConfirmationStatus(conf.status)) {
       errors.push(`Invalid confirmation.status: ${String(conf.status)}`);
     }
-    if (conf.confirmedAt !== undefined) {
+    if (conf.status === "confirmed") {
       if (typeof conf.confirmedAt !== "string" || Number.isNaN(Date.parse(conf.confirmedAt))) {
+        errors.push("confirmation.confirmedAt is required when status is 'confirmed'");
+      }
+      if (typeof conf.confirmedByPrincipalId !== "string" || conf.confirmedByPrincipalId.trim().length === 0) {
+        errors.push("confirmation.confirmedByPrincipalId is required when status is 'confirmed'");
+      }
+    } else {
+      if (conf.confirmedAt !== undefined && (typeof conf.confirmedAt !== "string" || Number.isNaN(Date.parse(conf.confirmedAt)))) {
         errors.push("confirmation.confirmedAt must be a valid ISO date string");
       }
-    }
-    if (conf.confirmedByPrincipalId !== undefined && typeof conf.confirmedByPrincipalId !== "string") {
-      errors.push("confirmation.confirmedByPrincipalId must be a string");
+      if (conf.confirmedByPrincipalId !== undefined && typeof conf.confirmedByPrincipalId !== "string") {
+        errors.push("confirmation.confirmedByPrincipalId must be a string");
+      }
     }
   }
 
