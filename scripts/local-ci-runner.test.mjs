@@ -187,21 +187,29 @@ test("local CI shadows pnpm 11 with the repository-pinned version", () => {
   mkdirSync(hostBin, { recursive: true });
   writeFileSync(hostPnpm, `#!/bin/sh\nif [ "$1" = "--version" ]; then echo 11.19.0; exit 0; fi\nif [ "$1" = "with" ] && [ "$2" = "10.33.2" ]; then shift 2; if [ "$1" = "--version" ]; then echo 10.33.2; exit 0; fi; fi\nexit 9\n`);
   chmodSync(hostPnpm, 0o755);
+  let probe = 0;
 
   const prepared = preparePinnedPnpmEnvironment({
     packageManager: "pnpm@10.33.2+sha512.fixture",
     toolchainDir,
     env: { PATH: `${hostBin}${delimiter}/usr/bin:/bin` },
     platform: "darwin",
+    spawnSyncImpl: () => ({
+      status: 0,
+      stdout: `${probe++ === 0 ? "11.19.0" : "10.33.2"}\n`,
+      stderr: "",
+    }),
   });
 
   assert.equal(prepared.mode, "pinned-shim");
   assert.equal(prepared.expectedVersion, "10.33.2");
   assert.equal(prepared.actualVersion, "11.19.0");
   assert.equal(prepared.env.PATH.split(delimiter)[0], toolchainDir);
-  const pinned = spawnSync("pnpm", ["--version"], { encoding: "utf8", env: prepared.env });
-  assert.equal(pinned.status, 0, pinned.stderr);
-  assert.equal(pinned.stdout.trim(), "10.33.2");
+  if (process.platform !== "win32") {
+    const pinned = spawnSync("pnpm", ["--version"], { encoding: "utf8", env: prepared.env });
+    assert.equal(pinned.status, 0, pinned.stderr);
+    assert.equal(pinned.stdout.trim(), "10.33.2");
+  }
   assert.match(readFileSync(join(toolchainDir, "pnpm"), "utf8"), /with.*10\.33\.2/);
 });
 
@@ -219,8 +227,40 @@ test("local CI keeps an already-matching pnpm without a shim", () => {
     toolchainDir: join(fixture, "toolchain"),
     env: { PATH: originalPath },
     platform: "darwin",
+    spawnSyncImpl: () => ({ status: 0, stdout: "10.33.2\n", stderr: "" }),
   });
 
   assert.equal(prepared.mode, "host-match");
   assert.equal(prepared.env.PATH, originalPath);
+});
+
+test("local CI resolves Windows Path casing and safely inspects cmd shims", () => {
+  const fixture = mkdtempSync(join(tmpdir(), "dpf local-ci pnpm-win-"));
+  const hostBin = join(fixture, "host bin");
+  const hostPnpm = join(hostBin, "pnpm.CMD");
+  mkdirSync(hostBin, { recursive: true });
+  writeFileSync(hostPnpm, "@echo 10.33.2\r\n");
+  const calls = [];
+
+  const prepared = preparePinnedPnpmEnvironment({
+    packageManager: "pnpm@10.33.2",
+    toolchainDir: join(fixture, "toolchain"),
+    env: {
+      Path: hostBin,
+      PATHEXT: ".CMD",
+      ComSpec: "C:\\Windows\\System32\\cmd.exe",
+    },
+    platform: "win32",
+    spawnSyncImpl(command, args, options) {
+      calls.push({ command, args, options });
+      return { status: 0, stdout: "10.33.2\r\n", stderr: "" };
+    },
+  });
+
+  assert.equal(prepared.mode, "host-match");
+  assert.equal(prepared.hostPnpm, hostPnpm);
+  assert.equal(calls[0].command, "C:\\Windows\\System32\\cmd.exe");
+  assert.deepEqual(calls[0].args.slice(0, 2), ["/d", "/c"]);
+  assert.match(calls[0].args[2], /^call ".*pnpm\.CMD" --version$/);
+  assert.equal(calls[0].options.windowsVerbatimArguments, true);
 });

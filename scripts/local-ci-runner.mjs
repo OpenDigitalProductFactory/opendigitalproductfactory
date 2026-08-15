@@ -28,6 +28,7 @@ import {
   resolveBaseFreshnessPolicy,
 } from "./lib/local-ci-base-freshness.mjs";
 import { ensureFullHistory } from "./lib/git-shallow-preflight.mjs";
+import { resolveHostCommandInvocation } from "./lib/host-command-invocation.mjs";
 import { parseRepositoryPnpmVersion, resolvePinnedPnpmInvocation } from "./lib/pinned-pnpm.mjs";
 
 const THIS_FILE = fileURLToPath(import.meta.url);
@@ -62,10 +63,12 @@ function redactUrl(url) {
 }
 
 function executableOnPath(command, { env = process.env, platform = process.platform } = {}) {
+  const pathKey = Object.keys(env).find((key) => key.toLowerCase() === "path");
+  const pathValue = pathKey ? env[pathKey] : "";
   const extensions = platform === "win32"
     ? (env.PATHEXT || ".COM;.EXE;.BAT;.CMD").split(";")
     : [""];
-  for (const entry of (env.PATH || "").split(delimiter).filter(Boolean)) {
+  for (const entry of (pathValue || "").split(delimiter).filter(Boolean)) {
     for (const extension of extensions) {
       const candidate = join(entry, `${command}${extension}`);
       try {
@@ -94,8 +97,15 @@ export function preparePinnedPnpmEnvironment({
   if (!expectedVersion) throw new Error(`local CI requires packageManager=pnpm@<version>; received ${packageManager || "missing"}`);
   const hostPnpm = executableOnPath("pnpm", { env, platform });
   if (!hostPnpm) throw new Error("local CI could not resolve pnpm on the admitted PATH");
-  const runOptions = { encoding: "utf8", env, shell: platform === "win32" };
-  const observed = spawnSyncImpl(hostPnpm, ["--version"], runOptions);
+  const runHostCommand = (command, args) => {
+    const invocation = resolveHostCommandInvocation(command, args, { platform, env });
+    return spawnSyncImpl(invocation.command, invocation.args, {
+      encoding: "utf8",
+      env,
+      windowsVerbatimArguments: platform === "win32",
+    });
+  };
+  const observed = runHostCommand(hostPnpm, ["--version"]);
   if (observed.status !== 0) {
     throw new Error(`local CI could not inspect host pnpm: ${(observed.stderr || observed.stdout || "unknown error").trim()}`);
   }
@@ -106,7 +116,7 @@ export function preparePinnedPnpmEnvironment({
 
   const pinnedInvocation = resolvePinnedPnpmInvocation(hostPnpm, actualVersion, expectedVersion, []);
   const pinnedPrefix = pinnedInvocation.args;
-  const bootstrap = spawnSyncImpl(pinnedInvocation.command, [...pinnedPrefix, "--version"], runOptions);
+  const bootstrap = runHostCommand(pinnedInvocation.command, [...pinnedPrefix, "--version"]);
   if (bootstrap.status !== 0 || bootstrap.stdout.trim() !== expectedVersion) {
     throw new Error(
       `local CI could not provision repository-pinned pnpm ${expectedVersion}: ` +
@@ -128,6 +138,7 @@ export function preparePinnedPnpmEnvironment({
     );
     chmodSync(shimPath, 0o755);
   }
+  const pathKey = Object.keys(env).find((key) => key.toLowerCase() === "path") || "PATH";
   return {
     mode: "pinned-shim",
     expectedVersion,
@@ -135,7 +146,7 @@ export function preparePinnedPnpmEnvironment({
     hostPnpm,
     env: {
       ...env,
-      PATH: `${toolchainDir}${delimiter}${env.PATH || ""}`,
+      [pathKey]: `${toolchainDir}${delimiter}${env[pathKey] || ""}`,
       DPF_LOCAL_CI_PINNED_PNPM_VERSION: expectedVersion,
     },
   };

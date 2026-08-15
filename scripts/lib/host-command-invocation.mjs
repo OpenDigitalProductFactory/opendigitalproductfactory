@@ -17,16 +17,17 @@ export function resolveHostCommandInvocation(
   args,
   { platform = process.platform, env = process.env } = {},
 ) {
-  if (platform !== "win32" || command !== "pnpm") {
+  const windowsCommandShim = command === "pnpm" || /\.cmd$/i.test(command);
+  if (platform !== "win32" || !windowsCommandShim) {
     return { command, args };
   }
+  const commandLine = [command, ...args].map(quoteWindowsCommandToken).join(" ");
+  const unresolvedPnpm = command === "pnpm";
+  const cmdCommand = unresolvedPnpm ? commandLine : `call ${commandLine}`;
   return {
     command: env.ComSpec || env.COMSPEC || "cmd.exe",
-    args: [
-      "/d",
-      "/s",
-      "/c",
-      [command, ...args].map(quoteWindowsCommandToken).join(" "),
-    ],
+    args: unresolvedPnpm
+      ? ["/d", "/s", "/c", cmdCommand]
+      : ["/d", "/c", cmdCommand],
   };
 }
