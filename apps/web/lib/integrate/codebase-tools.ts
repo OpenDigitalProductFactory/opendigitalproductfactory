@@ -26,7 +26,13 @@ import {
   getCwd,
 } from "@/lib/shared/lazy-node";
 
-function getProjectRoot(): string {
+/**
+ * Where this install's source checkout lives, if it has one. Exported so any
+ * surface that needs to READ cited source (e.g. decision evidence
+ * re-verification) resolves it here rather than re-deriving the path — one home
+ * for "where is the source", alongside `isDevInstance` and `isPathAllowedSync`.
+ */
+export function getProjectRoot(): string {
   const path = getPath();
   if (process.env.PROJECT_ROOT) return path.resolve(process.env.PROJECT_ROOT);
   return path.resolve(getCwd(), "..", "..");

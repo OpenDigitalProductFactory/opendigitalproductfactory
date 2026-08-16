@@ -47,6 +47,16 @@ describe("Hive Scout seed helper", () => {
     expect(prompt).toContain("external catalog");
   });
 
+  it("directs the market-aperture pass toward design challenges, not digests (BI-B8E4317D)", () => {
+    const prompt = buildHiveScoutScheduledPrompt();
+    expect(prompt).toContain("marketSources");
+    expect(prompt).toContain("make effortless");
+    expect(prompt).toContain("cite its source URL");
+    expect(prompt).toContain("at most two");
+    expect(prompt).toContain("never auto-promote");
+    expect(prompt).toContain("never copy code");
+  });
+
   it("registers external-catalog-scout as a narrow specialist in the agent registry", () => {
     const registryPath = join(__dirname, "..", "data", "agent_registry.json");
     const raw = JSON.parse(readFileSync(registryPath, "utf8")) as {

@@ -173,10 +173,18 @@ coworker still reports as unsummonable rather than as a clearance refusal —
 otherwise the generic refusal would imply a restricted matter that does not
 exist.
 
-Still open, tracked on BI-154DAA7E: `authorizeWorkRoomAccess` returns the
-requested level for a superuser *before* any clearance check, so no
-route-fronted coworker may hold superuser; and the conversational channel
-remains unpoliced for peers that are legitimately admitted.
+The superuser short-circuit is now guarded (BI-154DAA7E): the agent access
+input cannot express `isSuperuser` at all — the field was removed from
+`authorizeAgentRoomAccess`, so an AI principal claiming it is a type error —
+and `authorizeWorkroomAccess` refuses the short-circuit for
+`principalKind: "agent"` even if a future caller sets the flag another way. The
+short-circuit remains a human affordance: the installation owner on their own
+install.
+
+Still open, tracked on BI-154DAA7E: the conversational channel remains
+unpoliced for peers that are legitimately admitted — clearance is a *level*,
+while some confidentiality is *relational* (whose reports, whose deal), which a
+level-based clamp cannot express.
 
 ## 4b. Fresh-install behaviour and how to diagnose a silent refusal
 
@@ -243,6 +251,52 @@ normalization, rather than restating a default beside it.
 The general rule: when a default already exists elsewhere, confirm it answers the
 *same question* before copying it. Two defaults that look alike can encode
 opposite assumptions about what an absent value means.
+
+## 4c. The standing coordinator (BI-80ADD3A8)
+
+Founder-directed (2026-08-15, reaffirmed 2026-08-16): **the COO coordinates;
+specialists do the work.** This section records the shape and the two
+mechanisms that make it real, bounded by the ratified persona contract
+(2026-07-18, BI-7D29937E): the COO is a *role and a router* — its coordination
+is visible, but the byline on any recommendation stays with the authenticated
+`(human × client × session)` triple. Never "the COO decided."
+
+**The structural blocker.** `isHandoffPermitted` honours only an agent's direct
+`delegatesTo`/`escalatesTo`, and the registry is a management *tree*: 71
+agents, only 7 of which escalate directly to the COO. A finance specialist
+handing a cross-cutting question to the coordinator would be denied by its own
+org chart. Editing 71 seed rows would flatten the management chain and not
+survive re-seed (registry values are seed snapshots).
+
+**Mechanism 1 — standing-coordinator authority.**
+`STANDING_COORDINATOR_IDS` (`coordinator-authority.ts`) names the ONE
+coordinator role; `isHandoffPermitted` accepts it and always permits a target
+in that set. Deliberate asymmetry: the coordinator is always a permitted
+**target** — any coworker may hand a thread *up* to coordination — never an
+implicit source. The COO delegating outward still uses its declared
+`delegatesTo`; every hop still records a `DelegationChain` row; and the convene
+clearance clamp (§4a) is **not** bypassed.
+
+**Mechanism 2 — the coordinator contract block.** `COORDINATOR_BLOCK`, a
+DB-overridable `platform-identity/coordinator-contract` prompt block beside the
+ladder, telling every coworker the same two facts: specialists own the work on
+their surface and hand cross-cutting/contested/unowned questions to the COO;
+the COO routes, consults, and convenes, does not re-do specialist work, and
+holds a routed thread until someone owns it.
+
+**Interaction with the ladder.** The coordinator is *where rung 2/3 points when
+rung 1 has no decisive answer* — `find_coworker` finding nothing, several
+plausible owners, or a question spanning areas. It does not replace direct
+peer-to-peer consultation when the owner is obvious.
+
+**Open, deliberately.** The COO's own classification is `confidential`
+(`coo.prompt.md`), so on a fresh install an employee holding only `["public"]`
+cannot have the coordinator convened into their thread — the §4b clearance
+matrix applies to the COO like any peer. Whether the coordinator role should be
+classified lower, or default employee clearance seeded higher, is an operator
+policy decision, not one this contract makes. Content-aware route binding
+(BI-36408DB6) also lands here: if the COO is the router, intent-mismatch
+detection belongs to the coordinator path rather than to each bound specialist.
 
 ## 5. The triggering incident is not a ladder bug
 

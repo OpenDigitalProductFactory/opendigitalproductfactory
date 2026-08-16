@@ -64,6 +64,7 @@ const definitions: ToolDefinition[] = [
     requiredCapability: "view_operations" as const,
     executionMode: "immediate" as const,
     sideEffect: true,
+    consequence: "irreversible",
     buildPhases: ["ship"],
   },
   {

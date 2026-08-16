@@ -28,7 +28,6 @@ export interface AuthorizeAgentRoomAccessInput {
   actionPrincipalRefs: readonly string[];
   discoverablePrincipalRefs?: readonly string[];
   sensitivityCeiling: string | null;
-  isSuperuser?: boolean;
 }
 
 /**
@@ -47,7 +46,12 @@ export function authorizeAgentRoomAccess(
     discoverablePrincipalRefs: input.discoverablePrincipalRefs ?? [],
     sensitivityCeiling: input.sensitivityCeiling,
     sensitivityClearance: input.agentSensitivityClearance,
-    isSuperuser: input.isSuperuser ?? false,
+    // BI-154DAA7E: an AI principal can NEVER be superuser. The field is not
+    // accepted on this input at all — expressing it is a type error — and the
+    // core decision refuses the short-circuit for principalKind "agent" even if
+    // a future caller finds another way to set the flag.
+    isSuperuser: false,
+    principalKind: "agent",
   });
 }
 

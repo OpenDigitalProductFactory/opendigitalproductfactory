@@ -24,12 +24,34 @@ export function attentionAuthorForAgent(
   };
 }
 
+/**
+ * Plain-language rendering of the trust ladder (BI-A013BBA9). The ratified
+ * contract requires attribution to ride the trust ladder, and the audience
+ * contract (operating principle 5) forbids surfacing internal identifiers — so
+ * the ladder's own level names ("shadow"/"propose"/"supervised"/"autopilot",
+ * or any L0–L3 shorthand) never reach the byline. Each phrase states what the
+ * level MEANS for the human reading the card: who acts, and on whose say-so.
+ *
+ * Closed map on purpose: an unrecognized stored value renders as NOTHING rather
+ * than echoing an internal string — absence of a trust chip is honest; a leaked
+ * enum value is not.
+ */
+const TRUST_LEVEL_BYLINE: Record<string, string> = {
+  shadow: "observing only",
+  propose: "needs your approval",
+  supervised: "acts with your sign-off",
+  autopilot: "acts independently",
+};
+
 /** The honest byline for an agent-authored item. AI-labeled first, role as a thin
- *  presentation label, AI client appended when known. Never implies a human
- *  decided — e.g. "AI · your COO · Claude", never "your COO decided". */
+ *  presentation label, AI client appended when known, then the trust posture in
+ *  plain language. Never implies a human decided — e.g.
+ *  "AI · your COO · Claude · needs your approval", never "your COO decided". */
 export function formatAttentionByline(author: AttentionAuthor | undefined | null): string {
   if (!author) return "AI coworker";
   const parts = [`AI · your ${author.roleLabel}`];
   if (author.aiClient) parts.push(author.aiClient);
+  const trust = author.trustLevel ? TRUST_LEVEL_BYLINE[author.trustLevel] : undefined;
+  if (trust) parts.push(trust);
   return parts.join(" · ");
 }

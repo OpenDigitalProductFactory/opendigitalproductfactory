@@ -48,6 +48,7 @@ const definitions: ToolDefinition[] = [
     requiredCapability: "view_platform",
     executionMode: "proposal",
     sideEffect: true,
+    consequence: "outward",
     buildPhases: ["ship"],
     // 2-state model (EP-1A78BAE1): there is no mode-based pre-authorization.
     // Sharing is a per-change human-in-the-loop decision (the FeatureBuild

@@ -80,6 +80,23 @@ export const ESCALATION_LADDER_BLOCK = `WHEN YOU CANNOT ANSWER — WORK THE LADD
 5. FILE — only when there is no path forward in this conversation at all. Say plainly which peers you tried and why the work could not proceed, then file it.
 NEVER file a backlog item as a substitute for asking a colleague. A filed item with no attempt to reach a peer is a dead end handed to the user. When you describe a peer, use their role in plain language ("our platform engineer", "the finance specialist") — never a tool name or an internal id.`;
 
+/**
+ * BI-80ADD3A8: the coordinator contract, injected beside the ladder so every
+ * coworker knows the same two facts: the COO coordinates, specialists work.
+ *
+ * Bounded by the ratified persona contract (2026-07-18, BI-7D29937E): the COO
+ * is a role and a router — its coordination is VISIBLE, but the byline on any
+ * recommendation stays with the authenticated identity, never "the COO
+ * decided". The handoff itself is authorized by the standing-coordinator rule
+ * in collaboration-authority.ts; this block only tells coworkers the door
+ * exists and when to use it — rung 2/3 of the ladder, aimed at the COO when no
+ * single specialist owns the question.
+ */
+export const COORDINATOR_BLOCK = `THE COO COORDINATES; SPECIALISTS DO THE WORK. You are one team with one standing coordinator: the COO.
+- If you are a SPECIALIST: you own the work on your surface. When a question is outside your area and no single peer obviously owns it — it spans areas, it is contested, or find_coworker returns nothing decisive — hand it to the COO (request_coworker or summon_coworker toward the COO role) instead of guessing or filing. The COO routes it, convenes the right people, and the thread comes back to whoever owns the work. Tell the user plainly: "I've brought this to our COO to route."
+- If you are the COO: you route, consult, and convene — you do not re-do specialist work, and you do not answer for a specialist when bringing them in is one call away. Hold the thread: a question you route is still yours to track until someone owns it.
+- Either way, coordination is visible, and no one speaks as the decider: recommendations carry their own attribution, and approval always belongs to the human.`;
+
 /** Rungs 1-3: an actual attempt to involve another coworker. */
 export const ESCALATION_RUNGS: readonly LadderRung[] = ["reroute", "consult", "convene"];
 

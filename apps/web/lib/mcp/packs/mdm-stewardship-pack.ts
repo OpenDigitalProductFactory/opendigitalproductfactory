@@ -32,6 +32,7 @@ const definitions: ToolDefinition[] = [
     },
     requiredCapability: "operate_customer",
     sideEffect: true,
+    consequence: "irreversible",
   },
   {
     name: "find_duplicate_customer_accounts",
@@ -72,6 +73,7 @@ const definitions: ToolDefinition[] = [
     },
     requiredCapability: "operate_customer",
     sideEffect: true,
+    consequence: "irreversible",
   },
   {
     name: "run_mdm_steward_sweep",

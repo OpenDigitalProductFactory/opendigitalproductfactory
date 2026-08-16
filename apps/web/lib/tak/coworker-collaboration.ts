@@ -22,6 +22,7 @@ import { agentEventBus } from "@/lib/agent-event-bus";
 import { resolveAgent } from "@/lib/tak/agent-resolution";
 import { spawnWorkThread } from "@/lib/actions/agent-coworker";
 import { isHandoffPermitted } from "@/lib/tak/collaboration-authority";
+import { STANDING_COORDINATOR_IDS } from "@/lib/tak/coordinator-authority";
 import { coerceDataSensitivity } from "@dpf/db/principal-sensitivity";
 import {
   decideConveneClearance,
@@ -99,6 +100,8 @@ async function enforceHandoffAuthority(
     delegatesTo: caller.delegatesTo ?? [],
     escalatesTo: caller.escalatesTo ?? null,
     targetIds,
+    // BI-80ADD3A8: the COO is a standing escalation target from every surface.
+    standingCoordinatorIds: STANDING_COORDINATOR_IDS,
   });
   if (!permitted) {
     await recordDelegationHop({

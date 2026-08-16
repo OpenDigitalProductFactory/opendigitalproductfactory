@@ -31,6 +31,45 @@ test("promoter COPY inputs are derived from its Dockerfile", async () => {
   assert.equal(new Set(inputs).size, inputs.length);
 });
 
+// CodeQL js/redos alert #372 (high): the COPY matcher used `[^ ]+` for flag
+// bodies, which excludes only a literal SPACE — so it could also consume tabs,
+// exactly like the adjacent `\s+`. A single `(?:--[^ ]+\s+)` iteration could
+// therefore match what two iterations match, the classic ambiguity behind
+// exponential backtracking. The fix makes the two classes disjoint (`\S+` vs
+// horizontal whitespace) so no input can be split between them.
+//
+// Honesty note: no input was found that actually detonates the old pattern in
+// V8 (crafted "--\t"/"!\t--" runs up to n=60 all returned in <1ms), so this is
+// the removal of a LATENT ambiguity, not a patch for a demonstrated hang. The
+// timing assertion below is therefore a cheap canary against a future edit
+// reintroducing catastrophic backtracking — it is NOT proof the old code was
+// exploitable, and it passed before the fix too. The tests that carry real
+// weight here are the behavioural ones: the risk in this change is breaking
+// promoter COPY parsing, not the regex being slow.
+test("promoterCopyInputs stays linear on a crafted COPY line (canary)", () => {
+  const crafted = `COPY ${"--\t".repeat(60)}`;
+  const started = process.hrtime.bigint();
+  promoterCopyInputs(crafted);
+  const elapsedMs = Number(process.hrtime.bigint() - started) / 1e6;
+  assert.ok(elapsedMs < 1000, `regex took ${elapsedMs.toFixed(0)}ms — catastrophic backtracking (js/redos #372)`);
+});
+
+test("promoterCopyInputs still parses flagged and tab-separated COPY forms", () => {
+  assert.deepEqual(promoterCopyInputs("COPY scripts/a.sh /app/a.sh"), ["scripts/a.sh"]);
+  assert.deepEqual(
+    promoterCopyInputs("COPY --chown=node:node --chmod=755 scripts/b.sh /app/b.sh"),
+    ["scripts/b.sh"],
+    "flag prefixes must still be skipped rather than captured",
+  );
+  assert.deepEqual(promoterCopyInputs("COPY\tscripts/c.sh\t/app/c.sh"), ["scripts/c.sh"], "tab separators stay supported");
+  assert.deepEqual(promoterCopyInputs("COPY --from=build /out /app"), [], "--from stages are still excluded");
+  assert.deepEqual(
+    promoterCopyInputs("COPY a.sh /app/a.sh\nRUN echo hi\nCOPY b.sh /app/b.sh"),
+    ["a.sh", "b.sh"],
+    "matching must stay line-anchored",
+  );
+});
+
 test("compose wires the resolved host state into portal and promoter", async () => {
   const compose = await readFile(resolve(root, "docker-compose.yml"), "utf8");
   assert.deepEqual(assertHostStateWiring(compose), []);

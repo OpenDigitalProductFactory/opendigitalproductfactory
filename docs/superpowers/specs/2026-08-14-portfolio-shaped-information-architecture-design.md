@@ -65,6 +65,17 @@ Bring `/employee`, `/platform/ai`, and `/coworker-decisions` under one **Workfor
 
 The analysis found the UX coworker is a page-attached copilot with **no navigation capability**. A portfolio-shaped rail and a navigating coworker are complementary: the rail makes the structure legible for humans; the coworker makes it *traversable by intent* ("pay this supplier" → routes + acts). This spec covers the rail; the coworker capability is EP-UX-SYSTEM / coworker-epic work and is referenced, not built here.
 
+### 4.5 Connections cockpit — the Foundation instance (augmentation for external dependencies)
+
+Operator finding (2026-08-16): external-dependency configuration is the worst-case of the six-section problem. Setting or seeing a connection (an API key, a provider credential, an MCP server, a discovery collector) is spread across **8 top-level surfaces in 4 unrelated nav sections** (`/platform/tools/{built-ins,services,catalog,integrations,discovery}`, `/platform/ai/providers`, `/admin/settings`, `/finance/spend`) plus 13 per-connector sub-pages — and the same `PlatformKeysPanel` is duplicated in two of them with divergent hard-coded key lists. Cost/billing visibility compounds it: a mature AI-only spend stack exists (`TokenUsage.costUsd`, `AiProviderFinanceProfile`, `/finance/spend/ai`), while Brave, YouTube, and every `IntegrationCredential`/`McpServer`/`DiscoveryConnection` carry only a `configured` flag — no usage, no cost, no threshold. No unified inventory exists (the SBOM is code deps, not services).
+
+This is a **Foundation** concern (the `foundational` section already absorbs Platform/Tools/Admin), so it is the sharpest concrete case for this spec's reconciliation — and it augments the design in two ways the rail-only proposal did not cover:
+
+- **A single Connections cockpit** in Foundation over a **unified external-dependency registry** (unions PlatformConfig keys, `ModelProvider`, `IntegrationCredential`, `McpServer`, `DiscoveryConnection`), with **uniform cost/billing on every dependency** — generalizing the existing AI-cost pattern (`AiProviderFinanceProfile`) to non-AI deps, plus per-dependency usage + free-tier/budget threshold alerts. The 8 legacy surfaces become views/deep-links onto the one registry (the Phase-2 de-dupe pass, made concrete). This is the *cost* dimension the rail proposal is silent on.
+- **In-dialog provisioning as the first concrete instance of §4.4.** Rather than send the operator to a surface, the coworker detects a missing connection mid-task and requests + provisions it in the conversation (tell-don't-act; extends `agent-external-access-permission.ts`), so the surface is the fallback, not the default. This is exactly the "traversable by intent → routes + acts" capability §4.4 references — the Connections cockpit is where it first ships.
+
+Tracked as **BI-2A0180A9** under this epic (EP-8DC217EB). It honors §3/§6 (no parallel nav model; the cockpit is a Foundation surface over the existing single nav source, not a new registry).
+
 ## 5. Research & benchmarking
 
 How comparable business platforms bind a domain model to primary navigation:
@@ -91,6 +102,7 @@ How comparable business platforms bind a domain model to primary navigation:
 | 1 | **Workforce unification slice** — regroup People + AI Workforce + Coworker Decisions under one Workforce section (behind nav-mode preview) | M |
 | 2 | Label & de-dupe pass (folds in the quick wins: "Portal"→"Storefront Setup", drop `/platform/ai` vs `/overview` duplicate, "AI Coworkers"→"Agent Identities", rail-label↔H1 alignment) | S |
 | 3 | Reconcile remaining sections to the portfolio spine; make it the default after live-install validation | L |
+| 3b | **Connections cockpit (§4.5)** — unified external-dependency registry + one Foundation surface + uniform cost/billing + in-dialog provisioning (BI-2A0180A9); first concrete instance of the §4.4 capability | L |
 | 4 | *(referenced, separate epic)* coworker navigate-and-act capability | L |
 
 ### 7.1 Open question on the phase-2 label pass *(raised 2026-08-15, unresolved)*

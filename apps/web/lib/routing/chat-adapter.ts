@@ -467,6 +467,8 @@ export const chatAdapter: ExecutionAdapterHandler = {
     // this to avoid returning a max_tokens-truncated fragment as a final answer
     // (BI-1D144CC1). Each branch below maps its provider-specific value.
     let truncated = false;
+    /** Separate thinking channel, when the provider emits one (BI-1E77BEE3). */
+    let reasoning: string | undefined;
 
     if (isAnthropic(providerId)) {
       // Anthropic response
@@ -542,11 +544,22 @@ export const chatAdapter: ExecutionAdapterHandler = {
         message?: {
           content?: string;
           reasoning?: string;
+          /** llama.cpp / Docker Model Runner name for the separate thinking channel. */
+          reasoning_content?: string;
           tool_calls?: Array<{ id?: string; function?: { name?: string; arguments?: string } }>;
         };
       }>)?.[0];
       const msg = choice?.message;
-      text = msg?.content || msg?.reasoning || "";
+
+      // Capture reasoning as its OWN channel (BI-1E77BEE3). Providers disagree on
+      // the field name: llama.cpp / Docker Model Runner emit `reasoning_content`,
+      // other OpenAI-compatible providers emit `reasoning`.
+      reasoning = msg?.reasoning_content || msg?.reasoning || undefined;
+
+      // The answer is `content`. Falling back to reasoning is a LAST resort for a
+      // provider that returns only a thinking channel — without it such a turn
+      // renders blank. When content exists, reasoning must never displace it.
+      text = msg?.content || reasoning || "";
       truncated = choice?.finish_reason === "length";
 
       if (msg?.tool_calls && msg.tool_calls.length > 0) {
@@ -590,6 +603,9 @@ export const chatAdapter: ExecutionAdapterHandler = {
     return {
       text,
       toolCalls,
+      // Only present when the provider actually offered a separate channel;
+      // consumers read undefined as "not offered", not "the model had none".
+      ...(reasoning ? { reasoning } : {}),
       usage: { inputTokens, outputTokens, cacheCreationInputTokens, cacheReadInputTokens },
       inferenceMs,
       truncated,

@@ -276,6 +276,12 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   // reads decision-perspective material, never a work capsule.
   evaluate_profession_decision: ["registry_read"],
 
+  // Independent re-verification of a recorded decision's cited evidence
+  // (BI-8192557E phase 2b). Same `registry_read` tier as its siblings: auditing
+  // the evidence behind a decision must not need a higher grant than making the
+  // decision did, or the check is less reachable than the thing it checks.
+  reverify_decision_evidence: ["registry_read"],
+
   // Two more doors sealed the same way as evaluate_profession_decision, found
   // by the registry-wide sweep the BI-88B77204 fix added. Both packs already
   // declared the grant they intended; only the gating entry was missing, so

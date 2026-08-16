@@ -45,8 +45,20 @@ export async function auditLifecycleSurfaces(root) {
   return { violations, stale, remediationCount: [...remediationHits.values()].reduce((a, b) => a + b, 0) };
 }
 
+// CodeQL js/redos #372: `[^ ]+` excludes only a literal SPACE, so it also
+// matched tabs — exactly like the adjacent `\s+`. One `(?:--[^ ]+\s+)` iteration
+// could therefore cover what two iterations cover, the ambiguity that drives
+// exponential backtracking. Keeping the classes disjoint (`\S+` for tokens,
+// `[^\S\r\n]+` for horizontal gaps) removes every ambiguous split.
+// Using horizontal-only whitespace also fixes a latent correctness bug: the old
+// `\s+` matched newlines, so a COPY match could run past the end of its line.
+const COPY_INPUT_RE = /^COPY[^\S\r\n]+(?!.*--from=)(?:--\S+[^\S\r\n]+)*(\S+)[^\S\r\n]+[^\r\n]+$/gm;
+
 export function promoterCopyInputs(dockerfile) {
-  return [...dockerfile.matchAll(/^COPY\s+(?!.*--from=)(?:--[^ ]+\s+)*([^ ]+)\s+[^\r\n]+$/gm)].map((match) => match[1]);
+  // The literal carries /g, so reset lastIndex rather than sharing cursor state
+  // between calls.
+  COPY_INPUT_RE.lastIndex = 0;
+  return [...dockerfile.matchAll(COPY_INPUT_RE)].map((match) => match[1]);
 }
 
 export function assertHostStateWiring(compose) {
