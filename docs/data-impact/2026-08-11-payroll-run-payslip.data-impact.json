@@ -6,7 +6,7 @@
     "EmployeeProfile gains a virtual payslips back-relation (no column change)."
   ],
   "migration": {
-    "name": "20260811120000_add_payroll_run_payslip",
+    "name": "20260815200000_add_payroll_run_payslip",
     "backfill": "none — additive: 2 new tables (PayRun, Payslip) + FKs on freshly-created empty tables (attested data-safe). No existing table altered; no backfill."
   },
   "tests": [
