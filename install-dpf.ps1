@@ -1396,6 +1396,9 @@ if (-not (Test-StepDone "hardware")) {
         $modelReason = "Qwen3-Coder-Next 80B (MoE) -- top agentic coder, fits your $gpuVRAM_GB GB VRAM with headroom"
     } elseif ($gpuVRAM_GB -ge 23) {
         $selectedModel = "hf.co/ggml-org/Qwen3.8-27B-GGUF:Q4_K_M"
+        # Known-good content digest for this tier. Mirrors LocalModelTier.expectedDigest
+        # and SELECTION_TIERS in scripts/detect-hardware-host.ts -- keep in sync.
+        $expectedDigest = "sha256:66c4f325bc71350f07fb2da4f92455553c7bbc8af5d7ee2095fbeac79b9e66c9"
         $modelReason = "Qwen3.8 27B (dense, vision) -- most thorough local model, fits your $gpuVRAM_GB GB VRAM with headroom"
     } elseif ($gpuVRAM_GB -ge 21) {
         $selectedModel = "ai/qwen3-coder"
@@ -1596,7 +1599,7 @@ Copy-Item -Path (Join-Path $DPF_DIR "scripts\safety\dpf-shell-guard-fallback-pat
 # basename-based detection isn't fragile.
 # NOTE: no `--` separator before %*. With `pwsh -File`, PowerShell parses `--` as a
 # parameter prefix with an EMPTY name and aborts every guarded command with
-# "Parameter cannot be processed because the parameter name '' is ambiguous" —
+# "Parameter cannot be processed because the parameter name '' is ambiguous" --
 # which breaks git/docker/prisma for the whole user account, because safety-bin is
 # prepended to the user PATH below. The guard collects %* from the automatic $args.
 foreach ($tool in @("docker", "git", "prisma")) {
@@ -2025,6 +2028,31 @@ if (-not (Test-StepDone "model")) {
     } catch {}
     if ($isPresent) {
         $selectedModel = $runtimeModel
+        # Integrity check: a HuggingFace ref names a FILE, not an immutable
+        # revision, and `docker model pull` takes no flags, so nothing pins bytes
+        # at pull time. Model weights are a control-plane input, so a silent
+        # substitution is a behavioural compromise. DETECTION only -- warn
+        # loudly, never fail the install. (BI-73E9A282.)
+        if ($expectedDigest) {
+            $actualDigest = $null
+            try {
+                $inspected = docker model inspect $runtimeModel 2>$null | ConvertFrom-Json -ErrorAction SilentlyContinue
+                if ($inspected) { $actualDigest = $inspected.id }
+            } catch {}
+            if (-not $actualDigest) {
+                Write-Warn "Could not read the model digest to verify it; continuing."
+            } elseif ($actualDigest -eq $expectedDigest) {
+                Write-OK "Model integrity verified (digest matches the pinned value)"
+            } else {
+                Write-Warn "MODEL DIGEST MISMATCH for $runtimeModel"
+                Write-Warn "  expected: $expectedDigest"
+                Write-Warn "  actual:   $actualDigest"
+                Write-Warn "  The upstream model was republished, or the download differs from"
+                Write-Warn "  what this release pinned. The model still works, but its behaviour"
+                Write-Warn "  is no longer the version this install was tested against. Treat as"
+                Write-Warn "  a security event and re-run the tool evaluation before relying on it."
+            }
+        }
         # Persist the accurate runtime name for compose env + portal-init host_profile
         $selectedModel | Set-Content "$DPF_DIR\.selected-model" -ErrorAction SilentlyContinue
         $hpPath = "$DPF_DIR\.host-profile.json"

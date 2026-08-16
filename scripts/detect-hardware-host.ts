@@ -35,6 +35,8 @@ type HostProfile = {
   ram: { totalGB: number };
   gpu: { name: string; vramGB: number | null } | null;
   selectedModel: string;
+  /** Known-good digest for selectedModel, when it is pinned. Null otherwise. */
+  expectedDigest: string | null;
   detectedAt: string;
   notes?: string[];
 };
@@ -88,7 +90,7 @@ function detectDarwin(): HostProfile {
     cpu: { name: cpuName, cores },
     ram: { totalGB },
     gpu,
-    selectedModel: selectModel({ architecture, totalGB, gpu }),
+    ...selectedFields({ architecture, totalGB, gpu }),
     detectedAt: new Date().toISOString(),
   };
 }
@@ -161,7 +163,7 @@ function detectLinux(): HostProfile {
     cpu: { name: cpuName, cores },
     ram: { totalGB },
     gpu,
-    selectedModel: selectModel({ architecture, totalGB, gpu }),
+    ...selectedFields({ architecture, totalGB, gpu }),
     detectedAt: new Date().toISOString(),
   };
 }
@@ -194,20 +196,37 @@ function detectLinux(): HostProfile {
 const MODEL_HEADROOM_GB = 5;            // context KV + embedder + overhead (measured on RTX 4090)
 const UNIFIED_USABLE_FRACTION = 0.75;   // Apple Silicon GPU share of unified RAM
 const CPU_USABLE_FRACTION = 0.5;
-const SELECTION_TIERS: { model: string; weightsGb: number }[] = [
+// `expectedDigest` mirrors LocalModelTier.expectedDigest: set for any tier
+// sourced outside the curated `ai/` namespace, where the upstream reference is
+// mutable and `docker model pull` offers no revision pin (BI-73E9A282).
+const SELECTION_TIERS: { model: string; weightsGb: number; expectedDigest?: string }[] = [
   { model: "ai/qwen3-coder-next", weightsGb: 48 },          // big unified (Apple 128 GB) / 64 GB+ discrete
-  { model: "hf.co/ggml-org/Qwen3.8-27B-GGUF:Q4_K_M", weightsGb: 18 }, // dense 27B; replaces the 35B-A3B tier
+  {
+    model: "hf.co/ggml-org/Qwen3.8-27B-GGUF:Q4_K_M",
+    weightsGb: 18,                                          // dense 27B; replaces the 35B-A3B tier
+    expectedDigest: "sha256:66c4f325bc71350f07fb2da4f92455553c7bbc8af5d7ee2095fbeac79b9e66c9",
+  },
   { model: "ai/qwen3-coder", weightsGb: 16 },               // 24 GB-card sweet spot (measured ~20.7 GB @ 24k ctx)
   { model: "ai/qwen3:14B-Q6_K", weightsGb: 12 },
   { model: "ai/qwen3:8B-Q4_K_M", weightsGb: 6 },
   { model: "ai/qwen3:4B-UD-Q4_K_XL", weightsGb: 3 },
 ];
 
+/** Spread-able { selectedModel, expectedDigest } so a profile picks once. */
+function selectedFields(p: {
+  architecture: Architecture;
+  totalGB: number;
+  gpu: HostProfile["gpu"];
+}): { selectedModel: string; expectedDigest: string | null } {
+  const picked = selectModel(p);
+  return { selectedModel: picked.model, expectedDigest: picked.expectedDigest };
+}
+
 function selectModel(p: {
   architecture: Architecture;
   totalGB: number;
   gpu: HostProfile["gpu"];
-}): string {
+}): { model: string; expectedDigest: string | null } {
   let budgetGb: number;
   if (p.architecture === "discrete" && p.gpu && typeof p.gpu.vramGB === "number") {
     budgetGb = p.gpu.vramGB;
@@ -217,9 +236,11 @@ function selectModel(p: {
     budgetGb = p.totalGB * CPU_USABLE_FRACTION;
   }
   for (const tier of SELECTION_TIERS) {
-    if (tier.weightsGb + MODEL_HEADROOM_GB <= budgetGb) return tier.model;
+    if (tier.weightsGb + MODEL_HEADROOM_GB <= budgetGb) {
+      return { model: tier.model, expectedDigest: tier.expectedDigest ?? null };
+    }
   }
-  return "ai/qwen3:4B-UD-Q4_K_XL";
+  return { model: "ai/qwen3:4B-UD-Q4_K_XL", expectedDigest: null };
 }
 
 function main(): void {
