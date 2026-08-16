@@ -124,6 +124,7 @@ const definitions: ToolDefinition[] = [
     },
     requiredCapability: "operate_marketing",
     sideEffect: true,
+    consequence: "outward",
   },
   {
     name: "send_marketing_email",
@@ -137,6 +138,7 @@ const definitions: ToolDefinition[] = [
     },
     requiredCapability: "operate_marketing",
     sideEffect: true,
+    consequence: "outward",
   },
   {
     name: "place_linkedin_ad",
@@ -150,6 +152,7 @@ const definitions: ToolDefinition[] = [
     },
     requiredCapability: "operate_marketing",
     sideEffect: true,
+    consequence: "outward",
   },
   {
     name: "refresh_channel_kpis",
@@ -175,6 +178,7 @@ const definitions: ToolDefinition[] = [
     },
     requiredCapability: "operate_marketing",
     sideEffect: true,
+    consequence: "outward",
   },
   {
     name: "plan_upcoming_marketing_drafts",

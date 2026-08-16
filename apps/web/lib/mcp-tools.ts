@@ -95,6 +95,13 @@ export type ToolAnnotations = {
   irreversibleHint?: boolean;
 };
 
+/**
+ * Declared reach of a tool's effect. See `ToolDefinition.consequence`.
+ * Closed set: a new axis is a deliberate widening of what the gate governs,
+ * not a string literal someone invents at a call site.
+ */
+export type ToolConsequence = "outward" | "irreversible";
+
 export type ToolDefinition = {
   name: string;
   description: string;
@@ -109,6 +116,17 @@ export type ToolDefinition = {
   requiresExternalAccess?: boolean;
   executionMode?: "proposal" | "immediate";
   sideEffect?: boolean;
+  /**
+   * How far this tool's effect reaches. DECLARED, not inferred: "can this be
+   * undone" is not recoverable from the name, the schema, or `sideEffect`
+   * (true for `update_backlog_item` and `place_linkedin_ad` alike).
+   * `outward` = leaves the platform (third party, publish, spend) → the
+   * business stance governs it, so it is alignment-gated. `irreversible` =
+   * stays inside but no inverse call restores prior state → receipted, not
+   * alignment-gated. Absent = ordinary, which is a claim the coverage test
+   * pins rather than a default. Rationale: consequential-tool-policy.ts.
+   */
+  consequence?: ToolConsequence;
   /**
    * Tool captures the coworker's own recommendation or work product as a
    * structured artifact (e.g. save_marketing_review). Persistence-only; no

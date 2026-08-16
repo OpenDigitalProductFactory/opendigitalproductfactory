@@ -82,6 +82,7 @@ export const backlogPackDefinitions: ToolDefinition[] = [
     },
     requiredCapability: "manage_backlog",
     sideEffect: true,
+    consequence: "irreversible",
   },
   {
     name: "size_backlog_item",
