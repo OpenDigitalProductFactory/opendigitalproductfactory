@@ -1,8 +1,46 @@
+---
+title: Archetype-Aware Mobile Companion And Remote Access
+status: draft — architecture review applied 2026-06-12 (advisory; see §0)
+date: 2026-06-12
+owner: platform
+specKind: design
+relatedSpecs:
+  - docs/superpowers/specs/2026-03-19-mobile-companion-app-design.md
+  - docs/superpowers/specs/2026-05-13-realtime-hitl-mobile-companion-design.md
+  - docs/superpowers/specs/2026-05-20-mobile-expo-55-upgrade.md
+  - docs/superpowers/specs/2026-04-22-enterprise-auth-directory-federation-design.md
+  - docs/superpowers/specs/2026-05-09-deployment-contracts.md
+  - docs/superpowers/specs/2026-05-20-edge-node-deployment-matrix.md
+  - docs/architecture/2026-06-09-dap-experience-layer-design.md
+relatedPrinciples:
+  - docs/founder-kernel/wiki/principles/architecture-over-shortcuts.md
+  - docs/founder-kernel/wiki/principles/single-source-of-truth.md
+  - docs/founder-kernel/wiki/principles/principal-convergence.md
+  - docs/founder-kernel/wiki/principles/never-ask-user-to-run-commands.md
+canonicalSubstrate:
+  - packages/db/prisma/schema.prisma#CommunicationChannelBinding  # principal-anchored notification channels (incl. push) + urgency/quiet-hours
+  - packages/db/prisma/schema.prisma#CommunicationDeliveryAttempt  # delivery audit
+  - packages/db/prisma/schema.prisma#PrincipalAlias  # aliasType "mobile-device" fits with no new model
+  - packages/db/prisma/schema.prisma#PushDeviceRegistration  # thin, userId-keyed; needs convergence
+  - apps/mobile/src/stores/offlineQueue.ts  # in-memory zustand queue (refactor target)
+---
+
 # Archetype-Aware Mobile Companion And Remote Access Design
 
 **Date:** 2026-06-12
 **Status:** Draft
 **Scope:** Decide what DPF mobile should be responsible for, how it differs from Claude/Codex/headless use, how archetype-specific remote jobs are delivered, and how phones reach customer-owned DPF installs without weakening the Authority Core.
+
+## 0. Architecture Review (advisory, applied 2026-06-12)
+
+Reviewed against AGENTS.md §11 data-model stewardship, `schema-audit-before-features`, `single-source-of-truth`, `principal-convergence`, and `architecture-over-shortcuts`, with live substrate verification against `packages/db/prisma/schema.prisma` and `apps/mobile` on the current main line. **Verdict: well-aligned with one important convergence concern.** The core design decision — one adaptive native companion + server-owned archetype job packs, with mobile as a client of a single-tenant Authority Core — is the architecturally correct shape and is well-supported by the existing substrate. Substrate claims in §"Current-State Anchors" were spot-checked and are accurate (localhost defaults, in-memory queue, the mobile_models migration, `PushDeviceRegistration` shape, `Principal`/`PrincipalAlias`, `StorefrontConfig.archetypeId`, `OrganizationCapabilityActivation`, all six referenced specs). Findings are folded into the sections below.
+
+- **`[important]` The notification/channel substrate already exists as `CommunicationChannelBinding` — the spec retrofits the wrong (thinner) model.** §"Identity And Security" and Refactoring item 5 build push delivery and notification policy around `PushDeviceRegistration` (which is `userId`-keyed, carries only `platform`, and has no urgency/quiet-hours/audit). But DPF already has `CommunicationChannelBinding` — **principal-anchored** (`principalId`), with `channelType` (the communications surface already lists "Push"), `allowedUrgencies`, `quietHours`, `preferences`, `verificationStatus`, and a `CommunicationDeliveryAttempt` audit trail. Inventing notification policy and retrofitting `PushDeviceRegistration` in isolation duplicates substrate that is richer and already converges on `Principal`. **Resolution applied:** the design now treats a mobile push channel as a `CommunicationChannelBinding` (the device/Expo token is the endpoint detail), keeps `PushDeviceRegistration` only as token storage under that binding, and routes notification policy through the existing urgency/quiet-hours fields. (`single-source-of-truth`, `schema-audit-before-features`.)
+- **`[important]` `riskClass` notification policy is owned by the DAP experience-layer design, and "Today / Needs You" is the mobile face of the DAP cross-process inbox.** `HitlNotificationEvent`/`riskClass` are **not** built models (verified absent from the schema) — they are the DAP contract (its §3 IRC channel-selector). Mobile must be a downstream *channel* of that one policy, and the mobile home should be the mobile projection of the DAP cross-process inbox, not a Build/HITL-only inbox. **Resolution applied:** Refactoring item 5, Slice 2, and the mobile-first viewport now reference the DAP doc as the policy/inbox owner.
+- **`[minor]` The no-localhost guard must cover three files, not two.** `EXPO_PUBLIC_API_URL ?? "http://localhost:3000"` also lives in `apps/mobile/src/hooks/useOfflineStatus.ts:5`, not only `apiClient.ts` and `offlineQueue.ts`. **Resolution applied:** Refactoring item 1 and Slice 1 now name all three.
+- **`[minor]` The offline queue conflates "retry-exhausted" with "server-rejected."** `QueuedMutation.status` is `pending | retrying | failed` today; a 4xx server rejection and a 3×-retry network failure both land on `failed`. Refactoring item 2's stated four-state distinction (queued/retrying/failed/server-rejected) is therefore a real gap, not a nicety. **Resolution applied:** item 2 now calls this out explicitly.
+
+These are advisory; they sharpen the data contract before Slice 1 and do not gate the build.
 
 ## Problem Statement
 
@@ -23,9 +61,11 @@ Existing implementation:
 
 - `apps/mobile` is an Expo React Native app using Expo Router, Zustand, NativeWind, `expo-secure-store`, `expo-sqlite`, `expo-notifications`, `expo-camera`, and `expo-location`.
 - `apps/mobile/dynamic` already contains schema-driven form and view renderers with camera, location, lookup, select, signature, and widget components.
-- `apps/mobile/src/lib/apiClient.ts` and `apps/mobile/src/stores/offlineQueue.ts` still default to `http://localhost:3000`, which is wrong for phones outside the host machine.
-- `apps/mobile/src/stores/offlineQueue.ts` keeps queued mutations in memory, while the March mobile spec expects durable queued writes.
+- `apps/mobile/src/lib/apiClient.ts`, `apps/mobile/src/stores/offlineQueue.ts`, **and** `apps/mobile/src/hooks/useOfflineStatus.ts` still default to `http://localhost:3000`, which is wrong for phones outside the host machine.
+- `apps/mobile/src/stores/offlineQueue.ts` keeps queued mutations in Zustand memory (no SQLite persistence), and its `status` union is `pending | retrying | failed` — a server 4xx rejection is conflated with retry exhaustion. The March mobile spec expects durable queued writes.
 - `packages/db/prisma/migrations/20260319030000_mobile_models/migration.sql` created `Notification`, `PushDeviceRegistration`, `DynamicForm`, and `DynamicView`.
+- **Notification/channel substrate already exists and is principal-anchored:** `CommunicationChannelBinding` (`principalId`, `channelType` incl. push, `allowedUrgencies`, `quietHours`, `preferences`, `verificationStatus`) with `CommunicationDeliveryAttempt` audit and a live config surface at `/platform/tools/integrations/communications`. `PushDeviceRegistration` is by contrast `userId`-keyed and token-only. Mobile push must converge on the channel-binding model, not extend the thin one in isolation.
+- `Principal` / `PrincipalAlias` exist; `PrincipalAlias.aliasType` is a free-form string, so a `mobile-device` alias needs **no new model**.
 
 Existing specs:
 
@@ -120,6 +160,14 @@ Rejected anti-patterns:
 - "One binary per archetype." It multiplies app-store, signing, QA, and support burden while the meaningful variation is data/schema/workflow, not compiled code.
 - "AI-only / headless-only remote ops." Claude or Codex can build and administer, but they do not replace a worker's need to scan, photograph, confirm, sign, or receive a push-gated decision.
 
+### Market positioning and differentiation
+
+The named incumbents in DPF's archetype field-service markets are vertical-SaaS native apps: **ServiceTitan, Jobber, Housecall Pro** (trades/HVAC — Dale), **Square for Retail / Shopify POS** (Marisol), and clinic schedulers (Linda). They have polished, purpose-built mobile UX and years of field hardening. DPF will not out-polish a single-vertical app on its home turf, so the positioning is not "a better field-service app." It is structural:
+
+- **Client of a customer-owned single-tenant Authority Core, not a vendor SaaS control plane.** The worker's capture (parts used, counts, signatures, photos) flows into the *same governed system that runs the whole business* and that the customer owns — no second data plane, no per-seat SaaS lock-in, and a genuine data-sovereignty story for regulated/private installs. Vertical incumbents structurally cannot offer this. This is the moat; state it as positioning, not just plumbing.
+- **One adaptive app + server-owned job packs vs. N vertical apps.** A multi-archetype business (common at the SMB owner level) runs one DPF companion instead of stitching ServiceTitan + Square + a scheduler. The integration *is* the product.
+- **Competitive risk to manage:** the adaptive-renderer approach risks feeling generic against purpose-built incumbents, and "bring-your-own reachability" (Cloudflare/Tailscale/VPN) adds setup friction vs. SaaS "just works." Mitigations: archetype job packs that reach native-capture parity for the dogfood vertical first (truck stock, §Open Questions 5), and operator-assisted QR provisioning (§Remote access) so reachability never lands on a non-technical owner.
+
 ## Design Decision
 
 DPF should ship **one native mobile companion app** and many **archetype job packs**.
@@ -165,6 +213,24 @@ Manual scoring:
 | Per-archetype variants | Strong on branding | Weak on maintainability, QA, support, signing, update coordination | Reject for v1 |
 | Headless only | Strong for builders/admins | Fails field work, push/HITL, native capture, nontechnical workers | Reject as mobile replacement |
 
+### Open Question 6 — push substrate convergence (manual mapping, 2026-06-12)
+
+`principle_decide` was again not callable (portal offline), so this is a manual mapping against `PRINCIPLE_DIMENSIONS`, to be ratified live when the DPF MCP is reachable.
+
+Question: should mobile push be a `channelType="push"` `CommunicationChannelBinding` (**A**), or a standalone `PushDeviceRegistration` retrofit (**B**)?
+
+| Axis | A (channel-binding) | B (standalone retrofit) |
+|---|---|---|
+| long_term_maintainability | 0.85 | 0.40 |
+| schema_grounding | 0.85 | 0.45 |
+| reusability | 0.80 | 0.35 |
+| governance_compliance | 0.75 | 0.45 |
+| data_privacy | 0.70 | 0.45 |
+| speed_to_value | 0.50 | 0.65 |
+| blast_radius (cost) | 0.55 | 0.35 |
+
+Result: **A recommended.** Under tier-weighted aggregation, `architecture-over-shortcuts` and `single-source-of-truth` (high weight on maintainability + schema_grounding + reusability) dominate B's contextual-weight edge on speed_to_value/blast_radius. No commandment conflict — A *upholds* single-source-of-truth by reusing the principal-anchored channel substrate rather than forking notification policy onto the thin device table. This is consistent with the §Identity And Security direction; it does not flip a pre-decided default. **Status: recommended, pending live kernel ratification.**
+
 The manual result aligns with architecture-over-shortcuts: keep one canonical app and make the archetype variation a server-owned schema/policy layer.
 
 ## Experience Model
@@ -179,7 +245,7 @@ The manual result aligns with architecture-over-shortcuts: keep one canonical ap
 
 ### Mobile first viewport
 
-The native app should not open to a generic dashboard. It should open to a **Today / Needs You** surface:
+The native app should not open to a generic dashboard. It should open to a **Today / Needs You** surface — the **mobile projection of the DAP cross-process inbox** (DAP experience layer §5), filtered to what is actionable on a phone. It must share the cross-process decision-item contract so the same "what needs me right now?" spans Build Studio HITL, field tasks, and other DAP `kind`s rather than being a mobile-only inbox:
 
 - blocking approvals or paused work;
 - assigned field tasks;
@@ -290,8 +356,10 @@ Mobile identity rules:
 
 Required server-side records or convergence:
 
-- Retrofit `PushDeviceRegistration` toward `PrincipalAlias` / `mobile-device`, or add a bridge field that resolves to `Principal` while preserving existing rows.
-- Add per-device metadata needed for support: platform, app version, push environment, lastSeenAt, revokedAt, revocation reason.
+- **Treat a mobile push channel as a `CommunicationChannelBinding`** (`channelType = "push"`, `principalId` resolving the human/customer principal). This is the canonical, principal-anchored delivery + policy substrate (`allowedUrgencies`, `quietHours`, `preferences`, `verificationStatus`, `CommunicationDeliveryAttempt` audit). Do not stand up a parallel notification-policy model.
+- Keep `PushDeviceRegistration` only as **device-token storage and the `mobile-device` `PrincipalAlias` link** under that binding — not as the authority or policy record. Resolve authorization on the `Principal`, never on the device token.
+- Add per-device metadata needed for support to the device record: platform, app version, push environment, `lastSeenAt`, `revokedAt`, revocation reason. (`PushDeviceRegistration` today carries only `platform`.)
+- Device revocation must be independent of user revocation and must not require deleting the channel binding.
 - Ensure `AuthorizationDecisionLog`, `TaskMessage`, and any mobile-submitted field evidence can attribute both principal and alias/device.
 
 ## Refactoring Budget
@@ -299,14 +367,14 @@ Required server-side records or convergence:
 Per the 20 percent refactoring expectation, the first implementation phase must reserve work for the substrate that lets later mobile features stay simple:
 
 1. **Authority Core URL provisioning**
-   - Replace `EXPO_PUBLIC_API_URL ?? "http://localhost:3000"` defaults with a runtime `mobileAuthorityCoreUrl` stored in secure storage.
+   - Replace `EXPO_PUBLIC_API_URL ?? "http://localhost:3000"` defaults — in all three sites (`apiClient.ts`, `offlineQueue.ts`, `useOfflineStatus.ts`) — with a runtime `mobileAuthorityCoreUrl` stored in secure storage.
    - Add a first-launch QR/link setup flow.
    - Add tests proving mobile cannot silently fall back to localhost in production mode.
 
 2. **Durable offline queue**
-   - Move queued mutations from Zustand memory to SQLite.
+   - Move queued mutations from Zustand memory to SQLite (an `expo-sqlite` `CacheRepository` already exists to model the pattern after).
    - Add idempotency keys, retry metadata, and safe failure states.
-   - Preserve the UX distinction between "queued", "retrying", "failed", and "server rejected".
+   - Split the current `failed` state so the UX distinguishes "queued", "retrying", "failed (retry exhausted)", and "server rejected (4xx)" — today both collapse to `failed`. A server rejection must surface a distinct, non-silent recovery affordance rather than a generic retry.
 
 3. **Device identity convergence**
    - Align `PushDeviceRegistration` and future `MobileDevice` semantics with `PrincipalAlias`.
@@ -316,8 +384,8 @@ Per the 20 percent refactoring expectation, the first implementation phase must 
    - Introduce a server-owned `MobileJobPack` or equivalent projection before adding more hardcoded tabs.
    - Use existing `DynamicForm` / `DynamicView` where possible rather than creating parallel schema models.
 
-5. **Notification policy**
-   - Make `riskClass` / event type decide push vs ambient notification.
+5. **Notification policy (subordinate to the DAP experience layer)**
+   - The push-vs-ambient policy is owned by the [DAP experience-layer design](../../architecture/2026-06-09-dap-experience-layer-design.md) (§3: `riskClass` as the IRC channel-selector). Mobile is a downstream channel of that one policy — it maps DAP events to delivery via the `CommunicationChannelBinding` urgency/quiet-hours fields; it does not author a second policy. `HitlNotificationEvent`/`riskClass` are not yet built models, so this is a design target, not an existing field.
    - Avoid turning mobile into an activity feed that trains users to ignore urgent decisions.
 
 ## Implementation Slices
@@ -326,15 +394,15 @@ Per the 20 percent refactoring expectation, the first implementation phase must 
 
 - Runtime Authority Core provisioning.
 - No-localhost production guard.
-- Durable SQLite offline queue.
-- Push/device registration ownership hardening.
+- Durable SQLite offline queue with the four-state distinction (queued / retrying / failed / server-rejected).
+- Push/device registration convergence: mobile push modeled as a `CommunicationChannelBinding` with a `mobile-device` `PrincipalAlias`; `PushDeviceRegistration` demoted to token storage + support metadata.
 - Source-local mobile tests.
 
 ### Slice 2: HITL and notification companion
 
-- Canonical paused-work notification event.
-- Push adapter abstraction with Expo as first adapter.
-- Mobile Paused Work inbox and detail.
+- Canonical paused-work notification event, consumed via the DAP `riskClass` policy (not a mobile-private policy).
+- Push adapter abstraction with Expo as first adapter, delivering through the `CommunicationChannelBinding` (urgency/quiet-hours respected).
+- Mobile Paused Work inbox as the phone projection of the DAP cross-process inbox; detail view.
 - Approve / reject / request-changes through the same decision module as portal.
 
 ### Slice 3: Archetype job pack registry
@@ -368,7 +436,8 @@ Per the 20 percent refactoring expectation, the first implementation phase must 
 - **Source truth:** `StorefrontConfig.archetypeId`, `OrganizationCapabilityActivation`, principal/alias identity, dynamic form/view schemas, and task/notification records.
 - **Empty/failure behavior:** if no Authority Core is configured, show setup only; if not reachable, show last cached read data and clear reconnect state; if offline, block high-risk approvals and queue only allowed mutations.
 - **AI boundary:** mobile may show coworker-prepared briefs, but approval actions require explicit authenticated confirmation.
-- **Evidence before merge:** mobile unit tests, API route tests, production no-localhost guard, browser/viewport check for setup pages, and device/simulator verification before release.
+- **Accessibility and field ergonomics:** the dynamic renderer must honor native Dynamic Type / font scaling, expose VoiceOver/TalkBack labels on every form field and action (camera, signature, select, lookup), meet platform minimum touch-target sizes, and use theme tokens (no hardcoded colors) so high-contrast/dark modes work. Field reality adds two non-negotiables: state must be legible one-handed in bright sun (glanceable status chips for queued/synced/rejected) and with gloves (generous targets); never rely on color alone to signal sync state. First-launch QR provisioning needs legible error states for expired invite, wrong network/unreachable core, and camera-permission denied — not a generic failure.
+- **Evidence before merge:** mobile unit tests, API route tests, production no-localhost guard, browser/viewport check for setup pages, an accessibility pass (screen-reader on one archetype job form), and device/simulator verification before release.
 
 ## Test And Verification Strategy
 
@@ -404,6 +473,7 @@ Implementation later requires:
 3. Should job packs be stored as first-class DB rows or derived projections from existing archetype/capability/form records? Recommendation: derive first; add a model only when the projection needs versioning and audit.
 4. Should Expo push service be allowed in regulated deployments? Recommendation: make it configurable; support direct APNs/FCM or disabled push later through the adapter.
 5. What is the first archetype job pack for dogfood? Recommendation: field service truck stock because Dale already proves native need and business value.
+6. ~~Should mobile push be a `channelType="push"` `CommunicationChannelBinding` or a standalone `PushDeviceRegistration` retrofit?~~ **Resolved (pending live kernel ratification): `CommunicationChannelBinding`.** See the manual kernel mapping under "Kernel Consultation Note → Open Question 6" — Option A wins decisively on `architecture-over-shortcuts` / `single-source-of-truth`, no commandment conflict. Re-run `principle_decide` when the DPF MCP is reachable to ratify.
 
 ## Relationship To Existing Specs
 
@@ -422,4 +492,5 @@ This spec does not delete the March mobile companion spec. It narrows and supers
 - Archetype-specific behavior is delivered by server-owned job packs and dynamic schemas.
 - Customer-owned hardware reachability is explicit and deployment-selected.
 - Mobile device identity converges with `Principal` / `PrincipalAlias`.
-- The first 20 percent of implementation effort hardens URL provisioning, durable offline queue, device identity, job-pack registry, and notification policy.
+- Mobile push delivery and notification policy converge on `CommunicationChannelBinding` / `CommunicationDeliveryAttempt` and the DAP `riskClass` policy — no parallel notification-policy model.
+- The first 20 percent of implementation effort hardens URL provisioning (all three localhost sites), durable offline queue (four-state), device identity, job-pack registry, and notification-channel convergence.
