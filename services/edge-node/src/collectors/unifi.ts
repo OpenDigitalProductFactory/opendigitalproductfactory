@@ -553,7 +553,11 @@ async function collectOfficialUnifi(
     })),
   );
   for (const { device, detail } of details) {
-    if (detail.kind === "error") {
+    // "unsupported" (404/405/501 from fetchOfficialObject) has to be handled
+    // alongside "error" here, not just for type-narrowing: an older controller
+    // generation with no per-device detail endpoint would otherwise read as a
+    // successful fetch. Matches how the clients call below folds the two.
+    if (detail.kind === "error" || detail.kind === "unsupported") {
       warnings.push(`unifi_partial:device_detail:${device.id}`);
       continue;
     }
