@@ -128,6 +128,9 @@ services:
       AUTH_TRUST_HOST: "true"
       PUBLIC_URL: ${PUBLIC_URL:-}
       CREDENTIAL_ENCRYPTION_KEY: ${CREDENTIAL_ENCRYPTION_KEY:?CREDENTIAL_ENCRYPTION_KEY must be set - run scripts/setup.ps1 or scripts/setup.sh first}
+      LINKEDIN_MOCK_MODE: ${LINKEDIN_MOCK_MODE:-}
+      EMAIL_MOCK_MODE: ${EMAIL_MOCK_MODE:-}
+      ADS_MOCK_MODE: ${ADS_MOCK_MODE:-}
       NEO4J_URI: ${NEO4J_URI:-bolt://neo4j:7687}
       NEO4J_USER: neo4j
       NEO4J_PASSWORD: ${NEO4J_PASSWORD:-dpf_dev_password}
