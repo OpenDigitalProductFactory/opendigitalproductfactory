@@ -87,7 +87,27 @@ Phase 2 therefore splits:
 
 **Fail-closed, concretely.** A source without a re-resolvable locator is split into `unverifiable` with a reason (`no-locator` for every row on the install today, `malformed-locator`, `no-dimension-binding`) rather than dropped silently — dropping would let "0 citations, 0 failures" read as clean. `reverifyCitations` already refuses to report `allConfirmed` on an empty result set, so an all-legacy decision cannot present as re-verified.
 
-**Not yet closed:** nothing *calls* `recordedCitationsFromSources` in production — that is phase 2b, by design. And a locator only reaches the record when a caller supplies `evidence` to `principle_decide`; phase 2a makes an evidenced call re-verifiable, it does not make callers cite.
+**Not yet closed:** nothing *calls* `recordedCitationsFromSources` in production — that is phase 2b, by design. And a locator only reaches the record when a caller supplies `evidence` to `principle_decide`; phase 2a makes an evidenced call re-verifiable, it does not make callers cite. That second gap is now tracked as **BI-D045A069**.
+
+#### Phase 2b — SHIPPED
+
+`reverify_decision_evidence` (MCP, grant `registry_read`) — `lib/mcp/packs/decision-reverify-pack.ts` over `lib/decision/evidence-reverification.ts`. Loads a recorded decision by `interactionId`, decodes its citations with `recordedCitationsFromSources`, re-resolves each against live source with the phase-1 repo resolver, and reports what still holds.
+
+**A separate tool, not a step in `principle_decide`.** Re-verification only means something without access to the original scorer's reasoning. Grant matches the decision-governance siblings: auditing the evidence behind a decision must not require a higher grant than making the decision did, or the check is less reachable than the thing it checks.
+
+**Three outcomes, deliberately not two — the load-bearing design point.** `reverifyCitations` folds `unresolved` into `degrade`. That is right when the resolver could read the cited artifact and it was not there (fabrication), and catastrophic when the resolver cannot reach source at all: a production install has no checkout (`isDevInstance()` is false), so an unguarded pass would report **every decision ever made** as fabricated evidence. Source reachability is therefore decided *before* anything resolves, and the surface returns:
+
+| outcome | meaning |
+|---|---|
+| `verified` | every citation that could be checked still resolves and still matches |
+| `degraded` | at least one no longer holds — a real finding about the evidence |
+| `unverifiable` | nothing could be checked; `unverifiableCause` is `no-source-access` (a deployment fact, **not** a finding) or `no-recorded-locators` (a pre-2a record) |
+
+`coverage` rides alongside, so `verified` is never read as a clean bill of health for the whole decision: a decision with one confirmed citation and four unverifiable ones is `verified` at coverage 1/5, and the tool's own message says so.
+
+**Path guard (security).** A cited `filePath` is attacker-influenced data — it comes from whatever agent made the decision and is echoed back as `liveExcerpt`. Phase 1's resolver confines reads to the repo root, but the repo root legitimately *contains* `.env`, keys and credential files, so an unguarded citation naming one would round-trip its contents to any caller holding `registry_read`. `guardResolverPaths` wraps the resolver with `isPathAllowedSync` — the same blocklist `read_project_file` enforces — and a blocked path fails closed to `unresolved`. Regression-tested against a fixture repo containing a planted secret.
+
+**Deliberately NOT in 2b: recording the verdict.** The plan bullet above says "record degraded pairs"; that is held back to phase 3, for a reason found while building. The decision row is sealed into the append-only hash chain and a write guard forbids mutating sealed fields, so a verdict cannot be written back onto it — it needs its own record, whose shape is determined by how phase 3 consumes a degrade during re-scoring. Inventing that record now would fix the shape before the consumer exists. 2b is read-only and advisory, which is also the cleaner separation-of-duties story.
 
 ### Phase 3 — degrade feeds Axis 1
 A degraded pair drops the affected dimension to unevidenced on re-scoring, and the decision is flagged. This is what closes the loop with `evidence-grounding.ts`.
@@ -100,7 +120,7 @@ A degraded pair drops the affected dimension to unevidenced on re-scoring, and t
 
 ## 5. Verification
 
-- Unit: `pnpm --filter web exec vitest run lib/decision/locator-resolver.test.ts` (phase 1) and `lib/decision/recorded-citations.test.ts` (phase 2a).
+- Unit: `pnpm --filter web exec vitest run lib/decision/locator-resolver.test.ts` (phase 1), `lib/decision/recorded-citations.test.ts` (phase 2a), and `lib/decision/evidence-reverification.test.ts` + `lib/mcp/packs/decision-reverify-pack.test.ts` (phase 2b).
 - Production build: `pnpm --filter web build`.
 - No UI surface in phase 1 or 2a, so no UX verification path; no migration in either.
 

@@ -3,14 +3,14 @@
   "selectionCliff": 15,
   "entries": {
     "registry.toolDefinitions": {
-      "value": 387,
-      "reason": "Adds nine independently granted initiative-evidence writers for classification/research/dependency evidence and the design, architecture, data, UX, security, compliance, domain, and archetype review lanes (BI-64AF127B). Separate tool identities preserve least privilege and reviewer independence; a generic caller-selected lane would allow one grant to impersonate specialist authority.",
-      "recordedAt": "2026-08-15"
+      "value": 388,
+      "reason": "Adds reverify_decision_evidence (BI-8192557E phase 2b): the independent re-check of a recorded decision's cited evidence against live source. It earns a permanent identity because separation of duties is the property that makes it worth anything — folding re-verification into principle_decide would let a decision certify its own citations, and no existing tool can re-resolve a StructuredLocator. Read-only, registry_read, mutates nothing.",
+      "recordedAt": "2026-08-16"
     },
     "registry.packFiles": {
-      "value": 92,
-      "reason": "Adds the initiative-readiness pack (BI-64AF127B) as the single adapter owning all nine lane-specific evidence definitions, handlers, and grants. Keeping them together prevents readiness policy from being duplicated across backlog, Build Studio, and specialist packs.",
-      "recordedAt": "2026-08-15"
+      "value": 93,
+      "reason": "Adds the decision-reverify pack (BI-8192557E phase 2b) as the adapter owning that tool's definition, handler and grant. Kept out of principle-decide-pack deliberately: co-locating the verifier with the scorer is the coupling the separation-of-duties contract forbids.",
+      "recordedAt": "2026-08-16"
     },
     "tier.coreToolNames": {
       "value": 30,
