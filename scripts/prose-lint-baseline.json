@@ -5688,7 +5688,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 176
+    "textMass": 131
   },
   "apps/web/components/inventory/TopologyIntegritySummary.tsx": {
     "vocabulary": 0,
@@ -5884,14 +5884,14 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 42
+    "textMass": 37
   },
   "apps/web/components/ops/BacklogPanel.tsx": {
     "vocabulary": 0,
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 48
+    "textMass": 34
   },
   "apps/web/components/ops/BuildStamps.tsx": {
     "vocabulary": 0,
@@ -6423,7 +6423,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 297
+    "textMass": 333
   },
   "apps/web/components/platform/OperationsMapLiveShell.tsx": {
     "vocabulary": 0,

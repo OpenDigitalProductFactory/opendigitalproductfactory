@@ -566,8 +566,31 @@ if [ "$DPF_PLATFORM" = "darwin" ] && command -v docker >/dev/null 2>&1; then
       # calls use the exact string the model-runner knows. This prevents the
       # "failed to get model: model not found" seen in inference.model-manager
       # logs even when the pull command itself was issued.
+      #
+      # HuggingFace sources normalize differently from the `ai/` catalog. Verified
+      # on-box 2026-08-16: pulling `hf.co/ggml-org/Qwen3.8-27B-GGUF:Q4_K_M` lists as
+      # `huggingface.co/ggml-org/qwen3.8-27b-gguf:Q4_K_M` — the host is rewritten to
+      # its long form, the repo path is lowercased, and the quant tag KEEPS its case.
+      # Stripping `ai/` alone leaves the pull form unchanged for these, so the
+      # already-on-disk check never matches and the model re-downloads every run.
       _pull_name="$DPF_SELECTED_MODEL"
-      _runtime_model="$(printf '%s' "$_pull_name" | sed 's|^ai/||')"
+      case "$_pull_name" in
+        hf.co/*|huggingface.co/*)
+          case "$_pull_name" in
+            *:*) _hf_tag="${_pull_name##*:}"; _hf_path="${_pull_name%:*}" ;;
+            *)   _hf_tag=""; _hf_path="$_pull_name" ;;
+          esac
+          _hf_path="$(printf '%s' "$_hf_path" | sed 's|^hf\.co/|huggingface.co/|' | tr '[:upper:]' '[:lower:]')"
+          if [ -n "$_hf_tag" ]; then
+            _runtime_model="${_hf_path}:${_hf_tag}"
+          else
+            _runtime_model="$_hf_path"
+          fi
+          ;;
+        *)
+          _runtime_model="$(printf '%s' "$_pull_name" | sed 's|^ai/||')"
+          ;;
+      esac
       if docker model list 2>/dev/null | awk 'NR>1{print $1}' | grep -Fxq "$_runtime_model"; then
         ok "Model $_runtime_model already on disk"
         DPF_SELECTED_MODEL="$_runtime_model"
