@@ -43,3 +43,38 @@ describe("formatAttentionByline (BI-AB12B3D3)", () => {
     expect(formatAttentionByline(null)).toBe("AI coworker");
   });
 });
+
+describe("trust ladder in the byline (BI-A013BBA9)", () => {
+  it("renders each ladder level in plain language — who acts, on whose say-so", () => {
+    const expected: Record<string, string> = {
+      shadow: "observing only",
+      propose: "needs your approval",
+      supervised: "acts with your sign-off",
+      autopilot: "acts independently",
+    };
+    for (const [level, phrase] of Object.entries(expected)) {
+      expect(formatAttentionByline({ roleLabel: "COO", trustLevel: level })).toBe(
+        `AI · your COO · ${phrase}`,
+      );
+    }
+  });
+
+  it("composes with the AI client", () => {
+    expect(
+      formatAttentionByline({ roleLabel: "COO", aiClient: "Claude", trustLevel: "propose" }),
+    ).toBe("AI · your COO · Claude · needs your approval");
+  });
+
+  it("NEVER leaks an internal level name or L-shorthand into the byline", () => {
+    for (const level of ["shadow", "propose", "supervised", "autopilot", "L0", "L1", "L2", "L3"]) {
+      const line = formatAttentionByline({ roleLabel: "COO", trustLevel: level });
+      expect(line).not.toContain(level);
+    }
+  });
+
+  it("renders NOTHING for an unrecognized stored value — absence is honest, a leaked enum is not", () => {
+    for (const bogus of ["L1", "trusted", "", "root"]) {
+      expect(formatAttentionByline({ roleLabel: "COO", trustLevel: bogus })).toBe("AI · your COO");
+    }
+  });
+});
