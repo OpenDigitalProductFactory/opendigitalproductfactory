@@ -337,3 +337,86 @@ describe("resolveModelSelectionByPhase — non-local engines", () => {
     expect(overview.flags.some((f) => f.code === "no-providers")).toBe(true);
   });
 });
+
+// ── BI-E2CCFAC1: the no-eligible-endpoint remediation must name the real cause ──
+//
+// The router computes an exact reason per excluded endpoint and returns them on
+// decision.excludedReasons. This branch used to discard all of it and emit a
+// fixed "Activate a provider…" string. On a live install whose providers were
+// ACTIVE but whose CONNECTIONS were switched off, that sent the owner to a page
+// where everything read healthy, with no way forward.
+describe("resolveModelSelectionByPhase — blocked-route remediation", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockPreflight.mockResolvedValue({ ok: true, contextTokens: 131_072 });
+  });
+
+  function blockedBy(excludedReasons: string[], sensitivity = "internal") {
+    return {
+      decision: {
+        selectedEndpoint: null,
+        selectedModelId: null,
+        reason: `No eligible endpoints. ${excludedReasons.length} endpoint(s) excluded.`,
+        fitnessScore: 0,
+        fallbackChain: [],
+        candidates: [],
+        excludedCount: excludedReasons.length,
+        excludedReasons,
+        policyRulesApplied: [],
+        taskType: "analysis",
+        sensitivity,
+        timestamp: new Date(0),
+      },
+      selectedManifest: null,
+      contract: { taskType: "analysis", sensitivity },
+    };
+  }
+
+  it("names a switched-off connection instead of telling the owner to activate a provider", async () => {
+    mockGetConfig.mockResolvedValue(OPENCODE_CONFIG);
+    mockPreviewRoute.mockResolvedValue(
+      blockedBy([
+        "ep-a: Provider 'anthropic-sub' is outside the request allowlist",
+        "ep-b: Provider 'anthropic-sub' is outside the request allowlist",
+        "ep-c: Provider 'codex' is outside the request allowlist",
+        "ep-d: Minimum quality dimensions not met",
+      ]),
+    );
+
+    const overview = await resolveModelSelectionByPhase();
+    const flag = overview.flags.find((f) => f.code === "no-eligible-endpoint");
+    expect(flag).toBeDefined();
+    expect(flag!.remediation.toLowerCase()).not.toContain("activate a provider");
+    expect(flag!.remediation.toLowerCase()).toContain("connection");
+    // The count is carried so the owner can see how much of the estate it explains.
+    expect(flag!.message).toContain("3 of 4");
+  });
+
+  it("names the data class when a clearance policy is what blocks the route", async () => {
+    mockGetConfig.mockResolvedValue(OPENCODE_CONFIG);
+    mockPreviewRoute.mockResolvedValue(
+      blockedBy(
+        [
+          "ep-a: Sensitivity clearance missing for 'restricted'",
+          "ep-b: Sensitivity clearance missing for 'restricted'",
+          "ep-c: Minimum quality dimensions not met",
+        ],
+        "restricted",
+      ),
+    );
+
+    const overview = await resolveModelSelectionByPhase();
+    const flag = overview.flags.find((f) => f.code === "no-eligible-endpoint");
+    expect(flag!.message).toContain('"restricted"');
+    expect(flag!.remediation).toMatch(/off your machine/i);
+  });
+
+  it("falls back to the generic line only when there is nothing to summarise", async () => {
+    mockGetConfig.mockResolvedValue(OPENCODE_CONFIG);
+    mockPreviewRoute.mockResolvedValue(blockedBy([]));
+
+    const overview = await resolveModelSelectionByPhase();
+    const flag = overview.flags.find((f) => f.code === "no-eligible-endpoint");
+    expect(flag!.remediation).toContain("Activate a provider");
+  });
+});

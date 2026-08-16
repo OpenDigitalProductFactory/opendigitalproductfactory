@@ -36,6 +36,10 @@ import {
   classifyDispatchFailure,
   type DispatchFailureVerdict,
 } from "@/lib/inference/dispatch-failure-class";
+import {
+  dominantExclusion,
+  explainExclusion,
+} from "@/lib/inference/routing-exclusion-buckets";
 import type { RequestContract } from "@/lib/routing/request-contract";
 import {
   loadPhaseEnableCandidateProviders,
@@ -204,6 +208,18 @@ async function resolveRoutedPhase(args: {
       routeOptions,
     );
     if (!decision.selectedEndpoint || !selectedManifest) {
+      // BI-E2CCFAC1: the router already computed an exact reason per excluded
+      // endpoint and returns them on decision.excludedReasons. This branch used
+      // to discard all of it and emit a fixed "Activate a provider…" string —
+      // which, on an install whose provider was active but whose CONNECTION was
+      // switched off, sent the owner to a page where everything read healthy and
+      // left them with no way forward. Name the dominant real cause instead, and
+      // fall back to the generic line only when there is genuinely nothing to
+      // summarise (e.g. zero endpoints were even considered).
+      const bucketed = dominantExclusion(decision.excludedReasons ?? []);
+      const explanation = bucketed
+        ? explainExclusion(bucketed, { sensitivity: contract.sensitivity })
+        : null;
       const blocked: PhaseResolution = {
         ...base,
         providerId: null,
@@ -216,8 +232,11 @@ async function resolveRoutedPhase(args: {
           {
             severity: "error",
             code: "no-eligible-endpoint",
-            message: `No eligible AI endpoint for the ${args.label} phase under its routing contract.`,
+            message: explanation
+              ? `No eligible AI endpoint for the ${args.label} phase. ${explanation.message}`
+              : `No eligible AI endpoint for the ${args.label} phase under its routing contract.`,
             remediation:
+              explanation?.remediation ??
               "Activate a provider that satisfies this phase's requirements (tools, context, sensitivity) in Providers & Routing.",
           },
         ],
