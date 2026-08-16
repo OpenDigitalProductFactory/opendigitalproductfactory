@@ -14,10 +14,6 @@ export type FounderReviewUnresolvedReason =
   | "principle-conflict"
   | "confidence-below-threshold"
   | "relevance-degraded"
-  // BI-F5F2869D: an approve-direction escalation the operator WANTS — the
-  // stance is consistent but nobody has ruled on this question before. Not a
-  // gap; a new idea awaiting judgement.
-  | "aligned-not-settled"
   | "unknown";
 
 // Re-export the canonical perspective type from PR #1343 so callers in this
@@ -62,7 +58,6 @@ const ACTION_BY_REASON: Record<FounderReviewUnresolvedReason, string> = {
   "principle-conflict": "Resolve the conflicting stances",
   "confidence-below-threshold": "Answer it and review the confidence policy",
   "relevance-degraded": "Restore the embedding layer",
-  "aligned-not-settled": "Weigh this new proposition",
   "unknown": "Open the decision canvas",
 };
 
@@ -75,7 +70,6 @@ const LABEL_BY_REASON: Record<FounderReviewUnresolvedReason, string> = {
   "principle-conflict": "Principle conflict",
   "confidence-below-threshold": "Below confidence threshold",
   "relevance-degraded": "Embeddings unavailable",
-  "aligned-not-settled": "New proposition",
   "unknown": "Reason not recorded",
 };
 
@@ -209,12 +203,6 @@ export function deriveUnresolvedReason(payload: Record<string, unknown>): Founde
   // score, so this must not be reported as a confidence or doctrine problem —
   // the lever is the embedding layer, not the corpus.
   if (payload.relevanceMethod === "lexical") return "relevance-degraded";
-
-  // Fits existing doctrine but has never been ruled on — surfaced as a new idea
-  // to weigh, never as a doctrine gap to fill (BI-F5F2869D).
-  if (payload.gapReason === "aligned-not-settled" || payload.stanceAlignment === "approve") {
-    return "aligned-not-settled";
-  }
 
   if (typeof payload.confidenceScore === "number") return "confidence-below-threshold";
 

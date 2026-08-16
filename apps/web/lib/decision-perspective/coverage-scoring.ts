@@ -68,48 +68,7 @@ export type ProfileCoverage = {
   contentAware: boolean;
   alignmentScore?: number;
   stanceAlignment?: "approve" | "decline" | "mixed" | "none";
-  /** The owner's own prior ruling on THIS question, when one dominates the
-   *  relevant material (BI-F5F2869D). Presence is what separates a settled
-   *  question from a merely-aligned novel one. */
-  settledByRuling?: { materialId: string; relevance: number };
 };
-
-/**
- * Relevance at or above which a `ruled` stance is treated as answering THIS
- * question rather than merely being consistent with it. Deliberately near the
- * top of the re-normalised range: a ruling that is not the best match in its
- * own scored set is not the answer to the question being asked.
- */
-export const SETTLED_RULING_RELEVANCE_FLOOR = 0.9;
-
-/** `ruled` tier per STANCE_TIERS: a human ruled on a real decision in this class. */
-function isRuledTier(material: PerspectiveMaterial): boolean {
-  return material.evidenceGrade === "A" && material.confidenceWeight >= 1;
-}
-
-/**
- * Re-normalise relevance WITHIN the set actually being scored (BI-F5F2869D).
- *
- * `computeStanceRelevance` min-max normalises across every material the
- * resolver returned, but only the applicable subset is scored. So the material
- * holding relevance 1.0 could sit outside the scored set, leaving it with no
- * 1.0 and an arbitrary ceiling — measured live, a decisive 1.0-weight ruling
- * scored 0.60 and the verdict was indistinguishable from having no answer at
- * all. Min-max is monotonic, so re-normalising the already-normalised subset
- * restores the intended contract: the best match in the scored set scores 1.
- */
-function renormaliseWithinScoredSet(values: number[]): number[] {
-  const max = Math.max(...values, 0);
-  // Nothing in the scored set is relevant. Stretching that to 1 would
-  // manufacture relevance out of its explicit absence and turn a coverage
-  // `defer` into a confident verdict — the opposite of the intent.
-  if (max < 1e-9) return values.map(() => 0);
-  if (values.length <= 1) return values.map(() => 1);
-  const min = Math.min(...values);
-  // Equal-but-nonzero: genuinely indistinguishable, so none is down-weighted.
-  if (max - min < 1e-9) return values.map(() => 1);
-  return values.map((v) => (v - min) / (max - min));
-}
 
 function materialDirection(material: PerspectiveMaterial): "support" | "oppose" | "neutral" {
   const direction = material.direction ?? material.principleDirection ?? "neutral";
@@ -152,18 +111,13 @@ export function scoreProfileCoverage(input: {
   // off-mission decision (a relevant `oppose` stance) and an on-mission one (a
   // relevant `support` stance) produce materially different, directional
   // verdicts instead of an identical coverage constant.
-  const scopedRelevance = renormaliseWithinScoredSet(
-    applicableMaterials.map((m) => input.relevanceByMaterialId!.get(m.materialId) ?? 0),
-  );
-
   let supportMass = 0;
   let opposeMass = 0;
   let bestDirectionalWeight = 0;
-  let settledByRuling: ProfileCoverage["settledByRuling"];
   applicableMaterials.forEach((material, index) => {
     const effectiveWeight = materialScores[index]!.effectiveWeight;
     if (effectiveWeight <= 0) return;
-    const relevance = scopedRelevance[index]!;
+    const relevance = input.relevanceByMaterialId!.get(material.materialId) ?? 0;
     const weighted = effectiveWeight * relevance;
     const direction = materialDirection(material);
     if (direction === "support") {
@@ -172,17 +126,6 @@ export function scoreProfileCoverage(input: {
     } else if (direction === "oppose") {
       opposeMass += weighted;
       bestDirectionalWeight = Math.max(bestDirectionalWeight, weighted);
-    }
-    // Aligned is not settled. A generic supporting stance is merely consistent
-    // with the proposal; only a `ruled` stance that dominates the relevant
-    // material is the owner having already decided THIS question.
-    if (
-      direction !== "neutral"
-      && isRuledTier(material)
-      && relevance >= SETTLED_RULING_RELEVANCE_FLOOR
-      && relevance > (settledByRuling?.relevance ?? 0)
-    ) {
-      settledByRuling = { materialId: material.materialId, relevance };
     }
   });
 
@@ -209,7 +152,6 @@ export function scoreProfileCoverage(input: {
     contentAware: true,
     alignmentScore,
     stanceAlignment,
-    ...(settledByRuling ? { settledByRuling } : {}),
   };
 }
 

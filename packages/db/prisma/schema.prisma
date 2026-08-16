@@ -19,6 +19,29 @@ enum IntakeSource {
   innovation_radar
 }
 
+enum InitiativeGateKey {
+  classification
+  research
+  design_spec            @map("design-spec")
+  spec_approval          @map("spec-approval")
+  architecture_review    @map("architecture-review")
+  data_review            @map("data-review")
+  ux_fit_review          @map("ux-fit-review")
+  security_review        @map("security-review")
+  compliance_review      @map("compliance-review")
+  domain_review          @map("domain-review")
+  plan_review            @map("plan-review")
+  dependency_disposition @map("dependency-disposition")
+  archetype_provisioning @map("archetype-provisioning")
+  archetype_completeness @map("archetype-completeness")
+}
+
+enum InitiativeArtifactSourceKind {
+  build_artifact_revision @map("build-artifact-revision")
+  document_version        @map("document-version")
+  repository_blob_archive @map("repository-blob-archive")
+}
+
 enum BriefConfidence {
   high
   medium
@@ -2268,19 +2291,43 @@ model DemandEvidenceLink {
 // Per-item timeline. Cross-cutting tool audit lives in ToolExecution; this is
 // the entity-scoped view used by get_backlog_item and the UI.
 model BacklogItemActivity {
-  id                String      @id @default(cuid())
+  id                String                          @id @default(cuid())
   backlogItemId     String
   kind              String
+  gateKey           InitiativeGateKey?
   summary           String
-  payload           Json        @default("{}")
-  recordedAt        DateTime    @default(now())
+  payload           Json                            @default("{}")
+  recordedAt        DateTime                        @default(now())
   recordedById      String?
   recordedByAgentId String?
   toolExecutionId   String?
-  backlogItem       BacklogItem @relation(fields: [backlogItemId], references: [id], onDelete: Cascade)
+  backlogItem       BacklogItem                     @relation(fields: [backlogItemId], references: [id], onDelete: Cascade)
+  retentionPin      InitiativeArtifactRetentionPin?
 
   @@index([backlogItemId, recordedAt(sort: Desc)])
+  @@index([backlogItemId, gateKey, recordedAt(sort: Desc), id(sort: Desc)])
   @@index([kind, recordedAt(sort: Desc)])
+}
+
+model InitiativeArtifactRetentionPin {
+  id                      String                       @id @default(cuid())
+  baselineActivityId      String                       @unique
+  sourceKind              InitiativeArtifactSourceKind
+  artifactDigest          String
+  artifactLocator         Json
+  buildArtifactRevisionId String?
+  documentVersionId       String?
+  documentBlobId          String?
+  createdAt               DateTime                     @default(now())
+  baselineActivity        BacklogItemActivity          @relation(fields: [baselineActivityId], references: [id], onDelete: Restrict)
+  buildArtifactRevision   BuildArtifactRevision?       @relation(fields: [buildArtifactRevisionId], references: [id], onDelete: Restrict)
+  documentVersion         DocumentVersion?             @relation(fields: [documentVersionId], references: [id], onDelete: Restrict)
+  documentBlob            DocumentBlob?                @relation(fields: [documentBlobId], references: [id], onDelete: Restrict)
+
+  @@index([buildArtifactRevisionId])
+  @@index([documentVersionId])
+  @@index([documentBlobId])
+  @@index([sourceKind, createdAt(sort: Desc)])
 }
 
 /// The Workroom is the canonical unit of what we claim and where we work
@@ -2377,6 +2424,7 @@ model WorkroomActivity {
   capsule           Workroom @relation(fields: [workCapsuleId], references: [id], onDelete: Cascade)
 
   @@index([workCapsuleId, recordedAt(sort: Desc)])
+  @@index([workCapsuleId, kind, recordedAt(sort: Desc), id(sort: Desc)])
   @@index([kind, recordedAt(sort: Desc)])
   @@map("WorkCapsuleActivity")
 }
@@ -6566,26 +6614,27 @@ model Document {
 }
 
 model DocumentVersion {
-  id                   String              @id @default(cuid())
-  documentId           String
-  version              Int
-  title                String
-  contentFormat        String
-  contentText          String?             @db.Text
-  contentBlobId        String?
-  contentSha256        String?
-  sizeBytes            Int?
-  summary              String?             @db.Text
-  createdByPrincipalId String?
-  createdAt            DateTime            @default(now())
-  document             Document            @relation("DocumentVersions", fields: [documentId], references: [id], onDelete: Cascade)
-  currentForDocuments  Document[]          @relation("DocumentCurrentVersion")
-  contentBlob          DocumentBlob?       @relation(fields: [contentBlobId], references: [id], onDelete: SetNull)
-  createdByPrincipal   Principal?          @relation("DocumentVersionCreator", fields: [createdByPrincipalId], references: [id])
-  sourceReferences     DocumentReference[] @relation("DocumentReferenceSourceVersion")
-  targetReferences     DocumentReference[] @relation("DocumentReferenceTargetVersion")
-  renditions           DocumentRendition[]
-  invoiceDocuments     InvoiceDocument[]
+  id                      String                           @id @default(cuid())
+  documentId              String
+  version                 Int
+  title                   String
+  contentFormat           String
+  contentText             String?                          @db.Text
+  contentBlobId           String?
+  contentSha256           String?
+  sizeBytes               Int?
+  summary                 String?                          @db.Text
+  createdByPrincipalId    String?
+  createdAt               DateTime                         @default(now())
+  document                Document                         @relation("DocumentVersions", fields: [documentId], references: [id], onDelete: Cascade)
+  currentForDocuments     Document[]                       @relation("DocumentCurrentVersion")
+  contentBlob             DocumentBlob?                    @relation(fields: [contentBlobId], references: [id], onDelete: SetNull)
+  createdByPrincipal      Principal?                       @relation("DocumentVersionCreator", fields: [createdByPrincipalId], references: [id])
+  sourceReferences        DocumentReference[]              @relation("DocumentReferenceSourceVersion")
+  targetReferences        DocumentReference[]              @relation("DocumentReferenceTargetVersion")
+  renditions              DocumentRendition[]
+  invoiceDocuments        InvoiceDocument[]
+  initiativeRetentionPins InitiativeArtifactRetentionPin[]
 
   @@unique([documentId, version])
   @@index([documentId])
@@ -6596,14 +6645,15 @@ model DocumentVersion {
 }
 
 model DocumentBlob {
-  id         String              @id @default(cuid())
-  sha256     String              @unique
-  storageKey String              @unique
-  mimeType   String?
-  sizeBytes  Int
-  createdAt  DateTime            @default(now())
-  versions   DocumentVersion[]
-  renditions DocumentRendition[]
+  id                      String                           @id @default(cuid())
+  sha256                  String                           @unique
+  storageKey              String                           @unique
+  mimeType                String?
+  sizeBytes               Int
+  createdAt               DateTime                         @default(now())
+  versions                DocumentVersion[]
+  renditions              DocumentRendition[]
+  initiativeRetentionPins InitiativeArtifactRetentionPin[]
 
   @@index([sizeBytes])
 }
@@ -7246,21 +7296,22 @@ model BusinessBuildBrief {
 }
 
 model BuildArtifactRevision {
-  id             String                 @id @default(cuid())
-  buildId        String
-  field          String
-  revisionNumber Int
-  value          Json
-  valueDigest    String
-  savedByUserId  String
-  savedByAgentId String?
-  threadId       String?
-  status         String                 @default("accepted")
-  legacyEvidence Boolean                @default(false)
-  createdAt      DateTime               @default(now())
-  build          FeatureBuild           @relation(fields: [buildId], references: [buildId], onDelete: Cascade)
-  receiptUsages  ArtifactReceiptUsage[]
-  bomDocuments   BomDocument[]
+  id                      String                           @id @default(cuid())
+  buildId                 String
+  field                   String
+  revisionNumber          Int
+  value                   Json
+  valueDigest             String
+  savedByUserId           String
+  savedByAgentId          String?
+  threadId                String?
+  status                  String                           @default("accepted")
+  legacyEvidence          Boolean                          @default(false)
+  createdAt               DateTime                         @default(now())
+  build                   FeatureBuild                     @relation(fields: [buildId], references: [buildId], onDelete: Cascade)
+  receiptUsages           ArtifactReceiptUsage[]
+  bomDocuments            BomDocument[]
+  initiativeRetentionPins InitiativeArtifactRetentionPin[]
 
   @@unique([buildId, field, revisionNumber])
   @@index([buildId, field, createdAt(sort: Desc)])

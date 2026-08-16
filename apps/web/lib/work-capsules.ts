@@ -89,6 +89,7 @@ export const WORK_CAPSULE_ACTIVITY_KINDS = [
   "executor-changed",
   "scope-claimed",
   "scope-released",
+  "work-intent-declared",
   "change-impact-planned",
   "evidence-recorded",
   "runtime-target-registered",
@@ -120,6 +121,62 @@ export const WORK_CAPSULE_ACTIVITY_KINDS = [
 ] as const;
 
 export type WorkCapsuleActivityKind = (typeof WORK_CAPSULE_ACTIVITY_KINDS)[number];
+
+export const WORK_INTENTS = ["design", "review", "plan", "implementation"] as const;
+export type WorkIntent = (typeof WORK_INTENTS)[number];
+
+export type WorkIntentDeclared = {
+  schemaVersion: 1;
+  intent: WorkIntent;
+  policyVersion: string;
+  subject: {
+    kind: "backlog-item" | "epic" | "feature-build" | "task-run";
+    id: string;
+  };
+};
+
+export type WorkIntentParseResult =
+  | ({ ok: true } & WorkIntentDeclared)
+  | { ok: false; code: "work-intent-malformed"; error: string };
+
+export function parseWorkIntentDeclared(value: unknown): WorkIntentParseResult {
+  if (!value || typeof value !== "object") {
+    return { ok: false, code: "work-intent-malformed", error: "Work intent payload must be an object." };
+  }
+  const payload = value as Record<string, unknown>;
+  const subject = payload.subject as Record<string, unknown> | null;
+  const validSubjectKinds = new Set(["backlog-item", "epic", "feature-build", "task-run"]);
+  if (payload.schemaVersion !== 1
+    || typeof payload.intent !== "string" || !WORK_INTENTS.includes(payload.intent as WorkIntent)
+    || typeof payload.policyVersion !== "string" || !payload.policyVersion.trim()
+    || !subject || typeof subject.id !== "string" || !subject.id.trim()
+    || typeof subject.kind !== "string" || !validSubjectKinds.has(subject.kind)) {
+    return { ok: false, code: "work-intent-malformed", error: "Work intent payload is incomplete or invalid." };
+  }
+  return {
+    ok: true,
+    schemaVersion: 1,
+    intent: payload.intent as WorkIntent,
+    policyVersion: payload.policyVersion,
+    subject: { kind: subject.kind as WorkIntentDeclared["subject"]["kind"], id: subject.id },
+  };
+}
+
+export function projectLatestWorkIntent(rows: Array<{
+  id: string;
+  recordedAt: Date;
+  payload: unknown;
+}>): (WorkIntentParseResult & { activityId?: string }) {
+  const latest = [...rows].sort((left, right) => {
+    const byTime = right.recordedAt.getTime() - left.recordedAt.getTime();
+    return byTime || right.id.localeCompare(left.id);
+  })[0];
+  if (!latest) {
+    return { ok: false, code: "work-intent-malformed", error: "No work intent has been declared." };
+  }
+  const parsed = parseWorkIntentDeclared(latest.payload);
+  return parsed.ok ? { ...parsed, activityId: latest.id } : parsed;
+}
 
 /**
  * The subset of activity kinds an executor emits as a human-legible session

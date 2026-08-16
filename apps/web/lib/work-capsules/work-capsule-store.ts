@@ -15,7 +15,6 @@ import {
   normalizeWorkCapsuleScopeInput,
   parseScopeClaims,
   type ScopeClaim,
-  type WorkCapsuleActivityKind,
   type WorkCapsuleBranchTaxonomy,
   type WorkCapsuleEvidenceKind,
   type WorkCapsuleExecutorKind,
@@ -23,8 +22,6 @@ import {
   type WorkCapsuleSource,
   type WorkCapsuleStatus,
 } from "@/lib/work-capsules";
-import { revalidatePortalContext } from "@/lib/portal-context/invalidation";
-import { publishRecordedWorkCapsuleActivity } from "@/lib/work-capsules/activity-events";
 import { admitRuntimeGuardedWork } from "@/lib/platform-runtime/work-admission";
 import { planCapsuleChangeImpact, type CapsuleChangeImpactContract } from "./change-impact-contract";
 import {
@@ -38,9 +35,11 @@ import {
   type CapsuleAdoptionInput,
 } from "./work-capsule-branch-identity";
 import type { CapsuleDb, WorkCapsuleActor } from "./work-capsule-store-types";
+import { recordWorkCapsuleActivity as recordActivity } from "./work-capsule-activity-store";
 
 export type { CapsuleDb, WorkCapsuleActor } from "./work-capsule-store-types";
 export { CapsuleBranchOccupiedError } from "./work-capsule-branch-identity";
+export { declareWorkCapsuleIntent } from "./work-capsule-intent-store";
 
 type CapsuleCreateInput = {
   title: string;
@@ -100,31 +99,6 @@ async function admitCapsuleWork(db: CapsuleDb, guard: `work-capsule:${string}`):
   // Prisma transaction supplies these three admission members.
   if (!db.$queryRaw || !db.platformCapability || !db.runtimeCapabilityTransition) return;
   await admitRuntimeGuardedWork(db as never, guard);
-}
-
-async function recordActivity(
-  db: CapsuleDb,
-  input: {
-    workCapsuleId: string;
-    kind: WorkCapsuleActivityKind;
-    summary: string;
-    payload?: Record<string, unknown>;
-    actor: WorkCapsuleActor;
-  },
-) {
-  const activity = await db.workroomActivity.create({
-    data: {
-      workCapsuleId: input.workCapsuleId,
-      kind: input.kind,
-      summary: input.summary,
-      payload: input.payload ?? {},
-      recordedById: input.actor.userId,
-      recordedByAgentId: input.actor.agentId,
-    },
-  });
-  publishRecordedWorkCapsuleActivity(input.workCapsuleId, activity?.id);
-  revalidatePortalContext();
-  return activity;
 }
 
 export async function createWorkCapsule(args: {

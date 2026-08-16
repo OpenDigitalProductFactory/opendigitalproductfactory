@@ -415,6 +415,10 @@ export const HARDCODED_COWORKER_GRANTS: Record<string, readonly string[]> = {
     "spec_plan_read",
     "backlog_read",
     "registry_read",
+    // Mirrors AGT-WS-REVIEW in agent_registry.json. The seed is authoritative at
+    // boot, so both sources must carry these or the grants revert on restart.
+    "initiative_design_review",
+    "initiative_domain_review",
   ],
   "data-architect": ["file_read", "sandbox_execute", "architecture_read", "registry_read", "tool_script_exec"],
   "admin-assistant": ["admin_read", "admin_write", "agent_control_read", "registry_read", "web_search", "file_read"],

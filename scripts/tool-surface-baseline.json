@@ -3,14 +3,14 @@
   "selectionCliff": 15,
   "entries": {
     "registry.toolDefinitions": {
-      "value": 378,
-      "reason": "Adds propose_crm_enrichment and apply_crm_enrichment (BI-B2497DFB) — the two governed doors of proactive CRM enrichment (raise from the 376 that already includes EP-WORKROOM-COMMS's room tools). They are distinct contracts: propose is a non-destructive, scope-confirmed web-research stewardship step (grants web_search+crm_read) that files a steward proposal with the scant→enriched diff and no fabricated values; apply is the separate consequential CRM write (grant crm_write) that materializes an approved proposal with provenance. No existing tool carries either: enrich_customer_account is single-source own-website-only and files-but-never-applies, and the merge/steward tools resolve duplicates, not gap-fill enrichment.",
-      "recordedAt": "2026-08-14"
+      "value": 387,
+      "reason": "Adds nine independently granted initiative-evidence writers for classification/research/dependency evidence and the design, architecture, data, UX, security, compliance, domain, and archetype review lanes (BI-64AF127B). Separate tool identities preserve least privilege and reviewer independence; a generic caller-selected lane would allow one grant to impersonate specialist authority.",
+      "recordedAt": "2026-08-15"
     },
     "registry.packFiles": {
-      "value": 91,
-      "reason": "Adds one focused crm-enrichment pack (BI-B2497DFB) so the propose/apply pair, their web_search/crm_read/crm_write grants, and the propose-vs-apply governance boundary stay one bounded MCP surface. Folding into mdm-stewardship (duplicate resolution) or crm-sales-pipeline (deal/quote lifecycle) would blur the distinct proactive-enrichment contract and its two-step permission model.",
-      "recordedAt": "2026-08-14"
+      "value": 92,
+      "reason": "Adds the initiative-readiness pack (BI-64AF127B) as the single adapter owning all nine lane-specific evidence definitions, handlers, and grants. Keeping them together prevents readiness policy from being duplicated across backlog, Build Studio, and specialist packs.",
+      "recordedAt": "2026-08-15"
     },
     "tier.coreToolNames": {
       "value": 30,

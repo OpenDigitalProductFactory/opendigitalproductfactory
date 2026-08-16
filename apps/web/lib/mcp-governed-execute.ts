@@ -324,6 +324,7 @@ async function callExecuteTool(
     tokenScope?: "read" | "write" | "admin";
     tokenGrantScopes?: string[];
     authorizedSurfaceContext?: GovernedExecuteContext["authorizedSurfaceContext"];
+    authorityDecisionId?: string;
     governedDispatch?: (
       toolName: string,
       params: Record<string, unknown>,
@@ -398,6 +399,7 @@ export async function governedExecuteTool(
   args: GovernedExecuteArgs,
 ): Promise<GovernedExecuteResult> {
   let approvedAuthorityEnvelopeId: string | null = null;
+  let authorityDecisionId: string | undefined;
   let alignmentDecision: AlignmentGateDecision | null = null;
   let preconditionDecision: PreconditionOrderingDecision | null = null;
   const tool = findTool(args.toolName);
@@ -535,6 +537,7 @@ export async function governedExecuteTool(
       return result;
     }
     approvedAuthorityEnvelopeId = authorityGate.approvedEnvelopeId;
+    authorityDecisionId = authorityGate.authorityDecisionId;
   }
 
   const hookRejection = await runPreToolHooks({
@@ -634,6 +637,7 @@ export async function governedExecuteTool(
       tokenScope: args.context?.tokenScope,
       tokenGrantScopes: args.context?.tokenGrantScopes,
       authorizedSurfaceContext: args.context?.authorizedSurfaceContext,
+      authorityDecisionId,
       governedDispatch: async (nestedToolName, nestedParams, surfaceInvocation) => {
         const nestedTool = findTool(nestedToolName);
         if (!nestedTool) {
