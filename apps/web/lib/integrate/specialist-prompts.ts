@@ -21,7 +21,13 @@ ENUM CASING — MANDATORY:
 - Prisma enums in this project use LOWERCASE values: open, assigned, resolved, closed — NOT Open, OPEN, etc.
 - When creating new enums, use lowercase. When referencing enum values in API routes, components, or conditionals, use the EXACT lowercase value from the Prisma schema.
 - ALWAYS read the schema (describe_model or read_sandbox_file on schema.prisma) to confirm actual enum values before writing code that references them.
-- Never mix cases. If the schema says "open", the code must use "open" everywhere — in API defaults, filter values, dropdown option values, and conditional checks.`;
+- Never mix cases. If the schema says "open", the code must use "open" everywhere — in API defaults, filter values, dropdown option values, and conditional checks.
+
+IMPORTS — READ BEFORE YOU WRITE:
+- Before using any import as a VALUE (calling new X(), X.method(), or passing X as an argument), read the source module's exports to confirm it is a value export, not "export type".
+- @dpf/db (packages/db/src/index.ts) re-exports Prisma types as TYPE-ONLY. You CANNOT use "new Prisma.Decimal()" or any Prisma namespace as a runtime value.
+- For Decimal fields: Prisma accepts plain strings and numbers. Validate with Zod, return a string — no Prisma.Decimal needed.
+- When in doubt, search_sandbox for how existing files import and use the same symbol. Match the pattern exactly.`;
 
 const DATA_ARCHITECT_PROMPT = `${SHARED_IDENTITY}
 

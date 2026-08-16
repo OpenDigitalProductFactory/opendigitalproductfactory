@@ -281,6 +281,39 @@ export async function getFeatureBuildForContext(
     }
   }
 
+  // Load business context so the AI Coworker understands the organization
+  let businessContext: string | undefined;
+  try {
+    const bc = await prisma.businessContext.findFirst({
+      select: {
+        description: true,
+        valueProposition: true,
+        targetMarket: true,
+        customerSegments: true,
+        revenueModel: true,
+        companySize: true,
+        geographicScope: true,
+        industry: true,
+        ctaType: true,
+      },
+    });
+    if (bc) {
+      const lines: string[] = [];
+      if (bc.industry) lines.push(`Industry: ${bc.industry.replace(/-/g, " ")}`);
+      if (bc.description) lines.push(`What they do: ${bc.description}`);
+      if (bc.valueProposition) lines.push(`Differentiator: ${bc.valueProposition}`);
+      if (bc.targetMarket) lines.push(`Target market: ${bc.targetMarket}`);
+      if (bc.customerSegments?.length) lines.push(`Customer segments: ${bc.customerSegments.join(", ")}`);
+      if (bc.revenueModel) lines.push(`Revenue model: ${bc.revenueModel}`);
+      if (bc.ctaType) lines.push(`Primary CTA: ${bc.ctaType}`);
+      if (bc.companySize) lines.push(`Company size: ${bc.companySize}`);
+      if (bc.geographicScope) lines.push(`Geographic scope: ${bc.geographicScope}`);
+      if (lines.length > 0) businessContext = lines.join("\n");
+    }
+  } catch {
+    // Non-fatal — proceed without business context
+  }
+
   return {
     buildId: r.buildId,
     phase: r.phase as BuildPhase,
@@ -292,6 +325,7 @@ export async function getFeatureBuildForContext(
     phaseHandoffs: r.phaseHandoffs,
     taxonomyContext,
     designSystem,
+    businessContext,
   };
 }
 

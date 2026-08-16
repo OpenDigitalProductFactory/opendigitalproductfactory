@@ -7,7 +7,7 @@ export default async function StorefrontSetupPage() {
   const existing = await prisma.storefrontConfig.findFirst({ select: { id: true } });
   if (existing) redirect("/admin/storefront");
 
-  const [archetypes, setupContext] = await Promise.all([
+  const [archetypes, setupContext, org] = await Promise.all([
     prisma.storefrontArchetype.findMany({
       where: { isActive: true },
       select: {
@@ -23,11 +23,13 @@ export default async function StorefrontSetupPage() {
       orderBy: { category: "asc" },
     }),
     getSetupContext(),
+    prisma.organization.findFirst({ select: { name: true } }),
   ]);
 
   return (
     <SetupWizard
       archetypes={archetypes}
+      orgNameFromDb={org?.name ?? null}
       suggestedArchetypeId={setupContext?.suggestedArchetypeId ?? null}
       suggestedArchetypeName={setupContext?.suggestedArchetypeName ?? null}
       archetypeConfidence={setupContext?.archetypeConfidence ?? null}

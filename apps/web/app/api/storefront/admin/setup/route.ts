@@ -11,27 +11,38 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { archetypeId, tagline, heroImageUrl, orgName, orgSlug } = (await req.json()) as {
+  const {
+    archetypeId, tagline, heroImageUrl, orgName, orgSlug,
+    businessDescription, targetMarket, companySize, geographicScope,
+  } = (await req.json()) as {
     archetypeId: string;
     tagline?: string;
     heroImageUrl?: string;
     orgName: string;
     orgSlug: string;
+    businessDescription?: string;
+    targetMarket?: string;
+    companySize?: string;
+    geographicScope?: string;
   };
 
   if (!orgName || !orgSlug) {
     return NextResponse.json({ error: "orgName and orgSlug are required" }, { status: 400 });
   }
 
-  let org = await prisma.organization.findFirst({ select: { id: true } });
+  const org = await prisma.organization.findFirst({ select: { id: true, name: true } });
   if (!org) {
-    org = await prisma.organization.create({
-      data: {
-        orgId: `ORG-${nanoid(6).toUpperCase()}`,
-        name: orgName,
-        slug: orgSlug,
-      },
-      select: { id: true },
+    return NextResponse.json(
+      { error: "Organization not found. Complete account setup first." },
+      { status: 400 }
+    );
+  }
+
+  // Update org name if the user edited it in the storefront wizard
+  if (orgName && orgName !== org.name) {
+    await prisma.organization.update({
+      where: { id: org.id },
+      data: { name: orgName },
     });
   }
 
@@ -97,6 +108,46 @@ export async function POST(req: NextRequest) {
     // Non-fatal — storefront works without design system
     console.warn("[storefront-setup] design system generation failed:", (e as Error).message?.slice(0, 200));
   }
+
+  // Populate Organization.industry from archetype category
+  await prisma.organization.update({
+    where: { id: org.id },
+    data: { industry: archetype.category },
+  });
+
+  // Create BusinessContext — the single source of truth for business strategy context
+  const REVENUE_MODEL_MAP: Record<string, string> = {
+    booking: "Appointment-based services",
+    purchase: "Product/service sales",
+    inquiry: "Quote-based services",
+    donation: "Donor-funded",
+  };
+
+  await prisma.businessContext.upsert({
+    where: { organizationId: org.id },
+    create: {
+      organizationId: org.id,
+      description: businessDescription ?? null,
+      targetMarket: targetMarket ?? null,
+      companySize: companySize ?? null,
+      geographicScope: geographicScope ?? null,
+      industry: archetype.category,
+      ctaType: archetype.ctaType,
+      archetypeId: archetype.archetypeId,
+      revenueModel: REVENUE_MODEL_MAP[archetype.ctaType] ?? null,
+      customerSegments: [],
+    },
+    update: {
+      description: businessDescription ?? undefined,
+      targetMarket: targetMarket ?? undefined,
+      companySize: companySize ?? undefined,
+      geographicScope: geographicScope ?? undefined,
+      industry: archetype.category,
+      ctaType: archetype.ctaType,
+      archetypeId: archetype.archetypeId,
+      revenueModel: REVENUE_MODEL_MAP[archetype.ctaType] ?? null,
+    },
+  });
 
   // Seed default provider, availability, and booking config from template scheduling defaults
   const template = ALL_ARCHETYPES.find((a: { archetypeId: string }) => a.archetypeId === archetypeId);
