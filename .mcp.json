@@ -4,7 +4,7 @@
       "type": "http",
       "url": "http://127.0.0.1:3000/api/mcp/v1",
       "headers": {
-        "Authorization": "Bearer ${DPF_MCP_BEARER_TOKEN}"
+        "Authorization": "Bearer dpfmcp_K6ZJD74G3Q6H0GRFBXZG54M3RDFXYK7YTV1SRE0"
       }
     }
   }
