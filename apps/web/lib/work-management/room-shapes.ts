@@ -7,6 +7,7 @@ export const WORKROOM_SHAPE_KEYS = [
   "outward-review",
   "change-consequential",
   "escalation",
+  "craft-stewardship",
 ] as const;
 export type WorkroomShapeKey = (typeof WORKROOM_SHAPE_KEYS)[number];
 
@@ -58,6 +59,13 @@ const SHAPES: Record<WorkroomShapeKey, WorkroomShapeDefinition> = {
     authorityLadderLevel: "action",
     sensitivityStepUp: true,
     description: "A veto returns to the originating coordinator and accountable owner for accept-block or amendment.",
+  },
+  "craft-stewardship": {
+    key: "craft-stewardship",
+    inclusionOrder: ["coordinator", "specialist"],
+    authorityLadderLevel: "content",
+    sensitivityStepUp: false,
+    description: "The standing WSID craft-stewardship room: profession specialists curate the corpus and triage findings under a coordinator at content-level authority.",
   },
 };
 
