@@ -106,7 +106,7 @@ export const TOOL_WAIT_BUDGETS: Record<string, ToolWaitBudget> = {
   // ─── Misc admin actions ──────────────────────────────────────────────
 
   // Heartbeat — cheap; rarely in flight long enough to matter.
-  heartbeat_capsule: { typicalMs: 100, maxMs: 1_000, killable: true },
+  heartbeat_workroom: { typicalMs: 100, maxMs: 1_000, killable: true },
 
   // Hive scout ingest — long batch with DB writes. killable:false because
   // partial-ingest state is hard to reason about.

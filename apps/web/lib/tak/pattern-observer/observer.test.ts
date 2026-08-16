@@ -291,7 +291,7 @@ describe("observeCoworkerPatterns", () => {
       ],
       toolExecutions: [
         toolExecution({ toolName: "claim_nonprod_environment_lease", success: true, taskRunId: "TR-1" }),
-        toolExecution({ toolName: "record_capsule_evidence", success: true, taskRunId: "TR-2" }),
+        toolExecution({ toolName: "record_workroom_evidence", success: true, taskRunId: "TR-2" }),
         toolExecution({ toolName: "release_nonprod_environment_lease", success: true, taskRunId: "TR-3" }),
       ],
     });
@@ -332,12 +332,12 @@ describe("observeCoworkerPatterns", () => {
         taskRun({ taskRunId: "TR-B3", a2aMetadata: manualWorkflow("lease-b") }),
       ],
       toolExecutions: [
-        toolExecution({ toolName: "record_capsule_evidence", success: true, taskRunId: "TR-A1" }),
-        toolExecution({ toolName: "record_capsule_evidence", success: true, taskRunId: "TR-A2" }),
-        toolExecution({ toolName: "record_capsule_evidence", success: true, taskRunId: "TR-A3" }),
-        toolExecution({ toolName: "record_capsule_evidence", success: true, taskRunId: "TR-B1" }),
-        toolExecution({ toolName: "record_capsule_evidence", success: true, taskRunId: "TR-B2" }),
-        toolExecution({ toolName: "record_capsule_evidence", success: true, taskRunId: "TR-B3" }),
+        toolExecution({ toolName: "record_workroom_evidence", success: true, taskRunId: "TR-A1" }),
+        toolExecution({ toolName: "record_workroom_evidence", success: true, taskRunId: "TR-A2" }),
+        toolExecution({ toolName: "record_workroom_evidence", success: true, taskRunId: "TR-A3" }),
+        toolExecution({ toolName: "record_workroom_evidence", success: true, taskRunId: "TR-B1" }),
+        toolExecution({ toolName: "record_workroom_evidence", success: true, taskRunId: "TR-B2" }),
+        toolExecution({ toolName: "record_workroom_evidence", success: true, taskRunId: "TR-B3" }),
       ],
     });
 

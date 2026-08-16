@@ -44,11 +44,12 @@ relabel — a `WorkRoom` view layer over `WorkCase` already existed, and the rec
 and the room are one concept rather than two. Governed by `EP-WORK-CONVERGENCE`
 (umbrella `BI-D2D190BF`).
 
-⟦runtime: the MCP tools still carry their original `*_capsule_*` names behind an
-alias window, and the Prisma field vocabulary (`workCapsuleId`, `capsuleId`, the
-`WC-*` keys) is unchanged — `BI-0702869B` and `BI-C2C16582` retire those. Prefer
-the Workroom vocabulary in prose; expect the old names at the tool and column
-boundary until those ship.⟧
+⟦runtime: the MCP tools are now named `create_workroom`, `claim_workroom_scope`,
+`heartbeat_workroom` and so on; the legacy `*_capsule_*` names remain callable but
+unadvertised for the alias window. The Prisma field vocabulary (`workCapsuleId`,
+`capsuleId`, the `WC-*` keys) is still unchanged on disk under `@@map`. Prefer the
+Workroom vocabulary everywhere; expect the old names only at the column boundary
+and from clients that have not migrated.⟧
 
 ## What this rule does not yet enforce
 

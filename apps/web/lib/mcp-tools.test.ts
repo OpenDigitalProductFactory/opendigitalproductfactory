@@ -185,14 +185,14 @@ describe("mcp tools", () => {
     expect(scout!.sideEffect).toBe(true);
   });
 
-  it("hides plan_capsule_worktree from a view-only platform user", async () => {
+  it("hides plan_workroom_worktree from a view-only platform user", async () => {
     const tools = await getAvailableTools(inventoryUser, { externalAccessEnabled: false });
-    expect(tools.find((tool) => tool.name === "plan_capsule_worktree")).toBeUndefined();
+    expect(tools.find((tool) => tool.name === "plan_workroom_worktree")).toBeUndefined();
   });
 
-  it("exposes plan_capsule_worktree to an admin", async () => {
+  it("exposes plan_workroom_worktree to an admin", async () => {
     const tools = await getAvailableTools(adminUser, { externalAccessEnabled: false });
-    const tool = tools.find((candidate) => candidate.name === "plan_capsule_worktree");
+    const tool = tools.find((candidate) => candidate.name === "plan_workroom_worktree");
 
     expect(tool).toBeDefined();
     expect(tool!.requiredCapability).toBe("manage_backlog");
@@ -217,8 +217,8 @@ describe("mcp tools", () => {
     expect(toolNames).toContain("start_sandbox");
     expect(toolNames).toContain("run_sandbox_tests");
     // Ensure the grant filter is actually applied (work_capsule tools are NOT in build-specialist's grants)
-    expect(toolNames).not.toContain("list_work_capsules");
-    expect(toolNames).not.toContain("get_work_capsule");
+    expect(toolNames).not.toContain("list_workrooms");
+    expect(toolNames).not.toContain("get_workroom");
   });
 
   it("executes activity harness confidence approvals as governed configuration acknowledgements", async () => {

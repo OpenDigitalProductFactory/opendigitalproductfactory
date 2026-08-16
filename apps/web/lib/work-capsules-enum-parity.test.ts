@@ -21,24 +21,24 @@ function enumOf(toolName: string, paramName: string): readonly string[] {
 }
 
 describe("work capsule MCP enum parity", () => {
-  it("list_work_capsules.status mirrors WORK_CAPSULE_STATUSES", () => {
-    expect(enumOf("list_work_capsules", "status")).toEqual([...WORK_CAPSULE_STATUSES]);
+  it("list_workrooms.status mirrors WORK_CAPSULE_STATUSES", () => {
+    expect(enumOf("list_workrooms", "status")).toEqual([...WORK_CAPSULE_STATUSES]);
   });
 
-  it("create_work_capsule.source mirrors WORK_CAPSULE_SOURCES", () => {
-    expect(enumOf("create_work_capsule", "source")).toEqual([...WORK_CAPSULE_SOURCES]);
+  it("create_workroom.source mirrors WORK_CAPSULE_SOURCES", () => {
+    expect(enumOf("create_workroom", "source")).toEqual([...WORK_CAPSULE_SOURCES]);
   });
 
-  it("create_work_capsule.executorKind mirrors WORK_CAPSULE_EXECUTOR_KINDS", () => {
-    expect(enumOf("create_work_capsule", "executorKind")).toEqual([...WORK_CAPSULE_EXECUTOR_KINDS]);
+  it("create_workroom.executorKind mirrors WORK_CAPSULE_EXECUTOR_KINDS", () => {
+    expect(enumOf("create_workroom", "executorKind")).toEqual([...WORK_CAPSULE_EXECUTOR_KINDS]);
   });
 
-  it("create_work_capsule scope enums mirror source constants", () => {
-    expect(enumOf("create_work_capsule", "decisionScope")).toEqual([...WORK_CAPSULE_DECISION_SCOPES]);
-    expect(enumOf("create_work_capsule", "portfolioRole")).toEqual([...WORK_CAPSULE_PORTFOLIO_ROLES]);
-    expect(enumOf("create_work_capsule", "activityKind")).toEqual([...WORK_CAPSULE_SCOPE_ACTIVITY_KINDS]);
+  it("create_workroom scope enums mirror source constants", () => {
+    expect(enumOf("create_workroom", "decisionScope")).toEqual([...WORK_CAPSULE_DECISION_SCOPES]);
+    expect(enumOf("create_workroom", "portfolioRole")).toEqual([...WORK_CAPSULE_PORTFOLIO_ROLES]);
+    expect(enumOf("create_workroom", "activityKind")).toEqual([...WORK_CAPSULE_SCOPE_ACTIVITY_KINDS]);
 
-    const tool = PLATFORM_TOOLS.find((candidate) => candidate.name === "create_work_capsule");
+    const tool = PLATFORM_TOOLS.find((candidate) => candidate.name === "create_workroom");
     const schema = tool?.inputSchema as {
       properties?: Record<string, { properties?: Record<string, { enum?: string[] }> }>;
     };
@@ -53,20 +53,20 @@ describe("work capsule MCP enum parity", () => {
     expect(enumOf("adopt_worktree", "activityKind")).toEqual([...WORK_CAPSULE_SCOPE_ACTIVITY_KINDS]);
   });
 
-  it("list_work_capsules scope filters mirror source constants", () => {
-    expect(enumOf("list_work_capsules", "decisionScope")).toEqual([...WORK_CAPSULE_DECISION_SCOPES]);
-    expect(enumOf("list_work_capsules", "portfolioRole")).toEqual([...WORK_CAPSULE_PORTFOLIO_ROLES]);
+  it("list_workrooms scope filters mirror source constants", () => {
+    expect(enumOf("list_workrooms", "decisionScope")).toEqual([...WORK_CAPSULE_DECISION_SCOPES]);
+    expect(enumOf("list_workrooms", "portfolioRole")).toEqual([...WORK_CAPSULE_PORTFOLIO_ROLES]);
   });
 
-  it("record_capsule_evidence.kind mirrors WORK_CAPSULE_EVIDENCE_KINDS", () => {
-    expect(enumOf("record_capsule_evidence", "kind")).toEqual([...WORK_CAPSULE_EVIDENCE_KINDS]);
+  it("record_workroom_evidence.kind mirrors WORK_CAPSULE_EVIDENCE_KINDS", () => {
+    expect(enumOf("record_workroom_evidence", "kind")).toEqual([...WORK_CAPSULE_EVIDENCE_KINDS]);
   });
 
-  it("update_work_capsule_status.status mirrors WORK_CAPSULE_STATUSES", () => {
-    expect(enumOf("update_work_capsule_status", "status")).toEqual([...WORK_CAPSULE_STATUSES]);
+  it("update_workroom_status.status mirrors WORK_CAPSULE_STATUSES", () => {
+    expect(enumOf("update_workroom_status", "status")).toEqual([...WORK_CAPSULE_STATUSES]);
   });
 
-  it("plan_capsule_worktree.taxonomy mirrors WORK_CAPSULE_BRANCH_TAXONOMIES", () => {
-    expect(enumOf("plan_capsule_worktree", "taxonomy")).toEqual([...WORK_CAPSULE_BRANCH_TAXONOMIES]);
+  it("plan_workroom_worktree.taxonomy mirrors WORK_CAPSULE_BRANCH_TAXONOMIES", () => {
+    expect(enumOf("plan_workroom_worktree", "taxonomy")).toEqual([...WORK_CAPSULE_BRANCH_TAXONOMIES]);
   });
 });

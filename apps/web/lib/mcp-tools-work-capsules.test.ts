@@ -30,7 +30,7 @@ describe("work capsule MCP tools", () => {
     await expect(import("./mcp-tools")).resolves.toBeDefined();
   });
 
-  it("list_work_capsules returns capsule rows", async () => {
+  it("list_workrooms returns capsule rows", async () => {
     mockPrisma.workroom.findMany.mockResolvedValue([
       {
         capsuleId: "WC-1",
@@ -43,7 +43,7 @@ describe("work capsule MCP tools", () => {
     ]);
 
     const { executeTool } = await import("./mcp-tools");
-    const result = await executeTool("list_work_capsules", { status: "ready" }, "user-1");
+    const result = await executeTool("list_workrooms", { status: "ready" }, "user-1");
 
     expect(result.success).toBe(true);
     expect(result.data?.capsules).toEqual([
@@ -54,7 +54,7 @@ describe("work capsule MCP tools", () => {
     expect(mockPrisma.workroomActivity.create).not.toHaveBeenCalled();
   });
 
-  it("list_work_capsules filters by decision scope and portfolio role", async () => {
+  it("list_workrooms filters by decision scope and portfolio role", async () => {
     mockPrisma.workroom.findMany.mockResolvedValue([
       {
         capsuleId: "WC-WWWD",
@@ -70,7 +70,7 @@ describe("work capsule MCP tools", () => {
 
     const { executeTool } = await import("./mcp-tools");
     const result = await executeTool(
-      "list_work_capsules",
+      "list_workrooms",
       { decisionScope: "wwwd", portfolioRole: "productsAndServicesSold" },
       "user-1",
     );
@@ -91,7 +91,7 @@ describe("work capsule MCP tools", () => {
     ]);
   });
 
-  it("get_work_capsule does not renew leases for read-only hydration", async () => {
+  it("get_workroom does not renew leases for read-only hydration", async () => {
     mockPrisma.workroom.findUnique.mockResolvedValue({
       id: "row-1",
       capsuleId: "WC-READ",
@@ -100,7 +100,7 @@ describe("work capsule MCP tools", () => {
     });
 
     const { executeTool } = await import("./mcp-tools");
-    const result = await executeTool("get_work_capsule", { capsuleId: "WC-READ" }, "user-1", {
+    const result = await executeTool("get_workroom", { capsuleId: "WC-READ" }, "user-1", {
       agentId: "codex",
     });
 
@@ -109,10 +109,10 @@ describe("work capsule MCP tools", () => {
     expect(mockPrisma.workroomActivity.create).not.toHaveBeenCalled();
   });
 
-  it("create_work_capsule requires idempotencyKey", async () => {
+  it("create_workroom requires idempotencyKey", async () => {
     const { executeTool } = await import("./mcp-tools");
     const result = await executeTool(
-      "create_work_capsule",
+      "create_workroom",
       { title: "No key", objective: "Missing key", source: "manual" },
       "user-1",
     );
@@ -121,14 +121,14 @@ describe("work capsule MCP tools", () => {
     expect(result.error).toBe("missing_idempotencyKey");
   });
 
-  it("create_work_capsule accepts scope metadata without a backlog item", async () => {
+  it("create_workroom accepts scope metadata without a backlog item", async () => {
     mockPrisma.workroom.findUnique.mockResolvedValue(null);
     mockPrisma.workroom.create.mockResolvedValue({ id: "row-1", capsuleId: "WC-SCOPECREATE" });
     mockPrisma.workroomActivity.create.mockResolvedValue({ id: "activity-1" });
 
     const { executeTool } = await import("./mcp-tools");
     const result = await executeTool(
-      "create_work_capsule",
+      "create_workroom",
       {
         title: "Customer onboarding",
         objective: "Coordinate a customer onboarding work case.",
@@ -159,10 +159,10 @@ describe("work capsule MCP tools", () => {
     }));
   });
 
-  it("create_work_capsule rejects invalid scope metadata", async () => {
+  it("create_workroom rejects invalid scope metadata", async () => {
     const { executeTool } = await import("./mcp-tools");
     const result = await executeTool(
-      "create_work_capsule",
+      "create_workroom",
       {
         title: "Bad scope",
         objective: "Should not persist.",
@@ -179,12 +179,12 @@ describe("work capsule MCP tools", () => {
     expect(mockPrisma.workroom.create).not.toHaveBeenCalled();
   });
 
-  it("heartbeat_capsule renews a lease", async () => {
+  it("heartbeat_workroom renews a lease", async () => {
     mockPrisma.workroom.update.mockResolvedValue({ id: "row-1", capsuleId: "WC-1" });
     mockPrisma.workroomActivity.create.mockResolvedValue({ id: "activity-1" });
 
     const { executeTool } = await import("./mcp-tools");
-    const result = await executeTool("heartbeat_capsule", { capsuleId: "WC-1" }, "user-1", {
+    const result = await executeTool("heartbeat_workroom", { capsuleId: "WC-1" }, "user-1", {
       agentId: "codex",
     });
 
@@ -198,14 +198,14 @@ describe("work capsule MCP tools", () => {
     }));
   });
 
-  it("record_capsule_evidence auto-renews the lease after a capsule-scoped write", async () => {
+  it("record_workroom_evidence auto-renews the lease after a capsule-scoped write", async () => {
     mockPrisma.workroom.findUnique.mockResolvedValue({ id: "row-1", capsuleId: "WC-EVIDENCE" });
     mockPrisma.workroom.update.mockResolvedValue({ id: "row-1", capsuleId: "WC-EVIDENCE" });
     mockPrisma.workroomActivity.create.mockResolvedValue({ id: "activity-1" });
 
     const { executeTool } = await import("./mcp-tools");
     const result = await executeTool(
-      "record_capsule_evidence",
+      "record_workroom_evidence",
       {
         capsuleId: "WC-EVIDENCE",
         kind: "test",
@@ -328,7 +328,7 @@ describe("work capsule MCP tools", () => {
     expect(mockPrisma.workroom.update).not.toHaveBeenCalled();
   });
 
-  it("plan_capsule_worktree persists the planned workspace", async () => {
+  it("plan_workroom_worktree persists the planned workspace", async () => {
     mockPrisma.workroom.findUnique.mockResolvedValue({
       id: "row-1",
       capsuleId: "WC-PLANMCP",
@@ -353,7 +353,7 @@ describe("work capsule MCP tools", () => {
 
     const { executeTool } = await import("./mcp-tools");
     const result = await executeTool(
-      "plan_capsule_worktree",
+      "plan_workroom_worktree",
       { capsuleId: "WC-PLANMCP", taxonomy: "feat" },
       "user-1",
       {},
@@ -374,10 +374,10 @@ describe("work capsule MCP tools", () => {
     }));
   });
 
-  it("plan_capsule_worktree rejects an unknown taxonomy", async () => {
+  it("plan_workroom_worktree rejects an unknown taxonomy", async () => {
     const { executeTool } = await import("./mcp-tools");
     const result = await executeTool(
-      "plan_capsule_worktree",
+      "plan_workroom_worktree",
       { capsuleId: "WC-PLANMCP", taxonomy: "wat" },
       "user-1",
       {},
@@ -387,7 +387,7 @@ describe("work capsule MCP tools", () => {
     expect(result.error).toBe("invalid_taxonomy");
   });
 
-  it("claim_capsule_scope stores typed scope claims", async () => {
+  it("claim_workroom_scope stores typed scope claims", async () => {
     let capsule = {
       id: "row-1",
       capsuleId: "WC-SCOPE",
@@ -401,7 +401,7 @@ describe("work capsule MCP tools", () => {
     mockPrisma.workroomActivity.create.mockResolvedValue({ id: "activity-1" });
 
     const { executeTool } = await import("./mcp-tools");
-    const result = await executeTool("claim_capsule_scope", {
+    const result = await executeTool("claim_workroom_scope", {
       capsuleId: "WC-SCOPE",
       claims: [{ kind: "path", value: "apps/web/lib/work-capsules.ts", intent: "edit" }],
     }, "user-1", { agentId: "codex" });
@@ -445,7 +445,7 @@ describe("work capsule MCP tools", () => {
     }));
   });
 
-  it("update_work_capsule_status writes a status override", async () => {
+  it("update_workroom_status writes a status override", async () => {
     mockPrisma.workroom.findUnique.mockResolvedValue({
       id: "row-1",
       capsuleId: "WC-STATUS",
@@ -455,7 +455,7 @@ describe("work capsule MCP tools", () => {
     mockPrisma.workroomActivity.create.mockResolvedValue({ id: "activity-1" });
 
     const { executeTool } = await import("./mcp-tools");
-    const result = await executeTool("update_work_capsule_status", {
+    const result = await executeTool("update_workroom_status", {
       capsuleId: "WC-STATUS",
       status: "blocked",
       reason: "Provider credential blocked.",
@@ -485,7 +485,7 @@ describe("work capsule MCP tools", () => {
     }));
   });
 
-  it("release_capsule_scope removes matching scope claims", async () => {
+  it("release_workroom_scope removes matching scope claims", async () => {
     mockPrisma.workroom.findUnique.mockResolvedValue({
       id: "row-1",
       capsuleId: "WC-RELEASE",
@@ -510,7 +510,7 @@ describe("work capsule MCP tools", () => {
     mockPrisma.workroomActivity.create.mockResolvedValue({ id: "activity-1" });
 
     const { executeTool } = await import("./mcp-tools");
-    const result = await executeTool("release_capsule_scope", {
+    const result = await executeTool("release_workroom_scope", {
       capsuleId: "WC-RELEASE",
       claims: [{ kind: "path", value: "apps/web/lib/work-capsules.ts" }],
     }, "user-1", { agentId: "codex" });

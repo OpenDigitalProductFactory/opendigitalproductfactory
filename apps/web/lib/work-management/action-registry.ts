@@ -47,7 +47,7 @@ export const WORK_CASE_ACTION_REGISTRY = [
     requiresDecisionInteraction: false,
     requiresCoworkerEnvelope: "never",
     requiresReceipt: true,
-    sanctionedMutators: ["claim_capsule_scope", "update_backlog_item_status"],
+    sanctionedMutators: ["claim_workroom_scope", "update_backlog_item_status"],
   },
   {
     action: "pause",
@@ -58,7 +58,7 @@ export const WORK_CASE_ACTION_REGISTRY = [
     requiresDecisionInteraction: false,
     requiresCoworkerEnvelope: "never",
     requiresReceipt: true,
-    sanctionedMutators: ["update_work_capsule_status", "update_backlog_item_status"],
+    sanctionedMutators: ["update_workroom_status", "update_backlog_item_status"],
   },
   {
     action: "needs-input",
@@ -102,7 +102,7 @@ export const WORK_CASE_ACTION_REGISTRY = [
     requiresDecisionInteraction: false,
     requiresCoworkerEnvelope: "never",
     requiresReceipt: true,
-    sanctionedMutators: ["update_work_capsule_status", "update_backlog_item_status"],
+    sanctionedMutators: ["update_workroom_status", "update_backlog_item_status"],
   },
   {
     action: "propose",
@@ -157,7 +157,7 @@ export const WORK_CASE_ACTION_REGISTRY = [
     requiresDecisionInteraction: false,
     requiresCoworkerEnvelope: "never",
     requiresReceipt: true,
-    sanctionedMutators: ["run_sandbox_tests", "run_ux_test", "record_capsule_evidence"],
+    sanctionedMutators: ["run_sandbox_tests", "run_ux_test", "record_workroom_evidence"],
   },
   {
     action: "complete",
@@ -168,7 +168,7 @@ export const WORK_CASE_ACTION_REGISTRY = [
     requiresDecisionInteraction: false,
     requiresCoworkerEnvelope: "never",
     requiresReceipt: true,
-    sanctionedMutators: ["update_work_capsule_status", "update_backlog_item_status"],
+    sanctionedMutators: ["update_workroom_status", "update_backlog_item_status"],
   },
   {
     action: "cancel",
@@ -179,7 +179,7 @@ export const WORK_CASE_ACTION_REGISTRY = [
     requiresDecisionInteraction: false,
     requiresCoworkerEnvelope: "never",
     requiresReceipt: true,
-    sanctionedMutators: ["update_work_capsule_status", "update_backlog_item_status"],
+    sanctionedMutators: ["update_workroom_status", "update_backlog_item_status"],
   },
   {
     action: "open-cycle",

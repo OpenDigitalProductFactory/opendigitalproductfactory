@@ -53,7 +53,7 @@ export const TASK_CLASSES: readonly TaskClassDef[] = [
   {
     taskClass: "capsule-status",
     routePrefixes: ["/build", "/workspace/work"],
-    authoritativeToolNames: ["get_work_capsule", "list_work_capsules", "get_build_progress_visibility"],
+    authoritativeToolNames: ["get_workroom", "list_workrooms", "get_build_progress_visibility"],
     cues: [/\bbuild\b/i, /\bcapsule\b/i, /\bprogress\b/i, /\bphase\b/i, /\bstatus\b/i],
   },
 ];
