@@ -6,14 +6,9 @@
 
 ## Backlog coverage
 
-**Backlog item:** BI-B8E4317D
+**Umbrella item:** BI-B8E4317D. Coverage decision: **atomic** — the source list, market pass, prompt reshaping, and summary surfacing are one behavioural unit (a source list without the pass does nothing, the pass without the prompt produces unread material, and the prompt without the pass hallucinates); no phase is independently shippable. Dependencies: none.
 
-- Parent: BI-B8E4317D
-- Decision: atomic
-- Receipt: RECEIPT_PENDING_UNTIL_PUSH
-- Dependencies: none
-
-Atomic rationale: the source list, market pass, prompt reshaping, and summary surfacing are one behavioural unit — a source list without the pass does nothing, the pass without the prompt produces unread material, and the prompt without the pass hallucinates. No phase is independently shippable.
+**Governed coverage receipt: blocked by BI-B9403248.** `record_plan_backlog_coverage` (schema v2) rejects every external CLI session: its repository-artifact provenance check requires a capsule `headSha` no governed tool sets, a `PrincipalAlias` for the install's shared DCO identity that does not exist, and exactly one agent-recorded capsule activity that an external session structurally cannot produce — contradicting the §12 keystone that governance approves evidence, not provenance. The atomic decision, deliverable, and traceability refs above were submitted to the tool on 2026-08-16 (capsule WC-ED256C08, commit 748cac12) and refused with `plan-artifact-invalid`; the full audit trail lives on BI-B9403248. Restore this section's governed coverage block (marker + live receipt) when that defect ships.
 
 ## Phases
 
