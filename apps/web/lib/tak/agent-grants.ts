@@ -221,19 +221,6 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   release_workroom_scope: ["work_capsule_write"],
   reassign_workroom_executor: ["work_capsule_write"],
   get_runtime_coordination_map: ["work_capsule_read"],
-  // Legacy capsule tool names — still callable during the alias window
-  // (EP-WORK-CONVERGENCE / BI-0702869B). TOOL_TO_GRANTS denies unlisted tools,
-  // so an alias without a row here is an authorization failure, not a cosmetic gap.
-  list_work_capsules: ["work_capsule_read"],
-  get_work_capsule: ["work_capsule_read"],
-  create_work_capsule: ["work_capsule_write"],
-  plan_capsule_worktree: ["work_capsule_write"],
-  claim_capsule_scope: ["work_capsule_write"],
-  heartbeat_capsule: ["work_capsule_write"],
-  update_work_capsule_status: ["work_capsule_write"],
-  release_capsule_scope: ["work_capsule_write"],
-  record_capsule_evidence: ["work_capsule_write"],
-  reassign_capsule_executor: ["work_capsule_write"],
   // Queue-awareness reads (EP-3516E23D): platform-coordination visibility over
   // the shared queue flow-telemetry — same read grant as the sibling ops-read
   // tool above.
@@ -774,6 +761,32 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   screen_set_input:        ["coworker_screen_fill"],
   ...AUTHORIZED_SURFACE_TOOL_GRANTS,
 };
+
+/**
+ * Legacy capsule tool names, still callable during the Workroom alias window
+ * (EP-WORK-CONVERGENCE / BI-0702869B). Derived rather than hand-copied:
+ * TOOL_TO_GRANTS DENIES UNLISTED TOOLS, so an alias whose grants drift from its
+ * canonical name becomes a silent authorization failure. Deriving them makes the
+ * two provably identical and deletes in one edit when the window closes.
+ */
+export const WORKROOM_TOOL_ALIASES: Record<string, string> = {
+  list_work_capsules: "list_workrooms",
+  get_work_capsule: "get_workroom",
+  create_work_capsule: "create_workroom",
+  plan_capsule_worktree: "plan_workroom_worktree",
+  claim_capsule_scope: "claim_workroom_scope",
+  heartbeat_capsule: "heartbeat_workroom",
+  update_work_capsule_status: "update_workroom_status",
+  release_capsule_scope: "release_workroom_scope",
+  record_capsule_evidence: "record_workroom_evidence",
+  reassign_capsule_executor: "reassign_workroom_executor",
+};
+
+for (const [legacy, canonical] of Object.entries(WORKROOM_TOOL_ALIASES)) {
+  const grants = TOOL_TO_GRANTS[canonical];
+  if (grants) TOOL_TO_GRANTS[legacy] = grants;
+}
+
 
 /**
  * The catalog of every grant KEY known to the authority registry, derived from
