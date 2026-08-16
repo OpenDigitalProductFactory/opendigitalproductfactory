@@ -3259,7 +3259,7 @@
       "tier": "specialist",
       "value_stream": "explore",
       "role": "specialist",
-      "capability_domain": "External coworker archetype reconnaissance. Scans approved external agent catalogs, detects meaningful platform gaps, and files governed backlog suggestions without importing code.",
+      "capability_domain": "External product/market reconnaissance. Scans approved external agent catalogs and the wider product/market source list, detects meaningful platform gaps and design challenges, and files governed backlog suggestions without importing code.",
       "human_supervisor_id": "HR-200",
       "hitl_tier_default": 1,
       "delegates_to": [],

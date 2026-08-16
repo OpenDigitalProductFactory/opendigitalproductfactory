@@ -61,6 +61,10 @@ type HiveScoutSummaryPayload = {
     reviewClassificationHistogram?: Record<string, number>;
     reviewClassificationByFramework?: Record<string, Record<string, number>>;
     reviewClassificationByIndustry?: Record<string, Record<string, number>>;
+    marketSourcesAttempted?: number;
+    marketSourcesFetched?: number;
+    marketSourcesChanged?: number;
+    marketSourcesFailed?: number;
   };
   createdItemIds?: string[];
 };
@@ -221,6 +225,19 @@ export function extractHiveScoutSummary(
     scoutTool.result.data.reviewClassificationByIndustry,
   );
 
+  // Market-aperture pass metrics (BI-B8E4317D) — absent on runs predating it.
+  const marketRaw = isRecord(scoutTool.result.data.marketSources)
+    ? scoutTool.result.data.marketSources
+    : null;
+  const marketMetrics = marketRaw
+    ? {
+        marketSourcesAttempted: asNumber(marketRaw.attempted) ?? 0,
+        marketSourcesFetched: asNumber(marketRaw.fetched) ?? 0,
+        marketSourcesChanged: asNumber(marketRaw.changed) ?? 0,
+        marketSourcesFailed: asNumber(marketRaw.failed) ?? 0,
+      }
+    : null;
+
   const payload: HiveScoutSummaryPayload = {
     processedAt: new Date().toISOString(),
     metrics: {
@@ -250,6 +267,7 @@ export function extractHiveScoutSummary(
       ...(reviewClassificationHistogram ? { reviewClassificationHistogram } : {}),
       ...(reviewClassificationByFramework ? { reviewClassificationByFramework } : {}),
       ...(reviewClassificationByIndustry ? { reviewClassificationByIndustry } : {}),
+      ...(marketMetrics ?? {}),
     },
     ...(createdItemIds.length > 0 ? { createdItemIds } : {}),
   };
@@ -265,6 +283,13 @@ export function extractHiveScoutSummary(
     `review-schema-drops=${payload.metrics.reviewSchemaDropCount}`,
     `review-cache-hits=${payload.metrics.reviewCacheHits}`,
     `needs-review=${payload.metrics.needsReview}`,
+    ...(marketMetrics
+      ? [
+          `market-fetched=${marketMetrics.marketSourcesFetched}/${marketMetrics.marketSourcesAttempted}`,
+          `market-changed=${marketMetrics.marketSourcesChanged}`,
+          `market-failed=${marketMetrics.marketSourcesFailed}`,
+        ]
+      : []),
   ].join(" ");
 
   const threadMessage = [

@@ -72,6 +72,7 @@ import {
   resolveHiveScoutWorkforceLinks,
   type HiveScoutPrisma,
 } from "./ingest-db";
+import { runMarketSourcePass, type MarketSourcePassResult } from "./market-sources";
 
 // Re-exported so existing importers (tests, scripts, MCP tools) keep a single
 // entry point for the Hive Scout ingest API.
@@ -121,6 +122,8 @@ export interface IngestResult {
   duplicates: number;
   needsReview: number;
   createdItemIds?: string[];
+  /** Market-aperture pass (BI-B8E4317D) — product/market sources beyond the agent catalog. */
+  marketSources?: MarketSourcePassResult;
 }
 
 // ─── Main entry point ───────────────────────────────────────────────────────
@@ -414,6 +417,11 @@ export async function runHiveScoutIngest(
 
   await adminNotifier(created, db);
 
+  // Market-aperture pass runs after the catalog pass so a market-source
+  // failure can never mask a catalog regression; per-source errors are
+  // captured inside the pass, never thrown.
+  const marketSources = await runMarketSourcePass({ db, fetcher });
+
   return {
     catalogEntries: entries.length,
     gaps,
@@ -437,6 +445,7 @@ export async function runHiveScoutIngest(
     duplicates,
     needsReview,
     createdItemIds,
+    marketSources,
   };
 }
 
