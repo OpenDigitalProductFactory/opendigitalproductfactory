@@ -78,6 +78,25 @@ export interface AdapterResult {
    * returning the fragment (BI-1D144CC1). Absent/false means a clean stop.
    */
   truncated?: boolean;
+  /**
+   * The model's own reasoning/scratchpad for this turn, when the provider emits
+   * it as a channel SEPARATE from the answer — llama.cpp / Docker Model Runner
+   * send `reasoning_content`, some OpenAI-compatible providers send `reasoning`.
+   *
+   * Verified on the canonical runtime 2026-08-16 against Qwen3.8-27B: a single
+   * turn produced 249 chars of `reasoning_content` against 50 chars of
+   * `content`, so this is the bulk of what a thinking model spends its time on
+   * and the only honest source for a progress surface. (BI-1E77BEE3.)
+   *
+   * MUST NOT be substituted for `text`. It is scratchpad, not a considered
+   * position — real samples read like "likely say no... Need be concise" — so
+   * any surface rendering it has to frame it as working-out, subordinate to the
+   * answer, and never quote it as the coworker's conclusion.
+   *
+   * Absent when the provider emits no separate reasoning channel, which is the
+   * common case; consumers must treat undefined as "not offered", not "none".
+   */
+  reasoning?: string;
 }
 
 /** Contract every execution adapter implements */

@@ -270,6 +270,83 @@ describe("chatAdapter", () => {
     expect(result.truncated).toBe(true);
   });
 
+  // ── Reasoning capture (BI-1E77BEE3) ───────────────────────────────────────
+  // Shapes mirror the live Docker Model Runner response for Qwen3.8-27B
+  // (canonical runtime, 2026-08-16): reasoning_content is separate from content
+  // and is the bulk of the turn — 253 chars vs 3 ("No.") on the sampled call.
+
+  it("captures reasoning_content as its own channel without touching the answer", async () => {
+    stubFetchOk({
+      choices: [{
+        message: {
+          content: "Don't ship; the three failing tests block release.",
+          reasoning_content: "We need answer user's request. Need likely say no, don't ship due failing tests.",
+        },
+        finish_reason: "stop",
+      }],
+      usage: { prompt_tokens: 10, completion_tokens: 5 },
+    });
+
+    const result = await chatAdapter.execute(makeRequest({ providerId: "local", modelId: "qwen3.8-27b" }));
+
+    expect(result.text).toBe("Don't ship; the three failing tests block release.");
+    expect(result.reasoning).toContain("don't ship due failing tests");
+  });
+
+  it("accepts the `reasoning` spelling other OpenAI-compatible providers use", async () => {
+    stubFetchOk({
+      choices: [{ message: { content: "Answer.", reasoning: "Thinking out loud." }, finish_reason: "stop" }],
+      usage: { prompt_tokens: 1, completion_tokens: 1 },
+    });
+
+    const result = await chatAdapter.execute(makeRequest({ providerId: "ollama", modelId: "llama3.1" }));
+
+    expect(result.text).toBe("Answer.");
+    expect(result.reasoning).toBe("Thinking out loud.");
+  });
+
+  it("omits reasoning entirely when the provider offers none", async () => {
+    stubFetchOk({
+      choices: [{ message: { content: "Plain answer." }, finish_reason: "stop" }],
+      usage: { prompt_tokens: 1, completion_tokens: 1 },
+    });
+
+    const result = await chatAdapter.execute(makeRequest({ providerId: "ollama", modelId: "llama3.1" }));
+
+    // undefined means "not offered" — a disclosure surface must not render an
+    // empty reasoning panel for models that never think aloud.
+    expect(result.reasoning).toBeUndefined();
+    expect("reasoning" in result).toBe(false);
+  });
+
+  it("reasoning never displaces the answer when both are present", async () => {
+    stubFetchOk({
+      choices: [{
+        message: { content: "The answer.", reasoning_content: "Scratchpad that must not be shown as the answer." },
+        finish_reason: "stop",
+      }],
+      usage: { prompt_tokens: 1, completion_tokens: 1 },
+    });
+
+    const result = await chatAdapter.execute(makeRequest({ providerId: "local", modelId: "qwen3.8-27b" }));
+
+    expect(result.text).toBe("The answer.");
+    expect(result.text).not.toContain("Scratchpad");
+  });
+
+  it("falls back to reasoning as text ONLY when there is no content at all", async () => {
+    // Last-resort path: a thinking-only reply would otherwise render blank.
+    stubFetchOk({
+      choices: [{ message: { reasoning_content: "Only thinking, no answer emitted." }, finish_reason: "stop" }],
+      usage: { prompt_tokens: 1, completion_tokens: 1 },
+    });
+
+    const result = await chatAdapter.execute(makeRequest({ providerId: "local", modelId: "qwen3.8-27b" }));
+
+    expect(result.text).toBe("Only thinking, no answer emitted.");
+    expect(result.reasoning).toBe("Only thinking, no answer emitted.");
+  });
+
   it("OpenAI-compat: finish_reason=stop is not truncated", async () => {
     stubFetchOk({
       choices: [{ message: { content: "Done." }, finish_reason: "stop" }],
