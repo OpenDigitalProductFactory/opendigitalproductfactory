@@ -1,14 +1,28 @@
 ---
-status: phase-2-measured-do-not-proceed
+status: phase-4-implemented
 backlogItem: BI-68EED40A
 epic: EP-BUILD-STUDIO
 date: 2026-08-15
 ---
 
-> **Outcome (2026-08-16): Phase 2 ran and the gate did NOT open.** Qwen3.8-27B shows no
-> tool-selection advantage over either incumbent and is ~4x slower. Phases 4 and 5 are NOT
-> executed. See "Phase 2 result" below. The plan is retained because Phase 3 (BI-C2EFF855) and the
-> harness-runner work (BI-99A31531) remain valid independent of the tiering decision.
+> **Outcome (2026-08-16): Phase 4 implemented on an operator override of the Phase 2 gate.**
+>
+> Phase 2 measured no tool-selection advantage and a ~4x latency cost, and on those terms
+> recommended against tiering. The operator overrode that, on the grounds that (a) independent
+> testing found Qwen3.8-27B more complete and thorough on tasks than Qwen3.6, and (b) time-to-answer
+> is explicitly not a decision criterion for the local tier — a thorough, trustworthy result is.
+>
+> **The override is not evidence being ignored; it is the gate having measured the wrong thing.**
+> Phase 2 scores single-turn tool SELECTION. Both models tie there. The latency finding is real but
+> irrelevant to the stated criterion, and task completeness — the actual criterion — is precisely
+> what this harness cannot see, as recorded in "What this measurement does NOT settle" below.
+>
+> Consequence deliberately NOT taken: BI-3CF78C8E's finding that thinking mode costs 46% latency for
+> zero accuracy change is NOT applied. That measurement also only covers tool-picking, and the
+> thinking budget is plausibly what buys the thoroughness being selected for. Disabling it to chase
+> latency the operator has deprioritised would undercut the reason for the change. BI-3CF78C8E is
+> re-scoped from "disable thinking" to "decide the thinking contract against a task-completion
+> measure".
 
 # Qwen3.8-27B as the Local Generation Model — Implementation Plan
 
@@ -128,8 +142,11 @@ Tool-selection accuracy:
 | 45 | 55.6% | 66.7% | 66.7% |
 | mean latency | **10.3s** | 3.6s | **2.6s** |
 
-**Verdict: do not tier.** No accuracy advantage at any surface size (every delta is one case out of
-nine — inside the noise floor), and a ~4x latency penalty against the incumbent it would replace.
+**Verdict on these terms: do not tier** — no accuracy advantage at any surface size (every delta is
+one case out of nine, inside the noise floor) and a ~4x latency penalty against the incumbent.
+**Overridden by the operator**; see the header note. The tie is the load-bearing result: this
+harness found no reason to prefer either model, so it does not contradict independent evidence
+about task completeness, it is simply silent on it.
 
 The latency gap is architectural, not tunable. Qwen3.8-27B is **dense** — all 27B parameters active
 per token — while both incumbents are MoE with ~3B active. More total capability per parameter,
@@ -191,6 +208,30 @@ Sizing decision to make explicitly, with the measured numbers rather than in adv
 
 Also verify against the new weights: `recommendServedContextTokens()`, and the over-commit guard
 that exists precisely to catch mirror drift.
+
+### Phase 4 as implemented (2026-08-16)
+
+Qwen3.8-27B **replaces** the `ai/qwen3.6:35B-A3B` tier rather than being inserted below it. The
+ladder selects the largest model that fits, which assumes quality tracks size; that assumption does
+not hold here. Inserted below the 35B, the 27B would be unreachable — every host that fits the 35B
+fits it first. A 24 GB card and a 32 GB unified Mac now land on Qwen3.8-27B. The 35B remains in the
+operator-facing catalog as the explicit fast-alternative choice.
+
+The 80B `ai/qwen3-coder-next` tier above it is UNCHANGED — no evidence either way, so no guess.
+
+Two things verification caught that the plan had not anticipated:
+
+- **`install-dpf.sh` would have re-pulled the model on every run.** It derived the on-disk name by
+  stripping `ai/`, which is a no-op on a `hf.co/...` reference, so the already-on-disk check could
+  never match. The real transform was verified on-box: host rewritten to `huggingface.co/`, repo
+  path lowercased, quant tag case PRESERVED.
+- **Quality-tier resolution had to be proven, not assumed.** Default coworkers require
+  `minimumTier: strong`; a `hf.co/`-prefixed id could plausibly have missed the prefix match and
+  fallen through to `basic`, silently making the new default unusable by every default coworker.
+  Verified `strong` for both the pull form and the runtime form, family `qwen`, toolFidelity 80.
+
+Gate: 1906 unit tests across 152 files in the inference + routing suites, production build clean,
+`detect-hardware-host.ts` executes and emits valid JSON against the edited tier array.
 
 ## Phase 5 — Advance the live install
 

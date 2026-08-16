@@ -1380,15 +1380,23 @@ if (-not (Test-StepDone "hardware")) {
     # (same module) catches any drift.
     #
     # Thresholds = model weights + ~5 GB headroom (measured: a 30B at a 24k build
-    # context uses ~20.7 GB on a 24 GB card). So a 24 GB 4090 lands on the 30B
-    # coder, NOT the 35B -- which would fill the card and over-commit the moment a
-    # build runs. Pinned quant tags (never bare :latest) for reproducible sizes.
+    # context uses ~20.7 GB on a 24 GB card). Pinned quant tags (never bare
+    # :latest) for reproducible sizes.
+    #
+    # A 24 GB card lands on Qwen3.8-27B (17.66 GiB measured + headroom = 23). That
+    # model is DENSE, so it is ~4x slower per turn than the MoE tiers around it --
+    # a deliberate trade for thoroughness over time-to-answer.
+    #
+    # Qwen3.8 is pulled from HuggingFace (hf.co/...), not the curated ai/ namespace,
+    # because ai/qwen3.8 publishes only the 2.4T "Max". docker model pull accepts
+    # both sources; the runtime name it registers under differs (see the sh
+    # installer's normalization note).
     if ($gpuVRAM_GB -ge 53) {
         $selectedModel = "ai/qwen3-coder-next"
         $modelReason = "Qwen3-Coder-Next 80B (MoE) -- top agentic coder, fits your $gpuVRAM_GB GB VRAM with headroom"
-    } elseif ($gpuVRAM_GB -ge 27) {
-        $selectedModel = "ai/qwen3.6:35B-A3B-UD-Q4_K_M"
-        $modelReason = "Qwen3.6 35B-A3B (MoE) -- strong agentic model, fits your $gpuVRAM_GB GB VRAM with headroom"
+    } elseif ($gpuVRAM_GB -ge 23) {
+        $selectedModel = "hf.co/ggml-org/Qwen3.8-27B-GGUF:Q4_K_M"
+        $modelReason = "Qwen3.8 27B (dense, vision) -- most thorough local model, fits your $gpuVRAM_GB GB VRAM with headroom"
     } elseif ($gpuVRAM_GB -ge 21) {
         $selectedModel = "ai/qwen3-coder"
         $modelReason = "Qwen3-Coder 30B (MoE) -- serves chat + code, fits your $gpuVRAM_GB GB VRAM with headroom"
