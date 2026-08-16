@@ -188,6 +188,18 @@ low/medium/high/critical) and a recent-override penalty (capped at 0.3):
   **within the set actually scored** (BI-F5F2869D) — normalising across material that never gets
   scored leaves the scored set with no 1.0 and an arbitrary ceiling.
 
+**Alignment is not a licence to act.** A confident `approve` does NOT authorise the gate to decide.
+It acts autonomously only when the owner has ALREADY RULED on this question — a `ruled`-tier stance
+(grade A, weight 1.0) that dominates the relevant material, surfaced as `settledByRuling`. Anything
+else escalates with `gapReason: "aligned-not-settled"`, rendered to the operator as **"New
+proposition"** rather than a doctrine gap (BI-F5F2869D).
+
+This is deliberate, not a threshold that needs raising. Approving whatever matches recorded doctrine
+would mean the business only ever does what it already does; reviewing an unaligned or novel proposal
+is exactly where a new idea surfaces. The goal is better-sorted escalations, not fewer. The `decline`
+direction is unaffected — saying no to an off-stance idea is low-consequence and does not need the
+owner's live call.
+
 The recent-override penalty counts times the owner OVERRULED the profile in that class — the gate
 recommended one option and the human chose another. It deliberately does not count answering an
 escalation that carried no recommendation, nor an answer that agreed, nor one where no structured

@@ -123,6 +123,38 @@ gap reaches the operator as "the AI keeps asking me things it should know".
 **May NOT do:** block boot, loop/retry inside the hook (retry belongs to the
 next boot or the maintainer script), or log a clean pass it did not achieve.
 
+## 5. BI-F5F2869D part two — the escalation carried no signal (re-scope)
+
+Shipping §2 fixed retrieval and changed nothing the operator sees: verified live
+on DEPLOYED_SHA 94def5a4b, DI-7533BB032BA1 recorded SEVEN sources including the
+owner's own MSP ruling and still escalated at 0.50.
+
+Re-scoped on operator intent: the goal is NOT more autonomous approvals.
+Reviewing non-aligned propositions is desirable — it is where new ideas surface,
+and approving whatever matches recorded doctrine would make the business only
+ever do what it already does. The defect is that a NOVEL proposition and an
+ALREADY-RULED question both produce an identical `escalate` at 0.50.
+
+Cause: `evaluator.ts` normalises relevance across every material the resolver
+returned, but only the applicable subset is scored, so the material holding
+relevance 1.0 can sit outside the scored set. Confirmed arithmetically —
+`bestDirectionalWeight` 0.60 with `overridePenalty` 0 and all seven applicable
+materials `support`, so no neutral bystander took the maximum.
+
+Three changes: re-normalise within the scored set; add `settledByRuling` to
+separate aligned from settled (a `ruled` stance dominating the relevant
+material); and spend the recovered headroom on legibility — approval acts only
+when settled, otherwise it escalates as `aligned-not-settled`, rendered as
+"New proposition" rather than a doctrine gap.
+
+`directional-outcome.ts` is a pure extraction: `evaluator.ts` crossed the
+800-LOC ceiling, so the WWWD verdict ladder was lifted whole. Behaviour is
+unchanged and the existing suite proves it.
+
+**May NOT do:** lower `minimumConfidenceForRecommendation`, approve on alignment
+alone, touch the decline path, or stretch an explicit zero-relevance set to 1
+(that turns a coverage `defer` into a confident verdict — caught by test).
+
 ## Verification
 
 - Tests green across `lib/decision`, `lib/decision-perspective`,
