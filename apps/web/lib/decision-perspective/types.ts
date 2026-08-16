@@ -231,13 +231,39 @@ export type DecisionPerspectiveEvaluationResult = {
   constitutionalAlignment?: import("./alignment-criteria").ConstitutionalAlignmentResult;
   rationale: string;
   materialScores: PerspectiveMaterialScore[];
-  sources: Array<{
-    materialId: string;
-    sourceType: string;
-    summary: string;
-    effectiveWeight: number;
-  }>;
+  sources: Array<DecisionEvaluationSource>;
   gapReason?: "no-applicable-material" | "material-below-confidence";
+};
+
+/**
+ * One cited source on a recorded decision.
+ *
+ * The first four fields are the original contract (every gate populates them).
+ * The rest are the trust-envelope re-verification fields (BI-8192557E phase 2a):
+ * before them only `sourceType` — a bare string — survived the write, so a
+ * recorded citation could be proven un-tampered-with (via the sealed
+ * `evidenceDigests` hash chain) but never re-resolved against live source. A
+ * digest cannot answer "was this citation ever TRUE"; the structured locator can.
+ *
+ * All five are optional and additive: rows written before this carry none of
+ * them, and their absence must read as UNVERIFIABLE — never as confirmed
+ * (see `recordedCitationsFromSources`).
+ */
+export type DecisionEvaluationSource = {
+  materialId: string;
+  sourceType: string;
+  summary: string;
+  effectiveWeight: number;
+  /** Structured locator, re-resolvable against live source by the re-verifier. */
+  locator?: import("@/lib/deliberation/evidence").StructuredLocator;
+  /** Evidence grade the citation was admitted at (A/B/C; D is inadmissible). */
+  grade?: string;
+  /** The scored option this citation backs. */
+  optionId?: string;
+  /** The scored dimension this citation backs. */
+  dimensionKey?: string;
+  /** The excerpt the score relied on, as recorded at decision time. */
+  excerpt?: string | null;
 };
 
 export type DecisionInteractionGateView = {

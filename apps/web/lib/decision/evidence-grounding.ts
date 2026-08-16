@@ -275,12 +275,40 @@ export async function buildScoredDecisionOptions(input: {
   );
 }
 
-/** Shape the admissible citations for the DecisionInteraction.sources column. */
+/** Grade → effective weight for the persisted source row. A most conclusive. */
+const GRADE_WEIGHT: Record<string, number> = { A: 1, B: 0.75, C: 0.5, D: 0.25 };
+
+/**
+ * Shape the admissible citations for the DecisionInteraction.sources column.
+ *
+ * BI-8192557E phase 2a: the row now carries the STRUCTURED LOCATOR, not just
+ * `locator.sourceType`. Re-verification (`reverifyCitations`) re-resolves a
+ * locator against live source; a bare sourceType string cannot be re-resolved,
+ * so before this every recorded citation was permanently unverifiable. The
+ * sealed `evidenceDigests` chain proves the record was not tampered with —
+ * a different property from whether the citation was ever true.
+ *
+ * This is the single home for the ledger source shape; the kernel-consult
+ * ledger delegates here rather than re-deriving it.
+ */
 export function citationsToSources(
   citations: AdmissibleCitation[],
-): Array<{ sourceType: string; locator: StructuredLocator; grade: ClaimEvidenceGrade; optionId: string; dimensionKey: string; excerpt: string | null }> {
+): Array<{
+  materialId: string;
+  sourceType: string;
+  summary: string;
+  effectiveWeight: number;
+  locator: StructuredLocator;
+  grade: ClaimEvidenceGrade;
+  optionId: string;
+  dimensionKey: string;
+  excerpt: string | null;
+}> {
   return citations.map((c) => ({
+    materialId: `${c.optionId}:${c.dimensionKey}`,
     sourceType: c.locator.sourceType,
+    summary: c.excerpt ?? `${c.dimensionKey} cited from ${c.locator.sourceType}`,
+    effectiveWeight: GRADE_WEIGHT[c.grade] ?? 0.5,
     locator: c.locator,
     grade: c.grade,
     optionId: c.optionId,
