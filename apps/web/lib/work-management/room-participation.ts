@@ -47,8 +47,19 @@ export function authorizeWorkroomAccess(input: {
   sensitivityCeiling: string | null;
   sensitivityClearance: readonly string[];
   isSuperuser: boolean;
+  /**
+   * BI-154DAA7E: the superuser short-circuit is a HUMAN affordance — the
+   * installation owner bypassing ceiling checks on their own install. An AI
+   * principal must never ride it: a coworker provisioned as "superuser" would
+   * void every room-side clearance guarantee in one flag. Callers on the agent
+   * path pass "agent" and the short-circuit is refused regardless of
+   * isSuperuser; omitting the field preserves the human behaviour unchanged.
+   */
+  principalKind?: "human" | "agent";
 }): WorkroomAccessDecision {
-  if (input.isSuperuser) return { level: input.requested, reason: "authorized" };
+  if (input.isSuperuser && input.principalKind !== "agent") {
+    return { level: input.requested, reason: "authorized" };
+  }
   if (!input.principalRef) return { level: "none", reason: "not-admitted" };
 
   const admitted = input.assignedPrincipalRefs.includes(input.principalRef);
