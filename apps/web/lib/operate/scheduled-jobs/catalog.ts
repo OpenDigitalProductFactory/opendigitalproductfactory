@@ -61,30 +61,12 @@ import {
 
 /** core = platform-integrity cron, operator read-only. editable = cadence
  *  may be tuned by an operator after install. */
-export type JobCategory = "core" | "editable";
+import type { JobCategory, ScheduledJobCatalogEntry } from "./catalog-types";
 
-export interface ScheduledJobCatalogEntry {
-  /** Join key against ScheduledJob.jobId. For crons that maintain a row this
-   *  IS that row's jobId; for the rest it is a stable synthetic id (an
-   *  edit/enable upserts a row under this id on first mutation). */
-  jobId: string;
-  /** The Inngest function id (id passed to inngest.createFunction). */
-  inngestId: string;
-  /** Human-readable job name. */
-  name: string;
-  /** One-line purpose — what breaks if this never runs. */
-  purpose: string;
-  /** Raw cron expression as defined in code. */
-  cron: string;
-  /** Human cadence label for display (derived from `cron`). */
-  cadence: string;
-  category: JobCategory;
-  /** True when a ScheduledJob row carries live run data for this job. */
-  tracksRunData: boolean;
-  /** Inngest event name that triggers a one-shot manual run, or null when no
-   *  manual-trigger event function exists for this job. */
-  runNowEvent: string | null;
-}
+// Re-exported so existing importers of the catalog keep working; the types are
+// owned by ./catalog-types (BI-ED117C82).
+export type { JobCategory, ScheduledJobCatalogEntry };
+
 
 // Ordered roughly by operational prominence. core-locked jobs first.
 export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
