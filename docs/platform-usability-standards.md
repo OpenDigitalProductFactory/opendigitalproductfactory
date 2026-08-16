@@ -142,7 +142,12 @@ of an ordered ladder — re-route to the specialist who owns the area, consult a
 question, convene the parties in a workroom, and only then file, naming who was tried. The contract
 is assembled into every coworker's prompt from `platform-identity/escalation-ladder`
 (`apps/web/lib/tak/escalation-ladder.ts`), and a turn that files without attempting a rung above it
-offers the escalation instead of ending the thread. Full rationale in
+offers the escalation instead of ending the thread. When no single specialist obviously owns a
+question — it spans areas, or is contested — the ladder points at the standing coordinator: the
+specialist hands the thread to the COO, says so plainly ("I've brought this to our COO to route"),
+and the COO routes, convenes, and holds the thread until someone owns it. Coordination is visible;
+the byline never becomes "the COO decided" — recommendations keep their own attribution and approval
+stays with the human (`platform-identity/coordinator-contract`). Full rationale in
 [`coworker-escalation-ladder-design.md`](superpowers/specs/2026-08-15-coworker-escalation-ladder-design.md).
 
 Repeated detector or consultation events are audit occurrences, not automatically separate units
