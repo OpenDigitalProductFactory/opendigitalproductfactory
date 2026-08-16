@@ -107,6 +107,29 @@ Phase 2 therefore splits:
 
 **Path guard (security).** A cited `filePath` is attacker-influenced data — it comes from whatever agent made the decision and is echoed back as `liveExcerpt`. Phase 1's resolver confines reads to the repo root, but the repo root legitimately *contains* `.env`, keys and credential files, so an unguarded citation naming one would round-trip its contents to any caller holding `registry_read`. `guardResolverPaths` wraps the resolver with `isPathAllowedSync` — the same blocklist `read_project_file` enforces — and a blocked path fails closed to `unresolved`. Regression-tested against a fixture repo containing a planted secret.
 
+#### Phase 2b.1 — the anchoring rule (correction, BI-EE2B243D)
+
+**2b shipped with a defect that only functional verification on the live install could find.** Run against a real decision minutes after the install self-upgraded, every one of four *true* citations came back `degraded` — the fabrication verdict — with `sourceAccess: {available: true, detail: "source readable at /workspace"}`.
+
+The citations were correct; the resolver could not see the files. `PROJECT_ROOT=/workspace` is the Build Studio image-synced source volume: it has `package.json` at the root (so the availability probe said "available"), it has **no `.git`**, and it carries only *part* of the tree — `apps/web/lib/decision/` held 7 files and was missing `recorded-citations.ts`, `evidence-grounding.ts`, `evidence-reverifier.ts` and `locator-resolver.ts`, all merged and deployed.
+
+This is precisely the failure the three-way outcome existed to prevent, defeated by a probe too coarse to notice. And it is the worst available failure for this feature: **a false accusation of fabricated evidence** is more damaging than declining to check.
+
+**The rule: a citation can only be REFUTED against source of known revision.**
+
+Absence is evidence only when you know which revision you are looking at. On a tree of unknown provenance, "the file is not here" is equally explained by the citation being false, the tree being partial, or the tree being stale — and nothing distinguishes them. Confirmation is not symmetric: if the cited text *is* present, it existed, whatever revision the tree is at. So:
+
+| tree | resolves + matches | anything else |
+|---|---|---|
+| anchored (a `.git` checkout) | `confirmed` | `degraded` — a real finding |
+| unanchored | `confirmed` | `inconclusive` — an open question about the environment |
+
+`SourceAccess` gains `anchored` + `anchorDetail`; the report gains `inconclusive[]` and the cause `unanchored-source`; `degrade` is empty on an unanchored tree by construction. The tool description now states the asymmetry, because the description is what an agent reads before trusting a verdict.
+
+**Consequence for this install:** re-verification is confirm-only until the verifier is pointed at a checkout. That is the honest state — better inert than wrong — and the report says exactly why rather than going quiet.
+
+**Regression test** plants the live shape precisely: a root with `package.json`, no `.git`, and the cited file absent. It must yield `unverifiable` / `unanchored-source`, never `degraded`. The original suite missed this because every fixture either contained the cited file or fabricated a path in a tree that was otherwise complete.
+
 **Deliberately NOT in 2b: recording the verdict.** The plan bullet above says "record degraded pairs"; that is held back to phase 3, for a reason found while building. The decision row is sealed into the append-only hash chain and a write guard forbids mutating sealed fields, so a verdict cannot be written back onto it — it needs its own record, whose shape is determined by how phase 3 consumes a degrade during re-scoring. Inventing that record now would fix the shape before the consumer exists. 2b is read-only and advisory, which is also the cleaner separation-of-duties story.
 
 ### Phase 3 — degrade feeds Axis 1

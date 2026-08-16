@@ -66,7 +66,20 @@ function dbWith(citations: AdmissibleCitation[] | null, overrides: Record<string
   };
 }
 
-const AVAILABLE = (repoRoot: string): SourceAccess => ({ available: true, repoRoot });
+/** A real checkout: revision is knowable, so a miss is evidence about the citation. */
+const AVAILABLE = (repoRoot: string): SourceAccess => ({
+  available: true,
+  repoRoot,
+  anchored: true,
+  anchorDetail: "a git checkout",
+});
+/** Readable source of unknown revision — the live install's image-synced volume. */
+const UNANCHORED = (repoRoot: string): SourceAccess => ({
+  available: true,
+  repoRoot,
+  anchored: false,
+  anchorDetail: "NOT a git checkout, so its revision is unknown",
+});
 const UNAVAILABLE: SourceAccess = { available: false, detail: "no source checkout on this install" };
 const NEVER_CALLED: LocatorResolver = async () => {
   throw new Error("resolver must not be called");
@@ -194,6 +207,71 @@ describe("reverifyDecisionEvidence", () => {
       unverifiable: 1,
       complete: false,
     });
+  });
+
+  // BI-EE2B243D — the live regression. PROJECT_ROOT on the install is an
+  // image-synced source volume: package.json is present, `.git` is not, and the
+  // tree carries only PART of the repo. Every true citation resolved to nothing
+  // and the pass reported "degraded" — i.e. accused honest evidence of being
+  // fabricated. Absence in a tree of unknown revision proves nothing.
+  it("does NOT degrade a citation missing from a tree of unknown revision", async () => {
+    const repoRoot = await mkdtemp(join(tmpdir(), "dpf-unanchored-"));
+    // Exactly the live shape: a plausible root, no .git, and the cited file absent.
+    await writeFile(join(repoRoot, "package.json"), "{}", "utf8");
+
+    const lookup = await reverifyDecisionEvidence({
+      db: dbWith([citation()]),
+      interactionId: "DI-TEST",
+      sourceAccess: UNANCHORED(repoRoot),
+      resolve: createRepoLocatorResolver({ repoRoot }),
+    });
+
+    if (!lookup.found) throw new Error("expected found");
+    expect(lookup.report.outcome).not.toBe("degraded");
+    expect(lookup.report.outcome).toBe("unverifiable");
+    expect(lookup.report.unverifiableCause).toBe("unanchored-source");
+    expect(lookup.report.degrade).toEqual([]);
+    expect(lookup.report.degraded).toBe(0);
+    expect(lookup.report.inconclusive).toEqual([
+      {
+        optionId: "option-a",
+        dimensionKey: "evidence_density",
+        rawVerdict: "unresolved",
+        reason: "unanchored-source",
+      },
+    ]);
+    expect(lookup.report.sourceAccess.anchored).toBe(false);
+  });
+
+  // Confirmation survives the anchoring rule: if the cited text IS there, it
+  // existed, whatever revision the tree is at. Only refutation needs an anchor.
+  it("still confirms a citation whose text is present on an unanchored tree", async () => {
+    const repoRoot = await fixtureRepo();
+    const lookup = await reverifyDecisionEvidence({
+      db: dbWith([citation()]),
+      interactionId: "DI-TEST",
+      sourceAccess: UNANCHORED(repoRoot),
+      resolve: createRepoLocatorResolver({ repoRoot }),
+    });
+
+    if (!lookup.found) throw new Error("expected found");
+    expect(lookup.report.outcome).toBe("verified");
+    expect(lookup.report.confirmed).toBe(1);
+    expect(lookup.report.inconclusive).toEqual([]);
+  });
+
+  it("keeps a real refutation when the tree IS a checkout", async () => {
+    const repoRoot = await fixtureRepo();
+    const lookup = await reverifyDecisionEvidence({
+      db: dbWith([citation({ locator: { sourceType: "code", filePath: "apps/web/lib/invented.ts" } })]),
+      interactionId: "DI-TEST",
+      sourceAccess: AVAILABLE(repoRoot),
+      resolve: createRepoLocatorResolver({ repoRoot }),
+    });
+
+    if (!lookup.found) throw new Error("expected found");
+    expect(lookup.report.outcome).toBe("degraded");
+    expect(lookup.report.inconclusive).toEqual([]);
   });
 
   it("reports a missing decision as not found rather than as an empty pass", async () => {

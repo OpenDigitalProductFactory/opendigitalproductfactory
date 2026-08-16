@@ -27,6 +27,7 @@ import {
   reverifyCitations,
   type CitationReVerification,
   type LocatorResolver,
+  type ReVerificationVerdict,
 } from "@/lib/decision/evidence-reverifier";
 import {
   recordedCitationsFromSources,
@@ -34,9 +35,23 @@ import {
 } from "@/lib/decision/recorded-citations";
 import { decisionInteractionRowToEvaluation } from "@/lib/decision-perspective/persistence";
 
-/** Whether this install can read the source a `code`/`spec`/`doc` locator names. */
+/**
+ * Whether this install can read the source a `code`/`spec`/`doc` locator names,
+ * and — critically — whether that source can be tied to a known commit.
+ *
+ * `anchored` is what licenses a REFUTATION. Absence of a file only proves a
+ * citation false if we know which revision we are looking at; on a tree of
+ * unknown provenance, "the file is not here" is equally explained by the tree
+ * being partial or stale. The live install proved this the hard way: PROJECT_ROOT
+ * is an image-synced source volume with no `.git` and only part of the tree, so
+ * every true citation resolved to nothing and was reported as fabricated
+ * evidence (BI-EE2B243D).
+ *
+ * Confirmation is safe either way — if the cited text IS present, it existed —
+ * so an unanchored tree still confirms; it just may never degrade.
+ */
 export type SourceAccess =
-  | { available: true; repoRoot: string }
+  | { available: true; repoRoot: string; anchored: boolean; anchorDetail: string }
   | { available: false; detail: string };
 
 /**
@@ -49,7 +64,20 @@ export type SourceAccess =
  */
 export type DecisionEvidenceOutcome = "verified" | "degraded" | "unverifiable";
 
-export type UnverifiableCause = "no-source-access" | "no-recorded-locators";
+export type UnverifiableCause =
+  | "no-source-access"
+  | "no-recorded-locators"
+  /** Source is readable but of unknown revision, so nothing can be refuted. */
+  | "unanchored-source";
+
+/** A citation that was checked but cannot be adjudicated on this tree. */
+export type InconclusiveCitation = {
+  optionId: string;
+  dimensionKey: string;
+  /** What the raw pass said before the anchoring rule softened it. */
+  rawVerdict: ReVerificationVerdict;
+  reason: "unanchored-source";
+};
 
 export type DecisionEvidenceReport = {
   interactionId: string;
@@ -71,11 +99,17 @@ export type DecisionEvidenceReport = {
   confirmed: number;
   degraded: number;
   unresolved: number;
-  /** (option, dimension) pairs whose evidence no longer holds. */
+  /** (option, dimension) pairs whose evidence no longer holds. Empty on an unanchored tree. */
   degrade: Array<{ optionId: string; dimensionKey: string }>;
+  /**
+   * Checked, but not adjudicable here. On an unanchored tree a non-confirming
+   * citation lands here instead of in `degrade` — it is an open question, not a
+   * finding against the decision.
+   */
+  inconclusive: InconclusiveCitation[];
   results: CitationReVerification[];
   unverifiableSources: UnverifiableSource[];
-  sourceAccess: { available: boolean; detail: string };
+  sourceAccess: { available: boolean; anchored: boolean; detail: string };
 };
 
 export type DecisionEvidenceLookup =
@@ -131,7 +165,7 @@ function emptyReport(
   recordedSources: number,
   unverifiableSources: UnverifiableSource[],
   cause: UnverifiableCause,
-  sourceAccess: { available: boolean; detail: string },
+  sourceAccess: { available: boolean; anchored: boolean; detail: string },
 ): DecisionEvidenceReport {
   return {
     interactionId,
@@ -149,6 +183,7 @@ function emptyReport(
     degraded: 0,
     unresolved: 0,
     degrade: [],
+    inconclusive: [],
     results: [],
     unverifiableSources,
     sourceAccess,
@@ -183,10 +218,11 @@ export async function reverifyDecisionEvidence(input: {
 
   const question = typeof row.question === "string" ? row.question : null;
   const recordedAt = row.createdAt instanceof Date ? row.createdAt : null;
+  const anchored = input.sourceAccess.available && input.sourceAccess.anchored;
   const accessDetail = input.sourceAccess.available
-    ? `source readable at ${input.sourceAccess.repoRoot}`
+    ? `source readable at ${input.sourceAccess.repoRoot} — ${input.sourceAccess.anchorDetail}`
     : input.sourceAccess.detail;
-  const access = { available: input.sourceAccess.available, detail: accessDetail };
+  const access = { available: input.sourceAccess.available, anchored, detail: accessDetail };
 
   // Re-use the audit read path rather than parsing the jsonb here, so the
   // verifier sees exactly what the Decision Canvas sees.
@@ -235,24 +271,48 @@ export async function reverifyDecisionEvidence(input: {
 
   const report = await reverifyCitations(citations, input.resolve);
 
+  // The anchoring rule. On a tree whose revision we cannot establish, a
+  // non-confirming result is an OPEN QUESTION, not a finding: the file may be
+  // absent because the citation was false, or because this tree is partial or
+  // stale, and nothing here distinguishes those. Confirmation survives — if the
+  // cited text is present, it existed — so the pass stays useful without ever
+  // manufacturing a fabrication verdict out of a deployment artifact.
+  const inconclusive: InconclusiveCitation[] = anchored
+    ? []
+    : report.results
+      .filter((r) => r.verdict !== "confirmed")
+      .map((r) => ({
+        optionId: r.optionId,
+        dimensionKey: r.dimensionKey,
+        rawVerdict: r.verdict,
+        reason: "unanchored-source" as const,
+      }));
+  const degrade = anchored ? report.degrade : [];
+  const outcome: DecisionEvidenceOutcome = degrade.length > 0
+    ? "degraded"
+    : report.confirmed > 0
+      ? "verified"
+      : "unverifiable";
+
   return {
     found: true,
     report: {
       interactionId: String(row.interactionId ?? input.interactionId),
       question,
       recordedAt,
-      outcome: report.degrade.length > 0 ? "degraded" : "verified",
-      unverifiableCause: null,
+      outcome,
+      unverifiableCause: outcome === "unverifiable" && !anchored ? "unanchored-source" : null,
       coverage: {
         recordedSources,
         checked: citations.length,
         unverifiable: unverifiable.length,
-        complete: unverifiable.length === 0,
+        complete: unverifiable.length === 0 && inconclusive.length === 0,
       },
       confirmed: report.confirmed,
-      degraded: report.degraded,
-      unresolved: report.unresolved,
-      degrade: report.degrade,
+      degraded: anchored ? report.degraded : 0,
+      unresolved: anchored ? report.unresolved : 0,
+      degrade,
+      inconclusive,
       results: report.results,
       unverifiableSources: unverifiable,
       sourceAccess: access,
