@@ -20,6 +20,15 @@ WORKDIR /app
 # package.json.
 COPY pnpm-workspace.yaml pnpm-lock.yaml package.json ./
 
+# patchedDependencies in pnpm-workspace.yaml makes patches/ an INPUT to the
+# install, not an optional extra: pnpm hashes every referenced patch file
+# while resolving, so a missing one is a hard ENOENT rather than a skipped
+# patch. PR #4321 (image-size ICNS fix, CVE-2025-71330) added this repo's
+# first patched dependency and broke the edge-node image on exactly that.
+# Copy the whole directory — it is a handful of KB, and scoping it to
+# today's single patch would re-break the next time one is added.
+COPY patches ./patches
+
 # Every workspace package edge-node depends on (transitively). Today
 # that's @dpf/validators only; add more here if the dep tree grows.
 COPY packages/validators ./packages/validators
