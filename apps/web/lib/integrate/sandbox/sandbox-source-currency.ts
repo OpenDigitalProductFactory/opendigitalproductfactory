@@ -49,6 +49,12 @@ export type SandboxSourceCurrencyInput = {
 };
 
 const SOURCE_DIFF_EXCLUDES = [
+  // Per-build worktree homes (DPF_BUILD_WORKTREE_ISOLATION) live under .builds/.
+  // They are nested git worktrees, not source — exclude them so this dirty probe
+  // never flags an active build's OWN worktree as uncommitted drift, which would
+  // pause start_build with "Sandbox source dirty" (worktree-isolation regression).
+  ":!.builds",
+  ":!**/.builds/**",
   ":!node_modules",
   ":!**/node_modules/**",
   ":!.next",

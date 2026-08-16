@@ -34,6 +34,12 @@ const SANDBOX_PORT = Number(process.env.SANDBOX_PORT ?? "3035");
 const WORKSPACE = "/workspace";
 const GIT_INDEX_LOCK = `${WORKSPACE}/.git/index.lock`;
 const SANDBOX_GIT_STAGE_EXCLUDES = [
+  // Never stage per-build worktree homes (.builds/<id>) — they are nested git
+  // worktrees, not source. Without this, `git add` tracks them as gitlinks and
+  // every subsequent build sees a perpetually-"dirty" tree (worktree-isolation
+  // regression that blocked start_build).
+  ":!.builds",
+  ":!**/.builds/**",
   ":!node_modules",
   ":!**/node_modules/**",
   ":!.next",
@@ -50,6 +56,9 @@ const SANDBOX_GIT_STAGE_EXCLUDES = [
   ":!packages/db/generated/**",
 ] as const;
 const SANDBOX_GIT_CLEAN_EXCLUDES = [
+  // Protect active per-build worktrees (.builds/<id>) from the pre-build scrub.
+  ":!.builds",
+  ":!**/.builds/**",
   ":!node_modules",
   ":!**/node_modules/**",
   ":!.pnpm-store",
