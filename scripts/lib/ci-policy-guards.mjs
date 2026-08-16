@@ -47,6 +47,11 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
     guard("shell-guard-shim-contract", "Shell Guard Shim Contract", [
       node("--test", "scripts/check-shell-guard-shim-contract.test.mjs"),
     ]),
+    guard("installer-state-contract", "Installer State Contract", [
+      // Drives real bash: install-dpf.sh runs under `set -euo pipefail`, and the
+      // failure mode here is shell exit-status semantics, not source text.
+      node("--test", "scripts/installer/lib/state-cleanup-temps.test.mjs"),
+    ]),
     guard("published-image-freshness", "Published Image Freshness", [
       // Decision logic only — the live registry check needs Docker and runs on a
       // schedule (.github/workflows/published-image-freshness.yml).
