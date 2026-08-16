@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 638,
+  "pageCount": 639,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -370,6 +370,31 @@
         "evidence-hooks",
         "acceptance-mapping",
         "related"
+      ]
+    },
+    "docs/architecture/2026-08-16-simplify-and-strengthen-architecture-pass.md": {
+      "publicHref": "/architecture/2026-08-16-simplify-and-strengthen-architecture-pass/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "simplify-strengthen-whole-platform-architecture-pass-2026-08-16",
+        "1-the-customer-base-this-architecture-must-serve",
+        "2-state-of-the-existing-hardening-program-verified-live",
+        "3-findings-by-lens",
+        "31-code-structure",
+        "32-data-model",
+        "33-ux-primitives-information-architecture",
+        "34-runtime-deployment-topology",
+        "35-the-architecture-knowledge-base",
+        "4-systemic-diagnosis-three-patterns-one-root-cause",
+        "5-the-program-ranked-moves",
+        "tier-0-do-first-low-risk-high-leverage-mostly-additive",
+        "tier-1-this-quarter-structural-bounded-risk",
+        "tier-2-next-quarter-decisions-and-deeper-surgery",
+        "what-not-to-do",
+        "6-readiness-scorecard",
+        "7-measurement"
       ]
     },
     "docs/architecture/GAID.md": {
