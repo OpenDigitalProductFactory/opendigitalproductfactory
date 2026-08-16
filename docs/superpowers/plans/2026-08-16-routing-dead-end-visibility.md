@@ -1,8 +1,8 @@
 # Plan — Routing dead-end visibility: name the real cause instead of guessing
 
 **Backlog item:** BI-E2CCFAC1 — *Routing dead-ends require a DB write or an engineer to clear — no self-healing, no preflight, no owner-facing recovery on any install*
-**Related:** BI-04E4F111 (write-once connection status), BI-5493BBD9 (unprofiled Qwen3.8), BI-91F0E312 (harness records deferrals as failures)
-**Date:** 2026-08-16
+**Related:** BI-04E4F111 (write-once connection status), BI-5493BBD9 (unprofiled Qwen3.8), BI-91F0E312 (harness records deferrals as failures), BI-0A59F936 (scheduled turns stripped of web tools; absorbed BI-IMP-7E89183D), BI-090221E7 (/finance renders unknown as $0.00), BI-64F2EA96 (marketing approval loop never closes)
+**Date:** 2026-08-16 (extended the same day with the remediation slices below)
 
 ## Problem
 
@@ -59,3 +59,62 @@ Its remaining limitation is recorded on BI-E2CCFAC1 and **not** addressed here: 
 
 - **Reason-string coupling.** Bucketing matches on phrases from `getExclusionReasonV2`. Mitigated by testing against verbatim strings and by `other` degrading safely to the raw reason.
 - **Over-confident attribution.** A dominant bucket is not the only cause; the message states counts (`3 of 4`) rather than implying totality, and the full breakdown is retained on the returned object.
+
+---
+
+# Extension — the remediation slices (same branch, same day)
+
+The naming half above tells the operator the truth; this extension makes the coworkers able to RUN. Seven proven root causes from the live install, implemented as one coherent change because no single one of them alone produces a working coworker.
+
+## 1. Connection status lifecycle — BI-04E4F111
+
+`AiProviderConnection.status` was effectively write-once (the seed upsert updates only `label`; posture updates never touch status), while routing eligibility filters `connection.status === "active"` (`provider-suitability/runtime.ts`). Three repairs:
+
+- `activateProvider` (`lib/govern/activate-provider.ts`) brings the `provider-default-<id>` connection out of `unconfigured`/`disabled` **before** clearance derivation, so every activation path heals the connection with the provider.
+- Boot reconciliation (`lib/inference/provider-connection-reconcile.ts`, wired in `instrumentation.ts` with a 20-min net) heals installs already in the split state — only the `disabled` veto behind an `active` provider, only default connections; a deliberately disabled org-scoped connection stays disabled.
+- The providers list derives its eligibility badge from `resolveRuntimeConnectionStatus(provider.status, connection.status)` instead of the raw provider status, with a connection-specific remediation line; the provider detail page renders "connection disabled" instead of a green "active" when vetoed.
+
+## 2. Scheduled turns get their web tools — BI-0A59F936 (absorbed BI-IMP-7E89183D)
+
+`resolveAutonomousWorkTools` passed no `externalAccessEnabled`, so `getAvailableTools` stripped every `requiresExternalAccess` tool (search AND the keyless fetch) from every scheduled turn. New `lib/tak/scheduled-external-access.ts`:
+
+- `resolveScheduledTurnExternalAccess(agentId)` — the per-session human toggle's job falls to the agent's standing `web_search` grant (DB-first, registry fallback). Independent of `USE_UNIFIED_COWORKER` by design.
+- `scheduledTaskNeedsExternalResearch` + `assertScheduledResearchCapability` — a watch-kind task or research-shaped prompt with no external tool in its resolved surface fails **before** the model runs, with an error naming the missing grant. Completing "ok" with confident unresearched output was the failure mode; both scheduler call sites (loop + forced-tool backstop) now carry the resolved posture.
+
+## 3. Honest endpoint-test harness — BI-91F0E312
+
+Deferred ≠ failed, structurally:
+
+- `endpoint-test-runner.ts`: probe/scenario results carry `outcome: passed|failed|deferred` and `passed: boolean|null` (null = never reached the model). A `LocalProviderCapacityDeferredError` — including a `local-integration-ci` lease claimed mid-run — classifies as deferred.
+- A run containing any deferral is `status: "incomplete"`: no `avgScore`, no `ModelProfile` capability writes, and `verifyModels` reports it as `deferred`, not failed.
+- `eval-runner.ts` (DE-\* dimension evals): an inconclusive cycle no longer bumps `evalCount`/`profileConfidence` (which dampened the exponential-smoothing weight of the next REAL measurement — how placeholder scores became sticky), writes no manufactured avgScore, and the stale-run reaper records `incomplete` rather than `failed`.
+
+## 4. Re-profile qwen3.8-27b — BI-5493BBD9
+
+Runtime action after 3: re-run the dimension eval so `ModelProfile` carries measured `reasoning`/`codegen`/`toolFidelity` instead of 5 ms discovery estimates. No hand-edited scores — the fix in 3 is what lets a real measurement land at full weight.
+
+## 5. Reachability preflight + coworker visibility — BI-E2CCFAC1 (this BI's remaining half)
+
+- `route-readiness.ts` now evaluates a **confidential** coworker at the payload-screening escalation ceiling (`restricted`) too: the declared level is a floor, screening escalates real turns, and readiness reported "ready" for coworkers whose every real turn died. Blocked-at-ceiling surfaces as not-ready with the escalation named.
+- New `lib/coworker-service-catalog/routing-reachability-preflight.ts` + Inngest cron `inference/routing-reachability-preflight` (every 6 h, catalog-registered): dry-runs routing for every production coworker, raises ONE deduplicated owner-visible health issue (`CoworkerRoutingUnreachable`) plus an attention notification on zero-eligible, resolves it on recovery.
+- `/platform/ai/runtime-health` gains a "Coworker routing" table (coworker, data class incl. escalation, ready/blocked, why) — coworker turns are an activity class, not a build phase, which is why nothing warned the owner before.
+
+## 6. /finance honesty + burn/revenue/runway — BI-090221E7
+
+- Unrecorded ≠ zero: existence counts gate the copy — "all up to date" only when invoices exist; "Money You Owe" renders "Not recorded → record supplier bills" when no bill has ever been recorded.
+- New `lib/finance/burn-runway.ts`: pure `computeBurnRunway` (trailing 90-day burn incl. supplier-contract commitments, revenue, runway) with explicit `unknown` states, `committed-only` basis, `cash-growing`, and a `preRevenueWithBurn` flag; rendered as a four-card row with record-it links, never a fabricated $0.00.
+- Proactive half: a `finance-agent` proactivity self-task ("Review burn, revenue, and runway", weekly/twice-weekly) reads the same state and tells the owner what to record or watch. (The goal named finance-controller; that roster entry is a seed-only stub with no persona or route — LIFE-003 conformance gap — so the /finance-routable Finance Specialist carries the duty.)
+
+## 7. Marketing approval loop — BI-64F2EA96 (filed this session)
+
+- The landing surface leads with a first-viewport "Waiting on you / In progress" strip: pending drafts, ready-to-publish posts, or stalled briefs (saved briefs with nothing reviewable — the live month-long limbo), each deep-linked.
+- The hero CTAs' anchors (`#marketing-approval-queue`, `#marketing-publish-queue`) now actually exist on the queue sections — they previously pointed at nothing.
+
+## Design grounding
+
+Extends THIS plan (the naming half's declared "next slice"), the marketing progressive-disclosure contract from BI-8AB9C904 (strip added above the existing disclosure, not replacing it), and the scheduled-job catalog/self-task registries as the front doors for new recurring work. Kernel consults: DI-00FC30F08495 (marketing surfacing options; near-tie, operator directive in the session goal settled it), DI-22A333BD5397 (finance explicit-unknown; high confidence). UX-fit manifests: `docs/ux-fit/2026-08-16-marketing-waiting-on-you-strip.ux-fit.json`, `docs/ux-fit/2026-08-16-finance-explicit-unknown.ux-fit.json`.
+
+## Verification (extension)
+
+- Unit: 60+ new/updated tests across activate-provider, provider-connection-reconcile, scheduled-external-access, endpoint-test-runner (deferral), route-readiness (escalation ceiling), burn-runway, catalog parity.
+- Functional, on the contributor preview against the live workspace data: providers page names the connection cause; runtime-health shows the coworker routing table; /finance shows honest unknowns; /customer/marketing leads with the queue; and the acceptance turn — ask the Finance Specialist to record real recurring supplier costs and watch it run a turn and act, where it previously returned "No AI model can handle this request".
