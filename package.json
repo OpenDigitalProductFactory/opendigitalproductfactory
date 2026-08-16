@@ -42,6 +42,8 @@
     "check:fpaw-standard:test": "tsx --test scripts/check-fpaw-standard.test.ts scripts/check-fpaw-external-bridge.test.ts",
     "check:n1-caller-honesty": "node scripts/check-n-minus-one-caller-honesty.mjs",
     "check:module-size": "node scripts/check-module-size.mjs",
+    "check:fk-index-coverage": "node scripts/check-fk-index-coverage.mjs",
+    "check:retention-enrollment": "node scripts/check-retention-enrollment.mjs",
     "check:data-impact": "node scripts/check-data-impact.mjs",
     "measure:substrate": "node scripts/measure-platform-substrate.mjs --json",
     "check:substrate": "node scripts/measure-platform-substrate.mjs",
