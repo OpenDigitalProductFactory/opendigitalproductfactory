@@ -177,6 +177,11 @@ RUN mkdir -p /dpf-release-assets/scripts/lib /dpf-release-assets/scripts/install
     cp scripts/installer/install-state.v2.schema.json /dpf-release-assets/scripts/installer/ && \
     cp scripts/installer/native-edge-host.ps1 /dpf-release-assets/scripts/installer/ && \
     cp scripts/installer/lib/state.ps1 /dpf-release-assets/scripts/installer/lib/ && \
+    mkdir -p /dpf-release-assets/scripts/safety && \
+    cp scripts/safety/dpf-shell-guard.ps1 scripts/safety/dpf-shell-guard.sh \
+       scripts/safety/dpf-shell-guard-fallback-patterns.json \
+       scripts/safety/pre-destructive-snapshot.ps1 scripts/safety/pre-destructive-snapshot.sh \
+       /dpf-release-assets/scripts/safety/ && \
     cp -R monitoring/. /dpf-release-assets/monitoring/ && \
     cd /dpf-release-assets && \
     find . -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS
