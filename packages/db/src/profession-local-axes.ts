@@ -140,6 +140,88 @@ export const PROFESSION_LOCAL_AXES: readonly ProfessionLocalAxis[] = [
     // this one can carry weight on measured grounds.
     source: "acm/10.1145-2702123.2702575-miniukovich-2015",
   },
+
+  // ── Internal developer acumens (BI-CC44E74F, EP-413F2602) ──────────────────
+  // The architecture-shape principles from the 2026-08-16 simplify-strengthen
+  // pass, expressed as the decision vocabulary each craft actually trades in.
+  // ux-design's set above stands as that acumen's vector set; software-engineer
+  // and devops-platform additionally own demoted spine axes via
+  // PRINCIPLE_DIMENSION_SCOPE (schema_grounding/reusability and
+  // operational_independence/vendor_lock_in respectively), as do security
+  // (evidence_confidence/business_disruption). The axes below add what the
+  // shape principles need and the existing space cannot express.
+  {
+    profession: "data-architect",
+    key: "data-architect/referential_backing",
+    kind: "benefit",
+    highMeans:
+      "the option leaves every FK-shaped column as a declared, indexed relation the database " +
+      "enforces — no *Id columns whose target only the application layer knows about",
+    projectsOnto: ["long_term_maintainability"],
+    source: "postgresql/data-definition",
+  },
+  {
+    profession: "data-architect",
+    key: "data-architect/migration_fleet_risk",
+    kind: "cost",
+    highMeans:
+      "the option's schema change is more likely to fail on some install's real data state — " +
+      "in-place semantic change, constraint added without expand→contract, backfill assumed " +
+      "rather than shipped inline",
+    projectsOnto: ["blast_radius"],
+    source: "fowler/evolutionary-database-design",
+  },
+  {
+    profession: "software-engineer",
+    key: "software-engineer/supersession_debt",
+    kind: "cost",
+    highMeans:
+      "the option leaves the superseded generation alive beside its replacement — old handlers, " +
+      "aliases without expiry, tests at retired addresses, docs still describing the previous shape",
+    projectsOnto: ["human_cognitive_load"],
+    source: "fowler/parallel-change",
+  },
+  {
+    profession: "security",
+    key: "security/exposure_surface",
+    kind: "cost",
+    highMeans:
+      "the option widens what is externally reachable — new endpoints without a declared " +
+      "reachability class, unauthenticated surfaces, or class widenings shipped without review",
+    projectsOnto: ["blast_radius"],
+    source: "owasp/asvs",
+  },
+  {
+    profession: "devops-platform",
+    key: "devops-platform/upgrade_continuity",
+    kind: "benefit",
+    highMeans:
+      "the option keeps every install upgradeable unattended — forward-only changes that apply " +
+      "against any fleet data state, recovery points before mutation, no human runbook required",
+    projectsOnto: ["reversibility"],
+    source: "opengitops/principles",
+  },
+  {
+    profession: "mcp-integration",
+    key: "mcp-integration/protocol_window_conformance",
+    kind: "benefit",
+    highMeans:
+      "the option stays inside the stated coordination-plane contracts — the N/N-1 MCP protocol " +
+      "version window, the frozen tool-name contract with grant-mapped aliases, and the declared " +
+      "deprecation procedure",
+    projectsOnto: ["governance_compliance"],
+    source: "semver/spec",
+  },
+  {
+    profession: "mcp-integration",
+    key: "mcp-integration/context_economy",
+    kind: "benefit",
+    highMeans:
+      "the option minimizes what every caller's context window pays — deferred tool exposure, " +
+      "terse schemas, bounded results — rather than widening the always-on catalog",
+    projectsOnto: ["cost_efficiency"],
+    source: "mcp/architecture",
+  },
 ];
 
 /** Namespaced key for a profession-local axis. */

@@ -850,6 +850,40 @@
         "wip-genealogy-and-observation-provenance",
         "ot-read-only-boundary-and-stale-signal-handling"
       ]
+    },
+    {
+      "professionKey": "mcp-integration",
+      "label": "MCP & Integration Engineer",
+      "roles": ["integration-engineer"],
+      "contextSlugs": ["mcp"],
+      "sources": [
+        {
+          "name": "Model Context Protocol — Architecture (public)",
+          "url": "https://modelcontextprotocol.io/docs/concepts/architecture",
+          "licenseClass": "open"
+        },
+        {
+          "name": "Model Context Protocol — Introduction (public)",
+          "url": "https://modelcontextprotocol.io/introduction",
+          "licenseClass": "open"
+        },
+        {
+          "name": "RFC 9110 — HTTP Semantics",
+          "url": "https://www.rfc-editor.org/rfc/rfc9110",
+          "licenseClass": "open"
+        },
+        {
+          "name": "Semantic Versioning 2.0.0",
+          "url": "https://semver.org/",
+          "licenseClass": "open"
+        }
+      ],
+      "coverageChecklist": [
+        "coordination-plane-concepts",
+        "mcp-protocol-version-window",
+        "tool-name-contract-stability",
+        "context-economy"
+      ]
     }
   ]
 }
