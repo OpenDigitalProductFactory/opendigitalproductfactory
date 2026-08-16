@@ -120,6 +120,64 @@ every surface, or the platform ships three COOs.
 the question's intent does not match the route-bound specialist's area, rather
 than relying on the coworker to notice. Follow-on.
 
+## 4a. Rung 3 is clamped to the asking human's clearance (BI-154DAA7E)
+
+Making convening the default path raises a disclosure question the ladder did
+not create but did make routine: when a coworker brings a peer into a
+conversation, what may that peer say to the human sitting in it?
+
+**What was already enforced.** Every governed coworker *tool call* is already an
+intersection of the asking human's clearance with the acting agent's data
+sensitivity. `coworker-authority-decision.ts` denies `sensitivity-clearance-denied`
+when `authContext.sensitivityClearance` does not include
+`dataPolicy.sensitivity`, with `authContext` resolved from the requesting user
+and `actingAgentId` set. That check is unconditional and in the main decision
+path. An early reading of this gap as "nothing clamps a convened peer" was
+wrong: the clamp lives one layer below `coworker-collaboration.ts`, at the gate
+every governed call passes through.
+
+**What that gate structurally cannot cover.** It inspects tool arguments and
+results. It does not inspect *prose*. A peer convened into a thread composes its
+reply from its own model context — system prompt, working notes, profession
+corpus, its own earlier turns — and disclosure does not require a tool call:
+*"you may want to hold off on that hire"* leaks without one.
+
+**The fix is to refuse earlier, not to police the text.** An over-cleared peer
+that is never admitted has no prose channel to inspect.
+`decideConveneClearance` (`apps/web/lib/tak/convene-clearance.ts`) is called
+from `resolveTargetOrThrow`, the shared chokepoint behind both
+`request_coworker` and `summon_coworker`, so a future third convene path
+inherits the clamp instead of forgetting it. The tool gate remains behind it as
+defence in depth.
+
+Three details are load-bearing:
+
+- **Set membership, not rank.** The test mirrors the tool gate's `.includes()`
+  exactly. A rank comparison would permit a human holding
+  `{public, internal, restricted}` to convene a `confidential` peer, producing a
+  convene that succeeds while every subsequent tool call is denied.
+- **Fails closed.** An unlabelled or unrecognised agent sensitivity coerces to
+  `restricted` via `coerceDataSensitivity`, so a misconfigured coworker is not
+  convened by default.
+- **The refusal must not disclose.** This is where the clamp collides with the
+  limitation-response contract, which tells a blocked coworker to name the one
+  enabler and ask for a yes/no. Here that instinct is the leak: *"ask an admin
+  to grant you confidential clearance"* reveals that a restricted matter exists
+  and hints at its class. `CONVENE_DENIED_MESSAGE` therefore names no peer,
+  role, level, or subject and proposes no enabler — it is deliberately
+  indistinguishable from "no such specialist is available". The specifics go to
+  the `DelegationChain` audit row, which the asking human never sees.
+
+Ordering matters: the clamp runs *after* the lifecycle gate, so an unsummonable
+coworker still reports as unsummonable rather than as a clearance refusal —
+otherwise the generic refusal would imply a restricted matter that does not
+exist.
+
+Still open, tracked on BI-154DAA7E: `authorizeWorkRoomAccess` returns the
+requested level for a superuser *before* any clearance check, so no
+route-fronted coworker may hold superuser; and the conversational channel
+remains unpoliced for peers that are legitimately admitted.
+
 ## 5. The triggering incident is not a ladder bug
 
 For the record, so the BI is not miscategorised: the upgrade failure itself was
