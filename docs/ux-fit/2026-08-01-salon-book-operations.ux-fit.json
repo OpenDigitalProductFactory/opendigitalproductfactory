@@ -1,0 +1,19 @@
+{
+  "version": "1",
+  "decidedOption": "operations-first-with-watermarks",
+  "decisionInteractionId": "DI-9487AA43AD60",
+  "scope": {
+    "files": [
+      "apps/web/components/twin/salon/SalonBookOperations.tsx",
+      "apps/web/components/twin/salon/SalonDayRail.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "operations-first-with-watermarks",
+      "wait-for-cross-view-reconciliation",
+      "parallel-operations-and-performance"
+    ]
+  }
+}
