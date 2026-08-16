@@ -36,7 +36,12 @@ This plan implements **S1 (coupling model + pure negation analyzer)** and **S2 (
 - `s2-ci-structural-guard` → **BI-EAD441E0** (depends on `s1-coupling-analyzer`)
 - `s3-runtime-governance-routing` → **BI-696B91AB** (depends on `s1-coupling-analyzer`; sequenced after the EP-1C37C089 gate is built)
 
-**Implementation status (2026-08-15): NOT STARTED.** This plan and its spec are captured design only — no code has been written for S1 or S2. The next session picks up at Phase 1.
+**Implementation status (2026-08-15): S1 + S2 IMPLEMENTED.** Shipped in this PR:
+
+- **S1** — `apps/web/lib/lifecycle/grammar-negation.ts` (pure: `parseLifecycleDependencies`, `buildGrammarSnapshot`, `serializeSnapshot`, `resolveDependency`, `analyzeGrammarNegation`) + `grammar-negation.test.ts` (13 tests incl. the retain-gutting regression).
+- **S2** — the CI guard is implemented as a **vitest guard-test** (`lifecycle-grammar-consistency.guard.test.ts`) rather than a `scripts/*.mjs` entry: it runs in the already-required **Unit Tests** job, imports the live TS grammars natively (a `.mjs` cannot), and blocks merge on a negating change — a cleaner wiring than a bespoke guard-loop `.mjs` that would have to shell out to `tsx`. Supporting files: the frozen baseline `apps/web/lib/lifecycle/lifecycle-grammar-snapshot.json`, the shared core `grammar-consistency-check.ts`, the repo-declared kernel couplings `stance-lifecycle-dependencies.ts` (seeded with the recurring-use → `ovsm::retain` coupling), and the `--update` re-freeze script `apps/web/scripts/update-lifecycle-grammar-snapshot.ts`.
+
+Functional proof: gutting `ovsm::retain` from the live grammar source turns the guard test RED with the governance message ("Grammar change NEGATES a governing stance — route through governance, do not silently apply"); reverting returns it green. **S3** (per-install runtime routing) remains on BI-696B91AB, sequenced after the EP-1C37C089 gate is built.
 
 ## Risks & rollback
 

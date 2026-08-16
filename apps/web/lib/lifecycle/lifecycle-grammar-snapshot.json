@@ -1,0 +1,301 @@
+{
+  "stages": {
+    "backbone::build": {
+      "label": "Build",
+      "exitCriteria": []
+    },
+    "backbone::design": {
+      "label": "Design",
+      "exitCriteria": []
+    },
+    "backbone::plan": {
+      "label": "Plan",
+      "exitCriteria": []
+    },
+    "backbone::production": {
+      "label": "Production",
+      "exitCriteria": []
+    },
+    "backbone::retirement": {
+      "label": "Retirement",
+      "exitCriteria": []
+    },
+    "customer-account::active": {
+      "label": "Active",
+      "exitCriteria": []
+    },
+    "customer-account::closed": {
+      "label": "Closed",
+      "exitCriteria": []
+    },
+    "customer-account::onboarding": {
+      "label": "Onboarding",
+      "exitCriteria": [
+        "Onboarding milestones complete",
+        "First value delivered"
+      ]
+    },
+    "customer-account::prospect": {
+      "label": "Prospect",
+      "exitCriteria": [
+        "Contact and account identified",
+        "Fit hypothesis recorded"
+      ]
+    },
+    "customer-account::qualified": {
+      "label": "Qualified",
+      "exitCriteria": [
+        "Qualification confirmed",
+        "Commercial path agreed"
+      ]
+    },
+    "opportunity::closed_lost": {
+      "label": "Lost",
+      "exitCriteria": [
+        "Lost reason recorded",
+        "Reusable learning captured"
+      ]
+    },
+    "opportunity::closed_won": {
+      "label": "Won",
+      "exitCriteria": [
+        "Order or onboarding path confirmed",
+        "Handoff owner recorded"
+      ]
+    },
+    "opportunity::discovery": {
+      "label": "Discovery",
+      "exitCriteria": [
+        "Needs and success criteria captured",
+        "Stakeholders and blockers identified",
+        "Commercial fit is plausible"
+      ]
+    },
+    "opportunity::negotiation": {
+      "label": "Negotiation",
+      "exitCriteria": [
+        "Decision process confirmed",
+        "Commercial objections resolved",
+        "Signature or close step scheduled"
+      ]
+    },
+    "opportunity::proposal": {
+      "label": "Proposal",
+      "exitCriteria": [
+        "Quote or proposal sent",
+        "Commercial owner identified",
+        "Budget and timeline confirmed"
+      ]
+    },
+    "opportunity::qualification": {
+      "label": "Qualification",
+      "exitCriteria": [
+        "Buyer problem is clear",
+        "Account and primary contact are known",
+        "Value hypothesis is recorded"
+      ]
+    },
+    "ovsm::attract": {
+      "label": "Attract",
+      "exitCriteria": []
+    },
+    "ovsm::capture": {
+      "label": "Capture",
+      "exitCriteria": []
+    },
+    "ovsm::deliver": {
+      "label": "Deliver",
+      "exitCriteria": []
+    },
+    "ovsm::qualify": {
+      "label": "Qualify",
+      "exitCriteria": []
+    },
+    "ovsm::retain": {
+      "label": "Retain",
+      "exitCriteria": []
+    },
+    "ovsm::settle": {
+      "label": "Settle",
+      "exitCriteria": []
+    },
+    "tech-currency::approaching-eol": {
+      "label": "Approaching EOL",
+      "exitCriteria": []
+    },
+    "tech-currency::current": {
+      "label": "Current",
+      "exitCriteria": []
+    },
+    "tech-currency::end-of-life": {
+      "label": "End of life",
+      "exitCriteria": []
+    },
+    "tech-currency::unsupported": {
+      "label": "Unsupported",
+      "exitCriteria": []
+    }
+  },
+  "states": {
+    "backbone::build::active": {
+      "label": "Active",
+      "band": "ready"
+    },
+    "backbone::build::draft": {
+      "label": "Draft",
+      "band": "on-track"
+    },
+    "backbone::build::inactive": {
+      "label": "Inactive",
+      "band": "on-track"
+    },
+    "backbone::design::active": {
+      "label": "Active",
+      "band": "ready"
+    },
+    "backbone::design::draft": {
+      "label": "Draft",
+      "band": "on-track"
+    },
+    "backbone::design::inactive": {
+      "label": "Inactive",
+      "band": "on-track"
+    },
+    "backbone::plan::active": {
+      "label": "Active",
+      "band": "ready"
+    },
+    "backbone::plan::draft": {
+      "label": "Draft",
+      "band": "on-track"
+    },
+    "backbone::plan::inactive": {
+      "label": "Inactive",
+      "band": "on-track"
+    },
+    "backbone::production::active": {
+      "label": "Active",
+      "band": "ready"
+    },
+    "backbone::production::draft": {
+      "label": "Draft",
+      "band": "on-track"
+    },
+    "backbone::production::inactive": {
+      "label": "Inactive",
+      "band": "on-track"
+    },
+    "backbone::retirement::active": {
+      "label": "Active",
+      "band": "ready"
+    },
+    "backbone::retirement::draft": {
+      "label": "Draft",
+      "band": "on-track"
+    },
+    "backbone::retirement::inactive": {
+      "label": "Inactive",
+      "band": "on-track"
+    },
+    "customer-account::active::active": {
+      "label": "Active",
+      "band": "on-track"
+    },
+    "customer-account::active::at_risk": {
+      "label": "At risk",
+      "band": "blocked"
+    },
+    "customer-account::active::suspended": {
+      "label": "Suspended",
+      "band": "blocked"
+    },
+    "customer-account::closed::archived": {
+      "label": "Archived",
+      "band": "on-track"
+    },
+    "customer-account::closed::closed": {
+      "label": "Closed",
+      "band": "on-track"
+    },
+    "customer-account::closed::superseded": {
+      "label": "Superseded (merged)",
+      "band": "on-track"
+    },
+    "customer-account::onboarding::onboarding": {
+      "label": "Onboarding",
+      "band": "on-track"
+    },
+    "customer-account::prospect::prospect": {
+      "label": "Prospect",
+      "band": "on-track"
+    },
+    "customer-account::qualified::qualified": {
+      "label": "Qualified",
+      "band": "ready"
+    },
+    "opportunity::closed_lost::lost": {
+      "label": "Lost",
+      "band": "on-track"
+    },
+    "opportunity::closed_won::won": {
+      "label": "Won",
+      "band": "ready"
+    },
+    "opportunity::discovery::open": {
+      "label": "Open",
+      "band": "on-track"
+    },
+    "opportunity::negotiation::open": {
+      "label": "Open",
+      "band": "on-track"
+    },
+    "opportunity::proposal::open": {
+      "label": "Open",
+      "band": "on-track"
+    },
+    "opportunity::qualification::open": {
+      "label": "Open",
+      "band": "on-track"
+    },
+    "ovsm::attract::in-stage": {
+      "label": "In stage",
+      "band": "on-track"
+    },
+    "ovsm::capture::in-stage": {
+      "label": "In stage",
+      "band": "on-track"
+    },
+    "ovsm::deliver::in-stage": {
+      "label": "In stage",
+      "band": "on-track"
+    },
+    "ovsm::qualify::in-stage": {
+      "label": "In stage",
+      "band": "on-track"
+    },
+    "ovsm::retain::in-stage": {
+      "label": "In stage",
+      "band": "on-track"
+    },
+    "ovsm::settle::in-stage": {
+      "label": "In stage",
+      "band": "on-track"
+    },
+    "tech-currency::approaching-eol::approaching-eol": {
+      "label": "Approaching EOL",
+      "band": "blocked"
+    },
+    "tech-currency::current::current": {
+      "label": "Current",
+      "band": "on-track"
+    },
+    "tech-currency::end-of-life::end-of-life": {
+      "label": "End of life",
+      "band": "blocked"
+    },
+    "tech-currency::unsupported::unsupported": {
+      "label": "Unsupported",
+      "band": "blocked"
+    }
+  }
+}
