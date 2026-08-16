@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 638,
+  "pageCount": 645,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -6616,6 +6616,18 @@
         "see-also"
       ]
     },
+    "docs/professions/legal-compliance/wiki/attorney-review-packet.md": {
+      "publicHref": "/professions/legal-compliance/wiki/attorney-review-packet/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "rule",
+        "required-sections",
+        "guardrails",
+        "see-also"
+      ]
+    },
     "docs/professions/legal-compliance/wiki/ccpa-consumer-rights.md": {
       "publicHref": "/professions/legal-compliance/wiki/ccpa-consumer-rights/",
       "portalHref": null,
@@ -6625,6 +6637,30 @@
         "jurisdiction-competency",
         "the-structural-contrast-read-this-first",
         "ccpa-consumer-rights",
+        "see-also"
+      ]
+    },
+    "docs/professions/legal-compliance/wiki/commercial-software-support-terms.md": {
+      "publicHref": "/professions/legal-compliance/wiki/commercial-software-support-terms/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "rule",
+        "checklist",
+        "operator-dpf-application",
+        "see-also"
+      ]
+    },
+    "docs/professions/legal-compliance/wiki/contract-review-workflow.md": {
+      "publicHref": "/professions/legal-compliance/wiki/contract-review-workflow/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "rule",
+        "workflow",
+        "output-shape",
         "see-also"
       ]
     },
@@ -6680,6 +6716,19 @@
         "see-also"
       ]
     },
+    "docs/professions/legal-compliance/wiki/jurisdiction-layered-analysis.md": {
+      "publicHref": "/professions/legal-compliance/wiki/jurisdiction-layered-analysis/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "rule",
+        "layers-to-separate",
+        "how-to-apply",
+        "example",
+        "see-also"
+      ]
+    },
     "docs/professions/legal-compliance/wiki/personal-data-definition.md": {
       "publicHref": "/professions/legal-compliance/wiki/personal-data-definition/",
       "portalHref": null,
@@ -6689,6 +6738,18 @@
         "definition",
         "eu-vs-us-framing",
         "why-it-is-foundational",
+        "see-also"
+      ]
+    },
+    "docs/professions/legal-compliance/wiki/policy-lifecycle-management.md": {
+      "publicHref": "/professions/legal-compliance/wiki/policy-lifecycle-management/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "rule",
+        "lifecycle-states",
+        "how-to-apply",
         "see-also"
       ]
     },
@@ -6972,6 +7033,18 @@
         "why",
         "how-to-apply",
         "see-also"
+      ]
+    },
+    "docs/professions/operations/wiki/salon-provider-and-resource-assignment.md": {
+      "publicHref": "/professions/operations/wiki/salon-provider-and-resource-assignment/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "heuristic",
+        "industry-precedent-and-dpf-opportunity",
+        "why-it-matters",
+        "sources"
       ]
     },
     "docs/professions/operations/wiki/sli-slo-error-budget.md": {
@@ -11289,6 +11362,16 @@
         "access-and-other-channels",
         "finite-and-standing-rooms",
         "incomplete-or-unavailable-rooms"
+      ]
+    },
+    "docs/ux-fit/2026-08-01-field-dispatch-ops-surface-design-grounding.md": {
+      "publicHref": "/ux-fit/2026-08-01-field-dispatch-ops-surface-design-grounding/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "field-dispatch-operational-surface-design-grounding",
+        "design-grounding"
       ]
     }
   }
