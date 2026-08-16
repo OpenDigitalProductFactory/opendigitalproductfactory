@@ -1,9 +1,14 @@
 ---
-status: proposed
+status: phase-2-measured-do-not-proceed
 backlogItem: BI-68EED40A
 epic: EP-BUILD-STUDIO
 date: 2026-08-15
 ---
+
+> **Outcome (2026-08-16): Phase 2 ran and the gate did NOT open.** Qwen3.8-27B shows no
+> tool-selection advantage over either incumbent and is ~4x slower. Phases 4 and 5 are NOT
+> executed. See "Phase 2 result" below. The plan is retained because Phase 3 (BI-C2EFF855) and the
+> harness-runner work (BI-99A31531) remain valid independent of the tiering decision.
 
 # Qwen3.8-27B as the Local Generation Model — Implementation Plan
 
@@ -107,6 +112,51 @@ Two things to watch specifically, because they are the known risks rather than g
 - Loses, or wins only with thinking disabled in a way DPF cannot configure → stop. Record the
   finding, leave the ladder alone, keep the BI open against a future revision. This is a legitimate
   outcome, not a failure of the work.
+
+## Phase 2 result (measured 2026-08-16)
+
+Ran on Apple M5 Max / 128 GB via Docker Model Runner. 9 golden cases per point, thinking disabled,
+0 errors. Phase 1 passed first: DMR serves the hybrid `qwen35` architecture, 26.90B params,
+**17.66 GiB** resident (not the 19.0 GB the HuggingFace repo listing implied), 262,144 context.
+
+Tool-selection accuracy:
+
+| Attached tools | Qwen3.8-27B (dense) | Qwen3.6-35B-A3B (MoE) | Qwen3-Coder-30B (MoE, the incumbent) |
+|---|---|---|---|
+| 15 | 100.0% | 100.0% | 88.9% |
+| 30 | 88.9% | 88.9% | 88.9% |
+| 45 | 55.6% | 66.7% | 66.7% |
+| mean latency | **10.3s** | 3.6s | **2.6s** |
+
+**Verdict: do not tier.** No accuracy advantage at any surface size (every delta is one case out of
+nine — inside the noise floor), and a ~4x latency penalty against the incumbent it would replace.
+
+The latency gap is architectural, not tunable. Qwen3.8-27B is **dense** — all 27B parameters active
+per token — while both incumbents are MoE with ~3B active. More total capability per parameter,
+far more compute per token. For a coworker doing many turns, that is the dominant cost.
+
+Two findings worth keeping regardless:
+
+- **Thinking mode costs 46% latency and buys nothing here.** Identical accuracy and identical
+  misses with `chat_template_kwargs: {enable_thinking: false}`; mean latency 10.9s -> 5.9s at the
+  smaller surfaces. Feeds BI-3CF78C8E with measurement instead of argument.
+- **`ai/qwen3-coder` pulls with a 4,096-token context** — confirming the warning in
+  `local-model-policy.ts` — while Qwen3.8 arrives at 262,144.
+
+### What this measurement does NOT settle
+
+The harness scores single-turn tool SELECTION. The vendor's case for Qwen3.8 is long-horizon
+agentic work (QwenSWEBench 79.0 vs 49.3, OSWorld 84.3 vs 63.9). Nothing here speaks to that claim
+in either direction — it is silence, not refutation. If the agentic claim is the reason to adopt,
+the eval that could adjudicate it does not exist yet and would need building.
+
+### Measurement defect found and corrected mid-run
+
+The first pass used a fabricated distractor tool name (`list_provider`, which does not exist in
+DPF; the real tool is `add_provider`). Qwen3.8 was lured by it, producing an apparent 77.8% vs
+88.9% gap at surface 30. With the corrected pool both models tie at 88.9% — the entire measured
+difference was an artifact of the harness inputs. Recorded here because the first numbers were
+reported before the defect was found.
 
 ## Phase 3 — Companion-artifact support (BI-C2EFF855)
 
