@@ -337,8 +337,21 @@ describe("content-aware directional scoring (BI-7E1F128A)", () => {
     direction: "support",
     confidenceWeight: 0.7,
   });
+  // BI-F5F2869D: `ruled` tier (grade A / weight 1.0) — the owner decided THIS
+  // question on a real decision, as opposed to a stance merely consistent with it.
+  const ruledSupportStance = material({
+    materialId: "partner-network",
+    summary: "Offer a self-hosted software support subscription through MSP partners.",
+    direction: "support",
+    evidenceGrade: "A",
+    confidenceWeight: 1,
+  });
   const twoStances = baseInput({
     materials: [declineStance, supportStance],
+    riskTier: "medium",
+  });
+  const declineOrRuledSupport = baseInput({
+    materials: [declineStance, ruledSupportStance],
     riskTier: "medium",
   });
 
@@ -355,7 +368,12 @@ describe("content-aware directional scoring (BI-7E1F128A)", () => {
     expect(result.confidenceScore).toBeGreaterThan(0);
   });
 
-  it("recommends APPROVING when the relevant stance supports the decision", () => {
+  // BI-F5F2869D reversed this deliberately. Alignment is NOT a licence to act:
+  // auto-approving whatever matches recorded doctrine would make the business
+  // only ever do what it already does, and an unruled proposal is exactly where
+  // a new idea shows up. Aligned-but-unruled therefore escalates, LABELLED as a
+  // new proposition rather than as a doctrine gap.
+  it("escalates an aligned but never-ruled decision as a NEW proposition", () => {
     const result = evaluateDecisionPerspective({
       ...twoStances,
       question: "Should we onboard an MSP as a certified reseller partner?",
@@ -363,8 +381,20 @@ describe("content-aware directional scoring (BI-7E1F128A)", () => {
       relevanceMethod: "semantic",
     });
     expect(result.stanceAlignment).toBe("approve");
-    expect(result.outcomeType).toBe("recommend");
+    expect(result.outcomeType).toBe("escalate");
+    expect(result.gapReason).toBe("aligned-not-settled");
     expect(result.alignmentScore).toBeGreaterThan(0);
+  });
+
+  it("recommends APPROVING when the owner already RULED on this question", () => {
+    const result = evaluateDecisionPerspective({
+      ...declineOrRuledSupport,
+      question: "Should we onboard an MSP as a certified reseller partner?",
+      relevanceByMaterialId: new Map([["markets-we-decline", 0], ["partner-network", 1]]),
+      relevanceMethod: "semantic",
+    });
+    expect(result.stanceAlignment).toBe("approve");
+    expect(result.outcomeType).toBe("recommend");
   });
 
   it("produces OPPOSITE verdicts and different confidence for the two decisions (the core fix)", () => {
@@ -414,14 +444,16 @@ describe("content-aware directional scoring (BI-7E1F128A)", () => {
   // escalating. On the lexical fallback the gate must revert to escalate (the
   // safe pre-fix behavior) regardless of the apparent direction.
   it("FAIL-SAFE: lexical relevance escalates even when the apparent stance APPROVES", () => {
+    // Uses the RULED stance so semantic is genuinely allowed to act; otherwise
+    // both sides would escalate and the fail-safe would prove nothing.
     const semantic = evaluateDecisionPerspective({
-      ...twoStances,
+      ...declineOrRuledSupport,
       question: "Should we onboard an MSP as a certified reseller partner?",
       relevanceByMaterialId: new Map([["markets-we-decline", 0], ["partner-network", 1]]),
       relevanceMethod: "semantic",
     });
     const lexical = evaluateDecisionPerspective({
-      ...twoStances,
+      ...declineOrRuledSupport,
       question: "Should we onboard an MSP as a certified reseller partner?",
       relevanceByMaterialId: new Map([["markets-we-decline", 0], ["partner-network", 1]]),
       relevanceMethod: "lexical",

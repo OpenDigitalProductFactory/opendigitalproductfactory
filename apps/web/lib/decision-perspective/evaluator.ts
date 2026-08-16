@@ -11,6 +11,7 @@ import { resolveGateRecommendedOptionId } from "./option-recommendation";
 import type { AlignmentCorpora } from "./alignment-criteria";
 import { applyConstitutionalAlignment } from "./constitutional-alignment-application";
 import { getRecentOverrideCount } from "./override-count";
+import { contentAwareDirectionalOutcome } from "./directional-outcome";
 
 // Re-exported for existing importers; owned by ./override-count (BI-ACF0D6D4).
 export { RECENT_OVERRIDE_WINDOW_DAYS } from "./override-count";
@@ -143,101 +144,15 @@ export function evaluateDecisionPerspective(
   // off-mission idea), so a relevant `oppose` stance recommends declining at any
   // non-critical risk; approving carries consequence, so a `support` stance
   // governs at low/medium risk but a high-risk approval still escalates.
-  if (selectedCoverage.contentAware) {
-    const alignment = selectedCoverage.stanceAlignment ?? "none";
+  const directional = contentAwareDirectionalOutcome({
+    baseResult,
+    selectedCoverage,
+    selectedProfile,
+    confidence,
+    input: { riskTier: input.riskTier, relevanceMethod: input.relevanceMethod },
+  });
+  if (directional) return directional;
 
-    // Lexical-fallback fail-safe (BI-7E1F128A follow-up). When the embedding
-    // layer is unavailable, `computeStanceRelevance` scores relevance by coarse
-    // lexical token-overlap. That signal is too imprecise to drive a confident
-    // directional verdict: on a live install it spuriously matched a `support`
-    // stance and confidently APPROVED a blatantly off-mission decision — strictly
-    // worse than the pre-fix escalate, because it replaced "ask the owner" with
-    // "act wrongly". So when relevance is lexical we do NOT act autonomously in
-    // either direction; we escalate, exactly as the gate did before content
-    // discrimination existed. Confident directional outcomes require semantic
-    // relevance. (Restoring the embedding layer re-enables discrimination.)
-    if (input.relevanceMethod === "lexical") {
-      return {
-        ...baseResult,
-        outcomeType: "escalate",
-        rationale:
-          `Your recorded stance leans ${alignment} on this decision, but relevance was scored without the semantic embedding layer (lexical fallback) — too coarse to decide this on your behalf. Escalating to your call; restore embeddings to re-enable autonomous stance-grounded verdicts.`,
-      };
-    }
-
-    // Conflict is judged by RELEVANCE-WEIGHTED direction (`mixed`), not the
-    // coarse content-blind `principleConflict` — otherwise a domain that merely
-    // *contains* an opposing principle would escalate every decision even when
-    // only one side is relevant to the question. `principleConflict` is still
-    // recorded on the result for audit.
-    if (alignment === "mixed") {
-      return {
-        ...baseResult,
-        outcomeType: "escalate",
-        rationale:
-          "Your recorded stance points in conflicting directions on this decision. Escalating to your call, and the resolution becomes candidate stance material.",
-      };
-    }
-
-    if (input.riskTier === "critical") {
-      return {
-        ...baseResult,
-        outcomeType: "escalate",
-        rationale:
-          `This is a critical-risk decision, so it goes to your call even though your recorded stance leans ${alignment} at confidence ${confidence}.`,
-      };
-    }
-
-    if (
-      alignment === "none"
-      || confidence < selectedProfile.autonomyPolicy.minimumConfidenceForRecommendation
-    ) {
-      return {
-        ...baseResult,
-        outcomeType: "escalate",
-        rationale:
-          `Your recorded stance does not clearly speak to this decision (alignment ${alignment}, confidence ${confidence} below the ${selectedProfile.autonomyPolicy.minimumConfidenceForRecommendation} threshold). Escalating to your call.`,
-        gapReason: "material-below-confidence",
-      };
-    }
-
-    if (alignment === "decline") {
-      return {
-        ...baseResult,
-        outcomeType: "recommend",
-        rationale:
-          `Recommend DECLINING: your recorded stance opposes this decision at confidence ${confidence}. Declining an off-stance option is low-consequence, so this does not require your live call.`,
-      };
-    }
-
-    // alignment === "approve"
-    if (input.riskTier === "high") {
-      return {
-        ...baseResult,
-        outcomeType: "escalate",
-        rationale:
-          `Your recorded stance supports this at confidence ${confidence}, but approving a high-risk decision still needs your live call.`,
-      };
-    }
-    if (
-      selectedProfile.autonomyPolicy.allowArbitration
-      && riskWithin(input.riskTier, selectedProfile.autonomyPolicy.maxRiskForArbitration)
-      && confidence >= selectedProfile.autonomyPolicy.minimumConfidenceForArbitration
-    ) {
-      return {
-        ...baseResult,
-        outcomeType: "arbitrate",
-        rationale:
-          `Arbitrate and proceed: your recorded stance supports this at confidence ${confidence} and the autonomy policy allows arbitration at ${input.riskTier} risk.`,
-      };
-    }
-    return {
-      ...baseResult,
-      outcomeType: "recommend",
-      rationale:
-        `Recommend APPROVING: your recorded stance supports this decision at confidence ${confidence}.`,
-    };
-  }
 
   if (principleConflict) {
     return {
