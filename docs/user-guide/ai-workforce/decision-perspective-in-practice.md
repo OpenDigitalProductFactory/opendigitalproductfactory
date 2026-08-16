@@ -248,6 +248,32 @@ gate decision are:
 - **Operations Map** — decision-pressure overlays, so a rising escalation rate on one profile is visible
   next to cost pressure.
 
+### Un-tampered-with is not the same as true
+
+The ledger is sealed into an append-only hash chain, so a recorded decision can be proven **unaltered
+since it was written**. That is a different — and weaker — claim than the evidence behind it being
+**correct**. A citation can be perfectly well-formed, name a real-looking file and line, pass every
+admissibility check, and still describe something that was never there. Sealing it only guarantees
+nobody edited the claim afterwards.
+
+Closing that gap needs a second, later pass that goes back to the source. A decision's citations record
+*where* each one came from, and re-verification re-reads those places and reports what it finds:
+
+| It says | It means |
+|---|---|
+| **Verified** | every citation it could check still resolves, and still says what the decision claimed |
+| **Degraded** | at least one no longer holds — treat those points as unevidenced and revisit the decision |
+| **Unverifiable** | nothing could be checked — either this install carries no source to check against, or the decision predates citation recording |
+
+Read the verdict together with its **coverage**. "Verified" describes only the citations that could be
+checked, so a decision with one confirmed citation and four unverifiable ones is not a decision with
+five confirmed citations. Unverifiable is deliberately never reported as either a pass or a failure:
+not having looked is not the same as having looked and found a problem, and neither one is evidence
+that the decision was sound.
+
+This runs as its own pass, on purpose. A check performed by the same reasoning that made the decision
+would tell you very little; the point is that something independent went back and looked.
+
 ## How the three examples relate
 
 Read together, the trio shows the same engine producing the *right kind* of answer for the *kind of
