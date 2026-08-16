@@ -4,6 +4,7 @@
 **Proposed epic home:** EP-8DC217EB (Vertical Integration Inward) · composes with EP-VSL-SURFACE / EP-VSL-GOVERN
 **Companion:** [Portfolio-shaped information architecture](2026-08-14-portfolio-shaped-information-architecture-design.md)
 **Origin:** UX surface & navigation analysis, 2026-08-14 — four owner flows break the same way; six rail sections don't map to the four-portfolio model.
+**Amended:** 2026-08-15 — §3.2 `delegate` + `lexicon`, §3.3 `entry-gated-by-setup` + `spine-stage-inert`, §4 `prerequisitesToEntry`, §10 ordering note. Source: competitive read of a consumer agent product (Grokbot) whose entire differentiator is ease of use, tested against this model for what it fails to catch. Rationale inline at each amendment.
 
 ---
 
@@ -64,10 +65,13 @@ Every human-reachable surface carries a shape binding:
 |---|---|---|
 | `spineStage` | `OperationalValueStreamStageKey` | Which stage of earning/supporting this serves. |
 | `jobLane` | derived from `route-audience` + `page-purpose.primaryUser` | Whose job path this sits on. |
-| `stepRole` | `entry · progress · decide · complete · reference` | What the surface does *within* a flow — the field that makes "arrives but cannot continue" detectable. |
+| `stepRole` | `entry · progress · decide · delegate · complete · reference` | What the surface does *within* a flow — the field that makes "arrives but cannot continue" detectable. |
 | `continuesTo` | nav graph edges + `page-purpose.findability` | The next surface(s) in the job path. |
+| `lexicon` | approved operator vocabulary, extending `page-purpose` | Which words this surface is permitted to say. See §3.4. |
 
 `stepRole` is the load-bearing addition. A `progress` or `decide` node with no `continuesTo` is a **dead end** — the exact defect found in sales-orders (read-only, no detail), recruiting (no candidate→employee convert), and the bill detail (no approve control).
+
+**`delegate` is a distinct role, not a flavour of `progress`.** A `delegate` node is where the human hands the remainder of the job to a coworker. It **terminates the human's traversal** for flow-load purposes (§4), and its `continuesTo` names the receiving job lane rather than another surface. Typing delegation as `progress` or `decide` would make handing work to a coworker *increase* `stepsToOutcome` — the metric would penalise the platform's primary answer to cognitive load, and the phase-2 baseline would bake that inversion in. This is why the role belongs in the phase-0 contract rather than in a later phase.
 
 ### 3.3 Violation types
 
@@ -79,8 +83,26 @@ Emitted as conformance findings on the existing EA canvas and into blast-radius 
 | `job-path-broken` | A `progress`/`decide` node has no `continuesTo`, or its only continuation leaves the app (e.g. an emailed token page as sole actuation). |
 | `flow-load-regressed` | A job path's flow-load metrics (§4) worsen against baseline. |
 | `spine-stage-orphaned` | An OVS stage has no surface bound to it — the business has a stage the UI cannot serve. |
+| `entry-gated-by-setup` | A job path's `entry` requires configuration, connection, or permission that could have been requested in-flow at the step that needs it. |
+| `spine-stage-inert` | A stage is bound to surfaces and traversable, but no job path reached a `complete` node on it within the observation window. |
+| `lexicon-leak` | A user-visible string on the surface names an internal primitive (§3.4). |
 
-The last one is the inverse check, and valuable: it detects *missing* shape, not just malformed shape.
+`spine-stage-orphaned` is the inverse check, and valuable: it detects *missing* shape, not just malformed shape. Two of the additions extend that inverse logic to the two blind spots the structural findings cannot see:
+
+- **`entry-gated-by-setup`** covers the cost paid *before* the path. Every metric in §4 begins at `entry`, so a job whose entry is fronted by connector configuration scores identically to one that starts on first intent. The alternative posture — authorisation surfacing mid-flow, at the step that needs it, granted once and inherited — is the single largest ease-of-use gap between this platform and consumer agent products, and it is currently unmeasured rather than decided against.
+- **`spine-stage-inert`** covers the difference between traversable and used. A stage can bind cleanly, pass every page budget, hold no dead ends, and still produce nothing a human accepted. Without this finding the conformance suite certifies *process* and is silent on *value* — the criticism this platform is most exposed to, given how much governance machinery sits behind each surface.
+
+### 3.4 Lexicon — the shape has a vocabulary, not only a structure
+
+§1.1 requires that implementation complexity stay hidden and that design semantics never be promoted into human semantics. Today that requirement is asserted for *structure* and enforced for structure only. Nothing checks the **words**, and words are how machinery leaks first: `capsule`, `decomposition`, `projection`, `extractor`, `gear`, `pregate`, `backlog item`, `epic` are all builder primitives that have appeared, or can appear, in copy an owner reads.
+
+The cost of leaving this unenforced is already measurable. Retiring one leaked primitive — `WorkCapsule` → `Workroom` — took four coordinated PRs (#4338 model rename, #4339 doctrine, #4340 view vocabulary, #4342 MCP tool aliases) and a database model rename. That is the correct instinct executed by hand, and by hand it does not survive the next surface.
+
+**Rule.** A surface's user-visible strings draw from the approved operator lexicon. A string naming an internal primitive emits `lexicon-leak`, graded and ratcheted exactly as §5 grades every other finding: pre-existing leaks are baselined and may only improve, net-new leaks block.
+
+**Mechanism (no new machinery).** `ux-route-sweep` already drives every route in a real portal and already captures an ARIA snapshot for drift detection, so the visible strings are in hand at the moment the sweep runs. The lexicon itself extends `page-purpose`, which already carries `job` and `successOutcome` in operator language. The net-new cost is a word list and a check, not a subsystem.
+
+**Boundary.** This governs what a surface *says*, never what the model *is*. Internal names stay internal and stay precise; the rule only stops them reaching a reader who did not build the system.
 
 ## 4. Flow-level cognitive load *(operator-selected: flow-level, complementing the page budget)*
 
@@ -94,6 +116,9 @@ Metrics, measured per job path:
 | `sectionCrossings` | Rail-section changes mid-path. | The product-lifecycle flow crosses three; each is a reorientation cost. |
 | `groupExits` | Route-group / app exits mid-path. | Catches approvals that leave the shell for email-token pages. |
 | `deadEnds` | `progress`/`decide` nodes with no continuation. | The single most common defect found in the analysis. |
+| `prerequisitesToEntry` | Configuration, connection, or permission steps standing between stated intent and the first `entry` node. | Setup is load the other four metrics cannot see, because they all start at `entry`. It is where a non-technical operator abandons before reaching a surface this spec would score as healthy. |
+
+A `delegate` node closes the human's traversal: `stepsToOutcome` counts the steps to the delegation, not the coworker's subsequent path. Delegated work is still subject to `spine-stage-inert` (§3.3), so handing a job to a coworker cannot be used to make a stage look cheap while producing nothing.
 
 These are budgeted per job path the same way page budgets are per shell — founder-tunable, explicitly calibration rather than science, consistent with the existing `UX_BUDGETS` posture.
 
@@ -147,18 +172,24 @@ Practical consequences:
 - **No new job model.** Reuses `route-audience` + `page-purpose` generators.
 - **No new CI machinery.** Reuses the sweep + ratchet + baseline pattern already running for UX budgets.
 - **No new autonomy model.** References the Reduction Gear's `CalibrationKey`→`AutonomyTier` ladder; does not extend the deliberately cadence-only proactivity module.
+- **No new copy pipeline.** The §3.4 lexicon check reads the strings `ux-route-sweep` already captures and extends the `page-purpose` record already generated; it adds a word list and a check, not a subsystem.
+- **No new delegation model.** `delegate` types a surface that already exists; the coworker side is owned by the coworker epic referenced in the companion spec §4.4.
 
 ## 10. Phasing
 
 | Phase | Deliverable | Size |
 |---|---|---|
-| 0 | Shape node contract (`spineStage`, `jobLane`, `stepRole`, `continuesTo`) + extractor enrichment emitting `shape-off-spine` / `spine-stage-orphaned` as **advisory** | M |
+| 0 | Shape node contract (`spineStage`, `jobLane`, `stepRole` **incl. `delegate`**, `continuesTo`, **`lexicon`**) + extractor enrichment emitting `shape-off-spine` / `spine-stage-orphaned` as **advisory** | M |
 | 1 | `job-path-broken` detection (dead-end + group-exit) across the four analyzed flows; validate it reproduces the known defects | M |
-| 2 | Flow-load metrics + baseline + ratchet CI policy (advisory legacy / blocking net-new) | M |
+| 2 | Flow-load metrics incl. `prerequisitesToEntry` + baseline + ratchet CI policy (advisory legacy / blocking net-new) | M |
+| 2b | `lexicon-leak` word list + check on the existing sweep, baselined against the current estate | S |
 | 3 | Proactivity ↔ Reduction Gear coupling; per-stage "who runs this" rendering | L |
+| 3b | `spine-stage-inert` — completion observation per stage over a rolling window | M |
 | 4 | Shape lens on the EA canvas as an operator-facing view | M |
 
 **Phase 1 is the proof gate:** if the detector does not independently reproduce the four flow breaks already found by hand, the model is wrong and phases 2–4 do not proceed.
+
+**Ordering constraint (from the 2026-08-15 amendment).** `delegate` and `lexicon` are phase-0 contract changes, not later additions. Both are cheap to add before the baseline is written and expensive afterwards: `delegate` because phase 2 would otherwise baseline a `stepsToOutcome` that penalises delegation, and `lexicon` because a baseline written without it has no record of which leaks were pre-existing. `prerequisitesToEntry` and `spine-stage-inert` are genuinely later work and are phased accordingly.
 
 ## 11. Acceptance
 
@@ -166,4 +197,6 @@ Practical consequences:
 - The detector independently reproduces the four known flow breaks (bill approval dead-end, recruiting→hire gap, sales-order dead end, product→build discontinuity).
 - A net-new surface introducing a dead end or lacking a shape binding fails CI; pre-existing violations ratchet.
 - The EA canvas renders the shape lens with per-stage human/AI attribution sourced from gear autonomy tiers.
-- No design semantics leak into end-user surfaces — the shape informs navigation and impact analysis, it is not shown as a model to the user.
+- No design semantics leak into end-user surfaces — the shape informs navigation and impact analysis, it is not shown as a model to the user. This is asserted for **words as well as structure**: no user-visible string names an internal primitive without a baselined exception (§3.4).
+- Handing a job to a coworker registers as a `delegate` node and does not increase `stepsToOutcome`; a stage cannot pass by delegating work that never completes (`spine-stage-inert`).
+- Every job path reports `prerequisitesToEntry`, so setup cost is visible rather than invisible-by-construction.
