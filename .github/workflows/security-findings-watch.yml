@@ -1,0 +1,122 @@
+name: Security Findings Watch
+
+# The standing sweep behind Workroom WC-42C558DD.
+#
+# WHY: the GitHub Security tab aggregates THREE independent surfaces — Dependabot
+# alerts, Code Scanning (CodeQL), and Secret Scanning. Nothing previously swept
+# all three together: dependency-scan.yml covers OSV/dependencies only, and
+# audit-stale-overrides.yml reads Dependabot only. A high-severity `js/redos`
+# code-scanning alert consequently sat unnoticed while a Dependabot-only check
+# reported an all-clear. This job is the reconciled view.
+#
+# OBSERVABILITY IS THE POINT: each run upserts ONE tracking issue that always
+# states the cadence, the last sweep time, and the next scheduled run — so "when
+# does this run and when did it last run" is answerable at a glance instead of
+# inferred from workflow history.
+#
+# REPORT-ONLY by design. The blocking gate stays `pnpm scan:deps --fail-on high`
+# in dependency-scan.yml; a visibility job that can fail the build would get
+# muted, which is the failure mode this exists to prevent.
+
+on:
+  schedule:
+    - cron: "51 6 * * *" # daily 06:51 UTC — 10 min after dependency-scan so OSV results are fresh
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - "scripts/sbom/sweep-security-surfaces.mjs"
+      - ".github/workflows/security-findings-watch.yml"
+
+permissions:
+  contents: read
+  security-events: read # read all three alert surfaces
+  issues: write # upsert the single watch tracking issue
+
+concurrency:
+  group: security-findings-watch-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CADENCE_HUMAN: "daily at 06:51 UTC"
+  WATCH_ROOM: WC-42C558DD
+
+jobs:
+  sweep:
+    name: Security findings sweep
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - name: Sweep all three security surfaces
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node scripts/sbom/sweep-security-surfaces.mjs --json sbom/security-sweep.json --md sbom/security-sweep.md
+
+      - name: Publish sweep to the run summary
+        if: always()
+        run: |
+          set -euo pipefail
+          {
+            echo "_Cadence: **${CADENCE_HUMAN}** · watch room \`${WATCH_ROOM}\` · run \`${{ github.run_id }}\`._"
+            echo ""
+            cat sbom/security-sweep.md
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # ONE long-lived issue, updated in place. Kept open even at zero findings so
+      # the cadence and last-swept time stay observable — an issue that vanishes
+      # when clean cannot tell you whether the watch is still running at all,
+      # which is the specific thing being asked for here.
+      - name: Upsert the watch tracking issue
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          TITLE="Security findings watch — standing report"
+          # Derived in Node, not `date -d`: -d is GNU-only and silently unavailable
+          # on BSD/macOS, which would make this step impossible to exercise outside CI.
+          NOW="$(node -e "console.log(new Date().toISOString().replace('T',' ').slice(0,16)+' UTC')")"
+          NEXT="$(node -e "const n=new Date();const t=new Date(Date.UTC(n.getUTCFullYear(),n.getUTCMonth(),n.getUTCDate(),6,51));if(t<=n)t.setUTCDate(t.getUTCDate()+1);console.log(t.toISOString().replace('T',' ').slice(0,16)+' UTC')")"
+          OPEN_TOTAL="$(node -e "const r=require('./sbom/security-sweep.json');console.log(r.totals.open)")"
+          UNREADABLE="$(node -e "const r=require('./sbom/security-sweep.json');console.log(r.totals.unreadable)")"
+
+          BODY_FILE="$(mktemp)"
+          {
+            echo "| | |"
+            echo "| --- | --- |"
+            echo "| **Cadence** | ${CADENCE_HUMAN} |"
+            echo "| **Last swept** | ${NOW} |"
+            echo "| **Next run** | ${NEXT} |"
+            echo "| **Open findings** | ${OPEN_TOTAL} |"
+            echo "| **Unreadable surfaces** | ${UNREADABLE} |"
+            echo "| **Watch room** | \`${WATCH_ROOM}\` |"
+            echo ""
+            cat sbom/security-sweep.md
+            echo ""
+            echo "<sub>Auto-updated by .github/workflows/security-findings-watch.yml — run ${{ github.run_id }}. Edits to this body are overwritten each sweep; put durable decisions in the watch room, not here.</sub>"
+          } > "$BODY_FILE"
+
+          EXISTING=$(gh issue list --state open --search "$TITLE in:title" --json number --jq '.[0].number // empty')
+          if [ -n "$EXISTING" ]; then
+            gh issue edit "$EXISTING" --body-file "$BODY_FILE"
+            echo "Updated watch issue #$EXISTING."
+          else
+            gh issue create --title "$TITLE" --body-file "$BODY_FILE"
+          fi
+
+      - name: Upload sweep artifacts
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: security-sweep-${{ github.run_id }}
+          path: |
+            sbom/security-sweep.json
+            sbom/security-sweep.md
+          if-no-files-found: warn
+          retention-days: 90
