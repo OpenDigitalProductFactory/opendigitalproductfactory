@@ -804,6 +804,7 @@
       "docs/architecture/delivery-surfaces-runbook.md"
     ],
     "apps/web/lib/operate/retention/policies.ts": [
+      "docs/architecture/2026-08-16-simplify-and-strengthen-architecture-pass.md",
       "docs/architecture/enforced-ci-gates.md"
     ],
     "apps/web/lib/operate/sole-platform-readiness.ts": [
@@ -1195,6 +1196,9 @@
     "packages/db/src/capability-maturity.ts": [
       "docs/architecture/customer-zero-and-use-case-zero.md"
     ],
+    "packages/db/src/device-placement.ts": [
+      "docs/architecture/2026-08-16-simplify-and-strengthen-architecture-pass.md"
+    ],
     "packages/db/src/dimension-scope.ts": [
       "docs/architecture/decision-vectors.md"
     ],
@@ -1393,6 +1397,7 @@
       "docs/architecture/capability-driven-runtime-profiles.md"
     ],
     "scripts/check-application-boundaries.mjs": [
+      "docs/architecture/2026-08-16-simplify-and-strengthen-architecture-pass.md",
       "docs/architecture/application-boundaries.md"
     ],
     "scripts/check-build-namespace.mjs": [
@@ -2003,6 +2008,11 @@
       "apps/web/lib/gear-interface/otel-exporter.ts",
       "packages/storefront-templates/src/archetype-readiness.ts",
       "scripts/check-package-boundaries.mjs"
+    ],
+    "docs/architecture/2026-08-16-simplify-and-strengthen-architecture-pass.md": [
+      "apps/web/lib/operate/retention/policies.ts",
+      "packages/db/src/device-placement.ts",
+      "scripts/check-application-boundaries.mjs"
     ],
     "docs/architecture/agent-client-capability-parity.md": [
       "apps/web/lib/build/unified-wip-query.ts",

@@ -380,6 +380,7 @@
       "anchors": [
         "simplify-strengthen-whole-platform-architecture-pass-2026-08-16",
         "1-the-customer-base-this-architecture-must-serve",
+        "1a-operator-direction-2026-08-16-review",
         "2-state-of-the-existing-hardening-program-verified-live",
         "3-findings-by-lens",
         "31-code-structure",
@@ -387,6 +388,7 @@
         "33-ux-primitives-information-architecture",
         "34-runtime-deployment-topology",
         "35-the-architecture-knowledge-base",
+        "36-the-workroom-and-the-externally-exposed-coworker",
         "4-systemic-diagnosis-three-patterns-one-root-cause",
         "5-the-program-ranked-moves",
         "tier-0-do-first-low-risk-high-leverage-mostly-additive",
