@@ -33,6 +33,7 @@ const definitions: ToolDefinition[] = [
     },
     requiredCapability: "manage_platform",
     sideEffect: true,
+    consequence: "irreversible",
   },
 ];
 

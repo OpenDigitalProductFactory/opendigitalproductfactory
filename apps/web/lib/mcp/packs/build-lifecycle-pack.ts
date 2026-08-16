@@ -131,6 +131,7 @@ const definitions: ToolDefinition[] = [
     requiredCapability: "manage_capabilities",
     executionMode: "immediate",
     sideEffect: true,
+    consequence: "irreversible",
     buildPhases: ["ship"],
   },
   {
@@ -148,6 +149,7 @@ const definitions: ToolDefinition[] = [
     requiredCapability: "manage_capabilities",
     executionMode: "immediate",
     sideEffect: true,
+    consequence: "outward",
     buildPhases: ["ship"],
   },
   {

@@ -24,12 +24,23 @@ describe("consequential tool policy", () => {
     }).collaborationShape).toBe("specialist-alignment");
   });
 
+  // These cases used to assert shapes for `send_quote` and `execute_change` —
+  // neither of which exists as a tool. The test passed because the classifier
+  // is keyed on a bare string, so it happily classifies a name nothing can
+  // call. The Work Room binding is now driven by the tool's DECLARED reach,
+  // and consequential-tool-coverage.test.ts checks these names resolve.
   it.each([
-    ["send_quote", "outward-review"],
-    ["execute_change", "change-consequential"],
-  ])("binds %s to the %s Work Room shape", (toolName, collaborationShape) => {
-    expect(classifyConsequentialTool({ toolName, tool: { sideEffect: true } }).collaborationShape)
+    ["send_marketing_email", "outward" as const, "outward-review"],
+    ["execute_promotion", "irreversible" as const, "change-consequential"],
+  ])("binds a %s tool to the %s Work Room shape", (toolName, consequence, collaborationShape) => {
+    expect(classifyConsequentialTool({ toolName, tool: { sideEffect: true, consequence } }).collaborationShape)
       .toBe(collaborationShape);
+  });
+
+  it("keeps the precondition-gated HR transition on its change shape", () => {
+    expect(classifyConsequentialTool({
+      toolName: "transition_employee_status", tool: { sideEffect: true },
+    })).toMatchObject({ consequential: true, preconditionRequired: true, collaborationShape: "change-consequential" });
   });
 
   it("does not charge ordinary bookkeeping mutations for an alignment check", () => {
