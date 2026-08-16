@@ -8,8 +8,10 @@ import {
   type DecisionOutcomeType,
   type DecisionPerspectiveEvaluationResult,
   type DecisionRiskTier,
+  type DecisionEvaluationSource,
   type PerspectiveMaterialFreshness,
 } from "./types";
+import { normalizeLocator } from "@/lib/deliberation/evidence";
 
 type DecisionInteractionClient = {
   decisionInteraction: {
@@ -90,16 +92,28 @@ function normalizeFreshnessDistribution(value: unknown): Record<PerspectiveMater
 function normalizeSources(value: unknown): DecisionPerspectiveEvaluationResult["sources"] {
   if (!Array.isArray(value)) return [];
   return value
-    .map((entry) => {
+    .map((entry): DecisionEvaluationSource | null => {
       const source = asRecord(entry);
-      return typeof source.materialId === "string" && typeof source.sourceType === "string"
-        ? {
-          materialId: source.materialId,
-          sourceType: source.sourceType,
-          summary: typeof source.summary === "string" ? source.summary : "",
-          effectiveWeight: typeof source.effectiveWeight === "number" ? source.effectiveWeight : 0,
-        }
-        : null;
+      if (typeof source.materialId !== "string" || typeof source.sourceType !== "string") return null;
+      const normalized: DecisionEvaluationSource = {
+        materialId: source.materialId,
+        sourceType: source.sourceType,
+        summary: typeof source.summary === "string" ? source.summary : "",
+        effectiveWeight: typeof source.effectiveWeight === "number" ? source.effectiveWeight : 0,
+      };
+      // Trust-envelope re-verification fields (BI-8192557E phase 2a). Absent on
+      // every row written before they existed — carried through only when the
+      // locator still normalizes, so a malformed one reads as "no locator"
+      // (unverifiable) rather than as a citation the re-verifier can confirm.
+      const locator = normalizeLocator(source.locator);
+      if (locator) normalized.locator = locator;
+      if (typeof source.grade === "string") normalized.grade = source.grade;
+      if (typeof source.optionId === "string") normalized.optionId = source.optionId;
+      if (typeof source.dimensionKey === "string") normalized.dimensionKey = source.dimensionKey;
+      if (typeof source.excerpt === "string" || source.excerpt === null) {
+        normalized.excerpt = source.excerpt as string | null;
+      }
+      return normalized;
     })
     .filter((entry): entry is NonNullable<typeof entry> => Boolean(entry));
 }
