@@ -178,6 +178,72 @@ requested level for a superuser *before* any clearance check, so no
 route-fronted coworker may hold superuser; and the conversational channel
 remains unpoliced for peers that are legitimately admitted.
 
+## 4b. Fresh-install behaviour and how to diagnose a silent refusal
+
+Written down because the clamp's correct-for-disclosure silence is
+actively hostile during setup, and because the knowledge otherwise lives only in
+the session that built it. A new install is where this bites first.
+
+### Who can convene whom on a brand-new instance
+
+| Principal | Clearance resolved | Can convene a seeded `internal` coworker | …a seeded `confidential` coworker |
+| --- | --- | --- | --- |
+| Installation owner (superuser) | `INSTALLATION_OWNER_SENSITIVITY_FLOOR` = `public`, `internal`, `confidential` | yes | yes |
+| Employee with nothing explicit | `normalizePrincipalSensitivities(undefined)` → `["public"]` | **no** | **no** |
+| Principal with corrupt stored clearance | `[]` (fails closed) | no | no |
+
+`workforce-seed.ts` creates tier-2 coworkers at `sensitivity: "confidential"`,
+and only superusers receive the owner floor. So on a new box a regular employee
+cannot convene *any* seeded coworker — not merely the confidential ones — until
+clearance is granted explicitly.
+
+**Verify the escalation ladder as the installation owner first.** Verifying as an
+ordinary employee reproduces a total convene failure that looks like a broken
+feature and is in fact unseeded clearance.
+
+### Diagnosing a refused convene
+
+`CONVENE_DENIED_MESSAGE` is deliberately uninformative — it names no peer, role,
+sensitivity level, or subject, because a refusal that explains itself discloses
+the thing being protected (§4a). The unavoidable consequence is that a *setup
+gap* and a *policy decision* are indistinguishable from the UI.
+
+The reason exists in exactly one place: the `DelegationChain` audit row written
+before the refusal is thrown.
+
+```sql
+SELECT "toAgentId", reason, "originUserId", "createdAt"
+FROM "DelegationChain"
+WHERE status = 'blocked'
+ORDER BY "createdAt" DESC
+LIMIT 20;
+```
+
+`reason` carries the target agent and the required sensitivity
+(`conveneDenialAuditReason`). A blocked row naming a sensitivity the asking human
+plainly should hold is a seeding problem, not a policy problem.
+
+Note the same table also carries `delegatesTo`/`escalatesTo` refusals from
+`enforceHandoffAuthority`, whose reason text names the *caller* agent. The two are
+distinguishable by reason wording.
+
+### A defaulting trap worth generalising
+
+The first version of this clamp defaulted an unlinked user to
+`["public", "internal"]`, copied from `workspace-room-access.ts`. That produced an
+inversion: a properly **linked** employee with nothing explicit resolves to
+`["public"]`, so being *linked* made a user more restricted than being *unknown* —
+and the looser branch was the default.
+
+The room-access default covers a **missing auth context**. The convene path reads
+a **real principal row**. Same-shaped default, different meaning. Corrected by
+delegating to `packages/db/src/principal-sensitivity.ts`, which owns clearance
+normalization, rather than restating a default beside it.
+
+The general rule: when a default already exists elsewhere, confirm it answers the
+*same question* before copying it. Two defaults that look alike can encode
+opposite assumptions about what an absent value means.
+
 ## 5. The triggering incident is not a ladder bug
 
 For the record, so the BI is not miscategorised: the upgrade failure itself was
