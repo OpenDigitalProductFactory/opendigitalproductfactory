@@ -15,12 +15,36 @@
 - Epic: `EP-2984B02B`
 - Backlog item: `BI-D633F7AF`
 - Spec: `docs/superpowers/specs/2026-06-27-work-management-architecture-design.md`
-- Depends on PR #2484 / Wave 0 foundation landing on `main`.
-- Current planning branch: `doc/work-case-wave1-enforcement`, stacked on `origin/doc/work-management-architecture` until #2484 leaves the merge queue.
+- Wave 0 (PR #2484) has merged to `main`; the Wave 0 modules listed under File Structure already exist on `main`.
+- This plan is the doc-only artifact of PR #2485; the implementation branch is rebased onto `origin/main`. Open the implementation PR only after gates are green.
 - No operator UI in this BI.
 - No sponsor/authority-mode migration in this BI unless a failing invariant proves projection is impossible.
 - No new receipt persistence table. Use `ToolExecutionReceipt` and projected envelopes first.
 - No raw backing-record lockout. The guard distinguishes governed Action receipts from observed external/raw events.
+
+## Parallel Effort Coordination
+
+The [Governed Adaptive Playbooks](../specs/2026-06-27-governed-adaptive-playbooks-design.md) effort runs in parallel with this one. They are designed to interlock, not collide, and this plan must hold up its half of that contract.
+
+**What is parallel-safe (no dependency either way):** Playbook Slices 1–2 (the systemic capability-needs observer and Work Pattern metadata/candidate projection) only read evidence and emit `CoworkerSelfAssessment`/`CoworkerCapabilityNeed`/`TaskRun` metadata. They change no Work Case state and can land before, during, or after this BI.
+
+**What the playbook effort depends on from this BI (the contract Wave 1 exposes):**
+
+- `action-registry.ts` — `WorkCaseActionDescriptor` is the vocabulary a case-bound Pattern Candidate resolves to (it becomes a `propose` staged governed Action, never a free-form write).
+- `policy-envelope.ts` — `evaluateWorkCasePolicy` is the gate a case-staged playbook proposal must pass (promotion-ladder step 5, "Case-staged").
+- `receipt-envelope.ts` — `ReceiptEnvelope` and its normalizers are the receipt shape playbook evidence references; the playbook effort must reuse this, not fork a playbook-specific receipt (its §8 forbids a parallel receipt ledger).
+- `receipt-coverage.ts` — the guard that makes "case-bound playbook change requires a governed receipt" enforceable.
+- The `mcp-governed-execute.ts` `context.workCase` seam and `receiptKind = "work-case-governed-action"` derivation.
+
+To make that contract usable, export all six Wave 1 modules through `apps/web/lib/work-management/index.ts` (already in scope below) so the playbook effort imports them rather than reimplementing.
+
+**Collision points to respect:**
+
+- `mcp-governed-execute.ts` — this BI owns the `context.workCase` + receipt-derivation change. The playbook effort must consume it, not make a second competing edit to receipt derivation. If both branches are open, this BI lands the governed-execute change.
+- `CoworkerActionEnvelope` — both efforts use it (this BI reads it for the staging gate; the playbook effort creates candidates via the existing `screen_propose_action`). No schema change in either; no collision as long as neither adds columns.
+- `apps/web/lib/work-management/index.ts` — Wave 1 owns the Wave 1 exports; playbook modules live under `apps/web/lib/tak/*` and `apps/web/lib/coworker-self-assessment/*`, so re-export overlap is minimal. Rebase order: whichever merges second re-runs the index barrel test.
+
+**Hard gates the playbook effort inherits (state, do not weaken):** A case-bound playbook proposal that changes consequential state cannot proceed until this BI's governed Actions + receipt-coverage guard exist (Wave 1) and sponsor/authority-mode are available (Wave 2). Agent-level playbook observation is unaffected by either gate.
 
 ## File Structure
 
@@ -49,18 +73,21 @@
 - Create `apps/web/lib/work-management/case-telemetry.test.ts`
   - Verifies stable trace/span fields and case/action attributes.
 - Create `apps/web/lib/work-management/work-case-governance-hook.ts`
-  - Factory for a `ToolLifecycleHook` that evaluates Work Case context in `governedExecuteTool`.
-  - The hook is exported but not globally registered until call sites pass `context.workCase`.
+  - Factory for a `ToolLifecycleHook` (matching the existing `onPreToolUse`/`onPostToolUse` interface) that evaluates Work Case context in `governedExecuteTool`.
+  - Register it once via the existing `registerToolLifecycleHook`. The hook is inert — `onPreToolUse` returns allow — unless `event.context.workCase` is present, so existing executions are unaffected. "Not active for existing tools" is achieved by the context guard, not by withholding registration.
 - Create `apps/web/lib/work-management/work-case-governance-hook.test.ts`
   - Hook-level tests with fake lifecycle events.
 - Modify `apps/web/lib/work-management/source-registry.ts`
-  - Expand `WorkCaseSupportedTransition` to the full handoff grammar from the spec: `claim`, `pause`, `needs-input`, `needs-auth`, `respond`, `resume`, `propose`, `delegate`, `handoff`, `escalate`, `verify`, `complete`, `cancel`.
+  - Migrate `WorkCaseSupportedTransition` from the Wave 0 shorthand (`claim`, `delegate`, `pause`, `resume`, `ask`, `approve`, `verify`, `close`, `cancel`) to the full spec handoff grammar: `claim`, `pause`, `needs-input`, `needs-auth`, `respond`, `resume`, `propose`, `delegate`, `handoff`, `escalate`, `verify`, `complete`, `cancel`.
+  - This is a rename/migration, not an additive expansion. Provide a `LEGACY_TRANSITION_ALIASES` map (`ask` → `needs-input`, `close` → `complete`, `approve` → `respond`) so any external caller using the old names still resolves, and rewrite each source entry's `supportedTransitions` to canonical verbs. Note: `approve` is the resolution side of `propose`/staging plus `DecisionInteraction`, not a distinct top-level verb — confirm this mapping in one line during Task 1 rather than carrying `approve` forward as its own action.
+  - Update any Wave 0 consumers/tests that reference the legacy transition names (`ask`, `approve`, `close`) — at minimum `source-registry.test.ts`, and check `status-projection.ts`, `case-read-model.ts`, and `architecture-grounding.ts` — and re-run the full Wave 0 suite green before proceeding.
 - Modify `apps/web/lib/work-management/case-types.ts`
   - Add shared `WorkCaseRef`, `WorkCaseActorRef`, `WorkCaseActionVerb`, and `WorkCaseEnforcementMode` types if needed by the new modules.
 - Modify `apps/web/lib/work-management/architecture-grounding.ts`
-  - Add `ACT-WC-claim`, `ACT-WC-pause`, `ACT-WC-delegate`, `ACT-WC-verify`, `ACT-WC-complete`, `PART-WC-policy-envelope`, `PART-WC-receipt-envelope`.
+  - Extend the existing exports in place — `WORK_CASE_ARCHITECTURE_ELEMENTS`, `WORK_CASE_ARCHITECTURE_ALLOCATIONS`, and `getWorkCaseRequirementVerificationPairs()` — using the existing field names (`elementId`, `elementType`, `name`, `description`, `implementationStatus`, `itValueStreams`, `verificationCaseId`). Do not introduce a parallel manifest shape.
+  - Add `ACT-WC-claim`, `ACT-WC-pause`, `ACT-WC-delegate`, `ACT-WC-verify`, `ACT-WC-complete`, `PART-WC-policy-envelope`, `PART-WC-receipt-envelope` elements.
   - Move `REQ-WC-1`, `REQ-WC-2`, `VC-WC-1`, and `VC-WC-2` to `partially-implemented` or `implemented` according to the actual guard coverage.
-  - Add `sysml_allocates` edges to new Wave 1 files.
+  - Add `sysml_allocates` allocations to the new Wave 1 files.
 - Modify `apps/web/lib/work-management/architecture-grounding.test.ts`
   - Assert all new Wave 1 files have allocations and each implemented requirement has a verification case.
 - Modify `apps/web/lib/work-management/index.ts`
@@ -84,9 +111,11 @@
 - Modify: `apps/web/lib/work-management/case-types.ts`
 - Modify: `apps/web/lib/work-management/index.ts`
 
+**Central change:** Wave 0 shipped `supportedTransitions` in shorthand (`ask`, `approve`, `close`). This task migrates the source registry to the canonical spec grammar and introduces the action registry on top of it. Do the migration first so the "every transition is backed by an action" invariant can hold.
+
 - [ ] **Step 1: Write the failing action-registry tests**
 
-Add tests that require the full spec grammar and existing mutator mapping:
+Add tests that require the full spec grammar, the legacy alias resolution, and existing mutator mapping:
 
 ```ts
 import { describe, expect, it } from "vitest";
@@ -112,6 +141,12 @@ describe("Work Case action registry", () => {
     ]);
   });
 
+  it("resolves legacy Wave 0 transition names to canonical actions", () => {
+    expect(getWorkCaseAction("ask")?.action).toBe("needs-input");
+    expect(getWorkCaseAction("close")?.action).toBe("complete");
+    expect(getWorkCaseAction("approve")?.action).toBe("respond");
+  });
+
   it("marks consequential actions as policy and receipt gated", () => {
     for (const action of ["claim", "delegate", "handoff", "verify", "complete", "cancel"]) {
       expect(getWorkCaseAction(action)).toMatchObject({
@@ -131,6 +166,8 @@ describe("Work Case action registry", () => {
   });
 });
 ```
+
+Because the last assertion iterates the migrated `supportedTransitions`, source-registry migration (the File Structure note above) must land in this task, and `getWorkCaseAction` must accept both canonical verbs and legacy aliases.
 
 - [ ] **Step 2: Run the test and verify it fails**
 
@@ -176,6 +213,8 @@ Use sanctioned mutators already present in the repo where known:
 - `complete`: `update_work_capsule_status`, `update_backlog_item_status`
 - `cancel`: `update_work_capsule_status`, `update_backlog_item_status`
 
+Confirm each mutator's exact registered tool name against the live MCP tool registry before mapping. `screen_propose_action`, `update_backlog_item_status`, `run_sandbox_tests`, `run_ux_test`, and `run_sandbox_command` are verified present. `claim_capsule_scope`, `update_work_capsule_status`, `record_execution_evidence`, and `record_capsule_evidence` are registered DPF MCP tools but were not found in `mcp-tools.ts` by grep, so verify their registration site and exact spelling. Where no mutator yet exists for a verb (the principal-aware `handoff`/`delegate` mutator is Wave 2; some `needs-auth` authority/grant tools are later), set `sanctionedMutators: []` and a `deferredToWave` marker rather than asserting a name that does not exist. The registry maps verbs to mutators descriptively; Wave 1 does not have to route every mutator through the wrapper (reflected as `partially-implemented` in Task 7).
+
 - [ ] **Step 4: Run registry tests**
 
 Run:
@@ -211,7 +250,7 @@ Cover these cases:
 - Allows a non-terminal, supported, low-risk action with receipt policy present.
 - Denies unsupported source/action combinations.
 - Denies consequential action on a terminal case.
-- Denies supervised consequential action without an approved `CoworkerActionEnvelope`.
+- Denies supervised consequential action without an approved `CoworkerActionEnvelope`. Use the model's real status lifecycle — `proposed → approved|declined → executed|failed|cancelled` — and treat only `approved` (not yet executed) as satisfying the staging gate; `proposed` denies with `missing_coworker_envelope`, `declined`/`cancelled` deny with a distinct reason.
 - Denies action when stop condition is already tripped.
 - Denies consequential decision action when `decisionInteractionId` is missing.
 - Allows observed external events but marks them `enforcementMode = "observed-event"`.
@@ -322,6 +361,10 @@ export interface ReceiptEnvelope {
   rawRef: { table: string; id: string };
 }
 ```
+
+Normalizer notes:
+- `GoldenTriangleReceipt` (`apps/web/lib/golden-triangle/receipt.ts`) has no `toolExecutionId` or trace fields; it carries `preset`, `governedBy`, `requested`, `actual`, `deviations`, `matchedRequest`, and a plain-language `summary`. Map `summary` → `summary`, `requested`/`actual`/`governedBy` → `policyRefs`, and set `rawRef` to the receipt-store record (`apps/web/lib/golden-triangle/receipt-store.ts`), not a Prisma table — Golden Triangle receipts are not `ToolExecutionReceipt` rows.
+- `ToolExecutionReceipt` is the governed-action source: map `receiptKind`, `receiptStatus` → `status`, `executionStatus`, `inputFingerprint` → `inputDigest`, `outputDigest`, and `rawRef = { table: "ToolExecutionReceipt", id }`.
 
 Do not persist anything in this task.
 
@@ -664,5 +707,7 @@ Only mark `BI-D633F7AF` done when all verification passes and the branch has bee
 - Consequential Work Case actions cannot be considered complete without a passing policy decision and governed-action receipt in the guard.
 - Governed-action receipts and observed-event receipts are distinguishable.
 - `ReceiptEnvelope` demonstrably subsumes `GoldenTriangleReceipt` and `ToolExecutionReceipt`.
-- EA/SysML grounding is updated without inventing new modeling tables.
-- Branch is rebased onto `main` after #2484 lands, then pushed and opened as a regular ready-for-review PR only after gates are green.
+- EA/SysML grounding is updated by extending the existing `architecture-grounding.ts` manifest, without inventing new modeling tables or a parallel manifest shape.
+- Wave 0 transitions (`ask`, `approve`, `close`) are migrated to the canonical spec grammar, with legacy aliases resolving and the full Wave 0 suite green.
+- The parallel-effort contract is consumable: `action-registry`, `policy-envelope`, `receipt-envelope`, `receipt-coverage`, `case-telemetry`, and `work-case-governance-hook` are exported from `index.ts`, and the `mcp-governed-execute.ts` `context.workCase` + `work-case-governed-action` receipt seam is the single owner of Work Case receipt derivation (no second implementation expected from the Governed Adaptive Playbooks effort).
+- The implementation branch (already rebased onto `origin/main`) is pushed and opened as a regular ready-for-review PR only after gates are green.
