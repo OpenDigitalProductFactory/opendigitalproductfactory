@@ -103,13 +103,38 @@ test("postgres specifically is pinned — the exact consumer-install outage", ()
   assert.match(release, /dpf-postgres:\$\{DPF_IMAGE_TAG:-latest\}/);
 });
 
-test("every release-pinned dpf image is actually published by the workflow", () => {
-  const imageNames = [...release.matchAll(/\/(dpf-[a-z0-9-]+):\$\{DPF_IMAGE_TAG/g)].map((m) => m[1]);
-  const missing = [...new Set(imageNames)].filter((n) => !publishWorkflow.includes(`name: ${n}`));
+/** Image names in the build matrix (`- name: dpf-x`) and the merge matrix (`- dpf-x`). */
+function publishMatrices(source) {
+  const builds = new Set([...source.matchAll(/^\s*- name:\s*(dpf-[a-z0-9-]+)\s*$/gm)].map((m) => m[1]));
+  const mergeBlock = source.slice(source.indexOf("\n  merge:"));
+  const merges = new Set([...mergeBlock.matchAll(/^\s*-\s*(dpf-[a-z0-9-]+)\s*$/gm)].map((m) => m[1]));
+  return { builds, merges };
+}
+
+test("every release-pinned dpf image is actually BUILT by the workflow", () => {
+  const { builds } = publishMatrices(publishWorkflow);
+  const imageNames = [...new Set([...release.matchAll(/\/(dpf-[a-z0-9-]+):\$\{DPF_IMAGE_TAG/g)].map((m) => m[1]))];
+  const missing = imageNames.filter((n) => !builds.has(n));
   assert.deepEqual(
     missing,
     [],
     "the release overlay pins images that publish-image.yml never builds, so the pull " +
       "will 404: " + missing.join(", "),
+  );
+});
+
+test("every built image is also MERGED into a tag manifest", () => {
+  // Building without merging pushes per-arch images BY DIGEST ONLY -- no human tag
+  // is ever created, so `docker compose pull` fails with:
+  //     postgres Error manifest unknown
+  // That shipped once: dpf-postgres was added to the build matrix but not the merge
+  // matrix, so both arches built green and the tag still did not exist.
+  const { builds, merges } = publishMatrices(publishWorkflow);
+  const unmerged = [...builds].filter((n) => !merges.has(n));
+  assert.deepEqual(
+    unmerged,
+    [],
+    "these are built per-arch but never assembled into a tag manifest, so pulling the " +
+      "tag returns 'manifest unknown': " + unmerged.join(", "),
   );
 });
