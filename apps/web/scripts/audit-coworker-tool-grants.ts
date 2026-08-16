@@ -125,6 +125,10 @@ function loadToolToGrants(): Record<string, string[]> {
       path: "apps/web/lib/tak/product-management-tool-grants.ts",
       pattern: /PRODUCT_MANAGEMENT_TOOL_GRANTS[^=]*= \{([\s\S]*?)\n\}/,
     },
+    {
+      path: "apps/web/lib/tak/initiative-readiness-tool-grants.ts",
+      pattern: /INITIATIVE_READINESS_TOOL_GRANTS[^=]*= \{([\s\S]*?)\n\}/,
+    },
   ];
 
   for (const source of sources) {
