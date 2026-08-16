@@ -3,17 +3,36 @@
 #
 # Windows counterpart of dpf-shell-guard.sh. Installer copies this into
 # $DPF_DIR\safety-bin\ and generates .cmd shims (docker.cmd, git.cmd, etc.)
-# that invoke `pwsh -NoProfile -File dpf-shell-guard.ps1 -BinName <name> -- ARGS`.
+# that invoke `pwsh -NoProfile -File dpf-shell-guard.ps1 -BinName <name> ARGS`.
 #
 # Spec: docs/superpowers/specs/2026-05-24-runtime-kernel-commandments.md
 # Plan: docs/superpowers/plans/2026-05-24-runtime-kernel-commandments-slice-1.md
 
-param(
-  [Parameter(Mandatory = $true)][string]$BinName,
-  [Parameter(ValueFromRemainingArguments = $true)]$Args
-)
+# DELIBERATELY a *simple* parameter block: no [Parameter()] attributes and no
+# [CmdletBinding()]. Either one makes this an ADVANCED script, which (a) adds the
+# common parameters (-Verbose, -Debug, -ErrorAction, ...) and (b) enables prefix
+# matching against every declared parameter name. This shim forwards arbitrary
+# third-party flags, so that binding is actively harmful:
+#
+#   docker compose up -d        -> '-d' prefix-matches -Debug
+#   docker compose -f file.yml  -> '-f' prefix-matches a '-ForwardedArgs'-style param
+#   git ... --                  -> '--' parses as a parameter prefix with an EMPTY name
+#                                  ("Parameter cannot be processed because the
+#                                   parameter name '' is ambiguous")
+#
+# A parameter named $Args is doubly wrong: it collides with the automatic $args.
+#
+# As a simple script only -BinName binds; every other token, including unknown
+# -flags, falls through to the automatic $args -- exactly what a pass-through
+# shim needs. Do not "tidy" this into an advanced script.
+param([string]$BinName)
 
 $ErrorActionPreference = 'Stop'
+
+if (-not $BinName) {
+  Write-Error "[dpf-shell-guard] -BinName is required"
+  exit 2
+}
 
 $GateUrl = if ($env:DPF_GATE_URL) { $env:DPF_GATE_URL } else { 'http://localhost:3000/api/kernel/gate' }
 $SessionClass = if ($env:DPF_AUTONOMOUS_SESSION_ID) { 'autonomous' } else { 'interactive' }
@@ -34,8 +53,13 @@ if (-not $RealBin -or -not (Test-Path -LiteralPath $RealBin)) {
 # Build the request body using ConvertTo-Json (PowerShell's native JSON
 # emitter handles backslash/quote/control-char escaping).
 $argsArray = @()
-if ($null -ne $Args) {
-  $argsArray = @($Args | ForEach-Object { [string]$_ })
+if ($args.Count -gt 0) {
+  $argsArray = @($args | ForEach-Object { [string]$_ })
+  # Tolerate a legacy `--` separator from a shim generated before this fix, so an
+  # install that still has the old safety-bin\*.cmd on disk keeps working.
+  if ($argsArray.Count -gt 0 -and $argsArray[0] -eq '--') {
+    $argsArray = @($argsArray | Select-Object -Skip 1)
+  }
 }
 $body = @{
   attempt = @{ kind = 'shell'; command = $BinName; args = $argsArray }

@@ -44,6 +44,9 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
     guard("host-port-range-guard", "Host Port Range Guard", [
       node("--test", "scripts/check-host-port-range.test.mjs"),
     ]),
+    guard("shell-guard-shim-contract", "Shell Guard Shim Contract", [
+      node("--test", "scripts/check-shell-guard-shim-contract.test.mjs"),
+    ]),
     guard("docs-link-integrity", "Docs Link Integrity", [
       node("scripts/gen-doc-index.mjs", "--check"),
       node(
