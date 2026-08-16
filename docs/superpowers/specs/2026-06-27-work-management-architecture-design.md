@@ -427,6 +427,15 @@ Following ServiceNow Control Tower and Entra, the policy envelope, receipts, and
 
 ## UI Architecture
 
+### Information Architecture And Precedent
+
+The surface decisions below follow established IA practice and current top-of-market precedent for human + AI work surfaces, not house style:
+
+- **One attention inbox; each item appears once.** Converging "what needs you" into a single inbox is the consensus pattern (GTD single-capture; [LangChain ambient agents / Agent Inbox](https://www.langchain.com/blog/introducing-ambient-agents); Linear Triage + Inbox). The dominant failure mode is duplicate inboxes that re-notify the same item and cause notification fatigue — Work Case must project each item into the existing "Needs you" inbox exactly once, with explicit ownership/routing, never broadcast.
+- **Projection into existing surfaces, not a new console — especially for AI work.** The 2024–2026 consensus keeps agents "in the flow of work": [Microsoft 365 agents in the flow of work](https://www.microsoft.com/en-us/microsoft-365/blog/2026/04/13/bring-your-everyday-business-apps-into-the-flow-of-work-with-agents-in-microsoft-365-copilot/) and [Salesforce Agentforce shared console on handoff](https://www.salesforce.com/blog/agent-to-human-handoff/). Agent items needing a person land in the same inbox as human-routed items, with full context and a standard approve/edit/reject/respond control — no separate "AI dashboard."
+- **Progressive disclosure and chunking, not arbitrary caps.** Default to what needs the person now; push detail and advanced controls one level deeper ([NN/g Progressive Disclosure](https://www.nngroup.com/articles/progressive-disclosure/); [NN/g Complex Application Design](https://www.nngroup.com/articles/complex-application-design/)). Do **not** cap visible lists, nav, or filters at "7" — Miller's 7±2 governs what a user must *recall*, not what may be *shown and recognized* ([NN/g Chunking](https://www.nngroup.com/articles/chunking/)). Manage density with chunking and salience, and reduce *simultaneous decisions* per view (Hick's law), not list length.
+- **Operational, not analytical.** The attention surface is an operational "what now" view optimized for glanceability and urgency order ([NN/g operational dashboards](https://www.nngroup.com/articles/dashboards-preattentive/)), not a metrics dashboard.
+
 ### Owning Area
 
 Company-level work belongs primarily in `Workspace`, not `Platform`.
@@ -436,20 +445,47 @@ Company-level work belongs primarily in `Workspace`, not `Platform`.
 - `/storefront` remains internal management for storefront/business configuration.
 - `/portal` remains external/customer experience.
 
-The product label should be "Work" or "Cases" for general users. "Queue", "Capsule", "Receipt", and "DecisionInteraction" are implementation terms unless the user is in an admin/audit context.
+Work Case reconciles with the existing information architecture rather than extending it: case lists feed the existing attention surface (EP-ATTENTION-SURFACE) and the unified backlog intake (EP-INTAKE-UNIFY), and respect nav-coherence — no cross-section teleports, no composite scores (EP-NAV-COHERENCE). Work Case adds **no new top-level rail destination**; it lives as detail and projections under surfaces that already exist.
+
+The product label for the object is **Work** for general users (for example "My Work" and "Work that needs you"); an individual piece is referred to by its outcome/title, not a type name. "Queue", "Capsule", "Receipt", "Packet", and "DecisionInteraction" are implementation terms, shown only in admin/audit context. See Vocabulary below for the full user-facing / internal split.
+
+### Vocabulary
+
+Keep two registers: a plain user-facing label and the internal/architecture term used in code, audit, and this spec. Never show the internal term to a general user; never let the user-facing label leak into schema or field names. A general user should be able to read every label without a glossary; receipts, capsules, envelopes, perspectives, and principal/authority vocabulary are reserved for admin/audit views.
+
+| Internal / architecture term | User-facing label |
+|---|---|
+| Work Case (the object) | **Work** — surfaced as "My Work" and "Work that needs you"; an individual is named by its outcome, not a type |
+| Work Packet | **Assignment** — a bounded piece of Work given to a person or coworker |
+| Receipt / ReceiptEnvelope | **Activity** (rendered as a timeline) for users; **Audit log** for the governance/admin view; "Receipt" stays internal |
+| attention lens / projection | **Needs you** — the existing inbox; reuse it, do not rename |
+| Coworker (AI agent) | **Coworker** — already conventional |
+| Governed Action / handoff grammar | plain verbs: **Claim, Pause, Ask, Answer, Needs access, Resume, Delegate, Hand off, Escalate, Verify, Done** |
+| policy envelope / authority mode / autonomy mode | **Permissions** and "who can do what"; supervised vs automatic shown as a simple state, not "authority/autonomy mode" |
+| Sponsor | **Accountable owner** in general UI; "Sponsor" only in audit/admin |
+| Pattern / Living Playbook (sibling spec) | **Playbook** |
+| WWMD / WWWD / WSID, DecisionInteraction, WorkItem, WorkCapsule | architecture / admin / audit only — never general-user |
+
+Precedent for these labels: **"Work"** as the all-teams object is current top-of-market practice — Azure DevOps has long used "Work item", and Atlassian renamed Jira's "issue" to "work" in 2025 explicitly to serve all teams (rejecting "ticket" as too narrow). The **Activity** (user feed) vs **Audit log** (compliance) split follows ServiceNow/Salesforce/Microsoft Purview convention; no major platform exposes an internal term like "receipt" to users.
+
+Two cautions on "Work":
+
+- It is a mass noun — name an individual by its outcome/title ("Reschedule and credit for Acme"), not "a work". Where the object is genuinely a service/customer envelope, a domain subtype label ("request", "case") is acceptable for that vertical.
+- The user-facing phrase "work item" collides with the internal `WorkItem` model (the queue/routing record). Keep "work item" out of user copy so the company object is never conflated with the queue record; use "Work" / "My Work" and the item's own title.
+
+Handoff-verb mapping for the UI: `complete` → "Done", `needs-input` → "Ask" (actor) / "Answer" (responder), `needs-auth` → "Needs access", `respond` → "Answer", `handoff` → "Hand off". The backend grammar stays tight (per Handoff Grammar); only the labels are friendly.
 
 ### Primary Surface
 
-The first screen should be an attention lens, not a dashboard:
+Work Case must not add a new attention screen. DPF already has the workspace attention surface — the "Needs you" inbox at `/workspace/inbox` (EP-ATTENTION-SURFACE) — and "My Queue" at `/workspace/my-queue`. Work Case contributes case-typed rows and projections to those existing surfaces; it does not stand up a parallel inbox. This is the load-bearing cognitive-load decision: one place a person looks to see what needs them, not one inbox per feature.
 
-- Needs me now.
-- Running without me.
-- Waiting on someone else.
-- Awaiting decision.
-- Recently resolved.
-- Stale or at risk.
+Concretely:
 
-Each row should show outcome, accountable principal, current actor, status, due/stale indicator, risk, next action, and evidence confidence. The default action should be obvious and constrained.
+- "Needs me now" and "Awaiting decision" are case projections into the existing "Needs you" inbox, ordered by the established attention discipline (override tier → time-to-act → risk → age), never a new composite score (EP-NAV-COHERENCE: ordered facts, never a ledger).
+- "Running without me", "Waiting on someone else", "Recently resolved", and "Stale or at risk" are filters/facets on the case list and the existing queue, not separate pages.
+- The only net-new Work Case UI is the case detail drill-down (below), reached from those existing surfaces — exactly the disciplined shape Wave 6's Portal drill-down already followed (a child route, not a new dashboard or rail destination).
+
+Each case row should show outcome, accountable principal, current actor, status, due/stale indicator, risk, next action, and evidence confidence. The default action should be obvious and constrained.
 
 ### Case Detail
 
@@ -779,6 +815,9 @@ Fit:
 Guardrails:
 
 - Do not create a second dashboard for the same work.
+- Do not stand up a second attention surface — feed the existing "Needs you" inbox (EP-ATTENTION-SURFACE) and "My Queue"; add no new top-level rail destination.
+- Each attention item appears exactly once — single projection into the inbox, never the same item re-notified across surfaces or channels.
+- Do not show internal vocabulary (Work Case, Packet, Receipt, Capsule, envelope, authority/autonomy mode, WWMD/WWWD/WSID) to general users — use the user-facing labels in Vocabulary; reserve internal terms for admin/audit.
 - Do not make chat the state manager.
 - Do not expose WorkCapsule as the primary term for customer/company work.
 - Do not use platform WWMD as a substitute for customer/company WWWD.
