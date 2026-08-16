@@ -24,6 +24,10 @@ export type DirectionalOutcomeInput = {
 /**
  * Returns the directional verdict, or null when the caller should fall through
  * to the content-blind ladder.
+ *
+ * Null is returned ONLY for a non-content-aware coverage. Once the WWWD path is
+ * active the ladder below is total — every branch returns — so there is no
+ * fall-through from within it.
  */
 export function contentAwareDirectionalOutcome(
   args: DirectionalOutcomeInput,
@@ -143,6 +147,4 @@ export function contentAwareDirectionalOutcome(
     rationale:
       `Recommend APPROVING: your recorded stance supports this decision at confidence ${confidence}.`,
   };
-
-  return null;
 }
