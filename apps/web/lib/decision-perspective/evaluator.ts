@@ -207,7 +207,26 @@ export function evaluateDecisionPerspective(
       };
     }
 
-    // alignment === "approve"
+    // alignment === "approve".
+    //
+    // Aligned is NOT a licence to act (BI-F5F2869D, operator ruling). Approving
+    // whatever matches recorded doctrine would make the business only ever do
+    // what it already does, and reviewing an unaligned or novel proposal is
+    // exactly where new ideas surface. So an approval acts autonomously only
+    // when the owner has ALREADY RULED on this question — a `ruled` stance
+    // dominating the relevant material — and otherwise escalates with the
+    // reason made explicit, so a genuinely new proposition is legible as new
+    // rather than buried among settled ones.
+    if (!selectedCoverage.settledByRuling) {
+      return {
+        ...baseResult,
+        outcomeType: "escalate",
+        rationale:
+          `This is a NEW proposition: your recorded stance is consistent with it (confidence ${confidence}), but you have not ruled on this question before. Escalating so you can weigh it — a decision that merely matches existing doctrine is not one you have already made.`,
+        gapReason: "aligned-not-settled",
+      };
+    }
+
     if (input.riskTier === "high") {
       return {
         ...baseResult,
