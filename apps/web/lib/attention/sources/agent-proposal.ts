@@ -14,6 +14,9 @@ import {
   LEAVE_DECISION_ROUTE,
   parseLeaveDecisionProposalParameters,
 } from "@/lib/workforce/leave/leave-decision-proposal-contract";
+// Every item this source emits is awaiting a human turn (residueReason
+// "policy-approval"), so trustLevel "propose" is structural — the item exists
+// precisely because the coworker may not act alone (BI-A013BBA9).
 import { attentionAuthorForAgent } from "../attribution";
 import type { AttentionItem } from "../types";
 
@@ -81,7 +84,7 @@ export function agentProposalToAttentionItem(row: AgentActionProposalRow): Atten
         }:${proactivityChange.currentLevel}`,
       },
       technical: { detectedBy: proactivityChange.agentId ?? "AI workforce" },
-      author: attentionAuthorForAgent(proactivityChange.agentId ?? row.agentId),
+      author: attentionAuthorForAgent(proactivityChange.agentId ?? row.agentId, { trustLevel: "propose" }),
     };
   }
 
@@ -105,7 +108,7 @@ export function agentProposalToAttentionItem(row: AgentActionProposalRow): Atten
       deepLink: LEAVE_DECISION_ROUTE,
       audience: { operator: true },
       technical: { detectedBy: row.agentId },
-      author: attentionAuthorForAgent(row.agentId),
+      author: attentionAuthorForAgent(row.agentId, { trustLevel: "propose" }),
     };
   }
 
@@ -133,7 +136,7 @@ export function agentProposalToAttentionItem(row: AgentActionProposalRow): Atten
     }],
     deepLink: isActivityRoutingAction ? "/platform/ai/operations-map" : "/platform/ai",
     audience: { operator: true },
-    author: attentionAuthorForAgent(row.agentId),
+    author: attentionAuthorForAgent(row.agentId, { trustLevel: "propose" }),
   };
 }
 
