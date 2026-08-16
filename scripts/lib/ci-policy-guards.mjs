@@ -47,6 +47,9 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
     guard("shell-guard-shim-contract", "Shell Guard Shim Contract", [
       node("--test", "scripts/check-shell-guard-shim-contract.test.mjs"),
     ]),
+    guard("release-compose-pins", "Release Compose Pins", [
+      node("--test", "scripts/check-release-compose-pins.test.mjs"),
+    ]),
     guard("release-asset-contract", "Release Asset Contract", [
       // The consumer install has no git checkout: whatever the installer copies
       // out of the install dir must ship in the image's /dpf-release-assets.

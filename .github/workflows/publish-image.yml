@@ -108,6 +108,14 @@ jobs:
             context: .
             file: services/edge-node/Dockerfile
             target: ""
+          # postgres is BUILT in the base compose (baked pgvector + inngest init,
+          # deliberately no host bind mount). Without publishing it, a consumer
+          # install has no database image and `up` tries to build from a ./docker
+          # context that a no-checkout install does not have.
+          - name: dpf-postgres
+            context: .
+            file: docker/postgres/Dockerfile
+            target: ""
         platform:
           - arch: amd64
             runner: ubuntu-latest
