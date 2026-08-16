@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 637,
+  "pageCount": 638,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -4766,6 +4766,22 @@
         "uninstall",
         "going-further",
         "connecting-claude-code-or-vs-code-via-mcp"
+      ]
+    },
+    "docs/install/worktree-janitor-schedule.md": {
+      "publicHref": "/install/worktree-janitor-schedule/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "scheduling-the-worktree-janitor",
+        "install",
+        "letting-it-actually-reap",
+        "other-flags",
+        "what-gets-registered",
+        "reading-the-output",
+        "checking-it-ran",
+        "related"
       ]
     },
     "docs/maintenance/README.md": {

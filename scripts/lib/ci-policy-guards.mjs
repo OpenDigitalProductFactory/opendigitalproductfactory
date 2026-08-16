@@ -233,6 +233,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         // (now with the liveness + abandoned-merge verdicts), the session
         // heartbeat liveness signal, and the root-clone fast-forward remedy.
         "scripts/lib/worktree-janitor-core.test.mjs",
+        "scripts/worktree-janitor.test.mjs",
         "scripts/lib/worktree-session-heartbeat.test.mjs",
         // BI-DBAD1A1B: SessionEnd process matching accepts only the canonical
         // worktree itself or descendants, never sibling worktrees/CI runners.

@@ -185,10 +185,18 @@ function ageDays(wtPath) {
   return Math.floor((Date.now() / 1000 - ts) / 86400);
 }
 
-/** One MCP call for all leases; returns a predicate on worktree path. */
+/**
+ * One MCP call for all leases; returns the RAW RESPONSE STRING, which
+ * pathHasLease() substring-matches. Every failure path must also return a
+ * string: returning a Set here (as this did) is truthy, so pathHasLease got
+ * past its `!leasePayload` guard and called Set.includes — which does not
+ * exist — crashing the whole janitor. That is the *unattended* path (no token,
+ * portal down, curl missing), so the scheduled run died every time while an
+ * interactive run with a live token appeared to work.
+ */
 function loadLeasePaths() {
   const token = process.env.DPF_MCP_BEARER_TOKEN;
-  if (!token) return new Set();
+  if (!token) return "";
   const url = process.env.DPF_MCP_URL || "http://127.0.0.1:3000/api/mcp/v1";
   const body = JSON.stringify({
     jsonrpc: "2.0",
@@ -214,7 +222,7 @@ function loadLeasePaths() {
     ],
     { encoding: "utf8", windowsHide: true },
   );
-  if (r.status !== 0 || !r.stdout) return new Set();
+  if (r.status !== 0 || !r.stdout) return "";
   // Match any path-like substrings later via includes on raw payload.
   return r.stdout;
 }
@@ -357,4 +365,4 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
   main();
 }
 
-export { main };
+export { main, loadLeasePaths, pathHasLease };
