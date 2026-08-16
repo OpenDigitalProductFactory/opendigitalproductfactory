@@ -46,6 +46,7 @@ const EXPECTED_LEGACY_JOBS = [
   "prose-lint-guard",
   "published-image-freshness",
   "release-asset-contract",
+  "release-compose-pins",
   "repo-guard-loop",
   "reporting-composition-guard",
   "retired-substrate-guard",
