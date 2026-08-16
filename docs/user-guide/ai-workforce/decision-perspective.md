@@ -42,6 +42,21 @@ When a coworker or external MCP client hits a decision point that doesn't have a
 
 Every invocation writes a `DecisionInteraction` row recording the active profile version, the source materials cited, the confidence score, the chosen outcome, and the rationale text. This is the audit ledger — auditors and operators reconstruct "what perspective governed this decision, and on what evidence" from it.
 
+**Answering the queue does not make your AI less confident.** Confidence carries a
+discount for how often you have recently OVERRULED a profile in the same decision
+class — the signal being "our recorded doctrine is drifting from what the owner
+actually does here, so trust it less". An overrule means the gate recommended one
+option and you chose a different one. Simply answering an escalation is not an
+overrule, and neither is agreeing with the recommendation.
+
+This mattered in practice (BI-ACF0D6D4): the discount used to count every answer,
+so clearing a review queue drove it to its cap and pushed the NEXT decision below
+the threshold to act — working through your backlog was what kept the backlog
+full. Two cases deliberately do not count against you: an escalation that carried
+no recommendation (there was nothing to overrule), and an answer where you did not
+pick one of the offered options (that is not evidence of disagreement). Repeated
+genuine disagreement in a class still lowers autonomy there, which is the point.
+
 ### Consequential Action Alignment
 
 For a consequential tool call, Decision Perspective is a pre-execution control rather than optional advice. The gate extracts the proposed market, customer, product, geography, and go-to-market motion, then checks them independently against the organization's published WWWD stance, organization-owned product portfolio, and GTM evidence. An explicit hard boundary in any required corpus vetoes the action; positive signals elsewhere cannot average the veto away.

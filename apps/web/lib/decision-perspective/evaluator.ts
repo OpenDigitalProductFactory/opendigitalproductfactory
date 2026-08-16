@@ -10,6 +10,10 @@ import { MARK_DPF_PLATFORM_PROFILE } from "./default-profile";
 import { resolveGateRecommendedOptionId } from "./option-recommendation";
 import type { AlignmentCorpora } from "./alignment-criteria";
 import { applyConstitutionalAlignment } from "./constitutional-alignment-application";
+import { getRecentOverrideCount } from "./override-count";
+
+// Re-exported for existing importers; owned by ./override-count (BI-ACF0D6D4).
+export { RECENT_OVERRIDE_WINDOW_DAYS } from "./override-count";
 import {
   hasPrincipleConflict,
   orderedProfileChain,
@@ -32,7 +36,6 @@ import type {
 
 export { scorePerspectiveMaterial } from "./material";
 
-export const RECENT_OVERRIDE_WINDOW_DAYS = 30;
 
 export function evaluateDecisionPerspective(
   input: DecisionPerspectiveEvaluationInput,
@@ -433,22 +436,6 @@ export function operatorMessageFor(
   return `WWMD recommends starting implementation with ${evaluation.confidenceScore} confidence.`;
 }
 
-async function getRecentOverrideCount(input: {
-  db: any;
-  profileId: string;
-  domainClass: DecisionDomainClass;
-  now: Date;
-}): Promise<number> {
-  if (!input.db.escalationCapture?.count) return 0;
-  const gte = new Date(input.now.getTime() - RECENT_OVERRIDE_WINDOW_DAYS * 24 * 60 * 60 * 1000);
-  return input.db.escalationCapture.count({
-    where: {
-      domainClass: input.domainClass,
-      createdAt: { gte },
-      interaction: { profileId: input.profileId },
-    },
-  });
-}
 
 export async function evaluatePerspectiveGate(input: {
   db: any;
