@@ -89,12 +89,15 @@ export default async function ProvidersPage() {
   // ModelProvider.status — a provider whose only connection is disabled must
   // not read "active" here while routing silently skips it. Fold the default
   // connection's veto into the status the eligibility badge derives from.
-  const defaultConnections = await prisma.aiProviderConnection
-    .findMany({
-      where: { connectionId: { startsWith: "provider-default-" } },
-      select: { providerId: true, status: true },
-    })
-    .catch(() => [] as Array<{ providerId: string; status: string }>);
+  const defaultConnections =
+    typeof prisma.aiProviderConnection?.findMany === "function"
+      ? await prisma.aiProviderConnection
+          .findMany({
+            where: { connectionId: { startsWith: "provider-default-" } },
+            select: { providerId: true, status: true },
+          })
+          .catch(() => [] as Array<{ providerId: string; status: string }>)
+      : [];
   const connectionStatusByProvider = new Map(
     defaultConnections.map((c) => [c.providerId, c.status] as const),
   );
