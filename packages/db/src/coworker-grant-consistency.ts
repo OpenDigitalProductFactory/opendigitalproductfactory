@@ -73,7 +73,7 @@ export const KNOWN_GRANT_DIVERGENCES: readonly string[] = [
   "ea-architect",
   "external-catalog-scout",
   "finance-controller",
-  "hr-specialist",
+  // hr-specialist reconciled 2026-08-04: seed + registry both carry policy_read/write for Policy draft tools
   "inventory-specialist",
   "legal-operations-counsel",
   "marketing-specialist",

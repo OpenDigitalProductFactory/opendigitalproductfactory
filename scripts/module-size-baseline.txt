@@ -11,7 +11,7 @@ apps/web/components/ops/SelfUpgradeClient.tsx	1124
 apps/web/components/platform/EffectivePermissionsPanel.tsx	844
 apps/web/components/platform/edge-nodes/EdgeNodesAdminClient.tsx	985
 apps/web/components/storefront/SlotBookingFlow.tsx	1015
-apps/web/components/workbooks/Grid.tsx	1845
+apps/web/components/workbooks/Grid.tsx	1830
 apps/web/instrumentation.test.ts	945
 apps/web/instrumentation.ts	1524
 apps/web/lib/actions/agent-coworker-external.test.ts	867
@@ -53,7 +53,7 @@ apps/web/lib/self-upgrade/quiescence.test.ts	951
 apps/web/lib/self-upgrade/quiescence.ts	1612
 apps/web/lib/skills/evidence-search.ts	803
 apps/web/lib/tak/agent-grants.test.ts	915
-apps/web/lib/tak/agent-grants.ts	880
+apps/web/lib/tak/agent-grants.ts	886
 apps/web/lib/tak/agent-routing.ts	991
 apps/web/lib/tak/agentic-loop.test.ts	2387
 apps/web/lib/tak/agentic-loop.ts	2737

@@ -58,7 +58,7 @@ const definitions: ToolDefinition[] = [
   {
     name: "create_policy",
     description:
-      "Create a company Policy as DRAFT for human review on /compliance/policies. Never publishes. Use category 'hr' for HR policies. After create, tell the operator the draft is ready for review/edit/publish in the Policies UI. For audience-limited publish (e.g. US employees only), note the intended audience in notes until audience fields ship (BI-3CDEC5F0 P1).",
+      "Create a company Policy as DRAFT for human review on /compliance/policies. Never publishes. Use category 'hr' for HR policies. After create, tell the operator the draft is ready for review/edit/publish in the Policies UI. For audience-limited publish (e.g. US employees only), note the intended audience in notes until structured audience fields ship.",
     inputSchema: {
       type: "object",
       properties: {
@@ -282,7 +282,7 @@ async function createPolicyHandler(
       `Human review/edit/publish: /compliance/policies/${record.id}. ` +
       `This is a DRAFT — not published. ` +
       (notes?.toLowerCase().includes("us")
-        ? "Intended US audience is noted in notes; structured audience scoping is P1 (BI-3CDEC5F0)."
+        ? "Intended US audience is noted in notes; structured audience scoping is not enforced yet."
         : "Add intended audience in notes if not global (e.g. US-based employees only)."),
     data: {
       id: record.id,
