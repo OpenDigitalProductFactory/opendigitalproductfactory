@@ -18,6 +18,15 @@
 > - Merge state as measured on 2026-08-16: one conflict, `apps/web/data/design-intelligence/operational-precedents.csv` (data, not logic).
 > - The original backlog anchors in this document did **not** resolve in this install, so it could not pass `check_plan_backlog_coverage`. Coverage is rebound to `BI-3391BE2C`.
 >
+> - **Coverage is intentionally not recorded yet.** The stale delivery anchors (backlog-item and
+>   coverage-receipt metadata lines) were removed because their ids do not resolve here, and a
+>   receipt bound to work nobody has started would be fiction. This plan is therefore outside
+>   the plan-backlog-coverage gate by design — that gate skips any plan carrying no
+>   backlog-item metadata line. **When the implementation thread starts:** restore the backlog-item metadata line naming BI-3391BE2C, call
+>   `record_plan_backlog_coverage`, and copy its Receipt, Decision, Parent, Rationale and
+>   Dependencies into a `## Backlog coverage` section. Recording a receipt requires an active
+>   Workroom claim on BI-3391BE2C — the repository-artifact resolver needs a claim-backed subject.
+>
 > Implementation is deliberately deferred to its own thread: this work needs an install/seed cycle to verify honestly, and a rebase alone would not prove it works. Read `BI-3391BE2C` for the current dependency state before starting.
 
   `docs/superpowers/specs/2026-07-28-business-operations-and-performance-views-design.md`

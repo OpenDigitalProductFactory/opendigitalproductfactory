@@ -1,12 +1,6 @@
 # HOA property operations implementation plan
 
-**Backlog item:** `BI-76C1B949`
-
 **Epic:** `EP-SPATIAL-OPERATIONAL-VIEWS`
-
-**Work Capsule:** `WC-CC5BCC2A`
-
-**Coverage receipt:** `cmsaluvo90aru01qk0ovasyj1`
 
 **UX decision:** `DI-0B87641E5380` (`synchronized-progressive`, high confidence)
 
@@ -16,6 +10,15 @@
 > - Preserved implementation: `feat/hoa-property-operations` @ `04014faa3c452c56171ae6279a79132b582af620`, pinned locally at `refs/salvage/2026-08-15/feat/hoa-property-operations` and recorded in `~/dpf-deleted-remote-branch-tips-2026-08-15.txt`. Restore with `git push origin 04014faa3c452c56171ae6279a79132b582af620:refs/heads/feat/hoa-property-operations`.
 > - Merge state as measured on 2026-08-16: merges cleanly into current main (425 commits behind, no conflicts).
 > - The original backlog anchors in this document did **not** resolve in this install, so it could not pass `check_plan_backlog_coverage`. Coverage is rebound to `BI-FE286C27`.
+>
+> - **Coverage is intentionally not recorded yet.** The stale delivery anchors (backlog-item and
+>   coverage-receipt metadata lines) were removed because their ids do not resolve here, and a
+>   receipt bound to work nobody has started would be fiction. This plan is therefore outside
+>   the plan-backlog-coverage gate by design — that gate skips any plan carrying no
+>   backlog-item metadata line. **When the implementation thread starts:** restore the backlog-item metadata line naming BI-FE286C27, call
+>   `record_plan_backlog_coverage`, and copy its Receipt, Decision, Parent, Rationale and
+>   Dependencies into a `## Backlog coverage` section. Recording a receipt requires an active
+>   Workroom claim on BI-FE286C27 — the repository-artifact resolver needs a claim-backed subject.
 >
 > Implementation is deliberately deferred to its own thread: this work needs an install/seed cycle to verify honestly, and a rebase alone would not prove it works. Read `BI-FE286C27` for the current dependency state before starting.
 

@@ -1,6 +1,5 @@
 # Salon BOOK Operations implementation plan
 
-**Backlog:** `BI-9FA3C3A4`
 **Epic:** `EP-SPATIAL-OPERATIONAL-VIEWS`
 **Operations prerequisite:** `BI-CD2A412D`
 **Performance composition prerequisite:** `BI-00D276B2`
@@ -14,6 +13,15 @@
 > - Preserved implementation: `feat/salon-chair-operations` @ `820c169f4848a79e413cf0f37f57dbe44c05ba80`, pinned locally at `refs/salvage/2026-08-15/feat/salon-chair-operations` and recorded in `~/dpf-deleted-remote-branch-tips-2026-08-15.txt`. Restore with `git push origin 820c169f4848a79e413cf0f37f57dbe44c05ba80:refs/heads/feat/salon-chair-operations`.
 > - Merge state as measured on 2026-08-16: three conflicts: `WorkspaceTwinPanel.tsx`, `lib/twin/restaurant-scene-layout.ts`, and the generated `doc-index.generated.json` (regenerate, never hand-merge).
 > - The original backlog anchors in this document did **not** resolve in this install, so it could not pass `check_plan_backlog_coverage`. Coverage is rebound to `BI-0B55EF4D`.
+>
+> - **Coverage is intentionally not recorded yet.** The stale delivery anchors (backlog-item and
+>   coverage-receipt metadata lines) were removed because their ids do not resolve here, and a
+>   receipt bound to work nobody has started would be fiction. This plan is therefore outside
+>   the plan-backlog-coverage gate by design — that gate skips any plan carrying no
+>   backlog-item metadata line. **When the implementation thread starts:** restore the backlog-item metadata line naming BI-0B55EF4D, call
+>   `record_plan_backlog_coverage`, and copy its Receipt, Decision, Parent, Rationale and
+>   Dependencies into a `## Backlog coverage` section. Recording a receipt requires an active
+>   Workroom claim on BI-0B55EF4D — the repository-artifact resolver needs a claim-backed subject.
 >
 > Implementation is deliberately deferred to its own thread: this work needs an install/seed cycle to verify honestly, and a rebase alone would not prove it works. Read `BI-0B55EF4D` for the current dependency state before starting.
 

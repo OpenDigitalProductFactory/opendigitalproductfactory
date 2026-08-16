@@ -16,6 +16,15 @@
 > - Merge state as measured on 2026-08-16: 26 added files, none in main; seven weeks behind main.
 > - The original backlog anchors in this document did **not** resolve in this install, so it could not pass `check_plan_backlog_coverage`. Coverage is rebound to `BI-D936CAAF`.
 >
+> - **Coverage is intentionally not recorded yet.** The stale delivery anchors (backlog-item and
+>   coverage-receipt metadata lines) were removed because their ids do not resolve here, and a
+>   receipt bound to work nobody has started would be fiction. This plan is therefore outside
+>   the plan-backlog-coverage gate by design — that gate skips any plan carrying no
+>   backlog-item metadata line. **When the implementation thread starts:** restore the backlog-item metadata line naming BI-D936CAAF, call
+>   `record_plan_backlog_coverage`, and copy its Receipt, Decision, Parent, Rationale and
+>   Dependencies into a `## Backlog coverage` section. Recording a receipt requires an active
+>   Workroom claim on BI-D936CAAF — the repository-artifact resolver needs a claim-backed subject.
+>
 > Implementation is deliberately deferred to its own thread: this work needs an install/seed cycle to verify honestly, and a rebase alone would not prove it works. Read `BI-D936CAAF` for the current dependency state before starting.
 
 ---
