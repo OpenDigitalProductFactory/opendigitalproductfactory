@@ -310,6 +310,30 @@ model Holder {
     expect(regressions).toContain("model OldThing removed entirely");
   });
 
+  // Regression: once the rename has SHIPPED, base already contains the new model
+  // carrying @@map("<old name>"). The rename substitution used to rewrite inside
+  // that directive — turning base's @@map("OldThing") into @@map("NewThing"),
+  // which never matches head — so every renamed model reported its own @@map as
+  // removed and main regressed against itself. The @@map argument is a physical
+  // table name and must never be substituted.
+  it("reports nothing when base ALREADY carries the shipped rename", () => {
+    const shipped = parseSchema(`
+model NewThing {
+  id    String @id
+  name  String
+  kids  OldKid[]
+  @@map("OldThing")
+}
+
+model Holder {
+  id      String   @id
+  thingId String?
+  thing   NewThing? @relation(fields: [thingId], references: [id])
+}
+`);
+    expect(diffSchemas(shipped, shipped, new Set(), RENAMES)).toEqual([]);
+  });
+
   it("still reports a genuine field drop inside a renamed model", () => {
     const head = parseSchema(`
 model NewThing {
