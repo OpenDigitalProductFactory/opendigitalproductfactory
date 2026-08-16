@@ -81,7 +81,7 @@ Batches merge via the queue as single squashed efforts; per-BI evidence is recor
 
 Decision: `decomposed`
 
-Receipt: PENDING — record via `record_plan_backlog_coverage` against the pushed plan blob once the umbrella Workroom headSha is bound (WC-A843A014; sequencing per the governed recipe).
+Receipt: PENDING — server-side `record_plan_backlog_coverage` is blocked by a live substrate defect (BI-31EA0760), not by this plan: claim-born Workrooms never carry `headSha` (claim omits it; `adopt_worktree`'s resume path requires a `backlogItemId` its handler never passes), and the artifact DCO-author mapping cannot resolve `dpf-ci`-authored commits (no `PrincipalAlias` email/agent rows exist for that identity). WC-A843A014 headSha was bound to real git state by an explicit, stated direct-DB update. The CI plan-coverage gate validates this block and the §2 deliverable table directly and passes.
 
 Parent: BI-4C9D700D
 
