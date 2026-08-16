@@ -217,6 +217,7 @@ jobs:
           - dpf-browser-use
           - dpf-adp
           - dpf-edge-node
+          - dpf-postgres
 
     steps:
       - uses: actions/checkout@v7
