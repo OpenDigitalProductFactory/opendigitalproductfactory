@@ -47,6 +47,53 @@ Validation / user acceptance is the final stage and legitimately happens **post-
 
 **Key rule:** Stage 4 (cloud) is a *safety net*, not where failures are discovered. Failures must surface fast at Stage 2 (local, in-context) — otherwise threads pay the slow git round-trip (push → wait → CI-red → return → fix → re-push). Stage 2 is comprehensive *because* it is plain-Node, not Docker. Docs/reconciliation branches → lint only.
 
+## 4a. Observed in the field (2026-08-15/16) — evidence for the Stage 2/4 split
+
+One Claude Code session shipped five PRs (#4335, #4343, #4345, #4347, #4353) in a
+single evening while other sessions worked concurrently. It ran the heavy local
+Docker gate (`pnpm run pregate`) roughly **fourteen times to get five passes**.
+The failure distribution is the argument for §4's Stage 2/4 split, so it is
+recorded rather than left as folklore.
+
+**Cheap, correct failures — the preflight (~16–25 s each).** Module Size Guard,
+Derived Artifact Registry (a doc edit left `doc-impact.generated.json` stale), and
+Design Grounding Gate each failed fast, before any lease was claimed, and each was
+a real defect. This is precisely the Stage 2 behaviour the pipeline wants: plain
+Node, seconds, in-context, no Docker, no shared resource consumed.
+
+**Expensive, non-informative failures — the Docker stage.** Six of the fourteen
+runs died without producing build evidence:
+
+| Failure | Count | Cost each | Signal |
+| --- | --- | --- | --- |
+| `blocked_sandbox_drift` (exit 3) | 3 | ~5 s + a lease cycle | none — sandbox defect, self-heals on plain re-run |
+| `received SIGTERM` mid-run (exit 1) | 3 | 0:30, 1:10, 2:06 into ~3–5 min runs | none — the log showed `fail 0` throughout |
+
+The SIGTERMs were **slot contention**, not a product failure and not a defect in
+the invocation. Host state at the time: load average 5.4, ~22 live worktrees,
+several sessions gating against the same 2-slot resource. The decisive evidence
+is that the run passed first try once `list_nonprod_environment_leases` returned
+`{leases:[],queued:[]}`.
+
+**Diagnostic rule for any surface hitting this:** on `gate-worktree: received
+SIGTERM`, do **not** retry blindly and do **not** "fix" the invocation — check
+`list_nonprod_environment_leases` and retry only when it is empty. (A plausible
+but wrong hypothesis was pursued first in this session — that redirecting the
+command's output caused it — and was disproved when an unpiped, sole-command run
+died the same way. The queue message is also mildly misleading: "previous
+local-CI lease claim was released; creating fresh admission attempt N" can print
+while another session still holds the slot.)
+
+**Why this is evidence for the design, not an argument for a bigger gate.** Every
+defect that mattered was caught by the seconds-long preflight. The multi-minute
+Docker stage caught nothing in fourteen attempts that the cheap stage had not
+already caught, while consuming the scarce shared resource ~9 times without
+producing evidence. §1's second structural fault — one scarce heavyweight local
+resource that starves under demand — is not a projection; this is it happening at
+a fan-out of a handful of threads, well below the ~160 the pipeline targets.
+
+Tracked under `BI-8D56F777` (Stages 2 + 4).
+
 ## 5. Cross-surface enforcement matrix
 
 "Gate" = mandatory/platform; "Skill" = advisory paved road; every surface inherits both.
