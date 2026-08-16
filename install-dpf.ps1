@@ -1973,8 +1973,27 @@ if (-not (Test-StepDone "model")) {
     # files to the runtime name so that portal /v1/models discovery and inference
     # references match exactly what the model-runner serves (prevents "model not found"
     # in inference.model-manager even when pull was executed).
+    #
+    # HuggingFace sources normalize differently from the ai/ catalog. Verified on-box
+    # 2026-08-16: pulling hf.co/ggml-org/Qwen3.8-27B-GGUF:Q4_K_M lists as
+    # huggingface.co/ggml-org/qwen3.8-27b-gguf:Q4_K_M -- host rewritten to its long
+    # form, repo path lowercased, quant tag case PRESERVED. Stripping ai/ alone is a
+    # no-op on those refs, so the post-pull presence check below could never match and
+    # the installer would warn "pull reported success but not listed" on every run.
     $pullName = $selectedModel
-    $runtimeModel = $pullName -replace '^ai/',''
+    if ($pullName -match '^(hf\.co|huggingface\.co)/') {
+        if ($pullName -match '^(.*):([^:/]+)$') {
+            $hfPath = $Matches[1]
+            $hfTag  = $Matches[2]
+        } else {
+            $hfPath = $pullName
+            $hfTag  = ''
+        }
+        $hfPath = ($hfPath -replace '^hf\.co/','huggingface.co/').ToLowerInvariant()
+        if ($hfTag) { $runtimeModel = "${hfPath}:${hfTag}" } else { $runtimeModel = $hfPath }
+    } else {
+        $runtimeModel = $pullName -replace '^ai/',''
+    }
     # Expected size upfront (manifest only) so user with known bandwidth can estimate duration.
     $sizeMB = 0
     try {
