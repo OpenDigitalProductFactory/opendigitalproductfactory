@@ -2081,6 +2081,7 @@ model WorkEngagementActivity {
   @@unique([workEngagementId, seq])
   @@index([workEngagementId, recordedAt(sort: Desc)])
   @@index([kind, recordedAt(sort: Desc)])
+  @@index([recordedAt]) // retention sweep cutoff scan, apps/web/lib/operate/retention/execute.ts:99
 }
 
 model TaxonomyNode {
@@ -2324,6 +2325,7 @@ model BacklogItemActivity {
   @@index([backlogItemId, recordedAt(sort: Desc)])
   @@index([backlogItemId, gateKey, recordedAt(sort: Desc), id(sort: Desc)])
   @@index([kind, recordedAt(sort: Desc)])
+  @@index([recordedAt]) // retention sweep cutoff scan, apps/web/lib/operate/retention/execute.ts:99
 }
 
 model InitiativeArtifactRetentionPin {
@@ -2458,6 +2460,7 @@ model WorkroomActivity {
   @@index([workCapsuleId, recordedAt(sort: Desc)])
   @@index([workCapsuleId, kind, recordedAt(sort: Desc), id(sort: Desc)])
   @@index([kind, recordedAt(sort: Desc)])
+  @@index([recordedAt]) // retention sweep cutoff scan, apps/web/lib/operate/retention/execute.ts:99
   @@map("WorkCapsuleActivity")
 }
 
@@ -2692,6 +2695,7 @@ model RuntimeCapabilityTransitionEvent {
   transition   RuntimeCapabilityTransition @relation(fields: [transitionId], references: [transitionId], onDelete: Restrict)
 
   @@index([transitionId, createdAt])
+  @@index([createdAt]) // retention sweep cutoff scan, apps/web/lib/operate/retention/execute.ts:99
 }
 
 model McpServer {
@@ -2856,6 +2860,7 @@ model IntegrationCallbackReceipt {
   @@unique([connectorId, deliveryKey])
   @@index([status, dispatchPending, auditPending, updatedAt], map: "IntegrationCallbackReceipt_pending_idx")
   @@index([connectorId, createdAt])
+  @@index([createdAt]) // retention sweep cutoff scan, apps/web/lib/operate/retention/execute.ts:99
 }
 
 // Source-attributed import review queue for external provider records.
@@ -4497,6 +4502,7 @@ model AgentBudgetEvent {
 
   @@index([agentId, createdAt])
   @@index([buildRunId])
+  @@index([createdAt]) // retention sweep cutoff scan, apps/web/lib/operate/retention/execute.ts:99
 }
 
 // Voice Slice 2 — Transcript cleanup audit row.
@@ -5857,6 +5863,7 @@ model IdentityResolutionLog {
   @@index([inventoryEntityId])
   @@index([catalogIdentityId])
   @@index([resolutionType])
+  @@index([createdAt]) // retention sweep cutoff scan, apps/web/lib/operate/retention/execute.ts:99
 }
 
 model DiscoveryFingerprintObservation {
@@ -5897,6 +5904,7 @@ model DiscoveryFingerprintObservation {
   @@index([blastRadiusTier])
   @@index([inventoryEntityId])
   @@index([discoveryRunId])
+  @@index([createdAt]) // retention sweep cutoff scan, apps/web/lib/operate/retention/execute.ts:99
 }
 
 model DiscoveryFingerprintReview {
@@ -6560,6 +6568,7 @@ model ToolExecutionReceipt {
   @@index([buildId, createdAt(sort: Desc)])
   @@index([receiptKind, createdAt(sort: Desc)])
   @@index([receiptStatus, expiresAt])
+  @@index([createdAt]) // retention sweep cutoff scan, apps/web/lib/operate/retention/execute.ts:99
 }
 
 // Personal access token for the external MCP transport at /api/mcp/v1.
@@ -6788,6 +6797,7 @@ model DocumentLifecycleEvent {
   @@index([toState])
   @@index([actorPrincipalId])
   @@index([toolExecutionId])
+  @@index([createdAt]) // retention sweep cutoff scan, apps/web/lib/operate/retention/execute.ts:99
 }
 
 model DocumentRendition {
@@ -8605,6 +8615,7 @@ model LifecycleEvent {
   @@index([governedThingKind, governedThingId, createdAt])
   @@index([actorPrincipalId])
   @@index([toolExecutionId])
+  @@index([createdAt]) // retention sweep cutoff scan, apps/web/lib/operate/retention/execute.ts:99
 }
 
 // Membership of a governed thing in a Plateau (a relatively stable architecture state —
@@ -11242,6 +11253,7 @@ model HospitalityServiceTurnEvent {
   @@unique([serviceTurnId, atVersion])
   @@unique([organizationId, idempotencyKey])
   @@index([organizationId, occurredAt])
+  @@index([occurredAt]) // retention sweep cutoff scan, apps/web/lib/operate/retention/execute.ts:99
 }
 
 /// Organization-owned definition of a clinical or dental visit. StorefrontItem
@@ -11485,6 +11497,7 @@ model AppointmentSyncEvent {
   @@unique([organizationId, correlationId])
   @@index([organizationId, appointmentId, occurredAt])
   @@index([organizationId, outcome, occurredAt])
+  @@index([occurredAt]) // retention sweep cutoff scan, apps/web/lib/operate/retention/execute.ts:99
 }
 
 /// Patient/proxy/staff intake assignment linked to the canonical patient and,
@@ -14037,6 +14050,7 @@ model QueueTelemetryEvent {
   @@index([queueKey, occurredAt])
   @@index([itemKind, itemId])
   @@index([occurredAt])
+  @@index([createdAt]) // retention sweep cutoff scan, apps/web/lib/operate/retention/execute.ts:99
 }
 
 model QueueMetricSnapshot {
@@ -15062,6 +15076,7 @@ model EdgeEvent {
   @@index([severity])
   @@index([source])
   @@index([occurredAt])
+  @@index([createdAt]) // retention sweep cutoff scan, apps/web/lib/operate/retention/execute.ts:99
 }
 
 // ─── Edge-detected change events (deploys, config pushes, feature flips) ─────
@@ -15126,6 +15141,7 @@ model ChangeEvent {
   @@index([edgeNodeId, occurredAt])
   @@index([source])
   @@index([occurredAt])
+  @@index([createdAt]) // retention sweep cutoff scan, apps/web/lib/operate/retention/execute.ts:99
 }
 
 // ── EP-MSP-FEDERATION · B1 — sovereign-peer federation link (BI-130107D6) ─────
@@ -16532,6 +16548,7 @@ model StaffingAssignmentEvent {
   assignment StaffingAssignment @relation(fields: [staffingAssignmentId], references: [id], onDelete: Cascade)
 
   @@index([staffingAssignmentId, createdAt])
+  @@index([createdAt]) // retention sweep cutoff scan, apps/web/lib/operate/retention/execute.ts:99
 }
 
 /// Typed crew / composite assignable unit (spec §9.2.3). Members and their
