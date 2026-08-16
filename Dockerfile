@@ -101,6 +101,14 @@ COPY scripts/installer/install-state.v2.schema.json ./scripts/installer/
 COPY scripts/installer/native-edge-host.ps1 ./scripts/installer/
 COPY scripts/bootstrap-organization-pki.ps1 ./scripts/
 COPY scripts/installer/lib/state.ps1 ./scripts/installer/lib/
+# The consumer installer copies the kernel-commandment shell guard out of the
+# install dir, which on that path IS the release-asset bundle. The init stage
+# COPYs each asset explicitly, so the guard must be pulled in here before the
+# bundle-assembly RUN can cp it.
+COPY scripts/safety/dpf-shell-guard.ps1 scripts/safety/dpf-shell-guard.sh \
+     scripts/safety/dpf-shell-guard-fallback-patterns.json \
+     scripts/safety/pre-destructive-snapshot.ps1 scripts/safety/pre-destructive-snapshot.sh \
+     ./scripts/safety/
 COPY monitoring/ ./monitoring/
 COPY scripts/backup-postgres.sh ./scripts/
 COPY scripts/restore-postgres.sh ./scripts/

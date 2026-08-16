@@ -67,6 +67,24 @@ test("every file the installers unconditionally copy is shipped in the bundle", 
   );
 });
 
+test("every bundled asset is also COPYed into the build stage that assembles it", () => {
+  // Asserting only on the `cp` is half the chain and lets a broken image build
+  // through: the init stage COPYs each asset explicitly, so a file that is cp'd
+  // but never COPYed fails the build with a bare `exit code: 1`. That exact gap
+  // shipped once -- the cp was added without the COPY.
+  const copiedIntoStage = dockerfile
+    .split(/\r?\n/)
+    .filter((l) => /^COPY\s/.test(l) || /^\s{5,}scripts\//.test(l))
+    .join("\n");
+  const notStaged = REQUIRED_IN_BUNDLE.filter((p) => !copiedIntoStage.includes(p));
+  assert.deepEqual(
+    notStaged,
+    [],
+    "these are cp'd into /dpf-release-assets but never COPYed into the stage, so the " +
+      "build will fail: " + notStaged.join(", "),
+  );
+});
+
 test("every required path is actually referenced by an installer (no stale entries)", () => {
   for (const p of REQUIRED_IN_BUNDLE) {
     const win = p.replace(/\//g, "\\\\");
