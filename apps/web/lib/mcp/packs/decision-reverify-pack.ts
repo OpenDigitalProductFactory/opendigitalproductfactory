@@ -27,7 +27,8 @@ const definitions: ToolDefinition[] = [
     name: "reverify_decision_evidence",
     description:
       "Independently re-check the evidence cited by a recorded decision. Loads the decision's persisted citations and re-resolves each structured locator (code/spec/doc) against live source, reporting which citations still hold and which no longer do. Use it to audit a past decision before relying on it, or to spot a citation that was well-formed but never true. " +
-      "Read THREE fields together, they mean different things: `outcome` ('verified' = every citation that could be checked still holds; 'degraded' = at least one no longer holds; 'unverifiable' = nothing could be checked), `unverifiableCause` (why nothing could be checked), and `coverage` (how many of the decision's recorded sources were actually checkable). A 'verified' outcome at low coverage is NOT a clean bill of health for the decision. " +
+      "Read FOUR fields together, they mean different things: `outcome` ('verified' = every citation that could be adjudicated still holds; 'degraded' = at least one no longer holds; 'unverifiable' = nothing could be adjudicated), `unverifiableCause` (why), `coverage` (how many recorded sources were actually checkable), and `inconclusive` (citations looked up but not adjudicable in this environment). A 'verified' outcome at low coverage is NOT a clean bill of health for the decision. " +
+      "A citation can only be REFUTED against source of known revision. Where the source is not a checkout, a citation that fails to resolve is reported as inconclusive, never as degraded — absence in a tree of unknown provenance is not evidence the citation was false. " +
       "Advisory and read-only: it does not change the decision or its score. Call once per decision; do not poll.",
     inputSchema: {
       type: "object",
@@ -54,18 +55,29 @@ function summarize(report: {
   confirmed: number;
   degraded: number;
   unresolved: number;
-  sourceAccess: { detail: string };
+  inconclusive: unknown[];
+  sourceAccess: { anchored: boolean; detail: string };
 }): string {
   const { coverage } = report;
+  const open = report.inconclusive.length;
+  // Never phrase an unanchored miss as a finding against the decision.
+  const openNote = open > 0
+    ? ` ${open} citation(s) could NOT be adjudicated here: ${report.sourceAccess.detail}. That is an open question about this environment, not evidence against the decision — re-run where the source is a checkout.`
+    : "";
+
   if (report.outcome === "unverifiable") {
-    return report.unverifiableCause === "no-source-access"
-      ? `Cannot verify: ${report.sourceAccess.detail}. This is an environment limitation, NOT a finding about the decision's evidence — none of its ${coverage.recordedSources} recorded source(s) were checked.`
-      : `Cannot verify: none of the ${coverage.recordedSources} recorded source(s) carry a re-resolvable locator, so this decision's evidence is opaque to re-verification. Treat it as unverified, not as verified.`;
+    if (report.unverifiableCause === "no-source-access") {
+      return `Cannot verify: ${report.sourceAccess.detail}. This is an environment limitation, NOT a finding about the decision's evidence — none of its ${coverage.recordedSources} recorded source(s) were checked.`;
+    }
+    if (report.unverifiableCause === "unanchored-source") {
+      return `Cannot verify: ${report.sourceAccess.detail}. ${coverage.checked} citation(s) were looked up and none could be confirmed, but on a tree of unknown revision that does NOT mean they are false — treat this as unverified, not as fabricated.`;
+    }
+    return `Cannot verify: none of the ${coverage.recordedSources} recorded source(s) carry a re-resolvable locator, so this decision's evidence is opaque to re-verification. Treat it as unverified, not as verified.`;
   }
   const scope = `Checked ${coverage.checked} of ${coverage.recordedSources} recorded source(s)${coverage.unverifiable > 0 ? `; ${coverage.unverifiable} carried no re-resolvable locator and were NOT checked` : ""}.`;
   return report.outcome === "degraded"
     ? `Evidence DEGRADED: ${report.degraded} citation(s) no longer match their source and ${report.unresolved} no longer resolve at all. ${scope} The affected (option, dimension) pairs should be treated as unevidenced.`
-    : `Evidence holds: all ${report.confirmed} checked citation(s) still resolve and still match. ${scope}${coverage.unverifiable > 0 ? " Coverage is partial — this is not a clean bill of health for the whole decision." : ""}`;
+    : `Evidence holds: ${report.confirmed} checked citation(s) still resolve and still match. ${scope}${openNote}${coverage.unverifiable > 0 ? " Coverage is partial — this is not a clean bill of health for the whole decision." : ""}`;
 }
 
 async function reverifyDecisionEvidenceHandler(
@@ -98,12 +110,26 @@ async function reverifyDecisionEvidenceHandler(
     const repoRoot = getProjectRoot();
     const { existsSync } = await import("node:fs");
     const { join } = await import("node:path");
-    sourceAccess = existsSync(join(repoRoot, "package.json"))
-      ? { available: true, repoRoot }
-      : {
+    if (!existsSync(join(repoRoot, "package.json"))) {
+      sourceAccess = {
         available: false,
         detail: `no source found at ${repoRoot} (mount the project via PROJECT_ROOT to enable re-verification)`,
       };
+    } else {
+      // A checkout carries `.git` (a directory, or a file when it is a
+      // worktree). Without it the tree has no revision we can name, and an
+      // image-synced source volume is exactly that — readable, partial, and
+      // silent about which commit it represents.
+      const anchored = existsSync(join(repoRoot, ".git"));
+      sourceAccess = {
+        available: true,
+        repoRoot,
+        anchored,
+        anchorDetail: anchored
+          ? "a git checkout, so a missing file is evidence about the citation"
+          : "NOT a git checkout, so its revision is unknown; citations can be confirmed here but never refuted",
+      };
+    }
   }
 
   const resolve = sourceAccess.available
