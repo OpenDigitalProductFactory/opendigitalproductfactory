@@ -27,6 +27,14 @@
 
 import { CODE_GRAPH_JOB_ID } from "@/lib/integrate/code-graph/constants";
 import {
+  EMBEDDING_COVERAGE_JOB_ID,
+  EMBEDDING_COVERAGE_JOB_NAME,
+  EMBEDDING_COVERAGE_INNGEST_ID,
+  EMBEDDING_COVERAGE_REQUESTED_EVENT,
+  EMBEDDING_COVERAGE_CRON,
+  EMBEDDING_COVERAGE_CADENCE,
+} from "@/lib/wiki/embedding-coverage-constants";
+import {
   BUSINESS_JOURNEY_WATCHDOG_CADENCE,
   BUSINESS_JOURNEY_WATCHDOG_CRON,
   BUSINESS_JOURNEY_WATCHDOG_INNGEST_ID,
@@ -743,6 +751,18 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
     category: "editable",
     tracksRunData: false,
     runNowEvent: "ops/coworker-certification.requested",
+  },
+  {
+    jobId: EMBEDDING_COVERAGE_JOB_ID,
+    inngestId: EMBEDDING_COVERAGE_INNGEST_ID,
+    name: EMBEDDING_COVERAGE_JOB_NAME,
+    purpose:
+      "BI-ED117C82: re-embeds published wiki/stance pages that are missing a vector, so the decision engine can still retrieve the organisation's own doctrine. A page without a vector degrades stance relevance to lexical and the gate then escalates instead of deciding \u2014 which the operator experiences as coworkers re-asking settled questions. Retries every 2h because the local model is often busy at boot; reports coverage into the corpus-health Workroom so a run is visible. If it stops, silent corpus gaps accumulate with no symptom pointing at them.",
+    cron: EMBEDDING_COVERAGE_CRON,
+    cadence: EMBEDDING_COVERAGE_CADENCE,
+    category: "core",
+    tracksRunData: false,
+    runNowEvent: EMBEDDING_COVERAGE_REQUESTED_EVENT,
   },
   {
     jobId: BUSINESS_JOURNEY_WATCHDOG_JOB_ID,
