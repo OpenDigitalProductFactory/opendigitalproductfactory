@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   decideConveneClearance,
+  clearanceForPrincipal,
   conveneDenialAuditReason,
   CONVENE_DENIED_MESSAGE,
 } from "./convene-clearance";
@@ -66,6 +67,61 @@ describe("decideConveneClearance", () => {
   it("fails closed on an empty clearance list", () => {
     expect(
       decideConveneClearance({ askingHumanClearance: [], targetAgentSensitivity: "public" }),
+    ).toEqual({ permitted: false, reason: "insufficient-clearance" });
+  });
+});
+
+describe("clearanceForPrincipal", () => {
+  it("matches the principal path for an employee with nothing explicit", () => {
+    // normalizePrincipalSensitivities returns ["public"] for empty/absent. The
+    // first version of this clamp hardcoded ["public","internal"], which made an
+    // UNLINKED user more cleared than a LINKED one — an inversion on every
+    // fresh install, in the wrong direction for a disclosure clamp.
+    expect(clearanceForPrincipal(undefined)).toEqual(["public"]);
+    expect(clearanceForPrincipal(null)).toEqual(["public"]);
+    expect(clearanceForPrincipal([])).toEqual(["public"]);
+  });
+
+  it("an unlinked user is never MORE cleared than a linked one — the inversion regression", () => {
+    const linkedWithNothingExplicit = clearanceForPrincipal([]);
+    const unlinked = clearanceForPrincipal(undefined);
+    expect(unlinked).toEqual(linkedWithNothingExplicit);
+    // and neither can convene a merely-internal coworker
+    expect(
+      decideConveneClearance({ askingHumanClearance: unlinked, targetAgentSensitivity: "internal" }),
+    ).toEqual({ permitted: false, reason: "insufficient-clearance" });
+  });
+
+  it("passes through a granted clearance in canonical order", () => {
+    expect(clearanceForPrincipal(["confidential", "public", "internal"])).toEqual([
+      "public",
+      "internal",
+      "confidential",
+    ]);
+  });
+
+  it("FAILS CLOSED on corrupt stored clearance — empty, denying even public", () => {
+    // normalizePrincipalSensitivities throws on an unknown member. On the
+    // convene path that must not become a 500 and must not widen access.
+    expect(clearanceForPrincipal(["public", "not-a-level"])).toEqual([]);
+    expect(
+      decideConveneClearance({
+        askingHumanClearance: clearanceForPrincipal(["public", "not-a-level"]),
+        targetAgentSensitivity: "public",
+      }),
+    ).toEqual({ permitted: false, reason: "insufficient-clearance" });
+  });
+
+  it("the installation-owner floor still convenes a confidential coworker", () => {
+    // Fresh-install path: superusers receive INSTALLATION_OWNER_SENSITIVITY_FLOOR,
+    // and workforce-seed creates tier-2 coworkers at "confidential". If this
+    // fails, every seeded confidential coworker is unconvenable on a new box.
+    const owner = clearanceForPrincipal(["public", "internal", "confidential"]);
+    expect(
+      decideConveneClearance({ askingHumanClearance: owner, targetAgentSensitivity: "confidential" }),
+    ).toEqual({ permitted: true });
+    expect(
+      decideConveneClearance({ askingHumanClearance: owner, targetAgentSensitivity: "restricted" }),
     ).toEqual({ permitted: false, reason: "insufficient-clearance" });
   });
 });

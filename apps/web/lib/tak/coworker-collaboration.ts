@@ -25,6 +25,7 @@ import { isHandoffPermitted } from "@/lib/tak/collaboration-authority";
 import { coerceDataSensitivity } from "@dpf/db/principal-sensitivity";
 import {
   decideConveneClearance,
+  clearanceForPrincipal,
   conveneDenialAuditReason,
   CONVENE_DENIED_MESSAGE,
 } from "./convene-clearance";
@@ -166,10 +167,11 @@ export type SummonCoworkerInput = {
  * clearance. Placed in the shared target resolver rather than at each call site
  * so a future third convene path inherits it instead of forgetting it.
  *
- * The default for a user with no linked principal mirrors the established
- * precedent in `workspace-room-access.ts` (`["public", "internal"]`) rather
- * than inventing a stricter or looser one — so an unlinked user can still reach
- * ordinary specialists but never a confidential or restricted peer.
+ * Clearance resolves through `clearanceForPrincipal`, which delegates to the
+ * same `normalizePrincipalSensitivities` the principal-linking and seed paths
+ * use, so this clamp cannot drift from the clearance a principal is actually
+ * granted — and an unlinked user is never treated as MORE cleared than a linked
+ * one with nothing explicit.
  */
 async function enforceConveneClearance(
   target: { agentId: string; slugId: string | null },
@@ -187,7 +189,7 @@ async function enforceConveneClearance(
   ]);
 
   const decision = decideConveneClearance({
-    askingHumanClearance: alias?.principal.sensitivityClearance ?? ["public", "internal"],
+    askingHumanClearance: clearanceForPrincipal(alias?.principal.sensitivityClearance),
     targetAgentSensitivity: agentRow?.sensitivity,
   });
   if (decision.permitted) return;
