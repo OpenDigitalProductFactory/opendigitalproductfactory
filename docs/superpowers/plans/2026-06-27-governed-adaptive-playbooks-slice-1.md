@@ -28,6 +28,7 @@ The Work Case program (`EP-2984B02B`, Wave 1 seam owner `BI-D633F7AF`) runs in p
 - **No dependency:** Slice 1 only reads runtime evidence and emits needs/assessments. It changes no Work Case state and does not require Work Case Wave 0 or Wave 1.
 - **Later slices depend on Work Case (state, do not weaken):** Case-bound Pattern Candidates (this effort's Slice 4 and promotion-ladder step "Case-staged") consume Work Case Wave 1's governed Actions, policy envelope, and `ReceiptEnvelope`, and Wave 2's sponsor/authority-mode. Slice 1 builds none of that.
 - **Collision ownership:** Do not edit `apps/web/lib/mcp-governed-execute.ts` — the `context.workCase` / `work-case-governed-action` receipt seam is owned by Work Case Wave 1 (`BI-D633F7AF`). Slice 1 does not touch it.
+- **AI Readiness Console (parallel):** The [AI Readiness Console](../specs/2026-06-28-ai-readiness-console-design.md) owns provider/model/routing calibration queueing (discovery, profiling, eval, probe, stale-calibration jobs). The observer must not run a second provider-calibration sweep — for a future model-tier-mismatch / stale-routing signal it composes the readiness summary + `provider-routing-eligibility` and emits a capability need, sharing one background-job mechanism. Slice 1's three classifiers (grant-denial, tool-surface overload, repeated-success) do not overlap; this guard is for the later model-tier-mismatch classifier.
 
 ## File Structure
 
