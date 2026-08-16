@@ -49,7 +49,11 @@ const ALLOWLIST = new Set([
   // exists to enforce; this file just inlines it because it also needs to
   // set other dispatcher-only fields in the same atomic write.
   "apps/web/lib/actions/agent-thread-dispatcher-runtime.ts",
-]);
+
+  // Writes Workroom.status, not TaskRun.status — a durable maintenance room has
+  // no heartbeat and no stall watchdog, so markTaskRunWorking does not apply
+  // (BI-ED117C82).
+  "apps/web/lib/wiki/embedding-coverage-workroom.ts",]);
 
 const PATTERNS = [/status:\s*["']working["']/];
 
