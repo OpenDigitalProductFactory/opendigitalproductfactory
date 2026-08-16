@@ -133,7 +133,18 @@ dpf_state_lock_release() {
 dpf_state_cleanup_temps() {
   local path="$1" directory base temp
   directory="$(dirname "$path")"; base="$(basename "$path")"
-  for temp in "$directory/.${base}.tmp-"*; do [ -f "$temp" ] && rm -f "$temp"; done
+  # No nullglob: an unmatched glob stays LITERAL, so on the common case -- a fresh
+  # install with no leftover temps -- $temp is the pattern itself and `[ -f ]` is
+  # false. As the loop's last command that made the whole function return 1, and
+  # install-dpf.sh runs under `set -euo pipefail`, so a fresh install died right
+  # after "No prior install state; initializing ..." with exit 1 and no message.
+  # Guard with -e + continue, and return 0 explicitly so the exit status can never
+  # be inherited from the final test again.
+  for temp in "$directory/.${base}.tmp-"*; do
+    [ -e "$temp" ] || continue
+    rm -f "$temp"
+  done
+  return 0
 }
 
 dpf_state_temp_path() { echo "$(dirname "$1")/.$(basename "$1").tmp-${DPF_STATE_LOCK_OWNER_ID}"; }
