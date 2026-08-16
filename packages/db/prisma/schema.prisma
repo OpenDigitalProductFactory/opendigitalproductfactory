@@ -201,6 +201,7 @@ model CustomerContact {
   @@index([phone])
   @@index([nameNormalized])
   @@index([mergedIntoId])
+  @@index([accountId]) // FK-leading (spine): contacts-of-account join, apps/web/app/api/v1/customer/visits/route.ts:71
 }
 
 // ─── MDM stewardship substrate (EP-4A12A7CB: BI-FEA49EC1 / BI-28577CD1 /
@@ -412,6 +413,9 @@ model Principal {
   recordedProductOutcomeObservations  ProductOutcomeObservation[]         @relation("ProductOutcomeObservationRecorder")
   createdAt                           DateTime                            @default(now())
   updatedAt                           DateTime                            @updatedAt
+  leaseHeldWorkrooms                  Workroom[]                          @relation("WorkroomLeaseHolder")
+  createdWorkrooms                    Workroom[]                          @relation("WorkroomCreator")
+  requestedWorkrooms                  Workroom[]                          @relation("WorkroomRequester")
 
   @@index([sponsorPrincipalId])
   @@index([kind, authorityMode])
@@ -526,6 +530,7 @@ model EmployeeProfile {
   @@index([employmentTypeId])
   @@index([positionId])
   @@index([workLocationId])
+  @@index([dottedLineManagerId]) // FK-leading (self-relation): org-chart dotted-line reverse lookup, apps/web/lib/actions/workforce.ts:379
 }
 
 model Department {
@@ -846,6 +851,9 @@ model DigitalProduct {
   businessCapabilityLinks       BusinessCapabilityTraceLink[]  @relation("BusinessCapabilityProductLinks")
   dependencyEdgesFrom           ProductDependency[]            @relation("ProductDependencyFrom")
   dependencyEdgesTo             ProductDependency[]            @relation("ProductDependencyTo")
+
+  @@index([portfolioId]) // FK-leading (spine): portfolio coverage listing, apps/web/app/(shell)/portfolio/[[...slug]]/page.tsx:106
+  @@index([taxonomyNodeId]) // FK-leading (spine): sibling-products-by-node, apps/web/lib/explore/feature-build-data.ts:455
 }
 
 // Organization-owned business product hierarchy (EP-ED496EB0 Phase 1).
@@ -881,6 +889,7 @@ model ProductLine {
   @@index([organizationId, sortOrder])
   @@index([parentId])
   @@index([effectiveTo])
+  @@index([parentId, organizationId]) // FK-leading (tree parent): product-line hierarchy traversal
 }
 
 model Product {
@@ -1613,6 +1622,7 @@ model BusinessModelRoleAssignment {
   @@unique([userId, businessModelRoleId, productId])
   @@index([productId])
   @@index([userId])
+  @@index([businessModelRoleId]) // FK-leading (join table): role-side lookups; @@unique leads on userId, @@index on productId
 }
 
 model ProductVersion {
@@ -1634,6 +1644,7 @@ model ProductVersion {
 
   @@unique([digitalProductId, version])
   @@index([gitTag])
+  @@index([featureBuildId]) // FK-leading (spine): open promotions per build, apps/web/instrumentation.ts:503
 }
 
 model ChangePromotion {
@@ -1660,6 +1671,7 @@ model ChangePromotion {
   backup                  PromotionBackup? @relation(fields: [backupId], references: [id])
   productVersion          ProductVersion   @relation(fields: [productVersionId], references: [id])
   changeItem              ChangeItem?
+  workrooms               Workroom[]       @relation("WorkroomChangePromotion")
 
   @@index([status])
   @@index([productVersionId])
@@ -2094,6 +2106,8 @@ model TaxonomyNode {
   createdTaxonomyProposals      TaxonomyProposal[]             @relation("TaxonomyProposalCreatedNode")
   parent                        TaxonomyNode?                  @relation("TaxonomyTree", fields: [parentId], references: [id])
   children                      TaxonomyNode[]                 @relation("TaxonomyTree")
+
+  @@index([parentId]) // FK-leading (tree parent): root/child traversal, apps/web/lib/actions/build.ts:1295
 }
 
 model TaxonomyProposal {
@@ -2258,6 +2272,8 @@ model BacklogItem {
   @@index([portfolioId, demandScore])
   @@index([demandStage])
   @@index([scopeKind])
+  @@index([duplicateOfId]) // FK-leading (self-relation): duplicate-chain reverse lookup, apps/web/lib/mcp/backlog-retirement-handlers.ts:55
+  @@index([epicId]) // FK-leading (spine): open-items-per-epic scan, apps/web/lib/mcp/backlog-retirement-handlers.ts:168
 }
 
 // Direct, queryable evidence linked to the canonical BacklogItem demand record.
@@ -2393,6 +2409,19 @@ model Workroom {
   runtimeVerifications    RuntimeVerification[]
   externalEvidence        ExternalEvidenceRecord[]
   workItem                WorkItem?                @relation("WorkCapsuleWorkItem", fields: [workItemId], references: [id], onDelete: SetNull)
+  // BI-640B011D: real FK relations for the previously bare *Id link columns.
+  // Constraints land NOT VALID (legacy installs may hold orphan values; new
+  // writes are enforced) with ON DELETE SET NULL for these optional links.
+  // backlogItemId and epicId are deliberately NOT declared: live writers store
+  // mixed key shapes (BI-*/EP-* semantic keys vs cuid row ids), so a single FK
+  // target would break one writer family — normalize the writers first.
+  featureBuild            FeatureBuild?            @relation("WorkroomFeatureBuild", fields: [featureBuildId], references: [id], onDelete: SetNull)
+  taskRun                 TaskRun?                 @relation("WorkroomTaskRun", fields: [taskRunId], references: [id], onDelete: SetNull)
+  gitPromotionCandidate   GitPromotionCandidate?   @relation("WorkroomGitPromotionCandidate", fields: [gitPromotionCandidateId], references: [id], onDelete: SetNull)
+  changePromotion         ChangePromotion?         @relation("WorkroomChangePromotion", fields: [changePromotionId], references: [id], onDelete: SetNull)
+  leaseHolderPrincipal    Principal?               @relation("WorkroomLeaseHolder", fields: [leaseHolderPrincipalId], references: [id], onDelete: SetNull)
+  createdByPrincipal      Principal?               @relation("WorkroomCreator", fields: [createdByPrincipalId], references: [id], onDelete: SetNull)
+  requestedByPrincipal    Principal?               @relation("WorkroomRequester", fields: [requestedByPrincipalId], references: [id], onDelete: SetNull)
 
   @@index([status, updatedAt])
   @@index([backlogItemId])
@@ -2409,6 +2438,8 @@ model Workroom {
   @@index([leaseExpiresAt])
   @@index([requestedByPrincipalId])
   @@index([workItemId])
+  @@index([leaseHolderPrincipalId]) // FK-leading: SET NULL on Principal delete + lease-holder lookups
+  @@index([createdByPrincipalId]) // FK-leading: SET NULL on Principal delete
   @@map("WorkCapsule")
 }
 
@@ -2557,6 +2588,7 @@ model EpicPortfolio {
   portfolio   Portfolio @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
 
   @@id([epicId, portfolioId])
+  @@index([portfolioId]) // FK-leading (join table): portfolio-side lookups; @@id only covers epicId
 }
 
 model ImprovementProposal {
@@ -2688,6 +2720,7 @@ model McpServer {
 
   @@index([status])
   @@index([category])
+  @@index([integrationId]) // FK-leading (spine): integration-backed server listing, apps/web/lib/actions/connection-catalog.ts:96
 }
 
 model McpServerTool {
@@ -3431,6 +3464,8 @@ model Agent {
   workItemAssignments  WorkItem[]                  @relation("WorkItemAgent")
   workSchedule         WorkSchedule?               @relation("WorkScheduleAgent")
   authorityBindings    AuthorityBinding[]
+
+  @@index([portfolioId]) // FK-leading (spine): active-agents-per-portfolio groupBy, apps/web/lib/evaluate/portfolio-data.ts:72
 }
 
 model AgentOwnership {
@@ -3711,6 +3746,7 @@ model CoworkerCapabilityNeed {
   @@index([kind, status])
   @@index([linkedBacklogItemId])
   @@index([assessmentId])
+  @@index([duplicateOfId]) // FK-leading (self-relation): duplicate-chain reverse lookup
 }
 
 model AuthorityBinding {
@@ -4599,6 +4635,7 @@ model Quote {
   @@index([opportunityId])
   @@index([accountId])
   @@index([status])
+  @@index([previousId]) // FK-leading (self-relation): quote revision-chain reverse lookup
 }
 
 model QuoteLineItem {
@@ -4747,7 +4784,7 @@ model Organization {
   storefrontConfig                  StorefrontConfig?
   stockItems                        StockItem[]
   operationalSceneLayouts           OperationalSceneLayout[]
-  businessMetricRollups              BusinessMetricRollup[]            @relation("BusinessMetricRollupOrganization")
+  businessMetricRollups             BusinessMetricRollup[]             @relation("BusinessMetricRollupOrganization")
   hospitalityResources              HospitalityResource[]              @relation("HospitalityResourceOrganization")
   hospitalityCapacityPools          HospitalityCapacityPool[]          @relation("HospitalityCapacityPoolOrganization")
   hospitalityResourceAvailability   HospitalityResourceAvailability[]  @relation("HospitalityAvailabilityOrganization")
@@ -4830,6 +4867,26 @@ model Organization {
   dataProcessingActivities          DataProcessingActivity[]
   dataPolicyExceptions              DataPolicyException[]
   dataControlOperations             DataControlOperation[]
+  billableRates                     BillableRate[]
+  outboundDrafts                    OutboundDraft[]
+  inboundChannelMessages            InboundChannelMessage[]
+  marketingChannelSpendCeilings     MarketingChannelSpendCeiling[]
+  scheduledOutboundActions          ScheduledOutboundAction[]
+  outboundAutopilotPolicies         OutboundAutopilotPolicy[]
+  mediaAttachments                  MediaAttachment[]
+  adoptableAnimals                  AdoptableAnimal[]
+  staffingDemands                   StaffingDemand[]
+  staffingShifts                    StaffingShift[]
+  staffingAssignments               StaffingAssignment[]
+  staffingCrews                     StaffingCrew[]
+  staffingResourceLinks             StaffingResourceLink[]
+  employeeAvailabilityWindows       EmployeeAvailabilityWindow[]
+  employeeSchedulingPreferences     EmployeeSchedulingPreference[]
+  staffingProposalRuns              StaffingProposalRun[]
+  staffingExceptionRequests         StaffingExceptionRequest[]
+  workforceCandidateFacts           WorkforceCandidateFact[]
+  gearInterfaces                    GearInterface[]
+  staffingConstraintRules           StaffingConstraintRule[]
 }
 
 // Founder Hub's shared-portfolio curation layer. FederatedRecordMirror remains
@@ -6250,6 +6307,7 @@ model UserFact {
   @@index([userId, supersededAt])
   @@index([sourceAgentId, supersededAt])
   @@index([scope, sensitivity, supersededAt])
+  @@index([supersededById]) // FK-leading (self-relation): supersession-chain reverse lookup, apps/web/lib/tak/user-facts.ts:440
 }
 
 // BI-23A65B81 (EP-8C706944 P3): shared working context for a multi-coworker,
@@ -6757,6 +6815,8 @@ model ApiToken {
   expiresAt DateTime?
   createdAt DateTime  @default(now())
   user      User      @relation(fields: [userId], references: [id])
+
+  @@index([userId]) // FK-leading (spine): token revocation by user, apps/web/app/api/v1/auth/logout/route.ts:33
 }
 
 model Notification {
@@ -7052,7 +7112,7 @@ model ImprovementSignal {
 }
 
 model ExternalEvidenceRecord {
-  id                    String       @id @default(cuid())
+  id                    String    @id @default(cuid())
   actorUserId           String
   routeContext          String
   operationType         String
@@ -7071,8 +7131,8 @@ model ExternalEvidenceRecord {
   executorKind          String?
   recordedByPrincipalId String?
   recordedByAgentId     String?
-  createdAt             DateTime     @default(now())
-  actorUser             User         @relation(fields: [actorUserId], references: [id], onDelete: Cascade)
+  createdAt             DateTime  @default(now())
+  actorUser             User      @relation(fields: [actorUserId], references: [id], onDelete: Cascade)
   workCapsule           Workroom? @relation(fields: [workCapsuleId], references: [id], onDelete: SetNull)
 
   @@index([actorUserId, createdAt])
@@ -7230,6 +7290,7 @@ model FeatureBuild {
   runtimeVerifications        RuntimeVerification[]
   sandboxes                   Sandbox[]
   decisionInteractions        DecisionInteraction[]
+  workrooms                   Workroom[]               @relation("WorkroomFeatureBuild")
 
   @@index([phase])
   @@index([createdById])
@@ -7540,6 +7601,7 @@ model GitPromotionCandidate {
   createdAt               DateTime              @default(now())
   updatedAt               DateTime              @updatedAt
   runtimeVerifications    RuntimeVerification[]
+  workrooms               Workroom[]            @relation("WorkroomGitPromotionCandidate")
 
   @@index([status, createdAt])
   @@index([repositoryFullName, afterSha])
@@ -7835,6 +7897,7 @@ model TaskRun {
   decisionInteractions DecisionInteraction[]
   stallEvents          StallEvent[]
   actionEnvelopes      CoworkerActionEnvelope[]
+  workrooms            Workroom[]               @relation("WorkroomTaskRun")
 
   @@index([userId, status])
   @@index([threadId])
@@ -8785,6 +8848,7 @@ model EaViewElement {
   @@unique([viewId, elementId])
   @@index([elementId])
   @@index([viewId, parentViewElementId, orderIndex])
+  @@index([parentViewElementId]) // FK-leading (tree parent): view-element tree traversal, apps/web/lib/actions/ea.ts:651
 }
 
 model EaStructureRule {
@@ -9034,23 +9098,23 @@ model LeaveBalance {
 }
 
 model LeaveRequest {
-  id                 String           @id @default(cuid())
-  requestId          String           @unique
-  employeeProfileId  String
-  leaveType          String
-  startDate          DateTime
-  endDate            DateTime
-  days               Float
-  reason             String?
-  status             String           @default("pending")
-  approverEmployeeId String?
-  approvedAt         DateTime?
-  rejectionReason    String?
+  id                    String           @id @default(cuid())
+  requestId             String           @unique
+  employeeProfileId     String
+  leaveType             String
+  startDate             DateTime
+  endDate               DateTime
+  days                  Float
+  reason                String?
+  status                String           @default("pending")
+  approverEmployeeId    String?
+  approvedAt            DateTime?
+  rejectionReason       String?
   decisionInteractionId String?
-  createdAt          DateTime         @default(now())
-  updatedAt          DateTime         @updatedAt
-  approver           EmployeeProfile? @relation("LeaveApprovals", fields: [approverEmployeeId], references: [id])
-  employeeProfile    EmployeeProfile  @relation(fields: [employeeProfileId], references: [id])
+  createdAt             DateTime         @default(now())
+  updatedAt             DateTime         @updatedAt
+  approver              EmployeeProfile? @relation("LeaveApprovals", fields: [approverEmployeeId], references: [id])
+  employeeProfile       EmployeeProfile  @relation(fields: [employeeProfileId], references: [id])
 
   @@index([employeeProfileId])
   @@index([status])
@@ -9168,14 +9232,15 @@ model Payslip {
 }
 
 model BillableRate {
-  id             String   @id @default(cuid())
+  id             String       @id @default(cuid())
   organizationId String
   name           String
-  unit           String   @default("hour")
+  unit           String       @default("hour")
   billRate       Decimal
-  isActive       Boolean  @default(true)
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  isActive       Boolean      @default(true)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  organization   Organization @relation(fields: [organizationId], references: [id])
 
   @@index([organizationId, isActive])
 }
@@ -9478,6 +9543,7 @@ model ComplianceEvidence {
   @@index([evidenceType])
   @@index([providerConnectionId, claimKey, status])
   @@index([expiresAt, status])
+  @@index([supersededById]) // FK-leading (self-relation): supersession-chain reverse lookup
 }
 
 model RiskAssessment {
@@ -10161,6 +10227,7 @@ model StorefrontConfig {
   beautyCapacityAllocations      BeautyCapacityAllocation[]
 
   @@unique([id, organizationId])
+  @@index([archetypeId]) // FK-leading (spine): storefront-by-archetype relation join, apps/web/lib/demo/load-demo-business.ts:335
 }
 
 /// Operator-authored geometry for one operational-twin scene. Live business
@@ -10506,6 +10573,7 @@ model OutboundDraft {
 
   approvals    OutboundApprovalDecision[]
   publications OutboundPublication[]
+  organization Organization               @relation(fields: [organizationId], references: [id])
 
   @@index([organizationId, domain, status])
   @@index([sourceType, sourceId])
@@ -10562,7 +10630,7 @@ model OutboundPublication {
 // (the parsed body lives in `body` for audit), and never the message-id
 // when the channel uses one we already capture in externalMessageId.
 model InboundChannelMessage {
-  inboundId          String   @id @default(cuid())
+  inboundId          String       @id @default(cuid())
   organizationId     String
   domain             String // "marketing" today
   channelId          String // "email-postmark" | ...
@@ -10572,11 +10640,12 @@ model InboundChannelMessage {
   fromDisplayName    String?
   subject            String?
   body               String
-  receivedAt         DateTime @default(now())
+  receivedAt         DateTime     @default(now())
   classification     String? // qualified-inquiry | support | spam | other
   routedEngagementId String?
   draftedReplyId     String?
   metadata           Json?
+  organization       Organization @relation(fields: [organizationId], references: [id])
 
   @@index([organizationId, domain, receivedAt])
   @@index([channelId, externalThreadId])
@@ -10591,15 +10660,16 @@ model InboundChannelMessage {
 // operator-only (manage_provider_connections capability) so the agent
 // can't escalate its own ceiling.
 model MarketingChannelSpendCeiling {
-  ceilingId       String   @id @default(cuid())
+  ceilingId       String       @id @default(cuid())
   organizationId  String
   channelId       String
   weeklyCapCents  Int
   notes           String?
   lastSetByUserId String
-  lastSetAt       DateTime @default(now())
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  lastSetAt       DateTime     @default(now())
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+  organization    Organization @relation(fields: [organizationId], references: [id])
 
   @@unique([organizationId, channelId])
   @@index([channelId])
@@ -10638,6 +10708,7 @@ model ScheduledOutboundAction {
   // deleting an engagement instance must not delete its fired-action audit row.
   workEngagementInstanceId String?
   workEngagementInstance   WorkEngagement? @relation(fields: [workEngagementInstanceId], references: [id], onDelete: SetNull)
+  organization             Organization    @relation(fields: [organizationId], references: [id])
 
   @@index([status, scheduledFor])
   @@index([organizationId, kind, status])
@@ -10652,19 +10723,20 @@ model ScheduledOutboundAction {
 // runtime enforces those exclusions at the autopilot eligibility check
 // regardless of what the policy row says.
 model OutboundAutopilotPolicy {
-  policyId                String   @id @default(cuid())
+  policyId                String       @id @default(cuid())
   organizationId          String
-  domain                  String   @default("marketing")
+  domain                  String       @default("marketing")
   channelId               String
-  enabled                 Boolean  @default(false)
+  enabled                 Boolean      @default(false)
   autoApproveBelowWords   Int?
   autoPublishAfterMinutes Int?
   weeklyCeiling           Int
   enabledByUserId         String
-  enabledAt               DateTime @default(now())
+  enabledAt               DateTime     @default(now())
   pausedReason            String?
-  createdAt               DateTime @default(now())
-  updatedAt               DateTime @updatedAt
+  createdAt               DateTime     @default(now())
+  updatedAt               DateTime     @updatedAt
+  organization            Organization @relation(fields: [organizationId], references: [id])
 
   @@unique([organizationId, channelId])
   @@index([channelId, enabled])
@@ -10783,6 +10855,8 @@ model StorefrontBooking {
   @@index([customerEmail])
   @@index([scheduledAt])
   @@index([hospitalityResourceId, scheduledAt])
+  @@index([parentBookingId]) // FK-leading (self-relation): child-booking lookup for grouped bookings
+  @@index([providerId]) // FK-leading (spine): provider-day busy-booking scan, apps/web/lib/slot-engine/compute-slots.ts:139
 }
 
 model ServiceProvider {
@@ -10822,6 +10896,7 @@ model ProviderService {
   item     StorefrontItem  @relation(fields: [itemId], references: [id], onDelete: Cascade)
 
   @@unique([providerId, itemId])
+  @@index([itemId]) // FK-leading (spine): provider-service cleanup per item, apps/web/app/api/storefront/admin/items/[id]/route.ts:166
 }
 
 model ProviderAvailability {
@@ -11868,7 +11943,8 @@ model MediaAttachment {
   caption        String?
   createdAt      DateTime @default(now())
 
-  asset MediaAsset @relation(fields: [mediaAssetId], references: [id], onDelete: Cascade)
+  asset        MediaAsset   @relation(fields: [mediaAssetId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id])
 
   @@index([ownerType, ownerId, role, sortOrder])
   @@index([organizationId])
@@ -11900,7 +11976,8 @@ model AdoptableAnimal {
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt
 
-  storefront StorefrontConfig @relation(fields: [storefrontId], references: [id], onDelete: Cascade)
+  storefront   StorefrontConfig @relation(fields: [storefrontId], references: [id], onDelete: Cascade)
+  organization Organization     @relation(fields: [organizationId], references: [id])
 
   @@index([storefrontId, status, sortOrder])
 }
@@ -12051,32 +12128,32 @@ model AbsorptionPosture {
 // not enforced FKs — same pattern as AbsorptionPosture) so an assessment can exist
 // before every referent is normalized. Additive, fleet-safe.
 model IncumbentCoverageAssessment {
-  id           String @id @default(cuid())
-  assessmentId String @unique
+  id                           String    @id @default(cuid())
+  assessmentId                 String    @unique
   /// The incumbent application: a DigitalProduct with coverageStatus=incumbent.
-  digitalProductId String
+  digitalProductId             String
   /// Normalized identity (shared with Phase C), when resolved.
-  catalogIdentityId String?
+  catalogIdentityId            String?
   /// native_now | adapter_bridge | generic_connector | provider_led |
   /// do_not_absorb | gap — == ABSORPTION_VERDICTS.
-  verdict String
+  verdict                      String
   /// CAPABILITY_REGISTRY key that covers it, when known.
-  coveringCapabilityKey String?
+  coveringCapabilityKey        String?
   coveringBusinessCapabilityId String?
-  confidence Float @default(0)
+  confidence                   Float     @default(0)
   /// posture_matrix | rule | ai | human_confirmed — provenance of the verdict.
-  assessedVia String
+  assessedVia                  String
   /// What was matched, and on what basis.
-  evidence Json?
+  evidence                     Json?
   /// Set when verdict=gap — populated by D4 (gap→backlog), not this model.
-  backlogItemId String?
+  backlogItemId                String?
   /// proposed | confirmed | superseded. No verdict reaches confirmed without
   /// human/authorized-coworker action (spec R3 / §7).
-  status       String    @default("proposed")
-  assessedAt   DateTime  @default(now())
-  supersededAt DateTime?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  status                       String    @default("proposed")
+  assessedAt                   DateTime  @default(now())
+  supersededAt                 DateTime?
+  createdAt                    DateTime  @default(now())
+  updatedAt                    DateTime  @updatedAt
 
   @@index([digitalProductId])
   @@index([verdict])
@@ -12310,25 +12387,25 @@ model PaymentAllocation {
 // is genuinely new substrate rather than a fork of either.
 
 model StockItem {
-  id             String   @id @default(cuid())
-  stockItemId    String   @unique
-  organizationId String
-  name           String
+  id              String   @id @default(cuid())
+  stockItemId     String   @unique
+  organizationId  String
+  name            String
   /// Counting unit the operator thinks in (kg, litre, each, case).
-  unit           String
+  unit            String
   /// Latest counted quantity. Operator-maintained; not a running ledger.
-  onHandQuantity Decimal  @default(0)
+  onHandQuantity  Decimal  @default(0)
   /// Reorder when coverage falls to/below this quantity.
-  reorderPoint   Decimal  @default(0)
+  reorderPoint    Decimal  @default(0)
   /// Suggested quantity to order when below the reorder point.
-  reorderQuantity Decimal @default(0)
-  supplierId     String?
-  isActive       Boolean  @default(true)
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  reorderQuantity Decimal  @default(0)
+  supplierId      String?
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
-  organization Organization             @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  supplier     Supplier?                @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  organization Organization              @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  supplier     Supplier?                 @relation(fields: [supplierId], references: [id], onDelete: SetNull)
   components   StorefrontItemComponent[]
 
   @@unique([organizationId, name])
@@ -12595,6 +12672,7 @@ model Bill {
   @@index([supplierContractId])
   @@index([status])
   @@index([dueDate])
+  @@index([purchaseOrderId]) // FK-leading (spine): bills-for-PO lookup, apps/web/lib/actions/ap.ts:569
 }
 
 model BillLineItem {
@@ -13359,6 +13437,7 @@ model KnowledgeArticleProduct {
   digitalProduct   DigitalProduct   @relation(fields: [digitalProductId], references: [id], onDelete: Cascade)
 
   @@id([articleId, digitalProductId])
+  @@index([digitalProductId]) // FK-leading (join table): product-side lookups; @@id only covers articleId
 }
 
 model KnowledgeArticlePortfolio {
@@ -13368,6 +13447,7 @@ model KnowledgeArticlePortfolio {
   portfolio   Portfolio        @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
 
   @@id([articleId, portfolioId])
+  @@index([portfolioId]) // FK-leading (join table): portfolio-side lookups; @@id only covers articleId
 }
 
 // ─── EP-WIKI-001: Platform Kernel Wiki + Per-Org Overlay ─────────────────────
@@ -13570,6 +13650,7 @@ model WikiPageSource {
   source   RawSource @relation(fields: [sourceId], references: [id], onDelete: Cascade)
 
   @@id([pageId, sourceId])
+  @@index([sourceId]) // FK-leading (join table): source-side lookups; @@id only covers pageId
 }
 
 model WikiIngestEvent {
@@ -14001,24 +14082,24 @@ enum PerformanceMetricUnit {
 /// systems remain authoritative; this table exists so owner/manager reads never
 /// run historical aggregation on the operational hot path.
 model BusinessMetricRollup {
-  id                  String   @id @default(cuid())
-  organizationId      String
-  metricKey           String
-  periodStart         DateTime
-  periodEnd           DateTime
-  timezone            String
-  dimensionsHash      String
-  dimensions          Json
-  value               Decimal? @db.Decimal(20, 6)
-  unit                PerformanceMetricUnit
-  availability        BusinessMetricAvailability
-  unavailableReason   String?
-  definitionVersion   String
-  sourceWatermark     DateTime
-  sourceLineage       Json
-  computedAt          DateTime @default(now())
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
+  id                String                     @id @default(cuid())
+  organizationId    String
+  metricKey         String
+  periodStart       DateTime
+  periodEnd         DateTime
+  timezone          String
+  dimensionsHash    String
+  dimensions        Json
+  value             Decimal?                   @db.Decimal(20, 6)
+  unit              PerformanceMetricUnit
+  availability      BusinessMetricAvailability
+  unavailableReason String?
+  definitionVersion String
+  sourceWatermark   DateTime
+  sourceLineage     Json
+  computedAt        DateTime                   @default(now())
+  createdAt         DateTime                   @default(now())
+  updatedAt         DateTime                   @updatedAt
 
   organization Organization @relation("BusinessMetricRollupOrganization", fields: [organizationId], references: [id], onDelete: Cascade)
 
@@ -14339,31 +14420,31 @@ model PerspectiveMaterial {
 }
 
 model DecisionInteraction {
-  id                  String                            @id @default(cuid())
-  interactionId       String                            @unique
-  profileId           String
-  profileVersionId    String
-  fallbackProfileId   String?
-  buildId             String?
-  taskRunId           String?
-  deliberationRunId   String?
-  triggeredByUserId   String?
-  routeContext        String?
-  phaseFrom           String?
-  phaseTo             String?
-  domainClass         String                            @default("plan-readiness")
-  question            String                            @db.Text
-  options             Json                              @default("[]")
-  evidenceBundle      Json                              @default("{}")
-  sources             Json                              @default("[]")
-  rationale           String?                           @db.Text
-  riskTier            String
-  confidenceBefore    Float?
-  confidenceAfter     Float?
-  outcomeType         String
-  principleConflict   Boolean                           @default(false)
-  outcomePayload      Json                              @default("{}")
-  humanOutcome        Json?
+  id                      String                            @id @default(cuid())
+  interactionId           String                            @unique
+  profileId               String
+  profileVersionId        String
+  fallbackProfileId       String?
+  buildId                 String?
+  taskRunId               String?
+  deliberationRunId       String?
+  triggeredByUserId       String?
+  routeContext            String?
+  phaseFrom               String?
+  phaseTo                 String?
+  domainClass             String                            @default("plan-readiness")
+  question                String                            @db.Text
+  options                 Json                              @default("[]")
+  evidenceBundle          Json                              @default("{}")
+  sources                 Json                              @default("[]")
+  rationale               String?                           @db.Text
+  riskTier                String
+  confidenceBefore        Float?
+  confidenceAfter         Float?
+  outcomeType             String
+  principleConflict       Boolean                           @default(false)
+  outcomePayload          Json                              @default("{}")
+  humanOutcome            Json?
   // BI-D88DFEEA Phase 1 (gate instrumentation). When the gate scored real
   // per-option feature vectors (build-studio, work-pattern-review; NOT the
   // open-ended org-business/profession gates yet), `scoredOptions` carries the
@@ -14373,9 +14454,9 @@ model DecisionInteraction {
   // `scoredOptions`. All three are null for every other DecisionInteraction —
   // the weight-inference adapter (weight-inference-adapter.ts) treats null as
   // "cannot extract an observation from this row", never as zero-signal.
-  scoredOptions       Json?
-  recommendedOptionId String?
-  chosenOptionId      String?
+  scoredOptions           Json?
+  recommendedOptionId     String?
+  chosenOptionId          String?
   // Which governance gate produced this row (BI-1BE30A9A). The audit tier
   // derives from THIS, not from the fallback-resolved profile kind: a
   // profession/WSID decision that fell back to platform doctrine for material
@@ -14383,10 +14464,10 @@ model DecisionInteraction {
   // operator concludes — wrongly — that the gate is never called.
   // Null on rows written before the column existed; the read model falls back
   // to profile.kind for those.
-  gateKey             String?
+  gateKey                 String?
   // True when the gate ran but doctrine fell back off the gate's own profile
   // kind (e.g. profession gate resolving to MARK_DPF_PLATFORM_PROFILE).
-  gateFallbackUsed    Boolean                           @default(false)
+  gateFallbackUsed        Boolean                           @default(false)
   // Trust-envelope immutability (BI-81CC5D8E, EP-VERIFICATION-INTEGRITY).
   // A recorded decision is sealed into an append-only per-(chainId) hash chain:
   // chainEntryHash = H(canonical{criteria, evidence-digests, weights, composite}
@@ -14394,22 +14475,22 @@ model DecisionInteraction {
   // mutating any sealed field afterward (see apps/web/lib/decision/decision-chain.ts).
   // Nullable + additive: rows written before sealing (and the fail-open path)
   // carry NULL and are simply "unsealed", never invalid.
-  chainId             String?
-  prevHash            String?
-  chainEntryHash      String?                           @unique
-  sealedAt            DateTime?
-  createdAt           DateTime                          @default(now())
-  updatedAt           DateTime                          @updatedAt
-  profile             DecisionPerspectiveProfile        @relation("DecisionInteractionProfile", fields: [profileId], references: [profileId], onDelete: Cascade)
-  profileVersion      DecisionPerspectiveProfileVersion @relation(fields: [profileVersionId], references: [versionId], onDelete: Restrict)
-  fallbackProfile     DecisionPerspectiveProfile?       @relation("DecisionInteractionFallbackProfile", fields: [fallbackProfileId], references: [profileId], onDelete: SetNull)
-  build               FeatureBuild?                     @relation(fields: [buildId], references: [buildId], onDelete: SetNull)
-  taskRun             TaskRun?                          @relation(fields: [taskRunId], references: [taskRunId], onDelete: SetNull)
-  deliberationRun     DeliberationRun?                  @relation(fields: [deliberationRunId], references: [id], onDelete: SetNull)
-  triggeredByUser     User?                             @relation("DecisionInteractionTriggeredByUser", fields: [triggeredByUserId], references: [id], onDelete: SetNull)
-  escalationCapture   EscalationCapture?
-  deferralCapture     DeferralCapture?
-  voiceOutput         DecisionInteractionVoiceOutput?
+  chainId                 String?
+  prevHash                String?
+  chainEntryHash          String?                           @unique
+  sealedAt                DateTime?
+  createdAt               DateTime                          @default(now())
+  updatedAt               DateTime                          @updatedAt
+  profile                 DecisionPerspectiveProfile        @relation("DecisionInteractionProfile", fields: [profileId], references: [profileId], onDelete: Cascade)
+  profileVersion          DecisionPerspectiveProfileVersion @relation(fields: [profileVersionId], references: [versionId], onDelete: Restrict)
+  fallbackProfile         DecisionPerspectiveProfile?       @relation("DecisionInteractionFallbackProfile", fields: [fallbackProfileId], references: [profileId], onDelete: SetNull)
+  build                   FeatureBuild?                     @relation(fields: [buildId], references: [buildId], onDelete: SetNull)
+  taskRun                 TaskRun?                          @relation(fields: [taskRunId], references: [taskRunId], onDelete: SetNull)
+  deliberationRun         DeliberationRun?                  @relation(fields: [deliberationRunId], references: [id], onDelete: SetNull)
+  triggeredByUser         User?                             @relation("DecisionInteractionTriggeredByUser", fields: [triggeredByUserId], references: [id], onDelete: SetNull)
+  escalationCapture       EscalationCapture?
+  deferralCapture         DeferralCapture?
+  voiceOutput             DecisionInteractionVoiceOutput?
   evidenceReverifications EvidenceReVerification[]
 
   @@index([profileId, createdAt])
@@ -15184,7 +15265,7 @@ model FederationPairingSession {
   status                String    @default("pending")
   relationshipPreset    String    @default("same-organization")
   projectionTemplateKey String    @default("same-organization")
-  offeredRole            String    @default("same-org-peer")
+  offeredRole           String    @default("same-org-peer")
   matchingCode          String
   // Versioned SAS commit/reveal transcript. Ephemeral private material and
   // nonces are encrypted while the exchange is in flight and cleared after
@@ -15811,8 +15892,9 @@ model GearInterface {
   rationale  String?
 
   // OTel correlation (best-effort; export not required for write)
-  otelTraceId String?
-  otelSpanId  String?
+  otelTraceId  String?
+  otelSpanId   String?
+  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
 
   @@index([organizationId, recordedAt])
   @@index([innerRing, outerRing, transmissionDirection, recordedAt])
@@ -16363,7 +16445,8 @@ model StaffingDemand {
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 
-  shifts StaffingShift[]
+  shifts       StaffingShift[]
+  organization Organization    @relation(fields: [organizationId], references: [id])
 
   @@index([organizationId, status])
   @@index([demandShape])
@@ -16392,6 +16475,7 @@ model StaffingShift {
   demand        StaffingDemand?        @relation(fields: [staffingDemandId], references: [id])
   assignments   StaffingAssignment[]
   resourceLinks StaffingResourceLink[]
+  organization  Organization           @relation(fields: [organizationId], references: [id])
 
   @@index([organizationId, lifecycle])
   @@index([staffingDemandId])
@@ -16425,6 +16509,7 @@ model StaffingAssignment {
   crew                    StaffingCrew?             @relation(fields: [staffingCrewId], references: [id])
   events                  StaffingAssignmentEvent[]
   hospitalityServiceTurns HospitalityServiceTurn[]
+  organization            Organization              @relation(fields: [organizationId], references: [id])
 
   @@unique([id, organizationId])
   @@index([organizationId, lifecycle])
@@ -16461,8 +16546,9 @@ model StaffingCrew {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  members     StaffingCrewMember[]
-  assignments StaffingAssignment[]
+  members      StaffingCrewMember[]
+  assignments  StaffingAssignment[]
+  organization Organization         @relation(fields: [organizationId], references: [id])
 
   @@index([organizationId])
 }
@@ -16493,7 +16579,8 @@ model StaffingResourceLink {
   resourceRef     String
   createdAt       DateTime @default(now())
 
-  shift StaffingShift @relation(fields: [staffingShiftId], references: [id], onDelete: Cascade)
+  shift        StaffingShift @relation(fields: [staffingShiftId], references: [id], onDelete: Cascade)
+  organization Organization  @relation(fields: [organizationId], references: [id])
 
   @@index([staffingShiftId])
   @@index([resourceType, resourceRef])
@@ -16501,8 +16588,8 @@ model StaffingResourceLink {
 
 /// Employee-declared or authorized availability window. Spec §5.1.4.
 model EmployeeAvailabilityWindow {
-  id                String    @id @default(cuid())
-  windowId          String    @unique
+  id                String       @id @default(cuid())
+  windowId          String       @unique
   organizationId    String
   employeeProfileId String
   kind              String // available | unavailable
@@ -16515,11 +16602,12 @@ model EmployeeAvailabilityWindow {
   effectiveFrom     DateTime?
   effectiveTo       DateTime?
   ownerRef          String?
-  confirmationState String    @default("confirmed") // confirmed | pending
+  confirmationState String       @default("confirmed") // confirmed | pending
   supersededById    String?
-  version           Int       @default(1)
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
+  version           Int          @default(1)
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+  organization      Organization @relation(fields: [organizationId], references: [id])
 
   @@index([employeeProfileId])
   @@index([organizationId, kind])
@@ -16530,23 +16618,24 @@ model EmployeeAvailabilityWindow {
 /// employee-confirmed preferences (origin=explicit or promoted) are binding;
 /// inferred origin stays soft and expiring.
 model EmployeeSchedulingPreference {
-  id                String    @id @default(cuid())
-  preferenceId      String    @unique
+  id                String       @id @default(cuid())
+  preferenceId      String       @unique
   organizationId    String
   employeeProfileId String
   preferenceType    String
   scope             String?
-  weight            Float     @default(0)
-  origin            String    @default("explicit") // explicit | inferred
-  consentState      String    @default("pending") // pending | consented | revoked
+  weight            Float        @default(0)
+  origin            String       @default("explicit") // explicit | inferred
+  consentState      String       @default("pending") // pending | consented | revoked
   confidence        Float?
   evidenceRefs      Json?
   effectiveFrom     DateTime?
   expiresAt         DateTime?
   supersededById    String?
-  version           Int       @default(1)
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
+  version           Int          @default(1)
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+  organization      Organization @relation(fields: [organizationId], references: [id])
 
   @@index([employeeProfileId])
   @@index([organizationId, preferenceType])
@@ -16557,23 +16646,24 @@ model EmployeeSchedulingPreference {
 /// `predicateType` names the §9.8 variable family; hard rules cannot be relaxed
 /// by the solver, and non-waivable hard rules reject exception creation (§6).
 model StaffingConstraintRule {
-  id              String    @id @default(cuid())
-  ruleId          String    @unique
+  id              String        @id @default(cuid())
+  ruleId          String        @unique
   organizationId  String?
   predicateType   String
   family          String?
-  parameters      Json      @default("{}")
-  severity        String    @default("hard") // hard | soft
-  applicability   Json      @default("{}") // jurisdiction | archetype | org | unit | location | employmentType
+  parameters      Json          @default("{}")
+  severity        String        @default("hard") // hard | soft
+  applicability   Json          @default("{}") // jurisdiction | archetype | org | unit | location | employmentType
   sourcePolicyUrl String?
-  legallyWaivable Boolean   @default(false)
+  legallyWaivable Boolean       @default(false)
   effectiveFrom   DateTime?
   effectiveTo     DateTime?
-  validationState String    @default("draft") // draft | reviewed | active
+  validationState String        @default("draft") // draft | reviewed | active
   reviewOwnerRef  String?
-  version         Int       @default(1)
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  version         Int           @default(1)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  organization    Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
 
   @@index([organizationId])
   @@index([predicateType])
@@ -16600,7 +16690,8 @@ model StaffingProposalRun {
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 
-  options StaffingProposalOption[]
+  options      StaffingProposalOption[]
+  organization Organization             @relation(fields: [organizationId], references: [id])
 
   @@index([organizationId, status])
 }
@@ -16628,8 +16719,8 @@ model StaffingProposalOption {
 /// non-waivable legal/credential rules must reject exception creation at the
 /// application layer.
 model StaffingExceptionRequest {
-  id                       String    @id @default(cuid())
-  exceptionId              String    @unique
+  id                       String       @id @default(cuid())
+  exceptionId              String       @unique
   organizationId           String
   staffingConstraintRuleId String?
   staffingShiftId          String?
@@ -16638,11 +16729,12 @@ model StaffingExceptionRequest {
   requestedScope           String?
   expiresAt                DateTime?
   approvingAuthorityRef    String?
-  decision                 String    @default("pending") // pending | approved | denied
+  decision                 String       @default("pending") // pending | approved | denied
   decisionInteractionId    String?
   evidence                 Json?
-  createdAt                DateTime  @default(now())
-  updatedAt                DateTime  @updatedAt
+  createdAt                DateTime     @default(now())
+  updatedAt                DateTime     @updatedAt
+  organization             Organization @relation(fields: [organizationId], references: [id])
 
   @@index([organizationId, decision])
   @@index([staffingConstraintRuleId])
@@ -16652,24 +16744,25 @@ model StaffingExceptionRequest {
 /// (spec §5.1.9 + §10-§11). Never directly solver-authoritative: it must be
 /// employee-confirmed and promoted (to a preference or a LeaveRequest) first.
 model WorkforceCandidateFact {
-  id                       String    @id @default(cuid())
-  candidateFactId          String    @unique
+  id                       String       @id @default(cuid())
+  candidateFactId          String       @unique
   organizationId           String
   subjectEmployeeProfileId String?
   kind                     String // time_off_intent | availability_hint | preference_hint
   extractedValue           Json?
   confidence               Float?
   sourceEnvelope           Json? // provider | tenant | external id | sender/subject | received | integrity | excerpt/digest
-  identityResolution       String    @default("unresolved") // unresolved | resolved | ambiguous
-  reviewState              String    @default("pending") // pending | confirmed | edited | rejected
+  identityResolution       String       @default("unresolved") // unresolved | resolved | ambiguous
+  reviewState              String       @default("pending") // pending | confirmed | edited | rejected
   extractionModelVersion   String?
   inferenceAt              DateTime?
   expiresAt                DateTime?
   correctionOf             String?
   promotionTargetType      String? // preference | leave_request
   promotionTargetId        String?
-  createdAt                DateTime  @default(now())
-  updatedAt                DateTime  @updatedAt
+  createdAt                DateTime     @default(now())
+  updatedAt                DateTime     @updatedAt
+  organization             Organization @relation(fields: [organizationId], references: [id])
 
   @@index([organizationId, reviewState])
   @@index([subjectEmployeeProfileId])
@@ -16811,7 +16904,7 @@ model PipelineStage {
   createdAt     DateTime @default(now())
 
   requisition         JobRequisition?      @relation(fields: [requisitionId], references: [id], onDelete: SetNull)
-  currentApplications Application[]         @relation("ApplicationCurrentStage")
+  currentApplications Application[]        @relation("ApplicationCurrentStage")
   interviews          ScheduledInterview[]
 
   @@index([requisitionId])
@@ -16831,11 +16924,11 @@ model Application {
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt
 
-  candidate            Candidate            @relation(fields: [candidateId], references: [id], onDelete: Cascade)
-  requisition          JobRequisition?      @relation(fields: [requisitionId], references: [id], onDelete: SetNull)
-  currentStage         PipelineStage?       @relation("ApplicationCurrentStage", fields: [currentStageId], references: [id], onDelete: SetNull)
-  source               RecruitingSource?    @relation(fields: [sourceId], references: [id])
-  dispositionReason    DispositionReason?   @relation(fields: [dispositionReasonId], references: [id])
+  candidate            Candidate             @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  requisition          JobRequisition?       @relation(fields: [requisitionId], references: [id], onDelete: SetNull)
+  currentStage         PipelineStage?        @relation("ApplicationCurrentStage", fields: [currentStageId], references: [id], onDelete: SetNull)
+  source               RecruitingSource?     @relation(fields: [sourceId], references: [id])
+  dispositionReason    DispositionReason?    @relation(fields: [dispositionReasonId], references: [id])
   interviews           ScheduledInterview[]
   scorecards           Scorecard[]
   offers               Offer[]
