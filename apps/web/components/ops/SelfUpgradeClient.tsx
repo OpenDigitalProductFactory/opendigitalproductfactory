@@ -233,6 +233,82 @@ function recoveryMemberLabel(member: { target: string; status: string }): string
 const DEFAULT_STATUS_STYLE =
   "bg-[var(--dpf-surface-2)] text-[var(--dpf-text)] border-[var(--dpf-border)]";
 
+type OperatorUpgradeState = {
+  key: "disabled" | "queued" | "running" | "available" | "current";
+  tone: "info" | "success" | "warning";
+  headline: string;
+  actionLabel: string;
+  detail: string;
+};
+
+function operatorUpgradeState(args: {
+  enabled: boolean;
+  isFresh: boolean;
+  targetSha: string | null;
+  latestRun: LatestRun | null;
+  draining: boolean;
+  inMaintenanceWindow: boolean;
+}): OperatorUpgradeState {
+  if (!args.enabled) {
+    return {
+      key: "disabled",
+      tone: "warning",
+      headline: "Self-upgrade is off",
+      actionLabel: "Turn it on",
+      detail: "The platform will not install updates on its own while this is disabled.",
+    };
+  }
+
+  if (args.latestRun?.status === "queued" || args.latestRun?.status === "pending") {
+    return {
+      key: "queued",
+      tone: "info",
+      headline: "Update queued",
+      actionLabel: "No action needed",
+      detail: "The worker accepted the update and will start installing it shortly.",
+    };
+  }
+
+  if (args.latestRun?.status === "running" || args.draining) {
+    return {
+      key: "running",
+      tone: "info",
+      headline: "The platform is installing an update",
+      actionLabel: "No action needed",
+      detail: "The portal may reconnect for a moment as the update finishes.",
+    };
+  }
+
+  if (!args.isFresh && args.targetSha) {
+    return {
+      key: "available",
+      tone: args.inMaintenanceWindow ? "info" : "warning",
+      headline: "Update available",
+      actionLabel: args.inMaintenanceWindow ? "Ready in this window" : "Wait or upgrade now",
+      detail: "Review timing and release notes below when you need more detail.",
+    };
+  }
+
+  return {
+    key: "current",
+    tone: "success",
+    headline: "You're current",
+    actionLabel: "No action needed",
+    detail: "This install is already on the latest available platform update.",
+  };
+}
+
+function operatorStateClass(tone: OperatorUpgradeState["tone"]): string {
+  switch (tone) {
+    case "success":
+      return "border-[var(--dpf-success)]/40 bg-[var(--dpf-success)]/10";
+    case "warning":
+      return "border-[var(--dpf-warning)]/40 bg-[var(--dpf-warning)]/10";
+    default:
+      return "border-[var(--dpf-info)]/40 bg-[var(--dpf-info)]/10";
+  }
+}
+
 export default function SelfUpgradeClient({
   enabled,
   inMaintenanceWindow,
@@ -301,6 +377,14 @@ export default function SelfUpgradeClient({
   // or the portal is draining/swapping for the swap.
   const queuedRun = latestRun?.status === "queued" || latestRun?.status === "pending";
   const upgradeInFlight = queuedRun || latestRun?.status === "running" || draining;
+  const operatorState = operatorUpgradeState({
+    enabled,
+    isFresh,
+    targetSha,
+    latestRun,
+    draining,
+    inMaintenanceWindow,
+  });
 
   // Once a run is actually running, project when it should finish from the
   // median duration of past successful runs, anchored to this run's start. Null
@@ -453,22 +537,26 @@ export default function SelfUpgradeClient({
         </div>
       )}
 
-      {enabled && inMaintenanceWindow && (
-        <div className="p-3 rounded-lg bg-[var(--dpf-success)]/10 border border-[var(--dpf-success)]/30 text-sm text-[var(--dpf-text)]">
-          Currently in maintenance window — next scheduled check: {" "}
-          {nextScheduledCheckAt ? (
-            <>
-              <LocalTime className="font-mono" value={nextScheduledCheckAt} />
-              <span>. If an update is still available, it can start then.</span>
-            </>
-          ) : (
-            <>
-              <span className="font-mono">pending scheduler tick</span>
-              <span>. If an update is still available, it can start then.</span>
-            </>
-          )}
+      <section
+        className={`p-4 rounded-lg border space-y-2 ${operatorStateClass(operatorState.tone)}`}
+        data-operator-upgrade-state={operatorState.key}
+        aria-labelledby="self-upgrade-operator-state"
+      >
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <h2
+              id="self-upgrade-operator-state"
+              className="text-base font-semibold text-[var(--dpf-text)]"
+            >
+              {operatorState.headline}
+            </h2>
+            <p className="text-sm text-[var(--dpf-muted)]">{operatorState.detail}</p>
+          </div>
+          <div className="shrink-0 rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface)] px-3 py-1.5 text-sm font-medium text-[var(--dpf-text)]">
+            {operatorState.actionLabel}
+          </div>
         </div>
-      )}
+      </section>
 
       {enabled && showActivity && (
         <div
@@ -619,200 +707,219 @@ export default function SelfUpgradeClient({
         </div>
       )}
 
-      <div
-        className="p-3 rounded-lg bg-[var(--dpf-surface-1)] border border-[var(--dpf-border)] space-y-1"
-        data-platform-version={platformVersion.version}
-      >
-        <div className="text-xs text-[var(--dpf-muted)]">
-          <span className="font-medium text-[var(--dpf-text)]">Platform version:</span>{" "}
-          <span className="font-mono text-[var(--dpf-text)]">
-            v{platformVersion.version}
-          </span>
-        </div>
-        <div className="text-[11px] text-[var(--dpf-muted)]">
-          build{" "}
-          {platformVersion.gitSha || platformVersion.imageVersion?.raw ? (
-            <span className="font-mono">
-              {shortSha(platformVersion.gitSha ?? platformVersion.imageVersion?.raw ?? null)}
+      <details className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)]">
+        <summary className="cursor-pointer px-3 py-2 text-sm font-medium text-[var(--dpf-text)]">
+          Technical details
+        </summary>
+        <div
+          className="p-3 border-t border-[var(--dpf-border)] space-y-1"
+          data-platform-version={platformVersion.version}
+        >
+          <div className="text-xs text-[var(--dpf-muted)]">
+            <span className="font-medium text-[var(--dpf-text)]">Platform version:</span>{" "}
+            <span className="font-mono text-[var(--dpf-text)]">
+              v{platformVersion.version}
             </span>
-          ) : (
-            <span className="font-mono">dev (unbuilt)</span>
-          )}
-          {platformVersion.imageVersion?.source && (
-            <span className="ml-1">
-              ({sourceLabel(platformVersion.imageVersion.source)})
-            </span>
-          )}
-          {platformVersion.buildDate && (
-            <span className="ml-1">
-              · built <LocalTime value={platformVersion.buildDate} />
-            </span>
-          )}
-        </div>
-        {enabled && (
-          <>
-            <div className="text-xs text-[var(--dpf-muted)]">
-              <span className="font-medium text-[var(--dpf-text)]">Deployed:</span>{" "}
-              {deployedSha ? (
-                <>
-                  <span className="font-mono">{deployedSha}</span>
-                  {deployedShaSource && deployedShaSource !== "unknown" && (
-                    <span className="ml-2 text-[var(--dpf-muted)]">
-                      ({sourceLabel(deployedShaSource)})
-                    </span>
-                  )}
-                </>
-              ) : (
-                <span className="font-mono">unknown</span>
+          </div>
+          <div className="text-[11px] text-[var(--dpf-muted)]">
+            build{" "}
+            {platformVersion.gitSha || platformVersion.imageVersion?.raw ? (
+              <span className="font-mono">
+                {shortSha(platformVersion.gitSha ?? platformVersion.imageVersion?.raw ?? null)}
+              </span>
+            ) : (
+              <span className="font-mono">dev (unbuilt)</span>
+            )}
+            {platformVersion.imageVersion?.source && (
+              <span className="ml-1">
+                ({sourceLabel(platformVersion.imageVersion.source)})
+              </span>
+            )}
+            {platformVersion.buildDate && (
+              <span className="ml-1">
+                · built <LocalTime value={platformVersion.buildDate} />
+              </span>
+            )}
+          </div>
+          {enabled && (
+            <>
+              <div className="text-xs text-[var(--dpf-muted)]">
+                <span className="font-medium text-[var(--dpf-text)]">Deployed:</span>{" "}
+                {deployedSha ? (
+                  <>
+                    <span className="font-mono">{deployedSha}</span>
+                    {deployedShaSource && deployedShaSource !== "unknown" && (
+                      <span className="ml-2 text-[var(--dpf-muted)]">
+                        ({sourceLabel(deployedShaSource)})
+                      </span>
+                    )}
+                  </>
+                ) : (
+                  <span className="font-mono">unknown</span>
+                )}
+              </div>
+              <div className="text-xs text-[var(--dpf-muted)]">
+                <span className="font-medium text-[var(--dpf-text)]">Target:</span>{" "}
+                <span className="font-mono">{targetSha ?? "unknown"}</span>
+              </div>
+              {!upgradeInFlight && isFresh && (
+                <div className="text-xs text-[var(--dpf-success)]" data-up-to-date="true">
+                  Up to date
+                  {deployedSha &&
+                    targetSha &&
+                    deployedSha.toLowerCase() !== targetSha.toLowerCase() && (
+                      <span className="ml-1 text-[var(--dpf-muted)]">
+                        — the running build already contains the target; the
+                        Deployed id is the merge build that absorbed it, so the two
+                        SHAs differ by design.
+                      </span>
+                    )}
+                </div>
               )}
-            </div>
-            <div className="text-xs text-[var(--dpf-muted)]">
-              <span className="font-medium text-[var(--dpf-text)]">Target:</span>{" "}
-              <span className="font-mono">{targetSha ?? "unknown"}</span>
-            </div>
-            {isFresh && (
-              <div className="text-xs text-[var(--dpf-success)]" data-up-to-date="true">
-                Up to date
-                {deployedSha &&
-                  targetSha &&
-                  deployedSha.toLowerCase() !== targetSha.toLowerCase() && (
-                    <span className="ml-1 text-[var(--dpf-muted)]">
-                      — the running build already contains the target; the
-                      Deployed id is the merge build that absorbed it, so the two
-                      SHAs differ by design.
-                    </span>
-                  )}
-              </div>
-            )}
-            {!isFresh && targetSha && deployedShaSource === "content-hash" && (
-              <div className="text-xs text-[var(--dpf-warning)]">
-                This image wasn&apos;t stamped with a git commit, so it
-                can&apos;t be compared to the upgrade target. Published releases
-                are stamped automatically by CI; for a local build, rebuild with{" "}
-                <span className="font-mono">scripts/build-images.sh</span>{" "}
-                (<span className="font-mono">build-images.ps1</span> on Windows).
-              </div>
-            )}
-            {!isFresh && targetSha && deployedShaSource !== "content-hash" && (
-              <div className="text-xs text-[var(--dpf-warning)]">Update available</div>
-            )}
-            {/* At-a-glance scope of the available update, so "how big / what
+              {!isFresh && targetSha && deployedShaSource === "content-hash" && (
+                <div className="text-xs text-[var(--dpf-warning)]">
+                  This image wasn&apos;t stamped with a git commit, so it
+                  can&apos;t be compared to the upgrade target. Published releases
+                  are stamped automatically by CI; for a local build, rebuild with{" "}
+                  <span className="font-mono">scripts/build-images.sh</span>{" "}
+                  (<span className="font-mono">build-images.ps1</span> on Windows).
+                </div>
+              )}
+              {!upgradeInFlight && !isFresh && targetSha && deployedShaSource !== "content-hash" && (
+                <div className="text-xs text-[var(--dpf-warning)]">Update available</div>
+              )}
+              {/* At-a-glance scope of the available update, so "how big / what
                 kind" is answered on the banner without opening the elaborate
                 "What's in this update?" panel below. Auto-generated on load
                 (page.tsx) and cached; renders only when the summary resolved. */}
-            {!isFresh &&
-              targetSha &&
-              deployedShaSource !== "content-hash" &&
-              initialImpactSummary?.ok && (
-                <div className="mt-1 space-y-1" data-update-glance="true">
-                  <UpgradeScopeRibbon
-                    surface="available"
-                    counts={initialImpactSummary.summary.counts}
-                    headline={initialImpactSummary.summary.phrased?.headline ?? null}
-                  />
-                </div>
-              )}
-            {!isFresh &&
-              targetSha &&
-              releaseBatch?.applicable &&
-              !releaseBatch.eligible && (
-                <div className="text-xs text-[var(--dpf-muted)]" data-release-batch="waiting">
-                  Batching updates:{" "}
-                  {releaseBatch.pendingCount ?? "?"} of {releaseBatch.minPendingPrs} merged
-                  updates accumulated. Routine upgrades deploy in batches so the portal
-                  isn&apos;t paused for every change; &quot;Upgrade now&quot; deploys them
-                  immediately.
-                </div>
-              )}
-          </>
-        )}
-      </div>
-
-      {enabled && (
-        <div
-          className="p-3 rounded-lg bg-[var(--dpf-surface-1)] border border-[var(--dpf-border)] text-xs"
-          data-window-configured={windowConfigured ? "true" : "false"}
-        >
-          <span className="font-medium text-[var(--dpf-text)]">Schedule:</span>{" "}
-          {blackoutUntil ? (
-            <span className="text-[var(--dpf-warning)]" data-blackout="true">
-              Scheduled upgrades paused
-              {blackoutName ? (
-                <>
-                  {" "}— blackout{" "}
-                  <span className="font-medium text-[var(--dpf-text)]">{blackoutName}</span>
-                </>
-              ) : null}{" "}
-              until <LocalTime className="font-mono" value={blackoutUntil} />. They resume
-              automatically; use Emergency override to run now.
-            </span>
-          ) : windowSource === "needs-timezone" ? (
-            <span className="text-[var(--dpf-warning)]" data-window-source="needs-timezone">
-              Your business runs 24/7. Set your timezone in{" "}
-              <a className="underline" href="/storefront/settings/operations">
-                Settings → Operating Hours
-              </a>{" "}
-              so upgrades can run automatically overnight, or choose a maintenance window.
-            </span>
-          ) : !windowConfigured ? (
-            <span className="text-[var(--dpf-warning)]">
-              No maintenance window configured — scheduled upgrades will not run
-              on their own. Use Emergency override to run now.
-            </span>
-          ) : inMaintenanceWindow ? (
-            <span className="text-[var(--dpf-success)]">
-              In maintenance window now — next scheduled check: {" "}
-              {nextScheduledCheckAt ? (
-                <>
-                  <LocalTime className="font-mono" value={nextScheduledCheckAt} />
-                  <span>.</span>
-                </>
-              ) : (
-                <>
-                  <span className="font-mono">pending scheduler tick</span>
-                  <span>.</span>
-                </>
-              )}
-            </span>
-          ) : nextWindowStart ? (
-            <span className="text-[var(--dpf-muted)]">
-              Next maintenance window:{" "}
-              <LocalTime className="font-mono" value={nextWindowStart} /> —
-              {nextScheduledCheckAt ? (
-                <>
-                  {" "}next scheduled check: {" "}
-                  <LocalTime className="font-mono" value={nextScheduledCheckAt} />.
-                </>
-              ) : (
-                " upgrades are evaluated hourly."
-              )}
-            </span>
-          ) : (
-            <span className="text-[var(--dpf-muted)]">
-              Maintenance window configured.
-            </span>
-          )}
-          {windowSource === "auto-overnight" && autoWindowSummary && (
-            <div className="mt-1 text-[var(--dpf-muted)]" data-window-source="auto-overnight">
-              Your business runs 24/7, so upgrades run overnight (around{" "}
-              <span className="font-medium text-[var(--dpf-text)]">{autoWindowSummary}</span>
-              {windowTimezone ? ` ${windowTimezone}` : ""}).
-            </div>
-          )}
-          {windowTimezone && (
-            <div className="mt-1 text-[var(--dpf-muted)]" data-window-timezone={windowTimezone}>
-              Times shown in <span className="font-medium text-[var(--dpf-text)]">{windowTimezone}</span> — your
-              operating-hours timezone. Change it in{" "}
-              <a className="underline" href="/storefront/settings/operations">
-                Settings → Operating Hours
-              </a>
-              .
-            </div>
+              {!upgradeInFlight &&
+                !isFresh &&
+                targetSha &&
+                deployedShaSource !== "content-hash" &&
+                initialImpactSummary?.ok && (
+                  <div className="mt-1 space-y-1" data-update-glance="true">
+                    <UpgradeScopeRibbon
+                      surface="available"
+                      counts={initialImpactSummary.summary.counts}
+                      headline={initialImpactSummary.summary.phrased?.headline ?? null}
+                    />
+                  </div>
+                )}
+              {!upgradeInFlight &&
+                !isFresh &&
+                targetSha &&
+                releaseBatch?.applicable &&
+                !releaseBatch.eligible && (
+                  <div className="text-xs text-[var(--dpf-muted)]" data-release-batch="waiting">
+                    Batching updates:{" "}
+                    {releaseBatch.pendingCount ?? "?"} of {releaseBatch.minPendingPrs} merged
+                    updates accumulated. Routine upgrades deploy in batches so the portal
+                    isn&apos;t paused for every change; &quot;Upgrade now&quot; deploys them
+                    immediately.
+                  </div>
+                )}
+            </>
           )}
         </div>
+      </details>
+
+      {enabled && (
+        <details
+          className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)]"
+          data-window-configured={windowConfigured ? "true" : "false"}
+        >
+          <summary className="cursor-pointer px-3 py-2 text-sm font-medium text-[var(--dpf-text)]">
+            Timing and safety
+          </summary>
+          <div className="p-3 border-t border-[var(--dpf-border)] text-xs">
+            <span className="font-medium text-[var(--dpf-text)]">Schedule:</span>{" "}
+            {blackoutUntil ? (
+              <span className="text-[var(--dpf-warning)]" data-blackout="true">
+                Scheduled upgrades paused
+                {blackoutName ? (
+                  <>
+                    {" "}— blackout{" "}
+                    <span className="font-medium text-[var(--dpf-text)]">{blackoutName}</span>
+                  </>
+                ) : null}{" "}
+                until <LocalTime className="font-mono" value={blackoutUntil} />. They resume
+                automatically; use Emergency override to run now.
+              </span>
+            ) : windowSource === "needs-timezone" ? (
+              <span className="text-[var(--dpf-warning)]" data-window-source="needs-timezone">
+                Your business runs 24/7. Set your timezone in{" "}
+                <a className="underline" href="/storefront/settings/operations">
+                  Settings → Operating Hours
+                </a>{" "}
+                so upgrades can run automatically overnight, or choose a maintenance window.
+              </span>
+            ) : !windowConfigured ? (
+              <span className="text-[var(--dpf-warning)]">
+                No maintenance window configured — scheduled upgrades will not run
+                on their own. Use Emergency override to run now.
+              </span>
+            ) : inMaintenanceWindow ? (
+              <span className="text-[var(--dpf-success)]">
+                In maintenance window now — next scheduled check: {" "}
+                {nextScheduledCheckAt ? (
+                  <>
+                    <LocalTime className="font-mono" value={nextScheduledCheckAt} />
+                    <span>.</span>
+                  </>
+                ) : (
+                  <>
+                    <span className="font-mono">pending scheduler tick</span>
+                    <span>.</span>
+                  </>
+                )}
+              </span>
+            ) : nextWindowStart ? (
+              <span className="text-[var(--dpf-muted)]">
+                Next maintenance window:{" "}
+                <LocalTime className="font-mono" value={nextWindowStart} /> —
+                {nextScheduledCheckAt ? (
+                  <>
+                    {" "}next scheduled check: {" "}
+                    <LocalTime className="font-mono" value={nextScheduledCheckAt} />.
+                  </>
+                ) : (
+                  " upgrades are evaluated hourly."
+                )}
+              </span>
+            ) : (
+              <span className="text-[var(--dpf-muted)]">
+                Maintenance window configured.
+              </span>
+            )}
+            {windowSource === "auto-overnight" && autoWindowSummary && (
+              <div className="mt-1 text-[var(--dpf-muted)]" data-window-source="auto-overnight">
+                Your business runs 24/7, so upgrades run overnight (around{" "}
+                <span className="font-medium text-[var(--dpf-text)]">{autoWindowSummary}</span>
+                {windowTimezone ? ` ${windowTimezone}` : ""}).
+              </div>
+            )}
+            {windowTimezone && (
+              <div className="mt-1 text-[var(--dpf-muted)]" data-window-timezone={windowTimezone}>
+                Times shown in <span className="font-medium text-[var(--dpf-text)]">{windowTimezone}</span> — your
+                operating-hours timezone. Change it in{" "}
+                <a className="underline" href="/storefront/settings/operations">
+                  Settings → Operating Hours
+                </a>
+                .
+              </div>
+            )}
+          </div>
+        </details>
       )}
 
-      <UpgradeImpactPanel enabled={enabled} initialSummary={initialImpactSummary} />
+      <details className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)]">
+        <summary className="cursor-pointer px-3 py-2 text-sm font-medium text-[var(--dpf-text)]">
+          What changed
+        </summary>
+        <div className="border-t border-[var(--dpf-border)] p-3">
+          <UpgradeImpactPanel enabled={enabled} initialSummary={initialImpactSummary} />
+        </div>
+      </details>
 
       {enabled && !latestRun && (
         <div className="p-3 rounded-lg bg-[var(--dpf-surface-1)] border border-[var(--dpf-border)] text-xs text-[var(--dpf-muted)]">
@@ -1028,98 +1135,103 @@ export default function SelfUpgradeClient({
       )}
 
       {history && history.length > 0 && (
-        <div className="rounded-lg border border-[var(--dpf-border)] overflow-hidden">
-          <div className="px-3 py-2 border-b border-[var(--dpf-border)] bg-[var(--dpf-surface-1)]">
-            <span className="text-xs font-medium text-[var(--dpf-text)]">Run History</span>
-          </div>
-          <table className="w-full text-xs">
-            <thead>
-              <tr className="text-[var(--dpf-muted)] text-left">
-                <th className="px-3 py-1.5 font-medium">Status</th>
-                <th className="px-3 py-1.5 font-medium">Run</th>
-                <th className="px-3 py-1.5 font-medium">Change</th>
-                <th className="px-3 py-1.5 font-medium text-right">When</th>
-              </tr>
-            </thead>
-            <tbody>
-              {history.map((run) => {
-                // Surface WHY a run didn't install — the reason is persisted but
-                // was never shown per row (skipped/failed rows were a bare badge).
-                // Skips carry a structured reason; failures carry a classified log.
-                const skip =
-                  run.status === "skipped" ? describeSkipReason(run.reason) : null;
-                const failReason =
-                  run.status === "failed" ? conciseFailureReason(run.failureLog) : null;
-                const reasonText = skip ? `${skip.title} — ${skip.detail}` : failReason;
-                return (
-                  <Fragment key={run.runId}>
-                    <tr
-                      className="border-t border-[var(--dpf-border)]"
-                      data-run-id={run.runId}
-                    >
-                      <td className="px-3 py-2 w-24 shrink-0">
-                        <StatusBadge
-                          domain="selfUpgradeRun"
-                          status={run.status}
-                          label={statusLabel(run.status)}
-                          variant="soft"
-                        />
-                      </td>
-                      <td className="px-3 py-2 font-mono text-[var(--dpf-muted)]">{run.runId}</td>
-                      <td className="px-3 py-2 text-[var(--dpf-muted)]">
-                        {run.currentSha && run.targetSha ? (
-                          <>
-                            <span className="font-mono" title={run.currentSha}>
-                              {shortSha(run.currentSha)}
+        <details className="rounded-lg border border-[var(--dpf-border)] overflow-hidden">
+          <summary className="cursor-pointer px-3 py-2 text-sm font-medium text-[var(--dpf-text)]">
+            Run history and logs
+          </summary>
+          <div className="border-t border-[var(--dpf-border)]">
+            <div className="px-3 py-2 border-b border-[var(--dpf-border)] bg-[var(--dpf-surface-1)]">
+              <span className="text-xs font-medium text-[var(--dpf-text)]">Run History</span>
+            </div>
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="text-[var(--dpf-muted)] text-left">
+                  <th className="px-3 py-1.5 font-medium">Status</th>
+                  <th className="px-3 py-1.5 font-medium">Run</th>
+                  <th className="px-3 py-1.5 font-medium">Change</th>
+                  <th className="px-3 py-1.5 font-medium text-right">When</th>
+                </tr>
+              </thead>
+              <tbody>
+                {history.map((run) => {
+                  // Surface WHY a run didn't install — the reason is persisted but
+                  // was never shown per row (skipped/failed rows were a bare badge).
+                  // Skips carry a structured reason; failures carry a classified log.
+                  const skip =
+                    run.status === "skipped" ? describeSkipReason(run.reason) : null;
+                  const failReason =
+                    run.status === "failed" ? conciseFailureReason(run.failureLog) : null;
+                  const reasonText = skip ? `${skip.title} — ${skip.detail}` : failReason;
+                  return (
+                    <Fragment key={run.runId}>
+                      <tr
+                        className="border-t border-[var(--dpf-border)]"
+                        data-run-id={run.runId}
+                      >
+                        <td className="px-3 py-2 w-24 shrink-0">
+                          <StatusBadge
+                            domain="selfUpgradeRun"
+                            status={run.status}
+                            label={statusLabel(run.status)}
+                            variant="soft"
+                          />
+                        </td>
+                        <td className="px-3 py-2 font-mono text-[var(--dpf-muted)]">{run.runId}</td>
+                        <td className="px-3 py-2 text-[var(--dpf-muted)]">
+                          {run.currentSha && run.targetSha ? (
+                            <>
+                              <span className="font-mono" title={run.currentSha}>
+                                {shortSha(run.currentSha)}
+                              </span>
+                              {" → "}
+                              <span className="font-mono" title={run.targetSha}>
+                                {shortSha(run.targetSha)}
+                              </span>
+                            </>
+                          ) : null}
+                        </td>
+                        <td className="px-3 py-2 text-right text-[var(--dpf-muted)] whitespace-nowrap align-top">
+                          <LocalTime value={run.startedAt ?? run.createdAt} />
+                          {run.startedAt && run.completedAt && (
+                            <span className="ml-1 opacity-70">
+                              · {formatDuration(run.startedAt, run.completedAt)}
                             </span>
-                            {" → "}
-                            <span className="font-mono" title={run.targetSha}>
-                              {shortSha(run.targetSha)}
-                            </span>
-                          </>
-                        ) : null}
-                      </td>
-                      <td className="px-3 py-2 text-right text-[var(--dpf-muted)] whitespace-nowrap align-top">
-                        <LocalTime value={run.startedAt ?? run.createdAt} />
-                        {run.startedAt && run.completedAt && (
-                          <span className="ml-1 opacity-70">
-                            · {formatDuration(run.startedAt, run.completedAt)}
-                          </span>
-                        )}
-                      </td>
-                    </tr>
-                    {reasonText && (
-                      <tr data-run-reason-for={run.runId}>
-                        <td />
-                        <td
-                          colSpan={3}
-                          className="px-3 pb-2 pt-0 text-[11px] text-[var(--dpf-muted)] align-top"
-                        >
-                          <span
-                            className="opacity-80"
-                            title={run.failureLog ?? run.reason ?? undefined}
-                          >
-                            {reasonText}
-                          </span>
+                          )}
                         </td>
                       </tr>
-                    )}
-                  </Fragment>
-                );
-              })}
-            </tbody>
-          </table>
-          {historyNextCursor != null && (
-            <div className="px-3 py-2 border-t border-[var(--dpf-border)]">
-              <button
-                type="button"
-                className="text-xs text-[var(--dpf-accent)] hover:underline"
-              >
-                Load more
-              </button>
-            </div>
-          )}
-        </div>
+                      {reasonText && (
+                        <tr data-run-reason-for={run.runId}>
+                          <td />
+                          <td
+                            colSpan={3}
+                            className="px-3 pb-2 pt-0 text-[11px] text-[var(--dpf-muted)] align-top"
+                          >
+                            <span
+                              className="opacity-80"
+                              title={run.failureLog ?? run.reason ?? undefined}
+                            >
+                              {reasonText}
+                            </span>
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
+                  );
+                })}
+              </tbody>
+            </table>
+            {historyNextCursor != null && (
+              <div className="px-3 py-2 border-t border-[var(--dpf-border)]">
+                <button
+                  type="button"
+                  className="text-xs text-[var(--dpf-accent)] hover:underline"
+                >
+                  Load more
+                </button>
+              </div>
+            )}
+          </div>
+        </details>
       )}
     </div>
   );

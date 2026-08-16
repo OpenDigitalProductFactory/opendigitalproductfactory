@@ -186,6 +186,42 @@ describe("SelfUpgradeClient – enabled", () => {
 // ─── Running ──────────────────────────────────────────────────────────────────
 
 describe("SelfUpgradeClient – running", () => {
+  it("leads an in-flight upgrade with one operator status and no competing availability label", () => {
+    const html = renderToStaticMarkup(
+      <SelfUpgradeClient
+        {...baseStatus}
+        inMaintenanceWindow={true}
+        latestRun={makeRun("running")}
+      />,
+    );
+    expect(html).toContain('data-operator-upgrade-state="running"');
+    expect(html).toContain("No action needed");
+    expect(html).toContain("The platform is installing an update");
+    expect(html).not.toContain("Update available");
+    expect(html).not.toContain("Up to date");
+  });
+
+  it("keeps technical build identity behind a technical details disclosure", () => {
+    const html = renderToStaticMarkup(
+      <SelfUpgradeClient {...baseStatus} latestRun={makeRun("running")} />,
+    );
+    const technicalDetails = html.indexOf("Technical details");
+    const platformVersion = html.indexOf("Platform version:");
+    expect(technicalDetails).toBeGreaterThanOrEqual(0);
+    expect(platformVersion).toBeGreaterThan(technicalDetails);
+  });
+
+  it("renders schedule status once so timing does not compete with itself", () => {
+    const html = renderToStaticMarkup(
+      <SelfUpgradeClient
+        {...baseStatus}
+        inMaintenanceWindow={true}
+        latestRun={makeRun("running")}
+      />,
+    );
+    expect(html.match(/next scheduled check/g)?.length).toBe(1);
+  });
+
   it("shows queued state as accepted work instead of an idle trigger", () => {
     const html = renderToStaticMarkup(
       <SelfUpgradeClient
