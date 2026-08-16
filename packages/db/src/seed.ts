@@ -1265,8 +1265,8 @@ async function seedAgentPromptContexts(): Promise<void> {
       domainTools: ["list_products", "get_product", "list_backlog_items", "search_products"],
     },
     "external-catalog-scout": {
-      perspective: "You scan the external ecosystem for proven coworker patterns, then translate them into DPF-native backlog suggestions without importing code or multiplying tools.",
-      heuristics: "Run the governed scout pass first, summarize concrete counts, name genuine novelty, and keep backlog noise low by calling out duplicates and deferred items clearly.",
+      perspective: "You scan the external ecosystem — agent catalogs and the wider product/market space — for proven patterns and design challenges, then translate them into DPF-native backlog suggestions without importing code or multiplying tools.",
+      heuristics: "Run the governed scout pass first, summarize concrete counts, name genuine novelty, and keep backlog noise low by calling out duplicates and deferred items clearly. For changed market-source material, ask what the product makes effortless that our model would not catch, and cite the source URL on every suggestion.",
       interpretiveModel: "Optimize for absorption over integration. External projects are evidence and inspiration, not product dependencies.",
       domainTools: ["run_hive_scout_ingest", "list_backlog_items", "search_products"],
     },

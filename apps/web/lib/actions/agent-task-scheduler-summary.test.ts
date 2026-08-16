@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { extractDiscoveryTriageSummary } from "./agent-task-scheduler-summary";
+import {
+  extractDiscoveryTriageSummary,
+  extractHiveScoutSummary,
+} from "./agent-task-scheduler-summary";
 
 describe("extractDiscoveryTriageSummary wrapped tool results", () => {
   it("reads triage metrics from MCP tool-result payloads wrapped under data", () => {
@@ -39,5 +42,51 @@ describe("extractDiscoveryTriageSummary wrapped tool results", () => {
     expect(summary?.compactStatus).toContain("processed=3");
     expect(summary?.compactStatus).toContain("escalations=2");
     expect(summary?.payload?.metrics).toMatchObject({ decisionsCreated: 3 });
+  });
+});
+
+describe("extractHiveScoutSummary market-aperture metrics (BI-B8E4317D)", () => {
+  const baseData = {
+    catalogEntries: 112,
+    gaps: 32,
+    created: 0,
+    duplicates: 32,
+    needsReview: 0,
+  };
+
+  it("surfaces market-source counts in the payload and compact status", () => {
+    const summary = extractHiveScoutSummary([
+      {
+        name: "run_hive_scout_ingest",
+        args: {},
+        result: {
+          success: true,
+          message: "ok",
+          data: {
+            ...baseData,
+            marketSources: { enabled: true, attempted: 10, fetched: 9, changed: 4, failed: 1, material: [], failures: [] },
+          },
+        },
+      },
+    ] as never);
+
+    expect(summary?.payload?.metrics).toMatchObject({
+      marketSourcesAttempted: 10,
+      marketSourcesFetched: 9,
+      marketSourcesChanged: 4,
+      marketSourcesFailed: 1,
+    });
+    expect(summary?.compactStatus).toContain("market-fetched=9/10");
+    expect(summary?.compactStatus).toContain("market-changed=4");
+    expect(summary?.compactStatus).toContain("market-failed=1");
+  });
+
+  it("stays backward compatible with runs that predate the market pass", () => {
+    const summary = extractHiveScoutSummary([
+      { name: "run_hive_scout_ingest", args: {}, result: { success: true, message: "ok", data: baseData } },
+    ] as never);
+
+    expect(summary?.payload?.metrics).not.toHaveProperty("marketSourcesAttempted");
+    expect(summary?.compactStatus).not.toContain("market-fetched");
   });
 });
