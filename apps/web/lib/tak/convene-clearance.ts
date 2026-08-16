@@ -27,7 +27,40 @@
 // Refusing at the convene is the cheaper and more honest fix: an over-cleared
 // peer is never in the room, so there is no prose channel to police. The tool
 // gate stays as defence in depth behind it.
-import { coerceDataSensitivity, type PrincipalSensitivity } from "@dpf/db/principal-sensitivity";
+import {
+  coerceDataSensitivity,
+  normalizePrincipalSensitivities,
+  type PrincipalSensitivity,
+} from "@dpf/db/principal-sensitivity";
+
+/**
+ * Resolve the asking human's clearance from whatever their Principal row holds.
+ *
+ * Delegates to `normalizePrincipalSensitivities` — the SAME function the
+ * principal-linking and seed paths use — so the convene clamp cannot drift from
+ * the clearance a principal is actually granted. The first version of this
+ * clamp hardcoded `["public", "internal"]`, copied from the room-access
+ * precedent, which produced an inversion on a fresh install: a properly LINKED
+ * employee with no explicit clearance resolves to `["public"]`, while an
+ * unlinked user got the looser `["public", "internal"]`. Being linked made you
+ * more restricted than being unknown, and the looser branch was the default —
+ * the wrong direction for a disclosure clamp.
+ *
+ * A stored value containing an unrecognised level makes
+ * `normalizePrincipalSensitivities` throw. Here that must not become a 500 on
+ * the convene path, and it must not widen access, so it resolves to an EMPTY
+ * clearance — which denies every sensitivity including "public". Corrupt
+ * clearance data refuses everyone rather than guessing.
+ */
+export function clearanceForPrincipal(
+  stored: readonly string[] | null | undefined,
+): PrincipalSensitivity[] {
+  try {
+    return normalizePrincipalSensitivities(stored);
+  } catch {
+    return [];
+  }
+}
 
 export type ConveneClearanceDecision =
   | { permitted: true }
