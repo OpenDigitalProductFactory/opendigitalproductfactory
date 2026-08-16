@@ -14,7 +14,47 @@ import {
   MAX_LOCAL_CONTEXT_TOKENS,
   clampServedContextTokens,
   recommendServedContextTokens,
+  expectedDigestForModel,
+  tierRequiresDigestPin,
+  LOCAL_MODEL_TIERS,
 } from "./local-model-policy";
+
+describe("model integrity pinning (BI-73E9A282)", () => {
+  // A HuggingFace ref names a FILE, not an immutable revision, and
+  // `docker model pull` accepts no flags — so a mutable upstream can change
+  // under a stable id. The digest is the only detection the platform can do.
+  it("every tier sourced outside the curated ai/ namespace pins a digest", () => {
+    const unpinned = LOCAL_MODEL_TIERS.filter(
+      (t) => tierRequiresDigestPin(t) && !t.expectedDigest,
+    ).map((t) => t.model);
+    expect(unpinned).toEqual([]);
+  });
+
+  it("digests are full sha256 values, not truncated or bare hex", () => {
+    for (const tier of LOCAL_MODEL_TIERS) {
+      if (!tier.expectedDigest) continue;
+      expect(tier.expectedDigest).toMatch(/^sha256:[0-9a-f]{64}$/);
+    }
+  });
+
+  it("looks up the pinned digest by pull-form model id", () => {
+    expect(expectedDigestForModel("hf.co/ggml-org/Qwen3.8-27B-GGUF:Q4_K_M")).toBe(
+      "sha256:66c4f325bc71350f07fb2da4f92455553c7bbc8af5d7ee2095fbeac79b9e66c9",
+    );
+  });
+
+  it("returns null for curated ai/ tiers and for unknown ids", () => {
+    // ai/ tiers resolve through Docker Hub's content-addressed registry, which
+    // already pins bytes to a tag — no separate digest needed.
+    expect(expectedDigestForModel("ai/qwen3-coder")).toBeNull();
+    expect(expectedDigestForModel("ai/nonexistent-model")).toBeNull();
+  });
+
+  it("classifies which tiers require a pin", () => {
+    expect(tierRequiresDigestPin({ model: "ai/qwen3-coder", weightsGb: 16, label: "x" })).toBe(false);
+    expect(tierRequiresDigestPin({ model: "hf.co/org/repo:Q4", weightsGb: 1, label: "x" })).toBe(true);
+  });
+});
 
 describe("classifyLocalModelRole / isEmbeddingModelId", () => {
   it("classifies embedders", () => {
