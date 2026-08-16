@@ -96,6 +96,45 @@ export const COWORKER_SELF_TASKS: Record<string, CoworkerSelfTask> = {
     },
   },
 
+  // Finance Specialist reviews money health on a cadence (BI-090221E7). The
+  // /finance dashboard now says "unknown" out loud when the books are empty and
+  // flags pre-revenue burn — this self-task is the proactive half: the coworker
+  // looks at the same state and TELLS the owner what needs recording or
+  // attention instead of waiting to be asked. Read-and-report work: it records
+  // nothing on its own, so a weak model run degrades to a bland summary, never
+  // to invented business facts.
+  "finance-agent": {
+    title: "Review burn, revenue, and runway",
+    prompt: [
+      "You are running as a scheduled, autonomous task — no human is watching this",
+      "turn, so finish the work rather than asking questions.",
+      "",
+      "Goal: keep the owner ahead of their money position. Steps:",
+      "1. Review the real recorded finance state available to you (paid invoices,",
+      "   bills, expenses, bank balances, supplier commitments) using your read tools.",
+      "2. Report, in plain language addressed to the owner:",
+      "   - monthly burn and monthly revenue IF they are measurable from recorded",
+      "     data, saying what window they cover;",
+      "   - what is UNKNOWN and exactly what to record to make it known (e.g. 'no",
+      "     supplier bills are recorded, so burn is unknown — record your recurring",
+      "     supplier costs');",
+      "   - a clear flag when money is going out with no revenue recorded",
+      "     (pre-revenue with burn), including how many months of cash remain if",
+      "     that is computable.",
+      "3. Never present an absent number as zero, and never invent amounts — an",
+      "   honest 'unknown, here is what to record' is the deliverable when the",
+      "   books are empty.",
+    ].join("\n"),
+    routeContext: "/finance",
+    cadence: {
+      // Weekly (Wed) and twice-weekly (Mon+Thu) at 13:23 UTC — off-peak minute,
+      // deconflictCron shifts it on collision. Money review does not need daily
+      // cadence even for Assertive (BI-E962B9CD: prefer sub-daily by default).
+      balanced: "23 13 * * 3",
+      assertive: "23 13 * * 1,4",
+    },
+  },
+
   // Digital Product Estate Specialist keeps a current estate-posture knowledge
   // article on /inventory. This is a DISTINCT artifact from its existing
   // discovery-taxonomy-gap-triage-daily autonomy (that files backlog gaps; this

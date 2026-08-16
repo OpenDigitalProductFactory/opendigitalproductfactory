@@ -140,13 +140,28 @@ export default async function RuntimeHealthPage() {
   // Promise.all has produced unique-key 500s on this codebase before.
   const contextTracePromise = loadContextTraceHealth();
 
-  const [overviewResult, capabilityResult, queueSnapshots, jobEngineHealth, contextTraceHealth] =
+  // BI-E2CCFAC1: coworker turns are an activity class, not a build phase — this
+  // page covered only the five Build Studio phases, so a coworker routing
+  // dead-end was invisible here while every turn failed. Same read-only
+  // dry-run, projected per production coworker (incl. the payload-screening
+  // escalation ceiling).
+  const coworkerReachabilityPromise = import(
+    "@/lib/coworker-service-catalog/routing-reachability-preflight"
+  )
+    .then(({ computeCoworkerRoutingReachability }) => computeCoworkerRoutingReachability())
+    .catch(() => {
+      logRuntimeHealthReadFailure("coworker-reachability");
+      return null;
+    });
+
+  const [overviewResult, capabilityResult, queueSnapshots, jobEngineHealth, contextTraceHealth, coworkerReachability] =
     await Promise.all([
       overviewPromise,
       capabilityPromise,
       queuePromise,
       jobEnginePromise,
       contextTracePromise,
+      coworkerReachabilityPromise,
     ]);
   const overview: ModelSelectionOverview | null = overviewResult.value;
   const capabilityHealth: CapabilityServiceHealthProjection | null = capabilityResult.value;
@@ -380,6 +395,60 @@ export default async function RuntimeHealthPage() {
               </tbody>
             </table>
           </div>
+
+          {/* Coworker routing readiness (BI-E2CCFAC1) — coworker turns are an
+              activity class, not a build phase; without this section a coworker
+              routing dead-end never appeared on this page. */}
+          <h2 style={{ fontSize: 13, fontWeight: 700, color: "var(--dpf-text)", marginBottom: 10 }}>
+            Coworker routing
+          </h2>
+          {coworkerReachability === null ? (
+            <p style={{ fontSize: 12, color: "var(--dpf-muted)", marginBottom: 22 }}>
+              Coworker routing readiness is unavailable right now.
+            </p>
+          ) : (
+            <div
+              data-testid="coworker-routing-table-scroll"
+              style={{ overflowX: "auto", minWidth: 0, maxWidth: "100%", marginBottom: 22 }}
+            >
+              <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                <thead>
+                  <tr>
+                    <th style={th}>Coworker</th>
+                    <th style={th}>Data class</th>
+                    <th style={th}>Can route</th>
+                    <th style={th}>Why</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {coworkerReachability.map((c) => (
+                    <tr key={c.agentId}>
+                      <td style={td}>
+                        <div style={{ fontWeight: 600 }}>{c.displayName}</div>
+                        <div style={{ fontSize: 10, color: "var(--dpf-muted)", fontFamily: "var(--dpf-mono, monospace)" }}>{c.agentId}</div>
+                      </td>
+                      <td style={td}>
+                        {c.sensitivity}
+                        {c.escalated ? (
+                          <div style={{ fontSize: 10, color: "var(--dpf-muted)" }}>
+                            escalates to {c.escalated.sensitivity}
+                          </div>
+                        ) : null}
+                      </td>
+                      <td style={td}>
+                        {c.ready ? (
+                          <Chip bg="var(--dpf-state-success)" fg="var(--dpf-success)">Ready</Chip>
+                        ) : (
+                          <Chip bg={SEVERITY_STYLE.error.bg} fg={SEVERITY_STYLE.error.fg}>Blocked</Chip>
+                        )}
+                      </td>
+                      <td style={{ ...td, maxWidth: 420 }}>{c.reason}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
 
           {/* Mismatches & remediation */}
           <h2 style={{ fontSize: 13, fontWeight: 700, color: "var(--dpf-text)", marginBottom: 10 }}>

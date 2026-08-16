@@ -519,8 +519,10 @@ export async function runDimensionEval(
   // Reap stale "running" rows older than the guard window so they don't pile
   // up forever. The most common cause is an Inngest step timeout that cuts the
   // function off after callProvider() has fired but before the terminal
-  // endpointTestRun.update() runs. Treat these as failed so operators can see
-  // them in the test-run history rather than silently disappearing.
+  // endpointTestRun.update() runs — including runs cut off because the
+  // local-integration-ci lease reclaimed the GPU mid-run. Those runs never
+  // reached a verdict, so they are recorded as "incomplete", not "failed"
+  // (BI-91F0E312): a reaped run says nothing about the model.
   const reaped = await prisma.endpointTestRun.updateMany({
     where: {
       endpointId: providerId,
@@ -530,7 +532,7 @@ export async function runDimensionEval(
       startedAt: { lte: guardCutoff },
     },
     data: {
-      status: "failed",
+      status: "incomplete",
       completedAt: new Date(),
     },
   });
@@ -626,26 +628,42 @@ export async function runDimensionEval(
           },
         };
 
+  // BI-91F0E312: evalCount and profileConfidence are measurement bookkeeping.
+  // An inconclusive (deferred/infrastructure) cycle measured nothing — bumping
+  // them anyway inflates confidence in unmeasured scores AND dampens the
+  // exponential-smoothing weight of the next REAL measurement (computeNewScore
+  // weights by evalCount), which is how placeholder scores become sticky.
+  // lastEvalAt still stamps so the recency cooldown keeps eval churn off the
+  // GPU either way.
   await prisma.modelProfile.update({
     where: { providerId_modelId: { providerId, modelId } },
     data: {
       ...scoreUpdates,
       ...toolUseUpdate,
-      ...(hasRealScores ? { profileSource: "evaluated" as const } : {}),
-      profileConfidence: (currentEvalCount + 1) >= 5 ? "high" : "medium",
-      evalCount: { increment: 1 },
+      ...(hasRealScores
+        ? {
+            profileSource: "evaluated" as const,
+            profileConfidence: (currentEvalCount + 1) >= 5 ? "high" : "medium",
+            evalCount: { increment: 1 },
+          }
+        : {}),
       lastEvalAt: new Date(),
       ...(hasSevereDrift ? { modelStatus: "degraded" } : {}),
     },
   });
 
-  // Complete the test run record
+  // Complete the test run record. A cycle where nothing was measured is
+  // INCOMPLETE, and its avgScore must not be manufactured from carried-forward
+  // previous scores (BI-91F0E312).
+  const conclusiveDimensions = dimensions.filter((d) => !d.inconclusive);
   await prisma.endpointTestRun.update({
     where: { runId },
     data: {
-      status: "completed",
+      status: allInconclusive ? "incomplete" : "completed",
       completedAt: new Date(),
-      avgScore: dimensions.reduce((a, d) => a + d.rawScore, 0) / dimensions.length,
+      avgScore: conclusiveDimensions.length > 0
+        ? conclusiveDimensions.reduce((a, d) => a + d.rawScore, 0) / conclusiveDimensions.length
+        : null,
       results: {
         dimensions: dimensions.map((d) => ({
           dimension: d.dimension,

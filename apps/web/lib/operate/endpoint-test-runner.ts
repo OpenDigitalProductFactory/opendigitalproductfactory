@@ -15,14 +15,34 @@ import {
   type TestScenario,
 } from "./endpoint-test-registry";
 import { callProvider, type ChatMessage } from "@/lib/ai-inference";
+import { LocalProviderCapacityDeferredError } from "@/lib/routing/local-provider-capacity";
+
+/** A capacity deferral is the host declining to schedule, not the model failing. */
+export function isCapacityDeferral(err: unknown): boolean {
+  if (err instanceof LocalProviderCapacityDeferredError) return true;
+  const message = err instanceof Error ? err.message : String(err);
+  return /dispatch deferred|capacity reservation/i.test(message);
+}
 
 // ─── Types ───────────────────────────────────────────────────────────────────
+
+/**
+ * Probe outcomes distinguish a model that FAILED a capability check from a
+ * probe that never reached the model (BI-91F0E312). Capacity deferral — the
+ * local-integration-ci lease holding the GPU, including a lease claimed
+ * mid-run — is a scheduling fact about the host, not evidence about the model.
+ */
+export type ProbeOutcome = "passed" | "failed" | "deferred";
 
 export type ProbeRunResult = {
   probeId: string;
   category: string;
   name: string;
+  /** Back-compat alias of outcome === "passed"; deferred reads as false here. */
   pass: boolean;
+  /** True/false verdicts only; null when the probe never reached the model. */
+  passed: boolean | null;
+  outcome: ProbeOutcome;
   reason: string;
 };
 
@@ -30,7 +50,9 @@ export type ScenarioRunResult = {
   scenarioId: string;
   taskType: string;
   name: string;
+  /** Back-compat alias of outcome === "passed"; deferred reads as false here. */
   passed: boolean;
+  outcome: ProbeOutcome;
   assertionResults: Array<{ description: string; passed: boolean; detail: string }>;
   orchestratorScore: number | null;
   response: string;
@@ -108,9 +130,26 @@ async function runProbe(
     const toolCalls = result.toolCalls as unknown[] | undefined;
 
     const assertionResult = probe.assert(result.content, toolCalls);
-    return { probeId: probe.id, category: probe.category, name: probe.name, ...assertionResult };
+    return {
+      probeId: probe.id, category: probe.category, name: probe.name,
+      ...assertionResult,
+      passed: assertionResult.pass,
+      outcome: assertionResult.pass ? "passed" as const : "failed" as const,
+    };
   } catch (err) {
-    return { probeId: probe.id, category: probe.category, name: probe.name, pass: false, reason: `Error: ${err instanceof Error ? err.message : "unknown"}` };
+    const message = err instanceof Error ? err.message : "unknown";
+    if (isCapacityDeferral(err)) {
+      return {
+        probeId: probe.id, category: probe.category, name: probe.name,
+        pass: false, passed: null, outcome: "deferred",
+        reason: `Deferred: ${message}`,
+      };
+    }
+    return {
+      probeId: probe.id, category: probe.category, name: probe.name,
+      pass: false, passed: false, outcome: "failed",
+      reason: `Error: ${message}`,
+    };
   }
 }
 
@@ -171,13 +210,24 @@ async function runScenario(
     return {
       scenarioId: scenario.id, taskType: scenario.taskType, name: scenario.name,
       passed: allPassed,
+      outcome: allPassed ? "passed" : "failed",
       assertionResults: assertionResults.map((r) => ({ description: r.assertion.description, passed: r.passed, detail: r.detail })),
       orchestratorScore, response: result.content,
     };
   } catch (err) {
+    const message = err instanceof Error ? err.message : "unknown";
+    if (isCapacityDeferral(err)) {
+      return {
+        scenarioId: scenario.id, taskType: scenario.taskType, name: scenario.name,
+        passed: false, outcome: "deferred",
+        assertionResults: [{ description: "Execution", passed: false, detail: `Deferred: ${message}` }],
+        orchestratorScore: null, response: "",
+      };
+    }
     return {
       scenarioId: scenario.id, taskType: scenario.taskType, name: scenario.name,
-      passed: false, assertionResults: [{ description: "Execution", passed: false, detail: `Error: ${err instanceof Error ? err.message : "unknown"}` }],
+      passed: false, outcome: "failed",
+      assertionResults: [{ description: "Execution", passed: false, detail: `Error: ${message}` }],
       orchestratorScore: null, response: "",
     };
   }
@@ -285,12 +335,20 @@ export async function runEndpointTests(opts: {
       }
     }
 
-    // Update this specific ModelProfile with evidence
-    const instructionFollowing = mapProbeResultsToInstructionFollowing(probePassMap);
-    const codeScores = scenarioResults.filter((s) => s.taskType === "code-gen" && s.orchestratorScore !== null).map((s) => s.orchestratorScore!);
-    const codingCapability = mapScoresToCodingCapability(codeScores);
+    // BI-91F0E312: a run with any deferred probe/scenario is INCOMPLETE — it
+    // never observed the model on that surface. An incomplete run must not
+    // write model evidence: no avgScore, no ModelProfile capability fields.
+    // Recording it as completed-with-failures is how an idle GPU lease turned
+    // into "toolFidelity: insufficient" on a model that tool-calls correctly.
+    const probesDeferred = probeResults.filter((p) => p.outcome === "deferred").length;
+    const scenariosDeferred = scenarioResults.filter((s) => s.outcome === "deferred").length;
+    const runIncomplete = probesDeferred > 0 || scenariosDeferred > 0;
 
-    if (model.id) {
+    const instructionFollowing = runIncomplete ? null : mapProbeResultsToInstructionFollowing(probePassMap);
+    const codeScores = scenarioResults.filter((s) => s.taskType === "code-gen" && s.orchestratorScore !== null).map((s) => s.orchestratorScore!);
+    const codingCapability = runIncomplete ? null : mapScoresToCodingCapability(codeScores);
+
+    if (model.id && !runIncomplete && instructionFollowing) {
       try {
         await prisma.modelProfile.update({
           where: { id: model.id },
@@ -302,25 +360,29 @@ export async function runEndpointTests(opts: {
       } catch { /* best-effort */ }
     }
 
-    // Update test run record
+    // Update test run record. Deferred probes/scenarios count as neither
+    // passed nor failed; their counts live in the results payload.
+    const scoredScenarios = scenarioResults.filter((s) => s.orchestratorScore !== null);
     await prisma.endpointTestRun.update({
       where: { id: testRun.id },
       data: {
-        probesPassed: probeResults.filter((p) => p.pass).length,
-        probesFailed: probeResults.filter((p) => !p.pass).length,
-        scenariosPassed: scenarioResults.filter((s) => s.passed).length,
-        scenariosFailed: scenarioResults.filter((s) => !s.passed).length,
-        avgScore: scenarioResults.filter((s) => s.orchestratorScore !== null).length > 0
-          ? scenarioResults.filter((s) => s.orchestratorScore !== null).reduce((sum, s) => sum + s.orchestratorScore!, 0) / scenarioResults.filter((s) => s.orchestratorScore !== null).length
+        probesPassed: probeResults.filter((p) => p.outcome === "passed").length,
+        probesFailed: probeResults.filter((p) => p.outcome === "failed").length,
+        scenariosPassed: scenarioResults.filter((s) => s.outcome === "passed").length,
+        scenariosFailed: scenarioResults.filter((s) => s.outcome === "failed").length,
+        avgScore: !runIncomplete && scoredScenarios.length > 0
+          ? scoredScenarios.reduce((sum, s) => sum + s.orchestratorScore!, 0) / scoredScenarios.length
           : null,
         completedAt: new Date(),
-        status: "completed",
+        status: runIncomplete ? "incomplete" : "completed",
         results: {
           modelId,
           friendlyName,
-          probes: probeResults.map((p) => ({ id: p.probeId, category: p.category, name: p.name, pass: p.pass, reason: p.reason })),
+          probesDeferred,
+          scenariosDeferred,
+          probes: probeResults.map((p) => ({ id: p.probeId, category: p.category, name: p.name, pass: p.pass, passed: p.passed, outcome: p.outcome, reason: p.reason })),
           scenarios: scenarioResults.map((s) => ({
-            id: s.scenarioId, taskType: s.taskType, name: s.name, passed: s.passed,
+            id: s.scenarioId, taskType: s.taskType, name: s.name, passed: s.passed, outcome: s.outcome,
             assertions: s.assertionResults, orchestratorScore: s.orchestratorScore,
           })),
         } as unknown as import("@dpf/db").Prisma.InputJsonValue,
@@ -352,7 +414,7 @@ export async function runEndpointTests(opts: {
 export async function verifyModels(
   providerId: string,
   triggeredBy: string,
-): Promise<{ verified: number; passed: number; failed: number }> {
+): Promise<{ verified: number; passed: number; failed: number; deferred: number }> {
   const results = await runEndpointTests({
     endpointId: providerId,
     probesOnly: true,
@@ -361,11 +423,14 @@ export async function verifyModels(
 
   let passed = 0;
   let failed = 0;
+  let deferred = 0;
   for (const r of results) {
-    const allPass = r.probes.every((p) => p.pass);
-    if (allPass) passed++;
+    // A model whose probes were capacity-deferred is unverified, not failed —
+    // reporting it as failed is the BI-91F0E312 conflation.
+    if (r.probes.some((p) => p.outcome === "deferred")) deferred++;
+    else if (r.probes.every((p) => p.outcome === "passed")) passed++;
     else failed++;
   }
 
-  return { verified: results.length, passed, failed };
+  return { verified: results.length, passed, failed, deferred };
 }

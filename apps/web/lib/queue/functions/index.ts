@@ -1,5 +1,6 @@
 import { prometheusPoll, fullDiscoverySweep } from "./discovery-poll";
 import { modelDiscoveryRefresh } from "./model-discovery-refresh";
+import { routingReachabilityPreflight } from "./routing-reachability-preflight";
 import { infraPrune } from "./infra-prune";
 import { rateRecovery } from "./rate-recovery";
 import { mcpCatalogSync } from "./mcp-catalog-sync";
@@ -117,6 +118,7 @@ export const scheduledFunctions = [
   prometheusPoll,
   fullDiscoverySweep,
   modelDiscoveryRefresh,
+  routingReachabilityPreflight, // BI-E2CCFAC1: coworker routing dead-ends surface before a human hits one
   infraPrune,
   codeGraphReconcileScheduled,
   issueReportTriage,

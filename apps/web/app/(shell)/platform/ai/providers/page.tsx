@@ -24,6 +24,7 @@ import { resolveModelSelectionByPhase } from "@/lib/inference/phase-model-resolu
 import Link from "next/link";
 import { ProviderSuitabilityGuide } from "@/components/platform/ProviderSuitabilityGuide";
 import { loadProviderOnboardingRecommendation } from "@/lib/routing/provider-suitability/provider-onboarding-data";
+import { resolveRuntimeConnectionStatus } from "@/lib/routing/provider-suitability/onboarding-recommendation";
 import { getProviderSuitabilityTelemetryRollup } from "@/lib/actions/route-decision-logs";
 
 
@@ -84,6 +85,20 @@ export default async function ProvidersPage() {
   ]);
   const aiProviders = providers.filter((pw) => pw.provider.endpointType !== "service");
 
+  // BI-04E4F111: routing filters on AiProviderConnection.status, not
+  // ModelProvider.status — a provider whose only connection is disabled must
+  // not read "active" here while routing silently skips it. Fold the default
+  // connection's veto into the status the eligibility badge derives from.
+  const defaultConnections = await prisma.aiProviderConnection
+    .findMany({
+      where: { connectionId: { startsWith: "provider-default-" } },
+      select: { providerId: true, status: true },
+    })
+    .catch(() => [] as Array<{ providerId: string; status: string }>);
+  const connectionStatusByProvider = new Map(
+    defaultConnections.map((c) => [c.providerId, c.status] as const),
+  );
+
   // Derive the single routing-eligibility state per provider from data already
   // loaded above (status + credential + discovered models + CLI pool). This one
   // answer drives the row badge and the section counts — replacing the old
@@ -101,8 +116,12 @@ export default async function ProvidersPage() {
     const credentialExpired =
       !!pw.credential?.tokenExpiresAt &&
       new Date(pw.credential.tokenExpiresAt).getTime() < nowMs;
-    eligibilityById[p.providerId] = deriveRoutingEligibility({
-      status: p.status,
+    const connectionStatus = connectionStatusByProvider.get(p.providerId);
+    const connectionVetoed = p.status === "active" && connectionStatus === "disabled";
+    const eligibility = deriveRoutingEligibility({
+      status: connectionStatus != null
+        ? resolveRuntimeConnectionStatus(p.status, connectionStatus)
+        : p.status,
       endpointType: p.endpointType,
       category: p.category,
       serviceKind: p.serviceKind ?? null,
@@ -113,6 +132,13 @@ export default async function ProvidersPage() {
       cliPoolExhausted: pool?.isExhausted ?? false,
       cliPoolResetHint: pool ? poolResetHint(pool) : null,
     });
+    eligibilityById[p.providerId] = connectionVetoed
+      ? {
+          ...eligibility,
+          reason:
+            "The provider is on, but its connection is disabled — routing skips it. Reconnect or re-test the provider's credentials to bring the connection back.",
+        }
+      : eligibility;
     // Real remaining weekly subscription allocation, when a fresh snapshot exists.
     weeklyHintById[p.providerId] = pool ? formatWeeklyAllocationHint(pool, now) : null;
   }
