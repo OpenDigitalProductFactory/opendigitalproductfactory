@@ -126,6 +126,14 @@ type Props = {
     status: "healthy" | "degraded" | "unknown";
     detail: string | null;
     checkedAt: string | null;
+    watchdog?: {
+      status: "healthy" | "degraded" | "unknown";
+      detail: string | null;
+      lastInvocationAt: string | null;
+      lastGatewayHitAt: string | null;
+      lastRecoveryAttemptAt: string | null;
+      lastRecoverySummary: string | null;
+    };
   };
   history?: LatestRun[];
   historyNextCursor?: string | null;
@@ -312,6 +320,10 @@ export function isExpectedDuringSwap(err: unknown): boolean {
   );
 }
 
+export function shouldPollForJobEngineRecovery(jobEngine: Props["jobEngine"]): boolean {
+  return jobEngine?.status === "degraded";
+}
+
 export default function SelfUpgradeClient({
   enabled,
   channel,
@@ -382,6 +394,7 @@ export default function SelfUpgradeClient({
   const deferredRun = quiescence?.run?.status === "deferred";
   const showActivity =
     draining || cooldownActive || (!!deferredRun && (quiescence?.blockers.length ?? 0) > 0);
+  const pollForJobEngineRecovery = shouldPollForJobEngineRecovery(jobEngine);
 
   // True once the worker has actually picked the upgrade up — the run is running
   // or the portal is draining/swapping for the swap.
@@ -421,6 +434,12 @@ export default function SelfUpgradeClient({
     const interval = setInterval(() => router.refresh(), 4_000);
     return () => clearInterval(interval);
   }, [justQueued, upgradeInFlight, restarting, router]);
+
+  useEffect(() => {
+    if (!pollForJobEngineRecovery) return;
+    const interval = setInterval(() => router.refresh(), 15_000);
+    return () => clearInterval(interval);
+  }, [pollForJobEngineRecovery, router]);
 
   // Drop the reconnect banner once the swapped-in portal actually answers with
   // fresh data. We snapshot the server-derived signature at the moment the swap
@@ -631,13 +650,32 @@ export default function SelfUpgradeClient({
           data-job-engine-health="degraded"
         >
           <div className="font-medium text-[var(--dpf-warning)]">
-            ⚠ Background job engine isn’t dispatching
+            Background jobs need attention
           </div>
-          <div className="mt-1 text-[var(--dpf-muted)]">
-            The portal couldn’t register its jobs with Inngest, so background work
-            — self-upgrade, evals, backups, watchdogs — won’t run until this is
-            fixed.{jobEngine.detail ? ` (${jobEngine.detail})` : ""} Restart the
-            portal or check the Inngest service.
+          <div className="mt-1 space-y-1 text-[var(--dpf-muted)]">
+            <p>
+              Self-upgrade, evals, backups, and watchdogs depend on Inngest. The
+              portal retries Inngest registration automatically every 5 minutes
+              and this page checks for recovery while the alert is visible.
+            </p>
+            <p>
+              Last check:{" "}
+              <LocalTime value={jobEngine.checkedAt} mode="time" fallback="not recorded yet" />.
+              {jobEngine.detail ? ` Current signal: ${jobEngine.detail}` : ""}
+            </p>
+            {jobEngine.watchdog?.lastRecoveryAttemptAt && (
+              <p>
+                Last recovery attempt:{" "}
+                <LocalTime
+                  value={jobEngine.watchdog.lastRecoveryAttemptAt}
+                  mode="time"
+                  fallback="not recorded yet"
+                />
+                {jobEngine.watchdog.lastRecoverySummary
+                  ? ` - ${jobEngine.watchdog.lastRecoverySummary}`
+                  : ""}
+              </p>
+            )}
           </div>
         </div>
       )}
