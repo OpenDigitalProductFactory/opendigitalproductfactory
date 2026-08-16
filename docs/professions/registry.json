@@ -377,7 +377,7 @@
     {
       "professionKey": "security",
       "label": "Security Engineer / Data Governance",
-      "roles": ["security-auditor-agent", "data-governance-agent", "soc-triage-analyst", "soc-investigator", "soc-threat-hunter", "soc-incident-commander"],
+      "roles": ["security-auditor-agent", "data-governance-agent", "soc-triage-analyst", "soc-investigator", "soc-threat-hunter", "soc-incident-commander", "security-engineer"],
       "contextSlugs": ["data-security", "compliance"],
       "sources": [
         {
