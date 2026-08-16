@@ -225,7 +225,15 @@ export const INTENTIONAL_MODEL_RENAMES = new Map([
 
 // Apply the sanctioned model renames to a schema line so that a relation field
 // differing only by its referenced model name compares equal.
+//
+// `@@map("...")` is deliberately exempt. Its argument is the PHYSICAL TABLE
+// name, not a model name, and the whole point of an honoured rename is that the
+// new model keeps `@@map("<old model name>")`. Substituting inside it rewrote
+// the base's `@@map("WorkCapsule")` into `@@map("Workroom")`, which never
+// matches the head, so every renamed model reported its own `@@map` as removed
+// — main regressed against itself and blocked any PR touching the schema.
 function applyModelRenames(line, renames) {
+  if (/^@@map\(/.test(line.trim())) return line;
   let out = line;
   for (const [from, to] of renames) {
     out = out.replace(new RegExp(`\\b${from}\\b`, "g"), to);
