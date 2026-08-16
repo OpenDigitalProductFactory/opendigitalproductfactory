@@ -160,9 +160,26 @@ describe("decomposition pack — handler behavior (delegation preserved)", () =>
       {
         itemId: "BI-PARENT",
         planPath: "docs/superpowers/plans/example.md",
+        planArtifactRef: {
+          kind: "repo-blob-at-commit",
+          repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory",
+          commitSha: "a".repeat(40),
+          path: "docs/superpowers/plans/example.md",
+          providerBlobId: "b".repeat(40),
+        },
         decision: "decomposed",
         deliverables: [
-          { key: "one", title: "One", independentlyShippable: true, backlogItemId: "BI-1", dependsOn: [] },
+          {
+            key: "one",
+            title: "One",
+            independentlyShippable: true,
+            backlogItemId: "BI-1",
+            dependsOn: [],
+            requirementRefs: ["OBJ-1"],
+            contractRefs: ["contract:1"],
+            flowRefs: ["flow:1"],
+            verificationRefs: ["AC-1"],
+          },
         ],
       },
       "user-1",

@@ -323,7 +323,7 @@ describe("governedExecuteTool — happy path", () => {
     expect(auditRows[0]!.agentId).toBe("AGT-100");
   });
 
-  it("forwards caller attribution (callerClient/apiTokenId/authSource) into executeTool (BI-0EEBA669)", async () => {
+  it("forwards caller attribution and effective token scope into executeTool (BI-0EEBA669)", async () => {
     // Regression: governedExecuteTool built the executeTool context from only
     // {agentId, threadId, routeContext, taskRunId, featureBuildId} and dropped
     // the three caller-attribution fields, so every principle_decide consult
@@ -340,6 +340,7 @@ describe("governedExecuteTool — happy path", () => {
         callerClient: "claude-code/2.1",
         apiTokenId: "tok_xyz",
         authSource: "pat",
+        tokenScope: "admin",
       },
       source: "external-jsonrpc",
     });
@@ -352,6 +353,7 @@ describe("governedExecuteTool — happy path", () => {
         callerClient: "claude-code/2.1",
         apiTokenId: "tok_xyz",
         authSource: "pat",
+        tokenScope: "admin",
         threadId: "thread-9",
       }),
     );

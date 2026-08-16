@@ -340,6 +340,8 @@ export async function updateBacklogItemFields(id: string, patch: BacklogFieldPat
 
 export async function deleteBacklogItem(id: string): Promise<void> {
   await requireManageBacklog();
+  const { assertBacklogItemGovernanceDeletable } = await import("@/lib/backlog/initiative-governance-deletion");
+  await assertBacklogItemGovernanceDeletable(id);
   await prisma.backlogItem.delete({ where: { id } });
 }
 
@@ -463,6 +465,8 @@ export async function updateEpic(id: string, input: EpicInput): Promise<void> {
 
 export async function deleteEpic(id: string): Promise<void> {
   await requireManageBacklog();
+  const { assertEpicGovernanceDeletable } = await import("@/lib/backlog/initiative-governance-deletion");
+  await assertEpicGovernanceDeletable(id);
   await prisma.epic.delete({ where: { id } });
   // onDelete: SetNull in schema handles nullifying BacklogItem.epicId automatically
 }

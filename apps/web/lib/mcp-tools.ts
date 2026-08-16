@@ -56,7 +56,7 @@ export type ToolExecutionContext = AuthorizedSurfaceToolExecutionContext & {
   callerClient?: string;
   apiTokenId?: string;
   authSource?: string;
-  suppressDesignReviewAutoRepair?: boolean; suppressPlanReviewAutoRepair?: boolean;
+  tokenScope?: string; authorityDecisionId?: string; suppressDesignReviewAutoRepair?: boolean; suppressPlanReviewAutoRepair?: boolean;
   /**
    * Build the user is currently messaging from. Plumbed by agentic-loop.ts
    * from runAgenticLoop's `featureBuildId` param so phase-scoped tools can

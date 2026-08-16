@@ -232,13 +232,7 @@ export type DecisionPerspectiveEvaluationResult = {
   rationale: string;
   materialScores: PerspectiveMaterialScore[];
   sources: Array<DecisionEvaluationSource>;
-  gapReason?:
-    | "no-applicable-material"
-    | "material-below-confidence"
-    // BI-F5F2869D: not a gap at all — recorded doctrine is consistent with the
-    // proposal, but nobody has ruled on this question, so it goes to the owner
-    // as a NEW idea to weigh rather than as missing policy.
-    | "aligned-not-settled";
+  gapReason?: "no-applicable-material" | "material-below-confidence";
 };
 
 /**

@@ -76,6 +76,7 @@ export const TABLE_CLASSIFICATION: Record<string, TableSensitivity> = {
   CodebaseManifest: "internal",
   ServiceOffering: "internal",
   BacklogItem: "internal",
+  InitiativeArtifactRetentionPin: "confidential",
   Epic: "internal",
   EpicPortfolio: "internal",
   ImprovementProposal: "internal",

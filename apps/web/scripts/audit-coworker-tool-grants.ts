@@ -357,7 +357,8 @@ function checkGrant008(registry: RegistryAgent[], catalog: CatalogGrant[]): void
     const hasWrite = grants.some((k) => {
       const def = byKey.get(k);
       if (!def) return false;
-      return /(_write|_create|_execute|_publish|_emit|_provision|_trigger)$/.test(k);
+      return /(_write|_create|_execute|_publish|_emit|_provision|_trigger)$/.test(k)
+        || /^initiative_.*_review$/.test(k);
     });
     if (!hasWrite) {
       record(
