@@ -1,0 +1,68 @@
+# Is the image a new user would actually pull still able to install?
+#
+# `dpf-portal:latest` sat 1851 commits behind `main` for roughly seven weeks. The
+# "Ready to go" installer runs `docker cp <container>:/dpf-release-assets/.`, and that
+# directory only exists in images built after 1c157563a. Every non-technical user's
+# install failed with `consumer_release_asset_export_failed` for that entire period.
+#
+# It went unseen because CI only ever built images from source — nothing pulled the
+# PUBLISHED artifact and asked whether it still matched the installer's expectations.
+# One matrix cell (dpf-edge-node) failing its typecheck takes the whole publish down,
+# so `latest` silently stops advancing while every PR stays green.
+#
+# This runs daily against the real registry and fails loudly when the published image
+# falls behind the release contract.
+name: Published Image Freshness
+
+on:
+  schedule:
+    - cron: "17 6 * * *"
+  workflow_dispatch:
+    inputs:
+      image:
+        description: "Image ref to check"
+        required: false
+        default: "ghcr.io/opendigitalproductfactory/dpf-portal:latest"
+      max_behind:
+        description: "Advisory commit-drift ceiling"
+        required: false
+        default: "250"
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  freshness:
+    name: Published image freshness
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # Full history: the check walks from the published image's commit to HEAD.
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Log in to GHCR
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Check published image against the release contract
+        # Inputs go through env, never interpolated straight into the shell: a
+        # `${{ github.event.inputs.* }}` inside `run:` is the standard Actions
+        # script-injection sink.
+        env:
+          IMAGE: ${{ github.event.inputs.image || 'ghcr.io/opendigitalproductfactory/dpf-portal:latest' }}
+          MAX_BEHIND: ${{ github.event.inputs.max_behind || '250' }}
+        run: |
+          set -euo pipefail
+          node scripts/check-published-image-freshness.mjs \
+            --image "$IMAGE" \
+            --ref HEAD \
+            --max-behind "$MAX_BEHIND"

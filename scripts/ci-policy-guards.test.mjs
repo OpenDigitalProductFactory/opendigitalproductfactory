@@ -43,6 +43,7 @@ const EXPECTED_LEGACY_JOBS = [
   "package-boundary-guard",
   "pr-health-test",
   "prose-lint-guard",
+  "published-image-freshness",
   "repo-guard-loop",
   "reporting-composition-guard",
   "retired-substrate-guard",

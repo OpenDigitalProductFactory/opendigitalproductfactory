@@ -47,6 +47,11 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
     guard("shell-guard-shim-contract", "Shell Guard Shim Contract", [
       node("--test", "scripts/check-shell-guard-shim-contract.test.mjs"),
     ]),
+    guard("published-image-freshness", "Published Image Freshness", [
+      // Decision logic only — the live registry check needs Docker and runs on a
+      // schedule (.github/workflows/published-image-freshness.yml).
+      node("--test", "scripts/lib/published-image-freshness.test.mjs"),
+    ]),
     guard("docs-link-integrity", "Docs Link Integrity", [
       node("scripts/gen-doc-index.mjs", "--check"),
       node(
