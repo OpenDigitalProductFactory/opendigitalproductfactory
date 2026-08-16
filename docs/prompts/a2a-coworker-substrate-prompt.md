@@ -58,7 +58,7 @@ Every A2A message is a tool call from one principal to another. It must carry th
 
 ### 6. Migration from the in-memory bus
 
-`agent-event-bus.ts` carries 40+ event variants today, used inside a single request's deliberation. Document which of those events should *stay* in-memory (intra-request UI streaming) vs. which should *graduate* to the durable substrate (cross-coworker, cross-restart). The current bus stays — it just stops being asked to do things it was never built for.
+`agent-event-bus.ts` carries 40+ event variants today. Most are used inside a single request's deliberation; it also carries advisory system invalidations that let the shell refresh narrow background-operation projections without refreshing an entire route. Document which events should *stay* in-memory (intra-request UI streaming and same-process cache invalidation) vs. which should *graduate* to the durable substrate (cross-coworker, cross-process, cross-restart). Advisory invalidations are hints, never durable work state: consumers must re-read the authoritative projection and tolerate missed events. The current bus stays — it just stops being asked to do things it was never built for.
 
 ## Constraints / context to honor
 

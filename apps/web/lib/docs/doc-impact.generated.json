@@ -415,6 +415,9 @@
     "apps/web/components/monitoring/prometheus-config.test.ts": [
       "docs/install/platform-support-watchlist.md"
     ],
+    "apps/web/components/ops/SelfUpgradeLiveProvider.tsx": [
+      "docs/architecture/background-operation-observation-contract.md"
+    ],
     "apps/web/components/platform/AgentCardSupervisorPanel.tsx": [
       "docs/architecture/agent-standards-dpf-conformance.md"
     ],
@@ -423,6 +426,9 @@
     ],
     "apps/web/components/platform/StalledTaskRecoveryActions.tsx": [
       "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md"
+    ],
+    "apps/web/components/platform/SystemEventProvider.tsx": [
+      "docs/architecture/background-operation-observation-contract.md"
     ],
     "apps/web/components/proactivity/ProactivityRosterList.tsx": [
       "docs/user-guide/ai-workforce/coworker-proactivity.md"
@@ -458,10 +464,10 @@
     "apps/web/components/workspace/WorkCaseDetailView.tsx": [
       "docs/user-guide/workspace/work-rooms.md"
     ],
-    "apps/web/components/workspace/work-room/WorkRoomCycles.tsx": [
+    "apps/web/components/workspace/workroom/WorkroomCycles.tsx": [
       "docs/user-guide/workspace/work-rooms.md"
     ],
-    "apps/web/components/workspace/work-room/WorkRoomParticipants.tsx": [
+    "apps/web/components/workspace/workroom/WorkroomParticipants.tsx": [
       "docs/user-guide/workspace/work-rooms.md"
     ],
     "apps/web/design/tokens-utilities.test.ts": [
@@ -516,6 +522,9 @@
     ],
     "apps/web/lib/ai-operations-map/project-routing-topology.ts": [
       "docs/specs/routing-resilience-and-failure-observability-spec.md"
+    ],
+    "apps/web/lib/architecture/background-operation-observation-contract.test.ts": [
+      "docs/architecture/background-operation-observation-contract.md"
     ],
     "apps/web/lib/assurance/cyclonedx-generator.ts": [
       "docs/architecture/dependency-reduction-routine.md"
@@ -660,8 +669,17 @@
     "apps/web/lib/govern/data/policy-enforcement.ts": [
       "docs/architecture/ai-routing-document-map.md"
     ],
+    "apps/web/lib/govern/manager-scope.ts": [
+      "docs/architecture/mcp-tool-authorization-runbook.md"
+    ],
     "apps/web/lib/govern/permissions.ts": [
       "docs/architecture/delivery-ia.md"
+    ],
+    "apps/web/lib/hooks/useBackgroundOperationObserver.ts": [
+      "docs/architecture/background-operation-observation-contract.md"
+    ],
+    "apps/web/lib/hooks/useResilientEventSource.ts": [
+      "docs/architecture/background-operation-observation-contract.md"
     ],
     "apps/web/lib/identity/aidoc-resolver.ts": [
       "docs/architecture/agent-standards-dpf-conformance.md",
@@ -722,12 +740,18 @@
     "apps/web/lib/marketing/archetype-fit.ts": [
       "docs/platform-usability-standards.md"
     ],
+    "apps/web/lib/marketing/channels/contracts.ts": [
+      "docs/architecture/unified-connector-kernel.md"
+    ],
     "apps/web/lib/marketing/channels/email-postmark/responder.ts": [
       "docs/architecture/2026-06-14-ai-cockpit-sysml-architecture-note.md",
       "docs/architecture/2026-06-14-odysseus-review-depth-pass.md"
     ],
     "apps/web/lib/marketing/scheduler.ts": [
       "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md"
+    ],
+    "apps/web/lib/marketing/utm.ts": [
+      "docs/architecture/unified-connector-kernel.md"
     ],
     "apps/web/lib/mcp-governed-execute.ts": [
       "docs/architecture/ai-agent-meta-model.md",
@@ -784,6 +808,12 @@
     ],
     "apps/web/lib/operate/sole-platform-readiness.ts": [
       "docs/architecture/2026-07-27-platform-adequacy-roadmap-backlog-map.md"
+    ],
+    "apps/web/lib/performance/business-analysis-watch-run.ts": [
+      "docs/architecture/agent-standards-dpf-conformance.md"
+    ],
+    "apps/web/lib/performance/business-performance-provider.ts": [
+      "docs/architecture/operations-hot-path.md"
     ],
     "apps/web/lib/platform-runtime/capability-service-projection.ts": [
       "docs/architecture/capability-driven-runtime-profiles.md"
@@ -918,6 +948,9 @@
     "apps/web/lib/self-upgrade/prepare-source.ts": [
       "docs/dev/collision-free-dev-workflow.md"
     ],
+    "apps/web/lib/self-upgrade/status-snapshot.ts": [
+      "docs/architecture/background-operation-observation-contract.md"
+    ],
     "apps/web/lib/shared/action-result.ts": [
       "docs/architecture/data-model-stewardship-runbook.md"
     ],
@@ -950,6 +983,7 @@
       "docs/architecture/agent-standards-dpf-conformance.md"
     ],
     "apps/web/lib/tak/agent-event-bus.ts": [
+      "docs/architecture/background-operation-observation-contract.md",
       "docs/prompts/a2a-coworker-substrate-prompt.md"
     ],
     "apps/web/lib/tak/agent-grants.ts": [
@@ -978,6 +1012,9 @@
     ],
     "apps/web/lib/tak/delegation-authority.ts": [
       "docs/prompts/a2a-coworker-substrate-prompt.md"
+    ],
+    "apps/web/lib/tak/escalation-ladder.ts": [
+      "docs/platform-usability-standards.md"
     ],
     "apps/web/lib/tak/prompt-assembler.ts": [
       "docs/architecture/agent-standards-dpf-conformance.md",
@@ -1020,6 +1057,9 @@
     ],
     "apps/web/lib/work-management/room-participation.ts": [
       "docs/user-guide/workspace/work-rooms.md"
+    ],
+    "apps/web/lib/work-management/work-unit.ts": [
+      "docs/founder-kernel/wiki/principles/universal-work-formula.md"
     ],
     "apps/web/lib/work-management/workspace-case-loader.ts": [
       "docs/user-guide/workspace/work-rooms.md"
@@ -1282,6 +1322,9 @@
     "packages/integration-shared/src/credential-crypto.ts": [
       "docs/architecture/2026-06-22-platform-adequacy-architecture-review.md"
     ],
+    "packages/integration-shared/src/mcp-catalog-tier.ts": [
+      "docs/architecture/agent-standards-dpf-conformance.md"
+    ],
     "packages/storefront-templates/src/archetype-readiness.ts": [
       "docs/architecture/2026-07-27-platform-adequacy-roadmap-backlog-map.md",
       "docs/architecture/2026-08-09-portal-architecture-hardening-findings.md"
@@ -1302,6 +1345,9 @@
     ],
     "packages/storefront-templates/src/archetypes/trades-maintenance.ts": [
       "docs/personas/dale-hvac.md"
+    ],
+    "packages/storefront-templates/src/business-view-profile.ts": [
+      "docs/architecture/operations-hot-path.md"
     ],
     "packages/storefront-templates/src/twin-profile.ts": [
       "docs/architecture/operational-precedent-corpus.md"
@@ -1493,6 +1539,9 @@
       "docs/install/platform-support-watchlist.md",
       "docs/operations/session-transcript-recovery.md"
     ],
+    "scripts/install-worktree-janitor-schedule.sh": [
+      "docs/install/worktree-janitor-schedule.md"
+    ],
     "scripts/installer/install-state.schema.json": [
       "docs/operations/install.md"
     ],
@@ -1624,6 +1673,9 @@
     "scripts/sbom/check-singleton-safety.mjs": [
       "docs/architecture/dependency-reduction-routine.md"
     ],
+    "scripts/sbom/image-size-icns-loop.test.mjs": [
+      "docs/architecture/dependency-reduction-routine.md"
+    ],
     "scripts/sbom/internalization-candidates.mjs": [
       "docs/architecture/dependency-reduction-routine.md"
     ],
@@ -1663,7 +1715,8 @@
       "docs/edge-node/deployment-topology.md"
     ],
     "scripts/worktree-janitor.mjs": [
-      "docs/architecture/branch-and-worktree-runbook.md"
+      "docs/architecture/branch-and-worktree-runbook.md",
+      "docs/install/worktree-janitor-schedule.md"
     ],
     "services/edge-node/scripts/verify-lifecycle.ts": [
       "docs/architecture/2026-06-19-edge-node-deployment-sysml-architecture-note.md",
@@ -1975,6 +2028,7 @@
       "apps/web/lib/identity/aidoc-resolver.ts",
       "apps/web/lib/mcp/load-tools.ts",
       "apps/web/lib/mcp/tool-tier.ts",
+      "apps/web/lib/performance/business-analysis-watch-run.ts",
       "apps/web/lib/tak/agent-card-service.ts",
       "apps/web/lib/tak/agent-grants.ts",
       "apps/web/lib/tak/agent-routing.ts",
@@ -1985,7 +2039,8 @@
       "apps/web/lib/tak/tool-result-budget.ts",
       "apps/web/lib/tak/tool-script.ts",
       "apps/web/lib/tool-description-hygiene.test.ts",
-      "packages/db/src/seed-decision-perspective.ts"
+      "packages/db/src/seed-decision-perspective.ts",
+      "packages/integration-shared/src/mcp-catalog-tier.ts"
     ],
     "docs/architecture/ai-agent-meta-model.md": [
       "apps/web/app/api/mcp/v1/route.ts",
@@ -2010,6 +2065,15 @@
     ],
     "docs/architecture/archetype-business-value-streams.md": [
       "packages/storefront-templates/src/types.ts"
+    ],
+    "docs/architecture/background-operation-observation-contract.md": [
+      "apps/web/components/ops/SelfUpgradeLiveProvider.tsx",
+      "apps/web/components/platform/SystemEventProvider.tsx",
+      "apps/web/lib/architecture/background-operation-observation-contract.test.ts",
+      "apps/web/lib/hooks/useBackgroundOperationObserver.ts",
+      "apps/web/lib/hooks/useResilientEventSource.ts",
+      "apps/web/lib/self-upgrade/status-snapshot.ts",
+      "apps/web/lib/tak/agent-event-bus.ts"
     ],
     "docs/architecture/backlog-and-planning-runbook.md": [
       "apps/web/lib/govern/data/field-classification.ts",
@@ -2119,6 +2183,7 @@
       "scripts/sbom/check-new-dependencies.mjs",
       "scripts/sbom/check-sbom-drift.mjs",
       "scripts/sbom/check-singleton-safety.mjs",
+      "scripts/sbom/image-size-icns-loop.test.mjs",
       "scripts/sbom/internalization-candidates.mjs",
       "scripts/sbom/runtime-surface.mjs",
       "scripts/sbom/scan-dependencies.mjs"
@@ -2156,6 +2221,7 @@
       "apps/web/app/api/mcp/v1/route.ts",
       "apps/web/lib/agent-grants.ts",
       "apps/web/lib/coworker-lifecycle/lifecycle-gate.ts",
+      "apps/web/lib/govern/manager-scope.ts",
       "apps/web/lib/tak/tool-result-budget.ts",
       "apps/web/lib/tool-description-hygiene.test.ts",
       "scripts/lib/bootstrap-worktree-deps.mjs"
@@ -2181,6 +2247,10 @@
       "apps/web/lib/design-intelligence.ts",
       "packages/db/src/portfolio-sources/vertical-incumbents-manifest.ts",
       "packages/storefront-templates/src/twin-profile.ts"
+    ],
+    "docs/architecture/operations-hot-path.md": [
+      "apps/web/lib/performance/business-performance-provider.ts",
+      "packages/storefront-templates/src/business-view-profile.ts"
     ],
     "docs/architecture/orientation.md": [
       ".github/workflows/migration-safety-guard.yml",
@@ -2232,6 +2302,8 @@
     ],
     "docs/architecture/unified-connector-kernel.md": [
       "apps/web/lib/integrations/connectors/index.ts",
+      "apps/web/lib/marketing/channels/contracts.ts",
+      "apps/web/lib/marketing/utm.ts",
       "scripts/check-no-provider-local-connector-lifecycle.mjs"
     ],
     "docs/architecture/vector-decisioning-and-jsi.md": [
@@ -2302,6 +2374,9 @@
     "docs/founder-kernel/wiki/principles/outbound-actions-require-explicit-go.md": [
       "apps/web/lib/kernel/runtime-gate.ts"
     ],
+    "docs/founder-kernel/wiki/principles/universal-work-formula.md": [
+      "apps/web/lib/work-management/work-unit.ts"
+    ],
     "docs/founder-kernel/wiki/principles/worktree-per-session.md": [
       "scripts/seed-worktree-mcp.ps1",
       "scripts/seed-worktree-mcp.sh"
@@ -2361,6 +2436,10 @@
       ".github/workflows/release-gates.yml",
       "apps/web/scripts/issue-edge-bootstrap-token.ts",
       "services/edge-node/scripts/verify-lifecycle.ts"
+    ],
+    "docs/install/worktree-janitor-schedule.md": [
+      "scripts/install-worktree-janitor-schedule.sh",
+      "scripts/worktree-janitor.mjs"
     ],
     "docs/maintenance/README.md": [
       ".github/workflows/refresh-docs-staleness.yml",
@@ -2467,6 +2546,7 @@
       "apps/web/lib/shared/use-save-state.test.ts",
       "apps/web/lib/shared/use-save-state.ts",
       "apps/web/lib/shell/shell-action-contract.ts",
+      "apps/web/lib/tak/escalation-ladder.ts",
       "apps/web/lib/tak/prompt-assembler.ts",
       "apps/web/lib/ux-budget/measure.ts",
       "apps/web/lib/workforce/oversight-copy.ts",
@@ -2705,8 +2785,8 @@
       "apps/web/app/(shell)/workspace/my-queue/page.tsx",
       "apps/web/components/workspace/WorkCaseAttentionLens.tsx",
       "apps/web/components/workspace/WorkCaseDetailView.tsx",
-      "apps/web/components/workspace/work-room/WorkRoomCycles.tsx",
-      "apps/web/components/workspace/work-room/WorkRoomParticipants.tsx",
+      "apps/web/components/workspace/workroom/WorkroomCycles.tsx",
+      "apps/web/components/workspace/workroom/WorkroomParticipants.tsx",
       "apps/web/lib/work-management/room-channel-continuity.ts",
       "apps/web/lib/work-management/room-channel-ingress.ts",
       "apps/web/lib/work-management/room-participation.ts",

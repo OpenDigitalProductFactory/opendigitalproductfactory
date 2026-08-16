@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { BuildStudio } from "./BuildStudio";
 import {
@@ -23,11 +23,20 @@ const backlogBuildMocks = vi.hoisted(() => ({
   startBacklogBuild: vi.fn(),
 }));
 
+const buildReadMocks = vi.hoisted(() => ({
+  getFeatureBuild: vi.fn(),
+  getFeatureBuildCustomerStatus: vi.fn(),
+}));
+
 vi.mock("next/navigation", () => ({
   useRouter: () => ({
     refresh: routerMocks.refresh,
     replace: routerMocks.replace,
   }),
+}));
+
+vi.mock("@/lib/hooks/useResilientEventSource", () => ({
+  useResilientEventSource: vi.fn(),
 }));
 
 vi.mock("@/lib/actions/build", () => ({
@@ -45,7 +54,8 @@ vi.mock("@/lib/actions/backlog-build", () => ({
 }));
 
 vi.mock("@/lib/actions/build-read", () => ({
-  getFeatureBuild: vi.fn(),
+  getFeatureBuild: buildReadMocks.getFeatureBuild,
+  getFeatureBuildCustomerStatus: buildReadMocks.getFeatureBuildCustomerStatus,
 }));
 
 vi.mock("@/lib/actions/build-flow", () => ({
@@ -223,6 +233,7 @@ function makeEpicRollup(overrides: Partial<EpicRollupView> = {}): EpicRollupView
 describe("BuildStudio active-build header layout", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    localStorage.clear();
   });
 
   it("names the intake around the operator's outcome", () => {
@@ -419,6 +430,45 @@ describe("BuildStudio active-build header layout", () => {
     expect(html).not.toContain('data-testid="process-graph"');
     expect(html).not.toContain('data-testid="build-studio-details-drawer-pill"');
     expect(html).not.toContain('data-testid="build-studio-details-drawer"');
+    expect(html).not.toContain('data-testid="build-studio-footer"');
+    expect(html).not.toContain("Sandbox is shared");
+    expect(html).not.toContain("Open sandbox");
+  });
+
+  it("reconciles persisted progress even when the build already has a thread stream", async () => {
+    vi.useFakeTimers();
+    try {
+      buildReadMocks.getFeatureBuild.mockResolvedValue(
+        makeBuild({ threadId: "thread-1", phase: "build" }),
+      );
+      buildReadMocks.getFeatureBuildCustomerStatus.mockResolvedValue({
+        whatIsBeingBuilt: "Fix Build Studio header/content overlap in workflow view",
+        lifecyclePosition: "Building the change",
+        worker: "Build Studio",
+        evidence: "Implementation is active.",
+        nextAction: "No action needed.",
+        owner: "Build Studio",
+        needsYou: false,
+      });
+      render(
+        <BuildStudio
+          builds={[makeBuild({ threadId: "thread-1", phase: "build" })]}
+          portfolios={[]}
+          governedBacklogEnabled
+          projectBranch="main"
+          submissionBranchShortId="fb8783b9"
+        />,
+      );
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(10_100);
+      });
+
+      expect(buildReadMocks.getFeatureBuild).toHaveBeenCalledWith("FB-9B19098C");
+      expect(buildReadMocks.getFeatureBuildCustomerStatus).toHaveBeenCalledWith("FB-9B19098C");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("presents one outcome, one status, one next action, and one activity story before technical details", () => {
@@ -465,15 +515,18 @@ describe("BuildStudio active-build header layout", () => {
         governedBacklogEnabled
         projectBranch="main"
         submissionBranchShortId="fb8783b9"
+        portalContext={makePortalContextEnvelope()}
       />,
     );
 
     const assuranceGate = await findByTestId("build-assurance-gate-card");
     expect(assuranceGate.textContent).toContain("Assurance Gate");
     expect(assuranceGate.textContent).toContain("No BOM generated");
+    expect(document.body.textContent).toContain("Build context");
+    expect(document.body.textContent).toContain("WC-123");
   });
 
-  it("renders the portal context strip when a server envelope is provided", () => {
+  it("keeps portal context mechanics out of the default owner viewport", () => {
     const html = renderToStaticMarkup(
       <BuildStudio
         builds={[makeBuild()]}
@@ -485,9 +538,8 @@ describe("BuildStudio active-build header layout", () => {
       />,
     );
 
-    expect(html).toContain("Build context");
-    expect(html).toContain("Build Studio");
-    expect(html).toContain("Portal overlay");
+    expect(html).not.toContain("Build context");
+    expect(html).not.toContain("Portal overlay");
     expect(html).not.toContain("WC-123");
   });
 
@@ -672,11 +724,9 @@ describe("BuildStudio active-build header layout", () => {
     expect(html).not.toContain('data-testid="build-studio-action-banner"');
   });
 
-  it("mounts the footer OpenSandboxButton — single shared sandbox link", () => {
-    // Footer surfaces the shared sandbox without resorting to a per-build
-    // Preview tab. When a build has a live sandboxPort, the footer button
-    // labels itself with the driving build code.
-    const html = renderToStaticMarkup(
+  it("mounts the shared preview footer only in Technical details", async () => {
+    localStorage.setItem("dpf:build-studio-engineer-view", "true");
+    const { container, findByTestId } = render(
       <BuildStudio
         builds={[makeBuild({
           phase: "build",
@@ -689,17 +739,19 @@ describe("BuildStudio active-build header layout", () => {
         submissionBranchShortId="fb8783b9"
       />,
     );
+    await findByTestId("build-studio-footer");
+    const html = container.innerHTML;
     expect(html).toContain('data-testid="build-studio-footer"');
     expect(html).toContain('data-testid="build-studio-open-sandbox"');
     expect(html).toContain('data-driving="FB-9B19098C"');
-    expect(html).toContain("Open live preview · current build");
-    expect(html).not.toContain("driving: FB-9B19098C");
+    expect(html).toContain("Open live preview · driving: FB-9B19098C");
     expect(html).toContain('href="http://localhost:5555"');
     expect(html).toMatch(/rel="noopener noreferrer"/);
   });
 
-  it("footer OpenSandboxButton shows 'idle' when no build has a live sandboxPort", () => {
-    const html = renderToStaticMarkup(
+  it("Technical details shows an idle preview state when no build has a live preview", async () => {
+    localStorage.setItem("dpf:build-studio-engineer-view", "true");
+    const { container, findByTestId } = render(
       <BuildStudio
         builds={[makeBuild({ phase: "ideate", sandboxPort: null })]}
         portfolios={[]}
@@ -708,6 +760,8 @@ describe("BuildStudio active-build header layout", () => {
         submissionBranchShortId="fb8783b9"
       />,
     );
+    await findByTestId("build-studio-open-sandbox");
+    const html = container.innerHTML;
     expect(html).toContain('data-testid="build-studio-open-sandbox"');
     expect(html).toContain('data-driving="idle"');
     // Disabled span renders (no anchor when sandboxUrl is empty).

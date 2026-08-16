@@ -24,6 +24,7 @@ import {
   type SubmissionResultModel,
   type SubmissionType,
 } from "./submission-result-content";
+import { loadStorefrontOperatingTimezone } from "./storefront-operating-timezone.server";
 
 export {
   isSubmissionType,
@@ -70,7 +71,6 @@ export async function loadSubmissionResult(
     where: { organization: { slug } },
     select: {
       id: true,
-      timezone: true,
       contactEmail: true,
       contactPhone: true,
       organization: { select: { name: true, slug: true } },
@@ -79,6 +79,7 @@ export async function loadSubmissionResult(
   if (!config) return null;
 
   const storefrontId = config.id;
+  const operatingTimezone = await loadStorefrontOperatingTimezone(prisma);
   const orgName = config.organization.name;
   const orgSlug = config.organization.slug;
   const { heading, icon } = resultHeading(type);
@@ -111,7 +112,7 @@ export async function loadSubmissionResult(
     const name = await itemName(row.itemId);
     if (name) context.push({ label: "About", value: name });
     context.push({ label: "Name", value: row.customerName });
-    context.push({ label: "Email", value: row.customerEmail });
+    if (row.customerEmail) context.push({ label: "Email", value: row.customerEmail });
     if (row.customerPhone) context.push({ label: "Phone", value: row.customerPhone });
     if (row.message) context.push({ label: "Your message", value: row.message });
   } else if (type === "booking") {
@@ -131,10 +132,10 @@ export async function loadSubmissionResult(
     customerEmail = row.customerEmail;
     const name = await itemName(row.itemId);
     if (name) context.push({ label: "Reservation", value: name });
-    context.push({ label: "When", value: formatWhen(row.scheduledAt, config.timezone) });
+    context.push({ label: "When", value: formatWhen(row.scheduledAt, operatingTimezone) });
     context.push({ label: "For", value: `${row.durationMinutes} minutes` });
     context.push({ label: "Name", value: row.customerName });
-    context.push({ label: "Email", value: row.customerEmail });
+    if (row.customerEmail) context.push({ label: "Email", value: row.customerEmail });
     if (row.customerPhone) context.push({ label: "Phone", value: row.customerPhone });
     if (row.notes) context.push({ label: "Notes", value: row.notes });
   } else if (type === "order") {

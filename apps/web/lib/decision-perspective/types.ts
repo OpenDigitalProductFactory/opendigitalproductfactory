@@ -41,6 +41,14 @@ export type DecisionGateKey = typeof DECISION_GATE_KEYS[number];
 
 export const DECISION_DOMAIN_CLASSES = ["plan-readiness", "architecture-tradeoff", "risk-assessment", "professional-practice", "kernel-consult"] as const;
 export type DecisionDomainClass = typeof DECISION_DOMAIN_CLASSES[number];
+
+/**
+ * Topic tag on `PerspectiveMaterial.domains` marking material that governs every
+ * business domain class rather than one bucket (BI-F5F2869D). Lives here, on the
+ * shared leaf, so `material.ts` (which reads it) and `stance-promotion.ts`
+ * (which writes it) need no import between them.
+ */
+export const CROSS_DOMAIN_MATERIAL_TAG = "all-business-domains";
 export const PLAN_READINESS_DOMAIN_CLASS = "plan-readiness" satisfies DecisionDomainClass;
 
 export const PERSPECTIVE_MATERIAL_FRESHNESS = ["current", "stale", "superseded", "contradicted"] as const;
@@ -163,6 +171,17 @@ export type DecisionPerspectiveEvaluationInput = {
   riskTier: DecisionRiskTier;
   evidence?: DecisionEvidenceItem[];
   recentOverrideCount?: number;
+  /**
+   * Per-material relevance ∈ [0,1] to `question` (BI-7E1F128A), keyed by
+   * materialId. Computed async upstream (semantic embeddings with lexical
+   * fallback) and passed into this synchronous evaluator so scoring is
+   * content-aware without the evaluator itself doing IO. When omitted, every
+   * applicable material is treated as fully relevant (legacy coverage-only
+   * behaviour).
+   */
+  relevanceByMaterialId?: Map<string, number>;
+  /** How `relevanceByMaterialId` was computed, echoed onto the result. */
+  relevanceMethod?: "semantic" | "lexical";
 };
 
 export type DecisionPerspectiveEvaluationResult = {
@@ -192,15 +211,59 @@ export type DecisionPerspectiveEvaluationResult = {
    * recommending a path forward.
    */
   recommendedOptionId?: string | null;
+  /**
+   * Net directional pull of the stance material that is RELEVANT to this
+   * question (BI-7E1F128A), in [-1, 1]: +1 = the relevant stance wholly supports
+   * the decision, -1 = it wholly opposes it, 0 = no directional signal or a
+   * support/oppose conflict. Undefined on the legacy coverage-only path.
+   */
+  alignmentScore?: number;
+  /**
+   * The directional verdict derived from `alignmentScore`: `approve` when the
+   * org's relevant stance supports the decision, `decline` when it opposes it,
+   * `mixed` when relevant support and oppose material conflict, `none` when no
+   * relevant stance speaks to it.
+   */
+  stanceAlignment?: "approve" | "decline" | "mixed" | "none";
+  /** How question↔stance relevance was computed for this evaluation. */
+  relevanceMethod?: "semantic" | "lexical";
+  /** Independent corpus checks; any rejected hard boundary vetoes aggregation. */
+  constitutionalAlignment?: import("./alignment-criteria").ConstitutionalAlignmentResult;
   rationale: string;
   materialScores: PerspectiveMaterialScore[];
-  sources: Array<{
-    materialId: string;
-    sourceType: string;
-    summary: string;
-    effectiveWeight: number;
-  }>;
+  sources: Array<DecisionEvaluationSource>;
   gapReason?: "no-applicable-material" | "material-below-confidence";
+};
+
+/**
+ * One cited source on a recorded decision.
+ *
+ * The first four fields are the original contract (every gate populates them).
+ * The rest are the trust-envelope re-verification fields (BI-8192557E phase 2a):
+ * before them only `sourceType` — a bare string — survived the write, so a
+ * recorded citation could be proven un-tampered-with (via the sealed
+ * `evidenceDigests` hash chain) but never re-resolved against live source. A
+ * digest cannot answer "was this citation ever TRUE"; the structured locator can.
+ *
+ * All five are optional and additive: rows written before this carry none of
+ * them, and their absence must read as UNVERIFIABLE — never as confirmed
+ * (see `recordedCitationsFromSources`).
+ */
+export type DecisionEvaluationSource = {
+  materialId: string;
+  sourceType: string;
+  summary: string;
+  effectiveWeight: number;
+  /** Structured locator, re-resolvable against live source by the re-verifier. */
+  locator?: import("@/lib/deliberation/evidence").StructuredLocator;
+  /** Evidence grade the citation was admitted at (A/B/C; D is inadmissible). */
+  grade?: string;
+  /** The scored option this citation backs. */
+  optionId?: string;
+  /** The scored dimension this citation backs. */
+  dimensionKey?: string;
+  /** The excerpt the score relied on, as recorded at decision time. */
+  excerpt?: string | null;
 };
 
 export type DecisionInteractionGateView = {

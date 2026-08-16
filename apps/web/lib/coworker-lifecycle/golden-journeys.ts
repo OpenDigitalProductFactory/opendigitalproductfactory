@@ -74,6 +74,14 @@ export const CURATED_JOURNEYS: Readonly<Record<string, readonly Omit<GoldenJourn
         "Certification probe (read-only). Using your registry tools, report how many digital products are currently tracked and name one of them. Do not create or modify anything. If tools fail, reply TOOL-FAILURE and name the tool.",
     },
   ],
+  "time-off-advisor": [
+    {
+      journeyId: "time-off-advisor/workforce-fact-check",
+      mode: "act",
+      prompt:
+        "Certification probe (read-only). Use query_employees to retrieve the current workforce and report how many employees are visible plus one employee display name. Do not make a time-off recommendation because no request was supplied. Do not create, modify, or delete anything. If tools fail, reply TOOL-FAILURE and name the tool.",
+    },
+  ],
   "ops-coordinator": [
     {
       journeyId: "ops-coordinator/backlog-pulse",

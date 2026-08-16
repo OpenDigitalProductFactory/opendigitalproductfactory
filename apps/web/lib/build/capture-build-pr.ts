@@ -5,7 +5,7 @@
 // buried in BuildActivity.
 //
 // Why this exists (delivery visibility — "where are my PRs?"):
-//   A FeatureBuild auto-attaches a WorkCapsule at draft time
+//   A FeatureBuild auto-attaches a Workroom at draft time
 //   (work-capsules/build-studio-attachment.ts, featureBuildId = FeatureBuild.id),
 //   and that capsule already carries `pullRequestUrl` / `pullRequestNumber`.
 //   Those columns are READ in many places — the change-lanes projection
@@ -32,7 +32,7 @@ import {
 
 /** The narrow slice of the Prisma client this helper needs (injectable for tests). */
 export interface CaptureBuildPrDeps {
-  workCapsule: {
+  workroom: {
     // Method syntax keeps the real Prisma delegate assignable under
     // strictFunctionTypes while preserving the narrow test-double contract.
     findMany(args: {
@@ -67,12 +67,12 @@ export async function persistBuildPrDeliveryStateForBuild(input: {
   featureBuildId: string;
   delivery: BuildPrDeliveryStateV1;
 }): Promise<number> {
-  const capsules = await input.db.workCapsule.findMany({
+  const capsules = await input.db.workroom.findMany({
     where: { featureBuildId: input.featureBuildId },
     select: { id: true, workspaceState: true, updatedAt: true },
   });
   const writes = await Promise.all(capsules.map((capsule) =>
-    input.db.workCapsule.updateMany({
+    input.db.workroom.updateMany({
       where: { id: capsule.id, updatedAt: capsule.updatedAt },
       data: {
         pullRequestUrl: input.delivery.prUrl,

@@ -1,14 +1,14 @@
 import { describe, expect, it } from "vitest";
 
-import { buildWorkRoomOutcomePacket } from "./outcome-packet";
+import { buildWorkroomOutcomePacket } from "./outcome-packet";
 import {
   projectWorkItemCycleCarriers,
-  projectStoredWorkRoomOutcomePackets,
-  WORK_ROOM_CYCLE_EVIDENCE_KIND,
-  WORK_ROOM_OUTCOME_MESSAGE_TYPE,
+  projectStoredWorkroomOutcomePackets,
+  WORKROOM_CYCLE_EVIDENCE_KIND,
+  WORKROOM_OUTCOME_MESSAGE_TYPE,
 } from "./room-cycle-adapter";
 
-const packet = buildWorkRoomOutcomePacket({
+const packet = buildWorkroomOutcomePacket({
   sourceKey: "scheduled",
   outcomeState: "achieved",
   summary: "Weekly cash review completed.",
@@ -33,8 +33,8 @@ function item(status = "in-progress") {
     dueAt: "2026-08-01T16:00:00.000Z",
     createdAt: "2026-07-27T09:00:00.000Z",
     evidence: {
-      workRoomCycle: {
-        kind: WORK_ROOM_CYCLE_EVIDENCE_KIND,
+      workroomCycle: {
+        kind: WORKROOM_CYCLE_EVIDENCE_KIND,
         version: 1,
         cycleKey: "2026-W31",
         trigger: "Weekly schedule fired.",
@@ -67,9 +67,9 @@ describe("Work Room cycle source adapter", () => {
       items: [item("completed")],
       messages: [{
         messageId: "MSG-OUTCOME-31",
-        messageType: WORK_ROOM_OUTCOME_MESSAGE_TYPE,
+        messageType: WORKROOM_OUTCOME_MESSAGE_TYPE,
         structuredPayload: {
-          kind: WORK_ROOM_OUTCOME_MESSAGE_TYPE,
+          kind: WORKROOM_OUTCOME_MESSAGE_TYPE,
           version: 1,
           cycleKey: "2026-W31",
           carrierId: "WI-CYCLE-31",
@@ -93,9 +93,9 @@ describe("Work Room cycle source adapter", () => {
     const earlier = { ...packet, completedAt: "2026-07-25T16:00:00.000Z" };
     const messages = [earlier, packet].map((storedPacket, index) => ({
       messageId: `MSG-${index}`,
-      messageType: WORK_ROOM_OUTCOME_MESSAGE_TYPE,
+      messageType: WORKROOM_OUTCOME_MESSAGE_TYPE,
       structuredPayload: {
-        kind: WORK_ROOM_OUTCOME_MESSAGE_TYPE,
+        kind: WORKROOM_OUTCOME_MESSAGE_TYPE,
         version: 1,
         cycleKey: `cycle-${index}`,
         carrierId: `WI-${index}`,
@@ -103,6 +103,6 @@ describe("Work Room cycle source adapter", () => {
       },
     }));
 
-    expect(projectStoredWorkRoomOutcomePackets(messages)).toEqual([packet, earlier]);
+    expect(projectStoredWorkroomOutcomePackets(messages)).toEqual([packet, earlier]);
   });
 });

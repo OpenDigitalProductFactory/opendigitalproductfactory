@@ -566,8 +566,31 @@ if [ "$DPF_PLATFORM" = "darwin" ] && command -v docker >/dev/null 2>&1; then
       # calls use the exact string the model-runner knows. This prevents the
       # "failed to get model: model not found" seen in inference.model-manager
       # logs even when the pull command itself was issued.
+      #
+      # HuggingFace sources normalize differently from the `ai/` catalog. Verified
+      # on-box 2026-08-16: pulling `hf.co/ggml-org/Qwen3.8-27B-GGUF:Q4_K_M` lists as
+      # `huggingface.co/ggml-org/qwen3.8-27b-gguf:Q4_K_M` — the host is rewritten to
+      # its long form, the repo path is lowercased, and the quant tag KEEPS its case.
+      # Stripping `ai/` alone leaves the pull form unchanged for these, so the
+      # already-on-disk check never matches and the model re-downloads every run.
       _pull_name="$DPF_SELECTED_MODEL"
-      _runtime_model="$(printf '%s' "$_pull_name" | sed 's|^ai/||')"
+      case "$_pull_name" in
+        hf.co/*|huggingface.co/*)
+          case "$_pull_name" in
+            *:*) _hf_tag="${_pull_name##*:}"; _hf_path="${_pull_name%:*}" ;;
+            *)   _hf_tag=""; _hf_path="$_pull_name" ;;
+          esac
+          _hf_path="$(printf '%s' "$_hf_path" | sed 's|^hf\.co/|huggingface.co/|' | tr '[:upper:]' '[:lower:]')"
+          if [ -n "$_hf_tag" ]; then
+            _runtime_model="${_hf_path}:${_hf_tag}"
+          else
+            _runtime_model="$_hf_path"
+          fi
+          ;;
+        *)
+          _runtime_model="$(printf '%s' "$_pull_name" | sed 's|^ai/||')"
+          ;;
+      esac
       if docker model list 2>/dev/null | awk 'NR>1{print $1}' | grep -Fxq "$_runtime_model"; then
         ok "Model $_runtime_model already on disk"
         DPF_SELECTED_MODEL="$_runtime_model"
@@ -987,8 +1010,33 @@ fi
 #     Per spec § Approval policy: tokens issued by the local installer
 #     auto-approve at enrollment, so the operator doesn't have to click
 #     Approve in Admin > Platform Development for the host's own node.
+dpf_native_edge_converge() {
+  local token="${1:-}"
+  if [ "$(uname -s 2>/dev/null || true)" = "Darwin" ]; then
+    dpf_native_edge_install "$REPO_ROOT" "$token" "${HOSTNAME:-$(hostname -s 2>/dev/null || echo dpf-macos)}"
+  else
+    docker compose "${DPF_COMPOSE_FILES[@]}" up -d --no-deps --force-recreate edge-node >/dev/null 2>&1
+  fi
+}
+
 if [ "$DPF_INCLUDE_EDGE" = "1" ]; then
-  step "Edge Node bootstrap"
+  step "Edge Node convergence"
+
+  # Machine identity lives in the protected native state directory. Once it
+  # exists, upgrades reuse it and never mint another one-time enrollment token.
+  # A missing state file is the only condition that enters bootstrap issuance.
+  EDGE_NATIVE_STATE="${DPF_STATE_DIR:-$HOME/.dpf}/edge-node/state.json"
+  if [ "$(uname -s 2>/dev/null || true)" = "Darwin" ] && [ -f "$EDGE_NATIVE_STATE" ]; then
+    if dpf_native_edge_converge ""; then
+      if [ -f "$REPO_ROOT/docker-compose.edge.yml" ]; then
+        docker compose -f docker-compose.yml -f docker-compose.edge.yml stop edge-node >/dev/null 2>&1 || true
+      fi
+      ok "Native Edge Node converged; existing machine identity preserved"
+      info "  Check this installation's readiness in Platform > Edge Nodes."
+    else
+      warn "Native Edge Node convergence failed; the portal remains healthy."
+    fi
+  else
 
   # Mint a single-use auto-approve token. The script connects to
   # DATABASE_URL=postgresql://...@postgres:5432/dpf, which is only
@@ -1040,7 +1088,7 @@ if [ "$DPF_INCLUDE_EDGE" = "1" ]; then
       # Linux VM. Install the Go Edge Node as a supervised host process there;
       # Linux retains the container runtime.
       if [ "$(uname -s 2>/dev/null || true)" = "Darwin" ]; then
-        if dpf_native_edge_install "$REPO_ROOT" "$EDGE_TOKEN" "${HOSTNAME:-$(hostname -s 2>/dev/null || echo dpf-macos)}"; then
+        if dpf_native_edge_converge "$EDGE_TOKEN"; then
           if [ -f "$REPO_ROOT/docker-compose.edge.yml" ]; then
             docker compose -f docker-compose.yml -f docker-compose.edge.yml stop edge-node >/dev/null 2>&1 || true
           fi
@@ -1049,7 +1097,7 @@ if [ "$DPF_INCLUDE_EDGE" = "1" ]; then
         else
           warn "Native Edge Node installation failed; the portal remains healthy."
         fi
-      elif docker compose "${DPF_COMPOSE_FILES[@]}" up -d --no-deps --force-recreate edge-node >/dev/null 2>&1; then
+      elif dpf_native_edge_converge "$EDGE_TOKEN"; then
         ok "Edge Node bootstrapped — auto-approve token wired into .env"
         info "  The node enrolls within ~10s; check Admin > Platform Development > Edge Nodes."
       else
@@ -1068,6 +1116,7 @@ if [ "$DPF_INCLUDE_EDGE" = "1" ]; then
   # exhausted.
   if [ -n "${EDGE_TOKEN:-}" ] && [[ "$EDGE_TOKEN" == dpfboot_* ]]; then
     rm -f "$EDGE_TOKEN_LOG" 2>/dev/null || true
+  fi
   fi
 else
   info "Edge Node not bundled (opt-in; pass --with-edge to add a local node). Map a network from another machine via Admin > Platform Development > Edge Nodes (docker-compose.edge-standalone.yml)."

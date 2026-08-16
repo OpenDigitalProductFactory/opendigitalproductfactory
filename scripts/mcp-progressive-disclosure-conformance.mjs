@@ -13,8 +13,8 @@ import { request as httpsRequest } from "node:https";
 import { pathToFileURL } from "node:url";
 
 export const CLIENT_PROFILES = Object.freeze([
-  { name: "Codex Desktop", userAgent: "codex-desktop/conformance", expectedDefault: "core" },
-  { name: "Codex CLI", userAgent: "codex-cli/conformance", expectedDefault: "core" },
+  { name: "Codex Desktop", userAgent: "codex-desktop/conformance", expectedDefault: "full" },
+  { name: "Codex CLI", userAgent: "codex-cli/conformance", expectedDefault: "full" },
   { name: "Claude Code", userAgent: "claude-code/conformance", expectedDefault: "full" },
   { name: "Generic MCP", userAgent: "generic-mcp-client/conformance", expectedDefault: "core" },
 ]);

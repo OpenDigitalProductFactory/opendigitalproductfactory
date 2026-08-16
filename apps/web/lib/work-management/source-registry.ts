@@ -3,14 +3,15 @@ import {
   type WorkCaseActionVerb,
 } from "./case-types";
 import type {
-  WorkRoomCycleView,
-  WorkRoomMode,
-  WorkRoomOutcomePacketCategory,
+  WorkroomCycleView,
+  WorkroomMode,
+  WorkroomOutcomePacketCategory,
 } from "./room-types";
 
 export const WORK_CASE_WORK_ITEM_SOURCE_TYPES = [
   "task-node",
   "backlog-item",
+  "work-capsule",
   "approval",
   "manual-task",
   "scheduled",
@@ -42,10 +43,10 @@ export interface WorkCaseReceiptPolicy {
 }
 
 export interface WorkCaseRoomProjectionPolicy {
-  mode: WorkRoomMode;
-  cycleCarrierPrecedence: readonly WorkRoomCycleView["carrierKind"][];
+  mode: WorkroomMode;
+  cycleCarrierPrecedence: readonly WorkroomCycleView["carrierKind"][];
   outcomePacket: {
-    requiredCategories: readonly WorkRoomOutcomePacketCategory[];
+    requiredCategories: readonly WorkroomOutcomePacketCategory[];
   };
 }
 
@@ -150,6 +151,19 @@ export const WORK_CASE_SOURCE_REGISTRY = [
     accountResolverKey: null,
     titleProjection: "Use the backlog item title.",
     summaryProjection: "Use the backlog body, triage outcome, and linked epic.",
+    supportedTransitions: STANDARD_TRANSITIONS,
+    receiptPolicy: GOVERNED_RECEIPT_POLICY,
+    roomProjection: FINITE_ROOM_PROJECTION,
+  },
+  {
+    sourceKey: "work-capsule",
+    displayLabel: "Work capsule",
+    owningArea: "work-convergence",
+    domainCategory: "platform-development",
+    defaultDecisionScope: "wwmd",
+    accountResolverKey: null,
+    titleProjection: "Use the capsule title.",
+    summaryProjection: "Use the capsule objective, current state, and evidence.",
     supportedTransitions: STANDARD_TRANSITIONS,
     receiptPolicy: GOVERNED_RECEIPT_POLICY,
     roomProjection: FINITE_ROOM_PROJECTION,

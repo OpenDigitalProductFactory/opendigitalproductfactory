@@ -10,6 +10,16 @@
 
 **Incident:** the Discovery-page coworker guessed at SMTP setup because it neither received the rendered workflow nor possessed a governed way to inspect or operate it.
 
+**2026-08-12 implementation correction:** ASC semantic state is prehydrated at the shared coworker inference seam for browser, workroom, scheduled, background, mobile, and external modes. This is required in addition to the generic `surface_*` tools: a local or otherwise tool-incapable model must still receive the current authorized UX contract for read-only guidance. Prehydration uses the already-filtered tool authority, creates a principal-bound session, omits write-only/secret values, is bounded to 8,000 prompt characters, and fails open on uncovered surfaces. A read-only surface question sheds tool schemas and the default `toolUse` routing floor; any request to enter data or execute an action keeps governed tools and confirmation.
+
+**2026-08-13 routing correction:** A prehydrated, read-only ASC guidance turn is a bounded factual lookup over authoritative surface state, even when the generic utterance classifier labels wording such as “how should I set up...” as reasoning. At the shared inference seam, that turn routes through the existing `status-query` task contract with the existing `adequate` quality floor. This permits a residency-required local model to answer from the supplied contract instead of being rejected by a coworker's static frontier reasoning floor. The relaxation is turn-scoped: action-capable, non-prehydrated, image, and other turns retain the coworker's configured task, quality floor, tools, grants, and confirmation policy.
+
+**2026-08-13 evidence correction:** Successfully prehydrated, authorization-filtered ASC state is authoritative evidence for that bounded read-only guidance turn. The generic evidence-integrity gate therefore accepts an answer grounded in the injected surface snapshot without demanding a redundant tool call. The exception is not available when prehydration failed or the request is action-capable; those turns retain normal tool evidence, authorization, confirmation, and refusal behavior.
+
+**2026-08-13 response correction:** Authoritative ASC prehydration also crosses the response-presentation boundary: a tool-free local answer grounded in the current surface must not receive the generic “unverified” caveat. Configuration guidance is required to enumerate the applicable choices, exact field labels (including the names—but never values—of write-only fields), constraints/help, and submit/test action from the contract. This rule is generic across surfaces and renderers; it is not page-specific prompt copy.
+
+**2026-08-13 deterministic coverage correction:** Prompt instructions alone do not satisfy the response contract: live acceptance showed a grounded model could still paraphrase `Target IP or Hostname` as “device IP” and omit the write-only `Community String`. For read-only ASC guidance, the shared inference seam now carries the authorization-filtered `SurfaceSummary.highlights` through generation and any deliberation pass, then appends any missing highlight verbatim. This is a generic response-boundary invariant for every surface and renderer; it neither exposes secret values nor adds page-specific coworker logic.
+
 ## 1. Executive decision
 
 DPF will establish an **Authorized Surface Contract (ASC)** as a platform primitive. It is a versioned, render-independent semantic description of what a principal can perceive and do on a product surface. Browser DOM, accessibility tree, mobile UI, workroom, background session, external agent, and future renderers are projections or consumers of this contract—not its source of truth.
@@ -325,7 +335,7 @@ Backlog ownership:
 
 The design is accepted when all of the following are demonstrable in the canonical runtime:
 
-- On Discovery, the coworker can explain SMTP setup from current semantic state, identify exact missing fields/connections, populate permitted values, test/save through governed actions, and report evidence—without asking the user to transcribe the UI.
+- On Discovery, the coworker corrects an employee's “SMTP discovery” wording to SNMP, explains setup from current semantic state, identifies exact missing fields/connections, populates permitted values, tests/saves through governed actions, and reports evidence—without asking the user to transcribe the UI.
 - The same journey succeeds headlessly with no rendered page.
 - Browser and headless graph digests match for semantic content under the same principal/fixture.
 - A different role, tenant, clearance, or AuthorityBinding sees the correct narrower graph/actions.

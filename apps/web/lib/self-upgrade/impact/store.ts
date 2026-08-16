@@ -11,7 +11,7 @@
 // cheap to recompute, so they stay in the L1 cache only.
 
 import { prisma, Prisma } from "@dpf/db";
-import type { UpgradeImpactSummary } from "./types";
+import type { ImpactCategoryCounts, UpgradeImpactSummary } from "./types";
 
 function compoundKey(currentLineageSha: string, targetSha: string) {
   return { currentLineageSha_targetSha: { currentLineageSha, targetSha } };
@@ -59,6 +59,44 @@ export async function getPersistedSummaryRow(
   });
   if (!row) return null;
   return { id: row.id, summary: row.summary as UpgradeImpactSummary };
+}
+
+/**
+ * Batch-read the DIGEST (headline + counts) for a set of summary ids.
+ *
+ * The Run History table needs "what did this run carry?" for every visible row.
+ * Reading each row's full `summary` JSON to get two fields would haul the entire
+ * `allItems` array for a page of runs — potentially megabytes for a large
+ * upgrade — so the projection happens in Postgres via jsonb paths and only the
+ * two fields cross the wire. Bounded by the caller's page size; ids are
+ * parameterised, never interpolated.
+ */
+export async function getPersistedSummaryDigests(
+  ids: string[],
+): Promise<Map<string, { counts: ImpactCategoryCounts; headline: string | null }>> {
+  const unique = Array.from(new Set(ids.filter((id) => typeof id === "string" && id.length > 0)));
+  const out = new Map<string, { counts: ImpactCategoryCounts; headline: string | null }>();
+  if (unique.length === 0) return out;
+
+  const rows = await prisma.$queryRaw<
+    Array<{ id: string; counts: unknown; headline: string | null }>
+  >`
+    SELECT id,
+           summary -> 'counts' AS counts,
+           summary -> 'phrased' ->> 'headline' AS headline
+      FROM "UpgradeImpactSummary"
+     WHERE id = ANY(${unique})
+  `;
+
+  for (const row of rows) {
+    if (!row.counts || typeof row.counts !== "object") continue;
+    const headline = row.headline?.trim();
+    out.set(row.id, {
+      counts: row.counts as ImpactCategoryCounts,
+      headline: headline ? headline : null,
+    });
+  }
+  return out;
 }
 
 /**

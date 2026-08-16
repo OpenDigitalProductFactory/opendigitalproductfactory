@@ -11,8 +11,8 @@
 import { buildMentionNotifications } from "./mention-notify";
 import type { MentionRoster } from "./mentions";
 import {
-  buildCanonicalWorkRoomMetadata,
-  type CanonicalWorkRoomRef,
+  buildCanonicalWorkroomMetadata,
+  type CanonicalWorkroomRef,
 } from "./room-channel-continuity";
 
 export interface PostCommentDb {
@@ -34,7 +34,7 @@ export async function postWorkItemComment(args: {
   db: PostCommentDb;
   workItemId: string;
   workItemTitle: string;
-  roomRef?: CanonicalWorkRoomRef;
+  roomRef?: CanonicalWorkroomRef;
   body: string;
   sender: { type: "user" | "agent"; id: string; label: string };
   roster: MentionRoster;
@@ -64,7 +64,7 @@ export async function postWorkItemComment(args: {
               ...(fanout.mentionedAgentIds.length > 0
                 ? { mentionedAgentIds: fanout.mentionedAgentIds }
                 : {}),
-              ...(args.roomRef ? buildCanonicalWorkRoomMetadata(args.roomRef) : {}),
+              ...(args.roomRef ? buildCanonicalWorkroomMetadata(args.roomRef) : {}),
             },
           }
         : {}),

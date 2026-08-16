@@ -37,11 +37,13 @@ describe("recommendGenerationModel (discrete, headroom-aware)", () => {
     expect(recommendGenerationModel(0)).toBe("ai/qwen3:4B-UD-Q4_K_XL");
   });
   it("reserves headroom so a recommended model never fills the card", () => {
-    // 24 GB card → 30B (16+5=21 fits), NOT the 35B (22+5=27 > 24). This is the
-    // bug the recalibration fixes: the 35B at build context over-commits a 24 GB card.
-    expect(recommendGenerationModel(24)).toBe("ai/qwen3-coder");
+    // 24 GB card → Qwen3.8-27B (18+5=23 fits). 21-22 GB still lands on the 30B
+    // coder, and nothing may select a model whose weights+headroom exceed the card:
+    // that over-commit at build context is the bug this headroom rule exists for.
+    expect(recommendGenerationModel(24)).toBe("hf.co/ggml-org/Qwen3.8-27B-GGUF:Q4_K_M");
+    expect(recommendGenerationModel(27)).toBe("hf.co/ggml-org/Qwen3.8-27B-GGUF:Q4_K_M");
+    expect(recommendGenerationModel(22)).toBe("ai/qwen3-coder");
     expect(recommendGenerationModel(21)).toBe("ai/qwen3-coder");
-    expect(recommendGenerationModel(27)).toBe("ai/qwen3.6:35B-A3B-UD-Q4_K_M");
     expect(recommendGenerationModel(17)).toBe("ai/qwen3:14B-Q6_K");
     expect(recommendGenerationModel(12)).toBe("ai/qwen3:8B-Q4_K_M");
     expect(recommendGenerationModel(11)).toBe("ai/qwen3:8B-Q4_K_M");
@@ -52,14 +54,16 @@ describe("recommendGenerationModel (discrete, headroom-aware)", () => {
 });
 
 describe("recommendGenerationModelForHost (architecture-aware) + computeMemoryBudgetGb", () => {
-  it("discrete card uses VRAM directly → the 4090 lands on the 30B coder", () => {
-    expect(recommendGenerationModelForHost({ architecture: "discrete", vramGb: 24 })).toBe("ai/qwen3-coder");
+  it("discrete card uses VRAM directly → the 4090 lands on the dense 27B", () => {
+    // 24 GB card → Qwen3.8-27B (18+5=23 fits with a margin the 30B coder does not need).
+    expect(recommendGenerationModelForHost({ architecture: "discrete", vramGb: 24 })).toBe("hf.co/ggml-org/Qwen3.8-27B-GGUF:Q4_K_M");
     expect(computeMemoryBudgetGb({ architecture: "discrete", vramGb: 24 })).toBe(24);
   });
   it("unified Apple Silicon runs a far larger model than the same GB of discrete VRAM", () => {
     // 128 GB unified Mac → 80B MoE (128 * 0.75 = 96 budget; 48+5 fits).
     expect(recommendGenerationModelForHost({ architecture: "unified", totalRamGb: 128 })).toBe("ai/qwen3-coder-next");
-    expect(recommendGenerationModelForHost({ architecture: "unified", totalRamGb: 32 })).toBe("ai/qwen3-coder");
+    // 32 GB Mac → 24 budget → the dense 27B, same as a 24 GB card.
+    expect(recommendGenerationModelForHost({ architecture: "unified", totalRamGb: 32 })).toBe("hf.co/ggml-org/Qwen3.8-27B-GGUF:Q4_K_M");
     expect(recommendGenerationModelForHost({ architecture: "unified", totalRamGb: 16 })).toBe("ai/qwen3:8B-Q4_K_M");
   });
   it("cpu-only reserves more system RAM for the OS", () => {

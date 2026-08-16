@@ -125,7 +125,7 @@ export type PortalContextDb = {
   featureBuild: {
     findUnique(args: unknown): Promise<FeatureBuildRow | null>;
   };
-  workCapsule: {
+  workroom: {
     findUnique(args: unknown): Promise<WorkCapsuleRow | null>;
     findFirst(args: unknown): Promise<WorkCapsuleRow | null>;
   };
@@ -148,7 +148,7 @@ export type PortalContextDb = {
   authorityBinding?: {
     findMany(args: unknown): Promise<AuthorityBindingRow[]>;
   };
-  workCapsuleActivity: {
+  workroomActivity: {
     findMany(args: unknown): Promise<ActivityRow[]>;
   };
   backlogItemActivity: {

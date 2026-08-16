@@ -28,13 +28,13 @@ When an operator request could reasonably mean more than one work type, classify
 - immediate product fix
 - runtime investigation
 - specification or documentation update
-- backlog, Work Capsule, or decision-record coordination
+- backlog, Workroom, or decision-record coordination
 - governance or WWMD decision
 - autonomous self-improvement loop
 
-The agent should inspect relevant governed context first - current files, specs, backlog, Work Capsules, live DB state, and available MCP tools. If ambiguity remains, ask one targeted classification question with concrete choices. Do not start code edits, runtime state changes, or hidden direct fixes until the work type is clear enough to route.
+The agent should inspect relevant governed context first - current files, specs, backlog, Workrooms, live DB state, and available MCP tools. If ambiguity remains, ask one targeted classification question with concrete choices. Do not start code edits, runtime state changes, or hidden direct fixes until the work type is clear enough to route.
 
-If the request mentions AI coworkers, proactivity, autonomy, backlog, WWMD, process gaps, self-improvement, or the platform improving itself, prefer the highest-governance interpretation unless the operator explicitly asks for an immediate narrow repair. That means using the relevant DPF MCP, Work Capsule, backlog, and decision tools before implementation.
+If the request mentions AI coworkers, proactivity, autonomy, backlog, WWMD, process gaps, self-improvement, or the platform improving itself, prefer the highest-governance interpretation unless the operator explicitly asks for an immediate narrow repair. That means using the relevant DPF MCP, Workroom, backlog, and decision tools before implementation.
 
 ## Why
 
@@ -51,9 +51,9 @@ It does not require asking the operator for every task. Obvious one-class reques
 ## How To Apply
 
 1. **Detect work-type ambiguity.** Ask whether the request could be a fix, investigation, doc/spec change, governance decision, backlog item, or self-improvement loop.
-2. **Check governed context first.** Inspect the relevant specs, backlog, Work Capsules, live state, and available tools. Do not ask the operator to answer facts the platform can inspect.
+2. **Check governed context first.** Inspect the relevant specs, backlog, Workrooms, live state, and available tools. Do not ask the operator to answer facts the platform can inspect.
 3. **Ask one classification question if needed.** Use concrete choices, for example: "Should I treat this as an immediate product fix, a governance/process improvement, a spec/doc update, or a full self-improvement loop that includes backlog/capsule/WWMD?"
-4. **Route by selected class.** Use WWMD for platform-governance decisions, backlog or Work Capsules for coordinated work, specs/docs for durable contracts, and code only after the governance path is clear.
+4. **Route by selected class.** Use WWMD for platform-governance decisions, backlog or Workrooms for coordinated work, specs/docs for durable contracts, and code only after the governance path is clear.
 5. **Preserve documentation continuity.** A fix-first sequence may be appropriate for an incident or an explicit urgent repair, but it never waives the later spec, docs, backlog, decision, or evidence record. Do not claim done until that continuity exists or a concrete no-docs-needed reason is recorded.
 
 ## Decision Dimensions
@@ -61,14 +61,14 @@ It does not require asking the operator for every task. Obvious one-class reques
 - `governance_compliance: 1.0` - the rule exists to keep work on the governed path.
 - `long_term_maintainability: 0.9` - future agents need to know why the work was done, not just what changed.
 - `reusability: 0.8` - a classified request becomes a reusable process signal across clients and coworkers.
-- `schema_grounding: 0.7` - backlog, Work Capsule, decision, and spec records are the platform's structured memory.
+- `schema_grounding: 0.7` - backlog, Workroom, decision, and spec records are the platform's structured memory.
 - `evidence_density: 0.6` - classification creates an auditable trail that can be reviewed later.
 - `speed_to_value: -0.2` - classification can add a small pause, accepted to avoid the larger cost of the wrong work.
 - `human_cognitive_load: -0.2` - one targeted question is acceptable; broad interrogation is not.
 
 ## Examples
 
-- **Positive:** The operator says a discovered printer was not identified and asks why the assertive AI coworker did not resolve the gap. The agent classifies the request as a self-improvement loop, opens or updates a Work Capsule, runs WWMD, updates the spec, creates any needed backlog follow-up, and then implements the code fix.
+- **Positive:** The operator says a discovered printer was not identified and asks why the assertive AI coworker did not resolve the gap. The agent classifies the request as a self-improvement loop, opens or updates a Workroom, runs WWMD, updates the spec, creates any needed backlog follow-up, and then implements the code fix.
 - **Counterexample:** The agent directly patches the printer row or adds a one-off heuristic, then reports success. The visible symptom improves, but the coworker process remains unable to detect and close similar gaps.
 - **Positive:** The operator says "this button is broken; fix it now." The agent treats it as an immediate product fix, but still records documentation impact and evidence before claiming done.
 

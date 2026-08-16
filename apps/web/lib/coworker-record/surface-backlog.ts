@@ -42,7 +42,7 @@ export interface CoworkerBacklogSlice {
   items: SurfaceBacklogItem[];
 }
 
-const STATUS_VALUES = new Set(["triaging", "open", "in-progress", "done", "deferred"]);
+const STATUS_VALUES = new Set(["triaging", "open", "in-progress", "done", "deferred", "retired"]);
 const WORK_TYPE_VALUES = new Set(["bug", "feature", "chore", "doc", "tool", "skill", "refactor"]);
 
 function clampLimit(raw?: number): number {

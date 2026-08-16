@@ -43,7 +43,7 @@ describe("postWorkItemComment (BI-B416B12A)", () => {
         body: "@mark can you and @ops-coworker take this?",
         structuredPayload: {
           mentionedAgentIds: ["AGT-9"],
-          workRoom: {
+          workroom: {
             caseKey: "manual-task%3AWI-1",
             caseId: "manual-task:WI-1",
             workItemId: "WI-1",

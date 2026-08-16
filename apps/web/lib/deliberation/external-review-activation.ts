@@ -35,7 +35,7 @@ export type StrategyProfile = "economy" | "balanced" | "high-assurance" | "docum
 
 export interface ExternalArtifact {
   readonly artifactType: DeliberationArtifactType;
-  /** WorkCapsule executorKind of the authoring surface (e.g. claude-desktop). */
+  /** Workroom executorKind of the authoring surface (e.g. claude-desktop). */
   readonly authorSurface: string;
   readonly risk?: DeliberationRisk;
   /** Deliverable-sensitivity floor — can only RAISE the profile, never lower it. */

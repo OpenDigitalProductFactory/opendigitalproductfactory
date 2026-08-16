@@ -30,7 +30,7 @@ const db = {
   buildActivity: {
     create: vi.fn(),
   },
-  workCapsuleActivity: {
+  workroomActivity: {
     create: vi.fn(),
   },
   $transaction: vi.fn(async (fn: (tx: typeof db) => Promise<unknown>) => fn(db)),
@@ -43,7 +43,7 @@ function resetDb() {
   db.runtimeTarget.update.mockReset();
   db.runtimeVerification.create.mockReset();
   db.buildActivity.create.mockReset();
-  db.workCapsuleActivity.create.mockReset();
+  db.workroomActivity.create.mockReset();
   db.$transaction.mockReset();
   db.$transaction.mockImplementation(async (fn: (tx: typeof db) => Promise<unknown>) => fn(db));
 }
@@ -138,7 +138,7 @@ describe("registerRuntimeTarget", () => {
       targetId: "RT-BUILD-FB-1",
       status: "running",
     });
-    db.workCapsuleActivity.create.mockResolvedValueOnce({ id: "activity-1" });
+    db.workroomActivity.create.mockResolvedValueOnce({ id: "activity-1" });
 
     await registerRuntimeTarget({
       db: runtimeDb(),
@@ -162,7 +162,7 @@ describe("registerRuntimeTarget", () => {
         sandboxId: "sandbox-row-1",
       }),
     }));
-    expect(db.workCapsuleActivity.create).toHaveBeenCalledWith(expect.objectContaining({
+    expect(db.workroomActivity.create).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({
         workCapsuleId: "capsule-row-1",
         kind: "runtime-target-registered",
@@ -192,7 +192,7 @@ describe("registerRuntimeTarget", () => {
         targetId: "RT-BUILD-FB-1",
         workCapsuleId: "capsule-row-1",
       });
-    db.workCapsuleActivity.create.mockResolvedValueOnce({ id: "activity-1" });
+    db.workroomActivity.create.mockResolvedValueOnce({ id: "activity-1" });
 
     await heartbeatRuntimeTarget({
       db: runtimeDb(),
@@ -214,7 +214,7 @@ describe("registerRuntimeTarget", () => {
       where: { targetId: "RT-BUILD-FB-1" },
       data: { status: "released", lastHeartbeatAt: now },
     }));
-    expect(db.workCapsuleActivity.create).toHaveBeenCalledWith(expect.objectContaining({
+    expect(db.workroomActivity.create).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({
         workCapsuleId: "capsule-row-1",
         kind: "runtime-target-released",
@@ -320,7 +320,7 @@ describe("recordRuntimeVerification", () => {
       verificationId: "RV-UX-1",
       status: "passed",
     });
-    db.workCapsuleActivity.create.mockResolvedValueOnce({ id: "activity-1" });
+    db.workroomActivity.create.mockResolvedValueOnce({ id: "activity-1" });
 
     const result = await recordRuntimeVerification({
       db: runtimeDb(),
@@ -354,7 +354,7 @@ describe("recordRuntimeVerification", () => {
         summary: "Runtime verification RV-UX-1 passed.",
       }),
     }));
-    expect(db.workCapsuleActivity.create).toHaveBeenCalledWith(expect.objectContaining({
+    expect(db.workroomActivity.create).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({
         workCapsuleId: "capsule-row-1",
         kind: "runtime-verification-passed",
@@ -381,6 +381,6 @@ describe("recordRuntimeVerification", () => {
     });
 
     expect(db.runtimeVerification.create).toHaveBeenCalled();
-    expect(db.workCapsuleActivity.create).not.toHaveBeenCalled();
+    expect(db.workroomActivity.create).not.toHaveBeenCalled();
   });
 });

@@ -10,10 +10,11 @@
 // deployed stamp derived from that tree's real HEAD. The promoter never has to
 // be trusted to label the build; the label is the tree's own identity.
 //
-//   upstream: fetch <remote> <branch> → checkout install branch → merge the
-//             target into it (--no-ff). Clean merge ⇒ proceed with the
-//             merge-commit SHA as the stamp; conflict ⇒ abort + defer with the
-//             conflicting files, so the operator is never left mid-merge.
+//   upstream: fetch <remote> <branch> → checkout install branch → compare its
+//             content with the common upstream base. No local content delta ⇒
+//             advance to the exact upstream SHA. Local content delta ⇒ merge
+//             the target (--no-ff) and stamp the merge commit. Conflict ⇒ abort
+//             + defer, so the operator is never left mid-merge.
 //   local:    build the working tree as-is; stamp = HEAD (+ "-dirty" when the
 //             tree has uncommitted changes).
 
@@ -371,17 +372,50 @@ async function prepareUpgradeSourceInWorkspace(
     await run(["-C", input.workspacePath, "reset", "--hard", "HEAD"]);
     await run(["-C", input.workspacePath, "clean", "-fdx"]);
 
-    // ── 4. Merge upstream → install-branch ──────────────────────────────────
-    const merge = await run([
+    // ── 4. Advance or merge upstream → install-branch ───────────────────────
+    // An upstream-only installation must retain a globally resolvable image
+    // identity. The historical unconditional --no-ff merge minted a new local
+    // commit even when dpf/install carried no content beyond its upstream base;
+    // peers then could not fetch the served SHA to prove ancestry. Compare the
+    // install tree with the merge base: when there is no local content delta,
+    // moving directly to the fetched upstream commit preserves the exact bytes
+    // and canonical SHA. A real local delta still takes the merge path so
+    // proprietary/custom installation code is never discarded.
+    const upstreamRef = `${UPSTREAM_REMOTE_IN_WORKSPACE}/${input.branch}`;
+    const mergeBase = await run([
       "-C",
       input.workspacePath,
-      "merge",
-      "--no-ff",
-      `${UPSTREAM_REMOTE_IN_WORKSPACE}/${input.branch}`,
-      "-m",
-      `Merge ${UPSTREAM_REMOTE_IN_WORKSPACE}/${input.branch} into ${input.installBranch} (self-upgrade)`,
+      "merge-base",
+      "HEAD",
+      upstreamRef,
     ]);
-    if (merge.code !== 0) {
+    const baseSha = trim(mergeBase.stdout);
+    const localContentDelta =
+      mergeBase.code !== 0 || !baseSha
+        ? true
+        : (await run([
+            "-C",
+            input.workspacePath,
+            "diff",
+            "--quiet",
+            baseSha,
+            "HEAD",
+            "--",
+          ])).code !== 0;
+
+    const advance = localContentDelta
+      ? await run([
+          "-C",
+          input.workspacePath,
+          "merge",
+          "--no-ff",
+          upstreamRef,
+          "-m",
+          `Merge ${UPSTREAM_REMOTE_IN_WORKSPACE}/${input.branch} into ${input.installBranch} (self-upgrade)`,
+        ])
+      : await run(["-C", input.workspacePath, "reset", "--hard", upstreamRef]);
+
+    if (advance.code !== 0) {
       const conflicts = await run([
         "-C",
         input.workspacePath,
@@ -397,7 +431,7 @@ async function prepareUpgradeSourceInWorkspace(
       // when conflictFiles is empty (e.g. refusing to merge unrelated
       // histories) — the legacy "merge-conflict: " trail with no files left
       // operators guessing. The orchestrator surfaces this into the message.
-      const stderrExcerpt = trim(merge.stderr).slice(0, 500);
+      const stderrExcerpt = trim(advance.stderr).slice(0, 500);
       return {
         ok: false,
         reason: "merge-conflict",

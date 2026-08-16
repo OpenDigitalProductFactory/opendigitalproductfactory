@@ -13,7 +13,6 @@ import { resolveFounderDemandEnvironment } from "@dpf/db/founder-shared-portfoli
 import {
   FederationLinksAdminClient,
   type FederationLinkRow,
-  type NearbyDiscoveryHealth,
   type NearbyPairingRow,
 } from "@/components/platform/federation-links/FederationLinksAdminClient";
 import {
@@ -22,6 +21,12 @@ import {
 } from "@/components/platform/federation-links/PartnerBusinessPanel";
 import { OrganizationJoinPanel } from "@/components/platform/federation-links/OrganizationJoinPanel";
 import { getOrganizationJoinNodeSummariesAction } from "@/lib/actions/organization-join";
+import {
+  deriveNearbyDiscoveryHealth,
+  deriveEdgeNodeReadiness,
+  selectMainInstallationNode,
+  type EdgeReadinessNode,
+} from "@/lib/edge-node/readiness";
 
 export const dynamic = "force-dynamic";
 
@@ -40,21 +45,22 @@ export default async function FederationLinksPage() {
     redirect("/403");
   }
 
-  const [links, discoveryCapabilities, partnerAccounts, nearbyPairingSessions, organizationJoinNodes, introducedCandidates] = await Promise.all([
+  const [links, edgeNodes, partnerAccounts, nearbyPairingSessions, organizationJoinNodes, introducedCandidates] = await Promise.all([
     prisma.federationLink.findMany({
       include: { principal: { select: { displayName: true } } },
       orderBy: { createdAt: "desc" },
       take: 100,
     }),
-    prisma.edgeNodeCapability.findMany({
-      where: { capability: "federation.discovery" },
+    prisma.edgeNode.findMany({
       select: {
-        mode: true,
-        status: true,
-        reportedAt: true,
-        node: { select: { trustState: true, status: true } },
+        id: true, nodeId: true, platform: true, installMode: true, version: true,
+        status: true, trustState: true, lastSeenAt: true, enrolledAt: true,
+        customerAccountId: true, customerSiteId: true,
+        consumedTokens: { select: { autoApprove: true } },
+        capabilityRows: {
+          select: { capability: true, mode: true, status: true, reportedAt: true },
+        },
       },
-      orderBy: { reportedAt: "desc" },
     }),
     prisma.partnerAccount.findMany({
       include: {
@@ -86,43 +92,24 @@ export default async function FederationLinksPage() {
     }),
   ]);
 
-  const enabledDiscovery = discoveryCapabilities.filter(
-    (row) =>
-      (row.mode === "enabled" || row.mode === "reporting-only") &&
-      row.node.trustState === "trusted",
+  const readinessNodes: EdgeReadinessNode[] = edgeNodes.map((node) => ({
+    ...node,
+    storedStatus: node.status,
+    installerManaged: node.consumedTokens.some((token) => token.autoApprove),
+    capabilities: node.capabilityRows,
+  }));
+  const mainNode = selectMainInstallationNode(readinessNodes);
+  const discoveryCapability = mainNode.node?.capabilities.find(
+    (row) => row.capability === "federation.discovery",
   );
-  const nearbyDiscoveryHealth: NearbyDiscoveryHealth =
-    discoveryCapabilities.length === 0
-      ? {
-          status: "unavailable",
-          label: "Not set up",
-          detail: "The native Edge Node has not registered nearby discovery.",
-        }
-      : enabledDiscovery.length === 0
-        ? {
-            status: "disabled",
-            label: "Paused",
-            detail: "Nearby discovery is disabled by the Authority.",
-          }
-        : enabledDiscovery.some((row) => row.status === "healthy")
-          ? {
-              status: "healthy",
-              label: "Listening",
-              detail: "This installation is announcing and looking for nearby DPF installations.",
-            }
-          : enabledDiscovery.some(
-                (row) => row.status === "degraded" || row.status === "failing",
-              )
-            ? {
-                status: "degraded",
-                label: "Needs attention",
-                detail: "Nearby discovery is enabled but cannot advertise or browse. Check the endpoint configuration, multicast network, and host firewall.",
-              }
-            : {
-                status: "waiting",
-                label: "Starting",
-                detail: "Nearby discovery is enabled and waiting for its first health report.",
-              };
+  const readiness = mainNode.node
+    ? deriveEdgeNodeReadiness(mainNode.node, { requiredCapabilities: ["federation.discovery"] })
+    : null;
+  const nearbyDiscoveryHealth = deriveNearbyDiscoveryHealth({
+    selection: mainNode,
+    readiness,
+    discoveryCapability: discoveryCapability ?? null,
+  });
 
   const rows: FederationLinkRow[] = links.map((l) => {
     // What crosses this link to the peer: the minimum-necessary projection the

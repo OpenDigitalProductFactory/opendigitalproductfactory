@@ -27,12 +27,29 @@ vi.mock("@/lib/tak/profession-grounding", () => ({
   groundPromptWithProfessionCorpus: vi.fn(async () => ({ systemPrompt: "GROUNDED", grounded: true })),
   defaultProfessionGroundingDeps: {},
 }));
+vi.mock("@/lib/coworker/authorized-surface-prompt-grounding", () => ({
+  groundPromptWithAuthorizedSurface: vi.fn(async ({ systemPrompt }: { systemPrompt: string }) => ({
+    systemPrompt: `${systemPrompt}\n\nSURFACE GROUNDED`,
+    grounded: true,
+    sessionId: "surface-session-1",
+    guidanceHighlights: [
+      "For SNMP choose SNMP (Generic), enter Target IP or Hostname and the write-only Community String, then use Save & Test.",
+    ],
+  })),
+  enforceAuthorizedSurfaceGuidanceCoverage: vi.fn((content: string, highlights: string[]) =>
+    highlights.every((highlight) => content.includes(highlight))
+      ? content
+      : `${content}\n\nAUTHORIZED SURFACE DETAILS\n${highlights.map((highlight) => `- ${highlight}`).join("\n")}`,
+  ),
+  isAuthorizedSurfaceGuidanceRequest: vi.fn((content: string) => /how should i setup/i.test(content)),
+  closeAuthorizedSurfacePromptGrounding: vi.fn(async () => undefined),
+}));
 
-async function callLoop(interactionMode?: "chat" | "autonomous") {
+async function callLoop(interactionMode?: "chat" | "autonomous", content = "Do the build task.") {
   const { executeAutonomousAgenticLoop } = await import("./autonomous-work-run");
-  await executeAutonomousAgenticLoop({
+  return executeAutonomousAgenticLoop({
     systemPrompt: "BASE",
-    chatHistory: [{ role: "user", content: "Do the build task." }],
+    chatHistory: [{ role: "user", content }],
     sensitivity: "internal",
     tools: [],
     toolsForProvider: [],
@@ -51,6 +68,56 @@ describe("executeAutonomousAgenticLoop — profession-corpus grounding gate", ()
     vi.mocked(agentic.runAgenticLoop).mockResolvedValue({ content: "ok", executedTools: [] } as never);
     const grounding = await import("@/lib/tak/profession-grounding");
     vi.mocked(grounding.groundPromptWithProfessionCorpus).mockClear();
+    const surfaceGrounding = await import("@/lib/coworker/authorized-surface-prompt-grounding");
+    vi.mocked(surfaceGrounding.groundPromptWithAuthorizedSurface).mockClear();
+    vi.mocked(surfaceGrounding.closeAuthorizedSurfacePromptGrounding).mockClear();
+  });
+
+  it("prehydrates the authorized surface at the shared chat and autonomous seam", async () => {
+    await callLoop("chat");
+    await callLoop("autonomous");
+
+    const surfaceGrounding = await import("@/lib/coworker/authorized-surface-prompt-grounding");
+    const agentic = await import("@/lib/tak/agentic-loop");
+    expect(surfaceGrounding.groundPromptWithAuthorizedSurface).toHaveBeenCalledTimes(2);
+    expect(surfaceGrounding.groundPromptWithAuthorizedSurface).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        context: expect.objectContaining({
+          delegatingUserId: "user-1",
+          actingAgentId: "build-qa-engineer",
+          mode: "browser",
+          route: "build",
+        }),
+        authorizedToolNames: expect.any(Set),
+      }),
+    );
+    expect(surfaceGrounding.groundPromptWithAuthorizedSurface).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ context: expect.objectContaining({ mode: "background" }) }),
+    );
+    expect(agentic.runAgenticLoop).toHaveBeenLastCalledWith(
+      expect.objectContaining({ systemPrompt: expect.stringContaining("SURFACE GROUNDED") }),
+    );
+    expect(surfaceGrounding.closeAuthorizedSurfacePromptGrounding).toHaveBeenCalledTimes(2);
+  });
+
+  it("routes prehydrated read-only surface guidance without tool schemas or a tool-use floor", async () => {
+    const result = await callLoop("chat", "how should I setup this smtp discovery?");
+
+    const agentic = await import("@/lib/tak/agentic-loop");
+    expect(agentic.runAgenticLoop).toHaveBeenCalledWith(
+      expect.objectContaining({
+        toolsForProvider: undefined,
+        allowToolFreeInference: true,
+        systemPrompt: expect.stringContaining("SURFACE GROUNDED"),
+      }),
+    );
+    expect(result.authoritativeSurfaceEvidence).toBe(true);
+    expect(result.content).toContain("SNMP (Generic)");
+    expect(result.content).toContain("Target IP or Hostname");
+    expect(result.content).toContain("Community String");
+    expect(result.content).toContain("Save & Test");
   });
 
   it("grounds the autonomous path and forwards the grounded prompt to the loop", async () => {
@@ -59,7 +126,7 @@ describe("executeAutonomousAgenticLoop — profession-corpus grounding gate", ()
     const agentic = await import("@/lib/tak/agentic-loop");
     expect(grounding.groundPromptWithProfessionCorpus).toHaveBeenCalledTimes(1);
     expect(agentic.runAgenticLoop).toHaveBeenCalledWith(
-      expect.objectContaining({ systemPrompt: "GROUNDED" }),
+      expect.objectContaining({ systemPrompt: expect.stringContaining("GROUNDED") }),
     );
   });
 
@@ -69,7 +136,7 @@ describe("executeAutonomousAgenticLoop — profession-corpus grounding gate", ()
     const agentic = await import("@/lib/tak/agentic-loop");
     expect(grounding.groundPromptWithProfessionCorpus).not.toHaveBeenCalled();
     expect(agentic.runAgenticLoop).toHaveBeenCalledWith(
-      expect.objectContaining({ systemPrompt: "BASE" }),
+      expect.objectContaining({ systemPrompt: expect.stringContaining("BASE") }),
     );
   });
 });

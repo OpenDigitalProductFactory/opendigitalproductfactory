@@ -37,7 +37,7 @@ Use the Platform area to supervise AI operations, Edge Nodes, integrations, iden
 
 Open **Platform > Connections** to find nearby DPF installations or connect by invitation. A nearby result is only a setup suggestion: it never creates trust or shares backlog data by itself. Both installations must approve a connection before any shared demand or disposition can cross it.
 
-The page reports whether the native Edge Node is listening for nearby installations. If discovery is not set up, paused, or unhealthy, use the Edge Nodes link to review its authority and network status. Invitation-based setup remains available when local-network discovery cannot be used.
+The page reports whether the native Edge Node is listening for nearby installations. If discovery is not set up, paused, unhealthy, or blocked by an **Enrollment conflict**, use the Edge Nodes link to review its authority and network status. An enrollment conflict means that more than one installer-managed node claims this installation; DPF will not guess which node is authoritative. Invitation-based setup remains available when local-network discovery cannot be used.
 
 For another installation owned by the same organization, choose **Set up this
 DPF**. Automatic setup is available only when both installations advertise a
@@ -77,7 +77,7 @@ Choose the relationship preset that matches the connection:
 - **Same organization** for installations operated by the same company.
 - **Service provider / customer** for a reseller or managed-service relationship, then select which side manages the other.
 
-Only the minimum shared projection crosses an approved link. Local backlog detail, work capsules, private plans, attachments, and customer context remain on their originating installation. Either side can pause or revoke the connection.
+Only the minimum shared projection crosses an approved link. Local backlog detail, workrooms, private plans, attachments, and customer context remain on their originating installation. Either side can pause or revoke the connection.
 
 Classify every connection as **production**, **development**, or **test** in the
 Connections table. New or unclassified links fail safely to development.

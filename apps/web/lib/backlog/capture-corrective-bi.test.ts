@@ -1,25 +1,113 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const findFirst = vi.fn();
+const findMany = vi.fn();
 const create = vi.fn();
 const update = vi.fn();
+const activityFindMany = vi.fn();
+const activityCreateMany = vi.fn();
 
 vi.mock("@dpf/db", () => ({
   prisma: {
     backlogItem: {
       findFirst: (...a: unknown[]) => findFirst(...a),
+      findMany: (...a: unknown[]) => findMany(...a),
       create: (...a: unknown[]) => create(...a),
       update: (...a: unknown[]) => update(...a),
+    },
+    backlogItemActivity: {
+      findMany: (...a: unknown[]) => activityFindMany(...a),
+      createMany: (...a: unknown[]) => activityCreateMany(...a),
     },
   },
 }));
 
-import { captureCorrectiveFailureBI, correctiveFingerprint } from "./capture-corrective-bi";
+import {
+  captureCorrectiveFailureBI,
+  correctiveFingerprint,
+  recordCorrectiveRecoveryEvidence,
+} from "./capture-corrective-bi";
 
 beforeEach(() => {
   findFirst.mockReset();
   create.mockReset();
   update.mockReset();
+  findMany.mockReset();
+  activityFindMany.mockReset();
+  activityCreateMany.mockReset();
+});
+
+describe("recordCorrectiveRecoveryEvidence", () => {
+  const recovery = {
+    runId: "SUR-RECOVERED",
+    currentSha: "before-sha",
+    targetSha: "target-sha",
+    deployedSha: "deployed-sha",
+    completedAt: new Date("2026-08-14T00:00:00.000Z"),
+  };
+
+  it("records one non-closing recovery activity per active item and run", async () => {
+    findMany.mockResolvedValue([
+      { id: "row-1", itemId: "BI-ONE", body: "failureFingerprint: abcdef0123456789\nclass: unknown" },
+      { id: "row-2", itemId: "BI-TWO", body: "failureFingerprint: fedcba9876543210\nclass: environment" },
+    ]);
+    activityFindMany.mockResolvedValue([{ backlogItemId: "row-2" }]);
+    activityCreateMany.mockResolvedValue({ count: 1 });
+
+    const result = await recordCorrectiveRecoveryEvidence({
+      source: "self-upgrade-failure",
+      recovery,
+    });
+
+    expect(findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: {
+        source: "self-upgrade-failure",
+        status: { notIn: ["done", "deferred", "retired"] },
+      },
+    }));
+    expect(activityFindMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({
+        backlogItemId: { in: ["row-1", "row-2"] },
+        kind: "recovery_observed",
+        summary: "Recovery observed in SUR-RECOVERED",
+      }),
+    }));
+    expect(activityCreateMany).toHaveBeenCalledWith({
+      data: [expect.objectContaining({
+        id: expect.stringMatching(/^recovery_[0-9a-f]{24}$/),
+        backlogItemId: "row-1",
+        kind: "recovery_observed",
+        summary: "Recovery observed in SUR-RECOVERED",
+        payload: {
+          source: "self-upgrade-failure",
+          failureFingerprint: "abcdef0123456789",
+          recoveryRunId: "SUR-RECOVERED",
+          currentSha: "before-sha",
+          targetSha: "target-sha",
+          deployedSha: "deployed-sha",
+          completedAt: "2026-08-14T00:00:00.000Z",
+          statusMutated: false,
+        },
+      })],
+      skipDuplicates: true,
+    });
+    expect(result).toEqual({ action: "recorded", itemIds: ["BI-ONE"], activityCount: 1 });
+    expect(update).not.toHaveBeenCalled();
+    expect(activityCreateMany.mock.calls[0][0].data[0].payload).not.toHaveProperty("evidenceKind");
+  });
+
+  it("is best-effort when recovery evidence storage is unavailable", async () => {
+    findMany.mockRejectedValue(new Error("db unavailable"));
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      await expect(recordCorrectiveRecoveryEvidence({
+        source: "self-upgrade-failure",
+        recovery,
+      })).resolves.toEqual({ action: "skipped", reason: "error" });
+    } finally {
+      errSpy.mockRestore();
+    }
+  });
 });
 
 describe("correctiveFingerprint", () => {

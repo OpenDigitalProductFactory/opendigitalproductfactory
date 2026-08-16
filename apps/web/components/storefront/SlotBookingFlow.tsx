@@ -9,7 +9,7 @@ import { slotFlowExtraFields, type FormField } from "./slot-booking-fields";
 // booking-summary owns the structured-role mapping + handoff vocabulary;
 // slot-booking-fields (above) owns which schema fields the flow still renders.
 import { parseCovers, structuredBookingFieldRole } from "@/lib/storefront/booking-summary";
-
+import { createClientOperationId } from "@/lib/client-operation-id";
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 type AvailableSlot = {
@@ -394,7 +394,7 @@ export function SlotBookingFlow({
       covers,
       dietaryNotes,
       notes: notes || undefined,
-      idempotencyKey: crypto.randomUUID(),
+      idempotencyKey: createClientOperationId(),
     });
 
     if (!result.success) {

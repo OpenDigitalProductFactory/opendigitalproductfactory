@@ -1,6 +1,6 @@
 // apps/web/lib/work-capsules/work-capsule-reaper.ts
 //
-// WS9 (BI-CBAAEA94 / EP-PROCESS-SPINE) — the governed WorkCapsule reaper.
+// WS9 (BI-CBAAEA94 / EP-PROCESS-SPINE) — the governed Workroom reaper.
 //
 // The liveness contract (liveness.ts) makes a dead capsule READ as dead on every
 // surface. This reaper makes the STORED status catch up: a capsule whose lease
@@ -31,6 +31,67 @@ import { updateWorkCapsuleStatus, type CapsuleDb, type WorkCapsuleActor } from "
 
 /** Capsule statuses the reaper will never touch — already closed out. */
 const TERMINAL_STATUSES = new Set(["complete", "abandoned", "archived"]);
+
+export type TerminalBacklogReconciliationPlan = {
+  changed: boolean;
+  targetStatus: "open" | null;
+  clearActiveBuild: boolean;
+  releaseClaim: boolean;
+  completionEvidenceRequired: boolean;
+  outcome: "retryable" | "awaiting-governed-completion" | "already-reconciled";
+};
+
+/**
+ * Carrier-terminal → backlog lifecycle decision core. Completion is deliberately
+ * evidence-gated: this projector may clear a stale execution link, but it never
+ * fabricates `done`. A separate governed completion call must cite server-resolved
+ * evidence. Abandon/failure returns in-progress work to open so restart intent is
+ * preserved instead of silently retiring demand.
+ */
+export function planTerminalBacklogReconciliation(input: {
+  backlogStatus: string;
+  activeBuildId: string | null;
+  buildPhase: string | null;
+  capsuleStatus: string | null;
+  hasCompletionEvidence: boolean;
+}): TerminalBacklogReconciliationPlan {
+  const statuses = [input.buildPhase, input.capsuleStatus]
+    .filter((value): value is string => Boolean(value))
+    .map((value) => value.toLowerCase());
+  const completed = statuses.includes("complete") || statuses.includes("completed");
+  const retryable = statuses.some((status) => ["abandoned", "failed", "canceled", "cancelled"].includes(status));
+  const clearActiveBuild = Boolean(input.activeBuildId) && (completed || retryable);
+
+  if (retryable) {
+    const targetStatus = input.backlogStatus === "in-progress" ? "open" : null;
+    return {
+      changed: clearActiveBuild || targetStatus !== null,
+      targetStatus,
+      clearActiveBuild,
+      releaseClaim: targetStatus !== null,
+      completionEvidenceRequired: false,
+      outcome: clearActiveBuild || targetStatus !== null ? "retryable" : "already-reconciled",
+    };
+  }
+  if (completed && input.backlogStatus !== "done") {
+    return {
+      changed: clearActiveBuild,
+      targetStatus: null,
+      clearActiveBuild,
+      releaseClaim: false,
+      completionEvidenceRequired: !input.hasCompletionEvidence,
+      outcome: "awaiting-governed-completion",
+    };
+  }
+  return {
+    changed: clearActiveBuild,
+    targetStatus: null,
+    clearActiveBuild,
+    releaseClaim: false,
+    completionEvidenceRequired: false,
+    outcome: clearActiveBuild ? "awaiting-governed-completion" : "already-reconciled",
+  };
+}
 
 const SYSTEM_ACTOR: WorkCapsuleActor = {
   userId: "system:workcapsule-reaper",
@@ -102,11 +163,96 @@ export type ReapResult = {
   scanned: number;
   candidates: ReapCandidate[];
   reaped: number;
+  backlogReconciled?: number;
 };
 
 type ReaperDb = CapsuleDb & {
   featureBuild?: { findMany(args: unknown): Promise<any[]> };
+  backlogItem?: {
+    findFirst(args: unknown): Promise<any>;
+    update(args: unknown): Promise<any>;
+  };
+  backlogItemActivity?: {
+    count(args: unknown): Promise<number>;
+    create(args: unknown): Promise<any>;
+  };
 };
+
+/** Idempotent repair sweep for terminal capsules whose owning BI still carries execution state. */
+export async function reconcileTerminalCapsuleBacklogs(args: {
+  db: ReaperDb;
+  dryRun?: boolean;
+  now?: Date;
+}): Promise<{ scanned: number; reconciled: number }> {
+  if (!args.db.backlogItem || !args.db.backlogItemActivity) return { scanned: 0, reconciled: 0 };
+  const capsules = await args.db.workroom.findMany({
+    where: {
+      status: { in: [...TERMINAL_STATUSES] },
+      backlogItemId: { not: null },
+    },
+    select: { capsuleId: true, status: true, backlogItemId: true, featureBuildId: true },
+    take: 500,
+  });
+  const buildIds = capsules.map((capsule: any) => capsule.featureBuildId).filter(Boolean);
+  const phases = new Map<string, string | null>();
+  if (buildIds.length > 0 && args.db.featureBuild) {
+    const rows = await args.db.featureBuild.findMany({
+      where: { id: { in: [...new Set(buildIds)] } },
+      select: { id: true, phase: true },
+    });
+    for (const row of rows) phases.set(row.id, row.phase ?? null);
+  }
+  let reconciled = 0;
+  for (const capsule of capsules) {
+    const item = await args.db.backlogItem.findFirst({
+      where: { itemId: capsule.backlogItemId },
+      select: { id: true, itemId: true, status: true, activeBuildId: true },
+    });
+    if (!item) continue;
+    const evidenceCount = await args.db.backlogItemActivity.count({
+      where: {
+        backlogItemId: item.id,
+        kind: { in: ["completion_evidence", "execution_evidence", "runtime_verification"] },
+      },
+    });
+    const plan = planTerminalBacklogReconciliation({
+      backlogStatus: item.status,
+      activeBuildId: item.activeBuildId,
+      buildPhase: capsule.featureBuildId ? phases.get(capsule.featureBuildId) ?? null : null,
+      capsuleStatus: capsule.status,
+      hasCompletionEvidence: evidenceCount > 0,
+    });
+    if (!plan.changed || args.dryRun !== false) continue;
+    await args.db.backlogItem.update({
+      where: { id: item.id },
+      data: {
+        ...(plan.clearActiveBuild ? { activeBuildId: null } : {}),
+        ...(plan.targetStatus ? { status: plan.targetStatus } : {}),
+        ...(plan.releaseClaim ? { claimStatus: "released" } : {}),
+      },
+    });
+    await args.db.backlogItemActivity.create({
+      data: {
+        backlogItemId: item.id,
+        kind: "execution_reconciled",
+        summary: `${capsule.capsuleId} terminal execution reconciled (${plan.outcome})`,
+        payload: {
+          capsuleId: capsule.capsuleId,
+          capsuleStatus: capsule.status,
+          buildPhase: capsule.featureBuildId ? phases.get(capsule.featureBuildId) ?? null : null,
+          fromStatus: item.status,
+          targetStatus: plan.targetStatus,
+          completionEvidenceRequired: plan.completionEvidenceRequired,
+          rule: "terminal execution never infers backlog done",
+        },
+        recordedAt: args.now ?? new Date(),
+        recordedByAgentId: "workcapsule-reaper",
+      },
+    });
+    reconciled += 1;
+  }
+  return { scanned: capsules.length, reconciled };
+}
 
 const NON_TERMINAL_STATUSES = [
   "draft",
@@ -137,7 +283,7 @@ export async function reapStaleWorkCapsules(args: {
   const idleMs = args.idleMs ?? WORK_CAPSULE_IDLE_STALE_MS;
   const dryRun = args.dryRun ?? true;
 
-  const capsules: ReaperCapsuleRow[] = await args.db.workCapsule.findMany({
+  const capsules: ReaperCapsuleRow[] = await args.db.workroom.findMany({
     where: { status: { in: NON_TERMINAL_STATUSES }, archivedAt: null },
     select: {
       capsuleId: true,
@@ -190,7 +336,7 @@ export async function reapStaleWorkCapsules(args: {
         capsuleId: candidate.capsuleId,
         status: "abandoned",
         reason:
-          `Auto-abandoned by the governed WorkCapsule reaper (WS9/BI-CBAAEA94): ${candidate.reason} ` +
+          `Auto-abandoned by the governed Workroom reaper (WS9/BI-CBAAEA94): ${candidate.reason} ` +
           "Re-promote the backlog item or re-adopt the branch to resume. Worktree left untouched.",
         actor,
         now,
@@ -203,12 +349,19 @@ export async function reapStaleWorkCapsules(args: {
       console.warn(`[work-capsule-reaper] failed to abandon ${candidate.capsuleId}:`, err);
     }
   }
-  return { dryRun: false, scanned: capsules.length, candidates, reaped };
+  const backlogRepair = await reconcileTerminalCapsuleBacklogs({ db: args.db, dryRun: false, now });
+  return {
+    dryRun: false,
+    scanned: capsules.length,
+    candidates,
+    reaped,
+    backlogReconciled: backlogRepair.reconciled,
+  };
 }
 
 /**
  * Close the loop when a Build Studio build is abandoned/completed: transition its
- * attached WorkCapsule out of `working` so a terminal build never leaves a zombie
+ * attached Workroom out of `working` so a terminal build never leaves a zombie
  * "working" capsule behind (the largest slice of the WS9 sprawl). Best-effort and
  * idempotent — a missing or already-terminal capsule is a no-op. Called from the
  * inert-build reaper inside the same watchdog tick that abandons the build, so
@@ -222,7 +375,7 @@ export async function transitionCapsuleForTerminalBuild(
 ): Promise<boolean> {
   const { prisma } = await import("@dpf/db");
   const db = prisma as unknown as CapsuleDb;
-  const capsule = await db.workCapsule.findFirst({
+  const capsule = await db.workroom.findFirst({
     where: {
       idempotencyKey: `build-studio:${buildId}`,
       status: { notIn: [...TERMINAL_STATUSES] },

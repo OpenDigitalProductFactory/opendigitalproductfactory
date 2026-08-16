@@ -57,7 +57,7 @@ describe("runtime work attribution", () => {
     const prisma = {
       featureBuild: { count: vi.fn(async () => 1) },
       taskRun: { count: vi.fn(async () => 2) },
-      workCapsule: { count: vi.fn(async () => 3) },
+      workroom: { count: vi.fn(async () => 3) },
     };
     const db = createPrismaWorkAttributionStore(prisma);
     await Promise.all([
@@ -67,6 +67,6 @@ describe("runtime work attribution", () => {
     ]);
     expect(prisma.featureBuild.count).toHaveBeenCalledWith({ where: { abandonedAt: null, phase: { in: ["ideate", "plan", "build", "review"] } } });
     expect(prisma.taskRun.count).toHaveBeenCalledWith({ where: { source: "build", status: { in: ["working"] } } });
-    expect(prisma.workCapsule.count).toHaveBeenCalledWith({ where: { source: "build-studio", status: { in: ["blocked"] } } });
+    expect(prisma.workroom.count).toHaveBeenCalledWith({ where: { source: "build-studio", status: { in: ["blocked"] } } });
   });
 });

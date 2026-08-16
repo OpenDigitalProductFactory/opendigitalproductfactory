@@ -186,6 +186,10 @@ test("lease-guard + root-clone-guard ride a Bash matcher; the prechecks ride a w
     return WRITE_TOOLS.some((t) => tools.includes(t));
   });
   assert.ok(writeEntry, "expected a Write|Edit|MultiEdit matcher for the prechecks");
+  assert.ok(
+    (writeEntry.hooks ?? []).some((h) => JSON.stringify(h).includes("root-clone-guard.mjs")),
+    "root-clone-guard.mjs must ride the write-tool matcher so an aliased cwd cannot redirect edits into main",
+  );
   for (const s of ["plan-backlog-coverage-guard.mjs", "ux-fit-precheck.mjs", "spec-plan-doc-precheck.mjs", "design-grounding-precheck.mjs"]) {
     assert.ok(
       (writeEntry.hooks ?? []).some((h) => JSON.stringify(h).includes(s)),

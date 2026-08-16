@@ -1,9 +1,11 @@
 import {
   findRestaurantSeatingAlternatives,
+  restaurantSeatingAllocationsForInterval,
   restaurantSeatingVersion,
   type RestaurantSeatingAllocationFact,
   type RestaurantSeatingResourceFact,
 } from "@/lib/storefront/restaurant-seating";
+import { parseRestaurantTableAttributes } from "@/lib/storefront/restaurant-table-attributes";
 
 import {
   deriveRestaurantFloor,
@@ -19,7 +21,7 @@ interface RestaurantFloorBookingRow {
   id: string;
   bookingRef: string;
   customerName: string;
-  customerEmail: string;
+  customerEmail: string | null;
   customerPhone: string | null;
   covers: number | null;
   demandKind: string;
@@ -131,11 +133,21 @@ export interface RestaurantReservationWatch {
   tableLabels: string[];
 }
 
+export interface RestaurantCapacityTimelineSlot {
+  startsAt: string;
+  endsAt: string;
+  reservationCount: number;
+  reservedCovers: number;
+  onlineOpen: number;
+  inHouseOpen: number;
+}
+
 export interface RestaurantFloorOperationalView {
   floor: RestaurantFloorProjection;
   commands: RestaurantFloorCommandDemand[];
   moves: RestaurantFloorMoveCommand[];
   reservationWatch?: RestaurantReservationWatch[];
+  capacityTimeline?: RestaurantCapacityTimelineSlot[];
   telemetry: {
     durationMs: number;
     queryCount: number;
@@ -151,6 +163,69 @@ const OPEN_BOOKING_STATUSES = [
   "scheduled",
   "seated",
 ];
+
+function intervalsOverlap(
+  leftStart: Date,
+  leftEnd: Date,
+  rightStart: Date,
+  rightEnd: Date,
+) {
+  return leftStart < rightEnd && rightStart < leftEnd;
+}
+
+function buildCapacityTimeline(input: {
+  now: Date;
+  resources: RestaurantFloorResourceRow[];
+  allocations: RestaurantFloorAllocationRow[];
+  holds: Array<{ hospitalityResourceId: string | null; slotStart: Date; slotEnd: Date }>;
+  bookings: RestaurantFloorBookingRow[];
+}): RestaurantCapacityTimelineSlot[] {
+  const slotMs = 30 * 60_000;
+  const firstStart = new Date(Math.ceil(input.now.getTime() / slotMs) * slotMs);
+  return Array.from({ length: 6 }, (_, index) => {
+    const startsAt = new Date(firstStart.getTime() + index * slotMs);
+    const endsAt = new Date(startsAt.getTime() + slotMs);
+    const occupied = new Set(
+      input.allocations.flatMap((allocation) =>
+        allocation.resourceId &&
+          intervalsOverlap(allocation.startsAt, allocation.endsAt, startsAt, endsAt)
+          ? [allocation.resourceId]
+          : [],
+      ),
+    );
+    for (const hold of input.holds) {
+      if (
+        hold.hospitalityResourceId &&
+        intervalsOverlap(hold.slotStart, hold.slotEnd, startsAt, endsAt)
+      ) occupied.add(hold.hospitalityResourceId);
+    }
+    const reservations = input.bookings.filter((booking) => {
+      const bookingEnd = new Date(
+        booking.scheduledAt.getTime() + booking.durationMinutes * 60_000,
+      );
+      return booking.demandKind !== "walk-in" &&
+        ["pending", "confirmed", "scheduled", "seated"].includes(booking.status) &&
+        intervalsOverlap(booking.scheduledAt, bookingEnd, startsAt, endsAt);
+    });
+    const open = input.resources.filter(
+      (resource) => resource.status === "active" && !occupied.has(resource.id),
+    );
+    return {
+      startsAt: startsAt.toISOString(),
+      endsAt: endsAt.toISOString(),
+      reservationCount: reservations.length,
+      reservedCovers: reservations.reduce((sum, booking) => sum + (booking.covers ?? 0), 0),
+      onlineOpen: open.filter(
+        (resource) =>
+          parseRestaurantTableAttributes(resource.attributes).bookingAccess === "online",
+      ).length,
+      inHouseOpen: open.filter(
+        (resource) =>
+          parseRestaurantTableAttributes(resource.attributes).bookingAccess === "in-house",
+      ).length,
+    };
+  });
+}
 
 function attachExactPayloadBytes(
   view: RestaurantFloorOperationalView,
@@ -276,6 +351,11 @@ export async function loadRestaurantFloorOperationalView(
           status: { in: OPEN_BOOKING_STATUSES },
           OR: [
             { status: "waiting" },
+            {
+              hospitalityServiceTurn: {
+                is: { stage: { in: [...ACTIVE_TURN_STAGES] } },
+              },
+            },
             {
               scheduledAt: {
                 gte: horizonStart,
@@ -484,19 +564,26 @@ export async function loadRestaurantFloorOperationalView(
         return resource && floorTable?.state === "available" ? [resource] : [];
       });
       if (optionResources.length !== resourceIds.length) return [];
-      const resourceAllocations = allocations.filter(
-        (allocation) =>
-          allocation.resourceId !== null &&
-          resourceIds.includes(allocation.resourceId),
-      );
+      const interval = {
+        startsAt: now,
+        endsAt: new Date(
+          now.getTime() + demand.durationMinutes * 60_000,
+        ),
+      };
+      const resourceAllocations = restaurantSeatingAllocationsForInterval({
+        allocations: allocations.filter(
+          (allocation) =>
+            allocation.resourceId !== null &&
+            resourceIds.includes(allocation.resourceId),
+        ),
+        ...interval,
+      });
       return [{
         resourceIds,
         label: optionResources.map((resource) => resource.label).join(" + "),
         interval: {
-          startsAt: now.toISOString(),
-          endsAt: new Date(
-            now.getTime() + demand.durationMinutes * 60_000,
-          ).toISOString(),
+          startsAt: interval.startsAt.toISOString(),
+          endsAt: interval.endsAt.toISOString(),
         },
         expectedVersion: restaurantSeatingVersion({
           demand,
@@ -578,11 +665,15 @@ export async function loadRestaurantFloorOperationalView(
         const optionResources = resources.filter((resource) =>
           alternative.resourceIds.includes(resource.id),
         );
-        const optionAllocations = allocations.filter(
-          (allocation) =>
-            allocation.resourceId !== null &&
-            alternative.resourceIds.includes(allocation.resourceId),
-        );
+        const optionAllocations = restaurantSeatingAllocationsForInterval({
+          allocations: allocations.filter(
+            (allocation) =>
+              allocation.resourceId !== null &&
+              alternative.resourceIds.includes(allocation.resourceId),
+          ),
+          startsAt: now,
+          endsAt,
+        });
         return {
           resourceIds: alternative.resourceIds,
           label: alternative.label,
@@ -637,11 +728,20 @@ export async function loadRestaurantFloorOperationalView(
         left.scheduledAt.localeCompare(right.scheduledAt),
     );
 
+  const capacityTimeline = buildCapacityTimeline({
+    now,
+    resources,
+    allocations,
+    holds,
+    bookings,
+  });
+
   return attachExactPayloadBytes({
     floor,
     commands,
     moves,
     reservationWatch,
+    capacityTimeline,
     telemetry: {
       durationMs: Math.max(0, clock() - startedAt),
       queryCount,

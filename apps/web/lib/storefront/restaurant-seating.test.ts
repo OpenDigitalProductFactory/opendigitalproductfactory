@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   evaluateRestaurantSeating,
   findRestaurantSeatingAlternatives,
+  restaurantSeatingAllocationsForInterval,
   restaurantSeatingVersion,
   type RestaurantSeatingAllocationFact,
   type RestaurantSeatingResourceFact,
@@ -145,6 +146,33 @@ describe("restaurant seating decision", () => {
         demandRef: "BOOK-1",
       }),
     ).toEqual({ ok: true, capacity: 2 });
+  });
+
+  it("keeps only live allocations that overlap the command interval", () => {
+    const overlapping = {
+      id: "overlapping",
+      resourceId: "t1",
+      startsAt: new Date("2026-07-31T18:30:00.000Z"),
+      // clock-bomb-guard: allow pure interval-overlap test has no wall-clock dependency
+      endsAt: new Date("2026-07-31T19:30:00.000Z"),
+      lifecycle: "reserved" as const,
+      version: 1,
+    };
+    expect(restaurantSeatingAllocationsForInterval({
+      allocations: [
+        overlapping,
+        {
+          ...overlapping,
+          id: "later",
+          startsAt: new Date("2026-07-31T20:00:00.000Z"),
+          // clock-bomb-guard: allow pure interval-overlap test has no wall-clock dependency
+          endsAt: new Date("2026-07-31T21:00:00.000Z"),
+        },
+        { ...overlapping, id: "released", lifecycle: "released" },
+      ],
+      startsAt,
+      endsAt,
+    })).toEqual([overlapping]);
   });
 
   it("derives a stable concurrency token independent of query order", () => {

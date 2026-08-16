@@ -65,6 +65,7 @@ const resources = [
       shape: "round",
       combinationGroup: "main",
       combinableWith: [],
+      bookingAccess: "in-house",
     },
   },
 ];
@@ -217,6 +218,80 @@ describe("restaurant floor operational loader", () => {
           }),
         ],
       },
+    ]);
+    expect(view.capacityTimeline?.[0]).toEqual({
+      startsAt: "2026-07-31T18:30:00.000Z",
+      endsAt: "2026-07-31T19:00:00.000Z",
+      reservationCount: 1,
+      reservedCovers: 2,
+      onlineOpen: 0,
+      inHouseOpen: 1,
+    });
+  });
+
+  it("excludes a later reservation from the immediate seating version", async () => {
+    const db = database();
+    db.hospitalityCapacityAllocation.findMany.mockResolvedValue([
+      {
+        id: "allocation-later",
+        resourceId: "table-2",
+        startsAt: new Date("2026-07-31T20:00:00.000Z"),
+        endsAt: new Date("2026-07-31T21:00:00.000Z"),
+        lifecycle: "reserved",
+        version: 1,
+        demandRef: "BOOK-LATER",
+        serviceTurn: null,
+      },
+    ]);
+
+    const view = await loadRestaurantFloorOperationalView(db, {
+      organizationId: "org-1",
+      storefrontId: "store-1",
+      now,
+    });
+
+    const tableTwo = view.commands
+      .find((candidate) => candidate.demandId === "booking-waiting")
+      ?.options.find((option) => option.resourceIds.join(",") === "table-2");
+    expect(tableTwo?.expectedVersion).toBe(restaurantSeatingVersion({
+      demand: waitingBooking,
+      resources: [resources[1]],
+      allocations: [],
+    }));
+  });
+
+  it("keeps active-turn booking context outside the ordinary demand horizon", async () => {
+    const db = database();
+    db.storefrontBooking.findMany.mockImplementation(
+      async (args: unknown) =>
+        JSON.stringify(args).includes("hospitalityServiceTurn")
+          ? [
+              {
+                ...seatedBooking,
+                scheduledAt: new Date("2026-07-28T18:00:00.000Z"),
+              },
+              waitingBooking,
+            ]
+          : [waitingBooking],
+    );
+
+    const view = await loadRestaurantFloorOperationalView(db, {
+      organizationId: "org-1",
+      storefrontId: "store-1",
+      now,
+    });
+
+    expect(view.floor.tables[0]).toEqual(
+      expect.objectContaining({
+        party: { id: "booking-seated", name: "Morgan Lee", covers: 2 },
+      }),
+    );
+    expect(view.moves).toEqual([
+      expect.objectContaining({
+        demandId: "booking-seated",
+        serviceTurnId: "turn-1",
+        options: [expect.objectContaining({ resourceIds: ["table-2"] })],
+      }),
     ]);
   });
 

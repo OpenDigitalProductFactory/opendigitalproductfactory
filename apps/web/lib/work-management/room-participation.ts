@@ -1,11 +1,12 @@
 import type { ActiveViewer } from "./work-item-presence";
+import { deriveRoomCoordinator } from "./room-coordinator";
 import type {
-  WorkRoomParticipantRole,
-  WorkRoomParticipantView,
+  WorkroomParticipantRole,
+  WorkroomParticipantView,
 } from "./room-types";
 
-export const WORK_ROOM_ACCESS_LEVELS = ["none", "discover", "content", "action"] as const;
-export type WorkRoomAccessLevel = (typeof WORK_ROOM_ACCESS_LEVELS)[number];
+export const WORKROOM_ACCESS_LEVELS = ["none", "discover", "content", "action"] as const;
+export type WorkroomAccessLevel = (typeof WORKROOM_ACCESS_LEVELS)[number];
 
 const SENSITIVITY_RANK: Record<string, number> = {
   public: 0,
@@ -15,16 +16,16 @@ const SENSITIVITY_RANK: Record<string, number> = {
   critical: 3,
 };
 
-export type WorkRoomAccessDecision = {
-  level: WorkRoomAccessLevel;
+export type WorkroomAccessDecision = {
+  level: WorkroomAccessLevel;
   reason: "authorized" | "discover-only" | "not-admitted" | "insufficient-clearance";
 };
 
-export type WorkRoomDiscoveryField = "title" | "outcome" | "mode";
+export type WorkroomDiscoveryField = "title" | "outcome" | "mode";
 
-export function projectWorkRoomDiscovery(input: {
-  decision: WorkRoomAccessDecision;
-  allowedFields: readonly WorkRoomDiscoveryField[];
+export function projectWorkroomDiscovery(input: {
+  decision: WorkroomAccessDecision;
+  allowedFields: readonly WorkroomDiscoveryField[];
   metadata: { title: string; outcome: string | null; mode: "finite" | "standing" };
 }) {
   if (input.decision.level === "none") return null;
@@ -37,8 +38,8 @@ export function projectWorkRoomDiscovery(input: {
   };
 }
 
-export function authorizeWorkRoomAccess(input: {
-  requested: Exclude<WorkRoomAccessLevel, "none">;
+export function authorizeWorkroomAccess(input: {
+  requested: Exclude<WorkroomAccessLevel, "none">;
   principalRef: string | null;
   assignedPrincipalRefs: readonly string[];
   discoverablePrincipalRefs?: readonly string[];
@@ -46,7 +47,7 @@ export function authorizeWorkRoomAccess(input: {
   sensitivityCeiling: string | null;
   sensitivityClearance: readonly string[];
   isSuperuser: boolean;
-}): WorkRoomAccessDecision {
+}): WorkroomAccessDecision {
   if (input.isSuperuser) return { level: input.requested, reason: "authorized" };
   if (!input.principalRef) return { level: "none", reason: "not-admitted" };
 
@@ -74,11 +75,11 @@ export function authorizeWorkRoomAccess(input: {
   return { level: input.requested, reason: "authorized" };
 }
 
-export type WorkRoomParticipantAssignment = {
+export type WorkroomParticipantAssignment = {
   principalRef: string;
   displayName: string;
-  kind: WorkRoomParticipantView["kind"];
-  roles: WorkRoomParticipantRole[];
+  kind: WorkroomParticipantView["kind"];
+  roles: WorkroomParticipantRole[];
   currentWorkSummary: string | null;
   enteredReason: string | null;
   sponsorPrincipalRef: string | null;
@@ -86,20 +87,20 @@ export type WorkRoomParticipantAssignment = {
   authoritySummary: string;
 };
 
-export type WorkRoomConversationParticipant = Omit<
-  WorkRoomParticipantView,
+export type WorkroomConversationParticipant = Omit<
+  WorkroomParticipantView,
   "kind" | "presence" | "sourceRefs"
 > & {
-  sourceRef: WorkRoomParticipantView["sourceRefs"][number];
+  sourceRef: WorkroomParticipantView["sourceRefs"][number];
 };
 
-export function projectWorkRoomParticipants(input: {
-  assignments: readonly WorkRoomParticipantAssignment[];
-  conversationParticipants: readonly WorkRoomConversationParticipant[];
+export function projectWorkroomParticipants(input: {
+  assignments: readonly WorkroomParticipantAssignment[];
+  conversationParticipants: readonly WorkroomConversationParticipant[];
   presence: readonly ActiveViewer[];
-}): WorkRoomParticipantView[] {
+}): WorkroomParticipantView[] {
   const active = new Set(input.presence.map((viewer) => viewer.principalId));
-  const projected = new Map<string, WorkRoomParticipantView>();
+  const projected = new Map<string, WorkroomParticipantView>();
 
   for (const assignment of input.assignments) {
     const existing = projected.get(assignment.principalRef);
@@ -145,5 +146,7 @@ export function projectWorkRoomParticipants(input: {
     });
   }
 
-  return [...projected.values()];
+  // EP-WORKROOM-COMMS (BI-5A7BC4B3): ensure the room has a single Coordinator —
+  // kept if named by policy/lineage, otherwise the accountable principal by default.
+  return deriveRoomCoordinator([...projected.values()]);
 }

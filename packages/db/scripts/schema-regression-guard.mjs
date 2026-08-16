@@ -203,17 +203,73 @@ export const INTENTIONAL_FIELD_REMOVALS = new Set([
   "FederatedRecordMirror.acknowledgedVersion",
 ]);
 
-export function diffSchemas(base, head, allowlist = INTENTIONAL_FIELD_REMOVALS) {
+// Models intentionally RENAMED via a steward-reviewed change (AGENTS.md §11).
+// Each entry maps the old model name to the new one. A logical rename is not a
+// regression when the physical table is preserved, so the guard accepts an entry
+// ONLY when the new model carries `@@map("<old name>")` — that is what makes the
+// rename metadata-only (`prisma migrate diff` stays empty) and rollback cheap.
+// Without the @@map the rename IS a table drop and still regresses.
+//
+// Field lines are compared after substituting renamed model names, so a relation
+// whose only change is its referenced type (e.g. `WorkCapsule?` -> `Workroom?`)
+// is not reported. Genuine field drops inside a renamed model still regress.
+// Prune entries once the rename has shipped to every environment.
+export const INTENTIONAL_MODEL_RENAMES = new Map([
+  // 2026-08-15 BI-7BE9D81D (EP-WORK-CONVERGENCE): the Workroom is the canonical
+  // unit of what we claim and where we work, replacing WorkCapsule
+  // (founder-directed). Both models keep @@map to their original tables, so the
+  // 285 live rows are untouched and no migration is required.
+  ["WorkCapsule", "Workroom"],
+  ["WorkCapsuleActivity", "WorkroomActivity"],
+]);
+
+// Apply the sanctioned model renames to a schema line so that a relation field
+// differing only by its referenced model name compares equal.
+//
+// `@@map("...")` is deliberately exempt. Its argument is the PHYSICAL TABLE
+// name, not a model name, and the whole point of an honoured rename is that the
+// new model keeps `@@map("<old model name>")`. Substituting inside it rewrote
+// the base's `@@map("WorkCapsule")` into `@@map("Workroom")`, which never
+// matches the head, so every renamed model reported its own `@@map` as removed
+// — main regressed against itself and blocked any PR touching the schema.
+function applyModelRenames(line, renames) {
+  if (/^@@map\(/.test(line.trim())) return line;
+  let out = line;
+  for (const [from, to] of renames) {
+    out = out.replace(new RegExp(`\\b${from}\\b`, "g"), to);
+  }
+  return out;
+}
+
+export function diffSchemas(
+  base,
+  head,
+  allowlist = INTENTIONAL_FIELD_REMOVALS,
+  renames = INTENTIONAL_MODEL_RENAMES,
+) {
   const regressions = [];
+
+  // A rename is only honoured when the new model preserves the physical table
+  // via @@map("<old name>"); otherwise it is a real table drop.
+  const honouredRenames = new Map();
+  for (const [from, to] of renames) {
+    const headLines = head.models.get(to);
+    if (!headLines) continue;
+    if (![...headLines].some((l) => l === `@@map("${from}")`)) continue;
+    honouredRenames.set(from, to);
+  }
 
   // Models
   for (const [name, baseLines] of base.models) {
-    if (!head.models.has(name)) {
+    const renamedTo = honouredRenames.get(name);
+    if (!head.models.has(name) && !renamedTo) {
       regressions.push(`model ${name} removed entirely`);
       continue;
     }
-    const headLines = head.models.get(name);
-    for (const line of baseLines) {
+    const headLines = renamedTo ? head.models.get(renamedTo) : head.models.get(name);
+    const label = renamedTo ? `${name} (renamed to ${renamedTo})` : name;
+    for (const rawBaseLine of baseLines) {
+      const line = applyModelRenames(rawBaseLine, honouredRenames);
       if (!headLines.has(line)) {
         const equivalentWidening = [...headLines].some((headLine) =>
           isOptionalityWidening(line, headLine),
@@ -228,7 +284,7 @@ export function diffSchemas(base, head, allowlist = INTENTIONAL_FIELD_REMOVALS) 
         // (accidental drops) still regresses.
         const parsed = parseModelFieldLine(line);
         if (parsed && allowlist.has(`${name}.${parsed.name}`)) continue;
-        regressions.push(`model ${name}: removed \`${line}\``);
+        regressions.push(`model ${label}: removed \`${line}\``);
       }
     }
   }

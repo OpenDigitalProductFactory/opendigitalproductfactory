@@ -3,6 +3,8 @@ import {
   satisfiesMinimumCapabilities,
   DEFAULT_MINIMUM_CAPABILITIES,
   PASSIVE_AGENT_CAPABILITIES,
+  resolveTurnMinimumCapabilities,
+  resolveTurnGroundedGuidanceRoute,
 } from "./agent-capability-types";
 import type { EndpointManifest } from "./types";
 
@@ -69,5 +71,45 @@ describe("satisfiesMinimumCapabilities", () => {
       { toolUse: true, imageInput: true },
     );
     expect(result).toEqual({ satisfied: true });
+  });
+});
+
+describe("resolveTurnMinimumCapabilities", () => {
+  it("drops only tool use for prehydrated read-only guidance", () => {
+    expect(resolveTurnMinimumCapabilities(
+      { toolUse: true, imageInput: true },
+      { allowToolFreeInference: true, hasProviderTools: false, requireTools: false },
+    )).toEqual({ imageInput: true });
+  });
+
+  it("retains tool use when tools are attached or required", () => {
+    expect(resolveTurnMinimumCapabilities(
+      { toolUse: true },
+      { allowToolFreeInference: true, hasProviderTools: true, requireTools: false },
+    )).toEqual({ toolUse: true });
+  });
+});
+
+describe("resolveTurnGroundedGuidanceRoute", () => {
+  it("uses an adequate factual route for prehydrated read-only guidance", () => {
+    expect(resolveTurnGroundedGuidanceRoute(
+      "reasoning",
+      { codegen: 85, toolFidelity: 85, reasoning: 85 },
+      { allowToolFreeInference: true, hasProviderTools: false, requireTools: false },
+    )).toEqual({
+      taskType: "status-query",
+      minimumDimensions: { codegen: 50, toolFidelity: 50, reasoning: 50 },
+    });
+  });
+
+  it("retains the configured route for action-capable turns", () => {
+    expect(resolveTurnGroundedGuidanceRoute(
+      "reasoning",
+      { codegen: 85, toolFidelity: 85, reasoning: 85 },
+      { allowToolFreeInference: true, hasProviderTools: true, requireTools: false },
+    )).toEqual({
+      taskType: "reasoning",
+      minimumDimensions: { codegen: 85, toolFidelity: 85, reasoning: 85 },
+    });
   });
 });

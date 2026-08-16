@@ -8,6 +8,7 @@ import { getUserTeamIds, createAuthorizationDecisionLog } from "@/lib/governance
 import { buildPrincipalContext } from "@/lib/principal-context";
 import { resolveGovernedAction } from "@/lib/governance-resolver";
 import { summarizeGovernedLifecycleAttempt } from "@/lib/user-governance";
+import { syncUserPrincipal } from "@/lib/identity/principal-linking";
 import {
   buildPasswordResetExpiry,
   createPasswordResetToken,
@@ -200,7 +201,7 @@ export async function createUserAccount(input: {
       if (existing) return { ok: false, message: "A user with this email already exists." };
 
       const passwordHash = await hashPassword(input.password);
-      await prisma.user.create({
+      const created = await prisma.user.create({
         data: {
           email,
           passwordHash,
@@ -208,6 +209,16 @@ export async function createUserAccount(input: {
           isActive: true,
           groups: { create: { platformRoleId: roleDbId } },
         },
+        select: { id: true },
+      });
+
+      // Identity spine: every human-creation path must produce a linked human
+      // Principal (BI-4150F4D6). syncUserPrincipal is idempotent and converges
+      // with the later first-login EmployeeProfile auto-provision via the shared
+      // 'user' alias. A principal-sync failure must not orphan the created User,
+      // so it is best-effort and logged; the backfill migration is the net.
+      await syncUserPrincipal(created.id).catch((err: unknown) => {
+        console.error("[createUserAccount] principal sync failed", err);
       });
 
       revalidatePath("/admin");

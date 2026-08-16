@@ -3,14 +3,14 @@
   "selectionCliff": 15,
   "entries": {
     "registry.toolDefinitions": {
-      "value": 371,
-      "reason": "Adds the six-tool Authorized Surface Contract protocol (surface_list/open/snapshot/query/act/close) plus read and atomic configure/test tools for the Discovery reference surface. The generic protocol replaces page-specific coworker tool growth, is force-budgeted as one universal perception/action capability, and re-enters existing governed domain tools for persistent effects. EP-F7E35344.",
-      "recordedAt": "2026-08-08"
+      "value": 387,
+      "reason": "Adds nine independently granted initiative-evidence writers for classification/research/dependency evidence and the design, architecture, data, UX, security, compliance, domain, and archetype review lanes (BI-64AF127B). Separate tool identities preserve least privilege and reviewer independence; a generic caller-selected lane would allow one grant to impersonate specialist authority.",
+      "recordedAt": "2026-08-15"
     },
     "registry.packFiles": {
-      "value": 88,
-      "reason": "Adds one generic surface-pack.ts for the versioned Authorized Surface Contract. It serves browser, mobile, workroom, scheduled, background, headless, and external callers through the same compact protocol instead of adding one pack per UX surface. EP-F7E35344.",
-      "recordedAt": "2026-08-08"
+      "value": 92,
+      "reason": "Adds the initiative-readiness pack (BI-64AF127B) as the single adapter owning all nine lane-specific evidence definitions, handlers, and grants. Keeping them together prevents readiness policy from being duplicated across backlog, Build Studio, and specialist packs.",
+      "recordedAt": "2026-08-15"
     },
     "tier.coreToolNames": {
       "value": 30,

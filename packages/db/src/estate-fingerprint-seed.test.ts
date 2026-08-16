@@ -46,6 +46,21 @@ describe("estate seed rules ↔ DPPM placement algorithm consistency", () => {
     }
   });
 
+  it("covers the high-volume consumer and prosumer vendors observed on the operator estate", () => {
+    const keys = new Set(rules.map((rule) => rule.ruleKey));
+    for (const key of [
+      "estate:google-client",
+      "estate:roku-client",
+      "estate:sonos-speaker",
+      "estate:ring-security",
+      "estate:wyze-security",
+      "estate:synology-client",
+      "estate:raspberry-pi-client",
+    ]) {
+      expect(keys.has(key), key).toBe(true);
+    }
+  });
+
   it("covers every observed estate vendor group", () => {
     const nodes = new Set(rules.map((r) => r.taxonomyNodeId));
     expect(nodes).toEqual(
@@ -58,6 +73,7 @@ describe("estate seed rules ↔ DPPM placement algorithm consistency", () => {
         "foundational/network_management/voice",
         "foundational/network_management/network_connectivity",
         "foundational/compute/client_and_end_user_compute",
+        "foundational/data_and_storage_management/online_storage",
       ]),
     );
   });
@@ -146,6 +162,7 @@ describe("loadFingerprintCatalogIntoDb", () => {
           { id: "cuid_appliances", nodeId: "foundational/building_management/connected_appliances" },
           { id: "cuid_network", nodeId: "foundational/network_management/network_connectivity" },
           { id: "cuid_client", nodeId: "foundational/compute/client_and_end_user_compute" },
+          { id: "cuid_storage", nodeId: "foundational/data_and_storage_management/online_storage" },
         ],
       },
       discoveryFingerprintCatalogVersion: {
@@ -164,8 +181,8 @@ describe("loadFingerprintCatalogIntoDb", () => {
 
     const result = await loadFingerprintCatalogIntoDb(client, defaultCatalogPath(__dirname));
 
-    // 1 observability rule + 13 estate rules.
-    expect(result.loaded).toBe(14);
+    // 1 observability rule + the expanded estate rules.
+    expect(result.loaded).toBe(21);
     expect(result.unresolvedTaxonomy).toContain("observability:prometheus-node-exporter -> platform.observability.metrics");
     const reolink = upsertedRules.find((r) => r.ruleKey === "estate:reolink-camera");
     expect(reolink).toBeDefined();

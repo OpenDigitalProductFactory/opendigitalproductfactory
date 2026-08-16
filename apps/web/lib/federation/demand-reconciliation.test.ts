@@ -1,10 +1,19 @@
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  hasFederatedDemandOriginMarker,
   relationshipPresetForRole,
   runDemandReconciliation,
   type DemandReconciliationDb,
 } from "./demand-reconciliation";
+
+describe("hasFederatedDemandOriginMarker", () => {
+  it("matches only a canonical standalone origin-marker line", () => {
+    expect(hasFederatedDemandOriginMarker("Context\n[origin:federatedDemand:peer-a:item-1]\nMore")).toBe(true);
+    expect(hasFederatedDemandOriginMarker("The marker [origin:federatedDemand:peer-a:item-1] is documented here.")).toBe(false);
+    expect(hasFederatedDemandOriginMarker(null)).toBe(false);
+  });
+});
 
 const links = [{
   linkId: "link_internal",
@@ -130,11 +139,18 @@ describe("runDemandReconciliation", () => {
     expect(where).not.toHaveProperty("digitalProduct");
   });
 
-  it("never re-egresses a locally adopted peer envelope", async () => {
+  it("never re-egresses an adopted peer envelope but keeps explanatory prose eligible", async () => {
     const queueProjection = vi.fn();
+    const mkItem = (itemId: string, body: string) => ({
+      itemId, title: itemId, body, workType: "bug", occurrenceCount: 1,
+      createdAt: new Date("2026-08-01T00:00:00Z"), updatedAt: new Date("2026-08-01T00:00:00Z"), digitalProduct: null,
+    });
     const db = {
       federationLink: { findMany: vi.fn().mockResolvedValue(links) },
-      backlogItem: { findMany: vi.fn().mockResolvedValue([]) },
+      backlogItem: { findMany: vi.fn().mockResolvedValue([
+        mkItem("BI-ADOPTED", "[origin:federatedDemand:peer-a:item-1]"),
+        mkItem("BI-EXPLANATION", "This problem explains [origin:federatedDemand:peer-a:item-1] without adopting it."),
+      ]) },
       federatedRecordMirror: { findMany: vi.fn().mockResolvedValue([]) },
     } as unknown as DemandReconciliationDb;
 
@@ -146,12 +162,32 @@ describe("runDemandReconciliation", () => {
       dispatch: vi.fn().mockResolvedValue({ attempted: 0, delivered: 0, deferred: 0, deadLettered: 0 }),
     });
 
-    expect(db.backlogItem.findMany).toHaveBeenCalledWith(expect.objectContaining({
-      where: expect.objectContaining({
-        NOT: { body: { contains: "[origin:federatedDemand:" } },
-      }),
-    }));
-    expect(queueProjection).not.toHaveBeenCalled();
+    expect(queueProjection).toHaveBeenCalledOnce();
+    expect(queueProjection.mock.calls[0]?.[1]).toMatchObject({
+      source: { localRecordRef: "BI-EXPLANATION" },
+    });
+  });
+
+  it("keeps NULL-body items eligible — a bare NOT-contains would drop them (BI-8A7E3E56)", async () => {
+    const db = {
+      federationLink: { findMany: vi.fn().mockResolvedValue(links) },
+      backlogItem: { findMany: vi.fn().mockResolvedValue([]) },
+      federatedRecordMirror: { findMany: vi.fn().mockResolvedValue([]) },
+    } as unknown as DemandReconciliationDb;
+
+    await runDemandReconciliation(db, {
+      resolveIdentity: vi.fn().mockResolvedValue({ installationId: `inst_${"a".repeat(32)}`, projectionSecret: "b".repeat(64) }),
+      queueProjection: vi.fn(),
+      queueWithdrawal: vi.fn(),
+      reconcileDigests: vi.fn().mockResolvedValue({ linksChecked: 0, requeued: 0, confirmed: 0, failedLinks: 0 }),
+      dispatch: vi.fn().mockResolvedValue({ attempted: 0, delivered: 0, deferred: 0, deadLettered: 0 }),
+    });
+
+    const where = (db.backlogItem.findMany as unknown as { mock: { calls: Array<[{ where: Record<string, unknown> }]> } }).mock.calls[0][0].where;
+    // Origin-marker eligibility is parsed structurally after retrieval, so the
+    // database query must not use a broad body substring filter.
+    expect(where).not.toHaveProperty("OR");
+    expect(where).not.toHaveProperty("NOT");
   });
 
   it("queues withdrawal when a previously projected item is no longer policy-eligible", async () => {

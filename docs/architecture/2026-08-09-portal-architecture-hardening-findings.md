@@ -73,7 +73,7 @@ This is a review artifact, not a build-gate artifact. No production build, UX wa
 
 ## 4. Executive verdict
 
-DPF remains a **strong foundation with unusually deep governance and delivery doctrine** for an SMB-facing local-first platform. Relative to best-in-class architectures, it is **ahead on intentional control-plane design** (MCP grants, Work Capsules, self-upgrade ownership, principle-driven decisions, fitness guards) and **still behind on day-2 sole-platform evidence** (aggregated readiness verdict, restore-grade exit, universal mutation envelope, production observability, resource bounding by default).
+DPF remains a **strong foundation with unusually deep governance and delivery doctrine** for an SMB-facing local-first platform. Relative to best-in-class architectures, it is **ahead on intentional control-plane design** (MCP grants, Workrooms, self-upgrade ownership, principle-driven decisions, fitness guards) and **still behind on day-2 sole-platform evidence** (aggregated readiness verdict, restore-grade exit, universal mutation envelope, production observability, resource bounding by default).
 
 The dominant architectural risk is unchanged in kind from June, sharpened in form:
 

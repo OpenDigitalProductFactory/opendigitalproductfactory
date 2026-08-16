@@ -1,6 +1,18 @@
 import type { BuildStudioCustomerStatus } from "@/lib/build/customer-status-projection";
+import { ownerStateBadgeLabel } from "@/lib/build/owner-status-reconciliation";
 import type { BuildPhase } from "@/lib/feature-build-types";
 import { deriveBuildActivityStory } from "./build-studio-operator-view";
+
+const OWNER_STATE_BADGE = {
+  working: "border-[var(--dpf-info)] bg-[var(--dpf-state-info)] text-[var(--dpf-info)]",
+  "waiting-capacity": "border-[var(--dpf-warning)] bg-[var(--dpf-state-warning)] text-[var(--dpf-warning)]",
+  "waiting-owner": "border-[var(--dpf-warning)] bg-[var(--dpf-state-warning)] text-[var(--dpf-warning)]",
+  blocked: "border-[var(--dpf-error)] bg-[var(--dpf-state-error)] text-[var(--dpf-error)]",
+  inconclusive: "border-[var(--dpf-warning)] bg-[var(--dpf-state-warning)] text-[var(--dpf-warning)]",
+  failed: "border-[var(--dpf-error)] bg-[var(--dpf-state-error)] text-[var(--dpf-error)]",
+  complete: "border-[var(--dpf-success)] bg-[var(--dpf-state-success)] text-[var(--dpf-success)]",
+  "not-started": "border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] text-[var(--dpf-muted)]",
+} as const;
 
 const STEP_TONE = {
   complete: "border-[var(--dpf-success)] bg-[var(--dpf-state-success)] text-[var(--dpf-success)]",
@@ -20,9 +32,27 @@ export function BuildOperatorOverview({
   phase: BuildPhase;
   status?: BuildStudioCustomerStatus | null;
 }) {
-  const activity = deriveBuildActivityStory(phase);
+  const ownerTitle = ownerSafeBuildText(title);
+  const ownerOutcome = outcome ? ownerSafeBuildText(outcome) : outcome;
+  const activityPhase = status?.ownerState === "complete"
+    ? "complete"
+    : status?.ownerState === "failed"
+      ? (phase === "failed" ? "failed" : "abandoned")
+      : phase;
+  const activity = deriveBuildActivityStory(activityPhase);
   const lifecyclePosition = status?.lifecyclePosition ?? fallbackStatus(phase);
   const nextAction = status?.nextAction ?? fallbackNextAction(phase);
+  const ownerBadge = status?.ownerState
+    ? {
+        label: ownerStateBadgeLabel(status.ownerState),
+        className: OWNER_STATE_BADGE[status.ownerState],
+      }
+    : status?.needsYou
+      ? {
+          label: ownerStateBadgeLabel("waiting-owner"),
+          className: OWNER_STATE_BADGE["waiting-owner"],
+        }
+      : null;
 
   return (
     <div className="space-y-5 px-5 py-5 sm:px-7 sm:py-6">
@@ -34,11 +64,11 @@ export function BuildOperatorOverview({
           id="build-outcome-heading"
           className="m-0 mt-1 max-w-4xl text-balance text-xl font-semibold leading-7 text-[var(--dpf-text)] sm:text-2xl"
         >
-          {title}
+          {ownerTitle}
         </h2>
-        {outcome ? (
+        {ownerOutcome ? (
           <p className="m-0 mt-2 max-w-3xl text-sm leading-6 text-[var(--dpf-muted)]">
-            {outcome}
+            {ownerOutcome}
           </p>
         ) : null}
       </section>
@@ -56,15 +86,20 @@ export function BuildOperatorOverview({
             >
               Now
             </p>
-            {status?.needsYou ? (
-              <span className="rounded-full border border-[var(--dpf-warning)] bg-[var(--dpf-state-warning)] px-2 py-1 text-dpf-caption font-semibold text-[var(--dpf-warning)]">
-                Needs you
+            {ownerBadge ? (
+              <span className={`rounded-full border px-2 py-1 text-dpf-caption font-semibold ${ownerBadge.className}`}>
+                {ownerBadge.label}
               </span>
             ) : null}
           </div>
           <p className="m-0 mt-2 text-base font-semibold text-[var(--dpf-text)]">
             {lifecyclePosition}
           </p>
+          {status?.worker || status?.elapsedLabel ? (
+            <p className="m-0 mt-1 text-xs font-medium leading-5 text-[var(--dpf-text)]">
+              {[status?.worker, status?.elapsedLabel].filter(Boolean).join(" · ")}
+            </p>
+          ) : null}
           {status?.evidence ? (
             <p className="m-0 mt-1 text-xs leading-5 text-[var(--dpf-muted)]">
               {status.evidence}
@@ -86,6 +121,11 @@ export function BuildOperatorOverview({
           <p className="m-0 mt-2 text-sm font-medium leading-6 text-[var(--dpf-text)]">
             {nextAction}
           </p>
+          {status?.expectation ? (
+            <p className="m-0 mt-1 text-xs leading-5 text-[var(--dpf-muted)]">
+              {status.expectation}
+            </p>
+          ) : null}
         </section>
       </div>
 
@@ -130,6 +170,14 @@ export function BuildOperatorOverview({
       </section>
     </div>
   );
+}
+
+/** Keep governed record keys available in technical details, not owner copy. */
+export function ownerSafeBuildText(value: string): string {
+  return value
+    .replace(/\bBI-[A-Z0-9-]+\b/g, "this backlog item")
+    .replace(/\bWC-[A-Z0-9-]+\b/g, "this work record")
+    .replace(/\bFB-[A-Z0-9-]+\b/g, "this build");
 }
 
 function fallbackStatus(phase: BuildPhase): string {

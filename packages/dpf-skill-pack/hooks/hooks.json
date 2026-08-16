@@ -44,6 +44,10 @@
         "hooks": [
           {
             "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/root-clone-guard.mjs\""
+          },
+          {
+            "type": "command",
             "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/plan-backlog-coverage-guard.mjs\""
           },
           {

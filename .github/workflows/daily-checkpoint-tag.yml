@@ -1,9 +1,10 @@
 name: Daily Checkpoint Tag
 
 # Cuts a dated checkpoint tag (v<YYYY.MM.DD>) once per day WHEN main has new
-# commits since the previous checkpoint. Replaces manual version stamping.
+# commits since the previous checkpoint, then publishes that checkpoint as a
+# GitHub Release and a set of multi-arch GHCR images.
 #
-# WHY THESE TAGS EXIST — they are "how far behind" markers, NOT releases:
+# WHAT THESE TAGS ARE — dated release anchors AND "how far behind" markers:
 #   Every DPF instance self-upgrades continuously. The real drift signal is the
 #   number of merged commits an install is behind main, already computed by
 #   apps/web/lib/self-upgrade/release-batch.ts, which also decides when the next
@@ -12,12 +13,30 @@ name: Daily Checkpoint Tag
 #   reset `git describe` so any build reads like `v2026.08.01-12-g<sha>`
 #   ("12 commits past the Aug 1 checkpoint") — the counter, baked into the label.
 #
-# INTENTIONALLY TAG-ONLY. Tags are pushed with the built-in GITHUB_TOKEN, which
-# by GitHub's design does NOT trigger tag-push workflows — so a daily checkpoint
-# does NOT kick the heavier publish-release.yml (Edge-binary build). That path
-# stays for deliberate releases. Cutting a full downloadable Release per
-# checkpoint would be a separate, explicit change (it needs a PAT to chain the
-# release build, and would run that build 365x/year).
+# WHY THIS WORKFLOW DISPATCHES THE PUBLISH CHAIN EXPLICITLY.
+#   publish-release.yml and publish-image.yml both trigger on `push: tags: v*`.
+#   That trigger never fires for our checkpoints: the tag is pushed with the
+#   built-in GITHUB_TOKEN, and GitHub's recursion guard suppresses the resulting
+#   push event. Between 2026-06-26 and 2026-08-16 that left every daily
+#   checkpoint tag stranded — v2026.08.05 through v2026.08.15 all exist, and not
+#   one produced a Release or a refreshed image.
+#
+#   The fix does NOT need a PAT. workflow_dispatch is a documented exception to
+#   the recursion guard: "workflow_dispatch and repository_dispatch events
+#   always create workflow runs"
+#   (https://docs.github.com/en/actions/concepts/security/github_token).
+#   So we cut the tag, then POST to each workflow's dispatches endpoint with the
+#   same GITHUB_TOKEN and `actions: write`. No secret to rotate, no PAT whose
+#   scope outlives its owner.
+#
+#   Dispatching against a TAG ref requires the target workflow file — including
+#   its `workflow_dispatch:` block — to exist AT that tag. Both do, and the tag
+#   is cut from main HEAD, so the tag always carries the current workflow files.
+#
+#   No recursion risk: workflow_dispatch has no loop protection, but neither
+#   dispatched workflow dispatches anything back, and the Release each one
+#   creates is made with GITHUB_TOKEN (so its `release` event is suppressed by
+#   the ordinary guard).
 
 on:
   schedule:
@@ -26,6 +45,7 @@ on:
 
 permissions:
   contents: write # push the checkpoint tag
+  actions: write # POST .../actions/workflows/{file}/dispatches
 
 concurrency:
   group: daily-checkpoint-tag
@@ -41,6 +61,7 @@ jobs:
           fetch-depth: 0 # full history + tags for describe / rev-list
 
       - name: Cut checkpoint tag if main advanced
+        id: checkpoint
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -48,6 +69,15 @@ jobs:
           git fetch --tags --force origin
 
           today="v$(date -u +%Y.%m.%d)"
+
+          # The publish step keys off this output, so it must be written EXACTLY
+          # once on every path — a duplicate `tag=` line would leave which value
+          # wins up to undocumented runner behaviour, and losing that coin flip
+          # silently restores the stranded-tag bug this workflow exists to fix.
+          # An EXIT trap gives one write per run, including on failure (empty =
+          # publish nothing), no matter which branch below returns.
+          publish_tag=""
+          trap 'echo "tag=${publish_tag}" >> "$GITHUB_OUTPUT"' EXIT
 
           # Idempotent: never cut the same day twice (re-runs / dispatch).
           if git rev-parse -q --verify "refs/tags/${today}" >/dev/null; then
@@ -76,3 +106,42 @@ jobs:
           git tag -a "${today}" -m "${msg}"
           git push origin "refs/tags/${today}"
           echo "${msg}"
+
+          # Only now is the tag real and pushed, so only now is it publishable.
+          publish_tag="${today}"
+
+      - name: Publish the checkpoint (GitHub Release + GHCR images)
+        if: steps.checkpoint.outputs.tag != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.checkpoint.outputs.tag }}
+        run: |
+          set -euo pipefail
+
+          # REST endpoint rather than `gh workflow run --ref`: the CLI's ref
+          # resolution 404'd on legitimate refs (cli/cli#9781), and this call
+          # shape is the one the API reference documents for tag dispatch.
+          payload="$(printf '{"ref":"%s","inputs":{"tag":"%s"}}' "${TAG}" "${TAG}")"
+
+          dispatch() {
+            workflow="$1"
+            echo "Dispatching ${workflow} at ${TAG}..."
+            printf '%s' "${payload}" | gh api --method POST \
+              "repos/${GITHUB_REPOSITORY}/actions/workflows/${workflow}/dispatches" \
+              --input -
+          }
+
+          # Independent of each other: the Release carries source archives plus
+          # the counted native Edge binaries, the image run refreshes GHCR. A
+          # failure in one must not suppress the other, so both are attempted
+          # and the step fails afterwards if either did.
+          rc=0
+          dispatch publish-release.yml || rc=1
+          dispatch publish-image.yml || rc=1
+
+          if [ "${rc}" -ne 0 ]; then
+            echo "::error::At least one publish workflow failed to dispatch for ${TAG}."
+            exit 1
+          fi
+
+          echo "Dispatched Release + image publish for ${TAG}."

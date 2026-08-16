@@ -1,4 +1,5 @@
 import { prisma } from "@dpf/db";
+import { ensureCapsuleWorkItemAnchorNonFatal, ensureCapsuleWorkItemAnchorWithPrisma } from "@/lib/work-capsules/capsule-workitem-anchor.server";
 import { computeChangeImpactContract } from "@/lib/integrate/gate-context-bridge";
 import type { ToolResult } from "@/lib/mcp-tools";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
@@ -46,7 +47,7 @@ import {
 } from "./work-capsule-store";
 import { listLocalBranches } from "./git-scanner";
 import { providerToExecutorKind, ensureExternalSessionCapsule } from "./external-session-capture";
-
+import { branchOccupiedResult, invalidScopeResult } from "./mcp-result-errors";
 type ToolContext = {
   routeContext?: string;
   agentId?: string;
@@ -112,18 +113,9 @@ function parseScopeInput(params: Record<string, unknown>): WorkCapsuleScopeInput
   };
 }
 
-function invalidScopeResult(error: unknown): ToolResult {
-  return {
-    success: false,
-    error: "invalid_scope",
-    message: error instanceof Error ? error.message : "Invalid Work Capsule scope metadata.",
-  };
-}
-
 function workCapsuleDb(): CapsuleDb {
   return prisma as unknown as CapsuleDb;
 }
-
 async function renewLeaseAfterCapsuleWrite(capsuleId: string, currentActor: WorkCapsuleActor) {
   return heartbeatWorkCapsule({
     db: workCapsuleDb(),
@@ -239,7 +231,7 @@ export async function getWorkCapsuleTool(params: Record<string, unknown>): Promi
     return { success: false, error: "missing_capsuleId", message: "capsuleId is required." };
   }
 
-  const capsule = await prisma.workCapsule.findUnique({
+  const capsule = await prisma.workroom.findUnique({
     where: { capsuleId },
     include: {
       activities: {
@@ -300,23 +292,30 @@ export async function adoptWorktreeTool(
     return invalidScopeResult(error);
   }
 
-  const capsule = await adoptWorktreeCapsule({
-    db: workCapsuleDb(),
-    input: {
-      title,
-      objective,
-      repositoryFullName,
-      headBranch,
-      worktreePath,
-      baseBranch: stringParam(params, "baseBranch") ?? null,
-      baseSha: stringParam(params, "baseSha") ?? null,
-      headSha: stringParam(params, "headSha") ?? null,
-      executorKind: validatedExecutorKind,
-      scope: parseScopeInput(params),
-    },
-    actor: await actor(userId, context),
-  });
-
+  let capsule;
+  try {
+    capsule = await adoptWorktreeCapsule({
+      db: workCapsuleDb(),
+      input: {
+        title,
+        objective,
+        repositoryFullName,
+        headBranch,
+        worktreePath,
+        baseBranch: stringParam(params, "baseBranch") ?? null,
+        baseSha: stringParam(params, "baseSha") ?? null,
+        headSha: stringParam(params, "headSha") ?? null,
+        executorKind: validatedExecutorKind,
+        scope: parseScopeInput(params),
+      },
+      actor: await actor(userId, context),
+    });
+  } catch (error) {
+    const occupied = branchOccupiedResult(error);
+    if (occupied) return occupied;
+    throw error;
+  }
+  await ensureCapsuleWorkItemAnchorNonFatal(capsule, "adopted");
   return {
     success: true,
     entityId: capsule.capsuleId,
@@ -366,6 +365,23 @@ export async function claimBacklogItemForWorkTool(
       actor: await actor(userId, context),
     });
 
+    // EP-WORK-CONVERGENCE (BI-650994D7): anchor the capsule to the single canonical
+    // WorkItem for its backlog item, NON-FATALLY — the claim stands even if this fails,
+    // so capsule and case never split into two rows for one job.
+    try {
+      await ensureCapsuleWorkItemAnchorWithPrisma({
+        capsuleId: result.capsuleId,
+        backlogItemId: result.backlogItemId,
+        title: `Work on ${result.backlogItemId}`,
+      });
+    } catch (anchorError) {
+      console.warn(
+        `[work-convergence] WorkItem anchor skipped for ${result.capsuleId}: ${
+          anchorError instanceof Error ? anchorError.message : "unknown"
+        }`,
+      );
+    }
+
     const base = `Bound ${result.backlogItemId} to ${result.headBranch} (${result.capsuleId}).`;
     let message: string;
     if (result.conflict) {
@@ -395,6 +411,8 @@ export async function claimBacklogItemForWorkTool(
       data: result,
     };
   } catch (error) {
+    const occupied = branchOccupiedResult(error);
+    if (occupied) return occupied;
     const detail = error instanceof Error ? error.message : "Unknown failure";
     if (/not found/i.test(detail)) {
       return { success: false, error: "not_found", message: detail };
@@ -618,7 +636,7 @@ export async function createWorkCapsuleTool(
     },
     actor: await actor(userId, context),
   });
-
+  await ensureCapsuleWorkItemAnchorNonFatal(capsule, "created");
   return {
     success: true,
     entityId: capsule.capsuleId,

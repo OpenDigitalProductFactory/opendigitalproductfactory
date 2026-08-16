@@ -6,6 +6,7 @@ import { _resetSpecPlanCachesForTests, searchSpecsAndPlans } from "./spec-plan-s
 
 let tmpRoot: string;
 let originalCwd: string;
+let originalRepoRoot: string | undefined;
 
 async function writeFixture(rel: string, body: string): Promise<void> {
   const abs = path.join(tmpRoot, rel);
@@ -16,12 +17,15 @@ async function writeFixture(rel: string, body: string): Promise<void> {
 beforeEach(async () => {
   tmpRoot = await fs.mkdtemp(path.join(os.tmpdir(), "spec-plan-search-"));
   originalCwd = process.cwd();
+  originalRepoRoot = process.env.DPF_REPO_ROOT;
   process.chdir(tmpRoot);
   _resetSpecPlanCachesForTests();
 });
 
 afterEach(async () => {
   process.chdir(originalCwd);
+  if (originalRepoRoot === undefined) delete process.env.DPF_REPO_ROOT;
+  else process.env.DPF_REPO_ROOT = originalRepoRoot;
   _resetSpecPlanCachesForTests();
   await fs.rm(tmpRoot, { recursive: true, force: true });
 });
@@ -137,5 +141,29 @@ describe("searchSpecsAndPlans", () => {
   it("returns empty when target dirs do not exist", async () => {
     const results = await searchSpecsAndPlans({ query: "anything" });
     expect(results).toEqual([]);
+  });
+
+  it("prefers the governed self-upgrade workspace over a stale host checkout", async () => {
+    const installRoot = path.join(tmpRoot, "host-dpf");
+    const deployedRoot = path.join(installRoot, ".upgrade-workspace");
+    await writeFixture(
+      "host-dpf/docs/superpowers/plans/2026-08-13-stale.md",
+      "# Stale root plan\n\nold-only",
+    );
+    await writeFixture(
+      "host-dpf/.upgrade-workspace/docs/superpowers/plans/2026-08-14-deployed.md",
+      "# Deployed runtime plan\n\nBI-872048AF runtime evidence",
+    );
+    process.env.DPF_REPO_ROOT = installRoot;
+    const unrelatedRuntimeCwd = path.join(tmpRoot, "unrelated-runtime-cwd");
+    await fs.mkdir(unrelatedRuntimeCwd, { recursive: true });
+    process.chdir(unrelatedRuntimeCwd);
+
+    const results = await searchSpecsAndPlans({ query: "runtime evidence", kind: "plan" });
+
+    expect(results).toHaveLength(1);
+    expect(results[0]?.title).toBe("Deployed runtime plan");
+    expect(results[0]?.path).toBe("docs/superpowers/plans/2026-08-14-deployed.md");
+    expect(results[0]?.sourceRoot).toBe(deployedRoot);
   });
 });

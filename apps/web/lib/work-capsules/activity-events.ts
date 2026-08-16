@@ -66,7 +66,7 @@ export function parseWorkCapsuleActivityEvent(payload: unknown): WorkCapsuleActi
 }
 
 /**
- * Publish a best-effort wake-up after a WorkCapsuleActivity write.
+ * Publish a best-effort wake-up after a WorkroomActivity write.
  *
  * The activity table remains the source of truth; this notification only tells
  * subscribed browser streams to fetch the committed row. Failure is fail-open so

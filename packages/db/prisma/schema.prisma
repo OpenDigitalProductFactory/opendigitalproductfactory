@@ -19,6 +19,29 @@ enum IntakeSource {
   innovation_radar
 }
 
+enum InitiativeGateKey {
+  classification
+  research
+  design_spec            @map("design-spec")
+  spec_approval          @map("spec-approval")
+  architecture_review    @map("architecture-review")
+  data_review            @map("data-review")
+  ux_fit_review          @map("ux-fit-review")
+  security_review        @map("security-review")
+  compliance_review      @map("compliance-review")
+  domain_review          @map("domain-review")
+  plan_review            @map("plan-review")
+  dependency_disposition @map("dependency-disposition")
+  archetype_provisioning @map("archetype-provisioning")
+  archetype_completeness @map("archetype-completeness")
+}
+
+enum InitiativeArtifactSourceKind {
+  build_artifact_revision @map("build-artifact-revision")
+  document_version        @map("document-version")
+  repository_blob_archive @map("repository-blob-archive")
+}
+
 enum BriefConfidence {
   high
   medium
@@ -331,6 +354,7 @@ model Principal {
   authorityMode                       String?
   sensitivityClearance                PrincipalSensitivity[]              @default([public])
   aliases                             PrincipalAlias[]
+  deferredBacklogItems                BacklogItem[]                       @relation("BacklogDeferralOwner")
   sponsorPrincipal                    Principal?                          @relation("PrincipalSponsor", fields: [sponsorPrincipalId], references: [id])
   sponsoredPrincipals                 Principal[]                         @relation("PrincipalSponsor")
   communicationChannelBindings        CommunicationChannelBinding[]
@@ -2191,10 +2215,18 @@ model BacklogItem {
   claimedByAgentId        String?
   claimedAt               DateTime?
   claimStatus             String?
+  // Governed active-deferral projection (DI-03B7564E648A). History remains in
+  // BacklogItemActivity; these fields answer why/when/who without replaying it.
+  deferReason             String?
+  deferTrigger            String?
+  deferReviewAt           DateTime?
+  deferOwnerPrincipalId   String?
+  deferredAt              DateTime?
   upstreamIssueNumber     Int?
   upstreamIssueUrl        String?
   upstreamSyncedAt        DateTime?
   accountableEmployee     EmployeeProfile?              @relation("ItemAccountable", fields: [accountableEmployeeId], references: [id])
+  deferOwnerPrincipal     Principal?                    @relation("BacklogDeferralOwner", fields: [deferOwnerPrincipalId], references: [id], onDelete: SetNull)
   activeBuild             FeatureBuild?                 @relation("BacklogItemActiveBuild", fields: [activeBuildId], references: [id])
   activeEpic              Epic?                         @relation("BacklogItemActiveEpic", fields: [activeEpicId], references: [id])
   originatingEpic         Epic?                         @relation("EpicOriginatingItem")
@@ -2221,6 +2253,8 @@ model BacklogItem {
   @@index([businessProductId])
   @@index([status])
   @@index([status, updatedAt])
+  @@index([status, deferReviewAt])
+  @@index([deferOwnerPrincipalId, status])
   @@index([portfolioId, demandScore])
   @@index([demandStage])
   @@index([scopeKind])
@@ -2258,22 +2292,51 @@ model DemandEvidenceLink {
 // Per-item timeline. Cross-cutting tool audit lives in ToolExecution; this is
 // the entity-scoped view used by get_backlog_item and the UI.
 model BacklogItemActivity {
-  id                String      @id @default(cuid())
+  id                String                          @id @default(cuid())
   backlogItemId     String
   kind              String
+  gateKey           InitiativeGateKey?
   summary           String
-  payload           Json        @default("{}")
-  recordedAt        DateTime    @default(now())
+  payload           Json                            @default("{}")
+  recordedAt        DateTime                        @default(now())
   recordedById      String?
   recordedByAgentId String?
   toolExecutionId   String?
-  backlogItem       BacklogItem @relation(fields: [backlogItemId], references: [id], onDelete: Cascade)
+  backlogItem       BacklogItem                     @relation(fields: [backlogItemId], references: [id], onDelete: Cascade)
+  retentionPin      InitiativeArtifactRetentionPin?
 
   @@index([backlogItemId, recordedAt(sort: Desc)])
+  @@index([backlogItemId, gateKey, recordedAt(sort: Desc), id(sort: Desc)])
   @@index([kind, recordedAt(sort: Desc)])
 }
 
-model WorkCapsule {
+model InitiativeArtifactRetentionPin {
+  id                      String                       @id @default(cuid())
+  baselineActivityId      String                       @unique
+  sourceKind              InitiativeArtifactSourceKind
+  artifactDigest          String
+  artifactLocator         Json
+  buildArtifactRevisionId String?
+  documentVersionId       String?
+  documentBlobId          String?
+  createdAt               DateTime                     @default(now())
+  baselineActivity        BacklogItemActivity          @relation(fields: [baselineActivityId], references: [id], onDelete: Restrict)
+  buildArtifactRevision   BuildArtifactRevision?       @relation(fields: [buildArtifactRevisionId], references: [id], onDelete: Restrict)
+  documentVersion         DocumentVersion?             @relation(fields: [documentVersionId], references: [id], onDelete: Restrict)
+  documentBlob            DocumentBlob?                @relation(fields: [documentBlobId], references: [id], onDelete: Restrict)
+
+  @@index([buildArtifactRevisionId])
+  @@index([documentVersionId])
+  @@index([documentBlobId])
+  @@index([sourceKind, createdAt(sort: Desc)])
+}
+
+/// The Workroom is the canonical unit of what we claim and where we work
+/// (founder-directed 2026-08-15, renamed from WorkCapsule). @@map retains the
+/// physical table name so this rename is metadata-only over live rows; the
+/// physical move, the `capsuleId` semantic key and the workCapsuleId/capsule
+/// FIELD vocabulary are separate phases — this phase renames model identity only.
+model Workroom {
   id                      String                   @id @default(cuid())
   capsuleId               String                   @unique
   title                   String
@@ -2284,6 +2347,7 @@ model WorkCapsule {
   executorRef             String?
   backlogItemId           String?
   epicId                  String?
+  workItemId              String?
   featureBuildId          String?
   taskRunId               String?
   gitPromotionCandidateId String?
@@ -2324,10 +2388,11 @@ model WorkCapsule {
   updatedAt               DateTime                 @updatedAt
   lastSyncedAt            DateTime?
   archivedAt              DateTime?
-  activities              WorkCapsuleActivity[]
+  activities              WorkroomActivity[]
   runtimeTargets          RuntimeTarget[]
   runtimeVerifications    RuntimeVerification[]
   externalEvidence        ExternalEvidenceRecord[]
+  workItem                WorkItem?                @relation("WorkCapsuleWorkItem", fields: [workItemId], references: [id], onDelete: SetNull)
 
   @@index([status, updatedAt])
   @@index([backlogItemId])
@@ -2343,22 +2408,26 @@ model WorkCapsule {
   @@index([sandboxId])
   @@index([leaseExpiresAt])
   @@index([requestedByPrincipalId])
+  @@index([workItemId])
+  @@map("WorkCapsule")
 }
 
-model WorkCapsuleActivity {
-  id                String      @id @default(cuid())
+model WorkroomActivity {
+  id                String   @id @default(cuid())
   workCapsuleId     String
   kind              String
   summary           String
-  payload           Json        @default("{}")
-  recordedAt        DateTime    @default(now())
+  payload           Json     @default("{}")
+  recordedAt        DateTime @default(now())
   recordedById      String?
   recordedByAgentId String?
   toolExecutionId   String?
-  capsule           WorkCapsule @relation(fields: [workCapsuleId], references: [id], onDelete: Cascade)
+  capsule           Workroom @relation(fields: [workCapsuleId], references: [id], onDelete: Cascade)
 
   @@index([workCapsuleId, recordedAt(sort: Desc)])
+  @@index([workCapsuleId, kind, recordedAt(sort: Desc), id(sort: Desc)])
   @@index([kind, recordedAt(sort: Desc)])
+  @@map("WorkCapsuleActivity")
 }
 
 model RuntimeTarget {
@@ -2388,7 +2457,7 @@ model RuntimeTarget {
   sandbox                Sandbox?              @relation(fields: [sandboxId], references: [id], onDelete: SetNull)
   slot                   SandboxSlot?          @relation(fields: [slotId], references: [id], onDelete: SetNull)
   verifications          RuntimeVerification[]
-  workCapsule            WorkCapsule?          @relation(fields: [workCapsuleId], references: [id], onDelete: SetNull)
+  workCapsule            Workroom?             @relation(fields: [workCapsuleId], references: [id], onDelete: SetNull)
 
   @@index([kind, status])
   @@index([workCapsuleId])
@@ -2422,7 +2491,7 @@ model RuntimeVerification {
   featureBuild            FeatureBuild?          @relation(fields: [featureBuildId], references: [id], onDelete: SetNull)
   gitPromotionCandidate   GitPromotionCandidate? @relation(fields: [gitPromotionCandidateId], references: [id], onDelete: SetNull)
   runtimeTarget           RuntimeTarget?         @relation(fields: [runtimeTargetId], references: [id], onDelete: SetNull)
-  workCapsule             WorkCapsule?           @relation(fields: [workCapsuleId], references: [id], onDelete: SetNull)
+  workCapsule             Workroom?              @relation(fields: [workCapsuleId], references: [id], onDelete: SetNull)
 
   @@index([runtimeTargetId, createdAt(sort: Desc)])
   @@index([featureBuildId, kind, status])
@@ -4678,6 +4747,7 @@ model Organization {
   storefrontConfig                  StorefrontConfig?
   stockItems                        StockItem[]
   operationalSceneLayouts           OperationalSceneLayout[]
+  businessMetricRollups              BusinessMetricRollup[]            @relation("BusinessMetricRollupOrganization")
   hospitalityResources              HospitalityResource[]              @relation("HospitalityResourceOrganization")
   hospitalityCapacityPools          HospitalityCapacityPool[]          @relation("HospitalityCapacityPoolOrganization")
   hospitalityResourceAvailability   HospitalityResourceAvailability[]  @relation("HospitalityAvailabilityOrganization")
@@ -6185,7 +6255,7 @@ model UserFact {
 // BI-23A65B81 (EP-8C706944 P3): shared working context for a multi-coworker,
 // multi-session EFFORT outside Build Studio. Substrate-verify finding: PhaseHandoff
 // is build-phase-scoped (FK to a FeatureBuild) and actively used by the BS phase
-// machine; WorkCapsule is a single-executor, single-lease unit of WIP. Neither
+// machine; the Workroom is a single-executor, single-lease unit of WIP. Neither
 // models context shared across many coworkers over an effort's lifetime, so the
 // kernel decision (DI-F69AE978B70C) sanctioned exactly this one new concept.
 // Keyed by a free effortKey (e.g. "epic:EP-XXX", "bi:BI-YYY"); any participating
@@ -6545,26 +6615,27 @@ model Document {
 }
 
 model DocumentVersion {
-  id                   String              @id @default(cuid())
-  documentId           String
-  version              Int
-  title                String
-  contentFormat        String
-  contentText          String?             @db.Text
-  contentBlobId        String?
-  contentSha256        String?
-  sizeBytes            Int?
-  summary              String?             @db.Text
-  createdByPrincipalId String?
-  createdAt            DateTime            @default(now())
-  document             Document            @relation("DocumentVersions", fields: [documentId], references: [id], onDelete: Cascade)
-  currentForDocuments  Document[]          @relation("DocumentCurrentVersion")
-  contentBlob          DocumentBlob?       @relation(fields: [contentBlobId], references: [id], onDelete: SetNull)
-  createdByPrincipal   Principal?          @relation("DocumentVersionCreator", fields: [createdByPrincipalId], references: [id])
-  sourceReferences     DocumentReference[] @relation("DocumentReferenceSourceVersion")
-  targetReferences     DocumentReference[] @relation("DocumentReferenceTargetVersion")
-  renditions           DocumentRendition[]
-  invoiceDocuments     InvoiceDocument[]
+  id                      String                           @id @default(cuid())
+  documentId              String
+  version                 Int
+  title                   String
+  contentFormat           String
+  contentText             String?                          @db.Text
+  contentBlobId           String?
+  contentSha256           String?
+  sizeBytes               Int?
+  summary                 String?                          @db.Text
+  createdByPrincipalId    String?
+  createdAt               DateTime                         @default(now())
+  document                Document                         @relation("DocumentVersions", fields: [documentId], references: [id], onDelete: Cascade)
+  currentForDocuments     Document[]                       @relation("DocumentCurrentVersion")
+  contentBlob             DocumentBlob?                    @relation(fields: [contentBlobId], references: [id], onDelete: SetNull)
+  createdByPrincipal      Principal?                       @relation("DocumentVersionCreator", fields: [createdByPrincipalId], references: [id])
+  sourceReferences        DocumentReference[]              @relation("DocumentReferenceSourceVersion")
+  targetReferences        DocumentReference[]              @relation("DocumentReferenceTargetVersion")
+  renditions              DocumentRendition[]
+  invoiceDocuments        InvoiceDocument[]
+  initiativeRetentionPins InitiativeArtifactRetentionPin[]
 
   @@unique([documentId, version])
   @@index([documentId])
@@ -6575,14 +6646,15 @@ model DocumentVersion {
 }
 
 model DocumentBlob {
-  id         String              @id @default(cuid())
-  sha256     String              @unique
-  storageKey String              @unique
-  mimeType   String?
-  sizeBytes  Int
-  createdAt  DateTime            @default(now())
-  versions   DocumentVersion[]
-  renditions DocumentRendition[]
+  id                      String                           @id @default(cuid())
+  sha256                  String                           @unique
+  storageKey              String                           @unique
+  mimeType                String?
+  sizeBytes               Int
+  createdAt               DateTime                         @default(now())
+  versions                DocumentVersion[]
+  renditions              DocumentRendition[]
+  initiativeRetentionPins InitiativeArtifactRetentionPin[]
 
   @@index([sizeBytes])
 }
@@ -6991,17 +7063,17 @@ model ExternalEvidenceRecord {
   buildId               String?
   taskRunId             String?
   // EP-WORK-CONVERGENCE Phase 1 (BI-D6FA8641): bind external evidence to the
-  // durable WorkCapsule with producer identity, so external Claude/Codex/Grok
+  // durable Workroom with producer identity, so external Claude/Codex/Grok
   // work rolls up onto the capsule timeline. All nullable — additive, no
-  // backfill required to migrate. executorKind mirrors WorkCapsule.executorKind;
-  // recordedBy* mirror WorkCapsuleActivity's producer-identity fields.
+  // backfill required to migrate. executorKind mirrors Workroom.executorKind;
+  // recordedBy* mirror WorkroomActivity's producer-identity fields.
   workCapsuleId         String?
   executorKind          String?
   recordedByPrincipalId String?
   recordedByAgentId     String?
   createdAt             DateTime     @default(now())
   actorUser             User         @relation(fields: [actorUserId], references: [id], onDelete: Cascade)
-  workCapsule           WorkCapsule? @relation(fields: [workCapsuleId], references: [id], onDelete: SetNull)
+  workCapsule           Workroom? @relation(fields: [workCapsuleId], references: [id], onDelete: SetNull)
 
   @@index([actorUserId, createdAt])
   @@index([routeContext, operationType])
@@ -7225,21 +7297,22 @@ model BusinessBuildBrief {
 }
 
 model BuildArtifactRevision {
-  id             String                 @id @default(cuid())
-  buildId        String
-  field          String
-  revisionNumber Int
-  value          Json
-  valueDigest    String
-  savedByUserId  String
-  savedByAgentId String?
-  threadId       String?
-  status         String                 @default("accepted")
-  legacyEvidence Boolean                @default(false)
-  createdAt      DateTime               @default(now())
-  build          FeatureBuild           @relation(fields: [buildId], references: [buildId], onDelete: Cascade)
-  receiptUsages  ArtifactReceiptUsage[]
-  bomDocuments   BomDocument[]
+  id                      String                           @id @default(cuid())
+  buildId                 String
+  field                   String
+  revisionNumber          Int
+  value                   Json
+  valueDigest             String
+  savedByUserId           String
+  savedByAgentId          String?
+  threadId                String?
+  status                  String                           @default("accepted")
+  legacyEvidence          Boolean                          @default(false)
+  createdAt               DateTime                         @default(now())
+  build                   FeatureBuild                     @relation(fields: [buildId], references: [buildId], onDelete: Cascade)
+  receiptUsages           ArtifactReceiptUsage[]
+  bomDocuments            BomDocument[]
+  initiativeRetentionPins InitiativeArtifactRetentionPin[]
 
   @@unique([buildId, field, revisionNumber])
   @@index([buildId, field, createdAt(sort: Desc)])
@@ -8454,8 +8527,10 @@ model LifecycleEvent {
   governedThingId   String
   fromStage         String? // LifecycleStage | null
   toStage           String? // LifecycleStage | null
-  fromStatus        String? // LifecycleStatus | null
-  toStatus          String? // LifecycleStatus | null
+  fromStatus        String? // LifecycleStatus | null (closed canonical enum)
+  toStatus          String? // LifecycleStatus | null (closed canonical enum)
+  fromState         String? // open per-grammar StageState.key, NOT a canonical enum (lifecycle-grammar.ts)
+  toState           String? // open per-grammar StageState.key, NOT a canonical enum (lifecycle-grammar.ts)
   reason            String?        @db.Text
   evidenceRef       String? // pointer to corroborating evidence (discovery run, probe, etc.)
   actorPrincipalId  String?
@@ -8971,6 +9046,7 @@ model LeaveRequest {
   approverEmployeeId String?
   approvedAt         DateTime?
   rejectionReason    String?
+  decisionInteractionId String?
   createdAt          DateTime         @default(now())
   updatedAt          DateTime         @updatedAt
   approver           EmployeeProfile? @relation("LeaveApprovals", fields: [approverEmployeeId], references: [id])
@@ -10658,7 +10734,7 @@ model StorefrontBooking {
   storefrontId                String
   itemId                      String
   customerContactId           String?
-  customerEmail               String
+  customerEmail               String?
   customerName                String
   customerPhone               String?
   scheduledAt                 DateTime
@@ -13695,6 +13771,7 @@ model WorkItem {
   a2aTaskId                     String?
   messages                      WorkItemMessage[]
   presence                      WorkItemPresence[]
+  capsules                      Workroom[]             @relation("WorkCapsuleWorkItem")
   governedDataControlOperations DataControlOperation[] @relation("DataControlOperationGovernedCase")
   routingDecision               Json?
   // Generic retry scheduling owned by the canonical queue. Domain mirrors keep
@@ -13905,6 +13982,49 @@ model QueueMetricSnapshot {
   @@unique([queueKey, period])
   @@index([queueKey, period])
   @@index([period])
+}
+
+enum BusinessMetricAvailability {
+  available
+  unavailable
+}
+
+enum PerformanceMetricUnit {
+  count
+  currency
+  percent
+  rate
+  duration
+}
+
+/// Tenant-scoped, definition-versioned historical metric read model. Source
+/// systems remain authoritative; this table exists so owner/manager reads never
+/// run historical aggregation on the operational hot path.
+model BusinessMetricRollup {
+  id                  String   @id @default(cuid())
+  organizationId      String
+  metricKey           String
+  periodStart         DateTime
+  periodEnd           DateTime
+  timezone            String
+  dimensionsHash      String
+  dimensions          Json
+  value               Decimal? @db.Decimal(20, 6)
+  unit                PerformanceMetricUnit
+  availability        BusinessMetricAvailability
+  unavailableReason   String?
+  definitionVersion   String
+  sourceWatermark     DateTime
+  sourceLineage       Json
+  computedAt          DateTime @default(now())
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  organization Organization @relation("BusinessMetricRollupOrganization", fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, metricKey, periodStart, periodEnd, dimensionsHash, definitionVersion], map: "business_metric_rollup_identity")
+  @@index([organizationId, periodStart, periodEnd])
+  @@index([organizationId, metricKey, sourceWatermark])
 }
 
 // ─── Prompt Templates ─────────────────────────────────────────────────────────

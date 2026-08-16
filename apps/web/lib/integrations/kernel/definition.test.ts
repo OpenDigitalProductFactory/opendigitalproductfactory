@@ -103,6 +103,19 @@ describe("connectorDefinitionSchema", () => {
     ).toBe(false);
   });
 
+  it.each(["Email.Send", "email_send", "email", "email..send"])(
+    "rejects non-namespaced capability identifier %s",
+    (capability) => {
+      expect(
+        connectorDefinitionSchema.safeParse({
+          ...validDefinition,
+          capabilities: [capability],
+          operations: [{ ...validDefinition.operations[0], capability }],
+        }).success,
+      ).toBe(false);
+    },
+  );
+
   it("enforces bounded retry values", () => {
     const operation = validDefinition.operations[0];
     for (const retry of [

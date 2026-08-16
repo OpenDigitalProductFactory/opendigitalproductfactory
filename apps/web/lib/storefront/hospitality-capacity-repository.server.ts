@@ -1,4 +1,6 @@
 import { newId } from "@/lib/shared/new-id";
+import { loadStorefrontOperatingTimezone } from "./storefront-operating-timezone.server";
+import { parseRestaurantTableAttributes } from "./restaurant-table-attributes";
 
 import {
   evaluatePoolCapacity,
@@ -13,14 +15,17 @@ import {
 } from "./hospitality-capacity";
 
 interface HospitalityCapacityDatabase {
+  businessProfile: {
+    findFirst(args: unknown): Promise<{ timezone: string } | null>;
+  };
   hospitalityResource: {
     findFirst(args: unknown): Promise<{
       id: string;
       legacyServiceProviderId: string | null;
       status: string;
       capacity?: number;
+      attributes?: unknown;
       availability?: HospitalityAvailabilityWindow[];
-      storefront?: { timezone: string };
     } | null>;
   };
   hospitalityCapacityPool: {
@@ -48,17 +53,26 @@ export async function resolveHospitalityResourceForProvider(
     organizationId: string;
     storefrontId: string;
     providerId: string;
+    bookingAccess?: "online";
   },
 ) {
-  return database.hospitalityResource.findFirst({
+  const resource = await database.hospitalityResource.findFirst({
     where: {
       organizationId: input.organizationId,
       storefrontId: input.storefrontId,
       legacyServiceProviderId: input.providerId,
       status: "active",
     },
-    select: { id: true, legacyServiceProviderId: true, status: true },
+    select: { id: true, legacyServiceProviderId: true, status: true, attributes: true },
   });
+  if (
+    resource &&
+    input.bookingAccess === "online" &&
+    parseRestaurantTableAttributes(resource.attributes).bookingAccess !== "online"
+  ) {
+    return null;
+  }
+  return resource;
 }
 
 export async function allocateHospitalityCapacity(
@@ -77,6 +91,13 @@ export async function allocateHospitalityCapacity(
     endsAt: Date;
     quantity: number;
     idempotencyKey: string;
+    /**
+     * Public holds and bookings must fit the resource's bookable schedule.
+     * Authenticated host operations may extend an in-progress service turn
+     * beyond the last public bookable start while retaining every occupancy,
+     * capacity, version, and idempotency guard.
+     */
+    enforceResourceAvailability?: boolean;
   },
 ) {
   validateAllocationRequest(input);
@@ -132,7 +153,6 @@ export async function allocateHospitalityCapacity(
             date: true,
           },
         },
-        storefront: { select: { timezone: true } },
       },
     });
     if (!resource) {
@@ -151,11 +171,12 @@ export async function allocateHospitalityCapacity(
       );
     }
     if (
+      input.enforceResourceAvailability !== false &&
       !isHospitalityResourceAvailableForInterval({
         availability: resource.availability ?? [],
         startsAt: input.startsAt,
         endsAt: input.endsAt,
-        timeZone: resource.storefront?.timezone ?? "UTC",
+        timeZone: await loadStorefrontOperatingTimezone(database),
       })
     ) {
       throw new HospitalityCapacityConflictError(

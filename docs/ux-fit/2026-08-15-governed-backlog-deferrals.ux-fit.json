@@ -1,0 +1,18 @@
+{
+  "version": "1",
+  "decidedOption": "status-conditioned-inline-fieldset",
+  "decisionInteractionId": "DI-042F3AFBE557",
+  "scope": {
+    "files": [
+      "apps/web/components/ops/BacklogPanel.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "status-conditioned-inline-fieldset",
+      "always-visible-deferral-fields",
+      "separate-deferral-workflow"
+    ]
+  }
+}

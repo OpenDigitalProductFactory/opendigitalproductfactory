@@ -4,6 +4,7 @@ import "@testing-library/jest-dom/vitest";
 
 import {
   cleanup,
+  act,
   fireEvent,
   render,
   screen,
@@ -17,6 +18,8 @@ const mocks = vi.hoisted(() => ({
   execute: vi.fn(),
   advance: vi.fn(),
   move: vi.fn(),
+  createWalkIn: vi.fn(),
+  setAccess: vi.fn(),
   refresh: vi.fn(),
   canvasProps: null as Record<string, unknown> | null,
 }));
@@ -29,6 +32,8 @@ vi.mock("@/lib/twin/restaurant-floor-actions", () => ({
   executeRestaurantFloorCommand: mocks.execute,
   advanceRestaurantServiceTurn: mocks.advance,
   moveRestaurantParty: mocks.move,
+  createRestaurantWalkIn: mocks.createWalkIn,
+  setRestaurantTableBookingAccess: mocks.setAccess,
 }));
 
 vi.mock("@/components/twin/cartesian/CartesianSceneCanvas", () => ({
@@ -82,12 +87,14 @@ const props: RestaurantFloorOperationsProps = {
       tables: [
         {
           id: "table-1",
+          version: 1,
           label: "Table 1",
           capacity: 2,
           serviceArea: "Main dining",
           shape: "square",
           combinableWith: [],
           combinationGroup: "main",
+          bookingAccess: "online",
           combinedWith: [],
           state: "available",
           statusLabel: "Available",
@@ -163,6 +170,8 @@ describe("RestaurantFloorOperations", () => {
     mocks.execute.mockReset();
     mocks.advance.mockReset();
     mocks.move.mockReset();
+    mocks.createWalkIn.mockReset();
+    mocks.setAccess.mockReset();
     mocks.refresh.mockReset();
     mocks.canvasProps = null;
     mocks.execute.mockResolvedValue({
@@ -196,6 +205,14 @@ describe("RestaurantFloorOperations", () => {
       changedFacts: [
         { entityId: "turn-1", field: "resourceIds", value: "table-2" },
       ],
+    });
+    mocks.createWalkIn.mockResolvedValue({ ok: true, bookingId: "walk-in-1", bookingRef: "BK-WALKIN1", replayed: false });
+    mocks.setAccess.mockResolvedValue({
+      status: "confirmed",
+      idempotencyKey: "table-access-1",
+      replayed: false,
+      newVersion: "2",
+      changedFacts: [{ entityId: "table-1", field: "bookingAccess", value: "in-house" }],
     });
   });
 
@@ -233,7 +250,7 @@ describe("RestaurantFloorOperations", () => {
     expect(screen.getByText("Takeout order needs confirmation")).toBeTruthy();
   });
 
-  it("locks embedded floor navigation so table activation wins over canvas movement", () => {
+  it("keeps the complete authored floor reachable with interactive navigation", () => {
     render(<RestaurantFloorOperations {...props} />);
 
     expect(screen.getByTestId("restaurant-floor-canvas")).toHaveAttribute(
@@ -242,7 +259,7 @@ describe("RestaurantFloorOperations", () => {
     );
     expect(screen.getByTestId("restaurant-floor-canvas")).toHaveAttribute(
       "data-navigation",
-      "locked",
+      "interactive",
     );
     const bindings = mocks.canvasProps?.bindings as Record<
       string,
@@ -262,6 +279,27 @@ describe("RestaurantFloorOperations", () => {
       "data-owner-first-next-action",
       "restaurant-confirm-seating",
     );
+  });
+
+  it("opens the next table actions beside pointer or keyboard activation", async () => {
+    render(<RestaurantFloorOperations {...props} />);
+    const anchor = document.createElement("button");
+    anchor.getBoundingClientRect = () => ({
+      x: 100, y: 120, left: 100, right: 170, top: 120, bottom: 190,
+      width: 70, height: 70, toJSON: () => ({}),
+    });
+    document.body.append(anchor);
+    const onActivate = mocks.canvasProps?.onActivate as
+      ((placementId: string, entityRef: { kind: string; id: string }, anchor: HTMLElement) => void);
+    await act(async () => onActivate("table-placement-1", { kind: "table", id: "table-1" }, anchor));
+    const dialog = screen.getByRole("dialog", { name: "Actions for Table 1" });
+    expect(dialog).toHaveStyle({ left: "178px", top: "120px" });
+    expect(screen.getByRole("button", { name: "Seat Alex Kim here" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Hold for in-house guests" })).toBeInTheDocument();
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(screen.queryByRole("dialog", { name: "Actions for Table 1" })).not.toBeInTheDocument();
+    expect(anchor).toHaveFocus();
+    anchor.remove();
   });
 
   it("keeps late reservations and their held capacity visible during service", () => {
@@ -333,6 +371,29 @@ describe("RestaurantFloorOperations", () => {
     );
     await waitFor(() => expect(mocks.refresh).toHaveBeenCalled());
     expect(screen.getByText("Party seated")).toBeTruthy();
+  });
+
+  it("refreshes the floor and clears stale seating choices after a conflict", async () => {
+    mocks.execute.mockResolvedValueOnce({
+      status: "conflict",
+      idempotencyKey: "seat-conflict",
+      replayed: false,
+      message: "The floor changed before confirmation.",
+      currentVersion: "restaurant-seat.v1-newer",
+      changedFacts: [],
+    });
+
+    render(<RestaurantFloorOperations {...props} />);
+    fireEvent.click(screen.getByRole("button", { name: "Confirm seating" }));
+
+    await waitFor(() => expect(mocks.refresh).toHaveBeenCalledTimes(1));
+    const alert = screen.getByRole("alert");
+    expect(alert.getAttribute("aria-live")).toBe("assertive");
+    expect(alert.textContent).toContain("Floor changed before confirmation");
+    expect(alert.textContent).toContain("Review refreshed choices, then retry");
+    expect(document.activeElement).toBe(alert);
+    expect(screen.queryByRole("button", { name: "Confirm seating" })).toBeNull();
+    expect(screen.getByText("Choose a party for a safe seating choice.")).toBeTruthy();
   });
 
   it("submits host commands when randomUUID is unavailable on an HTTP install", async () => {

@@ -40,6 +40,12 @@ describe("retention registry invariants", () => {
     }
   });
 
+  it("never auto-purges permanent initiative artifact retention pins", () => {
+    const entry = RETAINED_DATASETS.find((dataset) => dataset.model === "initiativeArtifactRetentionPin");
+    expect(entry?.minRetentionYears).toBe(Number.POSITIVE_INFINITY);
+    expect(PURGE_MODELS).not.toContain("initiativeArtifactRetentionPin");
+  });
+
   it("every purge policy is well-formed", () => {
     for (const p of PURGE_POLICIES) {
       expect(p.model.length).toBeGreaterThan(0);

@@ -1,11 +1,25 @@
 import { describe, it, expect } from "vitest";
 import {
+  formatInboxCreatedDate,
   formatReservationWhen,
   nextActionForReservation,
   parseCovers,
   reservationActionLabel,
   structuredBookingFieldRole,
 } from "./booking-summary";
+
+describe("formatInboxCreatedDate", () => {
+  it("uses the storefront timezone instead of the rendering host timezone", () => {
+    // This instant is already August 13 in UTC, but still August 12 for the
+    // America/Chicago business. Server and browser must receive one label.
+    expect(
+      formatInboxCreatedDate(
+        new Date("2026-08-13T03:53:56.000Z"),
+        "America/Chicago",
+      ),
+    ).toBe("12/08/2026");
+  });
+});
 
 describe("structuredBookingFieldRole", () => {
   it("maps covers + dietary field names to their structured roles", () => {

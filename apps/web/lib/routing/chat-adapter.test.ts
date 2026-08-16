@@ -254,6 +254,36 @@ describe("chatAdapter", () => {
     expect(result.toolCalls).toEqual([]);
   });
 
+  // ── 1b. OpenAI-compat: finish_reason captured as `truncated` (BI-1D144CC1) ──
+
+  it("OpenAI-compat: finish_reason=length is captured as truncated=true", async () => {
+    stubFetchOk({
+      choices: [{ message: { content: "The first three steps are" }, finish_reason: "length" }],
+      usage: { prompt_tokens: 10, completion_tokens: 5 },
+    });
+
+    const result = await chatAdapter.execute(makeRequest({
+      providerId: "ollama",
+      modelId: "llama3.1",
+    }));
+
+    expect(result.truncated).toBe(true);
+  });
+
+  it("OpenAI-compat: finish_reason=stop is not truncated", async () => {
+    stubFetchOk({
+      choices: [{ message: { content: "Done." }, finish_reason: "stop" }],
+      usage: { prompt_tokens: 10, completion_tokens: 5 },
+    });
+
+    const result = await chatAdapter.execute(makeRequest({
+      providerId: "ollama",
+      modelId: "llama3.1",
+    }));
+
+    expect(result.truncated).toBe(false);
+  });
+
   // ── 2. OpenAI-compat: reasoning_effort from providerSettings ──
 
   it("OpenAI-compat: reasoning_effort from providerSettings", async () => {
@@ -394,6 +424,48 @@ describe("chatAdapter", () => {
     expect(result.text).toBe("Hello from Claude");
     expect(result.usage.inputTokens).toBe(12);
     expect(result.usage.outputTokens).toBe(8);
+  });
+
+  // ── 3b. Anthropic: stop_reason captured as `truncated` (BI-1D144CC1) ──
+
+  it("Anthropic: stop_reason=max_tokens is captured as truncated=true", async () => {
+    stubFetchOk({
+      content: [{ type: "text", text: "Here is the first part of the answer" }],
+      stop_reason: "max_tokens",
+      usage: { input_tokens: 12, output_tokens: 8 },
+    });
+
+    const result = await chatAdapter.execute(makeRequest({
+      providerId: "anthropic",
+      modelId: "claude-sonnet-4-20250514",
+      plan: makePlan({ providerId: "anthropic", modelId: "claude-sonnet-4-20250514" }),
+      provider: {
+        baseUrl: "https://api.anthropic.com/v1",
+        headers: { "x-api-key": "sk-ant-test", "anthropic-version": "2023-06-01" },
+      },
+    }));
+
+    expect(result.truncated).toBe(true);
+  });
+
+  it("Anthropic: stop_reason=end_turn is not truncated", async () => {
+    stubFetchOk({
+      content: [{ type: "text", text: "Complete answer." }],
+      stop_reason: "end_turn",
+      usage: { input_tokens: 12, output_tokens: 8 },
+    });
+
+    const result = await chatAdapter.execute(makeRequest({
+      providerId: "anthropic",
+      modelId: "claude-sonnet-4-20250514",
+      plan: makePlan({ providerId: "anthropic", modelId: "claude-sonnet-4-20250514" }),
+      provider: {
+        baseUrl: "https://api.anthropic.com/v1",
+        headers: { "x-api-key": "sk-ant-test", "anthropic-version": "2023-06-01" },
+      },
+    }));
+
+    expect(result.truncated).toBe(false);
   });
 
   // ── 4. Anthropic: providerTools merged into tools array (computer use) ──

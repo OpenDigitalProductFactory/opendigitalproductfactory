@@ -13,17 +13,17 @@
  * capability, and shipped model-driven deferral (load_tools + list_changed,
  * spec Phase 2) is purely additive on top of it.
  *
- * Server-authoritative default (BI-88681BE0): when a caller passes no explicit
- * `?tier=`, the default now depends on the client (defaultTierForClient) —
- * Claude Code keeps "full" (it defers client-side), every other/unknown client
- * defaults to the lean "core" surface so it stops paying the full catalog. Any
- * caller opts back in with `?tier=full`.
+ * Server-authoritative default (BI-88681BE0): an explicit `?tier=` wins. Known
+ * lazy-host bootstrap/config URLs use `?tier=full`, because current Codex HTTP
+ * requests carry no User-Agent and do not refresh the top-level registry after
+ * `list_changed`. User-Agent recognition remains a compatibility fallback for
+ * clients that identify themselves. Other/unknown clients default to `core`.
  *
- * Core is not "backlog-only": peer CLIs (Grok, Codex) have no ToolSearch, so
- * WWMD tools that AGENTS.md requires (`principle_decide`, `wiki_query`) must
- * be discoverable on the lean list — otherwise agents cannot consult the
- * kernel even when the token grants them. That is discovery only; execution
- * already allowed by-name before this expansion.
+ * Core is not "backlog-only": peer clients without host-side ToolSearch, such
+ * as Grok and generic MCP clients, still need the WWMD tools that AGENTS.md
+ * requires (`principle_decide`, `wiki_query`) on the lean list.
+ * That is discovery only; execution already allowed by-name before this
+ * expansion.
  */
 
 import {
@@ -32,6 +32,8 @@ import {
 export { LOAD_TOOLS_TOOL_NAME } from "@/lib/tak/tool-intent";
 
 export type McpToolTier = "core" | "full";
+
+const CLIENT_SIDE_LAZY_TOOL_CATALOG = /^(?:claude-code|codex(?:-cli|-desktop)?)(?:\/|$)/i;
 
 /** Parse an EXPLICIT tier hint (`?tier=core` / `?tier=full`), or null when absent. */
 export function parseExplicitTier(raw: string | null | undefined): McpToolTier | null {
@@ -47,18 +49,14 @@ export function resolveMcpToolTier(raw: string | null | undefined): McpToolTier 
 
 /**
  * The default tier for a caller when it did NOT pass an explicit `?tier=`
- * (BI-88681BE0 / BI-71310615 §5a — server-authoritative default-minimal
- * disclosure). Claude Code defers the catalog client-side (ToolSearch), so it
- * keeps the `full` surface with no behaviour change; every OTHER client (Codex,
- * Grok, a customer's own agent, or an unidentified caller) has no client-side
- * deferral and otherwise pays the whole ~26k-token catalog up front, so it
- * defaults to the lean `core` surface. This is discovery-only — `tools/call`
- * still executes any granted tool by name and `search_tool_marketplace` (in
- * core) surfaces the rest — so no capability is lost, and any caller can opt
- * back into the full surface with `?tier=full`.
+ * Compatibility fallback for a request without `?tier=`. Bootstrap does not
+ * rely on this signal: current Codex Streamable HTTP requests omit User-Agent,
+ * so known lazy-host configs request `tier=full` explicitly. Recognized Claude
+ * Code/Codex identifiers still receive `full`; Grok, generic MCP clients, and
+ * unidentified callers default to `core`. Explicit `?tier=` always wins.
  */
 export function defaultTierForClient(callerClient: string | null | undefined): McpToolTier {
-  return typeof callerClient === "string" && /^claude-code(\/|$)/i.test(callerClient)
+  return typeof callerClient === "string" && CLIENT_SIDE_LAZY_TOOL_CATALOG.test(callerClient)
     ? "full"
     : "core";
 }
@@ -82,8 +80,8 @@ export function resolveEffectiveTier(
  * is included so a model in core tier can still discover the rest.
  *
  * WWMD / kernel tools (`principle_decide`, `wiki_query`) are core for peer
- * external agents (Grok, Codex, …) that cannot ToolSearch the full catalog —
- * AGENTS.md requires principle_decide before multi-option platform menus.
+ * external agents that cannot ToolSearch the full catalog — AGENTS.md requires
+ * principle_decide before multi-option platform menus.
  */
 export const CORE_MCP_TOOL_NAMES: ReadonlySet<string> = new Set([
   // discovery / read
@@ -112,8 +110,8 @@ export const CORE_MCP_TOOL_NAMES: ReadonlySet<string> = new Set([
   "get_my_coworker_profile",
   "find_coworker",
   "get_next_recommended_work",
-  "list_work_capsules",
-  "get_work_capsule",
+  "list_workrooms",
+  "get_workroom",
   "get_build_progress_visibility",
   // live delivery / verification
   "get_quiescence_status",

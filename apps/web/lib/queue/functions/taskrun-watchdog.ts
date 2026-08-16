@@ -268,7 +268,7 @@ export const taskrunWatchdog = inngest.createFunction(
       console.warn("[taskrun-watchdog] inert-build reaper failed:", err);
     }
 
-    // WS9 (BI-CBAAEA94): governed WorkCapsule reaper — transition capsules whose
+    // WS9 (BI-CBAAEA94): governed Workroom reaper — transition capsules whose
     // TRUE liveness is dead (lease expired, linked build terminal, or idle past
     // the floor) out of "working" so abandoned work stops reading as active and
     // jamming the WIP cap. GOVERNED: observe-only (dry-run) unless

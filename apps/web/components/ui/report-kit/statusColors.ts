@@ -56,6 +56,23 @@ export function intentStyle(intent: Intent): IntentStyle {
  * (e.g. complaints) so each gets its own namespace.
  */
 export const STATUS_INTENT: Record<string, Record<string, Intent>> = {
+  // Edge operational health and operator-governed trust are deliberately
+  // separate axes. Both Edge Nodes and Connections consume these semantics.
+  edgeHealth: {
+    "setup-required": "neutral",
+    starting: "info",
+    healthy: "success",
+    degraded: "warning",
+    offline: "danger",
+    quarantined: "danger",
+    revoked: "neutral",
+  },
+  edgeTrust: {
+    pending: "warning",
+    trusted: "success",
+    quarantined: "danger",
+    revoked: "neutral",
+  },
   // Restaurant table capacity state (BI-7C95A586). Tables & Capacity page,
   // Workspace chips, and public booking all resolve here — one registry.
   restaurantCapacity: {
@@ -142,6 +159,14 @@ export const STATUS_INTENT: Record<string, Record<string, Intent>> = {
     suspended: "danger",
     offboarding: "warning",
     inactive: "neutral",
+  },
+  // Human-owned leave approval lifecycle. AI recommendations are rendered on
+  // a separate axis so a recommendation can never masquerade as a decision.
+  leaveRequest: {
+    pending: "warning",
+    approved: "success",
+    rejected: "danger",
+    cancelled: "neutral",
   },
   // Decision governance ledger (DecisionInteraction.outcomeType / riskTier).
   decisionOutcome: {
@@ -399,6 +424,7 @@ export const STATUS_INTENT: Record<string, Record<string, Intent>> = {
     "in-progress": "accent",
     done: "success",
     deferred: "neutral",
+    retired: "neutral",
   },
   // Workspace Work Room semantics. These domains are shared by the My Work
   // lens and room detail shell so neither surface carries a private color map.
@@ -414,14 +440,14 @@ export const STATUS_INTENT: Record<string, Record<string, Intent>> = {
     closed: "neutral",
     cancelled: "neutral",
   },
-  workRoomOutcomeHealth: {
+  workroomOutcomeHealth: {
     "on-track": "success",
     "at-risk": "warning",
     blocked: "danger",
     idle: "neutral",
     unknown: "neutral",
   },
-  workRoomActivity: {
+  workroomActivity: {
     message: "neutral",
     ask: "warning",
     "coworker-joined": "accent",

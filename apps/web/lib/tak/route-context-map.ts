@@ -1,11 +1,11 @@
 // apps/web/lib/route-context-map.ts
-// Factual domain context definitions per route — replaces persona-based agent routing.
 import { resolveDocsPath } from "@/lib/docs-route-map";
 import { AGRICULTURE_ROUTE_CONTEXT } from "./agriculture-route-context";
 import { CHANGE_REVIEWER_ROUTE_CONTEXT } from "./change-reviewer-route";
 import { PERFORMANCE_ROUTE_CONTEXT } from "./performance-route";
 import { PRODUCT_LINE_ROUTE_CONTEXT } from "./product-line-route-context";
 import { PRODUCT_ROUTE_CONTEXT } from "./product-route-context";
+import { LEAVE_DECISION_ROUTE_CONTEXT } from "./leave-decision-route";
 import type { RouteContextDef } from "./route-context-types";
 export type { RouteContextDef } from "./route-context-types";
 // Universal baseline page-interaction skills added to every route.
@@ -39,8 +39,8 @@ export const UNIVERSAL_SKILLS: RouteContextDef["skills"] = [
     prompt: "Evaluate the UX of this page. First, use read_project_file and search_project_files to find and read the component code for the current route. Then use evaluate_page to run a live accessibility audit. Synthesize both code analysis and live findings into a plain-language assessment. For each issue found: create a backlog item grouped by category (one item per category, not per finding). After presenting findings, ask the user if they want to build fixes now — if yes, assemble a FeatureBrief and launch Build Studio.",
   },
 ];
-
 export const ROUTE_CONTEXT_MAP: Record<string, RouteContextDef> = {
+  "/coworker/leave-decision": LEAVE_DECISION_ROUTE_CONTEXT,
   ...AGRICULTURE_ROUTE_CONTEXT,
   // Sensitivity MUST match ROUTE_AGENT_MAP["/coworker-decisions/craft"] — the
   // LIFE-007 conformance check fails on divergence, because the

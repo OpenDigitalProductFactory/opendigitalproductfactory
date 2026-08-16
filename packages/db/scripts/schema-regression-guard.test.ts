@@ -251,3 +251,118 @@ model PlatformIssueReport {
     expect(regressions(before, after)).toEqual([]);
   });
 });
+
+// ─── Sanctioned model renames ────────────────────────────────────────────────
+//
+// A logical model rename is not a regression WHEN the physical table is
+// preserved via @@map. Without the @@map the rename really does drop the
+// table, so the guard must still block it. That asymmetry is the whole safety
+// property of the rename allowlist.
+describe("intentional model renames", () => {
+  const RENAMES = new Map([["OldThing", "NewThing"]]);
+  const base = parseSchema(`
+model OldThing {
+  id    String @id
+  name  String
+  kids  OldKid[]
+}
+
+model Holder {
+  id      String   @id
+  thingId String?
+  thing   OldThing? @relation(fields: [thingId], references: [id])
+}
+`);
+
+  it("accepts a rename that preserves the physical table via @@map", () => {
+    const head = parseSchema(`
+model NewThing {
+  id    String @id
+  name  String
+  kids  OldKid[]
+  @@map("OldThing")
+}
+
+model Holder {
+  id      String   @id
+  thingId String?
+  thing   NewThing? @relation(fields: [thingId], references: [id])
+}
+`);
+    expect(diffSchemas(base, head, new Set(), RENAMES)).toEqual([]);
+  });
+
+  it("still blocks a rename that does NOT preserve the table", () => {
+    const head = parseSchema(`
+model NewThing {
+  id    String @id
+  name  String
+  kids  OldKid[]
+}
+
+model Holder {
+  id      String   @id
+  thingId String?
+  thing   NewThing? @relation(fields: [thingId], references: [id])
+}
+`);
+    const regressions = diffSchemas(base, head, new Set(), RENAMES);
+    expect(regressions).toContain("model OldThing removed entirely");
+  });
+
+  // Regression: once the rename has SHIPPED, base already contains the new model
+  // carrying @@map("<old name>"). The rename substitution used to rewrite inside
+  // that directive — turning base's @@map("OldThing") into @@map("NewThing"),
+  // which never matches head — so every renamed model reported its own @@map as
+  // removed and main regressed against itself. The @@map argument is a physical
+  // table name and must never be substituted.
+  it("reports nothing when base ALREADY carries the shipped rename", () => {
+    const shipped = parseSchema(`
+model NewThing {
+  id    String @id
+  name  String
+  kids  OldKid[]
+  @@map("OldThing")
+}
+
+model Holder {
+  id      String   @id
+  thingId String?
+  thing   NewThing? @relation(fields: [thingId], references: [id])
+}
+`);
+    expect(diffSchemas(shipped, shipped, new Set(), RENAMES)).toEqual([]);
+  });
+
+  it("still reports a genuine field drop inside a renamed model", () => {
+    const head = parseSchema(`
+model NewThing {
+  id    String @id
+  kids  OldKid[]
+  @@map("OldThing")
+}
+
+model Holder {
+  id      String   @id
+  thingId String?
+  thing   NewThing? @relation(fields: [thingId], references: [id])
+}
+`);
+    const regressions = diffSchemas(base, head, new Set(), RENAMES);
+    expect(regressions.some((r) => r.includes("name String"))).toBe(true);
+    expect(regressions.some((r) => r.includes("renamed to NewThing"))).toBe(true);
+  });
+
+  it("blocks an unlisted model removal even while renames are configured", () => {
+    const head = parseSchema(`
+model NewThing {
+  id    String @id
+  name  String
+  kids  OldKid[]
+  @@map("OldThing")
+}
+`);
+    const regressions = diffSchemas(base, head, new Set(), RENAMES);
+    expect(regressions).toContain("model Holder removed entirely");
+  });
+});

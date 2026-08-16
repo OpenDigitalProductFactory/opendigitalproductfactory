@@ -1,0 +1,79 @@
+{
+  "version": "1",
+  "accountableOwner": "portfolio-management",
+  "affectedCopies": [
+    "BacklogItem active lifecycle projection",
+    "BacklogItemActivity immutable transition history",
+    "Ops backlog read model",
+    "MCP backlog query and identity-scoped backlog projections"
+  ],
+  "migration": {
+    "name": "20260815181000_govern_backlog_deferrals",
+    "backfill": "Reclassify only existing deferred rows already carrying triageOutcome duplicate or discard as retired. Preserve still-wanted deferred rows without inventing owner, reason, trigger, or review evidence; they remain visibly nonconformant until reviewed through the governed lifecycle tool."
+  },
+  "tests": [
+    "packages/db/src/govern-backlog-deferrals-migration.test.ts",
+    "apps/web/lib/backlog/deferral-contract.test.ts",
+    "apps/web/lib/backlog/transitions.test.ts",
+    "apps/web/lib/mcp/packs/backlog-pack.test.ts",
+    "apps/web/lib/backlog-visibility.test.ts",
+    "apps/web/components/ops/BacklogPanel.test.tsx",
+    "scripts/check-data-impact.test.mjs"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:backlog-item#governed-deferral",
+      "prismaModel": "BacklogItem",
+      "lifecycleDisposition": "The active projection exists only while status is deferred. Reactivation, completion, or retirement clears it, while BacklogItemActivity preserves the attributable decision history under the BacklogItem retention policy. Rollback is forward-only: application enforcement may be reverted without dropping nullable columns or deleting lifecycle evidence.",
+      "fields": [
+        {
+          "fieldId": "data:backlog-item#status",
+          "resolution": "governed",
+          "reason": "Retired separates demand intentionally removed from execution from delivered outcomes and still-wanted parked work.",
+          "provenance": "BI-59F6ED17; DI-6FA2FA858D95; deferred backlog governance plan"
+        },
+        {
+          "fieldId": "data:backlog-item#deferReason",
+          "resolution": "governed",
+          "reason": "A retained deferral must explain why the work is not actionable now.",
+          "provenance": "BI-59F6ED17; DI-03B7564E648A; active deferral contract"
+        },
+        {
+          "fieldId": "data:backlog-item#deferTrigger",
+          "resolution": "governed",
+          "reason": "A retained deferral must name the observable condition that permits reconsideration.",
+          "provenance": "BI-59F6ED17; DI-03B7564E648A; active deferral contract"
+        },
+        {
+          "fieldId": "data:backlog-item#deferReviewAt",
+          "resolution": "governed",
+          "reason": "A safety horizon makes parked demand reviewable even when its trigger has not fired.",
+          "provenance": "BI-59F6ED17; DI-03B7564E648A; active deferral contract"
+        },
+        {
+          "fieldId": "data:backlog-item#deferOwnerPrincipalId",
+          "resolution": "governed",
+          "reason": "Accountability resolves to the canonical Principal record rather than a display string or surface-specific user id.",
+          "provenance": "BI-59F6ED17; canonical Principal identity contract",
+          "flags": [
+            "subject"
+          ],
+          "fieldPolicy": "Store only the canonical Principal foreign key needed for accountability. Resolve display identity at read time, restrict mutation to manage_backlog capability, and clear the active projection when the item leaves deferred status."
+        },
+        {
+          "fieldId": "data:backlog-item#deferredAt",
+          "resolution": "governed",
+          "reason": "The current parking interval needs an attributable start time distinct from the immutable activity history.",
+          "provenance": "BI-59F6ED17; DI-03B7564E648A; active deferral contract"
+        }
+      ]
+    },
+    {
+      "kind": "projection",
+      "derivedContractId": "projection:backlog-item#active-deferral",
+      "cleanupTest": "apps/web/lib/mcp/packs/backlog-pack.test.ts proves leaving deferred clears every active projection field while preserving activity history",
+      "reconciliationTest": "apps/web/lib/mcp/packs/backlog-pack-read-tools.test.ts proves compliant, incomplete, and review-due filters reconcile the canonical fields without N+1 reads"
+    }
+  ]
+}

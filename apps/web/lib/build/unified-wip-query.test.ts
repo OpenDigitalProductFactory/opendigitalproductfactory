@@ -25,7 +25,7 @@ function makeDb(opts: {
   const leaseFindMany = vi.fn().mockResolvedValue(opts.activeLeases ?? []);
   const db: UnifiedWipDb = {
     featureBuild: { count: featureBuildCount },
-    workCapsule: { findMany: capsuleFindMany },
+    workroom: { findMany: capsuleFindMany },
     nonProductionEnvironmentLease: { findMany: leaseFindMany },
   };
   return { db, featureBuildCount, capsuleFindMany };

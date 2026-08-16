@@ -3,7 +3,7 @@
 // Reduction Gear Phase 0 — RuntimeVerification → GearInterface adapter (CONTRACT STUB).
 //
 // RuntimeVerification is the typed verification event that already attaches to
-// RuntimeTarget / WorkCapsule / FeatureBuild / GitPromotionCandidate. It will
+// RuntimeTarget / Workroom / FeatureBuild / GitPromotionCandidate. It will
 // drive Ring 3→4 (Archetype → Sandbox/Production) outward records and Ring 4→5
 // inward records (release verification arriving back at the install).
 //

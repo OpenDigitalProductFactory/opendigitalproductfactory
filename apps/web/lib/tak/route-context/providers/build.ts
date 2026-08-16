@@ -13,7 +13,7 @@ export async function getCapsuleBuildContext(_userId: string, routeContext: stri
   if (!capsuleMatch) return "\nPAGE DATA — Work Capsule:\nNo capsule identified in route.";
 
   const capsuleId = capsuleMatch[1];
-  const capsule = await prisma.workCapsule.findUnique({
+  const capsule = await prisma.workroom.findUnique({
     where: { capsuleId },
     select: { title: true, status: true, featureBuildId: true },
   });

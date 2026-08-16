@@ -1,0 +1,1856 @@
+{
+    "source": "canonical runtime PostgreSQL read-only snapshot",
+    "entries": [
+        {
+            "itemId": "BI-0491037A",
+            "source": "self-upgrade-failure",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "0ef29c870199e4f63104366794ae4f7f",
+            "triageOutcome": "discard"
+        },
+        {
+            "itemId": "BI-06B66FFD",
+            "source": "user-request",
+            "status": "deferred",
+            "disposition": "defer",
+            "evidenceHash": "af5a9f2e2a75e6a8c46a5b454fb96ff5",
+            "triageOutcome": "defer"
+        },
+        {
+            "itemId": "BI-0EB136FD",
+            "source": "user-request",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "50c6ee8d70a1afb3bf547a01285ba136",
+            "triageOutcome": "duplicate"
+        },
+        {
+            "itemId": "BI-0EEBA669",
+            "source": "user-request",
+            "status": "deferred",
+            "disposition": "done",
+            "evidenceHash": "0945a9565002a2f087457aaef4750116",
+            "triageOutcome": ""
+        },
+        {
+            "itemId": "BI-0FCF844F",
+            "source": "build-failure",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "e5130a07c2b1eb555b9daf674cdfb999",
+            "triageOutcome": "defer"
+        },
+        {
+            "itemId": "BI-129B95BA",
+            "source": "self-upgrade-failure",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "4cd49b9bbead0698051dc137428bf53e",
+            "triageOutcome": "duplicate"
+        },
+        {
+            "itemId": "BI-18A42A6D",
+            "source": "user-request",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "34f8cdaba445ee577a76cdc4e93d5ae3",
+            "triageOutcome": "discard"
+        },
+        {
+            "itemId": "BI-18EB2CCF",
+            "source": "build-failure",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "180d725e5d0d961e0a68bc032a2295e4",
+            "triageOutcome": "defer"
+        },
+        {
+            "itemId": "BI-1B40934A",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "89ccf538b1da069f8dc494ebbea10ee3",
+            "triageOutcome": "discard"
+        },
+        {
+            "itemId": "BI-1C070099",
+            "source": "user-request",
+            "status": "deferred",
+            "disposition": "defer",
+            "evidenceHash": "8458a548f56212be0d390b1b9822ce7f",
+            "triageOutcome": "build"
+        },
+        {
+            "itemId": "BI-1D6F3991",
+            "source": "user-request",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "5faca81074fbfbc2e77c2689150aa722",
+            "triageOutcome": "duplicate"
+        },
+        {
+            "itemId": "BI-1E03B447",
+            "source": "user-request",
+            "status": "deferred",
+            "disposition": "defer",
+            "evidenceHash": "5365c095f82ca94a5d56ba7cffbc2aaf",
+            "triageOutcome": ""
+        },
+        {
+            "itemId": "BI-1F4A4861",
+            "source": "user-request",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "0cb73d63e491f54f93dc3dae50104b87",
+            "triageOutcome": "defer"
+        },
+        {
+            "itemId": "BI-28E5CBBD",
+            "source": "user-request",
+            "status": "deferred",
+            "disposition": "defer",
+            "evidenceHash": "981b1c10995741f868944bad1c2f24fc",
+            "triageOutcome": ""
+        },
+        {
+            "itemId": "BI-2A6BAACF",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "8a6f43e7872eb24ed6537b6828766d7c",
+            "triageOutcome": "discard"
+        },
+        {
+            "itemId": "BI-2E3A7ADC",
+            "source": "user-request",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "024d6327a04e56cb008906d47505cf1d",
+            "triageOutcome": "discard"
+        },
+        {
+            "itemId": "BI-3C662E7B",
+            "source": "user-request",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "f8fe3ca787aa4ea858b9cb7a256f8294",
+            "triageOutcome": "duplicate"
+        },
+        {
+            "itemId": "BI-3EC7FDB0",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "done",
+            "evidenceHash": "286c5512426ecc165be451b20529c5ec",
+            "triageOutcome": ""
+        },
+        {
+            "itemId": "BI-4433EE88",
+            "source": "user-request",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "9a4800ebb8d600e30c2f52f4a7942a39",
+            "triageOutcome": "discard"
+        },
+        {
+            "itemId": "BI-487B3E5F",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "81f4dde9fcbc71db0ecf04b50a519036",
+            "triageOutcome": "discard"
+        },
+        {
+            "itemId": "BI-53D7E70C",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "open",
+            "evidenceHash": "291fc458df61e450dc5f747f9bac1928",
+            "triageOutcome": "build"
+        },
+        {
+            "itemId": "BI-5457E216",
+            "source": "user-request",
+            "status": "deferred",
+            "disposition": "done",
+            "evidenceHash": "fd839362949cd5aaa34f28802f5762f3",
+            "triageOutcome": ""
+        },
+        {
+            "itemId": "BI-5743D81F",
+            "source": "user-request",
+            "status": "deferred",
+            "disposition": "open",
+            "evidenceHash": "8b717eff1ada8c80938e02ca4e3d26f0",
+            "triageOutcome": "build"
+        },
+        {
+            "itemId": "BI-58CF47BB",
+            "source": "self-upgrade-failure",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "36814fa438c88ac3f1c2b4d0774d1a17",
+            "triageOutcome": "discard"
+        },
+        {
+            "itemId": "BI-5A3C14C1",
+            "source": "user-request",
+            "status": "deferred",
+            "disposition": "defer",
+            "evidenceHash": "fc1707e4429f13858f520fac2cdb2c08",
+            "triageOutcome": "defer"
+        },
+        {
+            "itemId": "BI-5E1AC77D",
+            "source": "self-upgrade-failure",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "9cfc2785f975dcdc44cb0be5a83d613f",
+            "triageOutcome": "discard"
+        },
+        {
+            "itemId": "BI-5FB59BC6",
+            "source": "user-request",
+            "status": "deferred",
+            "disposition": "defer",
+            "evidenceHash": "5b896d02ac4ef89af04e7a07cfeb9fa5",
+            "triageOutcome": "defer"
+        },
+        {
+            "itemId": "BI-68191D13",
+            "source": "build-failure",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "43c9336d5f1911a507dede6bd2fa0f75",
+            "triageOutcome": "build"
+        },
+        {
+            "itemId": "BI-72E0A27B",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "cf9c322312e5cb93e0fa5a6f5622f442",
+            "triageOutcome": "defer"
+        },
+        {
+            "itemId": "BI-8133A4EC",
+            "source": "user-request",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "e9b6a6ac2ad5e89a0ca11f4b4e106974",
+            "triageOutcome": "duplicate"
+        },
+        {
+            "itemId": "BI-8307211F",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "16ff815312150cdd83ff2c8e46b11419",
+            "triageOutcome": "duplicate"
+        },
+        {
+            "itemId": "BI-84B196E6",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "5cc0ad7cf407c643336fe242cd8c2cc2",
+            "triageOutcome": "discard"
+        },
+        {
+            "itemId": "BI-8BE7DF8A",
+            "source": "user-request",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "1dab8a8e93e2e3701d68e72cf95b184c",
+            "triageOutcome": "defer"
+        },
+        {
+            "itemId": "BI-8CC1CA25",
+            "source": "user-request",
+            "status": "deferred",
+            "disposition": "open",
+            "evidenceHash": "c2b71ff31e3861eb9b94ba49324bf4f0",
+            "triageOutcome": "build"
+        },
+        {
+            "itemId": "BI-8E764B86",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "4884225cd34228d23497b1a5647ee2ea",
+            "triageOutcome": "discard"
+        },
+        {
+            "itemId": "BI-91BD8D67",
+            "source": "user-request",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "c894d0a33d0504c3d92864c044c62dc0",
+            "triageOutcome": "duplicate"
+        },
+        {
+            "itemId": "BI-91F5F092",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "049e9f755e9796cd2b408b238b45ae92",
+            "triageOutcome": "discard"
+        },
+        {
+            "itemId": "BI-9760D976",
+            "source": "self-upgrade-failure",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "d995a3adb73f8f920ad806d054d1d136",
+            "triageOutcome": "discard"
+        },
+        {
+            "itemId": "BI-9DFAFB4A",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "done",
+            "evidenceHash": "d89a9d8d345227402771d69fbe4d0cad",
+            "triageOutcome": "build"
+        },
+        {
+            "itemId": "BI-9E19FB5E",
+            "source": "user-request",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "ba785fb9a5de1e10bb06c735eb8bbece",
+            "triageOutcome": "discard"
+        },
+        {
+            "itemId": "BI-A2D9A618",
+            "source": "user-request",
+            "status": "deferred",
+            "disposition": "defer",
+            "evidenceHash": "3b96645e951bec7af685a06c9a67e79f",
+            "triageOutcome": "defer"
+        },
+        {
+            "itemId": "BI-A8F0B7D4",
+            "source": "build-failure",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "137568c49c31637392b8c9e7c4b84a6d",
+            "triageOutcome": "build"
+        },
+        {
+            "itemId": "BI-AF490944",
+            "source": "user-request",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "ffe81fcdab659baf1d26105a60f69a74",
+            "triageOutcome": "duplicate"
+        },
+        {
+            "itemId": "BI-AF675A20",
+            "source": "user-request",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "ce9f1fbff4eba9fb697cca48a12610cf",
+            "triageOutcome": "duplicate"
+        },
+        {
+            "itemId": "BI-AFC6F743",
+            "source": "user-request",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "0c8ae0c4dfa6ce548172cf326033ca7e",
+            "triageOutcome": "discard"
+        },
+        {
+            "itemId": "BI-B459B303",
+            "source": "user-request",
+            "status": "deferred",
+            "disposition": "defer",
+            "evidenceHash": "209c0acc3fd47bd6c068bac59be1d1ce",
+            "triageOutcome": ""
+        },
+        {
+            "itemId": "BI-B7F47740",
+            "source": "user-request",
+            "status": "deferred",
+            "disposition": "defer",
+            "evidenceHash": "d88e85941b396c2536db31c33dbd5fb1",
+            "triageOutcome": "defer"
+        },
+        {
+            "itemId": "BI-C298033E",
+            "source": "self-upgrade-failure",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "175162d9db0af35530ce5f0c347f5cc2",
+            "triageOutcome": "duplicate"
+        },
+        {
+            "itemId": "BI-C55675A8",
+            "source": "user-request",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "f04b0cd336badbcf522e274ad22b8873",
+            "triageOutcome": "duplicate"
+        },
+        {
+            "itemId": "BI-C7078DD2",
+            "source": "user-request",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "ada75902567904d526a351aa678eefa6",
+            "triageOutcome": "duplicate"
+        },
+        {
+            "itemId": "BI-CAP-1B143DF5",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "385a74a16083629f12cd325f4b01cefd",
+            "triageOutcome": "duplicate"
+        },
+        {
+            "itemId": "BI-CAP-1F43BC96",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "b3c0c7a2c4001a13e619e6273fb3f707",
+            "triageOutcome": "duplicate"
+        },
+        {
+            "itemId": "BI-CAP-22782AFE",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "57d1885c93c61ebcdcd89adaca4d8f87",
+            "triageOutcome": "duplicate"
+        },
+        {
+            "itemId": "BI-CAP-4D6F7183",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "9486daf7eb13c283e691ebe4d44751c2",
+            "triageOutcome": "duplicate"
+        },
+        {
+            "itemId": "BI-CAP-7B5AC9EE",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "291b403080f9b5d17217d2845051a880",
+            "triageOutcome": "duplicate"
+        },
+        {
+            "itemId": "BI-CAP-7F2AE411",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "b1f5fc981943afe50ac5936dc04f1602",
+            "triageOutcome": "discard"
+        },
+        {
+            "itemId": "BI-CAP-8BEBEB44",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "58f910eafaa7885198889e8eba2ca67a",
+            "triageOutcome": "duplicate"
+        },
+        {
+            "itemId": "BI-CAP-953AF920",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "done",
+            "evidenceHash": "77f3d1a0f0136789275d72a83d1a22d4",
+            "triageOutcome": "build"
+        },
+        {
+            "itemId": "BI-CAP-C2565D94",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "6ef0939429df24446d29ac06bbb8983e",
+            "triageOutcome": "discard"
+        },
+        {
+            "itemId": "BI-CAP-D857E8EC",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "e8c8a1efa305a7efd11ec5db091b4eea",
+            "triageOutcome": "defer"
+        },
+        {
+            "itemId": "BI-CAP-DF459AD7",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "0632a3cc3254ad06ede2053bd2f2a5b2",
+            "triageOutcome": "duplicate"
+        },
+        {
+            "itemId": "BI-CAP-F6A6DA8B",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "81a760b5a4009305ea71be06628b184e",
+            "triageOutcome": "discard"
+        },
+        {
+            "itemId": "BI-CAP-FBC75B4B",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "bac6b60203a417432fa35430865ae29b",
+            "triageOutcome": "duplicate"
+        },
+        {
+            "itemId": "BI-D2343081",
+            "source": "user-request",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "4c1447f4929d2494acafa0e8ac72318a",
+            "triageOutcome": "duplicate"
+        },
+        {
+            "itemId": "BI-D2E3F2FD",
+            "source": "user-request",
+            "status": "deferred",
+            "disposition": "defer",
+            "evidenceHash": "67194fa5c96ad71bdbed65c9714dc79a",
+            "triageOutcome": "defer"
+        },
+        {
+            "itemId": "BI-D43D3D76",
+            "source": "user-request",
+            "status": "deferred",
+            "disposition": "defer",
+            "evidenceHash": "427254b5b9e444c3f0224f2fcd8d1e37",
+            "triageOutcome": "defer"
+        },
+        {
+            "itemId": "BI-DFA39E81",
+            "source": "self-upgrade-failure",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "6693008b667d05483bbdf0629fbb6c2a",
+            "triageOutcome": "discard"
+        },
+        {
+            "itemId": "BI-DIG-1263DC24",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "fee3024c032737389849c94d5f561ff5",
+            "triageOutcome": "defer"
+        },
+        {
+            "itemId": "BI-E51D594F",
+            "source": "user-request",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "cb0487638a2197085371e79537db12e1",
+            "triageOutcome": "duplicate"
+        },
+        {
+            "itemId": "BI-E54F67A3",
+            "source": "user-request",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "7aa9b767c2f357a26acdceac226b5c2d",
+            "triageOutcome": "duplicate"
+        },
+        {
+            "itemId": "BI-EA91F7A8",
+            "source": "self-upgrade-failure",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "52c94d7442c4fc8a4f559c60f15e3d60",
+            "triageOutcome": "discard"
+        },
+        {
+            "itemId": "BI-FBBBC69C",
+            "source": "user-request",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "d0e60fab9db2fedb1a4948ac34385a40",
+            "triageOutcome": "duplicate"
+        },
+        {
+            "itemId": "BI-IMP-10B49FEA",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "open",
+            "evidenceHash": "64ac78e8a756a403efd9ae44d6228bff",
+            "triageOutcome": "build"
+        },
+        {
+            "itemId": "BI-IMP-289A3D72",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "047c7f4946c7654fae9e52c40b53f6b9",
+            "triageOutcome": "defer"
+        },
+        {
+            "itemId": "BI-IMP-615553AD",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "open",
+            "evidenceHash": "161de7fc252c5ad861ae726f4a52919e",
+            "triageOutcome": "build"
+        },
+        {
+            "itemId": "BI-IMP-F571C560",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "cd96e806fbfeb505d73ba922032b8b25",
+            "triageOutcome": "defer"
+        },
+        {
+            "itemId": "BI-OBS-d6e41f77",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "adf2d6656862bb7c82e0048f160146fb",
+            "triageOutcome": "discard"
+        },
+        {
+            "itemId": "BI-PIR-05428d2b",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "f25ea3ac9d46993fabe6b9f332aac2b2",
+            "triageOutcome": "duplicate"
+        },
+        {
+            "itemId": "BI-PIR-132f5f2e",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "3bb8678f00a80d0fa233a02c91f0a1b3",
+            "triageOutcome": "duplicate"
+        },
+        {
+            "itemId": "BI-PIR-16591d46",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "c962ce12cf3254adcc17b5701bc342a7",
+            "triageOutcome": "duplicate"
+        },
+        {
+            "itemId": "BI-PIR-17f0ddb1",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "b97b0e076f8aadd441befdd56bba3c22",
+            "triageOutcome": "duplicate"
+        },
+        {
+            "itemId": "BI-PIR-19481e33",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "3b8eb5d1f15dea0d522b10a965ceafcf",
+            "triageOutcome": "duplicate"
+        },
+        {
+            "itemId": "BI-PIR-1a88dcbf",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "5d49cd751ddcbb94ce5f58ab07e4c125",
+            "triageOutcome": "duplicate"
+        },
+        {
+            "itemId": "BI-PIR-1cf56926",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "099f14b4fffe188577243386855331ff",
+            "triageOutcome": "duplicate"
+        },
+        {
+            "itemId": "BI-PIR-21833b75",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "7ad52d1643fdd06b43b2e7f5b6b60142",
+            "triageOutcome": "duplicate"
+        },
+        {
+            "itemId": "BI-PIR-2b88ec06",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "36a354d41a94f32f30c1852477557ce5",
+            "triageOutcome": "duplicate"
+        },
+        {
+            "itemId": "BI-PIR-30a4a139",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "3c920e03b82b59a40adb0738b6ff0044",
+            "triageOutcome": "duplicate"
+        },
+        {
+            "itemId": "BI-PIR-3b840ae3",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "f1b25869ab33de0223be32a64694f9a2",
+            "triageOutcome": "duplicate"
+        },
+        {
+            "itemId": "BI-PIR-3da38d09",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "77549e0a9a964e70e618178596cc165e",
+            "triageOutcome": "duplicate"
+        },
+        {
+            "itemId": "BI-PIR-411566a7",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "29f3d6448a31303503847c1e32fe6918",
+            "triageOutcome": "duplicate"
+        },
+        {
+            "itemId": "BI-PIR-524bf087",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "6d8ab0b9b791eaebd2458e8cff2e077c",
+            "triageOutcome": "duplicate"
+        },
+        {
+            "itemId": "BI-PIR-65da14da",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "8767d7a60e2365bbd235e910b4448375",
+            "triageOutcome": "duplicate"
+        },
+        {
+            "itemId": "BI-PIR-669644c7",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "34d5a5906f4b052c1ef65dc9148cc8d9",
+            "triageOutcome": "duplicate"
+        },
+        {
+            "itemId": "BI-PIR-66d1debd",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "4c59bb128e40e1bcd092936360b4fac7",
+            "triageOutcome": "duplicate"
+        },
+        {
+            "itemId": "BI-PIR-6b45f1cc",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "cd94b1d1a4751124ef945a43860bce48",
+            "triageOutcome": "duplicate"
+        },
+        {
+            "itemId": "BI-PIR-84d6cd8a",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "a820412533511ae30ce395eca2e2c836",
+            "triageOutcome": "duplicate"
+        },
+        {
+            "itemId": "BI-PIR-8981fbe9",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "c19570240bb05b973309bc45d4267f50",
+            "triageOutcome": "duplicate"
+        },
+        {
+            "itemId": "BI-PIR-90ba8cfd",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "f374988b5cb7dda95cd7305a9271f95e",
+            "triageOutcome": "duplicate"
+        },
+        {
+            "itemId": "BI-PIR-9dc0c969",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "968e435c7fa6a06dfbfcfca59fda5584",
+            "triageOutcome": "duplicate"
+        },
+        {
+            "itemId": "BI-PIR-ac4bad41",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "8ed84c33852d82183a146110a84fce89",
+            "triageOutcome": "duplicate"
+        },
+        {
+            "itemId": "BI-PIR-b586334e",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "5648b8762576f9f9dea0f1a4f2986d0d",
+            "triageOutcome": "duplicate"
+        },
+        {
+            "itemId": "BI-PIR-b5eebe10",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "39ff3858bf962b917aaf599f74ccdf1e",
+            "triageOutcome": "duplicate"
+        },
+        {
+            "itemId": "BI-PIR-b9caccd0",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "6cca52e2e0af190d148903681261c7fd",
+            "triageOutcome": "duplicate"
+        },
+        {
+            "itemId": "BI-PIR-cbc30e90",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "b9a8c454a97ce9fbfb3e4f830082ad50",
+            "triageOutcome": "duplicate"
+        },
+        {
+            "itemId": "BI-PIR-cea8de37",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "45e4235fc64163e59877b1184415e043",
+            "triageOutcome": "duplicate"
+        },
+        {
+            "itemId": "BI-PIR-d666f4cd",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "e153ebb81690bc4638a9781b43e58bda",
+            "triageOutcome": "duplicate"
+        },
+        {
+            "itemId": "BI-PIR-e0de95d5",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "40d1be9e9e9382620d71af460d2c3961",
+            "triageOutcome": "duplicate"
+        },
+        {
+            "itemId": "BI-PIR-eb7b1c5b",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "276538fb1505a46b22d87faa4391a83f",
+            "triageOutcome": "duplicate"
+        },
+        {
+            "itemId": "BI-PIR-SPIKE-24631a46",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "a2b3adb2aedc1e494de9504400994acf",
+            "triageOutcome": "discard"
+        },
+        {
+            "itemId": "BI-SIG-00B70B37",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "0b3d8747e779d9a680327c7111c115c7",
+            "triageOutcome": "discard"
+        },
+        {
+            "itemId": "BI-SIG-01596B35",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "72ad0a75b341c2d114db46367f0d80a9",
+            "triageOutcome": "discard"
+        },
+        {
+            "itemId": "BI-SIG-04AA5E74",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "b87c8d7105b671eed3ee7c6cc78bc464",
+            "triageOutcome": "discard"
+        },
+        {
+            "itemId": "BI-SIG-0629B25D",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "796c537067675e1a885fb1665bdebcd9",
+            "triageOutcome": "discard"
+        },
+        {
+            "itemId": "BI-SIG-092065AC",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "b485fdf070610677d727f2ecb1b2efbf",
+            "triageOutcome": "discard"
+        },
+        {
+            "itemId": "BI-SIG-10457523",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "d0e11179882a7129ce2fd5a58e35258f",
+            "triageOutcome": "discard"
+        },
+        {
+            "itemId": "BI-SIG-1093DF86",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "81c6f2e1fbc33df51a755621b56f40ee",
+            "triageOutcome": "discard"
+        },
+        {
+            "itemId": "BI-SIG-15DF3EA7",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "5de0665452f7ea51bb89c5d2aedb4542",
+            "triageOutcome": "discard"
+        },
+        {
+            "itemId": "BI-SIG-1AA6B620",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "6ad01c1ac9e25b73d38a3c63f03fc253",
+            "triageOutcome": "discard"
+        },
+        {
+            "itemId": "BI-SIG-1D6ED62A",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "c96d65c76a004139cb0c8684afca5fc7",
+            "triageOutcome": "discard"
+        },
+        {
+            "itemId": "BI-SIG-1DAE3FAA",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "8fd8cd8173d34479f432ad9c59206c73",
+            "triageOutcome": "discard"
+        },
+        {
+            "itemId": "BI-SIG-1DF5B71D",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "11df07d208314a0614f3884b58280f54",
+            "triageOutcome": "discard"
+        },
+        {
+            "itemId": "BI-SIG-1E5A66AE",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "5111c84d353fb7a2ce96511e6b0b6501",
+            "triageOutcome": "discard"
+        },
+        {
+            "itemId": "BI-SIG-222F3FFC",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "50516b3d4c11fd60e3f0a4860af392db",
+            "triageOutcome": "discard"
+        },
+        {
+            "itemId": "BI-SIG-239A8E2F",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "4203719c4dd088803b46e9ce26ac698b",
+            "triageOutcome": "discard"
+        },
+        {
+            "itemId": "BI-SIG-26A9A248",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "d2ad4f5ea59e4b70791add1bd8a04ec6",
+            "triageOutcome": "discard"
+        },
+        {
+            "itemId": "BI-SIG-2DE64472",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "551e87f5b250b93e783b586d1d22d41c",
+            "triageOutcome": "discard"
+        },
+        {
+            "itemId": "BI-SIG-2FE6F248",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "51328955f8bec11f898fba307a838e71",
+            "triageOutcome": "discard"
+        },
+        {
+            "itemId": "BI-SIG-324D313E",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "a483dfde90f732e0f757b36620d778a9",
+            "triageOutcome": "discard"
+        },
+        {
+            "itemId": "BI-SIG-37ABA290",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "464340500bf089800decdea7af78c069",
+            "triageOutcome": "discard"
+        },
+        {
+            "itemId": "BI-SIG-37CE66CE",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "aaab96bb0834b938bec90d0bcc3b62ec",
+            "triageOutcome": "discard"
+        },
+        {
+            "itemId": "BI-SIG-38500FFC",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "075d0d32ff4d39d752aad9c9e4b8d200",
+            "triageOutcome": "discard"
+        },
+        {
+            "itemId": "BI-SIG-3AB8FA53",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "3c44ce98b067dab67aa4d39bc07f8c1a",
+            "triageOutcome": "discard"
+        },
+        {
+            "itemId": "BI-SIG-3AE79DAD",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "c7a3fa1073e1f77e3a2078df4327077e",
+            "triageOutcome": "discard"
+        },
+        {
+            "itemId": "BI-SIG-4082C4EF",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "6fe0fc8c426aa54dc1239a7e35cb721d",
+            "triageOutcome": "discard"
+        },
+        {
+            "itemId": "BI-SIG-45AB7EEB",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "ff567d039961b6aa7aa45e2c80a7c8ba",
+            "triageOutcome": "discard"
+        },
+        {
+            "itemId": "BI-SIG-478212FB",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "af33fc6debb05e0f1e815b5f5d39b41a",
+            "triageOutcome": "discard"
+        },
+        {
+            "itemId": "BI-SIG-4804F293",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "9de0cb07b1711b0fa1620cf17e3ebb80",
+            "triageOutcome": "discard"
+        },
+        {
+            "itemId": "BI-SIG-48CE4838",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "65f0c5a83a4bbc9f9ff655b75f9160a6",
+            "triageOutcome": "discard"
+        },
+        {
+            "itemId": "BI-SIG-4B2B7738",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "3e739a0eaddc8532371f6d87957ed758",
+            "triageOutcome": "discard"
+        },
+        {
+            "itemId": "BI-SIG-4C2C56FC",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "c15d7d9b75664e97a6fa61decc91f5a8",
+            "triageOutcome": "discard"
+        },
+        {
+            "itemId": "BI-SIG-524147F9",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "75ab16c7847136bc021008f36d8f5eb1",
+            "triageOutcome": "discard"
+        },
+        {
+            "itemId": "BI-SIG-5707F9E7",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "bb5175ffa36bbeaccfd52e48d06b1925",
+            "triageOutcome": "discard"
+        },
+        {
+            "itemId": "BI-SIG-5DA812AB",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "49aefed155481927de212863c57917bf",
+            "triageOutcome": "discard"
+        },
+        {
+            "itemId": "BI-SIG-611B6360",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "061d1167a392ae175e2c242dbe987827",
+            "triageOutcome": "discard"
+        },
+        {
+            "itemId": "BI-SIG-62F304C2",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "57b0f3a8e200ed3e8248f0d6a9383998",
+            "triageOutcome": "discard"
+        },
+        {
+            "itemId": "BI-SIG-64E00C52",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "9689ec78d140d58ebe6e5e41093dd1e1",
+            "triageOutcome": "discard"
+        },
+        {
+            "itemId": "BI-SIG-64F8A81D",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "c33a907ed4094f8644acd5f0a144146f",
+            "triageOutcome": "discard"
+        },
+        {
+            "itemId": "BI-SIG-66CCB58A",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "0d5f1c5fcd07dd1b7ec39b2d8848c24e",
+            "triageOutcome": "discard"
+        },
+        {
+            "itemId": "BI-SIG-67C59AE8",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "3483db1e3d1d82dc9bcc4ab913c53d52",
+            "triageOutcome": "discard"
+        },
+        {
+            "itemId": "BI-SIG-67F06100",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "b46bcea3879e3f8d0f09d4207d47bc2f",
+            "triageOutcome": "discard"
+        },
+        {
+            "itemId": "BI-SIG-6EA63AA2",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "fa2f7a77eb6af9f6c8632f6a039ff9cb",
+            "triageOutcome": "discard"
+        },
+        {
+            "itemId": "BI-SIG-703D123E",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "951a797041100cf7d9639d7f4f9173c6",
+            "triageOutcome": "discard"
+        },
+        {
+            "itemId": "BI-SIG-718615C7",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "ea9a6d05f9475f2df52bf18204d87a48",
+            "triageOutcome": "build"
+        },
+        {
+            "itemId": "BI-SIG-7999E1C8",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "0472acd44dccb3cf902195a44330a894",
+            "triageOutcome": "discard"
+        },
+        {
+            "itemId": "BI-SIG-7CE62267",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "9e9e53fba4b0da397a66679420cab6f3",
+            "triageOutcome": "discard"
+        },
+        {
+            "itemId": "BI-SIG-7F839CEF",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "ac204b6ac6d16de86b45cadd6e825ff3",
+            "triageOutcome": "discard"
+        },
+        {
+            "itemId": "BI-SIG-81901DC3",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "e5f9ee8cf524b3b6a8c05aa9b59d5de3",
+            "triageOutcome": "discard"
+        },
+        {
+            "itemId": "BI-SIG-8462C9BF",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "f2b032842bad4fdc41edc126195a8b00",
+            "triageOutcome": "discard"
+        },
+        {
+            "itemId": "BI-SIG-8FDCC365",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "8edcc544d455997316d9a40e857fe3e3",
+            "triageOutcome": "discard"
+        },
+        {
+            "itemId": "BI-SIG-95674B51",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "1ff9e75a957b39389e814c0c6d649996",
+            "triageOutcome": "discard"
+        },
+        {
+            "itemId": "BI-SIG-957DFBF2",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "f88006b3aaf750dd4a7c33822867724d",
+            "triageOutcome": "discard"
+        },
+        {
+            "itemId": "BI-SIG-9892BA49",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "bc02b2372ad462d2c5c98e9c60201aca",
+            "triageOutcome": "defer"
+        },
+        {
+            "itemId": "BI-SIG-9A505D61",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "103b355a18f9e11678a8d1c58ae67414",
+            "triageOutcome": "discard"
+        },
+        {
+            "itemId": "BI-SIG-9B52D958",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "e4876e12097bde94dbc24ed61d15bb65",
+            "triageOutcome": "discard"
+        },
+        {
+            "itemId": "BI-SIG-9C0AA047",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "d9f0ae4de3b3b89623e648fc4e51b54c",
+            "triageOutcome": "discard"
+        },
+        {
+            "itemId": "BI-SIG-9F51E00F",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "5a56fe23b5abd7e40982c4fbe2025ebc",
+            "triageOutcome": "discard"
+        },
+        {
+            "itemId": "BI-SIG-9FEB3ADA",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "c481b31e119d27d91a1466393e95d9a1",
+            "triageOutcome": "discard"
+        },
+        {
+            "itemId": "BI-SIG-A3D55E09",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "6c4b2540173048bbb339ecd89fb31035",
+            "triageOutcome": "discard"
+        },
+        {
+            "itemId": "BI-SIG-A75EA8EA",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "276193f3aac5337e556391d3d96779d5",
+            "triageOutcome": "discard"
+        },
+        {
+            "itemId": "BI-SIG-A7EC63A2",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "2ca6098328d131ed4b8d3d062ada4e67",
+            "triageOutcome": "discard"
+        },
+        {
+            "itemId": "BI-SIG-ACBAC937",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "969100311567b1eaddcfba2c126663d5",
+            "triageOutcome": "discard"
+        },
+        {
+            "itemId": "BI-SIG-B2ED4D27",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "001599e93030b815f3367dd1fd0d4072",
+            "triageOutcome": "discard"
+        },
+        {
+            "itemId": "BI-SIG-B358E2A2",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "fe681973967a6b2327c8ae80bafe4a6c",
+            "triageOutcome": "discard"
+        },
+        {
+            "itemId": "BI-SIG-B83B3C40",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "a0fc91d998e531fd7add4d2bb2292915",
+            "triageOutcome": "discard"
+        },
+        {
+            "itemId": "BI-SIG-BBD6976E",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "7b39bdc6422c4f342ef06e5b8c697ead",
+            "triageOutcome": "discard"
+        },
+        {
+            "itemId": "BI-SIG-BC865388",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "ea8045312dccab77dd7a4547e411f987",
+            "triageOutcome": "discard"
+        },
+        {
+            "itemId": "BI-SIG-C0563071",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "6502e1a6269b7e419e284c81ee25e739",
+            "triageOutcome": "discard"
+        },
+        {
+            "itemId": "BI-SIG-C934DCB6",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "755c1f9e03386848187125650e2b5f10",
+            "triageOutcome": "discard"
+        },
+        {
+            "itemId": "BI-SIG-CA8F3919",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "f92c22f2dfba4ffb334a81b3ab96f106",
+            "triageOutcome": "discard"
+        },
+        {
+            "itemId": "BI-SIG-CAE748E0",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "d689ba83d12a8196eca294ec69acb5a1",
+            "triageOutcome": "discard"
+        },
+        {
+            "itemId": "BI-SIG-CECBCB7C",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "f309853b1e2e65a8effb8695187df1f3",
+            "triageOutcome": "discard"
+        },
+        {
+            "itemId": "BI-SIG-D2BC4DC5",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "ce70252a90f37853934233d18b26240c",
+            "triageOutcome": "discard"
+        },
+        {
+            "itemId": "BI-SIG-D58B5690",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "2ec11160e53f40d3c21c4bff1e33eba4",
+            "triageOutcome": "discard"
+        },
+        {
+            "itemId": "BI-SIG-D5D3427B",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "129cbce104e944785deb94ca5c1fe5d1",
+            "triageOutcome": "discard"
+        },
+        {
+            "itemId": "BI-SIG-D5FC18C6",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "78d013a216a5b4dd3efb7c3a5a242509",
+            "triageOutcome": "discard"
+        },
+        {
+            "itemId": "BI-SIG-DAF4A4D6",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "bdb58a7e3eaefb93eb2ab180bda40e49",
+            "triageOutcome": "discard"
+        },
+        {
+            "itemId": "BI-SIG-DE87D377",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "ee6f6f8f4c725198c0ed2acf3d55a2b8",
+            "triageOutcome": "discard"
+        },
+        {
+            "itemId": "BI-SIG-E3FF2844",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "9d9b7c094d0476a1a5c9a87a5fb87573",
+            "triageOutcome": "discard"
+        },
+        {
+            "itemId": "BI-SIG-E5A48FB2",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "51a6bbcafc18213396f064521089e68a",
+            "triageOutcome": "discard"
+        },
+        {
+            "itemId": "BI-SIG-EB2CF96F",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "9ebf746a4cc1c5a81d8d77b5c6886539",
+            "triageOutcome": "discard"
+        },
+        {
+            "itemId": "BI-SIG-EDBACCB3",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "f22a7a9cc1a67033654712197bbd53f0",
+            "triageOutcome": "discard"
+        },
+        {
+            "itemId": "BI-SIG-F32FD8ED",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "2b937af85190505cd4f8760b50051b63",
+            "triageOutcome": "discard"
+        },
+        {
+            "itemId": "BI-SIG-F8FFA905",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "6ab32684a58092eb188a5d1924aed72e",
+            "triageOutcome": "discard"
+        },
+        {
+            "itemId": "BI-SIG-F9A717B4",
+            "source": "automated-detection",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "42df34c4650a5413cbad1b23a666ab09",
+            "triageOutcome": "discard"
+        },
+        {
+            "itemId": "HS-024FDB4239862B50",
+            "source": "hive-scout",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "a3a957191927ac9cfbb9c09bd3116ca1",
+            "triageOutcome": null
+        },
+        {
+            "itemId": "HS-0EE575B5AC214DDB",
+            "source": "hive-scout",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "cc5e3ab26b9f4366beafb890ee16afc4",
+            "triageOutcome": null
+        },
+        {
+            "itemId": "HS-1258093AE1A7CC78",
+            "source": "hive-scout",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "2e39431487c7644d56dab67244aed6e0",
+            "triageOutcome": null
+        },
+        {
+            "itemId": "HS-1AE4F2D5FF965504",
+            "source": "hive-scout",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "699dedf4af52ef2c0cda85545f1fb15b",
+            "triageOutcome": null
+        },
+        {
+            "itemId": "HS-26794CABC9B1B74D",
+            "source": "hive-scout",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "35f8c37640ee4eb8fc84884d537563a6",
+            "triageOutcome": null
+        },
+        {
+            "itemId": "HS-27E534235D590849",
+            "source": "hive-scout",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "31389aa6311dd430c8707fd13040bf84",
+            "triageOutcome": null
+        },
+        {
+            "itemId": "HS-2895116953587D44",
+            "source": "hive-scout",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "cc2a7b658660c0d7e9566be7c6762da0",
+            "triageOutcome": null
+        },
+        {
+            "itemId": "HS-29FEFFAB6E8B949F",
+            "source": "hive-scout",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "e609a59223fba5085094613657a5844e",
+            "triageOutcome": null
+        },
+        {
+            "itemId": "HS-2CA4E3253D83F708",
+            "source": "hive-scout",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "04ca98adea362aefe320fbbcfb8adac4",
+            "triageOutcome": null
+        },
+        {
+            "itemId": "HS-3A057251CE9F2CBD",
+            "source": "hive-scout",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "fc794ae1741c5be254b8ccd66c87a70c",
+            "triageOutcome": null
+        },
+        {
+            "itemId": "HS-4FEEB8AC55544908",
+            "source": "hive-scout",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "905fab0b8af1ec2c62fed13caa5eccf2",
+            "triageOutcome": null
+        },
+        {
+            "itemId": "HS-5412BB53AB7D8DFB",
+            "source": "hive-scout",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "58a5cf001d706135f9ffc619a51d5871",
+            "triageOutcome": null
+        },
+        {
+            "itemId": "HS-5A1624DF4282496B",
+            "source": "hive-scout",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "89662609e437e0635bc241878e43c7a0",
+            "triageOutcome": null
+        },
+        {
+            "itemId": "HS-5C4CDE36C644D596",
+            "source": "hive-scout",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "d1d81ad6a6c262117bd7692810646908",
+            "triageOutcome": null
+        },
+        {
+            "itemId": "HS-5CFB3DF23D81E79F",
+            "source": "hive-scout",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "8e4b19782cbc8c40556358a6b5273184",
+            "triageOutcome": null
+        },
+        {
+            "itemId": "HS-5E053231B494406B",
+            "source": "hive-scout",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "e4d8e3b6e9f2089c22bf105c757302e2",
+            "triageOutcome": null
+        },
+        {
+            "itemId": "HS-67E6F089A7775296",
+            "source": "hive-scout",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "0888658682a3855ed5f90dfd325c38a0",
+            "triageOutcome": null
+        },
+        {
+            "itemId": "HS-698D804201D841E8",
+            "source": "hive-scout",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "7a69d543e36e996be62b19fddb42af9b",
+            "triageOutcome": null
+        },
+        {
+            "itemId": "HS-70C31196FEE0D55D",
+            "source": "hive-scout",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "9f069135cec47c1daa7ef0aae4fad92d",
+            "triageOutcome": null
+        },
+        {
+            "itemId": "HS-72B7E4F9C13C2775",
+            "source": "hive-scout",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "89d6c38ffdea537fb5028ac69b0a350a",
+            "triageOutcome": null
+        },
+        {
+            "itemId": "HS-77EC33E122E55949",
+            "source": "hive-scout",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "b6c33d64b8e4e49f80396fa288c82d63",
+            "triageOutcome": null
+        },
+        {
+            "itemId": "HS-7B2E71A75F805763",
+            "source": "hive-scout",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "d51b4bdf8a88bed574a88169dd8aae41",
+            "triageOutcome": null
+        },
+        {
+            "itemId": "HS-7FCEE45E813001AF",
+            "source": "hive-scout",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "09b19a556703857fb883f64c700985ae",
+            "triageOutcome": null
+        },
+        {
+            "itemId": "HS-831905AE15BC0711",
+            "source": "hive-scout",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "cf0986839c9716379ce961cdd801f440",
+            "triageOutcome": null
+        },
+        {
+            "itemId": "HS-9149DBAA9498F0E2",
+            "source": "hive-scout",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "eed35c0e9161492893b43488c1c351c6",
+            "triageOutcome": null
+        },
+        {
+            "itemId": "HS-9552A7B6D80C7E41",
+            "source": "hive-scout",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "feb88cc0486e40342b4514e116ad49a2",
+            "triageOutcome": null
+        },
+        {
+            "itemId": "HS-B93C4D9610EC9FCC",
+            "source": "hive-scout",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "9fa22e323fd761d0a5fa05a5ccba5e35",
+            "triageOutcome": null
+        },
+        {
+            "itemId": "HS-BC4031B0AEE7D900",
+            "source": "hive-scout",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "ad3d016e02b466c48deb1064798b36cb",
+            "triageOutcome": null
+        },
+        {
+            "itemId": "HS-BE111693E3E354DB",
+            "source": "hive-scout",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "4018cadb379478ed1771dca2c863026d",
+            "triageOutcome": null
+        },
+        {
+            "itemId": "HS-CA75BA59AE045702",
+            "source": "hive-scout",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "e26b81d78e15cfe17dce7ce24ee42dfb",
+            "triageOutcome": null
+        },
+        {
+            "itemId": "HS-D6D2D52C3EE1BAA5",
+            "source": "hive-scout",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "e593ea042d9473122b36ab68625cdb34",
+            "triageOutcome": null
+        },
+        {
+            "itemId": "HS-D716F1D52EB3E69F",
+            "source": "hive-scout",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "c960d190c880b3914c0ae3f25e8426d8",
+            "triageOutcome": null
+        },
+        {
+            "itemId": "HS-E60E3B98C9990A84",
+            "source": "hive-scout",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "902f37b50146e531b1b4c96a323415ef",
+            "triageOutcome": null
+        },
+        {
+            "itemId": "HS-F4C9086BB7C46B57",
+            "source": "hive-scout",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "2c5bb372162b1a8eebe03a02c72b8a1e",
+            "triageOutcome": null
+        },
+        {
+            "itemId": "HS-FB654D2E56D8C4D7",
+            "source": "hive-scout",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "eb12ec5f6c5a256779f80c1a239e9290",
+            "triageOutcome": null
+        },
+        {
+            "itemId": "HS-FC8E01261455EA0D",
+            "source": "hive-scout",
+            "status": "deferred",
+            "disposition": "retire",
+            "evidenceHash": "a30f198e71fb47e6e43768fb5c0f3a0b",
+            "triageOutcome": null
+        }
+    ],
+    "capturedAt": "2026-08-15T18:27:53.669Z",
+    "evidenceHash": "md5 of canonical JSON evidence fields: title, body, status, triageOutcome, duplicateOfId, epicId, source, updatedAt",
+    "schemaVersion": 1,
+    "startingCount": 230,
+    "startingStatus": "deferred",
+    "dispositionCounts": {
+        "done": 5,
+        "open": 5,
+        "defer": 11,
+        "retire": 209
+    }
+}

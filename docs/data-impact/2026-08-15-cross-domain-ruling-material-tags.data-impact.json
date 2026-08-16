@@ -1,0 +1,36 @@
+{
+  "version": "1",
+  "accountableOwner": "data-steward",
+  "affectedCopies": [
+    "PerspectiveMaterial.domains (the topic-tag array read by isMaterialApplicable when the decision gate selects doctrine)",
+    "Decision-perspective retrieval on every WWWD org business decision and every WWMD build-studio gate",
+    "Prisma-to-EA current-state data-model mirror (no schema change; column already exists)"
+  ],
+  "migration": {
+    "name": "20260815190000_cross_domain_ruling_material_tags",
+    "backfill": "Value-only backfill of an existing String[] column; no column added, altered, or dropped, and no row created or deleted. Appends the 'all-business-domains' topic tag to PerspectiveMaterial rows that are already ruled-tier owner rulings (sourceType='stance' AND evidenceGrade='A' AND confidenceWeight>=1.0 AND promotionState='promoted' AND reviewStatus='approved'). Idempotent: rows already carrying the tag are skipped via NOT ('all-business-domains' = ANY(domains)), so a re-run is a no-op. Deliberately narrow — archetype defaults (unconfirmed, 0.6) and owner settings confirmations (confirmed, 0.9) are untouched, so only an explicit human ruling gains cross-domain reach. Reversible by removing the tag from the same predicate; no information is lost because the original domainClass column is unmodified."
+  },
+  "tests": [
+    "apps/web/lib/decision-perspective/material.test.ts",
+    "apps/web/lib/decision-perspective/stance-promotion.test.ts",
+    "apps/web/lib/decision/review-clustering.test.ts",
+    "apps/web/lib/founder-review/queue.test.ts",
+    "packages/db/scripts/migration-safety-guard.test.ts"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:perspective-material#cross-domain-tags",
+      "prismaModel": "PerspectiveMaterial",
+      "lifecycleDisposition": "No row is created, deleted, or re-tiered. Existing ruled-tier rows gain one additional topic tag on an existing array column; domainClass, confidenceWeight, evidenceGrade, reviewStatus, and promotionState are all left exactly as they were. The material ladder is unchanged — this widens where a ruling can be RETRIEVED, never what authority it carries.",
+      "fields": [
+        {
+          "fieldId": "data:perspective-material#domains",
+          "resolution": "governed",
+          "reason": "domains[] is a dormant topic-tag array that already exists on the model and until now only ever mirrored domainClass. It becomes load-bearing because isMaterialApplicable now matches additively over it. The backfill carries no data about a person: the tag is a static string constant, and the rows it lands on are the organization's own published doctrine. It exists to repair a retrieval defect — an owner ruling filed under one caller-supplied domainClass was invisible to the same question bucketed under another, so answering a decision taught the corpus something it could never retrieve (live evidence: DI-3A99C3561FA0 excluded stances/ruling-di-5bc09b3e5683).",
+          "provenance": "BI-F5F2869D; direction named by docs/superpowers/specs/2026-07-11-wwwd-stance-onboarding-design.md §a3 and scored through principle_decide (additive-domain-tags, margin 3.079, high confidence, no commandment conflict)"
+        }
+      ]
+    }
+  ]
+}

@@ -196,6 +196,10 @@ services:
       DPF_HOST_INSTALL_PATH: ${DPF_HOST_INSTALL_PATH:-}
       DPF_HOST_PLATFORM: ${DPF_HOST_PLATFORM:-}
       DPF_HOST_ARCH: ${DPF_HOST_ARCH:-}
+      # Authoritative installer opt-in state for the main installation's
+      # supervised host Edge service. The portal combines this intent with
+      # live enrollment/heartbeat evidence; it never treats the flag as health.
+      DPF_EDGE_ENABLED: ${DPF_INCLUDE_EDGE:-0}
       DPF_STATE_DIR_HOST: ${DPF_STATE_DIR:-${HOME}/.dpf}
       DPF_RUNTIME_TRANSITION_SECRET_FILE_HOST: ${DPF_STATE_DIR:-${HOME}/.dpf}/runtime-transition.secret
       # Portal-side live-readiness checks run inside the container, where
@@ -203,6 +207,9 @@ services:
       # helpers at the mounted host source so verify_live_install_readiness can
       # decide CAN-TEST vs MUST-ADVANCE without depending on github.com.
       DPF_REPO_ROOT: /host-dpf
+      # Runtime policy generators must resolve from the deployed image before
+      # the mutable host checkout so their rule bytes match DEPLOYED_SHA.
+      DPF_RUNTIME_REPO_ROOT: /app
       # Host path used by the governed PostgreSQL recovery-point workflow.
       DPF_BACKUPS_HOST_PATH: ${DPF_BACKUPS_HOST_PATH:-}
       DPF_SELF_UPGRADE_HOST_SOURCE_MOUNT: /host-dpf
@@ -253,6 +260,17 @@ services:
       # explicit per-install operator opt-in after a clean observe soak.
       DPF_WORKTREE_JANITOR_ENABLED: ${DPF_WORKTREE_JANITOR_ENABLED:-1}
       DPF_SANDBOX_BUILD_GC_ENABLED: ${DPF_SANDBOX_BUILD_GC_ENABLED:-1}
+      # WS9 governed WorkCapsule reaper (BI-CBAAEA94): transitions dead capsules
+      # (lease-expired / linked-build-terminal / idle-past-floor) working->abandoned
+      # so abandoned work stops reading as active on the board and jamming the WIP
+      # cap. Delivered HERE (base compose), not override-only: an override-only flag
+      # is dropped when the self-upgrade promoter recreates the portal, which is why
+      # the WS9 sprawl re-accumulated after it first shipped. Same soak model as the
+      # janitors above — ENABLED defaults ON = observe-only (logs would-reap, no DB
+      # writes); AUTO_REAP is the live/reversible actuation and stays OFF until a
+      # per-install operator opt-in via .env.
+      DPF_WORKCAPSULE_REAPER_ENABLED: ${DPF_WORKCAPSULE_REAPER_ENABLED:-1}
+      DPF_WORKCAPSULE_REAPER_AUTO_REAP: ${DPF_WORKCAPSULE_REAPER_AUTO_REAP:-0}
       # Runtime-artifact janitor (BI-DBF3F426 / BI-A55BE432): reaps orphaned
       # per-branch CI images + stray compose projects INCLUDING their named
       # volumes — the dominant local-disk leak (dead dpf-<topic> dev stacks
@@ -888,7 +906,7 @@ services:
   dpf-stt:
     profiles: ["runtime-local-speech", "tts"]
     # Pinned to the multi-arch index digest for hwdsl2/whisper-server:latest
-    # resolved on 2026-08-06 (the prior 120e4b78… digest was deleted from the
+    # resolved on 2026-08-15 (the prior 0b03ecb5… digest was deleted from the
     # registry — Release Image Manifest Guard caught it again). The registry
     # owner re-pushes :latest periodically and prunes the previous index, so
     # this digest must be re-resolved every time the guard fails. Bump
@@ -898,7 +916,7 @@ services:
     # the sidecar won't start, set DPF_STT_IMAGE in .env to a reachable ref
     # (e.g. hwdsl2/whisper-server:latest) then `docker compose up -d dpf-stt`,
     # and open a PR re-resolving the digest here (this is that PR's pattern).
-    image: ${DPF_STT_IMAGE:-hwdsl2/whisper-server@sha256:0b03ecb54c8247cd4fe42e808746f36f44eff7998dc45018554c50252975e29f}
+    image: ${DPF_STT_IMAGE:-hwdsl2/whisper-server@sha256:166a8c04e2687608a116372e92f11bfda3e963f3c1dbf390a7c820db0f45887b}
     restart: unless-stopped
     logging: *default-logging
     environment:

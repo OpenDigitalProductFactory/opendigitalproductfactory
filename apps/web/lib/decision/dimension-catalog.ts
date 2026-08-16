@@ -102,6 +102,10 @@ const HIGH_MEANS: Record<PrincipleDimension, string> = {
     "the option demands MORE operator operations and elapsed time to reach the outcome",
   legibility_of_consequence:
     "the operator can better foresee, before authorizing, what the option will do, to what, under whose authority, and how it is undone",
+  mission_fit: "the option more directly advances the organization's declared mission",
+  market_fit: "the option more directly serves the organization's declared market and segments",
+  product_fit: "the option more directly fits the organization's declared offer and product portfolio",
+  gtm_fit: "the option more directly fits the organization's declared go-to-market motion",
 };
 
 /** The full caller-facing catalogue, benefits first then costs, stable order. */

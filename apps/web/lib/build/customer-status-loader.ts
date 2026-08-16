@@ -1,5 +1,5 @@
-// BI-BB13B599 (EP-WORK-CONVERGENCE): server loader that fetches the WorkCapsule
-// linked to each Build Studio build (WorkCapsule.featureBuildId === FeatureBuild.id,
+// BI-BB13B599 (EP-WORK-CONVERGENCE): server loader that fetches the Workroom
+// linked to each Build Studio build (Workroom.featureBuildId === FeatureBuild.id,
 // set on every build via attachBuildStudioWorkCapsule) and projects each into the
 // plain, business-safe customer-mode status. Returns a map keyed by the build's
 // cuid `id` so the client can look up the active build's status without pulling
@@ -23,7 +23,7 @@ import {
 // (`prisma as unknown as CapsuleFindManyDelegate`) rather than this file
 // widening to the full Prisma delegate type, which would break test mocks.
 export interface CapsuleFindManyDelegate {
-  workCapsule: {
+  workroom: {
     findMany: (args: {
       where: { featureBuildId: { in: string[] } };
       select: { featureBuildId: true; capsuleId: true; status: true; workspaceState: true };
@@ -68,7 +68,7 @@ export async function loadBuildStudioCustomerStatuses(
   const byBuild = new Map<string, { capsuleId: string; status: string; workspaceState: unknown }>();
   const lastActivityByBuildId = new Map<string, Date>();
   if (ids.length > 0) {
-    const capsules = await db.workCapsule.findMany({
+    const capsules = await db.workroom.findMany({
       where: { featureBuildId: { in: ids } },
       select: { featureBuildId: true, capsuleId: true, status: true, workspaceState: true },
     });

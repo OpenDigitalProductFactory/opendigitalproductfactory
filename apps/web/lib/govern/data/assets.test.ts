@@ -191,6 +191,17 @@ describe("seeded registry", () => {
     }
   });
 
+  it("registers business performance rollups as local tenant-scoped derived analytics", () => {
+    expect(lookupAsset(DATA_ASSET_REGISTRY, "data:business-metric-rollup")).toMatchObject({
+      physical: { prismaModel: "BusinessMetricRollup" },
+      domain: "business-performance",
+      sensitivity: "confidential",
+      categories: expect.arrayContaining(["derived-analytic"]),
+      residencyClass: "local-only",
+      subjectLocators: [{ role: "organization", fieldPath: "organization" }],
+    });
+  });
+
   it("builds without invariant violations and carries the BI-DG-001 worked asset", () => {
     expect(DATA_ASSET_REGISTRY.assets.length).toBeGreaterThan(0);
     const conv = lookupAsset(DATA_ASSET_REGISTRY, "data:agent-conversation");

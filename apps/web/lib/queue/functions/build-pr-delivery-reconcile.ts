@@ -36,7 +36,7 @@ export async function runBuildPrDeliveryReconcile(): Promise<{
   );
   if (!token) throw new Error("Build PR delivery reconcile: GitHub credential unavailable");
 
-  const capsules = await prisma.workCapsule.findMany({
+  const capsules = await prisma.workroom.findMany({
     where: {
       featureBuildId: { not: null },
       pullRequestNumber: { not: null },
@@ -122,7 +122,7 @@ export async function runBuildPrDeliveryReconcile(): Promise<{
                 autonomy.eligibility.blockers.join(",")
                 || "autonomous-eligibility-withheld",
             };
-            const saved = await prisma.workCapsule.updateMany({
+            const saved = await prisma.workroom.updateMany({
               where: { id: capsule.id, updatedAt: capsule.updatedAt },
               data: {
                 workspaceState: writeBuildPrDeliveryState(
@@ -151,7 +151,7 @@ export async function runBuildPrDeliveryReconcile(): Promise<{
       });
       if (outcome.actuated) actuated += 1;
 
-      const saved = await prisma.workCapsule.updateMany({
+      const saved = await prisma.workroom.updateMany({
         where: { id: capsule.id, updatedAt: capsule.updatedAt },
         data: {
           workspaceState: writeBuildPrDeliveryState(
@@ -209,7 +209,7 @@ export async function runBuildPrDeliveryReconcile(): Promise<{
         lastObservedAt: new Date().toISOString(),
         lastError: String(error instanceof Error ? error.message : error).slice(0, 240),
       };
-      const saved = await prisma.workCapsule.updateMany({
+      const saved = await prisma.workroom.updateMany({
         where: { id: capsule.id, updatedAt: capsule.updatedAt },
         data: {
           workspaceState: writeBuildPrDeliveryState(

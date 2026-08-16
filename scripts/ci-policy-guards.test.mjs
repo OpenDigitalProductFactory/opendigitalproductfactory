@@ -39,6 +39,7 @@ const EXPECTED_LEGACY_JOBS = [
   "n-minus-one-caller-honesty",
   "new-dependency-gate",
   "override-provenance-guard",
+  "owned-patch-regression",
   "package-boundary-guard",
   "pr-health-test",
   "prose-lint-guard",
@@ -54,6 +55,7 @@ const EXPECTED_LEGACY_JOBS = [
   "test-clock-bomb-guard",
   "tool-surface-guard",
   "ux-fit-gate",
+  "work-unit-conformance-guard",
 ];
 
 function workflowJobBlock(workflow, jobId) {

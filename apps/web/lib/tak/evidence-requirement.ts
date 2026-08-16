@@ -148,13 +148,15 @@ export type EvidenceRecoveryAction =
 export function resolveEvidenceRecovery(params: {
   required: boolean;
   authoritativeToolExecutions: number;
+  authoritativeSurfaceEvidence?: boolean;
   content: string;
   recoveryNudgesUsed: number;
   maxRecoveryNudges?: number;
 }): EvidenceRecoveryAction {
   const guard = enforceEvidenceIntegrity({
     required: params.required,
-    authoritativeToolExecutions: params.authoritativeToolExecutions,
+    authoritativeToolExecutions:
+      params.authoritativeToolExecutions + (params.authoritativeSurfaceEvidence ? 1 : 0),
     content: params.content,
   });
   if (!guard.blocked) return { kind: "pass" };

@@ -54,6 +54,7 @@ export type CoworkerToolAuthorityGateResult =
   | {
       outcome: "allow";
       approvedEnvelopeId: string | null;
+      authorityDecisionId: string;
     }
   | {
       outcome: "reject";
@@ -322,5 +323,5 @@ export async function enforceCoworkerToolAuthority(
     }
   }
 
-  return { outcome: "allow", approvedEnvelopeId };
+  return { outcome: "allow", approvedEnvelopeId, authorityDecisionId: decisionId };
 }

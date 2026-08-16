@@ -49,9 +49,13 @@ function summaryWith(
     targetSha: "b".repeat(40),
     counts: {
       breaking: 0,
+      security: 0,
       feature: allItems.length,
       fix: 0,
       performance: 0,
+      dependency: 0,
+      documentation: 0,
+      maintenance: 0,
       other: 0,
       total: allItems.length,
     },
@@ -163,8 +167,9 @@ describe("UpgradeImpactPanel — activity indication", () => {
 
   it("shows an inline busy label and a panel skeleton while auto-generating on first view", async () => {
     // No initialSummary → the panel auto-fetches on mount (BI-4A400DE4). A
-    // never-resolving fetch keeps the useTransition pending so the loading UI
-    // stays on screen — no click needed, the activity shows behind the fetch.
+    // never-resolving fetch keeps the explicit request state pending so the
+    // loading UI stays on screen — no click needed, the activity shows behind
+    // the fetch.
     vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>(() => {})));
     render(<UpgradeImpactPanel enabled />);
 
@@ -189,5 +194,62 @@ describe("UpgradeImpactPanel — activity indication", () => {
     expect(screen.getAllByText("Top change one")).toHaveLength(1);
     const okRegion = document.querySelector('[data-summary-state="ok"]');
     expect(okRegion?.getAttribute("aria-busy")).toBe("true");
+  });
+
+  it("aborts optional impact work when navigation unmounts the panel", async () => {
+    let signal: AbortSignal | undefined;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((_url, init) => {
+        signal = init?.signal ?? undefined;
+        return new Promise<Response>(() => undefined);
+      }),
+    );
+    const { unmount } = render(<UpgradeImpactPanel enabled />);
+
+    await waitFor(() => expect(signal).toBeDefined());
+    expect(signal?.aborted).toBe(false);
+    unmount();
+    expect(signal?.aborted).toBe(true);
+  });
+});
+
+describe("UpgradeImpactPanel — category badges", () => {
+  it("labels each category distinctly instead of rendering a wall of OTHER", () => {
+    const items = [
+      item("sha-sec", "Patched an advisory", "security"),
+      item("sha-dep", "Bumped the framework", "dependency"),
+      item("sha-doc", "Documented the governance model", "documentation"),
+      item("sha-int", "Tidied internals", "maintenance"),
+    ];
+    render(
+      <UpgradeImpactPanel enabled initialSummary={summaryWith(items, items)} />,
+    );
+
+    expect(screen.getByText("Security")).toBeTruthy();
+    expect(screen.getByText("Dependency")).toBeTruthy();
+    expect(screen.getByText("Docs")).toBeTruthy();
+    expect(screen.getByText("Internal")).toBeTruthy();
+    expect(screen.queryByText("Other")).toBeNull();
+  });
+
+  // A summary persisted before a category existed replays from JSON; the badge
+  // map must degrade to the neutral label rather than render `undefined`.
+  it("falls back to a readable badge for a category this build does not know", () => {
+    const legacy = item("sha-x", "Recorded under an older taxonomy", "other");
+    const unknown = {
+      ...legacy,
+      sha: "sha-y",
+      category: "not-a-category" as ImpactItem["category"],
+    };
+    render(
+      <UpgradeImpactPanel
+        enabled
+        initialSummary={summaryWith([unknown], [unknown])}
+      />,
+    );
+
+    expect(screen.getByText("Other")).toBeTruthy();
+    expect(screen.getByText("Recorded under an older taxonomy")).toBeTruthy();
   });
 });

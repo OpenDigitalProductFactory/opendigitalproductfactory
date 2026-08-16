@@ -1,4 +1,4 @@
-// Durable auto-capture of external-agent work into a tracked WorkCapsule.
+// Durable auto-capture of external-agent work into a tracked Workroom.
 //
 // EP-UNIFIED-TRACKING / BI-636A11B3. The cross-surface activity view renders
 // WorkCapsules. External agents (Claude Code / Codex / Grok) that work "directly"
@@ -35,7 +35,7 @@ function providerLabel(provider: string): string {
 }
 
 /**
- * Ensure the external session is a tracked WorkCapsule and append this evidence
+ * Ensure the external session is a tracked Workroom and append this evidence
  * to its timeline. Returns the capsule's semantic id (WC-*). Idempotent: repeated
  * evidence from the same `externalSessionId` reuses one capsule.
  */
@@ -74,7 +74,7 @@ export async function captureExternalSessionEvidence(args: {
 }
 
 /**
- * BI-5FDBF786: ensure an external session is a tracked WorkCapsule at WORK
+ * BI-5FDBF786: ensure an external session is a tracked Workroom at WORK
  * START — before any evidence is recorded. captureExternalSessionEvidence
  * fires on first evidence (after work); this is the pure start signal so an
  * external agent (Claude/Codex/Grok/opencode) that has started but not yet

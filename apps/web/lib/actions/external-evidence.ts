@@ -13,7 +13,7 @@ export async function recordExternalEvidence(input: {
   taskRunId?: string;
   details?: Prisma.InputJsonValue;
   // EP-WORK-CONVERGENCE Phase 1 (BI-D6FA8641): bind the record to the durable
-  // WorkCapsule and carry producer identity. All optional — a caller that does
+  // Workroom and carry producer identity. All optional — a caller that does
   // not know the capsule still writes a valid record (resolution below is
   // best-effort; full auto-claim is Phase 2 / BI-5FDBF786).
   workCapsuleId?: string;
@@ -28,7 +28,7 @@ export async function recordExternalEvidence(input: {
   let executorKind = input.executorKind;
   if (workCapsuleId === undefined && input.buildId !== undefined) {
     try {
-      const linked = await prisma.workCapsule.findMany({
+      const linked = await prisma.workroom.findMany({
         where: { featureBuildId: input.buildId },
         select: { id: true, executorKind: true },
         take: 2,

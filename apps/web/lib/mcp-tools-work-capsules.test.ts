@@ -1,14 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mockPrisma = {
-  workCapsule: {
+  workroom: {
     create: vi.fn(),
     findFirst: vi.fn(),
     findMany: vi.fn(),
     findUnique: vi.fn(),
     update: vi.fn(),
   },
-  workCapsuleActivity: {
+  workroomActivity: {
     create: vi.fn(),
   },
 };
@@ -30,8 +30,8 @@ describe("work capsule MCP tools", () => {
     await expect(import("./mcp-tools")).resolves.toBeDefined();
   });
 
-  it("list_work_capsules returns capsule rows", async () => {
-    mockPrisma.workCapsule.findMany.mockResolvedValue([
+  it("list_workrooms returns capsule rows", async () => {
+    mockPrisma.workroom.findMany.mockResolvedValue([
       {
         capsuleId: "WC-1",
         title: "Adopt work",
@@ -43,19 +43,19 @@ describe("work capsule MCP tools", () => {
     ]);
 
     const { executeTool } = await import("./mcp-tools");
-    const result = await executeTool("list_work_capsules", { status: "ready" }, "user-1");
+    const result = await executeTool("list_workrooms", { status: "ready" }, "user-1");
 
     expect(result.success).toBe(true);
     expect(result.data?.capsules).toEqual([
       expect.objectContaining({ capsuleId: "WC-1", status: "ready" }),
     ]);
     // read tool — must never touch lease fields
-    expect(mockPrisma.workCapsule.update).not.toHaveBeenCalled();
-    expect(mockPrisma.workCapsuleActivity.create).not.toHaveBeenCalled();
+    expect(mockPrisma.workroom.update).not.toHaveBeenCalled();
+    expect(mockPrisma.workroomActivity.create).not.toHaveBeenCalled();
   });
 
-  it("list_work_capsules filters by decision scope and portfolio role", async () => {
-    mockPrisma.workCapsule.findMany.mockResolvedValue([
+  it("list_workrooms filters by decision scope and portfolio role", async () => {
+    mockPrisma.workroom.findMany.mockResolvedValue([
       {
         capsuleId: "WC-WWWD",
         title: "Customer onboarding",
@@ -70,13 +70,13 @@ describe("work capsule MCP tools", () => {
 
     const { executeTool } = await import("./mcp-tools");
     const result = await executeTool(
-      "list_work_capsules",
+      "list_workrooms",
       { decisionScope: "wwwd", portfolioRole: "productsAndServicesSold" },
       "user-1",
     );
 
     expect(result.success).toBe(true);
-    expect(mockPrisma.workCapsule.findMany).toHaveBeenCalledWith(expect.objectContaining({
+    expect(mockPrisma.workroom.findMany).toHaveBeenCalledWith(expect.objectContaining({
       where: {
         decisionScope: "wwwd",
         portfolioRole: "productsAndServicesSold",
@@ -91,8 +91,8 @@ describe("work capsule MCP tools", () => {
     ]);
   });
 
-  it("get_work_capsule does not renew leases for read-only hydration", async () => {
-    mockPrisma.workCapsule.findUnique.mockResolvedValue({
+  it("get_workroom does not renew leases for read-only hydration", async () => {
+    mockPrisma.workroom.findUnique.mockResolvedValue({
       id: "row-1",
       capsuleId: "WC-READ",
       title: "Read only",
@@ -100,19 +100,19 @@ describe("work capsule MCP tools", () => {
     });
 
     const { executeTool } = await import("./mcp-tools");
-    const result = await executeTool("get_work_capsule", { capsuleId: "WC-READ" }, "user-1", {
+    const result = await executeTool("get_workroom", { capsuleId: "WC-READ" }, "user-1", {
       agentId: "codex",
     });
 
     expect(result.success).toBe(true);
-    expect(mockPrisma.workCapsule.update).not.toHaveBeenCalled();
-    expect(mockPrisma.workCapsuleActivity.create).not.toHaveBeenCalled();
+    expect(mockPrisma.workroom.update).not.toHaveBeenCalled();
+    expect(mockPrisma.workroomActivity.create).not.toHaveBeenCalled();
   });
 
-  it("create_work_capsule requires idempotencyKey", async () => {
+  it("create_workroom requires idempotencyKey", async () => {
     const { executeTool } = await import("./mcp-tools");
     const result = await executeTool(
-      "create_work_capsule",
+      "create_workroom",
       { title: "No key", objective: "Missing key", source: "manual" },
       "user-1",
     );
@@ -121,14 +121,14 @@ describe("work capsule MCP tools", () => {
     expect(result.error).toBe("missing_idempotencyKey");
   });
 
-  it("create_work_capsule accepts scope metadata without a backlog item", async () => {
-    mockPrisma.workCapsule.findUnique.mockResolvedValue(null);
-    mockPrisma.workCapsule.create.mockResolvedValue({ id: "row-1", capsuleId: "WC-SCOPECREATE" });
-    mockPrisma.workCapsuleActivity.create.mockResolvedValue({ id: "activity-1" });
+  it("create_workroom accepts scope metadata without a backlog item", async () => {
+    mockPrisma.workroom.findUnique.mockResolvedValue(null);
+    mockPrisma.workroom.create.mockResolvedValue({ id: "row-1", capsuleId: "WC-SCOPECREATE" });
+    mockPrisma.workroomActivity.create.mockResolvedValue({ id: "activity-1" });
 
     const { executeTool } = await import("./mcp-tools");
     const result = await executeTool(
-      "create_work_capsule",
+      "create_workroom",
       {
         title: "Customer onboarding",
         objective: "Coordinate a customer onboarding work case.",
@@ -146,7 +146,7 @@ describe("work capsule MCP tools", () => {
     );
 
     expect(result.success).toBe(true);
-    expect(mockPrisma.workCapsule.create).toHaveBeenCalledWith(expect.objectContaining({
+    expect(mockPrisma.workroom.create).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({
         backlogItemId: null,
         decisionScope: "wwwd",
@@ -159,10 +159,10 @@ describe("work capsule MCP tools", () => {
     }));
   });
 
-  it("create_work_capsule rejects invalid scope metadata", async () => {
+  it("create_workroom rejects invalid scope metadata", async () => {
     const { executeTool } = await import("./mcp-tools");
     const result = await executeTool(
-      "create_work_capsule",
+      "create_workroom",
       {
         title: "Bad scope",
         objective: "Should not persist.",
@@ -176,36 +176,36 @@ describe("work capsule MCP tools", () => {
 
     expect(result.success).toBe(false);
     expect(result.error).toBe("invalid_scope");
-    expect(mockPrisma.workCapsule.create).not.toHaveBeenCalled();
+    expect(mockPrisma.workroom.create).not.toHaveBeenCalled();
   });
 
-  it("heartbeat_capsule renews a lease", async () => {
-    mockPrisma.workCapsule.update.mockResolvedValue({ id: "row-1", capsuleId: "WC-1" });
-    mockPrisma.workCapsuleActivity.create.mockResolvedValue({ id: "activity-1" });
+  it("heartbeat_workroom renews a lease", async () => {
+    mockPrisma.workroom.update.mockResolvedValue({ id: "row-1", capsuleId: "WC-1" });
+    mockPrisma.workroomActivity.create.mockResolvedValue({ id: "activity-1" });
 
     const { executeTool } = await import("./mcp-tools");
-    const result = await executeTool("heartbeat_capsule", { capsuleId: "WC-1" }, "user-1", {
+    const result = await executeTool("heartbeat_workroom", { capsuleId: "WC-1" }, "user-1", {
       agentId: "codex",
     });
 
     expect(result.success).toBe(true);
-    expect(mockPrisma.workCapsule.update).toHaveBeenCalledTimes(1);
-    expect(mockPrisma.workCapsule.update).toHaveBeenCalledWith(expect.objectContaining({
+    expect(mockPrisma.workroom.update).toHaveBeenCalledTimes(1);
+    expect(mockPrisma.workroom.update).toHaveBeenCalledWith(expect.objectContaining({
       where: { capsuleId: "WC-1" },
     }));
-    expect(mockPrisma.workCapsuleActivity.create).toHaveBeenCalledWith(expect.objectContaining({
+    expect(mockPrisma.workroomActivity.create).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({ kind: "lease-renewed", recordedByAgentId: "codex" }),
     }));
   });
 
-  it("record_capsule_evidence auto-renews the lease after a capsule-scoped write", async () => {
-    mockPrisma.workCapsule.findUnique.mockResolvedValue({ id: "row-1", capsuleId: "WC-EVIDENCE" });
-    mockPrisma.workCapsule.update.mockResolvedValue({ id: "row-1", capsuleId: "WC-EVIDENCE" });
-    mockPrisma.workCapsuleActivity.create.mockResolvedValue({ id: "activity-1" });
+  it("record_workroom_evidence auto-renews the lease after a capsule-scoped write", async () => {
+    mockPrisma.workroom.findUnique.mockResolvedValue({ id: "row-1", capsuleId: "WC-EVIDENCE" });
+    mockPrisma.workroom.update.mockResolvedValue({ id: "row-1", capsuleId: "WC-EVIDENCE" });
+    mockPrisma.workroomActivity.create.mockResolvedValue({ id: "activity-1" });
 
     const { executeTool } = await import("./mcp-tools");
     const result = await executeTool(
-      "record_capsule_evidence",
+      "record_workroom_evidence",
       {
         capsuleId: "WC-EVIDENCE",
         kind: "test",
@@ -220,10 +220,10 @@ describe("work capsule MCP tools", () => {
     );
 
     expect(result.success).toBe(true);
-    expect(mockPrisma.workCapsuleActivity.create).toHaveBeenCalledWith(expect.objectContaining({
+    expect(mockPrisma.workroomActivity.create).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({ kind: "evidence-recorded", recordedByAgentId: "codex" }),
     }));
-    expect(mockPrisma.workCapsuleActivity.create).toHaveBeenCalledWith(expect.objectContaining({
+    expect(mockPrisma.workroomActivity.create).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({
         payload: expect.objectContaining({
           targetId: "RT-SANDBOX-1",
@@ -232,22 +232,22 @@ describe("work capsule MCP tools", () => {
         }),
       }),
     }));
-    expect(mockPrisma.workCapsule.update).toHaveBeenCalledWith(expect.objectContaining({
+    expect(mockPrisma.workroom.update).toHaveBeenCalledWith(expect.objectContaining({
       where: { capsuleId: "WC-EVIDENCE" },
       data: expect.objectContaining({
         leaseHolderPrincipalId: "principal-agent",
         leaseExpiresAt: expect.any(Date),
       }),
     }));
-    expect(mockPrisma.workCapsuleActivity.create).toHaveBeenCalledWith(expect.objectContaining({
+    expect(mockPrisma.workroomActivity.create).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({ kind: "lease-renewed", recordedByAgentId: "codex" }),
     }));
   });
 
   it("adopt_worktree creates a capsule for a branch/worktree pair", async () => {
-    mockPrisma.workCapsule.findFirst.mockResolvedValue(null);
-    mockPrisma.workCapsule.create.mockResolvedValue({ id: "row-1", capsuleId: "WC-ADOPT" });
-    mockPrisma.workCapsuleActivity.create.mockResolvedValue({ id: "activity-1" });
+    mockPrisma.workroom.findFirst.mockResolvedValue(null);
+    mockPrisma.workroom.create.mockResolvedValue({ id: "row-1", capsuleId: "WC-ADOPT" });
+    mockPrisma.workroomActivity.create.mockResolvedValue({ id: "activity-1" });
 
     const { executeTool } = await import("./mcp-tools");
     const result = await executeTool("adopt_worktree", {
@@ -264,9 +264,9 @@ describe("work capsule MCP tools", () => {
   });
 
   it("adopt_worktree persists scope metadata", async () => {
-    mockPrisma.workCapsule.findFirst.mockResolvedValue(null);
-    mockPrisma.workCapsule.create.mockResolvedValue({ id: "row-1", capsuleId: "WC-ADOPTSCOPE" });
-    mockPrisma.workCapsuleActivity.create.mockResolvedValue({ id: "activity-1" });
+    mockPrisma.workroom.findFirst.mockResolvedValue(null);
+    mockPrisma.workroom.create.mockResolvedValue({ id: "row-1", capsuleId: "WC-ADOPTSCOPE" });
+    mockPrisma.workroomActivity.create.mockResolvedValue({ id: "activity-1" });
 
     const { executeTool } = await import("./mcp-tools");
     const result = await executeTool("adopt_worktree", {
@@ -284,7 +284,7 @@ describe("work capsule MCP tools", () => {
     }, "user-1", { agentId: "codex" });
 
     expect(result.success).toBe(true);
-    expect(mockPrisma.workCapsule.create).toHaveBeenCalledWith(expect.objectContaining({
+    expect(mockPrisma.workroom.create).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({
         decisionScope: "wwmd",
         portfolioRole: "manufactureAndDeliver",
@@ -295,8 +295,41 @@ describe("work capsule MCP tools", () => {
     }));
   });
 
-  it("plan_capsule_worktree persists the planned workspace", async () => {
-    mockPrisma.workCapsule.findUnique.mockResolvedValue({
+  it("adopt_worktree returns an actionable branch conflict instead of a raw tool failure", async () => {
+    mockPrisma.workroom.findFirst.mockResolvedValue({
+      id: "row-existing",
+      capsuleId: "WC-EXISTING",
+      status: "abandoned",
+      backlogItemId: "BI-OTHER",
+      headBranch: "fix/recovery",
+    });
+
+    const { executeTool } = await import("./mcp-tools");
+    const result = await executeTool("adopt_worktree", {
+      title: "Adopt recovery branch",
+      objective: "Recover useful work.",
+      repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory",
+      headBranch: "fix/recovery",
+      worktreePath: "D:/DPF-recovery",
+      executorKind: "codex-desktop",
+    }, "user-1", { agentId: "codex" });
+
+    expect(result).toMatchObject({
+      success: false,
+      error: "branch_occupied",
+      data: {
+        capsuleId: "WC-EXISTING",
+        status: "abandoned",
+        backlogItemId: "BI-OTHER",
+      },
+    });
+    expect(result.message).toMatch(/Resume that capsule.*or use a different branch/i);
+    expect(mockPrisma.workroom.create).not.toHaveBeenCalled();
+    expect(mockPrisma.workroom.update).not.toHaveBeenCalled();
+  });
+
+  it("plan_workroom_worktree persists the planned workspace", async () => {
+    mockPrisma.workroom.findUnique.mockResolvedValue({
       id: "row-1",
       capsuleId: "WC-PLANMCP",
       title: "Phase 2 MCP plan",
@@ -305,8 +338,8 @@ describe("work capsule MCP tools", () => {
       headBranch: null,
       worktreePath: null,
     });
-    mockPrisma.workCapsule.findFirst.mockResolvedValue(null);
-    mockPrisma.workCapsule.update.mockResolvedValue({
+    mockPrisma.workroom.findFirst.mockResolvedValue(null);
+    mockPrisma.workroom.update.mockResolvedValue({
       id: "row-1",
       capsuleId: "WC-PLANMCP",
       title: "Phase 2 MCP plan",
@@ -316,11 +349,11 @@ describe("work capsule MCP tools", () => {
       worktreePath: "D:\\DPF-phase-2-mcp-plan",
       branchTaxonomy: "feat",
     });
-    mockPrisma.workCapsuleActivity.create.mockResolvedValue({ id: "activity-1" });
+    mockPrisma.workroomActivity.create.mockResolvedValue({ id: "activity-1" });
 
     const { executeTool } = await import("./mcp-tools");
     const result = await executeTool(
-      "plan_capsule_worktree",
+      "plan_workroom_worktree",
       { capsuleId: "WC-PLANMCP", taxonomy: "feat" },
       "user-1",
       {},
@@ -328,7 +361,7 @@ describe("work capsule MCP tools", () => {
 
     expect(result.success).toBe(true);
     expect(result.entityId).toBe("WC-PLANMCP");
-    expect(mockPrisma.workCapsule.update).toHaveBeenCalledWith(expect.objectContaining({
+    expect(mockPrisma.workroom.update).toHaveBeenCalledWith(expect.objectContaining({
       where: { capsuleId: "WC-PLANMCP" },
       data: expect.objectContaining({
         branchTaxonomy: "feat",
@@ -336,15 +369,15 @@ describe("work capsule MCP tools", () => {
         worktreePath: expect.stringContaining("phase-2-mcp-plan"),
       }),
     }));
-    expect(mockPrisma.workCapsuleActivity.create).toHaveBeenCalledWith(expect.objectContaining({
+    expect(mockPrisma.workroomActivity.create).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({ kind: "workspace-planned" }),
     }));
   });
 
-  it("plan_capsule_worktree rejects an unknown taxonomy", async () => {
+  it("plan_workroom_worktree rejects an unknown taxonomy", async () => {
     const { executeTool } = await import("./mcp-tools");
     const result = await executeTool(
-      "plan_capsule_worktree",
+      "plan_workroom_worktree",
       { capsuleId: "WC-PLANMCP", taxonomy: "wat" },
       "user-1",
       {},
@@ -354,27 +387,27 @@ describe("work capsule MCP tools", () => {
     expect(result.error).toBe("invalid_taxonomy");
   });
 
-  it("claim_capsule_scope stores typed scope claims", async () => {
+  it("claim_workroom_scope stores typed scope claims", async () => {
     let capsule = {
       id: "row-1",
       capsuleId: "WC-SCOPE",
       scopeClaims: [],
     } as Record<string, unknown>;
-    mockPrisma.workCapsule.findUnique.mockImplementation(async () => capsule);
-    mockPrisma.workCapsule.update.mockImplementation(async ({ data }) => {
+    mockPrisma.workroom.findUnique.mockImplementation(async () => capsule);
+    mockPrisma.workroom.update.mockImplementation(async ({ data }) => {
       capsule = { ...capsule, ...data };
       return capsule;
     });
-    mockPrisma.workCapsuleActivity.create.mockResolvedValue({ id: "activity-1" });
+    mockPrisma.workroomActivity.create.mockResolvedValue({ id: "activity-1" });
 
     const { executeTool } = await import("./mcp-tools");
-    const result = await executeTool("claim_capsule_scope", {
+    const result = await executeTool("claim_workroom_scope", {
       capsuleId: "WC-SCOPE",
       claims: [{ kind: "path", value: "apps/web/lib/work-capsules.ts", intent: "edit" }],
     }, "user-1", { agentId: "codex" });
 
     expect(result.success).toBe(true);
-    expect(mockPrisma.workCapsule.update).toHaveBeenCalledWith(expect.objectContaining({
+    expect(mockPrisma.workroom.update).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({
         scopeClaims: [expect.objectContaining({
           kind: "path",
@@ -384,14 +417,14 @@ describe("work capsule MCP tools", () => {
       }),
     }));
     // write tool — must auto-renew the lease after the scope write
-    expect(mockPrisma.workCapsule.update).toHaveBeenCalledWith(expect.objectContaining({
+    expect(mockPrisma.workroom.update).toHaveBeenCalledWith(expect.objectContaining({
       where: { capsuleId: "WC-SCOPE" },
       data: expect.objectContaining({
         leaseHolderPrincipalId: "principal-agent",
         leaseExpiresAt: expect.any(Date),
       }),
     }));
-    expect(mockPrisma.workCapsuleActivity.create).toHaveBeenCalledWith(expect.objectContaining({
+    expect(mockPrisma.workroomActivity.create).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({ kind: "lease-renewed", recordedByAgentId: "codex" }),
     }));
     expect(result.data).toEqual(expect.objectContaining({
@@ -400,36 +433,36 @@ describe("work capsule MCP tools", () => {
         paths: ["apps/web/lib/work-capsules.ts"],
       }),
     }));
-    expect(mockPrisma.workCapsule.update).toHaveBeenCalledWith(expect.objectContaining({
+    expect(mockPrisma.workroom.update).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({
         verificationState: expect.objectContaining({
           changeImpactContract: expect.objectContaining({ status: "resolved" }),
         }),
       }),
     }));
-    expect(mockPrisma.workCapsuleActivity.create).toHaveBeenCalledWith(expect.objectContaining({
+    expect(mockPrisma.workroomActivity.create).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({ kind: "change-impact-planned" }),
     }));
   });
 
-  it("update_work_capsule_status writes a status override", async () => {
-    mockPrisma.workCapsule.findUnique.mockResolvedValue({
+  it("update_workroom_status writes a status override", async () => {
+    mockPrisma.workroom.findUnique.mockResolvedValue({
       id: "row-1",
       capsuleId: "WC-STATUS",
       workspaceState: { note: "preserve me" },
     });
-    mockPrisma.workCapsule.update.mockResolvedValue({ id: "row-1", capsuleId: "WC-STATUS", status: "blocked" });
-    mockPrisma.workCapsuleActivity.create.mockResolvedValue({ id: "activity-1" });
+    mockPrisma.workroom.update.mockResolvedValue({ id: "row-1", capsuleId: "WC-STATUS", status: "blocked" });
+    mockPrisma.workroomActivity.create.mockResolvedValue({ id: "activity-1" });
 
     const { executeTool } = await import("./mcp-tools");
-    const result = await executeTool("update_work_capsule_status", {
+    const result = await executeTool("update_workroom_status", {
       capsuleId: "WC-STATUS",
       status: "blocked",
       reason: "Provider credential blocked.",
     }, "user-1", { agentId: "codex" });
 
     expect(result.success).toBe(true);
-    expect(mockPrisma.workCapsule.update).toHaveBeenCalledWith(expect.objectContaining({
+    expect(mockPrisma.workroom.update).toHaveBeenCalledWith(expect.objectContaining({
       where: { capsuleId: "WC-STATUS" },
       data: expect.objectContaining({
         status: "blocked",
@@ -440,20 +473,20 @@ describe("work capsule MCP tools", () => {
       }),
     }));
     // write tool — must auto-renew the lease after the status write
-    expect(mockPrisma.workCapsule.update).toHaveBeenCalledWith(expect.objectContaining({
+    expect(mockPrisma.workroom.update).toHaveBeenCalledWith(expect.objectContaining({
       where: { capsuleId: "WC-STATUS" },
       data: expect.objectContaining({
         leaseHolderPrincipalId: "principal-agent",
         leaseExpiresAt: expect.any(Date),
       }),
     }));
-    expect(mockPrisma.workCapsuleActivity.create).toHaveBeenCalledWith(expect.objectContaining({
+    expect(mockPrisma.workroomActivity.create).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({ kind: "lease-renewed", recordedByAgentId: "codex" }),
     }));
   });
 
-  it("release_capsule_scope removes matching scope claims", async () => {
-    mockPrisma.workCapsule.findUnique.mockResolvedValue({
+  it("release_workroom_scope removes matching scope claims", async () => {
+    mockPrisma.workroom.findUnique.mockResolvedValue({
       id: "row-1",
       capsuleId: "WC-RELEASE",
       scopeClaims: [
@@ -473,30 +506,30 @@ describe("work capsule MCP tools", () => {
         },
       ],
     });
-    mockPrisma.workCapsule.update.mockResolvedValue({ id: "row-1", capsuleId: "WC-RELEASE" });
-    mockPrisma.workCapsuleActivity.create.mockResolvedValue({ id: "activity-1" });
+    mockPrisma.workroom.update.mockResolvedValue({ id: "row-1", capsuleId: "WC-RELEASE" });
+    mockPrisma.workroomActivity.create.mockResolvedValue({ id: "activity-1" });
 
     const { executeTool } = await import("./mcp-tools");
-    const result = await executeTool("release_capsule_scope", {
+    const result = await executeTool("release_workroom_scope", {
       capsuleId: "WC-RELEASE",
       claims: [{ kind: "path", value: "apps/web/lib/work-capsules.ts" }],
     }, "user-1", { agentId: "codex" });
 
     expect(result.success).toBe(true);
-    expect(mockPrisma.workCapsule.update).toHaveBeenCalledWith(expect.objectContaining({
+    expect(mockPrisma.workroom.update).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({
         scopeClaims: [expect.objectContaining({ kind: "route", value: "/build/work" })],
       }),
     }));
     // write tool — must auto-renew the lease after the scope release
-    expect(mockPrisma.workCapsule.update).toHaveBeenCalledWith(expect.objectContaining({
+    expect(mockPrisma.workroom.update).toHaveBeenCalledWith(expect.objectContaining({
       where: { capsuleId: "WC-RELEASE" },
       data: expect.objectContaining({
         leaseHolderPrincipalId: "principal-agent",
         leaseExpiresAt: expect.any(Date),
       }),
     }));
-    expect(mockPrisma.workCapsuleActivity.create).toHaveBeenCalledWith(expect.objectContaining({
+    expect(mockPrisma.workroomActivity.create).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({ kind: "lease-renewed", recordedByAgentId: "codex" }),
     }));
   });

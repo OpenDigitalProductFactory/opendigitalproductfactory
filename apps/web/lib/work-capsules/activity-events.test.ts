@@ -8,7 +8,7 @@ import {
   subscribeToWorkCapsuleActivityEvents,
 } from "./activity-events";
 
-describe("WorkCapsule activity push events", () => {
+describe("Workroom activity push events", () => {
   it("serializes and parses a valid activity event", () => {
     const event = { workCapsuleId: "cm-work-1", activityId: "act-1" };
     expect(parseWorkCapsuleActivityEvent(serializeWorkCapsuleActivityEvent(event))).toEqual(event);

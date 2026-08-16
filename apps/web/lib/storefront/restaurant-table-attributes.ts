@@ -10,10 +10,15 @@ export const RESTAURANT_TABLE_SHAPES = [
 
 export type RestaurantTableShape = (typeof RESTAURANT_TABLE_SHAPES)[number];
 
+export const RESTAURANT_TABLE_BOOKING_ACCESS = ["online", "in-house"] as const;
+export type RestaurantTableBookingAccess =
+  (typeof RESTAURANT_TABLE_BOOKING_ACCESS)[number];
+
 export interface RestaurantTableAttributes {
   shape: RestaurantTableShape;
   combinationGroup: string | null;
   combinableWith: string[];
+  bookingAccess: RestaurantTableBookingAccess;
 }
 
 export type RestaurantTableAttributesValidation =
@@ -21,6 +26,7 @@ export type RestaurantTableAttributesValidation =
   | { ok: false; error: string };
 
 const SHAPE_SET = new Set<string>(RESTAURANT_TABLE_SHAPES);
+const BOOKING_ACCESS_SET = new Set<string>(RESTAURANT_TABLE_BOOKING_ACCESS);
 const MAX_REFERENCE_LENGTH = 160;
 const MAX_COMBINATION_LINKS = 24;
 
@@ -56,7 +62,13 @@ export function parseRestaurantTableAttributes(
       ].slice(0, MAX_COMBINATION_LINKS)
     : [];
 
-  return { shape, combinationGroup, combinableWith };
+  const bookingAccess =
+    typeof record.bookingAccess === "string" &&
+      BOOKING_ACCESS_SET.has(record.bookingAccess)
+      ? record.bookingAccess as RestaurantTableBookingAccess
+      : "online";
+
+  return { shape, combinationGroup, combinableWith, bookingAccess };
 }
 
 export function serializeRestaurantTableAttributes(
@@ -71,6 +83,7 @@ export function serializeRestaurantTableAttributes(
     ...(parsed.combinableWith.length > 0
       ? { combinableWith: parsed.combinableWith }
       : {}),
+    bookingAccess: parsed.bookingAccess,
   };
 }
 
@@ -96,6 +109,12 @@ export function validateRestaurantTableAttributesInput(
       ))
   ) {
     return { ok: false, error: "Combined-table references are invalid." };
+  }
+  if (
+    value.bookingAccess !== undefined &&
+    !BOOKING_ACCESS_SET.has(String(value.bookingAccess))
+  ) {
+    return { ok: false, error: "Choose online or in-house table access." };
   }
   return { ok: true, value: parseRestaurantTableAttributes(value) };
 }

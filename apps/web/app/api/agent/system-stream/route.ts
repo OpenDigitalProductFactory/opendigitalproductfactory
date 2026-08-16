@@ -6,7 +6,8 @@
  * broadcast via agentEventBus.broadcastSystem) so clients that just need
  * to render the PlatformBanner don't need to make up a fake threadId.
  *
- * Currently emits: system:quiescence (drain banner state).
+ * Currently emits system:quiescence (drain banner state) and
+ * system:self-upgrade (durable run-state invalidation hints).
  * Future system events (system:maintenance, system:announcement, etc.)
  * land on the same stream.
  *

@@ -1,4 +1,5 @@
 import { spawnSync } from "node:child_process";
+import { resolveHostCommandInvocation } from "./host-command-invocation.mjs";
 
 function guard(legacyJobId, name, commands) {
   return {
@@ -24,29 +25,12 @@ export function isPolicyGuardSelfTest([command, args]) {
     || command === "pnpm" && args[0] === "run" && args[1]?.endsWith(":test");
 }
 
-function quoteWindowsCommandToken(token) {
-  const value = String(token);
-  if (!/[\s"&|<>^()%]/.test(value)) return value;
-  return `"${value.replaceAll("%", "%%").replaceAll('"', '""')}"`;
-}
-
 export function resolvePolicyGuardInvocation(
   command,
   args,
   { platform = process.platform, env = process.env } = {},
 ) {
-  if (platform !== "win32" || command !== "pnpm") {
-    return { command, args };
-  }
-  return {
-    command: env.ComSpec || env.COMSPEC || "cmd.exe",
-    args: [
-      "/d",
-      "/s",
-      "/c",
-      [command, ...args].map(quoteWindowsCommandToken).join(" "),
-    ],
-  };
+  return resolveHostCommandInvocation(command, args, { platform, env });
 }
 
 export const POLICY_GUARD_PROFILES = Object.freeze({
@@ -97,12 +81,14 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         "scripts/lib/ci-build-artifact.test.mjs",
         "scripts/lib/ci-evidence-plan.test.mjs",
         "scripts/ci-policy-guards.test.mjs",
+        "scripts/lib/host-command-invocation.test.mjs",
         // BI-812C676D: every covered-root *.test.mjs must appear here or on the
         // deliberate allowlist — otherwise CI stays green while the test never runs.
         "scripts/lib/ci-policy-test-inventory.test.mjs",
         "scripts/lib/git-shallow-preflight.test.mjs",
         "scripts/pregate-preflight.test.mjs",
         "scripts/gate-context.test.mjs",
+        "scripts/lib/gate-context-runtime-contract.test.mjs",
         "scripts/pre-push-dco-check.test.mjs",
       ),
       node("scripts/check-ci-policy-test-inventory.mjs"),
@@ -119,6 +105,11 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       node("scripts/check-build-script-policy.mjs"),
       node("--test", "scripts/check-build-script-policy.test.mjs"),
       node("--test", "scripts/check-root-script-runtime.test.mjs"),
+      // A `patchedDependencies` entry whose patch file never reaches the Docker
+      // build context fails `pnpm install` with ENOENT and breaks every image
+      // build (SUR-8AB3353C, regression from #4321).
+      node("scripts/check-docker-patch-context.mjs"),
+      node("--test", "scripts/check-docker-patch-context.test.mjs"),
     ]),
     guard("bundle-boundary-guard", "Bundle Boundary Guard", [
       node("scripts/check-bundle-boundaries.mjs"),
@@ -154,6 +145,10 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
     guard("test-clock-bomb-guard", "Test Clock Bomb Guard", [
       node("--test", "scripts/check-test-clock-bombs.test.mjs"),
       node("scripts/check-test-clock-bombs.mjs"),
+    ]),
+    guard("work-unit-conformance-guard", "WorkUnit Conformance Guard", [
+      node("--test", "scripts/check-work-unit-conformance.test.mjs"),
+      node("scripts/check-work-unit-conformance.mjs"),
     ]),
     guard("instruction-plane-guard", "Instruction Plane Guard", [
       node("--test", "scripts/check-instruction-plane-size.test.mjs"),
@@ -238,10 +233,15 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         // (now with the liveness + abandoned-merge verdicts), the session
         // heartbeat liveness signal, and the root-clone fast-forward remedy.
         "scripts/lib/worktree-janitor-core.test.mjs",
+        "scripts/worktree-janitor.test.mjs",
         "scripts/lib/worktree-session-heartbeat.test.mjs",
+        // BI-DBAD1A1B: SessionEnd process matching accepts only the canonical
+        // worktree itself or descendants, never sibling worktrees/CI runners.
+        "scripts/hooks/session-reaper.test.mjs",
         "scripts/lib/root-clone-refresh.test.mjs",
         "scripts/lib/compose-safety.test.mjs",
         "scripts/lib/local-integration-ci.test.mjs",
+        "scripts/lib/local-convergence-lock.test.mjs",
         "scripts/lib/sandbox-freshness.test.mjs",
         "scripts/sandbox-freshness-preflight.test.mjs",
         "scripts/release/re-resolve-stt-digest.test.mjs",
@@ -272,6 +272,15 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
     guard("prose-lint-guard", "Prose Lint Guard", [
       pnpm("run", "check:prose-lint:test"),
       pnpm("run", "check:prose-lint"),
+    ]),
+    // Proves the locally-owned image-size fix is still applied. image-size is
+    // archived upstream with no patched release, so patches/image-size@1.2.1.patch
+    // is the only thing standing between metro's asset pipeline and CVE-2025-71330.
+    // Lives in the WORKSPACE profile because it imports the installed package —
+    // the Dependency Scan workflow only reads the lockfile and never installs.
+    // Fails loudly when a metro bump moves image-size off the patched version.
+    guard("owned-patch-regression", "Owned Patch Regression", [
+      node("--test", "scripts/sbom/image-size-icns-loop.test.mjs"),
     ]),
   ]),
   "pull-request": Object.freeze([
@@ -349,6 +358,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       ),
       node(
         "--test",
+        "packages/dpf-skill-pack/hooks/mcp-catalog-profile.test.mjs",
         "packages/dpf-skill-pack/hooks/surface-manifest-paths.test.mjs",
       ),
       node("scripts/check-spec-plan-doc.mjs"),

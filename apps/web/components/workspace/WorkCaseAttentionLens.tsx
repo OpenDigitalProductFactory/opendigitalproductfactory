@@ -4,7 +4,7 @@ import { LocalTime } from "@/components/ui/LocalTime";
 import { StatCard, StatusBadge } from "@/components/ui/report-kit";
 import {
   roomLabel,
-} from "@/components/workspace/work-room/presentation";
+} from "@/components/workspace/workroom/presentation";
 import type {
   WorkspaceWorkCaseLensView,
   WorkspaceWorkCaseListItem,

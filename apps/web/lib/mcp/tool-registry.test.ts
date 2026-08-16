@@ -7,7 +7,7 @@ import { describe, expect, it } from "vitest";
 import { DELIBERATION_TOOLS } from "@/lib/mcp-tools-deliberation";
 import { SIEM_TOOLS } from "@/lib/mcp-tools-siem";
 import { PLATFORM_TOOLS } from "@/lib/mcp-tools";
-import { TOOL_TO_GRANTS } from "@/lib/tak/agent-grants";
+import { isToolAllowedByGrants, TOOL_TO_GRANTS } from "@/lib/tak/agent-grants";
 
 import { TOOL_PACK_REGISTRY } from "./pack-registry";
 
@@ -266,8 +266,7 @@ describe("coworker memory pack", () => {
   });
 
   it("mirrors the agent-grant gating source exactly (R3 no-drift)", () => {
-    // Ungated (self-scoped) — grants is empty, so nothing to drift against.
-    expect(coworkerMemoryPack.grants).toEqual({});
+    expect(coworkerMemoryPack.grants).toEqual({ record_working_note: [], list_working_notes: [] });
     for (const [name, grants] of Object.entries(coworkerMemoryPack.grants)) {
       expect(TOOL_TO_GRANTS[name], name).toEqual(grants);
     }
@@ -345,7 +344,7 @@ describe("composeToolPacks", () => {
         coworkerServiceCatalogPack.definitions.length,
     );
     expect(registry.getHandler("register_runtime_target")).toBeTypeOf("function");
-    expect(registry.getHandler("create_work_capsule")).toBeTypeOf("function");
+    expect(registry.getHandler("create_workroom")).toBeTypeOf("function");
     expect(registry.getHandler("workbook_list_tables")).toBeTypeOf("function");
     expect(registry.getHandler("report_quality_issue")).toBeTypeOf("function");
     expect(registry.getHandler("request_self_upgrade")).toBeTypeOf("function");
@@ -413,23 +412,10 @@ describe("executeTool inline-case ratchet", () => {
 // This sweep is registry-driven rather than hand-listed, so it covers packs
 // that do not exist yet.
 describe("tool-pack grant coverage (registry-wide)", () => {
-  // Shrinking baseline — BI-F998BCE8. These seven are the same defect, but
-  // their packs declare `grants: {}` with an "Ungated (self-scoped)" intent
-  // the gating layer cannot currently express (there is no "no grant needed"
-  // value, only listed-or-denied). Resolving that is a deliberate call on the
-  // gating contract, not a drive-by; until then they are quarantined here so a
-  // NEW ungated tool still fails loudly.
-  //
-  // This list may only shrink. Closing BI-F998BCE8 means emptying it and
-  // deleting the allowance below.
+  // Two host-surface telemetry tools remain outside coworker identity scope.
+  // Self-scoped coworker tools must carry an explicit [] mapping: present and
+  // intentionally universal, rather than absent and denied by default.
   const KNOWN_UNGATED_BI_F998BCE8 = [
-    "coworker-goal:evaluate_task_goal",
-    "coworker-goal:list_task_goals",
-    "coworker-goal:set_task_goal",
-    "coworker-memory:list_working_notes",
-    "coworker-memory:record_working_note",
-    "effort-context:read_effort_context",
-    "effort-context:record_effort_context",
     // BI-D6DFC0E7: benign self-report telemetry — a surface reporting its OWN
     // toolchain readiness (and reading the fleet roll-up) cannot exceed its
     // authority or affect anyone else, mirroring propose_improvement.
@@ -468,5 +454,10 @@ describe("tool-pack grant coverage (registry-wide)", () => {
       }
     }
     expect(drifted, `pack grant metadata drifted from TOOL_TO_GRANTS: ${drifted.join(", ")}`).toEqual([]);
+  });
+
+  it("allows explicitly self-scoped tools while unknown tools remain denied", () => {
+    expect(isToolAllowedByGrants("record_working_note", ["registry_read"])).toBe(true);
+    expect(isToolAllowedByGrants("unknown_self_scoped_tool", ["registry_read"])).toBe(false);
   });
 });

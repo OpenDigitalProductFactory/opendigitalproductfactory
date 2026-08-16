@@ -61,6 +61,13 @@ describe("statusColors", () => {
     expect(resolveIntent("complaintStatus", "resolved")).toBe("success");
   });
 
+  it("keeps Edge health and trust as separate shared status domains", () => {
+    expect(resolveIntent("edgeHealth", "healthy")).toBe("success");
+    expect(resolveIntent("edgeHealth", "offline")).toBe("danger");
+    expect(resolveIntent("edgeTrust", "trusted")).toBe("success");
+    expect(resolveIntent("edgeTrust", "quarantined")).toBe("danger");
+  });
+
   it("maps owner decision impact tags through the shared intent registry", () => {
     expect(resolveIntent("ownerDecisionImpact", "money")).toBe("warning");
     expect(resolveIntent("ownerDecisionImpact", "public")).toBe("danger");
@@ -92,9 +99,9 @@ describe("statusColors", () => {
 
   it("maps Work Room state, outcome health, and activity through shared domains", () => {
     expect(resolveIntent("workCaseState", "waiting-on-person")).toBe("warning");
-    expect(resolveIntent("workRoomOutcomeHealth", "at-risk")).toBe("warning");
-    expect(resolveIntent("workRoomActivity", "message")).toBe("neutral");
-    expect(resolveIntent("workRoomActivity", "decision-resolved")).toBe("success");
+    expect(resolveIntent("workroomOutcomeHealth", "at-risk")).toBe("warning");
+    expect(resolveIntent("workroomActivity", "message")).toBe("neutral");
+    expect(resolveIntent("workroomActivity", "decision-resolved")).toBe("success");
   });
 
   // BI-5B2F5447 (D0): the portfolioCoverage badge map is the render side of the

@@ -20,6 +20,12 @@ import { EXCLUDE_TOMBSTONED } from "@dpf/db/customer-lifecycle";
 
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
+import { loadPlatformVersion } from "@/lib/platform/version";
+import {
+  deriveEdgeNodeReadiness,
+  selectMainInstallationNode,
+  type EdgeReadinessNode,
+} from "@/lib/edge-node/readiness";
 
 import { EdgeNodesAdminClient } from "@/components/platform/edge-nodes/EdgeNodesAdminClient";
 
@@ -54,6 +60,11 @@ type EdgeNodeRow = {
   customerAccountName: string | null;
   customerSiteId: string | null;
   customerSiteName: string | null;
+  health: ReturnType<typeof deriveEdgeNodeReadiness>["health"];
+  heartbeatAgeMs: number | null;
+  nextAction: ReturnType<typeof deriveEdgeNodeReadiness>["nextAction"];
+  isMainInstallation: boolean;
+  readinessChecks: ReturnType<typeof deriveEdgeNodeReadiness>["checks"];
 };
 
 /**
@@ -137,6 +148,10 @@ export default async function EdgeNodesAdminPage() {
       principal: { select: { displayName: true } },
       customerAccount: { select: { name: true } },
       customerSite: { select: { name: true } },
+      capabilityRows: {
+        select: { capability: true, mode: true, status: true, reportedAt: true },
+      },
+      consumedTokens: { select: { autoApprove: true } },
     },
   });
 
@@ -176,8 +191,38 @@ export default async function EdgeNodesAdminPage() {
     },
   });
 
-  const nodeRows: EdgeNodeRow[] = nodes.map((n) => {
+  const readinessNodes: EdgeReadinessNode[] = nodes.map((node) => ({
+    id: node.id,
+    nodeId: node.nodeId,
+    platform: node.platform,
+    installMode: node.installMode,
+    version: node.version,
+    storedStatus: node.status,
+    trustState: node.trustState,
+    lastSeenAt: node.lastSeenAt,
+    enrolledAt: node.enrolledAt,
+    customerAccountId: node.customerAccountId,
+    customerSiteId: node.customerSiteId,
+    installerManaged: node.consumedTokens.some((token) => token.autoApprove),
+    capabilities: node.capabilityRows,
+  }));
+  const mainInstallation = selectMainInstallationNode(readinessNodes);
+  const edgeEnabled =
+    process.env.DPF_EDGE_ENABLED === "1" || mainInstallation.status === "found";
+  const platformVersion = await loadPlatformVersion();
+
+  const nodeRows: EdgeNodeRow[] = nodes.map((n, index) => {
     const hostMetadata = readHostMetadata(n.metadata);
+    const readinessNode = readinessNodes[index];
+    if (!readinessNode) {
+      throw new Error(`Missing readiness projection for Edge Node ${n.nodeId}`);
+    }
+    const isMainInstallation = mainInstallation.node?.id === n.id;
+    const readiness = deriveEdgeNodeReadiness(readinessNode, {
+      edgeEnabled,
+      currentVersion: isMainInstallation ? platformVersion.version : null,
+      requiredCapabilities: isMainInstallation ? ["federation.discovery"] : [],
+    });
     return {
       id: n.id,
       nodeId: n.nodeId,
@@ -203,6 +248,11 @@ export default async function EdgeNodesAdminPage() {
       customerAccountName: n.customerAccount?.name ?? null,
       customerSiteId: n.customerSiteId,
       customerSiteName: n.customerSite?.name ?? null,
+      health: readiness.health,
+      heartbeatAgeMs: readiness.heartbeatAgeMs,
+      nextAction: readiness.nextAction,
+      isMainInstallation,
+      readinessChecks: readiness.checks,
     };
   });
 
@@ -241,9 +291,8 @@ export default async function EdgeNodesAdminPage() {
       <div>
         <h1 className="text-xl font-bold text-[var(--dpf-text)]">Edge Nodes</h1>
         <p className="mt-0.5 text-sm text-[var(--dpf-muted)]">
-          Host-resident agents that enroll against this Authority Core and submit discovery
-          observations. Issue one-time bootstrap tokens to onboard new nodes; approve,
-          quarantine, or revoke existing ones from the table below.
+          See this installation&apos;s readiness and manage Edge Nodes enrolled with its Authority
+          Core.
         </p>
       </div>
 
@@ -251,6 +300,8 @@ export default async function EdgeNodesAdminPage() {
         nodes={nodeRows}
         tokens={tokenRows}
         customerAccounts={customerAccountOptions}
+        edgeEnabled={edgeEnabled}
+        mainInstallationStatus={mainInstallation.status}
       />
     </div>
   );

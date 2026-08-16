@@ -13,7 +13,7 @@ const mockPrisma = {
   buildActivity: {
     create: vi.fn(),
   },
-  workCapsule: {
+  workroom: {
     findUnique: vi.fn(),
   },
   featureBuild: {
@@ -22,7 +22,7 @@ const mockPrisma = {
   gitPromotionCandidate: {
     findUnique: vi.fn(),
   },
-  workCapsuleActivity: {
+  workroomActivity: {
     create: vi.fn(),
   },
   $transaction: vi.fn(async (fn: (tx: typeof mockPrisma) => Promise<unknown>) => fn(mockPrisma)),
@@ -94,7 +94,7 @@ describe("runtime coordination MCP tools", () => {
       id: "target-row-1",
       targetId: "RT-ROOT-PORTAL",
     });
-    mockPrisma.workCapsule.findUnique.mockResolvedValueOnce({
+    mockPrisma.workroom.findUnique.mockResolvedValueOnce({
       id: "capsule-row-1",
       capsuleId: "WC-RUNTIME",
     });

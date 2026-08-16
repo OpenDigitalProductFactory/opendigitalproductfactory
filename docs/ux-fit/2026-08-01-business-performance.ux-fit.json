@@ -1,0 +1,20 @@
+{
+  "version": "1",
+  "decidedOption": "progressive-disclosure",
+  "decisionInteractionId": "DI-073C131559E8",
+  "scope": {
+    "files": [
+      "apps/web/app/(shell)/performance/page.tsx",
+      "apps/web/components/performance/BusinessPerformanceDashboard.tsx",
+      "apps/web/components/performance/PerformanceTrendPanel.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "progressive-disclosure",
+      "dense-grid",
+      "separate-audit-route"
+    ]
+  }
+}

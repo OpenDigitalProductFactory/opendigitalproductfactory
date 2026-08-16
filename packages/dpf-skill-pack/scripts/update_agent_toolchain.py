@@ -18,6 +18,7 @@ import subprocess
 import sys
 from pathlib import Path
 from typing import Any, Optional
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 
 PLUGIN_NAME = "dpf-platform"
@@ -25,6 +26,22 @@ CODEX_PLUGIN_ID = f"{PLUGIN_NAME}@personal"
 MARKETPLACE_NAME = "dpf-platform-local"
 TOKEN_ENV_VAR = "DPF_MCP_BEARER_TOKEN"
 DEFAULT_MCP_URL = "http://127.0.0.1:3000/api/mcp/v1"
+
+
+def with_mcp_catalog_tier(mcp_url: str, tier: str) -> str:
+    """Set DPF's explicit catalog tier while preserving other query state."""
+    if tier not in {"core", "full"}:
+        raise ValueError(f"Unsupported DPF MCP catalog tier: {tier}")
+    parsed = urlsplit(mcp_url)
+    query = [
+        (key, value)
+        for key, value in parse_qsl(parsed.query, keep_blank_values=True)
+        if key != "tier"
+    ]
+    query.append(("tier", tier))
+    return urlunsplit(
+        (parsed.scheme, parsed.netloc, parsed.path, urlencode(query), parsed.fragment)
+    )
 
 
 def home_dir() -> Path:
@@ -623,11 +640,12 @@ def ensure_codex_config(
         [f"enabled = {'false' if desired_enabled is False else 'true'}"],
     )
     text = disable_competitive_codex_plugins(text, codex_competitive_plugin_ids(skill_pack))
+    lazy_host_mcp_url = with_mcp_catalog_tier(mcp_url, "full")
     text = upsert_toml_table(
         text,
         "[mcp_servers.dpf]",
         [
-            f'url = "{mcp_url}"',
+            f'url = "{lazy_host_mcp_url}"',
             f'bearer_token_env_var = "{TOKEN_ENV_VAR}"',
             "enabled = true",
         ],
@@ -639,12 +657,13 @@ def ensure_codex_config(
 
 def ensure_claude_repo_mcp_config(skill_pack_path: Path, mcp_url: str, dry_run: bool) -> bool:
     """Keep the packaged Claude MCP descriptor current for standalone installs."""
+    lazy_host_mcp_url = with_mcp_catalog_tier(mcp_url, "full")
     content = json.dumps(
         {
             "mcpServers": {
                 "dpf": {
                     "type": "http",
-                    "url": "${DPF_MCP_URL:-" + mcp_url + "}",
+                    "url": "${DPF_MCP_URL:-" + lazy_host_mcp_url + "}",
                     "headers": {"Authorization": "Bearer ${DPF_MCP_BEARER_TOKEN:-}"},
                 }
             }
@@ -1305,7 +1324,10 @@ CODEX_BASH_GUARDS = (
     "pregate-invocation-guard.mjs",
 )
 CODEX_ASK_GUARDS = ("decision-routing-guard.mjs",)
-CODEX_WRITE_GUARDS = ("plan-backlog-coverage-guard.mjs",)
+CODEX_WRITE_GUARDS = (
+    "root-clone-guard.mjs",
+    "plan-backlog-coverage-guard.mjs",
+)
 
 
 def codex_hooks_file(home: Path) -> Path:

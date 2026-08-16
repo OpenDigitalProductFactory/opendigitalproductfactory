@@ -27,34 +27,30 @@ const mocks = vi.hoisted(() => ({
   getLatestRun: vi.fn(),
   getLatestSucceededRun: vi.fn(),
   runPromoter: vi.fn(),
-  // Retained for back-compat; the precheck no longer calls it (it always rebuilds).
   isPromoterAvailable: vi.fn().mockResolvedValue(true),
-  // The precheck ALWAYS rebuilds the promoter before a swap, so the default is a
-  // successful rebuild; a test opts into failure to exercise the skip path.
   ensurePromoterImage: vi
     .fn()
     .mockResolvedValue({ ok: true, alreadyPresent: false, built: true }),
   buildCandidatePromoterImage: vi.fn().mockResolvedValue("dpf-promoter:abc1234deadbeef"),
   resolvePromoterArtifact: vi.fn(),
   runPromoterReadiness: vi.fn(),
-  // Cooldown backoff (this fix): no active cooldown by default.
   getCooldownUntil: vi.fn().mockResolvedValue(null),
   recordCooldown: vi.fn().mockResolvedValue(undefined),
   clearCooldown: vi.fn().mockResolvedValue(undefined),
+  // Host-memory-headroom guard (BI-EFA383AA): mock so the unit test never reads
+  // real host memory. The real guard calls os.freemem(), which under-reports on
+  // macOS (cache-heavy) and defers the whole suite on any memory-constrained
+  // host. Default to "enough headroom"; the defer path is exercised via override.
+  evaluateHostMemoryGuard: vi.fn().mockResolvedValue({ defer: false }),
   emitUpgradeEvent: vi.fn(),
   createSelfUpgradeRecoveryPoint: vi.fn(),
   summarizeRecoveryPointFailure: vi.fn(),
-  // BI-QUIESCE-010 — caller API consumed by runSelfUpgrade.
   startQuiescence: vi.fn(),
   signalSwapStarting: vi.fn(),
   signalSwapComplete: vi.fn(),
   failQuiescenceSwap: vi.fn(),
-  // Activity precheck snapshot (BI-F36E7510). Default empty so existing tests
-  // proceed to the drain exactly as before; the new skip-path test overrides it.
   captureActiveSessionBlockers: vi.fn().mockResolvedValue({ surfaces: [] }),
-  // 24/7 auto-window resolution (BI-A6382FB9). Default "operating-hours" so the
-  // gate behaves exactly as before (falls through to the mocked isUpgradeWindowOpen);
-  // the 24/7 tests override it.
+  // 24/7 auto-window resolution defaults to operating hours.
   resolveAutoUpgradeWindow: vi.fn().mockReturnValue({ kind: "operating-hours" }),
   // Operator blackout gate (BI-59591B14). Default null = no active blackout, so
   // every existing scheduled test proceeds exactly as before.
@@ -155,6 +151,14 @@ vi.mock("@/lib/self-upgrade/cooldown", () => ({
   isInCooldown: (until: Date | null, now: Date) =>
     !!until && now.getTime() < until.getTime(),
   DEFAULT_COOLDOWN_MINUTES: 30,
+}));
+
+// BI-EFA383AA: override only evaluateHostMemoryGuard (real impl reads os.freemem);
+// keep every other export real via importActual so formatGiB / checkHostMemoryHeadroom
+// / constants are unaffected.
+vi.mock("@/lib/self-upgrade/host-memory-preflight", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/self-upgrade/host-memory-preflight")>()),
+  evaluateHostMemoryGuard: mocks.evaluateHostMemoryGuard,
 }));
 
 vi.mock("@/lib/self-upgrade/notifications", () => ({
@@ -463,12 +467,21 @@ describe("success path", () => {
     );
   });
 
-  it("skips with up-to-date when the running build already contains the upstream SHA", async () => {
+  it("skips only when both upstream lineage and deployed identity match", async () => {
     mocks.getLatestSucceededRun.mockResolvedValue({ targetSha: "abc1234deadbeef" });
+    mocks.getDeployedSha.mockResolvedValue("abc1234deadbeef");
     const result = await runSelfUpgrade({ triggeredBy: "scheduled" });
     expect(result).toMatchObject({ skipped: true, reason: "up-to-date" });
     expect(mocks.prepareUpgradeSource).not.toHaveBeenCalled();
     expect(mocks.runPromoter).not.toHaveBeenCalled();
+    vi.clearAllMocks();
+    setupSourceReady();
+    setupQuiescenceReady();
+    mocks.getLatestSucceededRun.mockResolvedValue({ targetSha: "abc1234deadbeef" });
+    mocks.getDeployedSha.mockResolvedValue("synthetic-local-merge-sha");
+    await runSelfUpgrade({ triggeredBy: "ops" });
+    expect(mocks.prepareUpgradeSource).toHaveBeenCalled();
+    expect(mocks.runPromoter).toHaveBeenCalled();
   });
 
   it("skips BEFORE draining when activity is in flight — no drain/defer/cooldown cycle (BI-F36E7510)", async () => {
@@ -1295,6 +1308,32 @@ describe("skip-before-drain guards", () => {
         targetBundleHash: "abc1234deadbeef",
       }),
     );
+  });
+
+  // BI-EFA383AA: host-memory defer path, driven by the mocked guard so the
+  // assertion is host-independent (the real guard reads os.freemem and would
+  // otherwise flip this test on macOS/low-memory hosts). Defers BEFORE draining
+  // and records a cooldown so the next tick retries once memory recovers.
+  it("defers with host-memory-pressure BEFORE draining and records a cooldown", async () => {
+    mocks.evaluateHostMemoryGuard.mockResolvedValueOnce({
+      defer: true,
+      reason: "host memory 1.50GiB < required 2.00GiB",
+      extra: { availableBytes: 1_610_612_736, requiredBytes: 2_147_483_648, memorySource: "os-freemem" },
+    });
+
+    const result = await runSelfUpgrade({ triggeredBy: "scheduled", scheduled: true });
+
+    expect(result).toMatchObject({ skipped: true, reason: "host-memory-pressure" });
+    expect(mocks.recordCooldown).toHaveBeenCalled();
+    // Deferred before the drain — the guard sits right before startQuiescence.
+    expect(mocks.startQuiescence).not.toHaveBeenCalled();
+  });
+
+  it("proceeds to drain when the host-memory guard reports enough headroom", async () => {
+    // Default mock is { defer: false }; the happy path must reach the drain.
+    await runSelfUpgrade({ triggeredBy: "ops" });
+    expect(mocks.evaluateHostMemoryGuard).toHaveBeenCalled();
+    expect(mocks.startQuiescence).toHaveBeenCalled();
   });
 });
 

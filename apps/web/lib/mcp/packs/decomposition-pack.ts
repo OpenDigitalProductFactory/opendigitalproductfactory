@@ -129,12 +129,24 @@ const definitions: ToolDefinition[] = [
   },
   {
     name: "record_plan_backlog_coverage",
-    description: "Validate that every independently shippable plan deliverable maps to a live BacklogItem, or record an auditable rationale that the phased plan is atomic. Writes a structured coverage receipt to the umbrella BacklogItem. Use before implementation starts and copy the returned receipt and dependency mapping into the plan. Missing mappings, missing items, and invalid atomic claims fail without writing a receipt.",
+    description: "Write plan-coverage v2 after validating that every independently shippable deliverable maps to a live BacklogItem, has four-way traceability, and is bound to one provider-verified immutable plan blob whose digest the server derives. Missing mappings, stale artifacts, incomplete traceability, dependency cycles, and invalid atomic claims fail without writing a receipt.",
     inputSchema: {
       type: "object",
       properties: {
         itemId: { type: "string", description: "Umbrella BacklogItem ID (BI-*)." },
         planPath: { type: "string", description: "Repository-relative implementation plan path." },
+        planArtifactRef: {
+          type: "object",
+          description: "Immutable repository plan locator. The server resolves and stores its digest.",
+          properties: {
+            kind: { type: "string", enum: ["repo-blob-at-commit"] },
+            repositoryFullName: { type: "string" },
+            commitSha: { type: "string" },
+            path: { type: "string" },
+            providerBlobId: { type: "string" },
+          },
+          required: ["kind", "repositoryFullName", "commitSha", "path", "providerBlobId"],
+        },
         decision: { type: "string", enum: ["decomposed", "atomic"], description: "Whether independent work is mapped to BIs or the plan is deliberately atomic." },
         rationale: { type: "string", description: "Required for atomic: why no phase is independently shippable." },
         deliverables: {
@@ -147,12 +159,16 @@ const definitions: ToolDefinition[] = [
               independentlyShippable: { type: "boolean" },
               backlogItemId: { type: "string", description: "Existing or newly filed BI for an independent deliverable." },
               dependsOn: { type: "array", items: { type: "string" } },
+              requirementRefs: { type: "array", items: { type: "string" } },
+              contractRefs: { type: "array", items: { type: "string" } },
+              flowRefs: { type: "array", items: { type: "string" } },
+              verificationRefs: { type: "array", items: { type: "string" } },
             },
-            required: ["key", "title", "independentlyShippable", "dependsOn"],
+            required: ["key", "title", "independentlyShippable", "dependsOn", "requirementRefs", "contractRefs", "flowRefs", "verificationRefs"],
           },
         },
       },
-      required: ["itemId", "planPath", "decision", "deliverables"],
+      required: ["itemId", "planPath", "planArtifactRef", "decision", "deliverables"],
     },
     requiredCapability: "manage_backlog",
     sideEffect: true,
@@ -363,6 +379,7 @@ async function recordPlanBacklogCoverageTool(
   const planPath = String(params["planPath"] ?? "");
   const decision = params["decision"];
   const deliverables = params["deliverables"];
+  const planArtifactRef = params["planArtifactRef"];
   if (!itemId.startsWith("BI-")) {
     return { success: false, error: "invalid_itemId", message: "itemId must use the BI-* format." };
   }
@@ -379,10 +396,14 @@ async function recordPlanBacklogCoverageTool(
   if (!Array.isArray(deliverables)) {
     return { success: false, error: "invalid_deliverables", message: "deliverables must be an array." };
   }
+  if (!planArtifactRef || typeof planArtifactRef !== "object") {
+    return { success: false, error: "invalid_plan_artifact", message: "planArtifactRef is required." };
+  }
   const { recordPlanBacklogCoverage } = await import("@/lib/planning/plan-backlog-coverage");
   const result = await recordPlanBacklogCoverage({
     itemId,
     planPath,
+    planArtifactRef: planArtifactRef as Parameters<typeof recordPlanBacklogCoverage>[0]["planArtifactRef"],
     decision,
     rationale: typeof params["rationale"] === "string" ? params["rationale"] : undefined,
     deliverables: deliverables as Parameters<typeof recordPlanBacklogCoverage>[0]["deliverables"],

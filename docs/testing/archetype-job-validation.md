@@ -13,7 +13,7 @@ one: where people work and do specific jobs has a virtual counterpart. For
 born-virtual work the mapping is direct. For physical work, jobs are organized
 by **expected outcome** — cooking the food, seating the guest, taking orders
 and serving, paying the employees — and each outcome maps to a working surface
-(a standing Work Room per ongoing outcome, a finite room per bounded one) with
+(a standing Workroom per ongoing outcome, a finite room per bounded one) with
 the people and AI coworkers who own that outcome inside its boundary. The
 underlying substrate exists (Work Cases/Rooms, workspace homes, roles,
 coworkers); the current phase is TAILORING it per archetype, per job, per
@@ -23,7 +23,7 @@ virtual room serve its physical outcome better than working without it?
 First exercised live on the restaurant archetype, 2026-07-29 (goal thread:
 restaurant-owner overnight exercise). Companion substrate:
 
-- **Work Rooms** (`docs/superpowers/specs/2026-07-26-work-rooms-collaboration-design.md`,
+- **Workrooms** (`docs/superpowers/specs/2026-07-26-work-rooms-collaboration-design.md`,
   EP-2984B02B) — the collaboration surface a job uses for active work.
 - **Workspace home profiles** (`apps/web/lib/workspace-home/profiles.ts`) —
   archetype-category tailoring of the signed-in home.

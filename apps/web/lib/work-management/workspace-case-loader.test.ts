@@ -45,6 +45,9 @@ function prismaFor(items: WorkItemFixture[], detail: WorkItemFixture | null = it
         },
       ],
     },
+    workroom: {
+      findMany: async () => [],
+    },
   };
 }
 
@@ -140,7 +143,7 @@ describe("workspace Work Case loader", () => {
 
   it("loads the current cycle, completed packets, and governed receipts from canonical child records", async () => {
     const boundary = (cycleKey: string) => ({
-      workRoomCycle: {
+      workroomCycle: {
         kind: "work-room-cycle",
         version: 1,
         cycleKey,
@@ -232,6 +235,9 @@ describe("workspace Work Case loader", () => {
           createdAt: new Date("2026-08-01T16:00:00.000Z"),
         }],
       },
+      workroom: {
+        findMany: async () => [],
+      },
     };
 
     const detail = await loadWorkspaceWorkCaseDetail({
@@ -266,6 +272,9 @@ describe("workspace Work Case loader", () => {
           throw new Error("Messages must not load for an inaccessible room.");
         },
       },
+      workroom: {
+        findMany: async () => [],
+      },
     };
 
     const detail = await loadWorkspaceWorkCaseDetail({
@@ -284,7 +293,7 @@ describe("workspace Work Case loader", () => {
       ...baseItem,
       evidence: [{
         kind: "work-room-policy",
-        workRoomPolicy: {
+        workroomPolicy: {
           admittedPrincipalRefs: ["PRN-USER-1"],
           sensitivityCeiling: "confidential",
         },
@@ -316,7 +325,7 @@ describe("workspace Work Case loader", () => {
     const itemWithParticipantPolicy = {
       ...baseItem,
       evidence: [{
-        workRoomPolicy: {
+        workroomPolicy: {
           participants: [{
             principalRef: "PRN-REVIEWER",
             roles: ["reviewer"],

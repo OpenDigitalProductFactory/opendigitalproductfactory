@@ -5,7 +5,7 @@ pageKind: principle
 status: published
 abstract: Work tracking and activity coordination live in the DPF MCP substrate — the executor-agnostic source of truth that every delivery surface writes to, regardless of Build Studio. If it isn't in the MCP plane, it didn't happen.
 principleTier: core
-principleDirection: Claim a capsule and record gate evidence through the DPF MCP plane for every unit of work, on every surface; a surface that works without claiming a capsule and recording evidence is invisible to coordination and cannot advance a gate.
+principleDirection: Claim a workroom and record gate evidence through the DPF MCP plane for every unit of work, on every surface; a surface that works without claiming a workroom and recording evidence is invisible to coordination and cannot advance a gate.
 principleDimensionVector: {"governance_compliance": 0.9, "evidence_density": 0.8, "long_term_maintainability": 0.6, "blast_radius": -0.5}
 principleAppliesTo:
   - in_platform_coworker

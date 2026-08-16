@@ -1,0 +1,70 @@
+{
+  "version": "1",
+  "accountableOwner": "data-steward",
+  "affectedCopies": [
+    "BusinessMetricRollup is a tenant-scoped derived read model over canonical bookings, hospitality service turns, allocations, resources, and confirmed business hours; none of those operational authorities move into the rollup.",
+    "The owner/manager dashboard and CSV export contain aggregate metric values, availability reasons, definition versions, freshness, and model-level lineage only. Customer, staff, booking, table, demand, and actor identifiers are excluded.",
+    "A failed refresh preserves the prior valid rows. Re-running the current and prior local-business day replaces only the identical organization/metric/period/dimensions/definition-version projection.",
+    "The Performance route resolves Organization from the authenticated user's setup context. A legacy single-organization install may use its sole configured storefront; an unmapped user in a multi-organization install is refused before any rollup query."
+  ],
+  "migration": {
+    "name": "20260801010000_add_business_metric_rollup + 20260812020500_type_business_metric_rollup_closed_sets",
+    "backfill": "The first migration is additive and creates an empty rollup table. The forward-only follow-up converts unit and availability to their closed Prisma/PostgreSQL enums without changing values. The hourly idempotent aggregator populates current and prior periods after deploy. Rollback disables the aggregator and Performance reader while retaining canonical operational evidence; removing derived rows is safe only through the organization lifecycle or an explicit projection rebuild."
+  },
+  "tests": [
+    "apps/web/lib/performance/business-metric-rollup.test.ts",
+    "apps/web/lib/performance/business-metric-rollup.server.test.ts",
+    "apps/web/lib/performance/business-performance-provider.test.ts",
+    "apps/web/lib/performance/performance-decision-summary.test.ts",
+    "apps/web/lib/performance/performance-export.test.ts",
+    "apps/web/lib/performance/performance-format.test.ts",
+    "apps/web/components/performance/BusinessPerformanceDashboard.test.tsx",
+    "apps/web/app/(shell)/performance/page.test.tsx",
+    "apps/web/lib/govern/data/assets.test.ts",
+    "apps/web/lib/govern/data/coverage.live.test.ts",
+    "packages/db/scripts/migration-safety-guard.mjs",
+    "scripts/check-data-impact.mjs"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:business-metric-rollup",
+      "prismaModel": "BusinessMetricRollup",
+      "lifecycleDisposition": "derived business record — retained under the owning organization for historical comparison, rebuilt idempotently from source authorities, and removed only with the owning organization or an explicit governed projection rebuild",
+      "fields": [
+        {
+          "fieldId": "data:business-metric-rollup#identity-and-scope",
+          "resolution": "inherited",
+          "reason": "id, organizationId, metricKey, period bounds, timezone, dimensionsHash, dimensions, and definitionVersion form the tenant-scoped reproducible projection identity",
+          "provenance": "Prisma identity plus the code-owned archetype metric catalog"
+        },
+        {
+          "fieldId": "data:business-metric-rollup#value-and-availability",
+          "resolution": "governed",
+          "reason": "aggregate values and explicit unavailable reasons can reveal confidential operating and financial performance even though they exclude row-level subjects",
+          "provenance": "idempotent business-metrics aggregator over canonical organization-owned sources",
+          "flags": [
+            "sensitive"
+          ],
+          "fieldPolicy": "owner/manager capability only, organization-scoped, local-only, and exported only as aggregate values for the selected period"
+        },
+        {
+          "fieldId": "data:business-metric-rollup#lineage-and-freshness",
+          "resolution": "governed",
+          "reason": "sourceWatermark, sourceLineage, computedAt, createdAt, and updatedAt make metric freshness and provenance auditable without copying source-row identifiers",
+          "provenance": "hourly rollup receipt and allow-listed model-level lineage",
+          "flags": [
+            "sensitive"
+          ],
+          "fieldPolicy": "organization-scoped audit metadata; lineage is restricted to source model names, aggregate row counts, and storefront scope"
+        },
+        {
+          "fieldId": "data:business-metric-rollup#organization",
+          "resolution": "inherited",
+          "reason": "the owning relation enforces tenant lifecycle and cascade semantics",
+          "provenance": "Prisma foreign key to Organization"
+        }
+      ]
+    }
+  ]
+}

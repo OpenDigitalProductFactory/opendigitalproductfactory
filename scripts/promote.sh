@@ -404,6 +404,38 @@ if [[ $_dry_run -eq 0 ]]; then
     "${_f_args[@]}" run --rm -T --no-deps --entrypoint sh portal \
     -c 'cd /app && pnpm --filter @dpf/db exec prisma migrate resolve --rolled-back 20260714110000_bet5_pgvector_foundation' >/dev/null 2>&1 || true
 
+  # BI-2BD99239: a pre-fix upgrade can leave the human-principal backfill
+  # failed at zero steps on the PrincipalAlias uniqueness collision. The
+  # candidate-owned checker proves the exact migration bytes, SQLSTATE,
+  # constraint, zero-step ledger state, and the exact preceding corrective
+  # migration bytes. Only that state may be rolled back so normal deploy can
+  # apply the preparation migration first and then retry the immutable backfill.
+  _human_principal_recovery="$(
+    docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$PROMOTE_SOURCE" -p "$_project" \
+      "${_f_args[@]}" run --rm -T --no-deps --entrypoint sh portal \
+      -c 'cd /app && node packages/db/scripts/recover-human-principal-backfill-migration.mjs'
+  )" || {
+    printf 'error: human-principal migration recovery did not prove a safe state\n' >&2
+    exit 1
+  }
+  case "$_human_principal_recovery" in
+    recover:*)
+      _human_principal_migration_id="${_human_principal_recovery#recover:}"
+      docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$PROMOTE_SOURCE" -p "$_project" \
+        "${_f_args[@]}" run --rm -T --no-deps --entrypoint sh portal \
+        -c 'cd /app && pnpm --filter @dpf/db exec prisma migrate resolve --rolled-back 20260812110000_backfill_missing_human_principals'
+      docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$PROMOTE_SOURCE" -p "$_project" \
+        "${_f_args[@]}" run --rm -T --no-deps --entrypoint sh portal \
+        -c 'cd /app && node packages/db/scripts/recover-human-principal-backfill-migration.mjs --verify-rolled-back "$1"' \
+        sh "$_human_principal_migration_id"
+      ;;
+    not-needed) ;;
+    *)
+      printf 'error: human-principal migration recovery returned an unknown decision\n' >&2
+      exit 1
+      ;;
+  esac
+
   # BI-B92CFED7: a pre-fix self-upgrade can leave the 11:59 observation
   # snapshot failed at its first UPDATE because a corrupted unique index still
   # contains duplicate heap keys. The candidate-owned checker proves the exact

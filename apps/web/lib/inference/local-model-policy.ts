@@ -181,7 +181,24 @@ export interface LocalModelTier {
 
 export const LOCAL_MODEL_TIERS: readonly LocalModelTier[] = [
   { model: "ai/qwen3-coder-next", weightsGb: 48, label: "Qwen3-Coder-Next 80B (MoE, 3B active)" }, // big unified (Apple 128 GB) / 64 GB+ discrete
-  { model: "ai/qwen3.6:35B-A3B-UD-Q4_K_M", weightsGb: 22, label: "Qwen3.6 35B-A3B (MoE)" },
+  // Qwen3.8-27B replaces the Qwen3.6 35B-A3B tier it outranks on task completeness.
+  // DENSE 27B (all params active per token), so it is ~4x slower per turn than the
+  // MoE tiers around it — measured 10.3s vs 2.6s mean at 30-45 attached tools on an
+  // M5 Max. That trade is deliberate: the operator criterion for the local tier is a
+  // thorough, trustworthy result rather than time-to-answer (2026-08-16).
+  //
+  // Ranked ABOVE the 30B coder despite being the newer/smaller-footprint model
+  // because the ladder is "largest that fits" and quality here does not track size:
+  // a host that could run the 35B gets this instead.
+  //
+  // Pulled from HuggingFace, not the curated `ai/` namespace — `ai/qwen3.8` publishes
+  // only the 2.4T-A95B "Max" (1.31 TB). ggml-org is llama.cpp's own org, i.e. first-
+  // party to the runtime DMR embeds. Revisit if/when an `ai/qwen3.8:27b` tag lands.
+  // Verified 2026-08-16: this id resolves to quality tier `strong` (required by
+  // default coworkers) and capability family `qwen` (toolFidelity 80) in BOTH the
+  // pull form and the runtime form DMR registers. It does NOT yet resolve as
+  // vision-capable despite being a native VLM — see BI-C2EFF855.
+  { model: "hf.co/ggml-org/Qwen3.8-27B-GGUF:Q4_K_M", weightsGb: 18, label: "Qwen3.8 27B (dense)" },
   { model: "ai/qwen3-coder", weightsGb: 16, label: "Qwen3-Coder 30B (MoE, 3B active)" }, // the 24 GB-card sweet spot (measured ~20.7 GB @ 24k ctx)
   { model: "ai/qwen3:14B-Q6_K", weightsGb: 12, label: "Qwen3 14B" },
   { model: "ai/qwen3:8B-Q4_K_M", weightsGb: 6, label: "Qwen3 8B" },
@@ -242,6 +259,10 @@ export function estimateModelVramGb(modelId: string): number | null {
   // qwen3-coder's short DMR name carries no size hint but is the 30B-A3B build
   // model (observed ~16.5 GB resident). Match it explicitly before param-size.
   if (/qwen3-coder/.test(id)) return 16;
+  // Qwen3.8-27B dense — measured 17.66 GiB resident via Docker Model Runner.
+  // Must precede the generic param-size rules: the id carries "27b", which none
+  // of them match, and would otherwise fall through to null.
+  if (/qwen3\.8/.test(id)) return 18;
   if (/80b/.test(id)) return 48;
   if (/35b/.test(id)) return 22;
   if (/30b/.test(id)) return 16; // qwen3 30B-A3B observed ~16.5 GB

@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@dpf/db", () => ({
   prisma: {
-    workCapsule: { findUnique: vi.fn() },
+    workroom: { findUnique: vi.fn() },
     featureBuild: { findUnique: vi.fn(), findFirst: vi.fn() },
   },
 }));
@@ -36,7 +36,7 @@ describe("resolveRouteBuildId", () => {
   it("returns the explicit buildId unchanged (no route lookup)", async () => {
     const id = await resolveRouteBuildId({ buildId: "BUILD-1", routeContext: "/build/x", userId: "u1" });
     expect(id).toBe("BUILD-1");
-    expect(prisma.workCapsule.findUnique).not.toHaveBeenCalled();
+    expect(prisma.workroom.findUnique).not.toHaveBeenCalled();
     expect(prisma.featureBuild.findFirst).not.toHaveBeenCalled();
   });
 
@@ -47,7 +47,7 @@ describe("resolveRouteBuildId", () => {
   });
 
   it("resolves the capsule's linked build on a /build/work/<capsule> route", async () => {
-    asMock(prisma.workCapsule.findUnique).mockResolvedValueOnce({ featureBuildId: "fb-1" });
+    asMock(prisma.workroom.findUnique).mockResolvedValueOnce({ featureBuildId: "fb-1" });
     asMock(prisma.featureBuild.findUnique).mockResolvedValueOnce({ buildId: "BUILD-CAP" });
     const id = await resolveRouteBuildId({ routeContext: "/build/work/WC-ABC123", userId: "u1" });
     expect(id).toBe("BUILD-CAP");

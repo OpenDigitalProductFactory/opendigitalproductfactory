@@ -174,6 +174,13 @@ export const PRINCIPLE_DIMENSIONS = [
   // discipline that caught the never-wipe-db inversion.
   "operator_effort", // COST: how many operator operations + elapsed time to the outcome
   "legibility_of_consequence", // benefit: can the operator foresee what an action will do before authorizing it
+  // EP-1C37C089: shared constitutional-alignment currency. These describe how
+  // strongly an option fits an organization's declared direction; they never
+  // grant authority or imply specialist competence.
+  "mission_fit",
+  "market_fit",
+  "product_fit",
+  "gtm_fit",
 ] as const;
 export type PrincipleDimension = (typeof PRINCIPLE_DIMENSIONS)[number];
 

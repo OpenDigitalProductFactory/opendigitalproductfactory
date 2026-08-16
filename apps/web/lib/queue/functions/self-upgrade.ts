@@ -342,12 +342,13 @@ export async function runSelfUpgrade(
     const head = await gitRun(buildRemoteHeadCommand({ hostSourcePath, remote, branch }).slice(1));
     upstreamSha = head.code === 0 ? head.stdout.trim() : null;
     if (!upstreamSha) return await skipAttempt("no-target");
-
     const lastOk = await getLatestSucceededRun();
     if (!params.dryRun && !params.force && lastOk?.targetSha === upstreamSha) {
-      return await skipAttempt("up-to-date", `up-to-date: ${upstreamSha}`, { upstreamSha });
+      const deployedSha = await getDeployedSha();
+      if (deployedSha?.toLowerCase() === upstreamSha.toLowerCase()) {
+        return await skipAttempt("up-to-date", `up-to-date: ${upstreamSha}`, { upstreamSha });
+      }
     }
-
     // Release-batching gate — ROUTINE triggers only (the scheduled cron and
     // agent-requested runs; see SelfUpgradeRunEventData.routine). Every upgrade
     // drains the portal, so upgrading on any single new commit costs one full

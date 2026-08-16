@@ -21,7 +21,7 @@ import { requireCapability } from "@/lib/actions/shared/guards";
 import { promoteStanceMaterial } from "@/lib/decision-perspective/stance-promotion";
 import type { DecisionDomainClass } from "@/lib/decision-perspective/types";
 import { storeWikiPage } from "@/lib/wiki/embeddings";
-import { decisionReviewIdentity } from "@/lib/decision/review-identity";
+import { clusterDecisionReviewRowsSemantic } from "@/lib/decision/review-clustering";
 import {
   buildStandingStancePage,
   validateOrgDecisionCapture,
@@ -106,21 +106,27 @@ export async function captureOrgDecisionOutcome(
 
   const capturedAt = new Date().toISOString();
   const rationale = v.rationale ?? v.answer;
+  // BI-932C2A81: cluster membership is re-derived here, server-side, from the
+  // same function the review page renders with — never taken from the client —
+  // so what the card promised to close is what actually closes. The domainClass
+  // filter is gone deliberately: BI-F5F2869D made domain a prior rather than a
+  // gate because the same question gets bucketed differently by different
+  // callers, and re-imposing the split here would strand the siblings again.
   const clusterCandidates = await prisma.decisionInteraction.findMany({
     where: {
       profileId: row.profileId,
-      domainClass: row.domainClass,
       outcomeType: { in: ["defer", "escalate"] },
       buildId: null,
       routeContext: "/coworker-business",
       humanOutcome: { equals: Prisma.DbNull },
     },
+    orderBy: { createdAt: "desc" },
     select: { id: true, profileId: true, domainClass: true, question: true },
   });
-  const selectedReviewIdentity = decisionReviewIdentity(row);
-  const clusterIds = clusterCandidates
-    .filter((candidate) => decisionReviewIdentity(candidate) === selectedReviewIdentity)
-    .map((candidate) => candidate.id);
+  const { clusters } = await clusterDecisionReviewRowsSemantic(clusterCandidates);
+  const clusterIds = (
+    clusters.find((cluster) => cluster.members.some((member) => member.id === row.id))?.members ?? []
+  ).map((member) => member.id);
   // The selected row came from the same unresolved query shape. Keep the
   // operation safe under a concurrent reviewer even if it disappeared between
   // reads: the selected id remains the capture target and update predicates

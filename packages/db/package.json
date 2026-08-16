@@ -40,6 +40,7 @@
     "./local-model-capabilities": "./src/local-model-capabilities.ts",
     "./provider-compliance-source-registry": "./src/provider-compliance-source-registry.ts",
     "./hive-contribution-settings": "./src/hive-contribution-settings.ts",
+    "./device-fingerprint-contribution": "./src/device-fingerprint-contribution.ts",
     "./location-normalize": "./src/location-normalize.ts",
     "./eu-jurisdictions": "./src/eu-jurisdictions.ts",
     "./sovereignty-assessment": "./src/sovereignty-assessment.ts",
@@ -100,7 +101,7 @@
     "undici": "^8.9.0"
   },
   "devDependencies": {
-    "@types/pg": "^8.20.0",
+    "@types/pg": "^8.21.0",
     "@types/picomatch": "^4.0.2",
     "@vitest/coverage-v8": "^4.1.10",
     "picomatch": "^4.0.5",

@@ -17,6 +17,7 @@
 
 import { composeToolPacks } from "./tool-registry";
 import { deliberationSiemPack } from "./packs/deliberation-siem-pack";
+import { roomMessagingPack } from "./packs/room-messaging-pack";
 import { runtimeCoordinationPack } from "./packs/runtime-coordination-pack";
 import { workCapsulesPack } from "./packs/work-capsules-pack";
 import { workbooksPack } from "./packs/workbooks-pack";
@@ -41,6 +42,7 @@ import { coworkerGoalPack } from "./packs/coworker-goal-pack";
 import { subagentFanoutPack } from "./packs/subagent-fanout-pack";
 import { mdmStewardshipPack } from "./packs/mdm-stewardship-pack";
 import { crmContactsPack } from "./packs/crm-contacts-pack";
+import { crmEnrichmentPack } from "./packs/crm-enrichment-pack";
 import { storefrontActivityPack } from "./packs/storefront-activity-pack";
 import { stockCoveragePack } from "./packs/stock-coverage-pack";
 import { queueAwarenessPack } from "./packs/queue-awareness-pack";
@@ -67,6 +69,7 @@ import { marketingOpsPack } from "./packs/marketing-ops-pack";
 import { coworkerCapabilityPack } from "./packs/coworker-capability-pack";
 import { coworkerBacklogLensPack } from "./packs/coworker-backlog-lens-pack";
 import { recruitingPipelinePack } from "./packs/recruiting-pipeline-pack";
+import { leaveDecisionPack } from "./packs/leave-decision-pack";
 import { publicWebDesignPack } from "./packs/public-web-design-pack";
 import { projectFilesPack } from "./packs/project-files-pack";
 import { sorReadPack } from "./packs/sor-read-pack";
@@ -92,6 +95,7 @@ import { buildEvidenceExtraPack } from "./packs/build-evidence-extra-pack";
 import { changeReviewPack } from "./packs/change-review-pack";
 import { principleDecidePack } from "./packs/principle-decide-pack";
 import { productOutcomesPack } from "./packs/product-outcomes-pack";
+import { initiativeReadinessPack } from "./packs/initiative-readiness-pack";
 
 import { grokSigninPack } from "./packs/grok-signin-pack";
 import { releasePack } from "./packs/release-pack";
@@ -101,6 +105,7 @@ import { gateContextPack } from "./packs/gate-context-pack";
 
 export const TOOL_PACK_REGISTRY = composeToolPacks([
   deliberationSiemPack,
+  roomMessagingPack,
   runtimeCoordinationPack,
   workCapsulesPack,
   workbooksPack,
@@ -124,6 +129,7 @@ export const TOOL_PACK_REGISTRY = composeToolPacks([
   subagentFanoutPack,
   mdmStewardshipPack,
   crmContactsPack,
+  crmEnrichmentPack,
   storefrontActivityPack,
   stockCoveragePack,
   queueAwarenessPack,
@@ -150,6 +156,7 @@ export const TOOL_PACK_REGISTRY = composeToolPacks([
   coworkerCapabilityPack,
   coworkerBacklogLensPack,
   recruitingPipelinePack,
+  leaveDecisionPack,
   publicWebDesignPack,
   projectFilesPack,
   grokSigninPack,
@@ -180,5 +187,6 @@ export const TOOL_PACK_REGISTRY = composeToolPacks([
   changeReviewPack,
   principleDecidePack,
   productOutcomesPack,
+  initiativeReadinessPack,
   surfaceReadinessPack,
 ]);

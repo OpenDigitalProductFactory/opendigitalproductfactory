@@ -23,8 +23,22 @@ The main rail separates two different decisions:
   layout alone.
 - **Performance** answers “how is the business doing over time, and what is
   driving the result?” It is available only to authorized owners and operations
-  managers. If historical sources are not configured, it says so instead of
-  displaying placeholder zeroes.
+  managers. The dashboard reads precomputed local-business-day snapshots so it
+  does not slow current Operations work. Use the period choices to compare days,
+  open a metric's **How this is calculated** disclosure to inspect its definition,
+  version, source owner, and model-level lineage, or follow **Open source
+  operations** to investigate the underlying work. The **Trends** section lets
+  you switch among the headline measures; its chart has a **View trend as a
+  table** alternative with the same period values. The **Owner brief** ranks the
+  largest observed changes, identifies headline gaps that deserve review, and
+  says plainly when connected lineage cannot yet prove why a result changed. It
+  never labels movement good or bad without a target and business context. The
+  freshness badge uses the oldest contributing source update, so one current
+  metric cannot hide a stale sibling; a failed refresh keeps the previous valid
+  result instead of replacing it with zeroes. Metrics whose canonical source is
+  not connected say **Not available** and explain what is missing. **Export this
+  period** downloads only aggregate metrics for the selected period, not customer,
+  employee, booking, or physical-resource records.
 
 Performance is a separate main destination, not a tab inside Operations. Simple
 navigation keeps the day-to-day Operations surface and hides the manager view;
@@ -87,7 +101,7 @@ business action until the durable operations provider confirms it.
 - **Calendar** — Upcoming dates pulled from your backlog items, leave requests, deadlines, and any scheduled events in the areas you have access to.
 - **Managed Documents** — Maintained documents with lifecycle state, versions, references, and publication status.
 - **"Needs you" inbox** — The one place for business decisions that need you now. Routine technical recovery stays with your digital team, while money leaving the business and public actions always come to you.
-- **Work Rooms** — Active, access-controlled places where people and AI coworkers coordinate toward a named outcome. A Work Room is the friendly Workspace view over a governed Work Case.
+- **Workrooms** — Active, access-controlled places where people and AI coworkers coordinate toward a named outcome. A Workroom is the friendly Workspace view over a governed Work Case.
 
 ## What You Can Do
 
@@ -96,6 +110,6 @@ business action until the durable operations provider confirms it.
 - Review recent activity from colleagues and digital coworkers without leaving your workspace
 - Access your calendar for today's events and upcoming deadlines
 - Open [Managed Documents](documents.md) to review document state, versions, and references
-- Open [My Work and Work Rooms](work-rooms.md) to see the outcome, accountable participants, current attention, activity, and next action for active company work. Room access is checked before internal context loads; participant details explain each person or AI coworker's role, current work, authority, and sponsorship. Connected communication channels link back to the same canonical room and cannot treat message delivery as completed work.
+- Open [My Work and Workrooms](work-rooms.md) to see the outcome, accountable participants, current attention, activity, and next action for active company work. Room access is checked before internal context loads; participant details explain each person or AI coworker's role, current work, authority, and sponsorship. Connected communication channels link back to the same canonical room and cannot treat message delivery as completed work.
 - Use your digital coworker to get a personalized briefing on what needs your attention
 - Open the ["Needs you" inbox](attention-inbox.md) to review plain-language decision cards, weekly batches, and the full technical record when needed

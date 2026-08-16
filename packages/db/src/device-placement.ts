@@ -91,6 +91,7 @@ export const FOUNDATIONAL_NODES = {
   clientCompute: "foundational/compute/client_and_end_user_compute",
   networkConnectivity: "foundational/network_management/network_connectivity",
   voice: "foundational/network_management/voice",
+  onlineStorage: "foundational/data_and_storage_management/online_storage",
 } as const;
 
 export type DevicePlacement = {
@@ -169,6 +170,7 @@ const DEVICE_CLASS_NODE: Record<string, string> = {
   phone: FOUNDATIONAL_NODES.clientCompute,
   tablet: FOUNDATIONAL_NODES.clientCompute,
   printer: FOUNDATIONAL_NODES.clientCompute,
+  nas: FOUNDATIONAL_NODES.onlineStorage,
 };
 
 /** Synonyms → canonical device-class keys, so rules can use natural names. */

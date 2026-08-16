@@ -7,7 +7,7 @@
 // This module reads the real records keyed to the build and merges them:
 //   - ExternalEvidenceRecord  (record_external_development_evidence) — by buildId OR workCapsuleId
 //   - RuntimeVerification     (record_runtime_verification)         — keyed by FeatureBuild.id (cuid)
-//   - WorkCapsuleActivity     (record_capsule_evidence)             — via the build's linked capsule
+//   - WorkroomActivity     (record_capsule_evidence)             — via the build's linked capsule
 //
 // Read-only: no write-model change here. The ExternalEvidenceRecord -> capsule
 // link this projection reads is populated by EP-WORK-CONVERGENCE Phase 1
@@ -136,14 +136,14 @@ export function mapBuildEvidenceTimelineEvents(
 export type EvidenceTimelineDb = {
   externalEvidenceRecord: { findMany(args: unknown): Promise<unknown[]> };
   runtimeVerification: { findMany(args: unknown): Promise<unknown[]> };
-  workCapsule: { findFirst(args: unknown): Promise<unknown> };
-  workCapsuleActivity: { findMany(args: unknown): Promise<unknown[]> };
+  workroom: { findFirst(args: unknown): Promise<unknown> };
+  workroomActivity: { findMany(args: unknown): Promise<unknown[]> };
 };
 
 /**
  * Fetch the three cross-surface evidence sources for a build and project them.
  * `build.buildId` is the FB- id (ExternalEvidenceRecord.buildId); `build.id` is
- * the cuid (RuntimeVerification.featureBuildId / WorkCapsule.featureBuildId).
+ * the cuid (RuntimeVerification.featureBuildId / Workroom.featureBuildId).
  */
 export async function loadBuildEvidenceTimelineEvents(args: {
   db: EvidenceTimelineDb;
@@ -155,7 +155,7 @@ export async function loadBuildEvidenceTimelineEvents(args: {
   // Resolve the capsule first so external evidence can be matched by capsule
   // link as well as by build id — external-agent work is bound to the capsule
   // and may carry no FeatureBuild, so a buildId-only read would miss it.
-  const capsule = (await args.db.workCapsule.findFirst({
+  const capsule = (await args.db.workroom.findFirst({
     where: { featureBuildId: args.build.id },
     select: { id: true },
   })) as { id: string } | null;
@@ -178,7 +178,7 @@ export async function loadBuildEvidenceTimelineEvents(args: {
   ]);
 
   const capsuleEvidence = capsule
-    ? ((await args.db.workCapsuleActivity.findMany({
+    ? ((await args.db.workroomActivity.findMany({
       where: { workCapsuleId: capsule.id, kind: "evidence-recorded" },
       orderBy: { recordedAt: "desc" },
       take,

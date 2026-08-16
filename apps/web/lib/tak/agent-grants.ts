@@ -2,6 +2,7 @@
 import agentRegistryData from "../../../../packages/db/data/agent_registry.json";
 import { AUTHORIZED_SURFACE_TOOL_GRANTS } from "@/lib/coworker/authorized-surface-coworker-contract";
 import { PRODUCT_MANAGEMENT_TOOL_GRANTS } from "./product-management-tool-grants";
+import { INITIATIVE_READINESS_TOOL_GRANTS } from "./initiative-readiness-tool-grants";
 const agentRegistry = agentRegistryData as { agents: Array<Record<string, unknown>> };
 /**
  * Implications between agent grant categories. A grant on the left of the
@@ -33,6 +34,10 @@ export const GRANT_IMPLICATIONS: Readonly<Record<string, readonly string[]>> = {
   // `browser_read` (navigate / extract / screenshot). One-way, as ever —
   // `browser_read` alone never implies the drive grant.
   browser_drive: ["browser_read"],
+  // EP-WORKROOM-COMMS (BI-4402DABB): a coworker that can write a work capsule (the
+  // executors that claim/work rooms, incl. the external CLIs) may post to the room
+  // it is admitted to. One-way — work_room_write never implies capsule write.
+  work_capsule_write: ["work_room_write"],
   // CRM drafting (crm_write) implies CRM inspection (crm_read): a coworker that
   // can draft an opportunity or quote can always read the accounts/pipeline it
   // is drafting against. One-way — crm_read alone never implies crm_write.
@@ -96,18 +101,19 @@ export const COWORKER_READ_BASELINE_GRANTS: readonly string[] = [
   "document_read",
   "code_graph_read",
   "work_capsule_read",
+  // EP-WORKROOM-COMMS (BI-3F21C4D5): every coworker may read a room it is admitted
+  // to (room admission is the real gate; this is the baseline capability).
+  "work_room_read",
 ];
-/**
- * Maps platform tool names to agent grant categories.
- * A tool is allowed if the agent has ANY of the grants it maps to —
- * directly OR via GRANT_IMPLICATIONS expansion (see expandGrants).
- * Tools not in this map are DENIED by default — every tool must have an entry.
- *
- * Exported so the MCP-authority SysML reconcile (apps/web/lib/ea/reconcile-mcp-authority.ts)
- * can project this authority surface into the EA graph at runtime without parsing
- * source. The coworker-tool-grant audit still regex-parses the source form.
- */
+/** Maps tools to grants. [] means identity-scoped universal access; absence means deny. */
 export const TOOL_TO_GRANTS: Record<string, string[]> = {
+  record_working_note: [],
+  list_working_notes: [],
+  record_effort_context: [],
+  read_effort_context: [],
+  set_task_goal: [],
+  list_task_goals: [],
+  evaluate_task_goal: [],
   // Browser-driving (namespaced MCP, server slug `mcp-browser-use`) —
   // EP-BROWSER-DRIVE, spec 2026-06-05 §8.2 (Verdict 5). These are the
   // platform-visible `<serverId>__<toolName>` names (see mcp-server-tools.ts
@@ -176,9 +182,7 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   retire_backlog_item: ["backlog_write"],
   link_backlog_item_to_epic: ["backlog_write"],
   search_specs_and_plans: ["spec_plan_read", "backlog_read"],
-  // Build-scoped evidence recording — refactored to the finer `build_evidence`
-  // grant (BI-B2F7ABF5). Backwards-compat preserved by GRANT_IMPLICATIONS
-  // (backlog_write → build_evidence).
+  // Build-scoped evidence uses build_evidence; backlog_write implies it for compatibility (BI-B2F7ABF5).
   record_execution_evidence: ["build_evidence"],
   // Non-build evidence stays on backlog_write because it coordinates the whole backlog surface.
   record_external_development_evidence: ["backlog_write"],
@@ -186,6 +190,7 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   record_semantic_review_outcome: ["backlog_write"],
   record_local_integration_result: ["backlog_write"],
   record_functional_failure_evidence: ["backlog_write"],
+  ...INITIATIVE_READINESS_TOOL_GRANTS,
   get_next_recommended_work: ["backlog_read"],
   // Read-only coworker-roster discovery-by-intent (BI-5FB59BC6); returns ids/
   // names to then pass to request_coworker/summon_coworker.
@@ -193,21 +198,44 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   // Coworker self-scoped backlog lens (BI-474A1F55) — read-only, identity-scoped.
   list_my_backlog: ["backlog_read"],
   // Work Capsule control harness (spec 2026-05-14)
+  list_workrooms: ["work_capsule_read"],
+  get_workroom: ["work_capsule_read"],
+  // EP-WORKROOM-COMMS (BI-3F21C4D5): read/post a Work Room's message feed. Room
+  // admission is enforced separately (room-agent-access); these are the coarse caps.
+  read_room_messages: ["work_room_read"],
+  post_room_message: ["work_room_write"],
+  // EP-WORKROOM-COMMS: invite a participant on demand (write); 360 coworker
+  // room-engagement (read). Room admission/coordinator right enforced separately.
+  invite_room_participant: ["work_room_write"],
+  get_coworker_room_engagement: ["work_room_read"],
+  create_workroom: ["work_capsule_write"],
+  plan_workroom_worktree: ["work_capsule_write"],
+  adopt_worktree: ["work_capsule_adopt"],
+  claim_backlog_item_for_work: ["work_capsule_adopt"],
+  start_external_work: ["work_capsule_adopt"],
+  claim_workroom_scope: ["work_capsule_write"],
+  record_workroom_evidence: ["work_capsule_write"],
+  record_agent_activity: ["work_capsule_write"],
+  heartbeat_workroom: ["work_capsule_write"],
+  update_workroom_status: ["work_capsule_write"],
+  release_workroom_scope: ["work_capsule_write"],
+  reassign_workroom_executor: ["work_capsule_write"],
+  get_runtime_coordination_map: ["work_capsule_read"],
+  // Legacy capsule tool names, callable during the Workroom alias window
+  // (BI-0702869B). Listed STATICALLY on purpose: the Coworker Tool-Grant Audit
+  // reads this object literal without executing it, so a row derived at runtime
+  // is invisible to it and reads as a catalog tool missing from TOOL_TO_GRANTS.
+  // WORKROOM_TOOL_ALIASES below pins each of these to its canonical row in test.
   list_work_capsules: ["work_capsule_read"],
   get_work_capsule: ["work_capsule_read"],
   create_work_capsule: ["work_capsule_write"],
   plan_capsule_worktree: ["work_capsule_write"],
-  adopt_worktree: ["work_capsule_adopt"],
-  claim_backlog_item_for_work: ["work_capsule_adopt"],
-  start_external_work: ["work_capsule_adopt"],
   claim_capsule_scope: ["work_capsule_write"],
-  record_capsule_evidence: ["work_capsule_write"],
-  record_agent_activity: ["work_capsule_write"],
   heartbeat_capsule: ["work_capsule_write"],
   update_work_capsule_status: ["work_capsule_write"],
   release_capsule_scope: ["work_capsule_write"],
+  record_capsule_evidence: ["work_capsule_write"],
   reassign_capsule_executor: ["work_capsule_write"],
-  get_runtime_coordination_map: ["work_capsule_read"],
   // Queue-awareness reads (EP-3516E23D): platform-coordination visibility over
   // the shared queue flow-telemetry — same read grant as the sibling ops-read
   // tool above.
@@ -599,6 +627,10 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   list_mdm_steward_tasks: ["crm_read"],
   enrich_customer_account: ["web_search"],
   run_data_steward: ["crm_write"],
+  // Proactive CRM enrichment (BI-B2497DFB): propose is web-research stewardship
+  // inside the CRM-read envelope; apply is the consequential CRM write.
+  propose_crm_enrichment: ["web_search", "crm_read"],
+  apply_crm_enrichment: ["crm_write"],
 
   // Security Operations / SIEM (EP-SOVEREIGN-SOC). Writes are propose-only +
   // coworkerArtifact; siem_investigate/siem_tune/incident_respond imply siem_read.
@@ -720,10 +752,10 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   // Recruiting pipeline lens (BI-E64D11AE) — unified native + Greenhouse funnel.
   get_recruiting_pipeline: ["consumer_read", "registry_read"],
 
-  // Workforce staffing (EP-WORKFORCE-OPS / BI-4AD09A35) read surface.
+  // Workforce staffing + propose-only leave-decision surfaces.
   list_staffing_demand: ["registry_read"],
   get_staffing_coverage: ["registry_read"],
-
+  propose_leave_decision: ["consumer_read", "registry_read"],
   // ─── Pseudo-User Contract: screen_* view-command family (BI-DF6079E9) ─────
   // Three finer grants (coworker_screen_read / drive / fill) carry the view-
   // command surface. screen_scroll_to is read-class per the chief-architect
@@ -744,6 +776,28 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   screen_set_input:        ["coworker_screen_fill"],
   ...AUTHORIZED_SURFACE_TOOL_GRANTS,
 };
+
+/**
+ * Legacy capsule tool names, still callable during the Workroom alias window
+ * (EP-WORK-CONVERGENCE / BI-0702869B). Derived rather than hand-copied:
+ * TOOL_TO_GRANTS DENIES UNLISTED TOOLS, so an alias whose grants drift from its
+ * canonical name becomes a silent authorization failure. Deriving them makes the
+ * two provably identical and deletes in one edit when the window closes.
+ */
+export const WORKROOM_TOOL_ALIASES: Record<string, string> = {
+  list_work_capsules: "list_workrooms",
+  get_work_capsule: "get_workroom",
+  create_work_capsule: "create_workroom",
+  plan_capsule_worktree: "plan_workroom_worktree",
+  claim_capsule_scope: "claim_workroom_scope",
+  heartbeat_capsule: "heartbeat_workroom",
+  update_work_capsule_status: "update_workroom_status",
+  release_capsule_scope: "release_workroom_scope",
+  record_capsule_evidence: "record_workroom_evidence",
+  reassign_capsule_executor: "reassign_workroom_executor",
+};
+
+
 
 /**
  * The catalog of every grant KEY known to the authority registry, derived from
@@ -843,6 +897,7 @@ export function isToolAllowedByGrants(
     console.warn(`[agent-grants] Tool ${JSON.stringify(toolName)} has no TOOL_TO_GRANTS entry — denied by default`);
     return false;
   }
+  if (requiredGrants.length === 0) return true;
   // Expand the agent's grants through GRANT_IMPLICATIONS, then check that the
   // expanded set includes at least one of the required grants.
   const expanded = expandGrants(agentGrants);

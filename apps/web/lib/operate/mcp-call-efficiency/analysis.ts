@@ -97,6 +97,42 @@ export type AnalyzeCallEfficiencyOptions = {
 const POLL_HINT =
   /^(get_|list_|query_|search_|read_|status|watch|poll|check_)/i;
 
+/**
+ * Minimum healthy intervals for unattended edge routes. These are analysis
+ * policy bounds, not runtime configuration: traffic faster than the bound is
+ * still reported, while traffic at or below it is recognized as liveness.
+ */
+const ROUTINE_MACHINE_MIN_INTERVAL_MS: Readonly<Record<string, number>> = {
+  "edge.heartbeat": 60_000,
+  "edge.discovery_runs.submit": 300_000,
+  "edge.federation_candidates.submit": 90_000,
+};
+
+function fitsRoutineMachineCadence(
+  events: CallEfficiencyEvent[],
+  minimumIntervalMs: number,
+): boolean {
+  const byPrincipal = new Map<string, CallEfficiencyEvent[]>();
+  for (const event of events) {
+    const principal = event.agentId || event.threadId;
+    if (!principal) return false;
+    const rows = byPrincipal.get(principal) ?? [];
+    rows.push(event);
+    byPrincipal.set(principal, rows);
+  }
+
+  for (const rows of byPrincipal.values()) {
+    if (rows.length < 2) continue;
+    const first = rows[0]!.createdAt.getTime();
+    const last = rows[rows.length - 1]!.createdAt.getTime();
+    const expected = Math.floor(Math.max(0, last - first) / minimumIntervalMs) + 1;
+    // Permit scheduler jitter and one boundary call in a truncated ledger.
+    const allowed = Math.ceil(expected * 1.15) + 1;
+    if (rows.length > allowed) return false;
+  }
+  return true;
+}
+
 function surfaceLabel(e: CallEfficiencyEvent): string {
   if (e.apiTokenId) return `external-pat:${e.executionMode}`;
   return e.executionMode || "unknown";
@@ -195,6 +231,8 @@ export function analyzeCallEfficiency(
 
   const findings: EfficiencyFinding[] = [];
 
+  let suppressedRoutineCadenceFindings = 0;
+
   // Thrash: per (threadId, toolName)
   const thrashMap = new Map<string, CallEfficiencyEvent[]>();
   for (const e of sorted) {
@@ -278,7 +316,14 @@ export function analyzeCallEfficiency(
 
   // High volume / high failure from tool rollup
   for (const t of topTools) {
-    if (t.count >= highVolumeFloor) {
+    const routineInterval = ROUTINE_MACHINE_MIN_INTERVAL_MS[t.toolName];
+    const routineCadenceHealthy = routineInterval !== undefined && fitsRoutineMachineCadence(
+      sorted.filter((event) => event.toolName === t.toolName),
+      routineInterval,
+    );
+    if (t.count >= highVolumeFloor && routineCadenceHealthy) {
+      suppressedRoutineCadenceFindings += 1;
+    } else if (t.count >= highVolumeFloor) {
       findings.push({
         kind: "high_volume",
         severity: t.count >= highVolumeFloor * 3 ? "critical" : "warning",
@@ -344,7 +389,11 @@ export function analyzeCallEfficiency(
     ledgerSufficiency: {
       usable,
       note: usable
-        ? "ToolExecution volume is sufficient for thrash/volume/failure findings. tools/list and pre-auth denials remain unlogged gaps."
+        ? "ToolExecution volume is sufficient for thrash/volume/failure findings. " +
+          (suppressedRoutineCadenceFindings > 0
+            ? `${suppressedRoutineCadenceFindings} raw-volume finding(s) were suppressed because calls fit contractual machine cadence. `
+            : "") +
+          "tools/list and pre-auth denials remain unlogged gaps."
         : "Too few ToolExecution rows in window for reliable optimization; collect more traffic or widen the window.",
     },
   };

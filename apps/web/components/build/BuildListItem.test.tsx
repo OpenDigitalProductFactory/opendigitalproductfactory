@@ -113,6 +113,26 @@ describe("BuildListItem", () => {
 });
 
 describe("BuildListItem fleet density", () => {
+  it("uses the reconciled owner state for the selected row instead of a contradictory queue label", () => {
+    const html = renderToStaticMarkup(
+      <BuildListItem
+        build={makeBuild()}
+        active
+        index={0}
+        lifecycleLabel={null}
+        isDevEnvironment={false}
+        density="fleet"
+        queueState={{ kind: "running", stepLabel: null }}
+        ownerState="not-started"
+        onSelect={vi.fn()}
+        onDelete={vi.fn()}
+      />,
+    );
+
+    expect(html).toContain("Preparing");
+    expect(html).not.toContain(">Working<");
+  });
+
   it("renders the compact fleet row instead of the comfortable card", () => {
     const html = renderToStaticMarkup(
       <BuildListItem

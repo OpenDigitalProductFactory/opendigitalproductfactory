@@ -168,6 +168,13 @@ the topic and question; prompt or route text is never parsed as scope. A watch
 tick writes only a pending `ResearchProposal`, so external research and
 publication remain behind their existing human gates.
 
+Product intelligence selects its owned task kinds through
+`product-scheduled-task-kinds.ts`. That selector deliberately excludes the
+separate `business-analysis-watch` kind used by Performance. The shared
+scheduler may dispatch both, but product operating-context queries must never
+load or reinterpret accepted Performance plans; each domain keeps its own
+typed configuration and organization-scoped execution boundary.
+
 Demand is projected from organization-scoped `BacklogItem` associations.
 Change, architecture, and dependency evidence is included only through
 resolved enabling digital products. Product decisions remain explicitly

@@ -94,4 +94,19 @@ describe("deriveArchetypeBusinessViews", () => {
       );
     }
   });
+
+  it("declares typed watch materiality capabilities on every governed metric", () => {
+    for (const archetype of ALL_ARCHETYPES) {
+      const keys = metricKeys(deriveArchetypeBusinessViews(archetype).performance);
+      for (const key of keys) {
+        const definition = getPerformanceMetricDefinition(key)!;
+        expect(definition.materiality.modes).toEqual(["absolute", "relative"]);
+        expect(definition.materiality.directions).toEqual([
+          "increase",
+          "decrease",
+          "either",
+        ]);
+      }
+    }
+  });
 });

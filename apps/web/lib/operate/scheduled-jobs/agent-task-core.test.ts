@@ -202,6 +202,59 @@ describe("scheduleAgentTaskFor", () => {
       }),
     );
   });
+
+  it("requires organization scope and an exact typed business-analysis watch", async () => {
+    const { prisma } = await import("@dpf/db");
+    const create = prisma.scheduledAgentTask.create as ReturnType<typeof vi.fn>;
+    create.mockClear();
+    const { validateBusinessAnalysisPlan } = await import("@dpf/storefront-templates");
+    const accepted = validateBusinessAnalysisPlan({
+      schemaVersion: 1,
+      question: "Did covers change enough to review?",
+      intent: "change",
+      metrics: [{ key: "covers" }],
+      dimensions: [],
+      filters: [],
+      period: { start: "2026-08-11", end: "2026-08-11", timezone: "America/Chicago", grain: "day" },
+      comparison: { basis: "prior-period" },
+      sources: [{ owner: "restaurant-service", maximumAge: "PT2H" }],
+      checks: [{ kind: "completeness" }, { kind: "comparison-baseline" }],
+    });
+    if (accepted.status !== "accepted") throw new Error("expected accepted plan");
+    const taskConfig = {
+      schemaVersion: 1,
+      plan: accepted.plan,
+      fingerprint: accepted.fingerprint,
+      materiality: { mode: "relative", direction: "either", value: 0.1 },
+      baseline: { value: 100, sourceWatermark: "2026-08-12T11:00:00.000Z" },
+      lastEvaluation: null,
+    };
+
+    const withoutScope = await scheduleAgentTaskFor("u1", {
+      ...baseInput,
+      taskKind: "business-analysis-watch" as never,
+      taskConfig,
+    });
+    const valid = await scheduleAgentTaskFor("u1", {
+      ...baseInput,
+      organizationId: "org-1",
+      taskKind: "business-analysis-watch" as never,
+      taskConfig,
+    });
+
+    expect(withoutScope).toMatchObject({
+      success: false,
+      error: expect.stringMatching(/organization scope/i),
+    });
+    expect(valid).toMatchObject({ success: true });
+    expect(create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        organizationId: "org-1",
+        taskKind: "business-analysis-watch",
+        taskConfig: expect.objectContaining({ fingerprint: accepted.fingerprint }),
+      }),
+    }));
+  });
 });
 
 describe("cancelAgentTaskFor", () => {

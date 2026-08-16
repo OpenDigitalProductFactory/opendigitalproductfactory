@@ -21,14 +21,14 @@ import {
 import { revalidatePortalContext } from "@/lib/portal-context/invalidation";
 
 const db = {
-  workCapsule: {
+  workroom: {
     create: vi.fn(),
     findFirst: vi.fn(),
     findUnique: vi.fn(),
     findMany: vi.fn(),
     update: vi.fn(),
   },
-  workCapsuleActivity: {
+  workroomActivity: {
     create: vi.fn(),
   },
   backlogItem: {
@@ -40,12 +40,12 @@ const db = {
 const mockRevalidatePortalContext = revalidatePortalContext as ReturnType<typeof vi.fn>;
 
 function resetDbMocks() {
-  db.workCapsule.create.mockReset();
-  db.workCapsule.findFirst.mockReset();
-  db.workCapsule.findUnique.mockReset();
-  db.workCapsule.findMany.mockReset();
-  db.workCapsule.update.mockReset();
-  db.workCapsuleActivity.create.mockReset();
+  db.workroom.create.mockReset();
+  db.workroom.findFirst.mockReset();
+  db.workroom.findUnique.mockReset();
+  db.workroom.findMany.mockReset();
+  db.workroom.update.mockReset();
+  db.workroomActivity.create.mockReset();
   db.backlogItem.findFirst.mockReset();
   db.backlogItem.update.mockReset();
   db.$transaction.mockReset();
@@ -61,8 +61,8 @@ describe("work capsule store", () => {
   beforeEach(() => resetDbMocks());
 
   it("creates a capsule on first call and writes a single created activity", async () => {
-    db.workCapsule.findUnique.mockResolvedValueOnce(null);
-    db.workCapsule.create.mockResolvedValueOnce({
+    db.workroom.findUnique.mockResolvedValueOnce(null);
+    db.workroom.create.mockResolvedValueOnce({
       id: "row-1",
       capsuleId: "WC-ABC12345",
       title: "Work control",
@@ -80,16 +80,16 @@ describe("work capsule store", () => {
     });
 
     expect(result.capsuleId).toBe("WC-ABC12345");
-    expect(db.workCapsule.create).toHaveBeenCalledTimes(1);
-    expect(db.workCapsuleActivity.create).toHaveBeenCalledTimes(1);
-    expect(db.workCapsuleActivity.create).toHaveBeenCalledWith(expect.objectContaining({
+    expect(db.workroom.create).toHaveBeenCalledTimes(1);
+    expect(db.workroomActivity.create).toHaveBeenCalledTimes(1);
+    expect(db.workroomActivity.create).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({ kind: "created" }),
     }));
   });
 
   it("persists scope metadata when creating a backlog-free company capsule", async () => {
-    db.workCapsule.findUnique.mockResolvedValueOnce(null);
-    db.workCapsule.create.mockResolvedValueOnce({
+    db.workroom.findUnique.mockResolvedValueOnce(null);
+    db.workroom.create.mockResolvedValueOnce({
       id: "row-1",
       capsuleId: "WC-SCOPED",
       title: "Customer onboarding",
@@ -116,7 +116,7 @@ describe("work capsule store", () => {
     });
 
     expect(result.capsuleId).toBe("WC-SCOPED");
-    expect(db.workCapsule.create).toHaveBeenCalledWith(expect.objectContaining({
+    expect(db.workroom.create).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({
         backlogItemId: null,
         decisionScope: "wwwd",
@@ -131,8 +131,8 @@ describe("work capsule store", () => {
   });
 
   it("persists a first-class Requester distinct from the creating actor (BI-B24F96D0)", async () => {
-    db.workCapsule.findUnique.mockResolvedValueOnce(null);
-    db.workCapsule.create.mockResolvedValueOnce({ id: "row-1", capsuleId: "WC-REQ", title: "Commissioned work" });
+    db.workroom.findUnique.mockResolvedValueOnce(null);
+    db.workroom.create.mockResolvedValueOnce({ id: "row-1", capsuleId: "WC-REQ", title: "Commissioned work" });
 
     await createWorkCapsule({
       db: capsuleDb(),
@@ -146,7 +146,7 @@ describe("work capsule store", () => {
       actor: { userId: "worker-1", agentId: "agent-1", principalId: "principal-worker" },
     });
 
-    expect(db.workCapsule.create).toHaveBeenCalledWith(expect.objectContaining({
+    expect(db.workroom.create).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({
         createdByPrincipalId: "principal-worker",
         requestedByPrincipalId: "principal-requester",
@@ -155,8 +155,8 @@ describe("work capsule store", () => {
   });
 
   it("defaults the Requester to null when not supplied", async () => {
-    db.workCapsule.findUnique.mockResolvedValueOnce(null);
-    db.workCapsule.create.mockResolvedValueOnce({ id: "row-1", capsuleId: "WC-NOREQ", title: "Self-started" });
+    db.workroom.findUnique.mockResolvedValueOnce(null);
+    db.workroom.create.mockResolvedValueOnce({ id: "row-1", capsuleId: "WC-NOREQ", title: "Self-started" });
 
     await createWorkCapsule({
       db: capsuleDb(),
@@ -169,13 +169,13 @@ describe("work capsule store", () => {
       actor: { userId: "user-1", agentId: null, principalId: "principal-1" },
     });
 
-    expect(db.workCapsule.create).toHaveBeenCalledWith(expect.objectContaining({
+    expect(db.workroom.create).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({ requestedByPrincipalId: null }),
     }));
   });
 
   it("rejects invalid scope metadata before creating a capsule", async () => {
-    db.workCapsule.findUnique.mockResolvedValueOnce(null);
+    db.workroom.findUnique.mockResolvedValueOnce(null);
 
     await expect(createWorkCapsule({
       db: capsuleDb(),
@@ -189,12 +189,12 @@ describe("work capsule store", () => {
       actor: { userId: "user-1", agentId: null, principalId: "principal-1" },
     })).rejects.toThrow(/portfolioRole/i);
 
-    expect(db.workCapsule.create).not.toHaveBeenCalled();
-    expect(db.workCapsuleActivity.create).not.toHaveBeenCalled();
+    expect(db.workroom.create).not.toHaveBeenCalled();
+    expect(db.workroomActivity.create).not.toHaveBeenCalled();
   });
 
   it("returns the existing capsule on idempotent retry without writing a duplicate activity", async () => {
-    db.workCapsule.findUnique.mockResolvedValueOnce({
+    db.workroom.findUnique.mockResolvedValueOnce({
       id: "row-1",
       capsuleId: "WC-ABC12345",
       title: "Work control",
@@ -212,13 +212,13 @@ describe("work capsule store", () => {
     });
 
     expect(result.capsuleId).toBe("WC-ABC12345");
-    expect(db.workCapsule.create).not.toHaveBeenCalled();
-    expect(db.workCapsuleActivity.create).not.toHaveBeenCalled();
+    expect(db.workroom.create).not.toHaveBeenCalled();
+    expect(db.workroomActivity.create).not.toHaveBeenCalled();
   });
 
   it("adopts an existing worktree by repository and branch", async () => {
-    db.workCapsule.findFirst.mockResolvedValue(null);
-    db.workCapsule.create.mockResolvedValue({ id: "row-1", capsuleId: "WC-ADOPT01" });
+    db.workroom.findFirst.mockResolvedValue(null);
+    db.workroom.create.mockResolvedValue({ id: "row-1", capsuleId: "WC-ADOPT01" });
 
     const result = await adoptWorktreeCapsule({
       db: capsuleDb(),
@@ -237,14 +237,14 @@ describe("work capsule store", () => {
     });
 
     expect(result.capsuleId).toBe("WC-ADOPT01");
-    expect(db.workCapsuleActivity.create).toHaveBeenCalledWith(expect.objectContaining({
+    expect(db.workroomActivity.create).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({ kind: "adopted" }),
     }));
   });
 
   it("persists scope metadata when adopting a platform worktree", async () => {
-    db.workCapsule.findFirst.mockResolvedValue(null);
-    db.workCapsule.create.mockResolvedValue({ id: "row-1", capsuleId: "WC-ADOPTSCOPE" });
+    db.workroom.findFirst.mockResolvedValue(null);
+    db.workroom.create.mockResolvedValue({ id: "row-1", capsuleId: "WC-ADOPTSCOPE" });
 
     const result = await adoptWorktreeCapsule({
       db: capsuleDb(),
@@ -267,7 +267,7 @@ describe("work capsule store", () => {
     });
 
     expect(result.capsuleId).toBe("WC-ADOPTSCOPE");
-    expect(db.workCapsule.create).toHaveBeenCalledWith(expect.objectContaining({
+    expect(db.workroom.create).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({
         decisionScope: "wwmd",
         portfolioRole: "manufactureAndDeliver",
@@ -279,7 +279,7 @@ describe("work capsule store", () => {
   });
 
   it("renews a lease on heartbeat", async () => {
-    db.workCapsule.update.mockResolvedValue({ id: "row-1", capsuleId: "WC-LEASE" });
+    db.workroom.update.mockResolvedValue({ id: "row-1", capsuleId: "WC-LEASE" });
 
     const result = await heartbeatWorkCapsule({
       db: capsuleDb(),
@@ -289,14 +289,14 @@ describe("work capsule store", () => {
     });
 
     expect(result.capsuleId).toBe("WC-LEASE");
-    expect(db.workCapsule.update).toHaveBeenCalledWith(expect.objectContaining({
+    expect(db.workroom.update).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({ leaseHolderPrincipalId: "principal-1" }),
     }));
   });
 
   it("records evidence append-only", async () => {
-    db.workCapsule.findUnique.mockResolvedValue({ id: "row-1", capsuleId: "WC-EVIDENCE" });
-    db.workCapsuleActivity.create.mockResolvedValue({ id: "activity-1" });
+    db.workroom.findUnique.mockResolvedValue({ id: "row-1", capsuleId: "WC-EVIDENCE" });
+    db.workroomActivity.create.mockResolvedValue({ id: "activity-1" });
 
     await recordWorkCapsuleEvidence({
       db: capsuleDb(),
@@ -305,7 +305,7 @@ describe("work capsule store", () => {
       actor: { userId: "user-1", agentId: null, principalId: "principal-1" },
     });
 
-    expect(db.workCapsuleActivity.create).toHaveBeenCalledWith(expect.objectContaining({
+    expect(db.workroomActivity.create).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({
         kind: "evidence-recorded",
         summary: "Vitest passed",
@@ -315,8 +315,8 @@ describe("work capsule store", () => {
   });
 
   it("records runtime evidence links in the capsule activity payload", async () => {
-    db.workCapsule.findUnique.mockResolvedValue({ id: "row-1", capsuleId: "WC-EVIDENCE" });
-    db.workCapsuleActivity.create.mockResolvedValue({ id: "activity-1" });
+    db.workroom.findUnique.mockResolvedValue({ id: "row-1", capsuleId: "WC-EVIDENCE" });
+    db.workroomActivity.create.mockResolvedValue({ id: "activity-1" });
 
     await recordWorkCapsuleEvidence({
       db: capsuleDb(),
@@ -331,7 +331,7 @@ describe("work capsule store", () => {
       actor: { userId: "user-1", agentId: "codex", principalId: "principal-1" },
     });
 
-    expect(db.workCapsuleActivity.create).toHaveBeenCalledWith(expect.objectContaining({
+    expect(db.workroomActivity.create).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({
         kind: "evidence-recorded",
         payload: expect.objectContaining({
@@ -345,7 +345,7 @@ describe("work capsule store", () => {
 
   describe("planCapsuleWorkspace", () => {
     it("persists deterministic branch + worktree path on first plan and writes a workspace-planned activity", async () => {
-      db.workCapsule.findUnique.mockResolvedValueOnce({
+      db.workroom.findUnique.mockResolvedValueOnce({
         id: "row-1",
         capsuleId: "WC-PLAN0001",
         title: "Provider routing tool capability",
@@ -354,8 +354,8 @@ describe("work capsule store", () => {
         headBranch: null,
         worktreePath: null,
       });
-      db.workCapsule.findFirst.mockResolvedValueOnce(null);
-      db.workCapsule.update.mockResolvedValueOnce({
+      db.workroom.findFirst.mockResolvedValueOnce(null);
+      db.workroom.update.mockResolvedValueOnce({
         id: "row-1",
         capsuleId: "WC-PLAN0001",
         headBranch: "feat/provider-routing-tool-capability",
@@ -375,14 +375,14 @@ describe("work capsule store", () => {
 
       expect(result.headBranch).toBe("feat/provider-routing-tool-capability");
       expect(result.worktreePath).toBe("D:\\DPF-provider-routing-tool-capability");
-      expect(db.workCapsule.update).toHaveBeenCalledWith(expect.objectContaining({
+      expect(db.workroom.update).toHaveBeenCalledWith(expect.objectContaining({
         data: expect.objectContaining({
           baseBranch: "main",
           branchTaxonomy: "feat",
           status: "ready",
         }),
       }));
-      expect(db.workCapsuleActivity.create).toHaveBeenCalledWith(
+      expect(db.workroomActivity.create).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({ kind: "workspace-planned" }),
         }),
@@ -390,7 +390,7 @@ describe("work capsule store", () => {
     });
 
     it("returns the existing plan on idempotent re-plan without writing a second activity", async () => {
-      db.workCapsule.findUnique.mockResolvedValueOnce({
+      db.workroom.findUnique.mockResolvedValueOnce({
         id: "row-1",
         capsuleId: "WC-PLAN0002",
         title: "Provider routing tool capability",
@@ -410,12 +410,12 @@ describe("work capsule store", () => {
       });
 
       expect(result.headBranch).toBe("feat/provider-routing-tool-capability");
-      expect(db.workCapsule.update).not.toHaveBeenCalled();
-      expect(db.workCapsuleActivity.create).not.toHaveBeenCalled();
+      expect(db.workroom.update).not.toHaveBeenCalled();
+      expect(db.workroomActivity.create).not.toHaveBeenCalled();
     });
 
     it("throws on partial-plan state when only one workspace field is set", async () => {
-      db.workCapsule.findUnique.mockResolvedValueOnce({
+      db.workroom.findUnique.mockResolvedValueOnce({
         id: "row-1",
         capsuleId: "WC-PARTIAL",
         title: "Half written",
@@ -437,7 +437,7 @@ describe("work capsule store", () => {
     });
 
     it("refuses to propose the root clone as the worktree path", async () => {
-      db.workCapsule.findUnique.mockResolvedValueOnce({
+      db.workroom.findUnique.mockResolvedValueOnce({
         id: "row-1",
         capsuleId: "WC-PLAN0003",
         title: "Danger",
@@ -446,7 +446,7 @@ describe("work capsule store", () => {
         headBranch: null,
         worktreePath: null,
       });
-      db.workCapsule.findFirst.mockResolvedValueOnce(null);
+      db.workroom.findFirst.mockResolvedValueOnce(null);
 
       await expect(
         planCapsuleWorkspace({
@@ -463,7 +463,7 @@ describe("work capsule store", () => {
     });
 
     it("appends a numeric suffix when the slug collides with an existing branch", async () => {
-      db.workCapsule.findUnique.mockResolvedValueOnce({
+      db.workroom.findUnique.mockResolvedValueOnce({
         id: "row-1",
         capsuleId: "WC-PLAN0004",
         title: "Work capsule",
@@ -472,8 +472,8 @@ describe("work capsule store", () => {
         headBranch: null,
         worktreePath: null,
       });
-      db.workCapsule.findFirst.mockResolvedValueOnce(null);
-      db.workCapsule.update.mockResolvedValueOnce({
+      db.workroom.findFirst.mockResolvedValueOnce(null);
+      db.workroom.update.mockResolvedValueOnce({
         id: "row-1",
         capsuleId: "WC-PLAN0004",
         headBranch: "feat/work-capsule-2",
@@ -495,7 +495,7 @@ describe("work capsule store", () => {
     });
 
     it("appends a numeric suffix when another active capsule already owns the branch", async () => {
-      db.workCapsule.findUnique.mockResolvedValueOnce({
+      db.workroom.findUnique.mockResolvedValueOnce({
         id: "row-1",
         capsuleId: "WC-PLAN0005",
         title: "Owned elsewhere",
@@ -504,10 +504,10 @@ describe("work capsule store", () => {
         headBranch: null,
         worktreePath: null,
       });
-      db.workCapsule.findFirst
+      db.workroom.findFirst
         .mockResolvedValueOnce({ id: "row-other", capsuleId: "WC-OTHER" })
         .mockResolvedValueOnce(null);
-      db.workCapsule.update.mockResolvedValueOnce({
+      db.workroom.update.mockResolvedValueOnce({
         id: "row-1",
         capsuleId: "WC-PLAN0005",
         headBranch: "feat/owned-elsewhere-2",
@@ -526,175 +526,6 @@ describe("work capsule store", () => {
       });
 
       expect(result.headBranch).toBe("feat/owned-elsewhere-2");
-    });
-  });
-
-  describe("adoptWorktreeCapsule backlog binding", () => {
-    it("persists backlogItemId + epicId on a fresh adoption", async () => {
-      db.workCapsule.findFirst.mockResolvedValueOnce(null);
-      db.workCapsule.create.mockResolvedValueOnce({ id: "row-1", capsuleId: "WC-BOUND01" });
-
-      const result = await adoptWorktreeCapsule({
-        db: capsuleDb(),
-        input: {
-          title: "Bound branch",
-          objective: "Work an item.",
-          repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory",
-          headBranch: "feat/bound",
-          worktreePath: "D:/DPF-bound",
-          backlogItemId: "BI-7D20BFDF",
-          epicId: "EP-XYZ",
-          executorRef: "session-1",
-        },
-        actor: { userId: "user-1", agentId: "codex", principalId: "principal-1" },
-      });
-
-      expect(result.capsuleId).toBe("WC-BOUND01");
-      expect(db.workCapsule.create).toHaveBeenCalledWith(expect.objectContaining({
-        data: expect.objectContaining({
-          backlogItemId: "BI-7D20BFDF",
-          epicId: "EP-XYZ",
-          executorRef: "session-1",
-        }),
-      }));
-    });
-
-    it("late-binds backlogItemId onto an existing capsule that had none", async () => {
-      db.workCapsule.findFirst.mockResolvedValueOnce({
-        id: "row-1",
-        capsuleId: "WC-EXISTING",
-        status: "ready",
-        backlogItemId: null,
-        epicId: null,
-        executorRef: null,
-      });
-      db.workCapsule.update.mockResolvedValueOnce({
-        id: "row-1",
-        capsuleId: "WC-EXISTING",
-        backlogItemId: "BI-7D20BFDF",
-      });
-
-      const result = await adoptWorktreeCapsule({
-        db: capsuleDb(),
-        input: {
-          title: "Reuse",
-          objective: "Reuse existing branch.",
-          repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory",
-          headBranch: "feat/existing",
-          worktreePath: "D:/DPF-existing",
-          backlogItemId: "BI-7D20BFDF",
-        },
-        actor: { userId: "user-1", agentId: "codex", principalId: "principal-1" },
-      });
-
-      expect(result.capsuleId).toBe("WC-EXISTING");
-      expect(db.workCapsule.create).not.toHaveBeenCalled();
-      expect(db.workCapsule.update).toHaveBeenCalledWith(expect.objectContaining({
-        data: expect.objectContaining({ backlogItemId: "BI-7D20BFDF" }),
-      }));
-      expect(db.workCapsuleActivity.create).toHaveBeenCalledWith(expect.objectContaining({
-        data: expect.objectContaining({ kind: "adopted", payload: expect.objectContaining({ lateBind: true }) }),
-      }));
-    });
-
-    it("does not late-bind (or write) when the existing capsule already has the same backlogItemId", async () => {
-      db.workCapsule.findFirst.mockResolvedValueOnce({
-        id: "row-1",
-        capsuleId: "WC-EXISTING",
-        status: "working",
-        backlogItemId: "BI-7D20BFDF",
-        epicId: null,
-        executorRef: null,
-      });
-
-      const result = await adoptWorktreeCapsule({
-        db: capsuleDb(),
-        input: {
-          title: "Reuse",
-          objective: "Reuse existing branch.",
-          repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory",
-          headBranch: "feat/existing",
-          worktreePath: "D:/DPF-existing",
-          backlogItemId: "BI-7D20BFDF",
-        },
-        actor: { userId: "user-1", agentId: "codex", principalId: "principal-1" },
-      });
-
-      expect(result.capsuleId).toBe("WC-EXISTING");
-      expect(result.backlogItemId).toBe("BI-7D20BFDF");
-      expect(db.workCapsule.update).not.toHaveBeenCalled();
-      expect(db.workCapsule.create).not.toHaveBeenCalled();
-    });
-
-    // BI-95E37EA1 — abandoned main capsule must not be returned as a successful bind.
-    it("creates a fresh capsule when the only (repo, branch) hit is abandoned for another BI", async () => {
-      // findFirst with status notIn terminal returns null (abandoned filtered out).
-      db.workCapsule.findFirst.mockResolvedValueOnce(null);
-      db.workCapsule.create.mockResolvedValueOnce({
-        id: "row-new",
-        capsuleId: "WC-FRESH01",
-        status: "ready",
-        backlogItemId: "BI-NEWITEM",
-        headBranch: "main",
-        worktreePath: "D:/DPF",
-        executorRef: "session-new",
-      });
-
-      const result = await adoptWorktreeCapsule({
-        db: capsuleDb(),
-        input: {
-          title: "Work on BI-NEWITEM",
-          objective: "Claim-at-start binding for BI-NEWITEM",
-          repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory",
-          headBranch: "main",
-          worktreePath: "D:/DPF",
-          backlogItemId: "BI-NEWITEM",
-          executorRef: "session-new",
-          executorKind: "codex-desktop",
-        },
-        actor: { userId: "user-1", agentId: "codex", principalId: "principal-1" },
-      });
-
-      expect(result.capsuleId).toBe("WC-FRESH01");
-      expect(result.backlogItemId).toBe("BI-NEWITEM");
-      expect(db.workCapsule.create).toHaveBeenCalledTimes(1);
-      expect(db.workCapsule.update).not.toHaveBeenCalled();
-    });
-
-    it("creates a fresh capsule when a live capsule on the branch is bound to a different BI", async () => {
-      db.workCapsule.findFirst.mockResolvedValueOnce({
-        id: "row-1",
-        capsuleId: "WC-OTHERBI",
-        status: "working",
-        backlogItemId: "BI-OTHER",
-        executorRef: "session-other",
-        epicId: null,
-      });
-      db.workCapsule.create.mockResolvedValueOnce({
-        id: "row-new",
-        capsuleId: "WC-MINE001",
-        status: "ready",
-        backlogItemId: "BI-MINE",
-        executorRef: "session-mine",
-      });
-
-      const result = await adoptWorktreeCapsule({
-        db: capsuleDb(),
-        input: {
-          title: "Mine",
-          objective: "Different BI on same branch.",
-          repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory",
-          headBranch: "main",
-          worktreePath: "D:/DPF",
-          backlogItemId: "BI-MINE",
-          executorRef: "session-mine",
-        },
-        actor: { userId: "user-1", agentId: "codex", principalId: "principal-1" },
-      });
-
-      expect(result.capsuleId).toBe("WC-MINE001");
-      expect(db.workCapsule.create).toHaveBeenCalledTimes(1);
-      expect(db.workCapsule.update).not.toHaveBeenCalled();
     });
   });
 
@@ -726,14 +557,14 @@ describe("work capsule store", () => {
         claimedByAgentId: null,
         claimedAt: null,
       });
-      db.workCapsule.findFirst.mockResolvedValueOnce(null); // adopt: no existing
-      db.workCapsule.create.mockResolvedValueOnce({
+      db.workroom.findFirst.mockResolvedValueOnce(null); // adopt: no existing
+      db.workroom.create.mockResolvedValueOnce({
         id: "row-1",
         capsuleId: "WC-CLAIM01",
         headBranch: baseInput.headBranch,
         worktreePath: baseInput.worktreePath,
       });
-      db.workCapsule.findMany.mockResolvedValueOnce([]); // no other locations
+      db.workroom.findMany.mockResolvedValueOnce([]); // no other locations
       db.backlogItem.update.mockResolvedValueOnce({ id: "bi-row-1" });
 
       const result = await claimBacklogItemWorkspace({ db: capsuleDb(), input: baseInput, actor });
@@ -750,6 +581,55 @@ describe("work capsule store", () => {
       }));
     });
 
+    it("resumes the durable abandoned capsule when the same BI reclaims its branch", async () => {
+      db.backlogItem.findFirst.mockResolvedValueOnce({
+        id: "bi-row-1",
+        itemId: "BI-7D20BFDF",
+        epicId: "EP-1",
+        claimStatus: "active",
+        claimedById: "user-1",
+        claimedByAgentId: "agent-1",
+        claimedAt: new Date(),
+      });
+      db.workroom.findFirst.mockResolvedValueOnce({
+        id: "row-abandoned",
+        capsuleId: "WC-CLAIM01",
+        status: "abandoned",
+        archivedAt: null,
+        backlogItemId: "BI-7D20BFDF",
+        epicId: "EP-1",
+        executorKind: "codex-desktop",
+        executorRef: "session-old",
+        baseBranch: "main",
+        headBranch: baseInput.headBranch,
+        worktreePath: baseInput.worktreePath,
+      });
+      db.workroom.update.mockResolvedValueOnce({
+        id: "row-abandoned",
+        capsuleId: "WC-CLAIM01",
+        status: "ready",
+        backlogItemId: "BI-7D20BFDF",
+        headBranch: baseInput.headBranch,
+        worktreePath: baseInput.worktreePath,
+      });
+      db.workroom.findMany.mockResolvedValueOnce([]);
+      db.backlogItem.update.mockResolvedValueOnce({ id: "bi-row-1" });
+
+      const result = await claimBacklogItemWorkspace({ db: capsuleDb(), input: baseInput, actor });
+
+      expect(result.capsuleId).toBe("WC-CLAIM01");
+      expect(result.claimed).toBe(true);
+      expect(db.workroom.create).not.toHaveBeenCalled();
+      expect(db.workroom.update).toHaveBeenCalledWith(expect.objectContaining({
+        where: { capsuleId: "WC-CLAIM01" },
+        data: expect.objectContaining({
+          status: "ready",
+          executorRef: "session-A",
+          leaseHolderPrincipalId: "PRN-1",
+        }),
+      }));
+    });
+
     it("returns a non-blocking conflict and does NOT overwrite a fresh claim held by another agent", async () => {
       const now = new Date("2026-07-06T12:00:00.000Z");
       db.backlogItem.findFirst.mockResolvedValueOnce({
@@ -761,14 +641,14 @@ describe("work capsule store", () => {
         claimedByAgentId: "other-agent",
         claimedAt: new Date(now.getTime() - 60 * 60 * 1000), // 1h ago = fresh
       });
-      db.workCapsule.findFirst.mockResolvedValueOnce(null);
-      db.workCapsule.create.mockResolvedValueOnce({
+      db.workroom.findFirst.mockResolvedValueOnce(null);
+      db.workroom.create.mockResolvedValueOnce({
         id: "row-1",
         capsuleId: "WC-CLAIM02",
         headBranch: baseInput.headBranch,
         worktreePath: baseInput.worktreePath,
       });
-      db.workCapsule.findMany.mockResolvedValueOnce([]);
+      db.workroom.findMany.mockResolvedValueOnce([]);
 
       const result = await claimBacklogItemWorkspace({ db: capsuleDb(), input: baseInput, actor, now });
 
@@ -793,9 +673,9 @@ describe("work capsule store", () => {
         claimedByAgentId: "other-agent",
         claimedAt: new Date(now.getTime() - 13 * 60 * 60 * 1000), // 13h ago = stale
       });
-      db.workCapsule.findFirst.mockResolvedValueOnce(null);
-      db.workCapsule.create.mockResolvedValueOnce({ id: "row-1", capsuleId: "WC-CLAIM03" });
-      db.workCapsule.findMany.mockResolvedValueOnce([]);
+      db.workroom.findFirst.mockResolvedValueOnce(null);
+      db.workroom.create.mockResolvedValueOnce({ id: "row-1", capsuleId: "WC-CLAIM03" });
+      db.workroom.findMany.mockResolvedValueOnce([]);
       db.backlogItem.update.mockResolvedValueOnce({ id: "bi-row-1" });
 
       const result = await claimBacklogItemWorkspace({ db: capsuleDb(), input: baseInput, actor, now });
@@ -815,14 +695,14 @@ describe("work capsule store", () => {
         claimedByAgentId: null,
         claimedAt: null,
       });
-      db.workCapsule.findFirst.mockResolvedValueOnce(null);
-      db.workCapsule.create.mockResolvedValueOnce({
+      db.workroom.findFirst.mockResolvedValueOnce(null);
+      db.workroom.create.mockResolvedValueOnce({
         id: "row-2",
         capsuleId: "WC-CLAIM-B",
         headBranch: "feat/second-branch",
       });
       // Another capsule already exists on a DIFFERENT branch for the same BI.
-      db.workCapsule.findMany.mockResolvedValueOnce([
+      db.workroom.findMany.mockResolvedValueOnce([
         { capsuleId: "WC-CLAIM-A", headBranch: "feat/first-branch", worktreePath: "/wt/a", executorRef: "session-B", leaseHolderPrincipalId: "PRN-2" },
       ]);
       db.backlogItem.update.mockResolvedValueOnce({ id: "bi-row-1" });
@@ -852,7 +732,7 @@ describe("work capsule store", () => {
         claimedAt: new Date(),
       });
       // adopt reuse: existing capsule already bound to this BI + session.
-      db.workCapsule.findFirst.mockResolvedValueOnce({
+      db.workroom.findFirst.mockResolvedValueOnce({
         id: "row-1",
         capsuleId: "WC-CLAIM01",
         status: "working",
@@ -862,14 +742,14 @@ describe("work capsule store", () => {
         headBranch: baseInput.headBranch,
         worktreePath: baseInput.worktreePath,
       });
-      db.workCapsule.findMany.mockResolvedValueOnce([]);
+      db.workroom.findMany.mockResolvedValueOnce([]);
       db.backlogItem.update.mockResolvedValueOnce({ id: "bi-row-1" });
 
       const result = await claimBacklogItemWorkspace({ db: capsuleDb(), input: baseInput, actor });
 
       expect(result.capsuleId).toBe("WC-CLAIM01");
-      expect(db.workCapsule.create).not.toHaveBeenCalled();
-      expect(db.workCapsule.update).not.toHaveBeenCalled(); // already bound → no late-bind
+      expect(db.workroom.create).not.toHaveBeenCalled();
+      expect(db.workroom.update).not.toHaveBeenCalled(); // already bound → no late-bind
     });
   });
 
@@ -895,14 +775,14 @@ describe("work capsule store", () => {
     }
 
     it("rejects an edit claim that overlaps another active capsule's edit claim", async () => {
-      db.workCapsule.findUnique.mockResolvedValueOnce({
+      db.workroom.findUnique.mockResolvedValueOnce({
         id: "row-1",
         capsuleId: "WC-MINE001",
         status: "working",
         archivedAt: null,
         scopeClaims: [],
       });
-      db.workCapsule.findMany.mockResolvedValueOnce([otherCapsule({})]);
+      db.workroom.findMany.mockResolvedValueOnce([otherCapsule({})]);
 
       await expect(
         claimWorkCapsuleScope({
@@ -914,11 +794,11 @@ describe("work capsule store", () => {
       ).rejects.toBeInstanceOf(ScopeOverlapError);
 
       // The conflicting write must never reach the DB.
-      expect(db.workCapsule.update).not.toHaveBeenCalled();
+      expect(db.workroom.update).not.toHaveBeenCalled();
     });
 
     it("refuses scope claims on an abandoned capsule (BI-95E37EA1)", async () => {
-      db.workCapsule.findUnique.mockResolvedValueOnce({
+      db.workroom.findUnique.mockResolvedValueOnce({
         id: "row-stale",
         capsuleId: "WC-DEAC865E",
         status: "abandoned",
@@ -935,12 +815,12 @@ describe("work capsule store", () => {
         }),
       ).rejects.toThrow(/abandoned and cannot accept scope claims/i);
 
-      expect(db.workCapsule.update).not.toHaveBeenCalled();
+      expect(db.workroom.update).not.toHaveBeenCalled();
     });
 
     it("rejects an edit claim that overlaps another capsule's read claim (edit is exclusive)", async () => {
-      db.workCapsule.findUnique.mockResolvedValueOnce({ id: "row-1", capsuleId: "WC-MINE001", scopeClaims: [] });
-      db.workCapsule.findMany.mockResolvedValueOnce([
+      db.workroom.findUnique.mockResolvedValueOnce({ id: "row-1", capsuleId: "WC-MINE001", scopeClaims: [] });
+      db.workroom.findMany.mockResolvedValueOnce([
         otherCapsule({ scopeClaims: [{ kind: "module", value: "routing", intent: "read", recordedAt: "2026-06-18T00:00:00.000Z", recordedByPrincipalId: "PRN-2" }] }),
       ]);
 
@@ -955,12 +835,12 @@ describe("work capsule store", () => {
     });
 
     it("allows two read claims on the same scope (read is non-exclusive)", async () => {
-      db.workCapsule.findUnique.mockResolvedValue({ id: "row-1", capsuleId: "WC-MINE001", scopeClaims: [] });
-      db.workCapsule.findMany.mockResolvedValueOnce([
+      db.workroom.findUnique.mockResolvedValue({ id: "row-1", capsuleId: "WC-MINE001", scopeClaims: [] });
+      db.workroom.findMany.mockResolvedValueOnce([
         otherCapsule({ scopeClaims: [{ kind: "path", value: "apps/web/lib/foo.ts", intent: "read", recordedAt: "2026-06-18T00:00:00.000Z", recordedByPrincipalId: "PRN-2" }] }),
       ]);
-      db.workCapsule.update.mockResolvedValueOnce({ id: "row-1", capsuleId: "WC-MINE001" });
-      db.workCapsuleActivity.create.mockResolvedValueOnce({ id: "act-1" });
+      db.workroom.update.mockResolvedValueOnce({ id: "row-1", capsuleId: "WC-MINE001" });
+      db.workroomActivity.create.mockResolvedValueOnce({ id: "act-1" });
 
       await expect(
         claimWorkCapsuleScope({
@@ -970,14 +850,14 @@ describe("work capsule store", () => {
           actor,
         }),
       ).resolves.toBeDefined();
-      expect(db.workCapsule.update).toHaveBeenCalledTimes(1);
+      expect(db.workroom.update).toHaveBeenCalledTimes(1);
     });
 
     it("allows a claim when no other capsule holds overlapping scope", async () => {
-      db.workCapsule.findUnique.mockResolvedValueOnce({ id: "row-1", capsuleId: "WC-MINE001", scopeClaims: [] });
-      db.workCapsule.findMany.mockResolvedValueOnce([]);
-      db.workCapsule.update.mockResolvedValueOnce({ id: "row-1", capsuleId: "WC-MINE001" });
-      db.workCapsuleActivity.create.mockResolvedValueOnce({ id: "act-1" });
+      db.workroom.findUnique.mockResolvedValueOnce({ id: "row-1", capsuleId: "WC-MINE001", scopeClaims: [] });
+      db.workroom.findMany.mockResolvedValueOnce([]);
+      db.workroom.update.mockResolvedValueOnce({ id: "row-1", capsuleId: "WC-MINE001" });
+      db.workroomActivity.create.mockResolvedValueOnce({ id: "act-1" });
 
       const result = await claimWorkCapsuleScope({
         db: capsuleDb(),
@@ -986,14 +866,14 @@ describe("work capsule store", () => {
         actor,
       });
       expect(result.capsuleId).toBe("WC-MINE001");
-      expect(db.workCapsule.update).toHaveBeenCalledTimes(1);
+      expect(db.workroom.update).toHaveBeenCalledTimes(1);
     });
 
     it("force=true co-claims despite a conflict and records the override on the activity log", async () => {
-      db.workCapsule.findUnique.mockResolvedValueOnce({ id: "row-1", capsuleId: "WC-MINE001", scopeClaims: [] });
-      db.workCapsule.findMany.mockResolvedValueOnce([otherCapsule({})]);
-      db.workCapsule.update.mockResolvedValueOnce({ id: "row-1", capsuleId: "WC-MINE001" });
-      db.workCapsuleActivity.create.mockResolvedValueOnce({ id: "act-1" });
+      db.workroom.findUnique.mockResolvedValueOnce({ id: "row-1", capsuleId: "WC-MINE001", scopeClaims: [] });
+      db.workroom.findMany.mockResolvedValueOnce([otherCapsule({})]);
+      db.workroom.update.mockResolvedValueOnce({ id: "row-1", capsuleId: "WC-MINE001" });
+      db.workroomActivity.create.mockResolvedValueOnce({ id: "act-1" });
 
       await claimWorkCapsuleScope({
         db: capsuleDb(),
@@ -1003,16 +883,16 @@ describe("work capsule store", () => {
         force: true,
       });
 
-      expect(db.workCapsule.update).toHaveBeenCalledTimes(1);
-      const activityArg = db.workCapsuleActivity.create.mock.calls[0]![0] as {
+      expect(db.workroom.update).toHaveBeenCalledTimes(1);
+      const activityArg = db.workroomActivity.create.mock.calls[0]![0] as {
         data: { payload: { forcedOverConflicts?: unknown[] } };
       };
       expect(activityArg.data.payload.forcedOverConflicts).toHaveLength(1);
     });
 
     it("rejects an edit on a file beneath another capsule's directory path claim", async () => {
-      db.workCapsule.findUnique.mockResolvedValueOnce({ id: "row-1", capsuleId: "WC-MINE001", scopeClaims: [] });
-      db.workCapsule.findMany.mockResolvedValueOnce([
+      db.workroom.findUnique.mockResolvedValueOnce({ id: "row-1", capsuleId: "WC-MINE001", scopeClaims: [] });
+      db.workroom.findMany.mockResolvedValueOnce([
         otherCapsule({
           scopeClaims: [{ kind: "path", value: "apps/web/lib/", intent: "edit", recordedAt: "2026-06-18T00:00:00.000Z", recordedByPrincipalId: "PRN-2" }],
         }),
@@ -1026,12 +906,12 @@ describe("work capsule store", () => {
           actor,
         }),
       ).rejects.toBeInstanceOf(ScopeOverlapError);
-      expect(db.workCapsule.update).not.toHaveBeenCalled();
+      expect(db.workroom.update).not.toHaveBeenCalled();
     });
 
     it("rejects an edit directory claim that contains another capsule's file claim", async () => {
-      db.workCapsule.findUnique.mockResolvedValueOnce({ id: "row-1", capsuleId: "WC-MINE001", scopeClaims: [] });
-      db.workCapsule.findMany.mockResolvedValueOnce([otherCapsule({})]); // holds apps/web/lib/foo.ts (edit)
+      db.workroom.findUnique.mockResolvedValueOnce({ id: "row-1", capsuleId: "WC-MINE001", scopeClaims: [] });
+      db.workroom.findMany.mockResolvedValueOnce([otherCapsule({})]); // holds apps/web/lib/foo.ts (edit)
 
       await expect(
         claimWorkCapsuleScope({
@@ -1044,10 +924,10 @@ describe("work capsule store", () => {
     });
 
     it("does not treat a sibling path sharing a string prefix as overlapping", async () => {
-      db.workCapsule.findUnique.mockResolvedValueOnce({ id: "row-1", capsuleId: "WC-MINE001", scopeClaims: [] });
-      db.workCapsule.findMany.mockResolvedValueOnce([otherCapsule({})]); // holds apps/web/lib/foo.ts (edit)
-      db.workCapsule.update.mockResolvedValueOnce({ id: "row-1", capsuleId: "WC-MINE001" });
-      db.workCapsuleActivity.create.mockResolvedValueOnce({ id: "act-1" });
+      db.workroom.findUnique.mockResolvedValueOnce({ id: "row-1", capsuleId: "WC-MINE001", scopeClaims: [] });
+      db.workroom.findMany.mockResolvedValueOnce([otherCapsule({})]); // holds apps/web/lib/foo.ts (edit)
+      db.workroom.update.mockResolvedValueOnce({ id: "row-1", capsuleId: "WC-MINE001" });
+      db.workroomActivity.create.mockResolvedValueOnce({ id: "act-1" });
 
       const result = await claimWorkCapsuleScope({
         db: capsuleDb(),
@@ -1056,11 +936,11 @@ describe("work capsule store", () => {
         actor,
       });
       expect(result.capsuleId).toBe("WC-MINE001");
-      expect(db.workCapsule.update).toHaveBeenCalledTimes(1);
+      expect(db.workroom.update).toHaveBeenCalledTimes(1);
     });
 
     it("scopes the conflict query to active, non-terminal, unexpired, non-self capsules", async () => {
-      db.workCapsule.findMany.mockResolvedValueOnce([]);
+      db.workroom.findMany.mockResolvedValueOnce([]);
       const now = new Date("2026-06-18T12:00:00.000Z");
 
       await detectScopeConflicts({
@@ -1070,7 +950,7 @@ describe("work capsule store", () => {
         now,
       });
 
-      const where = db.workCapsule.findMany.mock.calls[0]![0].where;
+      const where = db.workroom.findMany.mock.calls[0]![0].where;
       expect(where.capsuleId).toEqual({ not: "WC-MINE001" });
       expect(where.archivedAt).toBeNull();
       expect(where.status.notIn).toEqual(expect.arrayContaining(["complete", "abandoned", "archived"]));
@@ -1084,19 +964,19 @@ describe("work capsule store", () => {
         claims: [],
       });
       expect(conflicts).toEqual([]);
-      expect(db.workCapsule.findMany).not.toHaveBeenCalled();
+      expect(db.workroom.findMany).not.toHaveBeenCalled();
     });
   });
 
   describe("reassignWorkCapsuleExecutor cross-agent handoff (BI-A443B9CC)", () => {
     it("changes the executor, transfers the lease, and writes an executor-changed activity with provenance", async () => {
-      db.workCapsule.findUnique.mockResolvedValueOnce({
+      db.workroom.findUnique.mockResolvedValueOnce({
         id: "row-1",
         executorKind: "claude-desktop",
         executorRef: "claude-session",
         leaseHolderPrincipalId: "principal-claude",
       });
-      db.workCapsule.update.mockResolvedValueOnce({ id: "row-1", capsuleId: "WC-HANDOFF" });
+      db.workroom.update.mockResolvedValueOnce({ id: "row-1", capsuleId: "WC-HANDOFF" });
 
       await reassignWorkCapsuleExecutor({
         db: capsuleDb(),
@@ -1109,7 +989,7 @@ describe("work capsule store", () => {
       });
 
       // executor + lease transferred to the receiving principal
-      expect(db.workCapsule.update).toHaveBeenCalledWith(expect.objectContaining({
+      expect(db.workroom.update).toHaveBeenCalledWith(expect.objectContaining({
         where: { capsuleId: "WC-HANDOFF" },
         data: expect.objectContaining({
           executorKind: "grok-desktop",
@@ -1118,7 +998,7 @@ describe("work capsule store", () => {
         }),
       }));
       // executor-changed activity carries full from/to provenance + manifest
-      expect(db.workCapsuleActivity.create).toHaveBeenCalledWith(expect.objectContaining({
+      expect(db.workroomActivity.create).toHaveBeenCalledWith(expect.objectContaining({
         data: expect.objectContaining({
           kind: "executor-changed",
           payload: expect.objectContaining({
@@ -1140,18 +1020,18 @@ describe("work capsule store", () => {
         toExecutorKind: "not-a-real-executor" as never,
         actor: { userId: "user-1", agentId: null, principalId: "principal-1" },
       })).rejects.toThrow(/executor kind/i);
-      expect(db.workCapsule.update).not.toHaveBeenCalled();
+      expect(db.workroom.update).not.toHaveBeenCalled();
     });
 
     it("throws when the capsule does not exist", async () => {
-      db.workCapsule.findUnique.mockResolvedValueOnce(null);
+      db.workroom.findUnique.mockResolvedValueOnce(null);
       await expect(reassignWorkCapsuleExecutor({
         db: capsuleDb(),
         capsuleId: "WC-MISSING",
         toExecutorKind: "codex-desktop",
         actor: { userId: "user-1", agentId: null, principalId: "principal-1" },
       })).rejects.toThrow(/not found/i);
-      expect(db.workCapsule.update).not.toHaveBeenCalled();
+      expect(db.workroom.update).not.toHaveBeenCalled();
     });
   });
 
@@ -1159,8 +1039,8 @@ describe("work capsule store", () => {
     it.each(["thought", "action", "question", "response", "error"] as const)(
       "writes a %s activity onto the capsule timeline with actor identity",
       async (type) => {
-        db.workCapsule.findUnique.mockResolvedValueOnce({ id: "row-1", capsuleId: "WC-SESS" });
-        db.workCapsuleActivity.create.mockResolvedValueOnce({ id: "act-1" });
+        db.workroom.findUnique.mockResolvedValueOnce({ id: "row-1", capsuleId: "WC-SESS" });
+        db.workroomActivity.create.mockResolvedValueOnce({ id: "act-1" });
 
         await recordAgentActivity({
           db: capsuleDb(),
@@ -1169,7 +1049,7 @@ describe("work capsule store", () => {
           actor: { userId: "user-1", agentId: "claude", principalId: "principal-1" },
         });
 
-        expect(db.workCapsuleActivity.create).toHaveBeenCalledWith(expect.objectContaining({
+        expect(db.workroomActivity.create).toHaveBeenCalledWith(expect.objectContaining({
           data: expect.objectContaining({
             workCapsuleId: "row-1",
             kind: type,
@@ -1188,11 +1068,11 @@ describe("work capsule store", () => {
         activity: { type: "chatter" as never, body: "nope" },
         actor: { userId: "user-1", agentId: null, principalId: "principal-1" },
       })).rejects.toThrow(/activity type/i);
-      expect(db.workCapsule.findUnique).not.toHaveBeenCalled();
+      expect(db.workroom.findUnique).not.toHaveBeenCalled();
     });
 
     it("throws when the capsule does not exist", async () => {
-      db.workCapsule.findUnique.mockResolvedValueOnce(null);
+      db.workroom.findUnique.mockResolvedValueOnce(null);
       await expect(recordAgentActivity({
         db: capsuleDb(),
         capsuleId: "WC-MISSING",

@@ -333,7 +333,7 @@ export async function ingestBacklogItem(
   // Dedup by origin marker against non-terminal items.
   if (marker) {
     const existing = await store.backlogItem.findFirst({
-      where: { body: { contains: marker }, status: { notIn: ["done", "deferred"] } },
+      where: { body: { contains: marker }, status: { notIn: ["done", "deferred", "retired"] } },
       select: { id: true, itemId: true },
       orderBy: { createdAt: "desc" },
     });

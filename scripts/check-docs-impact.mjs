@@ -60,9 +60,13 @@ export function isDependencyOnlyChange(changedFiles) {
 // Command-injection hygiene (mirrors check-ux-fit-decision.mjs): pin the ref /
 // path character sets so a forged CI value can't smuggle git option flags or
 // shell metachars through execFile. Path set includes Next route punctuation
-// — route groups `(shell)` and dynamic/catch-all `[id]` / `[[...slug]]`.
+// — route groups `(shell)` and dynamic/catch-all `[id]` / `[[...slug]]` — and
+// `@`, which appears in scoped package dirs and in pnpm's patch filenames
+// (`patches/image-size@1.2.1.patch`). `@` is not a shell metachar and these
+// values are passed via execFile (no shell), so the injection surface is
+// unchanged; the leading-`-` option-smuggling guard below is the real control.
 const REF_RE = /^[A-Za-z0-9._\-/]{1,200}$/;
-const PATH_RE = /^[A-Za-z0-9._\-/()[\]]+$/;
+const PATH_RE = /^[A-Za-z0-9._\-/()[\]@]+$/;
 
 function assertSafeRef(ref, label) {
   if (!REF_RE.test(ref) || ref.startsWith("-")) throw new Error(`[docs-impact-gate] refusing unsafe ${label}: ${JSON.stringify(ref)}`);

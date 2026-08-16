@@ -30,6 +30,7 @@ import { extractWikilinks } from "@dpf/db/wiki-frontmatter";
 import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/actions/shared/guards";
 import { promoteCraftOverrideOnPublish } from "@/lib/wiki/craft-override-promotion";
+import { embedPublishedOverlayPage } from "@/lib/wiki/embed-published-overlay";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -63,6 +64,9 @@ export type SaveWikiOverlayEditInput = {
    * that). Omitted = column left untouched on update.
    */
   metadata?: Record<string, unknown> | null;
+  /** Closed-axis projection for stance pages; carries evidence, never authority. */
+  principleDimensionVector?: Record<string, number>;
+  principleDimensions?: string[];
 };
 
 export type SaveWikiOverlayEditResult =
@@ -177,6 +181,11 @@ export async function saveWikiOverlayEdit(
     // transition can be detected below (BI-8AC24F3D). Null when creating a new
     // row, which counts as "was not published".
     let previousStatus: WikiPageStatus | null = null;
+    // Body this page held before this save. BI-D4C1E05E: an already-published
+    // page only needs re-embedding when its body actually changed — so a no-op
+    // or metadata-only re-save of a published page skips the embed. Null when
+    // creating a new row (which always embeds if it lands published).
+    let previousBody: string | null = null;
 
     // If pageId supplied: load + verify scope.
     if (input.pageId) {
@@ -189,6 +198,7 @@ export async function saveWikiOverlayEdit(
           organizationId: true,
           pageKind: true,
           status: true,
+          body: true,
         },
       })) as
         | {
@@ -198,6 +208,7 @@ export async function saveWikiOverlayEdit(
             organizationId: string | null;
             pageKind: string;
             status: WikiPageStatus;
+            body: string;
           }
         | null;
       if (!existing) {
@@ -226,6 +237,7 @@ export async function saveWikiOverlayEdit(
         };
       }
       previousStatus = existing.status;
+      previousBody = existing.body;
     } else if (input.overridesKernelPageId) {
       // Creating a new overlay that overrides a kernel page.
       const kernel = (await prisma.wikiPage.findFirst({
@@ -256,6 +268,12 @@ export async function saveWikiOverlayEdit(
       isKernel: false,
       abstract: input.abstract ?? null,
       ...(input.metadata !== undefined ? { metadata: input.metadata } : {}),
+      ...(input.principleDimensionVector !== undefined
+        ? { principleDimensionVector: input.principleDimensionVector }
+        : {}),
+      ...(input.principleDimensions !== undefined
+        ? { principleDimensions: input.principleDimensions }
+        : {}),
       kernelPageId: input.overridesKernelPageId ?? null,
       derivedFromKernelVersion: input.overridesKernelPageId
         ? readKernelVersionFromManifest()
@@ -297,6 +315,35 @@ export async function saveWikiOverlayEdit(
           pageKind: input.pageKind,
           abstract: input.abstract ?? null,
         },
+        origin: "wiki-edit",
+      });
+    }
+
+    // BI-D4C1E05E: embed the page into the `wiki-pages` vector store so a
+    // published stance/overlay is actually retrievable by the decision engine.
+    // Embed when the page lands published AND either it just became published
+    // (draft→published, or a fresh/override row with no prior status) OR its body
+    // changed — a no-op / metadata-only re-save of an already-published page skips
+    // the embed (storeWikiPage upserts by pageId, so a refresh would be idempotent
+    // but wasteful). Draft saves are never embedded (retrieval filters
+    // status=published). Never rolls back the save on a failed embed; the reembed
+    // reconcile self-heals on the next upgrade boot.
+    const bodyChangedWhilePublished =
+      previousStatus === "published" && previousBody !== input.body;
+    if (
+      saved.status === "published" &&
+      (previousStatus !== "published" || bodyChangedWhilePublished)
+    ) {
+      await embedPublishedOverlayPage({
+        page: {
+          id: saved.id,
+          slug: saved.slug,
+          title: input.title.trim(),
+          body: input.body,
+          abstract: input.abstract ?? null,
+          pageKind: input.pageKind,
+        },
+        organizationId: org.id,
         origin: "wiki-edit",
       });
     }

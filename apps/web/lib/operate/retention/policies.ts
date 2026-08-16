@@ -367,6 +367,7 @@ export const PURGE_POLICIES: readonly PurgePolicy[] = [
 // parts of that BI.
 
 export const RETAINED_DATASETS: readonly RetainedDataset[] = [
+  { model: "initiativeArtifactRetentionPin", label: "Initiative artifact retention pins", regulatoryBasis: "Approved initiative-governance baseline evidence is permanent until a separately governed, hold-aware exceptional disposition", minRetentionYears: Number.POSITIVE_INFINITY },
   // Financial records — IRS/SOX-style 7-year floor.
   { model: "invoice", label: "Invoices", regulatoryBasis: "Financial record retention (IRS / SOX-style statutory)", minRetentionYears: 7 },
   { model: "invoiceLineItem", label: "Invoice line items", regulatoryBasis: "Financial record retention", minRetentionYears: 7 },

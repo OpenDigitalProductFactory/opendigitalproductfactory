@@ -22,6 +22,11 @@ vi.mock("@/lib/actions/inventory", () => ({
   reassignTaxonomy: vi.fn(),
   requestDiscoveryEvidence: vi.fn(),
 }));
+vi.mock("@/components/ui/LocalTime", () => ({
+  LocalTime: ({ value, mode = "datetime" }: { value: string; mode?: string }) => (
+    <span data-mode={mode}>{value}</span>
+  ),
+}));
 
 import { InventoryExceptionQueue } from "./InventoryExceptionQueue";
 
@@ -140,7 +145,7 @@ describe("InventoryExceptionQueue", () => {
     );
 
     expect(html).toContain("Triage Workbench");
-    expect(html).toContain("Employee review");
+    expect(html).toContain("Review");
     expect(html).toContain("Needs More Evidence");
     expect(html).toContain("Taxonomy Gaps");
     expect(html).toContain("Auto Attributed");
@@ -151,6 +156,9 @@ describe("InventoryExceptionQueue", () => {
     expect(html).toContain("job: mystery-engine | instance: srv-01");
     expect(html).toContain("Accept recommendation");
     expect(html).toContain("Request evidence");
+    expect(html).toContain('data-mode="datetime"');
+    expect(html).toContain("2026-04-25T13:00:00Z");
+    expect(html).toContain("2026-04-25T12:00:00Z");
   });
 
   it("uses theme-aware classes instead of hardcoded gray or white utility colors", () => {

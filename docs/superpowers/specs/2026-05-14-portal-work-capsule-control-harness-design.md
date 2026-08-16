@@ -387,7 +387,7 @@ Field notes:
 - **Principal resolution at write time.** Implementations MUST resolve the writer to a Principal using the existing `apps/web/lib/identity/principal-linking.ts` primitives  -  `resolvePrincipalIdForUser(userId)` for human writers and `ensureAgentPrincipalIdentity(agentId)` for agent writers. If resolution fails (no alias yet, principal-linking outage), the column is written as `null` rather than fabricating a non-Principal FK. A null `*PrincipalId` is a known intermediate state; a User.id or Agent.id stuffed into a Principal column is a data-integrity defect that requires migration to undo.
 - `contributionMode` is `private` (default; PR targets the install's own repo) or `hive-public` (PR targets the public hive fork; goes through `contribute_to_hive` plumbing). The two modes require different DCO/signing surfaces; capsule must declare its mode at creation so downstream tools route correctly.
 - `branchTaxonomy` records the AGENTS.md section 4 prefix (`feat`, `fix`, `chore`, `doc`, `clean`). Capsule creation enforces this; adoption infers it from branch name and warns if absent.
-- `idempotencyKey` allows safe retry of `create_work_capsule` and `adopt_worktree`. Server returns the existing capsule on conflict rather than creating a duplicate.
+- `idempotencyKey` allows safe retry of `create_work_capsule` and `adopt_worktree`. The branch natural key owns one durable capsule identity: a live compatible capsule is reused, an abandoned capsule is resumed only for the same BacklogItem, and an incompatible terminal or foreign binding returns `branch_occupied` without overwriting history or attempting an impossible duplicate insert.
 - `leaseHolderPrincipalId` + `leaseExpiresAt` implement the external executor heartbeat in section 9.5. Build Studio capsules do not use the lease; they rely on `FeatureBuild` lifecycle directly.
 - Cached git/PR/sandbox fields (`baseSha`, `headSha`, `pullRequestNumber`, `sandboxId`, etc.) follow section 7.4: refresh through the reconciler, never authoritative.
 
@@ -521,7 +521,7 @@ Required MCP tools:
 | `list_work_capsules` | find assigned or open capsules | read-only |
 | `get_work_capsule` | hydrate context before acting | read-only |
 | `create_work_capsule` | create a governed work unit | `idempotencyKey` required; conflict returns existing capsule |
-| `adopt_worktree` | attach an existing path/branch | natural key `(repositoryFullName, headBranch)` returns existing capsule |
+| `adopt_worktree` | attach an existing path/branch | natural key `(repositoryFullName, headBranch)` reuses a compatible live capsule, resumes an abandoned same-BI capsule, and refuses foreign history with `branch_occupied` |
 | `plan_capsule_worktree` | generate deterministic branch name, worktree path, and taxonomy; display operator-paste launch commands | idempotent re-plan; collision with existing branch adds numeric suffix; issues initial lease on external-executor assignment |
 | `claim_capsule_scope` | declare intended files/modules | merging set on `(capsuleId, kind, value)` |
 | `record_capsule_evidence` | persist tests, builds, screenshots, notes | append-only |

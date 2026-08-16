@@ -1,9 +1,9 @@
 // apps/web/lib/work-capsules/liveness.ts
 //
-// WS9 (BI-CBAAEA94 / EP-PROCESS-SPINE) — the WorkCapsule liveness contract.
+// WS9 (BI-CBAAEA94 / EP-PROCESS-SPINE) — the Workroom liveness contract.
 //
 // Why this exists:
-//   A WorkCapsule's `updatedAt` is NOT a liveness signal. Build Studio capsules
+//   A Workroom's `updatedAt` is NOT a liveness signal. Build Studio capsules
 //   are born at the daily 14:00 governed-backlog tee-up and, if their build
 //   stalls immediately, are never written again — so `updatedAt` freezes at
 //   `...T14:00:00` forever while the row still says status="working". Dozens of

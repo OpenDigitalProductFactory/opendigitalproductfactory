@@ -1,4 +1,4 @@
-import { authorizeWorkRoomAccess, type WorkRoomAccessDecision } from "./room-participation";
+import { authorizeWorkroomAccess, type WorkroomAccessDecision } from "./room-participation";
 
 export type WorkspaceRoomPolicyMetadata = {
   admittedPrincipalRefs: string[];
@@ -10,7 +10,7 @@ export type WorkspaceRoomPolicyMetadata = {
 
 export type WorkspaceRoomPolicyParticipant = {
   principalRef: string;
-  roles: Array<"accountable" | "contributor" | "reviewer" | "observer">;
+  roles: Array<"accountable" | "coordinator" | "contributor" | "reviewer" | "observer">;
   enteredReason: string | null;
   currentWorkSummary: string | null;
 };
@@ -21,7 +21,7 @@ export function readWorkspaceRoomPolicy(evidence: unknown): Partial<WorkspaceRoo
   // earlier snapshot; reading the first would preserve stale authority.
   for (const value of [...values].reverse()) {
     if (!value || typeof value !== "object") continue;
-    const policy = (value as Record<string, unknown>).workRoomPolicy;
+    const policy = (value as Record<string, unknown>).workroomPolicy;
     if (!policy || typeof policy !== "object") continue;
     const record = policy as Record<string, unknown>;
     const strings = (key: string) => Array.isArray(record[key])
@@ -35,7 +35,7 @@ export function readWorkspaceRoomPolicy(evidence: unknown): Partial<WorkspaceRoo
             ? participant.principalRef.trim()
             : "";
           if (!principalRef) return [];
-          const validRoles = ["accountable", "contributor", "reviewer", "observer"];
+          const validRoles = ["accountable", "coordinator", "contributor", "reviewer", "observer"];
           const roles = Array.isArray(participant.roles)
             ? participant.roles.filter(
                 (role): role is WorkspaceRoomPolicyParticipant["roles"][number] =>
@@ -76,7 +76,7 @@ export function authorizeWorkspaceRoomItem(input: {
     sensitivityClearance: readonly string[];
     isSuperuser: boolean;
   };
-}): WorkRoomAccessDecision {
+}): WorkroomAccessDecision {
   const policy = readWorkspaceRoomPolicy(input.item.evidence);
   const principalId = input.authContext?.principalId ?? `user:${input.userId}`;
   const assignedToCurrentUser = input.item.assignedToUserId === input.userId;
@@ -85,7 +85,7 @@ export function authorizeWorkspaceRoomItem(input: {
     ? policy.actionPrincipalRefs ?? []
     : policy.admittedPrincipalRefs ?? [];
 
-  return authorizeWorkRoomAccess({
+  return authorizeWorkroomAccess({
     requested: input.requested,
     principalRef: principalId,
     assignedPrincipalRefs: [

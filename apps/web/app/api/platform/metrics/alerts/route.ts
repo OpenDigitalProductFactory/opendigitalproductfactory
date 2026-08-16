@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { fetchAlertSources } from "@/lib/observability/alert-sources";
+import { fetchAlertSources, isMonitoringConfigured } from "@/lib/observability/alert-sources";
 import { screenAlertsForSelfDistrust } from "@/lib/observability/alert-self-distrust";
 
 export const dynamic = "force-dynamic";
@@ -25,6 +25,17 @@ export async function GET() {
   const alerts = await screenAlertsForSelfDistrust(rawAlerts);
 
   if (!reached.prometheus && !reached["loki-ruler"]) {
+    // Distinguish "no monitoring stack configured on this topology" (expected on
+    // a fresh/local install — neutral, non-alarming) from "configured but
+    // unreachable" (a real outage worth a 503 + offline banner). BI-63FF58D2:
+    // a persistent "Monitoring offline" chrome on an install that simply never
+    // wired up Prometheus/Loki is a false-alarm default for a product we sell.
+    if (!isMonitoringConfigured()) {
+      return NextResponse.json(
+        { status: "not-configured", data: { alerts: [] } },
+        { headers: NO_CACHE_HEADERS },
+      );
+    }
     return NextResponse.json(
       { status: "error", error: "Monitoring stack unreachable", data: { alerts: [] } },
       { status: 503, headers: NO_CACHE_HEADERS },

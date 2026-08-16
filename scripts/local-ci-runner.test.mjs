@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { delimiter, join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 
@@ -7,6 +10,8 @@ import {
   LOCAL_CI_MISSING_DATABASE_URL,
   createLocalIntegrationChildInvocation,
   planPostgresOwnership,
+  preparePinnedPnpmEnvironment,
+  resetOwnedSlotDatabase,
 } from "./local-ci-runner.mjs";
 
 const cli = fileURLToPath(new URL("./local-ci-runner.mjs", import.meta.url));
@@ -131,4 +136,91 @@ test("a foreign listener never satisfies manifest Postgres ownership", () => {
     }),
     "reuse",
   );
+});
+
+test("an admitted runner resets only its manifest-owned disposable slot database", () => {
+  const calls = [];
+  resetOwnedSlotDatabase({
+    container: "dpf-local-ci-postgres-0",
+    database: "dpf_local_ci_0",
+    run: (command, args) => {
+      calls.push([command, args]);
+      return { status: 0, stdout: "", stderr: "" };
+    },
+  });
+
+  assert.deepEqual(calls, [
+    ["docker", ["exec", "dpf-local-ci-postgres-0", "dropdb", "--if-exists", "--force", "-U", "dpf", "dpf_local_ci_0"]],
+    ["docker", ["exec", "dpf-local-ci-postgres-0", "createdb", "-U", "dpf", "-O", "dpf", "dpf_local_ci_0"]],
+  ]);
+});
+
+test("slot database reset rejects non-manifest identities before invoking Docker", () => {
+  let called = false;
+  assert.throws(
+    () => resetOwnedSlotDatabase({
+      container: "postgres",
+      database: "production",
+      run: () => { called = true; return { status: 0 }; },
+    }),
+    /refusing non-slot Postgres reset/,
+  );
+  assert.equal(called, false);
+});
+
+test("slot database reset fails closed when drop or create fails", () => {
+  assert.throws(
+    () => resetOwnedSlotDatabase({
+      container: "dpf-local-ci-postgres-1",
+      database: "dpf_local_ci_1",
+      run: () => ({ status: 1, stdout: "", stderr: "database busy" }),
+    }),
+    /could not reset disposable slot database.*database busy/,
+  );
+});
+
+test("local CI shadows pnpm 11 with the repository-pinned version", () => {
+  const fixture = mkdtempSync(join(tmpdir(), "dpf-local-ci-pnpm-"));
+  const hostBin = join(fixture, "host-bin");
+  const toolchainDir = join(fixture, "toolchain");
+  const hostPnpm = join(hostBin, "pnpm");
+  mkdirSync(hostBin, { recursive: true });
+  writeFileSync(hostPnpm, `#!/bin/sh\nif [ "$1" = "--version" ]; then echo 11.19.0; exit 0; fi\nif [ "$1" = "with" ] && [ "$2" = "10.33.2" ]; then shift 2; if [ "$1" = "--version" ]; then echo 10.33.2; exit 0; fi; fi\nexit 9\n`);
+  chmodSync(hostPnpm, 0o755);
+
+  const prepared = preparePinnedPnpmEnvironment({
+    packageManager: "pnpm@10.33.2+sha512.fixture",
+    toolchainDir,
+    env: { PATH: `${hostBin}${delimiter}/usr/bin:/bin` },
+    platform: "darwin",
+  });
+
+  assert.equal(prepared.mode, "pinned-shim");
+  assert.equal(prepared.expectedVersion, "10.33.2");
+  assert.equal(prepared.actualVersion, "11.19.0");
+  assert.equal(prepared.env.PATH.split(delimiter)[0], toolchainDir);
+  const pinned = spawnSync("pnpm", ["--version"], { encoding: "utf8", env: prepared.env });
+  assert.equal(pinned.status, 0, pinned.stderr);
+  assert.equal(pinned.stdout.trim(), "10.33.2");
+  assert.match(readFileSync(join(toolchainDir, "pnpm"), "utf8"), /with.*10\.33\.2/);
+});
+
+test("local CI keeps an already-matching pnpm without a shim", () => {
+  const fixture = mkdtempSync(join(tmpdir(), "dpf-local-ci-pnpm-match-"));
+  const hostBin = join(fixture, "host-bin");
+  mkdirSync(hostBin, { recursive: true });
+  const hostPnpm = join(hostBin, "pnpm");
+  writeFileSync(hostPnpm, "#!/bin/sh\necho 10.33.2\n");
+  chmodSync(hostPnpm, 0o755);
+  const originalPath = `${hostBin}${delimiter}/usr/bin:/bin`;
+
+  const prepared = preparePinnedPnpmEnvironment({
+    packageManager: "pnpm@10.33.2",
+    toolchainDir: join(fixture, "toolchain"),
+    env: { PATH: originalPath },
+    platform: "darwin",
+  });
+
+  assert.equal(prepared.mode, "host-match");
+  assert.equal(prepared.env.PATH, originalPath);
 });

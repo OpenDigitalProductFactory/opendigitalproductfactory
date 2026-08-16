@@ -31,6 +31,7 @@ const BACKLOG_STATUS_OPTIONS = [
   { value: "in-progress", label: "In progress" },
   { value: "done", label: "Done" },
   { value: "deferred", label: "Deferred" },
+  { value: "retired", label: "Retired" },
 ];
 
 type Props = {

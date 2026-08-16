@@ -1,7 +1,7 @@
 import type { WorkCaseSourceRef } from "./case-types";
 import {
-  getWorkRoomLifecycleAction,
-  type WorkRoomLifecycleOperation,
+  getWorkroomLifecycleAction,
+  type WorkroomLifecycleOperation,
 } from "./action-registry";
 import {
   evaluateWorkCasePolicy,
@@ -10,11 +10,11 @@ import {
 } from "./policy-envelope";
 import { dedupeRoomSourceRefs, roomText } from "./room-projection-utils";
 import { getWorkCaseSourceEntry } from "./source-registry";
-import type { WorkRoomCycleView, WorkRoomOutcomePacket } from "./room-types";
+import type { WorkroomCycleView, WorkroomOutcomePacket } from "./room-types";
 
-export interface WorkRoomCycleCarrierCandidate {
+export interface WorkroomCycleCarrierCandidate {
   cycleKey: string;
-  carrierKind: WorkRoomCycleView["carrierKind"];
+  carrierKind: WorkroomCycleView["carrierKind"];
   carrierId: string;
   trigger: string | null;
   objective: string | null;
@@ -24,22 +24,22 @@ export interface WorkRoomCycleCarrierCandidate {
   stopConditions: readonly string[];
   measureSummary: string | null;
   contextRefs: readonly WorkCaseSourceRef[];
-  status: WorkRoomCycleView["status"];
-  outcomePacket?: WorkRoomOutcomePacket | null;
+  status: WorkroomCycleView["status"];
+  outcomePacket?: WorkroomOutcomePacket | null;
   sourceRefs: readonly WorkCaseSourceRef[];
 }
 
-export type WorkRoomCycleErrorReason =
+export type WorkroomCycleErrorReason =
   | "unknown_source"
   | "finite_room_has_cycle"
   | "multiple_active_cycles"
   | "missing_cycle_boundary"
   | "unsupported_cycle_carrier";
 
-export class WorkRoomCycleError extends Error {
-  constructor(readonly reason: WorkRoomCycleErrorReason, message: string) {
+export class WorkroomCycleError extends Error {
+  constructor(readonly reason: WorkroomCycleErrorReason, message: string) {
     super(message);
-    this.name = "WorkRoomCycleError";
+    this.name = "WorkroomCycleError";
   }
 }
 
@@ -49,7 +49,7 @@ function iso(value: Date | string | null): string | null {
   return Number.isNaN(date.getTime()) ? null : date.toISOString();
 }
 
-export function buildWorkRoomCycle(candidate: WorkRoomCycleCarrierCandidate): WorkRoomCycleView {
+export function buildWorkroomCycle(candidate: WorkroomCycleCarrierCandidate): WorkroomCycleView {
   const trigger = roomText(candidate.trigger);
   const objective = roomText(candidate.objective);
   const accountablePrincipalRef = roomText(candidate.accountablePrincipalRef);
@@ -68,13 +68,13 @@ export function buildWorkRoomCycle(candidate: WorkRoomCycleCarrierCandidate): Wo
     || !measureSummary
     || contextRefs.length === 0
   ) {
-    throw new WorkRoomCycleError(
+    throw new WorkroomCycleError(
       "missing_cycle_boundary",
       `Cycle '${candidate.cycleKey}' requires trigger, objective, accountable principal, opened/review times, stop condition, measure, and scoped context.`,
     );
   }
   if ((candidate.status === "closed" || candidate.status === "carried-over") && !candidate.outcomePacket) {
-    throw new WorkRoomCycleError(
+    throw new WorkroomCycleError(
       "missing_cycle_boundary",
       `Closed cycle '${candidate.cycleKey}' requires a sealed Outcome Packet.`,
     );
@@ -96,24 +96,24 @@ export function buildWorkRoomCycle(candidate: WorkRoomCycleCarrierCandidate): Wo
   };
 }
 
-export function selectCurrentWorkRoomCycle(
+export function selectCurrentWorkroomCycle(
   sourceKey: string,
-  candidates: readonly WorkRoomCycleCarrierCandidate[],
-): WorkRoomCycleView | null {
+  candidates: readonly WorkroomCycleCarrierCandidate[],
+): WorkroomCycleView | null {
   const source = getWorkCaseSourceEntry(sourceKey);
   if (!source) {
-    throw new WorkRoomCycleError("unknown_source", `Work Room source '${sourceKey}' is not registered.`);
+    throw new WorkroomCycleError("unknown_source", `Work Room source '${sourceKey}' is not registered.`);
   }
   const active = candidates.filter((candidate) => candidate.status === "open" || candidate.status === "verifying");
   if (source.roomProjection.mode === "finite") {
     if (active.length > 0) {
-      throw new WorkRoomCycleError("finite_room_has_cycle", `${source.displayLabel} is finite and cannot project a recurring cycle.`);
+      throw new WorkroomCycleError("finite_room_has_cycle", `${source.displayLabel} is finite and cannot project a recurring cycle.`);
     }
     return null;
   }
   const logicalCycles = new Set(active.map((candidate) => candidate.cycleKey));
   if (logicalCycles.size > 1) {
-    throw new WorkRoomCycleError("multiple_active_cycles", "A standing Work Room can have only one active logical cycle.");
+    throw new WorkroomCycleError("multiple_active_cycles", "A standing Work Room can have only one active logical cycle.");
   }
   if (active.length === 0) return null;
 
@@ -123,25 +123,25 @@ export function selectCurrentWorkRoomCycle(
     return rank || left.carrierId.localeCompare(right.carrierId);
   })[0];
   if (!selected || !precedence.includes(selected.carrierKind)) {
-    throw new WorkRoomCycleError("unsupported_cycle_carrier", "No supported carrier can project the active cycle.");
+    throw new WorkroomCycleError("unsupported_cycle_carrier", "No supported carrier can project the active cycle.");
   }
-  return buildWorkRoomCycle(selected);
+  return buildWorkroomCycle(selected);
 }
 
-export function selectCompletedWorkRoomCycles(
+export function selectCompletedWorkroomCycles(
   sourceKey: string,
-  candidates: readonly WorkRoomCycleCarrierCandidate[],
-): WorkRoomCycleView[] {
+  candidates: readonly WorkroomCycleCarrierCandidate[],
+): WorkroomCycleView[] {
   const source = getWorkCaseSourceEntry(sourceKey);
   if (!source) {
-    throw new WorkRoomCycleError("unknown_source", `Work Room source '${sourceKey}' is not registered.`);
+    throw new WorkroomCycleError("unknown_source", `Work Room source '${sourceKey}' is not registered.`);
   }
 
   const precedence = source.roomProjection.cycleCarrierPrecedence;
   const completed = candidates.filter(
     (candidate) => candidate.status === "closed" || candidate.status === "carried-over",
   );
-  const byLogicalCycle = new Map<string, WorkRoomCycleCarrierCandidate>();
+  const byLogicalCycle = new Map<string, WorkroomCycleCarrierCandidate>();
   for (const candidate of completed) {
     if (!precedence.includes(candidate.carrierKind)) continue;
     const existing = byLogicalCycle.get(candidate.cycleKey);
@@ -151,7 +151,7 @@ export function selectCompletedWorkRoomCycles(
   }
 
   return [...byLogicalCycle.values()]
-    .map(buildWorkRoomCycle)
+    .map(buildWorkroomCycle)
     .sort((left, right) => {
       const completedOrder = (right.outcomePacket?.completedAt ?? "")
         .localeCompare(left.outcomePacket?.completedAt ?? "");
@@ -159,16 +159,16 @@ export function selectCompletedWorkRoomCycles(
     });
 }
 
-export type WorkRoomCyclePolicyDecision =
+export type WorkroomCyclePolicyDecision =
   | WorkCasePolicyDecision
   | { ok: false; reason: "unknown_lifecycle_operation" | "missing_current_cycle" | "closed_cycle_sealed"; message: string };
 
-export function evaluateWorkRoomCyclePolicy(input: {
-  operation: WorkRoomLifecycleOperation | string;
-  cycle: WorkRoomCycleView | null;
+export function evaluateWorkroomCyclePolicy(input: {
+  operation: WorkroomLifecycleOperation | string;
+  cycle: WorkroomCycleView | null;
   policy: Omit<WorkCasePolicyInput, "action">;
-}): WorkRoomCyclePolicyDecision {
-  const lifecycle = getWorkRoomLifecycleAction(input.operation);
+}): WorkroomCyclePolicyDecision {
+  const lifecycle = getWorkroomLifecycleAction(input.operation);
   if (!lifecycle) {
     return { ok: false, reason: "unknown_lifecycle_operation", message: `Unknown Work Room lifecycle operation '${input.operation}'.` };
   }
@@ -182,7 +182,7 @@ export function evaluateWorkRoomCyclePolicy(input: {
   return evaluateWorkCasePolicy({ ...input.policy, action: lifecycle.canonicalAction });
 }
 
-export interface WorkRoomCarryOverCommand {
+export interface WorkroomCarryOverCommand {
   kind: "attach-to-cycle" | "create-case";
   summary: string;
   ownerRef: string | null;
@@ -199,16 +199,16 @@ function stableHash(value: string): string {
   return (hash >>> 0).toString(16).padStart(8, "0");
 }
 
-export function planWorkRoomCarryOver(input: {
+export function planWorkroomCarryOver(input: {
   roomKey: string;
   fromCycleKey: string;
   toCycleKey?: string | null;
-  unresolvedWork: WorkRoomOutcomePacket["unresolvedWork"];
-}): WorkRoomCarryOverCommand[] {
+  unresolvedWork: WorkroomOutcomePacket["unresolvedWork"];
+}): WorkroomCarryOverCommand[] {
   const commands = input.unresolvedWork.flatMap((item) => {
     if (item.disposition !== "carry-over" && item.disposition !== "new-case") return [];
     if (item.disposition === "carry-over" && !roomText(input.toCycleKey)) {
-      throw new WorkRoomCycleError("missing_cycle_boundary", "Carry-over requires a target cycle.");
+      throw new WorkroomCycleError("missing_cycle_boundary", "Carry-over requires a target cycle.");
     }
     const fingerprint = [item.summary.trim(), item.ownerRef ?? "", item.disposition].join("|");
     return [{

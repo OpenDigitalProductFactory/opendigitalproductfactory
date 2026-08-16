@@ -73,7 +73,7 @@ async function resolveWorkCapsuleRowId(params: Record<string, unknown>): Promise
   const capsuleId = stringParam(params, "capsuleId");
   if (!capsuleId) return null;
 
-  const capsule = await prisma.workCapsule.findUnique({
+  const capsule = await prisma.workroom.findUnique({
     where: { capsuleId },
     select: { id: true },
   });

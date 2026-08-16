@@ -5,7 +5,8 @@ import { WorkCaseDetailView } from "@/components/workspace/WorkCaseDetailView";
 import { auth } from "@/lib/auth";
 import { getGrantedCapabilities } from "@/lib/permissions";
 import { loadEffectiveAuthContext } from "@/lib/identity/load-effective-auth-context";
-import { loadPrismaWorkRoomParticipants } from "@/lib/work-management/room-participation-prisma.server";
+import { loadPrismaWorkroomParticipants } from "@/lib/work-management/room-participation-prisma.server";
+import { resolveWorkroomStructureForCase } from "@/lib/work-management/room-structure.server";
 import { loadWorkspaceWorkCaseDetail } from "@/lib/work-management/workspace-case-loader";
 
 type Props = {
@@ -35,7 +36,8 @@ export default async function WorkspaceCaseDetailPage({ params }: Props) {
       sensitivityClearance: effectiveAuth.sensitivityClearance,
       isSuperuser: effectiveAuth.isSuperuser,
     },
-    participantLoader: loadPrismaWorkRoomParticipants,
+    participantLoader: loadPrismaWorkroomParticipants,
+    structureLoader: resolveWorkroomStructureForCase,
   });
   if (!detail) notFound();
 

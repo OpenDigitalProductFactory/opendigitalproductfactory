@@ -54,6 +54,13 @@ The MCP seed scripts write `.dpf-worktree-readiness.json` with `compile-ready` o
 - `compile-ready` — a package manager and dependencies are present, so cheap source-local gates can run.
 - `source-only` — Git/MCP/Compose isolation exists, but local compile/test gates are unproven. **Do not claim them as passed.** Use canonical runtime or the shared local-CI convergence sandbox for verification evidence.
 
+The managed probe executes the repository's exact `packageManager` pin even
+when an agent host supplies a newer pnpm. It also runs `pnpm ignored-builds`;
+any unclassified install script keeps the tree `source-only` and emits a stable
+`dependencyPolicyReviewKey` keyed by base SHA, package/version, and reason. Use
+that key as the backlog intake origin so the canonical ingester increments one
+occurrence instead of filing one review per worktree.
+
 ## Compose project isolation
 
 `docker-compose.yml` defaults to the root project `dpf`; linked worktrees must override it with an ignored `.env` value such as `COMPOSE_PROJECT_NAME=dpf-<topic>`. The worktree MCP seed scripts write this automatically.

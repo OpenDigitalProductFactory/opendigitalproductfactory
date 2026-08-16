@@ -21,7 +21,7 @@ export interface WorkCaseActionDescriptor {
   sanctionedMutators: readonly string[];
 }
 
-export type WorkRoomLifecycleOperation =
+export type WorkroomLifecycleOperation =
   | "open-cycle"
   | "pause-cycle"
   | "verify-cycle"
@@ -31,8 +31,8 @@ export type WorkRoomLifecycleOperation =
   | "split"
   | "archive";
 
-export interface WorkRoomLifecycleActionDescriptor {
-  operation: WorkRoomLifecycleOperation;
+export interface WorkroomLifecycleActionDescriptor {
+  operation: WorkroomLifecycleOperation;
   displayLabel: string;
   canonicalAction: WorkCaseActionVerb;
 }
@@ -47,7 +47,7 @@ export const WORK_CASE_ACTION_REGISTRY = [
     requiresDecisionInteraction: false,
     requiresCoworkerEnvelope: "never",
     requiresReceipt: true,
-    sanctionedMutators: ["claim_capsule_scope", "update_backlog_item_status"],
+    sanctionedMutators: ["claim_workroom_scope", "update_backlog_item_status"],
   },
   {
     action: "pause",
@@ -58,7 +58,7 @@ export const WORK_CASE_ACTION_REGISTRY = [
     requiresDecisionInteraction: false,
     requiresCoworkerEnvelope: "never",
     requiresReceipt: true,
-    sanctionedMutators: ["update_work_capsule_status", "update_backlog_item_status"],
+    sanctionedMutators: ["update_workroom_status", "update_backlog_item_status"],
   },
   {
     action: "needs-input",
@@ -102,7 +102,7 @@ export const WORK_CASE_ACTION_REGISTRY = [
     requiresDecisionInteraction: false,
     requiresCoworkerEnvelope: "never",
     requiresReceipt: true,
-    sanctionedMutators: ["update_work_capsule_status", "update_backlog_item_status"],
+    sanctionedMutators: ["update_workroom_status", "update_backlog_item_status"],
   },
   {
     action: "propose",
@@ -157,7 +157,7 @@ export const WORK_CASE_ACTION_REGISTRY = [
     requiresDecisionInteraction: false,
     requiresCoworkerEnvelope: "never",
     requiresReceipt: true,
-    sanctionedMutators: ["run_sandbox_tests", "run_ux_test", "record_capsule_evidence"],
+    sanctionedMutators: ["run_sandbox_tests", "run_ux_test", "record_workroom_evidence"],
   },
   {
     action: "complete",
@@ -168,7 +168,7 @@ export const WORK_CASE_ACTION_REGISTRY = [
     requiresDecisionInteraction: false,
     requiresCoworkerEnvelope: "never",
     requiresReceipt: true,
-    sanctionedMutators: ["update_work_capsule_status", "update_backlog_item_status"],
+    sanctionedMutators: ["update_workroom_status", "update_backlog_item_status"],
   },
   {
     action: "cancel",
@@ -179,7 +179,7 @@ export const WORK_CASE_ACTION_REGISTRY = [
     requiresDecisionInteraction: false,
     requiresCoworkerEnvelope: "never",
     requiresReceipt: true,
-    sanctionedMutators: ["update_work_capsule_status", "update_backlog_item_status"],
+    sanctionedMutators: ["update_workroom_status", "update_backlog_item_status"],
   },
   {
     action: "open-cycle",
@@ -275,7 +275,7 @@ const WORK_CASE_ACTIONS_BY_VERB = new Map<WorkCaseActionVerb, WorkCaseActionDesc
   WORK_CASE_ACTION_REGISTRY.map((entry) => [entry.action, entry]),
 );
 
-export const WORK_ROOM_LIFECYCLE_ACTION_REGISTRY = [
+export const WORKROOM_LIFECYCLE_ACTION_REGISTRY = [
   { operation: "open-cycle", displayLabel: "Open cycle", canonicalAction: "open-cycle" },
   { operation: "pause-cycle", displayLabel: "Pause cycle", canonicalAction: "pause-cycle" },
   { operation: "verify-cycle", displayLabel: "Verify cycle", canonicalAction: "verify-cycle" },
@@ -284,12 +284,12 @@ export const WORK_ROOM_LIFECYCLE_ACTION_REGISTRY = [
   { operation: "renew", displayLabel: "Renew", canonicalAction: "renew" },
   { operation: "split", displayLabel: "Split", canonicalAction: "split" },
   { operation: "archive", displayLabel: "Archive", canonicalAction: "archive" },
-] as const satisfies readonly WorkRoomLifecycleActionDescriptor[];
+] as const satisfies readonly WorkroomLifecycleActionDescriptor[];
 
-const WORK_ROOM_LIFECYCLE_ACTIONS_BY_OPERATION = new Map<
-  WorkRoomLifecycleOperation,
-  WorkRoomLifecycleActionDescriptor
->(WORK_ROOM_LIFECYCLE_ACTION_REGISTRY.map((entry) => [entry.operation, entry]));
+const WORKROOM_LIFECYCLE_ACTIONS_BY_OPERATION = new Map<
+  WorkroomLifecycleOperation,
+  WorkroomLifecycleActionDescriptor
+>(WORKROOM_LIFECYCLE_ACTION_REGISTRY.map((entry) => [entry.operation, entry]));
 
 export function getWorkCaseAction(
   action: string | null | undefined,
@@ -299,10 +299,10 @@ export function getWorkCaseAction(
   return WORK_CASE_ACTIONS_BY_VERB.get(normalized) ?? null;
 }
 
-export function getWorkRoomLifecycleAction(
+export function getWorkroomLifecycleAction(
   operation: string | null | undefined,
-): WorkRoomLifecycleActionDescriptor | null {
-  const normalized = operation?.trim() as WorkRoomLifecycleOperation | undefined;
+): WorkroomLifecycleActionDescriptor | null {
+  const normalized = operation?.trim() as WorkroomLifecycleOperation | undefined;
   if (!normalized) return null;
-  return WORK_ROOM_LIFECYCLE_ACTIONS_BY_OPERATION.get(normalized) ?? null;
+  return WORKROOM_LIFECYCLE_ACTIONS_BY_OPERATION.get(normalized) ?? null;
 }

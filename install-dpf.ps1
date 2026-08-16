@@ -654,14 +654,14 @@ function Set-DPFEnvFileValue {
     Set-Content -Path $Path -Value $envText -Encoding UTF8 -NoNewline
 }
 
-function Invoke-DPFEdgeNodeBootstrap {
+function Invoke-DPFEdgeNodeConvergence {
     param([Parameter(Mandatory)][string]$InstallDir)
 
     $edgeModule = Resolve-DPFNativeEdgeModulePath -InstallDir $InstallDir
     . $edgeModule
     $edgeComposeArgs = Get-DPFComposeArgs -InstallDir $InstallDir -IncludeEdge:$false
 
-    Write-Action "Bootstrapping bundled Edge Node..."
+    Write-Action "Converging this installation's Edge Node..."
     $portalReady = $false
     for ($i = 0; $i -lt 60; $i++) {
         try {
@@ -680,30 +680,38 @@ function Invoke-DPFEdgeNodeBootstrap {
         $portalContainer = "dpf-portal-1"
     }
 
-    $edgeToken = $null
-    try {
-        $tokenOutput = docker exec $portalContainer sh -c 'cd /app/apps/web-src && /app/node_modules/.pnpm/node_modules/.bin/tsx scripts/issue-edge-bootstrap-token.ts --ttl-minutes 30 --auto-approve' 2>$null
-        if ($LASTEXITCODE -eq 0 -and $tokenOutput) {
-            $lines = @($tokenOutput) | ForEach-Object { $_.ToString().Trim() } | Where-Object { $_ -ne "" }
-            $candidate = if ($lines.Count -gt 0) { $lines[-1] } else { "" }
-            if ($candidate -match "^dpfboot_") {
-                $edgeToken = $candidate
+    $stateRoot = if ($env:DPF_STATE_DIR) { $env:DPF_STATE_DIR } else { Join-Path $env:USERPROFILE ".dpf" }
+    $existingEnrollment = Test-Path -LiteralPath (Join-Path $stateRoot "edge-node\state.json")
+    $edgeToken = ""
+    if (-not $existingEnrollment) {
+        try {
+            $tokenOutput = docker exec $portalContainer sh -c 'cd /app/apps/web-src && /app/node_modules/.pnpm/node_modules/.bin/tsx scripts/issue-edge-bootstrap-token.ts --ttl-minutes 30 --auto-approve' 2>$null
+            if ($LASTEXITCODE -eq 0 -and $tokenOutput) {
+                $lines = @($tokenOutput) | ForEach-Object { $_.ToString().Trim() } | Where-Object { $_ -ne "" }
+                $candidate = if ($lines.Count -gt 0) { $lines[-1] } else { "" }
+                if ($candidate -match "^dpfboot_") {
+                    $edgeToken = $candidate
+                }
             }
+        } catch {
+            $edgeToken = ""
         }
-    } catch {
-        $edgeToken = $null
+
+        if (-not $edgeToken) {
+            Write-Warn "Bootstrap token issuance failed. Skipping Edge Node enrollment wiring."
+            Write-Warn "Use the portal Edge Nodes page to issue a token if you need to enroll this node manually."
+            return $false
+        }
     }
 
-    if (-not $edgeToken) {
-        Write-Warn "Bootstrap token issuance failed. Skipping Edge Node enrollment wiring."
-        Write-Warn "Use the portal Edge Nodes page to issue a token if you need to enroll this node manually."
-        return $false
+    if ($edgeToken) {
+        $envPath = Join-Path $InstallDir ".env"
+        Set-DPFEnvFileValue -Path $envPath -Key "DPF_BOOTSTRAP_TOKEN" -Value $edgeToken
+        Set-DPFEnvFileValue -Path $envPath -Key "DPF_EDGE_NODE_NAME" -Value ([System.Net.Dns]::GetHostName())
+        Write-OK "Bootstrap token wired into .env (auto-approve)"
+    } else {
+        Write-OK "Existing Edge enrollment found; preserving its machine identity"
     }
-
-    $envPath = Join-Path $InstallDir ".env"
-    Set-DPFEnvFileValue -Path $envPath -Key "DPF_BOOTSTRAP_TOKEN" -Value $edgeToken
-    Set-DPFEnvFileValue -Path $envPath -Key "DPF_EDGE_NODE_NAME" -Value ([System.Net.Dns]::GetHostName())
-    Write-OK "Bootstrap token wired into .env (auto-approve)"
     if (Install-DPFNativeEdgeNode -InstallDir $InstallDir -BootstrapToken $edgeToken -Version $Version) {
         $legacyComposeArgs = Get-DPFComposeArgs -InstallDir $InstallDir -IncludeEdge:$true
         docker compose @legacyComposeArgs stop edge-node 2>&1 | Out-Null
@@ -1372,15 +1380,23 @@ if (-not (Test-StepDone "hardware")) {
     # (same module) catches any drift.
     #
     # Thresholds = model weights + ~5 GB headroom (measured: a 30B at a 24k build
-    # context uses ~20.7 GB on a 24 GB card). So a 24 GB 4090 lands on the 30B
-    # coder, NOT the 35B -- which would fill the card and over-commit the moment a
-    # build runs. Pinned quant tags (never bare :latest) for reproducible sizes.
+    # context uses ~20.7 GB on a 24 GB card). Pinned quant tags (never bare
+    # :latest) for reproducible sizes.
+    #
+    # A 24 GB card lands on Qwen3.8-27B (17.66 GiB measured + headroom = 23). That
+    # model is DENSE, so it is ~4x slower per turn than the MoE tiers around it --
+    # a deliberate trade for thoroughness over time-to-answer.
+    #
+    # Qwen3.8 is pulled from HuggingFace (hf.co/...), not the curated ai/ namespace,
+    # because ai/qwen3.8 publishes only the 2.4T "Max". docker model pull accepts
+    # both sources; the runtime name it registers under differs (see the sh
+    # installer's normalization note).
     if ($gpuVRAM_GB -ge 53) {
         $selectedModel = "ai/qwen3-coder-next"
         $modelReason = "Qwen3-Coder-Next 80B (MoE) -- top agentic coder, fits your $gpuVRAM_GB GB VRAM with headroom"
-    } elseif ($gpuVRAM_GB -ge 27) {
-        $selectedModel = "ai/qwen3.6:35B-A3B-UD-Q4_K_M"
-        $modelReason = "Qwen3.6 35B-A3B (MoE) -- strong agentic model, fits your $gpuVRAM_GB GB VRAM with headroom"
+    } elseif ($gpuVRAM_GB -ge 23) {
+        $selectedModel = "hf.co/ggml-org/Qwen3.8-27B-GGUF:Q4_K_M"
+        $modelReason = "Qwen3.8 27B (dense, vision) -- most thorough local model, fits your $gpuVRAM_GB GB VRAM with headroom"
     } elseif ($gpuVRAM_GB -ge 21) {
         $selectedModel = "ai/qwen3-coder"
         $modelReason = "Qwen3-Coder 30B (MoE) -- serves chat + code, fits your $gpuVRAM_GB GB VRAM with headroom"
@@ -1620,6 +1636,11 @@ if (-not (Test-StepDone "started")) {
     $stateLib = Join-Path $DPF_DIR "scripts\installer\lib\state.ps1"
     if (-not (Test-Path -LiteralPath $stateLib)) { throw "capability_state_helper_missing" }
     . $stateLib
+    if ($WithEdge) { $env:DPF_INCLUDE_EDGE = '1' }
+    elseif ($NoEdge) { $env:DPF_INCLUDE_EDGE = '0' }
+    $resolvedEdgeEnabled = Resolve-DpfEdgeEnabled -InstallDir $DPF_DIR
+    $env:DPF_INCLUDE_EDGE = if ($resolvedEdgeEnabled) { '1' } else { '0' }
+    Set-DpfStateValue -Key "edge" -Value @{ enabled = $resolvedEdgeEnabled; mode = $(if ($resolvedEdgeEnabled) { "local" } else { $null }) }
     $capabilityProjection = Resolve-DpfCapabilityComposeProfiles -InstallDir $DPF_DIR
     $env:COMPOSE_PROFILES = (@($capabilityProjection.composeProfiles) -join ',')
     $coreComposeArgs = Get-DPFComposeArgs -InstallDir $DPF_DIR -IncludeEdge:$false -IncludeRelease:($InstallMode -eq "consumer")
@@ -1849,25 +1870,21 @@ if (-not (Test-StepDone "mcp_seed")) {
     Write-OK "Already running"
 }
 
-# Edge Node deploy gate (opt-in; BI-72CFF89D / edge-topology design section 5).
-# A local Edge Node is bundled + auto-enrolled ONLY when -WithEdge is passed
-# (or a prior install already enabled it -- .env carries the bootstrap token);
-# -NoEdge forces it off. Default OFF. Map a network from a different machine
-# instead via Admin > Platform Development > Edge Nodes.
-$dpfEdgeOptIn = $false
-if ($WithEdge) {
-    $dpfEdgeOptIn = $true
-} elseif (-not $NoEdge) {
-    $dpfEnvPath = Join-Path $DPF_DIR ".env"
-    if ((Test-Path -LiteralPath $dpfEnvPath) -and (Select-String -Path $dpfEnvPath -Pattern '^DPF_BOOTSTRAP_TOKEN=dpf' -Quiet)) {
-        $dpfEdgeOptIn = $true
-    }
-}
-if ($dpfEdgeOptIn -and (-not (Test-StepDone "edge_bootstrap"))) {
-    if (Invoke-DPFEdgeNodeBootstrap -InstallDir $DPF_DIR) {
+# Edge is an explicit, persistent capability choice. Once enabled, every
+# governed install/repair converges the native service and verified binary;
+# the progress marker is evidence of a past success, not a skip condition.
+$edgeStateLib = Join-Path $DPF_DIR "scripts\installer\lib\state.ps1"
+if (-not (Test-Path -LiteralPath $edgeStateLib)) { throw "capability_state_helper_missing" }
+. $edgeStateLib
+if ($WithEdge) { $env:DPF_INCLUDE_EDGE = '1' }
+elseif ($NoEdge) { $env:DPF_INCLUDE_EDGE = '0' }
+$dpfEdgeOptIn = Resolve-DpfEdgeEnabled -InstallDir $DPF_DIR
+Set-DpfStateValue -Key "edge" -Value @{ enabled = $dpfEdgeOptIn; mode = $(if ($dpfEdgeOptIn) { "local" } else { $null }) }
+if ($dpfEdgeOptIn) {
+    if (Invoke-DPFEdgeNodeConvergence -InstallDir $DPF_DIR) {
         Save-Progress "edge_bootstrap"
     } else {
-        Write-Warn "Bundled Edge Node bootstrap did not complete. The portal remains usable."
+        Write-Warn "Bundled Edge Node convergence did not complete. The portal remains usable."
     }
 } elseif (-not $dpfEdgeOptIn) {
     Write-OK "Edge Node not bundled (opt-in). Re-run with -WithEdge to add a local node, or add a node on another machine from Admin > Platform Development > Edge Nodes."
@@ -1956,8 +1973,27 @@ if (-not (Test-StepDone "model")) {
     # files to the runtime name so that portal /v1/models discovery and inference
     # references match exactly what the model-runner serves (prevents "model not found"
     # in inference.model-manager even when pull was executed).
+    #
+    # HuggingFace sources normalize differently from the ai/ catalog. Verified on-box
+    # 2026-08-16: pulling hf.co/ggml-org/Qwen3.8-27B-GGUF:Q4_K_M lists as
+    # huggingface.co/ggml-org/qwen3.8-27b-gguf:Q4_K_M -- host rewritten to its long
+    # form, repo path lowercased, quant tag case PRESERVED. Stripping ai/ alone is a
+    # no-op on those refs, so the post-pull presence check below could never match and
+    # the installer would warn "pull reported success but not listed" on every run.
     $pullName = $selectedModel
-    $runtimeModel = $pullName -replace '^ai/',''
+    if ($pullName -match '^(hf\.co|huggingface\.co)/') {
+        if ($pullName -match '^(.*):([^:/]+)$') {
+            $hfPath = $Matches[1]
+            $hfTag  = $Matches[2]
+        } else {
+            $hfPath = $pullName
+            $hfTag  = ''
+        }
+        $hfPath = ($hfPath -replace '^hf\.co/','huggingface.co/').ToLowerInvariant()
+        if ($hfTag) { $runtimeModel = "${hfPath}:${hfTag}" } else { $runtimeModel = $hfPath }
+    } else {
+        $runtimeModel = $pullName -replace '^ai/',''
+    }
     # Expected size upfront (manifest only) so user with known bandwidth can estimate duration.
     $sizeMB = 0
     try {

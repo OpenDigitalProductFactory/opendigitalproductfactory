@@ -19,7 +19,7 @@ const LIVE_WORK_ITEM_STATUSES = [
 /**
  * BI-AC815F1E: project a BacklogItem's lifecycle status onto a WorkItem status so
  * the unified WorkCase view reflects the real state instead of always showing
- * "intake". BacklogStatuses (triaging|open|in-progress|done|deferred) map onto the
+ * "intake". BacklogStatuses (triaging|open|in-progress|done|deferred|retired) map onto the
  * WorkItem statuses that projectWorkItem already collapses into WorkCase states.
  */
 const BACKLOG_STATUS_TO_WORK_ITEM_STATUS: Record<string, string> = {
@@ -28,6 +28,7 @@ const BACKLOG_STATUS_TO_WORK_ITEM_STATUS: Record<string, string> = {
   "in-progress": "in-progress",
   done: "completed",
   deferred: "deferred",
+  retired: "cancelled",
 };
 
 function mapBacklogStatusToWorkItemStatus(status: string): string {

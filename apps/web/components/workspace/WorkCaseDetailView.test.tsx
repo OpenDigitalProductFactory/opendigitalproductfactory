@@ -3,9 +3,9 @@ import { describe, expect, it } from "vitest";
 
 import { WorkCaseDetailView } from "./WorkCaseDetailView";
 import type { WorkspaceWorkCaseDetailView } from "@/lib/work-management/workspace-case-loader";
-import type { WorkRoomView } from "@/lib/work-management/room-types";
+import type { WorkroomView } from "@/lib/work-management/room-types";
 
-const room: WorkRoomView = {
+const room: WorkroomView = {
   roomKey: "booking%3ABK-1",
   caseRef: { caseId: "booking:BK-1", sourceType: "booking", sourceId: "BK-1" },
   title: "Confirm condenser appointment",
@@ -108,6 +108,7 @@ const room: WorkRoomView = {
     { kind: "source", id: "BK-1", sourceType: "booking" },
     { kind: "work-item", id: "WI-1", status: "awaiting-input" },
   ],
+  structure: null,
   projection: {
     confidence: "high",
     incompleteBoundary: false,
@@ -213,7 +214,7 @@ describe("WorkCaseDetailView", () => {
   });
 
   it("explains an incomplete room boundary without inventing missing facts", () => {
-    const incompleteRoom: WorkRoomView = {
+    const incompleteRoom: WorkroomView = {
       ...room,
       outcome: { ...room.outcome, statement: null },
       boundary: {

@@ -76,6 +76,7 @@ export const TABLE_CLASSIFICATION: Record<string, TableSensitivity> = {
   CodebaseManifest: "internal",
   ServiceOffering: "internal",
   BacklogItem: "internal",
+  InitiativeArtifactRetentionPin: "confidential",
   Epic: "internal",
   EpicPortfolio: "internal",
   ImprovementProposal: "internal",
@@ -151,6 +152,9 @@ export const TABLE_CLASSIFICATION: Record<string, TableSensitivity> = {
   BeautyResource: "internal",
   BeautyResourceService: "internal",
   BeautyResourceAvailability: "internal",
+  // Tenant-scoped aggregate values and model-level lineage only; the
+  // projection contract forbids customer, workforce, and financial records.
+  BusinessMetricRollup: "internal",
   ProviderService: "internal",
   ProviderAvailability: "internal",
   OnboardingChecklist: "internal",

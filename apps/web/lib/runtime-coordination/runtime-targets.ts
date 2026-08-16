@@ -33,7 +33,7 @@ export type RuntimeCoordinationDb = {
   buildActivity?: {
     create(args: unknown): Promise<any>;
   };
-  workCapsuleActivity?: {
+  workroomActivity?: {
     create(args: unknown): Promise<any>;
   };
   $transaction?<T>(fn: (tx: RuntimeCoordinationDb) => Promise<T>): Promise<T>;
@@ -156,8 +156,8 @@ async function recordCapsuleActivity(args: {
   payload: Record<string, unknown>;
   actor?: RuntimeCoordinationActor;
 }) {
-  if (!args.workCapsuleId || !args.db.workCapsuleActivity) return null;
-  return args.db.workCapsuleActivity.create({
+  if (!args.workCapsuleId || !args.db.workroomActivity) return null;
+  return args.db.workroomActivity.create({
     data: {
       workCapsuleId: args.workCapsuleId,
       kind: args.kind,

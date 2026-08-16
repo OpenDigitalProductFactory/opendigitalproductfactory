@@ -1,6 +1,6 @@
 # Recruiting -> hiring -> paying seam implementation plan
 
-**Backlog anchors:** BI-A90203A4, BI-3E300172, BI-838F8D00, BI-DR-02, BI-DR-03.
+**Backlog anchors:** umbrella BI-FD5DA4CD; slices BI-232794FA, BI-2578714B, BI-F827180E, BI-8635205B, BI-52954812.
 
 **Designs:** `docs/superpowers/specs/2026-08-11-recruiting-hiring-payroll-seam-design.md` and `docs/superpowers/specs/2026-08-11-payroll-disbursement-rails-epic-and-backlog.md`.
 
@@ -96,13 +96,16 @@ One fifth of implementation effort was reserved for consolidation: one `Compensa
 
 ## Backlog coverage
 
-Governed receipt `cmspndncd0aif01nvtkn16kgg` records the `decomposed` decision for umbrella BI-44C79A02 and validates six live mappings:
+Governed receipt `cmsvbxbi60a0m01prycn5jdig` records the `decomposed` decision for umbrella `BI-FD5DA4CD` and validates five live mappings:
 
-- `offer-comp-handoff` -> BI-A90203A4
-- `employee-payslip-compute` -> BI-3E300172
-- `payrun-payslip-persistence` -> BI-838F8D00
-- `payee-bank-account-store` -> BI-DR-01
-- `manual-nacha-artifact` -> BI-DR-02
-- `manual-attestation` -> BI-DR-03
+- `offer-comp-handoff` -> BI-232794FA
+- `employee-payslip-compute` -> BI-2578714B
+- `payrun-payslip-persistence` -> BI-F827180E
+- `manual-nacha-artifact` -> BI-8635205B
+- `manual-attestation` -> BI-52954812
 
-Dependencies in the receipt: compute depends on the handoff; persistence depends on compute; the bank-account store depends on persistence; the NACHA core depends on persistence; attestation depends on the bank-account store and NACHA artifact.
+Dependencies in the receipt are a straight chain: compute depends on the handoff, persistence on compute, the NACHA artifact on persistence, and attestation on the NACHA artifact.
+
+The earlier receipt (`cmspndncd0aif01nvtkn16kgg`, umbrella `BI-44C79A02`) is superseded. None of the six ids it mapped resolve in this install — `check_plan_backlog_coverage` returned `backlog-item-not-found` — so the plan could not pass its coverage gate. The five slices above are the real local records.
+
+The sixth deliverable in the old receipt, `payee-bank-account-store` (BI-DR-01), is deliberately **not** mapped here: durable encrypted payee/batch storage is out of scope for this branch. That is why `manual-attestation` (BI-52954812) is a partial slice — it returns the evidence projection, and immutable `ComplianceEvidence` follows once encrypted batch identity exists. File the bank-account store separately before closing the umbrella.

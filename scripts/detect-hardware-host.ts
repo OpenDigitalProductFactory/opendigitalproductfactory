@@ -183,16 +183,20 @@ function detectLinux(): HostProfile {
 // (unified Apple Silicon shares it with the OS; CPU-only leaves even more aside).
 // Headroom reserves room for the context window + embedder so a recommended
 // model never fills the whole card and then over-commit the moment it runs.
-//   24 GB discrete  → ai/qwen3-coder (30B)        128 GB unified → ai/qwen3-coder-next (80B MoE)
-//   12 GB discrete  → ai/qwen3:8B                  32 GB unified → ai/qwen3-coder (30B)
+//   24 GB discrete  → Qwen3.8-27B (dense)          128 GB unified → ai/qwen3-coder-next (80B MoE)
+//   12 GB discrete  → ai/qwen3:8B                  32 GB unified → Qwen3.8-27B (dense)
 //    8 GB discrete  → ai/qwen3:4B                  16 GB unified → ai/qwen3:8B
+//
+// Qwen3.8-27B is DENSE, so it is markedly slower per turn than the MoE tiers it
+// sits between (~4x measured against the 30B-A3B coder). Selected anyway: the
+// operator criterion for the local tier is thoroughness over time-to-answer.
 // Tags for the ai/ Docker Model Runner namespace are case-sensitive.
 const MODEL_HEADROOM_GB = 5;            // context KV + embedder + overhead (measured on RTX 4090)
 const UNIFIED_USABLE_FRACTION = 0.75;   // Apple Silicon GPU share of unified RAM
 const CPU_USABLE_FRACTION = 0.5;
 const SELECTION_TIERS: { model: string; weightsGb: number }[] = [
   { model: "ai/qwen3-coder-next", weightsGb: 48 },          // big unified (Apple 128 GB) / 64 GB+ discrete
-  { model: "ai/qwen3.6:35B-A3B-UD-Q4_K_M", weightsGb: 22 },
+  { model: "hf.co/ggml-org/Qwen3.8-27B-GGUF:Q4_K_M", weightsGb: 18 }, // dense 27B; replaces the 35B-A3B tier
   { model: "ai/qwen3-coder", weightsGb: 16 },               // 24 GB-card sweet spot (measured ~20.7 GB @ 24k ctx)
   { model: "ai/qwen3:14B-Q6_K", weightsGb: 12 },
   { model: "ai/qwen3:8B-Q4_K_M", weightsGb: 6 },

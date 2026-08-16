@@ -88,6 +88,13 @@ vi.mock("@/components/ops/SelfUpgradeClient", () => ({
   ),
 }));
 
+// The shell owns SystemEventProvider. Page tests render this route in isolation,
+// so keep the live-provider boundary visible without requiring shell context;
+// its observation behavior is covered by SelfUpgradeLiveProvider.test.tsx.
+vi.mock("@/components/ops/SelfUpgradeLiveProvider", () => ({
+  SelfUpgradeLiveProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+}));
+
 // BI-8D87084D: owner-readable release card fronts the technical ledger. Stub it
 // to surface the derived state; the summary derivation itself is unit-tested in
 // lib/self-upgrade/owner-summary.test.ts. BI-D77BF495: also render the

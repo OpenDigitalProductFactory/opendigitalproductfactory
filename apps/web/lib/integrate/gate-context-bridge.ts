@@ -3,10 +3,12 @@
 // The gate-context pack generator lives in scripts/lib/gate-context.mjs and
 // MUST stay the single source of constraint knowledge — this bridge never
 // reimplements a rule. The portal shells out to the CLI's `--stdin-json` mode
-// against the host repo checkout (DPF_REPO_ROOT bind mount, the same
-// resolution Work Control uses; PROJECT_ROOT / cwd in dev), feeding it the
+// from the deployed image's packaged source closure (cwd / an explicit
+// DPF_RUNTIME_REPO_ROOT; PROJECT_ROOT in dev), feeding it the
 // PLANNED file changes so agents receive the CI constraints BEFORE code
-// exists. Advisory by contract: any failure returns null and the caller
+// exists. DPF_REPO_ROOT is only a final development fallback: a mutable host
+// checkout must never override the rule bytes that shipped with the portal.
+// Advisory by contract: any failure returns null and the caller
 // proceeds without the section — the pack must never block a build, and it
 // must never claim a gate passed.
 
@@ -56,7 +58,7 @@ export function plannedChangesFromPlan(plan: Record<string, unknown> | null | un
 export function resolveGateContextRepoRoot(
   env: Record<string, string | undefined> = process.env,
 ): string | null {
-  const candidates = [env.DPF_REPO_ROOT, env.PROJECT_ROOT].filter(
+  const candidates = [env.DPF_RUNTIME_REPO_ROOT].filter(
     (candidate): candidate is string => Boolean(candidate),
   );
   let ancestor = process.cwd();
@@ -66,6 +68,12 @@ export function resolveGateContextRepoRoot(
     if (parent === ancestor) break;
     ancestor = parent;
   }
+  // Development surfaces may point at a workspace or host checkout. Keep
+  // these after the image-owned cwd chain so a stale bind mount cannot replace
+  // the deployed generator and silently downgrade its schema.
+  candidates.push(...[env.PROJECT_ROOT, env.DPF_REPO_ROOT].filter(
+    (candidate): candidate is string => Boolean(candidate),
+  ));
   for (const candidate of candidates) {
     if (candidate && existsSync(join(candidate, "scripts", "gate-context.mjs"))) {
       return candidate;

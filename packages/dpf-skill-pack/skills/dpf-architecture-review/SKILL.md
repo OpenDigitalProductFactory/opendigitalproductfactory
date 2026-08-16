@@ -58,6 +58,8 @@ Measure the spec against these reference standards. They are the curated DPF set
 | Kernel principles | [docs/founder-kernel/wiki/principles/](../../../../docs/founder-kernel/wiki/principles/) | `architecture-over-shortcuts`, `single-source-of-truth`, `schema-audit-before-features`, `organization-canonical-identity`, `principal-convergence` (also via `mcp__dpf__wiki_query` filtered on `pageKind='principle'`) |
 | Platform usability standards | [docs/platform-usability-standards.md](../../../../docs/platform-usability-standards.md) | Theme-aware styling, progressive disclosure, wizard-first setup |
 | Deployment contracts | [docs/superpowers/specs/2026-05-09-deployment-contracts.md](../../../../docs/superpowers/specs/2026-05-09-deployment-contracts.md) | The canonical deployment contracts every substrate must wrap |
+| Unified connector kernel | [docs/architecture/unified-connector-kernel.md](../../../../docs/architecture/unified-connector-kernel.md) | Connector lifecycle, capability discovery, safe failures, third-party reads/backfill, and domain-adapter boundaries |
+| Federation discovery and pairing | [docs/superpowers/specs/2026-07-19-federated-demand-network-design.md](../../../../docs/superpowers/specs/2026-07-19-federated-demand-network-design.md) | mDNS/DNS-SD discovery, authenticated pairing, routed discovery, topology, and distributed revision/conflict standards |
 | Existing specs/plans | `mcp__dpf__search_specs_and_plans` | Prior designs the spec must extend rather than duplicate |
 | The spec under review | author-provided path or Build Studio `designDoc` / `buildPlan` | The actual problem, data model, approach, and decomposition |
 

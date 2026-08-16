@@ -77,3 +77,13 @@ describe("renderDelegationGuidance", () => {
     expect(renderDelegationGuidance({ mode: "fan_out", reason: "r" })!).toContain("spawn_work_thread");
   });
 });
+
+describe("alignment delegation policy", () => {
+  it("treats specialist qualification as evidence rather than action permission", async () => {
+    const { decideAlignmentDelegation } = await import("./alignment-specialist-delegation");
+    expect(decideAlignmentDelegation({ product: "support", motion: "partner" })).toEqual([
+      expect.objectContaining({ corpus: "portfolio", permissionGranted: false }),
+      expect.objectContaining({ corpus: "gtm", permissionGranted: false }),
+    ]);
+  });
+});

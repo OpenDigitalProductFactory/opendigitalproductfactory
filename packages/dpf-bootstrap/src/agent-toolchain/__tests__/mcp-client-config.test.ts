@@ -4,6 +4,7 @@ import { planMcpClientConfig } from "../mcp-client-config";
 
 const REPO = "/Users/dev/dpf";
 const ENDPOINT = "http://127.0.0.1:3000/api/mcp/v1";
+const FULL_ENDPOINT = `${ENDPOINT}?tier=full`;
 
 describe("planMcpClientConfig", () => {
   it("writes both files for a fresh contributor (no existing config)", () => {
@@ -19,7 +20,7 @@ describe("planMcpClientConfig", () => {
     const mcp = plan.writes.find((w) => w.path.endsWith("/.mcp.json"))!;
     const parsed = JSON.parse(mcp.content) as Record<string, any>;
     expect(parsed.mcpServers.dpf.type).toBe("http");
-    expect(parsed.mcpServers.dpf.url).toBe(ENDPOINT);
+    expect(parsed.mcpServers.dpf.url).toBe(FULL_ENDPOINT);
     expect(parsed.mcpServers.dpf.headers.Authorization).toBe("Bearer ${DPF_MCP_BEARER_TOKEN}");
     expect(mcp.content).not.toMatch(/dpfmcp_/);
   });
@@ -29,6 +30,7 @@ describe("planMcpClientConfig", () => {
     const vs = plan.writes.find((w) => w.path.endsWith("/.vscode/mcp.json"))!;
     const parsed = JSON.parse(vs.content) as Record<string, any>;
     expect("mcpServers" in parsed).toBe(false);
+    expect(parsed.servers.dpf.url).toBe(ENDPOINT);
     expect(parsed.servers.dpf.headers.Authorization).toBe("Bearer ${env:DPF_MCP_BEARER_TOKEN}");
   });
 

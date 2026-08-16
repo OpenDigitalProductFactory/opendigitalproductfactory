@@ -46,7 +46,6 @@ describe("hospitality service turn repository", () => {
       version: 1,
       events: {
         create: {
-          organizationId: "org-1",
           idempotencyKey: "seat-booking-1",
           eventType: "stage-transition",
           fromStage: null,
@@ -60,6 +59,9 @@ describe("hospitality service turn repository", () => {
     expect(
       create.mock.calls[0][0].data.events.create.eventId,
     ).toMatch(/^HTE-/);
+    expect(
+      create.mock.calls[0][0].data.events.create,
+    ).not.toHaveProperty("organizationId");
   });
 
   it("returns the existing demand turn instead of creating a duplicate", async () => {

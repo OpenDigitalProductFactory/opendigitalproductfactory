@@ -15,6 +15,7 @@
 // Reasons are accumulated verbatim so the operator UI can show *why* an item
 // landed where it did, with no LLM rewriting.
 
+import { CATEGORY_RANK } from "./classify";
 import type {
   ImpactItem,
   ImpactItemReason,
@@ -25,9 +26,18 @@ import type {
 
 const BASE_WEIGHT: Record<ParsedCommit["category"], number> = {
   breaking: 100,
+  // A security fix is the one thing besides a breaking change an operator
+  // should never scroll past, so it outweighs a feature.
+  security: 80,
   feature: 50,
   performance: 30,
   fix: 25,
+  // Dependency bumps outweigh docs and internal upkeep: they change what the
+  // product actually runs on, and are the usual suspect when an upgrade
+  // regresses something. Still far below anything an operator asked for.
+  dependency: 12,
+  documentation: 6,
+  maintenance: 5,
   other: 8,
 };
 
@@ -164,13 +174,12 @@ export function scoreCommits(input: ScoreInput): ImpactItem[] {
  * `git log --reverse`, so we use array index for stability).
  */
 export function orderByImpact(items: ImpactItem[]): ImpactItem[] {
-  const RANK: Record<ImpactItem["category"], number> = {
-    breaking: 0, feature: 1, performance: 2, fix: 3, other: 4,
-  };
   const indexed = items.map((item, index) => ({ item, index }));
   indexed.sort((a, b) => {
     if (a.item.score !== b.item.score) return b.item.score - a.item.score;
-    if (a.item.category !== b.item.category) return RANK[a.item.category] - RANK[b.item.category];
+    if (a.item.category !== b.item.category) {
+      return CATEGORY_RANK[a.item.category] - CATEGORY_RANK[b.item.category];
+    }
     return b.index - a.index; // newer first (later in `git log --reverse` => higher index)
   });
   return indexed.map((entry) => entry.item);

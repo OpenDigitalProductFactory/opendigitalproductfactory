@@ -4,6 +4,13 @@
 import { useState, useEffect, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { LocalTime } from "@/components/ui/LocalTime";
+import {
+  FormField,
+  FormStatus,
+  SubmitButton,
+  TextareaField,
+  fieldControlClass,
+} from "@/components/ui/form";
 import { createBacklogItem, updateBacklogItem } from "@/lib/actions/backlog";
 import { registerActiveFormAssist } from "@/lib/agent-form-assist";
 import { AGENT_NAME_MAP } from "@/lib/agent-routing";
@@ -60,6 +67,11 @@ export function BacklogPanel({
         workType: itemWorkType ?? "feature",
         status: item.status as BacklogItemInput["status"],
         body:   item.body ?? "",
+        deferReason: item.deferReason ?? "",
+        deferTrigger: item.deferTrigger ?? "",
+        deferReviewAt: item.deferReviewAt
+          ? new Date(item.deferReviewAt).toISOString().slice(0, 16)
+          : "",
       };
       if (item.priority !== null && item.priority !== undefined) next.priority = item.priority;
       if (item.taxonomyNode?.id) next.taxonomyNodeId = item.taxonomyNode.id;
@@ -133,7 +145,7 @@ export function BacklogPanel({
     <>
       {/* Backdrop */}
       <div
-        className="fixed inset-0 bg-black/40 z-40"
+        className="fixed inset-0 z-40 bg-[color-mix(in_srgb,var(--dpf-bg)_55%,transparent)]"
         onClick={onClose}
         aria-hidden="true"
       />
@@ -144,13 +156,13 @@ export function BacklogPanel({
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--dpf-border)]">
           <h2 className="text-sm font-semibold text-[var(--dpf-text)]">
-            {item ? "Edit Backlog Item" : "New Backlog Item"}
+            {item ? "Edit item" : "New item"}
           </h2>
-          <button onClick={onClose} className="text-[var(--dpf-muted)] hover:text-[var(--dpf-text)] text-lg leading-none">×</button>
+          <button type="button" onClick={onClose} aria-label="Close" className="text-[var(--dpf-muted)] hover:text-[var(--dpf-text)] text-lg leading-none">×</button>
         </div>
 
         {/* Form */}
-        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto px-5 py-4 flex flex-col gap-4">
+        <form id="backlog-item-form" onSubmit={handleSubmit} className="flex-1 overflow-y-auto px-5 py-4 flex flex-col gap-4">
           {/* Title */}
           <label className="flex flex-col gap-1">
             <span className="text-[10px] uppercase tracking-widest text-[var(--dpf-muted)]">Title *</span>
@@ -159,7 +171,6 @@ export function BacklogPanel({
               value={form.title}
               onChange={(e) => set("title", e.target.value)}
               className="bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)] rounded px-3 py-2 text-sm text-[var(--dpf-text)] placeholder:text-[var(--dpf-muted)] focus:outline-none focus:border-[var(--dpf-accent)]"
-              placeholder="What needs to be done?"
               required
             />
           </label>
@@ -178,7 +189,7 @@ export function BacklogPanel({
                   }}
                   className={`flex-1 py-1.5 text-xs font-semibold transition-colors ${
                     form.type === t
-                      ? "bg-[var(--dpf-accent)] text-white"
+                      ? "bg-[var(--dpf-accent)] text-[var(--dpf-on-accent,var(--dpf-surface-1))]"
                       : "bg-[var(--dpf-surface-2)] text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]"
                   }`}
                 >
@@ -217,12 +228,51 @@ export function BacklogPanel({
               <option value="in-progress">In Progress</option>
               <option value="done">Done</option>
               <option value="deferred">Deferred</option>
+              <option value="retired" disabled={item?.status !== "retired"}>
+                Retired
+              </option>
             </select>
           </label>
 
+          {form.status === "deferred" ? (
+            <fieldset className="space-y-3 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-3">
+              <legend className="px-1 text-dpf-caption uppercase tracking-widest text-[var(--dpf-muted)]">
+                Deferral
+              </legend>
+              <TextareaField
+                name="deferReason"
+                label="Reason"
+                value={form.deferReason ?? ""}
+                onValueChange={(value) => set("deferReason", value)}
+                rows={2}
+                required
+              />
+              <TextareaField
+                name="deferTrigger"
+                label="Resume when"
+                value={form.deferTrigger ?? ""}
+                onValueChange={(value) => set("deferTrigger", value)}
+                rows={2}
+                required
+              />
+              <FormField name="deferReviewAt" label="Review" required>
+                {(control) => (
+                  <input
+                    {...control}
+                    type="datetime-local"
+                    value={form.deferReviewAt ?? ""}
+                    onChange={(e) => set("deferReviewAt", e.target.value)}
+                    autoComplete="off"
+                    className={fieldControlClass}
+                  />
+                )}
+              </FormField>
+            </fieldset>
+          ) : null}
+
           {/* Priority */}
           <label className="flex flex-col gap-1">
-            <span className="text-[10px] uppercase tracking-widest text-[var(--dpf-muted)]">Priority (lower = higher)</span>
+            <span className="text-[10px] uppercase tracking-widest text-[var(--dpf-muted)]">Priority</span>
             <input
               type="number"
               min={1}
@@ -241,7 +291,7 @@ export function BacklogPanel({
               onChange={(e) => set("epicId", e.target.value || undefined)}
               className="bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)] rounded px-3 py-2 text-sm text-[var(--dpf-text)] focus:outline-none focus:border-[var(--dpf-accent)]"
             >
-              <option value="">— no epic —</option>
+              <option value="">None</option>
               {epics.map((ep) => (
                 <option key={ep.id} value={ep.id}>{ep.title}</option>
               ))}
@@ -250,7 +300,7 @@ export function BacklogPanel({
 
           {/* Taxonomy Node */}
           <label className="flex flex-col gap-1">
-            <span className="text-[10px] uppercase tracking-widest text-[var(--dpf-muted)]">Ownership Domain</span>
+            <span className="text-[10px] uppercase tracking-widest text-[var(--dpf-muted)]">Owner</span>
             <select
               value={form.taxonomyNodeId ?? ""}
               onChange={(e) => set("taxonomyNodeId", e.target.value || undefined)}
@@ -266,7 +316,7 @@ export function BacklogPanel({
           {/* Digital Product (product-type only) */}
           {form.type === "product" && (
             <label className="flex flex-col gap-1">
-              <span className="text-[10px] uppercase tracking-widest text-[var(--dpf-muted)]">Digital Product *</span>
+              <span className="text-[10px] uppercase tracking-widest text-[var(--dpf-muted)]">Product *</span>
               <select
                 value={form.digitalProductId ?? ""}
                 onChange={(e) => set("digitalProductId", e.target.value || undefined)}
@@ -293,9 +343,7 @@ export function BacklogPanel({
             />
           </label>
 
-          {error && (
-            <p className="text-xs text-red-400">{error}</p>
-          )}
+          <FormStatus error={error} />
         </form>
 
         {/* Metadata (read-only) */}
@@ -321,14 +369,15 @@ export function BacklogPanel({
           >
             Cancel
           </button>
-          <button
-            type="button"
-            onClick={handleSubmit}
-            disabled={isPending}
-            className="flex-1 py-2 rounded bg-[var(--dpf-accent)] text-xs text-white font-semibold hover:opacity-90 disabled:opacity-50"
+          <SubmitButton
+            type="submit"
+            form="backlog-item-form"
+            pending={isPending}
+            pendingLabel="Saving…"
+            className="flex-1"
           >
-            {isPending ? "Saving…" : item ? "Save Changes" : "Create Item"}
-          </button>
+            {item ? "Save Changes" : "Create Item"}
+          </SubmitButton>
         </div>
       </div>
       </div>
