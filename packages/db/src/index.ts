@@ -12,7 +12,11 @@ export {
 // Prisma is exported as both a value (for runtime helpers like Prisma.JsonNull,
 // Prisma.DbNull) and a type (for input/output type aliases).
 export { Prisma } from "../generated/client/client";
-export type { PrismaClient } from "../generated/client/client";
+export type {
+  PrismaClient,
+  PayRunStatus,
+  PayslipDisbursementStatus,
+} from "../generated/client/client";
 export { WriteGateRequirement } from "../generated/client/client";
 export {
   PRINCIPAL_SENSITIVITIES,

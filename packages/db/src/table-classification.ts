@@ -340,6 +340,9 @@ export const TABLE_CLASSIFICATION: Record<string, TableSensitivity> = {
   Scorecard: "confidential",
   Offer: "confidential",
   DemographicResponse: "restricted",
+  // Payroll pay records (recruiting→hiring→paying seam) — pay amounts + PII.
+  PayRun: "confidential",
+  Payslip: "confidential",
 };
 
 /** Fallback for tables not yet classified — defaults to confidential (obfuscate). */
