@@ -11,7 +11,7 @@ import {
 import { withCoworkerInteractionContract } from "./coworker-interaction-contract";
 import { DECISION_ROUTING_BLOCK } from "./decision-routing-block";
 import { LIMITATION_RESPONSE_BLOCK } from "./limitation-response-block";
-import { ESCALATION_LADDER_BLOCK } from "./escalation-ladder";
+import { ESCALATION_LADDER_BLOCK, COORDINATOR_BLOCK } from "./escalation-ladder";
 import { buildInitiativeBlock } from "./initiative-block";
 import type { ProactivityLevel } from "@/lib/proactivity/proactivity-types";
 import { readingLevelDirective, type ReadingLevel } from "@dpf/validators";
@@ -164,6 +164,7 @@ export async function assembleSystemPrompt(input: PromptInput): Promise<string> 
     { category: "platform-identity", slug: "decision-routing", fallback: DECISION_ROUTING_BLOCK },
     { category: "platform-identity", slug: "limitation-response", fallback: LIMITATION_RESPONSE_BLOCK },
     { category: "platform-identity", slug: "escalation-ladder", fallback: ESCALATION_LADDER_BLOCK },
+    { category: "platform-identity", slug: "coordinator-contract", fallback: COORDINATOR_BLOCK },
     { category: "platform-identity", slug: modeSlug, fallback: input.mode === "advise" ? ADVISE_MODE_BLOCK : ACT_MODE_BLOCK },
     { category: "platform-mission", slug: "company-mission", fallback: COMPANY_MISSION_FALLBACK },
   ]);
@@ -189,6 +190,12 @@ export async function assembleSystemPrompt(input: PromptInput): Promise<string> 
   // its own overridable block rather than folded into the identity block so a
   // DB override of the identity text cannot silently drop the contract.
   staticBlocks.push(loaded.get("platform-identity/escalation-ladder") ?? ESCALATION_LADDER_BLOCK);
+
+  // Block 1e: Coordinator contract (static) — the COO coordinates, specialists
+  // do the work (BI-80ADD3A8). Own overridable block for the same reason as the
+  // ladder: folding it into an overridable identity block would let an override
+  // silently drop the contract.
+  staticBlocks.push(loaded.get("platform-identity/coordinator-contract") ?? COORDINATOR_BLOCK);
 
   // Block 3: Mode (static per session — advise or act doesn't change mid-conversation)
   staticBlocks.push(loaded.get(`platform-identity/${modeSlug}`) ?? (input.mode === "advise" ? ADVISE_MODE_BLOCK : ACT_MODE_BLOCK));
