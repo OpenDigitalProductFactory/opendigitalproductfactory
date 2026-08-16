@@ -93,7 +93,11 @@ How comparable business platforms bind a domain model to primary navigation:
 | 3 | Reconcile remaining sections to the portfolio spine; make it the default after live-install validation | L |
 | 4 | *(referenced, separate epic)* coworker navigate-and-act capability | L |
 
-## 8. Acceptance
+### 7.1 Open question on the phase-2 label pass *(raised 2026-08-15, unresolved)*
+
+Phase 2 lists `"AI Coworkers"` → `"Agent Identities"` as a quick win. Under the lexicon rule proposed in the companion spec (§3.4, *Interaction Shape Graph*), that rename runs the wrong way: *AI Coworkers* is the operator's word for the thing, *Agent Identities* is the machinery's. Rail labels are among the most expensive strings in the product to change twice, because operators learn them.
+
+If the rename exists to disambiguate the identity **record** from the coworker — a real distinction — then the record is what should be renamed or kept off the rail, not the surface the owner reads. **This needs an answer before phase 2 lands.** Flagged rather than edited, because the disambiguation it is solving may be load-bearing in a way not visible from this document.
 
 - Every `shellNav` entry resolves — via a checked-in test — to exactly one FPAW portfolio key or an explicitly declared cross-cut; none is silently unclassified.
 - People, AI Workforce, and Coworker Decisions are reachable under one Workforce section without violating section-scoped nav or the breadcrumb guarantee.
