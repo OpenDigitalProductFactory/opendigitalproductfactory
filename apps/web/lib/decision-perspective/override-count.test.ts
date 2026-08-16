@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { getRecentOverrideCount } from "./evaluator";
+import { getRecentOverrideCount } from "./override-count";
 
 // BI-ACF0D6D4 — `overridePenalty` is meant to mean "the owner keeps overruling
 // this profile here, so trust it less". It counted every EscalationCapture,

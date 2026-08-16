@@ -10,6 +10,10 @@ import { MARK_DPF_PLATFORM_PROFILE } from "./default-profile";
 import { resolveGateRecommendedOptionId } from "./option-recommendation";
 import type { AlignmentCorpora } from "./alignment-criteria";
 import { applyConstitutionalAlignment } from "./constitutional-alignment-application";
+import { getRecentOverrideCount } from "./override-count";
+
+// Re-exported for existing importers; owned by ./override-count (BI-ACF0D6D4).
+export { RECENT_OVERRIDE_WINDOW_DAYS } from "./override-count";
 import {
   hasPrincipleConflict,
   orderedProfileChain,
@@ -32,7 +36,6 @@ import type {
 
 export { scorePerspectiveMaterial } from "./material";
 
-export const RECENT_OVERRIDE_WINDOW_DAYS = 30;
 
 export function evaluateDecisionPerspective(
   input: DecisionPerspectiveEvaluationInput,
@@ -433,64 +436,6 @@ export function operatorMessageFor(
   return `WWMD recommends starting implementation with ${evaluation.confidenceScore} confidence.`;
 }
 
-/**
- * How often has the owner recently OVERRULED this profile in this domain?
- *
- * The count feeds `overridePenalty`, whose purpose is "the corpus is drifting
- * from what the owner actually does, so trust it less here". It used to count
- * every `EscalationCapture` — a row written whenever a human ANSWERS an
- * escalated decision — which measured engagement, not disagreement (BI-ACF0D6D4).
- *
- * The consequence was perverse and measured live: clearing a review queue of 13
- * items drove the penalty to its 0.3 cap, which subtracted enough confidence to
- * force the NEXT decision to escalate too. Answering the queue is what kept the
- * queue full. Agreeing with the gate penalised it exactly as hard as overruling
- * it.
- *
- * An override now requires proof of divergence: the gate must have actually
- * recommended something (`recommendedOptionId`), and the human must have chosen
- * something else. Two cases deliberately do NOT count:
- *
- *  - no recommendation was made — there was nothing to overrule, which is the
- *    shape of every plain escalation;
- *  - the human answered without picking a structured option (`chosenOptionId`
- *    null) — absence of evidence is not evidence of disagreement, and guessing
- *    here would reintroduce the same false signal in a quieter form.
- *
- * Comparing two columns is not expressible in a Prisma `where`, so the
- * candidate set is narrowed in SQL (window + domain + profile + has a
- * recommendation) and the divergence test is applied in memory. The window and
- * domain filters keep that set small.
- */
-export async function getRecentOverrideCount(input: {
-  db: any;
-  profileId: string;
-  domainClass: DecisionDomainClass;
-  now: Date;
-}): Promise<number> {
-  if (!input.db.escalationCapture?.findMany) return 0;
-  const gte = new Date(input.now.getTime() - RECENT_OVERRIDE_WINDOW_DAYS * 24 * 60 * 60 * 1000);
-  const captures = await input.db.escalationCapture.findMany({
-    where: {
-      domainClass: input.domainClass,
-      createdAt: { gte },
-      interaction: {
-        profileId: input.profileId,
-        recommendedOptionId: { not: null },
-      },
-    },
-    select: {
-      interaction: { select: { recommendedOptionId: true, chosenOptionId: true } },
-    },
-  });
-  return captures.filter((capture: {
-    interaction: { recommendedOptionId: string | null; chosenOptionId: string | null } | null;
-  }) => {
-    const recommended = capture.interaction?.recommendedOptionId ?? null;
-    const chosen = capture.interaction?.chosenOptionId ?? null;
-    return recommended !== null && chosen !== null && chosen !== recommended;
-  }).length;
-}
 
 export async function evaluatePerspectiveGate(input: {
   db: any;
