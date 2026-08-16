@@ -1594,8 +1594,13 @@ Copy-Item -Path (Join-Path $DPF_DIR "scripts\safety\dpf-shell-guard-fallback-pat
 # basename as -BinName. The shim's filename (docker.cmd) is what `where docker`
 # resolves to; the guard receives the intended tool name explicitly so
 # basename-based detection isn't fragile.
+# NOTE: no `--` separator before %*. With `pwsh -File`, PowerShell parses `--` as a
+# parameter prefix with an EMPTY name and aborts every guarded command with
+# "Parameter cannot be processed because the parameter name '' is ambiguous" —
+# which breaks git/docker/prisma for the whole user account, because safety-bin is
+# prepended to the user PATH below. The guard collects %* from the automatic $args.
 foreach ($tool in @("docker", "git", "prisma")) {
-    $shimContent = "@echo off`r`npwsh -NoProfile -ExecutionPolicy Bypass -File `"%~dp0dpf-shell-guard.ps1`" -BinName $tool -- %*`r`n"
+    $shimContent = "@echo off`r`npwsh -NoProfile -ExecutionPolicy Bypass -File `"%~dp0dpf-shell-guard.ps1`" -BinName $tool %*`r`n"
     Set-Content -Path (Join-Path $safetyBin "$tool.cmd") -Value $shimContent -Encoding ASCII -NoNewline
 }
 
