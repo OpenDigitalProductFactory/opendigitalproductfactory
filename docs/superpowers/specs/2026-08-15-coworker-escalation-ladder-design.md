@@ -173,10 +173,18 @@ coworker still reports as unsummonable rather than as a clearance refusal —
 otherwise the generic refusal would imply a restricted matter that does not
 exist.
 
-Still open, tracked on BI-154DAA7E: `authorizeWorkRoomAccess` returns the
-requested level for a superuser *before* any clearance check, so no
-route-fronted coworker may hold superuser; and the conversational channel
-remains unpoliced for peers that are legitimately admitted.
+The superuser short-circuit is now guarded (BI-154DAA7E): the agent access
+input cannot express `isSuperuser` at all — the field was removed from
+`authorizeAgentRoomAccess`, so an AI principal claiming it is a type error —
+and `authorizeWorkroomAccess` refuses the short-circuit for
+`principalKind: "agent"` even if a future caller sets the flag another way. The
+short-circuit remains a human affordance: the installation owner on their own
+install.
+
+Still open, tracked on BI-154DAA7E: the conversational channel remains
+unpoliced for peers that are legitimately admitted — clearance is a *level*,
+while some confidentiality is *relational* (whose reports, whose deal), which a
+level-based clamp cannot express.
 
 ## 4b. Fresh-install behaviour and how to diagnose a silent refusal
 

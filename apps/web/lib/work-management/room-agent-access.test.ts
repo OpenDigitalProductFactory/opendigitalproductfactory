@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { authorizeWorkroomAccess } from "./room-participation";
 import { authorizeAgentRoomAccess, grantsRequested } from "./room-agent-access";
 
 const BASE = {
@@ -64,5 +65,56 @@ describe("authorizeAgentRoomAccess", () => {
     });
     expect(d.level).toBe("discover");
     expect(d.reason).toBe("discover-only");
+  });
+});
+
+describe("superuser guard (BI-154DAA7E)", () => {
+  // The superuser short-circuit in authorizeWorkroomAccess is a HUMAN
+  // affordance. An AI principal must never ride it: one flag would void
+  // admission AND the sensitivity ceiling at once.
+  it("the agent input cannot express superuser at all — the field does not exist", () => {
+    // Type-level guarantee, asserted at runtime for the compiled contract:
+    // passing isSuperuser must not change the decision for an unadmitted agent.
+    const decision = authorizeAgentRoomAccess({
+      requested: "action",
+      agentPrincipalRef: "agent:AGT-ORCH-000",
+      agentSensitivityClearance: ["public", "internal", "confidential", "restricted"],
+      admittedPrincipalRefs: [],
+      actionPrincipalRefs: [],
+      sensitivityCeiling: "public",
+      // @ts-expect-error BI-154DAA7E — isSuperuser was removed from the agent path
+      isSuperuser: true,
+    });
+    expect(decision.level).toBe("none");
+    expect(decision.reason).toBe("not-admitted");
+  });
+
+  it("an under-cleared agent is capped even if a future caller smuggles the flag through the core", () => {
+    // Belt and braces: the core decision refuses the short-circuit for
+    // principalKind "agent" even with isSuperuser true.
+    const decision = authorizeWorkroomAccess({
+      requested: "content",
+      principalRef: "agent:AGT-ORCH-000",
+      assignedPrincipalRefs: ["agent:AGT-ORCH-000"],
+      sensitivityCeiling: "restricted",
+      sensitivityClearance: ["public", "internal"],
+      isSuperuser: true,
+      principalKind: "agent",
+    });
+    expect(decision.level).toBe("discover");
+    expect(decision.reason).toBe("insufficient-clearance");
+  });
+
+  it("a human superuser is unchanged — the owner affordance survives", () => {
+    const decision = authorizeWorkroomAccess({
+      requested: "action",
+      principalRef: "user:owner",
+      assignedPrincipalRefs: [],
+      sensitivityCeiling: "restricted",
+      sensitivityClearance: [],
+      isSuperuser: true,
+    });
+    expect(decision.level).toBe("action");
+    expect(decision.reason).toBe("authorized");
   });
 });
