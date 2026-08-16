@@ -7,6 +7,8 @@ import {
   getToolGrantMapping,
   knownGrantKeys,
   COWORKER_READ_BASELINE_GRANTS,
+  TOOL_TO_GRANTS,
+  WORKROOM_TOOL_ALIASES,
 } from "./agent-grants";
 describe("TOOL_TO_GRANTS — Build / Sandbox entries", () => {
   it("write_sandbox_file requires sandbox_execute", () => {
@@ -909,5 +911,29 @@ describe("web_search roster — outward-facing roles hold it, internal/governanc
     expect(grants, `${role} not found in registry`).toBeTruthy();
     expect(grants).not.toContain("web_search");
     expect(isToolAllowedByGrants("search_public_web", grants ?? [])).toBe(false);
+  });
+});
+
+// ── Workroom alias window: static rows must not drift (BI-0702869B) ─────────────
+//
+// The legacy capsule rows are listed STATICALLY in TOOL_TO_GRANTS because the
+// Coworker Tool-Grant Audit parses that object literal without executing it — a
+// row added by a runtime loop is invisible to it and surfaces as GRANT-002
+// ("catalog grant lists tool X which is absent from TOOL_TO_GRANTS").
+//
+// Static rows can drift from their canonical twin, which is exactly the silent
+// authorization failure this window must not cause. This test is what buys back
+// the guarantee the runtime derivation gave for free.
+describe("workroom tool alias grants", () => {
+  it("gives every legacy capsule tool the SAME grants as its canonical workroom tool", () => {
+    for (const [legacy, canonical] of Object.entries(WORKROOM_TOOL_ALIASES)) {
+      expect(TOOL_TO_GRANTS[canonical], `${canonical} must have grants`).toBeDefined();
+      expect(TOOL_TO_GRANTS[legacy], `${legacy} must have grants or it is denied`).toBeDefined();
+      expect(TOOL_TO_GRANTS[legacy]).toEqual(TOOL_TO_GRANTS[canonical]);
+    }
+  });
+
+  it("covers every renamed tool — the alias map cannot silently shrink", () => {
+    expect(Object.keys(WORKROOM_TOOL_ALIASES).length).toBe(10);
   });
 });

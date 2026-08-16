@@ -221,6 +221,21 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   release_workroom_scope: ["work_capsule_write"],
   reassign_workroom_executor: ["work_capsule_write"],
   get_runtime_coordination_map: ["work_capsule_read"],
+  // Legacy capsule tool names, callable during the Workroom alias window
+  // (BI-0702869B). Listed STATICALLY on purpose: the Coworker Tool-Grant Audit
+  // reads this object literal without executing it, so a row derived at runtime
+  // is invisible to it and reads as a catalog tool missing from TOOL_TO_GRANTS.
+  // WORKROOM_TOOL_ALIASES below pins each of these to its canonical row in test.
+  list_work_capsules: ["work_capsule_read"],
+  get_work_capsule: ["work_capsule_read"],
+  create_work_capsule: ["work_capsule_write"],
+  plan_capsule_worktree: ["work_capsule_write"],
+  claim_capsule_scope: ["work_capsule_write"],
+  heartbeat_capsule: ["work_capsule_write"],
+  update_work_capsule_status: ["work_capsule_write"],
+  release_capsule_scope: ["work_capsule_write"],
+  record_capsule_evidence: ["work_capsule_write"],
+  reassign_capsule_executor: ["work_capsule_write"],
   // Queue-awareness reads (EP-3516E23D): platform-coordination visibility over
   // the shared queue flow-telemetry — same read grant as the sibling ops-read
   // tool above.
@@ -782,10 +797,6 @@ export const WORKROOM_TOOL_ALIASES: Record<string, string> = {
   reassign_capsule_executor: "reassign_workroom_executor",
 };
 
-for (const [legacy, canonical] of Object.entries(WORKROOM_TOOL_ALIASES)) {
-  const grants = TOOL_TO_GRANTS[canonical];
-  if (grants) TOOL_TO_GRANTS[legacy] = grants;
-}
 
 
 /**
