@@ -60,7 +60,7 @@ const CATALOG: CatalogModel[] = [
   {
     id: "hf.co/ggml-org/Qwen3.8-27B-GGUF:Q4_K_M",
     name: "Qwen3.8 27B (dense)",
-    description: "The most thorough local model DPF ships. Dense 27B — every parameter runs on every word, so answers take noticeably longer than the MoE models here and come back more complete. Holds a very long conversation (262K). ~18 GB. Ideal when you have 24 GB+ of graphics memory, or 32 GB+ of unified memory on a Mac. Choose a MoE model instead if fast replies matter more than thorough ones. (The model also understands images and video, but DPF cannot route picture questions to it yet — tracked as BI-C2EFF855.)",
+    description: "The most thorough local model. Slower to answer than the mixture-of-experts models here, and more complete when it does. Remembers very long conversations. ~18 GB, so you want 24 GB+ of graphics memory or a 32 GB+ Mac. It can read images, but DPF cannot send it picture questions yet.",
     vramGb: 18,
     contextK: 262,
     toolUse: true,
@@ -70,7 +70,7 @@ const CATALOG: CatalogModel[] = [
   {
     id: "ai/qwen3.6:35B-A3B-UD-Q4_K_M",
     name: "Qwen3.6 35B-A3B (MoE, 3B active)",
-    description: "The fast alternative to Qwen3.8 27B: a mixture-of-experts model that activates only a small slice of itself per word, so replies arrive several times sooner. Slightly less thorough on long, multi-step tasks. ~22 GB. Ideal when you have plenty of unified RAM (32 GB+ Apple Silicon) or 24 GB+ discrete VRAM.",
+    description: "The fast alternative to Qwen3.8 27B. Replies arrive several times sooner, at some cost to thoroughness on long, multi-step tasks. ~22 GB, so you want 24 GB+ of graphics memory or a 32 GB+ Mac.",
     vramGb: 22,
     contextK: 32,
     toolUse: true,
