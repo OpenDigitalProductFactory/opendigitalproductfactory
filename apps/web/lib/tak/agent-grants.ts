@@ -198,8 +198,8 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   // Coworker self-scoped backlog lens (BI-474A1F55) — read-only, identity-scoped.
   list_my_backlog: ["backlog_read"],
   // Work Capsule control harness (spec 2026-05-14)
-  list_work_capsules: ["work_capsule_read"],
-  get_work_capsule: ["work_capsule_read"],
+  list_workrooms: ["work_capsule_read"],
+  get_workroom: ["work_capsule_read"],
   // EP-WORKROOM-COMMS (BI-3F21C4D5): read/post a Work Room's message feed. Room
   // admission is enforced separately (room-agent-access); these are the coarse caps.
   read_room_messages: ["work_room_read"],
@@ -208,19 +208,34 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   // room-engagement (read). Room admission/coordinator right enforced separately.
   invite_room_participant: ["work_room_write"],
   get_coworker_room_engagement: ["work_room_read"],
-  create_work_capsule: ["work_capsule_write"],
-  plan_capsule_worktree: ["work_capsule_write"],
+  create_workroom: ["work_capsule_write"],
+  plan_workroom_worktree: ["work_capsule_write"],
   adopt_worktree: ["work_capsule_adopt"],
   claim_backlog_item_for_work: ["work_capsule_adopt"],
   start_external_work: ["work_capsule_adopt"],
-  claim_capsule_scope: ["work_capsule_write"],
-  record_capsule_evidence: ["work_capsule_write"],
+  claim_workroom_scope: ["work_capsule_write"],
+  record_workroom_evidence: ["work_capsule_write"],
   record_agent_activity: ["work_capsule_write"],
+  heartbeat_workroom: ["work_capsule_write"],
+  update_workroom_status: ["work_capsule_write"],
+  release_workroom_scope: ["work_capsule_write"],
+  reassign_workroom_executor: ["work_capsule_write"],
+  get_runtime_coordination_map: ["work_capsule_read"],
+  // Legacy capsule tool names, callable during the Workroom alias window
+  // (BI-0702869B). Listed STATICALLY on purpose: the Coworker Tool-Grant Audit
+  // reads this object literal without executing it, so a row derived at runtime
+  // is invisible to it and reads as a catalog tool missing from TOOL_TO_GRANTS.
+  // WORKROOM_TOOL_ALIASES below pins each of these to its canonical row in test.
+  list_work_capsules: ["work_capsule_read"],
+  get_work_capsule: ["work_capsule_read"],
+  create_work_capsule: ["work_capsule_write"],
+  plan_capsule_worktree: ["work_capsule_write"],
+  claim_capsule_scope: ["work_capsule_write"],
   heartbeat_capsule: ["work_capsule_write"],
   update_work_capsule_status: ["work_capsule_write"],
   release_capsule_scope: ["work_capsule_write"],
+  record_capsule_evidence: ["work_capsule_write"],
   reassign_capsule_executor: ["work_capsule_write"],
-  get_runtime_coordination_map: ["work_capsule_read"],
   // Queue-awareness reads (EP-3516E23D): platform-coordination visibility over
   // the shared queue flow-telemetry — same read grant as the sibling ops-read
   // tool above.
@@ -761,6 +776,28 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   screen_set_input:        ["coworker_screen_fill"],
   ...AUTHORIZED_SURFACE_TOOL_GRANTS,
 };
+
+/**
+ * Legacy capsule tool names, still callable during the Workroom alias window
+ * (EP-WORK-CONVERGENCE / BI-0702869B). Derived rather than hand-copied:
+ * TOOL_TO_GRANTS DENIES UNLISTED TOOLS, so an alias whose grants drift from its
+ * canonical name becomes a silent authorization failure. Deriving them makes the
+ * two provably identical and deletes in one edit when the window closes.
+ */
+export const WORKROOM_TOOL_ALIASES: Record<string, string> = {
+  list_work_capsules: "list_workrooms",
+  get_work_capsule: "get_workroom",
+  create_work_capsule: "create_workroom",
+  plan_capsule_worktree: "plan_workroom_worktree",
+  claim_capsule_scope: "claim_workroom_scope",
+  heartbeat_capsule: "heartbeat_workroom",
+  update_work_capsule_status: "update_workroom_status",
+  release_capsule_scope: "release_workroom_scope",
+  record_capsule_evidence: "record_workroom_evidence",
+  reassign_capsule_executor: "reassign_workroom_executor",
+};
+
+
 
 /**
  * The catalog of every grant KEY known to the authority registry, derived from

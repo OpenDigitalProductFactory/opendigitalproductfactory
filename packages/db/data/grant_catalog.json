@@ -1,7 +1,7 @@
 {
   "version": "1.0.0",
   "generated_at": "2026-04-28",
-  "notes": "Catalog of grant keys referenced by packages/db/data/agent_registry.json. honored_by_tools is empty when no tool in apps/web/lib/mcp-tools.ts (via apps/web/lib/tak/agent-grants.ts TOOL_TO_GRANTS) checks the grant — those are aspirational grants that do not yet authorize any platform action. The tool-grant audit's GRANT-002 surfaces them as findings; backfill PRs either implement the tool or remove the grant from the registry. Descriptions are heuristic placeholders generated from the grant key — refine by hand during reconciliation.",
+  "notes": "Catalog of grant keys referenced by packages/db/data/agent_registry.json. honored_by_tools is empty when no tool in apps/web/lib/mcp-tools.ts (via apps/web/lib/tak/agent-grants.ts TOOL_TO_GRANTS) checks the grant \u2014 those are aspirational grants that do not yet authorize any platform action. The tool-grant audit's GRANT-002 surfaces them as findings; backfill PRs either implement the tool or remove the grant from the registry. Descriptions are heuristic placeholders generated from the grant key \u2014 refine by hand during reconciliation. Workroom rename (EP-WORK-CONVERGENCE / BI-0702869B): both the canonical workroom_* tool name and its legacy capsule name are honored during the alias window; the legacy entries are removed when the window closes.",
   "grants": [
     {
       "key": "acceptance_package_write",
@@ -143,8 +143,8 @@
         "propose_decomposition",
         "register_digital_product_from_build",
         "register_tech_debt",
-        "retire_backlog_item",
         "report_quality_issue",
+        "retire_backlog_item",
         "save_phase_handoff",
         "submit_feedback",
         "update_backlog_item",
@@ -195,7 +195,7 @@
     },
     {
       "key": "build_evidence",
-      "description": "Pseudo-User Contract (BI-B2F7ABF5): record evidence against a FeatureBuild — execution outcome, notes, persisted artifacts. Finer-grained successor to the build-evidence-related slice of backlog_write; lets scoped coworker tokens record build progress without authority to mutate the broader backlog. Implied by backlog_write (one-way).",
+      "description": "Pseudo-User Contract (BI-B2F7ABF5): record evidence against a FeatureBuild \u2014 execution outcome, notes, persisted artifacts. Finer-grained successor to the build-evidence-related slice of backlog_write; lets scoped coworker tokens record build progress without authority to mutate the broader backlog. Implied by backlog_write (one-way).",
       "category": "integrate",
       "sensitivity": "internal",
       "honored_by_tools": [
@@ -207,7 +207,7 @@
     },
     {
       "key": "build_lifecycle",
-      "description": "Pseudo-User Contract (BI-B2F7ABF5): advance a FeatureBuild's lifecycle state — promote into Build Studio, process backlog batches into builds, and (when BI-0B3B0232 lands) reopen abandoned builds. Successor to build_promote; covers the full lifecycle surface required by the Pseudo-User Contract envelope flow. Implied by build_promote (one-way) for backwards compat.",
+      "description": "Pseudo-User Contract (BI-B2F7ABF5): advance a FeatureBuild's lifecycle state \u2014 promote into Build Studio, process backlog batches into builds, and (when BI-0B3B0232 lands) reopen abandoned builds. Successor to build_promote; covers the full lifecycle surface required by the Pseudo-User Contract envelope flow. Implied by build_promote (one-way) for backwards compat.",
       "category": "integrate",
       "sensitivity": "internal",
       "honored_by_tools": [
@@ -218,7 +218,7 @@
     },
     {
       "key": "build_phase_advance",
-      "description": "Pseudo-User Contract (BI-B2F7ABF5): advance a FeatureBuild's phase — approve or override a decomposition, propose a downstream decomposition. Finer-grained successor to the phase-advancing slice of backlog_write; gates the Ideate→Plan handoff. Implied by backlog_write (one-way).",
+      "description": "Pseudo-User Contract (BI-B2F7ABF5): advance a FeatureBuild's phase \u2014 approve or override a decomposition, propose a downstream decomposition. Finer-grained successor to the phase-advancing slice of backlog_write; gates the Ideate\u2192Plan handoff. Implied by backlog_write (one-way).",
       "category": "integrate",
       "sensitivity": "internal",
       "honored_by_tools": [
@@ -286,11 +286,11 @@
       "category": "explore",
       "sensitivity": "internal",
       "honored_by_tools": [
+        "find_related_tests",
         "get_code_graph_freshness",
         "inspect_build_code_impact",
         "search_code_graph",
-        "trace_code_surface",
-        "find_related_tests"
+        "trace_code_surface"
       ],
       "implies": []
     },
@@ -381,7 +381,7 @@
     },
     {
       "key": "coworker_screen_drive",
-      "description": "Pseudo-User Contract (BI-B2F7ABF5/BI-DF6079E9): drive the screen the user is on — select entities, navigate routes, open/close panels, focus fields. Read-only for the user (the coworker drives).",
+      "description": "Pseudo-User Contract (BI-B2F7ABF5/BI-DF6079E9): drive the screen the user is on \u2014 select entities, navigate routes, open/close panels, focus fields. Read-only for the user (the coworker drives).",
       "category": "platform",
       "sensitivity": "internal",
       "honored_by_tools": [
@@ -397,7 +397,7 @@
     },
     {
       "key": "coworker_screen_fill",
-      "description": "Pseudo-User Contract (BI-B2F7ABF5/BI-DF6079E9): pre-fill form fields on behalf of the user. Higher tier than coworker_screen_drive — the user can still override before submit, but the coworker is setting input without explicit user keystrokes.",
+      "description": "Pseudo-User Contract (BI-B2F7ABF5/BI-DF6079E9): pre-fill form fields on behalf of the user. Higher tier than coworker_screen_drive \u2014 the user can still override before submit, but the coworker is setting input without explicit user keystrokes.",
       "category": "platform",
       "sensitivity": "internal",
       "honored_by_tools": [
@@ -407,7 +407,7 @@
     },
     {
       "key": "coworker_screen_read",
-      "description": "Pseudo-User Contract (BI-B2F7ABF5/BI-DF6079E9): read the current screen's state — selected entities, focused field, open panels, route, scroll anchor. Read-only side of the coworker view-command surface (POLA-aligned per chief-architect review of PR #1361 — screen_scroll_to is read-class).",
+      "description": "Pseudo-User Contract (BI-B2F7ABF5/BI-DF6079E9): read the current screen's state \u2014 selected entities, focused field, open panels, route, scroll anchor. Read-only side of the coworker view-command surface (POLA-aligned per chief-architect review of PR #1361 \u2014 screen_scroll_to is read-class).",
       "category": "platform",
       "sensitivity": "internal",
       "honored_by_tools": [
@@ -449,9 +449,9 @@
       "category": "consume",
       "sensitivity": "internal",
       "honored_by_tools": [
+        "get_opportunity",
         "list_customer_accounts",
         "list_opportunities",
-        "get_opportunity",
         "list_quotes"
       ],
       "implies": []
@@ -496,8 +496,8 @@
       "category": "platform",
       "sensitivity": "internal",
       "honored_by_tools": [
-        "start_deliberation",
-        "deliberate_on"
+        "deliberate_on",
+        "start_deliberation"
       ],
       "implies": []
     },
@@ -604,7 +604,7 @@
     },
     {
       "key": "email_config",
-      "description": "Configure the organization's OWN outbound email (SMTP) — detect provider, save settings, send a test. Operator-gated (manage_provider_connections); DPF never relays mail on the operator's behalf.",
+      "description": "Configure the organization's OWN outbound email (SMTP) \u2014 detect provider, save settings, send a test. Operator-gated (manage_provider_connections); DPF never relays mail on the operator's behalf.",
       "category": "integrate",
       "sensitivity": "confidential",
       "honored_by_tools": [
@@ -614,7 +614,7 @@
     },
     {
       "key": "enrichment_write",
-      "description": "Run software/asset enrichment on demand — resolve a product's CatalogIdentity CPE + endoflife.date support-lifecycle and flag items for re-enrichment (EP-ASSET-INTELLIGENCE). Scoped finer than registry_write so enrichment mutation is separately auditable.",
+      "description": "Run software/asset enrichment on demand \u2014 resolve a product's CatalogIdentity CPE + endoflife.date support-lifecycle and flag items for re-enrichment (EP-ASSET-INTELLIGENCE). Scoped finer than registry_write so enrichment mutation is separately auditable.",
       "category": "explore",
       "sensitivity": "internal",
       "honored_by_tools": [
@@ -951,8 +951,8 @@
         "explain_blast_radius",
         "flag_stale_knowledge",
         "get_my_coworker_profile",
-        "list_my_capability_needs",
         "list_departments",
+        "list_my_capability_needs",
         "list_positions",
         "query_employees",
         "register_digital_product_from_build",
@@ -1190,9 +1190,9 @@
       "category": "operate",
       "sensitivity": "confidential",
       "honored_by_tools": [
-        "query_security_events",
+        "get_security_case",
         "query_detections",
-        "get_security_case"
+        "query_security_events"
       ],
       "implies": []
     },
@@ -1302,8 +1302,8 @@
       "category": "platform",
       "sensitivity": "internal",
       "honored_by_tools": [
-        "get_thread_result",
-        "get_child_threads"
+        "get_child_threads",
+        "get_thread_result"
       ],
       "implies": []
     },
@@ -1313,9 +1313,9 @@
       "category": "platform",
       "sensitivity": "internal",
       "honored_by_tools": [
-        "spawn_work_thread",
         "cancel_thread",
         "request_coworker",
+        "spawn_work_thread",
         "summon_coworker"
       ],
       "implies": []
@@ -1422,7 +1422,9 @@
       "honored_by_tools": [
         "get_runtime_coordination_map",
         "get_work_capsule",
-        "list_work_capsules"
+        "get_workroom",
+        "list_work_capsules",
+        "list_workrooms"
       ],
       "implies": []
     },
@@ -1433,16 +1435,23 @@
       "sensitivity": "internal",
       "honored_by_tools": [
         "claim_capsule_scope",
+        "claim_workroom_scope",
         "create_work_capsule",
+        "create_workroom",
         "heartbeat_capsule",
         "heartbeat_runtime_target",
+        "heartbeat_workroom",
         "plan_capsule_worktree",
+        "plan_workroom_worktree",
         "record_capsule_evidence",
         "record_runtime_verification",
+        "record_workroom_evidence",
         "register_runtime_target",
-        "release_runtime_target",
         "release_capsule_scope",
-        "update_work_capsule_status"
+        "release_runtime_target",
+        "release_workroom_scope",
+        "update_work_capsule_status",
+        "update_workroom_status"
       ],
       "implies": [
         "work_capsule_read"

@@ -344,7 +344,7 @@ describe("composeToolPacks", () => {
         coworkerServiceCatalogPack.definitions.length,
     );
     expect(registry.getHandler("register_runtime_target")).toBeTypeOf("function");
-    expect(registry.getHandler("create_work_capsule")).toBeTypeOf("function");
+    expect(registry.getHandler("create_workroom")).toBeTypeOf("function");
     expect(registry.getHandler("workbook_list_tables")).toBeTypeOf("function");
     expect(registry.getHandler("report_quality_issue")).toBeTypeOf("function");
     expect(registry.getHandler("request_self_upgrade")).toBeTypeOf("function");

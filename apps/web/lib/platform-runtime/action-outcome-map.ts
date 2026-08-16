@@ -48,7 +48,7 @@ const TOOL_OUTCOMES: Record<string, { one: string; many: string }> = {
   propose_product_research: { one: "research proposed", many: "researches proposed" },
   build_tracked_links: { one: "tracked link minted", many: "tracked links minted" },
   doc_save: { one: "document saved", many: "documents saved" },
-  create_work_capsule: { one: "work capsule opened", many: "work capsules opened" },
+  create_workroom: { one: "work capsule opened", many: "work capsules opened" },
   create_portal_pr: { one: "PR opened", many: "PRs opened" },
   propose_file_change: { one: "change proposed", many: "changes proposed" },
   saveBuildEvidence: { one: "build evidence saved", many: "build evidence saved" },

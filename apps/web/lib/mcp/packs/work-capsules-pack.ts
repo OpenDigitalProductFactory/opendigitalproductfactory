@@ -45,13 +45,13 @@ const scopeProperties = {
 
 const definitions: ToolDefinition[] = [
   {
-    name: "list_work_capsules",
+    name: "list_workrooms",
     description:
-      "List Work Capsule coordination records for active portal, Build Studio, and external agent work, each annotated with its TRUE liveness (live | lease-expired | build-terminal | idle-stale | no-signal). Liveness is derived from lease expiry, the linked build's phase, an open PR, and last sync — NOT from updatedAt, which a daily heartbeat freezes for Build Studio capsules, so a `working` status is not proof of life. Includes a livenessSummary (live vs reap-candidate counts). Pass staleOnly=true for just the not-live reap candidates. Read-only.",
+      "List Workroom coordination records for active portal, Build Studio, and external agent work, each annotated with its TRUE liveness (live | lease-expired | build-terminal | idle-stale | no-signal). Liveness is derived from lease expiry, the linked build's phase, an open PR, and last sync — NOT from updatedAt, which a daily heartbeat freezes for Build Studio capsules, so a `working` status is not proof of life. Includes a livenessSummary (live vs reap-candidate counts). Pass staleOnly=true for just the not-live reap candidates. Read-only.",
     inputSchema: {
       type: "object",
       properties: {
-        status: { type: "string", enum: ENUMS.statuses, description: "Filter by Work Capsule status." },
+        status: { type: "string", enum: ENUMS.statuses, description: "Filter by Workroom status." },
         decisionScope: { type: "string", enum: ENUMS.decisionScopes, description: "Filter by WWMD, WWWD, or WSID scope." },
         portfolioRole: { type: "string", enum: ENUMS.portfolioRoles, description: "Filter by primary portfolio role." },
         staleOnly: { type: "boolean", description: "Return only capsules that are NOT truly live (reap candidates). Default false." },
@@ -64,12 +64,12 @@ const definitions: ToolDefinition[] = [
     sideEffect: false,
   },
   {
-    name: "get_work_capsule",
-    description: "Fetch one Work Capsule with its recent activity timeline. Read-only.",
+    name: "get_workroom",
+    description: "Fetch one Workroom with its recent activity timeline. Read-only.",
     inputSchema: {
       type: "object",
       properties: {
-        capsuleId: { type: "string", description: "Semantic Work Capsule id (WC-*)." },
+        capsuleId: { type: "string", description: "Semantic Workroom id (WC-*)." },
       },
       required: ["capsuleId"],
     },
@@ -78,13 +78,13 @@ const definitions: ToolDefinition[] = [
     sideEffect: false,
   },
   {
-    name: "create_work_capsule",
-    description: "Create a Work Capsule coordination record for planned work. Idempotency key is required so retries do not duplicate capsule activity.",
+    name: "create_workroom",
+    description: "Create a Workroom coordination record for planned work. Idempotency key is required so retries do not duplicate workroom activity.",
     inputSchema: {
       type: "object",
       properties: {
-        title: { type: "string", description: "Short capsule title." },
-        objective: { type: "string", description: "Outcome this capsule coordinates." },
+        title: { type: "string", description: "Short workroom title." },
+        objective: { type: "string", description: "Outcome this workroom coordinates." },
         source: { type: "string", enum: ENUMS.sources, description: "Origin of the capsule." },
         idempotencyKey: { type: "string", description: "Stable caller-provided key used to make create retries idempotent." },
         executorKind: { type: "string", enum: ENUMS.executors, description: "Optional executor expected to work the capsule." },
@@ -96,12 +96,12 @@ const definitions: ToolDefinition[] = [
     sideEffect: true,
   },
   {
-    name: "plan_capsule_worktree",
-    description: "Generate and persist the deterministic branch and worktree-path plan for a Work Capsule. Idempotent: re-planning returns the existing plan and refuses to propose the root clone.",
+    name: "plan_workroom_worktree",
+    description: "Generate and persist the deterministic branch and worktree-path plan for a Workroom. Idempotent: re-planning returns the existing plan and refuses to propose the root clone.",
     inputSchema: {
       type: "object",
       properties: {
-        capsuleId: { type: "string", description: "Semantic Work Capsule id (WC-*)." },
+        capsuleId: { type: "string", description: "Semantic Workroom id (WC-*)." },
         taxonomy: { type: "string", enum: ENUMS.taxonomies, description: "AGENTS.md branch prefix." },
       },
       required: ["capsuleId", "taxonomy"],
@@ -112,11 +112,11 @@ const definitions: ToolDefinition[] = [
   },
   {
     name: "adopt_worktree",
-    description: "Adopt an existing local branch/worktree pair into a Work Capsule without creating a new worktree. A branch has one durable capsule identity; an incompatible terminal or foreign binding returns branch_occupied instead of overwriting history.",
+    description: "Adopt an existing local branch/worktree pair into a Workroom without creating a new worktree. A branch has one durable workroom identity; an incompatible terminal or foreign binding returns branch_occupied instead of overwriting history.",
     inputSchema: {
       type: "object",
       properties: {
-        title: { type: "string", description: "Short capsule title." },
+        title: { type: "string", description: "Short workroom title." },
         objective: { type: "string", description: "Outcome this adopted work should reach." },
         repositoryFullName: { type: "string", description: "GitHub repository full name, for example OpenDigitalProductFactory/opendigitalproductfactory." },
         headBranch: { type: "string", description: "Existing branch to adopt." },
@@ -141,11 +141,11 @@ const definitions: ToolDefinition[] = [
       properties: {
         itemId: { type: "string", description: "BacklogItem id (BI-*) to claim." },
         worktreePath: { type: "string", description: "Local worktree path where the work is happening." },
-        branchName: { type: "string", description: "Branch (head) for this work — the capsule is keyed on (repo, branch)." },
+        branchName: { type: "string", description: "Branch (head) for this work — the workroom is keyed on (repo, branch)." },
         repositoryFullName: { type: "string", description: "Optional GitHub repository full name; defaults to the platform repo." },
         baseBranch: { type: "string", description: "Optional base branch (defaults to main)." },
         provider: { type: "string", description: "Provider string (claude, codex, grok) — mapped to the closest executor kind." },
-        sessionRef: { type: "string", description: "Owner/session id, stored as the capsule executorRef." },
+        sessionRef: { type: "string", description: "Owner/session id, stored as the workroom executorRef." },
       },
       required: ["itemId", "worktreePath", "branchName", "provider", "sessionRef"],
     },
@@ -153,12 +153,12 @@ const definitions: ToolDefinition[] = [
     sideEffect: true,
   },
   {
-    name: "claim_capsule_scope",
-    description: "Claim path/module/package/route/skill/prompt scope for a Work Capsule. Edit-path claims automatically derive, persist, and return changeImpactContract with the tests and guards to address before implementation; consume it immediately, and treat status=unresolved as requiring exhaustive verification. Repeated claims refresh both scope and the full edit-path impact contract. Rejected with error=scope_conflict if another active Work Capsule already holds an overlapping edit claim — coordinate, claim different scope, or pass force=true to deliberately co-claim.",
+    name: "claim_workroom_scope",
+    description: "Claim path/module/package/route/skill/prompt scope for a Workroom. Edit-path claims automatically derive, persist, and return changeImpactContract with the tests and guards to address before implementation; consume it immediately, and treat status=unresolved as requiring exhaustive verification. Repeated claims refresh both scope and the full edit-path impact contract. Rejected with error=scope_conflict if another active Workroom already holds an overlapping edit claim — coordinate, claim different scope, or pass force=true to deliberately co-claim.",
     inputSchema: {
       type: "object",
       properties: {
-        capsuleId: { type: "string", description: "Semantic Work Capsule id (WC-*)." },
+        capsuleId: { type: "string", description: "Semantic Workroom id (WC-*)." },
         claims: {
           type: "array",
           items: {
@@ -172,7 +172,7 @@ const definitions: ToolDefinition[] = [
           },
           description: "Scope claims to add or refresh.",
         },
-        force: { type: "boolean", description: "Deliberately co-claim scope despite an active overlap on another Work Capsule (default false). The override is recorded on the capsule activity log." },
+        force: { type: "boolean", description: "Deliberately co-claim scope despite an active overlap on another Workroom (default false). The override is recorded on the workroom activity log." },
       },
       required: ["capsuleId", "claims"],
     },
@@ -180,15 +180,15 @@ const definitions: ToolDefinition[] = [
     sideEffect: true,
   },
   {
-    name: "heartbeat_capsule",
+    name: "heartbeat_workroom",
     description:
-      "Renew the active lease for a Work Capsule so other agents can see that work is in flight. " +
+      "Renew the active lease for a Workroom so other agents can see that work is in flight. " +
       "Heartbeat on a human-scale cadence (between stages / few minutes), not every tool call. " +
       "If the lease is already expired, re-claim or abandon — do not thrash heartbeat.",
     inputSchema: {
       type: "object",
       properties: {
-        capsuleId: { type: "string", description: "Semantic Work Capsule id (WC-*)." },
+        capsuleId: { type: "string", description: "Semantic Workroom id (WC-*)." },
       },
       required: ["capsuleId"],
     },
@@ -196,13 +196,13 @@ const definitions: ToolDefinition[] = [
     sideEffect: true,
   },
   {
-    name: "update_work_capsule_status",
-    description: "Set a Work Capsule status and record a temporary operator-visible status override reason.",
+    name: "update_workroom_status",
+    description: "Set a Workroom status and record a temporary operator-visible status override reason.",
     inputSchema: {
       type: "object",
       properties: {
-        capsuleId: { type: "string", description: "Semantic Work Capsule id (WC-*)." },
-        status: { type: "string", enum: ENUMS.statuses, description: "Next Work Capsule status." },
+        capsuleId: { type: "string", description: "Semantic Workroom id (WC-*)." },
+        status: { type: "string", enum: ENUMS.statuses, description: "Next Workroom status." },
         reason: { type: "string", description: "Reason for the status update or override." },
       },
       required: ["capsuleId", "status", "reason"],
@@ -211,18 +211,18 @@ const definitions: ToolDefinition[] = [
     sideEffect: true,
   },
   {
-    name: "release_capsule_scope",
+    name: "release_workroom_scope",
     description:
-      "Release previously claimed Work Capsule scope items by kind and value. " +
+      "Release previously claimed Workroom scope items by kind and value. " +
       "Requires capsuleId (WC-*) plus claims: [{kind, value}, ...] matching prior claim_capsule_scope entries. " +
       "Call once per handoff with the full claim set — do not release item-by-item in a loop. " +
       "Do NOT retry on invalid_input — fix the payload (claims must be a non-empty array of {kind,value}). " +
-      "Do NOT call for an abandoned/unknown capsule (retryable: false). " +
+      "Do NOT call for an abandoned/unknown workroom (retryable: false). " +
       "If nothing matched, success still returns (idempotent no-op on empty released set).",
     inputSchema: {
       type: "object",
       properties: {
-        capsuleId: { type: "string", description: "Semantic Work Capsule id (WC-*)." },
+        capsuleId: { type: "string", description: "Semantic Workroom id (WC-*)." },
         claims: {
           type: "array",
           items: {
@@ -242,12 +242,12 @@ const definitions: ToolDefinition[] = [
     sideEffect: true,
   },
   {
-    name: "record_capsule_evidence",
-    description: "Append an evidence entry to a Work Capsule activity timeline.",
+    name: "record_workroom_evidence",
+    description: "Append an evidence entry to a Workroom activity timeline.",
     inputSchema: {
       type: "object",
       properties: {
-        capsuleId: { type: "string", description: "Semantic Work Capsule id (WC-*)." },
+        capsuleId: { type: "string", description: "Semantic Workroom id (WC-*)." },
         kind: { type: "string", enum: ENUMS.evidenceKinds, description: "Evidence kind." },
         summary: { type: "string", description: "Evidence summary." },
         command: { type: "string", description: "Optional command that produced the evidence." },
@@ -263,13 +263,13 @@ const definitions: ToolDefinition[] = [
     sideEffect: true,
   },
   {
-    name: "reassign_capsule_executor",
+    name: "reassign_workroom_executor",
     description:
-      "Hand a Work Capsule off to a different executor: change the executor, transfer the active lease to the caller, and record an executor-changed event with the handoff manifest (next action, open risks, evidence digest). Renders as a plain status event, not raw agent plumbing.",
+      "Hand a Workroom off to a different executor: change the executor, transfer the active lease to the caller, and record an executor-changed event with the handoff manifest (next action, open risks, evidence digest). Renders as a plain status event, not raw agent plumbing.",
     inputSchema: {
       type: "object",
       properties: {
-        capsuleId: { type: "string", description: "Semantic Work Capsule id (WC-*)." },
+        capsuleId: { type: "string", description: "Semantic Workroom id (WC-*)." },
         toExecutorKind: { type: "string", enum: ENUMS.executors, description: "Executor taking over the work." },
         toExecutorRef: { type: "string", description: "Optional session/owner id for the receiving executor." },
         reason: { type: "string", description: "Why the handoff is happening." },
@@ -283,14 +283,14 @@ const definitions: ToolDefinition[] = [
   {
     name: "start_external_work",
     description:
-      "Register that you are STARTING work on an external session — before any evidence — so a tracked Work Capsule exists immediately and the session is visible to other agents instead of appearing only after the first result. " +
+      "Register that you are STARTING work on an external session — before any evidence — so a tracked Workroom exists immediately and the session is visible to other agents instead of appearing only after the first result. " +
       "Idempotent per session (or per repo+branch when a worktree is supplied); summary is optional at start. " +
       "Call once at session start — re-calling with the same session/worktree is a no-op, not a progress signal.",
     inputSchema: {
       type: "object",
       properties: {
         provider: { type: "string", description: "Provider string (claude, codex, grok, opencode) — mapped to the closest executor kind." },
-        externalSessionId: { type: "string", description: "Stable id for this external session (the capsule executorRef)." },
+        externalSessionId: { type: "string", description: "Stable id for this external session (the workroom executorRef)." },
         summary: { type: "string", description: "Optional short description of the work being started." },
         backlogItemId: { type: "string", description: "Optional BacklogItem id (BI-*) this session works." },
         worktreePath: { type: "string", description: "Optional local worktree path (enables the adopt path keyed on repo+branch)." },
@@ -306,11 +306,11 @@ const definitions: ToolDefinition[] = [
   {
     name: "record_agent_activity",
     description:
-      "Emit a human-legible session activity onto a Work Capsule's timeline — what the working teammate is thinking (thought), doing (action), asking (question), answering (response), or hit (error). Every executor and sub-worker writes to the same capsule, so multi-agent work reads as one teammate session on one item.",
+      "Emit a human-legible session activity onto a Workroom's timeline — what the working teammate is thinking (thought), doing (action), asking (question), answering (response), or hit (error). Every executor and sub-worker writes to the same capsule, so multi-agent work reads as one teammate session on one item.",
     inputSchema: {
       type: "object",
       properties: {
-        capsuleId: { type: "string", description: "Semantic Work Capsule id (WC-*)." },
+        capsuleId: { type: "string", description: "Semantic Workroom id (WC-*)." },
         type: { type: "string", enum: ENUMS.agentActivityKinds, description: "Activity type: thought | action | question | response | error." },
         body: { type: "string", description: "Human-legible one-line description of the activity." },
         payload: { type: "object", description: "Optional structured detail (e.g. subtaskRef, tool name)." },
@@ -328,35 +328,57 @@ export const workCapsulesPack: ToolPack = {
   packId: "work-capsules",
   definitions,
   handlers: {
+    list_workrooms: (params) => HANDLERS().then((m) => m.listWorkCapsulesTool(params)),
+    get_workroom: (params) => HANDLERS().then((m) => m.getWorkCapsuleTool(params)),
+    create_workroom: (params, userId, context) => HANDLERS().then((m) => m.createWorkCapsuleTool(params, userId, context)),
+    plan_workroom_worktree: (params, userId, context) => HANDLERS().then((m) => m.planCapsuleWorktreeTool(params, userId, context)),
+    adopt_worktree: (params, userId, context) => HANDLERS().then((m) => m.adoptWorktreeTool(params, userId, context)),
+    claim_backlog_item_for_work: (params, userId, context) => HANDLERS().then((m) => m.claimBacklogItemForWorkTool(params, userId, context)),
+    claim_workroom_scope: (params, userId, context) => HANDLERS().then((m) => m.claimCapsuleScopeTool(params, userId, context)),
+    heartbeat_workroom: (params, userId, context) => HANDLERS().then((m) => m.heartbeatCapsuleTool(params, userId, context)),
+    update_workroom_status: (params, userId, context) => HANDLERS().then((m) => m.updateWorkCapsuleStatusTool(params, userId, context)),
+    release_workroom_scope: (params, userId, context) => HANDLERS().then((m) => m.releaseCapsuleScopeTool(params, userId, context)),
+    record_workroom_evidence: (params, userId, context) => HANDLERS().then((m) => m.recordCapsuleEvidenceTool(params, userId, context)),
+    reassign_workroom_executor: (params, userId, context) => HANDLERS().then((m) => m.reassignCapsuleExecutorTool(params, userId, context)),
+    start_external_work: (params, userId, context) => HANDLERS().then((m) => m.startExternalWorkTool(params, userId, context)),
+    record_agent_activity: (params, userId, context) => HANDLERS().then((m) => m.recordAgentActivityTool(params, userId, context)),
+    // Legacy workroom names — callable, deliberately NOT advertised in `definitions`.
     list_work_capsules: (params) => HANDLERS().then((m) => m.listWorkCapsulesTool(params)),
     get_work_capsule: (params) => HANDLERS().then((m) => m.getWorkCapsuleTool(params)),
     create_work_capsule: (params, userId, context) => HANDLERS().then((m) => m.createWorkCapsuleTool(params, userId, context)),
     plan_capsule_worktree: (params, userId, context) => HANDLERS().then((m) => m.planCapsuleWorktreeTool(params, userId, context)),
-    adopt_worktree: (params, userId, context) => HANDLERS().then((m) => m.adoptWorktreeTool(params, userId, context)),
-    claim_backlog_item_for_work: (params, userId, context) => HANDLERS().then((m) => m.claimBacklogItemForWorkTool(params, userId, context)),
     claim_capsule_scope: (params, userId, context) => HANDLERS().then((m) => m.claimCapsuleScopeTool(params, userId, context)),
     heartbeat_capsule: (params, userId, context) => HANDLERS().then((m) => m.heartbeatCapsuleTool(params, userId, context)),
     update_work_capsule_status: (params, userId, context) => HANDLERS().then((m) => m.updateWorkCapsuleStatusTool(params, userId, context)),
     release_capsule_scope: (params, userId, context) => HANDLERS().then((m) => m.releaseCapsuleScopeTool(params, userId, context)),
     record_capsule_evidence: (params, userId, context) => HANDLERS().then((m) => m.recordCapsuleEvidenceTool(params, userId, context)),
     reassign_capsule_executor: (params, userId, context) => HANDLERS().then((m) => m.reassignCapsuleExecutorTool(params, userId, context)),
-    start_external_work: (params, userId, context) => HANDLERS().then((m) => m.startExternalWorkTool(params, userId, context)),
-    record_agent_activity: (params, userId, context) => HANDLERS().then((m) => m.recordAgentActivityTool(params, userId, context)),
   },
   grants: {
+    list_workrooms: ["work_capsule_read"],
+    get_workroom: ["work_capsule_read"],
+    create_workroom: ["work_capsule_write"],
+    plan_workroom_worktree: ["work_capsule_write"],
+    adopt_worktree: ["work_capsule_adopt"],
+    claim_backlog_item_for_work: ["work_capsule_adopt"],
+    claim_workroom_scope: ["work_capsule_write"],
+    heartbeat_workroom: ["work_capsule_write"],
+    update_workroom_status: ["work_capsule_write"],
+    release_workroom_scope: ["work_capsule_write"],
+    record_workroom_evidence: ["work_capsule_write"],
+    reassign_workroom_executor: ["work_capsule_write"],
+    start_external_work: ["work_capsule_adopt"],
+    record_agent_activity: ["work_capsule_write"],
+    // Legacy workroom names keep their grants for the alias window.
     list_work_capsules: ["work_capsule_read"],
     get_work_capsule: ["work_capsule_read"],
     create_work_capsule: ["work_capsule_write"],
     plan_capsule_worktree: ["work_capsule_write"],
-    adopt_worktree: ["work_capsule_adopt"],
-    claim_backlog_item_for_work: ["work_capsule_adopt"],
     claim_capsule_scope: ["work_capsule_write"],
     heartbeat_capsule: ["work_capsule_write"],
     update_work_capsule_status: ["work_capsule_write"],
     release_capsule_scope: ["work_capsule_write"],
     record_capsule_evidence: ["work_capsule_write"],
     reassign_capsule_executor: ["work_capsule_write"],
-    start_external_work: ["work_capsule_adopt"],
-    record_agent_activity: ["work_capsule_write"],
   },
 };

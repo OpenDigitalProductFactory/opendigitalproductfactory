@@ -63,10 +63,14 @@ silent drift.
 
 ⟦runtime: these lag the vocabulary on purpose — check before assuming drift⟧
 
-- **MCP tool names** — `create_work_capsule`, `claim_capsule_scope`,
-  `heartbeat_capsule` and the rest keep their names behind an alias window,
-  because external Claude / Codex / Grok clients and peer installs hold them.
-  `BI-0702869B`.
+- **MCP tool names** — DONE (`BI-0702869B`). The canonical names are now
+  `create_workroom`, `claim_workroom_scope`, `heartbeat_workroom` and the rest.
+  Every legacy `*_capsule_*` name stays **callable but unadvertised** for the
+  alias window, because external Claude / Codex / Grok clients and peer installs
+  hold them. Both names carry identical grants — `TOOL_TO_GRANTS` denies unlisted
+  tools, so an alias without a grant row is an authorization failure. Two tools
+  keep their names deliberately: `adopt_worktree` and `claim_backlog_item_for_work`
+  carry no capsule token.
 - **Prisma field vocabulary** — `workCapsuleId` foreign keys, the `capsule` /
   `workCapsule` relation fields, and the `capsuleId` semantic key with its `WC-*`
   values. The models carry `@@map` to their original physical tables, so the

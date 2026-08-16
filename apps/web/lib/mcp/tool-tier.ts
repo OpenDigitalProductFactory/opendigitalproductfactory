@@ -110,8 +110,8 @@ export const CORE_MCP_TOOL_NAMES: ReadonlySet<string> = new Set([
   "get_my_coworker_profile",
   "find_coworker",
   "get_next_recommended_work",
-  "list_work_capsules",
-  "get_work_capsule",
+  "list_workrooms",
+  "get_workroom",
   "get_build_progress_visibility",
   // live delivery / verification
   "get_quiescence_status",

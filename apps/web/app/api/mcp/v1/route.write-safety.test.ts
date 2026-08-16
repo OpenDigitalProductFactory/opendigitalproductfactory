@@ -65,7 +65,7 @@ beforeEach(() => {
 });
 
 describe("POST — mutating tool safety", () => {
-  it("allows write-scoped tokens to call create_work_capsule", async () => {
+  it("allows write-scoped tokens to call create_workroom", async () => {
     resolveMock.mockResolvedValue({
       tokenId: "tok_write",
       userId: "u1",
@@ -82,7 +82,7 @@ describe("POST — mutating tool safety", () => {
     });
 
     const res = await POST(
-      toolRequest("create_work_capsule", {
+      toolRequest("create_workroom", {
         title: "Token scope test",
         objective: "Verify write-token acceptance",
         source: "operator",
@@ -95,7 +95,7 @@ describe("POST — mutating tool safety", () => {
     expect(body.result.structuredContent).toEqual({ capsuleId: "WC-SCOPE" });
     expect(govMock).toHaveBeenCalledOnce();
     expect(govMock.mock.calls[0]![0]).toMatchObject({
-      toolName: "create_work_capsule",
+      toolName: "create_workroom",
       context: { apiTokenId: "tok_write" },
       source: "external-jsonrpc",
     });
