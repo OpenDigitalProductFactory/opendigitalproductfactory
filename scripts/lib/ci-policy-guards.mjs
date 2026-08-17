@@ -55,6 +55,11 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       // out of the install dir must ship in the image's /dpf-release-assets.
       node("--test", "scripts/check-release-asset-contract.test.mjs"),
     ]),
+    guard("installer-skip-visibility", "Installer Skip Visibility", [
+      // A guarded install step that skips in silence reads as success, and is
+      // then recorded as done by Save-Progress. Optional-script guards must say so.
+      node("--test", "scripts/check-installer-skip-visibility.test.mjs"),
+    ]),
     guard("installer-state-contract", "Installer State Contract", [
       // Drives real bash: install-dpf.sh runs under `set -euo pipefail`, and the
       // failure mode here is shell exit-status semantics, not source text.
