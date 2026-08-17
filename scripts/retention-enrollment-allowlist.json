@@ -1,0 +1,42 @@
+{
+  "version": 1,
+  "note": "Deliberate exclusions from the retention-enrollment guard (BI-873F3C48). Entries are growth-SHAPED by name+time-column but are business records or aggregates, not purgeable telemetry and not regulated retained datasets. Each entry is re-reviewed at expiry.",
+  "entries": [
+    {
+      "model": "Activity",
+      "reason": "CRM activity record (calls/meetings/notes against accounts, contacts, and deals) \u2014 a business record the operator curates, not append-only telemetry.",
+      "owner": "platform-architecture",
+      "expiry": "2026-11-16"
+    },
+    {
+      "model": "CalendarEvent",
+      "reason": "Business scheduling record (bookings/appointments surface), not an event-log; deleting old calendar entries is an operator decision, not a sweep.",
+      "owner": "platform-architecture",
+      "expiry": "2026-11-16"
+    },
+    {
+      "model": "HospitalityServiceTurnEvent",
+      "reason": "Standing domain-lifecycle-managed stewardship exemption (scripts/stewardship-exemptions.txt): follows its HospitalityServiceTurn cascade; independent aging would make seating/closure decisions unexplainable.",
+      "owner": "platform-architecture",
+      "expiry": "2026-11-16"
+    },
+    {
+      "model": "LifecycleEvent",
+      "reason": "Standing domain-lifecycle-managed stewardship exemption (scripts/stewardship-exemptions.txt): transition evidence follows the governed lifecycle of its referenced thing; age-based deletion would break accountability history.",
+      "owner": "platform-architecture",
+      "expiry": "2026-11-16"
+    },
+    {
+      "model": "ProductOutcomeObservation",
+      "reason": "Governance evidence for product objectives; corrections supersede rather than delete (correct_product_outcome_observation flow). Deliberately kept, pending an owner decision on a long-window archive policy.",
+      "owner": "platform-architecture",
+      "expiry": "2026-11-16"
+    },
+    {
+      "model": "SkillMetric",
+      "reason": "Periodic aggregate (per skill/agent/period) \u2014 the durable post-purge source of truth for the raw skillUsageEvent stream, which IS purge-enrolled.",
+      "owner": "platform-architecture",
+      "expiry": "2026-11-16"
+    }
+  ]
+}

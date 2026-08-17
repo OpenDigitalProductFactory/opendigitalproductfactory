@@ -1,0 +1,18 @@
+{
+  "version": "1",
+  "accountableOwner": "Mark Bodman (markdbodman@gmail.com)",
+  "summary": "BI-640B011D + BI-873F3C48 (Simplify & Strengthen W2/W3, architecture pass 2026-08-16 §3.2). Structural integrity + lifecycle coverage only — NO new data columns, NO row mutations, NO backfill. W2: (1) 29 justified FK-leading indexes (each migration statement cites its query path; misses are budgeted by scripts/check-fk-index-coverage.mjs, not mechanically indexed); (2) 7 real FK relations for Workroom's bare link columns (featureBuildId, taskRunId, gitPromotionCandidateId, changePromotionId, leaseHolderPrincipalId, createdByPrincipalId, requestedByPrincipalId) added NOT VALID with ON DELETE SET NULL so legacy orphan values never wedge the forward-only chain; backlogItemId/epicId deliberately excluded (mixed live key shapes); (3) NOT VALID organizationId FKs on 20 models (Staffing* family among them). W3: 21 append-only growth tables enrolled in PURGE_POLICIES (with 2 new categories integration-log/edge-telemetry), 2 Care* status-event tables added to RETAINED_DATASETS (HIPAA-adjacent), 4 growth-shaped business-record models deliberately allowlisted, and 17 leading time-column indexes so the sweep never seq-scans (migrations 20260816100000 + 20260816101000). W4 (BI-817ED2D4, §3.2-a): closed-set enum adoption for the top-40 closed-set string columns, expand→contract. Migration 20260816110000 creates 37 enum types and directly converts the 10 columns with provable birth-typed writers (BacklogItem sensitivity/estimateSource/demandStage/demandScoreFramework/investmentBucket, FeatureBuild kind/disposition/uxVerificationStatus, Workroom decisionScope/portfolioRole — per-column safety arguments in the migration). Migration 20260816111000 adds NOT VALID `*_closed_set` CHECK constraints on the 30 long-lived columns (new writes enforced, legacy rows tolerated; observed legacy vocabulary such as BacklogItem.status 'blocked' and FeatureBuild.phase 'panicked' is deliberately inside the sets because NOT VALID CHECKs re-evaluate on UPDATE) plus three unambiguous normalizations (empty-string→NULL on triageOutcome/source/effortSize; s/m/l case variants→canonical). The String→enum contract flip is proposal-only: docs/superpowers/plans/2026-08-16-enum-contract-step-proposal.md (operator-review-required). The schema comment blessing String discriminators was replaced with the enum/CHECK rule. New CI ratchet: check-no-new-closed-set-strings.mjs (697-column baseline, owner platform-architecture, expiry 2026-11-16). New CI ratchets from W2/W3: check-fk-index-coverage.mjs and check-retention-enrollment.mjs with owned baselines (owner platform-architecture, expiry 2026-11-16).",
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "Workroom",
+      "lifecycleDisposition": "domain-lifecycle-managed",
+      "fields": []
+    },
+    {
+      "kind": "destructive",
+      "holdCheck": true,
+      "dispositionEvidence": true
+    }
+  ]
+}

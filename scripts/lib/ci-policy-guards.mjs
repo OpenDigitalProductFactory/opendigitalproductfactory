@@ -159,6 +159,18 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
     guard("module-size-guard", "Module Size Guard", [
       node("scripts/check-module-size.mjs"),
     ]),
+    // BI-640B011D: schema FK budgets (declared FKs without a leading index +
+    // bare unbacked *Id columns) may only shrink against the owned baseline.
+    guard("fk-index-coverage-guard", "FK Index Coverage Guard", [
+      node("--test", "scripts/check-fk-index-coverage.test.mjs"),
+      node("scripts/check-fk-index-coverage.mjs"),
+    ]),
+    // BI-873F3C48: every growth-shaped (event/log/telemetry) model must be
+    // retention-enrolled (purge or retained) or deliberately allowlisted.
+    guard("retention-enrollment-guard", "Retention Enrollment Guard", [
+      node("--test", "scripts/check-retention-enrollment.test.mjs"),
+      node("scripts/check-retention-enrollment.mjs"),
+    ]),
     // Diff-scoped by design: repo-wide, the pattern matches 255 fixtures across 125
     // files, nearly all legitimate (far-future sentinels, deliberately-expired rows).
     // Gating on that would need a 125-file baseline — the silent allowlist this is
