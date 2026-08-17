@@ -30,6 +30,7 @@ const EXPECTED_LEGACY_JOBS = [
   "finding-substrate-guard",
   "fpaw-standard-guard",
   "host-port-range-guard",
+  "installer-skip-visibility",
   "installer-state-contract",
   "instruction-plane-guard",
   "instruction-plane-rule-coverage",
