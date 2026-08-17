@@ -689,7 +689,7 @@ export async function profileModels(
 
 export async function verifyProviderModels(
   providerId: string,
-): Promise<{ verified: number; passed: number; failed: number; error?: string }> {
+): Promise<{ verified: number; passed: number; failed: number; deferred?: number; error?: string }> {
   const userId = await requireManageProviders();
   try {
     const { verifyModels } = await import("@/lib/endpoint-test-runner");

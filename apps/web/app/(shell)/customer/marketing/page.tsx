@@ -138,6 +138,56 @@ export default async function CustomerMarketingPage() {
         </div>
       </section>
 
+      {/* BI-64F2EA96: the approval loop only closes when the owner can SEE the
+          queue from the first viewport. Briefs piled up for a month behind a
+          collapsed disclosure while this page led with onboarding copy. When
+          anything is waiting — drafts to review, approved posts to publish, or
+          briefs that have produced nothing reviewable — say so here, above the
+          fold, with a direct path to the action. */}
+      {(() => {
+        const pendingCount = snapshot.pendingDrafts.length;
+        const approvedCount = snapshot.approvedDrafts.length;
+        const briefCount = snapshot.workProducts.campaignBriefs.length;
+        if (pendingCount === 0 && approvedCount === 0 && briefCount === 0) return null;
+        return (
+          <section
+            data-testid="marketing-waiting-on-you"
+            className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-4"
+          >
+            <p className="text-xs font-semibold uppercase tracking-wide text-[var(--dpf-muted)]">
+              {pendingCount > 0 || approvedCount > 0 ? "Waiting on you" : "In progress"}
+            </p>
+            <div className="mt-2 flex flex-wrap gap-2 text-sm">
+              {pendingCount > 0 ? (
+                <Link
+                  href="/customer/marketing#marketing-approval-queue"
+                  className="rounded-full border border-[var(--dpf-accent)] px-3 py-1 font-medium text-[var(--dpf-accent)] hover:bg-[var(--dpf-surface-2)]"
+                >
+                  {pendingCount} {pendingCount === 1 ? "draft" : "drafts"} awaiting your review
+                </Link>
+              ) : null}
+              {approvedCount > 0 ? (
+                <Link
+                  href="/customer/marketing#marketing-publish-queue"
+                  className="rounded-full border border-[var(--dpf-accent)] px-3 py-1 font-medium text-[var(--dpf-accent)] hover:bg-[var(--dpf-surface-2)]"
+                >
+                  {approvedCount} approved {approvedCount === 1 ? "post" : "posts"} ready to publish
+                </Link>
+              ) : null}
+              {pendingCount === 0 && approvedCount === 0 && briefCount > 0 ? (
+                <Link
+                  href="/customer/marketing/campaigns"
+                  className="rounded-full border border-[var(--dpf-border)] px-3 py-1 font-medium text-[var(--dpf-text)] hover:border-[var(--dpf-accent)]"
+                >
+                  {briefCount} campaign {briefCount === 1 ? "brief" : "briefs"} saved — nothing has
+                  reached your review queue yet
+                </Link>
+              ) : null}
+            </div>
+          </section>
+        );
+      })()}
+
       {disclosure.quarantinedCount > 0 ? (
         <section
           data-testid="marketing-quarantine-banner"

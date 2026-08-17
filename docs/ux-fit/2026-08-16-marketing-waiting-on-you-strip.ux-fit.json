@@ -1,0 +1,18 @@
+{
+  "version": "1",
+  "decidedOption": "waiting-on-you-strip",
+  "decisionInteractionId": "DI-00FC30F08495",
+  "scope": {
+    "files": [
+      "apps/web/app/(shell)/customer/marketing/page.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "waiting-on-you-strip",
+      "promote-full-queue-panel",
+      "hero-only-recount"
+    ]
+  }
+}
