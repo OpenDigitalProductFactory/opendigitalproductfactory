@@ -174,8 +174,7 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
     jobId: "routing-reachability-preflight",
     inngestId: "inference/routing-reachability-preflight",
     name: "Coworker routing reachability preflight",
-    purpose:
-      "Dry-runs routing for every production coworker (including the payload-screening escalation ceiling) and raises one owner-visible issue when any coworker has zero eligible models — so a routing dead-end is announced instead of discovered mid-conversation.",
+    purpose: "Dry-runs routing per production coworker (incl. the payload-screening escalation ceiling); raises one owner-visible issue on zero eligible models so dead-ends are announced, not discovered mid-conversation.",
     cron: "37 */6 * * *",
     cadence: "Every 6 hours at :37",
     category: "core",

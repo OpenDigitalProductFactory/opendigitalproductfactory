@@ -314,7 +314,7 @@ function McpServiceDetail({ provider, connectionStatus }: { provider: import("@/
             <div style={{ fontSize: 13, color: "var(--dpf-warning)" }}>
               connection disabled
               <div style={{ fontSize: 11, color: "var(--dpf-muted)", marginTop: 2 }}>
-                The provider is on, but its connection is disabled — routing skips it. Reconnect or re-test credentials to restore routing.
+                Routing skips this provider until you reconnect its credentials.
               </div>
             </div>
           ) : (

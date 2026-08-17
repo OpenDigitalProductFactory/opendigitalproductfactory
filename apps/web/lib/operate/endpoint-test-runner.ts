@@ -16,12 +16,12 @@ import {
 } from "./endpoint-test-registry";
 import { callProvider, type ChatMessage } from "@/lib/ai-inference";
 import { LocalProviderCapacityDeferredError } from "@/lib/routing/local-provider-capacity";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 /** A capacity deferral is the host declining to schedule, not the model failing. */
 export function isCapacityDeferral(err: unknown): boolean {
   if (err instanceof LocalProviderCapacityDeferredError) return true;
-  const message = err instanceof Error ? err.message : String(err);
-  return /dispatch deferred|capacity reservation/i.test(message);
+  return /dispatch deferred|capacity reservation/i.test(getErrorMessage(err));
 }
 
 // ─── Types ───────────────────────────────────────────────────────────────────

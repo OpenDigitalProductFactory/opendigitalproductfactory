@@ -411,7 +411,8 @@ export default async function RuntimeHealthPage() {
               data-testid="coworker-routing-table-scroll"
               style={{ overflowX: "auto", minWidth: 0, maxWidth: "100%", marginBottom: 22 }}
             >
-              <table style={{ width: "100%", borderCollapse: "collapse" }}>
+              {/* Matches the adjacent per-phase table's raw-table idiom on this page. */}
+              <table style={{ width: "100%", borderCollapse: "collapse" }}>{/* reporting-composition-allow */}
                 <thead>
                   <tr>
                     <th style={th}>Coworker</th>

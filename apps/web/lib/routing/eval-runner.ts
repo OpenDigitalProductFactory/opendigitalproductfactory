@@ -516,13 +516,8 @@ export async function runDimensionEval(
     };
   }
 
-  // Reap stale "running" rows older than the guard window so they don't pile
-  // up forever. The most common cause is an Inngest step timeout that cuts the
-  // function off after callProvider() has fired but before the terminal
-  // endpointTestRun.update() runs — including runs cut off because the
-  // local-integration-ci lease reclaimed the GPU mid-run. Those runs never
-  // reached a verdict, so they are recorded as "incomplete", not "failed"
-  // (BI-91F0E312): a reaped run says nothing about the model.
+  // Reap stale "running" rows (step timeout or lease reclaiming the GPU). A
+  // reaped run never reached a verdict → "incomplete", not "failed" (BI-91F0E312).
   const reaped = await prisma.endpointTestRun.updateMany({
     where: {
       endpointId: providerId,
@@ -628,13 +623,8 @@ export async function runDimensionEval(
           },
         };
 
-  // BI-91F0E312: evalCount and profileConfidence are measurement bookkeeping.
-  // An inconclusive (deferred/infrastructure) cycle measured nothing — bumping
-  // them anyway inflates confidence in unmeasured scores AND dampens the
-  // exponential-smoothing weight of the next REAL measurement (computeNewScore
-  // weights by evalCount), which is how placeholder scores become sticky.
-  // lastEvalAt still stamps so the recency cooldown keeps eval churn off the
-  // GPU either way.
+  // BI-91F0E312: an inconclusive cycle measured nothing — bumping evalCount /
+  // profileConfidence would dampen the next REAL measurement. lastEvalAt stamps.
   await prisma.modelProfile.update({
     where: { providerId_modelId: { providerId, modelId } },
     data: {
@@ -652,9 +642,8 @@ export async function runDimensionEval(
     },
   });
 
-  // Complete the test run record. A cycle where nothing was measured is
-  // INCOMPLETE, and its avgScore must not be manufactured from carried-forward
-  // previous scores (BI-91F0E312).
+  // Nothing-measured cycles are INCOMPLETE; avgScore never comes from
+  // carried-forward previous scores (BI-91F0E312).
   const conclusiveDimensions = dimensions.filter((d) => !d.inconclusive);
   await prisma.endpointTestRun.update({
     where: { runId },

@@ -139,7 +139,7 @@ export default async function ProvidersPage() {
       ? {
           ...eligibility,
           reason:
-            "The provider is on, but its connection is disabled — routing skips it. Reconnect or re-test the provider's credentials to bring the connection back.",
+            "The provider is on, but its connection is disabled — routing skips it until you reconnect.",
         }
       : eligibility;
     // Real remaining weekly subscription allocation, when a fresh snapshot exists.

@@ -29,10 +29,7 @@ import {
   resolveAutonomousWorkAgent,
   resolveAutonomousWorkTools,
 } from "@/lib/tak/autonomous-work-run";
-import {
-  assertScheduledResearchCapability,
-  resolveScheduledTurnExternalAccess,
-} from "@/lib/tak/scheduled-external-access";
+import { assertScheduledResearchCapability, resolveScheduledTurnExternalAccess } from "@/lib/tak/scheduled-external-access";
 import { resolveUserAwareProactivityPlan } from "@/lib/proactivity/proactivity-resolver.server";
 import { resolveDelegatedPosture } from "@/lib/proactivity/delegated-posture";
 import { applyProviderRouteModelPreference } from "@/lib/ai-provider-route-context";
@@ -504,11 +501,7 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
     // Tools are resolved in "act" mode for propose so the model can still CALL
     // them; the loop's propose-interception captures the call as a proposal.
     const boundary = proactivity.actionBoundary;
-    // BI-0A59F936: a scheduled turn has no human to flip the per-session web
-    // toggle, so external access resolves from the coworker's standing grants.
-    // Passed explicitly — omission here used to strip search_public_web AND the
-    // keyless fetch_public_website from every scheduled turn regardless of
-    // grants, so recurring research tasks ran blind and reported ok.
+    // BI-0A59F936: unattended turns resolve external access from standing grants.
     const externalAccess = await resolveScheduledTurnExternalAccess(task.agentId);
     const { tools, toolsForProvider, deferredTools } = await resolveAutonomousWorkTools({
       userContext,
@@ -520,15 +513,10 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
       routeContext: task.routeContext,
       intentQuery: task.prompt,
     });
-
-    // A research task that cannot research must fail loudly here, before the
-    // model runs — not complete "ok" with confident, unresearched output.
+    // A research task that cannot research fails loudly BEFORE the model runs.
     assertScheduledResearchCapability({
-      taskKind: task.taskKind,
-      prompt: task.prompt,
-      agentId: task.agentId,
-      tools: [...tools, ...deferredTools],
-      externalAccess,
+      taskKind: task.taskKind, prompt: task.prompt, agentId: task.agentId,
+      tools: [...tools, ...deferredTools], externalAccess,
     });
 
     // Mirror the interactive coworker path (agent-coworker.sendMessage): carry the
