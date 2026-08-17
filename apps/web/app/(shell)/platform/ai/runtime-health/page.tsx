@@ -452,9 +452,10 @@ export default async function RuntimeHealthPage() {
               );
               return (
                 <div style={{ marginBottom: 22 }} data-testid="coworker-routing-section">
-                  {/* First viewport carries only the verdict and the actionable
-                      rows; the full roster stays behind a disclosure (UX word
-                      budget — the blocked rows are the ones that need reading). */}
+                  {/* First viewport carries ONLY the verdict; every row —
+                      blocked first — stays behind the disclosure so the
+                      arrival word count is independent of install state
+                      (a fresh install blocks every coworker). */}
                   <p style={{ fontSize: 12, color: "var(--dpf-text)", marginBottom: 8 }}>
                     {blocked.length === 0 ? (
                       <Chip bg="var(--dpf-state-success)" fg="var(--dpf-success)">
@@ -466,12 +467,17 @@ export default async function RuntimeHealthPage() {
                       </Chip>
                     )}
                   </p>
-                  {blocked.length > 0 ? renderRows(blocked) : null}
-                  <details style={{ marginTop: 8 }} data-testid="coworker-routing-full-roster">
+                  <details
+                    open={false}
+                    style={{ marginTop: 8 }}
+                    data-testid="coworker-routing-full-roster"
+                  >
                     <summary style={{ fontSize: 11, color: "var(--dpf-muted)", cursor: "pointer" }}>
-                      All coworkers ({coworkerReachability.length})
+                      {blocked.length > 0
+                        ? `Blocked coworkers and full roster (${coworkerReachability.length})`
+                        : `All coworkers (${coworkerReachability.length})`}
                     </summary>
-                    {renderRows(coworkerReachability)}
+                    {renderRows([...blocked, ...coworkerReachability.filter((c) => c.ready)])}
                   </details>
                 </div>
               );
