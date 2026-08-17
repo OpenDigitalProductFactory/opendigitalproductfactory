@@ -1,6 +1,6 @@
 # Plan — Routing dead-end visibility: name the real cause instead of guessing
 
-**Backlog item:** BI-E2CCFAC1 — *Routing dead-ends require a DB write or an engineer to clear — no self-healing, no preflight, no owner-facing recovery on any install*
+**Umbrella item:** BI-E2CCFAC1 — *Routing dead-ends require a DB write or an engineer to clear — no self-healing, no preflight, no owner-facing recovery on any install*
 **Related:** BI-04E4F111 (write-once connection status), BI-5493BBD9 (unprofiled Qwen3.8), BI-91F0E312 (harness records deferrals as failures), BI-0A59F936 (scheduled turns stripped of web tools; absorbed BI-IMP-7E89183D), BI-090221E7 (/finance renders unknown as $0.00), BI-64F2EA96 (marketing approval loop never closes)
 **Date:** 2026-08-16 (extended the same day with the remediation slices below)
 
@@ -109,6 +109,22 @@ Runtime action after 3: re-run the dimension eval so `ModelProfile` carries meas
 
 - The landing surface leads with a first-viewport "Waiting on you / In progress" strip: pending drafts, ready-to-publish posts, or stalled briefs (saved briefs with nothing reviewable — the live month-long limbo), each deep-linked.
 - The hero CTAs' anchors (`#marketing-approval-queue`, `#marketing-publish-queue`) now actually exist on the queue sections — they previously pointed at nothing.
+
+## Backlog coverage
+
+- **Decision:** `decomposed`
+- **Parent:** `BI-E2CCFAC1`
+- **Mappings:**
+  - Naming half (exclusion buckets → runtime-health/resolve_model_selection) -> BI-E2CCFAC1
+  - Connection status lifecycle (activation heal, boot reconcile, UI truth) -> BI-04E4F111
+  - Scheduled-turn external access + loud research failure -> BI-0A59F936 (absorbed BI-IMP-7E89183D by merge)
+  - Honest endpoint-test harness (deferred ≠ failed, incomplete runs) -> BI-91F0E312
+  - Re-profile qwen3.8-27b with measured dimensions (runtime action; depends on the harness fix) -> BI-5493BBD9
+  - Reachability preflight + coworker visibility + escalation-ceiling readiness -> BI-E2CCFAC1
+  - /finance honesty + burn/revenue/runway + finance-controller self-task -> BI-090221E7
+  - Marketing waiting-on-you queue + real hero anchors -> BI-64F2EA96
+- **Dependencies:** re-profile depends on the harness fix; the preflight builds on the naming half. Everything else is independently shippable and shipped together here because no single fix alone produces a working coworker (the three-legged failure documented on BI-0A59F936).
+- **Governed coverage receipt: blocked by BI-B9403248.** `record_plan_backlog_coverage` was submitted for capsule WC-522D96E3 with planArtifactRef {repo-blob-at-commit, OpenDigitalProductFactory/opendigitalproductfactory, 4093f5131b46b95537d8558268515a13d84a8ca5, this file, blob ae866799ddae0f77dfef5afd92715164e12cfe83} and refused with "Repository artifact ownership is missing or ambiguous for this subject" — claim-at-start leaves the capsule headSha unset and external CLI sessions structurally cannot satisfy the DCO-provenance leg (P1 BI-B9403248). This block records the same mappings the receipt would carry.
 
 ## Design grounding
 

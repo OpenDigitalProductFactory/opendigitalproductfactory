@@ -1418,7 +1418,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 201
+    "textMass": 204
   },
   "apps/web/app/(shell)/platform/ai/skills/page.tsx": {
     "vocabulary": 0,

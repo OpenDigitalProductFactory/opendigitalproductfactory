@@ -407,48 +407,75 @@ export default async function RuntimeHealthPage() {
               Coworker routing readiness is unavailable right now.
             </p>
           ) : (
-            <div
-              data-testid="coworker-routing-table-scroll"
-              style={{ overflowX: "auto", minWidth: 0, maxWidth: "100%", marginBottom: 22 }}
-            >
-              {/* Matches the adjacent per-phase table's raw-table idiom on this page. */}
-              <table style={{ width: "100%", borderCollapse: "collapse" }}>{/* reporting-composition-allow */}
-                <thead>
-                  <tr>
-                    <th style={th}>Coworker</th>
-                    <th style={th}>Data class</th>
-                    <th style={th}>Can route</th>
-                    <th style={th}>Why</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {coworkerReachability.map((c) => (
-                    <tr key={c.agentId}>
-                      <td style={td}>
-                        <div style={{ fontWeight: 600 }}>{c.displayName}</div>
-                        <div style={{ fontSize: 10, color: "var(--dpf-muted)", fontFamily: "var(--dpf-mono, monospace)" }}>{c.agentId}</div>
-                      </td>
-                      <td style={td}>
-                        {c.sensitivity}
-                        {c.escalated ? (
-                          <div style={{ fontSize: 10, color: "var(--dpf-muted)" }}>
-                            escalates to {c.escalated.sensitivity}
-                          </div>
-                        ) : null}
-                      </td>
-                      <td style={td}>
-                        {c.ready ? (
-                          <Chip bg="var(--dpf-state-success)" fg="var(--dpf-success)">Ready</Chip>
-                        ) : (
-                          <Chip bg={SEVERITY_STYLE.error.bg} fg={SEVERITY_STYLE.error.fg}>Blocked</Chip>
-                        )}
-                      </td>
-                      <td style={{ ...td, maxWidth: 420 }}>{c.reason}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            (() => {
+              const blocked = coworkerReachability.filter((c) => !c.ready);
+              const renderRows = (rows: typeof coworkerReachability) => (
+                <div style={{ overflowX: "auto", minWidth: 0, maxWidth: "100%" }}>
+                  {/* Matches the adjacent per-phase table's raw-table idiom. */}
+                  <table style={{ width: "100%", borderCollapse: "collapse" }}>{/* reporting-composition-allow */}
+                    <thead>
+                      <tr>
+                        <th style={th}>Coworker</th>
+                        <th style={th}>Data class</th>
+                        <th style={th}>Can route</th>
+                        <th style={th}>Why</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {rows.map((c) => (
+                        <tr key={c.agentId}>
+                          <td style={td}>
+                            <div style={{ fontWeight: 600 }}>{c.displayName}</div>
+                            <div style={{ fontSize: 10, color: "var(--dpf-muted)", fontFamily: "var(--dpf-mono, monospace)" }}>{c.agentId}</div>
+                          </td>
+                          <td style={td}>
+                            {c.sensitivity}
+                            {c.escalated ? (
+                              <div style={{ fontSize: 10, color: "var(--dpf-muted)" }}>
+                                escalates to {c.escalated.sensitivity}
+                              </div>
+                            ) : null}
+                          </td>
+                          <td style={td}>
+                            {c.ready ? (
+                              <Chip bg="var(--dpf-state-success)" fg="var(--dpf-success)">Ready</Chip>
+                            ) : (
+                              <Chip bg={SEVERITY_STYLE.error.bg} fg={SEVERITY_STYLE.error.fg}>Blocked</Chip>
+                            )}
+                          </td>
+                          <td style={{ ...td, maxWidth: 420 }}>{c.reason}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              );
+              return (
+                <div style={{ marginBottom: 22 }} data-testid="coworker-routing-section">
+                  {/* First viewport carries only the verdict and the actionable
+                      rows; the full roster stays behind a disclosure (UX word
+                      budget — the blocked rows are the ones that need reading). */}
+                  <p style={{ fontSize: 12, color: "var(--dpf-text)", marginBottom: 8 }}>
+                    {blocked.length === 0 ? (
+                      <Chip bg="var(--dpf-state-success)" fg="var(--dpf-success)">
+                        All {coworkerReachability.length} coworkers can route
+                      </Chip>
+                    ) : (
+                      <Chip bg={SEVERITY_STYLE.error.bg} fg={SEVERITY_STYLE.error.fg}>
+                        {blocked.length} of {coworkerReachability.length} coworkers blocked
+                      </Chip>
+                    )}
+                  </p>
+                  {blocked.length > 0 ? renderRows(blocked) : null}
+                  <details style={{ marginTop: 8 }} data-testid="coworker-routing-full-roster">
+                    <summary style={{ fontSize: 11, color: "var(--dpf-muted)", cursor: "pointer" }}>
+                      All coworkers ({coworkerReachability.length})
+                    </summary>
+                    {renderRows(coworkerReachability)}
+                  </details>
+                </div>
+              );
+            })()
           )}
 
           {/* Mismatches & remediation */}

@@ -1,0 +1,18 @@
+{
+  "version": "1",
+  "decidedOption": "verdict-chip-blocked-rows-collapsed-roster",
+  "decisionInteractionId": "DI-3372D8924B13",
+  "scope": {
+    "files": [
+      "apps/web/app/(shell)/platform/ai/runtime-health/page.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "verdict-chip-blocked-rows-collapsed-roster",
+      "full-roster-rebaseline",
+      "separate-subroute"
+    ]
+  }
+}
