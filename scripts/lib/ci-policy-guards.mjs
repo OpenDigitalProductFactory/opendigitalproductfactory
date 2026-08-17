@@ -46,6 +46,10 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
     ]),
     guard("shell-guard-shim-contract", "Shell Guard Shim Contract", [
       node("--test", "scripts/check-shell-guard-shim-contract.test.mjs"),
+      // Drives the real POSIX guard under bash: a cached binary path goes stale on
+      // every toolchain upgrade (Docker Desktop relocated its CLI mid-install here),
+      // and the guard must re-resolve rather than bricking `docker` for the account.
+      node("--test", "scripts/safety/shell-guard-stale-cache.test.mjs"),
     ]),
     guard("release-compose-pins", "Release Compose Pins", [
       node("--test", "scripts/check-release-compose-pins.test.mjs"),

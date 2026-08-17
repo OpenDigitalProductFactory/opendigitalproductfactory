@@ -30,8 +30,43 @@ GUARD_DIR="$(cd "$(dirname "$0")" && pwd)"
 real_var="DPF_REAL_$(echo "$BIN_NAME" | tr '[:lower:]' '[:upper:]')"
 eval "REAL_BIN=\${$real_var:-}"
 
+# The cache above is written once, at install time, and was never revalidated.
+# Tools move on upgrade -- Docker Desktop relocated its CLI to a per-user path
+# hours after an install on Windows, which broke every `docker` call for the
+# account because safety-bin is prepended to PATH. The same class of breakage
+# applies here (brew/apt/Docker Desktop upgrades relocate binaries), and the old
+# message told the operator to reinstall DPF because their toolchain updated.
+#
+# Re-resolve from PATH before giving up, then self-heal the cache.
 if [ -z "$REAL_BIN" ] || [ ! -x "$REAL_BIN" ]; then
-  echo "[dpf-shell-guard] cannot find real $BIN_NAME (set $real_var or reinstall)" >&2
+  # Search PATH with our own shim directory removed, so we never resolve to the
+  # shim and recurse.
+  _clean_path="$(printf '%s' "$PATH" | tr ':' '\n' | grep -vxF "$GUARD_DIR" | paste -sd: -)"
+  _resolved="$(PATH="$_clean_path" command -v "$BIN_NAME" 2>/dev/null || true)"
+
+  if [ -n "$_resolved" ] && [ -x "$_resolved" ]; then
+    echo "[dpf-shell-guard] cached path for $BIN_NAME was stale; re-resolved to $_resolved" >&2
+    REAL_BIN="$_resolved"
+    # Best-effort cache repair; never let it block the operator's command.
+    if [ -w "$GUARD_DIR" ]; then
+      {
+        _env_file="$GUARD_DIR/real-binaries.env"
+        _tmp="$_env_file.tmp-$$"
+        if [ -f "$_env_file" ]; then
+          grep -v "^${real_var}=" "$_env_file" > "$_tmp" 2>/dev/null || : > "$_tmp"
+        else
+          : > "$_tmp"
+        fi
+        printf '%s=%s\n' "$real_var" "$_resolved" >> "$_tmp"
+        mv -f "$_tmp" "$_env_file"
+      } 2>/dev/null || echo "[dpf-shell-guard] could not update real-binaries.env (continuing)" >&2
+    fi
+  fi
+fi
+
+if [ -z "$REAL_BIN" ] || [ ! -x "$REAL_BIN" ]; then
+  echo "[dpf-shell-guard] cannot find real $BIN_NAME on PATH or at the cached path" >&2
+  echo "                  (set $real_var to its full path, or re-run the DPF installer)" >&2
   exit 127
 fi
 
