@@ -119,6 +119,13 @@ moving it into review.
 
 ## Review and Publish
 
+The marketing overview leads with what is waiting on you. When anything is
+pending, a strip in the first viewport shows drafts awaiting your review,
+approved posts ready to publish, or saved campaign briefs that have not yet
+produced anything reviewable — each linking straight to the action. The
+"Start here" question is for the state where nothing is actionable, so a
+month-old approval queue can no longer hide behind onboarding copy.
+
 The **Review & publish queue** appears after there is archetype-fit campaign work
 to review. A fresh workspace deliberately shows an unlock message instead of
 empty operational queues.
