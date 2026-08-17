@@ -9,6 +9,7 @@ import {
   ACCENT_BUTTON_RE,
   CARD_STRING_RE,
   TEXT_WHITE_RE,
+  checkBoundaryCoverage,
   computeBudgets,
   countMatches,
   evaluateBudget,
@@ -43,6 +44,11 @@ test("pattern matchers count accent buttons, both card orders, and text-white", 
   // The border and surface tokens in SEPARATE strings are not one card string.
   const separate = 'a("border-[var(--dpf-border)]"); b("bg-[var(--dpf-surface-1)]")';
   assert.equal(countMatches(separate, CARD_STRING_RE), 0);
+  // A state-variant utility is not a card: a secondary button hovering onto
+  // surface-1 must not count.
+  const hoverOnly =
+    '"border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] hover:bg-[var(--dpf-surface-1)]"';
+  assert.equal(countMatches(hoverOnly, CARD_STRING_RE), 0);
   // text-whitespace must not match \btext-white\b's word boundary loosely.
   assert.equal(countMatches("text-white/80 text-whitesmoke", TEXT_WHITE_RE), 1);
 });
@@ -106,6 +112,40 @@ test("evaluateBudget is exact about growth vs stale", () => {
   const { growth, stale } = evaluateBudget({ a: 2, b: 1 }, { a: 1, c: 4 });
   assert.deepEqual(growth, ["a (1 -> 2)", "b (new, 1)"]);
   assert.deepEqual(stale, ["c (4 -> 0)"]);
+});
+
+test("boundary coverage: page-rendering groups need error.tsx + loading.tsx; api and handler-only segments exempt", () => {
+  // Synthetic app dir: (shell) has pages + both boundaries; (new) has a page
+  // and no boundaries; api and hooks-only segments are skipped.
+  const dirent = (name, isDir) => ({ name, isFile: () => !isDir, isDirectory: () => isDir });
+  const tree = {
+    "/app": [dirent("(shell)", true), dirent("(new)", true), dirent("api", true), dirent("connect", true)],
+    "/app/(shell)": [dirent("page.tsx", false), dirent("error.tsx", false), dirent("loading.tsx", false)],
+    "/app/(new)": [dirent("sub", true)],
+    "/app/(new)/sub": [dirent("page.tsx", false)],
+    "/app/api": [dirent("route.ts", false)],
+    "/app/connect": [dirent("route.ts", false)],
+  };
+  const existing = new Set(["/app/(shell)/error.tsx", "/app/(shell)/loading.tsx"]);
+  const { groups, missing } = checkBoundaryCoverage({
+    appDir: "/app",
+    readdir: (dir) => tree[dir.split("\\").join("/")] ?? [],
+    exists: (p) => existing.has(p.split("\\").join("/")),
+  });
+  assert.deepEqual(groups, ["(new)", "(shell)"]);
+  assert.deepEqual(missing, [
+    "apps/web/app/(new)/error.tsx",
+    "apps/web/app/(new)/loading.tsx",
+  ]);
+
+  // A missing boundary fails runCheck even with clean budgets.
+  const result = runCheck({
+    files: [],
+    baseline: baseline(),
+    today: "2026-08-16",
+    boundary: { groups: ["(new)"], missing: ["apps/web/app/(new)/error.tsx"] },
+  });
+  assert.equal(result.ok, false);
 });
 
 test("baseline contract: version, owner, expiry (expired fails), map shapes", () => {

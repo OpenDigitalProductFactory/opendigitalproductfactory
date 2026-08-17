@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { submitBillForApproval } from "@/lib/actions/ap";
 import { Button } from "@/components/ui/Button";
+import { FormStatus } from "@/components/ui/form";
 
 interface Props {
   billId: string;
@@ -32,9 +33,7 @@ export function SubmitBillButton({ billId }: Props) {
       <Button onClick={handleSubmit} disabled={loading}>
         {loading ? "Submitting…" : "Submit for Approval"}
       </Button>
-      {error && (
-        <p className="mt-2 text-xs text-[var(--dpf-error)]">{error}</p>
-      )}
+      <FormStatus error={error} className="mt-2" />
     </div>
   );
 }

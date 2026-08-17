@@ -27,12 +27,18 @@
 // The baseline carries an owner and an expiry date — an expired baseline fails
 // until it is re-reviewed and deliberately extended.
 //
+// Plus one ABSOLUTE coverage rule (BI-DD5FC4FF, W7 — not a baseline): every
+// top-level route group under apps/web/app that renders pages (contains a
+// page.tsx anywhere below it; `api` and route-handler-only segments are
+// naturally excluded) must carry error.tsx AND loading.tsx at its top level.
+// A new route group without its failure/loading face fails immediately.
+//
 //   node scripts/check-ux-primitive-adoption.mjs            # check (CI)
 //   node scripts/check-ux-primitive-adoption.mjs --update   # retighten
 //
 // Spec: docs/superpowers/specs/2026-08-16-ux-foundation-button-surface-design.md
 
-import { readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
@@ -48,9 +54,11 @@ export const UI_HOME = "apps/web/components/ui";
 export const SCAN_SUBDIRS = ["app", "components", "lib", "hooks"];
 
 export const ACCENT_BUTTON_RE = /bg-\[var\(--dpf-accent\)\]/g;
-// The card pattern in either order inside one string literal.
+// The card pattern in either order inside one string literal. The `(?<!:)`
+// lookbehinds keep state-variant utilities (hover:bg-…, focus:border-…) from
+// reading as a card — a secondary button's hover state is not a Surface.
 export const CARD_STRING_RE =
-  /border-\[var\(--dpf-border\)\][^"'`]*bg-\[var\(--dpf-surface-1\)\]|bg-\[var\(--dpf-surface-1\)\][^"'`]*border-\[var\(--dpf-border\)\]/g;
+  /(?<!:)border-\[var\(--dpf-border\)\][^"'`]*(?<!:)bg-\[var\(--dpf-surface-1\)\]|(?<!:)bg-\[var\(--dpf-surface-1\)\][^"'`]*(?<!:)border-\[var\(--dpf-border\)\]/g;
 export const TEXT_WHITE_RE = /\btext-white\b/g;
 
 export const BUDGET_KEYS = Object.freeze(["accentButton", "cardString", "textWhite"]);
@@ -112,6 +120,60 @@ export function computeBudgets(files) {
   return budgets;
 }
 
+export const APP_DIR = join(SCAN_DIR, "app");
+
+/**
+ * Boundary coverage (BI-DD5FC4FF): top-level segments of apps/web/app that
+ * contain at least one page.tsx must have error.tsx + loading.tsx at their
+ * top level. `api` is excluded; segments with only route handlers have no
+ * page.tsx and are excluded by construction.
+ *
+ * Injectable fs surface for tests: { readdir(dir) -> Dirent[], exists(path) }.
+ */
+export function checkBoundaryCoverage({
+  appDir = APP_DIR,
+  readdir = (dir) => readdirSync(dir, { withFileTypes: true }),
+  exists = existsSync,
+} = {}) {
+  const missing = [];
+  const groups = [];
+
+  const containsPage = (dir) => {
+    let entries;
+    try {
+      entries = readdir(dir);
+    } catch {
+      return false;
+    }
+    for (const entry of entries) {
+      if (entry.isFile() && entry.name === "page.tsx") return true;
+      if (entry.isDirectory() && entry.name !== "node_modules") {
+        if (containsPage(join(dir, entry.name))) return true;
+      }
+    }
+    return false;
+  };
+
+  let top;
+  try {
+    top = readdir(appDir);
+  } catch {
+    return { groups, missing };
+  }
+  for (const entry of top) {
+    if (!entry.isDirectory() || entry.name === "api") continue;
+    const dir = join(appDir, entry.name);
+    if (!containsPage(dir)) continue;
+    groups.push(entry.name);
+    for (const boundary of ["error.tsx", "loading.tsx"]) {
+      if (!exists(join(dir, boundary))) {
+        missing.push(`apps/web/app/${entry.name}/${boundary}`);
+      }
+    }
+  }
+  return { groups: groups.sort(), missing: missing.sort() };
+}
+
 export function validateBaseline(baseline, { today = new Date().toISOString().slice(0, 10) } = {}) {
   const failures = [];
   if (baseline?.version !== 1) failures.push("Baseline version must be 1.");
@@ -151,17 +213,17 @@ export function evaluateBudget(current, baselined) {
   return { growth: growth.sort(), stale: stale.sort() };
 }
 
-export function runCheck({ files, baseline, today }) {
+export function runCheck({ files, baseline, today, boundary = { groups: [], missing: [] } }) {
   const budgets = computeBudgets(files);
   const baselineFailures = validateBaseline(baseline, today ? { today } : {});
-  if (baselineFailures.length) return { ok: false, baselineFailures, budgets };
+  if (baselineFailures.length) return { ok: false, baselineFailures, budgets, boundary };
   const evaluation = {};
-  let ok = true;
+  let ok = boundary.missing.length === 0;
   for (const key of BUDGET_KEYS) {
     evaluation[key] = evaluateBudget(budgets[key], baseline[key]);
     if (evaluation[key].growth.length > 0) ok = false;
   }
-  return { ok, baselineFailures: [], budgets, evaluation };
+  return { ok, baselineFailures: [], budgets, evaluation, boundary };
 }
 
 function readFiles() {
@@ -213,7 +275,7 @@ function main() {
     process.exit(1);
   }
 
-  const result = runCheck({ files, baseline });
+  const result = runCheck({ files, baseline, boundary: checkBoundaryCoverage() });
   if (result.baselineFailures.length) {
     console.error("UX primitive-adoption baseline is invalid:");
     for (const f of result.baselineFailures) console.error(`  - ${f}`);
@@ -236,6 +298,12 @@ function main() {
       for (const g of growth) console.error(`  - ${g}`);
       console.error("");
     }
+    if (result.boundary.missing.length > 0) {
+      console.error("Route groups rendering pages MUST carry error.tsx + loading.tsx at the");
+      console.error("group top level (BI-DD5FC4FF; compose ui/ErrorBoundaryCard + report-kit Skeleton):");
+      for (const m of result.boundary.missing) console.error(`  - ${m} is missing`);
+      console.error("");
+    }
     console.error("Do not expand the baseline without an owned platform-architecture decision.");
     process.exit(1);
   }
@@ -253,7 +321,8 @@ function main() {
     `UX primitive adoption OK — accent-button ${budgetTotal(result.budgets.accentButton)}/${budgetTotal(baseline.accentButton)}, ` +
       `card-string ${budgetTotal(result.budgets.cardString)}/${budgetTotal(baseline.cardString)}, ` +
       `text-white ${budgetTotal(result.budgets.textWhite)}/${budgetTotal(baseline.textWhite)} ` +
-      `(current/budget), owner ${baseline.owner}, review by ${baseline.expiry}.`,
+      `(current/budget), ${result.boundary.groups.length} route group(s) boundary-covered, ` +
+      `owner ${baseline.owner}, review by ${baseline.expiry}.`,
   );
 }
 

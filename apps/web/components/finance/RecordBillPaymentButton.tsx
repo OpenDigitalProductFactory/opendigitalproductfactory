@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { recordBillPayment } from "@/lib/actions/ap";
 import { Button } from "@/components/ui/Button";
+import { FormStatus } from "@/components/ui/form";
 
 const PAYMENT_METHODS = [
   "bank_transfer", "card", "cash", "cheque", "direct_debit", "stripe",
@@ -128,7 +129,7 @@ export function RecordBillPaymentButton({ billId, amountDue, currency }: Props) 
           className={inputClasses + " w-full"}
         />
       </div>
-      {error && <p className="text-xs text-[var(--dpf-error)]">{error}</p>}
+      <FormStatus error={error} />
       <div className="flex gap-2 justify-end">
         <Button variant="secondary" size="sm" onClick={() => setOpen(false)}>
           Cancel

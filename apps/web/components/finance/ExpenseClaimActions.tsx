@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { respondToExpenseApproval, markExpenseReimbursed } from "@/lib/actions/expenses";
 import { Button } from "@/components/ui/Button";
+import { FormStatus } from "@/components/ui/form";
 
 interface Props {
   claimId: string;
@@ -88,7 +89,7 @@ export function ExpenseClaimActions({ claimId, status, approvalToken }: Props) {
         </Button>
       )}
 
-      {error && <p className="text-xs text-[var(--dpf-error)]">{error}</p>}
+      <FormStatus error={error} />
     </div>
   );
 }

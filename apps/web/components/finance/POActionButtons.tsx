@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { sendPurchaseOrder, convertPOToBill } from "@/lib/actions/ap";
 import { Button } from "@/components/ui/Button";
+import { FormStatus } from "@/components/ui/form";
 
 interface Props {
   poId: string;
@@ -55,7 +56,7 @@ export function POActionButtons({ poId, status }: Props) {
           </Button>
         )}
       </div>
-      {error && <p className="text-xs text-[var(--dpf-error)]">{error}</p>}
+      <FormStatus error={error} />
     </div>
   );
 }
