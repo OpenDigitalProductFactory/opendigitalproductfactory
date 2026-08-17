@@ -674,6 +674,10 @@ describe("executeScheduledAgentTask TaskRun lifecycle", () => {
         agentId: "inventory-specialist",
         threadId: "thread-1",
         taskRunId: "TR-SCHED-ABCDE",
+        // BI-0A59F936: the scheduled turn's resolved external-access posture
+        // now travels with the forced-tool call.
+        externalAccessEnabled: true,
+        apiTokenId: undefined,
       },
     });
     const agentTaskMessage = mocks.prisma.taskMessage.create.mock.calls.find(
@@ -756,6 +760,10 @@ describe("executeScheduledAgentTask TaskRun lifecycle", () => {
         agentId: "inventory-specialist",
         threadId: "thread-1",
         taskRunId: "TR-SCHED-ABCDE",
+        // BI-0A59F936: the scheduled turn's resolved external-access posture
+        // now travels with the forced-tool call.
+        externalAccessEnabled: true,
+        apiTokenId: undefined,
       },
     });
     expect(mocks.prisma.taskRun.update).toHaveBeenCalledWith(

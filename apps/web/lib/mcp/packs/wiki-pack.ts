@@ -50,6 +50,16 @@ const definitions: ToolDefinition[] = [
           description: "When pageKind=principle: only return principles classified as public (safe to surface to customers / contributors).",
         },
         limit: { type: "number", description: "Max results (default 5)." },
+        professionKey: {
+          type: "string",
+          description:
+            "Scope retrieval to one WSID profession family's craft corpus (e.g. 'data-architect', 'ux-design', 'mcp-integration' — professionKey from docs/professions/registry.json). Profession pages are included in results by default; this narrows to a single craft.",
+        },
+        includeProfessionCorpus: {
+          type: "boolean",
+          description:
+            "Set false to exclude the WSID profession corpus and search only kernel + org overlay pages (pre-BI-CC44E74F behavior). Default true.",
+        },
         retrievalMode: {
           type: "string",
           enum: ["vector", "ppr"],
@@ -201,6 +211,15 @@ async function wikiQueryHandler(
     organizationId,
     pageKind: typeof params["pageKind"] === "string" ? params["pageKind"] : undefined,
     limit,
+    // WSID profession corpus rides in wiki_query by default (BI-CC44E74F) —
+    // craft doctrine is retrievable without callers knowing the corpus layout.
+    // The library default stays opt-in so other searchWikiPages callers keep
+    // the pure org→kernel overlay contract.
+    includeProfessionCorpus: params["includeProfessionCorpus"] !== false,
+    professionKeys:
+      typeof params["professionKey"] === "string" && params["professionKey"].trim()
+        ? [params["professionKey"].trim()]
+        : undefined,
   };
   if (typeof params["tier"] === "string") {
     searchArgs.principleTier = params["tier"];

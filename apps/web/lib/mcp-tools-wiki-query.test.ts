@@ -57,6 +57,9 @@ describe("wiki_query MCP tool", () => {
       organizationId: "org_acme",
       pageKind: "stance",
       limit: 8,
+      // WSID profession corpus rides in wiki_query by default (BI-CC44E74F).
+      includeProfessionCorpus: true,
+      professionKeys: undefined,
     });
   });
 

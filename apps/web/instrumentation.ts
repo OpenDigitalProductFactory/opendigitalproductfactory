@@ -1127,6 +1127,14 @@ export async function register() {
         };
         logCtx(await reconcileLocalModelContext());
         setInterval(() => void reconcileLocalModelContext().then(logCtx), 20 * 60 * 1000);
+        // Same boot + periodic net for the provider ↔ default-connection status
+        // split (BI-04E4F111): routing filters on AiProviderConnection.status
+        // while the UI renders ModelProvider.status — see the module header.
+        const { reconcileProviderConnectionState } = await import(
+          "@/lib/inference/provider-connection-reconcile"
+        );
+        await reconcileProviderConnectionState().catch(() => {});
+        setInterval(() => void reconcileProviderConnectionState().catch(() => {}), 20 * 60 * 1000);
       })();
     }
 

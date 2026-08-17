@@ -1852,6 +1852,14 @@ if (-not (Test-StepDone "started")) {
 if (-not (Test-StepDone "mcp_seed")) {
     # Seed per-worktree MCP config first (idempotent; needs the token already
     # generated at Admin > Platform Development > MCP).
+    # Neither of the two scripts below ships in the release bundle, so on a
+    # `consumer` install both Test-Path checks are false. That is expected --
+    # install-dpf.sh gates the same convergence on contributor mode ("customer
+    # installs don't need agent CLIs wired up") -- but it must not be SILENT.
+    # Without an else branch, "the script isn't here" is indistinguishable from
+    # "it ran and succeeded", and we then Save-Progress the step as done. A user
+    # expecting MCP-connected agents after install gets no signal about why they
+    # are absent. install-dpf.sh already warns in this case; match it.
     $seedScript = Join-Path $DPF_DIR "scripts\seed-worktree-mcp.ps1"
     if (Test-Path $seedScript) {
         Write-Action "Seeding MCP token to worktrees..."
@@ -1860,6 +1868,8 @@ if (-not (Test-StepDone "mcp_seed")) {
         } catch {
             Write-Warn "MCP seed step encountered an issue (non-fatal): $_"
         }
+    } else {
+        Write-Warn "scripts\seed-worktree-mcp.ps1 not found; skipping MCP token seeding."
     }
 
     # Converge the agent toolchain (Claude + Codex + kernel memory + state).
@@ -1871,6 +1881,11 @@ if (-not (Test-StepDone "mcp_seed")) {
         } catch {
             Write-Warn "Agent toolchain bootstrap encountered an issue (non-fatal): $_"
         }
+    } else {
+        Write-Warn "scripts\dpf-bootstrap-agent-toolchain.ps1 not found; skipping agent toolchain convergence."
+        Write-Warn "Agent CLIs (Claude Code / Codex) will NOT be wired to this install's MCP endpoint."
+        Write-Warn "To connect one later: Admin > Platform Development > MCP, issue a token, then add the"
+        Write-Warn "'dpf' server to your agent client's config using that token."
     }
     Save-Progress "mcp_seed"
 }

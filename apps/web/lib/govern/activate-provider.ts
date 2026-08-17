@@ -130,6 +130,22 @@ export async function activateProvider(
     };
   }
 
+  // 0. Bring the default connection along with the provider. Routing
+  // eligibility filters on AiProviderConnection.status — not provider.status —
+  // so an activation that leaves the default connection disabled produces a
+  // provider that reads "active" on every surface yet can never route
+  // (BI-04E4F111). Runs before clearance derivation so the healed
+  // connection's evidence counts toward clearance.
+  if (typeof prisma.aiProviderConnection?.updateMany === "function") {
+    await prisma.aiProviderConnection.updateMany({
+      where: {
+        connectionId: `provider-default-${providerId}`,
+        status: { in: ["unconfigured", "disabled"] },
+      },
+      data: { status: "active" },
+    });
+  }
+
   // 1. Derive clearance from connection evidence. Working credentials alone
   // never manufacture business-account or contract posture.
   // A missing evidence reader (including older test doubles or a partially

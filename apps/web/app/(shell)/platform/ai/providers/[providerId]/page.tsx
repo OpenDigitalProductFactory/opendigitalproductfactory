@@ -186,7 +186,7 @@ export default async function ProviderDetailPage({ params }: Props) {
       )}
 
       {pw.provider.endpointType === "service" ? (
-        <McpServiceDetail provider={pw.provider} />
+        <McpServiceDetail provider={pw.provider} connectionStatus={providerConnection?.status ?? null} />
       ) : (
         <>
           <ProviderAccountPostureForm
@@ -271,7 +271,7 @@ export default async function ProviderDetailPage({ params }: Props) {
   );
 }
 
-function McpServiceDetail({ provider }: { provider: import("@/lib/ai-provider-types").ProviderRow }) {
+function McpServiceDetail({ provider, connectionStatus }: { provider: import("@/lib/ai-provider-types").ProviderRow; connectionStatus?: string | null }) {
   const isPluginManaged = provider.category === "mcp-subscribed" && !provider.endpoint && !provider.baseUrl;
 
   return (
@@ -308,7 +308,18 @@ function McpServiceDetail({ provider }: { provider: import("@/lib/ai-provider-ty
         </div>
         <div>
           <div style={{ fontSize: 10, color: "var(--dpf-muted)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 4 }}>Status</div>
-          <div style={{ fontSize: 13, color: provider.status === "active" ? "var(--dpf-success)" : "var(--dpf-warning)" }}>{provider.status}</div>
+          {/* BI-04E4F111: routing filters on the CONNECTION's status. A provider
+              whose only connection is disabled must not read "active" here. */}
+          {provider.status === "active" && connectionStatus === "disabled" ? (
+            <div style={{ fontSize: 13, color: "var(--dpf-warning)" }}>
+              connection disabled
+              <div style={{ fontSize: 11, color: "var(--dpf-muted)", marginTop: 2 }}>
+                Routing skips this provider until you reconnect its credentials.
+              </div>
+            </div>
+          ) : (
+            <div style={{ fontSize: 13, color: provider.status === "active" ? "var(--dpf-success)" : "var(--dpf-warning)" }}>{provider.status}</div>
+          )}
         </div>
         <div>
           <div style={{ fontSize: 10, color: "var(--dpf-muted)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 4 }}>Capability Tier</div>

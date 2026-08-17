@@ -75,6 +75,17 @@ export type CoworkerRouteReadiness = {
   reason: string;
   providerId?: string;
   modelId?: string;
+  /**
+   * Worst-case check at the payload-screening escalation ceiling
+   * (BI-E2CCFAC1). Present when the declared level was ready but real turns
+   * can be escalated to a level with zero eligible endpoints — the false
+   * green that let a "ready" coworker die on every real turn.
+   */
+  escalated?: {
+    sensitivity: SensitivityLevel;
+    ready: boolean;
+    reason: string;
+  };
 };
 
 const SENSITIVITY_LEVELS = new Set<SensitivityLevel>([
@@ -189,6 +200,52 @@ export async function projectCoworkerRouteReadiness(
   )
     ? (config.sensitivity as SensitivityLevel)
     : "internal";
+
+  const declared = await evaluateReadinessAtSensitivity(
+    config,
+    snapshot,
+    probe,
+    sensitivity,
+  );
+
+  // BI-E2CCFAC1: the declared level is a FLOOR, not the level real turns run
+  // at — payload screening escalates a turn carrying restricted-class content
+  // (invoices, bank details, personal records) to "restricted" regardless of
+  // what the agent declares. A coworker declared "confidential" handles exactly
+  // that material daily, so its readiness promise must hold at the escalation
+  // ceiling too. Evaluating only the declared level is how the catalog reported
+  // "ready" for a Finance coworker whose every real turn died with zero
+  // eligible endpoints.
+  if (declared.ready && sensitivity === "confidential") {
+    const ceiling = await evaluateReadinessAtSensitivity(
+      config,
+      snapshot,
+      probe,
+      "restricted",
+    );
+    if (!ceiling.ready) {
+      return {
+        ready: false,
+        reason:
+          "Ready at its declared level, but turns that touch restricted data — which payload screening escalates automatically — have no eligible model, so those turns will fail. Review AI readiness for the restricted data class.",
+        escalated: {
+          sensitivity: "restricted",
+          ready: false,
+          reason: ceiling.reason,
+        },
+      };
+    }
+  }
+
+  return declared;
+}
+
+async function evaluateReadinessAtSensitivity(
+  config: CoworkerRouteConfiguration,
+  snapshot: CoworkerRoutingReadinessSnapshot,
+  probe: CoworkerServiceReadinessProbe,
+  sensitivity: SensitivityLevel,
+): Promise<CoworkerRouteReadiness> {
   const minimumCapabilities = normalizeMinimumCapabilities(
     config.minimumCapabilities,
   );

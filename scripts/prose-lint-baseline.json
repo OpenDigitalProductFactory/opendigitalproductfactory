@@ -935,7 +935,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 218
+    "textMass": 236
   },
   "apps/web/app/(shell)/finance/payment-runs/page.tsx": {
     "vocabulary": 0,
@@ -1390,14 +1390,14 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 162
+    "textMass": 173
   },
   "apps/web/app/(shell)/platform/ai/providers/page.tsx": {
     "vocabulary": 0,
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 107
+    "textMass": 110
   },
   "apps/web/app/(shell)/platform/ai/readiness/page.tsx": {
     "vocabulary": 0,
@@ -1418,7 +1418,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 188
+    "textMass": 204
   },
   "apps/web/app/(shell)/platform/ai/skills/page.tsx": {
     "vocabulary": 0,

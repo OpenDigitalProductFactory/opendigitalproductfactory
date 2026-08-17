@@ -97,6 +97,17 @@ If any skill has drifted from the seed, a warning appears under the summary: a f
 
 Runtime Health explains infrastructure in terms of enabled capabilities. **Required — unavailable** needs attention because an enabled capability depends on that local service. **Optional — inactive** is expected when its capability is disabled and does not make the platform unhealthy. **Optional — degraded** means the capability is enabled but its local service is unavailable. **External — provider managed** reports reconciled provider evidence rather than pretending the provider is a local container. Each state includes text and an action; color is supplementary.
 
+### Coworker routing
+
+Runtime Health also lists every production coworker with whether it can reach
+an eligible AI model **right now** — including at the stricter data class its
+real conversations can be escalated to when they touch restricted material.
+A coworker shown **Blocked** here would fail its next conversation, and the
+"Why" column names the cause in plain language. A scheduled preflight runs the
+same check every few hours and raises one owner-visible alert when any
+coworker has zero eligible models, so a routing dead-end announces itself
+instead of being discovered mid-conversation.
+
 ### Context budget: what recent turns were given
 
 Every coworker turn assembles context — page data, recalled facts, prior conversation — against a token budget for the model running it. When it does not all fit, the least important sources are shortened or left out. **Context budget** is a collapsed panel at the foot of Runtime Health that reports what was left out, across the most recent turns that recorded a decision.

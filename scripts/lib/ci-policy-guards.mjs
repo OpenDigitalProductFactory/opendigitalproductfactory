@@ -46,6 +46,10 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
     ]),
     guard("shell-guard-shim-contract", "Shell Guard Shim Contract", [
       node("--test", "scripts/check-shell-guard-shim-contract.test.mjs"),
+      // Drives the real POSIX guard under bash: a cached binary path goes stale on
+      // every toolchain upgrade (Docker Desktop relocated its CLI mid-install here),
+      // and the guard must re-resolve rather than bricking `docker` for the account.
+      node("--test", "scripts/safety/shell-guard-stale-cache.test.mjs"),
     ]),
     guard("release-compose-pins", "Release Compose Pins", [
       node("--test", "scripts/check-release-compose-pins.test.mjs"),
@@ -54,6 +58,11 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       // The consumer install has no git checkout: whatever the installer copies
       // out of the install dir must ship in the image's /dpf-release-assets.
       node("--test", "scripts/check-release-asset-contract.test.mjs"),
+    ]),
+    guard("installer-skip-visibility", "Installer Skip Visibility", [
+      // A guarded install step that skips in silence reads as success, and is
+      // then recorded as done by Save-Progress. Optional-script guards must say so.
+      node("--test", "scripts/check-installer-skip-visibility.test.mjs"),
     ]),
     guard("installer-state-contract", "Installer State Contract", [
       // Drives real bash: install-dpf.sh runs under `set -euo pipefail`, and the
@@ -158,6 +167,18 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
     ]),
     guard("module-size-guard", "Module Size Guard", [
       node("scripts/check-module-size.mjs"),
+    ]),
+    // BI-640B011D: schema FK budgets (declared FKs without a leading index +
+    // bare unbacked *Id columns) may only shrink against the owned baseline.
+    guard("fk-index-coverage-guard", "FK Index Coverage Guard", [
+      node("--test", "scripts/check-fk-index-coverage.test.mjs"),
+      node("scripts/check-fk-index-coverage.mjs"),
+    ]),
+    // BI-873F3C48: every growth-shaped (event/log/telemetry) model must be
+    // retention-enrolled (purge or retained) or deliberately allowlisted.
+    guard("retention-enrollment-guard", "Retention Enrollment Guard", [
+      node("--test", "scripts/check-retention-enrollment.test.mjs"),
+      node("scripts/check-retention-enrollment.mjs"),
     ]),
     // Diff-scoped by design: repo-wide, the pattern matches 255 fixtures across 125
     // files, nearly all legitimate (far-future sentinels, deliberately-expired rows).
