@@ -85,5 +85,11 @@ export const KNOWN_GRANT_DIVERGENCES: readonly string[] = [
   "ops-coordinator",
   "platform-engineer",
   "portfolio-advisor",
+  // security-engineer / integration-engineer (BI-CC44E74F, EP-413F2602) are
+  // seed-defined coworkers established via the factory door: their runtime
+  // grants live in HARDCODED_COWORKER_GRANTS (the durable source), and the JSON
+  // agent_registry mirror intentionally does not carry a duplicate entry.
+  "security-engineer",
+  "integration-engineer",
   "storefront-advisor",
 ];

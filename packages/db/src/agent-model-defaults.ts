@@ -70,6 +70,10 @@ export const AGENT_MODEL_CONFIG_DEFAULTS: AgentModelConfigDefault[] = [
   // design judgment is the task, and the corpus it is calibrated against is
   // expensive founder time that a weak model would waste.
   { agentId: "ux-design-critic", minimumTier: "strong", budgetClass: "balanced", minimumCapabilities: { toolUse: true, imageInput: true }, minimumContextTokens: 32000 },
+  // Internal developer security / mcp-integration acumens (BI-CC44E74F,
+  // EP-413F2602), established via the factory door; draft until certification.
+  { agentId: "security-engineer", minimumTier: "adequate", budgetClass: "balanced", minimumCapabilities: { toolUse: true }, minimumContextTokens: 32000 },
+  { agentId: "integration-engineer", minimumTier: "adequate", budgetClass: "balanced", minimumCapabilities: { toolUse: true }, minimumContextTokens: 32000 },
 ];
 
 export function resolveAgentModelDefaultUpdate(

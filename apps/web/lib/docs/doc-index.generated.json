@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 646,
+  "pageCount": 661,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -1183,6 +1183,7 @@
         "operatoreffort",
         "legibilityofconsequence",
         "4-profession-local-8-axes-each-projecting-back-onto-the-spine",
+        "41-profession-declared-namespaced-axes",
         "5-where-a-weight-comes-from-sourcing-classes",
         "51-the-revealed-class-in-detail",
         "52-confidence-is-discounted-before-any-of-this-is-acted-on",
@@ -3468,6 +3469,21 @@
         "see-also"
       ]
     },
+    "docs/founder-kernel/wiki/principles/doc-cited-anchors-must-exist.md": {
+      "publicHref": "/founder-kernel/wiki/principles/doc-cited-anchors-must-exist/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "rule",
+        "why",
+        "applies-to",
+        "how-to-apply",
+        "decision-dimensions",
+        "examples",
+        "related"
+      ]
+    },
     "docs/founder-kernel/wiki/principles/elicit-tacit-knowledge.md": {
       "publicHref": "/founder-kernel/wiki/principles/elicit-tacit-knowledge/",
       "portalHref": null,
@@ -3481,6 +3497,21 @@
         "decision-dimensions",
         "examples",
         "sources"
+      ]
+    },
+    "docs/founder-kernel/wiki/principles/endpoint-classification-at-birth.md": {
+      "publicHref": "/founder-kernel/wiki/principles/endpoint-classification-at-birth/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "rule",
+        "why",
+        "applies-to",
+        "how-to-apply",
+        "decision-dimensions",
+        "examples",
+        "related"
       ]
     },
     "docs/founder-kernel/wiki/principles/evidence-before-diagnosis.md": {
@@ -3543,6 +3574,21 @@
         "sources"
       ]
     },
+    "docs/founder-kernel/wiki/principles/fleet-safe-schema-evolution.md": {
+      "publicHref": "/founder-kernel/wiki/principles/fleet-safe-schema-evolution/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "rule",
+        "why",
+        "applies-to",
+        "how-to-apply",
+        "decision-dimensions",
+        "examples",
+        "related"
+      ]
+    },
     "docs/founder-kernel/wiki/principles/gate-coverage-matches-blast-radius.md": {
       "publicHref": "/founder-kernel/wiki/principles/gate-coverage-matches-blast-radius/",
       "portalHref": null,
@@ -3602,6 +3648,20 @@
         "decision-dimensions",
         "related",
         "origin"
+      ]
+    },
+    "docs/founder-kernel/wiki/principles/install-is-the-tenant.md": {
+      "publicHref": "/founder-kernel/wiki/principles/install-is-the-tenant/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "rule",
+        "why",
+        "applies-to",
+        "how-to-apply",
+        "decision-dimensions",
+        "related"
       ]
     },
     "docs/founder-kernel/wiki/principles/keep-root-clone-as-merge-worktree.md": {
@@ -3944,6 +4004,21 @@
         "examples"
       ]
     },
+    "docs/founder-kernel/wiki/principles/primitive-done-means-ratchet-on.md": {
+      "publicHref": "/founder-kernel/wiki/principles/primitive-done-means-ratchet-on/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "rule",
+        "why",
+        "applies-to",
+        "how-to-apply",
+        "decision-dimensions",
+        "examples",
+        "related"
+      ]
+    },
     "docs/founder-kernel/wiki/principles/principle-based-rules.md": {
       "publicHref": "/founder-kernel/wiki/principles/principle-based-rules/",
       "portalHref": null,
@@ -4280,6 +4355,21 @@
         "anti-patterns",
         "related-principles",
         "spec-references"
+      ]
+    },
+    "docs/founder-kernel/wiki/principles/supersession-is-a-mechanical-act.md": {
+      "publicHref": "/founder-kernel/wiki/principles/supersession-is-a-mechanical-act/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "rule",
+        "why",
+        "applies-to",
+        "how-to-apply",
+        "decision-dimensions",
+        "examples",
+        "related"
       ]
     },
     "docs/founder-kernel/wiki/principles/sweep-main-before-trusting-worktree-specs.md": {
@@ -5858,6 +5948,19 @@
         "sources"
       ]
     },
+    "docs/professions/data-architect/wiki/referential-integrity-is-declared-not-implied.md": {
+      "publicHref": "/professions/data-architect/wiki/referential-integrity-is-declared-not-implied/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "rule",
+        "why",
+        "how-to-apply",
+        "decision-dimensions",
+        "related"
+      ]
+    },
     "docs/professions/data-architect/wiki/schema-audit-before-features.md": {
       "publicHref": "/professions/data-architect/wiki/schema-audit-before-features/",
       "portalHref": null,
@@ -6005,6 +6108,19 @@
         "why-it-belongs-in-the-pipeline",
         "how-dpf-coworkers-use-it",
         "see-also"
+      ]
+    },
+    "docs/professions/devops-platform/wiki/upgrade-the-fleet-forward-only.md": {
+      "publicHref": "/professions/devops-platform/wiki/upgrade-the-fleet-forward-only/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "rule",
+        "why",
+        "how-to-apply",
+        "decision-dimensions",
+        "related"
       ]
     },
     "docs/professions/documentation-content/wiki/choose-the-right-documentation-mode.md": {
@@ -6931,6 +7047,57 @@
         "see-also"
       ]
     },
+    "docs/professions/mcp-integration/wiki/context-economy.md": {
+      "publicHref": "/professions/mcp-integration/wiki/context-economy/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "the-heuristic",
+        "why-it-matters",
+        "when-it-applies",
+        "how-to-apply",
+        "related"
+      ]
+    },
+    "docs/professions/mcp-integration/wiki/coordination-plane-concepts.md": {
+      "publicHref": "/professions/mcp-integration/wiki/coordination-plane-concepts/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "what-the-coordination-plane-is",
+        "the-layer-separation",
+        "reachability-posture",
+        "related"
+      ]
+    },
+    "docs/professions/mcp-integration/wiki/mcp-protocol-version-window.md": {
+      "publicHref": "/professions/mcp-integration/wiki/mcp-protocol-version-window/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "rule",
+        "why",
+        "how-to-apply",
+        "decision-dimensions",
+        "related"
+      ]
+    },
+    "docs/professions/mcp-integration/wiki/tool-name-contract-stability.md": {
+      "publicHref": "/professions/mcp-integration/wiki/tool-name-contract-stability/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "rule",
+        "why",
+        "how-to-apply",
+        "decision-dimensions",
+        "related"
+      ]
+    },
     "docs/professions/operations/wiki/automotive-adas-recalibration-dispatch.md": {
       "publicHref": "/professions/operations/wiki/automotive-adas-recalibration-dispatch/",
       "portalHref": null,
@@ -7595,6 +7762,19 @@
         "see-also"
       ]
     },
+    "docs/professions/security/wiki/classify-exposure-at-birth.md": {
+      "publicHref": "/professions/security/wiki/classify-exposure-at-birth/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "rule",
+        "why",
+        "how-to-apply",
+        "decision-dimensions",
+        "related"
+      ]
+    },
     "docs/professions/security/wiki/cve-cvss-triage.md": {
       "publicHref": "/professions/security/wiki/cve-cvss-triage/",
       "portalHref": null,
@@ -7763,6 +7943,19 @@
         "the-2025-categories",
         "what-changed-in-2025",
         "how-dpf-coworkers-use-it"
+      ]
+    },
+    "docs/professions/software-engineer/wiki/retire-the-old-generation-in-the-same-motion.md": {
+      "publicHref": "/professions/software-engineer/wiki/retire-the-old-generation-in-the-same-motion/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "rule",
+        "why",
+        "how-to-apply",
+        "decision-dimensions",
+        "related"
       ]
     },
     "docs/professions/software-engineer/wiki/secure-coding-no-injection-validate-input.md": {
@@ -7999,6 +8192,19 @@
         "the-classical-lenses-and-what-each-is-actually-for",
         "how-the-critique-is-expected-to-read",
         "see-also"
+      ]
+    },
+    "docs/professions/ux-design/wiki/primitive-adoption-before-new-variants.md": {
+      "publicHref": "/professions/ux-design/wiki/primitive-adoption-before-new-variants/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "rule",
+        "why",
+        "how-to-apply",
+        "decision-dimensions",
+        "related"
       ]
     },
     "docs/professions/ux-design/wiki/target-size-and-operable-interactions.md": {

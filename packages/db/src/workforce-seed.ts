@@ -311,6 +311,35 @@ export const COWORKER_AGENT_SEEDS: readonly CoworkerAgentSeed[] = [
     valueStream: "evaluate",
     sensitivity: "internal",
   },
+  // Internal developer security acumen (BI-CC44E74F, EP-413F2602), established
+  // via the establish_coworker factory door; stays draft pending certification.
+  {
+    agentId: "security-engineer",
+    slugId: "security-engineer",
+    name: "Security Engineer",
+    tier: 2,
+    type: "coworker",
+    description:
+      "Exposure classification at birth, vulnerability and supply-chain triage, access-control review of platform surfaces (endpoints, MCP/A2A planes), and security findings stewardship",
+    valueStream: "evaluate",
+    sensitivity: "confidential",
+    initialLifecycleStage: "draft",
+  },
+  // Internal developer mcp-integration acumen (BI-CC44E74F, EP-413F2602),
+  // established via the establish_coworker factory door; stays draft pending
+  // certification.
+  {
+    agentId: "integration-engineer",
+    slugId: "integration-engineer",
+    name: "MCP & Integration Engineer",
+    tier: 2,
+    type: "coworker",
+    description:
+      "Coordination-plane stewardship: MCP protocol version window (N/N-1), frozen tool-name contract with grant-mapped aliases, context economy of the tool surface, and integration/connector review",
+    valueStream: "integrate",
+    sensitivity: "internal",
+    initialLifecycleStage: "draft",
+  },
 ];
 
 export const HARDCODED_COWORKER_GRANTS: Record<string, readonly string[]> = {
@@ -481,6 +510,29 @@ export const HARDCODED_COWORKER_GRANTS: Record<string, readonly string[]> = {
     // Load-bearing once WSID decisions carry dimension vectors: that scored
     // path runs through this tool.
     "registry_read",
+  ],
+  // Security Engineer — must match the establish_coworker factory-door grants
+  // exactly (BI-CC44E74F). Files findings as backlog items (backlog_write);
+  // holds no merge-blocking or release-gate authority by design.
+  "security-engineer": [
+    "file_read",
+    "architecture_read",
+    "backlog_read",
+    "backlog_write",
+    "telemetry_read",
+    "web_search",
+  ],
+  // MCP & Integration Engineer — must match the establish_coworker factory-door
+  // grants exactly (BI-CC44E74F). registry_read reaches the WSID craft-decision
+  // path; tool_script_exec supports programmatic review of the tool surface.
+  "integration-engineer": [
+    "file_read",
+    "architecture_read",
+    "backlog_read",
+    "backlog_write",
+    "registry_read",
+    "tool_script_exec",
+    "web_search",
   ],
 };
 
