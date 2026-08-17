@@ -9,7 +9,6 @@ principleDimensionVector: {"long_term_maintainability": 0.9, "human_cognitive_lo
 principleAppliesTo:
   - in_platform_coworker
   - external_coding_agent
-  - human
 principleRingScope:
   - ring-2-workflow
 principleConsumerArchetype: specialist

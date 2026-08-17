@@ -9,7 +9,6 @@ principleDimensionVector: {"blast_radius": -0.8, "operational_independence": 0.9
 principleAppliesTo:
   - in_platform_coworker
   - external_coding_agent
-  - human
 principleRingScope:
   - ring-4-sandbox-prod
 principleConsumerArchetype: specialist

@@ -9,7 +9,6 @@ principleDimensionVector: {"governance_compliance": 0.8, "long_term_maintainabil
 principleAppliesTo:
   - in_platform_coworker
   - external_coding_agent
-  - human
 principleRingScope:
   - external-coordination
   - ring-2-workflow

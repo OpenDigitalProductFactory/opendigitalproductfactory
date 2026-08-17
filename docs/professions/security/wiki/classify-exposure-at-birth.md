@@ -9,7 +9,6 @@ principleDimensionVector: {"blast_radius": -0.9, "data_privacy": 0.8, "governanc
 principleAppliesTo:
   - in_platform_coworker
   - external_coding_agent
-  - human
 principleRingScope:
   - ring-4-sandbox-prod
   - external-coordination
