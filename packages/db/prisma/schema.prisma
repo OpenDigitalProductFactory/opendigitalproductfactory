@@ -67,6 +67,350 @@ enum PrincipalSensitivity {
   restricted
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Closed-set vocabularies (BI-817ED2D4, Simplify & Strengthen W4, architecture
+// pass 2026-08-16 §3.2-a). Closed-set string fields are typed enums (AGENTS.md
+// §8); long-lived columns migrate expand→contract because fleet installs may
+// hold drifted values.
+//
+// Two groups below:
+//   1. IN USE — the column is already this enum type (direct conversion per
+//      the 20260815200100 payroll precedent; each conversion's data-safety
+//      argument lives in migration 20260816110000).
+//   2. CONTRACT-PENDING — the Postgres type exists and the column carries a
+//      `*_closed_set` CHECK (NOT VALID) enforcing new writes, but the Prisma
+//      field stays String until the contract step normalizes legacy values and
+//      flips the type. Ordered plan (operator-review-required):
+//      docs/superpowers/plans/2026-08-16-enum-contract-step-proposal.md
+//
+// New closed-set String columns are blocked by
+// scripts/check-no-new-closed-set-strings.mjs (baseline may only shrink).
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ── Group 1: in use ──
+
+// BacklogItem.sensitivity — cross-org sharing classification (BI-DC4E526E).
+// Canonical union: apps/web/lib/federation/cross-org-sharing.ts
+enum BacklogSensitivity {
+  public
+  internal
+  confidential
+  restricted
+}
+
+// BacklogItem.estimateSource — estimate provenance (BI-E731A6C1).
+// Canonical union: apps/web/lib/demand/estimate-provenance.ts
+enum EstimateSource {
+  ai
+  human
+  agreed
+}
+
+// BacklogItem.demandStage — demand funnel (EP-DEMAND-MGMT, DI-5CB3AFE78912).
+enum DemandStage {
+  raw
+  screened
+  shaped
+  ready
+}
+
+// BacklogItem.demandScoreFramework — pluggable scoring (DI-4CEA0F5FACCE).
+enum DemandScoreFramework {
+  rice
+  wsjf
+  value_effort
+  weighted
+}
+
+// BacklogItem.investmentBucket — Run/Grow/Transform (DI-8E489A791375).
+enum InvestmentBucket {
+  run
+  grow
+  transform
+}
+
+// FeatureBuild.kind — work-kind discriminator.
+// Canonical union: apps/web/lib/explore/feature-build-types.ts
+enum FeatureBuildKind {
+  feature
+  fix
+  chore
+  doc
+}
+
+// FeatureBuild.disposition — private/public change segregation (EP-1A78BAE1).
+enum ChangeDisposition {
+  private
+  shareable
+}
+
+// FeatureBuild.uxVerificationStatus — UX verification outcome.
+enum UxVerificationStatus {
+  running
+  complete
+  failed
+  skipped
+}
+
+// Workroom.decisionScope — which decision surface governs the work.
+// Canonical union: apps/web/lib/work-capsules.ts
+enum DecisionScope {
+  wwmd
+  wwwd
+  wsid
+}
+
+// Workroom.portfolioRole — FPAW portfolio attribution.
+// Canonical union: apps/web/lib/work-capsules.ts
+enum WorkPortfolioRole {
+  foundational
+  manufactureAndDeliver
+  forEmployees
+  productsAndServicesSold
+}
+
+// ── Group 2: contract-pending (column is String + `*_closed_set` CHECK) ──
+
+enum BacklogItemStatus {
+  triaging
+  open
+  in_progress @map("in-progress")
+  done
+  deferred
+  retired
+}
+
+enum BacklogItemType {
+  portfolio
+  product
+}
+
+enum BacklogWorkType {
+  bug
+  feature
+  chore
+  doc
+  tool
+  skill
+  refactor
+}
+
+enum BacklogTriageOutcome {
+  build
+  runbook
+  coworker_task @map("coworker-task")
+  defer
+  duplicate
+  discard
+}
+
+enum BacklogSource {
+  user_request        @map("user-request")
+  automated_detection @map("automated-detection")
+}
+
+enum BacklogEffortSize {
+  small
+  medium
+  large
+  xlarge
+}
+
+// Shared by BacklogItem.claimStatus and FeatureBuild.claimStatus — one claim
+// vocabulary (apps/web/lib/backlog/claim-on-start.ts).
+enum WorkClaimStatus {
+  active
+  released
+}
+
+enum EpicStatus {
+  open
+  in_progress @map("in-progress")
+  done
+}
+
+// Shared by BacklogItem.scopeKind and Epic.scopeKind (BI-E387A203).
+enum BacklogScopeKind {
+  platform
+  common
+  archetype_category @map("archetype-category")
+  archetype_leaf     @map("archetype-leaf")
+  multi_archetype    @map("multi-archetype")
+  unknown
+}
+
+// Workroom.status — apps/web/lib/work-capsules.ts WORK_CAPSULE_STATUSES.
+enum WorkroomStatus {
+  draft
+  ready
+  working
+  blocked
+  verifying
+  ready_for_review    @map("ready-for-review")
+  ready_for_promotion @map("ready-for-promotion")
+  complete
+  abandoned
+  archived
+}
+
+// Workroom.source — apps/web/lib/work-capsules.ts WORK_CAPSULE_SOURCES.
+enum WorkroomSource {
+  backlog
+  build_studio      @map("build-studio")
+  external_adoption @map("external-adoption")
+  git_promotion     @map("git-promotion")
+  manual
+  scheduled_steward @map("scheduled-steward")
+}
+
+// FeatureBuild.phase — apps/web/lib/explore/feature-build-types.ts BuildPhase.
+enum FeatureBuildPhase {
+  ideate
+  plan
+  build
+  review
+  ship
+  complete
+  failed
+  abandoned
+}
+
+// CustomerAccount.status — packages/db/src/customer-lifecycle.ts.
+enum CustomerAccountStatus {
+  prospect
+  qualified
+  onboarding
+  active
+  at_risk
+  suspended
+  closed
+  superseded
+  archived
+}
+
+// CustomerSite.status — packages/db/src/customer-lifecycle.ts.
+enum CustomerSiteStatus {
+  active
+  planned
+  inactive
+  superseded
+  archived
+}
+
+enum StaffingDemandShape {
+  coverage_floor
+  forecast_curve
+  fixed_slot
+  task_pipeline
+  census_load
+}
+
+enum StaffingDemandSourceType {
+  forecast
+  manual
+  booking
+  work
+  census
+}
+
+enum StaffingDemandStatus {
+  open
+  partially_covered
+  covered
+  cancelled
+}
+
+enum TaskNodeType {
+  analyze
+  plan
+  execute
+  review
+  skeptical_review
+  activation_proposal
+  approval_gate
+  verify
+  summarize
+}
+
+enum TaskNodeStatus {
+  queued
+  ready
+  running
+  blocked
+  awaiting_human
+  completed
+  failed
+  cancelled
+  superseded
+}
+
+enum TaskNodeWorkerRole {
+  planner
+  researcher
+  executor
+  reviewer
+  skeptical_reviewer
+  verifier
+  activation_analyst
+  summarizer
+}
+
+enum TaskNodeDependencyMode {
+  all_of
+  any_of
+  after_parent
+}
+
+enum TaskNodeInfluenceLevel {
+  none
+  contextual
+  material
+}
+
+enum TaskNodeEdgeType {
+  depends_on
+  informs
+  verifies
+  blocks
+  supersedes
+}
+
+enum KnowledgeArticleCategory {
+  process
+  policy
+  decision
+  how_to          @map("how-to")
+  reference
+  troubleshooting
+  runbook
+}
+
+// Shared by KnowledgeArticle.status and WikiPage.status — one document
+// lifecycle vocabulary.
+enum KnowledgeDocStatus {
+  draft
+  published
+  review_needed @map("review-needed")
+  archived
+}
+
+enum KnowledgeVisibility {
+  internal
+  team
+  public
+}
+
+enum WikiPageKind {
+  entity
+  summary
+  decision
+  runbook
+  index
+  stance
+  heuristic
+  principle
+}
+
 model User {
   id                             String                        @id @default(cuid())
   email                          String                        @unique
@@ -2141,11 +2485,11 @@ model BacklogItem {
   title                   String
   status                  String
   type                    String
-  // Cross-org sharing classification (BI-DC4E526E): public | internal |
-  // confidential | restricted. Deny-by-default — only `public` may cross an
-  // organization boundary in federated demand (kernel DI-3E77E48D5710). Default
-  // `internal` so unclassified proprietary demand never leaks upstream.
-  sensitivity             String                        @default("internal")
+  // Cross-org sharing classification (BI-DC4E526E). Deny-by-default — only
+  // `public` may cross an organization boundary in federated demand (kernel
+  // DI-3E77E48D5710). Default `internal` so unclassified proprietary demand
+  // never leaks upstream.
+  sensitivity             BacklogSensitivity            @default(internal)
   body                    String?
   createdAt               DateTime                      @default(now())
   updatedAt               DateTime                      @updatedAt
@@ -2173,7 +2517,7 @@ model BacklogItem {
   // field is absent. demandStage is an additive funnel facet orthogonal to
   // status (which continues to gate work-claims). Spec:
   // docs/superpowers/specs/2026-07-10-demand-management-design.md §5.
-  demandStage             String?
+  demandStage             DemandStage?
   reach                   Int?
   impact                  Float?
   confidence              Float?
@@ -2182,12 +2526,12 @@ model BacklogItem {
   riskOpportunity         Int?
   jobSize                 Float?
   demandScore             Float?
-  demandScoreFramework    String?
+  demandScoreFramework    DemandScoreFramework?
   demandScoreComputedAt   DateTime?
   // Investment bucket (EP-DEMAND-MGMT Phase 3): run | grow | transform. The
   // strategic-balance dimension so demand is prioritized against a target
   // allocation, not a flat list. Default derived from workType. §8.
-  investmentBucket        String?
+  investmentBucket        InvestmentBucket?
   // Backlog archetype scope (BI-E387A203). Nullable/additive so existing
   // planning rows honestly remain unclassified until backfilled.
   scopeKind               String?
@@ -2212,7 +2556,7 @@ model BacklogItem {
   estimateHumanJobSize    Float?
   estimateHumanById       String?
   estimateHumanAt         DateTime?
-  estimateSource          String?
+  estimateSource          EstimateSource?
   estimateAgreed          Boolean?
   activeBuildId           String?                       @unique
   activeEpicId            String?                       @unique
@@ -2370,8 +2714,8 @@ model Workroom {
   taskRunId               String?
   gitPromotionCandidateId String?
   changePromotionId       String?
-  decisionScope           String?
-  portfolioRole           String?
+  decisionScope           DecisionScope?
+  portfolioRole           WorkPortfolioRole?
   servedPersona           String?
   activityKind            String?
   outcomeAnchor           Json                     @default("{}")
@@ -7208,10 +7552,10 @@ model FeatureBuild {
   title                       String
   description                 String?
   // Work kind discriminator (FEATURE_BUILD_KIND_VALUES in
-  // apps/web/lib/explore/feature-build-types.ts): "feature" | "fix".
+  // apps/web/lib/explore/feature-build-types.ts).
   // Default "feature" backfills all existing/in-flight builds with no behavior
   // change. Derived from BacklogItem.source ("bug" -> "fix") at promote time.
-  kind                        String                   @default("feature")
+  kind                        FeatureBuildKind         @default(feature)
   portfolioId                 String?
   originatingBacklogItemId    String?
   brief                       Json?
@@ -7248,7 +7592,7 @@ model FeatureBuild {
   // "shareable". `dispositionSuggested`/`Reason` cache the AI suggestion from
   // review signals; `dispositionSource` is null until a human makes the final
   // call ("operator") or the suggestion is recorded ("suggested").
-  disposition                 String                   @default("private")
+  disposition                 ChangeDisposition        @default(private)
   dispositionReason           String?
   dispositionSource           String?
   dispositionDecidedAt        DateTime?
@@ -7256,7 +7600,7 @@ model FeatureBuild {
   dispositionSuggested        String?
   dispositionSuggestionReason String?
   uxTestResults               Json?
-  uxVerificationStatus        String? // null | "running" | "complete" | "failed" | "skipped"
+  uxVerificationStatus        UxVerificationStatus?
   deliberationSummary         Json? // compact BuildDeliberationSummary (see apps/web/lib/feature-build-types.ts)
   buildExecState              Json?
   taxonomyAttribution         Json?
@@ -16424,8 +16768,10 @@ model GraphEdge {
 // Cross-domain references (employee/org/principal/leave/credential/proposal) are
 // bare indexed FK columns — matching the schema's organizationId convention — so
 // this migration is additive and touches no hub model. Relations are declared
-// only within the staffing domain. Discriminator fields are String (allowed
-// values named in comments), matching LeaveRequest/TimesheetPeriod status fields.
+// only within the staffing domain. Closed-set discriminator fields are typed
+// enums, or CHECK-constrained Strings pending the enum contract flip
+// (BI-817ED2D4; AGENTS.md §8) — a NEW closed-set String column is a defect,
+// ratcheted by scripts/check-no-new-closed-set-strings.mjs.
 // Times are stored as instants plus a timezone and local-date context (spec §5.3).
 // `version` columns carry optimistic concurrency for publication (spec §5.3).
 // ─────────────────────────────────────────────────────────────────────────────

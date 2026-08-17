@@ -201,6 +201,24 @@ export const INTENTIONAL_FIELD_REMOVALS = new Set([
   // fleet-wide.
   "FederatedRecordMirror.version",
   "FederatedRecordMirror.acknowledgedVersion",
+  // 2026-08-16 BI-817ED2D4 (Simplify & Strengthen W4, §3.2-a): ten closed-set
+  // columns CONVERT String -> typed enum (the field is KEPT, only its type
+  // strengthens; same shape as the FederatedRecordMirror widening above — the
+  // guard keys removals by field name+type, so a type change reads as a
+  // removal of the String-typed signature). Values are preserved byte-for-byte
+  // by `USING (col::"Enum")`; per-column data-safety arguments live in
+  // migration 20260816110000_closed_set_enum_types_and_direct_conversions.
+  // Prune once shipped fleet-wide.
+  "BacklogItem.sensitivity",
+  "BacklogItem.estimateSource",
+  "BacklogItem.demandStage",
+  "BacklogItem.demandScoreFramework",
+  "BacklogItem.investmentBucket",
+  "FeatureBuild.kind",
+  "FeatureBuild.disposition",
+  "FeatureBuild.uxVerificationStatus",
+  "Workroom.decisionScope",
+  "Workroom.portfolioRole",
 ]);
 
 // Models intentionally RENAMED via a steward-reviewed change (AGENTS.md §11).
