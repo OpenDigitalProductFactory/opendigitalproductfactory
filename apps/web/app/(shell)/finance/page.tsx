@@ -16,6 +16,7 @@ import { FinanceSummaryCard } from "@/components/finance/FinanceSummaryCard";
 import { FinanceTabNav } from "@/components/finance/FinanceTabNav";
 import { OwnerFirstFinanceView, type MoneyJobMetric } from "@/components/finance/OwnerFirstFinanceView";
 import { resolveFinanceSurface, type FinanceMetricKey } from "@/lib/finance/finance-surface";
+import { loadBurnRunway } from "@/lib/finance/burn-runway";
 import { StatCard } from "@/components/ui/report-kit";
 import { RecentInvoicesTable, type RecentInvoiceRow } from "./RecentInvoicesTable";
 
@@ -162,6 +163,17 @@ export default async function FinancePage() {
     }),
   ]);
 
+  // BI-090221E7: existence counts so "nothing recorded" is never rendered as a
+  // healthy $0.00 — an empty book is unknown, not zero. Plus burn/revenue/runway
+  // with an explicit unknown state.
+  const [totalInvoiceCount, totalBillCount, burnRunway] = await Promise.all([
+    prisma.invoice.count(),
+    prisma.bill.count(),
+    loadBurnRunway(),
+  ]);
+  const hasAnyInvoices = totalInvoiceCount > 0;
+  const hasAnyBills = totalBillCount > 0;
+
   const financeSurface = resolveFinanceSurface(
     storefrontConfig?.archetype.category,
     storefrontConfig?.archetype.archetypeId,
@@ -229,8 +241,10 @@ export default async function FinancePage() {
         hint:
           overdueCount > 0 && oldestOverdue
             ? `oldest: ${oldestOverdue.account.name}`
-            : "all up to date",
-        intent: overdueCount > 0 ? "danger" : "success",
+            : hasAnyInvoices
+              ? "all up to date"
+              : "no invoices recorded yet",
+        intent: overdueCount > 0 ? "danger" : hasAnyInvoices ? "success" : "neutral",
       },
       "supplier-bills-due": {
         value: `${sym}${formatMoney(moneyOweAmount)}`,
@@ -408,13 +422,92 @@ export default async function FinancePage() {
         <StatCard
           label="Overdue"
           value={overdueCount}
-          intent={overdueCount > 0 ? "danger" : "success"}
+          intent={overdueCount > 0 ? "danger" : hasAnyInvoices ? "success" : "neutral"}
           hint={
             overdueCount > 0 && oldestOverdue ? (
               <>Oldest: <span className="text-[var(--dpf-text)]">{oldestOverdue.account.name}</span></>
-            ) : (
+            ) : hasAnyInvoices ? (
               "All up to date"
+            ) : (
+              "No invoices recorded yet"
             )
+          }
+        />
+      </div>
+
+      {/* Burn & runway (BI-090221E7): explicit unknown state — an empty book is
+          not a healthy $0.00, and pre-revenue with real burn is said plainly. */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-4" data-testid="finance-burn-runway">
+        <StatCard
+          label="Monthly Burn"
+          value={
+            burnRunway.monthlyBurn === null
+              ? "Unknown"
+              : `${sym}${formatMoney(burnRunway.monthlyBurn)}`
+          }
+          intent={burnRunway.monthlyBurn === null ? "neutral" : "accent"}
+          hint={
+            burnRunway.burnBasis === "unknown" ? (
+              <Link href="/finance/bills/new" className="text-[var(--dpf-accent)] hover:underline">
+                Record spend to measure →
+              </Link>
+            ) : burnRunway.burnBasis === "committed-only" ? (
+              "committed subscriptions only — record paid bills for real burn"
+            ) : (
+              "trailing 90-day average incl. commitments"
+            )
+          }
+        />
+        <StatCard
+          label="Monthly Revenue"
+          value={
+            burnRunway.monthlyRevenue === null
+              ? "None recorded"
+              : `${sym}${formatMoney(burnRunway.monthlyRevenue)}`
+          }
+          intent={burnRunway.monthlyRevenue === null ? "neutral" : "success"}
+          hint={
+            burnRunway.monthlyRevenue === null
+              ? "no paid invoices in the last 90 days"
+              : "trailing 90-day average"
+          }
+        />
+        <StatCard
+          label="Runway"
+          value={
+            burnRunway.runwayState === "measured" && burnRunway.runwayMonths !== null
+              ? `${burnRunway.runwayMonths.toFixed(1)} months`
+              : burnRunway.runwayState === "cash-growing"
+                ? "Cash growing"
+                : "Unknown"
+          }
+          intent={
+            burnRunway.runwayState === "measured"
+              ? burnRunway.runwayMonths !== null && burnRunway.runwayMonths < 6
+                ? "danger"
+                : "success"
+              : burnRunway.runwayState === "cash-growing"
+                ? "success"
+                : "neutral"
+          }
+          hint={
+            burnRunway.runwayState === "unknown-burn"
+              ? "needs measured burn"
+              : burnRunway.runwayState === "unknown-cash"
+                ? "needs a bank account balance"
+                : burnRunway.runwayState === "cash-growing"
+                  ? "revenue covers current burn"
+                  : "cash ÷ net monthly burn"
+          }
+        />
+        <StatCard
+          label="Money Health"
+          value={burnRunway.preRevenueWithBurn ? "Pre-revenue" : hasAnyInvoices || hasAnyBills ? "Tracking" : "Not started"}
+          intent={burnRunway.preRevenueWithBurn ? "danger" : "neutral"}
+          hint={
+            burnRunway.preRevenueWithBurn
+              ? "money is going out with no revenue recorded — watch runway"
+              : burnRunway.gaps[0] ?? "books have activity in both directions"
           }
         />
       </div>
@@ -426,12 +519,25 @@ export default async function FinancePage() {
           value={`${sym}${formatMoney(paidAmount)}`}
           hint={`${paidCount} invoice${paidCount !== 1 ? "s" : ""} paid`}
         />
-        <StatCard
-          label="Money You Owe"
-          value={`${sym}${formatMoney(moneyOweAmount)}`}
-          intent={moneyOweAmount > 0 ? "danger" : "success"}
-          hint={`${moneyOweCount} bill${moneyOweCount !== 1 ? "s" : ""} awaiting payment`}
-        />
+        {hasAnyBills ? (
+          <StatCard
+            label="Money You Owe"
+            value={`${sym}${formatMoney(moneyOweAmount)}`}
+            intent={moneyOweAmount > 0 ? "danger" : "success"}
+            hint={`${moneyOweCount} bill${moneyOweCount !== 1 ? "s" : ""} awaiting payment`}
+          />
+        ) : (
+          <StatCard
+            label="Money You Owe"
+            value="Not recorded"
+            intent="neutral"
+            hint={
+              <Link href="/finance/bills/new" className="text-[var(--dpf-accent)] hover:underline">
+                Record supplier bills →
+              </Link>
+            }
+          />
+        )}
         <StatCard
           label="Active Recurring"
           value={activeRecurringCount}

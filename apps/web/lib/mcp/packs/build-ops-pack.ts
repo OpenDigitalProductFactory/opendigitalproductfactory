@@ -507,24 +507,38 @@ async function runEndpointTestsHandler(
   });
 
   const summary = results.map((r) => {
-    const probesPassed = r.probes.filter((p) => p.pass).length;
-    const probesFailed = r.probes.filter((p) => !p.pass).length;
-    const scenariosPassed = r.scenarios.filter((s) => s.passed).length;
-    const scenariosFailed = r.scenarios.filter((s) => !s.passed).length;
+    // BI-91F0E312: deferred probes/scenarios never reached the model — report
+    // them as deferred, not failed, and flag the run as incomplete.
+    const probesPassed = r.probes.filter((p) => p.outcome === "passed").length;
+    const probesFailed = r.probes.filter((p) => p.outcome === "failed").length;
+    const probesDeferred = r.probes.filter((p) => p.outcome === "deferred").length;
+    const scenariosPassed = r.scenarios.filter((s) => s.outcome === "passed").length;
+    const scenariosFailed = r.scenarios.filter((s) => s.outcome === "failed").length;
+    const scenariosDeferred = r.scenarios.filter((s) => s.outcome === "deferred").length;
     const lines = [
-      `**${r.endpointId}**: Probes ${probesPassed}/${probesPassed + probesFailed} passed`,
+      `**${r.endpointId}**: Probes ${probesPassed}/${probesPassed + probesFailed} passed` +
+        (probesDeferred > 0 ? ` (${probesDeferred} deferred — capacity held, run incomplete)` : ""),
     ];
     if (r.scenarios.length > 0) {
-      lines.push(`Scenarios ${scenariosPassed}/${scenariosPassed + scenariosFailed} passed`);
+      lines.push(
+        `Scenarios ${scenariosPassed}/${scenariosPassed + scenariosFailed} passed` +
+          (scenariosDeferred > 0 ? ` (${scenariosDeferred} deferred)` : ""),
+      );
     }
     lines.push(`Instruction following: ${r.instructionFollowing ?? "unknown"}`);
     if (r.codingCapability) lines.push(`Coding: ${r.codingCapability}`);
-    // List failures
-    for (const p of r.probes.filter((p) => !p.pass)) {
+    // List failures and deferrals distinctly
+    for (const p of r.probes.filter((p) => p.outcome === "failed")) {
       lines.push(`  FAIL probe: ${p.name} — ${p.reason}`);
     }
-    for (const s of r.scenarios.filter((s) => !s.passed)) {
+    for (const p of r.probes.filter((p) => p.outcome === "deferred")) {
+      lines.push(`  DEFERRED probe: ${p.name} — ${p.reason}`);
+    }
+    for (const s of r.scenarios.filter((s) => s.outcome === "failed")) {
       lines.push(`  FAIL scenario: ${s.name}`);
+    }
+    for (const s of r.scenarios.filter((s) => s.outcome === "deferred")) {
+      lines.push(`  DEFERRED scenario: ${s.name}`);
     }
     return lines.join("\n");
   }).join("\n\n");

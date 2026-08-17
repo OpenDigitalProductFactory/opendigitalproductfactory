@@ -153,6 +153,52 @@ describe("projectCoworkerRouteReadiness", () => {
     ).resolves.toMatchObject({ ready: false });
   });
 
+  // BI-E2CCFAC1: the declared level is a floor — payload screening escalates
+  // turns carrying restricted-class content to "restricted". A confidential
+  // coworker whose install cannot route restricted must not report ready.
+  it("reports not-ready for a confidential coworker when the restricted escalation ceiling has no eligible endpoint", async () => {
+    const result = await projectCoworkerRouteReadiness(
+      { ...config, sensitivity: "confidential" },
+      snapshot([
+        endpoint({
+          sensitivityClearance: ["public", "internal", "confidential"],
+        }),
+      ]),
+    );
+
+    expect(result.ready).toBe(false);
+    expect(result.reason).toContain("restricted");
+    expect(result.escalated).toMatchObject({
+      sensitivity: "restricted",
+      ready: false,
+    });
+  });
+
+  it("stays ready for a confidential coworker when restricted turns can also route", async () => {
+    const result = await projectCoworkerRouteReadiness(
+      { ...config, sensitivity: "confidential" },
+      snapshot([
+        endpoint({
+          providerId: "local",
+          sensitivityClearance: ["public", "internal", "confidential", "restricted"],
+        }),
+      ]),
+    );
+
+    expect(result.ready).toBe(true);
+    expect(result.escalated).toBeUndefined();
+  });
+
+  it("does not apply the restricted ceiling to internal coworkers", async () => {
+    const result = await projectCoworkerRouteReadiness(
+      { ...config, sensitivity: "internal" },
+      snapshot([
+        endpoint({ sensitivityClearance: ["public", "internal"] }),
+      ]),
+    );
+    expect(result.ready).toBe(true);
+  });
+
   it("honors the platform local-only boundary", async () => {
     await expect(
       projectCoworkerRouteReadiness(config, {

@@ -119,8 +119,9 @@ export function ApprovalQueuePanel({
   return (
     <div className="space-y-6">
       <section
+        id="marketing-approval-queue"
         data-testid="marketing-approval-queue"
-        className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-5"
+        className="scroll-mt-24 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-5"
       >
         <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
           <div>
@@ -167,8 +168,9 @@ export function ApprovalQueuePanel({
       </section>
 
       <section
+        id="marketing-publish-queue"
         data-testid="marketing-publish-queue"
-        className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-5"
+        className="scroll-mt-24 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-5"
       >
         <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
           <div>

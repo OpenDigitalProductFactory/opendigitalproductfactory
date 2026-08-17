@@ -16,6 +16,7 @@ const { mockPrisma, mockAutoDiscoverAndProfile } = vi.hoisted(() => ({
     },
     aiProviderConnection: {
       findMany: vi.fn(),
+      updateMany: vi.fn(),
     },
   },
   mockAutoDiscoverAndProfile: vi.fn(),
@@ -38,6 +39,7 @@ describe("activateProvider", () => {
     mockPrisma.modelProfile.updateMany.mockResolvedValue({ count: 0 });
     mockPrisma.mcpServer.findMany.mockResolvedValue([]);
     mockPrisma.aiProviderConnection.findMany.mockResolvedValue([]);
+    mockPrisma.aiProviderConnection.updateMany.mockResolvedValue({ count: 0 });
     mockAutoDiscoverAndProfile.mockResolvedValue({ discovered: 3, profiled: 3 });
   });
 
@@ -210,6 +212,31 @@ describe("activateProvider", () => {
         retiredReason: null,
       },
     });
+  });
+
+  it("brings a disabled or unconfigured default connection to active with the provider", async () => {
+    mockPrisma.modelProvider.findUnique.mockResolvedValue({
+      providerId: "anthropic-sub",
+      category: "direct",
+      endpointType: "llm",
+      status: "active",
+    });
+
+    await activateProvider("anthropic-sub", { trigger: "test_auth" });
+
+    // Routing filters on connection status, not provider status — activation
+    // that leaves the default connection disabled is the BI-04E4F111 dead end.
+    expect(mockPrisma.aiProviderConnection.updateMany).toHaveBeenCalledWith({
+      where: {
+        connectionId: "provider-default-anthropic-sub",
+        status: { in: ["unconfigured", "disabled"] },
+      },
+      data: { status: "active" },
+    });
+    // Healing happens before clearance derivation so evidence counts.
+    const healOrder = mockPrisma.aiProviderConnection.updateMany.mock.invocationCallOrder[0];
+    const readOrder = mockPrisma.aiProviderConnection.findMany.mock.invocationCallOrder[0];
+    expect(healOrder).toBeLessThan(readOrder);
   });
 
   it("returns gracefully when provider does not exist", async () => {
