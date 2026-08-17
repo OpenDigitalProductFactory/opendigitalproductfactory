@@ -96,14 +96,15 @@ export const COWORKER_SELF_TASKS: Record<string, CoworkerSelfTask> = {
     },
   },
 
-  // Finance Specialist reviews money health on a cadence (BI-090221E7). The
+  // Finance Controller reviews money health on a cadence (BI-090221E7). The
   // /finance dashboard now says "unknown" out loud when the books are empty and
   // flags pre-revenue burn — this self-task is the proactive half: the coworker
   // looks at the same state and TELLS the owner what needs recording or
-  // attention instead of waiting to be asked. Read-and-report work: it records
-  // nothing on its own, so a weak model run degrades to a bland summary, never
-  // to invented business facts.
-  "finance-agent": {
+  // attention instead of waiting to be asked. Keyed on the ROSTER coworker
+  // (LIFE-009); the finance-agent chat persona has no Agent row (BI-79298169).
+  // Read-and-report work: it records nothing on its own, so a weak model run
+  // degrades to a bland summary, never to invented business facts.
+  "finance-controller": {
     title: "Review burn, revenue, and runway",
     prompt: [
       "You are running as a scheduled, autonomous task — no human is watching this",

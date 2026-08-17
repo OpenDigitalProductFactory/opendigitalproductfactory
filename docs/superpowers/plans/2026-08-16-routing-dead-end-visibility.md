@@ -103,7 +103,7 @@ Runtime action after 3: re-run the dimension eval so `ModelProfile` carries meas
 
 - Unrecorded ≠ zero: existence counts gate the copy — "all up to date" only when invoices exist; "Money You Owe" renders "Not recorded → record supplier bills" when no bill has ever been recorded.
 - New `lib/finance/burn-runway.ts`: pure `computeBurnRunway` (trailing 90-day burn incl. supplier-contract commitments, revenue, runway) with explicit `unknown` states, `committed-only` basis, `cash-growing`, and a `preRevenueWithBurn` flag; rendered as a four-card row with record-it links, never a fabricated $0.00.
-- Proactive half: a `finance-agent` proactivity self-task ("Review burn, revenue, and runway", weekly/twice-weekly) reads the same state and tells the owner what to record or watch. (The goal named finance-controller; that roster entry is a seed-only stub with no persona or route — LIFE-003 conformance gap — so the /finance-routable Finance Specialist carries the duty.)
+- Proactive half: a `finance-controller` proactivity self-task ("Review burn, revenue, and runway", weekly/twice-weekly) reads the same state and tells the owner what to record or watch. Keyed on the roster coworker — the LIFE-009 conformance gate rejects the `finance-agent` chat persona, which has no Agent row (that identity gap is BI-79298169).
 
 ## 7. Marketing approval loop — BI-64F2EA96 (filed this session)
 
