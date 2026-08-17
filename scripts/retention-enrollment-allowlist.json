@@ -4,7 +4,7 @@
   "entries": [
     {
       "model": "Activity",
-      "reason": "CRM activity record (calls/meetings/notes against accounts, contacts, and deals) — a business record the operator curates, not append-only telemetry.",
+      "reason": "CRM activity record (calls/meetings/notes against accounts, contacts, and deals) \u2014 a business record the operator curates, not append-only telemetry.",
       "owner": "platform-architecture",
       "expiry": "2026-11-16"
     },
@@ -15,14 +15,26 @@
       "expiry": "2026-11-16"
     },
     {
-      "model": "SkillMetric",
-      "reason": "Periodic aggregate (per skill/agent/period) — the durable post-purge source of truth for the raw skillUsageEvent stream, which IS purge-enrolled.",
+      "model": "HospitalityServiceTurnEvent",
+      "reason": "Standing domain-lifecycle-managed stewardship exemption (scripts/stewardship-exemptions.txt): follows its HospitalityServiceTurn cascade; independent aging would make seating/closure decisions unexplainable.",
+      "owner": "platform-architecture",
+      "expiry": "2026-11-16"
+    },
+    {
+      "model": "LifecycleEvent",
+      "reason": "Standing domain-lifecycle-managed stewardship exemption (scripts/stewardship-exemptions.txt): transition evidence follows the governed lifecycle of its referenced thing; age-based deletion would break accountability history.",
       "owner": "platform-architecture",
       "expiry": "2026-11-16"
     },
     {
       "model": "ProductOutcomeObservation",
       "reason": "Governance evidence for product objectives; corrections supersede rather than delete (correct_product_outcome_observation flow). Deliberately kept, pending an owner decision on a long-window archive policy.",
+      "owner": "platform-architecture",
+      "expiry": "2026-11-16"
+    },
+    {
+      "model": "SkillMetric",
+      "reason": "Periodic aggregate (per skill/agent/period) \u2014 the durable post-purge source of truth for the raw skillUsageEvent stream, which IS purge-enrolled.",
       "owner": "platform-architecture",
       "expiry": "2026-11-16"
     }

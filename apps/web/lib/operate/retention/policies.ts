@@ -484,24 +484,12 @@ export const PURGE_POLICIES: readonly PurgePolicy[] = [
     rationale:
       "Per-channel delivery attempt rows. Delivery troubleshooting value decays in days; 90 days.",
   },
-  {
-    model: "lifecycleEvent",
-    label: "Universal lifecycle event ledger",
-    category: "audit-log",
-    timestampField: "createdAt",
-    baseRetentionDays: DAYS_365,
-    rationale:
-      "Append-only stage/state transition ledger across governed things. Two-axis lifecycle reporting reads recent windows; the entity rows carry current state. One year.",
-  },
-  {
-    model: "hospitalityServiceTurnEvent",
-    label: "Hospitality service-turn events",
-    category: "audit-log",
-    timestampField: "occurredAt",
-    baseRetentionDays: DAYS_180,
-    rationale:
-      "Table service-turn transition events. Operational service telemetry; 6 months.",
-  },
+  // LifecycleEvent and HospitalityServiceTurnEvent are deliberately NOT
+  // enrolled: both hold standing domain-lifecycle-managed stewardship
+  // exemptions (scripts/stewardship-exemptions.txt) — their rows follow the
+  // lifecycle of the thing they evidence, and age-based deletion would break
+  // accountability history. Listed on the retention-enrollment guard allowlist
+  // with that reason.
   {
     model: "appointmentSyncEvent",
     label: "Appointment sync events",

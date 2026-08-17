@@ -35,7 +35,6 @@ AgentToolGrantRevocation
 AiProviderConnection
 AiProviderFinanceProfile
 ApiToken
-AppointmentSyncEvent
 ApprovalRule
 ArtifactReceiptUsage
 AssuranceFinding
@@ -81,14 +80,12 @@ CapabilityMaturityDependency
 CareAppointment
 CareAppointmentParticipant
 CareAppointmentResource
-CareAppointmentStatusEvent
 CareConsentAttestation
 CareCoverageEvidence
 CareIntakeAccessGrant
 CareIntakeException
 CareIntakePacket
 CareIntakeResponse
-CareIntakeStatusEvent
 CareLocation
 CareResource
 CareSchedulingPolicy

@@ -8959,7 +8959,6 @@ model LifecycleEvent {
   @@index([governedThingKind, governedThingId, createdAt])
   @@index([actorPrincipalId])
   @@index([toolExecutionId])
-  @@index([createdAt]) // retention sweep cutoff scan, apps/web/lib/operate/retention/execute.ts:99
 }
 
 // Membership of a governed thing in a Plateau (a relatively stable architecture state —
@@ -11597,7 +11596,6 @@ model HospitalityServiceTurnEvent {
   @@unique([serviceTurnId, atVersion])
   @@unique([organizationId, idempotencyKey])
   @@index([organizationId, occurredAt])
-  @@index([occurredAt]) // retention sweep cutoff scan, apps/web/lib/operate/retention/execute.ts:99
 }
 
 /// Organization-owned definition of a clinical or dental visit. StorefrontItem
