@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { sendPurchaseOrder, convertPOToBill } from "@/lib/actions/ap";
+import { Button } from "@/components/ui/Button";
+import { FormStatus } from "@/components/ui/form";
 
 interface Props {
   poId: string;
@@ -44,25 +46,17 @@ export function POActionButtons({ poId, status }: Props) {
     <div className="flex flex-col items-end gap-2">
       <div className="flex gap-2">
         {status === "draft" && (
-          <button
-            onClick={handleSend}
-            disabled={loading !== null}
-            className="px-4 py-2 rounded-md text-sm font-medium bg-[var(--dpf-accent)] text-white hover:opacity-90 transition-opacity disabled:opacity-50"
-          >
+          <Button onClick={handleSend} disabled={loading !== null}>
             {loading === "send" ? "Sending…" : "Send to Supplier"}
-          </button>
+          </Button>
         )}
         {(status === "sent" || status === "acknowledged") && (
-          <button
-            onClick={handleConvert}
-            disabled={loading !== null}
-            className="px-4 py-2 rounded-md text-sm font-medium bg-[var(--dpf-accent)] text-white hover:opacity-90 transition-opacity disabled:opacity-50"
-          >
+          <Button onClick={handleConvert} disabled={loading !== null}>
             {loading === "convert" ? "Converting…" : "Convert to Bill"}
-          </button>
+          </Button>
         )}
       </div>
-      {error && <p className="text-xs text-[var(--dpf-error)]">{error}</p>}
+      <FormStatus error={error} />
     </div>
   );
 }

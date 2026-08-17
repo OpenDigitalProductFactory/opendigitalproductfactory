@@ -63,6 +63,7 @@ const EXPECTED_LEGACY_JOBS = [
   "test-clock-bomb-guard",
   "tool-surface-guard",
   "ux-fit-gate",
+  "ux-primitive-adoption-guard",
   "work-unit-conformance-guard",
 ];
 

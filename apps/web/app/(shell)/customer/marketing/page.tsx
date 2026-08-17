@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Surface } from "@/components/ui/Surface";
 import {
   formatMarketingGap,
   formatMarketingLabel,
@@ -150,10 +151,7 @@ export default async function CustomerMarketingPage() {
         const briefCount = snapshot.workProducts.campaignBriefs.length;
         if (pendingCount === 0 && approvedCount === 0 && briefCount === 0) return null;
         return (
-          <section
-            data-testid="marketing-waiting-on-you"
-            className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-4"
-          >
+          <Surface as="section" data-testid="marketing-waiting-on-you">
             <p className="text-xs font-semibold uppercase tracking-wide text-[var(--dpf-muted)]">
               {pendingCount > 0 || approvedCount > 0 ? "Waiting on you" : "In progress"}
             </p>
@@ -184,7 +182,7 @@ export default async function CustomerMarketingPage() {
                 </Link>
               ) : null}
             </div>
-          </section>
+          </Surface>
         );
       })()}
 

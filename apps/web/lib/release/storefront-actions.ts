@@ -2,6 +2,7 @@
 
 import { prisma } from "@dpf/db";
 import { newId } from "@/lib/shared/new-id";
+import { ok, err as fail, type ActionResult } from "@/lib/shared/action-result";
 import { generateInvoiceFromStorefrontOrder } from "@/lib/actions/finance";
 import { isExclusionViolation } from "@/lib/db/exclusion-violation";
 import {
@@ -50,9 +51,8 @@ function makeRef(prefix: string) {
   return `${prefix}-${newId(8).toUpperCase()}`;
 }
 
-type ActionResult =
-  | { success: true; ref: string; type: string }
-  | { success: false; error: string };
+/** Public storefront submissions resolve to a reference + record type. */
+type SubmissionReceipt = { ref: string; type: string };
 
 // ── Inquiry ──────────────────────────────────────────────────────────────────
 
@@ -66,9 +66,9 @@ export async function submitInquiry(
     itemId?: string;
     formData?: Record<string, unknown>;
   }
-): Promise<ActionResult> {
+): Promise<ActionResult<SubmissionReceipt>> {
   const storefront = await getPublishedStorefront(slug);
-  if (!storefront) return { success: false, error: "Storefront not found or not published" };
+  if (!storefront) return fail("Storefront not found or not published");
 
   const ref = makeRef("INQ");
   const created = await prisma.storefrontInquiry.create({
@@ -86,7 +86,7 @@ export async function submitInquiry(
     select: { inquiryRef: true },
   });
 
-  return { success: true, ref: created.inquiryRef, type: "inquiry" };
+  return ok({ ref: created.inquiryRef, type: "inquiry" });
 }
 
 // ── Booking ───────────────────────────────────────────────────────────────────
@@ -147,9 +147,9 @@ export async function submitBooking(
     recurrenceRule?: "weekly" | "biweekly" | "monthly";
     recurrenceEndDate?: Date;
   }
-): Promise<ActionResult> {
+): Promise<ActionResult<SubmissionReceipt>> {
   const storefront = await getPublishedStorefront(slug);
-  if (!storefront) return { success: false, error: "Storefront not found or not published" };
+  if (!storefront) return fail("Storefront not found or not published");
   const commercialItem = await prisma.storefrontItem.findFirst({
     where: {
       storefrontId: storefront.id,
@@ -451,32 +451,26 @@ export async function submitBooking(
     });
   } catch (err) {
     if (err instanceof BookingHoldInvalidError) {
-      return { success: false, error: "Invalid or expired hold" };
+      return fail("Invalid or expired hold");
     }
     if (err instanceof RestaurantTableUnavailableError) {
-      return {
-        success: false,
-        error: "That table is not available for reservations. Please choose another time.",
-      };
+      return fail("That table is not available for reservations. Please choose another time.");
     }
     if (err instanceof HospitalityCapacityConflictError) {
-      return {
-        success: false,
-        error: "That table cannot seat this party. Please choose a smaller party or contact the venue.",
-      };
+      return fail("That table cannot seat this party. Please choose a smaller party or contact the venue.");
     }
     if (isExclusionViolation(err)) {
-      return { success: false, error: "That time slot is no longer available" };
+      return fail("That time slot is no longer available");
     }
     const prismaError = err as Error & { code?: string };
     if (prismaError.code === "P2002") {
-      return { success: false, error: "Duplicate submission" };
+      return fail("Duplicate submission");
     }
     throw err;
   }
   await productManagementChanges.flush();
 
-  return { success: true, ref: created.bookingRef, type: "booking" };
+  return ok({ ref: created.bookingRef, type: "booking" });
 }
 
 // ── Order ─────────────────────────────────────────────────────────────────────
@@ -498,12 +492,12 @@ export async function submitOrder(
     totalAmount: number | string; // ignored — recalculated server-side
     currency?: string;
   }
-): Promise<ActionResult> {
+): Promise<ActionResult<SubmissionReceipt>> {
   const storefront = await getPublishedStorefront(slug);
-  if (!storefront) return { success: false, error: "Storefront not found or not published" };
+  if (!storefront) return fail("Storefront not found or not published");
 
   if (!data.items || data.items.length === 0) {
-    return { success: false, error: "Order must contain at least one item" };
+    return fail("Order must contain at least one item");
   }
 
   // Look up authoritative prices for all submitted item IDs in one query
@@ -558,14 +552,14 @@ export async function submitOrder(
   for (const line of data.items) {
     const dbPrice = priceMap.get(line.itemId);
     if (dbPrice === undefined) {
-      return { success: false, error: `Item not found: ${line.itemId}` };
+      return fail(`Item not found: ${line.itemId}`);
     }
     if (dbPrice === null) {
-      return { success: false, error: `Item has no price configured: ${line.itemId}` };
+      return fail(`Item has no price configured: ${line.itemId}`);
     }
     const actualPrice = dbPrice.toNumber();
     if (Math.abs(actualPrice - line.unitPrice) > 0.001) {
-      return { success: false, error: `Price mismatch for item ${line.itemId}` };
+      return fail(`Price mismatch for item ${line.itemId}`);
     }
   }
 
@@ -700,7 +694,7 @@ export async function submitOrder(
     console.error("Auto-invoice generation failed for StorefrontOrder", created.orderRef, err);
   }
 
-  return { success: true, ref: created.orderRef, type: "order" };
+  return ok({ ref: created.orderRef, type: "order" });
 }
 
 // ── Donation ──────────────────────────────────────────────────────────────────
@@ -716,9 +710,9 @@ export async function submitDonation(
     message?: string;
     isAnonymous?: boolean;
   }
-): Promise<ActionResult> {
+): Promise<ActionResult<SubmissionReceipt>> {
   const storefront = await getPublishedStorefront(slug);
-  if (!storefront) return { success: false, error: "Storefront not found or not published" };
+  if (!storefront) return fail("Storefront not found or not published");
 
   const ref = makeRef("DON");
   const created = await prisma.storefrontDonation.create({
@@ -736,5 +730,5 @@ export async function submitDonation(
     select: { donationRef: true },
   });
 
-  return { success: true, ref: created.donationRef, type: "donation" };
+  return ok({ ref: created.donationRef, type: "donation" });
 }

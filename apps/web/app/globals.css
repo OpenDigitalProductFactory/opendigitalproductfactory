@@ -17,6 +17,10 @@
   --dpf-text-secondary: #4a4a5e;
   --dpf-accent: #2563eb;
   --dpf-accent-soft: color-mix(in srgb, var(--dpf-accent) 12%, var(--dpf-surface-1));
+  /* Label color for text/icons sitting ON a solid accent (or error) fill.
+     Light accent #2563eb vs #ffffff = 5.2:1 (WCAG AA). Never hardcode
+     text-white on accent buttons — use text-[var(--dpf-on-accent)]. */
+  --dpf-on-accent: #ffffff;
   --dpf-border: #d4d4dc;
   --dpf-border-strong: #c8c8d4;
   --dpf-muted: #6b7280;
@@ -47,6 +51,9 @@
     --dpf-text-secondary: #b8b8cc;
     --dpf-accent: #7c8cf8;
     --dpf-accent-soft: color-mix(in srgb, var(--dpf-accent) 18%, var(--dpf-surface-1));
+    /* Dark accent #7c8cf8 is light — white fails AA on it (3.0:1). The dark
+       bg color gives 6.3:1 and reads as "punched out of the page". */
+    --dpf-on-accent: #0f0f1a;
     --dpf-border: #2a2a40;
     --dpf-border-strong: #3a3a55;
     --dpf-muted: #8888a0;

@@ -6,23 +6,8 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { POActionButtons } from "@/components/finance/POActionButtons";
 import { LocalTime } from "@/components/ui/LocalTime";
-
-const STATUS_COLOURS: Record<string, string> = {
-  draft: "#8888a0",
-  sent: "#38bdf8",
-  acknowledged: "#a78bfa",
-  received: "#4ade80",
-  cancelled: "#6b7280",
-};
-
-const BILL_STATUS_COLOURS: Record<string, string> = {
-  draft: "#8888a0",
-  awaiting_approval: "#a78bfa",
-  approved: "#38bdf8",
-  partially_paid: "#fbbf24",
-  paid: "#4ade80",
-  void: "#6b7280",
-};
+import { StatusBadge } from "@/components/ui/report-kit";
+import { Surface } from "@/components/ui/Surface";
 
 type Props = { params: Promise<{ id: string }> };
 
@@ -34,7 +19,6 @@ export default async function PODetailPage({ params }: Props) {
   const orgSettings = await getOrgSettings();
   const sym = getCurrencySymbol(orgSettings.baseCurrency);
 
-  const statusColour = STATUS_COLOURS[po.status] ?? "#6b7280";
   const formatMoney = (amount: unknown) =>
     Number(amount).toLocaleString("en-GB", { minimumFractionDigits: 2 });
 
@@ -58,12 +42,12 @@ export default async function PODetailPage({ params }: Props) {
         <div>
           <div className="flex items-center gap-3 mb-1">
             <h1 className="text-xl font-bold text-[var(--dpf-text)]">{po.poNumber}</h1>
-            <span
-              className="text-[9px] px-2 py-0.5 rounded-full"
-              style={{ color: statusColour, backgroundColor: `${statusColour}20` }}
-            >
-              {po.status.replace(/_/g, " ")}
-            </span>
+            <StatusBadge
+              domain="financePurchaseOrder"
+              status={po.status}
+              label={po.status.replace(/_/g, " ")}
+              variant="soft"
+            />
           </div>
           <p className="text-sm text-[var(--dpf-muted)]">{po.supplier.name}</p>
         </div>
@@ -84,15 +68,12 @@ export default async function PODetailPage({ params }: Props) {
             value: <LocalTime value={po.createdAt} mode="date" />,
           },
         ].map(({ label, value }) => (
-          <div
-            key={label}
-            className="p-4 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)]"
-          >
+          <Surface key={label}>
             <p className="text-[10px] uppercase tracking-widest text-[var(--dpf-muted)] mb-1">
               {label}
             </p>
             <p className="text-sm text-[var(--dpf-text)]">{value}</p>
-          </div>
+          </Surface>
         ))}
       </div>
 
@@ -101,7 +82,7 @@ export default async function PODetailPage({ params }: Props) {
         <h2 className="text-[10px] uppercase tracking-widest text-[var(--dpf-muted)] mb-3">
           Line Items
         </h2>
-        <div className="rounded-lg border border-[var(--dpf-border)] overflow-hidden">
+        <Surface padding="none" className="overflow-hidden">
           <table className="w-full text-xs">
             <thead>
               <tr className="border-b border-[var(--dpf-border)]">
@@ -179,7 +160,7 @@ export default async function PODetailPage({ params }: Props) {
               </tr>
             </tfoot>
           </table>
-        </div>
+        </Surface>
       </section>
 
       {/* Linked Bills */}
@@ -188,7 +169,7 @@ export default async function PODetailPage({ params }: Props) {
           <h2 className="text-[10px] uppercase tracking-widest text-[var(--dpf-muted)] mb-3">
             Linked Bills
           </h2>
-          <div className="rounded-lg border border-[var(--dpf-border)] overflow-hidden">
+          <Surface padding="none" className="overflow-hidden">
             <table className="w-full text-xs">
               <thead>
                 <tr className="border-b border-[var(--dpf-border)]">
@@ -205,7 +186,6 @@ export default async function PODetailPage({ params }: Props) {
               </thead>
               <tbody>
                 {po.bills.map((bill) => {
-                  const colour = BILL_STATUS_COLOURS[bill.status] ?? "#6b7280";
                   return (
                     <tr
                       key={bill.id}
@@ -220,12 +200,12 @@ export default async function PODetailPage({ params }: Props) {
                         </Link>
                       </td>
                       <td className="px-4 py-2.5">
-                        <span
-                          className="text-[9px] px-1.5 py-0.5 rounded-full"
-                          style={{ color: colour, backgroundColor: `${colour}20` }}
-                        >
-                          {bill.status.replace(/_/g, " ")}
-                        </span>
+                        <StatusBadge
+                          domain="financeBill"
+                          status={bill.status}
+                          label={bill.status.replace(/_/g, " ")}
+                          variant="soft"
+                        />
                       </td>
                       <td className="px-4 py-2.5 text-right text-[var(--dpf-text)]">
                         {sym}{formatMoney(bill.totalAmount)}
@@ -235,7 +215,7 @@ export default async function PODetailPage({ params }: Props) {
                 })}
               </tbody>
             </table>
-          </div>
+          </Surface>
         </section>
       )}
     </div>

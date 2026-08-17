@@ -101,14 +101,14 @@ export function InquiryForm({
       formData: Object.keys(formData).length > 0 ? formData : undefined,
     });
 
-    if (!result.success) {
+    if (!result.ok) {
       setError(result.error);
       setLoading(false);
       return;
     }
 
     // Result-named route — an enquiry is not a checkout (BI-F20763F5).
-    router.push(`/s/${orgSlug}/inquiry/received?ref=${encodeURIComponent(result.ref)}`);
+    router.push(`/s/${orgSlug}/inquiry/received?ref=${encodeURIComponent(result.data.ref)}`);
   }
 
   const labelByName = new Map(formSchema.map((f) => [f.name, f.label] as const));

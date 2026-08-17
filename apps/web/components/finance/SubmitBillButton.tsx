@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { submitBillForApproval } from "@/lib/actions/ap";
+import { Button } from "@/components/ui/Button";
+import { FormStatus } from "@/components/ui/form";
 
 interface Props {
   billId: string;
@@ -28,16 +30,10 @@ export function SubmitBillButton({ billId }: Props) {
 
   return (
     <div>
-      <button
-        onClick={handleSubmit}
-        disabled={loading}
-        className="px-4 py-2 rounded-md text-sm font-medium bg-[var(--dpf-accent)] text-white hover:opacity-90 transition-opacity disabled:opacity-50"
-      >
+      <Button onClick={handleSubmit} disabled={loading}>
         {loading ? "Submitting…" : "Submit for Approval"}
-      </button>
-      {error && (
-        <p className="mt-2 text-xs text-[var(--dpf-error)]">{error}</p>
-      )}
+      </Button>
+      <FormStatus error={error} className="mt-2" />
     </div>
   );
 }

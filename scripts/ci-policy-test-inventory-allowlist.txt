@@ -22,6 +22,7 @@ scripts/check-missing-ci-dispatch.test.mjs
 scripts/check-module-size.test.mjs
 scripts/check-no-governed-surface-without-mcp-tool.test.mjs
 scripts/check-no-hand-rolled-loading.test.mjs
+scripts/check-no-local-action-result.test.mjs
 scripts/check-no-local-backup-helper.test.mjs
 scripts/check-no-local-client-credentials.test.mjs
 scripts/check-no-local-isrecord.test.mjs

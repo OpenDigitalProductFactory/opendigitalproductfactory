@@ -7,23 +7,8 @@ import Link from "next/link";
 import { getAiSupplierFinanceDetail } from "@/lib/finance/ai-provider-finance";
 import { AiSupplierFinancePanel } from "@/components/finance/AiSupplierFinancePanel";
 import { LocalTime } from "@/components/ui/LocalTime";
-
-const BILL_STATUS_COLOURS: Record<string, string> = {
-  draft: "#8888a0",
-  awaiting_approval: "#a78bfa",
-  approved: "#38bdf8",
-  partially_paid: "#fbbf24",
-  paid: "#4ade80",
-  void: "#6b7280",
-};
-
-const PO_STATUS_COLOURS: Record<string, string> = {
-  draft: "#8888a0",
-  sent: "#38bdf8",
-  acknowledged: "#a78bfa",
-  received: "#4ade80",
-  cancelled: "#6b7280",
-};
+import { StatusBadge } from "@/components/ui/report-kit";
+import { Surface } from "@/components/ui/Surface";
 
 type Props = { params: Promise<{ id: string }> };
 
@@ -65,13 +50,13 @@ export default async function SupplierDetailPage({ params }: Props) {
         <div className="flex gap-2">
           <Link
             href={`/finance/bills/new?supplierId=${supplier.id}`}
-            className="px-3 py-1.5 rounded-md text-xs font-medium bg-[var(--dpf-accent)] text-white hover:opacity-90 transition-opacity"
+            className="px-3 py-1.5 rounded-md text-xs font-medium bg-[var(--dpf-accent)] text-[var(--dpf-on-accent)] hover:opacity-90 transition-opacity"
           >
             New Bill
           </Link>
           <Link
             href={`/finance/purchase-orders/new?supplierId=${supplier.id}`}
-            className="px-3 py-1.5 rounded-md text-xs font-medium border border-[var(--dpf-border)] text-[var(--dpf-muted)] hover:text-[var(--dpf-text)] hover:border-white transition-colors"
+            className="px-3 py-1.5 rounded-md text-xs font-medium border border-[var(--dpf-border)] text-[var(--dpf-muted)] hover:text-[var(--dpf-text)] hover:border-[var(--dpf-border-strong)] transition-colors"
           >
             New PO
           </Link>
@@ -88,15 +73,12 @@ export default async function SupplierDetailPage({ params }: Props) {
           { label: "Payment Terms", value: supplier.paymentTerms },
           { label: "Currency", value: supplier.defaultCurrency },
         ].map(({ label, value }) => (
-          <div
-            key={label}
-            className="p-4 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)]"
-          >
+          <Surface key={label}>
             <p className="text-[10px] uppercase tracking-widest text-[var(--dpf-muted)] mb-1">
               {label}
             </p>
             <p className="text-sm text-[var(--dpf-text)]">{value}</p>
-          </div>
+          </Surface>
         ))}
       </div>
 
@@ -119,7 +101,7 @@ export default async function SupplierDetailPage({ params }: Props) {
         {supplier.bills.length === 0 ? (
           <p className="text-sm text-[var(--dpf-muted)]">No bills yet.</p>
         ) : (
-          <div className="rounded-lg border border-[var(--dpf-border)] overflow-hidden">
+          <Surface padding="none" className="overflow-hidden">
             <table className="w-full text-xs">
               <thead>
                 <tr className="border-b border-[var(--dpf-border)]">
@@ -131,7 +113,6 @@ export default async function SupplierDetailPage({ params }: Props) {
               </thead>
               <tbody>
                 {supplier.bills.map((bill) => {
-                  const colour = BILL_STATUS_COLOURS[bill.status] ?? "#6b7280";
                   return (
                     <tr
                       key={bill.id}
@@ -146,12 +127,12 @@ export default async function SupplierDetailPage({ params }: Props) {
                         </Link>
                       </td>
                       <td className="px-4 py-2.5">
-                        <span
-                          className="text-[9px] px-1.5 py-0.5 rounded-full"
-                          style={{ color: colour, backgroundColor: `${colour}20` }}
-                        >
-                          {bill.status.replace(/_/g, " ")}
-                        </span>
+                        <StatusBadge
+                          domain="financeBill"
+                          status={bill.status}
+                          label={bill.status.replace(/_/g, " ")}
+                          variant="soft"
+                        />
                       </td>
                       <td className="px-4 py-2.5 text-[var(--dpf-muted)]">
                         <LocalTime value={bill.dueDate} utc />
@@ -164,7 +145,7 @@ export default async function SupplierDetailPage({ params }: Props) {
                 })}
               </tbody>
             </table>
-          </div>
+          </Surface>
         )}
       </section>
 
@@ -185,7 +166,7 @@ export default async function SupplierDetailPage({ params }: Props) {
         {supplier.purchaseOrders.length === 0 ? (
           <p className="text-sm text-[var(--dpf-muted)]">No purchase orders yet.</p>
         ) : (
-          <div className="rounded-lg border border-[var(--dpf-border)] overflow-hidden">
+          <Surface padding="none" className="overflow-hidden">
             <table className="w-full text-xs">
               <thead>
                 <tr className="border-b border-[var(--dpf-border)]">
@@ -196,7 +177,6 @@ export default async function SupplierDetailPage({ params }: Props) {
               </thead>
               <tbody>
                 {supplier.purchaseOrders.map((po) => {
-                  const colour = PO_STATUS_COLOURS[po.status] ?? "#6b7280";
                   return (
                     <tr
                       key={po.id}
@@ -211,12 +191,12 @@ export default async function SupplierDetailPage({ params }: Props) {
                         </Link>
                       </td>
                       <td className="px-4 py-2.5">
-                        <span
-                          className="text-[9px] px-1.5 py-0.5 rounded-full"
-                          style={{ color: colour, backgroundColor: `${colour}20` }}
-                        >
-                          {po.status.replace(/_/g, " ")}
-                        </span>
+                        <StatusBadge
+                          domain="financePurchaseOrder"
+                          status={po.status}
+                          label={po.status.replace(/_/g, " ")}
+                          variant="soft"
+                        />
                       </td>
                       <td className="px-4 py-2.5 text-right text-[var(--dpf-text)]">
                         {sym}{formatMoney(po.totalAmount)}
@@ -226,7 +206,7 @@ export default async function SupplierDetailPage({ params }: Props) {
                 })}
               </tbody>
             </table>
-          </div>
+          </Surface>
         )}
       </section>
     </div>

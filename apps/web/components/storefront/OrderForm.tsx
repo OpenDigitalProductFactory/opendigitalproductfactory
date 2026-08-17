@@ -77,13 +77,13 @@ export function OrderForm({
       currency,
     });
 
-    if (!result.success) {
+    if (!result.ok) {
       setError(result.error);
       setLoading(false);
       return;
     }
 
-    router.push(`/s/${orgSlug}/checkout?ref=${result.ref}&type=order`);
+    router.push(`/s/${orgSlug}/checkout?ref=${result.data.ref}&type=order`);
   }
 
   return (

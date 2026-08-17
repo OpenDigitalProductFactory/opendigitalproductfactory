@@ -29,7 +29,7 @@ function revalidateDiscoverySurfaces() {
   DISCOVERY_REVALIDATE_PATHS.forEach((path) => revalidatePath(path));
 }
 
-type InventoryActionResult = { ok: true } | { ok: false; error: string };
+import { type ActionResult } from "@/lib/shared/action-result";
 
 type DiscoveryManager = {
   id?: string | null;
@@ -359,7 +359,7 @@ export async function dismissEntity(
 
 export async function requestDiscoveryEvidence(
   entityId: string,
-): Promise<InventoryActionResult> {
+): Promise<ActionResult> {
   const authResult = await requireManageDiscovery();
   if (!authResult.ok) return authResult;
 
@@ -381,7 +381,7 @@ export async function requestDiscoveryEvidence(
 
 export async function markTaxonomyGapForReview(
   entityId: string,
-): Promise<InventoryActionResult> {
+): Promise<ActionResult> {
   const authResult = await requireManageDiscovery();
   if (!authResult.ok) return authResult;
 
@@ -403,7 +403,7 @@ export async function markTaxonomyGapForReview(
 
 export async function acceptTriageRecommendation(
   decisionId: string,
-): Promise<InventoryActionResult> {
+): Promise<ActionResult> {
   const authResult = await requireManageDiscovery();
   if (!authResult.ok) return authResult;
 

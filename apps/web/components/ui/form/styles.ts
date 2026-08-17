@@ -22,10 +22,16 @@ export const fieldHintClass = "text-xs text-[var(--dpf-muted)]";
 /** Inline validation / error text. */
 export const fieldErrorClass = "text-xs text-[var(--dpf-error)]";
 
-/** Primary submit button. */
+/**
+ * Primary submit button — form-kit compat surface. Kept for the existing form
+ * contract (SubmitButton composes it); NEW standalone buttons compose
+ * `ui/Button` instead of raw class strings. Label resolves through
+ * --dpf-on-accent so it passes WCAG AA in both themes and under brand
+ * overrides (BI-D25ED55D — text-white on accent was the pre-token defect).
+ */
 export const primaryButtonClass =
   "inline-flex items-center justify-center gap-2 rounded-md bg-[var(--dpf-accent)] " +
-  "px-4 py-2 text-sm font-semibold text-white transition-opacity " +
+  "px-4 py-2 text-sm font-semibold text-[var(--dpf-on-accent)] transition-opacity " +
   "hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60";
 
 /** Join class strings, dropping falsy values. */

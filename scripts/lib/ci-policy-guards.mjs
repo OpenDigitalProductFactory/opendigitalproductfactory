@@ -174,6 +174,13 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       node("--test", "scripts/check-fk-index-coverage.test.mjs"),
       node("scripts/check-fk-index-coverage.mjs"),
     ]),
+    // BI-D25ED55D: UX primitive-adoption budgets (inline accent-button/card
+    // strings outside components/ui + text-white) may only shrink against the
+    // owned baseline — the ratchet half of the W5 UX foundation pack.
+    guard("ux-primitive-adoption-guard", "UX Primitive Adoption Guard", [
+      node("--test", "scripts/check-ux-primitive-adoption.test.mjs"),
+      node("scripts/check-ux-primitive-adoption.mjs"),
+    ]),
     // BI-873F3C48: every growth-shaped (event/log/telemetry) model must be
     // retention-enrolled (purge or retained) or deliberately allowlisted.
     guard("retention-enrollment-guard", "Retention Enrollment Guard", [

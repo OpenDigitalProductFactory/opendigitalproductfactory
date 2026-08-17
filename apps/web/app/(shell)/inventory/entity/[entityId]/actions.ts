@@ -2,8 +2,7 @@
 
 import { prisma, resolveCanonicalInventoryEntityId } from "@dpf/db";
 import { revalidatePath } from "next/cache";
-
-type ActionResult = { ok: true } | { ok: false; error: string };
+import type { ActionResult } from "@/lib/shared/action-result";
 
 // Confirm support status for a device. Used when the operator has
 // independently verified the device is in active support (warranty

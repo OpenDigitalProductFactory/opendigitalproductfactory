@@ -27,7 +27,7 @@ export function DataStewardPanel({ recent }: { recent: AutoResolution[] }) {
     setResult(null);
     startTransition(async () => {
       const r = await runDataStewardAction(dryRun);
-      setResult(r.ok ? r.summary : r.message);
+      setResult(r.ok ? r.data : r.error);
     });
   }
 
