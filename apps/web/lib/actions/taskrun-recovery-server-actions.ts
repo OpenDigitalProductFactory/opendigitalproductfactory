@@ -7,10 +7,7 @@ import {
   taskrunEscalate,
   TaskrunRecoveryError,
 } from "./taskrun-recovery";
-
-type Result<T = void> =
-  | (T extends void ? { ok: true } : { ok: true } & T)
-  | { ok: false; error: string };
+import { ok, err, type ActionResult } from "@/lib/shared/action-result";
 
 /**
  * Server-action wrappers for Phase F recovery UI. They:
@@ -40,38 +37,38 @@ function describeError(err: unknown): string {
 export async function serverTaskrunRetry(
   taskRunId: string,
   opts: { force?: boolean } = {},
-): Promise<Result<{ newTaskRunId: string; strategy: string }>> {
+): Promise<ActionResult<{ newTaskRunId: string; strategy: string }>> {
   const userId = await operatorUserId();
-  if (!userId) return { ok: false, error: "Not authenticated" };
+  if (!userId) return err("Not authenticated");
   try {
     const { newTaskRunId, strategy } = await taskrunRetry(taskRunId, userId, opts);
-    return { ok: true, newTaskRunId, strategy };
-  } catch (err) {
-    return { ok: false, error: describeError(err) };
+    return ok({ newTaskRunId, strategy });
+  } catch (e) {
+    return err(describeError(e));
   }
 }
 
-export async function serverTaskrunAbandon(taskRunId: string): Promise<Result> {
+export async function serverTaskrunAbandon(taskRunId: string): Promise<ActionResult> {
   const userId = await operatorUserId();
-  if (!userId) return { ok: false, error: "Not authenticated" };
+  if (!userId) return err("Not authenticated");
   try {
     await taskrunAbandon(taskRunId, userId);
-    return { ok: true };
-  } catch (err) {
-    return { ok: false, error: describeError(err) };
+    return ok();
+  } catch (e) {
+    return err(describeError(e));
   }
 }
 
 export async function serverTaskrunEscalate(
   taskRunId: string,
   notes?: string,
-): Promise<Result> {
+): Promise<ActionResult> {
   const userId = await operatorUserId();
-  if (!userId) return { ok: false, error: "Not authenticated" };
+  if (!userId) return err("Not authenticated");
   try {
     await taskrunEscalate(taskRunId, userId, notes);
-    return { ok: true };
-  } catch (err) {
-    return { ok: false, error: describeError(err) };
+    return ok();
+  } catch (e) {
+    return err(describeError(e));
   }
 }

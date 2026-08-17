@@ -71,7 +71,7 @@ describe("InquiryForm — empty validation", () => {
 
 describe("InquiryForm — safe successful submit", () => {
   it("submits valid data and navigates to the named result route", async () => {
-    submitInquiry.mockResolvedValue({ success: true, ref: "INQ-XYZ789", type: "inquiry" });
+    submitInquiry.mockResolvedValue({ ok: true, data: { ref: "INQ-XYZ789", type: "inquiry" } });
     setup();
 
     fireEvent.change(screen.getByLabelText(/your name/i), { target: { value: "UX Study Guest" } });
@@ -91,7 +91,7 @@ describe("InquiryForm — safe successful submit", () => {
   });
 
   it("surfaces a server error without navigating", async () => {
-    submitInquiry.mockResolvedValue({ success: false, error: "Storefront not published" });
+    submitInquiry.mockResolvedValue({ ok: false, error: "Storefront not published" });
     setup();
 
     fireEvent.change(screen.getByLabelText(/your name/i), { target: { value: "Guest" } });

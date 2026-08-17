@@ -44,13 +44,16 @@ export interface EnvelopeRow {
   resolvedAt: Date | null;
 }
 
-export type ActionResult<T = EnvelopeRow> =
+// Deliberately NOT lib/shared/action-result's ActionResult: this is an HTTP
+// refusal contract (structured reason + status for the API routes), renamed so
+// the generic name has exactly one home (BI-1CED89B9, Simplify & Strengthen W6).
+export type EnvelopeActionResult<T = EnvelopeRow> =
   | { ok: true; envelope: T }
   | { ok: false; reason: string; httpStatus: number };
 
 /** Common load + validate prelude. Returns the row in a known-good shape
  *  (with `status` typed as EnvelopeStatus) or a structured refusal. */
-async function loadEnvelope(envelopeId: string): Promise<ActionResult<EnvelopeRow>> {
+async function loadEnvelope(envelopeId: string): Promise<EnvelopeActionResult<EnvelopeRow>> {
   const row = await prisma.coworkerActionEnvelope.findUnique({ where: { id: envelopeId } });
   if (!row) {
     return { ok: false, reason: `Envelope ${envelopeId} not found.`, httpStatus: 404 };
@@ -68,7 +71,7 @@ async function loadEnvelope(envelopeId: string): Promise<ActionResult<EnvelopeRo
 /** Verify the calling user matches the envelope's delegating user. Coworker
  *  actions only ever resolve on behalf of the user who initiated the
  *  chat turn that produced the proposal. */
-function assertCallerIsDelegate(envelope: EnvelopeRow, callerUserId: string): ActionResult<EnvelopeRow> {
+function assertCallerIsDelegate(envelope: EnvelopeRow, callerUserId: string): EnvelopeActionResult<EnvelopeRow> {
   if (envelope.delegatingUserId !== callerUserId) {
     return {
       ok: false,
@@ -89,7 +92,7 @@ function assertCallerIsDelegate(envelope: EnvelopeRow, callerUserId: string): Ac
 export async function approveEnvelope(
   envelopeId: string,
   callerUserId: string,
-): Promise<ActionResult<EnvelopeRow>> {
+): Promise<EnvelopeActionResult<EnvelopeRow>> {
   const load = await loadEnvelope(envelopeId);
   if (!load.ok) return load;
   const authz = assertCallerIsDelegate(load.envelope, callerUserId);
@@ -117,7 +120,7 @@ export async function approveEnvelope(
 export async function denyEnvelope(
   envelopeId: string,
   callerUserId: string,
-): Promise<ActionResult<EnvelopeRow>> {
+): Promise<EnvelopeActionResult<EnvelopeRow>> {
   const load = await loadEnvelope(envelopeId);
   if (!load.ok) return load;
   const authz = assertCallerIsDelegate(load.envelope, callerUserId);
@@ -145,7 +148,7 @@ export async function denyEnvelope(
 export async function cancelEnvelope(
   envelopeId: string,
   callerUserId: string,
-): Promise<ActionResult<EnvelopeRow>> {
+): Promise<EnvelopeActionResult<EnvelopeRow>> {
   const load = await loadEnvelope(envelopeId);
   if (!load.ok) return load;
   const authz = assertCallerIsDelegate(load.envelope, callerUserId);
@@ -172,7 +175,7 @@ export async function cancelEnvelope(
  *  call; these helpers only record the outcome against the envelope.
  *  Status flow: approved → executed (on success) or approved → failed
  *  (on error). Both are terminal. */
-export async function markEnvelopeExecuted(envelopeId: string): Promise<ActionResult<EnvelopeRow>> {
+export async function markEnvelopeExecuted(envelopeId: string): Promise<EnvelopeActionResult<EnvelopeRow>> {
   const load = await loadEnvelope(envelopeId);
   if (!load.ok) return load;
 
@@ -192,7 +195,7 @@ export async function markEnvelopeExecuted(envelopeId: string): Promise<ActionRe
   return { ok: true, envelope: updated as EnvelopeRow };
 }
 
-export async function markEnvelopeFailed(envelopeId: string): Promise<ActionResult<EnvelopeRow>> {
+export async function markEnvelopeFailed(envelopeId: string): Promise<EnvelopeActionResult<EnvelopeRow>> {
   const load = await loadEnvelope(envelopeId);
   if (!load.ok) return load;
 

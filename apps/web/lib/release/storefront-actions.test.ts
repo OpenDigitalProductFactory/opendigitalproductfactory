@@ -61,8 +61,8 @@ describe("submitInquiry", () => {
       customerName: "Alice",
       message: "Hello",
     });
-    expect(result.success).toBe(false);
-    expect((result as { success: false; error: string }).error).toMatch(/not found/i);
+    expect(result.ok).toBe(false);
+    expect((result as { ok: false; error: string }).error).toMatch(/not found/i);
   });
 
   it("creates inquiry and returns ref when storefront is published", async () => {
@@ -78,9 +78,9 @@ describe("submitInquiry", () => {
       customerName: "Alice",
       message: "Hello",
     });
-    expect(result.success).toBe(true);
-    expect((result as { success: true; ref: string; type: string }).ref).toBe("INQ-TESTREF");
-    expect((result as { success: true; ref: string; type: string }).type).toBe("inquiry");
+    expect(result.ok).toBe(true);
+    expect((result as { ok: true; data: { ref: string; type: string } }).data.ref).toBe("INQ-TESTREF");
+    expect((result as { ok: true; data: { ref: string; type: string } }).data.type).toBe("inquiry");
   });
 });
 
@@ -93,7 +93,7 @@ describe("submitDonation", () => {
       donorEmail: "d@e.com",
       amount: 10,
     });
-    expect(result.success).toBe(false);
+    expect(result.ok).toBe(false);
   });
 });
 
@@ -157,9 +157,8 @@ describe("submitOrder Product Sold traceability", () => {
     });
 
     expect(result).toEqual({
-      success: true,
-      ref: "ORD-TESTREF",
-      type: "order",
+      ok: true,
+      data: { ref: "ORD-TESTREF", type: "order" },
     });
     expect(prisma.$transaction).toHaveBeenCalledTimes(1);
     expect(prisma.storefrontOrder.create).toHaveBeenCalledWith(
@@ -227,7 +226,7 @@ describe("submitOrder Product Sold traceability", () => {
       totalAmount: 20,
     });
 
-    expect(result.success).toBe(true);
+    expect(result.ok).toBe(true);
     expect(prisma.storefrontOrderLineItem.create).not.toHaveBeenCalled();
     expect(prisma.productSold.upsert).not.toHaveBeenCalled();
   });
@@ -335,7 +334,7 @@ describe("submitBooking (enhanced)", () => {
       scheduledAt: new Date("2026-03-23T09:00:00Z"), durationMinutes: 45,
       holderToken: "tok-abc",
     });
-    expect(result.success).toBe(true);
+    expect(result.ok).toBe(true);
     expect(prisma.bookingHold.delete).toHaveBeenCalledWith({ where: { id: "hold-1" } });
   });
 
@@ -348,8 +347,8 @@ describe("submitBooking (enhanced)", () => {
       scheduledAt: new Date("2026-03-23T09:00:00Z"), durationMinutes: 45,
       holderToken: "invalid-token",
     });
-    expect(result.success).toBe(false);
-    if (!result.success) expect(result.error).toMatch(/invalid|expired/i);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toMatch(/invalid|expired/i);
   });
 
   it("rejects duplicate submission via idempotency key", async () => {
@@ -367,8 +366,8 @@ describe("submitBooking (enhanced)", () => {
       scheduledAt: new Date("2026-03-23T09:00:00Z"), durationMinutes: 45,
       holderToken: "tok-def", idempotencyKey: "dup-key",
     });
-    expect(result.success).toBe(false);
-    if (!result.success) expect(result.error).toMatch(/duplicate/i);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toMatch(/duplicate/i);
   });
 
   it("runs booking creation inside a transaction", async () => {
@@ -418,7 +417,7 @@ describe("submitBooking (enhanced)", () => {
       covers: 4,
     });
 
-    expect(result.success).toBe(true);
+    expect(result.ok).toBe(true);
     expect(prisma.businessProfile.findFirst).toHaveBeenCalledWith({
       where: { isActive: true },
       select: { timezone: true },
@@ -462,7 +461,7 @@ describe("submitBooking (enhanced)", () => {
     });
 
     expect(result).toEqual({
-      success: false,
+      ok: false,
       error: "That table is not available for reservations. Please choose another time.",
     });
     expect(prisma.storefrontBooking.create).not.toHaveBeenCalled();
@@ -484,7 +483,7 @@ describe("submitBooking (enhanced)", () => {
     });
 
     expect(result).toEqual({
-      success: false,
+      ok: false,
       error: "That table is not available for reservations. Please choose another time.",
     });
     expect(prisma.storefrontBooking.create).not.toHaveBeenCalled();
@@ -526,7 +525,7 @@ describe("submitBooking (enhanced)", () => {
     });
 
     expect(result).toEqual({
-      success: false,
+      ok: false,
       error: "That table cannot seat this party. Please choose a smaller party or contact the venue.",
     });
   });
@@ -545,8 +544,8 @@ describe("submitBooking (enhanced)", () => {
       scheduledAt: new Date("2026-03-23T09:00:00Z"), durationMinutes: 45,
       providerId: "prov-1",
     });
-    expect(result.success).toBe(false);
-    if (!result.success) expect(result.error).toMatch(/no longer available/i);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toMatch(/no longer available/i);
   });
 });
 
@@ -563,7 +562,7 @@ describe("submitBooking (recurring)", () => {
       recurrenceRule: "weekly" as const,
       recurrenceEndDate: new Date("2026-04-13T00:00:00Z"), // ~3 weeks out
     });
-    expect(result.success).toBe(true);
+    expect(result.ok).toBe(true);
     // Parent + 3 children = 4 total create calls
     expect(prisma.storefrontBooking.create).toHaveBeenCalledTimes(4);
   });

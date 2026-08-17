@@ -22,17 +22,16 @@ import {
   type MergeResult,
   type UnmergeResult,
 } from "@/lib/mdm/merge";
+import { ok, err, type ActionResult } from "@/lib/shared/action-result";
 
-type ActionResult<T> = { ok: true; data: T } | { ok: false; message: string };
-
-async function requireAdmin(): Promise<{ ok: false; message: string } | null> {
+async function requireAdmin(): Promise<{ ok: false; error: string } | null> {
   const session = await auth();
   const user = session?.user;
   if (
     !user ||
     !can({ platformRole: user.platformRole, isSuperuser: user.isSuperuser }, "view_admin")
   ) {
-    return { ok: false, message: "Not authorized." };
+    return err("Not authorized.");
   }
   return null;
 }
@@ -49,7 +48,7 @@ export async function listCustomerAccountMergeTargets(
     take: 200,
     select: { id: true, name: true, accountId: true, status: true },
   });
-  return { ok: true, data: targets };
+  return ok(targets);
 }
 
 export type MergeImpactPreview = {
@@ -66,16 +65,16 @@ export async function previewCustomerAccountMerge(
 ): Promise<ActionResult<MergeImpactPreview>> {
   const denied = await requireAdmin();
   if (denied) return denied;
-  if (loserId === survivorId) return { ok: false, message: "Pick two different accounts." };
+  if (loserId === survivorId) return err("Pick two different accounts.");
 
   const select = { id: true, name: true, accountId: true, status: true };
   const [loser, survivor] = await Promise.all([
     prisma.customerAccount.findUnique({ where: { id: loserId }, select }),
     prisma.customerAccount.findUnique({ where: { id: survivorId }, select }),
   ]);
-  if (!loser || !survivor) return { ok: false, message: "Account not found." };
+  if (!loser || !survivor) return err("Account not found.");
   if (loser.status === "superseded" || survivor.status === "superseded") {
-    return { ok: false, message: "A superseded account cannot participate in a merge." };
+    return err("A superseded account cannot participate in a merge.");
   }
 
   const adapter = MERGE_ADAPTERS["customer-account"];
@@ -87,7 +86,7 @@ export async function previewCustomerAccountMerge(
     const count = await client[step.model]!.count({ where });
     if (count > 0) impact[`${step.model}.${step.field}`] = count;
   }
-  return { ok: true, data: { loser, survivor, impact } };
+  return ok({ loser, survivor, impact });
 }
 
 /** Execute the merge (loser → survivor) and log the audit activity. */
@@ -101,11 +100,11 @@ export async function mergeCustomerAccounts(
   let result: MergeResult;
   try {
     result = await mergeRecords("customer-account", loserId, survivorId);
-  } catch (err) {
-    if (err instanceof MergeValidationFailure) {
-      return { ok: false, message: `Merge rejected: ${err.reason}.` };
+  } catch (e) {
+    if (e instanceof MergeValidationFailure) {
+      return err(`Merge rejected: ${e.reason}.`);
     }
-    throw err;
+    throw e;
   }
 
   // Audit trail: the full MergeResult (snapshot + repoint counts) as a system
@@ -123,7 +122,7 @@ export async function mergeCustomerAccounts(
 
   revalidatePath("/customer");
   revalidatePath(`/customer/${survivorId}`);
-  return { ok: true, data: result };
+  return ok(result);
 }
 
 /** Reverse a merge from the tombstone (admin; lineage-based, BI-F7B6D55E). */
@@ -136,17 +135,17 @@ export async function unmergeCustomerAccounts(
   let result: UnmergeResult;
   try {
     result = await unmergeRecords(loserId);
-  } catch (err) {
-    if (err instanceof UnmergeValidationFailure) {
+  } catch (e) {
+    if (e instanceof UnmergeValidationFailure) {
       const why: Record<string, string> = {
         "not-merged": "This account is not a merge tombstone.",
         "no-audit": "No merge audit record found — cannot restore safely.",
         "lossy-lineage": "The merge moved more rows than the lineage cap records — manual restore required.",
         "survivor-mismatch": "The tombstone does not match the audit record.",
       };
-      return { ok: false, message: why[err.reason] ?? `Unmerge rejected: ${err.reason}.` };
+      return err(why[e.reason] ?? `Unmerge rejected: ${e.reason}.`);
     }
-    throw err;
+    throw e;
   }
 
   await prisma.activity.create({
@@ -163,5 +162,5 @@ export async function unmergeCustomerAccounts(
   revalidatePath("/customer");
   revalidatePath(`/customer/${loserId}`);
   revalidatePath(`/customer/${result.survivorId}`);
-  return { ok: true, data: result };
+  return ok(result);
 }
