@@ -67,3 +67,67 @@ describe("evaluateBuildStudioIdeateStartGate", () => {
     }));
   });
 });
+
+describe("ship gate acumen consults (W16, BI-18519A73)", () => {
+  it("stays byte-identical when plannedFilePaths is absent", async () => {
+    evaluateGate.mockResolvedValue({
+      allowed: true,
+      interactionId: "DI-ship-2",
+      evaluation: { outcomeType: "recommend" },
+      operatorMessage: "Recommended",
+      orgProfileSelected: false,
+    });
+    const runner = vi.fn();
+
+    const result = await evaluateBuildStudioShipGate({
+      db: {},
+      build: { buildId: "FB-TEST", planReview: null, deliberationSummary: null },
+      sensitivity: "low",
+      acumenConsultRunner: runner as never,
+    });
+
+    expect(runner).not.toHaveBeenCalled();
+    expect((result as { acumenConsults?: unknown }).acumenConsults).toBeUndefined();
+    expect(result.operatorMessage).toBe("Recommended");
+  });
+
+  it("attaches advisory consults without changing the ship verdict", async () => {
+    evaluateGate.mockResolvedValue({
+      allowed: true,
+      interactionId: "DI-ship-3",
+      evaluation: { outcomeType: "recommend" },
+      operatorMessage: "Recommended",
+      orgProfileSelected: false,
+    });
+    const runner = vi.fn().mockResolvedValue([
+      {
+        professionKey: "security",
+        interactionId: "DI-ACU-SEC",
+        outcomeType: "defer",
+        confidenceScore: 0,
+        rationale: "no applicable craft guidance",
+        professionProfileSelected: false,
+      },
+    ]);
+
+    const result = await evaluateBuildStudioShipGate({
+      db: {},
+      build: { buildId: "FB-TEST", planReview: null, deliberationSummary: null },
+      sensitivity: "low",
+      plannedFilePaths: ["apps/web/app/api/users/route.ts"],
+      acumenConsultRunner: runner as never,
+    });
+
+    expect(result.allowed).toBe(true);
+    expect((result as { acumenConsults?: unknown[] }).acumenConsults?.length).toBe(1);
+    expect(result.operatorMessage).toContain("security: defer");
+    expect(runner).toHaveBeenCalledWith(
+      expect.objectContaining({
+        filePaths: ["apps/web/app/api/users/route.ts"],
+        phaseFrom: "review",
+        phaseTo: "ship",
+        callingPopulation: "build_studio_phase_gate",
+      }),
+    );
+  });
+});

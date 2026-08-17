@@ -66,3 +66,23 @@ exposed as `spineDimensionKind`). Consequence for axis authors (incl. BI-F405AC5
 projecting onto a cost axis must score the deficit — `hierarchy_flatness`, `disclosure_debt`,
 `perceptual_clutter` — never the goodness. Mixed-polarity projection targets are rejected
 outright: one axis cannot be both.
+
+## Addendum (2026-08-16, BI-18519A73 / W16): Phase 3 landed for the profession-gate path
+
+The feature-key/scoring wiring shipped where profession decisions actually meet
+principle vectors today: the shared commandment argmax
+(`apps/web/lib/decision-perspective/option-recommendation.ts`). When a
+`professionKey` is in scope and an option's features carry namespaced
+`<profession>/<axis>` keys, `projectLocalAxisVector` rolls them onto the spine
+before `decide()` runs; `profession-gate.ts` threads its resolved
+`professionKey` into `resolveRecommendedOptionId`. Scope is deliberately the
+profession-gate path only — the WWMD `principle_decide` retrieval path
+(validateOptionFeatures / buildFeaturesDescription) is untouched and remains
+the outstanding remainder of Phase 3.
+
+Same slice (W16, EP-413F2602): Build Studio phase gates now consult the
+IMPACTED acumens' profession gates (`acumen-impact.ts`,
+`acumen-phase-consult.ts` — advisory; consults never change a gate's `allowed`
+verdict), and consults the craft cannot answer nominate a corpus gap as a
+`CoworkerCapabilityNeed` for human consolidation in the review-service inbox
+(`acumen-gap-nomination.ts`). Guards nominate; the human consolidates.

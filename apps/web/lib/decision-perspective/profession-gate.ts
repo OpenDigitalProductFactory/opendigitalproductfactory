@@ -346,6 +346,11 @@ export async function evaluateProfessionDecisionGate(input: {
     scoredOptions: input.scoredOptions,
     organizationId: null,
     outcomeType: evaluation.outcomeType,
+    // Phase 3 of the profession-local-axes plan (BI-106C2585): the resolved
+    // profession scopes local-axis projection, so a caller that scored
+    // namespaced `<profession>/<axis>` features has them rolled onto the spine
+    // instead of silently ignored. Profession-gate path only.
+    professionKey,
   });
 
   traceWsid("wsid.evaluator.complete", {

@@ -12,15 +12,29 @@ import type {
 } from "./types";
 import { PLAN_READINESS_DOMAIN_CLASS } from "./types";
 import { runVoiceSynthesisJob } from "../voice-synthesis/synthesis-job";
+import {
+  realAcumenGapNomination,
+  runAcumenPhaseConsults,
+  summarizeAcumenConsults,
+  type AcumenConsultResult,
+} from "./acumen-phase-consult";
 
 type BuildStudioGateClient = any;
 type GateEvaluator = (input: DecisionPerspectiveEvaluationInput) => DecisionPerspectiveEvaluationResult;
+type AcumenConsultRunner = typeof runAcumenPhaseConsults;
 
 export type BuildStudioDecisionGateResult = {
   allowed: boolean;
   interactionId: string;
   evaluation: DecisionPerspectiveEvaluationResult;
   operatorMessage: string;
+  /**
+   * W16 (BI-18519A73): advisory consults from the acumens impacted by the
+   * phase's planned file paths. Present only when the caller supplied
+   * `plannedFilePaths`; NEVER changes `allowed` — blocking on acumen verdicts
+   * is a later, ratified step.
+   */
+  acumenConsults?: AcumenConsultResult[];
 };
 
 export type BuildStudioPlanAdvancementBuild = {
@@ -101,6 +115,15 @@ export async function evaluateBuildStudioPlanAdvancementGate(input: {
   evaluator?: GateEvaluator;
   now?: Date;
   riskTier?: DecisionRiskTier;
+  /**
+   * W16 (BI-18519A73): file paths the build plans to touch. When absent the
+   * gate behaves byte-identically to before; when present, each IMPACTED
+   * acumen's profession gate is consulted (advisory) and the results are
+   * attached to the return + summarized in the operator message.
+   */
+  plannedFilePaths?: readonly string[];
+  /** Injectable for tests; defaults to the real consult composition. */
+  acumenConsultRunner?: AcumenConsultRunner;
 }): Promise<BuildStudioDecisionGateResult> {
   const question = planAdvancementQuestion(input.build);
   const options = planAdvancementOptions();
@@ -127,10 +150,37 @@ export async function evaluateBuildStudioPlanAdvancementGate(input: {
     },
   });
 
-  return {
+  const gateResult: BuildStudioDecisionGateResult = {
     allowed: result.allowed,
     interactionId: result.interactionId,
     evaluation: result.evaluation,
     operatorMessage: result.operatorMessage,
   };
+
+  // W16 (BI-18519A73): advisory acumen consults, only when the caller told us
+  // which files the phase intends to touch. The `allowed` verdict above is
+  // final before the consults run and is never revised by them.
+  if (input.plannedFilePaths && input.plannedFilePaths.length > 0) {
+    const runConsults = input.acumenConsultRunner ?? runAcumenPhaseConsults;
+    const acumenConsults = await runConsults({
+      db: input.db,
+      filePaths: input.plannedFilePaths,
+      question,
+      options,
+      optionFeatures: scoredPlanAdvancementOptions(),
+      riskTier,
+      callingPopulation: "build_studio_phase_gate",
+      routeContext: "/build",
+      phaseFrom: "plan",
+      phaseTo: "build",
+      triggeredByUserId: input.triggeredByUserId,
+      nominateGap: realAcumenGapNomination,
+    });
+    if (acumenConsults.length > 0) {
+      gateResult.acumenConsults = acumenConsults;
+      gateResult.operatorMessage = `${gateResult.operatorMessage} ${summarizeAcumenConsults(acumenConsults)}`;
+    }
+  }
+
+  return gateResult;
 }
