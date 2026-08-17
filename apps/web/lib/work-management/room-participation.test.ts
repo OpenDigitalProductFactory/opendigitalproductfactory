@@ -12,14 +12,19 @@ import {
 } from "./room-shapes";
 
 describe("Work Room participation", () => {
-  it("registers the five consequential collaboration shapes", () => {
+  it("registers the consequential collaboration shapes plus the standing craft shape", () => {
     expect(WORKROOM_SHAPE_KEYS).toEqual([
       "specialist-alignment", "approval-sign-off", "outward-review",
-      "change-consequential", "escalation",
+      "change-consequential", "escalation", "craft-stewardship",
     ]);
     expect(getWorkroomShape("specialist-alignment")).toMatchObject({
       authorityLadderLevel: "action",
       inclusionOrder: ["coordinator", "specialist", "approver"],
+    });
+    expect(getWorkroomShape("craft-stewardship")).toMatchObject({
+      authorityLadderLevel: "content",
+      sensitivityStepUp: false,
+      inclusionOrder: ["coordinator", "specialist"],
     });
   });
 

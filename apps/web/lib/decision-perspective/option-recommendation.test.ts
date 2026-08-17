@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { recommendOptionAgainstCommandments, resolveRecommendedOptionId } from "./option-recommendation";
+import type { DecisionScoredOption } from "./types";
 
 // BI-D88DFEEA Phase 1. This module is deliberately commandments-only (see its
 // header) — these tests pin that it reuses listPrinciplesByTier + decide()
@@ -118,5 +119,75 @@ describe("resolveRecommendedOptionId (BI-6DCF772F guard)", () => {
       const result = await resolveRecommendedOptionId({ db: commandmentDb(), scoredOptions, outcomeType });
       expect(result).toBe("revise");
     }
+  });
+});
+
+describe("profession-local axis projection (Phase 3, BI-106C2585 / W16)", () => {
+  // A commandment that rewards speed and PENALIZES cognitive load. The
+  // ux-design local axes (the registry's first real entries) all roll onto
+  // human_cognitive_load, so a namespaced clutter score only bites once the
+  // projection runs.
+  const cognitiveLoadCommandment = {
+    id: "cmd-load",
+    title: "Human Attention Is A Budget",
+    principleTier: "commandment",
+    principleWeight: null,
+    principleDimensionVector: { speed_to_value: 0.4, human_cognitive_load: -1.0 },
+  };
+  const scoredOptions: DecisionScoredOption[] = [
+    {
+      id: "cluttered",
+      description: "Ship the dense variant now",
+      // Namespaced local axis: ignored without projection (principle vectors
+      // are spine-only), decisive with it.
+      features: { speed_to_value: 0.9, "ux-design/perceptual_clutter": 0.9 },
+    },
+    {
+      id: "calm",
+      description: "Ship the calmer variant",
+      features: { speed_to_value: 0.6 },
+    },
+  ];
+  const db = () => ({ wikiPage: { findMany: vi.fn().mockResolvedValue([cognitiveLoadCommandment]) } });
+
+  it("without a professionKey the namespaced feature is inert and the cluttered option wins", async () => {
+    const result = await recommendOptionAgainstCommandments({ db: db(), scoredOptions });
+    expect(result).toBe("cluttered");
+  });
+
+  it("with the owning professionKey the local axis projects onto the spine and moves the recommendation", async () => {
+    const result = await recommendOptionAgainstCommandments({
+      db: db(),
+      scoredOptions,
+      professionKey: "ux-design",
+    });
+    expect(result).toBe("calm");
+  });
+
+  it("threads professionKey through resolveRecommendedOptionId (the profession-gate path)", async () => {
+    const without = await resolveRecommendedOptionId({
+      db: db(),
+      scoredOptions,
+      outcomeType: "recommend",
+    });
+    const withProfession = await resolveRecommendedOptionId({
+      db: db(),
+      scoredOptions,
+      outcomeType: "recommend",
+      professionKey: "ux-design",
+    });
+    expect(without).toBe("cluttered");
+    expect(withProfession).toBe("calm");
+  });
+
+  it("a foreign profession's key drops the unknown namespaced axis instead of inventing one", async () => {
+    // data-architect owns no ux-design/* axis, so projection drops the key —
+    // same outcome as no projection at all for THIS feature set.
+    const result = await recommendOptionAgainstCommandments({
+      db: db(),
+      scoredOptions,
+      professionKey: "data-architect",
+    });
+    expect(result).toBe("cluttered");
   });
 });

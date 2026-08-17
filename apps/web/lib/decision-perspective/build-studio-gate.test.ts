@@ -394,3 +394,59 @@ describe("evaluateBuildStudioPlanAdvancementGate", () => {
     trace.mockRestore();
   });
 });
+
+describe("acumen phase consults (W16, BI-18519A73)", () => {
+  it("does not run consults and attaches nothing when plannedFilePaths is absent (byte-identical legacy path)", async () => {
+    const db = makeDb();
+    const runner = vi.fn();
+
+    const result = await evaluateBuildStudioPlanAdvancementGate({
+      db: db as never,
+      build: makeBuild(),
+      acumenConsultRunner: runner as never,
+    });
+
+    expect(runner).not.toHaveBeenCalled();
+    expect(result.acumenConsults).toBeUndefined();
+  });
+
+  it("attaches advisory consults and summarizes them without changing the allowed verdict", async () => {
+    const db = makeDb();
+    const runner = vi.fn().mockResolvedValue([
+      {
+        professionKey: "data-architect",
+        interactionId: "DI-ACU-1",
+        outcomeType: "escalate",
+        confidenceScore: 0.35,
+        rationale: "no craft material for this class",
+        professionProfileSelected: false,
+      },
+    ]);
+
+    const result = await evaluateBuildStudioPlanAdvancementGate({
+      db: db as never,
+      build: makeBuild(),
+      plannedFilePaths: ["packages/db/src/schema-helper.ts"],
+      acumenConsultRunner: runner as never,
+    });
+
+    // The main WWMD verdict (recommend/allowed) is untouched by the escalating consult.
+    expect(result.allowed).toBe(true);
+    expect(result.acumenConsults).toEqual([
+      expect.objectContaining({ professionKey: "data-architect", outcomeType: "escalate" }),
+    ]);
+    expect(result.operatorMessage).toContain(
+      "data-architect: escalate (0.35) — no craft material for this class",
+    );
+    expect(runner).toHaveBeenCalledWith(
+      expect.objectContaining({
+        filePaths: ["packages/db/src/schema-helper.ts"],
+        callingPopulation: "build_studio_phase_gate",
+        phaseFrom: "plan",
+        phaseTo: "build",
+      }),
+    );
+    // The real gap-nomination dep is registered at the gate call site.
+    expect(runner.mock.calls[0]![0].nominateGap).toBeTypeOf("function");
+  });
+});
