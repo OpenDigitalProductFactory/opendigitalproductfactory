@@ -91,7 +91,7 @@ export function DatePicker({
               root: "text-[var(--dpf-foreground)]",
               day: "text-sm rounded hover:bg-[var(--dpf-surface-2)]",
               selected:
-                "bg-[var(--dpf-accent)] text-white hover:bg-[var(--dpf-accent)]",
+                "bg-[var(--dpf-accent)] text-[var(--dpf-on-accent)] hover:bg-[var(--dpf-accent)]",
               today: "font-bold",
               chevron: "fill-[var(--dpf-muted)]",
             }}

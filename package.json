@@ -43,6 +43,7 @@
     "check:n1-caller-honesty": "node scripts/check-n-minus-one-caller-honesty.mjs",
     "check:module-size": "node scripts/check-module-size.mjs",
     "check:fk-index-coverage": "node scripts/check-fk-index-coverage.mjs",
+    "check:ux-primitive-adoption": "node scripts/check-ux-primitive-adoption.mjs",
     "check:retention-enrollment": "node scripts/check-retention-enrollment.mjs",
     "check:closed-set-strings": "node scripts/check-no-new-closed-set-strings.mjs",
     "check:data-impact": "node scripts/check-data-impact.mjs",

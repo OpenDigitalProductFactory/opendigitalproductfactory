@@ -36,6 +36,10 @@ function buildCssBlock(tokens: TokenRecord): string {
     ["--dpf-surface-2", safeString(palette.surface2)],
     ["--dpf-text", safeString(palette.text)],
     ["--dpf-accent", safeString(palette.accent)],
+    // Label color on a solid accent fill (globals.css --dpf-on-accent). A brand
+    // that overrides `accent` should supply `onAccent` when its accent flips
+    // which label color passes WCAG AA; omitted -> the theme default stands.
+    ["--dpf-on-accent", safeString(palette.onAccent)],
     ["--dpf-muted", safeString(palette.muted)],
     ["--dpf-border", safeString(palette.border)],
     ["--dpf-font-body", safeString(typography.fontFamily)],

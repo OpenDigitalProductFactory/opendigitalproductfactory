@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { recordBillPayment } from "@/lib/actions/ap";
+import { Button } from "@/components/ui/Button";
 
 const PAYMENT_METHODS = [
   "bank_transfer", "card", "cash", "cheque", "direct_debit", "stripe",
@@ -67,12 +68,7 @@ export function RecordBillPaymentButton({ billId, amountDue, currency }: Props) 
 
   if (!open) {
     return (
-      <button
-        onClick={() => setOpen(true)}
-        className="px-4 py-2 rounded-md text-sm font-medium bg-[var(--dpf-accent)] text-white hover:opacity-90 transition-opacity"
-      >
-        Record Payment
-      </button>
+      <Button onClick={() => setOpen(true)}>Record Payment</Button>
     );
   }
 
@@ -134,20 +130,12 @@ export function RecordBillPaymentButton({ billId, amountDue, currency }: Props) 
       </div>
       {error && <p className="text-xs text-[var(--dpf-error)]">{error}</p>}
       <div className="flex gap-2 justify-end">
-        <button
-          type="button"
-          onClick={() => setOpen(false)}
-          className="px-3 py-1.5 rounded-md text-sm border border-[var(--dpf-border)] text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]"
-        >
+        <Button variant="secondary" size="sm" onClick={() => setOpen(false)}>
           Cancel
-        </button>
-        <button
-          type="submit"
-          disabled={loading}
-          className="px-3 py-1.5 rounded-md text-sm font-medium bg-[var(--dpf-accent)] text-white hover:opacity-90 disabled:opacity-50"
-        >
+        </Button>
+        <Button type="submit" size="sm" disabled={loading}>
           {loading ? "Recording…" : "Confirm payment"}
-        </button>
+        </Button>
       </div>
     </form>
   );
