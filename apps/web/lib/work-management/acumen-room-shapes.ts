@@ -62,10 +62,9 @@ export const ACUMEN_ROOM_SHAPES: readonly AcumenRoomShapeDefinition[] = [
  * docs/professions/registry.json. The contract test enforces that every entry
  * here is genuinely absent from the registry — the moment the family lands,
  * this list must shrink, so the exception is a ratchet, not a hole.
+ * (mcp-integration landed with PR #4391; the list is empty again.)
  */
-export const ACUMEN_PROFESSION_KEYS_PENDING_REGISTRY: readonly string[] = [
-  "mcp-integration",
-];
+export const ACUMEN_PROFESSION_KEYS_PENDING_REGISTRY: readonly string[] = [];
 
 const VALID_PARTICIPANT_ROLES = [
   "accountable",
