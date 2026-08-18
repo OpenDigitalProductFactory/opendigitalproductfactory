@@ -1587,6 +1587,9 @@
     "scripts/lib/ensure-pre-push-hook.mjs": [
       "docs/testing/pre-pr-gate.md"
     ],
+    "scripts/lib/entry-module.mjs": [
+      "docs/install/platform-support-watchlist.md"
+    ],
     "scripts/lib/gate-context.mjs": [
       "docs/testing/pr-health.md"
     ],
@@ -1754,6 +1757,9 @@
     ],
     "tests/release/local-ci-gate-contract.test.mjs": [
       "docs/testing/pre-pr-gate.md"
+    ],
+    "tests/release/pregate-node-gate-contract.test.mjs": [
+      "docs/install/platform-support-watchlist.md"
     ]
   },
   "docToRoutes": {
@@ -2451,7 +2457,9 @@
       "packages/db/src/discovery-collectors/network.ts",
       "scripts/hooks/run-hook.mjs",
       "scripts/installer/lib/platform.sh",
-      "scripts/lib/dockerfile-portal-build.test.mjs"
+      "scripts/lib/dockerfile-portal-build.test.mjs",
+      "scripts/lib/entry-module.mjs",
+      "tests/release/pregate-node-gate-contract.test.mjs"
     ],
     "docs/install/scratch-install-rehearsal.md": [
       "scripts/fresh-install.ps1"

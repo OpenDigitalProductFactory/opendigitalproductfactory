@@ -36,6 +36,7 @@ import {
   installBrokenPipeTolerance,
   isVerboseGateConsole,
 } from "./lib/pregate-console.mjs";
+import { isEntryModule } from "./lib/entry-module.mjs";
 
 const THIS_FILE = fileURLToPath(import.meta.url);
 const SCRIPT_DIR = dirname(THIS_FILE);
@@ -629,8 +630,10 @@ async function main() {
 }
 
 // Guard against side effects on import (e.g. from tests importing routing
-// helpers) — only run when this file is the process entry point.
-if (process.argv[1] === THIS_FILE) {
+// helpers) — only run when this file is the process entry point. Entry-path
+// comparison must survive symlinked invocation spellings (macOS /var tmpdir),
+// or the guard silently skips main() and exits 0 (BI-745658D7).
+if (isEntryModule(import.meta.url)) {
   main().catch((error) => {
     process.stderr.write(`pregate: ${error?.stack || String(error)}\n`);
     process.exit(1);

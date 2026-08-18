@@ -17,7 +17,6 @@
 import { readFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { dirname, resolve as resolvePath } from "node:path";
-import { fileURLToPath } from "node:url";
 
 import {
   createLocalCiSlotManifest,
@@ -30,8 +29,7 @@ import {
   reconcileSlots,
 } from "./lib/pregate-status.mjs";
 import { installBrokenPipeTolerance } from "./lib/pregate-console.mjs";
-
-const THIS_FILE = fileURLToPath(import.meta.url);
+import { isEntryModule } from "./lib/entry-module.mjs";
 
 function gitText(args, cwd) {
   const result = spawnSync("git", args, { cwd, encoding: "utf8" });
@@ -137,4 +135,4 @@ function main() {
   process.exit(exitCodeForVerdict(result.verdict));
 }
 
-if (process.argv[1] === THIS_FILE) main();
+if (isEntryModule(import.meta.url)) main();
