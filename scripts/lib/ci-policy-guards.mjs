@@ -181,6 +181,20 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       node("--test", "scripts/check-ux-primitive-adoption.test.mjs"),
       node("scripts/check-ux-primitive-adoption.mjs"),
     ]),
+    // BI-3F17B16B: an EP-/BI- id cited in a CHANGED doc must exist in the live
+    // backlog (diff-scoped; grandfather baseline; degrades to warn-pass when no
+    // live install is reachable). Closes the unbacked-doc-anchor pattern (P3).
+    guard("doc-anchor-existence", "Doc Anchor Existence", [
+      node("--test", "scripts/check-doc-anchor-existence.test.mjs"),
+      node("scripts/check-doc-anchor-existence.mjs"),
+    ]),
+    // BI-79BCE3F2: ONE status/supersession frontmatter convention across
+    // docs/superpowers/{specs,plans} — new/changed files must carry
+    // status: draft|active|binding|superseded; supersededBy only on superseded.
+    guard("spec-status-frontmatter", "Spec Status Frontmatter", [
+      node("--test", "scripts/check-spec-status-frontmatter.test.mjs"),
+      node("scripts/check-spec-status-frontmatter.mjs"),
+    ]),
     // BI-873F3C48: every growth-shaped (event/log/telemetry) model must be
     // retention-enrolled (purge or retained) or deliberately allowlisted.
     guard("retention-enrollment-guard", "Retention Enrollment Guard", [

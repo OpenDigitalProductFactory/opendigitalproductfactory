@@ -31,6 +31,7 @@ scripts/check-no-local-liveness-literal.test.mjs
 scripts/check-no-local-oauth-refresh.test.mjs
 scripts/check-no-local-status-color.test.mjs
 scripts/check-no-merge-readiness-policy-drift.test.mjs
+scripts/check-no-expired-baseline-budgets.test.mjs
 scripts/check-no-nanoid-import.test.mjs
 scripts/check-no-new-closed-set-strings.test.mjs
 scripts/check-no-postgres-initdb-host-mount.test.mjs

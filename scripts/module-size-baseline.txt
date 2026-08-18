@@ -1,3 +1,8 @@
+# owner: platform-architecture
+# expiry: 2026-11-16
+# Module-size ratchet baseline (BI-OPT-RATCHETS). Shrink-only: files leave by
+# being split/refactored under the ceiling, never by expanding the baseline.
+# Regenerate with: node scripts/check-module-size.mjs --update
 apps/web/app/api/mcp/v1/route.test.ts	1532
 apps/web/app/api/mcp/v1/route.ts	901
 apps/web/app/api/v1/edge/discovery-runs/route.test.ts	982

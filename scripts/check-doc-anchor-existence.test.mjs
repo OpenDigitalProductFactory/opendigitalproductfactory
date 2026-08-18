@@ -1,0 +1,106 @@
+// scripts/check-doc-anchor-existence.test.mjs
+// BI-3F17B16B — the doc anchor-existence gate's logic, with the MCP HTTP
+// lookups mocked (no live install required to prove the guard).
+import assert from "node:assert/strict";
+import { test } from "node:test";
+
+import {
+  classifyId,
+  extractAnchorIds,
+  interpretToolResponse,
+  parseAnchorBaseline,
+  serializeAnchorBaseline,
+  verifyAnchors,
+} from "./check-doc-anchor-existence.mjs";
+
+test("extractAnchorIds finds hex-shaped EP/BI/WC (8) and DI (12) ids, deduped and sorted", () => {
+  const md = [
+    "Anchors: BI-3F17B16B under EP-413F2602, room WC-A843A014, ledger DI-9CA3854D4287.",
+    "Repeat BI-3F17B16B. Named epics like EP-WORK-CONVERGENCE are out of scope.",
+    "Lowercase bi-12345678 and short BI-1234 do not match; BI-79BCE3F2 does.",
+  ].join("\n");
+  assert.deepEqual(extractAnchorIds(md), [
+    "BI-3F17B16B",
+    "BI-79BCE3F2",
+    "DI-9CA3854D4287",
+    "EP-413F2602",
+    "WC-A843A014",
+  ]);
+});
+
+test("classifyId routes BI to get_backlog_item, EP to list_epics, WC/DI to unverifiable", () => {
+  assert.equal(classifyId("BI-3F17B16B"), "backlog-item");
+  assert.equal(classifyId("EP-413F2602"), "epic");
+  assert.equal(classifyId("WC-A843A014"), "unverifiable");
+  assert.equal(classifyId("DI-9CA3854D4287"), "unverifiable");
+});
+
+test("baseline round-trips with the budget header and skips comments", () => {
+  const text = serializeAnchorBaseline(
+    [
+      { doc: "docs/b.md", id: "BI-79BCE3F2" },
+      { doc: "docs/a.md", id: "EP-413F2602" },
+      { doc: "docs/a.md", id: "EP-413F2602" }, // duplicate collapses
+    ],
+    { owner: "platform-architecture", expiry: "2026-11-16" },
+  );
+  assert.match(text, /^# owner: platform-architecture\n# expiry: 2026-11-16\n/);
+  const keys = parseAnchorBaseline(text);
+  assert.equal(keys.size, 2);
+  assert.ok(keys.has("docs/a.md\tEP-413F2602"));
+  assert.ok(keys.has("docs/b.md\tBI-79BCE3F2"));
+});
+
+test("interpretToolResponse: not_found is missing; echoed id is exists; errors are unknown", () => {
+  const notFound = JSON.stringify({
+    jsonrpc: "2.0", id: 1,
+    result: { content: [{ type: "text", text: '{"success":false,"error":"not_found","message":"Item BI-C04CAD7F not found"}' }] },
+  });
+  assert.equal(interpretToolResponse("backlog-item", "BI-C04CAD7F", notFound), "missing");
+
+  const found = JSON.stringify({
+    jsonrpc: "2.0", id: 1,
+    result: { content: [{ type: "text", text: '{"success":true,"item":{"itemId":"BI-3F17B16B","title":"Budgets"}}' }] },
+  });
+  assert.equal(interpretToolResponse("backlog-item", "BI-3F17B16B", found), "exists");
+
+  const rpcError = JSON.stringify({ jsonrpc: "2.0", id: 1, error: { code: -32001, message: "insufficient_token_scope" } });
+  assert.equal(interpretToolResponse("backlog-item", "BI-3F17B16B", rpcError), "unknown");
+  assert.equal(interpretToolResponse("backlog-item", "BI-3F17B16B", "<html>portal booting</html>"), "unknown");
+});
+
+test("interpretToolResponse for epics: membership in the listing decides", () => {
+  const listing = JSON.stringify({
+    jsonrpc: "2.0", id: 1,
+    result: { content: [{ type: "text", text: '{"epics":[{"epicId":"EP-413F2602"},{"epicId":"EP-8B03CB06"}]}' }] },
+  });
+  assert.equal(interpretToolResponse("epic", "EP-413F2602", listing), "exists");
+  assert.equal(interpretToolResponse("epic", "EP-DEADBEEF", listing), "missing");
+});
+
+test("verifyAnchors sorts pairs into missing/verified/skipped/unverifiable via the injected lookup", async () => {
+  const pairs = [
+    { doc: "docs/x.md", id: "BI-3F17B16B" },
+    { doc: "docs/x.md", id: "BI-C04CAD7F" },
+    { doc: "docs/x.md", id: "EP-413F2602" },
+    { doc: "docs/x.md", id: "WC-A843A014" },
+    { doc: "docs/x.md", id: "BI-0BADF00D" },
+  ];
+  const verdicts = {
+    "BI-3F17B16B": "exists",
+    "BI-C04CAD7F": "missing",
+    "EP-413F2602": "exists",
+    "BI-0BADF00D": "unknown",
+  };
+  const calls = [];
+  const result = await verifyAnchors(pairs, async (kind, id) => {
+    calls.push(`${kind}:${id}`);
+    return verdicts[id];
+  });
+  assert.deepEqual(result.missing.map((p) => p.id), ["BI-C04CAD7F"]);
+  assert.deepEqual(result.verified.map((p) => p.id), ["BI-3F17B16B", "EP-413F2602"]);
+  assert.deepEqual(result.skipped.map((p) => p.id), ["BI-0BADF00D"]);
+  assert.deepEqual(result.unverifiable.map((p) => p.id), ["WC-A843A014"]);
+  // The unverifiable id never reached the lookup (no HTTP for WC-/DI-).
+  assert.ok(!calls.some((c) => c.includes("WC-")));
+});

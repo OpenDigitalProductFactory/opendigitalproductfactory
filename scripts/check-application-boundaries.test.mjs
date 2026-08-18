@@ -30,6 +30,8 @@ const contexts = {
 function registry(overrides = {}) {
   return {
     version: 1,
+    owner: "platform-architecture",
+    expiry: "2099-01-01",
     root: "apps/web/lib",
     contexts,
     exceptions: [],
@@ -83,6 +85,19 @@ test("registry requires ownership and a documented context purpose", () => {
   const failures = validateBoundaryRegistry(invalid).join("\n");
   assert.match(failures, /domain.*owner/i);
   assert.match(failures, /domain.*description/i);
+});
+
+test("registry requires an owned, unexpired global budget (BI-3F17B16B)", () => {
+  const missing = registry({ owner: undefined, expiry: undefined });
+  const failures = validateBoundaryRegistry(missing).join("\n");
+  assert.match(failures, /registry budget: missing budget owner/);
+  assert.match(failures, /registry budget: missing or malformed budget expiry/);
+
+  const expired = registry({ expiry: "2026-01-01" });
+  assert.match(
+    validateBoundaryRegistry(expired, { today: "2026-08-18" }).join("\n"),
+    /registry budget.*EXPIRED on 2026-01-01/,
+  );
 });
 
 test("registry rejects expired architecture-debt exceptions", () => {

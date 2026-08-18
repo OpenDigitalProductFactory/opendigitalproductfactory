@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # UX Foundation — Button, Surface & the `--dpf-on-accent` Token
 
 **Status:** Shipped (with this PR)

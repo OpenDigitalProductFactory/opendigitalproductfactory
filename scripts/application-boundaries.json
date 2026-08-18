@@ -1,5 +1,8 @@
 {
   "version": 1,
+  "owner": "platform-architecture",
+  "expiry": "2026-11-16",
+  "note": "Application-boundary exception budget (BI-2E9F6D37, budget shape BI-3F17B16B). Shrink-only: exceptions leave via the owning context refactor, never by expanding the list. New exceptions inherit reviewBy from this file's expiry. Regenerate with: node scripts/check-application-boundaries.mjs --write-baseline",
   "root": "apps/web/lib",
   "contexts": {
     "mcp": {
@@ -392,19 +395,7 @@
       "reviewBy": "2026-11-01"
     },
     {
-      "key": "apps/web/lib/tak/agentic-loop.ts|@/lib/actions/coworker-tool-budget|actions",
-      "owner": "agent-runtime",
-      "rationale": "Pre-existing reverse dependency captured by BI-2E9F6D37; remove through the owning context refactor.",
-      "reviewBy": "2026-11-01"
-    },
-    {
       "key": "apps/web/lib/tak/autonomous-work-run.ts|@/lib/actions/coworker-tool-budget|actions",
-      "owner": "agent-runtime",
-      "rationale": "Pre-existing reverse dependency captured by BI-2E9F6D37; remove through the owning context refactor.",
-      "reviewBy": "2026-11-01"
-    },
-    {
-      "key": "apps/web/lib/tak/capability-broker.ts|@/lib/actions/coworker-tool-budget|actions",
       "owner": "agent-runtime",
       "rationale": "Pre-existing reverse dependency captured by BI-2E9F6D37; remove through the owning context refactor.",
       "reviewBy": "2026-11-01"
