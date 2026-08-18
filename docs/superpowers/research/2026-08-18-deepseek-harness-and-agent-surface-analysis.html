@@ -1,0 +1,691 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Harness, Router, Cockpit — DPF research</title>
+<meta name="description" content="Three DPF workstreams from a DeepSeek Harness teardown, the T3 terminal critique, and a substrate check of the router and Build Studio surfaces.">
+<!--
+  Self-contained per docs/superpowers/html-artifacts-guide.md: inline CSS, no
+  external assets, no CDN. Colors come from the --dpf-* token set mirrored from
+  apps/web/app/globals.css so light, dark and brand overrides all resolve.
+-->
+
+<style>
+/* ── DPF design tokens, taken from apps/web/app/globals.css ─────────────── */
+:root {
+  --dpf-bg: #fafafa;
+  --dpf-surface-1: #ffffff;
+  --dpf-surface-2: #f4f4f6;
+  --dpf-text: #1a1a2e;
+  --dpf-text-secondary: #4a4a5e;
+  --dpf-accent: #2563eb;
+  --dpf-accent-soft: color-mix(in srgb, var(--dpf-accent) 12%, var(--dpf-surface-1));
+  --dpf-border: #d4d4dc;
+  --dpf-border-strong: #c8c8d4;
+  --dpf-muted: #6b7280;
+  --dpf-success: #16a34a;
+  --dpf-warning: #d97706;
+  --dpf-error: #dc2626;
+  --dpf-info: #0284c7;
+  --dpf-state-success: color-mix(in srgb, var(--dpf-success) 10%, var(--dpf-surface-1));
+  --dpf-state-warning: color-mix(in srgb, var(--dpf-warning) 10%, var(--dpf-surface-1));
+  --dpf-state-error: color-mix(in srgb, var(--dpf-error) 10%, var(--dpf-surface-1));
+  --dpf-state-info: color-mix(in srgb, var(--dpf-info) 10%, var(--dpf-surface-1));
+
+  --dpf-font-body: Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --dpf-font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+
+  --sp-2xs: 4px; --sp-xs: 8px; --sp-sm: 12px; --sp-md: 16px;
+  --sp-lg: 24px; --sp-xl: 32px; --sp-2xl: 48px; --sp-3xl: 64px;
+  --r-sm: 4px; --r-md: 6px; --r-lg: 10px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --dpf-bg: #0f0f1a;
+    --dpf-surface-1: #1a1a2e;
+    --dpf-surface-2: #161625;
+    --dpf-text: #e2e2f0;
+    --dpf-text-secondary: #b8b8cc;
+    --dpf-accent: #7c8cf8;
+    --dpf-accent-soft: color-mix(in srgb, var(--dpf-accent) 18%, var(--dpf-surface-1));
+    --dpf-border: #2a2a40;
+    --dpf-border-strong: #3a3a55;
+    --dpf-muted: #8888a0;
+    --dpf-success: #4ade80;
+    --dpf-warning: #fbbf24;
+    --dpf-error: #f87171;
+    --dpf-info: #38bdf8;
+    --dpf-state-success: color-mix(in srgb, var(--dpf-success) 14%, var(--dpf-surface-1));
+    --dpf-state-warning: color-mix(in srgb, var(--dpf-warning) 14%, var(--dpf-surface-1));
+    --dpf-state-error: color-mix(in srgb, var(--dpf-error) 14%, var(--dpf-surface-1));
+    --dpf-state-info: color-mix(in srgb, var(--dpf-info) 14%, var(--dpf-surface-1));
+  }
+}
+
+:root[data-theme="dark"] {
+  --dpf-bg: #0f0f1a;
+  --dpf-surface-1: #1a1a2e;
+  --dpf-surface-2: #161625;
+  --dpf-text: #e2e2f0;
+  --dpf-text-secondary: #b8b8cc;
+  --dpf-accent: #7c8cf8;
+  --dpf-accent-soft: color-mix(in srgb, var(--dpf-accent) 18%, var(--dpf-surface-1));
+  --dpf-border: #2a2a40;
+  --dpf-border-strong: #3a3a55;
+  --dpf-muted: #8888a0;
+  --dpf-success: #4ade80;
+  --dpf-warning: #fbbf24;
+  --dpf-error: #f87171;
+  --dpf-info: #38bdf8;
+  --dpf-state-success: color-mix(in srgb, var(--dpf-success) 14%, var(--dpf-surface-1));
+  --dpf-state-warning: color-mix(in srgb, var(--dpf-warning) 14%, var(--dpf-surface-1));
+  --dpf-state-error: color-mix(in srgb, var(--dpf-error) 14%, var(--dpf-surface-1));
+  --dpf-state-info: color-mix(in srgb, var(--dpf-info) 14%, var(--dpf-surface-1));
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--dpf-bg);
+  color: var(--dpf-text);
+  font-family: var(--dpf-font-body);
+  font-size: 16px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+.wrap {
+  max-width: 940px;
+  margin: 0 auto;
+  padding: var(--sp-2xl) var(--sp-lg) var(--sp-3xl);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2xl);
+}
+
+.prose { max-width: 68ch; }
+
+/* ── type ───────────────────────────────────────────────────────────────── */
+h1, h2, h3, h4 { text-wrap: balance; margin: 0; font-weight: 600; letter-spacing: -0.015em; }
+h1 { font-size: 2.25rem; line-height: 1.15; font-weight: 700; letter-spacing: -0.03em; }
+h2 { font-size: 1.5rem; line-height: 1.25; }
+h3 { font-size: 1.0625rem; line-height: 1.35; }
+h4 { font-size: 0.9375rem; line-height: 1.4; }
+p { margin: 0; }
+
+.eyebrow {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  color: var(--dpf-muted);
+}
+
+.lede { font-size: 1.0625rem; color: var(--dpf-text-secondary); }
+.sub { font-size: 0.9375rem; color: var(--dpf-text-secondary); }
+.fine { font-size: 0.8125rem; color: var(--dpf-muted); }
+
+code, .mono {
+  font-family: var(--dpf-font-mono);
+  font-size: 0.8125em;
+  font-variant-ligatures: none;
+}
+code {
+  background: var(--dpf-surface-2);
+  border: 1px solid var(--dpf-border);
+  border-radius: var(--r-sm);
+  padding: 1px 5px;
+  white-space: nowrap;
+}
+
+a { color: var(--dpf-accent); text-decoration-thickness: 1px; text-underline-offset: 2px; }
+a:focus-visible, summary:focus-visible {
+  outline: 2px solid var(--dpf-accent);
+  outline-offset: 2px;
+  border-radius: var(--r-sm);
+}
+
+strong { font-weight: 600; color: var(--dpf-text); }
+
+/* ── header ─────────────────────────────────────────────────────────────── */
+header { display: flex; flex-direction: column; gap: var(--sp-md); }
+.rule { height: 1px; background: var(--dpf-border); border: 0; margin: 0; }
+
+.ws-index {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: var(--sp-sm);
+}
+.ws-card {
+  background: var(--dpf-surface-1);
+  border: 1px solid var(--dpf-border);
+  border-radius: var(--r-lg);
+  padding: var(--sp-md);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2xs);
+}
+.ws-card .name { font-weight: 600; font-size: 0.9375rem; }
+.ws-card .what { font-size: 0.8125rem; color: var(--dpf-muted); }
+
+/* ── evidence chips: encode how a claim was established ─────────────────── */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid;
+  white-space: nowrap;
+}
+.chip::before { content: ""; width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
+.chip-verified { color: var(--dpf-success); border-color: color-mix(in srgb, var(--dpf-success) 40%, transparent); background: var(--dpf-state-success); }
+.chip-inferred { color: var(--dpf-warning); border-color: color-mix(in srgb, var(--dpf-warning) 40%, transparent); background: var(--dpf-state-warning); }
+.chip-external { color: var(--dpf-info); border-color: color-mix(in srgb, var(--dpf-info) 40%, transparent); background: var(--dpf-state-info); }
+
+.legend { display: flex; flex-wrap: wrap; gap: var(--sp-md); align-items: baseline; }
+.legend-item { display: flex; gap: var(--sp-xs); align-items: baseline; font-size: 0.8125rem; color: var(--dpf-text-secondary); }
+
+/* ── workstream sections ────────────────────────────────────────────────── */
+section.ws { display: flex; flex-direction: column; gap: var(--sp-lg); }
+.ws-head { display: flex; flex-direction: column; gap: var(--sp-xs); }
+
+/* finding cards carry a severity rail — the rail is the state, not decoration */
+.finding {
+  background: var(--dpf-surface-1);
+  border: 1px solid var(--dpf-border);
+  border-left-width: 3px;
+  border-radius: var(--r-md);
+  padding: var(--sp-md) var(--sp-lg);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-xs);
+}
+.finding.defect { border-left-color: var(--dpf-error); }
+.finding.gap    { border-left-color: var(--dpf-warning); }
+.finding.asset  { border-left-color: var(--dpf-success); }
+.finding .head { display: flex; flex-wrap: wrap; gap: var(--sp-xs); align-items: baseline; justify-content: space-between; }
+.finding .title { font-weight: 600; font-size: 0.9375rem; }
+.finding p { font-size: 0.9375rem; color: var(--dpf-text-secondary); }
+.finding .src { font-size: 0.75rem; color: var(--dpf-muted); font-family: var(--dpf-font-mono); }
+
+.stack { display: flex; flex-direction: column; gap: var(--sp-sm); }
+
+/* ── ordered steps: numbered because they are dependency-ordered ────────── */
+ol.steps { list-style: none; counter-reset: s; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--sp-md); }
+ol.steps > li {
+  counter-increment: s;
+  display: grid;
+  grid-template-columns: 26px 1fr;
+  gap: var(--sp-md);
+  align-items: start;
+}
+ol.steps > li::before {
+  content: counter(s);
+  font-family: var(--dpf-font-mono);
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--dpf-accent);
+  background: var(--dpf-accent-soft);
+  border: 1px solid color-mix(in srgb, var(--dpf-accent) 25%, transparent);
+  border-radius: var(--r-sm);
+  width: 26px; height: 22px;
+  display: flex; align-items: center; justify-content: center;
+  margin-top: 2px;
+}
+ol.steps .body { display: flex; flex-direction: column; gap: var(--sp-2xs); }
+ol.steps .body p { font-size: 0.9375rem; color: var(--dpf-text-secondary); }
+ol.steps .body .why { font-size: 0.8125rem; color: var(--dpf-muted); }
+
+/* ── first move callout ─────────────────────────────────────────────────── */
+.first-move {
+  background: var(--dpf-accent-soft);
+  border: 1px solid color-mix(in srgb, var(--dpf-accent) 28%, transparent);
+  border-radius: var(--r-lg);
+  padding: var(--sp-md) var(--sp-lg);
+  display: flex; flex-direction: column; gap: var(--sp-2xs);
+}
+.first-move .eyebrow { color: var(--dpf-accent); }
+.first-move p { font-size: 0.9375rem; }
+
+/* ── tables ─────────────────────────────────────────────────────────────── */
+.tscroll { overflow-x: auto; border: 1px solid var(--dpf-border); border-radius: var(--r-lg); background: var(--dpf-surface-1); }
+table { border-collapse: collapse; width: 100%; font-size: 0.875rem; min-width: 560px; }
+th, td { text-align: left; padding: var(--sp-sm) var(--sp-md); border-bottom: 1px solid var(--dpf-border); vertical-align: top; }
+thead th {
+  font-size: 0.6875rem; text-transform: uppercase; letter-spacing: 0.08em;
+  color: var(--dpf-muted); font-weight: 600; background: var(--dpf-surface-2);
+  white-space: nowrap;
+}
+tbody tr:last-child td { border-bottom: 0; }
+td.num { font-variant-numeric: tabular-nums; font-family: var(--dpf-font-mono); font-size: 0.8125rem; white-space: nowrap; }
+
+/* ── misc ───────────────────────────────────────────────────────────────── */
+ul.plain { margin: 0; padding-left: 1.15em; display: flex; flex-direction: column; gap: var(--sp-2xs); }
+ul.plain li { font-size: 0.9375rem; color: var(--dpf-text-secondary); }
+
+details {
+  border: 1px solid var(--dpf-border);
+  border-radius: var(--r-md);
+  background: var(--dpf-surface-1);
+  padding: var(--sp-sm) var(--sp-md);
+}
+summary { cursor: pointer; font-weight: 600; font-size: 0.875rem; }
+details[open] summary { margin-bottom: var(--sp-sm); }
+
+footer { border-top: 1px solid var(--dpf-border); padding-top: var(--sp-lg); display: flex; flex-direction: column; gap: var(--sp-sm); }
+
+
+/* ── frontmatter + TOC (repo-doc chrome; not present in the artifact copy) ── */
+.frontmatter {
+  background: var(--dpf-surface-2);
+  border: 1px solid var(--dpf-border);
+  border-radius: var(--r-lg);
+  padding: var(--sp-md) var(--sp-lg);
+}
+.frontmatter dl { margin: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: var(--sp-sm) var(--sp-lg); }
+.frontmatter dt { font-size: 0.6875rem; text-transform: uppercase; letter-spacing: 0.09em; color: var(--dpf-muted); font-weight: 600; }
+.frontmatter dd { margin: 2px 0 0; font-size: 0.875rem; color: var(--dpf-text); }
+.toc { border-left: 2px solid var(--dpf-border); padding-left: var(--sp-md); display: flex; flex-direction: column; gap: var(--sp-xs); }
+.toc ol { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: var(--sp-xs) var(--sp-lg); }
+.toc a { font-size: 0.875rem; text-decoration: none; }
+.toc a:hover { text-decoration: underline; }
+section.ws { scroll-margin-top: var(--sp-lg); }
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}
+@media (max-width: 620px) {
+  h1 { font-size: 1.75rem; }
+  .wrap { padding: var(--sp-xl) var(--sp-md) var(--sp-2xl); gap: var(--sp-xl); }
+}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+
+<header>
+  <p class="eyebrow">DPF · working brief · 18 Aug 2026</p>
+  <h1>Harness, Router, Cockpit</h1>
+  <p class="lede prose">Three workstreams pulled out of the DeepSeek Harness teardown, the T3 terminal critique, and a grep-level check of what DPF already has. Every claim below is tagged by how it was established — a lot of what looked like a gap turned out to be built already, and one thing I predicted as a hypothetical turned out to be a live defect in this repo.</p>
+
+  <div class="ws-index">
+    <div class="ws-card">
+      <span class="name">Harness</span>
+      <span class="what">Make the local Qwen path survive a long session</span>
+    </div>
+    <div class="ws-card">
+      <span class="name">Router</span>
+      <span class="what">Stop the interface silently choosing the model</span>
+    </div>
+    <div class="ws-card">
+      <span class="name">Cockpit</span>
+      <span class="what">Fleet legibility for non-technical operators</span>
+    </div>
+  </div>
+</header>
+
+
+<div class="frontmatter">
+  <dl>
+    <div><dt>Status</dt><dd>Advisory — findings only, nothing filed</dd></div>
+    <div><dt>Date</dt><dd>2026-08-18</dd></div>
+    <div><dt>BI</dt><dd>none yet — see <a href="#caveats">what I could not check</a></dd></div>
+    <div><dt>Epic</dt><dd>unassigned</dd></div>
+    <div><dt>Repo state</dt><dd><span class="mono">350779b</span> (main)</dd></div>
+  </dl>
+</div>
+
+<nav class="toc" aria-label="Contents">
+  <span class="eyebrow">Contents</span>
+  <ol>
+    <li><a href="#harness">Harness — the local Qwen path</a></li>
+    <li><a href="#router">Router — model choice</a></li>
+    <li><a href="#cockpit">Cockpit — fleet legibility</a></li>
+    <li><a href="#sequencing">Sequencing</a></li>
+    <li><a href="#caveats">What I could not check</a></li>
+  </ol>
+</nav>
+
+<hr class="rule">
+
+<section>
+  <div class="legend">
+    <div class="legend-item"><span class="chip chip-verified">Verified</span><span>read in this repo at a named path</span></div>
+    <div class="legend-item"><span class="chip chip-inferred">Inferred</span><span>reasoned from contracts, not observed running</span></div>
+    <div class="legend-item"><span class="chip chip-external">External</span><span>from dsh packages or the T3 transcript</span></div>
+  </div>
+  <p class="fine" style="margin-top:12px">Two corrections to what I said earlier in the session, both from the substrate sweep: DPF's model router is <em>far</em> more built out than I implied, and Build Studio does have an owner-facing status vocabulary. Both are marked below.</p>
+</section>
+
+<!-- ════════════════════════ WORKSTREAM: HARNESS ════════════════════════ -->
+<section class="ws" id="harness">
+  <div class="ws-head">
+    <p class="eyebrow">Workstream</p>
+    <h2>Harness — make the local Qwen path survive a long session</h2>
+    <p class="sub prose">DPF runs <code>qwen3-coder</code> on Docker Model Runner at <code>localhost:12434</code>. The dsh teardown said the thing that kills a small local model isn't the model — it's unmeasured context. That exact failure is wired into this repo right now.</p>
+  </div>
+
+  <div class="stack">
+    <div class="finding defect">
+      <div class="head">
+        <span class="title">The local endpoint has no context window, so the capacity gate never applies to it</span>
+        <span class="chip chip-verified">Verified</span>
+      </div>
+      <p><code>metadata-extractor.ts:86</code> sets <code>maxContextTokens: null</code> for Ollama with the comment "Ollama doesn't report this in <code>/api/tags</code>." <code>task-router.ts:154</code> then gates on <code>endpoint.maxContextTokens !== null &amp;&amp; … &lt; minContextTokens</code>. A null capacity doesn't fail the check — it <em>skips</em> it. The local model is the one endpoint whose real window is smallest and the only one exempt from the size gate.</p>
+      <p class="src">apps/web/lib/routing/metadata-extractor.ts:86 · apps/web/lib/routing/task-router.ts:154</p>
+    </div>
+
+    <div class="finding gap">
+      <div class="head">
+        <span class="title">Overflow is handled reactively, after the provider rejects the call</span>
+        <span class="chip chip-verified">Verified</span>
+      </div>
+      <p><code>capacity-routing-exclude.ts</code> lists <code>request_too_large</code> among <code>BLOCKING_CAPACITY_STATES</code>. That's a good backstop, but it fires <em>after</em> a request has already failed — the work is lost and the operator sees a stall. dsh's equivalent is a pre-step pressure check that compacts before the request goes out.</p>
+      <p class="src">apps/web/lib/routing/capacity-routing-exclude.ts</p>
+    </div>
+
+    <div class="finding gap">
+      <div class="head">
+        <span class="title">No turn-over-turn conversation compaction found</span>
+        <span class="chip chip-inferred">Inferred</span>
+      </div>
+      <p>DPF has request-shaping — <code>activity-contract.ts</code> carries <code>compression: none | summarize | cite-sources | strict-packet</code> per activity class. That shapes one packet. I found nothing that trims or checkpoints a <em>growing</em> conversation across turns in <code>lib/routing</code>, <code>lib/build</code>, or <code>lib/coworker</code>. Absence from three greps isn't proof; someone who knows the loop should confirm before this is treated as settled.</p>
+      <p class="src">searched: apps/web/lib/{routing,build,coworker} for compact/summariz/trim/prune/slidingWindow</p>
+    </div>
+
+    <div class="finding asset">
+      <div class="head">
+        <span class="title">The Qwen reasoning dialect is already handled</span>
+        <span class="chip chip-verified">Verified</span>
+      </div>
+      <p><code>adapter-types.ts</code> captures a separate reasoning channel and documents that DeepSeek-family models emit <code>reasoning_content</code> while other OpenAI-compatible providers emit <code>reasoning</code>. This is the problem dsh needed a per-route <code>compat.thinkingFormat</code> switch for. DPF got there independently — no work needed.</p>
+      <p class="src">apps/web/lib/routing/adapter-types.ts:82–99</p>
+    </div>
+  </div>
+
+  <h3>Next steps</h3>
+  <ol class="steps">
+    <li><div class="body">
+      <h4>Give the local endpoint a real served-context number</h4>
+      <p>Query <code>/engines/_configure</code> — not <code>/models</code>, whose metadata is static and lies about the live window — and populate <code>maxContextTokens</code> for the DMR endpoint. Your own observe-build skill already documents this distinction in section B4; the router just isn't using it.</p>
+      <p class="why">Everything downstream reads this number. Nothing else on this list works while it's null.</p>
+    </div></li>
+    <li><div class="body">
+      <h4>Make a null capacity fail closed, not open</h4>
+      <p>Change the <code>task-router.ts:154</code> gate so an endpoint with unknown capacity is treated as unable to serve a large-context task, rather than exempt from the check. Pair it with a conservative floor so an unprobed endpoint stays usable for small tasks.</p>
+      <p class="why">Same class of bug as the pi-ai trap: a fallback default that silently makes the smallest model look like the biggest.</p>
+    </div></li>
+    <li><div class="body">
+      <h4>Decide whether context pressure belongs in the loop at all</h4>
+      <p>Run this through <code>dpf-brainstorming</code> → <code>dpf-decision-via-kernel</code> rather than assuming. Three genuinely distinct options: (a) proactive compaction on the dsh model, (b) fresh-context-per-round on the Ralph model — likely a better fit given Build Studio already has discrete phases, (c) leave it reactive and just make the failure legible. Option (b) deserves real weight; a 30B model does better re-deriving state from the workspace than compacting a degrading transcript.</p>
+      <p class="why">This is an architecture decision with a kernel-scoreable shape, not an implementation detail.</p>
+    </div></li>
+    <li><div class="body">
+      <h4>If compaction wins, route the summarizer to a stronger model than the conversation</h4>
+      <p>dsh exposes this as <code>summarizationProvider</code>/<code>summarizationModel</code> for exactly this reason. A bad checkpoint poisons every turn after it, so this is the highest-leverage single knob for a weak local model. DPF's <code>quality-tiers</code> and <code>task-requirements</code> already have the vocabulary to express it.</p>
+      <p class="why">Costs a little cloud spend on a rare call; protects the whole session.</p>
+    </div></li>
+    <li><div class="body">
+      <h4>Do not trust a 4-chars-per-token estimator if you build one</h4>
+      <p>dsh's meter is unconfigurable and its own docs admit "CJK text and JSON schemas underprice badly at four characters per token." Tool schemas are JSON, so this is wrong for <em>every</em> agent session, not just non-English ones. Anchor on provider-reported usage where available and estimate only the delta.</p>
+      <p class="why">The single most-reported dsh defect. Free to avoid; expensive to retrofit.</p>
+    </div></li>
+  </ol>
+
+  <div class="first-move">
+    <p class="eyebrow">First move</p>
+    <p>Steps 1 and 2 are a small, self-contained, testable change with a clear failing-test shape — a good <code>dpf-tdd</code> candidate and worth filing as one BI before any of the architecture work starts.</p>
+  </div>
+</section>
+
+<hr class="rule">
+
+<!-- ════════════════════════ WORKSTREAM: ROUTER ═════════════════════════ -->
+<section class="ws" id="router">
+  <div class="ws-head">
+    <p class="eyebrow">Workstream</p>
+    <h2>Router — stop the interface silently choosing the model</h2>
+    <p class="sub prose">I was wrong earlier to imply DPF needed to learn multi-model abstraction from T3. It has more of it than either comparison point, and in a direction neither has.</p>
+  </div>
+
+  <div class="stack">
+    <div class="finding asset">
+      <div class="head">
+        <span class="title">Correction — DPF's router is more governed than pi-ai's</span>
+        <span class="chip chip-verified">Verified</span>
+      </div>
+      <p>Adapter registry with per-provider adapters for Anthropic, Gemini, Ollama, OpenAI, OpenRouter, Codex CLI and a generic CLI pool; capability probes and a profile cache; cost ranking; quality tiers; champion/challenger; capacity-based routing exclusion; a provider-suitability compiler with its own runtime policy and telemetry. pi-ai gives you a model catalog. DPF has a <em>governed selection</em> layer, which is the harder half and the part that matters for a regulated small business.</p>
+      <p class="src">apps/web/lib/routing/ — 60+ modules incl. adapter-registry, capability-probes, cost-ranking, quality-tiers, champion-challenger, provider-suitability/</p>
+    </div>
+
+    <div class="finding gap">
+      <div class="head">
+        <span class="title">The T3 lesson that does apply: interface quality silently overrides model quality</span>
+        <span class="chip chip-external">External</span>
+      </div>
+      <p>The single most useful line in the T3 transcript: <em>"I ended up finding myself defaulting to OpenAI models even in things they were worse at because I just liked having a good app."</em> A domain expert knowingly chose a worse tool because the surface around it was more legible. DPF operators will make that trade constantly and never notice they made it — and DPF has no instrument that would detect it.</p>
+    </div>
+
+    <div class="finding gap">
+      <div class="head">
+        <span class="title">Two config surfaces can disagree, and a third exists to flag it</span>
+        <span class="chip chip-verified">Verified</span>
+      </div>
+      <p><code>/platform/ai/providers</code> governs routing for ideate/plan/review; <code>/platform/ai/build-studio</code> governs build-phase dispatch. Your own skill calls the mismatch "the classic 'I set local but it called cloud' confusion," and <code>/platform/ai/runtime-health</code> exists to surface it. A reconciliation view is a patch over split authority — it's the config-surface form of "which tmux pane was which."</p>
+      <p class="src">packages/dpf-skill-pack/skills/dpf-drive-portal-and-observe-build/SKILL.md §B3</p>
+    </div>
+  </div>
+
+  <h3>Next steps</h3>
+  <ol class="steps">
+    <li><div class="body">
+      <h4>Instrument the adoption-vs-quality gap</h4>
+      <p>You already write adapter telemetry and skill telemetry. Join them: for each task type, compare the model the router <em>recommended</em> against what actually ran and what the operator <em>chose</em> when given the option. A persistent divergence is the T3 distortion showing up in your own data.</p>
+      <p class="why">Turns an anecdote into a metric. Cheap — the telemetry writers exist.</p>
+    </div></li>
+    <li><div class="body">
+      <h4>Name the winner and the reason in operator language, at the point of use</h4>
+      <p><code>task-requirements.ts</code> already carries a <code>selectionRationale</code> per task type ("Low-risk summarization — cheap/local utility tier"). That string is doing nothing for the person watching a build. Surface it: <em>"Drafting your reply — using the fast local model because this is low-risk."</em></p>
+      <p class="why">The cheapest legibility win available. The content already exists and is already written for humans.</p>
+    </div></li>
+    <li><div class="body">
+      <h4>Collapse the two config surfaces, or make one authoritative</h4>
+      <p>Don't add a fourth reconciliation view. Either build-studio dispatch reads from providers-and-routing with a documented override, or the split is made explicit in the UI so nobody can set one believing they set both. Route via <code>dpf-architecture-review</code> — this is a canonical-contract question.</p>
+      <p class="why">Every reconciliation surface you add is an admission that state is split. Fix the split.</p>
+    </div></li>
+    <li><div class="body">
+      <h4>Treat subsidised-subscription execution as a strategic question, not a feature</h4>
+      <p>T3's actual moat is running Claude Code and Codex through official SDKs against the operator's own subscription — "8 to 14 grand for 200 bucks" — negotiated with the labs rather than hacked. DPF already has <code>codex-cli-adapter</code> and a CLI pool, so the substrate exists. What's unresolved is whether a small-business install can lean on customer-held subscriptions, and what happens when a lab changes policy — which the transcript notes has already been threatened once and held.</p>
+      <p class="why">Unit-economics decision with a real external dependency. Belongs in front of the founder, not in a sprint.</p>
+    </div></li>
+  </ol>
+
+  <div class="first-move">
+    <p class="eyebrow">First move</p>
+    <p>Step 2. <code>selectionRationale</code> is already written in plain language and already sitting in the codebase unused. Surfacing it is small, visible, and directly serves the non-technical operator.</p>
+  </div>
+</section>
+
+<hr class="rule">
+
+<!-- ════════════════════════ WORKSTREAM: COCKPIT ════════════════════════ -->
+<section class="ws" id="cockpit">
+  <div class="ws-head">
+    <p class="eyebrow">Workstream</p>
+    <h2>Cockpit — fleet legibility for non-technical operators</h2>
+    <p class="sub prose">The T3 argument isn't about terminals. It's about supervising N concurrent, long-running, semi-autonomous workers whose state is invisible unless you go looking. That's Build Studio. And your operators can't build their way out the way a founder-programmer can.</p>
+  </div>
+
+  <div class="stack">
+    <div class="finding asset">
+      <div class="head">
+        <span class="title">Correction — an owner-facing status vocabulary already exists</span>
+        <span class="chip chip-verified">Verified</span>
+      </div>
+      <p>My earlier "no fleet view" read was too shallow. <code>BuildOperatorOverview</code> carries an eight-state <code>ownerState</code> enum — <em>working, waiting-capacity, waiting-owner, blocked, inconclusive, failed, complete, not-started</em> — with semantic colour per state, backed by <code>customer-status-projection</code> and an <code>ownerSafeBuildText</code> sanitiser. Two of those states name <em>who is blocking</em>, which is precisely the distinction an owner needs. This is a strong asset.</p>
+      <p class="src">apps/web/components/build/BuildOperatorOverview.tsx · lib/build/customer-status-projection · owner-status-reconciliation</p>
+    </div>
+
+    <div class="finding gap">
+      <div class="head">
+        <span class="title">The vocabulary is per-build; the operator's problem is cross-build</span>
+        <span class="chip chip-inferred">Inferred</span>
+      </div>
+      <p><code>ownerState</code> answers "how is <em>this</em> build." The T3 collapse happens at the level above: <em>which of my six things needs me right now.</em> I found no single view answering that across builds and coworkers — <code>components/cockpit/</code> holds one file (<code>GraduationVetoButton.tsx</code>) and <code>/admin/cockpit</code> is an events table. That's a narrow sweep, not a product-wide audit.</p>
+      <p class="src">searched: components/cockpit, lib/cockpit, app/(shell)/admin/cockpit</p>
+    </div>
+
+    <div class="finding defect">
+      <div class="head">
+        <span class="title">Your own paved road says not to trust the UI</span>
+        <span class="chip chip-verified">Verified</span>
+      </div>
+      <p>The observe-build skill, step 4: <em>"Observe progress via <code>list_build_activity_since</code> + <code>FeatureBuild.phase</code>/<code>buildExecState</code>, not by staring at the UI."</em> Step 6: <em>"Verify every mutation in DB/logs, not the UI."</em> Build truth is documented as living in four places — Postgres columns, <code>BuildActivity</code> rows, <code>docker logs dpf-portal-1</code>, and sandbox state. A skilled agent is told to read the database. An owner cannot.</p>
+      <p class="src">packages/dpf-skill-pack/skills/dpf-drive-portal-and-observe-build/SKILL.md §B, steps 4 &amp; 6</p>
+    </div>
+
+    <div class="finding asset">
+      <div class="head">
+        <span class="title">The WIP cap of 3 is already below the collapse threshold</span>
+        <span class="chip chip-verified">Verified</span>
+      </div>
+      <p>No more than three builds in flight. T3's mental-model collapse lands at five or six. Whether it was chosen for runtime capacity or not, the cap is doing double duty as a cognitive-load guard — and that rationale should be written down before somebody "optimises" it upward.</p>
+      <p class="src">SKILL.md §B5</p>
+    </div>
+  </div>
+
+  <h3>The three properties to design against</h3>
+  <p class="sub prose">The wrong takeaway from T3 is "build more UI" — the transcript itself criticises two bad GUIs. The argument is really about three properties, and a GUI is only one way to deliver them. Test any Build Studio surface against these rather than against "is it graphical."</p>
+
+  <div class="tscroll">
+    <table>
+      <thead>
+        <tr><th>Property</th><th>The test</th><th>Where DPF stands</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>State legibility</strong></td>
+          <td>The operator <em>reads</em> what's happening and never has to <em>recall</em> it. Recall fails discontinuously at ~5 items.</td>
+          <td>Strong per build (<code>ownerState</code>). Unproven across builds.</td>
+        </tr>
+        <tr>
+          <td><strong>Work durability</strong></td>
+          <td>Close the laptop; the work continues. The deliverable is "I stopped thinking about it."</td>
+          <td>Server-side builds suggest this holds — but self-upgrade is documented to strand in-flight builds.</td>
+        </tr>
+        <tr>
+          <td><strong>Cheap re-entry</strong></td>
+          <td>Away four hours. What do you see on return — a summary of what changed and what needs you, or a wall of activity rows to reconstruct?</td>
+          <td><code>BuildChangeSummaryBand</code> and <code>BuildDecisionLedgerBand</code> exist. Whether they answer "what happened while I was gone" is untested.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Next steps</h3>
+  <ol class="steps">
+    <li><div class="body">
+      <h4>Build one cross-build attention view on the existing projection</h4>
+      <p>Not a new dashboard — a list of every in-flight build and coworker with its <code>ownerState</code>, sorted so <em>waiting-owner</em> and <em>blocked</em> float to the top. The projection layer already produces every value this needs; nothing new has to be modelled. Answer one question: <em>what needs me right now.</em></p>
+      <p class="why">Highest-value UX item on this page, and it is assembly, not invention.</p>
+    </div></li>
+    <li><div class="body">
+      <h4>Run the re-entry test with a real non-technical operator</h4>
+      <p>Start three builds, walk away four hours, come back, and record what they can and can't answer without opening the database. Use <code>dpf-verify-on-live-install</code> for the preflight so the run is on a provable runtime. Findings become BIs.</p>
+      <p class="why">Cheap, and it will produce better next steps than any amount of further reading.</p>
+    </div></li>
+    <li><div class="body">
+      <h4>Treat "truth lives in four places" as an owner-facing defect, not an ops note</h4>
+      <p>Where the UI can't answer a question an operator legitimately has, that's a gap in the surface, not a reason to document the psql query. Pick the top three questions the skill currently answers via database or <code>docker logs</code> — <em>which model ran this, why did this stall, what did the tool actually return</em> — and give each an owner-safe surface.</p>
+      <p class="why">This is where the DPF version of "ask Claude Code to find my Claude Code session" lives.</p>
+    </div></li>
+    <li><div class="body">
+      <h4>Write down the WIP cap rationale, then treat 3 as a UX constant</h4>
+      <p>If the cap ever rises above five for capacity reasons, the attention view in step 1 stops being a convenience and becomes load-bearing. Record the cognitive-load rationale next to the capacity one so the tradeoff is explicit.</p>
+      <p class="why">One paragraph now; prevents a silent regression later.</p>
+    </div></li>
+    <li><div class="body">
+      <h4>Extend <code>dpf-ux-fit-review</code> with a fleet-legibility check</h4>
+      <p>The skill already triggers on dashboards, status, cards and empty states. Add the three properties above as explicit review questions so every future UI-impacting change gets tested against cognitive load rather than only against visual fit.</p>
+      <p class="why">Makes this analysis durable instead of a document someone read once.</p>
+    </div></li>
+  </ol>
+
+  <div class="first-move">
+    <p class="eyebrow">First move</p>
+    <p>Step 2 before step 1. Four hours of observation will tell you what the attention view must contain; building it first means guessing.</p>
+  </div>
+</section>
+
+<hr class="rule">
+
+<!-- ════════════════════════ SEQUENCING ═════════════════════════════════ -->
+<section class="ws" id="sequencing">
+  <div class="ws-head">
+    <p class="eyebrow">If you only do three things</p>
+    <h2>Sequencing</h2>
+  </div>
+
+  <div class="tscroll">
+    <table>
+      <thead>
+        <tr><th>Do</th><th>Workstream</th><th>Why first</th><th>Size</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Fix the null context window</strong></td>
+          <td>Harness</td>
+          <td>Verified defect, self-contained, TDD-shaped, and every other harness item depends on it</td>
+          <td class="num">S</td>
+        </tr>
+        <tr>
+          <td><strong>Surface <code>selectionRationale</code></strong></td>
+          <td>Router</td>
+          <td>Operator-language content already written and sitting unused</td>
+          <td class="num">S</td>
+        </tr>
+        <tr>
+          <td><strong>Run the four-hour re-entry test</strong></td>
+          <td>Cockpit</td>
+          <td>Generates better requirements than more analysis; costs an afternoon</td>
+          <td class="num">S</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p class="sub prose" style="margin-top:16px">Everything else on this page is either an architecture decision that should go through <code>dpf-decision-via-kernel</code> (context strategy, config-surface authority) or a founder-level call (subsidised-subscription execution). None of it should start before the three above are done.</p>
+</section>
+
+<!-- ════════════════════════ CAVEATS ════════════════════════════════════ -->
+<section class="ws" id="caveats">
+  <div class="ws-head">
+    <p class="eyebrow">Before filing any of this</p>
+    <h2>What I could not check</h2>
+  </div>
+
+  <ul class="plain prose">
+    <li><strong>The live backlog.</strong> <code>DPF_MCP_BEARER_TOKEN</code> is unset in this session, so the <code>dpf</code> MCP server can't authenticate. I could not check whether any of these findings duplicate an existing BI — and several feel like things that may already be filed. <code>dpf-verify-substrate-first</code> wants that sweep before anything new is recorded.</li>
+    <li><strong>Anything at runtime.</strong> This worktree is source-only — no <code>node_modules</code>, no Prisma client. Every finding here is read from source or from published package contracts. Nothing was observed executing.</li>
+    <li><strong>Absence claims.</strong> "No conversation compaction" and "no cross-build view" each rest on a handful of greps over three or four directories. Treat them as leads to confirm, not as established facts.</li>
+    <li><strong>The dsh repo itself.</strong> <code>github.com/deepseek-ai/deepseek-harness</code> returned 404 from this environment, so the harness findings come from the published npm tarballs at <code>0.1.0-rc.7</code> — authoritative, and shipped with full READMEs, but not the source tree.</li>
+  </ul>
+</section>
+
+<footer>
+  <p class="fine">Sources — DeepSeek Harness packages at <span class="mono">0.1.0-rc.7</span> (<span class="mono">dsh-compaction-basic</span>, <span class="mono">dsh-token-meter</span>, <span class="mono">dsh-llm-retry</span>, <span class="mono">dsh-tool-ralph</span>, <span class="mono">dsh-llm-pi-ai</span>); <span class="mono">@earendil-works/pi-ai</span> 0.84.2 provider catalog; deepseek-harness discussion #2107; T3 terminal transcript; DPF repo at <span class="mono">350779b</span>.</p>
+  <p class="fine">Findings are advisory. Nothing here has been filed, and no code has been changed.</p>
+</footer>
+
+</div>
+</body>
+</html>
