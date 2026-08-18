@@ -28,6 +28,7 @@ const EXPECTED_LEGACY_JOBS = [
   "docs-impact-gate",
   "docs-link-integrity",
   "docs-staleness-detector",
+  "endpoint-classification-guard",
   "finding-substrate-guard",
   "fk-index-coverage-guard",
   "fpaw-standard-guard",

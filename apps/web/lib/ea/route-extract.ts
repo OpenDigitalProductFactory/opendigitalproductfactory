@@ -24,6 +24,57 @@ import type { SysmlDesiredModel } from "./sysml-model-seed";
 /** Synthetic root container — holds every top-level route (mirrors VALUE_STREAM_PACKAGE_KEY). */
 export const ROUTE_PACKAGE_KEY = "route:pkg";
 
+/**
+ * Endpoint exposure classes (Simplify & Strengthen W17, BI-810BEC9C; edge
+ * reachability plan EP-8B03CB06). Every API route handler declares WHO may
+ * reach it, at birth:
+ *   - "public"        — anonymously reachable by design (must also sit inside the
+ *                       proxy's public path-segmentation allowlist, see
+ *                       lib/release/storefront-middleware.ts RouteClass.PublicApi);
+ *   - "authenticated" — requires a session (or an equivalent scope/contract gate
+ *                       enforced inside the handler);
+ *   - "private-mesh"  — reachable only over the private install-to-install mesh
+ *                       (never exposed through the public edge).
+ */
+export const ROUTE_EXPOSURES = ["public", "authenticated", "private-mesh"] as const;
+export type RouteExposure = (typeof ROUTE_EXPOSURES)[number];
+
+/** Result of scanning a route handler's source for its exposure declaration. */
+export type RouteExposureScan =
+  | { kind: "none" }
+  | { kind: "exposure"; exposure: RouteExposure }
+  | { kind: "invalid"; raw: string };
+
+/**
+ * Extract the per-file exposure declaration from a route handler's source.
+ *
+ * MECHANISM NOTE: the preferred shape was `export const exposure = "…"`, but
+ * Next.js 16's generated route type-guards (next-types-plugin `checkFields<
+ * Diff<…>>`) reject any non-standard export from a route.ts entry, so the
+ * declaration is a structured pragma comment instead — colocated in the route
+ * file (no central conflict-magnet map) and collected by the build-time
+ * manifest walker (apps/web/scripts/build-route-manifest.ts) into
+ * route-manifest.json, where scripts/check-endpoint-classification.mjs reads it.
+ *
+ *   // @exposure authenticated — session required; see route handler auth()
+ *
+ * First pragma wins unless a second one disagrees (conflict = invalid). An
+ * unknown class value is invalid, never silently unclassified — the walker
+ * hard-fails so a typo cannot demote a route to "unclassified/grandfathered".
+ * Pure + dependency-free (mirrors detectRedirectTarget) for plain-Node reuse.
+ */
+export function detectRouteExposure(src: string): RouteExposureScan {
+  const matches = [...String(src).matchAll(/@exposure[ \t]+([A-Za-z-]+)/g)].map((m) => m[1]!);
+  if (matches.length === 0) return { kind: "none" };
+  const distinct = [...new Set(matches)];
+  if (distinct.length > 1) return { kind: "invalid", raw: distinct.join(" vs ") };
+  const value = distinct[0]!;
+  if ((ROUTE_EXPOSURES as readonly string[]).includes(value)) {
+    return { kind: "exposure", exposure: value as RouteExposure };
+  }
+  return { kind: "invalid", raw: value };
+}
+
 /** One navigable endpoint discovered by the build-time manifest walker. */
 export interface RouteManifestRow {
   /** URL path with route groups stripped, leading slash, e.g. "/admin/storefront/items" or "/". */
@@ -36,6 +87,12 @@ export interface RouteManifestRow {
   dynamicParams: string[];
   /** Source file path relative to repo root (for provenance). */
   file: string;
+  /** Route handlers (kind "route") only: the endpoint's declared exposure class,
+   *  collected from the file's `// @exposure <class>` pragma (see
+   *  detectRouteExposure). Absent while a route is still grandfathered in
+   *  scripts/endpoint-classification-baseline.txt; the endpoint-classification
+   *  guard hard-fails any NEW route handler under apps/web/app/api without one. */
+  exposure?: RouteExposure;
   /** If this page is a PURE redirect shim (its only behavior is `redirect("/x")`, no
    *  UI render), the destination route path (query/hash stripped). Absent for normal
    *  pages and for conditional auth-guard redirects (which render a real page). Lets the

@@ -1,3 +1,4 @@
+// @exposure authenticated — session required unconditionally (auth() → 401).
 import { NextResponse } from "next/server";
 
 import { auth } from "@/lib/auth";
