@@ -85,3 +85,16 @@ Codex Desktop can retain a stale top-level model registry even after the server 
 4. **Promote** — `establish_coworker` `action: "promote"` flips draft → production only when the definition landed AND a passing certification exists.
 
 The paved-road walkthrough is the `dpf-establish-coworker` skill (`packages/dpf-skill-pack/skills/dpf-establish-coworker/SKILL.md`).
+
+## Protocol version window (mechanics landed; contract pending ratification)
+
+The `/api/mcp/v1` transport's advertised protocol revisions are governed by one
+constant module, `apps/web/lib/mcp/protocol-versions.ts`: the N/N-1 `MCP_VERSION_WINDOW`
+(current + one previous) plus the explicitly-listed grandfathered set
+(`2025-03-26`, `2024-11-05`), which may only shrink. The CI guard
+`scripts/check-no-adhoc-mcp-protocol-versions.mjs` refuses ad-hoc revision literals on
+the transport and any growth of the grandfathered set. The version-window CONTRACT
+itself — including retiring the grandfathered revisions — is operator-ratified; the
+decision brief is
+[`docs/superpowers/specs/2026-08-16-mcp-version-window-contract-brief.md`](../superpowers/specs/2026-08-16-mcp-version-window-contract-brief.md).
+No revision has been retired under this section yet.

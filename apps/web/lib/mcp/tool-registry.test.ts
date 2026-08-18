@@ -4,8 +4,8 @@ import { dirname, join } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { DELIBERATION_TOOLS } from "@/lib/mcp-tools-deliberation";
-import { SIEM_TOOLS } from "@/lib/mcp-tools-siem";
+import { DELIBERATION_TOOLS } from "@/lib/mcp/deliberation-handlers";
+import { SIEM_TOOLS } from "@/lib/mcp/siem-handlers";
 import { PLATFORM_TOOLS } from "@/lib/mcp-tools";
 import { isToolAllowedByGrants, TOOL_TO_GRANTS } from "@/lib/tak/agent-grants";
 

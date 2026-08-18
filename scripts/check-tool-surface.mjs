@@ -50,7 +50,10 @@ const METRICS_REL = join("apps", "web", "lib", "tak", "context-economy-metrics.t
 
 // ── Measurement (pure) ──────────────────────────────────────────────────────────
 
-const TOOL_NAME_RE = /^\s+name: "[a-z_][a-z0-9_]*",/gm;
+// camelCase is allowed because three frozen legacy tool names (saveBuildEvidence,
+// reviewDesignDoc, reviewBuildPlan) predate the snake_case convention and moved
+// into packs verbatim under the frozen tool-NAME contract (W9, BI-0E7B0953).
+const TOOL_NAME_RE = /^\s+name: "[a-zA-Z_][a-zA-Z0-9_]*",/gm;
 const INPUT_SCHEMA_RE = /^\s+inputSchema:/gm;
 
 function countMatches(source, re) {

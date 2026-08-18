@@ -73,6 +73,25 @@ export function resolveEffectiveTier(
 }
 
 /**
+ * Auth-source-aware tier resolution (W12, BI-EE64547B). Internal AI-coworker
+ * calls (`source: "session-jwt"`, the `x-mcp-session` seam) are per-call
+ * stateless: no server-side deferred-loading session may influence what they
+ * see, so their default tier is `full` — the session JWT's narrow scopes
+ * already bound the surface, and every call independently lists everything it
+ * is authorized for. External clients keep the client-aware default (and the
+ * per-token deferred-loading session store). An explicit `?tier=` always wins
+ * for both.
+ */
+export function resolveEffectiveTierForAuthSource(
+  rawTierParam: string | null | undefined,
+  callerClient: string | null | undefined,
+  authSource: "pat" | "session-jwt",
+): McpToolTier {
+  if (authSource === "session-jwt") return parseExplicitTier(rawTierParam) ?? "full";
+  return resolveEffectiveTier(rawTierParam, callerClient);
+}
+
+/**
  * The curated lean surface for token-constrained MCP sessions: broadly-useful
  * discovery / read / backlog-lifecycle / work-visibility tools. A drift guard
  * (tool-tier.test.ts) asserts every name here exists in PLATFORM_TOOLS, so a

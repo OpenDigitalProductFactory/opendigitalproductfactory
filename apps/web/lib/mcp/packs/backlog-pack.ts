@@ -17,7 +17,7 @@
 // resolution helpers rather than replicating them per pack.
 
 import { getErrorMessage } from "@/lib/shared/get-error-message";
-import { handleUpdateBacklogItem } from "@/lib/mcp-handlers/update-backlog-item";
+import { handleUpdateBacklogItem } from "./backlog-update-item-handler";
 import { updateBuildHappyPathState } from "@/lib/mcp/build-tool-helpers";
 import { optionalStringParam, stringArrayParam, validScopeKind } from "./backlog-scope-metadata";
 import { getBacklogItem, listBacklogItems, listEpics, queryBacklog } from "./backlog-pack-read-tools";

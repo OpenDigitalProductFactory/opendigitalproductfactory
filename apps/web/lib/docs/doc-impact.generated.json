@@ -782,6 +782,9 @@
     "apps/web/lib/mcp/packs/workbooks-pack.ts": [
       "docs/architecture/mcp-tool-packs.md"
     ],
+    "apps/web/lib/mcp/protocol-versions.ts": [
+      "docs/architecture/mcp-tool-authorization-runbook.md"
+    ],
     "apps/web/lib/mcp/tool-pack.ts": [
       "docs/architecture/mcp-tool-packs.md",
       "docs/architecture/mcp-tool-surface-ergonomics-audit.md"
@@ -1444,6 +1447,9 @@
     "scripts/check-module-size.mjs": [
       "docs/architecture/mcp-tool-packs.md",
       "docs/maintenance/staleness-report.md"
+    ],
+    "scripts/check-no-adhoc-mcp-protocol-versions.mjs": [
+      "docs/architecture/mcp-tool-authorization-runbook.md"
     ],
     "scripts/check-no-dialog-in-transition.mjs": [
       "docs/architecture/theme-aware-styling-runbook.md"
@@ -2232,8 +2238,10 @@
       "apps/web/lib/agent-grants.ts",
       "apps/web/lib/coworker-lifecycle/lifecycle-gate.ts",
       "apps/web/lib/govern/manager-scope.ts",
+      "apps/web/lib/mcp/protocol-versions.ts",
       "apps/web/lib/tak/tool-result-budget.ts",
       "apps/web/lib/tool-description-hygiene.test.ts",
+      "scripts/check-no-adhoc-mcp-protocol-versions.mjs",
       "scripts/lib/bootstrap-worktree-deps.mjs"
     ],
     "docs/architecture/mcp-tool-packs.md": [

@@ -32,13 +32,15 @@ import {
 import { resolveWorkforcePlatformRole } from "@/lib/govern/auth-utils";
 import { MCP_ROUTE_TOOL_RESULT_CHAR_CAP } from "@/lib/tak/tool-result-budget";
 import {
-  resolveEffectiveTier,
+  resolveEffectiveTierForAuthSource,
   selectToolsForListing,
   resolveLoadToolsSelection,
+  mergeLoadedToolNames,
   LOAD_TOOLS_TOOL_NAME,
   type McpToolTier,
 } from "@/lib/mcp/tool-tier";
 import { getLoadedToolNames, loadToolsForSession } from "@/lib/mcp/tool-session-store";
+import { SUPPORTED_PROTOCOL_VERSIONS, FALLBACK_PROTOCOL_VERSION } from "@/lib/mcp/protocol-versions";
 import {
   shouldAdvertiseTasksCapability,
   tasksLifecycleEnabled,
@@ -63,19 +65,8 @@ type ResolvedAuth = ResolvedMcpToken & {
   source: "pat" | "session-jwt";
 };
 
-// Versions we can speak, newest first. We echo back the version the client
-// requested when it is in this list so older clients connect. Include every
-// wire revision clients actually send — Grok Build 1.0.0 negotiates
-// `2025-06-18` and re-sends it as `MCP-Protocol-Version` on tools/list; omitting
-// it made initialize fall back but then 400'd subsequent calls.
-// Tasks capability is ONLY advertised on 2025-11-25 (see shouldAdvertiseTasksCapability).
-const SUPPORTED_PROTOCOL_VERSIONS = [
-  "2025-11-25",
-  "2025-06-18",
-  "2025-03-26",
-  "2024-11-05",
-] as const;
-const FALLBACK_PROTOCOL_VERSION = "2024-11-05";
+// Protocol revisions: the governed N/N-1 window + grandfathered set, declared
+// ONLY in @/lib/mcp/protocol-versions.ts (W12, BI-EE64547B; guard-enforced).
 const SERVER_NAME = "dpf-platform";
 const SERVER_VERSION = "1.0.0";
 
@@ -431,10 +422,13 @@ async function handleLoadTools(
     await resolveListingAuthorityForToken(token, userContext),
   );
   const selected = resolveLoadToolsSelection(authorized, args);
-  const loadedToolNames = await loadToolsForSession(
-    token.tokenId,
-    selected.map((t) => t.name),
-  );
+  // W12 (BI-EE64547B): internal session-JWT calls are per-call stateless — the
+  // result still carries the selected definitions inline, but no per-token
+  // session row is written (internal lists are full-tier; nothing to append).
+  const loadedToolNames =
+    token.source === "session-jwt"
+      ? mergeLoadedToolNames([], selected.map((t) => t.name))
+      : await loadToolsForSession(token.tokenId, selected.map((t) => t.name));
   const result = buildLoadToolsResult(
     selected.map((t) => ({ name: t.name, description: t.description })),
     loadedToolNames,
@@ -581,8 +575,13 @@ async function handleToolsList(
   // this token pulled in via load_tools, then the load_tools meta-tool itself.
   // Append-not-swap keeps the lean core for clients that ignore list_changed and
   // preserves the cached prompt prefix (tools are only ever added, never
-  // removed/reordered).
-  const loadedNames = new Set(await getLoadedToolNames(token.tokenId));
+  // removed/reordered). W12 (BI-EE64547B): the internal path (session-jwt) is
+  // per-call stateless — it never reads the store (its synthesized tokenId is
+  // shared by concurrent runs of one coworker, so reads would bleed one run's
+  // load_tools into another's listing); it lists full-tier every call instead.
+  const loadedNames = new Set(
+    token.source === "session-jwt" ? [] : await getLoadedToolNames(token.tokenId),
+  );
   const listed = selectToolsForListing(authorized, tier, loadedNames).map(annotateTool);
   return jsonRpcOk(id, { tools: [...listed, LOAD_TOOLS_LISTED] });
 }
@@ -833,9 +832,10 @@ export async function POST(request: Request): Promise<Response> {
         return await handleToolsList(
           body.id ?? null,
           token,
-          resolveEffectiveTier(
+          resolveEffectiveTierForAuthSource(
             new URL(request.url).searchParams.get("tier"),
             deriveCallerClient(request.headers.get("user-agent")),
+            token.source,
           ),
         );
 
