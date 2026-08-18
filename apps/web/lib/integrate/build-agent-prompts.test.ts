@@ -330,7 +330,7 @@ describe("getBuildContextSection", () => {
     expect(section).toContain("least privilege"); // authz commandment
     expect(section).toContain("CONCRETE TEST-FIRST");
     expect(section).toContain("GROUNDED FILE PATHS");
-    expect(section).toContain("packages/db/prisma/schema.prisma"); // the real path the planner kept missing
+    expect(section).toContain("packages/db/prisma/schema/"); // the real path (domain folder) the planner kept missing
   });
   it("injects the design standard into the ideate phase too", async () => {
     const section = await getBuildContextSection({
