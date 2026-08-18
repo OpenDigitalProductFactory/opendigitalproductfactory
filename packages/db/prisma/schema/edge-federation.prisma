@@ -1,0 +1,712 @@
+// ── DPF Edge Node (Phase 0 — A1) ────────────────────────────────────────────
+//
+// Spec: docs/superpowers/specs/2026-05-09-dpf-edge-node-design.md
+// Roadmap: docs/superpowers/plans/2026-05-12-edge-node-phase0-roadmap.md
+//
+// Per AGENTS.md §11 principal-convergence rule, an EdgeNode's identity
+// is also represented as a PrincipalAlias row (aliasType = "edge_node",
+// aliasValue = EdgeNode.nodeId). The EdgeNode model itself stores
+// operational state; authorization decisions resolve through the
+// convergent Principal model. The application layer (A2) creates the
+// Principal + PrincipalAlias pair atomically with the EdgeNode row on
+// successful enrollment.
+model EdgeNode {
+  id          String @id @default(cuid())
+  // Identity for an Edge Node lives on Principal + PrincipalAlias per
+  // AGENTS.md §11 Principal convergence (kind="edge-node",
+  // aliasType="edge-node"). EdgeNode is a host-attributes side table
+  // keyed 1:1 to Principal via principalId. `displayName` reads from
+  // the joined Principal row, never directly from EdgeNode.
+  principalId String @unique
+  // Stable external identifier used in API URLs and tokens. Distinct
+  // from `id` (the cuid surrogate) and from `principalId` (the
+  // identity FK). Mirrored to PrincipalAlias.aliasValue where
+  // aliasType="edge-node". Per spec, do not conflate the three.
+  nodeId      String @unique
+  // darwin | win32 | linux
+  platform    String
+  // native | container-host | container-vm
+  installMode String
+  version     String
+
+  // Operational state (changes on heartbeat / timeout):
+  //   pending  - enrolled but no heartbeat yet
+  //   active   - heartbeat received within the soft-fail window
+  //   offline  - heartbeat missed past threshold
+  //   quarantined - alive but submissions dropped (see trustState)
+  status     String    @default("pending")
+  // Trust state (changes on operator action / lifecycle events):
+  //   pending     - awaiting operator approval (default for remote nodes)
+  //   trusted     - submissions accepted into inventory
+  //   quarantined - alive but submissions dropped (operator can investigate)
+  //   revoked     - tokens invalidated; row preserved for audit
+  trustState String    @default("pending")
+  lastSeenAt DateTime?
+
+  // Capability advertisement (the agent's claim of what it can do).
+  // Authority's accepted set lives in EdgeNodeCapability rows. Stored
+  // here as a denormalized JSON array for fast read; the
+  // EdgeNodeCapability rows are the source of truth for per-capability
+  // mode + status.
+  capabilities      Json
+  // Free-form: hostname, host fingerprint, operator-assigned tags.
+  // Hostname / IP intentionally not first-class fields per Wazuh-IP-as-key
+  // anti-pattern (R&B section).
+  metadata          Json?
+  customerAccountId String?
+  customerSiteId    String?
+  // The support contract (Subscription) this instance is covered by, if any.
+  subscriptionId    String?
+  scopePolicy       Json?
+
+  // ── Auth (per spec § Token namespaces and lifecycle) ─────────────
+  // dpfedge_* node token, hashed at rest (mirrors McpApiToken pattern).
+  // Null until enrollment completes.
+  // Phase 0: single hash (atomic rotation; no grace window).
+  // Phase 1+: may add `previousTokenHash` for graceful rotation.
+  tokenHash      String?   @unique
+  // First 8 chars after `dpfedge_` prefix, for visual ID only. Not auth.
+  tokenPrefix    String?
+  tokenRotatedAt DateTime?
+
+  // ── Enrollment lifecycle (per spec § Enrollment, rotation, lifecycle)
+  enrolledAt            DateTime?
+  // Set when the trustState transitions from `pending` to `trusted`,
+  // either by operator approval or auto-approve policy.
+  approvedAt            DateTime?
+  // FK to the Principal that approved this node. NULL for auto-approve
+  // (installer-issued local-host bootstrap); populated for operator
+  // approval flows.
+  approvedByPrincipalId String?
+
+  // Quarantine + revocation (per spec § Quarantine / § Revocation)
+  quarantinedAt    DateTime?
+  quarantineReason String?
+  revokedAt        DateTime?
+  revocationReason String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  principal                    Principal                    @relation("EdgeNodeIdentity", fields: [principalId], references: [id], onDelete: Cascade)
+  approvedBy                   Principal?                   @relation("EdgeNodeApprover", fields: [approvedByPrincipalId], references: [id])
+  customerAccount              CustomerAccount?             @relation(fields: [customerAccountId], references: [id], onDelete: SetNull)
+  customerSite                 CustomerSite?                @relation(fields: [customerSiteId], references: [id], onDelete: SetNull)
+  subscription                 Subscription?                @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
+  capabilityRows               EdgeNodeCapability[]
+  certificates                 EdgeNodeCertificate[]
+  discoveryRuns                DiscoveryRun[]               @relation("EdgeNodeDiscoveryRuns")
+  targetedDiscoveryConnections DiscoveryConnection[]        @relation("EdgeNodeTargetedDiscoveryConnections")
+  consumedTokens               BootstrapToken[]             @relation("BootstrapTokenConsumer")
+  events                       EdgeEvent[]                  @relation("EdgeNodeEvents")
+  changes                      ChangeEvent[]                @relation("EdgeNodeChanges")
+  productFulfillmentInstances  ProductFulfillmentInstance[] @relation("ProductFulfillmentEdgeNode")
+
+  @@index([trustState])
+  @@index([status])
+  @@index([tokenHash])
+  @@index([lastSeenAt])
+  @@index([customerAccountId])
+  @@index([customerSiteId])
+}
+
+model BootstrapToken {
+  id        String @id @default(cuid())
+  // Hashed at rest (mirrors McpApiToken pattern). Plaintext is shown
+  // to the operator exactly once at issuance and never persisted.
+  tokenHash String @unique
+  // First 8 chars after `dpfboot_` prefix, for visual ID in UI lists.
+  prefix    String
+  // Phase 0 ships only `edge:enroll` scope. Reserved column for future
+  // token kinds that might share this table.
+  scope     String @default("edge:enroll")
+
+  issuedAt            DateTime @default(now())
+  // FK to the Principal that issued this token (operator action via
+  // Admin > Platform Development, or the installer auto-issuing for
+  // local-host bootstrap).
+  issuedByPrincipalId String
+  // Per spec § Token namespaces and lifecycle: ≤15 min default TTL,
+  // operator-configurable up to 24h max. Application enforces the cap.
+  expiresAt           DateTime
+
+  // Single-use semantics. consumedAt + consumedByEdgeNodeId set when
+  // an EdgeNode successfully enrolls with this token. After that, the
+  // token is no longer valid for any further enrollment attempt.
+  consumedAt           DateTime?
+  consumedByEdgeNodeId String?
+
+  // Operators can pre-revoke a token before consumption.
+  revokedAt DateTime?
+
+  // Per spec § Approval policy: tokens flagged as installer-issued
+  // for the DPF host's own Edge Node enroll directly into
+  // trustState=trusted, skipping the operator-approval click. Paste-
+  // provisioned tokens (the default for remote nodes) leave this
+  // false so the new node lands in `pending` until an operator
+  // approves in Admin > Platform Development.
+  //
+  // Threat model: marking this true requires either Admin > Platform
+  // Development action (the operator chose to auto-approve, e.g. for
+  // bulk enrollment) or installer-side issuance (the installer runs
+  // with host access already, so a flag carrying that intent is no
+  // weaker than the install path itself).
+  autoApprove             Boolean @default(false)
+  targetCustomerAccountId String?
+  targetCustomerSiteId    String?
+  scopePolicy             Json?
+
+  // Relations
+  issuedBy              Principal        @relation("BootstrapTokenIssuer", fields: [issuedByPrincipalId], references: [id])
+  consumedByEdgeNode    EdgeNode?        @relation("BootstrapTokenConsumer", fields: [consumedByEdgeNodeId], references: [id])
+  targetCustomerAccount CustomerAccount? @relation(fields: [targetCustomerAccountId], references: [id], onDelete: SetNull)
+  targetCustomerSite    CustomerSite?    @relation(fields: [targetCustomerSiteId], references: [id], onDelete: SetNull)
+
+  @@index([tokenHash])
+  @@index([expiresAt])
+  @@index([consumedAt])
+  @@index([targetCustomerAccountId])
+  @@index([targetCustomerSiteId])
+}
+
+model EdgeNodeCapability {
+  id         String   @id @default(cuid())
+  // FK to EdgeNode.id (the cuid surrogate); distinct from EdgeNode.nodeId.
+  edgeNodeId String
+  // Capability identifier from the spec § Edge Node capability envelope.
+  // Enrollment accepts a closed subset of the reserved registry. Native Edge
+  // Nodes may additionally advertise "federation.discovery" for host mDNS.
+  capability String
+  // Authority's per-node decision:
+  //   enabled         - capability is active
+  //   reporting-only  - agent advertises it but Authority doesn't accept submissions
+  //   disabled        - agent cannot use this capability
+  mode       String   @default("disabled")
+  // Last-known health from the agent's self-report.
+  //   healthy | degraded | failing | unknown
+  status     String   @default("unknown")
+  // Free-form: error messages, metric snapshots the agent attached.
+  evidence   Json?
+  reportedAt DateTime @default(now())
+
+  node EdgeNode @relation(fields: [edgeNodeId], references: [id], onDelete: Cascade)
+
+  @@unique([edgeNodeId, capability])
+  @@index([capability])
+}
+
+// Machine-bound X.509 identities accepted at the dedicated Edge mTLS boundary.
+// The CA private key remains in step-ca; the portal stores only lifecycle and
+// binding metadata needed to re-authorize every request after Caddy verifies
+// the organization-rooted certificate chain.
+model EdgeNodeCertificate {
+  id                String    @id @default(cuid())
+  certificateId     String    @unique
+  edgeNodeId        String
+  fingerprintSha256 String    @unique
+  serialNumber      String
+  subject           String
+  issuer            String
+  provisioner       String
+  status            String    @default("active")
+  validFrom         DateTime
+  validUntil        DateTime
+  registeredAt      DateTime  @default(now())
+  lastSeenAt        DateTime?
+  revokedAt         DateTime?
+  revocationReason  String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  edgeNode EdgeNode @relation(fields: [edgeNodeId], references: [id], onDelete: Cascade)
+
+  @@unique([edgeNodeId, serialNumber])
+  @@index([edgeNodeId, status])
+  @@index([validUntil])
+}
+
+// ─── Edge-detected events (PagerDuty-equivalent) ─────────────────────────────
+// Canonical PD-CEF-style envelope persisted from POST /api/v1/edge/events.
+// Detectors on the edge (reachability probes, SNMP poll/trap, syslog, ARP/DHCP
+// delta, host self, vendor adapters) emit Events; the route upserts by
+// (edgeNodeId, dedupKey) so flap/flood noise that survived edge-side dedupe
+// collapses here too rather than fanning out into duplicate rows.
+//
+// Lifecycle (action drives status):
+//   action="trigger"     -> status="triggered" on insert; lastSeenAt bumped on replay
+//   action="acknowledge" -> status="acknowledged" (preserves lastSeenAt)
+//   action="resolve"     -> status="resolved", resolvedAt set; later "trigger"
+//                            on the same dedupKey re-opens (resolvedAt=null,
+//                            occurrenceCount++)
+//
+// Slice 0 owns ingest + persistence only. Cross-source correlation, escalation
+// policies, on-call routing, and ML grouping are separate downstream slices
+// — see BI-9FE9D48D.
+model EdgeEvent {
+  id              String    @id @default(cuid())
+  // FK to EdgeNode.id (the cuid surrogate); distinct from EdgeNode.nodeId.
+  // The route fills this from the bearer-token auth, never from the body.
+  edgeNodeId      String
+  // Dedup anchor. Edge-side detectors compose this from
+  // source + component + class (+ instance) so the same condition collapses
+  // on replay. Scoped per-node by the @@unique to keep keyspaces isolated.
+  dedupKey        String
+  // Producing detector — "snmp.trap", "syslog", "ping", "unifi.events", etc.
+  source          String
+  // Sub-source identifier the operator can read — hostname, IP, MAC, port.
+  component       String?
+  // PD-CEF group: logical bucket within the source ("network", "host", "ups").
+  eventGroup      String?
+  // PD-CEF class: the specific condition ("interface_down", "high_cpu",
+  // "cert_expiring", "rogue_ap").
+  eventClass      String?
+  // info | warn | error | critical
+  severity        String    @default("warn")
+  // Lifecycle state. Mirrors PagerDuty incident states.
+  //   triggered | acknowledged | resolved | suppressed
+  status          String    @default("triggered")
+  // Last action submitted by the edge: trigger | acknowledge | resolve.
+  // Kept distinct from `status` because actions can race with operator state.
+  action          String    @default("trigger")
+  // Short human-readable line for incident lists.
+  summary         String
+  // Free-form: probe response details, syslog message, SNMP varbinds,
+  // counter deltas, vendor payload — whatever the detector wants to attach.
+  customDetails   Json?
+  // When the edge detector observed the condition (RFC 3339, set by detector).
+  occurredAt      DateTime
+  // When this dedupKey first appeared at the portal.
+  firstSeenAt     DateTime  @default(now())
+  // Bumped on every replay (including trigger after resolve).
+  lastSeenAt      DateTime  @default(now())
+  // Set when action=resolve; cleared on re-open.
+  resolvedAt      DateTime?
+  // Number of times the same dedupKey has been submitted.
+  occurrenceCount Int       @default(1)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  node EdgeNode @relation("EdgeNodeEvents", fields: [edgeNodeId], references: [id], onDelete: Cascade)
+
+  @@unique([edgeNodeId, dedupKey])
+  @@index([edgeNodeId, status])
+  @@index([severity])
+  @@index([source])
+  @@index([occurredAt])
+  @@index([createdAt]) // retention sweep cutoff scan, apps/web/lib/operate/retention/execute.ts:99
+}
+
+// ─── Edge-detected change events (deploys, config pushes, feature flips) ─────
+// Slice 1 of the edge-node detection engine (BI-8405FDA5). Persisted from
+// POST /api/v1/edge/events when eventType="change". The correlation engine
+// (separate slice) joins alerts to changes within an N-minute window to
+// surface deploy-driven incidents — the highest-leverage borrowed PagerDuty
+// pattern per the research brief.
+//
+// Distinct from EdgeEvent because changes are point-in-time facts, not
+// fire-and-collapse conditions:
+//   - No status lifecycle (a deploy doesn't get "acknowledged" or "resolved")
+//   - No occurrenceCount (each change is a discrete event)
+//   - Idempotency on (edgeNodeId, changeKey) so re-submitting the same
+//     change (e.g. retry after transient failure) updates summary +
+//     customDetails without duplicating the row
+//
+// The portal route accepts the same EdgeEventEnvelope wire shape and
+// discriminates on `eventType`; `action` is required by the schema for
+// envelope uniformity but ignored for changes.
+model ChangeEvent {
+  id            String   @id @default(cuid())
+  // FK to EdgeNode.id (the cuid surrogate). Route fills this from the
+  // bearer-token auth, never from the body.
+  edgeNodeId    String
+  // Stable identifier — git SHA, deploy ID, change-ticket reference.
+  // Carried as `dedupKey` in the envelope. Re-submission with the same
+  // (edgeNodeId, changeKey) updates summary + customDetails.
+  changeKey     String
+  // Producing detector — "git.deploy", "kubectl.apply", "terraform.plan", etc.
+  source        String
+  // Operator-readable sub-source — service name, environment, target host.
+  component     String?
+  // Logical bucket — "deploy", "config", "feature-flag", "rollback".
+  eventGroup    String?
+  // Specific class — "deploy", "rollback", "scale", "flag_enable".
+  eventClass    String?
+  // info | warn | error | critical — routine deploy=info, canary=warn,
+  // emergency hotfix=error.
+  severity      String   @default("info")
+  // Short human-readable line for change feeds + correlation tooltips.
+  summary       String
+  // Free-form: gitSha, deployedBy, targetEnv, runId, ticketRef, diff URL.
+  customDetails Json?
+  // When the change actually happened (RFC 3339, set by detector).
+  occurredAt    DateTime
+  // When the portal first received this changeKey for this edge node.
+  firstSeenAt   DateTime @default(now())
+  // Bumped on every replay. Cheap signal that "this change keeps being
+  // re-asserted by the detector" — useful for debouncing noisy emitters.
+  lastSeenAt    DateTime @default(now())
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  node EdgeNode @relation("EdgeNodeChanges", fields: [edgeNodeId], references: [id], onDelete: Cascade)
+
+  @@unique([edgeNodeId, changeKey])
+  // Composite index powers the correlation engine's "changes for this node
+  // in the last N minutes" join against alert events. Keep this in lockstep
+  // with the EdgeEvent.occurredAt index so both sides of the join are O(log n).
+  @@index([edgeNodeId, occurredAt])
+  @@index([source])
+  @@index([occurredAt])
+  @@index([createdAt]) // retention sweep cutoff scan, apps/web/lib/operate/retention/execute.ts:99
+}
+
+// ── EP-MSP-FEDERATION · B1 — sovereign-peer federation link (BI-130107D6) ─────
+// The edge-node enrollment handshake generalized to deployment-to-deployment.
+// Two sovereign DPF Authority Cores connect through a dual-approved, outbound-
+// only, revocable channel. Identity lives on Principal(kind="federated-peer")
+// with FederationLink as the side table — mirrors EdgeNode↔Principal. Trust is
+// derived via resolveLinkTrust (trust-link-lifecycle.ts) from the approval
+// timestamps; authorization resolves on Principal + AuthorityBinding (soft ref).
+model FederationLink {
+  id                    String    @id @default(cuid())
+  linkId                String    @unique
+  principalId           String    @unique
+  // This deployment's perspective: "manages" (we are the MSP) or "managed-by"
+  // (we are the sovereign customer being managed).
+  role                  String
+  // Outbound-only base URL of the peer Authority Core. No inbound listener is
+  // required on a sovereign customer.
+  peerAuthorityUrl      String
+  // The peer's org identifier + our own org, for the B5 CustomerAccount↔Org crosswalk.
+  peerOrganizationRef   String?
+  // Stable pseudonymous installation identity learned from an authenticated
+  // digest exchange. Used for route-loop checks; never derived from hostname.
+  peerInstallationId    String?
+  peerDeviceId          String?
+  localOrganizationId   String?
+  // Trust state — derived from the approval/revoke/quarantine timestamps below.
+  linkState             String    @default("pending")
+  // Dual approval: trusted only when BOTH approvedAt* are set.
+  approvedAtLocal       DateTime?
+  approvedAtPeer        DateTime?
+  approvedByPrincipalId String?
+  quarantinedAt         DateTime?
+  quarantineReason      String?
+  revokedAt             DateTime?
+  revocationReason      String?
+  // Auth: dpflink_* link token, hashed at rest, rotating (mirrors EdgeNode).
+  // tokenHash is the INBOUND token (the one we issued for the peer to call us).
+  tokenHash             String?   @unique
+  tokenPrefix           String?
+  tokenRotatedAt        DateTime?
+  // The OUTBOUND token: the peer-issued link token WE use to call the peer.
+  // Encrypted at rest (AES-256-GCM, credential-crypto) because we must replay it,
+  // not hash it. Set when this deployment enrolled outbound with the peer.
+  peerTokenEnc          String?
+  // Negotiated scope + authority (soft refs to ProjectionContract (B2) and
+  // AuthorityBinding (the band) to keep cross-model blast radius low).
+  projectionContractId  String?
+  authorityBindingId    String?
+  metadata              Json?
+  enrolledAt            DateTime?
+  // Introductions exchange candidate coordinates only over an already-trusted
+  // link. Each direction is explicit; neither flag transfers trust.
+  offersIntroductions   Boolean   @default(false)
+  acceptsIntroductions  Boolean   @default(false)
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  principal              Principal                         @relation("FederationLinkIdentity", fields: [principalId], references: [id], onDelete: Cascade)
+  bootstrapTokens        FederationBootstrapToken[]        @relation("FederationBootstrapConsumer")
+  partnerAccount         PartnerAccount?
+  introductionCandidates FederationIntroductionCandidate[] @relation("FederationIntroducerLink")
+
+  @@index([linkState])
+  @@index([role])
+  @@index([tokenHash])
+  @@index([peerOrganizationRef])
+  @@index([peerInstallationId])
+  @@index([peerDeviceId])
+}
+
+// Durable review candidates learned from one trusted introducer. This is not a
+// trust table: pairing still runs through FederationPairingSession and the only
+// durable relationship authority is FederationLink.
+model FederationIntroductionCandidate {
+  id                     String    @id @default(cuid())
+  introductionId         String    @unique
+  introducerLinkId       String
+  installationId         String
+  deviceId               String
+  displayName            String
+  authorityUrl           String
+  relationshipHint       String
+  introducedByPath       String[]
+  hopCount               Int
+  firstSeenAt            DateTime  @default(now())
+  lastSeenAt             DateTime  @default(now())
+  expiresAt              DateTime
+  withdrawnAt            DateTime?
+  dismissedAt            DateTime?
+  pairedFederationLinkId String?
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
+
+  introducerLink FederationLink @relation("FederationIntroducerLink", fields: [introducerLinkId], references: [linkId], onDelete: Cascade)
+
+  @@unique([introducerLinkId, installationId])
+  @@index([expiresAt, withdrawnAt, dismissedAt])
+  @@index([installationId])
+}
+
+// Single-use invitation, mirrors BootstrapToken. The inviting peer issues a
+// dpffboot_* token bound to the role offered, a proposed projection scope, and a
+// proposed authority band; the accepting peer redeems it once at enrollment.
+model FederationBootstrapToken {
+  id                    String    @id @default(cuid())
+  tokenHash             String    @unique
+  prefix                String
+  // Role OFFERED to the accepting peer (it receives the inverse of the inviter's role).
+  offeredRole           String
+  proposedProjection    Json?
+  proposedAuthorityBand Json?
+  issuedAt              DateTime  @default(now())
+  issuedByPrincipalId   String
+  expiresAt             DateTime
+  consumedAt            DateTime?
+  consumedByLinkId      String?
+  revokedAt             DateTime?
+
+  link           FederationLink?           @relation("FederationBootstrapConsumer", fields: [consumedByLinkId], references: [id])
+  pairingSession FederationPairingSession?
+
+  @@index([consumedByLinkId])
+  @@index([expiresAt])
+}
+
+// Expiring device-style delivery envelope for nearby same-organization setup.
+// This row never creates trust: FederationBootstrapToken remains invitation
+// authority and FederationLink remains the only relationship/trust authority.
+// Incoming request secrets are hashed; replayable local credentials use the
+// existing AES-256-GCM credential-crypto boundary and are cleared at terminal
+// lifecycle points.
+model FederationPairingSession {
+  id                    String    @id @default(cuid())
+  pairingId             String    @unique
+  direction             String
+  status                String    @default("pending")
+  relationshipPreset    String    @default("same-organization")
+  projectionTemplateKey String    @default("same-organization")
+  offeredRole           String    @default("same-org-peer")
+  matchingCode          String
+  // Versioned SAS commit/reveal transcript. Ephemeral private material and
+  // nonces are encrypted while the exchange is in flight and cleared after
+  // reveal; public identity/reveal facts remain for auditability.
+  sasState              Json?
+  sasConfirmedAtLocal   DateTime?
+  sasConfirmedAtPeer    DateTime?
+  pairingSecretHash     String?   @unique
+  pairingSecretEnc      String?
+  peerAuthorityUrl      String
+  peerDisplayName       String
+  peerInstallationId    String?
+  candidateDiscoveryId  String?
+  bootstrapTokenId      String?   @unique
+  bootstrapTokenEnc     String?
+  requestedAt           DateTime  @default(now())
+  approvedAt            DateTime?
+  approvedByPrincipalId String?
+  deniedAt              DateTime?
+  deniedByPrincipalId   String?
+  denialReason          String?
+  deliveredAt           DateTime?
+  consumedAt            DateTime?
+  expiresAt             DateTime
+  lastPolledAt          DateTime?
+  pollCount             Int       @default(0)
+  failureReason         String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  bootstrapToken FederationBootstrapToken? @relation(fields: [bootstrapTokenId], references: [id], onDelete: SetNull)
+
+  @@index([status, expiresAt])
+  @@index([direction, status])
+  @@index([peerInstallationId])
+}
+
+// ── EP-MSP-FEDERATION · B2 — scoped estate projection contract (BI-4F8F50FD) ──
+// Per-link allow-list of exactly what crosses the FederationLink — never raw
+// data. The pure serializer (projection-serialization.ts) enforces this plus a
+// hard forbidden-field guard at egress. Stored as a dedicated table (not JSON on
+// the link) so per-field allow/deny + CADA posture are queryable at egress and
+// the last negative-egress test result is auditable (spec §15.1).
+model ProjectionContract {
+  id                String    @id @default(cuid())
+  contractId        String    @unique
+  // Soft ref to the FederationLink (which carries projectionContractId back).
+  federationLinkId  String?
+  includeSlices     String[]
+  excludeSlices     String[]
+  fieldAllowList    Json?
+  retentionClass    String    @default("standard")
+  cadaPosture       Json?
+  reviewCadenceDays Int?
+  lastTestResult    Json?
+  lastTestedAt      DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  @@index([federationLinkId])
+}
+
+// ── EP-MSP-FEDERATION · B3 + B5 — generic federated record mirror (BI-3179B48E /
+// BI-E2398997). One mirror/crosswalk table for everything that syncs over a
+// link: incident→ticket mirrors (B3) and CustomerAccount↔Organization crosswalk
+// (B5). Canonical record stays SOURCE-SIDE; the peer holds a governed mirror.
+// recordType discriminates rather than spawning per-kind tables (spec §7.4).
+model FederatedRecordMirror {
+  id                  String    @id @default(cuid())
+  mirrorId            String    @unique
+  federationLinkId    String
+  // "incident" | "service-ticket" | "organization-crosswalk" | "demand-envelope"
+  recordType          String
+  // Which side holds the canonical record: "local" | "peer".
+  canonicalSide       String
+  localRecordRef      String?
+  peerRecordRef       String?
+  // pending | synced | conflict | withdrawn | dead-letter | revoked
+  syncStatus          String    @default("pending")
+  // BigInt: demand originVersion is derived from the source record's updatedAt
+  // epoch (ms) so re-projecting an unchanged record is idempotent. A ms epoch
+  // (~1.7e12) overflows Int (int4, max ~2.1e9) — see BI-CC8021CE.
+  version             BigInt    @default(1)
+  // Per-installation causal-ordering vector (BI-67315C4A). When present on both
+  // sides, the exchange uses it (not the scalar `version`) to distinguish a clean
+  // newer-than from a genuine concurrent conflict. Null on legacy rows / peers
+  // that predate the vector — the exchange falls back to the scalar then.
+  versionVector       Json?
+  conflictReason      String?
+  lastSyncedAt        DateTime?
+  // Durable delivery state for local-canonical outbox records. Peer-canonical
+  // inbox mirrors leave these null/zero.
+  deliveryAttempts    Int       @default(0)
+  nextDeliveryAt      DateTime?
+  lastDeliveryAt      DateTime?
+  lastDeliveryError   String?
+  acknowledgedVersion BigInt?
+  deadLetteredAt      DateTime?
+  // How many times digest reconciliation has resurrected this record after it
+  // dead-lettered. Bounded by MAX_DEMAND_REHEALS so a transient/upgrade-window
+  // stranding recovers while a genuinely-poison record eventually stays dead.
+  rehealCount         Int       @default(0)
+  // Last projected (already minimized) payload that crossed — never raw data.
+  payload             Json?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  @@unique([federationLinkId, recordType, localRecordRef], map: "FederatedRecordMirror_link_type_local_key")
+  // Peer-canonical records (including demand envelopes) need the inverse key so
+  // concurrent retries cannot create duplicate inbox mirrors before adoption.
+  @@unique([federationLinkId, recordType, peerRecordRef], map: "FederatedRecordMirror_link_type_peer_key")
+  @@index([federationLinkId])
+  @@index([recordType])
+  @@index([syncStatus])
+  @@index([recordType, canonicalSide, syncStatus, nextDeliveryAt], map: "FederatedRecordMirror_delivery_due_idx")
+}
+
+// ── EP-MSP-FEDERATION · B4 — cross-org remediation proposal (BI-3C21D4E2) ──────
+// The specialized side table over the AgentActionProposal + AuthorityBinding
+// substrate (spec §11.5 — audited as not covering headless cross-org proposals,
+// so a specialization, NOT a second approval engine). A proposal crosses the
+// link as a PROPOSAL; it lands on the CUSTOMER's Attention Surface and executes
+// on the CUSTOMER's own runner. The MSP never gains standing execute rights.
+model FederatedRemediationProposal {
+  id                   String    @id @default(cuid())
+  proposalId           String    @unique
+  federationLinkId     String
+  incidentKey          String
+  edgeNodeId           String?
+  // RemediationActionDraft[] (each with its per-action authority decision).
+  actions              Json
+  // auto-approve | needs-human-approval | refuse (the band gate).
+  overallDecision      String
+  // proposed | approved | rejected | executed | expired
+  status               String    @default("proposed")
+  // Attention Surface item on the CUSTOMER side, when human approval is needed.
+  attentionItemRef     String?
+  decidedAt            DateTime?
+  decidedByPrincipalId String?
+  executedAt           DateTime?
+  executionEvidenceRef String?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  @@index([federationLinkId])
+  @@index([status])
+  @@index([incidentKey])
+}
+
+// ─── EP-REMOTE-ACTION · the convergent governed remote-execution primitive ───
+// Spec: docs/superpowers/specs/2026-06-25-convergent-remote-action-execution-design.md.
+// ONE primitive, two consumers: federated remediation (EP-MSP-FEDERATION) + estate
+// patch-apply (EP-PATCH-MANAGEMENT, which specced this shape in §7.3). P1 = the
+// governed RECORD + the approved-proposal→RemoteAction seam. There is NO platform→
+// Edge dispatch channel yet (P2, gated on machine-bound trust + a threat model), so
+// a materialized action rests at status="queued" and nothing executes — the record
+// is the honest, auditable intent, not a side effect.
+model RemoteAction {
+  id                String  @id @default(cuid())
+  actionKey         String  @unique
+  // The Edge Node that will execute this (resolved at dispatch, P2); nullable
+  // because a federated proposal names a host, not yet an enrolled Edge node.
+  edgeNodeId        String?
+  inventoryEntityId String?
+  customerAccountId String?
+  customerSiteId    String?
+  // inventory.collect | diagnostics.collect | patch.apply | service.restart | reboot | script.run
+  actionType        String
+  parameters        Json    @default("{}")
+  // read-only | low | medium | high | destructive (remediation-authority risk class).
+  riskClass         String  @default("read-only")
+
+  // Convergence provenance: which proposal produced this, and (for MSP-originated
+  // cross-org actions) which link it came across — the sovereignty guard reads
+  // originLinkId to forbid autonomous execution of an action the MSP merely proposed.
+  originProposalRef String?
+  originLinkId      String?
+
+  requestedByPrincipalId String
+  // proposed | approved | rejected | cancelled
+  approvalState          String  @default("proposed")
+  approvedByPrincipalId  String?
+  changeRequestId        String?
+  deploymentWindowId     String?
+  patchPlanId            String?
+
+  // queued | dispatched | running | succeeded | failed | rolled-back | timed-out
+  status               String    @default("queued")
+  // Immutable signed-dispatch audit. Nullable for historic/P1 rows; populated
+  // atomically when a P2a Edge node claims an action.
+  dispatchNonce        String?   @unique
+  dispatchIssuedAt     DateTime?
+  dispatchExpiresAt    DateTime?
+  dispatchSigningKeyId String?
+  dispatchSignature    String?
+  result               Json      @default("{}")
+  evidence             Json      @default("{}")
+  rollbackOf           String?
+  createdAt            DateTime  @default(now())
+  startedAt            DateTime?
+  completedAt          DateTime?
+  updatedAt            DateTime  @updatedAt
+
+  @@index([originProposalRef])
+  @@index([originLinkId])
+  @@index([approvalState])
+  @@index([status])
+  @@index([customerAccountId, customerSiteId])
+}

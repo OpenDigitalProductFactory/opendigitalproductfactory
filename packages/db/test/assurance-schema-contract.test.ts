@@ -1,8 +1,7 @@
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
+import { readCanonicalPrismaSchema } from "../src/schema-source";
 
-const schema = readFileSync(resolve(__dirname, "../prisma/schema.prisma"), "utf8");
+const schema = readCanonicalPrismaSchema();
 
 function modelBlock(modelName: string): string {
   const match = schema.match(new RegExp(`model ${modelName} \\{[\\s\\S]*?\\n\\}`, "m"));

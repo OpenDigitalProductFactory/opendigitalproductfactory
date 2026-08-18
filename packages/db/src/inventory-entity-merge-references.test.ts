@@ -2,8 +2,8 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { INVENTORY_ENTITY_MERGE_REFERENCES } from "./inventory-entity-merge-references";
+import { readCanonicalPrismaSchema } from "./schema-source";
 
-const schemaPath = join(__dirname, "..", "prisma", "schema.prisma");
 const migrationPath = join(
   __dirname,
   "..",
@@ -18,7 +18,7 @@ function lowerFirst(value: string): string {
 }
 
 function schemaRelationsTargetingInventoryEntity(): string[] {
-  const schema = readFileSync(schemaPath, "utf8");
+  const schema = readCanonicalPrismaSchema();
   const results: string[] = [];
   for (const [, modelName, body] of schema.matchAll(/model (\w+) \{([\s\S]*?)\n\}/g)) {
     const relations = body!.matchAll(

@@ -59,7 +59,9 @@ import { POLICY_GUARD_PROFILES } from "./ci-policy-guards.mjs";
 export const GATE_CONTEXT_SCHEMA_VERSION = 2;
 
 const MIGRATION_FILE_RE = /^packages\/db\/prisma\/migrations\/[^/]+\/migration\.sql$/;
-const PRISMA_SCHEMA_PATH = "packages/db/prisma/schema.prisma";
+// Schema domain-folder files (packages/db/prisma/schema/*.prisma, B5 Seam C
+// layout) plus the legacy schema.prisma monolith for diffs spanning the split.
+const PRISMA_SCHEMA_RE = /^packages\/db\/prisma\/schema(\.prisma$|\/[^/]+\.prisma$)/;
 
 function normalize(path) {
   return String(path ?? "").trim().replace(/\\/g, "/");
@@ -319,10 +321,10 @@ export function buildGateContext({
       rule: "new migration: must pass the migration-safety guard (tightening DDL needs an in-file attestation/remediation block) and the timestamp-collision guard (rebump via git mv if a concurrent PR took your timestamp)",
     });
   }
-  if (paths.includes(PRISMA_SCHEMA_PATH)) {
+  if (paths.some((p) => PRISMA_SCHEMA_RE.test(p))) {
     migrations.push({
       severity: "advisory",
-      rule: "schema.prisma changed: a new model trips the substrate-complexity baseline (scripts/platform-substrate-baseline.json prismaModelCount) plus the new-Prisma-model gate gauntlet — update only your own baseline line",
+      rule: "Prisma schema changed: a new model trips the substrate-complexity baseline (scripts/platform-substrate-baseline.json prismaModelCount) plus the new-Prisma-model gate gauntlet — update only your own baseline line",
     });
   }
 

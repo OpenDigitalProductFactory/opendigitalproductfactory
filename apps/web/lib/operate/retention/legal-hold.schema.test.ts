@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 import { LEGAL_HOLD_MODELS, LEGAL_HOLD_FIELD, legalHoldExclusion } from "./legal-hold";
+import { readCanonicalPrismaSchema } from "@dpf/db/schema-source";
 
 // Drift guard: LEGAL_HOLD_MODELS must exactly match the set of Prisma models
 // that actually carry a `legalHold Boolean` column. If someone adds a legalHold
@@ -10,12 +11,6 @@ import { LEGAL_HOLD_MODELS, LEGAL_HOLD_FIELD, legalHoldExclusion } from "./legal
 // so the retention engine can never silently stop honouring a hold on a newly
 // held model. Same discipline as the stewardship-scope guard (BI-C34E09B0).
 
-/** Repo root: this file is apps/web/lib/operate/retention/. */
-const SCHEMA_PATH = resolve(
-  __dirname,
-  "../../../../..",
-  "packages/db/prisma/schema.prisma",
-);
 
 /** camelCase the first character, matching the Prisma delegate accessor. */
 function delegateName(model: string): string {
@@ -25,7 +20,7 @@ function delegateName(model: string): string {
 /** Parse schema.prisma for every model whose body declares a `legalHold`
  *  Boolean field, returning delegate names. */
 function modelsWithLegalHoldFromSchema(): Set<string> {
-  const src = readFileSync(SCHEMA_PATH, "utf8");
+  const src = readCanonicalPrismaSchema();
   const out = new Set<string>();
   const modelRe = /^model\s+(\w+)\s*\{([\s\S]*?)^\}/gm;
   let m: RegExpExecArray | null;

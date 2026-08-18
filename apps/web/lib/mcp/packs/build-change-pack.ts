@@ -69,7 +69,7 @@ async function validateSchema(params: Record<string, unknown>, userId: string): 
     const { execInSandbox } = await import("@/lib/sandbox");
     const schemaContent = await execInSandbox(
       vsSandboxId,
-      "cat /workspace/packages/db/prisma/schema.prisma",
+      "cat /workspace/packages/db/prisma/schema/*.prisma",
     );
     const { validatePrismaSchema, formatSchemaValidation } = await import("@/lib/integrate/schema-validator");
     const result = validatePrismaSchema(schemaContent);

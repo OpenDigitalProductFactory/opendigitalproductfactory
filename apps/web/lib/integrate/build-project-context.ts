@@ -15,7 +15,7 @@ ARCHITECTURE:
 - Two packages: apps/web (Next.js app) and packages/db (Prisma ORM)
 - API routes live at: apps/web/app/api/<endpoint>/route.ts
 - Shared libraries at: apps/web/lib/
-- Prisma schema at: packages/db/prisma/schema.prisma (large file — use offset/limit when reading)
+- Prisma schema at: packages/db/prisma/schema/ (domain-split *.prisma files — pick the domain file for your models)
 - Tailwind CSS with CSS custom properties for theming
 
 ROUTE GROUPS — CRITICAL (Next.js uses parenthesized folders for layout grouping):
@@ -41,7 +41,7 @@ KEY PATHS:
 - Customer hub:   apps/web/app/(shell)/customer/ — authenticated customer pages (engagements, quotes, orders, etc.)
 - API:            apps/web/app/api/              — all API endpoints
 - Lib:            apps/web/lib/                  — shared code, actions, utilities
-- DB:             packages/db/prisma/schema.prisma — database schema
+- DB:             packages/db/prisma/schema/ — database schema (domain-split *.prisma files)
 - Types:          apps/web/lib/*-types.ts        — TypeScript type definitions
 
 CONVENTIONS:
@@ -53,14 +53,14 @@ CONVENTIONS:
 
 DATABASE:
 - Prisma 7.x — NEVER use npx prisma (use pnpm --filter @dpf/db exec prisma)
-- To add a model: edit schema.prisma, then run_sandbox_command "cd packages/db && pnpm exec prisma migrate dev --name <name>"
+- To add a model: edit the owning domain file under packages/db/prisma/schema/, then run_sandbox_command "cd packages/db && pnpm exec prisma migrate dev --name <name>"
 - To generate client after schema change: run_sandbox_command "pnpm --filter @dpf/db exec prisma generate"
 - The sandbox has its own database — schema changes here do NOT affect production
 
 PROCESS — how to build a feature:
 1. Read existing similar pages to understand patterns (read_sandbox_file)
 2. Plan the data model changes needed (if any)
-3. Edit the Prisma schema (edit_sandbox_file on packages/db/prisma/schema.prisma)
+3. Edit the Prisma schema (edit_sandbox_file on the owning packages/db/prisma/schema/<domain>.prisma file)
 4. Run migration (run_sandbox_command "cd packages/db && pnpm exec prisma migrate dev --name add-complaint")
 5. Generate Prisma client (run_sandbox_command "pnpm --filter @dpf/db exec prisma generate")
 6. Create new page files (write_sandbox_file)

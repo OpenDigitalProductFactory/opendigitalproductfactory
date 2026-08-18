@@ -420,27 +420,27 @@ export async function backupProductionDb(
 }
 
 /**
- * Detects lines removed from schema.prisma that would regress main's schema
- * if this diff were applied — i.e. the sandbox was initialized from a stale
- * portal image and the diff would overwrite newer schema additions on main.
+ * Detects lines removed from the Prisma schema (packages/db/prisma/schema/*.prisma
+ * domain files, or the legacy schema.prisma monolith) that would regress main's
+ * schema if this diff were applied — i.e. the sandbox was initialized from a
+ * stale portal image and the diff would overwrite newer schema additions on main.
  */
 export function detectSchemaRegressions(fullDiff: string): string[] {
-  const SCHEMA_FILE = "packages/db/prisma/schema.prisma";
+  const SCHEMA_FILE_RE = /^packages\/db\/prisma\/schema(\.prisma$|\/[^/]+\.prisma$)/;
   const diffHeaderRegex = /^diff --git a\/(.+) b\/.+$/gm;
-  let schemaSection = "";
+  const schemaSections: string[] = [];
   let match;
   while ((match = diffHeaderRegex.exec(fullDiff)) !== null) {
-    if (match[1] === SCHEMA_FILE) {
+    if (SCHEMA_FILE_RE.test(match[1])) {
       const start = match.index;
       const remaining = fullDiff.slice(start);
       const nextHeader = remaining.search(/\ndiff --git /);
-      schemaSection = nextHeader === -1 ? remaining : remaining.slice(0, nextHeader);
-      break;
+      schemaSections.push(nextHeader === -1 ? remaining : remaining.slice(0, nextHeader));
     }
   }
-  if (!schemaSection) return [];
+  if (schemaSections.length === 0) return [];
   const regressions: string[] = [];
-  for (const line of schemaSection.split("\n")) {
+  for (const line of schemaSections.join("\n").split("\n")) {
     if (!line.startsWith("-")) continue;
     if (line.startsWith("---")) continue;
     const content = line.slice(1);

@@ -198,7 +198,7 @@ YOUR TASK:
 1. Search the codebase for existing patterns related to this feature:
    - Search for related keywords in *.prisma files (schema models)
    - Search for related keywords in *.ts files (API routes, components)
-   - Read packages/db/prisma/schema.prisma to understand the data model
+   - Read packages/db/prisma/schema/ (domain-split *.prisma files) to understand the data model
    - Read at least one existing API route (app/api/*/route.ts) to understand patterns
    - Read at least one existing page component to understand UI patterns
 

@@ -1,0 +1,677 @@
+model McpServer {
+  id                  String    @id @default(cuid())
+  serverId            String    @unique
+  name                String
+  config              Json
+  status              String    @default("unconfigured")
+  transport           String?
+  category            String?
+  tags                String[]  @default([])
+  healthStatus        String    @default("unknown")
+  lastHealthCheck     DateTime?
+  lastHealthError     String?
+  integrationId       String?
+  activatedBy         String?
+  activatedAt         DateTime?
+  deactivatedAt       DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  authMode            String?
+  credentialOwnerMode String?
+
+  integration McpIntegration? @relation(fields: [integrationId], references: [id])
+  tools       McpServerTool[]
+
+  @@index([status])
+  @@index([category])
+  @@index([integrationId]) // FK-leading (spine): integration-backed server listing, apps/web/lib/actions/connection-catalog.ts:96
+}
+
+model McpServerTool {
+  id           String   @id @default(cuid())
+  serverId     String
+  toolName     String
+  description  String?
+  inputSchema  Json
+  isEnabled    Boolean  @default(true)
+  discoveredAt DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  server McpServer @relation(fields: [serverId], references: [id], onDelete: Cascade)
+
+  @@unique([serverId, toolName])
+  @@index([serverId])
+}
+
+model CredentialEntry {
+  id                 String                @id @default(cuid())
+  providerId         String                @unique
+  secretRef          String?
+  status             String                @default("unconfigured")
+  updatedAt          DateTime              @updatedAt
+  clientId           String?
+  clientSecret       String?
+  tokenEndpoint      String?
+  scope              String?
+  cachedToken        String?
+  tokenExpiresAt     DateTime?
+  refreshToken       String?
+  providerConnection AiProviderConnection?
+}
+
+// Polymorphic credentials for enterprise integrations (ADP, QuickBooks, Plaid, Workday, …).
+// Distinct from CredentialEntry, which is OAuth-shaped for LLM providers.
+// fieldsEnc holds a JSON blob encrypted via credential-crypto.ts encryptJson.
+model IntegrationCredential {
+  id            String    @id @default(cuid())
+  integrationId String    @unique
+  provider      String
+  status        String    @default("unconfigured")
+  fieldsEnc     String    @db.Text
+  tokenCacheEnc String?   @db.Text
+  lastTestedAt  DateTime?
+  lastErrorAt   DateTime?
+  lastErrorMsg  String?
+  certExpiresAt DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([provider, status])
+}
+
+// Browser-driving session binding (EP-BROWSER-DRIVE, spec 2026-06-05 §8.7).
+// A thin, auditable+resumable record of one driven browser session. It is NOT
+// an action log — individual actions live in ToolExecution keyed by sessionId.
+// Identity/credential/delegation refs are plain string semantic ids (matching
+// the CoworkerActionEnvelope convention), so this table does not add back-
+// relations to the heavily-related Principal/User/IntegrationCredential models.
+// Q1 (EP-CTRL convergence): no live ControlSession today, so this owns its own
+// table; field names are chosen to align with a future ControlSession.
+model BrowserSessionBinding {
+  id                String    @id @default(cuid())
+  sessionId         String    @unique
+  means             String // "deterministic" | "plugin" | "delegated"
+  driverRef         String? // adapter/sidecar session handle
+  engine            String // "chromium" | "safari" | "firefox"
+  profileRef        String // /profiles/<principalId>/<siteKey>/ or an operator-live handle
+  profileKind       String // "service-account" | "operator-live"
+  attended          Boolean   @default(false)
+  actingPrincipalId String? // Principal.principalId of the service account; null for operator-live
+  delegatingUserId  String // human on whose behalf the session runs
+  delegationGrantId String? // DelegationGrant.id bounding the run (side-effecting sessions)
+  credentialId      String? // IntegrationCredential.integrationId (browser-session kind)
+  targetDomains     String[] // navigation/act allowlist
+  status            String    @default("active") // active | closed | failed | blocked-on-reauth
+  meansDecisionJson Json? // per-task WWMD means-selector contribution ledger
+  evidenceDir       String? // session-scoped screenshot/evidence directory
+  startedAt         DateTime  @default(now())
+  closedAt          DateTime?
+
+  @@index([actingPrincipalId])
+  @@index([delegatingUserId])
+  @@index([status])
+}
+
+// Call-level audit log for every enterprise-integration MCP tool invocation.
+// Distinct from ComplianceAuditLog (entity-diff focused) and AgentActionProposal
+// (write-proposal focused). Reusable across ADP, QuickBooks, Plaid, Workday.
+// argsHash is sha256 of canonicalized args — raw args are never stored.
+model IntegrationToolCallLog {
+  id           String   @id @default(cuid())
+  calledAt     DateTime @default(now())
+  integration  String
+  coworkerId   String
+  userId       String?
+  toolName     String
+  argsHash     String
+  responseKind String
+  resultCount  Int?
+  durationMs   Int
+  errorCode    String?
+  errorMessage String?
+
+  @@index([calledAt])
+  @@index([integration, calledAt])
+  @@index([coworkerId, calledAt])
+  @@index([toolName, calledAt])
+}
+
+// Idempotency and recovery state for at-least-once connector callbacks.
+// requestHash and acknowledgment are safe, adapter-redacted projections; raw
+// callback payloads, signatures, and credentials must never be stored here.
+model IntegrationCallbackReceipt {
+  id                     String    @id @default(cuid())
+  connectorId            String
+  deliveryKey            String
+  requestHash            String
+  status                 String    @default("processing")
+  responseCode           Int?
+  domainEntityId         String?
+  acknowledgment         Json?
+  dispatchPending        Boolean   @default(false)
+  dispatchLeaseToken     String?
+  dispatchLeaseExpiresAt DateTime?
+  auditPending           Boolean   @default(false)
+  auditData              Json?
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
+  completedAt            DateTime?
+
+  @@unique([connectorId, deliveryKey])
+  @@index([status, dispatchPending, auditPending, updatedAt], map: "IntegrationCallbackReceipt_pending_idx")
+  @@index([connectorId, createdAt])
+  @@index([createdAt]) // retention sweep cutoff scan, apps/web/lib/operate/retention/execute.ts:99
+}
+
+// Source-attributed import review queue for external provider records.
+// Stores review/link posture only; raw provider payloads stay outside DPF.
+model IntegrationImportBatch {
+  id                  String    @id @default(cuid())
+  batchRef            String    @unique
+  sourceProvider      String
+  providerEnvironment String?
+  sourceTimestamp     DateTime?
+  status              String    @default("reviewing")
+  createdById         String?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  records IntegrationImportStagedRecord[]
+
+  @@index([sourceProvider, status])
+  @@index([createdAt])
+}
+
+model IntegrationImportStagedRecord {
+  id                      String    @id @default(cuid())
+  importBatchId           String
+  sourceProvider          String
+  entityFamily            String
+  externalId              String
+  sourceTimestamp         DateTime?
+  ownerSide               String
+  reviewStatus            String    @default("candidate")
+  proposedLocalEntityType String
+  proposedLocalId         String?
+  proposedLocalStatus     String    @default("candidate")
+  proposedLocalConfidence String    @default("low")
+  proposedLocalReason     String
+  displayFields           Json
+  sourceFingerprint       String
+  readOnly                Boolean   @default(true)
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @updatedAt
+
+  batch IntegrationImportBatch @relation(fields: [importBatchId], references: [id], onDelete: Cascade)
+
+  @@unique([importBatchId, entityFamily, externalId], map: "integration_import_record_batch_family_external_key")
+  @@index([sourceProvider, entityFamily, externalId], map: "integration_import_record_source_family_external_idx")
+  @@index([reviewStatus])
+}
+
+model OAuthPendingFlow {
+  id           String   @id @default(cuid())
+  state        String   @unique
+  codeVerifier String
+  providerId   String
+  createdAt    DateTime @default(now())
+}
+
+// Transient store for OAuth Device Flow (RFC 8628) sessions in flight.
+// Holds the device_code server-side so the browser only ever handles the
+// short user_code; deletes itself after consumption or on expiry sweep.
+// 15-minute TTL maps to GitHub's documented expires_in for device codes.
+model DeviceCodeSession {
+  id         String   @id @default(cuid())
+  deviceCode String   @unique
+  userCode   String
+  interval   Int
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  createdBy  String
+  consumed   Boolean  @default(false)
+
+  @@index([expiresAt])
+}
+
+model CommunicationChannelBinding {
+  id                 String                         @id @default(cuid())
+  bindingId          String                         @unique @default(cuid())
+  principalId        String
+  employeeProfileId  String?
+  channelType        String
+  providerKey        String
+  providerAccountId  String                         @default("")
+  externalSubject    String
+  displayLabel       String?
+  verificationStatus String                         @default("pending")
+  allowedDirections  String[]                       @default([])
+  allowedUrgencies   String[]                       @default([])
+  quietHours         Json?
+  preferences        Json?
+  lastVerifiedAt     DateTime?
+  lastTestedAt       DateTime?
+  lastError          String?
+  isActive           Boolean                        @default(true)
+  createdAt          DateTime                       @default(now())
+  updatedAt          DateTime                       @updatedAt
+  deliveryAttempts   CommunicationDeliveryAttempt[]
+  employeeProfile    EmployeeProfile?               @relation(fields: [employeeProfileId], references: [id], onDelete: SetNull)
+  principal          Principal                      @relation(fields: [principalId], references: [id], onDelete: Cascade)
+
+  @@unique([channelType, providerKey, providerAccountId, externalSubject])
+  @@index([principalId])
+  @@index([employeeProfileId])
+  @@index([channelType, isActive])
+}
+
+model CommunicationChannelSession {
+  id                String     @id @default(cuid())
+  sessionId         String     @unique @default(cuid())
+  channelType       String
+  providerKey       String
+  providerAccountId String     @default("")
+  externalPeerId    String
+  trustLevel        String     @default("unknown")
+  principalId       String?
+  agentThreadId     String?
+  workItemId        String?
+  lastInboundAt     DateTime?
+  lastOutboundAt    DateTime?
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+  principal         Principal? @relation(fields: [principalId], references: [id], onDelete: SetNull)
+
+  @@unique([channelType, providerKey, providerAccountId, externalPeerId])
+  @@index([principalId])
+  @@index([agentThreadId])
+  @@index([workItemId])
+}
+
+model CommunicationDeliveryAttempt {
+  id                String                       @id @default(cuid())
+  attemptId         String                       @unique @default(cuid())
+  channelBindingId  String?
+  channelType       String
+  targetType        String
+  targetId          String
+  providerMessageId String?
+  status            String                       @default("queued")
+  urgency           String                       @default("routine")
+  errorCode         String?
+  errorMessage      String?
+  sentAt            DateTime?
+  deliveredAt       DateTime?
+  readAt            DateTime?
+  createdAt         DateTime                     @default(now())
+  updatedAt         DateTime                     @updatedAt
+  channelBinding    CommunicationChannelBinding? @relation(fields: [channelBindingId], references: [id], onDelete: SetNull)
+
+  @@index([targetType, targetId])
+  @@index([channelBindingId])
+  @@index([channelType, status])
+  @@index([createdAt])
+}
+
+model McpIntegration {
+  id               String   @id @default(cuid())
+  registryId       String   @unique
+  slug             String   @unique
+  name             String
+  shortDescription String?
+  description      String?  @db.Text
+  logoUrl          String?
+  vendor           String?
+  repositoryUrl    String?
+  documentationUrl String?
+  category         String
+  subcategory      String?
+  tags             String[] @default([])
+  pricingModel     String?
+  rating           Decimal?
+  ratingCount      Int?
+  installCount     Int?
+  isVerified       Boolean  @default(false)
+  archetypeIds     String[] @default([])
+  status           String   @default("active")
+  rawMetadata      Json
+  lastSyncedAt     DateTime
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  mcpServers McpServer[]
+
+  @@index([category])
+  @@index([pricingModel])
+  @@index([isVerified])
+  @@index([status])
+  // Note: B-tree index — array containment (@>) queries need a raw GIN migration (follow-on)
+  @@index([tags])
+}
+
+// Vendor ecosystem absorption matrix (BI-ECO-001 / BI-BF909CE6, P1).
+//
+// DPF-AUTHORED DOCTRINE — deliberately a separate model from McpIntegration
+// (which is externally registry-synced; note its lastSyncedAt). Mixing authored
+// verdicts into a synced row risks a sync overwriting doctrine (plan §2.1,
+// honoring schema-audit-before-features). mcpIntegrationId / catalogIdentityId
+// are OPTIONAL SOFT references (plain columns, not enforced FKs) so a posture
+// can exist before the marketplace catalog is populated (McpIntegration is
+// empty on a fresh install); the enforced relation can be added when the
+// catalog is seeded. The row is authored, never synced.
+//
+// The vocabulary MATCHES IncumbentCoverageAssessment.verdict (spec 2026-07-23
+// §5.2) so the per-customer coverage stage-1 can default from this matrix.
+// Purely additive: a new empty table, no backfill, fleet-safe by construction.
+model AbsorptionPosture {
+  id                  String   @id @default(cuid())
+  postureId           String   @unique
+  /// Vendor / product name — "Mindbody", "Toast", "QuickBooks".
+  providerName        String
+  /// Optional grouping key — "scheduling-fitness", "pos-food".
+  providerFamily      String?
+  /// The kind of system it is (unit of connector tiering).
+  /// Guarded by isIntegrationCategory (vertical-incumbents-manifest.ts).
+  integrationCategory String
+  /// tier1-shared | tier2-semi | tier3-bespoke — derived from the category.
+  connectorTier       String
+  /// Granular storefront archetypeIds this incumbent applies to.
+  archetypeIds        String[] @default([])
+  /// native_now | adapter_bridge | generic_connector | provider_led |
+  /// do_not_absorb | gap — == IncumbentCoverageAssessment vocabulary.
+  verdict             String   @default("gap")
+  /// The DPF domain primitive that absorbs it (original BI-ECO-001). Authored.
+  coveringPrimitive   String?
+  /// Why this verdict.
+  reason              String   @default("")
+  confidence          Float    @default(0)
+  /// seed | operator | ai | human_confirmed — provenance of the verdict.
+  source              String   @default("seed")
+  /// Soft references (NOT enforced FKs — see model note). Set when the provider
+  /// is also cataloged / normalized.
+  mcpIntegrationId    String?
+  catalogIdentityId   String?
+  /// proposed | confirmed | superseded. No verdict reaches confirmed without
+  /// human / authorized-coworker action (plan §5 governance).
+  status              String   @default("proposed")
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@unique([providerName, integrationCategory])
+  @@index([verdict])
+  @@index([status])
+  @@index([integrationCategory])
+  @@index([connectorTier])
+}
+
+// Per-customer incumbent coverage verdict (BI-548060D5, D3; spec 2026-07-23 §5.2).
+//
+// The INSTANTIATED, evidenced verdict for one customer's one incumbent
+// application — distinct from AbsorptionPosture, which is DPF's authored posture
+// toward a vendor FAMILY. The posture matrix supplies the default (stage 1); this
+// row carries the per-org truth, its confidence, its evidence, and its
+// provenance. verdict/status reuse the AbsorptionPosture vocabulary (deliberately
+// identical). assessedVia keeps provenance honest: a posture_matrix default is a
+// starting position, not a claim, and must be distinguishable from
+// human_confirmed (spec R3). digitalProductId / catalogIdentityId /
+// coveringBusinessCapabilityId / backlogItemId are soft references (plain columns,
+// not enforced FKs — same pattern as AbsorptionPosture) so an assessment can exist
+// before every referent is normalized. Additive, fleet-safe.
+model IncumbentCoverageAssessment {
+  id                           String    @id @default(cuid())
+  assessmentId                 String    @unique
+  /// The incumbent application: a DigitalProduct with coverageStatus=incumbent.
+  digitalProductId             String
+  /// Normalized identity (shared with Phase C), when resolved.
+  catalogIdentityId            String?
+  /// native_now | adapter_bridge | generic_connector | provider_led |
+  /// do_not_absorb | gap — == ABSORPTION_VERDICTS.
+  verdict                      String
+  /// CAPABILITY_REGISTRY key that covers it, when known.
+  coveringCapabilityKey        String?
+  coveringBusinessCapabilityId String?
+  confidence                   Float     @default(0)
+  /// posture_matrix | rule | ai | human_confirmed — provenance of the verdict.
+  assessedVia                  String
+  /// What was matched, and on what basis.
+  evidence                     Json?
+  /// Set when verdict=gap — populated by D4 (gap→backlog), not this model.
+  backlogItemId                String?
+  /// proposed | confirmed | superseded. No verdict reaches confirmed without
+  /// human/authorized-coworker action (spec R3 / §7).
+  status                       String    @default("proposed")
+  assessedAt                   DateTime  @default(now())
+  supersededAt                 DateTime?
+  createdAt                    DateTime  @default(now())
+  updatedAt                    DateTime  @updatedAt
+
+  @@index([digitalProductId])
+  @@index([verdict])
+  @@index([status])
+  @@index([assessedVia])
+}
+
+model McpCatalogSync {
+  id                String    @id @default(cuid())
+  triggeredBy       String
+  triggeredByUserId String?
+  startedAt         DateTime  @default(now())
+  completedAt       DateTime?
+  status            String    @default("running")
+  totalFetched      Int?
+  totalUpserted     Int?
+  totalNew          Int?
+  totalRemoved      Int?
+  error             String?   @db.Text
+
+  @@index([startedAt])
+}
+
+// ─── Discovery Connections ─────────────────────────────────────────────────────
+// Connects discovered infrastructure entities (e.g. gateways) to their management
+// APIs.  When a gateway is discovered, the user can configure a connection with
+// credentials.  On subsequent discovery sweeps, collectors read these connections
+// from the DB and use them to pull rich topology data.
+model DiscoveryConnection {
+  id                String            @id @default(cuid())
+  connectionKey     String            @unique // e.g. "unifi:192.168.0.1"
+  name              String // human label
+  collectorType     String // "unifi" | future: "meraki", "fortigate", ...
+  status            String            @default("unconfigured") // unconfigured | active | auth_failed | unreachable
+  endpointUrl       String // e.g. "https://192.168.0.1"
+  encryptedApiKey   String? // AES-256-GCM encrypted via credential-crypto
+  configuration     Json              @default("{}") // collector-specific config (site, discoverClients, etc.)
+  lastTestedAt      DateTime?
+  lastTestStatus    String? // ok | auth_failed | unreachable | tls_error
+  lastTestMessage   String?
+  gatewayEntityId   String? // FK to the InventoryEntity that triggered this connection
+  customerAccountId String?
+  customerSiteId    String?
+  targetEdgeNodeId  String?
+  gatewayEntity     InventoryEntity?  @relation("DiscoveryConnectionGateway", fields: [gatewayEntityId], references: [id])
+  customerAccount   CustomerAccount?  @relation(fields: [customerAccountId], references: [id], onDelete: SetNull)
+  customerSite      CustomerSite?     @relation(fields: [customerSiteId], references: [id], onDelete: SetNull)
+  targetEdgeNode    EdgeNode?         @relation("EdgeNodeTargetedDiscoveryConnections", fields: [targetEdgeNodeId], references: [id], onDelete: SetNull)
+  inventoryEntities InventoryEntity[] @relation("DiscoveredViaConnection")
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  @@index([collectorType])
+  @@index([status])
+  @@index([customerAccountId])
+  @@index([customerSiteId])
+  @@index([targetEdgeNodeId])
+}
+
+// ─── Integration Coverage Matrix ─────────────────────────────────────────────
+enum WriteGateRequirement {
+  credential_verified
+  read_probe_passed
+  audit_log_enabled
+  approval_binding
+}
+
+model IntegrationCoverageProvider {
+  id                String       @id @default(cuid())
+  organizationId    String
+  organization      Organization @relation("OrgToCoverageProviders", fields: [organizationId], references: [id])
+  providerKey       String
+  displayName       String
+  posture           String
+  replacementIntent String
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+
+  @@unique([organizationId, providerKey])
+  @@index([organizationId])
+}
+
+model IntegrationRoleCoverage {
+  id             String                 @id @default(cuid())
+  organizationId String
+  organization   Organization           @relation("OrgToCoverageCells", fields: [organizationId], references: [id])
+  providerKey    String
+  role           String
+  surface        String
+  readPosture    String
+  writeGates     WriteGateRequirement[]
+  createdAt      DateTime               @default(now())
+
+  @@unique([organizationId, providerKey, role, surface])
+  @@index([organizationId])
+}
+
+// ─── Reduction Gear Phase 0 — GearInterface canonical observation envelope ────
+//
+// One row per "transmission" at a ring interface in the agentic gear train.
+// Phase 0 emits at Ring 1→2 (Coworker → Workflow) only; outer rings get
+// contract stubs but no production dual-emission yet.
+//
+// Spec: docs/superpowers/specs/2026-05-24-reduction-gear-architecture-design.md §3.1
+// BI:   BI-85CB31F0 (Phase 0 pilot)
+// Epic: EP-REDUCTION-GEAR-ARCH
+//
+// Authority model: existing source tables (ToolExecution, AdapterRunTelemetry,
+// BuildPhaseRun, FeatureBuild, RuntimeVerification, …) remain the authoritative
+// write models for their domains. GearInterface dual-emits alongside them as a
+// normalized read/evidence/calibration stream. NEVER migrate or mutate source
+// tables to fit this stream.
+model GearInterface {
+  id             String    @id @default(cuid())
+  schemaVersion  Int       @default(1)
+  recordedAt     DateTime  @default(now())
+  sourceEventAt  DateTime?
+  /// Deterministic key for upsert/replay; see writer service derivation.
+  /// Format: {interfaceClass}:{innerRing}:{outerRing}:{transmissionDirection}:{shaftSourceType}:{shaftSourceId}:{outcomeType}[:{suffix}]
+  idempotencyKey String    @unique
+  organizationId String?
+
+  // Where this transmission happens
+  /// 'internal-adjacent' (Ring N ↔ N+1) | 'external-federated' (other DPF install)
+  /// | 'external-bridged' (non-DPF via adapter) | 'external-customer' (read-only slice)
+  interfaceClass           String
+  /// 'outward' (inner→outer compounding) | 'inward' (outer→inner learning/release/priors)
+  /// | 'lateral' (external peer/federated only; never internal)
+  transmissionDirection    String  @default("outward")
+  /// 1..5; required for internal-adjacent
+  innerRing                Int?
+  /// 1..5; for internal-adjacent, equals innerRing + 1
+  outerRing                Int?
+  /// 'supplier' | 'partner' | 'customer' | 'peer-install'; required when interfaceClass='external-*'
+  externalCounterpartyType String?
+  /// Pseudonymized identifier — never store raw counterparty PII here
+  externalCounterpartyId   String?
+
+  // What event crossed the boundary (polymorphic source — FK-by-string)
+  /// 'tool-execution' | 'phase-run' | 'capsule' | 'promotion' | 'feature-pack'
+  /// | 'a2a-thread' | 'deliberation' | 'runtime-verification' | 'decision-interaction'
+  /// | 'external-po' | 'external-invoice' | 'external-handoff'
+  /// | 'platform-upgrade-run' | 'release-manifest' | 'channel-manifest'
+  /// | 'migration-classifier' | 'seed-delta-manifest'
+  shaftSourceType  String
+  /// FK-by-string into the source table's id column (or external reference id)
+  shaftSourceId    String
+  /// 'agent' | 'human' | 'system'
+  actorType        String
+  actorId          String
+  actorPrincipalId String?
+  /// Canonical capability name — Phase 0 emits raw intent verbatim (capabilityVocabularyVersion='raw-v0')
+  intent           String
+
+  // The thing being graded — the capability triple
+  capabilityName              String
+  capabilityVocabularyVersion String  @default("raw-v0")
+  /// Null only at Ring 1→2 and explicitly archetype-agnostic system work
+  archetypeContext            String?
+  agentIdForTriple            String
+
+  // Mechanical readings — see spec §3.4
+  /// 0..1 — pass=1.0, partial=0.5, fail=0.0 with severity adjustments
+  torqueTechnical  Float
+  /// 0..1 — business-outcome attribution; null until value-signal wiring lands
+  torqueValue      Float?
+  /// 0..1 — grader confidence in the score
+  torqueConfidence Float
+  /// How many inner-ring events fed this outer-ring advance (gear ratio)
+  ratioConsumed    Int
+  /// 'transmission' | 'slip' | 'graduation' | 'veto' | 'calibration-update'
+  outcomeType      String
+  slipDetected     Boolean @default(false)
+  /// 'novel-context' | 'failed-outcome' | 'human-override' | 'cost-overrun'
+  /// | 'safety-block' | 'rate-limit' | 'capability-gap' | 'migration-destructive'
+  /// | 'manifest-invalid' | 'signature-invalid' | 'seed-delta-conflict' | 'source-unindexed'
+  /// | 'archetype-unresolved'
+  slipReason       String?
+
+  // Cost — Decimal because this joins AI cost governance + finance views
+  costUsd                  Decimal? @db.Decimal(12, 6)
+  inputTokens              Int?
+  outputTokens             Int?
+  cacheCreationInputTokens Int?
+  cacheReadInputTokens     Int?
+  reasoningOutputTokens    Int?
+  durationMs               Int?
+
+  // Trust / autonomy state at this interface — see spec §6.2 governor mapping
+  /// 'hitl-required' | 'hitl-fallback' | 'auto-confirm' | 'auto-silent'
+  graduationFromAutonomy String?
+  graduationToAutonomy   String?
+  graduationSampleSize   Int?
+  /// DecisionInteraction id — graduation audit link
+  graduationGovernorRef  String?
+
+  // Provenance — HITL is the training signal
+  /// 'human' | 'automated' | 'deliberation' | 'runtime-check'
+  graderType String
+  graderId   String?
+  /// Captured when graderType='human'
+  rationale  String?
+
+  // OTel correlation (best-effort; export not required for write)
+  otelTraceId  String?
+  otelSpanId   String?
+  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, recordedAt])
+  @@index([innerRing, outerRing, transmissionDirection, recordedAt])
+  @@index([capabilityName, archetypeContext, recordedAt])
+  @@index([agentIdForTriple, capabilityName, archetypeContext])
+  @@index([shaftSourceType, shaftSourceId])
+  @@index([outcomeType, recordedAt])
+}
+
+/// Per-token deferred-tool-loading session (BI-D8101329, MCP tool-tier Phase 2).
+/// Keyed by the MCP token id (PAT id or `session:*` id). Records which
+/// additional tool names a model has pulled into scope via `load_tools`, so
+/// `tools/list` can APPEND them to the lean core tier (never swap it) on the
+/// next fetch. Short-TTL and swept on expiry — discovery-only state, no
+/// authorization meaning (execution still gates on grants at tools/call).
+model McpToolSession {
+  tokenId         String   @id
+  loadedToolNames String[] @default([])
+  expiresAt       DateTime
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @default(now()) @updatedAt
+
+  @@index([expiresAt])
+}

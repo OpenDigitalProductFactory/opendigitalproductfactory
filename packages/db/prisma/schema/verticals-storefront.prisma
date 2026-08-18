@@ -1,0 +1,766 @@
+model StorefrontArchetype {
+  id                  String                           @id @default(cuid())
+  archetypeId         String                           @unique
+  name                String
+  category            String
+  ctaType             String
+  itemTemplates       Json
+  sectionTemplates    Json
+  formSchema          Json
+  tags                String[]
+  isActive            Boolean                          @default(true)
+  isBuiltIn           Boolean                          @default(true)
+  activationProfile   Json?
+  productMix          Json?
+  customVocabulary    Json?
+  marketingSkillRules Json?
+  createdAt           DateTime                         @default(now())
+  updatedAt           DateTime                         @updatedAt
+  storefronts         StorefrontConfig[]
+  compositionSlots    StorefrontArchetypeComposition[]
+
+  @@index([category])
+  @@index([isActive])
+}
+
+model StorefrontConfig {
+  id                             String                           @id @default(cuid())
+  organizationId                 String                           @unique
+  archetypeId                    String
+  tagline                        String?
+  description                    String?
+  heroImageUrl                   String?
+  contactEmail                   String?
+  contactPhone                   String?
+  socialLinks                    Json?
+  designSystem                   Json?
+  isPublished                    Boolean                          @default(false)
+  customDomain                   String?
+  timezone                       String                           @default("UTC")
+  portfolioId                    String?
+  createdAt                      DateTime                         @default(now())
+  updatedAt                      DateTime                         @updatedAt
+  bookings                       StorefrontBooking[]
+  archetype                      StorefrontArchetype              @relation(fields: [archetypeId], references: [id])
+  organization                   Organization                     @relation(fields: [organizationId], references: [id])
+  donations                      StorefrontDonation[]
+  inquiries                      StorefrontInquiry[]
+  items                          StorefrontItem[]
+  orders                         StorefrontOrder[]
+  sections                       StorefrontSection[]
+  providers                      ServiceProvider[]
+  bookingHolds                   BookingHold[]
+  marketingStrategies            MarketingStrategy[]
+  rentableUnits                  RentableUnit[]
+  rentalAgreements               RentalAgreement[]
+  adoptableAnimals               AdoptableAnimal[]
+  archetypeCompositions          StorefrontArchetypeComposition[]
+  hospitalityResources           HospitalityResource[]
+  hospitalityCapacityPools       HospitalityCapacityPool[]
+  hospitalityCapacityAllocations HospitalityCapacityAllocation[]
+  hospitalityServiceTurns        HospitalityServiceTurn[]
+  beautyResources                BeautyResource[]
+  beautyResourceServices         BeautyResourceService[]
+  beautyCapacityAllocations      BeautyCapacityAllocation[]
+
+  @@unique([id, organizationId])
+  @@index([archetypeId]) // FK-leading (spine): storefront-by-archetype relation join, apps/web/lib/demo/load-demo-business.ts:335
+}
+
+/// Operator-authored geometry for one operational-twin scene. Live business
+/// state remains in its owning domain models and is joined through layoutState
+/// placement entity references at read time.
+model OperationalSceneLayout {
+  id           String       @id @default(cuid())
+  orgId        String
+  twinTemplate String
+  spaceKind    String
+  locationId   String?
+  label        String
+  layoutState  Json
+  underlayRef  String?
+  version      Int          @default(1)
+  updatedAt    DateTime     @updatedAt
+  createdAt    DateTime     @default(now())
+  organization Organization @relation(fields: [orgId], references: [orgId], onDelete: Cascade)
+
+  @@unique([orgId, twinTemplate, locationId])
+  @@index([orgId, twinTemplate])
+}
+
+// ── Multi-archetype composition (EP-ARCH-8D4F2A) ─────────────────────────────
+// One StorefrontConfig maps to one primary archetype + up to 2 secondaries.
+// StorefrontConfig.archetypeId remains the canonical primary FK (unchanged).
+// This join table is additive: single-archetype storefronts get one row here
+// (role=primary) written at setup completion; secondaries are added post-setup
+// via the "Add service line" admin action.
+model StorefrontArchetypeComposition {
+  id            String    @id @default(cuid())
+  storefrontId  String
+  archetypeId   String
+  productLineId String?   @unique
+  /// "primary" | "secondary"
+  role          String
+  sortOrder     Int       @default(0)
+  /// Soft-delete: set when operator removes a service line. Seeded items/sections
+  /// are deactivated/hidden first; this marks the composition row as inactive while
+  /// preserving the audit trail. sourceCompositionId FKs use onDelete:SetNull so
+  /// historical item rows survive a hard delete if ever needed.
+  removedAt     DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  storefront     StorefrontConfig    @relation(fields: [storefrontId], references: [id], onDelete: Cascade)
+  archetype      StorefrontArchetype @relation(fields: [archetypeId], references: [id])
+  productLine    ProductLine?        @relation(fields: [productLineId], references: [id], onDelete: SetNull)
+  seededItems    StorefrontItem[]
+  seededSections StorefrontSection[]
+
+  @@unique([storefrontId, archetypeId])
+  @@index([storefrontId, role])
+  @@index([removedAt])
+}
+
+model StorefrontSection {
+  id                  String                          @id @default(cuid())
+  storefrontId        String
+  type                String
+  title               String?
+  content             Json
+  sortOrder           Int                             @default(0)
+  isVisible           Boolean                         @default(true)
+  /// Provenance: set when this section was seeded by a secondary add-line action.
+  sourceCompositionId String?
+  createdAt           DateTime                        @default(now())
+  updatedAt           DateTime                        @updatedAt
+  storefront          StorefrontConfig                @relation(fields: [storefrontId], references: [id], onDelete: Cascade)
+  sourceComposition   StorefrontArchetypeComposition? @relation(fields: [sourceCompositionId], references: [id], onDelete: SetNull)
+
+  @@index([storefrontId, sortOrder])
+  @@index([sourceCompositionId])
+}
+
+model StorefrontItem {
+  id                     String                          @id @default(cuid())
+  itemId                 String                          @unique
+  storefrontId           String
+  name                   String
+  description            String?
+  category               String?
+  priceAmount            Decimal?
+  priceCurrency          String                          @default("USD")
+  priceType              String?
+  imageUrl               String?
+  ctaType                String
+  ctaLabel               String?
+  bookingConfig          Json?
+  isActive               Boolean                         @default(true)
+  sortOrder              Int                             @default(0)
+  /// Provenance: set when this item was seeded by a secondary add-line action.
+  /// Used by removeStorefrontServiceLine to scope cleanup to the right items.
+  sourceCompositionId    String?
+  catalogItemId          String?
+  createdAt              DateTime                        @default(now())
+  updatedAt              DateTime                        @updatedAt
+  storefront             StorefrontConfig                @relation(fields: [storefrontId], references: [id], onDelete: Cascade)
+  sourceComposition      StorefrontArchetypeComposition? @relation(fields: [sourceCompositionId], references: [id], onDelete: SetNull)
+  catalogItem            CatalogItem?                    @relation(fields: [catalogItemId], references: [id], onDelete: SetNull)
+  providerServices       ProviderService[]
+  beautyResourceServices BeautyResourceService[]
+  bookingHolds           BookingHold[]
+  rentableUnits          RentableUnit[]
+  rentalAgreements       RentalAgreement[]
+  stockComponents        StorefrontItemComponent[]
+
+  @@unique([id, storefrontId])
+  @@index([storefrontId, isActive, sortOrder])
+  @@index([sourceCompositionId])
+  @@index([catalogItemId])
+}
+
+model StorefrontBooking {
+  id                          String                          @id @default(cuid())
+  bookingRef                  String                          @unique
+  organizationId              String
+  storefrontId                String
+  itemId                      String
+  customerContactId           String?
+  customerEmail               String?
+  customerName                String
+  customerPhone               String?
+  scheduledAt                 DateTime
+  durationMinutes             Int
+  // Structured reservation context (BI-3DA1DFDC): party size and dietary notes are
+  // first-class facts so the owner handoff is traceable, not buried in `notes`.
+  covers                      Int?
+  demandKind                  String                          @default("reservation")
+  dietaryNotes                String?
+  notes                       String?
+  status                      String                          @default("pending")
+  providerId                  String?
+  hospitalityResourceId       String?
+  assignmentMode              String?
+  recurrenceRule              String?
+  recurrenceEndDate           DateTime?
+  parentBookingId             String?
+  fromReschedule              String?
+  cancellationReason          String?
+  cancelledAt                 DateTime?
+  // EP-056D2A5E / BI-CC4659CB. Set by the booking-overlap-exclusion migration
+  // when a PRE-EXISTING overlap is found: the later row of the pair is parked
+  // here (not cancelled, not deleted) so the EXCLUDE constraint can land without
+  // destroying customer data (kernel decision B/D5, principle_decide 2026-07-03).
+  // Excluded from the constraint predicate; non-null rows are the operator review
+  // queue. New bookings never set this.
+  overlapQuarantinedAt        DateTime?
+  idempotencyKey              String?                         @unique
+  createdAt                   DateTime                        @default(now())
+  updatedAt                   DateTime                        @updatedAt
+  storefront                  StorefrontConfig                @relation(fields: [storefrontId], references: [id])
+  organization                Organization                    @relation("StorefrontBookingOrganization", fields: [organizationId], references: [id], onDelete: Restrict)
+  provider                    ServiceProvider?                @relation(fields: [providerId], references: [id])
+  hospitalityResource         HospitalityResource?            @relation("HospitalityBookingResource", fields: [hospitalityResourceId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  hospitalityAllocations      HospitalityCapacityAllocation[] @relation("HospitalityAllocationBooking")
+  hospitalityServiceTurn      HospitalityServiceTurn?         @relation("HospitalityServiceTurnBooking")
+  beautyAllocations           BeautyCapacityAllocation[]      @relation("BeautyAllocationBooking")
+  parentBooking               StorefrontBooking?              @relation("BookingRecurrence", fields: [parentBookingId], references: [id])
+  childBookings               StorefrontBooking[]             @relation("BookingRecurrence")
+  careAppointment             CareAppointment?
+  productSoldEvidence         ProductSoldEvidence[]           @relation("ProductSoldEvidenceBooking")
+  productFulfillmentInstances ProductFulfillmentInstance[]    @relation("ProductFulfillmentBooking")
+
+  @@unique([id, organizationId])
+  @@index([storefrontId, status])
+  @@index([customerEmail])
+  @@index([scheduledAt])
+  @@index([hospitalityResourceId, scheduledAt])
+  @@index([parentBookingId]) // FK-leading (self-relation): child-booking lookup for grouped bookings
+  @@index([providerId]) // FK-leading (spine): provider-day busy-booking scan, apps/web/lib/slot-engine/compute-slots.ts:139
+}
+
+model ServiceProvider {
+  id           String   @id @default(cuid())
+  providerId   String   @unique
+  storefrontId String
+  name         String
+  email        String?
+  phone        String?
+  avatarUrl    String?
+  employeeId   String?
+  isActive     Boolean  @default(true)
+  priority     Int      @default(0)
+  weight       Int      @default(100)
+  sortOrder    Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  storefront                  StorefrontConfig             @relation(fields: [storefrontId], references: [id])
+  employee                    EmployeeProfile?             @relation(fields: [employeeId], references: [id])
+  services                    ProviderService[]
+  availability                ProviderAvailability[]
+  bookings                    StorefrontBooking[]
+  bookingHolds                BookingHold[]
+  careAppointmentParticipants CareAppointmentParticipant[]
+  hospitalityResource         HospitalityResource?         @relation("HospitalityResourceLegacyProvider")
+
+  @@index([storefrontId])
+}
+
+model ProviderService {
+  id         String @id @default(cuid())
+  providerId String
+  itemId     String
+
+  provider ServiceProvider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  item     StorefrontItem  @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  @@unique([providerId, itemId])
+  @@index([itemId]) // FK-leading (spine): provider-service cleanup per item, apps/web/app/api/storefront/admin/items/[id]/route.ts:166
+}
+
+model ProviderAvailability {
+  id         String    @id @default(cuid())
+  providerId String
+  days       Int[]     @default([])
+  startTime  String
+  endTime    String
+  date       DateTime?
+  isBlocked  Boolean   @default(false)
+  reason     String?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  provider ServiceProvider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+
+  @@index([providerId])
+  @@index([providerId, date])
+}
+
+model BookingHold {
+  id                    String   @id @default(cuid())
+  organizationId        String
+  storefrontId          String
+  itemId                String
+  providerId            String?
+  hospitalityResourceId String?
+  slotStart             DateTime
+  slotEnd               DateTime
+  holderToken           String
+  holderIp              String?
+  expiresAt             DateTime
+  createdAt             DateTime @default(now())
+
+  storefront             StorefrontConfig                @relation(fields: [storefrontId], references: [id], onDelete: Cascade)
+  organization           Organization                    @relation("BookingHoldOrganization", fields: [organizationId], references: [id], onDelete: Restrict)
+  item                   StorefrontItem                  @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  provider               ServiceProvider?                @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  hospitalityResource    HospitalityResource?            @relation("HospitalityHoldResource", fields: [hospitalityResourceId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  hospitalityAllocations HospitalityCapacityAllocation[] @relation("HospitalityAllocationHold")
+  beautyAllocations      BeautyCapacityAllocation[]      @relation("BeautyAllocationHold")
+
+  @@unique([id, organizationId])
+  @@index([storefrontId, slotStart, slotEnd])
+  @@index([hospitalityResourceId, slotStart, slotEnd])
+  @@index([expiresAt])
+}
+
+model StorefrontOrder {
+  id                String                    @id @default(cuid())
+  orderRef          String                    @unique
+  organizationId    String?
+  storefrontId      String
+  customerContactId String?
+  customerEmail     String
+  customerName      String?
+  deliveryAddress   Json?
+  items             Json
+  totalAmount       Decimal
+  currency          String                    @default("USD")
+  status            String                    @default("pending")
+  createdAt         DateTime                  @default(now())
+  updatedAt         DateTime                  @updatedAt
+  storefront        StorefrontConfig          @relation(fields: [storefrontId], references: [id])
+  organization      Organization?             @relation("StorefrontOrderOrganization", fields: [organizationId], references: [id], onDelete: Restrict)
+  lineItems         StorefrontOrderLineItem[]
+
+  @@unique([id, organizationId])
+  @@index([storefrontId, status])
+  @@index([organizationId, status])
+  @@index([customerEmail])
+}
+
+// Normalized forward authority for storefront purchase lines. The legacy
+// StorefrontOrder.items JSON remains a compatibility payload during expand.
+model StorefrontOrderLineItem {
+  id                    String                @id @default(cuid())
+  lineId                String                @unique
+  organizationId        String
+  storefrontOrderId     String
+  catalogItemId         String
+  catalogSkuId          String?
+  description           String
+  quantity              Decimal               @default(1)
+  unitPrice             Decimal
+  discountAmount        Decimal               @default(0)
+  taxAmount             Decimal               @default(0)
+  totalAmount           Decimal
+  currency              String                @default("USD")
+  configurationSnapshot Json?
+  pricingSnapshot       Json
+  sourcePosition        Int?
+  sourceKind            String?
+  sourceRef             String?
+  createdAt             DateTime              @default(now())
+  updatedAt             DateTime              @updatedAt
+  organization          Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  storefrontOrder       StorefrontOrder       @relation(fields: [storefrontOrderId, organizationId], references: [id, organizationId], onDelete: Cascade)
+  catalogItem           CatalogItem           @relation(fields: [catalogItemId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  catalogSku            CatalogSku?           @relation(fields: [catalogSkuId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  productSoldEvidence   ProductSoldEvidence[] @relation("ProductSoldEvidenceStorefrontOrderLine")
+
+  @@unique([id, organizationId])
+  @@unique([storefrontOrderId, sourcePosition])
+  @@index([organizationId, catalogItemId])
+  @@index([catalogSkuId])
+}
+
+// ── Rental / shared-asset value stream (EP-ARCH-8D4F2A, BI-EEA24A34) ──────────
+// Models the reserve → checkout → return & inspect → re-pool lifecycle for
+// stocked, returnable assets. StorefrontItem remains the rate-card *class*
+// ("Compact SUV", "Scaffold Tower", "10x10 Unit"); RentableUnit is an
+// individual stocked asset (optional — a class can be a quantity-pool with
+// stockQuantity and zero units); RentalAgreement is the rental analog of
+// StorefrontBooking. BookingHold (reused) carries reservation concurrency.
+// String-enum columns are registered in apps/web/lib/storefront/rental.ts.
+model RentableUnit {
+  id               String    @id @default(cuid())
+  unitId           String    @unique
+  storefrontId     String
+  storefrontItemId String
+  catalogSkuId     String?
+  unitRef          String? // plate / VIN / serial
+  label            String
+  status           String    @default("available") // available|reserved|out|returned|maintenance|retired
+  meterReading     Decimal? // mileage / hours
+  attributes       Json?
+  acquiredAt       DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  storefront                  StorefrontConfig             @relation(fields: [storefrontId], references: [id], onDelete: Cascade)
+  item                        StorefrontItem               @relation(fields: [storefrontItemId], references: [id], onDelete: Cascade)
+  catalogSku                  CatalogSku?                  @relation(fields: [catalogSkuId], references: [id], onDelete: SetNull)
+  agreements                  RentalAgreement[]
+  productFulfillmentInstances ProductFulfillmentInstance[] @relation("ProductFulfillmentRentableUnit")
+
+  @@index([storefrontId, status])
+  @@index([storefrontItemId, status])
+  @@index([catalogSkuId])
+}
+
+model RentalAgreement {
+  id                   String    @id @default(cuid())
+  agreementRef         String    @unique
+  storefrontId         String
+  storefrontItemId     String
+  rentableUnitId       String? // null for quantity-pool classes
+  customerContactId    String?
+  customerEmail        String
+  customerName         String
+  customerPhone        String?
+  periodStart          DateTime
+  periodEnd            DateTime
+  pricingModel         String    @default("per-day") // per-day|per-week|usage-based|fixed
+  rateAmount           Decimal?
+  depositAmount        Decimal?
+  currency             String    @default("USD")
+  status               String    @default("reserved") // reserved|verified|active|returned|closed|cancelled
+  verificationStatus   String    @default("not-required") // not-required|pending|verified|failed
+  checkoutConditionId  String?   @unique
+  returnConditionId    String?   @unique
+  cancellationReason   String?
+  cancelledAt          DateTime?
+  // EP-056D2A5E / BI-CC4659CB. See StorefrontBooking.overlapQuarantinedAt — the
+  // later row of a pre-existing overlapping pair is parked here (not cancelled,
+  // not deleted) so the EXCLUDE constraint can land without destroying customer
+  // data. Excluded from the constraint predicate; non-null rows are the operator
+  // review queue.
+  overlapQuarantinedAt DateTime?
+  idempotencyKey       String?   @unique
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  storefront                  StorefrontConfig             @relation(fields: [storefrontId], references: [id], onDelete: Cascade)
+  item                        StorefrontItem               @relation(fields: [storefrontItemId], references: [id], onDelete: Cascade)
+  rentableUnit                RentableUnit?                @relation(fields: [rentableUnitId], references: [id])
+  customerContact             CustomerContact?             @relation(fields: [customerContactId], references: [id])
+  checkoutCondition           RentalConditionRecord?       @relation("CheckoutCondition", fields: [checkoutConditionId], references: [id])
+  returnCondition             RentalConditionRecord?       @relation("ReturnCondition", fields: [returnConditionId], references: [id])
+  conditionRecords            RentalConditionRecord[]      @relation("AgreementConditions")
+  productSoldEvidence         ProductSoldEvidence[]        @relation("ProductSoldEvidenceRentalAgreement")
+  productFulfillmentInstances ProductFulfillmentInstance[] @relation("ProductFulfillmentRentalAgreement")
+
+  @@index([storefrontId, status])
+  @@index([rentableUnitId, status])
+  @@index([periodStart, periodEnd])
+  @@index([customerEmail])
+}
+
+model RentalConditionRecord {
+  id           String   @id @default(cuid())
+  agreementId  String
+  phase        String // checkout|return
+  meterReading Decimal?
+  notes        String?
+  mediaRefs    Json?
+  recordedById String?
+  recordedAt   DateTime @default(now())
+
+  agreement            RentalAgreement  @relation("AgreementConditions", fields: [agreementId], references: [id], onDelete: Cascade)
+  checkoutForAgreement RentalAgreement? @relation("CheckoutCondition")
+  returnForAgreement   RentalAgreement? @relation("ReturnCondition")
+
+  @@index([agreementId, phase])
+}
+
+// Media asset management — see
+// docs/superpowers/specs/2026-06-12-media-asset-management-design.md.
+// One first-class, org-scoped, content-addressed asset (MediaAsset) plus a
+// polymorphic, ordered, role-tagged attachment (MediaAttachment) so any entity
+// can carry galleries without a column per model. Existing scalar imageUrl /
+// logoUrl / avatarUrl / heroImageUrl fields stay as a denormalized primary-image
+// cache, kept in sync from the primary attachment.
+model MediaAsset {
+  id             String   @id @default(cuid())
+  organizationId String
+  sha256         String // content hash; dedup key within an org
+  storageKey     String // path within the blob store
+  storageDriver  String   @default("filesystem") // filesystem|s3|gcs — pluggable
+  kind           String   @default("image") // image|video|document
+  mimeType       String
+  sizeBytes      Int
+  width          Int?
+  height         Int?
+  durationMs     Int? // video
+  altText        String? // SEO + accessibility
+  dominantColor  String? // hex, low-quality placeholder background
+  blurhash       String? // tiny placeholder string
+  focalX         Float?   @default(0.5) // 0..1 crop anchor
+  focalY         Float?   @default(0.5)
+  originalName   String?
+  status         String   @default("ready") // uploading|ready|failed|quarantined
+  createdById    String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  attachments  MediaAttachment[]
+
+  @@unique([organizationId, sha256])
+  @@index([organizationId, kind, status])
+}
+
+model MediaAttachment {
+  id             String   @id @default(cuid())
+  organizationId String
+  mediaAssetId   String
+  ownerType      String // StorefrontItem|RentableUnit|AdoptableAnimal|ServiceProvider|StorefrontConfig|StorefrontSection|Organization|RentalConditionRecord
+  ownerId        String
+  role           String   @default("gallery") // primary|gallery|hero|logo|avatar|equipment|inspection-checkout|inspection-return|before|after
+  sortOrder      Int      @default(0)
+  caption        String?
+  createdAt      DateTime @default(now())
+
+  asset        MediaAsset   @relation(fields: [mediaAssetId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id])
+
+  @@index([ownerType, ownerId, role, sortOrder])
+  @@index([organizationId])
+  @@index([mediaAssetId])
+}
+
+// The adoptable animal — the entity behind the `animals-available` storefront
+// section (pet-rescue, animal-shelter), which previously had no model. Shaped
+// after Petfinder: a gallery (MediaAttachment, ownerType="AdoptableAnimal") plus
+// a designated primary photo.
+model AdoptableAnimal {
+  id                  String    @id @default(cuid())
+  animalRef           String    @unique
+  storefrontId        String
+  organizationId      String
+  name                String
+  species             String? // dog|cat|rabbit|other
+  breed               String?
+  age                 String? // baby|young|adult|senior | free text
+  sex                 String?
+  size                String? // small|medium|large|xl
+  description         String?   @db.Text
+  status              String    @default("available") // available|pending|adopted|hold
+  primaryPhotoAssetId String?
+  attributes          Json? // spayed/neutered, good-with-kids/dogs/cats, house-trained
+  publishedAt         DateTime?
+  adoptedAt           DateTime?
+  sortOrder           Int       @default(0)
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  storefront   StorefrontConfig @relation(fields: [storefrontId], references: [id], onDelete: Cascade)
+  organization Organization     @relation(fields: [organizationId], references: [id])
+
+  @@index([storefrontId, status, sortOrder])
+}
+
+model StorefrontInquiry {
+  id                String           @id @default(cuid())
+  inquiryRef        String           @unique
+  storefrontId      String
+  itemId            String?
+  customerContactId String?
+  customerEmail     String
+  customerName      String
+  customerPhone     String?
+  message           String?
+  formData          Json?
+  status            String           @default("new")
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+  storefront        StorefrontConfig @relation(fields: [storefrontId], references: [id])
+
+  @@index([storefrontId, status])
+  @@index([customerEmail])
+}
+
+model StorefrontDonation {
+  id                String           @id @default(cuid())
+  donationRef       String           @unique
+  storefrontId      String
+  customerContactId String?
+  donorEmail        String
+  donorName         String?
+  amount            Decimal
+  currency          String           @default("USD")
+  campaignId        String?
+  message           String?
+  isAnonymous       Boolean          @default(false)
+  status            String           @default("pending")
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+  storefront        StorefrontConfig @relation(fields: [storefrontId], references: [id])
+
+  @@index([storefrontId, status])
+  @@index([donorEmail])
+}
+
+// ─── Finance: Accounts Payable ─────────────────────────────────────
+
+// ── Stock coverage starter (EP-SPEND-PROCUREMENT-ASSETS, BI-SPEND-003 slice) ──
+// The smallest honest model of "are we about to run out of what we sell":
+// a stocked supply the operator counts, and the per-unit link from a sellable
+// StorefrontItem to the supplies it consumes.
+//
+// Deliberately NOT a warehouse system. onHandQuantity is operator-maintained
+// (a stocktake number), and CONSUMPTION IS DERIVED FROM ACTUAL SALES rather
+// than from a decrement ledger — which is how a small operator actually works,
+// and which keeps this slice free of partial-fulfilment/reversal semantics.
+// Receipts, adjustments, valuation, and COGS posting remain BI-SPEND-003 scope.
+//
+// Naming note: `InventoryEntity` is the IT-estate discovery model and `Bom*` is
+// the software bill of materials; neither describes physical supplies, so this
+// is genuinely new substrate rather than a fork of either.
+model StockItem {
+  id              String   @id @default(cuid())
+  stockItemId     String   @unique
+  organizationId  String
+  name            String
+  /// Counting unit the operator thinks in (kg, litre, each, case).
+  unit            String
+  /// Latest counted quantity. Operator-maintained; not a running ledger.
+  onHandQuantity  Decimal  @default(0)
+  /// Reorder when coverage falls to/below this quantity.
+  reorderPoint    Decimal  @default(0)
+  /// Suggested quantity to order when below the reorder point.
+  reorderQuantity Decimal  @default(0)
+  supplierId      String?
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  organization Organization              @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  supplier     Supplier?                 @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  components   StorefrontItemComponent[]
+
+  @@unique([organizationId, name])
+  @@index([organizationId, isActive])
+  @@index([supplierId])
+}
+
+/// One line of a sellable item's recipe: selling one unit of `storefrontItem`
+/// consumes `quantityPerUnit` of `stockItem`. Archetype-neutral — a dish
+/// consumes mozzarella, a salon service consumes colourant.
+model StorefrontItemComponent {
+  id               String   @id @default(cuid())
+  storefrontItemId String
+  stockItemId      String
+  quantityPerUnit  Decimal
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  storefrontItem StorefrontItem @relation(fields: [storefrontItemId], references: [id], onDelete: Cascade)
+  stockItem      StockItem      @relation(fields: [stockItemId], references: [id], onDelete: Cascade)
+
+  @@unique([storefrontItemId, stockItemId])
+  @@index([stockItemId])
+}
+
+// ─── Course Management ────────────────────────────────────────────
+model CourseProduct {
+  id                String           @id @default(cuid())
+  courseProductId   String           @unique
+  name              String
+  description       String?
+  standardPriceUsd  Decimal
+  durationDays      Int
+  certificationBody String?
+  isActive          Boolean          @default(true)
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+  instances         CourseInstance[]
+
+  @@index([isActive])
+  @@index([certificationBody])
+}
+
+model CourseInstance {
+  id                String               @id @default(cuid())
+  jobCode           String               @unique
+  courseProductId   String
+  startDate         DateTime
+  endDate           DateTime
+  trainerName       String?
+  location          String?
+  isPublic          Boolean              @default(true)
+  customerTag       String?
+  maxSeats          Int
+  currentEnrollment Int                  @default(0)
+  pricePerSeatUsd   Decimal?
+  status            String               @default("scheduled")
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+  courseProduct     CourseProduct        @relation(fields: [courseProductId], references: [id])
+  registrations     CourseRegistration[]
+
+  @@index([courseProductId, status])
+  @@index([startDate])
+  @@index([isPublic, status])
+  @@index([customerTag])
+}
+
+model CourseRegistration {
+  id               String         @id @default(cuid())
+  registrationId   String         @unique
+  courseInstanceId String
+  firstName        String
+  lastName         String
+  email            String
+  phone            String?
+  company          String?
+  country          String?
+  role             String?
+  netFeeUsd        Decimal        @default(0)
+  vatAmount        Decimal        @default(0)
+  instructorCost   Decimal        @default(0)
+  materialsCost    Decimal        @default(0)
+  voucherCost      Decimal        @default(0)
+  grossProfit      Decimal?
+  paymentStatus    String         @default("pending")
+  paidDate         DateTime?
+  stripeRef        String?
+  b2cInvoice       String?
+  xeroRef          String?
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+  courseInstance   CourseInstance @relation(fields: [courseInstanceId], references: [id])
+  examVoucher      ExamVoucher?
+
+  @@index([courseInstanceId, paymentStatus])
+  @@index([email])
+  @@index([stripeRef])
+  @@index([xeroRef])
+}
+
+model ExamVoucher {
+  id               String             @id @default(cuid())
+  registrationId   String             @unique
+  ogId             String?
+  voucherType      String?
+  voucherExpiry1   DateTime?
+  voucherExpiry2   DateTime?
+  ogStoreReference String?
+  status           String             @default("pending")
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+  registration     CourseRegistration @relation(fields: [registrationId], references: [id], onDelete: Cascade)
+
+  @@index([ogId])
+  @@index([status])
+}

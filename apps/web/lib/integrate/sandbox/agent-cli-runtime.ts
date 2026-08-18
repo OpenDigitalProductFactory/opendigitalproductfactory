@@ -37,7 +37,7 @@ export const SANDBOX_CONTAINER = process.env.SANDBOX_CONTAINER_ID ?? "dpf-sandbo
 export const SPECIALIST_ROLE_INSTRUCTIONS: Record<SpecialistRole, string> = {
   "data-architect": `You are a data architect working on a Prisma schema.
 Key files:
-- Schema: packages/db/prisma/schema.prisma
+- Schema: packages/db/prisma/schema/ (domain-split *.prisma files)
 - Validate with: pnpm --filter @dpf/db exec prisma validate
 - After changes: pnpm --filter @dpf/db exec prisma migrate dev --name <descriptive_name>
 - Then: pnpm --filter @dpf/db exec prisma generate

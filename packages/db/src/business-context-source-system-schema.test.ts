@@ -1,12 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { readCanonicalPrismaSchema } from "./schema-source";
 
 const repoRoot = join(__dirname, "..", "..", "..");
 
 describe("BusinessContext source system schema", () => {
   it("declares and migrates the optional sourceSystem field", () => {
-    const schema = readFileSync(join(repoRoot, "packages/db/prisma/schema.prisma"), "utf8");
+    const schema = readCanonicalPrismaSchema();
     expect(schema).toMatch(/model BusinessContext \{[\s\S]*sourceSystem\s+String\?/);
 
     const migrationPath = join(

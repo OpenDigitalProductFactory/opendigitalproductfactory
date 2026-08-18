@@ -1,0 +1,705 @@
+enum PrincipalSensitivity {
+  public
+  internal
+  confidential
+  restricted
+}
+
+model User {
+  id                             String                        @id @default(cuid())
+  email                          String                        @unique
+  passwordHash                   String
+  isActive                       Boolean                       @default(true)
+  isSuperuser                    Boolean                       @default(false)
+  createdAt                      DateTime                      @default(now())
+  approvedProposals              AgentActionProposal[]         @relation("ProposalDecisions")
+  agentThreads                   AgentThread[]
+  apiTokens                      ApiToken[]
+  mcpApiTokens                   McpApiToken[]
+  backlogSubmissions             BacklogItem[]                 @relation("BacklogSubmissions")
+  customEvalDimsApproved         CustomEvalDimension[]         @relation("CustomEvalDimensionApprover")
+  customEvalDimsCreated          CustomEvalDimension[]         @relation("CustomEvalDimensionCreator")
+  grantedDelegations             DelegationGrant[]             @relation("DelegationGrantGrantor")
+  employeeProfile                EmployeeProfile?
+  authoredEmploymentEvents       EmploymentEvent[]
+  epicSubmissions                Epic[]                        @relation("EpicSubmissions")
+  externalEvidenceRecords        ExternalEvidenceRecord[]
+  featureBuilds                  FeatureBuild[]
+  improvementReviews             ImprovementProposal[]         @relation("ImprovementReviews")
+  improvementSubmissions         ImprovementProposal[]         @relation("ImprovementSubmissions")
+  notifications                  Notification[]
+  notificationSubscriptions      NotificationSubscription[]    @relation("NotificationSubscriptionUser")
+  requestedPasswordResetTokens   PasswordResetToken[]          @relation("PasswordResetRequestedBy")
+  passwordResetTokens            PasswordResetToken[]          @relation("PasswordResetForUser")
+  issueReports                   PlatformIssueReport[]
+  policyRulesCreated             PolicyRule[]                  @relation("PolicyRuleCreator")
+  pushDevices                    PushDeviceRegistration[]
+  taskRequirementsApproved       TaskRequirement[]             @relation("TaskRequirementApprover")
+  taskRequirementsCreated        TaskRequirement[]             @relation("TaskRequirementCreator")
+  teamMemberships                TeamMembership[]
+  groups                         UserGroup[]
+  userSkills                     UserSkill[]                   @relation("UserSkillCreator")
+  invoicesCreated                Invoice[]                     @relation("InvoiceCreations")
+  invoiceDocumentsCreated        InvoiceDocument[]
+  paymentsCreated                Payment[]                     @relation("PaymentCreations")
+  journalEntriesCreated          JournalEntry[]                @relation("JournalEntryCreations")
+  journalEntriesPosted           JournalEntry[]                @relation("JournalEntryPostings")
+  engagementAssignments          Engagement[]                  @relation("EngagementAssignments")
+  opportunityAssignments         Opportunity[]                 @relation("OpportunityAssignments")
+  activitiesCreated              Activity[]                    @relation("ActivityCreations")
+  quotesCreated                  Quote[]                       @relation("QuoteCreations")
+  billsCreated                   Bill[]                        @relation("BillCreations")
+  posCreated                     PurchaseOrder[]               @relation("PurchaseOrderCreations")
+  approvalRules                  ApprovalRule[]                @relation("ApprovalRuleApprover")
+  billApprovals                  BillApproval[]                @relation("BillApprovalResponses")
+  recurringSchedulesCreated      RecurringSchedule[]           @relation("RecurringScheduleCreations")
+  expenseApprovals               ExpenseClaim[]                @relation("ExpenseApprovals")
+  platformSetupProgress          PlatformSetupProgress?        @relation("UserSetupProgress")
+  taskRuns                       TaskRun[]
+  businessModelRoleAssignments   BusinessModelRoleAssignment[]
+  platformDevConfigs             PlatformDevConfig[]           @relation("PlatformDevConfiguredBy")
+  platformDevDcoAcceptances      PlatformDevConfig[]           @relation("PlatformDevDcoAcceptedBy")
+  privatePathRules               PrivatePathRule[]             @relation("PrivatePathRuleCreatedBy")
+  platformDevFeedbackOptIns      PlatformDevConfig[]           @relation("PlatformDevUpstreamFeedbackOptInBy")
+  agentModelConfigs              AgentModelConfig[]            @relation("AgentModelConfiguredBy")
+  knowledgeArticles              KnowledgeArticle[]            @relation("KnowledgeArticleAuthor")
+  knowledgeRevisions             KnowledgeArticleRevision[]    @relation("KnowledgeRevisionCreator")
+  wikiRevisions                  WikiPageRevision[]            @relation("WikiRevisionCreator")
+  wikiIngestEvents               WikiIngestEvent[]             @relation("WikiIngestEventUser")
+  workItemAssignments            WorkItem[]                    @relation("WorkItemAssignee")
+  workSchedule                   WorkSchedule?
+  adminActivities                AdminActivity[]
+  userFacts                      UserFact[]
+  decisionEscalationsResolved    EscalationCapture[]           @relation("DecisionEscalationResolverUser")
+  triggeredDecisionInteractions  DecisionInteraction[]         @relation("DecisionInteractionTriggeredByUser")
+  weightAdjustmentProposalsRuled WeightAdjustmentProposal[]
+  scheduledAgentTasks            ScheduledAgentTask[]          @relation("ScheduledAgentTaskOwner")
+  addedLocalities                City[]                        @relation("CityAddedByUser")
+  workbooksCreated               Workbook[]                    @relation("WorkbookCreatedBy")
+  workbookShares                 WorkbookShare[]               @relation("WorkbookShareUser")
+  workbookRowsCreated            WorkbookRow[]                 @relation("WorkbookRowCreatedBy")
+  workbookViewsCreated           WorkbookView[]                @relation("WorkbookViewCreatedBy")
+}
+
+model UserGroup {
+  id             String       @id @default(cuid())
+  userId         String
+  platformRoleId String
+  platformRole   PlatformRole @relation(fields: [platformRoleId], references: [id])
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, platformRoleId])
+}
+
+model SocialIdentity {
+  id                String          @id @default(cuid())
+  provider          String
+  providerAccountId String
+  email             String?
+  contactId         String
+  linkedAt          DateTime        @default(now())
+  contact           CustomerContact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([contactId])
+}
+
+model AccountInvite {
+  id        String          @id @default(cuid())
+  code      String          @unique
+  accountId String
+  createdBy String?
+  expiresAt DateTime?
+  usedAt    DateTime?
+  usedBy    String?
+  createdAt DateTime        @default(now())
+  account   CustomerAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+}
+
+model PasswordResetToken {
+  id                String    @id @default(cuid())
+  userId            String
+  tokenHash         String    @unique
+  deliveryChannel   String
+  requestedByUserId String?
+  expiresAt         DateTime
+  consumedAt        DateTime?
+  createdAt         DateTime  @default(now())
+  requestedByUser   User?     @relation("PasswordResetRequestedBy", fields: [requestedByUserId], references: [id])
+  user              User      @relation("PasswordResetForUser", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@index([consumedAt])
+}
+
+model PlatformRole {
+  id           String      @id @default(cuid())
+  roleId       String      @unique
+  name         String
+  description  String?
+  hitlTierMin  Int         @default(1)
+  slaDurationH Int?
+  users        UserGroup[]
+}
+
+model Team {
+  id          String           @id @default(cuid())
+  teamId      String           @unique
+  name        String
+  slug        String           @unique
+  description String?
+  status      String           @default("active")
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  ownerships  AgentOwnership[]
+  memberships TeamMembership[]
+  userSkills  UserSkill[]
+}
+
+model TeamMembership {
+  id        String   @id @default(cuid())
+  teamId    String
+  userId    String
+  role      String
+  isPrimary Boolean  @default(false)
+  createdAt DateTime @default(now())
+  team      Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([teamId, userId])
+  @@index([userId])
+}
+
+model Principal {
+  id                                  String                              @id @default(cuid())
+  principalId                         String                              @unique
+  kind                                String
+  status                              String                              @default("active")
+  displayName                         String
+  sponsorPrincipalId                  String?
+  authorityMode                       String?
+  sensitivityClearance                PrincipalSensitivity[]              @default([public])
+  aliases                             PrincipalAlias[]
+  deferredBacklogItems                BacklogItem[]                       @relation("BacklogDeferralOwner")
+  sponsorPrincipal                    Principal?                          @relation("PrincipalSponsor", fields: [sponsorPrincipalId], references: [id])
+  sponsoredPrincipals                 Principal[]                         @relation("PrincipalSponsor")
+  communicationChannelBindings        CommunicationChannelBinding[]
+  communicationChannelSessions        CommunicationChannelSession[]
+  // Per AGENTS.md §11 (Principal convergence, 2026-05-09): EdgeNode
+  // identity lives on Principal + PrincipalAlias, with EdgeNode as a
+  // host-attributes side table keyed by `principalId`. 1:1 cardinality.
+  edgeNode                            EdgeNode?                           @relation("EdgeNodeIdentity")
+  edgeNodesApproved                   EdgeNode[]                          @relation("EdgeNodeApprover")
+  // EP-MSP-FEDERATION · B1 — a federated peer (another DPF deployment) is a
+  // Principal(kind="federated-peer") with FederationLink as its side table,
+  // exactly as EdgeNode is for an edge agent. No parallel identity table.
+  federationLink                      FederationLink?                     @relation("FederationLinkIdentity")
+  bootstrapTokensIssued               BootstrapToken[]                    @relation("BootstrapTokenIssuer")
+  ownedDocuments                      Document[]                          @relation("DocumentOwner")
+  createdDocuments                    Document[]                          @relation("DocumentCreator")
+  documentVersions                    DocumentVersion[]                   @relation("DocumentVersionCreator")
+  documentReferences                  DocumentReference[]                 @relation("DocumentReferenceCreator")
+  documentAccessGrants                DocumentAccessGrant[]               @relation("DocumentAccessGrantPrincipal")
+  documentAccessGrantsCreated         DocumentAccessGrant[]               @relation("DocumentAccessGrantCreator")
+  documentLifecycleEvents             DocumentLifecycleEvent[]            @relation("DocumentLifecycleActor")
+  lifecycleEvents                     LifecycleEvent[]                    @relation("LifecycleEventActor")
+  ownedDecisionPerspectiveProfiles    DecisionPerspectiveProfile[]        @relation("DecisionPerspectiveProfileOwner")
+  promotedDecisionPerspectiveVersions DecisionPerspectiveProfileVersion[] @relation("DecisionPerspectiveProfileVersionPromoter")
+  decisionEscalationsResolved         EscalationCapture[]                 @relation("DecisionEscalationResolverPrincipal")
+  patientProfiles                     PatientProfile[]                    @relation("PatientProfileIdentity")
+  patientProfilesRecorded             PatientProfile[]                    @relation("PatientProfileRecorder")
+  patientProfilesVerified             PatientProfile[]                    @relation("PatientProfileVerifier")
+  patientAuthoritiesGranted           PatientAuthority[]                  @relation("PatientAuthorityGrantee")
+  patientAuthoritiesAsserted          PatientAuthority[]                  @relation("PatientAuthorityAsserter")
+  patientAuthoritiesVerified          PatientAuthority[]                  @relation("PatientAuthorityVerifier")
+  patientAuthoritiesRevoked           PatientAuthority[]                  @relation("PatientAuthorityRevoker")
+  patientConsentDirectivesAsserted    PatientConsentDirective[]           @relation("PatientConsentDirectiveAsserter")
+  patientConsentDirectivesVerified    PatientConsentDirective[]           @relation("PatientConsentDirectiveVerifier")
+  patientConsentDirectivesRevoked     PatientConsentDirective[]           @relation("PatientConsentDirectiveRevoker")
+  patientAuthorizationDecisions       AuthorizationDecisionLog[]          @relation("PatientAuthorizationSubject")
+  careAppointmentsCreated             CareAppointment[]                   @relation("CareAppointmentCreator")
+  careAppointmentsOverbooked          CareAppointment[]                   @relation("CareAppointmentOverbookAuthorizer")
+  careAppointmentStatusEvents         CareAppointmentStatusEvent[]        @relation("CareAppointmentStatusActor")
+  careIntakePacketsSourced            CareIntakePacket[]                  @relation("CareIntakePacketSource")
+  careIntakePacketsRecorded           CareIntakePacket[]                  @relation("CareIntakePacketRecorder")
+  careIntakeResponsesSourced          CareIntakeResponse[]                @relation("CareIntakeResponseSource")
+  careIntakeResponsesRecorded         CareIntakeResponse[]                @relation("CareIntakeResponseRecorder")
+  careIntakeAccessGrants              CareIntakeAccessGrant[]             @relation("CareIntakeAccessGrantee")
+  careIntakeAccessGrantsIssued        CareIntakeAccessGrant[]             @relation("CareIntakeAccessIssuer")
+  careConsentAttestationsSigned       CareConsentAttestation[]            @relation("CareConsentAttestationSigner")
+  careConsentAttestationsWitnessed    CareConsentAttestation[]            @relation("CareConsentAttestationWitness")
+  careConsentAttestationsAccepted     CareConsentAttestation[]            @relation("CareConsentAttestationAcceptor")
+  careCoverageEvidenceResponsible     CareCoverageEvidence[]              @relation("CareCoverageResponsibleParty")
+  careCoverageEvidenceVerified        CareCoverageEvidence[]              @relation("CareCoverageEvidenceVerifier")
+  careIntakeExceptionsAssigned        CareIntakeException[]               @relation("CareIntakeExceptionAssignee")
+  careIntakeExceptionsResolved        CareIntakeException[]               @relation("CareIntakeExceptionResolver")
+  careIntakeStatusEvents              CareIntakeStatusEvent[]             @relation("CareIntakeStatusActor")
+  ownedProductObjectives              ProductObjective[]                  @relation("ProductObjectiveOwner")
+  recordedProductOutcomeObservations  ProductOutcomeObservation[]         @relation("ProductOutcomeObservationRecorder")
+  createdAt                           DateTime                            @default(now())
+  updatedAt                           DateTime                            @updatedAt
+  leaseHeldWorkrooms                  Workroom[]                          @relation("WorkroomLeaseHolder")
+  createdWorkrooms                    Workroom[]                          @relation("WorkroomCreator")
+  requestedWorkrooms                  Workroom[]                          @relation("WorkroomRequester")
+
+  @@index([sponsorPrincipalId])
+  @@index([kind, authorityMode])
+}
+
+model PrincipalAlias {
+  id                   String                @id @default(cuid())
+  principalId          String
+  aliasType            String
+  aliasValue           String
+  issuer               String                @default("")
+  createdAt            DateTime              @default(now())
+  principal            Principal             @relation(fields: [principalId], references: [id], onDelete: Cascade)
+  personLicenseRecords PersonLicenseRecord[]
+
+  @@unique([aliasType, aliasValue, issuer])
+  @@index([principalId])
+}
+
+model BusinessProfile {
+  id                String             @id @default(cuid())
+  profileKey        String             @unique
+  name              String
+  description       String?
+  isActive          Boolean            @default(true)
+  businessHours     Json
+  timezone          String             @default("UTC")
+  hasStorefront     Boolean            @default(false)
+  lowTrafficWindows Json?
+  hoursConfirmedAt  DateTime?
+  deploymentWindows DeploymentWindow[]
+  blackoutPeriods   BlackoutPeriod[]
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+}
+
+model AuthorityBinding {
+  id                 String                     @id @default(cuid())
+  bindingId          String                     @unique
+  name               String
+  scopeType          String
+  status             String                     @default("draft")
+  resourceType       String
+  resourceRef        String
+  appliedAgentId     String?
+  policyJson         Json?
+  authorityScope     Json?
+  approvalMode       String                     @default("none")
+  sensitivityCeiling String?
+  createdAt          DateTime                   @default(now())
+  updatedAt          DateTime                   @updatedAt
+  appliedAgent       Agent?                     @relation(fields: [appliedAgentId], references: [id])
+  subjects           AuthorityBindingSubject[]
+  grants             AuthorityBindingGrant[]
+  decisionLogs       AuthorizationDecisionLog[]
+
+  @@index([scopeType, status])
+  @@index([resourceType, resourceRef])
+  @@index([appliedAgentId])
+}
+
+model AuthorityBindingSubject {
+  id                 String           @id @default(cuid())
+  authorityBindingId String
+  subjectType        String
+  subjectRef         String
+  relation           String
+  createdAt          DateTime         @default(now())
+  authorityBinding   AuthorityBinding @relation(fields: [authorityBindingId], references: [id], onDelete: Cascade)
+
+  @@unique([authorityBindingId, subjectType, subjectRef, relation])
+  @@index([subjectType, subjectRef])
+}
+
+model AuthorityBindingGrant {
+  id                 String           @id @default(cuid())
+  authorityBindingId String
+  grantKey           String
+  mode               String
+  rationale          String?
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+  authorityBinding   AuthorityBinding @relation(fields: [authorityBindingId], references: [id], onDelete: Cascade)
+
+  @@unique([authorityBindingId, grantKey])
+  @@index([grantKey])
+}
+
+model AuthorizationDecisionLog {
+  id                        String                   @id @default(cuid())
+  decisionId                String                   @unique
+  actorType                 String
+  actorRef                  String
+  humanContextRef           String?
+  agentContextRef           String?
+  delegationGrantId         String?
+  authorityBindingId        String?
+  organizationId            String?
+  patientSubjectPrincipalId String?
+  patientAuthorityId        String?
+  patientConsentDirectiveId String?
+  purposeOfUse              String?
+  policyVersion             String?
+  actionKey                 String
+  objectRef                 String?
+  decision                  String
+  rationale                 Json
+  createdAt                 DateTime                 @default(now())
+  endpointUsed              String?
+  mode                      String?
+  routeContext              String?
+  sensitivityLevel          String?
+  sensitivityOverride       Boolean?
+  authorityBinding          AuthorityBinding?        @relation(fields: [authorityBindingId], references: [id])
+  delegationGrant           DelegationGrant?         @relation(fields: [delegationGrantId], references: [id])
+  organization              Organization?            @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  patientSubjectPrincipal   Principal?               @relation("PatientAuthorizationSubject", fields: [patientSubjectPrincipalId], references: [id], onDelete: SetNull)
+  patientAuthority          PatientAuthority?        @relation(fields: [patientAuthorityId], references: [id], onDelete: SetNull)
+  patientConsentDirective   PatientConsentDirective? @relation(fields: [patientConsentDirectiveId], references: [id], onDelete: SetNull)
+  actionEnvelopes           CoworkerActionEnvelope[]
+  dataControlOperations     DataControlOperation[]
+
+  @@index([decision])
+  @@index([createdAt])
+  @@index([actorRef])
+  @@index([authorityBindingId])
+  @@index([organizationId, patientSubjectPrincipalId, createdAt])
+  @@index([patientAuthorityId])
+  @@index([patientConsentDirectiveId])
+}
+
+model Organization {
+  id                                String                             @id @default(cuid())
+  orgId                             String                             @unique
+  name                              String
+  legalName                         String?
+  slug                              String                             @unique
+  industry                          String?
+  website                           String?
+  email                             String?
+  phone                             String?
+  address                           Json?
+  logoUrl                           String?
+  designSystem                      Json?
+  // Optional organization-facing address for the standing AGT-ORCH-000 coworker.
+  // Canonical identity, routing, authority, and attribution remain Agent.displayName="COO".
+  cooConversationalName             String?
+  // EP-WIKI-004: per-org retrieval mode for wiki search.
+  // "vector" = the EP-WIKI-001 default (Qdrant cosine similarity only).
+  // "ppr"    = vector seeds → Personalized PageRank over the per-org
+  //            WikiPageLink subgraph → combined ranking. Drop-in
+  //            replacement; falls back to "vector" when the subgraph
+  //            is sparse or PPR fails.
+  wikiRetrievalMode                 String                             @default("vector")
+  createdAt                         DateTime                           @default(now())
+  updatedAt                         DateTime                           @updatedAt
+  brandingConfig                    BrandingConfig?
+  storefrontConfig                  StorefrontConfig?
+  stockItems                        StockItem[]
+  operationalSceneLayouts           OperationalSceneLayout[]
+  businessMetricRollups             BusinessMetricRollup[]             @relation("BusinessMetricRollupOrganization")
+  hospitalityResources              HospitalityResource[]              @relation("HospitalityResourceOrganization")
+  hospitalityCapacityPools          HospitalityCapacityPool[]          @relation("HospitalityCapacityPoolOrganization")
+  hospitalityResourceAvailability   HospitalityResourceAvailability[]  @relation("HospitalityAvailabilityOrganization")
+  hospitalityCapacityAllocations    HospitalityCapacityAllocation[]    @relation("HospitalityAllocationOrganization")
+  beautyResources                   BeautyResource[]                   @relation("BeautyResourceOrganization")
+  beautyResourceAvailability        BeautyResourceAvailability[]       @relation("BeautyAvailabilityOrganization")
+  beautyCapacityAllocations         BeautyCapacityAllocation[]         @relation("BeautyAllocationOrganization")
+  hospitalityServiceTurns           HospitalityServiceTurn[]           @relation("HospitalityServiceTurnOrganization")
+  hospitalityServiceTurnEvents      HospitalityServiceTurnEvent[]      @relation("HospitalityServiceTurnEventOrganization")
+  hospitalityBookingHolds           BookingHold[]                      @relation("BookingHoldOrganization")
+  businessContext                   BusinessContext?
+  marketingStrategy                 MarketingStrategy?
+  marketingReviews                  MarketingReview[]
+  marketingCampaigns                MarketingCampaign[]
+  marketingCampaignBriefs           MarketingCampaignBrief[]
+  marketingAssetTasks               MarketingAssetTask[]
+  marketingAssetVariants            MarketingAssetVariant[]
+  marketingBattlecards              MarketingBattlecard[]
+  workEngagements                   WorkEngagement[]
+  marketingKpiCheckpoints           MarketingKpiCheckpoint[]
+  marketingAutomationCandidates     MarketingAutomationCandidate[]
+  taxProfile                        OrganizationTaxProfile?
+  licenseProfile                    OrganizationLicenseProfile?
+  personLicenseRecords              PersonLicenseRecord[]
+  platformSetupProgress             PlatformSetupProgress?             @relation("OrgSetupProgress")
+  wikiPages                         WikiPage[]
+  wikiRawSources                    RawSource[]
+  wikiIngestEvents                  WikiIngestEvent[]
+  wikiLintFindings                  WikiLintFinding[]
+  documents                         Document[]
+  decisionPerspectiveProfiles       DecisionPerspectiveProfile[]
+  researchProposals                 ResearchProposal[]
+  backlogItems                      BacklogItem[]                      @relation("BacklogItemOrganization")
+  scheduledProductIntelligenceTasks ScheduledAgentTask[]               @relation("ScheduledAgentTaskOrganization")
+  integrationCoverageProviders      IntegrationCoverageProvider[]      @relation("OrgToCoverageProviders")
+  integrationRoleCoverages          IntegrationRoleCoverage[]          @relation("OrgToCoverageCells")
+  capabilityActivations             OrganizationCapabilityActivation[]
+  governanceMeetings                GovernanceMeeting[]
+  recordsRequests                   RecordsRequest[]
+  fundBudgetLines                   FundBudgetLine[]
+  memberEquityEntries               MemberEquityEntry[]
+  mediaAssets                       MediaAsset[]
+  ledgerAccounts                    LedgerAccount[]
+  journalEntries                    JournalEntry[]
+  patientProfiles                   PatientProfile[]
+  patientAuthorizationDecisions     AuthorizationDecisionLog[]
+  storefrontBookings                StorefrontBooking[]                @relation("StorefrontBookingOrganization")
+  productLines                      ProductLine[]
+  businessProducts                  Product[]
+  productObjectives                 ProductObjective[]                 @relation("ProductObjectiveOrganization")
+  productOfferings                  ProductOffering[]                  @relation("ProductOfferingOrganization")
+  providedProductOfferings          ProductOffering[]                  @relation("ProductOfferingProviderOrganization")
+  catalogItems                      CatalogItem[]
+  productConfigurations             ProductConfiguration[]
+  catalogSkus                       CatalogSku[]
+  catalogBundleComponents           CatalogBundleComponent[]
+  catalogPriceLists                 CatalogPriceList[]
+  catalogPriceListEntries           CatalogPriceListEntry[]
+  catalogPromotions                 CatalogPromotion[]
+  catalogPromotionItems             CatalogPromotionItem[]
+  catalogChannelEligibility         CatalogChannelEligibility[]
+  storefrontOrders                  StorefrontOrder[]                  @relation("StorefrontOrderOrganization")
+  storefrontOrderLineItems          StorefrontOrderLineItem[]
+  productSolds                      ProductSold[]                      @relation("ProductSoldOrganization")
+  providedProductSolds              ProductSold[]                      @relation("ProductSoldProviderOrganization")
+  productSoldEvidence               ProductSoldEvidence[]
+  productSoldParties                ProductSoldParty[]
+  productSoldEntitlements           ProductSoldEntitlement[]
+  productFulfillmentInstances       ProductFulfillmentInstance[]
+  productSoldComponentAllocations   ProductSoldComponentAllocation[]
+  careVisitTypes                    CareVisitType[]
+  careLocations                     CareLocation[]
+  careResources                     CareResource[]
+  careSchedulingPolicies            CareSchedulingPolicy[]
+  careAppointments                  CareAppointment[]
+  careIntakePackets                 CareIntakePacket[]
+  aiProviderConnections             AiProviderConnection[]
+  partnerAccounts                   PartnerAccount[]
+  founderDemandClusters             FounderDemandCluster[]
+  dataProcessingActivities          DataProcessingActivity[]
+  dataPolicyExceptions              DataPolicyException[]
+  dataControlOperations             DataControlOperation[]
+  billableRates                     BillableRate[]
+  outboundDrafts                    OutboundDraft[]
+  inboundChannelMessages            InboundChannelMessage[]
+  marketingChannelSpendCeilings     MarketingChannelSpendCeiling[]
+  scheduledOutboundActions          ScheduledOutboundAction[]
+  outboundAutopilotPolicies         OutboundAutopilotPolicy[]
+  mediaAttachments                  MediaAttachment[]
+  adoptableAnimals                  AdoptableAnimal[]
+  staffingDemands                   StaffingDemand[]
+  staffingShifts                    StaffingShift[]
+  staffingAssignments               StaffingAssignment[]
+  staffingCrews                     StaffingCrew[]
+  staffingResourceLinks             StaffingResourceLink[]
+  employeeAvailabilityWindows       EmployeeAvailabilityWindow[]
+  employeeSchedulingPreferences     EmployeeSchedulingPreference[]
+  staffingProposalRuns              StaffingProposalRun[]
+  staffingExceptionRequests         StaffingExceptionRequest[]
+  workforceCandidateFacts           WorkforceCandidateFact[]
+  gearInterfaces                    GearInterface[]
+  staffingConstraintRules           StaffingConstraintRule[]
+}
+
+// EP-PARTNER-CHANNEL Phase 1b. Generic per-organization opt-in overlay on top of
+// the axis-derived capability applicability from @dpf/storefront-templates. The
+// derivation answers "is this capability applicable to the business model?"; this
+// row records "did this org turn it on?" — captured at setup (decidedVia="setup-wizard")
+// for capabilities that resolveCapabilityActivation() flags promptAtSetup, and
+// editable later from admin (decidedVia="admin"). Not partner-specific; partner-program
+// is the first consumer. Spec 2026-06-04-partner-reseller-archetype-identity §6.3.
+model OrganizationCapabilityActivation {
+  id             String       @id @default(cuid())
+  organizationId String
+  // Matches a @dpf/storefront-templates CapabilityKey (validated in app code via
+  // isCapabilityKey before write). Stored as String to avoid a DB enum that would
+  // need a migration every time the capability registry grows.
+  capabilityKey  String
+  // CapabilityActivationChoice: "enabled" | "disabled".
+  choice         String
+  // Provenance of the decision: "setup-wizard" | "admin".
+  decidedVia     String
+  decidedAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, capabilityKey])
+  @@index([organizationId])
+}
+
+model BusinessContext {
+  id             String       @id @default(cuid())
+  organizationId String       @unique
+  organization   Organization @relation(fields: [organizationId], references: [id])
+
+  // What the company does (richer than tagline)
+  description      String?
+  valueProposition String?
+  // Why the company exists — captured at onboarding (business-context step).
+  // Seeds the company-mission prompt (Block 0) and the org WWWD corpus.
+  mission          String?
+
+  // Who they serve
+  targetMarket     String?
+  customerSegments String[]
+
+  // Business model
+  revenueModel    String?
+  companyStage    String?
+  companySize     String?
+  geographicScope String?
+  sourceSystem    String?
+  // US state/province code driving statutory defaults (records-request response
+  // deadlines, retention schedules) for public-sector archetypes. Org-level
+  // configuration on seeded obligations — not 50 seed variants (civic spec $10).
+  stateCode       String?
+
+  // ─── Compliance & regulatory scope (captured at setup) ───────────────────
+  // Region is multi-dimensional: a business OPERATES in some jurisdictions,
+  // SELLS to others, and EMPLOYS in others — and different obligations key off
+  // different dimensions (sales tax & marketing consent off where customers are;
+  // employment law off where staff work; data sovereignty off where data
+  // subjects are). Each set holds PROFESSION_JURISDICTIONS slugs (us | eu | uk).
+  // Read by resolveInstallVariantContext to drive per-coworker corpus selection
+  // via the jurisdiction-basis model. Empty = undeclared → that dimension is not
+  // filtered (no regression).
+  operatesIn                String[]  @default([])
+  sellsTo                   String[]  @default([])
+  employsIn                 String[]  @default([])
+  dataResidency             String[]  @default([])
+  // Whether the business handles card payments (PCI-DSS, a global-basis obligation).
+  handlesCardPayments       Boolean   @default(false)
+  // What the org DOES with data / how it operates — the triggers that put it in
+  // scope of HORIZONTAL regulations (privacy, breach, AI governance, marketing,
+  // accessibility). Values are the DATA_HANDLING_PREDICATES enum in
+  // regulation-applicability.ts (processes-personal-data | serves-consumers |
+  // deploys-automated-decisioning | sends-marketing | publicly-accessible-service
+  // | handles-health-data | handles-financial-data | handles-education-data |
+  // government-customers | handles-card-data). Empty = undeclared → a
+  // data-handling-gated regulation surfaces as "review", never silently applied.
+  // handlesCardPayments=true is bridged to the handles-card-data predicate at
+  // resolve time, so the two stay consistent.
+  dataHandling              String[]  @default([])
+  // Corporate-law legal form / market-listing status, orthogonal to industry
+  // archetype: any archetype can be a listed or private company. Gates
+  // listing-specific governance regimes (e.g. UK Corporate Governance Code
+  // Provision 29, which applies to UK premium-listed companies). Values are the
+  // LISTING_STATUSES enum in regulation-applicability.ts (premium-listed |
+  // standard-listed | aim-listed | private | other). Null = undeclared → a
+  // listing-gated regulation is surfaced as "review", never silently applied.
+  listingStatus             String?
+  // When the operator last confirmed the compliance scope at setup.
+  complianceScopeCapturedAt DateTime?
+
+  // Derived from archetype (auto-populated)
+  industry String?
+  ctaType  String?
+
+  // Per-org Digital Product Portfolio decomposition (BI-2D452667, spec
+  // docs/superpowers/specs/2026-06-07-business-operating-model-portfolio-wiring-design.md §3/§8 Phase 0).
+  // Shape: PortfolioDecomposition (Record<PortfolioRole, PortfolioProfile>) from
+  // @dpf/storefront-templates — roles foundational | manufactureAndDeliver |
+  // forEmployees | productsAndServicesSold, each with a scope. Seeded ONCE from
+  // the archetype's activationProfile at setup completion (seed-is-bootstrap),
+  // then refinable by the operator. Read via resolvePortfolioDecomposition(),
+  // which prefers this persisted value and falls back to the archetype-derived
+  // computation when null.
+  portfolioDecomposition Json?
+
+  // ─── Risk posture (EP-ONBOARDING-INTAKE P0) ─────────────────────────────────
+  // Org-wide autonomy/risk appetite — the structured companion to the prose
+  // howWeDecide WWWD stance. Industry sets a conservative DEFAULT
+  // (deriveRiskPostureDefault, mirroring INDUSTRY_RETENTION_FLOORS); the operator
+  // may override. Sets the autonomy ENVELOPE (ceiling + maturation rate), not the
+  // live autonomy level: the autopilot trust dial still starts HITL-first and
+  // earns autonomy on evidence. Values: conservative | balanced | progressive.
+  // Read via resolveRiskEnvelope() (apps/web/lib/govern/risk-posture.ts).
+  // Consumers wired in P1; this column is the inert home seeded at setup.
+  riskPosture           String?
+  // Provenance: "industry-default" (machine-derived) or "operator" (chosen).
+  riskPostureSource     String?
+  // When the operator last confirmed/changed the posture.
+  riskPostureCapturedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// Personal access token for the external MCP transport at /api/mcp/v1.
+// User-owned (the human issues it from /admin/platform-development), hashed
+// at rest, scoped to a subset of the user's grants, optionally bound to a
+// specific Agent identity for grant-narrowing.
+model McpApiToken {
+  id            String    @id @default(cuid())
+  userId        String
+  agentId       String?
+  // Lifecycle classification. "operator" (default) = manually issued by an
+  // operator, lives until manually revoked. "ephemeral_ship" = auto-issued
+  // by transitionBuildPhase on review→ship entry, auto-revoked on ship
+  // exit (complete / failed / phase rollback). Other kinds may be added
+  // later (e.g. "ephemeral_promotion") — keep as a string so we don't
+  // need an enum migration each time.
+  kind          String    @default("operator")
+  // When kind = "ephemeral_ship", this points at the FeatureBuild whose
+  // ship phase owns this token's lifecycle. Null for operator-issued
+  // tokens. Not modelled as a Prisma relation: FeatureBuild lives in the
+  // same DB but the FK semantics here are loose-coupled (we don't want a
+  // build delete to cascade-delete the audit trail).
+  buildId       String?
+  name          String
+  tokenHash     String    @unique
+  prefix        String
+  tokenSuffix   String?
+  secretEnc     String?   @db.Text
+  scopes        String[]  @default([])
+  capability    String    @default("read")
+  scope         String    @default("read")
+  lastUsedAt    DateTime?
+  expiresAt     DateTime?
+  revokedAt     DateTime?
+  revokedReason String?
+  createdAt     DateTime  @default(now())
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, revokedAt])
+  @@index([tokenHash])
+  // Lookup: "all active ephemeral tokens for build X" — used by the
+  // ship-exit hook to find rows to revoke.
+  @@index([buildId, revokedAt])
+}
+
+model ApiToken {
+  id        String    @id @default(cuid())
+  token     String    @unique
+  userId    String
+  name      String
+  expiresAt DateTime?
+  createdAt DateTime  @default(now())
+  user      User      @relation(fields: [userId], references: [id])
+
+  @@index([userId]) // FK-leading (spine): token revocation by user, apps/web/app/api/v1/auth/logout/route.ts:33
+}
+
+model OrgSettings {
+  id                 String    @id @default(cuid())
+  // The single-org locale/currency spine (EP-ORG-LOCALE-CURRENCY). baseCurrency
+  // + locale are the operator-facing money-format source; countryCode is the ISO
+  // alpha-2 the two are derived from at onboarding (see lib/org-locale). Default
+  // is the neutral USD/en-US, NOT a hardcoded foreign GBP/Europe-London.
+  baseCurrency       String    @default("USD")
+  locale             String    @default("en-US")
+  countryCode        String?
+  autoFetchRates     Boolean   @default(true)
+  lastRateFetchAt    DateTime?
+  // Archetype finance profile actually applied during setup. Lets surfaces
+  // render the org's real profile instead of a hardcoded default.
+  appliedProfileSlug String?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+}

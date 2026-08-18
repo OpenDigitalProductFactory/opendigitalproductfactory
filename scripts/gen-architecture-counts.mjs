@@ -25,6 +25,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { readPrismaSchemaText } from "./lib/prisma-schema-source.mjs";
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const OUT_PATH = path.join(REPO_ROOT, "docs", "architecture", "architecture-counts.generated.md");
@@ -55,8 +56,8 @@ this file; never retype them into prose, where they drift (BI-79BCE3F2, pass §3
 
 | Count | Value | Source of truth |
 |---|---:|---|
-| Prisma models | ${counts.models} | \`packages/db/prisma/schema.prisma\` |
-| Prisma enums | ${counts.enums} | \`packages/db/prisma/schema.prisma\` |
+| Prisma models | ${counts.models} | \`packages/db/prisma/schema/\` |
+| Prisma enums | ${counts.enums} | \`packages/db/prisma/schema/\` |
 | Migrations | ${counts.migrations} | \`packages/db/prisma/migrations/\` |
 | Kernel principles | ${counts.principles} | \`docs/founder-kernel/wiki/principles/\` |
 | App routes | ${counts.routes} | \`apps/web/lib/ea/route-manifest.json\` |
@@ -64,7 +65,7 @@ this file; never retype them into prose, where they drift (BI-79BCE3F2, pass §3
 }
 
 export function generate() {
-  const schemaText = fs.readFileSync(path.join(REPO_ROOT, "packages", "db", "prisma", "schema.prisma"), "utf8");
+  const schemaText = readPrismaSchemaText(REPO_ROOT);
   const migrationEntries = fs.readdirSync(path.join(REPO_ROOT, "packages", "db", "prisma", "migrations"));
   const principleFiles = fs.readdirSync(path.join(REPO_ROOT, "docs", "founder-kernel", "wiki", "principles"));
   const routeManifest = JSON.parse(

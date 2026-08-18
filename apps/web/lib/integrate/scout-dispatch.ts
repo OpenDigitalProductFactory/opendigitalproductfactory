@@ -128,7 +128,7 @@ async function runScoutResearch(params: {
 
     // Parallel task execution with graceful error handling
     const results = await Promise.allSettled([
-      // Task A: Search schema.prisma for related models
+      // Task A: Search the Prisma schema folder for related models
       (async () => {
         const schemaResults: ScoutResult["relatedModels"] = [];
         for (const keyword of keywords) {

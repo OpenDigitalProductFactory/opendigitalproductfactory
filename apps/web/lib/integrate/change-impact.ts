@@ -119,8 +119,11 @@ function fileToRoute(filePath: string): string | null {
 }
 
 /**
- * Detect schema/model changes from diff content touching schema.prisma.
+ * Detect schema/model changes from diff content touching the Prisma schema
+ * (packages/db/prisma/schema/*.prisma domain files or the legacy monolith).
  */
+const SCHEMA_DIFF_PATH_RE = /packages\/db\/prisma\/schema(\.prisma\b|\/[^ \t]+\.prisma\b)/;
+
 function parseSchemaChanges(diff: string): SchemaChange[] {
   const changes: SchemaChange[] = [];
   const lines = diff.split("\n");
@@ -131,11 +134,11 @@ function parseSchemaChanges(diff: string): SchemaChange[] {
   const modifiedModels = new Set<string>();
 
   for (const line of lines) {
-    if (line.startsWith("diff --git ") && line.includes("schema.prisma")) {
+    if (line.startsWith("diff --git ") && SCHEMA_DIFF_PATH_RE.test(line)) {
       inSchemaFile = true;
       continue;
     }
-    if (line.startsWith("diff --git ") && !line.includes("schema.prisma")) {
+    if (line.startsWith("diff --git ") && !SCHEMA_DIFF_PATH_RE.test(line)) {
       inSchemaFile = false;
       continue;
     }

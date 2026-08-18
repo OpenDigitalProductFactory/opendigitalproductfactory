@@ -106,14 +106,14 @@ export async function deployFeature(params: Record<string, unknown>, userId: str
   }
 
   // Guard: schema regression check.
-  // If the diff removes existing fields/models from schema.prisma, the sandbox
+  // If the diff removes existing fields/models from the Prisma schema, the sandbox
   // was initialized from a stale portal image and this diff would silently
   // regress main's schema. Block deploy and surface the removed lines so the
   // operator knows what drifted.
   if (extracted.schemaRegressions.length > 0) {
     const regressionSample = extracted.schemaRegressions.slice(0, 10).join("\n");
     const regressionMessage =
-      `Schema regression detected in sandbox diff — ${extracted.schemaRegressions.length} existing field(s) or model declaration(s) would be removed from packages/db/prisma/schema.prisma. ` +
+      `Schema regression detected in sandbox diff — ${extracted.schemaRegressions.length} existing field(s) or model declaration(s) would be removed from packages/db/prisma/schema/. ` +
       `This almost always means the sandbox was initialized from a portal image that predates recent schema changes on main. ` +
       `Rebuild the sandbox from a fresh image (Admin → Build Studio → Rebuild Sandbox) and re-run the build before deploying.\n\n` +
       `Removed lines (first 10):\n${regressionSample}`;

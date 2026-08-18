@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { buildDefaultProviderConnection } from "./provider-connection";
+import { readCanonicalPrismaSchema } from "./schema-source";
 
 type TrustCatalog = {
   category: string;
@@ -104,7 +105,7 @@ describe("provider trust registry", () => {
 });
 
 describe("provider connection schema", () => {
-  const schema = readFileSync(join(import.meta.dirname, "..", "prisma", "schema.prisma"), "utf8");
+  const schema = readCanonicalPrismaSchema();
   const migration = readFileSync(
     join(
       import.meta.dirname,

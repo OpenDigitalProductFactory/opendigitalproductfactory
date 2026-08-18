@@ -209,12 +209,12 @@ STEP 1 — SAVE THE PLAN:
   Call saveBuildEvidence with field "buildPlan" containing EXACTLY this JSON structure:
   {
     "fileStructure": [
-      { "path": "packages/db/prisma/schema.prisma", "action": "modify", "purpose": "Add Complaint model" },
+      { "path": "packages/db/prisma/schema/crm-commerce.prisma", "action": "modify", "purpose": "Add Complaint model" },
       { "path": "apps/web/app/api/complaints/route.ts", "action": "create", "purpose": "REST endpoints" },
       ...more files — list ALL files that will be created or modified
     ],
     "tasks": [
-      { "title": "Add Complaint model to schema", "testFirst": "validate_schema", "implement": "Edit packages/db/prisma/schema.prisma — add Complaint model + add inverse relations to User model at line 62", "verify": "prisma migrate" },
+      { "title": "Add Complaint model to schema", "testFirst": "validate_schema", "implement": "Edit packages/db/prisma/schema/crm-commerce.prisma — add Complaint model + add inverse relations to User in core-identity.prisma", "verify": "prisma migrate" },
       { "title": "Create API routes", "testFirst": "tsc --noEmit", "implement": "Create apps/web/app/api/complaints/route.ts — write route handlers using auth() pattern from existing routes", "verify": "tsc --noEmit" },
       ...more tasks — one per logical unit of work
     ]
@@ -317,7 +317,7 @@ NEVER run prisma migrate without calling validate_schema first.
 ENUM CASING — MANDATORY:
 - Prisma enums in this project use LOWERCASE values: open, assigned, resolved, closed — NOT Open, OPEN, etc.
 - When referencing enum values in API routes, components, dropdown <option> values, or conditional checks, use the EXACT lowercase value from the Prisma schema.
-- ALWAYS read the schema (describe_model or read_sandbox_file on schema.prisma) to confirm actual enum values before writing code that references them.
+- ALWAYS read the schema (describe_model or read_sandbox_file on the owning packages/db/prisma/schema/<domain>.prisma file) to confirm actual enum values before writing code that references them.
 - Never mix cases. If the schema says "open", every reference must be "open" — in defaults, filters, option values, and conditionals.
 
 CRITICAL: ALWAYS use read_sandbox_file + edit_sandbox_file for existing files. write_sandbox_file is for NEW files only — it overwrites everything.
@@ -861,7 +861,7 @@ Measured against the DPF founder kernel (docs/founder-kernel/wiki/principles/) a
 1. INPUT VALIDATION & SANITIZATION (kernel commandment "never trust input - validate, encode, parameterize"). For every new field, parameter, and external input, state how it is validated, length/format-constrained, and encoded. Unbounded String columns and unvalidated request bodies are automatic rejections.
 2. AUTHORIZATION, least privilege (kernel commandment "least privilege, deny by default"). For every new API route, MCP tool, mutation, or sensitive read, state the auth/ownership check. A new endpoint or tool with no stated authz is an automatic rejection.
 3. CONCRETE TEST-FIRST. Each task's testFirst must name the real test file and the specific failing case it asserts (e.g. "apps/web/lib/x/y.test.ts - asserts validateRationale() rejects a 5000-char body"), not a vague "write a test".
-4. GROUNDED FILE PATHS. Every fileStructure path and modify target must be a REAL path in this repo - verify before listing. Frequent misses: it is "packages/db/prisma/schema.prisma" (not "packages/db/schema.prisma"); source files are kebab-case (e.g. "build-orchestrator.ts", not "build_orchestrator.ts"). A plan referencing a non-existent modify target is rejected.
+4. GROUNDED FILE PATHS. Every fileStructure path and modify target must be a REAL path in this repo - verify before listing. Frequent misses: the Prisma schema is the domain folder "packages/db/prisma/schema/" (e.g. "packages/db/prisma/schema/finance.prisma" — the schema.prisma monolith is gone); source files are kebab-case (e.g. "build-orchestrator.ts", not "build_orchestrator.ts"). A plan referencing a non-existent modify target is rejected.
 
 Design to this up front - it is the same lens the reviewer applies, so meeting it here is how the plan passes WITHOUT a needs-human escalation.`;
 

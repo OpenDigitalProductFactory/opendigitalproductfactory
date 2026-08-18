@@ -24,7 +24,7 @@ COPY pnpm-workspace.yaml pnpm-lock.yaml package.json ./
 COPY scripts/set-hooks-path.mjs ./scripts/
 COPY apps/web/package.json ./apps/web/
 COPY packages/db/package.json ./packages/db/
-COPY packages/db/prisma/schema.prisma ./packages/db/prisma/
+COPY packages/db/prisma/schema ./packages/db/prisma/schema
 COPY packages/db/prisma.config.ts ./packages/db/
 COPY packages/db/src/load-env.ts ./packages/db/src/
 # EVERY workspace importer that later stages COPY into the image must have its
