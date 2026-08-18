@@ -52,7 +52,7 @@ vi.mock("@/lib/backlog/mcp-epic-tools", () => ({
 }));
 
 const updateHandler = vi.hoisted(() => ({ handleUpdateBacklogItem: vi.fn() }));
-vi.mock("@/lib/mcp-handlers/update-backlog-item", () => ({
+vi.mock("./backlog-update-item-handler", () => ({
   handleUpdateBacklogItem: (...a: unknown[]) => updateHandler.handleUpdateBacklogItem(...a),
 }));
 
