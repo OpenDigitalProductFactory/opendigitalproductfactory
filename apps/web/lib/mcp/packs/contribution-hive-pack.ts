@@ -166,7 +166,7 @@ async function assessContributionHandler(
   // Parse diff to understand scope
   const changedFiles = [...diff.matchAll(/^diff --git a\/(.+) b\/.+$/gm)].map((m) => m[1]);
   const newRoutes = changedFiles.filter((f) => f.includes("/app/") && f.endsWith("/page.tsx"));
-  const schemaChanges = changedFiles.filter((f) => f.includes("schema.prisma"));
+  const schemaChanges = changedFiles.filter((f) => /prisma\/schema(\.prisma$|\/[^/]+\.prisma$)/.test(f));
   const migrationFiles = changedFiles.filter((f) => f.startsWith("prisma/migrations/"));
   const hasNewModels = diff.includes("model ") && diff.includes("@id");
 
@@ -437,7 +437,7 @@ async function contributeToHiveHandler(
   const { allFiles, seedFit, securityScan } = await (await import("@/lib/integrate/contribution-review")).analyzeContributionSeedFit(shareableDiff, brief, build.designDoc);
   const migrationFiles = allFiles.filter((f) => f.startsWith("prisma/migrations/"));
   const codeFiles = allFiles.filter((f) => !f.startsWith("prisma/migrations/"));
-  const schemaFiles = allFiles.filter((f) => f.includes("schema.prisma"));
+  const schemaFiles = allFiles.filter((f) => /prisma\/schema(\.prisma$|\/[^/]+\.prisma$)/.test(f));
 
   // Build manifest
   const manifest = {

@@ -2,7 +2,7 @@
 // FK index-coverage ratchet — BI-640B011D (Simplify & Strengthen W2,
 // architecture pass 2026-08-16 §3.2-b).
 //
-// Two budgets over packages/db/prisma/schema.prisma, frozen in a baseline the
+// Two budgets over packages/db/prisma/schema/*.prisma, frozen in a baseline the
 // same way scripts/check-application-boundaries.mjs freezes owned exceptions
 // and scripts/check-module-size.mjs freezes oversized files:
 //
@@ -29,15 +29,16 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { readPrismaSchemaText } from "./lib/prisma-schema-source.mjs";
 
 const SCRIPT_PATH = fileURLToPath(import.meta.url);
 const REPO_ROOT = join(dirname(SCRIPT_PATH), "..");
-export const SCHEMA_PATH = join(REPO_ROOT, "packages", "db", "prisma", "schema.prisma");
+export const SCHEMA_DIR = join(REPO_ROOT, "packages", "db", "prisma", "schema");
 export const BASELINE_PATH = join(REPO_ROOT, "scripts", "fk-index-coverage-baseline.json");
 
 const SCALAR_FK_TYPES = new Set(["String", "Int", "BigInt"]);
 
-/** Parse schema.prisma into a minimal structural model list. */
+/** Parse the Prisma schema text into a minimal structural model list. */
 export function parsePrismaModels(source) {
   const models = [];
   const modelRe = /^model\s+(\w+)\s+\{([\s\S]*?)^\}/gm;
@@ -166,7 +167,7 @@ export function runCheck({ schemaSource, baseline, today }) {
 }
 
 function main() {
-  const schemaSource = readFileSync(SCHEMA_PATH, "utf8");
+  const schemaSource = readPrismaSchemaText(REPO_ROOT);
 
   if (process.argv.includes("--update")) {
     let owner = "platform-architecture";

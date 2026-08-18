@@ -1,0 +1,500 @@
+model DiscoveryRun {
+  id                      String                            @id @default(cuid())
+  // runKey is unique PER (edgeNodeId, runKey) — each Edge Node owns
+  // its own runKey namespace per the Edge Node spec's REST ingestion
+  // controls section. Bootstrap-discovery runs (edgeNodeId IS NULL)
+  // retain global runKey uniqueness via a partial unique index,
+  // defined in the migration alongside the composite constraint.
+  runKey                  String
+  sourceSlug              String
+  trigger                 String                            @default("bootstrap")
+  status                  String                            @default("running")
+  startedAt               DateTime                          @default(now())
+  completedAt             DateTime?
+  itemCount               Int                               @default(0)
+  relationshipCount       Int                               @default(0)
+  notes                   Json?
+  // Edge Node attribution per spec § Edge Node registry. Optional FK
+  // because (a) historical runs predate the Edge Node concept and
+  // (b) bootstrap-discovery runs (portal-resident) have no edgeNodeId.
+  // When set, this DiscoveryRun was submitted by an Edge Node via
+  // /api/v1/edge/discovery-runs and routed through
+  // persistSubmittedDiscoveryRun.
+  edgeNodeId              String?
+  customerAccountId       String?
+  customerSiteId          String?
+  discoveredItems         DiscoveredItem[]
+  discoveredRelations     DiscoveredRelationship[]
+  fingerprintObservations DiscoveryFingerprintObservation[]
+  confirmedEntities       InventoryEntity[]                 @relation("InventoryEntityConfirmedRun")
+  confirmedRelations      InventoryRelationship[]           @relation("InventoryRelationshipConfirmedRun")
+  edgeNode                EdgeNode?                         @relation("EdgeNodeDiscoveryRuns", fields: [edgeNodeId], references: [id])
+  customerAccount         CustomerAccount?                  @relation(fields: [customerAccountId], references: [id], onDelete: SetNull)
+  customerSite            CustomerSite?                     @relation(fields: [customerSiteId], references: [id], onDelete: SetNull)
+
+  @@unique([edgeNodeId, runKey])
+  @@index([edgeNodeId])
+  @@index([customerAccountId])
+  @@index([customerSiteId])
+}
+
+model DiscoveredItem {
+  id                String                   @id @default(cuid())
+  discoveryRunId    String
+  observedKey       String
+  itemType          String
+  name              String
+  sourcePath        String?
+  confidence        Float?
+  attributionStatus String                   @default("unmapped")
+  rawData           Json
+  firstSeenAt       DateTime                 @default(now())
+  lastSeenAt        DateTime                 @default(now())
+  inventoryEntityId String?
+  discoveryRun      DiscoveryRun             @relation(fields: [discoveryRunId], references: [id], onDelete: Cascade)
+  inventoryEntity   InventoryEntity?         @relation(fields: [inventoryEntityId], references: [id])
+  fromRelationships DiscoveredRelationship[] @relation("DiscoveredRelationshipFromItem")
+  toRelationships   DiscoveredRelationship[] @relation("DiscoveredRelationshipToItem")
+
+  @@unique([discoveryRunId, observedKey])
+  @@index([itemType])
+  @@index([attributionStatus])
+}
+
+model DiscoveredSoftwareEvidence {
+  id                      String           @id @default(cuid())
+  evidenceKey             String           @unique
+  inventoryEntityId       String
+  evidenceSource          String
+  packageManager          String?
+  rawVendor               String?
+  rawProductName          String?
+  rawPackageName          String?
+  rawVersion              String?
+  installLocation         String?
+  rawMetadata             Json?
+  normalizationStatus     String           @default("pending")
+  normalizationConfidence Float?
+  // `softwareIdentityId` is a pre-existing DANGLING FK — its target `SoftwareIdentity` was dropped
+  // in migration 20260320222431. Left untouched here (additive change); its resolution
+  // (rename→legacy + warm-start join, OR drop-with-evidence) needs live row counts and is an
+  // explicit sandbox sub-task of BI-74579817. Spec §7.4.
+  softwareIdentityId      String?
+  // New canonical linkage into the CatalogIdentity spine (additive).
+  catalogIdentityId       String?
+  firstSeenAt             DateTime         @default(now())
+  lastSeenAt              DateTime         @default(now())
+  inventoryEntity         InventoryEntity  @relation(fields: [inventoryEntityId], references: [id], onDelete: Cascade)
+  catalogIdentity         CatalogIdentity? @relation(fields: [catalogIdentityId], references: [id], onDelete: SetNull)
+
+  @@index([inventoryEntityId])
+  @@index([normalizationStatus])
+  @@index([catalogIdentityId])
+}
+
+/// Canonical normalized software/hardware identity — the manufacturer→product→version→edition
+/// spine (Technopedia-style), keyed by CPE 2.3 where resolved. Raw vendor strings never write
+/// here directly; only the fingerprint/normalize pipeline sets these fields, via rules.
+/// EP-ASSET-INTELLIGENCE / BI-74579817.
+/// Spec: docs/superpowers/specs/2026-07-16-software-asset-intelligence-enrichment-design.md §4.1
+model CatalogIdentity {
+  id                  String                       @id @default(cuid())
+  // Stable canonical key (e.g. the cpe:2.3 string, or manufacturer:product:version:edition).
+  identityKey         String                       @unique
+  part                String                       @default("a") // CPE part: a (application) | o (os) | h (hardware)
+  manufacturer        String
+  product             String
+  productVersion      String?
+  edition             String?
+  patchLevel          String?
+  cpe                 String? // cpe:2.3 formatted string when resolved
+  category            String?
+  source              String                       @default("manual") // seeded | rule | ai_resolved | human_confirmed | feed
+  confidence          Float?
+  createdAt           DateTime                     @default(now())
+  updatedAt           DateTime                     @updatedAt
+  lifecycleMilestones CatalogLifecycleMilestone[]
+  // Convergence (BI-74579817): reuse the existing DiscoveryFingerprintRule subsystem rather than
+  // add a parallel rule model — it already maps evidence→identity (via inline resolvedIdentity
+  // JSON). This FK lets a rule resolve to a canonical CatalogIdentity. See spec §4.1 + the
+  // stewardship note in the BI. STEWARD DECISION: converge vs. keep device/software rules separate.
+  fingerprintRules    DiscoveryFingerprintRule[]
+  resolutionLogs      IdentityResolutionLog[]
+  inventoryEntities   InventoryEntity[]
+  softwareEvidence    DiscoveredSoftwareEvidence[]
+  bomComponents       BomComponent[]
+
+  @@index([manufacturer, product])
+  @@index([cpe])
+  @@index([part])
+}
+
+/// Structured support-lifecycle milestone for a CatalogIdentity — one row per named milestone,
+/// each carrying its own source + confidence. Populated from open feeds (endoflife.date) plus a
+/// manual overlay for long-tail commercial software. BI-74579817 (model) / BI-3A2328D6 (feed).
+model CatalogLifecycleMilestone {
+  id                String          @id @default(cuid())
+  catalogIdentityId String
+  // mainstream_end | extended_support_end | eol | eosl | security_updates_end | release
+  milestone         String
+  date              DateTime?
+  source            String // endoflife.date | nvd | vendor_calendar | manual
+  confidence        Float?
+  notes             String?
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  catalogIdentity   CatalogIdentity @relation(fields: [catalogIdentityId], references: [id], onDelete: Cascade)
+
+  @@unique([catalogIdentityId, milestone, source], map: "CatalogLifecycleMilestone_identity_milestone_source_key")
+  @@index([catalogIdentityId])
+  @@index([milestone])
+}
+
+/// Audit lineage of every identity resolution — which rule / AI / human resolved an entity to a
+/// CatalogIdentity, with confidence + evidence. Human-confirmed rows are never overwritten by a
+/// rule (§6.3.1). BI-74579817.
+model IdentityResolutionLog {
+  id                String                    @id @default(cuid())
+  inventoryEntityId String?
+  catalogIdentityId String?
+  fingerprintRuleId String?
+  // rule | ai_resolved | human_confirmed | human_corrected | shadow
+  resolutionType    String
+  confidence        Float?
+  evidence          Json?
+  discoveryRunId    String?
+  createdAt         DateTime                  @default(now())
+  inventoryEntity   InventoryEntity?          @relation(fields: [inventoryEntityId], references: [id], onDelete: SetNull)
+  catalogIdentity   CatalogIdentity?          @relation(fields: [catalogIdentityId], references: [id], onDelete: SetNull)
+  fingerprintRule   DiscoveryFingerprintRule? @relation(fields: [fingerprintRuleId], references: [id], onDelete: SetNull)
+
+  @@index([inventoryEntityId])
+  @@index([catalogIdentityId])
+  @@index([resolutionType])
+  @@index([createdAt]) // retention sweep cutoff scan, apps/web/lib/operate/retention/execute.ts:99
+}
+
+model DiscoveryFingerprintObservation {
+  id                 String   @id @default(cuid())
+  observationKey     String   @unique
+  inventoryEntityId  String?
+  discoveryRunId     String?
+  sourceKind         String
+  signalClass        String
+  protocol           String?
+  rawEvidenceLocal   Json?
+  normalizedEvidence Json
+  redactionStatus    String   @default("not_required")
+  evidenceFamilies   String[] @default([])
+  identityCandidates Json     @default("[]")
+  taxonomyCandidates Json     @default("[]")
+  identityConfidence Float?
+  taxonomyConfidence Float?
+  candidateMargin    Float?
+  blastRadiusTier    String   @default("medium")
+  decisionStatus     String   @default("pending")
+  reviewReason       String?
+  approvedRuleId     String?
+  firstSeenAt        DateTime @default(now())
+  lastSeenAt         DateTime @default(now())
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  inventoryEntity InventoryEntity?             @relation(fields: [inventoryEntityId], references: [id], onDelete: SetNull)
+  discoveryRun    DiscoveryRun?                @relation(fields: [discoveryRunId], references: [id], onDelete: SetNull)
+  approvedRule    DiscoveryFingerprintRule?    @relation("ApprovedFingerprintRule", fields: [approvedRuleId], references: [id], onDelete: SetNull)
+  reviews         DiscoveryFingerprintReview[]
+
+  @@index([sourceKind])
+  @@index([signalClass])
+  @@index([redactionStatus])
+  @@index([decisionStatus])
+  @@index([blastRadiusTier])
+  @@index([inventoryEntityId])
+  @@index([discoveryRunId])
+  @@index([createdAt]) // retention sweep cutoff scan, apps/web/lib/operate/retention/execute.ts:99
+}
+
+model DiscoveryFingerprintReview {
+  id             String   @id @default(cuid())
+  observationId  String
+  reviewerType   String
+  reviewerId     String?
+  decision       String
+  reason         String?
+  previousStatus String?
+  nextStatus     String
+  auditPayload   Json     @default("{}")
+  createdAt      DateTime @default(now())
+
+  observation DiscoveryFingerprintObservation @relation(fields: [observationId], references: [id], onDelete: Cascade)
+
+  @@index([observationId])
+  @@index([decision])
+  @@index([reviewerType])
+}
+
+model DiscoveryFingerprintRule {
+  id                       String   @id @default(cuid())
+  ruleKey                  String   @unique
+  catalogVersionId         String?
+  status                   String   @default("draft")
+  scope                    String   @default("global")
+  matchExpression          Json
+  requiredEvidenceFamilies String[] @default([])
+  excludedSignals          Json     @default("[]")
+  resolvedIdentity         Json
+  taxonomyNodeId           String?
+  identityConfidence       Float
+  taxonomyConfidence       Float
+  source                   String   @default("manual")
+  redactionReport          Json     @default("{}")
+  fixtureRefs              String[] @default([])
+  sourceObservationIds     String[] @default([])
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
+  // Convergence FK (BI-74579817): resolve a fingerprint to the canonical CatalogIdentity spine,
+  // superseding the inline `resolvedIdentity` JSON over time. Nullable during migration.
+  catalogIdentityId        String?
+
+  catalogVersion       DiscoveryFingerprintCatalogVersion? @relation(fields: [catalogVersionId], references: [id], onDelete: SetNull)
+  taxonomyNode         TaxonomyNode?                       @relation(fields: [taxonomyNodeId], references: [id], onDelete: SetNull)
+  approvedObservations DiscoveryFingerprintObservation[]   @relation("ApprovedFingerprintRule")
+  catalogIdentity      CatalogIdentity?                    @relation(fields: [catalogIdentityId], references: [id], onDelete: SetNull)
+  resolutionLogs       IdentityResolutionLog[]
+
+  @@index([status])
+  @@index([scope])
+  @@index([taxonomyNodeId])
+  @@index([catalogVersionId])
+  @@index([catalogIdentityId])
+}
+
+model DiscoveryFingerprintCatalogVersion {
+  id            String   @id @default(cuid())
+  catalogKey    String
+  version       String
+  schemaVersion String
+  source        String   @default("repo")
+  importedAt    DateTime @default(now())
+  changelog     String?
+  validation    Json     @default("{}")
+
+  rules DiscoveryFingerprintRule[]
+
+  @@unique([catalogKey, version])
+}
+
+model DiscoveredRelationship {
+  id                      String                 @id @default(cuid())
+  discoveryRunId          String
+  relationshipKey         String
+  relationshipType        String
+  fromDiscoveredItemId    String
+  toDiscoveredItemId      String
+  confidence              Float?
+  rawData                 Json?
+  inventoryRelationshipId String?
+  discoveryRun            DiscoveryRun           @relation(fields: [discoveryRunId], references: [id], onDelete: Cascade)
+  fromDiscoveredItem      DiscoveredItem         @relation("DiscoveredRelationshipFromItem", fields: [fromDiscoveredItemId], references: [id], onDelete: Cascade)
+  inventoryRelationship   InventoryRelationship? @relation(fields: [inventoryRelationshipId], references: [id])
+  toDiscoveredItem        DiscoveredItem         @relation("DiscoveredRelationshipToItem", fields: [toDiscoveredItemId], references: [id], onDelete: Cascade)
+
+  @@unique([discoveryRunId, relationshipKey])
+  @@index([relationshipType])
+}
+
+model InventoryEntity {
+  id                          String                            @id @default(cuid())
+  entityKey                   String                            @unique
+  entityType                  String
+  name                        String
+  technicalClass              String?
+  iconKey                     String?
+  manufacturer                String?
+  productModel                String?
+  observedVersion             String?
+  normalizedVersion           String?
+  supportStatus               String                            @default("unknown")
+  status                      String                            @default("active")
+  attributionStatus           String                            @default("needs_review")
+  confidence                  Float?
+  providerView                String                            @default("foundational")
+  properties                  Json                              @default("{}")
+  firstSeenAt                 DateTime                          @default(now())
+  lastSeenAt                  DateTime                          @default(now())
+  lastConfirmedRunId          String?
+  portfolioId                 String?
+  taxonomyNodeId              String?
+  digitalProductId            String?
+  attributionMethod           String?
+  attributionConfidence       Float?
+  attributionEvidence         Json?
+  candidateTaxonomy           Json?
+  // Enrichment result fields (BI-70469721). Populated by the enrich-digital-product pipeline
+  // (BI-27EE2AF7). Spec 2026-07-16-software-asset-intelligence-enrichment-design §4.3.
+  catalogIdentityId           String?
+  identityStatus              String? // unresolved | rule_resolved | ai_resolved | human_confirmed
+  identityConfidence          Float?
+  updatePosture               String                            @default("unknown") // unknown | current | behind | ahead
+  updatePostureSource         String?
+  updatePostureConfidence     Float?
+  latestKnownVersion          String?
+  supportLifecycleSource      String?
+  supportLifecycleConfidence  Float?
+  discoveredItems             DiscoveredItem[]
+  catalogIdentity             CatalogIdentity?                  @relation(fields: [catalogIdentityId], references: [id])
+  identityResolutionLogs      IdentityResolutionLog[]
+  digitalProduct              DigitalProduct?                   @relation(fields: [digitalProductId], references: [id])
+  lastConfirmedRun            DiscoveryRun?                     @relation("InventoryEntityConfirmedRun", fields: [lastConfirmedRunId], references: [id])
+  portfolio                   Portfolio?                        @relation(fields: [portfolioId], references: [id])
+  taxonomyNode                TaxonomyNode?                     @relation(fields: [taxonomyNodeId], references: [id])
+  fromRelationships           InventoryRelationship[]           @relation("InventoryRelationshipFromEntity")
+  toRelationships             InventoryRelationship[]           @relation("InventoryRelationshipToEntity")
+  qualityIssues               PortfolioQualityIssue[]
+  triageDecisions             DiscoveryTriageDecision[]
+  changeItems                 ChangeItem[]
+  softwareEvidence            DiscoveredSoftwareEvidence[]
+  fingerprintObservations     DiscoveryFingerprintObservation[]
+  discoveryConnectionGateways DiscoveryConnection[]             @relation("DiscoveryConnectionGateway")
+  discoveredViaConnectionId   String?
+  discoveredViaConnection     DiscoveryConnection?              @relation("DiscoveredViaConnection", fields: [discoveredViaConnectionId], references: [id])
+  scopeKey                    String                            @default("organization:internal")
+  customerAccountId           String?
+  customerSiteId              String?
+  mergedIntoId                String?
+  customerAccount             CustomerAccount?                  @relation("InventoryEntityCustomerAccount", fields: [customerAccountId], references: [id], onDelete: SetNull)
+  customerSite                CustomerSite?                     @relation("InventoryEntityCustomerSite", fields: [customerSiteId], references: [id], onDelete: SetNull)
+  mergedInto                  InventoryEntity?                  @relation("InventoryEntityMerge", fields: [mergedIntoId], references: [id], onDelete: SetNull)
+  mergedEntities              InventoryEntity[]                 @relation("InventoryEntityMerge")
+
+  @@index([entityType])
+  @@index([attributionStatus])
+  @@index([portfolioId])
+  @@index([taxonomyNodeId])
+  @@index([digitalProductId])
+  @@index([catalogIdentityId])
+  @@index([scopeKey])
+  @@index([customerAccountId])
+  @@index([customerSiteId])
+  @@index([mergedIntoId])
+}
+
+model InventoryRelationship {
+  id                      String                   @id @default(cuid())
+  // BI-PIR-7d69a445 (part 2): relationshipKey is SOURCE-SCOPED provenance that
+  // varies per source/scope for the same real relationship, so it is NOT the
+  // canonical identity — it is intentionally non-unique. The canonical identity
+  // is the compound @@unique([fromEntityId, toEntityId, relationshipType]) below.
+  // Per-run relationshipKey provenance is preserved on DiscoveredRelationship
+  // (@@unique([discoveryRunId, relationshipKey])); nothing looks up
+  // InventoryRelationship by relationshipKey, so dropping its @unique loses
+  // nothing and ends the cross-run P2002 (the upsert now targets the tuple).
+  relationshipKey         String
+  relationshipType        String
+  status                  String                   @default("active")
+  confidence              Float?
+  properties              Json?
+  firstSeenAt             DateTime                 @default(now())
+  lastSeenAt              DateTime                 @default(now())
+  lastConfirmedRunId      String?
+  fromEntityId            String
+  toEntityId              String
+  scopeKey                String                   @default("organization:internal")
+  customerAccountId       String?
+  customerSiteId          String?
+  mergedIntoId            String?
+  discoveredRelationships DiscoveredRelationship[]
+  fromEntity              InventoryEntity          @relation("InventoryRelationshipFromEntity", fields: [fromEntityId], references: [id], onDelete: Cascade)
+  lastConfirmedRun        DiscoveryRun?            @relation("InventoryRelationshipConfirmedRun", fields: [lastConfirmedRunId], references: [id])
+  toEntity                InventoryEntity          @relation("InventoryRelationshipToEntity", fields: [toEntityId], references: [id], onDelete: Cascade)
+  qualityIssues           PortfolioQualityIssue[]
+  customerAccount         CustomerAccount?         @relation("InventoryRelationshipCustomerAccount", fields: [customerAccountId], references: [id], onDelete: SetNull)
+  customerSite            CustomerSite?            @relation("InventoryRelationshipCustomerSite", fields: [customerSiteId], references: [id], onDelete: SetNull)
+  mergedInto              InventoryRelationship?   @relation("InventoryRelationshipMerge", fields: [mergedIntoId], references: [id], onDelete: SetNull)
+  mergedRelationships     InventoryRelationship[]  @relation("InventoryRelationshipMerge")
+
+  @@unique([fromEntityId, toEntityId, relationshipType])
+  @@index([relationshipType])
+  @@index([status])
+  @@index([scopeKey])
+  @@index([customerAccountId])
+  @@index([customerSiteId])
+  @@index([mergedIntoId])
+}
+
+model PortfolioQualityIssue {
+  id                      String                    @id @default(cuid())
+  issueKey                String                    @unique
+  issueType               String
+  status                  String                    @default("open")
+  severity                String                    @default("warn")
+  summary                 String
+  details                 Json?
+  firstDetectedAt         DateTime                  @default(now())
+  lastDetectedAt          DateTime                  @default(now())
+  resolvedAt              DateTime?
+  inventoryEntityId       String?
+  inventoryRelationshipId String?
+  portfolioId             String?
+  taxonomyNodeId          String?
+  digitalProductId        String?
+  // EP-MSP-FEDERATION · A1 (BI-8777B85A) — per-customer/site routing scope.
+  // Denormalized from the originating EdgeNode / InventoryEntity (the canonical
+  // scope source) via the estate-scope resolver so the operator inbox can route
+  // a firing issue to the right customer queue instead of one global inbox.
+  // NULL customerAccountId / scopeKey="organization:internal" = the operator's
+  // own estate (self-monitoring), preserving backward-compatible behavior.
+  customerAccountId       String?
+  customerSiteId          String?
+  scopeKey                String?
+  digitalProduct          DigitalProduct?           @relation(fields: [digitalProductId], references: [id])
+  inventoryEntity         InventoryEntity?          @relation(fields: [inventoryEntityId], references: [id])
+  inventoryRelationship   InventoryRelationship?    @relation(fields: [inventoryRelationshipId], references: [id])
+  portfolio               Portfolio?                @relation(fields: [portfolioId], references: [id])
+  taxonomyNode            TaxonomyNode?             @relation(fields: [taxonomyNodeId], references: [id])
+  customerAccount         CustomerAccount?          @relation("QualityIssueCustomerAccount", fields: [customerAccountId], references: [id], onDelete: SetNull)
+  customerSite            CustomerSite?             @relation("QualityIssueCustomerSite", fields: [customerSiteId], references: [id], onDelete: SetNull)
+  triageDecisions         DiscoveryTriageDecision[]
+
+  @@index([issueType])
+  @@index([status])
+  @@index([severity])
+  @@index([portfolioId])
+  @@index([taxonomyNodeId])
+  @@index([digitalProductId])
+  @@index([customerAccountId])
+  @@index([customerSiteId])
+  @@index([scopeKey])
+}
+
+model DiscoveryTriageDecision {
+  id                     String                 @id @default(cuid())
+  decisionId             String                 @unique
+  inventoryEntityId      String?
+  qualityIssueId         String?
+  actorType              String
+  actorId                String?
+  outcome                String
+  identityConfidence     Float?
+  taxonomyConfidence     Float?
+  evidenceCompleteness   Float?
+  reproducibilityScore   Float?
+  selectedTaxonomyNodeId String?
+  selectedIdentity       Json?
+  evidencePacket         Json
+  proposedRule           Json?
+  appliedRuleId          String?
+  requiresHumanReview    Boolean                @default(false)
+  humanReviewedAt        DateTime?
+  createdAt              DateTime               @default(now())
+  inventoryEntity        InventoryEntity?       @relation(fields: [inventoryEntityId], references: [id], onDelete: SetNull)
+  qualityIssue           PortfolioQualityIssue? @relation(fields: [qualityIssueId], references: [id], onDelete: SetNull)
+  selectedTaxonomyNode   TaxonomyNode?          @relation("DiscoveryTriageDecisionSelectedTaxonomy", fields: [selectedTaxonomyNodeId], references: [id], onDelete: SetNull)
+
+  @@index([outcome])
+  @@index([inventoryEntityId])
+  @@index([qualityIssueId])
+  @@index([selectedTaxonomyNodeId])
+  @@index([requiresHumanReview, createdAt])
+}

@@ -4,8 +4,8 @@
 #
 #   1. Migration immutability — reject commits that modify previously-committed
 #      Prisma migration .sql files (drift prevention).
-#   2. Stale Prisma client refresh — regenerate when schema.prisma is newer
-#      than the generated client.
+#   2. Stale Prisma client refresh — regenerate when any schema domain file
+#      (packages/db/prisma/schema/*.prisma) is newer than the generated client.
 #   2b. Derived-artifact registry — regenerate + stage any registered derived
 #      artifact (doc index, doc-impact manifest, doc diagrams, capability
 #      catalog, ...) whose sources are staged. Same "regenerate transparently"
@@ -69,7 +69,7 @@ if [ -n "$MODIFIED_MIGRATIONS" ]; then
 fi
 
 # ─── Guard 2: stale Prisma client refresh ───────────────────────────────────
-# When `git pull` brings in a newer schema.prisma, the generated Prisma client
+# When `git pull` brings in a newer schema domain file, the generated Prisma client
 # in packages/db/generated/client stays at the old shape until someone runs
 # `pnpm install` (which fires the postinstall: prisma generate). The
 # typecheck below will then fail with "Property X does not exist" errors that
@@ -77,11 +77,16 @@ fi
 #
 # Detect the drift and regenerate transparently. Fast (~1s) and idempotent.
 
-SCHEMA="packages/db/prisma/schema.prisma"
+SCHEMA_DIR="packages/db/prisma/schema"
 CLIENT="packages/db/generated/client/client.ts"
 
-if [ -f "$SCHEMA" ] && [ -f "$CLIENT" ] && [ "$SCHEMA" -nt "$CLIENT" ]; then
-  echo "[pre-commit] schema.prisma is newer than generated client — regenerating..."
+SCHEMA_NEWER=""
+if [ -d "$SCHEMA_DIR" ] && [ -f "$CLIENT" ]; then
+  SCHEMA_NEWER=$(find "$SCHEMA_DIR" -name '*.prisma' -newer "$CLIENT" -print -quit 2>/dev/null || true)
+fi
+
+if [ -n "$SCHEMA_NEWER" ]; then
+  echo "[pre-commit] Prisma schema is newer than generated client — regenerating..."
   if ! pnpm --filter @dpf/db exec prisma generate >/tmp/pre-commit-prisma.log 2>&1; then
     echo ""
     echo "ERROR: prisma generate failed. Check /tmp/pre-commit-prisma.log."
@@ -156,7 +161,7 @@ if [ -n "$STAGED_FILES" ]; then
 fi
 
 # ─── Guard 5: schema regression ─────────────────────────────────────────────
-# When schema.prisma is staged, run the same reorder-tolerant set-based
+# When a schema domain file is staged, run the same reorder-tolerant set-based
 # check the CI workflow uses (.github/workflows/schema-regression-guard.yml
 # → packages/db/scripts/schema-regression-guard.mjs). Catches removed
 # fields/attributes/models/enum values BEFORE push so contributors don't
@@ -166,10 +171,10 @@ fi
 # tripped PR #1366) and whitespace / column-alignment changes.
 
 STAGED_SCHEMA=$(git diff --cached --name-only --diff-filter=ACMR \
-  | grep -E '^packages/db/prisma/schema\.prisma$' || true)
+  | grep -E '^packages/db/prisma/schema(\.prisma$|/[^/]+\.prisma$)' || true)
 
 if [ -n "$STAGED_SCHEMA" ]; then
-  echo "[pre-commit] schema.prisma staged — running schema regression guard..."
+  echo "[pre-commit] Prisma schema staged — running schema regression guard..."
 
   # Prefer origin/main as the comparison base. Fall back to upstream@{u}
   # if the branch tracks something other than origin/main. Skip if neither

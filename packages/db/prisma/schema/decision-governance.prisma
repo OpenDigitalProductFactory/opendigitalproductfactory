@@ -1,0 +1,707 @@
+// ─── Task Governance Runtime ──────────────────────────────────────
+
+// Progressive autonomy substrate (EP-8AF1C996 / BI-DE4BF92F).
+// DecisionShadowLedger records what a coworker would/did decide for a governed
+// activity; TrustState stores the measured aggregate for one
+// coworker x activity x risk triple. These tables measure trust only; they do
+// not authorize runtime autonomy changes.
+model DecisionShadowLedger {
+  id                    String    @id @default(cuid())
+  ledgerId              String    @unique
+  agentId               String
+  activityType          String
+  riskClass             String
+  autonomyLevel         String    @default("shadow")
+  proposedDecision      Json
+  rationale             String?   @db.Text
+  actualDecision        Json?
+  outcome               Json?
+  agreement             Boolean?
+  sourceKind            String?
+  taskRunId             String?
+  toolExecutionId       String?
+  decisionInteractionId String?
+  envelopeId            String?
+  regulatoryPolicyId    String?
+  regulatoryEvidence    Json      @default("{}")
+  metadata              Json      @default("{}")
+  observedAt            DateTime  @default(now())
+  reconciledAt          DateTime?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@index([agentId, activityType, riskClass, observedAt(sort: Desc)])
+  @@index([agentId, observedAt(sort: Desc)])
+  @@index([activityType, riskClass])
+  @@index([agreement])
+  @@index([taskRunId])
+  @@index([toolExecutionId])
+  @@index([decisionInteractionId])
+  @@index([envelopeId])
+  @@index([regulatoryPolicyId])
+  @@index([observedAt])
+}
+
+model TrustState {
+  id                String    @id @default(cuid())
+  agentId           String
+  activityType      String
+  riskClass         String
+  currentLevel      String    @default("shadow")
+  regulatoryCeiling String?
+  sampleCount       Int       @default(0)
+  agreementCount    Int       @default(0)
+  agreementRate     Float?
+  lastLedgerId      String?
+  recommendation    Json      @default("{}")
+  lastEvaluatedAt   DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  @@unique([agentId, activityType, riskClass])
+  @@index([agentId, currentLevel])
+  @@index([activityType, riskClass])
+  @@index([currentLevel])
+  @@index([regulatoryCeiling])
+  @@index([lastEvaluatedAt])
+}
+
+model RegulatoryAutonomyPolicy {
+  id                   String    @id @default(cuid())
+  policyId             String    @unique
+  policyKey            String
+  version              Int       @default(1)
+  industry             String?
+  jurisdiction         String    @default("global")
+  jurisdictionBasis    String    @default("global")
+  activityClass        String
+  maxAutonomyLevel     String    @default("propose")
+  humanControlRequired Boolean   @default(true)
+  requiredEvidence     Json      @default("[]")
+  regulationId         String?
+  rationale            String?   @db.Text
+  sourceKind           String    @default("operator")
+  status               String    @default("active")
+  effectiveFrom        DateTime  @default(now())
+  effectiveUntil       DateTime?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  @@unique([policyKey, version])
+  @@index([status, effectiveFrom, effectiveUntil])
+  @@index([industry, jurisdiction, activityClass])
+  @@index([jurisdiction, jurisdictionBasis])
+  @@index([activityClass])
+  @@index([maxAutonomyLevel])
+  @@index([regulationId])
+}
+
+// ─── Deliberation Pattern Framework ────────────────────────────────────────────
+// Reusable multi-agent quality patterns (review, debate, ...) executed over the
+// existing TaskRun/TaskNode/TaskNodeEdge substrate.
+//
+// Spec: docs/superpowers/specs/2026-04-21-deliberation-pattern-framework-design.md
+// Plan: docs/superpowers/plans/2026-04-22-deliberation-pattern-framework-v1.md
+//
+// Canonical enum values for the String columns below are documented inline and
+// live in TypeScript (see apps/web/lib/deliberation/types.ts — arriving Task 3)
+// and in the MCP tool enums. Hyphenated values per CLAUDE.md § "Strongly-Typed
+// String Enums — MANDATORY COMPLIANCE".
+model DeliberationPattern {
+  id                    String   @id @default(cuid())
+  slug                  String   @unique // e.g. "review", "debate"
+  name                  String
+  purpose               String   @db.Text
+  defaultRoles          Json // Array<{ roleId, count, required }>
+  topologyTemplate      Json // branch + convergence spec consumed by task-graph builder
+  activationPolicyHints Json // { stageDefaults, riskEscalation, explicitTriggers } — hints, not authoritative
+  evidenceRequirements  Json // { retrievalRequired, admissibleSourceTypes, freshness, conflictReconciliationRequired }
+  outputContract        Json // shape of the DeliberationOutcome produced
+  providerStrategyHints Json // preferred diversity mode and strategy profile
+  sourceFile            String? // path to the seed file under deliberation/
+  status                String   @default("active") // "active" | "deprecated" | "draft"
+  isOverridden          Boolean  @default(false) // admin edited at runtime — seeder will skip
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  runs DeliberationRun[]
+
+  @@index([status])
+}
+
+model DeliberationRoleProfile {
+  id                       String   @id @default(cuid())
+  roleId                   String   @unique // slug: "author" | "reviewer" | "skeptic" | "adjudicator" | "debater" | ...
+  roleName                 String
+  personaGuidance          String   @db.Text // portable persona prompt ({{include:...}} composition allowed)
+  allowedNodeTypes         String[] @default([]) // which TaskNode.nodeType values this role can occupy
+  sameModelPersonaAllowed  Boolean  @default(true)
+  preferProviderDiversity  Boolean  @default(false)
+  requireProviderDiversity Boolean  @default(false)
+  evidenceStrictness       String   @default("standard") // "lenient" | "standard" | "strict"
+  sourceFile               String? // path to the seed file for this persona
+  isOverridden             Boolean  @default(false) // admin edited at runtime — seeder will skip
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
+
+  @@index([evidenceStrictness])
+}
+
+model DeliberationRun {
+  id                 String    @id @default(cuid())
+  taskRunId          String // FK to TaskRun.id — deliberation always parented to a task run
+  patternId          String // FK to DeliberationPattern.id
+  artifactType       String // "spec" | "plan" | "code-change" | "architecture-decision" | "policy" | "research-question"
+  triggerSource      String // "stage" | "risk" | "explicit" | "combined"
+  adjudicationMode   String // "synthesis" | "majority-vote" | "unanimous" | "no-consensus-ok"
+  activatedRiskLevel String? // "low" | "medium" | "high" | "critical"
+  diversityMode      String // "single-model-multi-persona" | "multi-model-same-provider" | "multi-provider-heterogeneous"
+  strategyProfile    String // "economy" | "balanced" | "high-assurance" | "document-authority"
+  consensusState     String    @default("pending") // "consensus" | "partial-consensus" | "no-consensus" | "insufficient-evidence" | "pending"
+  maxBranches        Int       @default(4)
+  budgetUsd          Float?
+  metadata           Json? // free-form run metadata: degradation notes, budget-halted flag, etc.
+  startedAt          DateTime  @default(now())
+  completedAt        DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  taskRun              TaskRun                @relation(fields: [taskRunId], references: [id], onDelete: Cascade)
+  pattern              DeliberationPattern    @relation(fields: [patternId], references: [id])
+  outcome              DeliberationOutcome?
+  issueSets            DeliberationIssueSet[]
+  claims               ClaimRecord[]
+  evidenceBundles      EvidenceBundle[]
+  branchNodes          TaskNode[]             @relation("DeliberationRunBranchNodes")
+  decisionInteractions DecisionInteraction[]
+
+  @@index([taskRunId])
+  @@index([patternId])
+  @@index([consensusState])
+  @@index([artifactType, consensusState])
+}
+
+model DeliberationOutcome {
+  id                   String   @id @default(cuid())
+  deliberationRunId    String   @unique
+  mergedRecommendation String   @db.Text
+  rationaleSummary     String   @db.Text
+  confidence           Float?
+  consensusState       String // duplicate of DeliberationRun.consensusState for read-only snapshot at synthesis time
+  evidenceQuality      String? // "source-backed" | "mixed" | "needs-more-evidence"
+  unresolvedRisks      String[] @default([])
+  diversityLabel       String? // UI-friendly summary, e.g. "Multi-provider review"
+  branchRoster         Json? // [{ branchNodeId, role, status }] — prevents false-success blindness (spec § 13)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  deliberationRun DeliberationRun @relation(fields: [deliberationRunId], references: [id], onDelete: Cascade)
+
+  @@index([consensusState])
+}
+
+model DeliberationIssueSet {
+  id                String   @id @default(cuid())
+  deliberationRunId String
+  assertions        Json     @default("[]") // compact list of supported assertions
+  objections        Json     @default("[]") // list of objections raised by branches
+  rebuttals         Json     @default("[]") // rebuttals to objections
+  adjudicationNotes String?  @db.Text
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  deliberationRun DeliberationRun @relation(fields: [deliberationRunId], references: [id], onDelete: Cascade)
+
+  @@index([deliberationRunId])
+}
+
+model ClaimRecord {
+  id                  String   @id @default(cuid())
+  deliberationRunId   String
+  branchNodeId        String? // FK to TaskNode.id — the branch that made the claim (nullable for synthesis-level facts)
+  claimText           String   @db.Text
+  claimType           String // "assertion" | "objection" | "rebuttal" | "synthesis-fact" | "synthesis-inference"
+  status              String   @default("unresolved") // "supported" | "contested" | "unresolved" | "rejected"
+  evidenceGrade       String // "A" | "B" | "C" | "D"
+  confidence          Float?
+  supportingSourceIds String[] @default([]) // EvidenceSource.id references supporting the claim
+  opposingSourceIds   String[] @default([]) // EvidenceSource.id references opposing the claim
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  deliberationRun DeliberationRun @relation(fields: [deliberationRunId], references: [id], onDelete: Cascade)
+  branchNode      TaskNode?       @relation("ClaimRecordBranchNode", fields: [branchNodeId], references: [id])
+
+  @@index([deliberationRunId, claimType])
+  @@index([branchNodeId])
+  @@index([status])
+  @@index([evidenceGrade])
+}
+
+model EvidenceBundle {
+  id                String   @id @default(cuid())
+  deliberationRunId String
+  taskNodeId        String? // nullable — bundle may be run-level or branch-level
+  artifactRef       String? // identifier of the artifact under evaluation (free-form)
+  retrievalContext  Json? // query string, retrieval tool, filters
+  summary           String?  @db.Text
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  deliberationRun DeliberationRun  @relation(fields: [deliberationRunId], references: [id], onDelete: Cascade)
+  taskNode        TaskNode?        @relation("EvidenceBundleTaskNode", fields: [taskNodeId], references: [id])
+  sources         EvidenceSource[]
+
+  @@index([deliberationRunId])
+  @@index([taskNodeId])
+}
+
+model EvidenceSource {
+  id               String    @id @default(cuid())
+  evidenceBundleId String
+  sourceType       String // "code" | "spec" | "doc" | "paper" | "web" | "db-query" | "tool-output" | "runtime-state"
+  locator          Json // structured locator (file+line, URL+ts, DOI+page, query+capturedAt, etc.)
+  retrievedBy      String? // tool or provider used to retrieve
+  excerpt          String?   @db.Text // normalized excerpt/fact text
+  retrievedAt      DateTime? // retrieval timestamp (freshness tracking)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  evidenceBundle EvidenceBundle @relation(fields: [evidenceBundleId], references: [id], onDelete: Cascade)
+
+  @@index([evidenceBundleId])
+  @@index([sourceType])
+}
+
+model DecisionPerspectiveProfile {
+  id                        String                              @id @default(cuid())
+  profileId                 String                              @unique
+  name                      String
+  kind                      String
+  scope                     Json                                @default("{}")
+  ownerOrganizationId       String?
+  ownerPrincipalId          String?
+  fallbackProfileId         String?
+  currentVersionId          String?                             @unique
+  defaultResolver           Json?
+  autonomyPolicy            Json                                @default("{}")
+  status                    String                              @default("active")
+  personaConfig             Json?
+  voiceEnabled              Boolean                             @default(false)
+  createdAt                 DateTime                            @default(now())
+  updatedAt                 DateTime                            @updatedAt
+  ownerOrganization         Organization?                       @relation(fields: [ownerOrganizationId], references: [id], onDelete: SetNull)
+  ownerPrincipal            Principal?                          @relation("DecisionPerspectiveProfileOwner", fields: [ownerPrincipalId], references: [id], onDelete: SetNull)
+  fallbackProfile           DecisionPerspectiveProfile?         @relation("DecisionPerspectiveProfileFallback", fields: [fallbackProfileId], references: [profileId], onDelete: SetNull)
+  fallbackChildren          DecisionPerspectiveProfile[]        @relation("DecisionPerspectiveProfileFallback")
+  currentVersion            DecisionPerspectiveProfileVersion?  @relation("DecisionPerspectiveProfileCurrentVersion", fields: [currentVersionId], references: [versionId], onDelete: SetNull)
+  versions                  DecisionPerspectiveProfileVersion[] @relation("DecisionPerspectiveProfileVersions")
+  materials                 PerspectiveMaterial[]
+  interactions              DecisionInteraction[]               @relation("DecisionInteractionProfile")
+  fallbackInteractions      DecisionInteraction[]               @relation("DecisionInteractionFallbackProfile")
+  voiceProfile              VoiceProfile?
+  weightAdjustmentProposals WeightAdjustmentProposal[]
+
+  @@index([kind, status])
+  @@index([ownerOrganizationId])
+  @@index([ownerPrincipalId])
+  @@index([fallbackProfileId])
+}
+
+model DecisionPerspectiveProfileVersion {
+  id                    String                      @id @default(cuid())
+  versionId             String                      @unique
+  profileId             String
+  versionNumber         Int
+  materialFingerprint   String
+  changeSummary         String?
+  promotedByPrincipalId String?
+  createdAt             DateTime                    @default(now())
+  profile               DecisionPerspectiveProfile  @relation("DecisionPerspectiveProfileVersions", fields: [profileId], references: [profileId], onDelete: Cascade)
+  currentForProfile     DecisionPerspectiveProfile? @relation("DecisionPerspectiveProfileCurrentVersion")
+  promotedByPrincipal   Principal?                  @relation("DecisionPerspectiveProfileVersionPromoter", fields: [promotedByPrincipalId], references: [id], onDelete: SetNull)
+  materials             PerspectiveMaterial[]
+  interactions          DecisionInteraction[]
+
+  @@unique([profileId, versionNumber])
+  @@index([profileId])
+  @@index([promotedByPrincipalId])
+}
+
+model PerspectiveMaterial {
+  id               String                             @id @default(cuid())
+  materialId       String                             @unique
+  profileId        String
+  profileVersionId String?
+  sourceType       String
+  sourceRef        Json                               @default("{}")
+  scope            Json                               @default("{}")
+  domainClass      String                             @default("plan-readiness")
+  direction        String                             @default("neutral")
+  domains          String[]                           @default([])
+  freshness        String                             @default("current")
+  evidenceGrade    String                             @default("A")
+  stalenessPolicy  Json?
+  lastValidatedAt  DateTime?
+  confidenceWeight Float                              @default(0.5)
+  reviewStatus     String                             @default("draft")
+  promotionState   String                             @default("candidate")
+  summary          String?                            @db.Text
+  createdAt        DateTime                           @default(now())
+  updatedAt        DateTime                           @updatedAt
+  profile          DecisionPerspectiveProfile         @relation(fields: [profileId], references: [profileId], onDelete: Cascade)
+  profileVersion   DecisionPerspectiveProfileVersion? @relation(fields: [profileVersionId], references: [versionId], onDelete: SetNull)
+
+  @@index([profileId, freshness])
+  @@index([profileId, reviewStatus, promotionState])
+  @@index([profileId, domainClass])
+  @@index([profileVersionId])
+  @@index([domainClass])
+  @@index([direction])
+  @@index([evidenceGrade])
+  @@index([sourceType])
+}
+
+model DecisionInteraction {
+  id                      String                            @id @default(cuid())
+  interactionId           String                            @unique
+  profileId               String
+  profileVersionId        String
+  fallbackProfileId       String?
+  buildId                 String?
+  taskRunId               String?
+  deliberationRunId       String?
+  triggeredByUserId       String?
+  routeContext            String?
+  phaseFrom               String?
+  phaseTo                 String?
+  domainClass             String                            @default("plan-readiness")
+  question                String                            @db.Text
+  options                 Json                              @default("[]")
+  evidenceBundle          Json                              @default("{}")
+  sources                 Json                              @default("[]")
+  rationale               String?                           @db.Text
+  riskTier                String
+  confidenceBefore        Float?
+  confidenceAfter         Float?
+  outcomeType             String
+  principleConflict       Boolean                           @default(false)
+  outcomePayload          Json                              @default("{}")
+  humanOutcome            Json?
+  // BI-D88DFEEA Phase 1 (gate instrumentation). When the gate scored real
+  // per-option feature vectors (build-studio, work-pattern-review; NOT the
+  // open-ended org-business/profession gates yet), `scoredOptions` carries the
+  // DecisionOption[] (id/description/features) actually scored,
+  // `recommendedOptionId` is the kernel's argmax pick via decide(), and
+  // `chosenOptionId` is populated once the human's response resolves to one of
+  // `scoredOptions`. All three are null for every other DecisionInteraction —
+  // the weight-inference adapter (weight-inference-adapter.ts) treats null as
+  // "cannot extract an observation from this row", never as zero-signal.
+  scoredOptions           Json?
+  recommendedOptionId     String?
+  chosenOptionId          String?
+  // Which governance gate produced this row (BI-1BE30A9A). The audit tier
+  // derives from THIS, not from the fallback-resolved profile kind: a
+  // profession/WSID decision that fell back to platform doctrine for material
+  // still belongs to the WSID tier, otherwise the tier reads empty and the
+  // operator concludes — wrongly — that the gate is never called.
+  // Null on rows written before the column existed; the read model falls back
+  // to profile.kind for those.
+  gateKey                 String?
+  // True when the gate ran but doctrine fell back off the gate's own profile
+  // kind (e.g. profession gate resolving to MARK_DPF_PLATFORM_PROFILE).
+  gateFallbackUsed        Boolean                           @default(false)
+  // Trust-envelope immutability (BI-81CC5D8E, EP-VERIFICATION-INTEGRITY).
+  // A recorded decision is sealed into an append-only per-(chainId) hash chain:
+  // chainEntryHash = H(canonical{criteria, evidence-digests, weights, composite}
+  // || prevHash). `sealedAt` marks the row immutable; a write guard forbids
+  // mutating any sealed field afterward (see apps/web/lib/decision/decision-chain.ts).
+  // Nullable + additive: rows written before sealing (and the fail-open path)
+  // carry NULL and are simply "unsealed", never invalid.
+  chainId                 String?
+  prevHash                String?
+  chainEntryHash          String?                           @unique
+  sealedAt                DateTime?
+  createdAt               DateTime                          @default(now())
+  updatedAt               DateTime                          @updatedAt
+  profile                 DecisionPerspectiveProfile        @relation("DecisionInteractionProfile", fields: [profileId], references: [profileId], onDelete: Cascade)
+  profileVersion          DecisionPerspectiveProfileVersion @relation(fields: [profileVersionId], references: [versionId], onDelete: Restrict)
+  fallbackProfile         DecisionPerspectiveProfile?       @relation("DecisionInteractionFallbackProfile", fields: [fallbackProfileId], references: [profileId], onDelete: SetNull)
+  build                   FeatureBuild?                     @relation(fields: [buildId], references: [buildId], onDelete: SetNull)
+  taskRun                 TaskRun?                          @relation(fields: [taskRunId], references: [taskRunId], onDelete: SetNull)
+  deliberationRun         DeliberationRun?                  @relation(fields: [deliberationRunId], references: [id], onDelete: SetNull)
+  triggeredByUser         User?                             @relation("DecisionInteractionTriggeredByUser", fields: [triggeredByUserId], references: [id], onDelete: SetNull)
+  escalationCapture       EscalationCapture?
+  deferralCapture         DeferralCapture?
+  voiceOutput             DecisionInteractionVoiceOutput?
+  evidenceReverifications EvidenceReVerification[]
+
+  @@index([profileId, createdAt])
+  @@index([profileVersionId])
+  @@index([fallbackProfileId])
+  @@index([buildId, createdAt])
+  @@index([taskRunId])
+  @@index([deliberationRunId])
+  @@index([triggeredByUserId])
+  @@index([domainClass, createdAt])
+  @@index([outcomeType, createdAt])
+  // Backs the per-tier count/latest queries on the decision log.
+  @@index([gateKey, createdAt])
+  @@index([principleConflict, createdAt])
+  @@index([riskTier, createdAt])
+  // Trust-envelope chain lookups (find the head of a chain to link the next entry).
+  @@index([chainId, sealedAt])
+}
+
+model EscalationCapture {
+  id                  String              @id @default(cuid())
+  escalationId        String              @unique
+  interactionId       String              @unique
+  resolverPrincipalId String?
+  resolverUserId      String?
+  prompt              String              @db.Text
+  answer              String?             @db.Text
+  criteria            Json                @default("[]")
+  rationale           String?             @db.Text
+  objectionsResolved  Json                @default("[]")
+  domainClass         String
+  candidateMaterial   Boolean             @default(false)
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+  interaction         DecisionInteraction @relation(fields: [interactionId], references: [id], onDelete: Cascade)
+  resolverPrincipal   Principal?          @relation("DecisionEscalationResolverPrincipal", fields: [resolverPrincipalId], references: [id], onDelete: SetNull)
+  resolverUser        User?               @relation("DecisionEscalationResolverUser", fields: [resolverUserId], references: [id], onDelete: SetNull)
+
+  @@index([resolverPrincipalId])
+  @@index([resolverUserId])
+  @@index([domainClass])
+  @@index([candidateMaterial])
+}
+
+model DeferralCapture {
+  id                   String              @id @default(cuid())
+  deferralId           String              @unique
+  interactionId        String              @unique
+  domain               String
+  gapReason            String
+  suggestedSourceTypes String[]            @default([])
+  candidateMaterial    Boolean             @default(false)
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
+  interaction          DecisionInteraction @relation(fields: [interactionId], references: [id], onDelete: Cascade)
+
+  @@index([domain, createdAt])
+  @@index([gapReason])
+  @@index([candidateMaterial])
+}
+
+// Trust-envelope external verifier (BI-70FF9114, EP-VERIFICATION-INTEGRITY).
+// Separation-of-duties re-check of one cited evidence item on a sealed decision,
+// reusing the verified-finding-review pattern (apps/web/lib/build/verified-finding-
+// review.ts): an independent pass re-resolves the recorded locator against the live
+// source and compares excerpts. A mismatch/unresolved locator degrades the affected
+// dimension to unevidenced. Append-only (no updatedAt); each verdict is its own row.
+model EvidenceReVerification {
+  id               String              @id @default(cuid())
+  reverificationId String              @unique
+  interactionId    String
+  chainEntryHash   String? // the sealed entry re-checked (audit correlation)
+  optionId         String
+  dimensionKey     String
+  evidenceLocator  Json // the recorded StructuredLocator being re-resolved
+  recordedExcerpt  String?             @db.Text
+  liveExcerpt      String?             @db.Text
+  resolved         Boolean             @default(false) // did the locator resolve at all
+  excerptMatch     Boolean             @default(false) // does the live source still support the recorded excerpt
+  verdict          String              @default("pending") // pending | confirmed | degraded | unresolved
+  verifierRunId    String? // the independent verifier pass id (separation of duties)
+  checkedAt        DateTime?
+  createdAt        DateTime            @default(now())
+  interaction      DecisionInteraction @relation(fields: [interactionId], references: [interactionId], onDelete: Cascade)
+
+  @@index([interactionId])
+  @@index([verdict])
+  @@index([chainEntryHash])
+  @@index([optionId, dimensionKey])
+}
+
+// Trust-envelope jurisdiction criteria (BI-B84CD2D3, EP-VERIFICATION-INTEGRITY).
+// Sibling projection of RegulatoryAutonomyPolicy keyed on the SAME
+// (industry, jurisdiction, jurisdictionBasis, activityClass) tuple, so the
+// autonomy ceiling and the axis profile can never disagree about which regime
+// applies. Where RegulatoryAutonomyPolicy caps AUTONOMY, this selects the
+// scoring VECTOR: which axes are required, which are forbidden, which are
+// monitoring-only (never a scoring input), plus a per-axis weight overlay.
+// Axis keys are validated at the app layer against PRINCIPLE_DIMENSIONS.
+model JurisdictionCriteriaProfile {
+  id                 String    @id @default(cuid())
+  profileKey         String
+  version            Int       @default(1)
+  industry           String?
+  jurisdiction       String    @default("global")
+  jurisdictionBasis  String    @default("global")
+  activityClass      String
+  requiredAxes       String[]  @default([])
+  forbiddenAxes      String[]  @default([])
+  monitoringOnlyAxes String[]  @default([])
+  weightOverlay      Json      @default("{}") // { dimensionKey: multiplier }
+  regulationId       String?
+  packVersion        String? // provenance of the jurisdiction pack, recorded on decisions
+  rationale          String?   @db.Text
+  sourceKind         String    @default("operator") // operator | pack | learned
+  status             String    @default("active")
+  effectiveFrom      DateTime  @default(now())
+  effectiveUntil     DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  @@unique([profileKey, version])
+  @@index([industry, jurisdiction, activityClass])
+  @@index([jurisdiction, jurisdictionBasis])
+  @@index([activityClass])
+  @@index([status, effectiveFrom, effectiveUntil])
+  @@index([regulationId])
+}
+
+// Trust-envelope MONITORING-ONLY demographic rail (BI-A59CB2EA,
+// EP-VERIFICATION-INTEGRITY). Deliberately STRUCTURALLY SEPARATE from the
+// scoring path: it has NO relation to DecisionInteraction or any candidate/
+// scoring model, and is joined to an evaluation only by the opaque string
+// `evaluationRef`. Collected (where lawful + consented) SOLELY to compute
+// NYC LL144 / four-fifths adverse-impact ratios; the scoring path holds no
+// read access to this table. The one guardrail that matters most: the thing
+// you must measure for a bias audit is the thing you must never let touch the
+// score, so it does not share a foreign key with the score.
+model ProtectedMonitoringObservation {
+  id               String   @id @default(cuid())
+  observationId    String   @unique
+  evaluationRef    String // opaque correlation to a candidate evaluation — NOT a scoring FK
+  jurisdiction     String   @default("global")
+  activityClass    String   @default("hiring")
+  protectedClass   String // race | sex | age-band | disability | ... (jurisdiction-resolved)
+  classValue       String // bucketed value used only for impact-ratio aggregation
+  selectionOutcome String? // advanced | rejected | hired (post-decision label)
+  consentBasis     String   @default("none")
+  createdAt        DateTime @default(now())
+
+  @@index([evaluationRef])
+  @@index([jurisdiction, activityClass, protectedClass])
+  @@index([activityClass, protectedClass, classValue])
+}
+
+// BI-D88DFEEA Phase 3. A weight-adjustment PROPOSAL — never a silent
+// mutation (spec 2026-07-23-decision-tier-rebalance-and-vector-epistemology-
+// design.md §2.4). Emitted by weight-inference.ts's inferWeightProposals(),
+// persisted here, surfaced on /coworker-decisions/review for a human ruling.
+// `status` starts "proposed" at PROPOSED_CONFIDENCE_WEIGHT (0.3, below every
+// authored stance tier). A ruling moves it to "ruled" (and, via
+// stance-promotion.ts's promoteStanceMaterial, into the same ladder authored
+// stance material uses) or "rejected" — the review-queue pattern this reuses
+// (stance-promotion.ts) has no reject primitive of its own, so this model
+// carries its own explicit status rather than inventing a second ladder.
+model WeightAdjustmentProposal {
+  id                       String                     @id @default(cuid())
+  proposalId               String                     @unique
+  domainClass              String
+  profileId                String
+  axis                     String
+  direction                String
+  consistency              Float
+  meanSeparation           Float
+  sampleSize               Int
+  entersAtConfidenceWeight Float
+  status                   String                     @default("proposed")
+  ruledAt                  DateTime?
+  ruledByUserId            String?
+  rejectionReason          String?                    @db.Text
+  createdAt                DateTime                   @default(now())
+  updatedAt                DateTime                   @updatedAt
+  profile                  DecisionPerspectiveProfile @relation(fields: [profileId], references: [profileId], onDelete: Cascade)
+  ruledByUser              User?                      @relation(fields: [ruledByUserId], references: [id], onDelete: SetNull)
+
+  @@index([profileId, domainClass, status])
+  @@index([status, createdAt])
+}
+
+// ── Voice Layer ───────────────────────────────────────────────────────────────
+//
+// Spec: docs/superpowers/specs/2026-05-19-persona-voice-layer-wwtd-design.md
+//
+model VoiceConsentRecord {
+  id                    String         @id @default(cuid())
+  subjectName           String
+  subjectEmail          String?
+  consentMethod         String
+  authorizedUseCases    String[]       @default([])
+  authorizedLanguages   String[]       @default(["en"])
+  authorizedTerritories String[]       @default(["global"])
+  expiresAt             DateTime
+  capturedByPrincipalId String
+  evidenceRef           String?
+  revokedAt             DateTime?
+  createdAt             DateTime       @default(now())
+  voiceProfiles         VoiceProfile[]
+
+  @@index([capturedByPrincipalId])
+}
+
+model VoiceProfile {
+  id                    String                     @id @default(cuid())
+  profileId             String                     @unique
+  provider              String
+  providerVoiceId       String?
+  status                String                     @default("pending")
+  consentType           String
+  consentRecordId       String?
+  sampleCount           Int                        @default(0)
+  totalSampleDurationMs Int                        @default(0)
+  qualityScore          Float?
+  language              String                     @default("en")
+  // Per-profile TTS tuning chosen by the user on the voice page (speed,
+  // expressiveness, etc). Shape: { speed?, exaggeration?, cfgWeight?, temperature? }.
+  // Null = use the deployment/provider defaults. Applied on every synthesis.
+  voiceSettings         Json?
+  createdAt             DateTime                   @default(now())
+  updatedAt             DateTime                   @updatedAt
+  profile               DecisionPerspectiveProfile @relation(fields: [profileId], references: [profileId], onDelete: Cascade)
+  consentRecord         VoiceConsentRecord?        @relation(fields: [consentRecordId], references: [id])
+  // trainingJobs retained for schema-regression-guard compliance.
+  // Chatterbox is zero-shot; this table is no longer written to.
+  // Formal drop deferred to a dedicated schema-cleanup PR.
+  trainingJobs          VoiceTrainingJob[]
+
+  @@index([status])
+}
+
+// VoiceTrainingJob: retained for schema-regression-guard compliance.
+// No longer written to — Chatterbox replaces async training with zero-shot
+// reference audio registration. Table drop deferred to schema-cleanup PR.
+model VoiceTrainingJob {
+  id             String       @id @default(cuid())
+  voiceProfileId String
+  status         String       @default("pending")
+  providerJobId  String?
+  inputSamples   Json         @default("[]")
+  errorMessage   String?
+  startedAt      DateTime?
+  completedAt    DateTime?
+  createdAt      DateTime     @default(now())
+  voiceProfile   VoiceProfile @relation(fields: [voiceProfileId], references: [id], onDelete: Cascade)
+
+  @@index([voiceProfileId, status])
+}
+
+model DecisionInteractionVoiceOutput {
+  id              String              @id @default(cuid())
+  interactionId   String              @unique
+  audioStorageKey String
+  narrationText   String              @db.Text
+  durationMs      Int
+  provider        String
+  voiceProfileId  String
+  ttsCostUnits    Int?
+  generatedAt     DateTime            @default(now())
+  interaction     DecisionInteraction @relation(fields: [interactionId], references: [id], onDelete: Cascade)
+
+  @@index([voiceProfileId])
+}

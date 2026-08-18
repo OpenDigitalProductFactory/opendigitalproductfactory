@@ -4,8 +4,9 @@ import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
 import { TABLE_CLASSIFICATION } from "./table-classification";
+import { readCanonicalPrismaSchema } from "./schema-source";
 
-const schema = readFileSync(new URL("../prisma/schema.prisma", import.meta.url), "utf8");
+const schema = readCanonicalPrismaSchema();
 const migration = readFileSync(
   new URL("../prisma/migrations/20260808235000_initiative_readiness_receipts/migration.sql", import.meta.url),
   "utf8",

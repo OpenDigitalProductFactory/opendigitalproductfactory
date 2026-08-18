@@ -6,7 +6,7 @@
 # while this page still described Neo4j as a live service.
 relatedCode:
   - docker-compose.yml
-  - packages/db/prisma/schema.prisma
+  - packages/db/prisma/schema
   - packages/db/src/pg-graph.ts
   - packages/db/src/pgvector-store.ts
   - monitoring/prometheus/prometheus.yml

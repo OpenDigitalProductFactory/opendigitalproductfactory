@@ -1,0 +1,1171 @@
+model OrganizationLicenseProfile {
+  id                        String    @id @default(cuid())
+  organizationId            String    @unique
+  setupStatus               String    @default("draft")
+  investigationMode         String    @default("unknown")
+  homeCountryCode           String?
+  primaryRegionCode         String?
+  operatingFootprintSummary String?
+  legalActivityConfidence   String    @default("medium")
+  researchCoverageStatus    String    @default("draft")
+  notes                     String?
+  lastVerifiedAt            DateTime?
+  createdAt                 DateTime  @default(now())
+  updatedAt                 DateTime  @updatedAt
+
+  organization    Organization                @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  licenseRecords  OrganizationLicenseRecord[]
+  readinessIssues LicenseReadinessIssue[]
+}
+
+model LicenseRequirementReference {
+  id                  String    @id @default(cuid())
+  requirementRefId    String    @unique
+  countryCode         String
+  stateProvinceCode   String?
+  jurisdictionLabel   String
+  authorityName       String
+  authorityType       String
+  requirementType     String
+  scopeLevel          String
+  archetypeCategories String[]
+  activityTags        String[]
+  summary             String
+  officialWebsiteUrl  String?
+  applicationUrl      String?
+  renewalUrl          String?
+  helpUrl             String?
+  displayRuleSummary  String?
+  renewalCadenceHint  String?
+  sourceUrls          String[]
+  sourceKind          String    @default("official")
+  lastResearchedAt    DateTime?
+  lastVerifiedAt      DateTime?
+  confidence          String    @default("medium")
+  staleAfterDays      Int       @default(180)
+  tags                String[]  @default([])
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  organizationLicenseRecords OrganizationLicenseRecord[]
+  personLicenseRecords       PersonLicenseRecord[]
+
+  @@index([countryCode, stateProvinceCode])
+  @@index([requirementType])
+  @@index([authorityType])
+}
+
+model OrganizationLicenseRecord {
+  id                           String    @id @default(cuid())
+  licenseRecordId              String    @unique
+  organizationLicenseProfileId String
+  requirementReferenceId       String?
+  licenseKind                  String
+  status                       String    @default("draft")
+  licenseNumber                String?
+  issuedAt                     DateTime?
+  effectiveFrom                DateTime?
+  expiresAt                    DateTime?
+  renewalCadence               String?
+  renewalFeeAmount             Decimal?  @db.Decimal(12, 2)
+  renewalFeeCurrency           String?
+  displayRequirementStatus     String    @default("unknown")
+  officialSourceUrl            String?
+  lastVerifiedAt               DateTime?
+  verificationNotes            String?
+  createdAt                    DateTime  @default(now())
+  updatedAt                    DateTime  @updatedAt
+
+  organizationLicenseProfile OrganizationLicenseProfile   @relation(fields: [organizationLicenseProfileId], references: [id], onDelete: Cascade)
+  requirementReference       LicenseRequirementReference? @relation(fields: [requirementReferenceId], references: [id], onDelete: SetNull)
+  displayObligations         LicenseDisplayObligation[]
+  feeSchedules               LicenseFeeSchedule[]
+  readinessIssues            LicenseReadinessIssue[]
+
+  @@index([organizationLicenseProfileId])
+  @@index([requirementReferenceId])
+  @@index([status, expiresAt])
+}
+
+model PersonLicenseRecord {
+  id                       String    @id @default(cuid())
+  personLicenseRecordId    String    @unique
+  principalAliasId         String
+  organizationId           String
+  requirementReferenceId   String?
+  credentialType           String
+  status                   String    @default("draft")
+  credentialNumber         String?
+  issuingAuthority         String?
+  issuedAt                 DateTime?
+  expiresAt                DateTime?
+  renewalCadence           String?
+  supervisoryOrDisplayRole String?
+  officialSourceUrl        String?
+  lastVerifiedAt           DateTime?
+  createdAt                DateTime  @default(now())
+  updatedAt                DateTime  @updatedAt
+
+  principalAlias       PrincipalAlias               @relation(fields: [principalAliasId], references: [id], onDelete: Cascade)
+  organization         Organization                 @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  requirementReference LicenseRequirementReference? @relation(fields: [requirementReferenceId], references: [id], onDelete: SetNull)
+  displayObligations   LicenseDisplayObligation[]
+  feeSchedules         LicenseFeeSchedule[]
+  readinessIssues      LicenseReadinessIssue[]
+
+  @@index([principalAliasId])
+  @@index([organizationId])
+  @@index([requirementReferenceId])
+  @@index([status, expiresAt])
+}
+
+model LicenseDisplayObligation {
+  id                          String   @id @default(cuid())
+  displayObligationId         String   @unique
+  organizationLicenseRecordId String?
+  personLicenseRecordId       String?
+  evidenceId                  String?
+  displayType                 String
+  requirementLevel            String
+  displayLocation             String?
+  isSatisfied                 Boolean  @default(false)
+  notes                       String?
+  createdAt                   DateTime @default(now())
+  updatedAt                   DateTime @updatedAt
+
+  organizationLicenseRecord OrganizationLicenseRecord? @relation(fields: [organizationLicenseRecordId], references: [id], onDelete: SetNull)
+  personLicenseRecord       PersonLicenseRecord?       @relation(fields: [personLicenseRecordId], references: [id], onDelete: SetNull)
+  evidence                  ComplianceEvidence?        @relation(fields: [evidenceId], references: [id], onDelete: SetNull)
+
+  @@index([organizationLicenseRecordId])
+  @@index([personLicenseRecordId])
+  @@index([evidenceId])
+  @@index([requirementLevel, isSatisfied])
+}
+
+model LicenseFeeSchedule {
+  id                          String    @id @default(cuid())
+  feeScheduleId               String    @unique
+  organizationLicenseRecordId String?
+  personLicenseRecordId       String?
+  feeType                     String
+  amount                      Decimal   @db.Decimal(12, 2)
+  currency                    String    @default("USD")
+  dueDate                     DateTime?
+  paymentStatus               String    @default("pending")
+  financeHandoffMode          String    @default("track_only")
+  externalReference           String?
+  notes                       String?
+  createdAt                   DateTime  @default(now())
+  updatedAt                   DateTime  @updatedAt
+
+  organizationLicenseRecord OrganizationLicenseRecord? @relation(fields: [organizationLicenseRecordId], references: [id], onDelete: SetNull)
+  personLicenseRecord       PersonLicenseRecord?       @relation(fields: [personLicenseRecordId], references: [id], onDelete: SetNull)
+
+  @@index([organizationLicenseRecordId])
+  @@index([personLicenseRecordId])
+  @@index([paymentStatus, dueDate])
+}
+
+model LicenseReadinessIssue {
+  id                           String    @id @default(cuid())
+  issueId                      String    @unique
+  organizationLicenseProfileId String
+  organizationLicenseRecordId  String?
+  personLicenseRecordId        String?
+  issueType                    String
+  severity                     String    @default("medium")
+  status                       String    @default("open")
+  title                        String
+  details                      String?
+  openedAt                     DateTime  @default(now())
+  resolvedAt                   DateTime?
+  createdAt                    DateTime  @default(now())
+  updatedAt                    DateTime  @updatedAt
+
+  organizationLicenseProfile OrganizationLicenseProfile @relation(fields: [organizationLicenseProfileId], references: [id], onDelete: Cascade)
+  organizationLicenseRecord  OrganizationLicenseRecord? @relation(fields: [organizationLicenseRecordId], references: [id], onDelete: SetNull)
+  personLicenseRecord        PersonLicenseRecord?       @relation(fields: [personLicenseRecordId], references: [id], onDelete: SetNull)
+
+  @@index([organizationLicenseProfileId])
+  @@index([organizationLicenseRecordId])
+  @@index([personLicenseRecordId])
+  @@index([status, severity])
+}
+
+model Regulation {
+  id                String                 @id @default(cuid())
+  regulationId      String                 @unique
+  name              String
+  shortName         String
+  jurisdiction      String
+  industry          String?
+  // Data-driven applicability spec (RegulationApplicability in
+  // regulation-applicability.ts): { basis[], jurisdictions[], archetypes?,
+  // listingStatuses? }. When set, the generic evaluator (regulationApplies)
+  // classifies this regulation for an install with no per-regulation code —
+  // adding a governance requirement is a data operation, not a code change.
+  // Null → fall back to the legacy jurisdiction/industry string matcher.
+  applicability     Json?
+  // Functional domain that owns tracking this regulation (REGULATION_DOMAINS in
+  // regulation-applicability.ts: privacy-security | hr-employment | finance |
+  // ai-governance | consumer-marketing | accessibility | corporate-governance |
+  // sector | cross-cutting). ATTRIBUTION/REPORTING ONLY — it does NOT affect
+  // applicability. Lets each functional context own its slice while everything
+  // rolls up to one posture. Null → treated as cross-cutting until backfilled.
+  domain            String?
+  sourceType        String                 @default("external")
+  effectiveDate     DateTime?
+  reviewDate        DateTime?
+  sourceUrl         String?
+  notes             String?
+  agentId           String?
+  status            String                 @default("active")
+  createdAt         DateTime               @default(now())
+  updatedAt         DateTime               @updatedAt
+  changeDetected    Boolean                @default(false)
+  lastKnownVersion  String?
+  sourceCheckDate   DateTime?
+  // Phase 4 — version lineage. `version` increments per governed iteration;
+  // `previousVersionId` links a new version to the one it supersedes, so
+  // "iterate an existing regulation" is an immutable new version, not a silent
+  // in-place mutation. The prior version is retired (status="superseded").
+  version           Int                    @default(1)
+  previousVersionId String?
+  previousVersion   Regulation?            @relation("RegulationVersions", fields: [previousVersionId], references: [id])
+  nextVersions      Regulation[]           @relation("RegulationVersions")
+  obligations       Obligation[]
+  alerts            RegulatoryAlert[]
+  submissions       RegulatorySubmission[]
+
+  @@index([status])
+  @@index([jurisdiction])
+  @@index([sourceType])
+  @@index([previousVersionId])
+}
+
+model Obligation {
+  id              String                  @id @default(cuid())
+  obligationId    String                  @unique
+  regulationId    String
+  title           String
+  description     String?
+  reference       String?
+  category        String?
+  frequency       String?
+  applicability   String?
+  // Phase 3 — typed output/deliverable form. Declares WHAT artifact satisfies
+  // this obligation (DELIVERABLE_TYPES: board-declaration | regulatory-filing |
+  // attestation | evidence-pack | policy-acknowledgement | none), so the platform
+  // and the compliance coworker know what to produce/track. Null = unspecified.
+  deliverableType String?
+  penaltySummary  String?
+  ownerEmployeeId String?
+  reviewDate      DateTime?
+  agentId         String?
+  status          String                  @default("active")
+  createdAt       DateTime                @default(now())
+  updatedAt       DateTime                @updatedAt
+  evidence        ComplianceEvidence[]
+  controls        ControlObligationLink[]
+  ownerEmployee   EmployeeProfile?        @relation("ObligationOwner", fields: [ownerEmployeeId], references: [id])
+  regulation      Regulation              @relation(fields: [regulationId], references: [id])
+  policies        Policy[]
+  policyLinks     PolicyObligationLink[]
+  submissions     RegulatorySubmission[]
+
+  @@index([regulationId])
+  @@index([ownerEmployeeId])
+  @@index([status])
+  @@index([category])
+}
+
+model Control {
+  id                   String                  @id @default(cuid())
+  controlId            String                  @unique
+  title                String
+  description          String?
+  controlType          String
+  // Stable cross-framework identity (Phase 2 — control consolidation). A control
+  // with a catalogKey is the SAME control across every regulation whose
+  // obligations it satisfies, so one control answers many frameworks (a
+  // crosswalk) instead of being duplicated per framework. Dedup keys on this,
+  // not a fragile exact-title match. Null = a bespoke, un-cataloged control.
+  catalogKey           String?
+  implementationStatus String                  @default("planned")
+  ownerEmployeeId      String?
+  reviewFrequency      String?
+  lastReviewedAt       DateTime?
+  nextReviewDate       DateTime?
+  effectiveness        String?
+  agentId              String?
+  status               String                  @default("active")
+  createdAt            DateTime                @default(now())
+  updatedAt            DateTime                @updatedAt
+  auditFindings        AuditFinding[]
+  evidence             ComplianceEvidence[]
+  ownerEmployee        EmployeeProfile?        @relation("ControlOwner", fields: [ownerEmployeeId], references: [id])
+  obligations          ControlObligationLink[]
+  riskAssessments      RiskControl[]
+
+  @@index([ownerEmployeeId])
+  @@index([status])
+  @@index([implementationStatus])
+  @@index([controlType])
+  @@index([catalogKey])
+}
+
+model ControlObligationLink {
+  id           String     @id @default(cuid())
+  controlId    String
+  obligationId String
+  notes        String?
+  createdAt    DateTime   @default(now())
+  control      Control    @relation(fields: [controlId], references: [id], onDelete: Cascade)
+  obligation   Obligation @relation(fields: [obligationId], references: [id], onDelete: Cascade)
+
+  @@unique([controlId, obligationId])
+  @@index([controlId])
+  @@index([obligationId])
+}
+
+// Phase 5 — compliance-coworker write-WITH-APPROVAL. The coworker is accountable
+// for keeping the GRC register current, but authoritative writes stay
+// human-in-the-loop: the coworker PROPOSES a change (a control-obligation mapping,
+// a new regulation, …) into this staging row, and a human approves before it
+// commits via the existing create/link actions. `payload` holds the kind-specific
+// proposal; `kind` selects how approval commits it.
+model ComplianceProposal {
+  id                   String   @id @default(cuid())
+  proposalId           String   @unique
+  kind                 String // "control-mapping" | "regulation" | "obligation"
+  status               String   @default("pending") // pending | approved | rejected
+  payload              Json
+  rationale            String?
+  proposedByAgentId    String?
+  proposedByEmployeeId String?
+  reviewedByEmployeeId String?
+  reviewNotes          String?
+  committedEntityId    String?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  @@index([status])
+  @@index([kind])
+}
+
+model ComplianceEvidence {
+  id                        String                     @id @default(cuid())
+  evidenceId                String                     @unique
+  title                     String
+  evidenceType              String
+  description               String?
+  obligationId              String?
+  controlId                 String?
+  collectedAt               DateTime                   @default(now())
+  collectedByEmployeeId     String?
+  fileRef                   String?
+  retentionUntil            DateTime?
+  supersededById            String?
+  providerConnectionId      String?
+  claimKey                  String?
+  assertedValue             Json?
+  validFrom                 DateTime?
+  expiresAt                 DateTime?
+  agentId                   String?
+  status                    String                     @default("active")
+  createdAt                 DateTime                   @default(now())
+  updatedAt                 DateTime                   @updatedAt
+  collectedBy               EmployeeProfile?           @relation("EvidenceCollector", fields: [collectedByEmployeeId], references: [id])
+  control                   Control?                   @relation(fields: [controlId], references: [id])
+  obligation                Obligation?                @relation(fields: [obligationId], references: [id])
+  supersededBy              ComplianceEvidence?        @relation("EvidenceSupersession", fields: [supersededById], references: [id])
+  supersedes                ComplianceEvidence[]       @relation("EvidenceSupersession")
+  providerConnection        AiProviderConnection?      @relation(fields: [providerConnectionId], references: [id], onDelete: SetNull)
+  licenseDisplayObligations LicenseDisplayObligation[]
+
+  @@index([obligationId])
+  @@index([controlId])
+  @@index([collectedByEmployeeId])
+  @@index([status])
+  @@index([evidenceType])
+  @@index([providerConnectionId, claimKey, status])
+  @@index([expiresAt, status])
+  @@index([supersededById]) // FK-leading (self-relation): supersession-chain reverse lookup
+}
+
+model RiskAssessment {
+  id                   String               @id @default(cuid())
+  assessmentId         String               @unique
+  title                String
+  scope                String?
+  hazard               String
+  likelihood           String
+  severity             String
+  inherentRisk         String
+  residualRisk         String?
+  assessedByEmployeeId String?
+  assessedAt           DateTime             @default(now())
+  nextReviewDate       DateTime?
+  notes                String?
+  agentId              String?
+  status               String               @default("active")
+  createdAt            DateTime             @default(now())
+  updatedAt            DateTime             @updatedAt
+  incidents            ComplianceIncident[]
+  assessedBy           EmployeeProfile?     @relation("RiskAssessor", fields: [assessedByEmployeeId], references: [id])
+  controls             RiskControl[]
+
+  @@index([assessedByEmployeeId])
+  @@index([status])
+  @@index([inherentRisk])
+}
+
+model RiskControl {
+  id               String         @id @default(cuid())
+  riskAssessmentId String
+  controlId        String
+  mitigationNotes  String?
+  createdAt        DateTime       @default(now())
+  control          Control        @relation(fields: [controlId], references: [id], onDelete: Cascade)
+  riskAssessment   RiskAssessment @relation(fields: [riskAssessmentId], references: [id], onDelete: Cascade)
+
+  @@unique([riskAssessmentId, controlId])
+  @@index([riskAssessmentId])
+  @@index([controlId])
+}
+
+model ComplianceIncident {
+  id                   String             @id @default(cuid())
+  incidentId           String             @unique
+  title                String
+  description          String?
+  occurredAt           DateTime
+  detectedAt           DateTime?
+  severity             String
+  category             String?
+  regulatoryNotifiable Boolean            @default(false)
+  notificationDeadline DateTime?
+  notifiedAt           DateTime?
+  rootCause            String?
+  riskAssessmentId     String?
+  reportedByEmployeeId String?
+  agentId              String?
+  status               String             @default("open")
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+  reportedBy           EmployeeProfile?   @relation("IncidentReporter", fields: [reportedByEmployeeId], references: [id])
+  riskAssessment       RiskAssessment?    @relation(fields: [riskAssessmentId], references: [id])
+  correctiveActions    CorrectiveAction[]
+
+  @@index([riskAssessmentId])
+  @@index([reportedByEmployeeId])
+  @@index([status])
+  @@index([severity])
+  @@index([regulatoryNotifiable])
+}
+
+model CorrectiveAction {
+  id                   String              @id @default(cuid())
+  actionId             String              @unique
+  title                String
+  description          String?
+  rootCause            String?
+  sourceType           String
+  incidentId           String?
+  auditFindingId       String?
+  ownerEmployeeId      String?
+  dueDate              DateTime?
+  completedAt          DateTime?
+  verificationMethod   String?
+  verificationDate     DateTime?
+  verifiedByEmployeeId String?
+  agentId              String?
+  status               String              @default("open")
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
+  auditFinding         AuditFinding?       @relation(fields: [auditFindingId], references: [id])
+  incident             ComplianceIncident? @relation(fields: [incidentId], references: [id])
+  owner                EmployeeProfile?    @relation("CorrectiveActionOwner", fields: [ownerEmployeeId], references: [id])
+  verifiedBy           EmployeeProfile?    @relation("CorrectiveActionVerifier", fields: [verifiedByEmployeeId], references: [id])
+
+  @@index([incidentId])
+  @@index([auditFindingId])
+  @@index([ownerEmployeeId])
+  @@index([verifiedByEmployeeId])
+  @@index([status])
+  @@index([dueDate])
+}
+
+model ComplianceAudit {
+  id                String           @id @default(cuid())
+  auditId           String           @unique
+  title             String
+  auditType         String
+  scope             String?
+  auditorName       String?
+  auditorEmployeeId String?
+  scheduledAt       DateTime?
+  conductedAt       DateTime?
+  completedAt       DateTime?
+  overallRating     String?
+  notes             String?
+  agentId           String?
+  status            String           @default("planned")
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+  findings          AuditFinding[]
+  auditor           EmployeeProfile? @relation("AuditAuditor", fields: [auditorEmployeeId], references: [id])
+
+  @@index([auditorEmployeeId])
+  @@index([status])
+  @@index([auditType])
+}
+
+model AuditFinding {
+  id                String             @id @default(cuid())
+  findingId         String             @unique
+  auditId           String
+  controlId         String?
+  title             String
+  description       String?
+  findingType       String
+  dueDate           DateTime?
+  resolvedAt        DateTime?
+  agentId           String?
+  status            String             @default("open")
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  audit             ComplianceAudit    @relation(fields: [auditId], references: [id], onDelete: Cascade)
+  control           Control?           @relation(fields: [controlId], references: [id])
+  correctiveActions CorrectiveAction[]
+
+  @@index([auditId])
+  @@index([controlId])
+  @@index([status])
+}
+
+model RegulatorySubmission {
+  id                    String           @id @default(cuid())
+  submissionId          String           @unique
+  title                 String
+  regulationId          String?
+  // Phase 3 — a filing/deliverable can satisfy a specific obligation, not just a
+  // regulation, so an obligation's required output is tracked to its artifact.
+  obligationId          String?
+  recipientBody         String
+  submissionType        String
+  submittedAt           DateTime?
+  dueDate               DateTime?
+  submittedByEmployeeId String?
+  confirmationRef       String?
+  responseReceived      Boolean          @default(false)
+  responseDate          DateTime?
+  responseSummary       String?
+  notes                 String?
+  agentId               String?
+  status                String           @default("draft")
+  createdAt             DateTime         @default(now())
+  updatedAt             DateTime         @updatedAt
+  regulation            Regulation?      @relation(fields: [regulationId], references: [id])
+  obligation            Obligation?      @relation(fields: [obligationId], references: [id])
+  submittedBy           EmployeeProfile? @relation("SubmissionSubmitter", fields: [submittedByEmployeeId], references: [id])
+
+  @@index([regulationId])
+  @@index([obligationId])
+  @@index([submittedByEmployeeId])
+  @@index([status])
+  @@index([dueDate])
+}
+
+model ComplianceAuditLog {
+  id                    String           @id @default(cuid())
+  entityType            String
+  entityId              String
+  action                String
+  field                 String?
+  oldValue              String?
+  newValue              String?
+  performedByEmployeeId String?
+  agentId               String?
+  performedAt           DateTime         @default(now())
+  notes                 String?
+  performedBy           EmployeeProfile? @relation("ComplianceAuditLogActor", fields: [performedByEmployeeId], references: [id])
+
+  @@index([entityType, entityId])
+  @@index([performedByEmployeeId])
+  @@index([performedAt])
+}
+
+model Policy {
+  id                   String                 @id @default(cuid())
+  policyId             String                 @unique
+  title                String
+  description          String?
+  body                 String?
+  category             String
+  version              Int                    @default(1)
+  lifecycleStatus      String                 @default("draft")
+  ownerEmployeeId      String?
+  approvedByEmployeeId String?
+  approvedAt           DateTime?
+  publishedAt          DateTime?
+  retiredAt            DateTime?
+  effectiveDate        DateTime?
+  reviewDate           DateTime?
+  reviewFrequency      String?
+  fileRef              String?
+  obligationId         String?
+  notes                String?
+  agentId              String?
+  status               String                 @default("active")
+  executablePolicyIds  Json                   @default("[]")
+  createdAt            DateTime               @default(now())
+  updatedAt            DateTime               @updatedAt
+  approvedBy           EmployeeProfile?       @relation("PolicyApprover", fields: [approvedByEmployeeId], references: [id])
+  obligation           Obligation?            @relation(fields: [obligationId], references: [id])
+  ownerEmployee        EmployeeProfile?       @relation("PolicyOwner", fields: [ownerEmployeeId], references: [id])
+  acknowledgments      PolicyAcknowledgment[]
+  requirements         PolicyRequirement[]
+  obligationLinks      PolicyObligationLink[]
+
+  @@index([ownerEmployeeId])
+  @@index([approvedByEmployeeId])
+  @@index([obligationId])
+  @@index([lifecycleStatus])
+  @@index([category])
+  @@index([status])
+}
+
+model PolicyRequirement {
+  id                  String                  @id @default(cuid())
+  requirementId       String                  @unique
+  policyId            String
+  title               String
+  requirementType     String
+  description         String?
+  frequency           String?
+  applicability       String?
+  dueDays             Int?
+  agentId             String?
+  status              String                  @default("active")
+  executablePolicyIds Json                    @default("[]")
+  createdAt           DateTime                @default(now())
+  updatedAt           DateTime                @updatedAt
+  policy              Policy                  @relation(fields: [policyId], references: [id], onDelete: Cascade)
+  completions         RequirementCompletion[]
+  trainingRequirement TrainingRequirement?
+
+  @@index([policyId])
+  @@index([requirementType])
+  @@index([status])
+}
+
+/// Organization-specific confirmation of why a bounded data scope is processed.
+/// Archetype proposals remain status="review" until an accountable owner confirms them.
+model DataProcessingActivity {
+  id                      String       @id @default(cuid())
+  activityId              String
+  organizationId          String
+  name                    String
+  purposeKey              String
+  ownerRef                String
+  status                  String       @default("review")
+  assetIds                Json         @default("[]")
+  fieldIds                Json         @default("[]")
+  dataCategories          Json         @default("[]")
+  subjectTypes            Json         @default("[]")
+  authorityRefs           Json         @default("[]")
+  recipientRefs           Json         @default("[]")
+  destinationClasses      Json         @default("[]")
+  residencyConstraints    Json         @default("[]")
+  transferConstraints     Json         @default("[]")
+  derivedCopyContractIds  Json         @default("[]")
+  lifecycleClassIds       Json         @default("[]")
+  erasureExceptionRefs    Json         @default("[]")
+  controlIds              Json         @default("[]")
+  evidenceIds             Json         @default("[]")
+  executablePolicyIds     Json         @default("[]")
+  controllerProcessorRole String?
+  riskLevel               String?
+  highRisk                Boolean      @default(false)
+  dpiaRequired            Boolean      @default(false)
+  effectiveFrom           DateTime?
+  effectiveUntil          DateTime?
+  reviewAt                DateTime?
+  confirmedAt             DateTime?
+  confirmedByRef          String?
+  provenance              Json
+  version                 Int          @default(1)
+  createdAt               DateTime     @default(now())
+  updatedAt               DateTime     @updatedAt
+  organization            Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, activityId])
+  @@index([organizationId, status, purposeKey])
+  @@index([effectiveUntil])
+  @@index([reviewAt])
+}
+
+/// Time-bounded, explicitly approved exception to executable data policy.
+model DataPolicyException {
+  id                  String       @id @default(cuid())
+  exceptionId         String
+  organizationId      String
+  name                String
+  status              String       @default("draft")
+  scope               Json
+  executablePolicyIds Json         @default("[]")
+  approverRef         String?
+  approvedAt          DateTime?
+  rationale           String?
+  compensatingControl String?
+  expiresAt           DateTime?
+  remediationItemId   String?
+  provenance          Json
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
+  organization        Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, exceptionId])
+  @@index([organizationId, status])
+  @@index([expiresAt])
+  @@index([remediationItemId])
+}
+
+model RequirementCompletion {
+  id                String            @id @default(cuid())
+  completionId      String            @unique
+  requirementId     String
+  employeeProfileId String
+  completedAt       DateTime          @default(now())
+  expiresAt         DateTime?
+  method            String
+  notes             String?
+  agentId           String?
+  status            String            @default("active")
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+  employeeProfile   EmployeeProfile   @relation("RequirementCompletions", fields: [employeeProfileId], references: [id], onDelete: Cascade)
+  requirement       PolicyRequirement @relation(fields: [requirementId], references: [id], onDelete: Cascade)
+
+  @@unique([requirementId, employeeProfileId, status])
+  @@index([requirementId])
+  @@index([employeeProfileId])
+  @@index([status])
+  @@index([expiresAt])
+}
+
+model TrainingRequirement {
+  id                  String            @id @default(cuid())
+  requirementId       String            @unique
+  trainingTitle       String
+  provider            String?
+  deliveryMethod      String?
+  durationMinutes     Int?
+  externalUrl         String?
+  passingScore        Float?
+  certificateRequired Boolean           @default(false)
+  agentId             String?
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+  requirement         PolicyRequirement @relation(fields: [requirementId], references: [id], onDelete: Cascade)
+
+  @@index([requirementId])
+}
+
+model PolicyAcknowledgment {
+  id                String          @id @default(cuid())
+  policyId          String
+  employeeProfileId String
+  acknowledgedAt    DateTime        @default(now())
+  policyVersion     Int
+  method            String          @default("digital-signature")
+  agentId           String?
+  createdAt         DateTime        @default(now())
+  employeeProfile   EmployeeProfile @relation("PolicyAcknowledgments", fields: [employeeProfileId], references: [id], onDelete: Cascade)
+  policy            Policy          @relation(fields: [policyId], references: [id], onDelete: Cascade)
+
+  @@unique([policyId, employeeProfileId, policyVersion])
+  @@index([policyId])
+  @@index([employeeProfileId])
+}
+
+model PolicyObligationLink {
+  id           String   @id @default(cuid())
+  policyId     String
+  obligationId String
+  notes        String?
+  createdAt    DateTime @default(now())
+
+  policy     Policy     @relation(fields: [policyId], references: [id], onDelete: Cascade)
+  obligation Obligation @relation(fields: [obligationId], references: [id], onDelete: Cascade)
+
+  @@unique([policyId, obligationId])
+  @@index([policyId])
+  @@index([obligationId])
+}
+
+model OnboardingDraft {
+  id        String   @id @default(cuid())
+  data      Json
+  createdBy String
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+}
+
+model RegulatoryMonitorScan {
+  id                    String            @id @default(cuid())
+  scanId                String            @unique
+  triggeredBy           String
+  triggeredByEmployeeId String?
+  status                String            @default("running")
+  regulationsChecked    Int               @default(0)
+  alertsGenerated       Int               @default(0)
+  summary               String?
+  agentId               String?
+  startedAt             DateTime          @default(now())
+  completedAt           DateTime?
+  errorMessage          String?
+  createdAt             DateTime          @default(now())
+  alerts                RegulatoryAlert[]
+  triggeredByEmployee   EmployeeProfile?  @relation("ScanTriggerer", fields: [triggeredByEmployeeId], references: [id])
+
+  @@index([triggeredByEmployeeId])
+  @@index([status])
+  @@index([startedAt])
+}
+
+model RegulatoryAlert {
+  id                   String                @id @default(cuid())
+  alertId              String                @unique
+  scanId               String
+  regulationId         String?
+  alertType            String
+  severity             String                @default("medium")
+  title                String
+  description          String?
+  sourceUrl            String?
+  sourceSnippet        String?
+  suggestedAction      String?
+  reviewedByEmployeeId String?
+  reviewedAt           DateTime?
+  resolution           String?
+  resolutionNotes      String?
+  agentId              String?
+  status               String                @default("pending")
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+  regulation           Regulation?           @relation(fields: [regulationId], references: [id])
+  reviewedBy           EmployeeProfile?      @relation("AlertReviewer", fields: [reviewedByEmployeeId], references: [id])
+  scan                 RegulatoryMonitorScan @relation(fields: [scanId], references: [id], onDelete: Cascade)
+
+  @@index([scanId])
+  @@index([regulationId])
+  @@index([reviewedByEmployeeId])
+  @@index([status])
+  @@index([severity])
+  @@index([alertType])
+}
+
+model ComplianceSnapshot {
+  id                  String   @id @default(cuid())
+  snapshotId          String   @unique
+  takenAt             DateTime @default(now())
+  triggeredBy         String
+  totalRegulations    Int
+  totalObligations    Int
+  coveredObligations  Int
+  totalControls       Int
+  implementedControls Int
+  openIncidents       Int
+  overdueActions      Int
+  publishedPolicies   Int
+  pendingAlerts       Int
+  overallScore        Float
+  regulationBreakdown Json
+  agentId             String?
+  createdAt           DateTime @default(now())
+
+  @@index([takenAt])
+}
+
+/// Durable intent and reconciliation journal for consequential data mutations
+/// that cross Postgres and one or more external or derived stores.
+model DataControlOperation {
+  id                       String                     @id @default(cuid())
+  operationId              String                     @unique @default(cuid())
+  organizationId           String
+  actorType                String
+  actorRef                 String
+  actorAuthority           Json
+  actionKey                String
+  purposeOfUse             String
+  inputHash                String
+  envelopeHash             String
+  assetRefs                String[]                   @default([])
+  fieldRefs                String[]                   @default([])
+  classificationRefs       String[]                   @default([])
+  policyVersions           Json
+  holdRevisions            Json
+  approvals                Json                       @default("[]")
+  risk                     Json                       @default("{}")
+  idempotencyKey           String
+  status                   String                     @default("planned")
+  authorizationDecisionId  String?
+  authorizationBindingHash String?
+  authorizationConsumedAt  DateTime?
+  governedCaseWorkItemId   String?
+  terminalEvidence         Json?
+  authorizedAt             DateTime?
+  startedAt                DateTime?
+  reconciledAt             DateTime?
+  failedAt                 DateTime?
+  createdAt                DateTime                   @default(now())
+  updatedAt                DateTime                   @updatedAt
+  organization             Organization               @relation(fields: [organizationId], references: [id])
+  authorizationDecision    AuthorizationDecisionLog?  @relation(fields: [authorizationDecisionId], references: [decisionId], onDelete: SetNull)
+  governedCaseWorkItem     WorkItem?                  @relation("DataControlOperationGovernedCase", fields: [governedCaseWorkItemId], references: [id], onDelete: SetNull)
+  steps                    DataControlOperationStep[]
+
+  @@unique([organizationId, idempotencyKey])
+  @@index([organizationId, actionKey, createdAt])
+  @@index([status, updatedAt])
+  @@index([authorizationDecisionId])
+  @@index([governedCaseWorkItemId])
+}
+
+/// A target-specific durable outbox/checkpoint row. Provider acknowledgement
+/// is intentionally separate from verified target truth.
+model DataControlOperationStep {
+  id                  String               @id @default(cuid())
+  stepId              String               @unique @default(cuid())
+  operationId         String
+  targetKey           String
+  targetType          String
+  pepKey              String
+  sequence            Int
+  status              String               @default("pending")
+  idempotencyKey      String               @unique
+  attempt             Int                  @default(0)
+  cursor              Json?
+  targetReceipt       Json?
+  verificationReceipt Json?
+  errorClass          String?
+  errorDetail         Json?
+  nextRetryAt         DateTime?
+  compensable         Boolean              @default(false)
+  compensationKey     String?
+  compensationReceipt Json?
+  leaseOwner          String?
+  leaseExpiresAt      DateTime?
+  claimedAt           DateTime?
+  appliedAt           DateTime?
+  verifiedAt          DateTime?
+  compensatedAt       DateTime?
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  operation           DataControlOperation @relation(fields: [operationId], references: [operationId], onDelete: Cascade)
+
+  @@unique([operationId, targetKey])
+  @@index([operationId, sequence])
+  @@index([status, nextRetryAt])
+  @@index([leaseExpiresAt])
+}
+
+// ─── Security telemetry (OCSF-normalized) ───────────────────────────────────
+// EP-SOVEREIGN-SOC P0 keystone — append-only OCSF-aligned security telemetry.
+// Spec: docs/superpowers/specs/2026-06-24-sovereign-soc-siem-design.md §6.1.
+//
+// Distinct from EdgeEvent/ChangeEvent — the same call the codebase already made
+// splitting ChangeEvent from EdgeEvent: one shared edge envelope (eventType=
+// "security"), distinct model because the lifecycle differs. An EdgeEvent is a
+// dedup'd fire-and-collapse alert; a SecurityEvent is an immutable normalized
+// fact — the triggered/acknowledged/resolved lifecycle lives on Detection /
+// SecurityCase (later phases), never here.
+//
+// Scope is FIRST-CLASS (denormalized), NOT derived through an EdgeNode relation
+// like EdgeEvent, because (a) internal sources (AuthorizationDecisionLog,
+// ToolExecution) have no edge node, and (b) fleet-scale per-tenant reads must
+// not join through EdgeNode. There is intentionally NO foreign key to EdgeNode:
+// a security record must outlive node deletion for forensic / audit purposes.
+//   - Edge-sourced rows: scope copied from the authenticated EdgeNode row
+//     (never the request body — preserves the edge auth-boundary invariant).
+//   - Internal rows: scope set at write time from actor / object context.
+// rawRef is a pointer / hash to edge-local raw evidence — never the raw blob
+// (the sovereignty boundary: raw stays on the edge, detections cross). ocsf-
+// Version pins the schema the producer normalized to (version-pinned-ocsf,
+// the kernel-decided schema authority, spec §8) so schema evolution is explicit.
+model SecurityEvent {
+  id              String   @id @default(cuid())
+  // Globally-unique, producer-composed idempotency / dedup key. Internal
+  // sources namespace it ("dpf.internal:authz:<decisionId>"); edge detectors
+  // compose it from source + node + offset/hash so replays collapse.
+  eventKey        String   @unique
+  // OCSF schema version the producer normalized to (e.g. "1.8.0").
+  ocsfVersion     String
+  ocsfCategoryUid Int?
+  ocsfClassUid    Int
+  ocsfActivityId  Int?
+  // OCSF severity_id (0..6).
+  severityId      Int?
+  // OCSF event time (when the activity occurred, set by the detector).
+  time            DateTime
+
+  // DPF tenancy scope — denormalized, set at the trust boundary.
+  scopeKey          String
+  customerAccountId String?
+  customerSiteId    String?
+  // Soft reference to EdgeNode.id (NO FK — see header). Null for internal sources.
+  edgeNodeId        String?
+  // Source family — "windows.security", "syslog", "aws.cloudtrail", "dpf.internal".
+  sourceKind        String
+  sourceName        String
+
+  // Principal reference when the actor is a known platform identity (AGENTS.md §11).
+  actorPrincipalId String?
+  actor            Json     @default("{}")
+  device           Json     @default("{}")
+  srcEndpoint      Json     @default("{}")
+  dstEndpoint      Json     @default("{}")
+  observables      Json     @default("[]")
+  // Full normalized OCSF object (the canonical body).
+  normalized       Json     @default("{}")
+  // Pointer / hash to edge-local raw evidence — NOT the raw blob.
+  rawRef           Json     @default("{}")
+  // source-reported | low | medium | high | confirmed
+  confidence       String   @default("source-reported")
+  createdAt        DateTime @default(now())
+
+  @@index([scopeKey, time])
+  @@index([customerAccountId, severityId, time])
+  @@index([edgeNodeId, time])
+  @@index([ocsfClassUid, time])
+  // Ingest-time index for the data-retention sweep (security-audit category).
+  @@index([createdAt])
+}
+
+// ─── Detection content + fired detections + threat intel ────────────────────
+// EP-SOVEREIGN-SOC P1. Spec §6.2–6.5. DetectionRule is executable content (NOT
+// wiki storage) carrying a kernel-pack baseline + per-tenant overlay via
+// scopeKey; the correlation sweep evaluates enabled rules over SecurityEvent
+// windows and emits Detection rows; ThreatIndicator is the IOC store matched at
+// enrichment + detection. Detections later group into SecurityCase (P2).
+model DetectionRule {
+  id              String   @id @default(cuid())
+  ruleKey         String   @unique
+  rulePackKey     String
+  rulePackVersion String
+  name            String
+  description     String?
+  // sigma | ocsf-query | dpf-correlation — how `predicate` is interpreted.
+  ruleFormat      String
+  // Executable predicate (the DetectionPredicate DSL for dpf-correlation).
+  predicate       Json
+  // ATT&CK technique ids carried by the rule (string[]), for coverage rollups.
+  mitreTechniques Json     @default("[]")
+  severity        String
+  // kernel (shared pack) | customer:<id> | site:<id> overlay.
+  scopeKey        String
+  enabled         Boolean  @default(true)
+  // Per-tenant tuning — thresholds, allow-lists, suppression with expiry.
+  tuning          Json     @default("{}")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([scopeKey, enabled])
+  @@index([rulePackKey, rulePackVersion])
+}
+
+model Detection {
+  id                String   @id @default(cuid())
+  // Idempotency: a rule firing on the same event-set collapses on this key.
+  detectionKey      String   @unique
+  ruleId            String
+  scopeKey          String
+  customerAccountId String?
+  customerSiteId    String?
+  severity          String
+  // open | triaged | linked | suppressed | closed
+  status            String   @default("open")
+  riskScore         Int?
+  // SecurityEvent.eventKey[] that fired this detection.
+  matchedEventRefs  Json     @default("[]")
+  enrichment        Json     @default("{}")
+  firstSeenAt       DateTime
+  lastSeenAt        DateTime
+  // Set when the detection is grouped into a SecurityCase (P2). Soft ref.
+  securityCaseId    String?
+  createdAt         DateTime @default(now())
+
+  @@index([scopeKey, status, lastSeenAt])
+  @@index([customerAccountId, severity, status])
+  @@index([ruleId, lastSeenAt])
+  // Ingest-time index for the data-retention sweep (security-audit category).
+  @@index([createdAt])
+}
+
+model ThreatIndicator {
+  id            String    @id @default(cuid())
+  indicatorKey  String    @unique
+  // ip | domain | url | hash | email | user | process | registry
+  indicatorType String
+  value         String
+  source        String
+  confidence    String
+  severity      String?
+  validFrom     DateTime?
+  validUntil    DateTime?
+  tags          Json      @default("[]")
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Value-first index powers the observable-match path (value IN (...)).
+  @@index([value])
+  @@index([indicatorType, value])
+  @@index([source])
+  @@index([validUntil])
+}
+
+// ─── Security case (the AI-SOC analyst worklist) ────────────────────────────
+// EP-SOVEREIGN-SOC P2. Spec §6.4. Operational SOC record: groups Detections and
+// owns the investigation timeline, verdict, SLA, and assignment. The federation
+// projection unit (P5). It COMPOSES ComplianceIncident for the regulated path
+// (complianceIncidentId link) rather than duplicating regulatoryNotifiable /
+// notificationDeadline / CorrectiveAction — those stay on ComplianceIncident.
+// The verdict is an evidence conclusion (set by investigation), NOT a kernel
+// vote; the kernel governs the action decisions layered on top (spec §6, §7.3).
+model SecurityCase {
+  id                   String    @id @default(cuid())
+  caseKey              String    @unique
+  scopeKey             String
+  customerAccountId    String?
+  customerSiteId       String?
+  title                String
+  severity             String
+  // new | triaging | investigating | contained | resolved | closed
+  status               String    @default("new")
+  // unknown | false-positive | benign-true-positive | malicious | needs-human
+  verdict              String    @default("unknown")
+  // low | medium | high | confirmed
+  confidence           String    @default("low")
+  assignedAgentId      String?
+  assignedUserId       String?
+  // Investigation timeline entries (actor, action, evidence ref, decision).
+  timeline             Json      @default("[]")
+  evidence             Json      @default("{}")
+  // SLA timers (MTTD / MTTR clocks, due-by markers).
+  sla                  Json      @default("{}")
+  // Soft link to the regulated incident record when the notifiable threshold
+  // is crossed (ComplianceIncident owns regulatoryNotifiable / deadlines).
+  complianceIncidentId String?
+  openedAt             DateTime  @default(now())
+  resolvedAt           DateTime?
+  closedAt             DateTime?
+  // Ingest-time-equivalent index (openedAt) already covers retention scans;
+  // SecurityCase is a RETAINED record (never auto-purged) per policies.ts.
+
+  @@index([scopeKey, status, openedAt])
+  @@index([customerAccountId, severity, status])
+  @@index([complianceIncidentId])
+}

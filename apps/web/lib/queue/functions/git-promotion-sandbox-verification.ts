@@ -18,7 +18,7 @@ export function buildGitPromotionVerificationScript(input: {
     `git fetch --depth 1 origin ${shellQuote(input.afterSha)}`,
     `git checkout --detach ${shellQuote(input.afterSha)}`,
     "pnpm install --frozen-lockfile",
-    "pnpm --filter @dpf/db exec prisma generate --schema prisma/schema.prisma",
+    "pnpm --filter @dpf/db exec prisma generate --schema prisma/schema",
     "pnpm --filter web typecheck",
     "pnpm --filter web exec next build",
   ].join("\n");

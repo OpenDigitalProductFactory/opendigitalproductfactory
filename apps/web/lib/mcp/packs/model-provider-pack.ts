@@ -110,11 +110,14 @@ async function describeModelHandler(params: Record<string, unknown>, userId: str
   const tryDirectRead = async (): Promise<string | null> => {
     try {
       const { resolve } = lazyPath();
-      const { readFile } = lazyFsPromises();
+      const { readFile, readdir } = lazyFsPromises();
       const root = process.env.PROJECT_ROOT
         ? resolve(process.env.PROJECT_ROOT)
         : resolve(getCwd(), "..", "..");
-      return await readFile(resolve(root, "packages/db/prisma/schema.prisma"), "utf-8");
+      const schemaDir = resolve(root, "packages/db/prisma/schema");
+      const names = (await readdir(schemaDir)).filter((n) => n.endsWith(".prisma")).sort();
+      const parts = await Promise.all(names.map((n) => readFile(resolve(schemaDir, n), "utf-8")));
+      return parts.length > 0 ? parts.join("\n") : null;
     } catch {
       return null;
     }
@@ -130,12 +133,12 @@ async function describeModelHandler(params: Record<string, unknown>, userId: str
   // Fallback: use sandbox if one is already provisioned for this build.
   const dmBuild = await prisma.featureBuild.findUnique({ where: { buildId }, select: { sandboxId: true } });
   if (!dmBuild?.sandboxId) {
-    return { success: false, error: "Schema not accessible.", message: "Could not read schema — sandbox not provisioned and project root is unavailable. Try read_project_file on packages/db/prisma/schema.prisma instead." };
+    return { success: false, error: "Schema not accessible.", message: "Could not read schema — sandbox not provisioned and project root is unavailable. Try read_project_file on packages/db/prisma/schema/<domain>.prisma instead." };
   }
 
   try {
     const { execInSandbox } = await import("@/lib/sandbox");
-    const schemaContent = await execInSandbox(dmBuild.sandboxId, "cat /workspace/packages/db/prisma/schema.prisma");
+    const schemaContent = await execInSandbox(dmBuild.sandboxId, "cat /workspace/packages/db/prisma/schema/*.prisma");
     const desc = describeModel(schemaContent, modelName);
     if (!desc) return { success: false, error: `Model "${modelName}" not found.`, message: `No model named "${modelName}" exists. Check spelling (PascalCase).` };
     return { success: true, message: formatModelDescription(desc), data: desc as unknown as Record<string, unknown> };

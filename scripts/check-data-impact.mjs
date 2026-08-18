@@ -16,7 +16,10 @@ import { execFileSync } from "node:child_process";
 
 // ── Persistent-surface classification (kept conservative for the first ship) ──
 export const PERSISTENT_SURFACE_RULES = [
-  { kind: "schema", re: /^packages\/db\/prisma\/schema\.prisma$/ },
+  // Matches the schema domain folder (packages/db/prisma/schema/*.prisma, the
+  // B5 Seam C layout) AND the legacy schema.prisma monolith so diffs that span
+  // the split still classify.
+  { kind: "schema", re: /^packages\/db\/prisma\/schema(\.prisma$|\/[^/]+\.prisma$)/ },
   { kind: "migration", re: /^packages\/db\/prisma\/migrations\// },
   { kind: "projection", re: /lib\/(ea\/data-model-mirror|integrate\/.*graph-sync|.*pgvector-store)\.ts$/ },
   { kind: "ai-context", re: /lib\/inference\/semantic-memory(\b|[.-])/ },

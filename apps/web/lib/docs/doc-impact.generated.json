@@ -1163,10 +1163,19 @@
       "docs/architecture/capability-driven-runtime-profiles.md",
       "docs/architecture/platform-substrate-boundaries.md"
     ],
-    "packages/db/prisma/schema.prisma": [
-      "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md",
-      "docs/architecture/2026-06-14-odysseus-review-depth-pass.md",
+    "packages/db/prisma/schema": [
       "docs/architecture/platform-overview.md"
+    ],
+    "packages/db/prisma/schema/ai-coworker.prisma": [
+      "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md",
+      "docs/architecture/2026-06-14-odysseus-review-depth-pass.md"
+    ],
+    "packages/db/prisma/schema/build-delivery.prisma": [
+      "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md",
+      "docs/architecture/dpf-patterns.md"
+    ],
+    "packages/db/prisma/schema/work-coordination.prisma": [
+      "docs/architecture/dpf-patterns.md"
     ],
     "packages/db/scripts/check-cada-readiness.ts": [
       "docs/strategy/2026-09-cada-architects-forum-deck.md"
@@ -1977,7 +1986,8 @@
       "apps/web/lib/tak/agent-grants.ts",
       "apps/web/lib/tak/autonomous-work-run.ts",
       "docker-compose.yml",
-      "packages/db/prisma/schema.prisma"
+      "packages/db/prisma/schema/ai-coworker.prisma",
+      "packages/db/prisma/schema/build-delivery.prisma"
     ],
     "docs/architecture/2026-06-14-ai-cockpit-sysml-architecture-note.md": [
       "apps/web/lib/ea/ai-routing-architecture-extract.ts",
@@ -1995,7 +2005,7 @@
       "apps/web/lib/marketing/channels/email-postmark/responder.ts",
       "apps/web/lib/routing/pipeline-v2.ts",
       "apps/web/lib/routing/request-contract.ts",
-      "packages/db/prisma/schema.prisma"
+      "packages/db/prisma/schema/ai-coworker.prisma"
     ],
     "docs/architecture/2026-06-19-cada-cloud-sovereignty-architecture-note.md": [
       "apps/web/lib/routing/pipeline-v2.test.ts",
@@ -2216,6 +2226,10 @@
       "scripts/sbom/runtime-surface.mjs",
       "scripts/sbom/scan-dependencies.mjs"
     ],
+    "docs/architecture/dpf-patterns.md": [
+      "packages/db/prisma/schema/build-delivery.prisma",
+      "packages/db/prisma/schema/work-coordination.prisma"
+    ],
     "docs/architecture/enforced-ci-gates.md": [
       "apps/web/lib/docs-route-map.ts",
       "apps/web/lib/docs/doc-link-resolver.mjs",
@@ -2298,7 +2312,7 @@
     "docs/architecture/platform-overview.md": [
       "docker-compose.yml",
       "monitoring/prometheus/prometheus.yml",
-      "packages/db/prisma/schema.prisma",
+      "packages/db/prisma/schema",
       "packages/db/src/pg-graph.ts",
       "packages/db/src/pgvector-store.ts"
     ],

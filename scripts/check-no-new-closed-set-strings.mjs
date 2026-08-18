@@ -6,7 +6,7 @@
 // strings. This guard freezes the residual violation set in a shrink-only
 // baseline (sibling pattern: check-fk-index-coverage.mjs).
 //
-// A String column in packages/db/prisma/schema.prisma is a CANDIDATE when
+// A String column in packages/db/prisma/schema/*.prisma is a CANDIDATE when
 // either:
 //   - its name ends in one of the closed-set suffixes (Status/State/Kind/Type,
 //     case-insensitive — configurable via CLOSED_SET_SUFFIXES), or
@@ -29,12 +29,13 @@
 //   node scripts/check-no-new-closed-set-strings.mjs --update   # retighten
 
 import { readFileSync, writeFileSync, readdirSync, existsSync } from "node:fs";
+import { readPrismaSchemaText } from "./lib/prisma-schema-source.mjs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const SCRIPT_PATH = fileURLToPath(import.meta.url);
 const REPO_ROOT = join(dirname(SCRIPT_PATH), "..");
-export const SCHEMA_PATH = join(REPO_ROOT, "packages", "db", "prisma", "schema.prisma");
+export const SCHEMA_DIR = join(REPO_ROOT, "packages", "db", "prisma", "schema");
 export const MIGRATIONS_DIR = join(REPO_ROOT, "packages", "db", "prisma", "migrations");
 export const BASELINE_PATH = join(REPO_ROOT, "scripts", "closed-set-strings-baseline.json");
 
@@ -173,7 +174,7 @@ function readMigrationTexts() {
 }
 
 function main() {
-  const schemaSource = readFileSync(SCHEMA_PATH, "utf8");
+  const schemaSource = readPrismaSchemaText(REPO_ROOT);
   const migrationTexts = readMigrationTexts();
 
   if (process.argv.includes("--update")) {

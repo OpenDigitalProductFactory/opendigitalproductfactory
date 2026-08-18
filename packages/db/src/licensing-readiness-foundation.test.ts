@@ -1,12 +1,9 @@
-import { readFileSync } from "fs";
-import { join } from "path";
 import { describe, expect, it } from "vitest";
 import { prisma } from "./client";
-
-const SCHEMA_PATH = join(__dirname, "..", "prisma", "schema.prisma");
+import { readCanonicalPrismaSchema } from "./schema-source";
 
 function readSchema(): string {
-  return readFileSync(SCHEMA_PATH, "utf-8");
+  return readCanonicalPrismaSchema();
 }
 
 function extractModelBlock(schema: string, modelName: string): string {

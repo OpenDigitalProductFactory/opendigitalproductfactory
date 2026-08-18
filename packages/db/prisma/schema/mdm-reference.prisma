@@ -1,0 +1,209 @@
+// ─── MDM stewardship substrate (EP-4A12A7CB: BI-FEA49EC1 / BI-28577CD1 /
+//     BI-130EF887 / BI-37F52B70 / BI-16450BB2) ────────────────────────────────
+
+// One row per open data-quality question a human steward must answer:
+// a duplicate pair from the batch scan, or a stale record from the
+// staleness sweep. Persisted so review survives sessions (the on-demand
+// scan in lib/mdm/batch-scan.ts stays the compute; this is the workflow).
+model MdmStewardTask {
+  id          String    @id @default(cuid())
+  taskId      String    @unique // STEW-XXXXXXXX
+  domain      String // customer-account | customer-contact | customer-site
+  kind        String // duplicate | stale
+  // open | resolved_merged | resolved_distinct | resolved_refreshed | dismissed
+  status      String    @default("open")
+  subjectId   String // canonical row id the task is about
+  // duplicate tasks: the other row of the pair; "" for single-record tasks
+  // (NOT NULL so the compound unique actually dedupes — NULL≠NULL in PG).
+  candidateId String    @default("")
+  score       Float?
+  reasons     Json?
+  note        String?
+  resolvedBy  String?
+  resolvedAt  DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@unique([domain, kind, subjectId, candidateId])
+  @@index([status, kind])
+  @@index([subjectId])
+}
+
+// Attribute-level history for master-data identity fields (BI-130EF887):
+// who changed what, when — the temporal record commercial MDM keeps.
+// Written by the governed update paths; append-only.
+model MdmAttributeChange {
+  id        String   @id @default(cuid())
+  domain    String // customer-account | customer-contact | customer-site
+  entityId  String
+  attribute String
+  oldValue  String?
+  newValue  String?
+  actorId   String? // user id when known; null for system paths
+  source    String? // api-patch | merge | unmerge | steward | system
+  changedAt DateTime @default(now())
+
+  @@index([domain, entityId, changedAt])
+  @@index([attribute])
+}
+
+// Per-domain governed match/merge configuration (BI-37F52B70 / BI-16450BB2):
+// operator-tunable thresholds + survivorship mode, JSON with code defaults
+// as fallback (lib/mdm/match-config.ts owns the parse + defaults).
+model MdmMatchConfig {
+  id        String   @id @default(cuid())
+  domain    String   @unique
+  config    Json
+  updatedBy String?
+  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now())
+}
+
+model Country {
+  id          String   @id @default(cuid())
+  name        String
+  iso2        String   @unique
+  iso3        String   @unique
+  numericCode String   @unique
+  phoneCode   String
+  status      String   @default("active")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  regions     Region[]
+
+  @@index([status])
+}
+
+/// This model contains an expression index which requires additional setup for migrations. Visit https://pris.ly/d/expression-indexes for more info.
+model Region {
+  id           String   @id @default(cuid())
+  name         String
+  code         String?
+  countryId    String
+  status       String   @default("active")
+  mergedIntoId String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  cities       City[]
+  country      Country  @relation(fields: [countryId], references: [id])
+  mergedInto   Region?  @relation("RegionMerge", fields: [mergedIntoId], references: [id])
+  mergedFrom   Region[] @relation("RegionMerge")
+
+  @@index([countryId, name])
+  @@index([countryId])
+  @@index([status])
+  @@index([mergedIntoId])
+}
+
+/// This model contains an expression index which requires additional setup for migrations. Visit https://pris.ly/d/expression-indexes for more info.
+model City {
+  id             String    @id @default(cuid())
+  name           String
+  nameNormalized String    @default("")
+  regionId       String
+  localityType   String    @default("city")
+  source         String    @default("seed")
+  sourceProvider String?
+  sourceRef      String?
+  confidence     Decimal?  @db.Decimal(5, 4)
+  disambiguator  String?
+  addedByUserId  String?
+  status         String    @default("active")
+  mergedIntoId   String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  addedByUser    User?     @relation("CityAddedByUser", fields: [addedByUserId], references: [id])
+  addresses      Address[]
+  region         Region    @relation(fields: [regionId], references: [id])
+  mergedInto     City?     @relation("CityMerge", fields: [mergedIntoId], references: [id])
+  mergedFrom     City[]    @relation("CityMerge")
+
+  @@index([regionId, name])
+  @@index([regionId])
+  @@index([regionId, nameNormalized])
+  @@index([status])
+  @@index([mergedIntoId])
+  @@index([source])
+  @@index([addedByUserId])
+}
+
+model Address {
+  id                String            @id @default(cuid())
+  label             String
+  addressLine1      String
+  addressLine2      String?
+  cityId            String
+  postalCode        String
+  latitude          Decimal?          @db.Decimal(10, 7)
+  longitude         Decimal?          @db.Decimal(10, 7)
+  validatedAt       DateTime?
+  validationSource  String?
+  status            String            @default("active")
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+  city              City              @relation(fields: [cityId], references: [id])
+  customerSites     CustomerSite[]
+  employeeAddresses EmployeeAddress[]
+  workLocations     WorkLocation[]
+
+  @@index([cityId])
+  @@index([status])
+}
+
+/// Master Data Management source crosswalk (MDM spec §6.2, typed-FK hybrid,
+/// resolved 2026-06-06). The durable, resolved mapping from a source-system
+/// record to a canonical DPF record — written once a staged import record is
+/// accepted/linked, not a second intake table. Identity-bearing domains
+/// (organization, customer-contact) crosswalk via PrincipalAlias instead and
+/// are out of scope here. High-volume domains (customer-account, supplier)
+/// carry a typed FK for DB-enforced cascade; low-volume domains rely on the
+/// polymorphic (domain, canonicalId) pointer with application-enforced integrity.
+model MasterDataSourceRef {
+  id                String   @id @default(cuid())
+  domain            String
+  canonicalId       String
+  customerAccountId String?
+  supplierId        String?
+  sourceSystem      String
+  sourceEntityType  String?
+  sourceEntityId    String
+  sourcePayloadHash String?
+  observedAt        DateTime
+  lastSeenAt        DateTime
+  trustTier         String   @default("unknown")
+  status            String   @default("active")
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  customerAccount CustomerAccount? @relation("CustomerAccountMdmSourceRef", fields: [customerAccountId], references: [id], onDelete: Cascade)
+  supplier        Supplier?        @relation("SupplierMdmSourceRef", fields: [supplierId], references: [id], onDelete: Cascade)
+
+  @@unique([domain, sourceSystem, sourceEntityId])
+  @@index([domain, canonicalId])
+  @@index([sourceSystem, sourceEntityId])
+  @@index([customerAccountId])
+  @@index([supplierId])
+}
+
+/// IEEE OUI registry: the first 24 bits of a burned-in MAC identify its manufacturer.
+///
+/// Reference data, not estate data — global, unscoped, and seeded from
+/// `packages/db/data/oui.tsv` rather than written by discovery.
+///
+/// Why this is a table and not a file read: discovery-sync resolves vendors inside
+/// its transaction on the server, and a 1.2MB TSV read from a bundled workspace
+/// package is not reliable at runtime. Seeding happens in Node context where the
+/// file definitely exists, and the sweep then does one batched query.
+///
+/// Why it exists at all: nothing in the platform resolved a MAC to a vendor. The
+/// vendors that DID appear came from the UniFi controller's own lookup, supplied
+/// per-client — so anything the controller did not hand us stayed unidentified,
+/// including every UniFi device itself (BI-9632B15B).
+model MacVendorOui {
+  /// Upper-case 24-bit prefix, no separators (e.g. "AC8BA9").
+  oui       String   @id
+  vendor    String
+  updatedAt DateTime @updatedAt
+
+  @@index([vendor])
+}

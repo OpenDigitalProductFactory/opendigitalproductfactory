@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 //
 // schema-regression-guard.mjs — detect genuine schema regressions in
-// packages/db/prisma/schema.prisma between a base ref and HEAD.
+// the Prisma schema (packages/db/prisma/schema/ folder, or the legacy
+// schema.prisma monolith at older refs) between a base ref and HEAD.
 //
 // What counts as a regression:
 //   - A model removed entirely
@@ -35,11 +36,50 @@
 //   - packages/db/scripts/schema-regression-guard.test.ts (vitest)
 
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const SCHEMA_REPO_PATH = "packages/db/prisma/schema.prisma";
+// The canonical schema is a FOLDER of domain files since the B5 Seam C split
+// (BI-134DD02F); the monolith path remains readable so the guard can diff a
+// base ref that predates the split (transition PRs included).
+const SCHEMA_REPO_DIR = "packages/db/prisma/schema";
+const LEGACY_SCHEMA_REPO_PATH = "packages/db/prisma/schema.prisma";
+
+/**
+ * Read the full schema text at a git ref: the concatenated domain files when
+ * the ref has the schema folder, else the legacy schema.prisma monolith.
+ */
+function readSchemaAtRef(baseRef, { repoRoot, exec = execFileSync }) {
+  const opts = { cwd: repoRoot, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] };
+  let fileList = null;
+  try {
+    fileList = exec("git", ["ls-tree", "--name-only", `${baseRef}:${SCHEMA_REPO_DIR}`], opts);
+  } catch {
+    // No schema folder at this ref — fall through to the legacy monolith.
+  }
+  if (fileList !== null) {
+    const names = fileList
+      .split("\n")
+      .map((name) => name.trim())
+      .filter((name) => name.endsWith(".prisma"))
+      .sort();
+    return names
+      .map((name) => exec("git", ["show", `${baseRef}:${SCHEMA_REPO_DIR}/${name}`], opts))
+      .join("\n");
+  }
+  return exec("git", ["show", `${baseRef}:${LEGACY_SCHEMA_REPO_PATH}`], opts);
+}
+
+/** Read the full schema text from the working tree (concatenated domain files). */
+function readSchemaFromWorkingTree(repoRoot) {
+  const dir = resolve(repoRoot, SCHEMA_REPO_DIR);
+  return readdirSync(dir)
+    .filter((name) => name.endsWith(".prisma"))
+    .sort()
+    .map((name) => readFileSync(resolve(dir, name), "utf8"))
+    .join("\n");
+}
 
 // ─── Parser ──────────────────────────────────────────────────────────────────
 //
@@ -350,23 +390,19 @@ if (invokedDirectly) {
   let baseSource;
   let headSource;
   try {
-    baseSource = execFileSync(
-      "git",
-      ["show", `${baseRef}:${SCHEMA_REPO_PATH}`],
-      { cwd: repoRoot, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] },
-    );
+    baseSource = readSchemaAtRef(baseRef, { repoRoot });
   } catch (err) {
     console.error(
-      `❌ Could not read ${SCHEMA_REPO_PATH} at ${baseRef}: ${err.message.split("\n")[0]}`,
+      `❌ Could not read the Prisma schema at ${baseRef}: ${err.message.split("\n")[0]}`,
     );
     console.error("   The base ref may not be fetched. Try: git fetch origin main --depth=50");
     process.exit(2);
   }
 
   try {
-    headSource = readFileSync(resolve(repoRoot, SCHEMA_REPO_PATH), "utf8");
+    headSource = readSchemaFromWorkingTree(repoRoot);
   } catch (err) {
-    console.error(`❌ Could not read ${SCHEMA_REPO_PATH} from working tree: ${err.message}`);
+    console.error(`❌ Could not read ${SCHEMA_REPO_DIR} from working tree: ${err.message}`);
     process.exit(2);
   }
 
@@ -382,7 +418,7 @@ if (invokedDirectly) {
   console.error("❌ Schema regression detected.");
   console.error("");
   console.error(
-    `The following items were removed from ${SCHEMA_REPO_PATH} since ${baseRef}:`,
+    `The following items were removed from ${SCHEMA_REPO_DIR} since ${baseRef}:`,
   );
   for (const r of regressions) {
     console.error(`  - ${r}`);

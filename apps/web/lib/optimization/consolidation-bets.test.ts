@@ -19,9 +19,10 @@ import {
   CONSOLIDATION_WAVES,
   getConsolidationBet,
 } from "./consolidation-bets";
+import { readCanonicalPrismaSchema } from "@dpf/db/schema-source";
 
 const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "..");
-const SCHEMA = readFileSync(join(REPO_ROOT, "packages/db/prisma/schema.prisma"), "utf8");
+const SCHEMA = readCanonicalPrismaSchema();
 const PACKS_DIR = join(REPO_ROOT, "apps/web/lib/mcp/packs");
 const MCP_TOOLS = [
   readFileSync(join(REPO_ROOT, "apps/web/lib/mcp-tools.ts"), "utf8"),

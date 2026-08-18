@@ -66,7 +66,7 @@ const definitions: ToolDefinition[] = [
   },
   {
     name: "generate_codebase_manifest",
-    description: "Generate or refresh the codebase manifest (SBOM). Reads package.json, schema.prisma, directory structure, and the base manifest template to produce a current snapshot. Dev-only.",
+    description: "Generate or refresh the codebase manifest (SBOM). Reads package.json, the prisma/schema folder, directory structure, and the base manifest template to produce a current snapshot. Dev-only.",
     inputSchema: {
       type: "object",
       properties: {

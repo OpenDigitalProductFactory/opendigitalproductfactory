@@ -29,7 +29,7 @@ vi.mock("@/lib/sandbox", () => sandbox);
 
 const lazyNode = vi.hoisted(() => ({
   lazyPath: vi.fn(() => ({ resolve: (...parts: string[]) => parts.join("/") })),
-  lazyFsPromises: vi.fn(() => ({ readFile: vi.fn() })),
+  lazyFsPromises: vi.fn(() => ({ readFile: vi.fn(), readdir: vi.fn() })),
   getCwd: vi.fn(() => "/cwd"),
 }));
 vi.mock("@/lib/shared/lazy-node", () => lazyNode);
@@ -125,7 +125,10 @@ describe("model-provider pack — handler behavior (delegation preserved)", () =
 
   it("describe_model reads the project schema directly and formats the description", async () => {
     db.prisma.featureBuild.findFirst.mockResolvedValue({ buildId: "FB-1" });
-    lazyNode.lazyFsPromises.mockReturnValue({ readFile: vi.fn().mockResolvedValue("model User {}") });
+    lazyNode.lazyFsPromises.mockReturnValue({
+      readdir: vi.fn().mockResolvedValue(["core-identity.prisma"]),
+      readFile: vi.fn().mockResolvedValue("model User {}"),
+    });
     schemaValidator.describeModel.mockReturnValue({ name: "User", fields: [] });
     schemaValidator.formatModelDescription.mockReturnValue("User: no fields");
     const res = await modelProviderPack.handlers.describe_model({ model_name: "User" }, "u1");

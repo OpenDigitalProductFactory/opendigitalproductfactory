@@ -154,10 +154,17 @@ export async function generateManifest(opts?: {
   }
 
   // Auto-generate: model count
-  const schemaPath = path.resolve(projectRoot, "packages/db/prisma/schema.prisma");
+  // The Prisma schema is a folder of domain files (packages/db/prisma/schema/*.prisma).
+  const schemaDir = path.resolve(projectRoot, "packages/db/prisma/schema");
   let modelCount = 0;
-  if (fs.existsSync(schemaPath)) {
-    modelCount = countPrismaModels(fs.readFileSync(schemaPath, "utf-8"));
+  if (fs.existsSync(schemaDir)) {
+    const schemaText = fs
+      .readdirSync(schemaDir)
+      .filter((name) => name.endsWith(".prisma"))
+      .sort()
+      .map((name) => fs.readFileSync(path.join(schemaDir, name), "utf-8"))
+      .join("\n");
+    modelCount = countPrismaModels(schemaText);
   }
 
   // Auto-generate: file/line statistics per module

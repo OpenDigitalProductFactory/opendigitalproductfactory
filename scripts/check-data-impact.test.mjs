@@ -72,6 +72,9 @@ test("exception cannot permit prohibited storage or waive asset/lifecycle covera
 // ── surface classification + gate flow ──
 test("classifies persistent surfaces by content, not just a registry file touch", () => {
   assert.deepEqual(classifyChangedSurfaces(["packages/db/prisma/schema.prisma"]), ["schema"]);
+  // B5 Seam C folder layout: every domain file classifies as a schema surface.
+  assert.deepEqual(classifyChangedSurfaces(["packages/db/prisma/schema/finance.prisma"]), ["schema"]);
+  assert.deepEqual(classifyChangedSurfaces(["packages/db/prisma/schema/seed-notes.md"]), []);
   assert.deepEqual(
     classifyChangedSurfaces(["packages/db/prisma/migrations/2026_x/migration.sql"]),
     ["migration"],

@@ -24,7 +24,7 @@ OPERATING STYLE:
 ENUM CASING — MANDATORY:
 - Prisma enums in this project use LOWERCASE values: open, assigned, resolved, closed — NOT Open, OPEN, etc.
 - When creating new enums, use lowercase. When referencing enum values in API routes, components, or conditionals, use the EXACT lowercase value from the Prisma schema.
-- ALWAYS read the schema (describe_model or read_sandbox_file on schema.prisma) to confirm actual enum values before writing code that references them.
+- ALWAYS read the schema (describe_model or read_sandbox_file on the owning packages/db/prisma/schema/<domain>.prisma file) to confirm actual enum values before writing code that references them.
 - Never mix cases. If the schema says "open", the code must use "open" everywhere — in API defaults, filter values, dropdown option values, and conditional checks.`;
 
 const DATA_ARCHITECT_PROMPT = `${SHARED_IDENTITY}
@@ -32,7 +32,7 @@ const DATA_ARCHITECT_PROMPT = `${SHARED_IDENTITY}
 You are the Data Architect specialist. Your domain: Prisma schema design, migrations, model validation, index optimization.
 
 WORKFLOW:
-1. read_sandbox_file on packages/db/prisma/schema.prisma to see existing models
+1. read_sandbox_file on packages/db/prisma/schema/<domain>.prisma (domain-split schema folder) to see existing models
 2. edit_sandbox_file to add/modify models. ALWAYS include:
    - Inverse relations on BOTH sides
    - @@index on every foreign key field (xxxId fields)
@@ -58,7 +58,7 @@ You are the Software Engineer specialist. Your domain: API routes, server action
 WORKFLOW:
 1. list_sandbox_files to understand existing file structure
 2. read_sandbox_file on similar existing files to match patterns (imports, exports, naming, error handling)
-   - To find existing data models as reference, use describe_model (e.g. describe_model("ExpenseClaim")) or read_sandbox_file on packages/db/prisma/schema.prisma
+   - To find existing data models as reference, use describe_model (e.g. describe_model("ExpenseClaim")) or read_sandbox_file on the owning packages/db/prisma/schema/<domain>.prisma file
    - To find similar routes/API files, use search_sandbox with a keyword from the domain (e.g. "expense" or "claim")
    - If a search returns no results, try a DIFFERENT keyword — the feature you are building may not exist yet. Search for SIMILAR existing features instead.
 3. For new files: generate_code with clear instruction

@@ -10,6 +10,7 @@ import {
   modelSourceKey,
   type ExistingMirrorRow,
 } from "./data-model-mirror";
+import { readCanonicalPrismaSchema } from "@dpf/db/schema-source";
 
 const SCHEMA = `
 model User {
@@ -157,10 +158,7 @@ describe("planMirror", () => {
 
 describe("healthcare patient authority mirror allocation", () => {
   it("discovers the canonical patient models and their Principal/Organization relationships", () => {
-    const schema = readFileSync(
-      resolve(process.cwd(), "../../packages/db/prisma/schema.prisma"),
-      "utf8",
-    );
+    const schema = readCanonicalPrismaSchema();
     const desired = buildDesiredState(parsePrismaSchema(schema));
     const elementKeys = desired.elements.map((element) => element.sourceKey);
     const relationshipKeys = desired.relationships.map(
@@ -187,10 +185,7 @@ describe("healthcare patient authority mirror allocation", () => {
 
 describe("healthcare care appointment mirror allocation", () => {
   it("discovers care scheduling authority and tenant/patient relationships", () => {
-    const schema = readFileSync(
-      resolve(process.cwd(), "../../packages/db/prisma/schema.prisma"),
-      "utf8",
-    );
+    const schema = readCanonicalPrismaSchema();
     const desired = buildDesiredState(parsePrismaSchema(schema));
     const elementKeys = desired.elements.map((element) => element.sourceKey);
     const relationshipKeys = desired.relationships.map(
@@ -227,10 +222,7 @@ describe("healthcare care appointment mirror allocation", () => {
 
 describe("employee asset-allocation precondition evidence", () => {
   it("surfaces the current FixedAsset assignment field as drift, not a fabricated employee FK", () => {
-    const schema = readFileSync(
-      resolve(process.cwd(), "../../packages/db/prisma/schema.prisma"),
-      "utf8",
-    );
+    const schema = readCanonicalPrismaSchema();
     const desired = buildDesiredState(parsePrismaSchema(schema));
     const fixedAsset = desired.elements.find((element) => element.sourceKey === modelSourceKey("FixedAsset"));
     const fields = (fixedAsset?.properties.fields ?? []) as Array<{ name: string; isRequired: boolean }>;

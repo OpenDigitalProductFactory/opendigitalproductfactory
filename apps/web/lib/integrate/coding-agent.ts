@@ -118,7 +118,7 @@ export function buildCodeGenPrompt(brief: FeatureBrief | null, plan: Record<stri
     "- Write all files to /workspace",
     "- Use TypeScript strict mode",
     "- Follow existing project patterns",
-    "- Schema changes are allowed. Add new models/fields to prisma/schema.prisma as needed.",
+    "- Schema changes are allowed. Add new models/fields to the owning packages/db/prisma/schema/<domain>.prisma file as needed.",
     "- After schema changes, use `prisma db push` to apply changes to the sandbox database.",
     "- Do NOT use `prisma migrate dev` — use `prisma db push` for sandbox iteration.",
     "- Do NOT drop existing tables or columns without explicit instruction.",

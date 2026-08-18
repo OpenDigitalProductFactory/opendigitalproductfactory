@@ -10,17 +10,15 @@ import {
   isIdentityBearingDomain,
   masterDataSourceRefDomains,
 } from "@/lib/mdm/domain-registry";
+import { readCanonicalPrismaSchema } from "@dpf/db/schema-source";
 
 const KEBAB_SLUG = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 
 // Resolve real Prisma model names from the schema (hermetic — no DB, no client
-// runtime). schema.prisma is the canonical source the EA extractor also reads.
-const SCHEMA_PATH = fileURLToPath(
-  new URL("../../../../packages/db/prisma/schema.prisma", import.meta.url),
-);
+// runtime). The prisma/schema folder is the canonical source the EA extractor also reads.
 const PRISMA_MODEL_NAMES = new Set<string>(
   Array.from(
-    readFileSync(SCHEMA_PATH, "utf8").matchAll(/^model\s+(\w+)\s*\{/gm),
+    readCanonicalPrismaSchema().matchAll(/^model\s+(\w+)\s*\{/gm),
     (m) => m[1],
   ),
 );

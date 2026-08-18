@@ -1,0 +1,1097 @@
+model TaxonomyNode {
+  id                            String                         @id @default(cuid())
+  nodeId                        String                         @unique
+  name                          String
+  portfolioId                   String?
+  parentId                      String?
+  status                        String                         @default("active")
+  governance                    Json?
+  description                   String?
+  enrichment                    Json?
+  backlogItems                  BacklogItem[]
+  products                      DigitalProduct[]
+  eaElements                    EaElement[]
+  businessCapabilityLinks       BusinessCapabilityTraceLink[]  @relation("BusinessCapabilityTaxonomyLinks")
+  fingerprintRules              DiscoveryFingerprintRule[]
+  inventoryEntities             InventoryEntity[]
+  portfolioQualityIssues        PortfolioQualityIssue[]
+  capabilityMaturityAssessments CapabilityMaturityAssessment[]
+  triageSelectionDecisions      DiscoveryTriageDecision[]      @relation("DiscoveryTriageDecisionSelectedTaxonomy")
+  taxonomyProposalParents       TaxonomyProposal[]             @relation("TaxonomyProposalParent")
+  createdTaxonomyProposals      TaxonomyProposal[]             @relation("TaxonomyProposalCreatedNode")
+  parent                        TaxonomyNode?                  @relation("TaxonomyTree", fields: [parentId], references: [id])
+  children                      TaxonomyNode[]                 @relation("TaxonomyTree")
+
+  @@index([parentId]) // FK-leading (tree parent): root/child traversal, apps/web/lib/actions/build.ts:1295
+}
+
+model TaxonomyProposal {
+  id             String        @id @default(cuid())
+  parentNodeId   String
+  proposedName   String
+  description    String?
+  rationale      String
+  status         String        @default("proposed")
+  featureBuildId String?
+  reviewedById   String?
+  reviewedAt     DateTime?
+  reviewNotes    String?
+  createdNodeId  String?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  parentNode     TaxonomyNode  @relation("TaxonomyProposalParent", fields: [parentNodeId], references: [id], onDelete: Cascade)
+  createdNode    TaxonomyNode? @relation("TaxonomyProposalCreatedNode", fields: [createdNodeId], references: [id], onDelete: SetNull)
+  featureBuild   FeatureBuild? @relation(fields: [featureBuildId], references: [id], onDelete: SetNull)
+
+  @@index([status])
+  @@index([parentNodeId])
+  @@index([featureBuildId])
+  @@index([createdNodeId])
+}
+
+model OrganizationTaxProfile {
+  id                String    @id @default(cuid())
+  organizationId    String    @unique
+  setupMode         String    @default("unknown")
+  setupStatus       String    @default("draft")
+  homeCountryCode   String?
+  primaryRegionCode String?
+  taxModel          String    @default("hybrid")
+  filingOwner       String    @default("business")
+  handoffMode       String    @default("dpf_readiness_only")
+  externalSystem    String?
+  footprintSummary  String?
+  notes             String?
+  lastVerifiedAt    DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  organization         Organization             @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  registrations        TaxRegistration[]
+  issues               TaxIssue[]
+  decisionSnapshots    TaxDecisionSnapshot[]
+  liabilityEntries     TaxLiabilityEntry[]
+  authorityCredentials TaxAuthorityCredential[]
+}
+
+model TaxJurisdictionReference {
+  id                      String    @id @default(cuid())
+  jurisdictionRefId       String    @unique
+  countryCode             String
+  stateProvinceCode       String?
+  authorityName           String
+  authorityType           String
+  parentJurisdictionRefId String?
+  taxTypes                String[]
+  localityModel           String
+  officialWebsiteUrl      String?
+  registrationUrl         String?
+  filingUrl               String?
+  paymentUrl              String?
+  helpUrl                 String?
+  cadenceHints            String[]
+  filingNotes             String?
+  automationHints         Json?
+  sourceUrls              String[]
+  sourceKind              String    @default("official")
+  lastResearchedAt        DateTime?
+  lastVerifiedAt          DateTime?
+  confidence              String    @default("medium")
+  staleAfterDays          Int       @default(180)
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @updatedAt
+
+  registrations TaxRegistration[]
+
+  @@index([countryCode, stateProvinceCode])
+  @@index([authorityType])
+}
+
+model TaxRegistration {
+  id                       String    @id @default(cuid())
+  registrationId           String    @unique
+  organizationTaxProfileId String
+  jurisdictionReferenceId  String
+  taxType                  String
+  registrationNumber       String?
+  registrationStatus       String    @default("draft")
+  filingFrequency          String
+  filingBasis              String?
+  remitterRole             String    @default("business")
+  effectiveFrom            DateTime
+  effectiveTo              DateTime?
+  firstPeriodStart         DateTime?
+  portalAccountNotes       String?
+  verifiedFromSourceUrl    String?
+  lastVerifiedAt           DateTime?
+  confidence               String    @default("medium")
+  createdAt                DateTime  @default(now())
+  updatedAt                DateTime  @updatedAt
+
+  organizationTaxProfile OrganizationTaxProfile   @relation(fields: [organizationTaxProfileId], references: [id], onDelete: Cascade)
+  jurisdictionReference  TaxJurisdictionReference @relation(fields: [jurisdictionReferenceId], references: [id], onDelete: Restrict)
+  obligationPeriods      TaxObligationPeriod[]
+  issues                 TaxIssue[]
+  decisionSnapshots      TaxDecisionSnapshot[]
+  liabilityEntries       TaxLiabilityEntry[]
+  authorityCredentials   TaxAuthorityCredential[]
+
+  @@index([organizationTaxProfileId])
+  @@index([jurisdictionReferenceId])
+  @@index([registrationStatus])
+}
+
+model TaxDecisionSnapshot {
+  id                       String   @id @default(cuid())
+  snapshotId               String   @unique
+  organizationTaxProfileId String
+  registrationId           String
+  sourceType               String
+  sourceId                 String
+  sourceLineItemId         String?
+  taxType                  String
+  taxCode                  String?
+  direction                String
+  taxableAmount            Decimal  @default(0)
+  taxRate                  Decimal?
+  taxAmount                Decimal  @default(0)
+  jurisdictionRefId        String?
+  occurredAt               DateTime
+  evidence                 Json     @default("{}")
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
+
+  organizationTaxProfile OrganizationTaxProfile @relation(fields: [organizationTaxProfileId], references: [id], onDelete: Cascade)
+  registration           TaxRegistration        @relation(fields: [registrationId], references: [id], onDelete: Cascade)
+  liabilityEntries       TaxLiabilityEntry[]
+
+  @@index([organizationTaxProfileId, occurredAt])
+  @@index([registrationId, occurredAt])
+  @@index([sourceType, sourceId])
+}
+
+model TaxLiabilityEntry {
+  id                       String   @id @default(cuid())
+  entryId                  String   @unique
+  organizationTaxProfileId String
+  registrationId           String
+  periodId                 String?
+  decisionSnapshotId       String?
+  sourceType               String
+  sourceId                 String
+  sourceLineItemId         String?
+  direction                String
+  taxableAmount            Decimal  @default(0)
+  taxAmount                Decimal  @default(0)
+  currency                 String   @default("USD")
+  notes                    String?
+  occurredAt               DateTime
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
+
+  organizationTaxProfile OrganizationTaxProfile @relation(fields: [organizationTaxProfileId], references: [id], onDelete: Cascade)
+  registration           TaxRegistration        @relation(fields: [registrationId], references: [id], onDelete: Cascade)
+  period                 TaxObligationPeriod?   @relation(fields: [periodId], references: [id], onDelete: SetNull)
+  decisionSnapshot       TaxDecisionSnapshot?   @relation(fields: [decisionSnapshotId], references: [id], onDelete: SetNull)
+
+  @@index([organizationTaxProfileId, occurredAt])
+  @@index([registrationId, periodId])
+  @@index([sourceType, sourceId])
+  @@index([decisionSnapshotId])
+}
+
+model TaxObligationPeriod {
+  id                     String    @id @default(cuid())
+  periodId               String    @unique
+  registrationId         String
+  periodStart            DateTime
+  periodEnd              DateTime
+  dueDate                DateTime
+  status                 String    @default("draft")
+  salesTaxAmount         Decimal   @default(0)
+  inputTaxAmount         Decimal   @default(0)
+  netTaxAmount           Decimal   @default(0)
+  manualAdjustmentAmount Decimal   @default(0)
+  exportStatus           String    @default("not_started")
+  filedAt                DateTime?
+  paidAt                 DateTime?
+  confirmationRef        String?
+  dueSoonNotifiedAt      DateTime?
+  overdueNotifiedAt      DateTime?
+  preparedByAgentId      String?
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
+
+  registration     TaxRegistration     @relation(fields: [registrationId], references: [id], onDelete: Cascade)
+  artifacts        TaxFilingArtifact[]
+  issues           TaxIssue[]
+  liabilityEntries TaxLiabilityEntry[]
+  remittanceRuns   TaxRemittanceRun[]
+
+  @@index([registrationId])
+  @@index([status, dueDate])
+}
+
+model TaxFilingArtifact {
+  id               String   @id @default(cuid())
+  periodId         String
+  artifactType     String
+  storageKey       String?
+  externalRef      String?
+  sourceUrl        String?
+  notes            String?
+  createdByAgentId String?
+  createdByUserId  String?
+  createdAt        DateTime @default(now())
+
+  period TaxObligationPeriod @relation(fields: [periodId], references: [id], onDelete: Cascade)
+
+  @@index([periodId])
+  @@index([artifactType])
+}
+
+model TaxIssue {
+  id                       String    @id @default(cuid())
+  issueId                  String    @unique
+  organizationTaxProfileId String
+  registrationId           String?
+  periodId                 String?
+  issueType                String
+  severity                 String    @default("medium")
+  status                   String    @default("open")
+  title                    String
+  details                  String?
+  openedAt                 DateTime  @default(now())
+  resolvedAt               DateTime?
+  createdAt                DateTime  @default(now())
+  updatedAt                DateTime  @updatedAt
+
+  organizationTaxProfile OrganizationTaxProfile @relation(fields: [organizationTaxProfileId], references: [id], onDelete: Cascade)
+  registration           TaxRegistration?       @relation(fields: [registrationId], references: [id], onDelete: SetNull)
+  period                 TaxObligationPeriod?   @relation(fields: [periodId], references: [id], onDelete: SetNull)
+
+  @@index([organizationTaxProfileId])
+  @@index([registrationId])
+  @@index([periodId])
+  @@index([status, severity])
+}
+
+model TaxAuthorityCredential {
+  id                       String    @id @default(cuid())
+  credentialId             String    @unique
+  organizationTaxProfileId String
+  registrationId           String
+  authorityName            String
+  portalBaseUrl            String?
+  credentialOwnerMode      String    @default("business_shared")
+  status                   String    @default("draft")
+  authMode                 String    @default("portal_username_password")
+  secretRef                String?   @db.Text
+  mfaMode                  String    @default("human_step_up")
+  lastVerifiedAt           DateTime?
+  lastFailureAt            DateTime?
+  lastFailureReason        String?
+  notes                    String?
+  createdAt                DateTime  @default(now())
+  updatedAt                DateTime  @updatedAt
+
+  organizationTaxProfile OrganizationTaxProfile @relation(fields: [organizationTaxProfileId], references: [id], onDelete: Cascade)
+  registration           TaxRegistration        @relation(fields: [registrationId], references: [id], onDelete: Cascade)
+  remittanceRuns         TaxRemittanceRun[]
+
+  @@index([organizationTaxProfileId])
+  @@index([registrationId, status])
+}
+
+model TaxRemittanceRun {
+  id               String    @id @default(cuid())
+  runId            String    @unique
+  periodId         String
+  credentialId     String?
+  status           String    @default("draft")
+  executionMode    String    @default("manual")
+  scheduledFor     DateTime?
+  startedAt        DateTime?
+  completedAt      DateTime?
+  submittedAt      DateTime?
+  paidAt           DateTime?
+  confirmationRef  String?
+  failureCode      String?
+  failureDetails   String?
+  createdByAgentId String?
+  createdByUserId  String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  period     TaxObligationPeriod     @relation(fields: [periodId], references: [id], onDelete: Cascade)
+  credential TaxAuthorityCredential? @relation(fields: [credentialId], references: [id], onDelete: SetNull)
+
+  @@index([periodId, status])
+  @@index([credentialId])
+  @@index([scheduledFor, status])
+}
+
+// ─── Finance: Invoicing & Payments ─────────────────────────────────
+model Invoice {
+  id                String    @id @default(cuid())
+  invoiceRef        String    @unique
+  type              String    @default("standard")
+  status            String    @default("draft")
+  accountId         String
+  contactId         String?
+  sourceType        String?
+  sourceId          String?
+  issueDate         DateTime  @default(now())
+  dueDate           DateTime
+  currency          String    @default("USD")
+  subtotal          Decimal
+  taxAmount         Decimal   @default(0)
+  discountAmount    Decimal   @default(0)
+  totalAmount       Decimal
+  amountPaid        Decimal   @default(0)
+  amountDue         Decimal
+  paymentTerms      String?
+  notes             String?
+  internalNotes     String?
+  sentAt            DateTime?
+  viewedAt          DateTime?
+  paidAt            DateTime?
+  voidedAt          DateTime?
+  reminderCount     Int       @default(0)
+  lastReminderAt    DateTime?
+  erpSyncStatus     String?   @default("pending")
+  erpRefId          String?
+  payToken          String?   @unique
+  // E-signature (Phase 1): in-platform signature capture on the payment portal.
+  // signatureRequired gates the Pay Now flow; the signed* fields record the
+  // captured signature. Third-party e-sign (DocuSign/HelloSign) is a later phase.
+  signatureRequired Boolean   @default(false)
+  signedAt          DateTime?
+  signedByName      String?
+  signedByEmail     String?
+  signatureDataUrl  String?
+  createdById       String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  account     CustomerAccount     @relation(fields: [accountId], references: [id])
+  contact     CustomerContact?    @relation(fields: [contactId], references: [id])
+  createdBy   User?               @relation("InvoiceCreations", fields: [createdById], references: [id])
+  lineItems   InvoiceLineItem[]
+  allocations PaymentAllocation[]
+  dunningLogs DunningLog[]
+  documents   InvoiceDocument[]
+
+  @@index([accountId])
+  @@index([status])
+  @@index([dueDate])
+  @@index([sourceType, sourceId])
+}
+
+/// Binds an immutable document snapshot to the invoice it was produced for.
+///
+/// Chosen over a polymorphic ownerType/ownerId column on Document (kernel
+/// decision DI-763E5529F491): real foreign keys and cascade semantics, at the
+/// cost of one join table per record type. This is the precedent for quotes,
+/// purchase orders, and contracts.
+///
+/// A row is WRITE-ONCE. Reissuing an invoice appends revision N+1; it never
+/// mutates N, because the whole point is that what the customer received stays
+/// recoverable exactly as they received it.
+model InvoiceDocument {
+  id                String   @id @default(cuid())
+  invoiceId         String
+  documentVersionId String
+  /// What this snapshot IS: sent-copy | signed-copy | credit-note.
+  role              String   @default("sent-copy")
+  /// 1-based, per (invoice, role). Monotonic; gaps are not expected.
+  revision          Int
+  /// Who it went to, captured at send time — the contact email can change later.
+  sentToEmail       String?
+  createdById       String?
+  createdAt         DateTime @default(now())
+
+  invoice         Invoice         @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  documentVersion DocumentVersion @relation(fields: [documentVersionId], references: [id], onDelete: Restrict)
+  createdBy       User?           @relation(fields: [createdById], references: [id])
+
+  @@unique([invoiceId, role, revision])
+  @@index([invoiceId])
+  @@index([documentVersionId])
+  @@index([createdAt])
+}
+
+model InvoiceLineItem {
+  id              String   @id @default(cuid())
+  invoiceId       String
+  description     String
+  quantity        Decimal  @default(1)
+  unitPrice       Decimal
+  taxRate         Decimal  @default(0)
+  taxAmount       Decimal  @default(0)
+  discountPercent Decimal  @default(0)
+  lineTotal       Decimal
+  accountCode     String?
+  sortOrder       Int      @default(0)
+  createdAt       DateTime @default(now())
+
+  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@index([invoiceId])
+}
+
+model Payment {
+  id                 String    @id @default(cuid())
+  paymentRef         String    @unique
+  direction          String
+  method             String
+  status             String    @default("pending")
+  amount             Decimal
+  currency           String    @default("USD")
+  exchangeRate       Decimal   @default(1)
+  baseCurrencyAmount Decimal?
+  reference          String?
+  stripePaymentId    String?
+  counterpartyId     String?
+  counterpartyType   String?
+  receivedAt         DateTime?
+  processedAt        DateTime?
+  reconciled         Boolean   @default(false)
+  reconciledAt       DateTime?
+  erpSyncStatus      String?   @default("pending")
+  erpRefId           String?
+  notes              String?
+  createdById        String?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  createdBy   User?               @relation("PaymentCreations", fields: [createdById], references: [id])
+  allocations PaymentAllocation[]
+
+  @@index([direction])
+  @@index([status])
+  @@index([counterpartyId, counterpartyType])
+}
+
+model PaymentAllocation {
+  id        String   @id @default(cuid())
+  paymentId String
+  invoiceId String?
+  billId    String?
+  amount    Decimal
+  createdAt DateTime @default(now())
+
+  payment Payment  @relation(fields: [paymentId], references: [id])
+  invoice Invoice? @relation(fields: [invoiceId], references: [id])
+  bill    Bill?    @relation(fields: [billId], references: [id])
+
+  @@index([paymentId])
+  @@index([invoiceId])
+  @@index([billId])
+}
+
+model Supplier {
+  id              String   @id @default(cuid())
+  supplierId      String   @unique
+  name            String
+  contactName     String?
+  email           String?
+  phone           String?
+  address         Json?
+  taxId           String?
+  paymentTerms    String?  @default("Net 30")
+  defaultCurrency String   @default("USD")
+  status          String   @default("active")
+  bankDetails     Json?
+  notes           String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  bills                Bill[]
+  purchaseOrders       PurchaseOrder[]
+  aiProviderProfiles   AiProviderFinanceProfile[]
+  supplierContracts    SupplierContract[]
+  financeWorkItems     FinanceWorkItem[]
+  masterDataSourceRefs MasterDataSourceRef[]      @relation("SupplierMdmSourceRef")
+  stockItems           StockItem[]
+
+  @@index([status])
+}
+
+model SupplierContract {
+  id                     String    @id @default(cuid())
+  contractId             String    @unique
+  profileId              String?
+  supplierId             String
+  accountableEmployeeId  String?
+  commitmentKind         String    @default("ai_provider")
+  commitmentSource       String    @default("ai_provider_registry")
+  externalReference      String?   @unique
+  status                 String    @default("draft")
+  contractType           String    @default("subscription")
+  billingCadence         String    @default("monthly")
+  billingDayOfMonth      Int?
+  currency               String    @default("USD")
+  monthlyCommittedAmount Decimal?
+  budgetAmount           Decimal?
+  budgetWindow           String    @default("monthly")
+  allowsOverage          Boolean   @default(false)
+  usageUnit              String?
+  paymentMethod          String?
+  paymentReference       String?
+  coveredProviderIds     Json?
+  billingUrl             String?
+  usageUrl               String?
+  renewalDate            DateTime?
+  startDate              DateTime?
+  endDate                DateTime?
+  notes                  String?
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
+
+  profile             AiProviderFinanceProfile? @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  supplier            Supplier                  @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  accountableEmployee EmployeeProfile?          @relation("AiContractOwner", fields: [accountableEmployeeId], references: [id], onDelete: SetNull)
+  allowances          ContractAllowance[]
+  usageSnapshots      ContractUsageSnapshot[]
+  financeWorkItems    FinanceWorkItem[]
+  bills               Bill[]
+  providerConnections AiProviderConnection[]
+
+  @@index([profileId])
+  @@index([supplierId])
+  @@index([status])
+  @@index([commitmentKind, status])
+  @@index([accountableEmployeeId])
+}
+
+model ContractAllowance {
+  id               String   @id @default(cuid())
+  contractId       String
+  allowanceName    String
+  usageUnit        String
+  includedQuantity Decimal
+  overageUnitCost  Decimal?
+  valuationMethod  String   @default("commitment_first")
+  sortOrder        Int      @default(0)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  contract SupplierContract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+
+  @@index([contractId])
+}
+
+model ContractUsageSnapshot {
+  id                        String   @id @default(cuid())
+  contractId                String
+  snapshotDate              DateTime
+  sourceType                String   @default("internal_observed")
+  confidence                String   @default("medium")
+  consumedQuantity          Decimal  @default(0)
+  includedQuantity          Decimal?
+  remainingQuantity         Decimal?
+  utilizationPct            Float?
+  projectedMonthEndQuantity Decimal?
+  projectedUnusedValue      Decimal?
+  projectedOverageCost      Decimal?
+  metadata                  Json?
+  createdAt                 DateTime @default(now())
+  updatedAt                 DateTime @updatedAt
+
+  contract SupplierContract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+
+  @@unique([contractId, snapshotDate])
+  @@index([snapshotDate])
+}
+
+model FinanceWorkItem {
+  id              String    @id @default(cuid())
+  workItemId      String    @unique
+  profileId       String?
+  contractId      String?
+  supplierId      String?
+  ownerEmployeeId String?
+  type            String
+  status          String    @default("open")
+  severity        String    @default("medium")
+  title           String
+  description     String?
+  dueAt           DateTime?
+  resolvedAt      DateTime?
+  metadata        Json?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  profile       AiProviderFinanceProfile? @relation(fields: [profileId], references: [id], onDelete: SetNull)
+  contract      SupplierContract?         @relation(fields: [contractId], references: [id], onDelete: SetNull)
+  supplier      Supplier?                 @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  ownerEmployee EmployeeProfile?          @relation("AiFinanceWorkItemOwner", fields: [ownerEmployeeId], references: [id], onDelete: SetNull)
+
+  @@index([profileId])
+  @@index([contractId])
+  @@index([supplierId])
+  @@index([ownerEmployeeId])
+  @@index([status, severity])
+}
+
+model Bill {
+  id                 String   @id @default(cuid())
+  billRef            String   @unique
+  supplierId         String
+  status             String   @default("draft")
+  invoiceRef         String?
+  issueDate          DateTime
+  dueDate            DateTime
+  currency           String   @default("USD")
+  subtotal           Decimal
+  taxAmount          Decimal  @default(0)
+  totalAmount        Decimal
+  amountPaid         Decimal  @default(0)
+  amountDue          Decimal
+  purchaseOrderId    String?
+  supplierContractId String?
+  approvalToken      String?  @unique
+  notes              String?
+  createdById        String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  supplier         Supplier            @relation(fields: [supplierId], references: [id])
+  purchaseOrder    PurchaseOrder?      @relation(fields: [purchaseOrderId], references: [id])
+  supplierContract SupplierContract?   @relation(fields: [supplierContractId], references: [id], onDelete: SetNull)
+  createdBy        User?               @relation("BillCreations", fields: [createdById], references: [id])
+  lineItems        BillLineItem[]
+  allocations      PaymentAllocation[]
+  approvals        BillApproval[]
+
+  @@index([supplierId])
+  @@index([supplierContractId])
+  @@index([status])
+  @@index([dueDate])
+  @@index([purchaseOrderId]) // FK-leading (spine): bills-for-PO lookup, apps/web/lib/actions/ap.ts:569
+}
+
+model BillLineItem {
+  id          String   @id @default(cuid())
+  billId      String
+  description String
+  quantity    Decimal  @default(1)
+  unitPrice   Decimal
+  taxRate     Decimal  @default(0)
+  taxAmount   Decimal  @default(0)
+  lineTotal   Decimal
+  accountCode String?
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+
+  bill Bill @relation(fields: [billId], references: [id], onDelete: Cascade)
+
+  @@index([billId])
+}
+
+model PurchaseOrder {
+  id           String    @id @default(cuid())
+  poNumber     String    @unique
+  supplierId   String
+  status       String    @default("draft")
+  currency     String    @default("USD")
+  subtotal     Decimal
+  taxAmount    Decimal   @default(0)
+  totalAmount  Decimal
+  deliveryDate DateTime?
+  terms        String?
+  notes        String?
+  sentAt       DateTime?
+  createdById  String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  supplier  Supplier                @relation(fields: [supplierId], references: [id])
+  createdBy User?                   @relation("PurchaseOrderCreations", fields: [createdById], references: [id])
+  lineItems PurchaseOrderLineItem[]
+  bills     Bill[]
+
+  @@index([supplierId])
+  @@index([status])
+}
+
+model PurchaseOrderLineItem {
+  id              String   @id @default(cuid())
+  purchaseOrderId String
+  description     String
+  quantity        Decimal  @default(1)
+  unitPrice       Decimal
+  taxRate         Decimal  @default(0)
+  taxAmount       Decimal  @default(0)
+  lineTotal       Decimal
+  sortOrder       Int      @default(0)
+  createdAt       DateTime @default(now())
+
+  purchaseOrder PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+
+  @@index([purchaseOrderId])
+}
+
+model ApprovalRule {
+  id         String   @id @default(cuid())
+  name       String
+  minAmount  Decimal  @default(0)
+  maxAmount  Decimal?
+  approverId String
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  approver User @relation("ApprovalRuleApprover", fields: [approverId], references: [id])
+}
+
+model BillApproval {
+  id          String    @id @default(cuid())
+  billId      String
+  approverId  String
+  status      String    @default("pending")
+  token       String    @unique
+  respondedAt DateTime?
+  comments    String?
+  createdAt   DateTime  @default(now())
+
+  bill     Bill @relation(fields: [billId], references: [id])
+  approver User @relation("BillApprovalResponses", fields: [approverId], references: [id])
+
+  @@index([billId])
+  @@index([token])
+}
+
+// ─── Finance: Banking & Reconciliation ─────────────────────────────
+model BankAccount {
+  id               String    @id @default(cuid())
+  bankAccountId    String    @unique
+  name             String
+  bankName         String?
+  accountNumber    String?
+  sortCode         String?
+  iban             String?
+  swift            String?
+  currency         String    @default("USD")
+  accountType      String    @default("current")
+  isDefault        Boolean   @default(false)
+  openingBalance   Decimal   @default(0)
+  currentBalance   Decimal   @default(0)
+  lastReconciledAt DateTime?
+  status           String    @default("active")
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  transactions BankTransaction[]
+
+  @@index([status])
+}
+
+model BankTransaction {
+  id               String   @id @default(cuid())
+  bankAccountId    String
+  transactionDate  DateTime
+  description      String
+  amount           Decimal
+  balance          Decimal?
+  reference        String?
+  category         String?
+  matchStatus      String   @default("unmatched")
+  matchedPaymentId String?
+  importBatchId    String?
+  createdAt        DateTime @default(now())
+
+  bankAccount BankAccount @relation(fields: [bankAccountId], references: [id])
+
+  @@index([bankAccountId])
+  @@index([matchStatus])
+  @@index([transactionDate])
+  @@index([importBatchId])
+}
+
+model BankRule {
+  id          String   @id @default(cuid())
+  name        String
+  matchField  String
+  matchType   String   @default("contains")
+  matchValue  String
+  accountCode String?
+  category    String?
+  taxRate     Decimal?
+  description String?
+  isActive    Boolean  @default(true)
+  hitCount    Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// ─── Finance: Recurring Billing ────────────────────────────────────
+model RecurringSchedule {
+  id              String    @id @default(cuid())
+  scheduleId      String    @unique
+  accountId       String
+  name            String
+  frequency       String
+  amount          Decimal
+  currency        String    @default("USD")
+  startDate       DateTime
+  endDate         DateTime?
+  nextInvoiceDate DateTime
+  lastInvoicedAt  DateTime?
+  status          String    @default("active")
+  autoSend        Boolean   @default(true)
+  templateNotes   String?
+  createdById     String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  // The support contract this schedule renews, if it was minted from one.
+  subscriptionId String?             @unique
+  account        CustomerAccount     @relation(fields: [accountId], references: [id])
+  createdBy      User?               @relation("RecurringScheduleCreations", fields: [createdById], references: [id])
+  subscription   Subscription?       @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
+  lineItems      RecurringLineItem[]
+
+  @@index([accountId])
+  @@index([status])
+  @@index([nextInvoiceDate])
+}
+
+model RecurringLineItem {
+  id          String   @id @default(cuid())
+  scheduleId  String
+  description String
+  quantity    Decimal  @default(1)
+  unitPrice   Decimal
+  taxRate     Decimal  @default(0)
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+
+  schedule RecurringSchedule @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+
+  @@index([scheduleId])
+}
+
+// ─── Finance: Credit Control ───────────────────────────────────────
+model DunningSequence {
+  id        String   @id @default(cuid())
+  name      String
+  isDefault Boolean  @default(false)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  steps DunningStep[]
+}
+
+model DunningStep {
+  id            String   @id @default(cuid())
+  sequenceId    String
+  dayOffset     Int
+  subject       String
+  emailTemplate String
+  severity      String   @default("friendly")
+  sortOrder     Int      @default(0)
+  createdAt     DateTime @default(now())
+
+  sequence DunningSequence @relation(fields: [sequenceId], references: [id], onDelete: Cascade)
+
+  @@index([sequenceId])
+}
+
+model DunningLog {
+  id        String   @id @default(cuid())
+  invoiceId String
+  stepId    String?
+  action    String
+  sentAt    DateTime @default(now())
+  emailTo   String?
+  notes     String?
+
+  invoice Invoice @relation(fields: [invoiceId], references: [id])
+
+  @@index([invoiceId])
+  @@index([sentAt])
+}
+
+// ─── Finance: Expense Management ───────────────────────────────────
+model ExpenseClaim {
+  id             String    @id @default(cuid())
+  claimId        String    @unique
+  employeeId     String
+  status         String    @default("draft")
+  title          String
+  totalAmount    Decimal
+  currency       String    @default("USD")
+  submittedAt    DateTime?
+  approvedById   String?
+  approvedAt     DateTime?
+  rejectedReason String?
+  paidAt         DateTime?
+  approvalToken  String?   @unique
+  notes          String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  employee   EmployeeProfile @relation("ExpenseClaims", fields: [employeeId], references: [id])
+  approvedBy User?           @relation("ExpenseApprovals", fields: [approvedById], references: [id])
+  items      ExpenseItem[]
+
+  @@index([employeeId])
+  @@index([status])
+}
+
+model ExpenseItem {
+  id             String   @id @default(cuid())
+  claimId        String
+  date           DateTime
+  category       String
+  description    String
+  amount         Decimal
+  currency       String   @default("USD")
+  receiptUrl     String?
+  taxReclaimable Boolean  @default(false)
+  taxAmount      Decimal  @default(0)
+  accountCode    String?
+  sortOrder      Int      @default(0)
+  createdAt      DateTime @default(now())
+
+  claim ExpenseClaim @relation(fields: [claimId], references: [id], onDelete: Cascade)
+
+  @@index([claimId])
+}
+
+// ─── Finance: Asset Management ─────────────────────────────────────
+model FixedAsset {
+  id                      String    @id @default(cuid())
+  assetId                 String    @unique
+  name                    String
+  category                String
+  purchaseDate            DateTime
+  purchaseCost            Decimal
+  currency                String    @default("USD")
+  depreciationMethod      String    @default("straight_line")
+  usefulLifeMonths        Int
+  residualValue           Decimal   @default(0)
+  currentBookValue        Decimal
+  accumulatedDepreciation Decimal   @default(0)
+  status                  String    @default("active")
+  disposedAt              DateTime?
+  disposalAmount          Decimal?
+  location                String?
+  assignedToId            String?
+  serialNumber            String?
+  notes                   String?
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @updatedAt
+
+  @@index([status])
+  @@index([category])
+}
+
+// ─── Finance: Multi-Currency ───────────────────────────────────────
+model ExchangeRate {
+  id             String   @id @default(cuid())
+  baseCurrency   String
+  targetCurrency String
+  rate           Decimal
+  source         String   @default("ecb")
+  fetchedAt      DateTime @default(now())
+
+  @@unique([baseCurrency, targetCurrency, fetchedAt])
+  @@index([baseCurrency, targetCurrency])
+}
+
+// ─── General Ledger — management single-source-of-truth (EP-SAP-PARITY) ────────
+// The double-entry posting layer the finance sub-ledgers (Invoice, Bill, Payment,
+// ExpenseClaim, FixedAsset depreciation) post to. Modelled on the S/4HANA
+// Universal Journal (ACDOCA) idea — one balanced line-item record of every
+// financial movement — but framed as a *management* ledger: the org's external
+// accounting/ERP system can remain the authoritative book of record and reconcile
+// via erpSyncStatus/erpRefId. Completes the chartOfAccountsSeed already carried by
+// @dpf/finance-templates, which sub-ledger line items already reference through
+// their optional accountCode. String-enum columns are registered (and the posting
+// invariants enforced) in apps/web/lib/finance/ledger.ts.
+model LedgerAccount {
+  id             String   @id @default(cuid())
+  organizationId String
+  code           String // chart-of-accounts code, e.g. "4000"
+  name           String
+  type           String // asset|liability|equity|revenue|expense
+  subtype        String? // optional finer classification
+  normalBalance  String // debit|credit — derived from type, stored for query/reporting
+  parentId       String? // hierarchical roll-up within the chart
+  isActive       Boolean  @default(true)
+  isControl      Boolean  @default(false) // control/reconciliation account (AR, AP, bank)
+  currency       String   @default("USD")
+  description    String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  parent       LedgerAccount?  @relation("LedgerAccountTree", fields: [parentId], references: [id])
+  children     LedgerAccount[] @relation("LedgerAccountTree")
+  journalLines JournalLine[]
+
+  @@unique([organizationId, code])
+  @@index([organizationId, type, isActive])
+  @@index([parentId])
+}
+
+model JournalEntry {
+  id             String    @id @default(cuid())
+  organizationId String
+  entryRef       String    @unique // human reference, e.g. "JE-000123"
+  entryDate      DateTime  @default(now()) // accounting / posting date
+  periodKey      String // "YYYY-MM" fiscal-period bucket, drives period close
+  status         String    @default("draft") // draft|posted|reversed
+  memo           String?
+  // Originating flow. manual|invoice|bill|payment|expense|depreciation|opening-balance|fx-revaluation
+  source         String    @default("manual")
+  sourceType     String? // originating sub-ledger model, e.g. "Invoice"
+  sourceId       String? // originating document id
+  currency       String    @default("USD")
+  postedAt       DateTime?
+  postedById     String?
+  reversalOfId   String?   @unique // set when this entry reverses another
+  erpSyncStatus  String?   @default("pending")
+  erpRefId       String?
+  createdById    String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  postedBy     User?         @relation("JournalEntryPostings", fields: [postedById], references: [id])
+  createdBy    User?         @relation("JournalEntryCreations", fields: [createdById], references: [id])
+  reversalOf   JournalEntry? @relation("JournalReversal", fields: [reversalOfId], references: [id])
+  reversedBy   JournalEntry? @relation("JournalReversal")
+  lines        JournalLine[]
+
+  @@index([organizationId, status, entryDate])
+  @@index([organizationId, periodKey])
+  @@index([sourceType, sourceId])
+}
+
+model JournalLine {
+  id                String   @id @default(cuid())
+  journalEntryId    String
+  accountId         String
+  // Exactly one of debit/credit is non-zero per line; both stored as non-negative
+  // Decimal. The posting service enforces sum(debit) == sum(credit) per entry.
+  debit             Decimal  @default(0)
+  credit            Decimal  @default(0)
+  currency          String   @default("USD")
+  description       String?
+  // Optional analytical dimensions (ACDOCA-style rich line): who the posting relates to.
+  customerAccountId String?
+  contactId         String?
+  sortOrder         Int      @default(0)
+  createdAt         DateTime @default(now())
+
+  journalEntry JournalEntry  @relation(fields: [journalEntryId], references: [id], onDelete: Cascade)
+  account      LedgerAccount @relation(fields: [accountId], references: [id])
+
+  @@index([journalEntryId])
+  @@index([accountId])
+}

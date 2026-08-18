@@ -1,0 +1,717 @@
+// ─── Managed Document Store ─────────────────────────────────────────────────
+// Spec: docs/superpowers/specs/2026-05-12-document-management-capability.md
+//
+// This is the minimum Documentum-class foundation: stable document identity,
+// independent versions, durable references, lifecycle events, access metadata,
+// and content-addressed blob/rendition pointers. Postgres full-text, Qdrant,
+// and Neo4j remain projections; Postgres rows are authoritative.
+model Document {
+  id                   String                   @id @default(cuid())
+  documentId           String                   @unique
+  organizationId       String
+  ownerPrincipalId     String?
+  title                String
+  slug                 String?
+  documentKind         String
+  contentFormat        String
+  sourceKind           String                   @default("managed")
+  externalLocator      Json?
+  currentVersionId     String?
+  currentState         String                   @default("draft")
+  accessScope          String                   @default("organization")
+  classification       String?
+  semanticIndexedAt    DateTime?
+  fullTextIndexedAt    DateTime?
+  archivedAt           DateTime?
+  createdByPrincipalId String?
+  createdAt            DateTime                 @default(now())
+  updatedAt            DateTime                 @updatedAt
+  organization         Organization             @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  ownerPrincipal       Principal?               @relation("DocumentOwner", fields: [ownerPrincipalId], references: [id])
+  createdByPrincipal   Principal?               @relation("DocumentCreator", fields: [createdByPrincipalId], references: [id])
+  versions             DocumentVersion[]        @relation("DocumentVersions")
+  currentVersion       DocumentVersion?         @relation("DocumentCurrentVersion", fields: [currentVersionId], references: [id])
+  outgoingReferences   DocumentReference[]      @relation("DocumentReferenceSource")
+  incomingReferences   DocumentReference[]      @relation("DocumentReferenceTarget")
+  tags                 DocumentTag[]
+  accessGrants         DocumentAccessGrant[]
+  lifecycleEvents      DocumentLifecycleEvent[]
+
+  @@index([organizationId, currentState])
+  @@index([ownerPrincipalId])
+  @@index([createdByPrincipalId])
+  @@index([documentKind])
+  @@index([contentFormat])
+  @@index([sourceKind])
+  @@index([updatedAt])
+}
+
+model DocumentVersion {
+  id                      String                           @id @default(cuid())
+  documentId              String
+  version                 Int
+  title                   String
+  contentFormat           String
+  contentText             String?                          @db.Text
+  contentBlobId           String?
+  contentSha256           String?
+  sizeBytes               Int?
+  summary                 String?                          @db.Text
+  createdByPrincipalId    String?
+  createdAt               DateTime                         @default(now())
+  document                Document                         @relation("DocumentVersions", fields: [documentId], references: [id], onDelete: Cascade)
+  currentForDocuments     Document[]                       @relation("DocumentCurrentVersion")
+  contentBlob             DocumentBlob?                    @relation(fields: [contentBlobId], references: [id], onDelete: SetNull)
+  createdByPrincipal      Principal?                       @relation("DocumentVersionCreator", fields: [createdByPrincipalId], references: [id])
+  sourceReferences        DocumentReference[]              @relation("DocumentReferenceSourceVersion")
+  targetReferences        DocumentReference[]              @relation("DocumentReferenceTargetVersion")
+  renditions              DocumentRendition[]
+  invoiceDocuments        InvoiceDocument[]
+  initiativeRetentionPins InitiativeArtifactRetentionPin[]
+
+  @@unique([documentId, version])
+  @@index([documentId])
+  @@index([contentBlobId])
+  @@index([contentSha256])
+  @@index([createdByPrincipalId])
+  @@index([createdAt])
+}
+
+model DocumentBlob {
+  id                      String                           @id @default(cuid())
+  sha256                  String                           @unique
+  storageKey              String                           @unique
+  mimeType                String?
+  sizeBytes               Int
+  createdAt               DateTime                         @default(now())
+  versions                DocumentVersion[]
+  renditions              DocumentRendition[]
+  initiativeRetentionPins InitiativeArtifactRetentionPin[]
+
+  @@index([sizeBytes])
+}
+
+model DocumentReference {
+  id                   String           @id @default(cuid())
+  sourceDocumentId     String
+  sourceVersionId      String?
+  targetDocumentId     String?
+  targetVersionId      String?
+  targetExternalRef    String?
+  refType              String
+  anchor               String?          @db.Text
+  createdByPrincipalId String?
+  createdAt            DateTime         @default(now())
+  sourceDocument       Document         @relation("DocumentReferenceSource", fields: [sourceDocumentId], references: [id], onDelete: Cascade)
+  sourceVersion        DocumentVersion? @relation("DocumentReferenceSourceVersion", fields: [sourceVersionId], references: [id], onDelete: SetNull)
+  targetDocument       Document?        @relation("DocumentReferenceTarget", fields: [targetDocumentId], references: [id], onDelete: SetNull)
+  targetVersion        DocumentVersion? @relation("DocumentReferenceTargetVersion", fields: [targetVersionId], references: [id], onDelete: SetNull)
+  createdByPrincipal   Principal?       @relation("DocumentReferenceCreator", fields: [createdByPrincipalId], references: [id])
+
+  @@index([sourceDocumentId])
+  @@index([sourceVersionId])
+  @@index([targetDocumentId])
+  @@index([targetVersionId])
+  @@index([refType])
+  @@index([createdByPrincipalId])
+}
+
+model DocumentTag {
+  documentId String
+  tag        String
+  createdAt  DateTime @default(now())
+  document   Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@id([documentId, tag])
+  @@index([tag])
+}
+
+model DocumentAccessGrant {
+  id                   String     @id @default(cuid())
+  documentId           String
+  principalId          String?
+  grantKind            String
+  createdByPrincipalId String?
+  createdAt            DateTime   @default(now())
+  expiresAt            DateTime?
+  document             Document   @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  principal            Principal? @relation("DocumentAccessGrantPrincipal", fields: [principalId], references: [id], onDelete: Cascade)
+  createdByPrincipal   Principal? @relation("DocumentAccessGrantCreator", fields: [createdByPrincipalId], references: [id])
+
+  @@unique([documentId, principalId, grantKind])
+  @@index([documentId])
+  @@index([principalId])
+  @@index([grantKind])
+  @@index([createdByPrincipalId])
+}
+
+model DocumentLifecycleEvent {
+  id               String         @id @default(cuid())
+  documentId       String
+  fromState        String?
+  toState          String
+  reason           String?        @db.Text
+  actorPrincipalId String?
+  toolExecutionId  String?
+  createdAt        DateTime       @default(now())
+  document         Document       @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  actorPrincipal   Principal?     @relation("DocumentLifecycleActor", fields: [actorPrincipalId], references: [id])
+  toolExecution    ToolExecution? @relation(fields: [toolExecutionId], references: [id])
+
+  @@index([documentId, createdAt])
+  @@index([toState])
+  @@index([actorPrincipalId])
+  @@index([toolExecutionId])
+  @@index([createdAt]) // retention sweep cutoff scan, apps/web/lib/operate/retention/execute.ts:99
+}
+
+model DocumentRendition {
+  id                String          @id @default(cuid())
+  documentVersionId String
+  renditionKind     String
+  contentText       String?         @db.Text
+  blobId            String?
+  mimeType          String?
+  createdAt         DateTime        @default(now())
+  documentVersion   DocumentVersion @relation(fields: [documentVersionId], references: [id], onDelete: Cascade)
+  blob              DocumentBlob?   @relation(fields: [blobId], references: [id], onDelete: SetNull)
+
+  @@unique([documentVersionId, renditionKind])
+  @@index([documentVersionId])
+  @@index([blobId])
+  @@index([renditionKind])
+}
+
+// One ledger for everything that flows to the hive — what was shared, when,
+// its type, and its curation status (spec §6.1: "one contribution ledger").
+model HiveContributionLedger {
+  id                    String                           @id @default(cuid())
+  // "device_fingerprint" | "source" | "improvement" (extensible).
+  contributionType      String
+  // The stable obfuscated contributor pseudonym used across all types.
+  contributor           String
+  // For device-fingerprint contributions: the rule key shared.
+  ruleKey               String?
+  summary               String
+  // Hash of the contributed payload for dedup/audit without storing PII.
+  payloadHash           String?
+  // submitted | curating | accepted | rejected | withdrawn
+  status                String                           @default("submitted")
+  redactionStatus       String?
+  // Result-only contribution body and opaque source receipt. Intake commits
+  // independently of downstream forge delivery so a provider outage cannot
+  // lose a contribution or expose the contributor's private backlog.
+  resultBundle          Json?
+  sourceReceipt         String?                          @unique
+  deliveryProvider      String?
+  deliveryStatus        String                           @default("not-requested")
+  deliveryAttempts      Int                              @default(0)
+  deliveryRemoteRef     String?
+  deliveryError         String?
+  nextDeliveryAt        DateTime?
+  deliveredAt           DateTime?
+  reviewedByPrincipalId String?
+  createdAt             DateTime                         @default(now())
+  updatedAt             DateTime                         @updatedAt
+  partnerRecognitions   PartnerContributionRecognition[]
+
+  @@index([contributionType])
+  @@index([status])
+  @@index([contributor])
+  @@index([deliveryStatus, nextDeliveryAt])
+}
+
+// ─── EP-KM-001: Knowledge Management ──────────────────────────────────────────
+model KnowledgeArticle {
+  id                 String                      @id @default(cuid())
+  articleId          String                      @unique // Human-readable: KA-001, KA-002...
+  title              String
+  body               String                      @db.Text
+  category           String // process | policy | decision | how-to | reference | troubleshooting | runbook
+  status             String                      @default("draft") // draft | published | review-needed | archived
+  visibility         String                      @default("internal") // internal | team | public
+  authorId           String?
+  authorAgentId      String?
+  reviewIntervalDays Int                         @default(90)
+  lastReviewedAt     DateTime?
+  valueStreams       String[]                    @default([])
+  tags               String[]                    @default([])
+  abstract           String? // EP-INF-UTIL-001: one-line abstract generated by utility tier
+  createdAt          DateTime                    @default(now())
+  updatedAt          DateTime                    @updatedAt
+  author             User?                       @relation("KnowledgeArticleAuthor", fields: [authorId], references: [id])
+  authorAgent        Agent?                      @relation("KnowledgeArticleAgentAuthor", fields: [authorAgentId], references: [id])
+  revisions          KnowledgeArticleRevision[]
+  products           KnowledgeArticleProduct[]
+  portfolios         KnowledgeArticlePortfolio[]
+
+  @@index([status])
+  @@index([category])
+  @@index([authorId])
+}
+
+model KnowledgeArticleRevision {
+  id               String           @id @default(cuid())
+  articleId        String
+  version          Int
+  title            String
+  body             String           @db.Text
+  changeSummary    String?
+  createdAt        DateTime         @default(now())
+  createdById      String?
+  createdByAgentId String?
+  article          KnowledgeArticle @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  createdBy        User?            @relation("KnowledgeRevisionCreator", fields: [createdById], references: [id])
+
+  @@unique([articleId, version])
+  @@index([articleId])
+}
+
+model KnowledgeArticleProduct {
+  articleId        String
+  digitalProductId String
+  article          KnowledgeArticle @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  digitalProduct   DigitalProduct   @relation(fields: [digitalProductId], references: [id], onDelete: Cascade)
+
+  @@id([articleId, digitalProductId])
+  @@index([digitalProductId]) // FK-leading (join table): product-side lookups; @@id only covers articleId
+}
+
+model KnowledgeArticlePortfolio {
+  articleId   String
+  portfolioId String
+  article     KnowledgeArticle @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  portfolio   Portfolio        @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
+
+  @@id([articleId, portfolioId])
+  @@index([portfolioId]) // FK-leading (join table): portfolio-side lookups; @@id only covers articleId
+}
+
+// ─── EP-WIKI-001: Platform Kernel Wiki + Per-Org Overlay ─────────────────────
+// Spec: docs/superpowers/specs/2026-05-09-platform-kernel-wiki-design.md
+// Plan: docs/superpowers/plans/2026-05-09-platform-kernel-wiki.md (Phase 1a)
+//
+// Phase 1a is purely additive — `KnowledgeArticle` stays live alongside these
+// new models. Phase 1b (later PR) deprecates `KnowledgeArticle` once kernel
+// content has validated `WikiPage` in real use.
+model RawSource {
+  id             String           @id @default(cuid())
+  sourceKey      String           @unique
+  sourceType     String // paper | article | spec | doc | framework | external-url
+  title          String
+  authors        String[]         @default([])
+  publishedAt    DateTime?
+  url            String?
+  doi            String?
+  locator        Json?
+  abstract       String?          @db.Text
+  excerpt        String?          @db.Text
+  fullTextPath   String?
+  license        String?
+  retrievedAt    DateTime?
+  isKernel       Boolean          @default(false)
+  organizationId String?
+  organization   Organization?    @relation(fields: [organizationId], references: [id])
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  pageSources    WikiPageSource[]
+
+  @@index([sourceType])
+  @@index([isKernel])
+  @@index([organizationId])
+}
+
+model WikiPage {
+  id                       String               @id @default(cuid())
+  slug                     String
+  title                    String
+  body                     String               @db.Text
+  pageKind                 String // entity | summary | decision | runbook | index | stance | heuristic | principle
+  status                   String               @default("draft") // draft | published | review-needed | archived
+  isKernel                 Boolean              @default(false)
+  kernelVersion            String?
+  organizationId           String?
+  organization             Organization?        @relation(fields: [organizationId], references: [id])
+  kernelPageId             String?
+  kernelPage               WikiPage?            @relation("WikiPageOverride", fields: [kernelPageId], references: [id])
+  overrides                WikiPage[]           @relation("WikiPageOverride")
+  derivedFromKernelVersion String?
+  abstract                 String?              @db.Text
+  // Free-form frontmatter bag (mirrors PromptTemplate.metadata = "all other
+  // frontmatter"). Profession-corpus pages carry the WSID variant axes here
+  // (professionJurisdiction / professionCompetencyLevel) so coverage is
+  // queryable at runtime without typed/indexed columns (variants spec §3).
+  metadata                 Json?
+  lastReviewedAt           DateTime?
+  createdAt                DateTime             @default(now())
+  updatedAt                DateTime             @updatedAt
+  revisions                WikiPageRevision[]
+  outLinks                 WikiPageLink[]       @relation("WikiOutLinks")
+  inLinks                  WikiPageLink[]       @relation("WikiInLinks")
+  sources                  WikiPageSource[]
+  demandEvidenceLinks      DemandEvidenceLink[]
+
+  // ─── Principle-only fields ──────────────────────────────────────────────
+  // Nullable or defaulted; only populated when pageKind = "principle". See
+  // docs/superpowers/specs/2026-05-12-principles-as-wiki-kind-design.md §9.
+  // Storage-layer accepts incomplete principle data; required-field gating
+  // lives in lint detectors (spec §14).
+  principleTier               String? // commandment | core | contextual
+  principleDirection          String?  @db.Text
+  principleWeight             Float?
+  principleWeightRationale    String?  @db.Text
+  principleDimensionVector    Json?
+  principleDimensions         String[] @default([])
+  principleAppliesTo          String[] @default([]) // in_platform_coworker | external_coding_agent | human
+  // Ring-scope axis — depth of the Reduction Gear loop the principle binds
+  // (Ring 1 coworker → Ring 5 hive + external-coordination + universal-ring).
+  // Independent of principleConsumerArchetype / principleConsumerContexts
+  // (which describe domain). Spec:
+  // docs/superpowers/specs/2026-05-24-founder-kernel-evolution-discipline-design.md §3.
+  // Empty default preserves current behavior for pre-existing principles
+  // until the backfill BI sets explicit scope. Lint detector
+  // `principle-ring-scope-overuse` warns on >30% universal-ring tagging.
+  principleRingScope          String[] @default([])
+  // Consumer archetype + contexts — spec §8A. Independent axis from
+  // principleAppliesTo; coherence rules in §8A.1 are enforced by lint.
+  principleConsumerArchetype  String? // universal | ai-coworker-universal | generalist | specialist | route-domain-specific
+  principleConsumerContexts   String[] @default([]) // governed kebab-case slugs (e.g., "build-studio")
+  principlePublic             Boolean  @default(false)
+  principlePublicRationale    String?  @db.Text
+  // Runtime enforcement payload for tier-1 commandments (spec 2026-05-24).
+  // Shape: {interactiveMode, autonomousMode, patterns: [{kind, regex|toolName, rationale}]}
+  // Consumed by apps/web/lib/kernel/runtime-gate.ts at execution time;
+  // orthogonal to the decision-time substrate (principle-decide.ts).
+  principleRuntimeEnforcement Json?
+
+  @@unique([organizationId, slug])
+  @@index([slug])
+  @@index([pageKind])
+  @@index([status])
+  @@index([kernelPageId])
+  @@index([organizationId])
+  @@index([isKernel])
+  @@index([principleTier])
+  @@index([principleConsumerArchetype])
+  @@index([principlePublic])
+}
+
+// ─── Profession corpus runtime (WSID Phase 3 / BI close coverage→usage gap) ──
+// Coverage (corpus pages seeded per family) is NOT usage. These two additive
+// tables record what actually happens at runtime when a coworker assembles a
+// prompt: was its profession corpus injected, or missed — and when missed, the
+// gap becomes a deduplicated growth-backlog item so each corpus grows from real
+// usage. Written fire-and-forget / fail-open from the prompt path so they can
+// never break a coworker response. See
+// docs/superpowers/plans/2026-06-16-profession-corpus-runtime-injection.md.
+model ProfessionCorpusGap {
+  id              String   @id @default(cuid())
+  // Deterministic dedupe key: sha256(professionKey:normalizedTopic:reason)[0:16].
+  // Re-detecting the same gap coalesces (occurrences++) instead of piling up.
+  fingerprint     String   @unique
+  professionKey   String
+  // The coworker that surfaced the gap (Agent.agentId). Null when the agent
+  // mapped to no profession family at all (reason = "unmapped").
+  agentId         String?
+  routeContext    String?
+  // The task/query the coworker could not ground in its profession corpus.
+  query           String   @db.Text
+  // Normalized, human-readable topic (the dedupe basis).
+  missingTopic    String
+  // unmapped | empty-corpus | low-relevance | deferred
+  reason          String
+  // Suggested corpus / source to close the gap (from the registry checklist + sources).
+  suggestedSource String?  @db.Text
+  occurrences     Int      @default(1)
+  // open | addressed | dismissed
+  status          String   @default("open")
+  firstSeenAt     DateTime @default(now())
+  lastSeenAt      DateTime @updatedAt
+
+  @@index([professionKey, status])
+  @@index([status])
+  @@index([reason])
+}
+
+model ProfessionCorpusUsageStat {
+  id            String   @id @default(cuid())
+  professionKey String
+  // UTC day bucket (YYYY-MM-DD). Bucketing keeps the per-turn upsert at bounded
+  // cardinality (families × days) instead of a row per coworker turn.
+  day           String
+  injectedCount Int      @default(0)
+  missedCount   Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([professionKey, day])
+  @@index([professionKey])
+  @@index([day])
+}
+
+model WikiPageRevision {
+  id               String   @id @default(cuid())
+  pageId           String
+  version          Int
+  title            String
+  body             String   @db.Text
+  changeSummary    String?
+  changeKind       String // ingest | manual | lint-fix | kernel-merge
+  createdAt        DateTime @default(now())
+  createdById      String?
+  createdByAgentId String?
+  page             WikiPage @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  createdBy        User?    @relation("WikiRevisionCreator", fields: [createdById], references: [id])
+  createdByAgent   Agent?   @relation("WikiRevisionAgentCreator", fields: [createdByAgentId], references: [id])
+
+  @@unique([pageId, version])
+  @@index([pageId])
+}
+
+model WikiPageLink {
+  fromPageId String
+  toPageId   String
+  fromPage   WikiPage @relation("WikiOutLinks", fields: [fromPageId], references: [id], onDelete: Cascade)
+  toPage     WikiPage @relation("WikiInLinks", fields: [toPageId], references: [id], onDelete: Cascade)
+
+  @@id([fromPageId, toPageId])
+  @@index([toPageId])
+}
+
+model WikiPageSource {
+  pageId   String
+  sourceId String
+  page     WikiPage  @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  source   RawSource @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+
+  @@id([pageId, sourceId])
+  @@index([sourceId]) // FK-leading (join table): source-side lookups; @@id only covers pageId
+}
+
+model WikiIngestEvent {
+  id             String        @id @default(cuid())
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+  sourceId       String
+  touchedPageIds String[]
+  agentId        String?
+  agent          Agent?        @relation("WikiIngestEventAgent", fields: [agentId], references: [id])
+  userId         String?
+  user           User?         @relation("WikiIngestEventUser", fields: [userId], references: [id])
+  kernelVersion  String?
+  createdAt      DateTime      @default(now())
+
+  @@index([sourceId])
+  @@index([organizationId])
+  @@index([createdAt])
+}
+
+model WikiLintFinding {
+  id             String        @id @default(cuid())
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+  pageId         String
+  findingKind    String // contradiction | stale | orphan | missing-xref | dangling-xref | kernel-drift | stance-extraction-needed
+  detail         Json
+  severity       String        @default("info") // info | warn | error
+  status         String        @default("open") // open | resolved | ignored
+  resolvedAt     DateTime?
+  createdAt      DateTime      @default(now())
+
+  @@index([organizationId])
+  @@index([status])
+  @@index([findingKind])
+}
+
+// =============================================================================
+// Universal Grid & Workbooks (EP-GRID-WORKBOOKS)
+// Spec: docs/superpowers/specs/2026-03-23-universal-grid-workbooks-design.md
+// Airtable/Smartsheet-style grids for knowledge workers. WorkbookRow/Cell hold
+// user-defined ("custom") table data; platform-data tables are views resolved
+// through adapters at runtime and do not populate WorkbookRow.
+// =============================================================================
+model Workbook {
+  id          String          @id @default(cuid())
+  workbookId  String          @unique // format: "WB-<cuid>" — generated by server action
+  name        String
+  description String          @default("")
+  areaSlug    String? // links to shell area (ops, crm, etc.) — null for standalone
+  createdById String
+  createdBy   User            @relation("WorkbookCreatedBy", fields: [createdById], references: [id])
+  tables      WorkbookTable[]
+  shares      WorkbookShare[]
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  @@index([createdById])
+}
+
+model WorkbookShare {
+  id         String   @id @default(cuid())
+  workbookId String
+  workbook   Workbook @relation(fields: [workbookId], references: [id], onDelete: Cascade)
+  userId     String
+  user       User     @relation("WorkbookShareUser", fields: [userId], references: [id], onDelete: Cascade)
+  role       String // owner | editor | viewer — validated by Zod enum at server action layer
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([workbookId, userId])
+}
+
+model WorkbookTable {
+  id               String           @id @default(cuid())
+  tableId          String           @unique // format: "TBL-<cuid>"
+  name             String
+  position         Int              @default(0)
+  workbookId       String
+  workbook         Workbook         @relation(fields: [workbookId], references: [id], onDelete: Cascade)
+  dataSource       String           @default("custom")
+  // "custom" = user-defined rows stored in WorkbookRow/Cell
+  // Any other value = view over an existing Prisma model (e.g., "backlog_item")
+  dataSourceFilter Json? // optional pre-filter — see spec "Data Source Filter Schema"
+  columns          WorkbookColumn[]
+  rows             WorkbookRow[] // only populated when dataSource = "custom"
+  views            WorkbookView[]
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  @@index([workbookId, position])
+}
+
+model WorkbookColumn {
+  id           String             @id @default(cuid())
+  columnId     String             @unique // format: "COL-<cuid>"
+  name         String
+  position     Int                @default(0)
+  tableId      String
+  table        WorkbookTable      @relation(fields: [tableId], references: [id], onDelete: Cascade)
+  fieldType    String // text | number | date | datetime | checkbox | select | multi_select | reference | url | email
+  fieldConfig  Json? // select options, reference target type, validation rules, etc.
+  sourceField  String? // when dataSource != "custom", maps to the Prisma model field name
+  required     Boolean            @default(false)
+  defaultValue String?
+  width        Int? // pixel width for grid rendering
+  cells        WorkbookCell[]
+  cellLinks    WorkbookCellLink[]
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+
+  @@index([tableId, position])
+}
+
+model WorkbookRow {
+  id          String             @id @default(cuid())
+  rowId       String             @unique // format: "ROW-<cuid>"
+  position    Int                @default(0)
+  tableId     String
+  table       WorkbookTable      @relation(fields: [tableId], references: [id], onDelete: Cascade)
+  createdById String?
+  createdBy   User?              @relation("WorkbookRowCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  cells       WorkbookCell[]
+  cellLinks   WorkbookCellLink[]
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+
+  @@index([tableId, position])
+}
+
+model WorkbookCell {
+  id               String         @id @default(cuid())
+  rowId            String
+  row              WorkbookRow    @relation(fields: [rowId], references: [id], onDelete: Cascade)
+  columnId         String
+  column           WorkbookColumn @relation(fields: [columnId], references: [id], onDelete: Cascade)
+  textValue        String?
+  numberValue      Float?
+  dateValue        DateTime?
+  boolValue        Boolean?
+  selectValue      String? // stored key from fieldConfig options
+  multiSelectValue String[] // array of selected keys (Postgres array)
+  referenceId      String? // platform entity ID
+  referenceType    String? // entity table: "epic", "customer_contact", etc.
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  @@unique([rowId, columnId])
+  @@index([referenceType, referenceId])
+  @@index([columnId, textValue])
+  @@index([columnId, numberValue])
+  @@index([columnId, dateValue])
+}
+
+// A single link from a (row, column) cell to one target record — the "link-to-many"
+// substrate (EP-GRID-WORKBOOKS). Many rows per cell model 1-M / M-M; a `reference`
+// column stays single-valued on WorkbookCell. The target is a platform entity
+// (referenceType = "epic", … + referenceId) or another workbook row (referenceType
+// = a workbook table id + referenceId = WorkbookRow.rowId). First-class rows so
+// rollups can group/aggregate over links in SQL.
+model WorkbookCellLink {
+  id            String         @id @default(cuid())
+  rowId         String
+  row           WorkbookRow    @relation(fields: [rowId], references: [id], onDelete: Cascade)
+  columnId      String
+  column        WorkbookColumn @relation(fields: [columnId], references: [id], onDelete: Cascade)
+  referenceId   String // target record id (platform entity id or WorkbookRow.rowId)
+  referenceType String // target kind: "epic", "customer_account", … or a workbook table id
+  position      Int            @default(0)
+  createdAt     DateTime       @default(now())
+
+  @@unique([rowId, columnId, referenceId]) // no duplicate link within a cell
+  @@index([columnId, referenceId]) // reverse lookup + rollup groupBy
+  @@index([rowId, columnId]) // read a cell's links in one scan
+}
+
+model WorkbookView {
+  id          String        @id @default(cuid())
+  viewId      String        @unique // format: "VW-<cuid>"
+  name        String
+  tableId     String
+  table       WorkbookTable @relation(fields: [tableId], references: [id], onDelete: Cascade)
+  viewType    String        @default("grid") // grid | kanban
+  config      Json // see spec "View Config Schema"
+  isDefault   Boolean       @default(false)
+  createdById String?
+  createdBy   User?         @relation("WorkbookViewCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@index([tableId, createdById])
+}
+
+/// BET-5 (BI-A1E864A5): pgvector-backed vector storage, replacing Qdrant. The `embedding`
+/// column is Unsupported (Prisma can't model pgvector) — access via $queryRaw in
+/// packages/db/src/pgvector-store.ts. One table, per-collection HNSW indexes (see migration).
+model VectorEmbedding {
+  collection String
+  pointId    BigInt                     @map("point_id")
+  embedding  Unsupported("vector(768)")
+  payload    Json                       @default("{}")
+
+  @@id([collection, pointId])
+  @@map("vector_embedding")
+}
+
+/// BET-5 (BI-A1E864A5): Postgres graph mirror, replacing Neo4j. `key` is the universal node
+/// key (coalesce of productId/ciId/nodeId/slug). Traversals run as WITH RECURSIVE over
+/// graph_edge in packages/db/src/pg-graph.ts. Populated by the sync writers (formerly Neo4j).
+model GraphNode {
+  key    String   @id
+  labels String[]
+  props  Json     @default("{}")
+
+  @@map("graph_node")
+}
+
+model GraphEdge {
+  id      BigInt @id @default(autoincrement())
+  srcKey  String @map("src_key")
+  dstKey  String @map("dst_key")
+  relType String @map("rel_type")
+  props   Json   @default("{}")
+
+  @@unique([srcKey, dstKey, relType], name: "graph_edge_triple")
+  @@index([dstKey, relType])
+  @@index([srcKey, relType])
+  @@map("graph_edge")
+}

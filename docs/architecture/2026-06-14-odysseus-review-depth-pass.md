@@ -195,7 +195,7 @@ relevant for the edge-node story under `platform/edge-nodes/`, if at all.)
 
 ## 5. The genuinely net-new work: thread metadata
 
-`AgentThread` ([`schema.prisma:3780`](../../packages/db/prisma/schema.prisma)) is intentionally thin
+`AgentThread` ([`ai-coworker.prisma`](../../packages/db/prisma/schema/ai-coworker.prisma)) is intentionally thin
 (`@@unique([userId, contextKey])` — one thread per user per route context, plus CLI-session and
 spawn fields). The memo's proposed thread metadata mostly exists *elsewhere*, keyed by
 `threadId`/`agentMessageId`. Mapping the memo's fields to reality:

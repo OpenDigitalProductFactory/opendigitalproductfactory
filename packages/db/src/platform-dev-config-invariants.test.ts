@@ -1,10 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { readCanonicalPrismaSchema } from "./schema-source";
 
 describe("PlatformDevConfig invariants", () => {
   it("contributionModel has no default in schema — fresh rows must be null", () => {
-    const schema = readFileSync(resolve(__dirname, "../prisma/schema.prisma"), "utf8");
+    const schema = readCanonicalPrismaSchema();
     const block = schema.match(/model PlatformDevConfig \{[\s\S]*?\n\}/)?.[0] ?? "";
     expect(block, "PlatformDevConfig model block not found").not.toBe("");
     const line = block.split("\n").find((l) => l.trim().startsWith("contributionModel"));
@@ -14,7 +15,7 @@ describe("PlatformDevConfig invariants", () => {
   });
 
   it("fork fields are nullable with no defaults", () => {
-    const schema = readFileSync(resolve(__dirname, "../prisma/schema.prisma"), "utf8");
+    const schema = readCanonicalPrismaSchema();
     const block = schema.match(/model PlatformDevConfig \{[\s\S]*?\n\}/)?.[0] ?? "";
     for (const field of ["contributorForkOwner", "contributorForkRepo", "forkVerifiedAt"]) {
       const line = block.split("\n").find((l) => l.trim().startsWith(field));

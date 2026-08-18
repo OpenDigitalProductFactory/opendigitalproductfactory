@@ -2,8 +2,9 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 import { describe, expect, it } from "vitest";
+import { readCanonicalPrismaSchema } from "./schema-source";
 
-const schema = readFileSync(resolve(import.meta.dirname, "../prisma/schema.prisma"), "utf8");
+const schema = readCanonicalPrismaSchema();
 const migration = readFileSync(resolve(
   import.meta.dirname,
   "../prisma/migrations/20260720100000_provider_suitability_evidence/migration.sql",
