@@ -1684,7 +1684,8 @@
       "publishedPublic": true,
       "publishedPortal": false,
       "anchors": [
-        "mcp-tool-authorization-runbook"
+        "mcp-tool-authorization-runbook",
+        "protocol-version-window-mechanics-landed-contract-pending-ratification"
       ]
     },
     "docs/architecture/mcp-tool-packs.md": {
