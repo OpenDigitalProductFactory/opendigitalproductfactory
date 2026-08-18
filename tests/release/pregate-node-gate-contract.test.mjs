@@ -8,7 +8,7 @@
 // tests/release/local-ci-gate-contract.test.mjs.
 
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync, cpSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync, cpSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createServer } from "node:http";
@@ -259,6 +259,37 @@ test("gate-worktree.mjs refuses to run when neither an explicit command, the stu
   const result = spawnSync(process.execPath, [join(temp, "scripts", "gate-worktree.mjs"), "--branch", "feat/x", "--sha", "abc123", "--worktree", dir, "--no-push"], { encoding: "utf8", env });
   assert.notEqual(result.status, 0);
   assert.match(result.stderr, /refusing to record passing stub evidence/);
+});
+
+// BI-745658D7: the entry guard compares argv[1] against import.meta.url, and
+// Node realpath-resolves the ESM entry module. Invoked through a symlinked
+// path (macOS tmpdir is /var -> /private/var; the refusal test above runs the
+// gate from tmpdir), the naive comparison is false, main() silently never
+// runs, and the gate exits 0 with no output — a false pass. This pins the
+// guard to run main() regardless of which spelling of the path the caller
+// used.
+test("gate-worktree.mjs still runs main() when invoked through a symlinked path (BI-745658D7)", (t) => {
+  const temp = mkdtempSync(join(tmpdir(), "dpf-node-gate-symlink-"));
+  const link = join(temp, "repo-link");
+  try {
+    // "junction" keeps this runnable on Windows hosts without symlink privilege.
+    symlinkSync(repoRoot, link, "junction");
+  } catch (error) {
+    rmSync(temp, { recursive: true, force: true });
+    t.skip(`cannot create a directory symlink on this host: ${error.code}`);
+    return;
+  }
+  try {
+    const result = spawnSync(
+      process.execPath,
+      [join(link, "scripts", "gate-worktree.mjs"), "--dry-run", "--branch", "feat/x", "--sha", "abc123", "--worktree", repoRoot, "--no-push"],
+      { encoding: "utf8", env: { ...process.env } },
+    );
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stdout, /gate-worktree dry-run/, "main() must run under a symlinked argv[1], not silently exit 0");
+  } finally {
+    rmSync(temp, { recursive: true, force: true });
+  }
 });
 
 // ── scripts/gate-worktree.mjs: full lease/evidence sequence ─────────────────

@@ -16,7 +16,6 @@ import { X_OK } from "node:constants";
 import { accessSync, chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { connect } from "node:net";
 import { delimiter, dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
 import {
   assertLocalCiCleanupTarget,
   createLocalCiSlotManifest,
@@ -29,8 +28,7 @@ import {
 } from "./lib/local-ci-base-freshness.mjs";
 import { ensureFullHistory } from "./lib/git-shallow-preflight.mjs";
 import { parseRepositoryPnpmVersion, resolvePinnedPnpmInvocation } from "./lib/pinned-pnpm.mjs";
-
-const THIS_FILE = fileURLToPath(import.meta.url);
+import { isEntryModule } from "./lib/entry-module.mjs";
 
 function die(message) {
   // BI-8304AB09: write BOTH streams so gate-worktree log capture cannot drop the cause.
@@ -506,4 +504,4 @@ async function main() {
   process.exit(result.status ?? 1);
 }
 
-if (process.argv[1] === THIS_FILE) main();
+if (isEntryModule(import.meta.url)) main();
