@@ -1,3 +1,7 @@
+---
+status: draft
+---
+
 # MCP protocol version window — operator ratification brief
 
 **Status:** draft, operator-ratification-required

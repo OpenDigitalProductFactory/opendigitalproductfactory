@@ -59,6 +59,7 @@ const EXPECTED_LEGACY_JOBS = [
   "shell-guard-shim-contract",
   "singleton-safety-guard",
   "spec-plan-doc-gate",
+  "spec-status-frontmatter",
   "stewardship-scope-guard",
   "style-drift-guard",
   "test-clock-bomb-guard",

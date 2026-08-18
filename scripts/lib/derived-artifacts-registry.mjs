@@ -95,6 +95,20 @@ export const DERIVED_ARTIFACTS = [
     // absent; CI (a compile-ready runner) is the backstop via --check.
     requiresBinary: "mmdc",
   },
+  {
+    id: "architecture-counts",
+    description: "Generated architecture counts include (models/enums/migrations/principles/routes)",
+    sourceGlobs: [
+      "packages/db/prisma/schema.prisma",
+      "packages/db/prisma/migrations/**",
+      "docs/founder-kernel/wiki/principles/*.md",
+      "apps/web/lib/ea/route-manifest.json",
+      "scripts/gen-architecture-counts.mjs",
+    ],
+    artifactPaths: ["docs/architecture/architecture-counts.generated.md"],
+    generate: ["node", "scripts/gen-architecture-counts.mjs"],
+    check: ["node", "scripts/gen-architecture-counts.mjs", "--check"],
+  },
   // ─── Route-derived registry chain (BI-34D69270) ────────────────────────────
   //
   // route-manifest -> route-audience -> route-shells -> page-purpose: four

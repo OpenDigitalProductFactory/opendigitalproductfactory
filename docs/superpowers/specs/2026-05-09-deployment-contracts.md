@@ -1,3 +1,7 @@
+---
+status: draft
+---
+
 # Canonical Deployment Contracts (DRAFT)
 
 > Status: **doctrine spec** — establishes the binding contracts every
@@ -84,8 +88,10 @@ TAPPaaS module's `install.sh` / `update.sh` / `delete.sh` scripts
 on a TAPPaaS deployment), but the *operations* are the same.
 
 The update operation must support pre-update logical backups
-(Postgres / Neo4j / Qdrant exports) regardless of whether the
-substrate also takes its own snapshot.
+(Postgres exports — since BET-5 (BI-A1E864A5) retired Neo4j and
+Qdrant onto PostgreSQL, the graph mirror and pgvector data ride in
+the same Postgres backup) regardless of whether the substrate also
+takes its own snapshot.
 
 ### 4. Identity
 
@@ -676,7 +682,7 @@ this section.
 | `identityEdgeMode=customer-provided` | Planned | Planned | Planned | Planned | Planned | Planned | Planned | Planned |
 | `identityEdgeMode=tappaas-upstream` | n/a | n/a | n/a | n/a | n/a | n/a | Blocked (TAPPaaS identity automation maturity) | n/a |
 | **Lifecycle (Contract 3)** | | | | | | | | |
-| Backup / restore (logical Postgres / Neo4j / Qdrant exports) | Planned | Planned | Planned | Planned | Substrate-managed (PITR + snapshots) | Substrate-managed | Inherits Single VM + TAPPaaS VM snapshots | Inherits Single VM |
+| Backup / restore (logical Postgres exports; graph + vector data live in Postgres since BET-5) | Planned | Planned | Planned | Planned | Substrate-managed (PITR + snapshots) | Substrate-managed | Inherits Single VM + TAPPaaS VM snapshots | Inherits Single VM |
 | Update / rollback | GA (`dpf-reinstall.ps1`) | Planned | Planned | Planned (Terraform re-apply) | Planned (Helm/Terraform) | Planned (Helm) | TAPPaaS-managed (snapshot + post-update tests + rollback on fatal) | Marketplace listing version |
 
 ### Reading the matrix
@@ -824,7 +830,8 @@ doctrine; that's the point of having a uniform gate.
 - [ ] Research & Benchmarking section complete (per AGENTS.md §10).
 - [ ] Open questions resolved or explicitly deferred to a named
       follow-up spec / epic.
-- [ ] Schema impact reviewed (Prisma, Neo4j, Postgres) — including
+- [ ] Schema impact reviewed (Prisma / Postgres, including the
+      in-Postgres graph mirror and pgvector) — including
       backward-compat implications and migration story.
 - [ ] Canonical contracts updated if the spec changes shared
       behavior (this doctrine; or another doctrine if one is

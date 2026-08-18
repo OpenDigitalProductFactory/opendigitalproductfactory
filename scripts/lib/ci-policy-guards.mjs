@@ -188,6 +188,13 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       node("--test", "scripts/check-doc-anchor-existence.test.mjs"),
       node("scripts/check-doc-anchor-existence.mjs"),
     ]),
+    // BI-79BCE3F2: ONE status/supersession frontmatter convention across
+    // docs/superpowers/{specs,plans} — new/changed files must carry
+    // status: draft|active|binding|superseded; supersededBy only on superseded.
+    guard("spec-status-frontmatter", "Spec Status Frontmatter", [
+      node("--test", "scripts/check-spec-status-frontmatter.test.mjs"),
+      node("scripts/check-spec-status-frontmatter.mjs"),
+    ]),
     // BI-873F3C48: every growth-shaped (event/log/telemetry) model must be
     // retention-enrolled (purge or retained) or deliberately allowlisted.
     guard("retention-enrollment-guard", "Retention Enrollment Guard", [

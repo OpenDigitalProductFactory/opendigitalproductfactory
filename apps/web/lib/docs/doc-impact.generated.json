@@ -1539,6 +1539,9 @@
     "scripts/gate-worktree.sh": [
       "docs/testing/pre-pr-gate.md"
     ],
+    "scripts/gen-architecture-counts.mjs": [
+      "docs/architecture/architecture-counts.generated.md"
+    ],
     "scripts/harness/archetype-exercise.mjs": [
       "docs/testing/archetype-exercise-harness.md"
     ],
@@ -2081,6 +2084,9 @@
     ],
     "docs/architecture/archetype-business-value-streams.md": [
       "packages/storefront-templates/src/types.ts"
+    ],
+    "docs/architecture/architecture-counts.generated.md": [
+      "scripts/gen-architecture-counts.mjs"
     ],
     "docs/architecture/background-operation-observation-contract.md": [
       "apps/web/components/ops/SelfUpgradeLiveProvider.tsx",

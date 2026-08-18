@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 661,
+  "pageCount": 662,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -860,6 +860,15 @@
         "6-test-translation-rules",
         "7-guardrails",
         "8-documentation-maintenance-rule"
+      ]
+    },
+    "docs/architecture/architecture-counts.generated.md": {
+      "publicHref": "/architecture/architecture-counts.generated/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "architecture-counts-generated"
       ]
     },
     "docs/architecture/autonomy-and-wwmd.md": {
@@ -1763,6 +1772,7 @@
       "publishedPortal": false,
       "anchors": [
         "architecture-orientation",
+        "subsystem-map",
         "channel-adapter-capabilities"
       ]
     },
