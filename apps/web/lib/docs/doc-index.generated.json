@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 662,
+  "pageCount": 666,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -7759,6 +7759,50 @@
         "why",
         "how-to-apply",
         "see-also"
+      ]
+    },
+    "docs/professions/security-guarding-operations/wiki/alarm-response-and-keyholding-duty.md": {
+      "publicHref": "/professions/security-guarding-operations/wiki/alarm-response-and-keyholding-duty/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "heuristic",
+        "interoperability-posture",
+        "source"
+      ]
+    },
+    "docs/professions/security-guarding-operations/wiki/assignment-instructions-and-post-orders.md": {
+      "publicHref": "/professions/security-guarding-operations/wiki/assignment-instructions-and-post-orders/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "heuristic",
+        "interoperability-posture",
+        "source"
+      ]
+    },
+    "docs/professions/security-guarding-operations/wiki/officer-licensing-and-vetting-currency.md": {
+      "publicHref": "/professions/security-guarding-operations/wiki/officer-licensing-and-vetting-currency/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "heuristic",
+        "interoperability-posture",
+        "source"
+      ]
+    },
+    "docs/professions/security-guarding-operations/wiki/patrol-verification-and-proof-of-presence.md": {
+      "publicHref": "/professions/security-guarding-operations/wiki/patrol-verification-and-proof-of-presence/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "heuristic",
+        "interoperability-posture",
+        "source"
       ]
     },
     "docs/professions/security/wiki/cis-controls-implementation-groups.md": {
