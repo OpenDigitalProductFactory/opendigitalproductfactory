@@ -146,8 +146,10 @@ export async function saveBuildEvidence(params: Record<string, unknown>, userId:
         // Unwrap if agent nested: { buildPlan: { fileStructure, tasks } }
         let plan = normalizedValue as Record<string, unknown> | null;
         if (plan && !plan.fileStructure && !plan.tasks && plan.buildPlan && typeof plan.buildPlan === "object") {
+          // The unwrap flows forward through `plan`; normalizedValue is
+          // reassigned from normalizeBuildPlanPaths(plan) below on every
+          // non-returning path.
           plan = plan.buildPlan as Record<string, unknown>;
-          normalizedValue = plan;
         }
         const fileStructure = plan?.fileStructure;
         const tasks = plan?.tasks;
@@ -157,7 +159,7 @@ export async function saveBuildEvidence(params: Record<string, unknown>, userId:
         }
 
         if (!Array.isArray(fileStructure) || fileStructure.length === 0) {
-          const hint = plan ? `Got keys: ${Object.keys(plan).join(", ")}` : "Got null";
+          const hint = `Got keys: ${Object.keys(plan).join(", ")}`;
           return {
             success: false,
             error: "buildPlan missing fileStructure array.",
