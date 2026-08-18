@@ -20,6 +20,7 @@
 import { existsSync, readFileSync, readdirSync, realpathSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { resolveHostCommandInvocation } from "./host-command-invocation.mjs";
+import { isEntryModule } from "./entry-module.mjs";
 import { parseRepositoryPnpmVersion, resolvePinnedPnpmInvocation } from "./pinned-pnpm.mjs";
 
 export { resolvePinnedPnpmInvocation } from "./pinned-pnpm.mjs";
@@ -419,9 +420,7 @@ export function bootstrapWorktreeDeps(worktreePath, opts = {}) {
 // break the seed script (the worktree just stays source-only). Skipped on import
 // so unit tests of the pure helpers never trigger an install (mirrors
 // worktree-create.mjs).
-const invokedDirectly =
-  process.argv[1] && process.argv[1].replace(/\\/g, "/").endsWith("bootstrap-worktree-deps.mjs");
-if (invokedDirectly) {
+if (isEntryModule(import.meta.url)) {
   const args = process.argv.slice(2);
   const classifyOnly = args.includes("--classify-only");
   const target = args.find((a) => !a.startsWith("--")) ?? process.cwd();

@@ -17,6 +17,8 @@
 
 import { execFileSync } from "node:child_process";
 
+import { isEntryModule } from "./entry-module.mjs";
+
 /**
  * @param {(args: string[]) => string} git  — exec wrapper returning stdout
  * @returns {boolean}
@@ -101,10 +103,7 @@ export function defaultGit(args) {
 }
 
 // CLI: node scripts/lib/git-fetch-shared-safe.mjs assert|fetch
-const entry = typeof process.argv[1] === "string" ? process.argv[1].replace(/\\/g, "/") : "";
-const isMain =
-  entry.endsWith("/git-fetch-shared-safe.mjs") || entry.endsWith("git-fetch-shared-safe.mjs");
-if (isMain) {
+if (isEntryModule(import.meta.url)) {
   const cmd = process.argv[2] || "assert";
   try {
     if (cmd === "assert") {
