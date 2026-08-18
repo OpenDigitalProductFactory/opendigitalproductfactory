@@ -23,6 +23,7 @@ const EXPECTED_LEGACY_JOBS = [
   "derived-artifact-registry",
   "design-grounding-gate",
   "diagram-dependency-pin-guard",
+  "doc-anchor-existence",
   "doc-reference-integrity",
   "docs-impact-gate",
   "docs-link-integrity",

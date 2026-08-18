@@ -30,6 +30,7 @@ import {
   MODULE_SIZE_SOFT_CEILING as SOFT_CEILING,
   scanModuleSizesSync,
 } from "./lib/module-size-scope.mjs";
+import { formatTxtBudgetHeader, parseTxtBudgetHeader } from "./lib/baseline-budget.mjs";
 
 const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 // Line-oriented `<path>\t<loc>` baseline, merged with git's built-in
@@ -41,11 +42,22 @@ const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 // merge, then red guard on every rebase.
 const BASELINE_PATH = join(REPO_ROOT, "scripts", "module-size-baseline.txt");
 
-function serializeBaseline(baseline) {
+// Owned-expiring-budget header (BI-3F17B16B): the baseline carries `# owner:`
+// and `# expiry:` comment lines; scripts/check-no-expired-baseline-budgets.mjs
+// enforces presence + freshness. --update preserves the existing header.
+const DEFAULT_BUDGET = Object.freeze({ owner: "platform-architecture", expiry: "2026-11-16" });
+const BUDGET_NOTE_LINES = Object.freeze([
+  "Module-size ratchet baseline (BI-OPT-RATCHETS). Shrink-only: files leave by",
+  "being split/refactored under the ceiling, never by expanding the baseline.",
+  "Regenerate with: node scripts/check-module-size.mjs --update",
+]);
+
+function serializeBaseline(baseline, budget = DEFAULT_BUDGET) {
+  const header = formatTxtBudgetHeader({ ...budget, noteLines: BUDGET_NOTE_LINES });
   const lines = Object.keys(baseline)
     .sort()
     .map((k) => `${k}\t${baseline[k]}`);
-  return `${lines.join("\n")}\n`;
+  return `${header}${lines.join("\n")}\n`;
 }
 
 /**
@@ -99,7 +111,16 @@ function main() {
       .filter((k) => sizes[k] > SOFT_CEILING)
       .sort();
     const baseline = Object.fromEntries(over.map((k) => [k, sizes[k]]));
-    writeFileSync(BASELINE_PATH, serializeBaseline(baseline));
+    // Preserve the existing budget header (owner/expiry) across re-baselines;
+    // extending an expiry is a deliberate owner act, never an --update side effect.
+    let budget = DEFAULT_BUDGET;
+    try {
+      const existing = parseTxtBudgetHeader(readFileSync(BASELINE_PATH, "utf8"));
+      if (existing.owner && existing.expiry) budget = existing;
+    } catch {
+      // no existing baseline — defaults apply
+    }
+    writeFileSync(BASELINE_PATH, serializeBaseline(baseline, budget));
     console.log(
       `Wrote module-size baseline: ${over.length} files over ${SOFT_CEILING} LOC (ratchet-down set).`,
     );

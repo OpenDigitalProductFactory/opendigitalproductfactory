@@ -14,6 +14,8 @@ import {
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { validateBudget } from "./lib/baseline-budget.mjs";
+
 const SCRIPT_PATH = fileURLToPath(import.meta.url);
 const DEFAULT_REPO_ROOT = join(dirname(SCRIPT_PATH), "..");
 const DEFAULT_REGISTRY_PATH = join(DEFAULT_REPO_ROOT, "scripts", "application-boundaries.json");
@@ -124,6 +126,13 @@ function findCycle(contexts) {
 export function validateBoundaryRegistry(registry, { today = new Date().toISOString().slice(0, 10) } = {}) {
   const failures = [];
   if (registry?.version !== 1) failures.push("Registry version must be 1.");
+  // Owned-expiring-budget shape (BI-3F17B16B): the registry as a whole carries
+  // an owner + expiry like every other ratchet baseline; per-exception
+  // owner/reviewBy stay the finer-grained budget below.
+  failures.push(...validateBudget(
+    { owner: registry?.owner, expiry: registry?.expiry },
+    { label: "registry budget", today },
+  ));
   if (typeof registry?.root !== "string" || !registry.root.trim()) {
     failures.push("Registry root must be a non-empty repository-relative path.");
   }
@@ -229,7 +238,9 @@ function writeCurrentBaseline(registry, analysis, path = DEFAULT_REGISTRY_PATH) 
     key: edge.key,
     owner: registry.contexts[edge.sourceContext].owner,
     rationale: "Pre-existing reverse dependency captured by BI-2E9F6D37; remove through the owning context refactor.",
-    reviewBy: "2026-11-01",
+    // A new exception inherits the registry-level budget expiry (BI-3F17B16B)
+    // rather than a hardcoded date that goes stale and is born expired.
+    reviewBy: registry.expiry,
   });
   writeFileSync(path, `${JSON.stringify(registry, null, 2)}\n`, "utf8");
   return registry.exceptions.length;
