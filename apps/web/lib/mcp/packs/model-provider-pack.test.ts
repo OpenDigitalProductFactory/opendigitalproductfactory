@@ -29,7 +29,7 @@ vi.mock("@/lib/sandbox", () => sandbox);
 
 const lazyNode = vi.hoisted(() => ({
   lazyPath: vi.fn(() => ({ resolve: (...parts: string[]) => parts.join("/") })),
-  lazyFsPromises: vi.fn(() => ({ readFile: vi.fn() })),
+  lazyFsPromises: vi.fn(() => ({ readFile: vi.fn(), readdir: vi.fn() })),
   getCwd: vi.fn(() => "/cwd"),
 }));
 vi.mock("@/lib/shared/lazy-node", () => lazyNode);
