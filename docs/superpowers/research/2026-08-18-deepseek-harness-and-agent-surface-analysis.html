@@ -378,10 +378,12 @@ section.ws { scroll-margin-top: var(--sp-lg); }
     <div class="finding defect">
       <div class="head">
         <span class="title">The local endpoint has no context window, so the capacity gate never applies to it</span>
-        <span class="chip chip-verified">Verified</span>
+        <span class="chip chip-verified">Code reading verified</span>
+        <span class="chip chip-inferred">Diagnosis previously rejected — BI-9DFAFB4A</span>
       </div>
       <p><code>metadata-extractor.ts:86</code> sets <code>maxContextTokens: null</code> for Ollama with the comment "Ollama doesn't report this in <code>/api/tags</code>." <code>task-router.ts:154</code> then gates on <code>endpoint.maxContextTokens !== null &amp;&amp; … &lt; minContextTokens</code>. A null capacity doesn't fail the check — it <em>skips</em> it. The local model is the one endpoint whose real window is smallest and the only one exempt from the size gate.</p>
-      <p class="src">apps/web/lib/routing/metadata-extractor.ts:86 · apps/web/lib/routing/task-router.ts:154</p>
+      <p><strong>Correction (2026-08-18, on merge).</strong> The code reading above is accurate, but the conclusion that it is a live defect is not. <code>BI-9DFAFB4A</code> investigated this exact asymmetry in July 2026 and <em>rejected</em> it as the core defect: the pipeline-v2 Stage-5b tier sort already ranks <code>user_configured</code> ahead of <code>bundled</code>, so the local endpoint only wins when every paid endpoint was excluded by a hard constraint. In that case the null-capacity exemption is a deliberate last-resort safety net — gating it closed would fail the request outright instead of degrading. The shippable part of that BI was banner honesty, and it shipped: <code>routed-inference.ts:700</code> carries the <code>BI-9DFAFB4A</code> rationale in-tree today. Treat this section as a re-derivation of settled analysis, not a new finding.</p>
+      <p class="src">apps/web/lib/routing/metadata-extractor.ts:86 · apps/web/lib/routing/task-router.ts:154 · rebutted by apps/web/lib/routing/pipeline-v2.ts (Stage 5b) · apps/web/lib/inference/routed-inference.ts:700 · BI-9DFAFB4A</p>
     </div>
 
     <div class="finding gap">
@@ -420,9 +422,9 @@ section.ws { scroll-margin-top: var(--sp-lg); }
       <p class="why">Everything downstream reads this number. Nothing else on this list works while it's null.</p>
     </div></li>
     <li><div class="body">
-      <h4>Make a null capacity fail closed, not open</h4>
-      <p>Change the <code>task-router.ts:154</code> gate so an endpoint with unknown capacity is treated as unable to serve a large-context task, rather than exempt from the check. Pair it with a conservative floor so an unprobed endpoint stays usable for small tasks.</p>
-      <p class="why">Same class of bug as the pi-ai trap: a fallback default that silently makes the smallest model look like the biggest.</p>
+      <h4><s>Make a null capacity fail closed, not open</s> — withdrawn</h4>
+      <p>Withdrawn on merge. <code>BI-9DFAFB4A</code> already considered and rejected this change: because Stage 5b only reaches the local endpoint after every paid endpoint has been hard-excluded, failing closed on unknown capacity would turn a degraded answer into no answer at all. The null exemption is load-bearing, not an oversight. The recommendation immediately above — populate a real served-context number for the DMR endpoint — stands on its own and is the one that actually removes the ambiguity.</p>
+      <p class="why">The prior analysis is in-tree; re-deriving it cost a round trip, which is the reusable lesson.</p>
     </div></li>
     <li><div class="body">
       <h4>Decide whether context pressure belongs in the loop at all</h4>
