@@ -27,6 +27,9 @@ export type OpenOrgDecision = {
   recommendedOptionId?: string | null;
   /** Number of unresolved audit occurrences represented by this one work item. */
   occurrenceCount: number;
+  /** The other phrasings this one answer will close (BI-932C2A81). Shown so the
+   *  operator rules on what actually resolves, not on a bare count. */
+  variantQuestions?: string[];
 };
 
 function CaptureCard({ decision }: { decision: OpenOrgDecision }) {
@@ -97,6 +100,19 @@ function CaptureCard({ decision }: { decision: OpenOrgDecision }) {
         )}
         <LocalTime value={decision.createdAt} mode="date" className="text-xs text-[var(--dpf-muted)] shrink-0" />
       </div>
+      {decision.variantQuestions && decision.variantQuestions.length > 0 && (
+        <details className="mb-2">
+          <summary className="cursor-pointer text-xs text-[var(--dpf-muted)]">
+            Answering this also closes {decision.variantQuestions.length} other
+            {decision.variantQuestions.length === 1 ? " wording" : " wordings"}
+          </summary>
+          <ul className="mt-1 ml-4 list-disc text-xs text-[var(--dpf-muted)]">
+            {decision.variantQuestions.map((q) => (
+              <li key={q}>{q}</li>
+            ))}
+          </ul>
+        </details>
+      )}
       <form onSubmit={onSubmit}>
         {decision.scoredOptions && decision.scoredOptions.length > 0 && (
           <fieldset className="grid gap-1.5 text-xs text-[var(--dpf-text)] mb-2">

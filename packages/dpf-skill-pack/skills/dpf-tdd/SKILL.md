@@ -54,7 +54,7 @@ Match the test to the runtime it needs:
 
 This is [AGENTS.md §5 "Where each gate runs"](../../../../AGENTS.md) applied to TDD. Do not spend cycles making the thread worktree into a full DPF runtime so a runtime-bound test will run there — that is harness work, not test work. A suite that did not execute because the worktree could not host its runtime is an **unrun gate, not a red gate**.
 
-1. **Impact before Red.** Consume the `changeImpactContract` returned when the Work Capsule's edit paths were claimed (or retrieve it from `verificationState.changeImpactContract`). Resolve every `testImpact` entry with `mcp__dpf__find_related_tests`, and put every applicable `guardObligation` into the loop now. `status: unresolved`, missing/stale graph advice, or an unmapped source path expands verification; it never means “no tests.”
+1. **Impact before Red.** Consume the `changeImpactContract` returned when the Workroom's edit paths were claimed (or retrieve it from `verificationState.changeImpactContract`). Resolve every `testImpact` entry with `mcp__dpf__find_related_tests`, and put every applicable `guardObligation` into the loop now. `status: unresolved`, missing/stale graph advice, or an unmapped source path expands verification; it never means “no tests.”
 
 2. **Red — write the failing test first.** Name the behavior; assert the expected result; run it and **watch it fail for the right reason**. For a bug fix this is mandatory: a test that reproduces the symptom (generalizing `security-fix-needs-regression-test-first` beyond security). Use `mcp__dpf__find_related_tests` to place it with its siblings and match the suite's conventions.
 

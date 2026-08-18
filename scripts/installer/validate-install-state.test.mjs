@@ -225,6 +225,44 @@ test("uses the repository schema rather than a duplicated field list", async () 
   assert.match(result.errors.join("\n"), new RegExp(schema.required[0]));
 });
 
+test("validates environmentClass and bootstrapIntent in v2 state", async () => {
+  for (const envClass of ["production", "development", "test", null]) {
+    const withEnv = { ...valid, environmentClass: envClass };
+    assert.deepEqual(await validateInstallState(withEnv), { valid: true, errors: [] }, `envClass: ${envClass}`);
+  }
+
+  const invalidEnv = { ...valid, environmentClass: "staging" };
+  const resInvalidEnv = await validateInstallState(invalidEnv);
+  assert.equal(resInvalidEnv.valid, false);
+
+  const withBootstrap = {
+    ...valid,
+    environmentClass: "production",
+    bootstrapIntent: {
+      schemaVersion: 1,
+      primaryPurpose: "operate-organization",
+      secondaryPurposes: ["deliver-managed-services"],
+      relationshipIntents: ["service-provider"],
+      confidence: "high",
+      recordedAt: "2026-08-08T12:00:00Z",
+      absorbedAt: null,
+    },
+  };
+  assert.deepEqual(await validateInstallState(withBootstrap), { valid: true, errors: [] });
+
+  const invalidBootstrapPurpose = {
+    ...valid,
+    bootstrapIntent: {
+      schemaVersion: 1,
+      primaryPurpose: "unsupported-purpose",
+      confidence: "high",
+      recordedAt: "2026-08-08T12:00:00Z",
+    },
+  };
+  const resInvalidBootstrap = await validateInstallState(invalidBootstrapPurpose);
+  assert.equal(resInvalidBootstrap.valid, false);
+});
+
 test("command-line contract validates the installer-resolved state path", async () => {
   const dir = await mkdtemp(join(tmpdir(), "dpf-state-validator-"));
   const path = join(dir, "install-state.json");
@@ -233,3 +271,4 @@ test("command-line contract validates the installer-resolved state path", async 
   assert.equal(result.status, 0, result.stderr);
   assert.match(result.stdout, /install-state valid/);
 });
+

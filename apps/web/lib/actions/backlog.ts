@@ -19,6 +19,11 @@ import {
   type BacklogScopeKind,
   type EpicInput,
 } from "@/lib/backlog";
+import {
+  CLEAR_DEFERRAL_PROJECTION,
+  normalizeDeferralInput,
+} from "@/lib/backlog/deferral-contract";
+import { resolvePrincipalRecordIdForSessionIdentity } from "@/lib/identity/principal-linking";
 
 async function requireManageBacklog(): Promise<void> {
   await requireCapability("manage_backlog");
@@ -27,6 +32,32 @@ async function requireManageBacklog(): Promise<void> {
 async function getSessionUserId(): Promise<string | null> {
   const session = await auth();
   return session?.user?.id ?? null;
+}
+
+async function currentDeferralOwnerRecordId(): Promise<string> {
+  const session = await auth();
+  if (!session?.user || session.user.type !== "admin") {
+    throw new Error("An authenticated employee is required to own a deferral");
+  }
+  const principalId = await resolvePrincipalRecordIdForSessionIdentity({
+    type: "admin",
+    id: session.user.id,
+  });
+  if (!principalId) throw new Error("Your canonical Principal identity is not ready");
+  return principalId;
+}
+
+async function deferralProjectionForInput(input: BacklogItemInput) {
+  if (input.status !== "deferred") return CLEAR_DEFERRAL_PROJECTION;
+  const ownerPrincipalId = await currentDeferralOwnerRecordId();
+  const normalized = normalizeDeferralInput({
+    reason: input.deferReason,
+    trigger: input.deferTrigger,
+    reviewAt: input.deferReviewAt,
+    ownerPrincipalId,
+  });
+  if (!normalized.ok) throw new Error(normalized.message);
+  return { ...normalized.value, deferredAt: new Date() };
 }
 
 function cleanStringArray(values: string[] | undefined): string[] {
@@ -40,7 +71,11 @@ export async function createBacklogItem(input: BacklogItemInput): Promise<void> 
   await requireManageBacklog();
   const error = validateBacklogInput(input);
   if (error) throw new Error(error);
+  if (input.status === "retired") {
+    throw new Error("A new backlog item cannot start retired; use the governed retirement action for an existing item");
+  }
 
+  const deferralProjection = await deferralProjectionForInput(input);
   const createData = {
     itemId:           `BI-${crypto.randomUUID()}`,
     title:            input.title.trim(),
@@ -64,6 +99,7 @@ export async function createBacklogItem(input: BacklogItemInput): Promise<void> 
     scopeRationale:      input.scopeRationale?.trim() || null,
     lifecycleTags:       cleanStringArray(input.lifecycleTags),
     ...(input.body !== undefined && { body: input.body.trim() || null }),
+    ...deferralProjection,
   };
   const created = await prisma.$transaction(async (tx) => {
     const item = await tx.backlogItem.create({
@@ -105,10 +141,22 @@ export async function updateBacklogItem(id: string, input: BacklogItemInput): Pr
       organizationId: true,
       productLineId: true,
       businessProductId: true,
+      deferredAt: true,
     },
   });
-  const isNowDone = input.status === "done" || input.status === "deferred";
-  const wasDone = existing?.status === "done" || existing?.status === "deferred";
+  if (input.status === "retired" && existing?.status !== "retired") {
+    throw new Error("Use the governed retirement action so the retirement rationale is audited");
+  }
+  const isNowDone = input.status === "done" || input.status === "retired";
+  const wasDone = existing?.status === "done" || existing?.status === "retired";
+  const deferralProjection = input.status === "deferred"
+    ? {
+        ...(await deferralProjectionForInput(input)),
+        deferredAt: existing?.status === "deferred" && existing.deferredAt
+          ? existing.deferredAt
+          : new Date(),
+      }
+    : CLEAR_DEFERRAL_PROJECTION;
 
   const updateData = {
     title:            input.title.trim(),
@@ -139,15 +187,44 @@ export async function updateBacklogItem(id: string, input: BacklogItemInput): Pr
     ...(input.body !== undefined && { body: input.body.trim() || null }),
     ...(isNowDone && !wasDone ? { completedAt: new Date() } : {}),
     ...(!isNowDone && wasDone ? { completedAt: null } : {}),
+    ...deferralProjection,
   };
-  await prisma.backlogItem.update({ where: { id }, data: updateData });
+  const actorUserId = await getSessionUserId();
+  await prisma.$transaction(async (tx) => {
+    await tx.backlogItem.update({ where: { id }, data: updateData });
+    if (existing?.status !== input.status || input.status === "deferred") {
+      await tx.backlogItemActivity.create({
+        data: {
+          backlogItemId: id,
+          kind: existing?.status === "deferred" && input.status === "deferred"
+            ? "deferral_review"
+            : "status_change",
+          summary: `${existing?.status ?? "unknown"} → ${input.status}`,
+          payload: input.status === "deferred"
+            ? {
+                from: existing?.status ?? null,
+                to: input.status,
+                deferral: {
+                  reason: input.deferReason,
+                  trigger: input.deferTrigger,
+                  reviewAt: input.deferReviewAt,
+                  ownerPrincipalId: deferralProjection.deferOwnerPrincipalId,
+                },
+              }
+            : { from: existing?.status ?? null, to: input.status },
+          recordedById: actorUserId,
+        },
+      });
+    }
+  });
 
-  // Auto-complete epic when all its items are done/deferred
+  // Deferred work is still wanted and therefore keeps its epic open. Only
+  // delivered or explicitly retired demand is terminal for epic completion.
   if (isNowDone && !wasDone) {
     const epicId = input.epicId ?? (await prisma.backlogItem.findUnique({ where: { id }, select: { epicId: true } }))?.epicId;
     if (epicId) {
       const remaining = await prisma.backlogItem.count({
-        where: { epicId, status: { notIn: ["done", "deferred"] } },
+        where: { epicId, status: { notIn: ["done", "retired"] } },
       });
       if (remaining === 0) {
         await prisma.epic.update({
@@ -197,6 +274,12 @@ export async function updateBacklogItemFields(id: string, patch: BacklogFieldPat
   if (patch.status !== undefined && !BACKLOG_STATUS_VALUES.includes(patch.status)) {
     throw new Error(`Invalid status: ${patch.status}`);
   }
+  if (patch.status === "deferred") {
+    throw new Error("Use the backlog editor to provide reason, trigger, owner, and review date for a deferral");
+  }
+  if (patch.status === "retired" && existing.status !== "retired") {
+    throw new Error("Use the governed retirement action so the retirement rationale is audited");
+  }
   if (patch.workType !== undefined && !BACKLOG_WORK_TYPE_VALUES.includes(patch.workType)) {
     throw new Error(`Invalid work type: ${patch.workType}`);
   }
@@ -216,8 +299,8 @@ export async function updateBacklogItemFields(id: string, patch: BacklogFieldPat
   }
 
   const nextStatus = patch.status ?? existing.status;
-  const isNowDone = nextStatus === "done" || nextStatus === "deferred";
-  const wasDone = existing.status === "done" || existing.status === "deferred";
+  const isNowDone = nextStatus === "done" || nextStatus === "retired";
+  const wasDone = existing.status === "done" || existing.status === "retired";
 
   const data: Record<string, unknown> = {};
   if (patch.title !== undefined) data.title = patch.title.trim();
@@ -235,15 +318,16 @@ export async function updateBacklogItemFields(id: string, patch: BacklogFieldPat
   if (patch.status !== undefined) {
     if (isNowDone && !wasDone) data.completedAt = new Date();
     if (!isNowDone && wasDone) data.completedAt = null;
+    Object.assign(data, CLEAR_DEFERRAL_PROJECTION);
   }
 
   if (Object.keys(data).length === 0) return;
   await prisma.backlogItem.update({ where: { id }, data });
 
-  // Auto-complete the epic when this status change makes all its items done/deferred.
+  // Deferred work is still wanted and therefore keeps its epic open.
   if (patch.status !== undefined && isNowDone && !wasDone && existing.epicId) {
     const remaining = await prisma.backlogItem.count({
-      where: { epicId: existing.epicId, status: { notIn: ["done", "deferred"] } },
+      where: { epicId: existing.epicId, status: { notIn: ["done", "retired"] } },
     });
     if (remaining === 0) {
       await prisma.epic.update({
@@ -256,6 +340,8 @@ export async function updateBacklogItemFields(id: string, patch: BacklogFieldPat
 
 export async function deleteBacklogItem(id: string): Promise<void> {
   await requireManageBacklog();
+  const { assertBacklogItemGovernanceDeletable } = await import("@/lib/backlog/initiative-governance-deletion");
+  await assertBacklogItemGovernanceDeletable(id);
   await prisma.backlogItem.delete({ where: { id } });
 }
 
@@ -379,6 +465,8 @@ export async function updateEpic(id: string, input: EpicInput): Promise<void> {
 
 export async function deleteEpic(id: string): Promise<void> {
   await requireManageBacklog();
+  const { assertEpicGovernanceDeletable } = await import("@/lib/backlog/initiative-governance-deletion");
+  await assertEpicGovernanceDeletable(id);
   await prisma.epic.delete({ where: { id } });
   // onDelete: SetNull in schema handles nullifying BacklogItem.epicId automatically
 }

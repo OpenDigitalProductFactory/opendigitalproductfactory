@@ -16,6 +16,21 @@ const MANAGED_DEVICE_TYPES = new Set([
   "wan_uplink",
 ]);
 
+const DISPLAY_RANK_BY_CI_TYPE: Record<string, number> = {
+  wan_uplink: 0,
+  gateway: 1,
+  router: 1,
+  switch: 2,
+  network_device: 2,
+  access_point: 3,
+  network_client: 4,
+  host: 4,
+};
+
+export function getPhysicalDisplayRank(ciType: string | null | undefined): number | null {
+  return DISPLAY_RANK_BY_CI_TYPE[ciType ?? ""] ?? null;
+}
+
 export type PhysicalTopologyIntegrity = {
   state: "current" | "partial" | "stale" | "empty";
   deviceCount: number;
@@ -33,7 +48,27 @@ export function projectPhysicalTopology(
   const connectedIds = new Set(physicalLinks.flatMap((link) => [link.source, link.target]));
   const nodes = graph.nodes.filter((node) => connectedIds.has(node.id));
   const nodeIds = new Set(nodes.map((node) => node.id));
-  const links = physicalLinks.filter((link) => nodeIds.has(link.source) && nodeIds.has(link.target));
+  const nodesById = new Map(nodes.map((node) => [node.id, node]));
+  const seenLinks = new Set<string>();
+  const links = physicalLinks
+    .filter((link) => nodeIds.has(link.source) && nodeIds.has(link.target))
+    .map((link) => {
+      const sourceRank = getPhysicalDisplayRank(nodesById.get(link.source)?.ciType);
+      const targetRank = getPhysicalDisplayRank(nodesById.get(link.target)?.ciType);
+      if (sourceRank != null && targetRank != null && sourceRank > targetRank) {
+        return { ...link, source: link.target, target: link.source };
+      }
+      return link;
+    })
+    .filter((link) => {
+      const endpoints = link.type === "CONNECTS_TO" || link.type === "PEER_OF"
+        ? [link.source, link.target].sort().join("-")
+        : `${link.source}-${link.target}`;
+      const key = `${link.type}-${endpoints}`;
+      if (seenLinks.has(key)) return false;
+      seenLinks.add(key);
+      return true;
+    });
   const deviceCount = nodes.filter((node) => MANAGED_DEVICE_TYPES.has(node.ciType ?? "")).length;
   const sources = [...new Set(nodes.map((node) => node.sourceKind).filter((value): value is string => Boolean(value)))].sort();
   const observedTimes = nodes

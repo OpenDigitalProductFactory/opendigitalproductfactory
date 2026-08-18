@@ -99,9 +99,9 @@ describe("statusColors", () => {
 
   it("maps Work Room state, outcome health, and activity through shared domains", () => {
     expect(resolveIntent("workCaseState", "waiting-on-person")).toBe("warning");
-    expect(resolveIntent("workRoomOutcomeHealth", "at-risk")).toBe("warning");
-    expect(resolveIntent("workRoomActivity", "message")).toBe("neutral");
-    expect(resolveIntent("workRoomActivity", "decision-resolved")).toBe("success");
+    expect(resolveIntent("workroomOutcomeHealth", "at-risk")).toBe("warning");
+    expect(resolveIntent("workroomActivity", "message")).toBe("neutral");
+    expect(resolveIntent("workroomActivity", "decision-resolved")).toBe("success");
   });
 
   // BI-5B2F5447 (D0): the portfolioCoverage badge map is the render side of the

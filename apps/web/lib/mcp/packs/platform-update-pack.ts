@@ -20,6 +20,7 @@ const definitions: ToolDefinition[] = [
     requiredCapability: "manage_platform",
     executionMode: "immediate",
     sideEffect: true,
+    consequence: "irreversible",
   },
   {
     name: "summarize_upgrade_impact",

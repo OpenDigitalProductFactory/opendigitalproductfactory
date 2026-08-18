@@ -1,0 +1,25 @@
+{
+  "version": "1",
+  "decidedOption": "token-paired-variant-props",
+  "decisionInteractionId": "DI-29940E3797F3",
+  "scope": {
+    "files": [
+      "apps/web/components/ui/Button.tsx",
+      "apps/web/components/ui/ErrorBoundaryCard.tsx",
+      "apps/web/components/finance/ExpenseClaimActions.tsx",
+      "apps/web/components/finance/POActionButtons.tsx",
+      "apps/web/components/finance/RecordBillPaymentButton.tsx",
+      "apps/web/components/finance/SubmitBillButton.tsx",
+      "apps/web/app/(shell)/not-found.tsx",
+      "apps/web/app/(portal)/not-found.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "token-paired-variant-props",
+      "cva-class-composer",
+      "class-string-exports"
+    ]
+  }
+}

@@ -47,7 +47,7 @@ type HiveScoutSummaryPayload = {
     created: number;
     duplicates: number;
     skippedByReview: number;
-    deferred: number;
+    needsReview: number;
     reviewFailed: number;
     reviewBatchSize: number;
     reviewBatchUtilization: number;
@@ -61,6 +61,10 @@ type HiveScoutSummaryPayload = {
     reviewClassificationHistogram?: Record<string, number>;
     reviewClassificationByFramework?: Record<string, Record<string, number>>;
     reviewClassificationByIndustry?: Record<string, Record<string, number>>;
+    marketSourcesAttempted?: number;
+    marketSourcesFetched?: number;
+    marketSourcesChanged?: number;
+    marketSourcesFailed?: number;
   };
   createdItemIds?: string[];
 };
@@ -221,6 +225,19 @@ export function extractHiveScoutSummary(
     scoutTool.result.data.reviewClassificationByIndustry,
   );
 
+  // Market-aperture pass metrics (BI-B8E4317D) — absent on runs predating it.
+  const marketRaw = isRecord(scoutTool.result.data.marketSources)
+    ? scoutTool.result.data.marketSources
+    : null;
+  const marketMetrics = marketRaw
+    ? {
+        marketSourcesAttempted: asNumber(marketRaw.attempted) ?? 0,
+        marketSourcesFetched: asNumber(marketRaw.fetched) ?? 0,
+        marketSourcesChanged: asNumber(marketRaw.changed) ?? 0,
+        marketSourcesFailed: asNumber(marketRaw.failed) ?? 0,
+      }
+    : null;
+
   const payload: HiveScoutSummaryPayload = {
     processedAt: new Date().toISOString(),
     metrics: {
@@ -230,7 +247,9 @@ export function extractHiveScoutSummary(
       created: asNumber(scoutTool.result.data.created) ?? 0,
       duplicates: asNumber(scoutTool.result.data.duplicates) ?? 0,
       skippedByReview: asNumber(scoutTool.result.data.skippedByReview) ?? 0,
-      deferred: asNumber(scoutTool.result.data.deferred) ?? 0,
+      needsReview: asNumber(scoutTool.result.data.needsReview)
+        ?? asNumber(scoutTool.result.data.deferred)
+        ?? 0,
       reviewFailed: asNumber(scoutTool.result.data.reviewFailed) ?? 0,
       reviewBatchSize: asNumber(scoutTool.result.data.reviewBatchSize) ?? 0,
       reviewBatchUtilization: asNumber(scoutTool.result.data.reviewBatchUtilization) ?? 0,
@@ -248,6 +267,7 @@ export function extractHiveScoutSummary(
       ...(reviewClassificationHistogram ? { reviewClassificationHistogram } : {}),
       ...(reviewClassificationByFramework ? { reviewClassificationByFramework } : {}),
       ...(reviewClassificationByIndustry ? { reviewClassificationByIndustry } : {}),
+      ...(marketMetrics ?? {}),
     },
     ...(createdItemIds.length > 0 ? { createdItemIds } : {}),
   };
@@ -262,7 +282,14 @@ export function extractHiveScoutSummary(
     `review-rejections=${payload.metrics.skippedByReview}`,
     `review-schema-drops=${payload.metrics.reviewSchemaDropCount}`,
     `review-cache-hits=${payload.metrics.reviewCacheHits}`,
-    `deferred=${payload.metrics.deferred}`,
+    `needs-review=${payload.metrics.needsReview}`,
+    ...(marketMetrics
+      ? [
+          `market-fetched=${marketMetrics.marketSourcesFetched}/${marketMetrics.marketSourcesAttempted}`,
+          `market-changed=${marketMetrics.marketSourcesChanged}`,
+          `market-failed=${marketMetrics.marketSourcesFailed}`,
+        ]
+      : []),
   ].join(" ");
 
   const threadMessage = [

@@ -37,7 +37,7 @@ principle_decide (lib/mcp/packs/principle-decide-pack.ts)
   → DecisionInteraction.sources (jsonb)   // admissible citations, sealed into the hash chain
 ```
 
-So citations are already persisted per (optionId, dimensionKey) with their locator and excerpt. The re-verifier reads that record — it does not need new storage.
+So citations are persisted per (optionId, dimensionKey), and the re-verifier reads that record rather than needing new storage. ⟦corrected in phase 2a: the *locator* was NOT among the persisted fields — see §3 Phase 2. Only the widening below made this true.⟧
 
 **Independence is the contract.** The verifier must not run inside the scoring call: `evidence-reverifier.ts` specifies a pass with no access to the original scorer's reasoning, mirroring `lib/build/verified-finding-review.ts` (which is exposed via `lib/mcp-tools.ts`). Wiring it into `principle_decide` itself would destroy the separation-of-duties property that makes it meaningful.
 
@@ -73,6 +73,65 @@ Phase 2 therefore splits:
 - **2a — persist the structured locator** alongside the existing summary (additive; migration-safe), so a recorded decision carries what re-resolution needs. Without this, phases 2b/3 have nothing to verify.
 - **2b — independent verification surface.** Load the decision's citations, run `reverifyCitations` with the repo resolver, return the report, and record degraded (option, dimension) pairs. Follows the `verified-finding-review` exposure pattern; an MCP tool carries the known grant/gate cascade (`TOOL_TO_GRANTS` entry required, or the tool is denied).
 
+#### Phase 2a — SHIPPED (this PR)
+
+**No migration.** `DecisionInteraction.sources` is already `Json @default("[]")`, so the locator is carried as additional keys on each source entry. Nothing is tightened, nothing is backfilled, and the change applies against any existing data state because existing rows simply lack the new keys.
+
+**Write.** `citationsToSources` (`lib/decision/evidence-grounding.ts`) becomes the single home for the ledger source shape and now emits `locator`, `grade`, `optionId`, `dimensionKey` and `excerpt` alongside the original `materialId` / `sourceType` / `summary` / `effectiveWeight`. It had been an unused export duplicating a shape the ledger re-derived inline; `kernel-consult-ledger.ts` now delegates to it (and `GRADE_WEIGHT` moved with it) rather than mapping citations itself.
+
+**What is sealed is unchanged.** `SealablePayload` covers `{question, optionIds, criteria, evidenceDigests, recommendedOptionId, composite}`. `sources` was never inside it, so widening the source row does not touch the append-only chain — asserted directly in `recorded-citations.test.ts`.
+
+**Read.** `normalizeSources` (`lib/decision-perspective/persistence.ts`) carries the new keys through, re-running `normalizeLocator` rather than trusting the stored shape: `sources` is jsonb, so the persisted value is whatever some writer put there. A locator that no longer normalizes is dropped to "no locator", never passed through as a checkable citation.
+
+**Decode.** `lib/decision/recorded-citations.ts` — `recordedCitationsFromSources(sources)` returns `{ citations, unverifiable, whollyUnverifiable }`. A pure decoder: it resolves nothing, so it carries no separation-of-duties concern and is **not** wired into `principle_decide`; phase 2b supplies its own resolver.
+
+**Fail-closed, concretely.** A source without a re-resolvable locator is split into `unverifiable` with a reason (`no-locator` for every row on the install today, `malformed-locator`, `no-dimension-binding`) rather than dropped silently — dropping would let "0 citations, 0 failures" read as clean. `reverifyCitations` already refuses to report `allConfirmed` on an empty result set, so an all-legacy decision cannot present as re-verified.
+
+**Not yet closed:** nothing *calls* `recordedCitationsFromSources` in production — that is phase 2b, by design. And a locator only reaches the record when a caller supplies `evidence` to `principle_decide`; phase 2a makes an evidenced call re-verifiable, it does not make callers cite. That second gap is now tracked as **BI-D045A069**.
+
+#### Phase 2b — SHIPPED
+
+`reverify_decision_evidence` (MCP, grant `registry_read`) — `lib/mcp/packs/decision-reverify-pack.ts` over `lib/decision/evidence-reverification.ts`. Loads a recorded decision by `interactionId`, decodes its citations with `recordedCitationsFromSources`, re-resolves each against live source with the phase-1 repo resolver, and reports what still holds.
+
+**A separate tool, not a step in `principle_decide`.** Re-verification only means something without access to the original scorer's reasoning. Grant matches the decision-governance siblings: auditing the evidence behind a decision must not require a higher grant than making the decision did, or the check is less reachable than the thing it checks.
+
+**Three outcomes, deliberately not two — the load-bearing design point.** `reverifyCitations` folds `unresolved` into `degrade`. That is right when the resolver could read the cited artifact and it was not there (fabrication), and catastrophic when the resolver cannot reach source at all: a production install has no checkout (`isDevInstance()` is false), so an unguarded pass would report **every decision ever made** as fabricated evidence. Source reachability is therefore decided *before* anything resolves, and the surface returns:
+
+| outcome | meaning |
+|---|---|
+| `verified` | every citation that could be checked still resolves and still matches |
+| `degraded` | at least one no longer holds — a real finding about the evidence |
+| `unverifiable` | nothing could be checked; `unverifiableCause` is `no-source-access` (a deployment fact, **not** a finding) or `no-recorded-locators` (a pre-2a record) |
+
+`coverage` rides alongside, so `verified` is never read as a clean bill of health for the whole decision: a decision with one confirmed citation and four unverifiable ones is `verified` at coverage 1/5, and the tool's own message says so.
+
+**Path guard (security).** A cited `filePath` is attacker-influenced data — it comes from whatever agent made the decision and is echoed back as `liveExcerpt`. Phase 1's resolver confines reads to the repo root, but the repo root legitimately *contains* `.env`, keys and credential files, so an unguarded citation naming one would round-trip its contents to any caller holding `registry_read`. `guardResolverPaths` wraps the resolver with `isPathAllowedSync` — the same blocklist `read_project_file` enforces — and a blocked path fails closed to `unresolved`. Regression-tested against a fixture repo containing a planted secret.
+
+#### Phase 2b.1 — the anchoring rule (correction, BI-EE2B243D)
+
+**2b shipped with a defect that only functional verification on the live install could find.** Run against a real decision minutes after the install self-upgraded, every one of four *true* citations came back `degraded` — the fabrication verdict — with `sourceAccess: {available: true, detail: "source readable at /workspace"}`.
+
+The citations were correct; the resolver could not see the files. `PROJECT_ROOT=/workspace` is the Build Studio image-synced source volume: it has `package.json` at the root (so the availability probe said "available"), it has **no `.git`**, and it carries only *part* of the tree — `apps/web/lib/decision/` held 7 files and was missing `recorded-citations.ts`, `evidence-grounding.ts`, `evidence-reverifier.ts` and `locator-resolver.ts`, all merged and deployed.
+
+This is precisely the failure the three-way outcome existed to prevent, defeated by a probe too coarse to notice. And it is the worst available failure for this feature: **a false accusation of fabricated evidence** is more damaging than declining to check.
+
+**The rule: a citation can only be REFUTED against source of known revision.**
+
+Absence is evidence only when you know which revision you are looking at. On a tree of unknown provenance, "the file is not here" is equally explained by the citation being false, the tree being partial, or the tree being stale — and nothing distinguishes them. Confirmation is not symmetric: if the cited text *is* present, it existed, whatever revision the tree is at. So:
+
+| tree | resolves + matches | anything else |
+|---|---|---|
+| anchored (a `.git` checkout) | `confirmed` | `degraded` — a real finding |
+| unanchored | `confirmed` | `inconclusive` — an open question about the environment |
+
+`SourceAccess` gains `anchored` + `anchorDetail`; the report gains `inconclusive[]` and the cause `unanchored-source`; `degrade` is empty on an unanchored tree by construction. The tool description now states the asymmetry, because the description is what an agent reads before trusting a verdict.
+
+**Consequence for this install:** re-verification is confirm-only until the verifier is pointed at a checkout. That is the honest state — better inert than wrong — and the report says exactly why rather than going quiet.
+
+**Regression test** plants the live shape precisely: a root with `package.json`, no `.git`, and the cited file absent. It must yield `unverifiable` / `unanchored-source`, never `degraded`. The original suite missed this because every fixture either contained the cited file or fabricated a path in a tree that was otherwise complete.
+
+**Deliberately NOT in 2b: recording the verdict.** The plan bullet above says "record degraded pairs"; that is held back to phase 3, for a reason found while building. The decision row is sealed into the append-only hash chain and a write guard forbids mutating sealed fields, so a verdict cannot be written back onto it — it needs its own record, whose shape is determined by how phase 3 consumes a degrade during re-scoring. Inventing that record now would fix the shape before the consumer exists. 2b is read-only and advisory, which is also the cleaner separation-of-duties story.
+
 ### Phase 3 — degrade feeds Axis 1
 A degraded pair drops the affected dimension to unevidenced on re-scoring, and the decision is flagged. This is what closes the loop with `evidence-grounding.ts`.
 
@@ -84,6 +143,8 @@ A degraded pair drops the affected dimension to unevidenced on re-scoring, and t
 
 ## 5. Verification
 
-- Unit: `pnpm --filter web exec vitest run lib/decision/locator-resolver.test.ts`.
+- Unit: `pnpm --filter web exec vitest run lib/decision/locator-resolver.test.ts` (phase 1), `lib/decision/recorded-citations.test.ts` (phase 2a), and `lib/decision/evidence-reverification.test.ts` + `lib/mcp/packs/decision-reverify-pack.test.ts` (phase 2b).
 - Production build: `pnpm --filter web build`.
-- No UI surface in phase 1, so no UX verification path; no migration.
+- No UI surface in phase 1 or 2a, so no UX verification path; no migration in either.
+
+Phase 2a's round-trip test is deliberately end-to-end rather than a decoder unit test: it drives a real `recordKernelConsultInteraction` write, pushes the row through `JSON.parse(JSON.stringify(...))` (the jsonb boundary — anything that does not survive serialization is not actually persisted), reads it back through `decisionInteractionRowToEvaluation`, and re-verifies with the real repo resolver against a temp checkout. It asserts a genuine citation confirms, a fabricated-but-well-formed one degrades, a real file lacking the recorded excerpt degrades, and a legacy four-field row reports `unverifiable` rather than confirmed.

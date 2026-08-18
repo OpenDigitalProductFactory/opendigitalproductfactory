@@ -397,13 +397,13 @@ export function SlotBookingFlow({
       idempotencyKey: createClientOperationId(),
     });
 
-    if (!result.success) {
+    if (!result.ok) {
       setSubmitError(result.error);
       setSubmitLoading(false);
       return;
     }
 
-    router.push(`/s/${orgSlug}/checkout?ref=${result.ref}&type=booking`);
+    router.push(`/s/${orgSlug}/checkout?ref=${result.data.ref}&type=booking`);
   }
 
   // ── Render ──────────────────────────────────────────────────────────────────

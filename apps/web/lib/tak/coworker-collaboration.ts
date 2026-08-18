@@ -22,7 +22,23 @@ import { agentEventBus } from "@/lib/agent-event-bus";
 import { resolveAgent } from "@/lib/tak/agent-resolution";
 import { spawnWorkThread } from "@/lib/actions/agent-coworker";
 import { isHandoffPermitted } from "@/lib/tak/collaboration-authority";
+import { STANDING_COORDINATOR_IDS } from "@/lib/tak/coordinator-authority";
+import { coerceDataSensitivity } from "@dpf/db/principal-sensitivity";
+import {
+  decideConveneClearance,
+  clearanceForPrincipal,
+  conveneDenialAuditReason,
+  CONVENE_DENIED_MESSAGE,
+} from "./convene-clearance";
 import type { CollaborationProvenance } from "@/lib/tak/conversation-participants-core";
+
+/** Raised when a convene is refused because the peer outranks the asking human's clearance. */
+export class ConveneDeniedError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ConveneDeniedError";
+  }
+}
 
 /** Raised when a coworker-initiated handoff is denied by delegation authority. */
 export class HandoffDeniedError extends Error {
@@ -84,6 +100,8 @@ async function enforceHandoffAuthority(
     delegatesTo: caller.delegatesTo ?? [],
     escalatesTo: caller.escalatesTo ?? null,
     targetIds,
+    // BI-80ADD3A8: the COO is a standing escalation target from every surface.
+    standingCoordinatorIds: STANDING_COORDINATOR_IDS,
   });
   if (!permitted) {
     await recordDelegationHop({
@@ -147,7 +165,52 @@ export type SummonCoworkerInput = {
   routeContext?: string;
 };
 
-async function resolveTargetOrThrow(targetAgent: string) {
+/**
+ * BI-154DAA7E: refuse to convene a peer classified above the asking human's
+ * clearance. Placed in the shared target resolver rather than at each call site
+ * so a future third convene path inherits it instead of forgetting it.
+ *
+ * Clearance resolves through `clearanceForPrincipal`, which delegates to the
+ * same `normalizePrincipalSensitivities` the principal-linking and seed paths
+ * use, so this clamp cannot drift from the clearance a principal is actually
+ * granted — and an unlinked user is never treated as MORE cleared than a linked
+ * one with nothing explicit.
+ */
+async function enforceConveneClearance(
+  target: { agentId: string; slugId: string | null },
+  userId: string,
+): Promise<void> {
+  const [agentRow, alias] = await Promise.all([
+    prisma.agent.findFirst({
+      where: { OR: [{ agentId: target.agentId }, { slugId: target.agentId }] },
+      select: { sensitivity: true },
+    }),
+    prisma.principalAlias.findFirst({
+      where: { aliasType: "user", aliasValue: userId, issuer: "" },
+      include: { principal: { select: { sensitivityClearance: true } } },
+    }),
+  ]);
+
+  const decision = decideConveneClearance({
+    askingHumanClearance: clearanceForPrincipal(alias?.principal.sensitivityClearance),
+    targetAgentSensitivity: agentRow?.sensitivity,
+  });
+  if (decision.permitted) return;
+
+  await recordDelegationHop({
+    fromAgentId: target.agentId,
+    toAgentId: target.agentId,
+    status: "blocked",
+    reason: conveneDenialAuditReason({
+      targetAgentId: target.agentId,
+      requiredSensitivity: coerceDataSensitivity(agentRow?.sensitivity),
+    }),
+    originUserId: userId,
+  });
+  throw new ConveneDeniedError(CONVENE_DENIED_MESSAGE);
+}
+
+async function resolveTargetOrThrow(targetAgent: string, userId: string) {
   const target = await resolveAgent(targetAgent);
   if (!target) throw new Error(`UNKNOWN_AGENT: ${targetAgent}`);
   // Lifecycle gate (EP-COWORKER-LIFECYCLE Phase 3): a draft/retired coworker —
@@ -158,6 +221,12 @@ async function resolveTargetOrThrow(targetAgent: string) {
   if (!verdict.allowed) {
     throw new Error(`COWORKER_NOT_SUMMONABLE: ${verdict.reason}`);
   }
+
+  // BI-154DAA7E: disclosure clamp. Runs AFTER the lifecycle gate so an
+  // unsummonable coworker still reports as unsummonable rather than as a
+  // clearance refusal, which would let the generic refusal hint at a
+  // restricted matter that does not exist.
+  await enforceConveneClearance(target, userId);
   return target;
 }
 
@@ -171,7 +240,7 @@ export async function requestCoworker(
 ): Promise<CollaborationResult> {
   const objective = input.objective?.trim();
   if (!objective) throw new Error("OBJECTIVE_REQUIRED");
-  const target = await resolveTargetOrThrow(input.targetAgent);
+  const target = await resolveTargetOrThrow(input.targetAgent, userId);
 
   // Slice 2: enforce the caller's declared delegatesTo / escalatesTo before any
   // child thread is spawned. Throws HandoffDeniedError (and records a blocked
@@ -237,7 +306,7 @@ export async function summonCoworker(
 ): Promise<CollaborationResult> {
   const objective = input.objective?.trim();
   if (!objective) throw new Error("OBJECTIVE_REQUIRED");
-  const target = await resolveTargetOrThrow(input.targetAgent);
+  const target = await resolveTargetOrThrow(input.targetAgent, userId);
 
   const { child, taskRunId } = await spawnWorkThread(
     {

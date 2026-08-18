@@ -1,25 +1,25 @@
 import { dedupeRoomSourceRefs, roomText } from "./room-projection-utils";
 import { getWorkCaseSourceEntry } from "./source-registry";
 import type {
-  WorkRoomOutcomePacket,
-  WorkRoomOutcomePacketCategory,
+  WorkroomOutcomePacket,
+  WorkroomOutcomePacketCategory,
 } from "./room-types";
 import type { WorkCaseSourceRef } from "./case-types";
 
-export type WorkRoomOutcomeFactProvenance = "canonical" | "raw-chat";
+export type WorkroomOutcomeFactProvenance = "canonical" | "raw-chat";
 
-export interface WorkRoomOutcomeFact {
-  category: WorkRoomOutcomePacketCategory;
+export interface WorkroomOutcomeFact {
+  category: WorkroomOutcomePacketCategory;
   sourceRef: WorkCaseSourceRef;
-  provenance: WorkRoomOutcomeFactProvenance;
+  provenance: WorkroomOutcomeFactProvenance;
 }
 
-export interface BuildWorkRoomOutcomePacketInput {
+export interface BuildWorkroomOutcomePacketInput {
   sourceKey: string;
-  outcomeState: WorkRoomOutcomePacket["outcomeState"];
+  outcomeState: WorkroomOutcomePacket["outcomeState"];
   summary: string;
-  facts: readonly WorkRoomOutcomeFact[];
-  unresolvedWork?: WorkRoomOutcomePacket["unresolvedWork"];
+  facts: readonly WorkroomOutcomeFact[];
+  unresolvedWork?: WorkroomOutcomePacket["unresolvedWork"];
   accountablePrincipalRef: string;
   verifiedByRef?: string | null;
   completedAt: Date | string;
@@ -27,7 +27,7 @@ export interface BuildWorkRoomOutcomePacketInput {
   sourceRefs?: readonly WorkCaseSourceRef[];
 }
 
-export type WorkRoomOutcomePacketErrorReason =
+export type WorkroomOutcomePacketErrorReason =
   | "unknown_source"
   | "missing_summary"
   | "missing_accountable"
@@ -36,20 +36,20 @@ export type WorkRoomOutcomePacketErrorReason =
   | "missing_required_category"
   | "invalid_unresolved_disposition";
 
-export class WorkRoomOutcomePacketError extends Error {
+export class WorkroomOutcomePacketError extends Error {
   constructor(
-    readonly reason: WorkRoomOutcomePacketErrorReason,
+    readonly reason: WorkroomOutcomePacketErrorReason,
     message: string,
   ) {
     super(message);
-    this.name = "WorkRoomOutcomePacketError";
+    this.name = "WorkroomOutcomePacketError";
   }
 }
 
 function iso(value: Date | string): string {
   const date = value instanceof Date ? value : new Date(value);
   if (Number.isNaN(date.getTime())) {
-    throw new WorkRoomOutcomePacketError("invalid_completed_at", "Outcome Packet completion time must be valid.");
+    throw new WorkroomOutcomePacketError("invalid_completed_at", "Outcome Packet completion time must be valid.");
   }
   return date.toISOString();
 }
@@ -59,8 +59,8 @@ function optionalIso(value: Date | string | null | undefined): string | null {
 }
 
 function refsFor(
-  facts: readonly WorkRoomOutcomeFact[],
-  category: WorkRoomOutcomePacketCategory,
+  facts: readonly WorkroomOutcomeFact[],
+  category: WorkroomOutcomePacketCategory,
 ): WorkCaseSourceRef[] {
   return dedupeRoomSourceRefs(
     facts.filter((fact) => fact.category === category).map((fact) => fact.sourceRef),
@@ -68,13 +68,13 @@ function refsFor(
 }
 
 function validateUnresolvedWork(
-  unresolvedWork: BuildWorkRoomOutcomePacketInput["unresolvedWork"],
-): WorkRoomOutcomePacket["unresolvedWork"] {
+  unresolvedWork: BuildWorkroomOutcomePacketInput["unresolvedWork"],
+): WorkroomOutcomePacket["unresolvedWork"] {
   const allowed = new Set(["carry-over", "new-case", "deferred", "accepted"]);
   return (unresolvedWork ?? []).map((item) => {
     const summary = roomText(item.summary);
     if (!summary || !allowed.has(item.disposition)) {
-      throw new WorkRoomOutcomePacketError(
+      throw new WorkroomOutcomePacketError(
         "invalid_unresolved_disposition",
         "Unresolved work needs a summary and a carry-over, new-case, deferred, or accepted disposition.",
       );
@@ -83,27 +83,27 @@ function validateUnresolvedWork(
   });
 }
 
-export function buildWorkRoomOutcomePacket(
-  input: BuildWorkRoomOutcomePacketInput,
-): WorkRoomOutcomePacket {
+export function buildWorkroomOutcomePacket(
+  input: BuildWorkroomOutcomePacketInput,
+): WorkroomOutcomePacket {
   const source = getWorkCaseSourceEntry(input.sourceKey);
   if (!source) {
-    throw new WorkRoomOutcomePacketError("unknown_source", `Work Room source '${input.sourceKey}' is not registered.`);
+    throw new WorkroomOutcomePacketError("unknown_source", `Work Room source '${input.sourceKey}' is not registered.`);
   }
   const summary = roomText(input.summary);
   if (!summary) {
-    throw new WorkRoomOutcomePacketError("missing_summary", "Outcome Packet summary is required.");
+    throw new WorkroomOutcomePacketError("missing_summary", "Outcome Packet summary is required.");
   }
   const accountablePrincipalRef = roomText(input.accountablePrincipalRef);
   if (!accountablePrincipalRef) {
-    throw new WorkRoomOutcomePacketError("missing_accountable", "Outcome Packet accountable principal is required.");
+    throw new WorkroomOutcomePacketError("missing_accountable", "Outcome Packet accountable principal is required.");
   }
 
   const invalidChat = input.facts.find(
     (fact) => fact.provenance === "raw-chat" && ["decisions", "artifacts", "evidence"].includes(fact.category),
   );
   if (invalidChat) {
-    throw new WorkRoomOutcomePacketError(
+    throw new WorkroomOutcomePacketError(
       "raw_chat_not_durable",
       `Raw chat cannot satisfy the '${invalidChat.category}' Outcome Packet field.`,
     );
@@ -118,7 +118,7 @@ export function buildWorkRoomOutcomePacket(
   };
   for (const category of source.roomProjection.outcomePacket.requiredCategories) {
     if (refs[category].length === 0) {
-      throw new WorkRoomOutcomePacketError(
+      throw new WorkroomOutcomePacketError(
         "missing_required_category",
         `${source.displayLabel} Outcome Packets require '${category}'.`,
       );
@@ -129,7 +129,7 @@ export function buildWorkRoomOutcomePacket(
     ...(input.sourceRefs ?? []),
     ...Object.values(refs).flat(),
   ]);
-  const packet: WorkRoomOutcomePacket = {
+  const packet: WorkroomOutcomePacket = {
     outcomeState: input.outcomeState,
     summary,
     decisionRefs: refs.decisions,

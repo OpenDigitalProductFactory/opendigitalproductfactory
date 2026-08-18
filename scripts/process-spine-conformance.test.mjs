@@ -74,5 +74,28 @@ test("typecheck gates include the bootstrap planning library", () => {
   assert.match(hook, /RUN_BOOTSTRAP=0/);
   assert.match(hook, /packages\/dpf-bootstrap\/\*\)\s+RUN_BOOTSTRAP=1/);
   assert.match(hook, /run_typecheck "@dpf\/bootstrap"\s+"packages\/dpf-bootstrap"/);
-  assert.match(rootPackage.scripts.typecheck, /--filter @dpf\/bootstrap typecheck/);
+
+  // The property is "root typecheck covers @dpf/bootstrap", not "root
+  // typecheck names @dpf/bootstrap". A recursive sweep satisfies it for every
+  // package at once, so pinning the explicit filter string would forbid the
+  // stronger form — and an enumerated list is what let dpf-edge-node go
+  // untypechecked until its release build failed.
+  const rootTypecheck = rootPackage.scripts.typecheck;
+  const sweepsWorkspace = /pnpm -r\b[^&|]*\btypecheck\b/.test(rootTypecheck);
+  assert.ok(
+    sweepsWorkspace || /--filter @dpf\/bootstrap typecheck/.test(rootTypecheck),
+    `root typecheck must cover @dpf/bootstrap, got: ${rootTypecheck}`,
+  );
+
+  // A sweep only covers the package if the package actually defines the
+  // script the sweep looks for, so assert that rather than assuming it.
+  if (sweepsWorkspace) {
+    const bootstrapPackage = JSON.parse(
+      readFileSync(join(repoRoot, "packages/dpf-bootstrap/package.json"), "utf8"),
+    );
+    assert.ok(
+      bootstrapPackage.scripts?.typecheck,
+      "@dpf/bootstrap must define a typecheck script for the recursive sweep to pick it up",
+    );
+  }
 });

@@ -174,9 +174,37 @@ effectiveWeight = confidenceWeight × freshnessFactor × evidenceFactor × revie
 where each factor is an independent [0,1] discount: `freshnessFactor` (current 1 / stale 0.5 /
 superseded 0.2 / contradicted 0), `evidenceFactor` by grade (A 1 / B 0.75 / C 0.4 / D 0),
 `reviewFactor` (approved 1 / draft 0.35 / rejected 0), `promotionFactor` (promoted 1 / candidate
-0.45 / revoked 0). Confidence for a domain is the mean `effectiveWeight` across applicable
-materials, minus a risk-tier penalty (0 / 0.1 / 0.25 / 0.5 for low/medium/high/critical) and a
-recent-override penalty (capped at 0.3).
+0.45 / revoked 0).
+
+Confidence is then computed one of two ways, minus a risk-tier penalty (0 / 0.1 / 0.25 / 0.5 for
+low/medium/high/critical) and a recent-override penalty (capped at 0.3):
+
+- **Content-blind (WWMD / build-studio):** the mean `effectiveWeight` across applicable materials.
+  Coverage-shaped — it answers "how well-grounded is this class", not "what does our doctrine say
+  about THIS question".
+- **Content-aware (WWWD, BI-7E1F128A):** each material is weighted by its semantic relevance to the
+  question, and confidence is the strongest relevant DIRECTIONAL weight scaled by how one-sided the
+  relevant material is (`bestDirectionalWeight × |alignmentScore|`). Relevance is min-max normalised
+  **within the set actually scored** (BI-F5F2869D) — normalising across material that never gets
+  scored leaves the scored set with no 1.0 and an arbitrary ceiling.
+
+**Alignment is not a licence to act.** A confident `approve` does NOT authorise the gate to decide.
+It acts autonomously only when the owner has ALREADY RULED on this question — a `ruled`-tier stance
+(grade A, weight 1.0) that dominates the relevant material, surfaced as `settledByRuling`. Anything
+else escalates with `gapReason: "aligned-not-settled"`, rendered to the operator as **"New
+proposition"** rather than a doctrine gap (BI-F5F2869D).
+
+This is deliberate, not a threshold that needs raising. Approving whatever matches recorded doctrine
+would mean the business only ever does what it already does; reviewing an unaligned or novel proposal
+is exactly where a new idea surfaces. The goal is better-sorted escalations, not fewer. The `decline`
+direction is unaffected — saying no to an off-stance idea is low-consequence and does not need the
+owner's live call.
+
+The recent-override penalty counts times the owner OVERRULED the profile in that class — the gate
+recommended one option and the human chose another. It deliberately does not count answering an
+escalation that carried no recommendation, nor an answer that agreed, nor one where no structured
+option was picked (BI-ACF0D6D4). Counting answers rather than overrules made working through a
+review queue drive the penalty to its cap and suppress the next decision.
 
 **External grounding.** A confidence score built as a **product of independent reliability
 discount factors applied to a base weight** is the same structural move as the **GRADE framework**

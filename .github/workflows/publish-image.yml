@@ -108,6 +108,14 @@ jobs:
             context: .
             file: services/edge-node/Dockerfile
             target: ""
+          # postgres is BUILT in the base compose (baked pgvector + inngest init,
+          # deliberately no host bind mount). Without publishing it, a consumer
+          # install has no database image and `up` tries to build from a ./docker
+          # context that a no-checkout install does not have.
+          - name: dpf-postgres
+            context: .
+            file: docker/postgres/Dockerfile
+            target: ""
         platform:
           - arch: amd64
             runner: ubuntu-latest
@@ -157,6 +165,15 @@ jobs:
           build-args: |
             DPF_VERSION=${{ github.sha }}
             DPF_PLATFORM_VERSION=${{ github.ref_name }}
+          # Same identity, in the OCI-standard place. /app/.dpf-image-version is inside
+          # the filesystem, so reading it costs a `docker create` + `docker cp`; a label
+          # is readable straight from the manifest. `latest` sat 1851 commits behind main
+          # for ~7 weeks and nothing caught it, partly because the only identity was one
+          # no tool would think to look for. Keep both: the file is what the running
+          # portal self-reports, the label is what tooling inspects.
+          labels: |
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ github.ref_name }}
           # Push by digest only — the merge job assembles the named
           # tag manifest list. `type=image,name=...,push-by-digest=true`
           # uploads the layers under the digest with no human tag.
@@ -200,6 +217,7 @@ jobs:
           - dpf-browser-use
           - dpf-adp
           - dpf-edge-node
+          - dpf-postgres
 
     steps:
       - uses: actions/checkout@v7

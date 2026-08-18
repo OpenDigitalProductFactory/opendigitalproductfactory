@@ -42,7 +42,13 @@ export type RetentionCategory =
   | "eval-history"
   | "inbox"
   | "self-upgrade-log"
-  | "coordination-log";
+  | "coordination-log"
+  // BI-873F3C48: external integration / channel / sync telemetry (webhook
+  // receipts, delivery attempts, connector tool-call logs).
+  | "integration-log"
+  // BI-873F3C48: per-install edge estate event streams (EdgeEvent/ChangeEvent,
+  // EP-8B03CB06 makes these a first-class growth axis).
+  | "edge-telemetry";
 
 export const RETENTION_CATEGORIES: readonly RetentionCategory[] = [
   "ai-telemetry",
@@ -58,6 +64,8 @@ export const RETENTION_CATEGORIES: readonly RetentionCategory[] = [
   "inbox",
   "self-upgrade-log",
   "coordination-log",
+  "integration-log",
+  "edge-telemetry",
 ] as const;
 
 /** Minimal structural view of a Prisma model delegate the engine needs. Keeping
@@ -351,6 +359,194 @@ export const PURGE_POLICIES: readonly PurgePolicy[] = [
     rationale:
       "Coworker conversations with no activity for ~18 months, cascading their messages + attachments. Conservative default; regulated industries lengthen via floors. Selection by last activity so active threads are never swept.",
   },
+
+  // ── BI-873F3C48 (Simplify & Strengthen W3): full growth-table coverage ─────
+  // Append-only event/log/telemetry tables found unenrolled by the 2026-08-16
+  // architecture pass (§3.2-e). Each enrollment below pairs with a leading
+  // time-column index (migration 20260816101000_retention_enrollment_time_indexes)
+  // so the sweep never seq-scans. Growth-shaped models deliberately NOT enrolled
+  // (business records / aggregates) live on the check-retention-enrollment.mjs
+  // allowlist with owner + expiry.
+  {
+    model: "workEngagementActivity",
+    label: "Work engagement activity ledger",
+    category: "coordination-log",
+    timestampField: "recordedAt",
+    baseRetentionDays: DAYS_180,
+    rationale:
+      "Per-engagement activity rows (kind/summary/payload). Operational coordination trail; 6 months covers post-hoc investigation.",
+  },
+  {
+    model: "backlogItemActivity",
+    label: "Backlog item activity ledger",
+    category: "audit-log",
+    timestampField: "recordedAt",
+    baseRetentionDays: DAYS_365,
+    rationale:
+      "Per-BI activity/gate trail. One year of work-history audit; the BacklogItem row itself (status, links) is the durable record.",
+  },
+  {
+    model: "workroomActivity",
+    label: "Workroom activity ledger",
+    category: "coordination-log",
+    timestampField: "recordedAt",
+    baseRetentionDays: DAYS_180,
+    rationale:
+      "Per-workroom activity rows. Workrooms are reaped when idle; their activity trail is operational, 6 months.",
+  },
+  {
+    model: "runtimeCapabilityTransitionEvent",
+    label: "Runtime capability transition events",
+    category: "coordination-log",
+    timestampField: "createdAt",
+    baseRetentionDays: DAYS_90,
+    rationale:
+      "Per-transition outcome events for runtime capability orchestration. Debugging value decays fast; 90 days.",
+  },
+  {
+    model: "integrationCallbackReceipt",
+    label: "Integration callback receipts",
+    category: "integration-log",
+    timestampField: "createdAt",
+    baseRetentionDays: DAYS_90,
+    rationale:
+      "Webhook/callback dedup receipts. Only needed within a provider's replay window; 90 days is generous.",
+  },
+  {
+    model: "agentBudgetEvent",
+    label: "Agent budget events",
+    category: "ai-telemetry",
+    timestampField: "createdAt",
+    baseRetentionDays: DAYS_180,
+    rationale:
+      "Per-inference/tool-call cost rows (mirrors tokenUsage). Kept 6 months for cost reconciliation; aggregates live elsewhere.",
+  },
+  {
+    model: "transcriptCleanupAudit",
+    label: "Transcript cleanup audit",
+    category: "security-audit",
+    timestampField: "createdAt",
+    baseRetentionDays: DAYS_365,
+    rationale:
+      "Raw-vs-cleaned transcript records incl. injection-suspicion indicators. One-year security-audit window (holds raw text — purging is also data-minimization).",
+  },
+  {
+    model: "identityResolutionLog",
+    label: "Discovery identity resolution log",
+    category: "audit-log",
+    timestampField: "createdAt",
+    baseRetentionDays: DAYS_180,
+    rationale:
+      "Per-resolution evidence rows from discovery sweeps. The resolved inventory entities are the durable record; 6 months.",
+  },
+  {
+    model: "discoveryFingerprintObservation",
+    label: "Discovery fingerprint observations",
+    category: "audit-log",
+    timestampField: "createdAt",
+    baseRetentionDays: DAYS_180,
+    rationale:
+      "Raw fingerprint evidence feeding rule approval. Approved rules are the durable output; observations disposable after 6 months.",
+  },
+  {
+    model: "adminActivity",
+    label: "Admin tool activity log",
+    category: "security-audit",
+    timestampField: "createdAt",
+    baseRetentionDays: DAYS_365,
+    rationale:
+      "Admin tool invocations (tiered, incl. blocked/denied). One-year security-audit baseline; regulated industries lengthen via floors.",
+  },
+  {
+    model: "toolExecutionReceipt",
+    label: "Tool execution receipts",
+    category: "audit-log",
+    timestampField: "createdAt",
+    baseRetentionDays: DAYS_365,
+    rationale:
+      "Verification receipts for tool executions. Matches the parent toolExecution window (365d); receipts also cascade when the parent purges.",
+  },
+  {
+    model: "documentLifecycleEvent",
+    label: "Document lifecycle events",
+    category: "audit-log",
+    timestampField: "createdAt",
+    baseRetentionDays: DAYS_365,
+    rationale:
+      "Document state-transition audit trail. One year; the Document row carries the current state and cascades its events on delete.",
+  },
+  {
+    model: "communicationDeliveryAttempt",
+    label: "Communication delivery attempts",
+    category: "integration-log",
+    timestampField: "createdAt",
+    baseRetentionDays: DAYS_90,
+    rationale:
+      "Per-channel delivery attempt rows. Delivery troubleshooting value decays in days; 90 days.",
+  },
+  // LifecycleEvent and HospitalityServiceTurnEvent are deliberately NOT
+  // enrolled: both hold standing domain-lifecycle-managed stewardship
+  // exemptions (scripts/stewardship-exemptions.txt) — their rows follow the
+  // lifecycle of the thing they evidence, and age-based deletion would break
+  // accountability history. Listed on the retention-enrollment guard allowlist
+  // with that reason.
+  {
+    model: "appointmentSyncEvent",
+    label: "Appointment sync events",
+    category: "integration-log",
+    timestampField: "occurredAt",
+    baseRetentionDays: DAYS_90,
+    rationale:
+      "Cross-channel appointment sync/correlation telemetry. The appointment records are durable; sync events disposable after 90 days.",
+  },
+  {
+    model: "queueTelemetryEvent",
+    label: "Queue telemetry events",
+    category: "coordination-log",
+    timestampField: "createdAt",
+    baseRetentionDays: DAYS_90,
+    rationale:
+      "Queue transition telemetry feeding flow metrics. Aggregated dashboards are the durable output; 90 days of raw rows.",
+  },
+  {
+    model: "edgeEvent",
+    label: "Edge estate events",
+    category: "edge-telemetry",
+    timestampField: "createdAt",
+    baseRetentionDays: DAYS_180,
+    // Never sweep an alert that is still open (triggered/acknowledged) — mirror
+    // of the notification read:true rule. Only settled events age out.
+    extraWhere: { status: { in: ["resolved", "suppressed"] } },
+    rationale:
+      "Per-node edge telemetry events (SNMP/syslog/probe detections). Settled events past 6 months are disposable; open alerts are never swept regardless of age.",
+  },
+  {
+    model: "changeEvent",
+    label: "Edge change-detection events",
+    category: "edge-telemetry",
+    timestampField: "createdAt",
+    baseRetentionDays: DAYS_365,
+    rationale:
+      "Configuration/state change detections from edge nodes. One year of change history for estate forensics.",
+  },
+  {
+    model: "staffingAssignmentEvent",
+    label: "Staffing assignment events",
+    category: "audit-log",
+    timestampField: "createdAt",
+    baseRetentionDays: DAYS_365,
+    rationale:
+      "Assignment lifecycle transitions (proposed/confirmed/declined/…). Scheduling audit — NOT a wage/payroll record (those are retained); one year.",
+  },
+  {
+    model: "integrationToolCallLog",
+    label: "Integration tool call log",
+    category: "integration-log",
+    timestampField: "calledAt",
+    baseRetentionDays: DAYS_180,
+    rationale:
+      "Per-call connector telemetry (durations, error codes, arg hashes). Efficiency analysis uses recent windows; 6 months.",
+  },
 ] as const;
 
 // ── Retained datasets (regulated — NEVER auto-purged) ───────────────────────
@@ -367,6 +563,7 @@ export const PURGE_POLICIES: readonly PurgePolicy[] = [
 // parts of that BI.
 
 export const RETAINED_DATASETS: readonly RetainedDataset[] = [
+  { model: "initiativeArtifactRetentionPin", label: "Initiative artifact retention pins", regulatoryBasis: "Approved initiative-governance baseline evidence is permanent until a separately governed, hold-aware exceptional disposition", minRetentionYears: Number.POSITIVE_INFINITY },
   // Financial records — IRS/SOX-style 7-year floor.
   { model: "invoice", label: "Invoices", regulatoryBasis: "Financial record retention (IRS / SOX-style statutory)", minRetentionYears: 7 },
   { model: "invoiceLineItem", label: "Invoice line items", regulatoryBasis: "Financial record retention", minRetentionYears: 7 },
@@ -389,6 +586,10 @@ export const RETAINED_DATASETS: readonly RetainedDataset[] = [
   { model: "storefrontOrder", label: "Storefront orders", regulatoryBasis: "Sales/financial record retention", minRetentionYears: 7 },
   { model: "storefrontDonation", label: "Storefront donations", regulatoryBasis: "Nonprofit financial record retention", minRetentionYears: 7 },
   { model: "rentalAgreement", label: "Rental agreements", regulatoryBasis: "Contract / financial record retention", minRetentionYears: 7 },
+
+  // Payroll records (recruiting→hiring→paying seam).
+  { model: "payRun", label: "Pay runs", regulatoryBasis: "Payroll/wage record retention (IRS employment-tax + FLSA payroll recordkeeping)", minRetentionYears: 7 },
+  { model: "payslip", label: "Payslips", regulatoryBasis: "Payroll/wage record retention (IRS employment-tax + FLSA payroll recordkeeping)", minRetentionYears: 7 },
 
   // Tax records.
   { model: "taxRemittanceRun", label: "Tax remittance runs", regulatoryBasis: "Tax record retention", minRetentionYears: 7 },
@@ -440,6 +641,12 @@ export const RETAINED_DATASETS: readonly RetainedDataset[] = [
   // window. (A privacy-minimization purge BEYOND the statutory floor is an
   // operator policy decision — see spec §10; not a fabricated window here.)
   { model: "protectedMonitoringObservation", label: "Protected-class monitoring observations", regulatoryBasis: "NYC LL144 bias-audit / EEOC Title VII adverse-impact record retention", minRetentionYears: 1 },
+
+  // Care coordination audit trails (BI-873F3C48). Patient appointment/intake
+  // status histories are part of the clinical scheduling record — HIPAA-adjacent
+  // ~6-year floor, mirroring the healthcare-wellness industry floor.
+  { model: "careAppointmentStatusEvent", label: "Care appointment status events", regulatoryBasis: "HIPAA-adjacent clinical scheduling record retention", minRetentionYears: 6 },
+  { model: "careIntakeStatusEvent", label: "Care intake status events", regulatoryBasis: "HIPAA-adjacent clinical intake record retention", minRetentionYears: 6 },
 ] as const;
 
 /** Models the engine will purge (for guard tests + reporting). */

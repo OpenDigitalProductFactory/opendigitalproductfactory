@@ -1,6 +1,6 @@
 import { encodeWorkCaseKey } from "./workspace-case-loader";
 import {
-  buildCanonicalWorkRoomMetadata,
+  buildCanonicalWorkroomMetadata,
   normalizeInboundRoomEvent,
   type NormalizedInboundRoomEvent,
 } from "./room-channel-continuity";
@@ -35,7 +35,7 @@ export type RoomChannelIngressDb = {
   };
 };
 
-export async function ingestWorkRoomChannelEvent(input: {
+export async function ingestWorkroomChannelEvent(input: {
   db: RoomChannelIngressDb;
   channelType: string;
   providerKey: string;
@@ -123,7 +123,7 @@ export async function ingestWorkRoomChannelEvent(input: {
       structuredPayload: {
         externalEventId: eventId,
         principalRef: normalized.principalRef,
-        ...buildCanonicalWorkRoomMetadata(normalized.room),
+        ...buildCanonicalWorkroomMetadata(normalized.room),
         requestedAction: normalized.requestedAction,
       },
       channel: input.channelType,

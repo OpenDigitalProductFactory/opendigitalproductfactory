@@ -1,23 +1,23 @@
 import type { WorkCaseActorRef, WorkCaseSourceRef } from "./case-types";
 import type {
-  WorkRoomActivityKind,
-  WorkRoomActivityView,
+  WorkroomActivityKind,
+  WorkroomActivityView,
 } from "./room-types";
 
-export interface WorkRoomActivityInput {
+export interface WorkroomActivityInput {
   sourceEventId: string;
-  kind: WorkRoomActivityKind;
+  kind: WorkroomActivityKind;
   occurredAt: Date | string | null;
   actorRef: WorkCaseActorRef | null;
   summary: string;
   sourceRef: WorkCaseSourceRef;
-  emphasis?: WorkRoomActivityView["emphasis"];
-  channel?: WorkRoomActivityView["channel"];
+  emphasis?: WorkroomActivityView["emphasis"];
+  channel?: WorkroomActivityView["channel"];
 }
 
 function defaultEmphasis(
-  kind: WorkRoomActivityKind,
-): WorkRoomActivityView["emphasis"] {
+  kind: WorkroomActivityKind,
+): WorkroomActivityView["emphasis"] {
   if (kind === "message") return "quiet";
   if (
     kind === "decision-proposed"
@@ -38,10 +38,10 @@ function iso(value: Date | string | null): string | null {
   return value instanceof Date ? value.toISOString() : value;
 }
 
-export function normalizeWorkRoomActivities(
-  activities: readonly WorkRoomActivityInput[],
-): WorkRoomActivityView[] {
-  const keyed = new Map<string, WorkRoomActivityView>();
+export function normalizeWorkroomActivities(
+  activities: readonly WorkroomActivityInput[],
+): WorkroomActivityView[] {
+  const keyed = new Map<string, WorkroomActivityView>();
   for (const activity of activities) {
     const sourceEventId = activity.sourceEventId.trim();
     if (!sourceEventId) continue;

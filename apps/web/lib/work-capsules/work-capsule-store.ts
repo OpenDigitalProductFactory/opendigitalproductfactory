@@ -15,7 +15,6 @@ import {
   normalizeWorkCapsuleScopeInput,
   parseScopeClaims,
   type ScopeClaim,
-  type WorkCapsuleActivityKind,
   type WorkCapsuleBranchTaxonomy,
   type WorkCapsuleEvidenceKind,
   type WorkCapsuleExecutorKind,
@@ -23,8 +22,6 @@ import {
   type WorkCapsuleSource,
   type WorkCapsuleStatus,
 } from "@/lib/work-capsules";
-import { revalidatePortalContext } from "@/lib/portal-context/invalidation";
-import { publishRecordedWorkCapsuleActivity } from "@/lib/work-capsules/activity-events";
 import { admitRuntimeGuardedWork } from "@/lib/platform-runtime/work-admission";
 import { planCapsuleChangeImpact, type CapsuleChangeImpactContract } from "./change-impact-contract";
 import {
@@ -38,9 +35,11 @@ import {
   type CapsuleAdoptionInput,
 } from "./work-capsule-branch-identity";
 import type { CapsuleDb, WorkCapsuleActor } from "./work-capsule-store-types";
+import { recordWorkCapsuleActivity as recordActivity } from "./work-capsule-activity-store";
 
 export type { CapsuleDb, WorkCapsuleActor } from "./work-capsule-store-types";
 export { CapsuleBranchOccupiedError } from "./work-capsule-branch-identity";
+export { declareWorkCapsuleIntent } from "./work-capsule-intent-store";
 
 type CapsuleCreateInput = {
   title: string;
@@ -102,31 +101,6 @@ async function admitCapsuleWork(db: CapsuleDb, guard: `work-capsule:${string}`):
   await admitRuntimeGuardedWork(db as never, guard);
 }
 
-async function recordActivity(
-  db: CapsuleDb,
-  input: {
-    workCapsuleId: string;
-    kind: WorkCapsuleActivityKind;
-    summary: string;
-    payload?: Record<string, unknown>;
-    actor: WorkCapsuleActor;
-  },
-) {
-  const activity = await db.workCapsuleActivity.create({
-    data: {
-      workCapsuleId: input.workCapsuleId,
-      kind: input.kind,
-      summary: input.summary,
-      payload: input.payload ?? {},
-      recordedById: input.actor.userId,
-      recordedByAgentId: input.actor.agentId,
-    },
-  });
-  publishRecordedWorkCapsuleActivity(input.workCapsuleId, activity?.id);
-  revalidatePortalContext();
-  return activity;
-}
-
 export async function createWorkCapsule(args: {
   db: CapsuleDb;
   input: CapsuleCreateInput;
@@ -141,7 +115,7 @@ export async function createWorkCapsule(args: {
   }
   const scope = normalizeWorkCapsuleScopeInput(args.input.scope);
 
-  const existing = await args.db.workCapsule.findUnique({
+  const existing = await args.db.workroom.findUnique({
     where: { idempotencyKey: args.input.idempotencyKey },
   });
   if (existing) return existing;
@@ -151,7 +125,7 @@ export async function createWorkCapsule(args: {
     return await inTransaction(args.db, async (tx) => {
       const status = args.input.status ?? (args.input.executorKind ? "ready" : "draft");
       if (status !== "draft") await admitCapsuleWork(tx, `work-capsule:${args.input.source}`);
-      const created = await tx.workCapsule.create({
+      const created = await tx.workroom.create({
         data: {
           capsuleId: nextCapsuleId(),
           title: args.input.title,
@@ -190,7 +164,7 @@ export async function createWorkCapsule(args: {
     });
   } catch (error) {
     if (isUniqueViolation(error)) {
-      const winner = await args.db.workCapsule.findUnique({
+      const winner = await args.db.workroom.findUnique({
         where: { idempotencyKey: args.input.idempotencyKey },
       });
       if (winner) return winner;
@@ -213,7 +187,7 @@ export async function adoptWorktreeCapsule(args: {
   // Read that row regardless of lifecycle: an abandoned same-BI capsule is the
   // durable identity to resume, while a foreign/terminal identity must refuse
   // instead of falling through to an impossible duplicate create (BI-E363A524).
-  const existing = await args.db.workCapsule.findFirst({
+  const existing = await args.db.workroom.findFirst({
     where: {
       repositoryFullName: args.input.repositoryFullName,
       headBranch: args.input.headBranch,
@@ -226,7 +200,7 @@ export async function adoptWorktreeCapsule(args: {
   if (resumePlan) {
     return inTransaction(args.db, async (tx) => {
       await admitCapsuleWork(tx, "work-capsule:external-adoption");
-      const resumed = await tx.workCapsule.update(resumePlan.update);
+      const resumed = await tx.workroom.update(resumePlan.update);
       await recordActivity(tx, { ...resumePlan.activity, actor: args.actor });
       return resumed;
     });
@@ -239,7 +213,7 @@ export async function adoptWorktreeCapsule(args: {
     // cut before the BI was chosen still join the BI↔location record.
     if (args.input.backlogItemId && existing.backlogItemId == null) {
       const bound = await inTransaction(args.db, async (tx) => {
-        const updated = await tx.workCapsule.update({
+        const updated = await tx.workroom.update({
           where: { capsuleId: existing.capsuleId },
           data: {
             backlogItemId: args.input.backlogItemId,
@@ -272,7 +246,7 @@ export async function adoptWorktreeCapsule(args: {
   try {
     return await inTransaction(args.db, async (tx) => {
       await admitCapsuleWork(tx, "work-capsule:external-adoption");
-      const capsule = await tx.workCapsule.create({
+      const capsule = await tx.workroom.create({
         data: {
           capsuleId: nextCapsuleId(),
           title: args.input.title,
@@ -316,7 +290,7 @@ export async function adoptWorktreeCapsule(args: {
     });
   } catch (error) {
     if (isUniqueViolation(error)) {
-      const winner = await args.db.workCapsule.findFirst({
+      const winner = await args.db.workroom.findFirst({
         where: {
           repositoryFullName: args.input.repositoryFullName,
           headBranch: args.input.headBranch,
@@ -362,7 +336,7 @@ export type BacklogWorkspaceConflict = {
  * Soft claim-at-start (BI-7D20BFDF): bind a BacklogItem to the location + session
  * that is starting work on it, so a directly-working agent's BI no longer looks
  * unclaimed to a parallel session. Creates (or reuses + late-binds) the
- * WorkCapsule for (repositoryFullName, headBranch) and stamps the BI claim
+ * Workroom for (repositoryFullName, headBranch) and stamps the BI claim
  * fields, FOLLOWING the existing 12h-stale claim convention.
  *
  * This is advisory, not a hard lock (per the WWMD kernel decision): an existing
@@ -450,7 +424,7 @@ export async function claimBacklogItemWorkspace(args: {
   // Conflict 2: another non-archived capsule on the SAME BI, on a different branch
   // or session. Multiple branches per BI are fine, but we still list them so the
   // caller can see the parallel work.
-  const otherCapsules = await args.db.workCapsule.findMany({
+  const otherCapsules = await args.db.workroom.findMany({
     where: {
       backlogItemId: item.itemId,
       archivedAt: null,
@@ -515,7 +489,7 @@ async function hasWorkspaceCollision(
   db: CapsuleDb,
   args: { capsuleId: string; headBranch: string; worktreePath: string },
 ): Promise<boolean> {
-  const existing = await db.workCapsule.findFirst({
+  const existing = await db.workroom.findFirst({
     where: {
       capsuleId: { not: args.capsuleId },
       archivedAt: null,
@@ -549,7 +523,7 @@ export async function planCapsuleWorkspace(args: {
     releaseOverride: args.releaseOverride,
   };
 
-  const capsule = await args.db.workCapsule.findUnique({
+  const capsule = await args.db.workroom.findUnique({
     where: { capsuleId: input.capsuleId },
   });
   if (!capsule) throw new Error(`Work Capsule ${input.capsuleId} not found`);
@@ -585,7 +559,7 @@ export async function planCapsuleWorkspace(args: {
   }
 
   return inTransaction(args.db, async (tx) => {
-    const updated = await tx.workCapsule.update({
+    const updated = await tx.workroom.update({
       where: { capsuleId: input.capsuleId },
       data: {
         headBranch,
@@ -614,7 +588,7 @@ export async function heartbeatWorkCapsule(args: {
 }) {
   const nextLease = leaseUntil(args.now ?? new Date());
   return inTransaction(args.db, async (tx) => {
-    const capsule = await tx.workCapsule.update({
+    const capsule = await tx.workroom.update({
       where: { capsuleId: args.capsuleId },
       data: {
         leaseHolderPrincipalId: args.actor.principalId,
@@ -657,7 +631,7 @@ export async function reassignWorkCapsuleExecutor(args: {
   }
   const nextLease = leaseUntil(args.now ?? new Date());
   return inTransaction(args.db, async (tx) => {
-    const current = await tx.workCapsule.findUnique({
+    const current = await tx.workroom.findUnique({
       where: { capsuleId: args.capsuleId },
       select: {
         id: true,
@@ -668,7 +642,7 @@ export async function reassignWorkCapsuleExecutor(args: {
     });
     if (!current) throw new Error(`Work Capsule ${args.capsuleId} not found`);
 
-    const updated = await tx.workCapsule.update({
+    const updated = await tx.workroom.update({
       where: { capsuleId: args.capsuleId },
       data: {
         executorKind: args.toExecutorKind,
@@ -708,7 +682,7 @@ export async function recordWorkCapsuleEvidence(args: {
     throw new Error("Invalid evidence kind");
   }
 
-  const capsule = await args.db.workCapsule.findUnique({
+  const capsule = await args.db.workroom.findUnique({
     where: { capsuleId: args.capsuleId },
   });
   if (!capsule) throw new Error(`Work Capsule ${args.capsuleId} not found`);
@@ -724,7 +698,7 @@ export async function recordWorkCapsuleEvidence(args: {
 
 /**
  * Emit a human-legible agent-session activity (thought / action / question /
- * response / error) onto the WorkCapsule's timeline (BI-C41AB195). The capsule
+ * response / error) onto the Workroom's timeline (BI-C41AB195). The capsule
  * IS the teammate session; every executor and sub-worker writes to the SAME
  * capsule via this one writer, so multi-agent work rolls up into one feed on one
  * item rather than N separate surfaces. `payload.subtaskRef` (optional) lets a
@@ -744,7 +718,7 @@ export async function recordAgentActivity(args: {
     throw new Error("Invalid agent activity type");
   }
 
-  const capsule = await args.db.workCapsule.findUnique({
+  const capsule = await args.db.workroom.findUnique({
     where: { capsuleId: args.capsuleId },
   });
   if (!capsule) throw new Error(`Work Capsule ${args.capsuleId} not found`);
@@ -833,7 +807,7 @@ export async function detectScopeConflicts(args: {
   if (args.claims.length === 0) return [];
 
   const now = args.now ?? new Date();
-  const others = await args.db.workCapsule.findMany({
+  const others = await args.db.workroom.findMany({
     where: {
       capsuleId: { not: args.capsuleId },
       archivedAt: null,
@@ -889,7 +863,7 @@ export async function claimWorkCapsuleScope(args: {
   /** Prospective, advisory impact derived before the scope write. */
   buildChangeImpactContract?: (paths: string[]) => Promise<CapsuleChangeImpactContract>;
 }) {
-  const capsule = await args.db.workCapsule.findUnique({
+  const capsule = await args.db.workroom.findUnique({
     where: { capsuleId: args.capsuleId },
   });
   if (!capsule) throw new Error(`Work Capsule ${args.capsuleId} not found`);
@@ -947,7 +921,7 @@ export async function claimWorkCapsuleScope(args: {
     build: args.buildChangeImpactContract,
   });
   return inTransaction(args.db, async (tx) => {
-    const updated = await tx.workCapsule.update({
+    const updated = await tx.workroom.update({
       where: { capsuleId: args.capsuleId },
       data: {
         scopeClaims,
@@ -985,7 +959,7 @@ export async function releaseWorkCapsuleScope(args: {
   claims: ScopeReleaseInput[];
   actor: WorkCapsuleActor;
 }) {
-  const capsule = await args.db.workCapsule.findUnique({
+  const capsule = await args.db.workroom.findUnique({
     where: { capsuleId: args.capsuleId },
   });
   if (!capsule) throw new Error(`Work Capsule ${args.capsuleId} not found`);
@@ -996,7 +970,7 @@ export async function releaseWorkCapsuleScope(args: {
   const released = existing.filter((claim) => releaseKeys.has(`${claim.kind}:${claim.value}`));
 
   return inTransaction(args.db, async (tx) => {
-    const updated = await tx.workCapsule.update({
+    const updated = await tx.workroom.update({
       where: { capsuleId: args.capsuleId },
       data: { scopeClaims },
     });
@@ -1021,7 +995,7 @@ export async function updateWorkCapsuleStatus(args: {
 }) {
   if (!isWorkCapsuleStatus(args.status)) throw new Error("Invalid capsule status");
 
-  const capsule = await args.db.workCapsule.findUnique({
+  const capsule = await args.db.workroom.findUnique({
     where: { capsuleId: args.capsuleId },
   });
   if (!capsule) throw new Error(`Work Capsule ${args.capsuleId} not found`);
@@ -1037,7 +1011,7 @@ export async function updateWorkCapsuleStatus(args: {
   };
 
   return inTransaction(args.db, async (tx) => {
-    const updated = await tx.workCapsule.update({
+    const updated = await tx.workroom.update({
       where: { capsuleId: args.capsuleId },
       data: {
         status: args.status,

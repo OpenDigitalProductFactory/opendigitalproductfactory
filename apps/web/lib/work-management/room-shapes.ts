@@ -1,29 +1,30 @@
-import type { WorkRoomAccessLevel } from "./room-participation";
-import type { WorkRoomParticipantRole } from "./room-types";
+import type { WorkroomAccessLevel } from "./room-participation";
+import type { WorkroomParticipantRole } from "./room-types";
 
-export const WORK_ROOM_SHAPE_KEYS = [
+export const WORKROOM_SHAPE_KEYS = [
   "specialist-alignment",
   "approval-sign-off",
   "outward-review",
   "change-consequential",
   "escalation",
+  "craft-stewardship",
 ] as const;
-export type WorkRoomShapeKey = (typeof WORK_ROOM_SHAPE_KEYS)[number];
+export type WorkroomShapeKey = (typeof WORKROOM_SHAPE_KEYS)[number];
 
 type ShapeRole = Extract<
-  WorkRoomParticipantRole,
+  WorkroomParticipantRole,
   "coordinator" | "specialist" | "approver" | "reviewer"
 >;
 
-export type WorkRoomShapeDefinition = {
-  key: WorkRoomShapeKey;
+export type WorkroomShapeDefinition = {
+  key: WorkroomShapeKey;
   inclusionOrder: readonly ShapeRole[];
-  authorityLadderLevel: WorkRoomAccessLevel;
+  authorityLadderLevel: WorkroomAccessLevel;
   sensitivityStepUp: boolean;
   description: string;
 };
 
-const SHAPES: Record<WorkRoomShapeKey, WorkRoomShapeDefinition> = {
+const SHAPES: Record<WorkroomShapeKey, WorkroomShapeDefinition> = {
   "specialist-alignment": {
     key: "specialist-alignment",
     inclusionOrder: ["coordinator", "specialist", "approver"],
@@ -59,29 +60,36 @@ const SHAPES: Record<WorkRoomShapeKey, WorkRoomShapeDefinition> = {
     sensitivityStepUp: true,
     description: "A veto returns to the originating coordinator and accountable owner for accept-block or amendment.",
   },
+  "craft-stewardship": {
+    key: "craft-stewardship",
+    inclusionOrder: ["coordinator", "specialist"],
+    authorityLadderLevel: "content",
+    sensitivityStepUp: false,
+    description: "The standing WSID craft-stewardship room: profession specialists curate the corpus and triage findings under a coordinator at content-level authority.",
+  },
 };
 
-export function getWorkRoomShape(key: WorkRoomShapeKey): WorkRoomShapeDefinition {
+export function getWorkroomShape(key: WorkroomShapeKey): WorkroomShapeDefinition {
   return SHAPES[key];
 }
 
-export type WorkRoomShapeBinding = {
-  shape: WorkRoomShapeKey;
+export type WorkroomShapeBinding = {
+  shape: WorkroomShapeKey;
   initiator: { principalRef: string; kind: "person" | "agent" };
   requiredParticipants: Array<{ role: ShapeRole; principalRef: string }>;
-  authorityLadderLevel: WorkRoomAccessLevel;
+  authorityLadderLevel: WorkroomAccessLevel;
   stepUpRequired: boolean;
   gaps: ShapeRole[];
   allowed: boolean;
 };
 
-export function bindWorkRoomShape(input: {
-  shape: WorkRoomShapeKey;
-  initiator: WorkRoomShapeBinding["initiator"];
+export function bindWorkroomShape(input: {
+  shape: WorkroomShapeKey;
+  initiator: WorkroomShapeBinding["initiator"];
   participants: Partial<Record<ShapeRole, string>>;
   sensitivityCeiling: string | null;
-}): WorkRoomShapeBinding {
-  const definition = getWorkRoomShape(input.shape);
+}): WorkroomShapeBinding {
+  const definition = getWorkroomShape(input.shape);
   const gaps = definition.inclusionOrder.filter((role) => !input.participants[role]);
   const requiredParticipants = definition.inclusionOrder.flatMap((role) => {
     const principalRef = input.participants[role];

@@ -5,6 +5,8 @@ import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { isEntryModule } from "./lib/entry-module.mjs";
+
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 export const DEFAULT_MANIFEST = resolve(ROOT, "config/merge-readiness-policy.json");
 const TERMINAL_SUCCESS = new Set(["success", "skipped"]);
@@ -199,4 +201,4 @@ function main() {
   throw new Error(`unknown command: ${command}`);
 }
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) main();
+if (isEntryModule(import.meta.url)) main();

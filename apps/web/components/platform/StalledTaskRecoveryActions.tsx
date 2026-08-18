@@ -45,7 +45,7 @@ export function StalledTaskRecoveryActions({
     startTransition(async () => {
       const result = await serverTaskrunRetry(taskRunId, { force: isShipPhase });
       if (result.ok) {
-        setStatus({ kind: "success", message: `Retried as ${result.newTaskRunId}` });
+        setStatus({ kind: "success", message: `Retried as ${result.data.newTaskRunId}` });
         router.refresh();
       } else {
         setStatus({ kind: "error", message: result.error });

@@ -96,6 +96,111 @@ export const DERIVED_ARTIFACTS = [
     requiresBinary: "mmdc",
   },
   {
+    id: "architecture-counts",
+    description: "Generated architecture counts include (models/enums/migrations/principles/routes)",
+    sourceGlobs: [
+      "packages/db/prisma/schema.prisma",
+      "packages/db/prisma/migrations/**",
+      "docs/founder-kernel/wiki/principles/*.md",
+      "apps/web/lib/ea/route-manifest.json",
+      "scripts/gen-architecture-counts.mjs",
+    ],
+    artifactPaths: ["docs/architecture/architecture-counts.generated.md"],
+    generate: ["node", "scripts/gen-architecture-counts.mjs"],
+    check: ["node", "scripts/gen-architecture-counts.mjs", "--check"],
+  },
+  // ─── Route-derived registry chain (BI-34D69270) ────────────────────────────
+  //
+  // route-manifest -> route-audience -> route-shells -> page-purpose: four
+  // artifacts generated from the App Router route tree, in strict dependency
+  // order (each reads the one before it from disk). Registered here so a route
+  // add/remove/rename regenerates + stages ALL of them at commit time, the way
+  // the "Route Manifest Freshness" CI guard checks them.
+  //
+  // Filed after #4302 inherited latent main-red from #4295: that PR added
+  // /ops/stack-currency's page without regenerating route-manifest.json, so the
+  // downstream registries never saw the route, all four stayed mutually
+  // consistent at the old count, and the staleness sat invisible until an
+  // unrelated route-touching PR tripped the required Merge Readiness
+  // aggregation and had to absorb the repair. Pre-commit auto-regen closes that
+  // class at the source: the committing dev can no longer ship a stale chain.
+  //
+  // Each entry lists the app route globs (a route change must regenerate the
+  // whole chain) plus its own upstream artifact + generator/logic files. Order
+  // in this array IS the regeneration order, so downstream entries read the
+  // freshly-written upstream artifact.
+  {
+    id: "route-manifest",
+    description: "App Router route manifest (SysML route projection source)",
+    sourceGlobs: [
+      "apps/web/app/**/page.ts",
+      "apps/web/app/**/page.tsx",
+      "apps/web/app/**/route.ts",
+      "apps/web/app/**/route.tsx",
+      "apps/web/scripts/build-route-manifest.ts",
+      "apps/web/lib/ea/route-extract.ts",
+    ],
+    artifactPaths: ["apps/web/lib/ea/route-manifest.json"],
+    generate: ["pnpm", "--filter", "web", "run", "build:route-manifest"],
+    check: ["pnpm", "--filter", "web", "run", "check:route-manifest"],
+  },
+  {
+    id: "route-audience",
+    description: "Per-route audience + destination-kind classification (derives from the manifest)",
+    sourceGlobs: [
+      "apps/web/app/**/page.ts",
+      "apps/web/app/**/page.tsx",
+      "apps/web/app/**/route.ts",
+      "apps/web/app/**/route.tsx",
+      "apps/web/lib/ea/route-manifest.json",
+      "apps/web/lib/navigation/route-audience.ts",
+      "apps/web/scripts/build-route-audience.ts",
+    ],
+    artifactPaths: ["apps/web/lib/navigation/route-audience.generated.json"],
+    generate: ["pnpm", "--filter", "web", "run", "build:route-audience"],
+    check: ["pnpm", "--filter", "web", "run", "check:route-audience"],
+  },
+  {
+    id: "route-shells",
+    description: "Intended page-shell + sweep-eligibility registry (derives from manifest + audience)",
+    sourceGlobs: [
+      "apps/web/app/**/page.ts",
+      "apps/web/app/**/page.tsx",
+      "apps/web/app/**/route.ts",
+      "apps/web/app/**/route.tsx",
+      "apps/web/lib/ea/route-manifest.json",
+      "apps/web/lib/navigation/route-audience.generated.json",
+      "apps/web/lib/ux-budget/route-shells.ts",
+      "apps/web/lib/ux-budget/budgets.ts",
+      "apps/web/scripts/build-route-shells.ts",
+    ],
+    artifactPaths: ["apps/web/lib/ux-budget/route-shells.generated.json"],
+    generate: ["pnpm", "--filter", "web", "run", "build:route-shells"],
+    check: ["pnpm", "--filter", "web", "run", "check:route-shells"],
+  },
+  {
+    id: "page-purpose",
+    description: "Per-route purpose-contract registry (derives from the shared route policy)",
+    sourceGlobs: [
+      "apps/web/app/**/page.ts",
+      "apps/web/app/**/page.tsx",
+      "apps/web/app/**/route.ts",
+      "apps/web/app/**/route.tsx",
+      "apps/web/lib/ea/route-manifest.json",
+      "apps/web/lib/ux-budget/page-purpose.ts",
+      "apps/web/lib/ux-budget/route-policy.ts",
+      "apps/web/lib/ux-budget/route-purpose-baseline.json",
+      "apps/web/lib/ux-budget/purpose-contracts/**",
+      "apps/web/scripts/build-page-purpose.ts",
+      "apps/web/scripts/registry-generator-support.ts",
+    ],
+    artifactPaths: ["apps/web/lib/ux-budget/route-purpose.generated.json"],
+    generate: ["pnpm", "--filter", "web", "run", "build:page-purpose"],
+    // Freshness only (committed == regenerated + non-diff identity ratchet). The
+    // base-ref transition ratchet is the CI workflow's job (audit-route-manifest.yml).
+    check: ["pnpm", "--filter", "web", "run", "check:page-purpose"],
+  },
+  {
     id: "capability-service-catalog",
     description: "Compiled capability/service catalog",
     sourceGlobs: [

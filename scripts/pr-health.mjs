@@ -31,13 +31,13 @@
 
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
 
 // Single SoT for override codes (BI-563F6AB6) — shared with PreToolUse guards.
 import {
   LOCAL_CI_OVERRIDE_REASON_CODES,
   classifyLocalCiOverride,
 } from "../packages/dpf-skill-pack/hooks/lib/local-ci-override.mjs";
+import { isEntryModule } from "./lib/entry-module.mjs";
 
 export { LOCAL_CI_OVERRIDE_REASON_CODES, classifyLocalCiOverride };
 
@@ -321,4 +321,4 @@ function main() {
   process.exit(1);
 }
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) main();
+if (isEntryModule(import.meta.url)) main();

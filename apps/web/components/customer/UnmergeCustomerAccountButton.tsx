@@ -19,7 +19,7 @@ export function UnmergeCustomerAccountButton({ accountId }: { accountId: string 
     startTransition(async () => {
       const result = await unmergeCustomerAccounts(accountId);
       if (!result.ok) {
-        setError(result.message);
+        setError(result.error);
         setConfirming(false);
         return;
       }

@@ -18,17 +18,26 @@ function hire(overrides: Partial<GreenhouseHire> = {}): GreenhouseHire {
 function fakeDb(opts: {
   existingRef?: { canonicalId: string } | null;
   refCreateThrows?: boolean;
+  raceWinnerRef?: { canonicalId: string };
 }) {
-  const findUnique = vi.fn().mockResolvedValue(opts.existingRef ?? null);
+  const findUnique = vi
+    .fn()
+    .mockResolvedValueOnce(opts.existingRef ?? null)
+    .mockResolvedValue(opts.raceWinnerRef ?? opts.existingRef ?? null);
   const refCreate = opts.refCreateThrows
     ? vi.fn().mockRejectedValue(new Error("unique constraint"))
     : vi.fn().mockResolvedValue({});
   const empCreate = vi.fn().mockResolvedValue({ id: "emp-cuid-1" });
-  const db: HireLandingClient = {
+  const tx = {
     masterDataSourceRef: { findUnique, create: refCreate },
     employeeProfile: { create: empCreate },
   };
-  return { db, findUnique, refCreate, empCreate };
+  const transaction = vi.fn(async (fn: (client: typeof tx) => Promise<unknown>) => fn(tx));
+  const db: HireLandingClient = {
+    ...tx,
+    $transaction: transaction as HireLandingClient["$transaction"],
+  };
+  return { db, findUnique, refCreate, empCreate, transaction };
 }
 
 describe("landGreenhouseHire", () => {
@@ -56,6 +65,34 @@ describe("landGreenhouseHire", () => {
     });
   });
 
+  it("lands the accepted offer's compensation so the hire is payable", async () => {
+    const { db, empCreate } = fakeDb({ existingRef: null });
+
+    await landGreenhouseHire(
+      db,
+      hire({ compensation: { payType: "salary", annualSalary: 120000, standardAnnualHours: 2080 } }),
+    );
+
+    const empData = empCreate.mock.calls[0][0].data;
+    // The exact columns lib/hr/labor-service#compensationFromEmployee reads to pay.
+    expect(empData).toMatchObject({
+      payType: "salary",
+      annualSalary: 120000,
+      standardAnnualHours: 2080,
+    });
+  });
+
+  it("lands a hire with absent/malformed comp unpaid, never blocking the hire", async () => {
+    const { db, empCreate } = fakeDb({ existingRef: null });
+
+    const result = await landGreenhouseHire(db, hire({ compensation: { payType: "hourly" } }));
+
+    expect(result).toEqual({ landed: true, employeeProfileId: "emp-cuid-1" });
+    const empData = empCreate.mock.calls[0][0].data;
+    expect(empData.payType).toBeUndefined();
+    expect(empData.hourlyRate).toBeUndefined();
+  });
+
   it("is idempotent — an existing crosswalk returns the existing profile, no create", async () => {
     const { db, empCreate, refCreate } = fakeDb({ existingRef: { canonicalId: "emp-existing" } });
 
@@ -70,15 +107,21 @@ describe("landGreenhouseHire", () => {
     expect(refCreate).not.toHaveBeenCalled();
   });
 
-  it("treats a lost crosswalk race (unique violation) as already-landed", async () => {
-    const { db } = fakeDb({ existingRef: null, refCreateThrows: true });
+  it("rolls back a lost crosswalk race and returns the winning canonical profile", async () => {
+    const { db, findUnique, transaction } = fakeDb({
+      existingRef: null,
+      refCreateThrows: true,
+      raceWinnerRef: { canonicalId: "emp-winner" },
+    });
 
     const result = await landGreenhouseHire(db, hire());
 
     expect(result).toEqual({
       landed: false,
       reason: "already-landed",
-      employeeProfileId: "emp-cuid-1",
+      employeeProfileId: "emp-winner",
     });
+    expect(transaction).toHaveBeenCalledTimes(1);
+    expect(findUnique).toHaveBeenCalledTimes(2);
   });
 });

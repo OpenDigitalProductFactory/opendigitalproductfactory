@@ -18,6 +18,28 @@ export type DocumentBlobWriteResult = {
   sizeBytes: number;
 };
 
+type DocumentBlobRetentionDb = {
+  $transaction: <T>(work: (tx: DocumentBlobRetentionTx) => Promise<T>) => Promise<T>;
+};
+
+type DocumentBlobRetentionTx = {
+  $queryRaw: <T>(strings: TemplateStringsArray, ...values: unknown[]) => Promise<T>;
+  initiativeArtifactRetentionPin: {
+    count: (args: { where: { documentBlobId: string } }) => Promise<number>;
+  };
+  documentBlob: {
+    delete: (args: { where: { id: string }; select: { id: true } }) => Promise<{ id: string }>;
+  };
+};
+
+export class DocumentBlobRetentionError extends Error {
+  readonly code = "INITIATIVE_GOVERNANCE_RETENTION";
+}
+
+function isMissingFileError(error: unknown): boolean {
+  return Boolean(error && typeof error === "object" && "code" in error && error.code === "ENOENT");
+}
+
 function toBuffer(content: DocumentBlobContent): Buffer {
   if (Buffer.isBuffer(content)) return content;
   if (typeof content === "string") return Buffer.from(content, "utf-8");
@@ -74,10 +96,18 @@ export async function writeDocumentBlob(input: {
 
   await fs.mkdir(directory, { recursive: true });
 
+  const verifyExistingBlob = async (): Promise<void> => {
+    const existing = await fs.readFile(absolutePath);
+    if (existing.byteLength !== content.byteLength || hashDocumentBlobContent(existing) !== sha256) {
+      throw new Error("Existing document blob bytes do not match their content-addressed key.");
+    }
+  };
+
   try {
-    await fs.access(absolutePath);
+    await verifyExistingBlob();
     return result;
-  } catch {
+  } catch (error) {
+    if (!isMissingFileError(error)) throw error;
     // Missing content falls through to an atomic write below.
   }
 
@@ -91,12 +121,92 @@ export async function writeDocumentBlob(input: {
     await fs.unlink(temporaryPath).catch(() => {});
 
     try {
-      await fs.access(absolutePath);
+      await verifyExistingBlob();
       return result;
-    } catch {
+    } catch (existingError) {
+      if (!isMissingFileError(existingError)) throw existingError;
       throw error;
     }
   }
 
   return result;
+}
+
+export async function readDocumentBlob(input: {
+  storageKey: string;
+  expectedSha256: string;
+  storageRoot?: string;
+}): Promise<Buffer> {
+  const expectedStorageKey = buildDocumentBlobStorageKey(input.expectedSha256);
+  if (input.storageKey !== expectedStorageKey) {
+    throw new Error("Document blob storage key does not match its content digest.");
+  }
+
+  const storageRoot = input.storageRoot ?? await getDocumentBlobStorageRoot();
+  const path = lazyPath();
+  const bytes = await lazyFsPromises().readFile(path.join(storageRoot, expectedStorageKey));
+  if (hashDocumentBlobContent(bytes) !== input.expectedSha256) {
+    throw new Error("Document blob bytes do not match their content digest.");
+  }
+  return bytes;
+}
+
+/** Canonical storage-GC door. Pinned initiative evidence is never removable. */
+export async function deleteDocumentBlob(input: {
+  documentBlobId: string;
+  storageKey: string;
+  expectedSha256: string;
+  storageRoot?: string;
+  db?: DocumentBlobRetentionDb;
+}): Promise<void> {
+  const expectedStorageKey = buildDocumentBlobStorageKey(input.expectedSha256);
+  if (input.storageKey !== expectedStorageKey) {
+    throw new Error("Document blob storage key does not match its content digest.");
+  }
+  const storageRoot = input.storageRoot ?? await getDocumentBlobStorageRoot();
+  const db = input.db ?? (prisma as unknown as DocumentBlobRetentionDb);
+  const fs = lazyFsPromises();
+  const path = lazyPath();
+  const absolutePath = path.join(storageRoot, expectedStorageKey);
+  const quarantinePath = path.join(
+    path.dirname(absolutePath),
+    `.${path.basename(absolutePath)}.${process.pid}.${lazyCrypto().randomUUID()}.delete`,
+  );
+  let quarantined = false;
+  try {
+    await db.$transaction(async (tx) => {
+      // The row lock serializes a concurrent pin. Renaming first preserves
+      // recoverability, while deleting the row in this same transaction makes
+      // every waiting FK insert fail after commit instead of pinning lost bytes.
+      const rows = await tx.$queryRaw<Array<{ id: string; storageKey: string; sha256: string }>>`
+        SELECT "id", "storageKey", "sha256"
+        FROM "DocumentBlob"
+        WHERE "id" = ${input.documentBlobId}
+        FOR UPDATE
+      `;
+      if (rows.length !== 1) throw new Error("Document blob metadata was not found.");
+      if (rows[0]!.storageKey !== input.storageKey || rows[0]!.sha256 !== input.expectedSha256) {
+        throw new Error("Document blob metadata does not match the requested storage identity.");
+      }
+      if (await tx.initiativeArtifactRetentionPin.count({ where: { documentBlobId: input.documentBlobId } }) > 0) {
+        throw new DocumentBlobRetentionError("Pinned initiative document bytes are permanently retained.");
+      }
+      await fs.rename(absolutePath, quarantinePath);
+      quarantined = true;
+      await tx.documentBlob.delete({ where: { id: input.documentBlobId }, select: { id: true } });
+    });
+  } catch (error) {
+    if (quarantined) {
+      try {
+        await fs.rename(quarantinePath, absolutePath);
+      } catch (recoveryError) {
+        throw new AggregateError(
+          [error, recoveryError],
+          `Document blob metadata deletion failed and bytes require recovery from ${quarantinePath}.`,
+        );
+      }
+    }
+    throw error;
+  }
+  await fs.unlink(quarantinePath);
 }

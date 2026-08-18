@@ -231,7 +231,7 @@ export async function getWorkCapsuleTool(params: Record<string, unknown>): Promi
     return { success: false, error: "missing_capsuleId", message: "capsuleId is required." };
   }
 
-  const capsule = await prisma.workCapsule.findUnique({
+  const capsule = await prisma.workroom.findUnique({
     where: { capsuleId },
     include: {
       activities: {

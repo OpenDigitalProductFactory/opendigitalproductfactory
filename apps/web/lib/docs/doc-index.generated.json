@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 635,
+  "pageCount": 667,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -370,6 +370,33 @@
         "evidence-hooks",
         "acceptance-mapping",
         "related"
+      ]
+    },
+    "docs/architecture/2026-08-16-simplify-and-strengthen-architecture-pass.md": {
+      "publicHref": "/architecture/2026-08-16-simplify-and-strengthen-architecture-pass/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "simplify-strengthen-whole-platform-architecture-pass-2026-08-16",
+        "1-the-customer-base-this-architecture-must-serve",
+        "1a-operator-direction-2026-08-16-review",
+        "2-state-of-the-existing-hardening-program-verified-live",
+        "3-findings-by-lens",
+        "31-code-structure",
+        "32-data-model",
+        "33-ux-primitives-information-architecture",
+        "34-runtime-deployment-topology",
+        "35-the-architecture-knowledge-base",
+        "36-the-workroom-and-the-externally-exposed-coworker",
+        "4-systemic-diagnosis-three-patterns-one-root-cause",
+        "5-the-program-ranked-moves",
+        "tier-0-do-first-low-risk-high-leverage-mostly-additive",
+        "tier-1-this-quarter-structural-bounded-risk",
+        "tier-2-next-quarter-decisions-and-deeper-surgery",
+        "what-not-to-do",
+        "6-readiness-scorecard",
+        "7-measurement"
       ]
     },
     "docs/architecture/GAID.md": {
@@ -835,6 +862,15 @@
         "8-documentation-maintenance-rule"
       ]
     },
+    "docs/architecture/architecture-counts.generated.md": {
+      "publicHref": "/architecture/architecture-counts.generated/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "architecture-counts-generated"
+      ]
+    },
     "docs/architecture/autonomy-and-wwmd.md": {
       "publicHref": "/architecture/autonomy-and-wwmd/",
       "portalHref": null,
@@ -1156,6 +1192,7 @@
         "operatoreffort",
         "legibilityofconsequence",
         "4-profession-local-8-axes-each-projecting-back-onto-the-spine",
+        "41-profession-declared-namespaced-axes",
         "5-where-a-weight-comes-from-sourcing-classes",
         "51-the-revealed-class-in-detail",
         "52-confidence-is-discounted-before-any-of-this-is-acted-on",
@@ -1239,7 +1276,7 @@
         "1-dpf-novel-patterns",
         "11-gearinterface-canonical-observation-envelope-at-every-ring-boundary",
         "12-wwmd-consultation-principledecide-against-the-founder-kernel",
-        "13-capsule-vs-featurebuild-vs-sandbox-vs-runtimetarget-pick-the-right-substrate",
+        "13-workroom-vs-featurebuild-vs-sandbox-vs-runtimetarget-pick-the-right-substrate",
         "14-propose-acknowledge-reassign-par-concurrent-session-ownership-protocol",
         "15-governance-approves-evidence-not-provenance",
         "2-dpf-anti-patterns-defaults-the-kernel-forbids",
@@ -1656,7 +1693,8 @@
       "publishedPublic": true,
       "publishedPortal": false,
       "anchors": [
-        "mcp-tool-authorization-runbook"
+        "mcp-tool-authorization-runbook",
+        "protocol-version-window-mechanics-landed-contract-pending-ratification"
       ]
     },
     "docs/architecture/mcp-tool-packs.md": {
@@ -1734,6 +1772,7 @@
       "publishedPortal": false,
       "anchors": [
         "architecture-orientation",
+        "subsystem-map",
         "channel-adapter-capabilities"
       ]
     },
@@ -2074,7 +2113,7 @@
       "anchors": [
         "unified-development-activity-tracking",
         "the-structure",
-        "one-unit-of-work-the-workcapsule",
+        "one-unit-of-work-the-workroom",
         "how-each-surface-is-captured",
         "what-you-see",
         "why-this-works",
@@ -2137,7 +2176,7 @@
       "publishedPublic": true,
       "publishedPortal": false,
       "anchors": [
-        "work-room-participation-and-channel-continuity",
+        "workroom-participation-and-channel-continuity",
         "design-grounding",
         "authorization-boundary",
         "participant-projection",
@@ -2158,6 +2197,20 @@
         "decision-rules",
         "links-to-live-work",
         "maintenance"
+      ]
+    },
+    "docs/architecture/workroom-vocabulary-boundary.md": {
+      "publicHref": "/architecture/workroom-vocabulary-boundary/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "workroom-vocabulary-boundary",
+        "the-three-layers",
+        "naming-rules",
+        "a-known-tension-accepted-deliberately",
+        "what-is-deliberately-not-renamed-yet",
+        "related"
       ]
     },
     "docs/business-types/_readability-report.md": {
@@ -3169,6 +3222,19 @@
         "related-principles"
       ]
     },
+    "docs/founder-kernel/wiki/principles/claim-a-workroom-before-you-work.md": {
+      "publicHref": "/founder-kernel/wiki/principles/claim-a-workroom-before-you-work/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "rule",
+        "why-the-unit-is-the-workroom-and-not-the-build",
+        "the-name",
+        "what-this-rule-does-not-yet-enforce",
+        "related"
+      ]
+    },
     "docs/founder-kernel/wiki/principles/classify-ambiguous-requests-before-acting.md": {
       "publicHref": "/founder-kernel/wiki/principles/classify-ambiguous-requests-before-acting/",
       "portalHref": null,
@@ -3414,6 +3480,21 @@
         "see-also"
       ]
     },
+    "docs/founder-kernel/wiki/principles/doc-cited-anchors-must-exist.md": {
+      "publicHref": "/founder-kernel/wiki/principles/doc-cited-anchors-must-exist/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "rule",
+        "why",
+        "applies-to",
+        "how-to-apply",
+        "decision-dimensions",
+        "examples",
+        "related"
+      ]
+    },
     "docs/founder-kernel/wiki/principles/elicit-tacit-knowledge.md": {
       "publicHref": "/founder-kernel/wiki/principles/elicit-tacit-knowledge/",
       "portalHref": null,
@@ -3427,6 +3508,21 @@
         "decision-dimensions",
         "examples",
         "sources"
+      ]
+    },
+    "docs/founder-kernel/wiki/principles/endpoint-classification-at-birth.md": {
+      "publicHref": "/founder-kernel/wiki/principles/endpoint-classification-at-birth/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "rule",
+        "why",
+        "applies-to",
+        "how-to-apply",
+        "decision-dimensions",
+        "examples",
+        "related"
       ]
     },
     "docs/founder-kernel/wiki/principles/evidence-before-diagnosis.md": {
@@ -3489,6 +3585,21 @@
         "sources"
       ]
     },
+    "docs/founder-kernel/wiki/principles/fleet-safe-schema-evolution.md": {
+      "publicHref": "/founder-kernel/wiki/principles/fleet-safe-schema-evolution/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "rule",
+        "why",
+        "applies-to",
+        "how-to-apply",
+        "decision-dimensions",
+        "examples",
+        "related"
+      ]
+    },
     "docs/founder-kernel/wiki/principles/gate-coverage-matches-blast-radius.md": {
       "publicHref": "/founder-kernel/wiki/principles/gate-coverage-matches-blast-radius/",
       "portalHref": null,
@@ -3548,6 +3659,20 @@
         "decision-dimensions",
         "related",
         "origin"
+      ]
+    },
+    "docs/founder-kernel/wiki/principles/install-is-the-tenant.md": {
+      "publicHref": "/founder-kernel/wiki/principles/install-is-the-tenant/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "rule",
+        "why",
+        "applies-to",
+        "how-to-apply",
+        "decision-dimensions",
+        "related"
       ]
     },
     "docs/founder-kernel/wiki/principles/keep-root-clone-as-merge-worktree.md": {
@@ -3890,6 +4015,21 @@
         "examples"
       ]
     },
+    "docs/founder-kernel/wiki/principles/primitive-done-means-ratchet-on.md": {
+      "publicHref": "/founder-kernel/wiki/principles/primitive-done-means-ratchet-on/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "rule",
+        "why",
+        "applies-to",
+        "how-to-apply",
+        "decision-dimensions",
+        "examples",
+        "related"
+      ]
+    },
     "docs/founder-kernel/wiki/principles/principle-based-rules.md": {
       "publicHref": "/founder-kernel/wiki/principles/principle-based-rules/",
       "portalHref": null,
@@ -4228,6 +4368,21 @@
         "spec-references"
       ]
     },
+    "docs/founder-kernel/wiki/principles/supersession-is-a-mechanical-act.md": {
+      "publicHref": "/founder-kernel/wiki/principles/supersession-is-a-mechanical-act/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "rule",
+        "why",
+        "applies-to",
+        "how-to-apply",
+        "decision-dimensions",
+        "examples",
+        "related"
+      ]
+    },
     "docs/founder-kernel/wiki/principles/sweep-main-before-trusting-worktree-specs.md": {
       "publicHref": "/founder-kernel/wiki/principles/sweep-main-before-trusting-worktree-specs/",
       "portalHref": null,
@@ -4255,6 +4410,21 @@
         "examples",
         "when-this-does-not-apply",
         "see-also"
+      ]
+    },
+    "docs/founder-kernel/wiki/principles/trust-is-prospective-not-retrospective.md": {
+      "publicHref": "/founder-kernel/wiki/principles/trust-is-prospective-not-retrospective/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "rule",
+        "why",
+        "applies-to",
+        "how-to-apply",
+        "decision-dimensions",
+        "examples",
+        "sources"
       ]
     },
     "docs/founder-kernel/wiki/principles/universal-work-formula.md": {
@@ -4726,6 +4896,22 @@
         "connecting-claude-code-or-vs-code-via-mcp"
       ]
     },
+    "docs/install/worktree-janitor-schedule.md": {
+      "publicHref": "/install/worktree-janitor-schedule/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "scheduling-the-worktree-janitor",
+        "install",
+        "letting-it-actually-reap",
+        "other-flags",
+        "what-gets-registered",
+        "reading-the-output",
+        "checking-it-ran",
+        "related"
+      ]
+    },
     "docs/maintenance/README.md": {
       "publicHref": "/maintenance/README/",
       "portalHref": null,
@@ -5001,6 +5187,7 @@
         "idempotence-guarantee",
         "agent-toolchain-only-update",
         "where-state-lives",
+        "installation-operating-intent-and-environment-class",
         "diagnostics",
         "show-substrate-flag",
         "dpf-doctor",
@@ -5772,6 +5959,19 @@
         "sources"
       ]
     },
+    "docs/professions/data-architect/wiki/referential-integrity-is-declared-not-implied.md": {
+      "publicHref": "/professions/data-architect/wiki/referential-integrity-is-declared-not-implied/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "rule",
+        "why",
+        "how-to-apply",
+        "decision-dimensions",
+        "related"
+      ]
+    },
     "docs/professions/data-architect/wiki/schema-audit-before-features.md": {
       "publicHref": "/professions/data-architect/wiki/schema-audit-before-features/",
       "portalHref": null,
@@ -5919,6 +6119,19 @@
         "why-it-belongs-in-the-pipeline",
         "how-dpf-coworkers-use-it",
         "see-also"
+      ]
+    },
+    "docs/professions/devops-platform/wiki/upgrade-the-fleet-forward-only.md": {
+      "publicHref": "/professions/devops-platform/wiki/upgrade-the-fleet-forward-only/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "rule",
+        "why",
+        "how-to-apply",
+        "decision-dimensions",
+        "related"
       ]
     },
     "docs/professions/documentation-content/wiki/choose-the-right-documentation-mode.md": {
@@ -6557,6 +6770,18 @@
         "see-also"
       ]
     },
+    "docs/professions/legal-compliance/wiki/attorney-review-packet.md": {
+      "publicHref": "/professions/legal-compliance/wiki/attorney-review-packet/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "rule",
+        "required-sections",
+        "guardrails",
+        "see-also"
+      ]
+    },
     "docs/professions/legal-compliance/wiki/ccpa-consumer-rights.md": {
       "publicHref": "/professions/legal-compliance/wiki/ccpa-consumer-rights/",
       "portalHref": null,
@@ -6566,6 +6791,30 @@
         "jurisdiction-competency",
         "the-structural-contrast-read-this-first",
         "ccpa-consumer-rights",
+        "see-also"
+      ]
+    },
+    "docs/professions/legal-compliance/wiki/commercial-software-support-terms.md": {
+      "publicHref": "/professions/legal-compliance/wiki/commercial-software-support-terms/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "rule",
+        "checklist",
+        "operator-dpf-application",
+        "see-also"
+      ]
+    },
+    "docs/professions/legal-compliance/wiki/contract-review-workflow.md": {
+      "publicHref": "/professions/legal-compliance/wiki/contract-review-workflow/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "rule",
+        "workflow",
+        "output-shape",
         "see-also"
       ]
     },
@@ -6621,6 +6870,19 @@
         "see-also"
       ]
     },
+    "docs/professions/legal-compliance/wiki/jurisdiction-layered-analysis.md": {
+      "publicHref": "/professions/legal-compliance/wiki/jurisdiction-layered-analysis/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "rule",
+        "layers-to-separate",
+        "how-to-apply",
+        "example",
+        "see-also"
+      ]
+    },
     "docs/professions/legal-compliance/wiki/personal-data-definition.md": {
       "publicHref": "/professions/legal-compliance/wiki/personal-data-definition/",
       "portalHref": null,
@@ -6630,6 +6892,18 @@
         "definition",
         "eu-vs-us-framing",
         "why-it-is-foundational",
+        "see-also"
+      ]
+    },
+    "docs/professions/legal-compliance/wiki/policy-lifecycle-management.md": {
+      "publicHref": "/professions/legal-compliance/wiki/policy-lifecycle-management/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "rule",
+        "lifecycle-states",
+        "how-to-apply",
         "see-also"
       ]
     },
@@ -6784,6 +7058,57 @@
         "see-also"
       ]
     },
+    "docs/professions/mcp-integration/wiki/context-economy.md": {
+      "publicHref": "/professions/mcp-integration/wiki/context-economy/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "the-heuristic",
+        "why-it-matters",
+        "when-it-applies",
+        "how-to-apply",
+        "related"
+      ]
+    },
+    "docs/professions/mcp-integration/wiki/coordination-plane-concepts.md": {
+      "publicHref": "/professions/mcp-integration/wiki/coordination-plane-concepts/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "what-the-coordination-plane-is",
+        "the-layer-separation",
+        "reachability-posture",
+        "related"
+      ]
+    },
+    "docs/professions/mcp-integration/wiki/mcp-protocol-version-window.md": {
+      "publicHref": "/professions/mcp-integration/wiki/mcp-protocol-version-window/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "rule",
+        "why",
+        "how-to-apply",
+        "decision-dimensions",
+        "related"
+      ]
+    },
+    "docs/professions/mcp-integration/wiki/tool-name-contract-stability.md": {
+      "publicHref": "/professions/mcp-integration/wiki/tool-name-contract-stability/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "rule",
+        "why",
+        "how-to-apply",
+        "decision-dimensions",
+        "related"
+      ]
+    },
     "docs/professions/operations/wiki/automotive-adas-recalibration-dispatch.md": {
       "publicHref": "/professions/operations/wiki/automotive-adas-recalibration-dispatch/",
       "portalHref": null,
@@ -6913,6 +7238,18 @@
         "why",
         "how-to-apply",
         "see-also"
+      ]
+    },
+    "docs/professions/operations/wiki/salon-provider-and-resource-assignment.md": {
+      "publicHref": "/professions/operations/wiki/salon-provider-and-resource-assignment/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "heuristic",
+        "industry-precedent-and-dpf-opportunity",
+        "why-it-matters",
+        "sources"
       ]
     },
     "docs/professions/operations/wiki/sli-slo-error-budget.md": {
@@ -7424,6 +7761,50 @@
         "see-also"
       ]
     },
+    "docs/professions/security-guarding-operations/wiki/alarm-response-and-keyholding-duty.md": {
+      "publicHref": "/professions/security-guarding-operations/wiki/alarm-response-and-keyholding-duty/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "heuristic",
+        "interoperability-posture",
+        "source"
+      ]
+    },
+    "docs/professions/security-guarding-operations/wiki/assignment-instructions-and-post-orders.md": {
+      "publicHref": "/professions/security-guarding-operations/wiki/assignment-instructions-and-post-orders/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "heuristic",
+        "interoperability-posture",
+        "source"
+      ]
+    },
+    "docs/professions/security-guarding-operations/wiki/officer-licensing-and-vetting-currency.md": {
+      "publicHref": "/professions/security-guarding-operations/wiki/officer-licensing-and-vetting-currency/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "heuristic",
+        "interoperability-posture",
+        "source"
+      ]
+    },
+    "docs/professions/security-guarding-operations/wiki/patrol-verification-and-proof-of-presence.md": {
+      "publicHref": "/professions/security-guarding-operations/wiki/patrol-verification-and-proof-of-presence/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "heuristic",
+        "interoperability-posture",
+        "source"
+      ]
+    },
     "docs/professions/security/wiki/cis-controls-implementation-groups.md": {
       "publicHref": "/professions/security/wiki/cis-controls-implementation-groups/",
       "portalHref": null,
@@ -7434,6 +7815,19 @@
         "implementation-groups",
         "how-dpf-coworkers-use-it",
         "see-also"
+      ]
+    },
+    "docs/professions/security/wiki/classify-exposure-at-birth.md": {
+      "publicHref": "/professions/security/wiki/classify-exposure-at-birth/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "rule",
+        "why",
+        "how-to-apply",
+        "decision-dimensions",
+        "related"
       ]
     },
     "docs/professions/security/wiki/cve-cvss-triage.md": {
@@ -7604,6 +7998,19 @@
         "the-2025-categories",
         "what-changed-in-2025",
         "how-dpf-coworkers-use-it"
+      ]
+    },
+    "docs/professions/software-engineer/wiki/retire-the-old-generation-in-the-same-motion.md": {
+      "publicHref": "/professions/software-engineer/wiki/retire-the-old-generation-in-the-same-motion/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "rule",
+        "why",
+        "how-to-apply",
+        "decision-dimensions",
+        "related"
       ]
     },
     "docs/professions/software-engineer/wiki/secure-coding-no-injection-validate-input.md": {
@@ -7840,6 +8247,19 @@
         "the-classical-lenses-and-what-each-is-actually-for",
         "how-the-critique-is-expected-to-read",
         "see-also"
+      ]
+    },
+    "docs/professions/ux-design/wiki/primitive-adoption-before-new-variants.md": {
+      "publicHref": "/professions/ux-design/wiki/primitive-adoption-before-new-variants/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "rule",
+        "why",
+        "how-to-apply",
+        "decision-dimensions",
+        "related"
       ]
     },
     "docs/professions/ux-design/wiki/target-size-and-operable-interactions.md": {
@@ -9951,6 +10371,7 @@
         "example-3-wsid-what-a-competent-data-architect-would-do",
         "human-in-the-loop-where-a-person-enters-each-path",
         "the-immutable-decision-ledger",
+        "un-tampered-with-is-not-the-same-as-true",
         "how-the-three-examples-relate",
         "related-reading"
       ]
@@ -9995,6 +10416,7 @@
         "reading-the-skills-catalog",
         "related-routes",
         "reading-runtime-health",
+        "coworker-routing",
         "context-budget-what-recent-turns-were-given",
         "authority-governance",
         "agent-authority-overview",
@@ -10633,6 +11055,7 @@
         "overview",
         "key-concepts",
         "what-you-can-do",
+        "burn-revenue-and-runway",
         "before-you-record-money-movement",
         "choose-the-workflow",
         "owner-first-overview-food-hospitality",
@@ -11241,6 +11664,16 @@
         "build-studio-owner-brief-and-proof-design-grounding",
         "design-grounding",
         "2026-08-15-reconciliation"
+      ]
+    },
+    "docs/ux-fit/2026-08-01-field-dispatch-ops-surface-design-grounding.md": {
+      "publicHref": "/ux-fit/2026-08-01-field-dispatch-ops-surface-design-grounding/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "field-dispatch-operational-surface-design-grounding",
+        "design-grounding"
       ]
     }
   }

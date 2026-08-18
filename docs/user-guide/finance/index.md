@@ -56,6 +56,22 @@ purchase order and bill for a payable, or a claim for an employee expense.
 - Monitor AI providers as finance-owned suppliers, including draft contracts, open setup work items, and linked billing/usage pages
 - Review committed AI spend and setup gaps from the dedicated `/finance/spend/ai` workspace
 
+## Burn, Revenue, and Runway
+
+The finance overview carries a money-health row: **Monthly Burn**, **Monthly
+Revenue**, **Runway**, and **Money Health**. These are computed from what is
+actually recorded — paid bills and expenses over the trailing 90 days plus
+known supplier-contract commitments for burn, paid invoices for revenue, and
+bank balances for runway.
+
+When nothing is recorded, the cards say **Unknown** or **Not recorded** and
+link to the place to record it. An empty book is never shown as a healthy
+$0.00, and "all up to date" appears only when there are real invoices to be up
+to date on. When money is going out with no revenue recorded, Money Health
+flags **Pre-revenue** so a shrinking cash position is said plainly. The Finance
+Controller coworker reviews the same state on a schedule and tells you what to
+record or watch.
+
 ## Before You Record Money Movement
 
 - Confirm the real event in the bank, processor, payroll, or supplier/customer

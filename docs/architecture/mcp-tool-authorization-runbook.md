@@ -8,7 +8,7 @@ Authorized product surfaces use the six generic `surface_*` MCP tools rather tha
 
 MCP bearer tokens use the `dpfmcp_...` pattern and are issued from Admin > Platform Development > MCP. Treat `.mcp.json` and `.vscode/mcp.json` as local credential files only; they are ignored by git and must never be committed.
 
-**MCP token scopes:** tokens have a coarse `scope` of `read`, `write`, or `admin` plus granular per-tool grants. Default tokens are `read` and cannot call side-effecting tools even if an old token row carries a write grant. Use **Issue write token** in Admin > Platform Development > MCP when an agent must create or update Work Capsules, backlog items, Build Studio evidence, runtime coordination records, or other side-effecting MCP records. The portal shows the plaintext token once, writes the local client snippet, and supports revocation without editing config files.
+**MCP token scopes:** tokens have a coarse `scope` of `read`, `write`, or `admin` plus granular per-tool grants. Default tokens are `read` and cannot call side-effecting tools even if an old token row carries a write grant. Use **Issue write token** in Admin > Platform Development > MCP when an agent must create or update Workrooms, backlog items, Build Studio evidence, runtime coordination records, or other side-effecting MCP records. The portal shows the plaintext token once, writes the local client snippet, and supports revocation without editing config files.
 
 **Scope escalation rule:** if `/api/mcp/v1` returns an MCP tool result with `structuredContent.error = "insufficient_token_scope"` and `requiredScope` such as `"write"`, stop the MCP workflow and surface the required scope to the operator. Do not fall back to `psql`, Prisma scripts, direct DB edits, or hidden runtime patches to bypass the MCP scope gate. The correct action is to issue a scoped token in the portal, update the client token using the displayed setup command/snippet, call `/api/mcp/token/refresh` with the new token, and retry through MCP.
 
@@ -85,3 +85,16 @@ Codex Desktop can retain a stale top-level model registry even after the server 
 4. **Promote** — `establish_coworker` `action: "promote"` flips draft → production only when the definition landed AND a passing certification exists.
 
 The paved-road walkthrough is the `dpf-establish-coworker` skill (`packages/dpf-skill-pack/skills/dpf-establish-coworker/SKILL.md`).
+
+## Protocol version window (mechanics landed; contract pending ratification)
+
+The `/api/mcp/v1` transport's advertised protocol revisions are governed by one
+constant module, `apps/web/lib/mcp/protocol-versions.ts`: the N/N-1 `MCP_VERSION_WINDOW`
+(current + one previous) plus the explicitly-listed grandfathered set
+(`2025-03-26`, `2024-11-05`), which may only shrink. The CI guard
+`scripts/check-no-adhoc-mcp-protocol-versions.mjs` refuses ad-hoc revision literals on
+the transport and any growth of the grandfathered set. The version-window CONTRACT
+itself — including retiring the grandfathered revisions — is operator-ratified; the
+decision brief is
+[`docs/superpowers/specs/2026-08-16-mcp-version-window-contract-brief.md`](../superpowers/specs/2026-08-16-mcp-version-window-contract-brief.md).
+No revision has been retired under this section yet.

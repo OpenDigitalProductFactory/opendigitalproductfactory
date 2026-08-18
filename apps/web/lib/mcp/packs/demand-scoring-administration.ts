@@ -171,7 +171,7 @@ export async function findDuplicateCandidatesHandler(params: Record<string, unkn
   // Compare against open, non-terminal items (optionally same portfolio).
   const pool = await prisma.backlogItem.findMany({
     where: {
-      status: { notIn: ["done", "deferred"] },
+      status: { notIn: ["done", "deferred", "retired"] },
       itemId: { not: itemId },
       ...(target.portfolioId ? { portfolioId: target.portfolioId } : {}),
     },
@@ -215,7 +215,7 @@ export async function mergeBacklogItemsHandler(params: Record<string, unknown>):
     }),
     prisma.backlogItem.update({
       where: { itemId: duplicateItemId },
-      data: { status: "deferred", triageOutcome: "duplicate", duplicateOfId: canonical.id },
+      data: { status: "retired", triageOutcome: "duplicate", duplicateOfId: canonical.id, completedAt: new Date() },
     }),
   ]);
   return {
@@ -232,7 +232,7 @@ export async function sweepDuplicateDemandHandler(params: Record<string, unknown
   const portfolioId = typeof params["portfolioId"] === "string" ? (params["portfolioId"] as string) : undefined;
   const items = await prisma.backlogItem.findMany({
     where: {
-      status: { notIn: ["done", "deferred"] },
+      status: { notIn: ["done", "deferred", "retired"] },
       ...(portfolioId ? { portfolioId } : {}),
     },
     select: { itemId: true, title: true, body: true },

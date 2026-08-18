@@ -1,5 +1,5 @@
 // BI-BB13B599 (EP-WORK-CONVERGENCE): translate a Build Studio build + its linked
-// WorkCapsule into a plain, business-safe customer-mode status. Build Studio's
+// Workroom into a plain, business-safe customer-mode status. Build Studio's
 // bands read FeatureBuild.phase directly and are blind to the capsule projection,
 // so external Claude/Codex/Grok work carried on the capsule is invisible. This
 // pure function reuses the WorkCase projection (projectWorkCaseState) and never

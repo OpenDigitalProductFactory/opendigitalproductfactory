@@ -1,0 +1,18 @@
+{
+  "version": "1",
+  "decidedOption": "scan-first operational surface with attention strip, schedule, schematic route, work lanes, support checks, and canonical status badges",
+  "decisionInteractionId": "DI-C1E3A31C969F",
+  "scope": {
+    "files": [
+      "apps/web/app/(shell)/storefront/dispatch/page.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "scan-first operational surface with attention strip, schedule, schematic route, work lanes, support checks, and canonical status badges",
+      "generic status-column board only",
+      "separate map schedule and billing tabs without first-viewport synthesis"
+    ]
+  }
+}

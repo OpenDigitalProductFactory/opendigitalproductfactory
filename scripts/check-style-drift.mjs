@@ -20,6 +20,27 @@ import { readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { dirname, join, relative } from "node:path";
 import { isStyleDriftSource } from "./lib/gate-sensitivity.mjs";
+import { formatBudgetedFileMap, readBudgetedFileMap } from "./lib/baseline-budget.mjs";
+
+// Owned-expiring-budget shape (BI-3F17B16B): both baselines are budget
+// envelopes ({version, owner, expiry, note, files}); freshness is enforced by
+// scripts/check-no-expired-baseline-budgets.mjs. --update preserves the meta.
+const DEFAULT_BUDGET = Object.freeze({ owner: "platform-architecture", expiry: "2026-11-16" });
+
+function loadBudgetedBaseline(path) {
+  const parsed = JSON.parse(readFileSync(path, "utf8"));
+  return readBudgetedFileMap(parsed);
+}
+
+function budgetFrom(path, note) {
+  try {
+    const { budget } = loadBudgetedBaseline(path);
+    if (budget.owner && budget.expiry) return { ...budget, note };
+  } catch {
+    // fall through to defaults
+  }
+  return { ...DEFAULT_BUDGET, note };
+}
 
 const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const WEB = join(REPO_ROOT, "apps", "web");
@@ -193,22 +214,24 @@ function main() {
   const tokenCounts = scanTokens();
 
   if (process.argv.includes("--update")) {
-    const sorted = Object.fromEntries(Object.keys(counts).sort().map((k) => [k, counts[k]]));
-    writeFileSync(BASELINE_PATH, `${JSON.stringify(sorted, null, 2)}\n`);
-    const sortedTokens = Object.fromEntries(
-      Object.keys(tokenCounts).sort().map((k) => [k, tokenCounts[k]]),
-    );
-    writeFileSync(TOKEN_BASELINE_PATH, `${JSON.stringify(sortedTokens, null, 2)}\n`);
-    console.log(`Wrote style-drift baseline: ${Object.keys(sorted).length} files with hardcoded hex.`);
+    writeFileSync(BASELINE_PATH, formatBudgetedFileMap(counts, budgetFrom(
+      BASELINE_PATH,
+      "Style-drift ratchet baseline (BI-ARCH-UI-PRIMS). Shrink-only: migrate a surface to --dpf-* tokens, then --update retightens. Regenerate with: node scripts/check-style-drift.mjs --update",
+    )));
+    writeFileSync(TOKEN_BASELINE_PATH, formatBudgetedFileMap(tokenCounts, budgetFrom(
+      TOKEN_BASELINE_PATH,
+      "Token-drift ratchet baseline (BI-CBC7430F, EP-UX-SYSTEM L4). Shrink-only per axis. Regenerate with: node scripts/check-style-drift.mjs --update",
+    )));
+    console.log(`Wrote style-drift baseline: ${Object.keys(counts).length} files with hardcoded hex.`);
     console.log(
-      `Wrote token-drift baseline: ${Object.keys(sortedTokens).length} files with off-scale spacing/type/motion.`,
+      `Wrote token-drift baseline: ${Object.keys(tokenCounts).length} files with off-scale spacing/type/motion.`,
     );
     process.exit(0);
   }
 
   let baseline = {};
   try {
-    baseline = JSON.parse(readFileSync(BASELINE_PATH, "utf8"));
+    baseline = loadBudgetedBaseline(BASELINE_PATH).files;
   } catch {
     console.error(`Missing baseline ${relative(REPO_ROOT, BASELINE_PATH)} — run: node scripts/check-style-drift.mjs --update`);
     process.exit(1);
@@ -224,7 +247,7 @@ function main() {
 
   let tokenBaseline = {};
   try {
-    tokenBaseline = JSON.parse(readFileSync(TOKEN_BASELINE_PATH, "utf8"));
+    tokenBaseline = loadBudgetedBaseline(TOKEN_BASELINE_PATH).files;
   } catch {
     console.error(
       `Missing baseline ${relative(REPO_ROOT, TOKEN_BASELINE_PATH)} — run: node scripts/check-style-drift.mjs --update`,

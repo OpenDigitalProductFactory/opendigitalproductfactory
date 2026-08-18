@@ -279,9 +279,15 @@ async function runHiveScoutIngestHandler(
     taskRunId: context?.taskRunId,
     enableAutonomousReview: true,
   });
+  const market = result.marketSources;
+  const marketSummary = market
+    ? market.enabled
+      ? ` Market pass: fetched ${market.fetched}/${market.attempted} source${market.attempted === 1 ? "" : "s"} (${market.changed} changed, ${market.failed} failed).`
+      : " Market pass: disabled by operator config."
+    : "";
   return {
     success: true,
-    message: `Hive Scout parsed ${result.catalogEntries} entries, detected ${result.gaps} gaps, reviewed ${result.reviewed ?? 0} ambiguous candidate${result.reviewed === 1 ? "" : "s"}, created ${result.created} backlog suggestion${result.created === 1 ? "" : "s"}, skipped ${result.duplicates} deterministic duplicate${result.duplicates === 1 ? "" : "s"} and ${result.skippedByReview ?? 0} review rejection${result.skippedByReview === 1 ? "" : "s"}, deferred ${result.deferred}, reused ${result.reviewCacheHits ?? 0} cached review${result.reviewCacheHits === 1 ? "" : "s"}, dropped ${result.reviewSchemaDropCount ?? 0} invalid review entr${result.reviewSchemaDropCount === 1 ? "y" : "ies"}${result.reviewSkipReason ? `, and skipped autonomous review because ${result.reviewSkipReason}` : ""}${result.reviewFailureReason ? `, with reviewer failure reason ${result.reviewFailureReason}` : ""}.`,
+    message: `Hive Scout parsed ${result.catalogEntries} entries, detected ${result.gaps} gaps, reviewed ${result.reviewed ?? 0} ambiguous candidate${result.reviewed === 1 ? "" : "s"}, created ${result.created} backlog suggestion${result.created === 1 ? "" : "s"}, skipped ${result.duplicates} deterministic duplicate${result.duplicates === 1 ? "" : "s"} and ${result.skippedByReview ?? 0} review rejection${result.skippedByReview === 1 ? "" : "s"}, sent ${result.needsReview} to triaging for review, reused ${result.reviewCacheHits ?? 0} cached review${result.reviewCacheHits === 1 ? "" : "s"}, dropped ${result.reviewSchemaDropCount ?? 0} invalid review entr${result.reviewSchemaDropCount === 1 ? "y" : "ies"}${result.reviewSkipReason ? `, and skipped autonomous review because ${result.reviewSkipReason}` : ""}${result.reviewFailureReason ? `, with reviewer failure reason ${result.reviewFailureReason}` : ""}.${marketSummary}`,
     data: result as unknown as Record<string, unknown>,
   };
 }

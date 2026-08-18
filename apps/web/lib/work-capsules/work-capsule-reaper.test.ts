@@ -6,8 +6,8 @@ vi.mock("@/lib/portal-context/invalidation", () => ({
 
 const { prismaMock } = vi.hoisted(() => ({
   prismaMock: {
-    workCapsule: { findFirst: vi.fn(), findUnique: vi.fn(), update: vi.fn() },
-    workCapsuleActivity: { create: vi.fn() },
+    workroom: { findFirst: vi.fn(), findUnique: vi.fn(), update: vi.fn() },
+    workroomActivity: { create: vi.fn() },
     $transaction: vi.fn(),
   },
 }));
@@ -71,7 +71,7 @@ describe("planTerminalBacklogReconciliation (BI-C2EB2C6B)", () => {
 describe("reconcileTerminalCapsuleBacklogs (BI-C2EB2C6B)", () => {
   it("repairs a terminal abandoned capsule without inferring completion", async () => {
     const db = {
-      workCapsule: {
+      workroom: {
         findMany: vi.fn().mockResolvedValue([{ capsuleId: "WC-DEAD", status: "abandoned", backlogItemId: "BI-DEAD", featureBuildId: "FB-DEAD" }]),
       },
       featureBuild: {
@@ -157,14 +157,14 @@ describe("selectReapCandidates", () => {
 
 function makeDb() {
   const db = {
-    workCapsule: {
+    workroom: {
       findMany: vi.fn(),
       findUnique: vi.fn(),
       update: vi.fn(),
       create: vi.fn(),
       findFirst: vi.fn(),
     },
-    workCapsuleActivity: { create: vi.fn() },
+    workroomActivity: { create: vi.fn() },
     featureBuild: { findMany: vi.fn() },
     $transaction: vi.fn(async (fn: (tx: unknown) => Promise<unknown>) => fn(db)),
   };
@@ -183,7 +183,7 @@ describe("reapStaleWorkCapsules", () => {
   ];
 
   it("DEFAULTS to dry-run: returns candidates but writes nothing", async () => {
-    db.workCapsule.findMany.mockResolvedValueOnce(deadRows());
+    db.workroom.findMany.mockResolvedValueOnce(deadRows());
     db.featureBuild.findMany.mockResolvedValueOnce([]);
 
     const result = await reapStaleWorkCapsules({ db: db as unknown as CapsuleDb, now: NOW });
@@ -192,35 +192,35 @@ describe("reapStaleWorkCapsules", () => {
     expect(result.reaped).toBe(0);
     expect(result.candidates.map((c) => c.capsuleId)).toEqual(["WC-LEASE-DEAD"]);
     // No mutation on the default path.
-    expect(db.workCapsule.update).not.toHaveBeenCalled();
-    expect(db.workCapsuleActivity.create).not.toHaveBeenCalled();
+    expect(db.workroom.update).not.toHaveBeenCalled();
+    expect(db.workroomActivity.create).not.toHaveBeenCalled();
   });
 
   it("transitions dead capsules to abandoned only when dryRun=false", async () => {
-    db.workCapsule.findMany.mockResolvedValueOnce(deadRows());
+    db.workroom.findMany.mockResolvedValueOnce(deadRows());
     db.featureBuild.findMany.mockResolvedValueOnce([]);
-    db.workCapsule.findUnique.mockResolvedValue({ id: "row-lease-dead", capsuleId: "WC-LEASE-DEAD", workspaceState: {} });
-    db.workCapsule.update.mockResolvedValue({ id: "row-lease-dead", capsuleId: "WC-LEASE-DEAD" });
+    db.workroom.findUnique.mockResolvedValue({ id: "row-lease-dead", capsuleId: "WC-LEASE-DEAD", workspaceState: {} });
+    db.workroom.update.mockResolvedValue({ id: "row-lease-dead", capsuleId: "WC-LEASE-DEAD" });
 
     const result = await reapStaleWorkCapsules({ db: db as unknown as CapsuleDb, now: NOW, dryRun: false });
 
     expect(result.dryRun).toBe(false);
     expect(result.reaped).toBe(1);
-    expect(db.workCapsule.update).toHaveBeenCalledTimes(1);
-    expect(db.workCapsule.update).toHaveBeenCalledWith(
+    expect(db.workroom.update).toHaveBeenCalledTimes(1);
+    expect(db.workroom.update).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { capsuleId: "WC-LEASE-DEAD" },
         data: expect.objectContaining({ status: "abandoned" }),
       }),
     );
     // The live capsule is never touched.
-    expect(db.workCapsule.update).not.toHaveBeenCalledWith(
+    expect(db.workroom.update).not.toHaveBeenCalledWith(
       expect.objectContaining({ where: { capsuleId: "WC-LIVE" } }),
     );
   });
 
   it("classifies zombie build-studio capsules via the linked build snapshot", async () => {
-    db.workCapsule.findMany.mockResolvedValueOnce([
+    db.workroom.findMany.mockResolvedValueOnce([
       capsule({ capsuleId: "WC-ZOMBIE", featureBuildId: "fb-1" }),
     ]);
     db.featureBuild.findMany.mockResolvedValueOnce([
@@ -236,39 +236,39 @@ describe("reapStaleWorkCapsules", () => {
 
 describe("transitionCapsuleForTerminalBuild (build-reap coupling)", () => {
   beforeEach(() => {
-    prismaMock.workCapsule.findFirst.mockReset();
-    prismaMock.workCapsule.findUnique.mockReset();
-    prismaMock.workCapsule.update.mockReset();
-    prismaMock.workCapsuleActivity.create.mockReset();
+    prismaMock.workroom.findFirst.mockReset();
+    prismaMock.workroom.findUnique.mockReset();
+    prismaMock.workroom.update.mockReset();
+    prismaMock.workroomActivity.create.mockReset();
     prismaMock.$transaction.mockReset();
     prismaMock.$transaction.mockImplementation(async (fn: (tx: unknown) => Promise<unknown>) => fn(prismaMock));
   });
 
   it("abandons the non-terminal capsule attached to a reaped build", async () => {
-    prismaMock.workCapsule.findFirst.mockResolvedValueOnce({ capsuleId: "WC-ZOMBIE" });
-    prismaMock.workCapsule.findUnique.mockResolvedValueOnce({ id: "row-z", capsuleId: "WC-ZOMBIE", workspaceState: {} });
-    prismaMock.workCapsule.update.mockResolvedValueOnce({ id: "row-z", capsuleId: "WC-ZOMBIE" });
+    prismaMock.workroom.findFirst.mockResolvedValueOnce({ capsuleId: "WC-ZOMBIE" });
+    prismaMock.workroom.findUnique.mockResolvedValueOnce({ id: "row-z", capsuleId: "WC-ZOMBIE", workspaceState: {} });
+    prismaMock.workroom.update.mockResolvedValueOnce({ id: "row-z", capsuleId: "WC-ZOMBIE" });
 
     const did = await transitionCapsuleForTerminalBuild("FB-123", "inert — no activity in ideate.");
 
     expect(did).toBe(true);
     // Looks up by the build-studio idempotency key and only when non-terminal.
-    expect(prismaMock.workCapsule.findFirst).toHaveBeenCalledWith(
+    expect(prismaMock.workroom.findFirst).toHaveBeenCalledWith(
       expect.objectContaining({
         where: expect.objectContaining({ idempotencyKey: "build-studio:FB-123" }),
       }),
     );
-    expect(prismaMock.workCapsule.update).toHaveBeenCalledWith(
+    expect(prismaMock.workroom.update).toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ status: "abandoned" }) }),
     );
   });
 
   it("is a no-op when no attached non-terminal capsule exists", async () => {
-    prismaMock.workCapsule.findFirst.mockResolvedValueOnce(null);
+    prismaMock.workroom.findFirst.mockResolvedValueOnce(null);
 
     const did = await transitionCapsuleForTerminalBuild("FB-404", "stalled.");
 
     expect(did).toBe(false);
-    expect(prismaMock.workCapsule.update).not.toHaveBeenCalled();
+    expect(prismaMock.workroom.update).not.toHaveBeenCalled();
   });
 });

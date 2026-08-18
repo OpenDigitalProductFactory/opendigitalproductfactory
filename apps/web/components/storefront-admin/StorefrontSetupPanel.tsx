@@ -223,7 +223,7 @@ function GeneratedContentRecovery({
         else
           setFeedback({
             tone: "success",
-            message: `Restored “${line.name}” — ${res.affected.items} items reactivated.`,
+            message: `Restored “${line.name}” — ${res.data.affected.items} items reactivated.`,
             undo: () => reRemove(line.compositionId, line.name),
           });
       },
@@ -244,7 +244,7 @@ function GeneratedContentRecovery({
         else
           setFeedback({
             tone: "success",
-            message: `Permanently removed “${line.name}” (${res.affected.items} items, ${res.affected.sections} sections deleted).`,
+            message: `Permanently removed “${line.name}” (${res.data.affected.items} items, ${res.data.affected.sections} sections deleted).`,
           });
       },
     });

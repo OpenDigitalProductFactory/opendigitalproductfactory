@@ -82,7 +82,7 @@ compatibility adapter while external clients can construct the same receipt.
 
 A receipt is fresh only while all of its semantic identity remains unchanged:
 
-- Work Capsule;
+- Workroom;
 - base and head trees;
 - diff digest;
 - policy and reviewer versions; and
@@ -130,10 +130,10 @@ inconclusive samples are excluded from precision and unique-yield denominators.
   the agent-client governance contract on this page.
 - Current code substrate reviewed: the surface-neutral semantic review receipt,
   external-review activation policy, existing external evidence and Work
-  Capsule activity streams, Build Studio task review, and assembled-change
+  Workroom activity streams, Build Studio task review, and assembled-change
   verification transition.
 - Source of truth: the immutable receipt identity in
-  `apps/web/lib/change-review/semantic-change-review.ts` plus Work Capsule
+  `apps/web/lib/change-review/semantic-change-review.ts` plus Workroom
   evidence; no new persistence substrate is introduced.
 - Decision: both authoring paths use one operation and evidence shape. A local
   no-network adapter enforces exact-tree freshness only after cross-surface
@@ -146,7 +146,7 @@ Client identity is useful attribution:
 - which client family and version connected;
 - which token and human principal authorized the request;
 - which coworker or task run acted; and
-- which session or Work Capsule contained the work.
+- which session or Workroom contained the work.
 
 It is not authority. A new Antigravity, Grok, Codex, or customer agent receives
 the same server policy. Measured trust is keyed to coworker, activity, and risk,

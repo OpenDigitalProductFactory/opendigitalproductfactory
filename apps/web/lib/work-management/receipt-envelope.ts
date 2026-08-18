@@ -7,7 +7,7 @@ import type {
   WorkCaseRef,
   WorkCaseSourceRef,
 } from "./case-types";
-import type { WorkRoomShapeKey } from "./room-shapes";
+import type { WorkroomShapeKey } from "./room-shapes";
 
 export type ReceiptEnvelopeStatus = "valid" | "invalid" | "observed" | "failed";
 
@@ -26,7 +26,7 @@ export interface ReceiptEnvelope {
   outputDigest?: unknown;
   policyRefs: readonly string[];
   governance?: {
-    collaborationShape: WorkRoomShapeKey;
+    collaborationShape: WorkroomShapeKey;
     authorityLadderLevel: "none" | "discover" | "content" | "action";
     requiredPrincipalRefs: readonly string[];
     decisionInteractionId?: string;
@@ -276,7 +276,7 @@ export function fromWorkCapsuleActivity(row: WorkCapsuleActivityRow): ReceiptEnv
       id: row.workCapsuleId,
       status: row.kind,
     },
-    rawRef: { table: "WorkCapsuleActivity", id: row.id },
+    rawRef: { table: "WorkroomActivity", id: row.id },
     summary: row.summary,
     occurredAt: row.recordedAt,
     outputDigest: row.payload,

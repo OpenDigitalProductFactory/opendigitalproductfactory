@@ -72,7 +72,16 @@ describe("buildBrandingStyleTag", () => {
     expect(css).toContain("--dpf-font-heading: Montserrat");
   });
 
-  it("only maps the 9 active CSS variables", () => {
+  it("maps palette.onAccent to --dpf-on-accent (and omits it when absent)", () => {
+    const withOnAccent = buildBrandingStyleTag({
+      palette: { accent: "#ffe14d", onAccent: "#1a1a2e" },
+    });
+    expect(withOnAccent).toContain("--dpf-on-accent: #1a1a2e");
+    const withoutOnAccent = buildBrandingStyleTag({ palette: { accent: "#ff0000" } });
+    expect(withoutOnAccent).not.toContain("--dpf-on-accent");
+  });
+
+  it("only maps the 10 active CSS variables", () => {
     const tokens = {
       palette: { bg: "#111", surface1: "#222", surface2: "#333", accent: "#444", muted: "#555", border: "#666", text: "#e2e2f0" },
       typography: { fontFamily: "Inter", headingFontFamily: "Inter" },

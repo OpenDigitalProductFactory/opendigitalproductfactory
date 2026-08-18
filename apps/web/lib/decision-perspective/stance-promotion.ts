@@ -15,7 +15,7 @@
 // the ladder. It never moves material down: promote() refuses to write a
 // lower tier over a higher one.
 
-import type { DecisionDomainClass } from "./types";
+import { CROSS_DOMAIN_MATERIAL_TAG, type DecisionDomainClass } from "./types";
 
 export const STANCE_TIERS = {
   unconfirmed: { evidenceGrade: "B", confidenceWeight: 0.6 },
@@ -107,6 +107,18 @@ export async function promoteStanceMaterial(
   const materialIds: string[] = [];
   const keptHigherTier: string[] = [];
 
+  // BI-F5F2869D. A `ruled` stance is the owner answering a real decision, so it
+  // is the one kind of material that must survive re-bucketing: the question it
+  // settles can be asked again under a different caller-supplied domainClass,
+  // and under the old exact-match gate the ruling would then be invisible — the
+  // "remember this" loop taught the corpus something it could never retrieve.
+  // Lower tiers stay scoped to their own domain; only an explicit owner ruling
+  // earns cross-domain reach.
+  const domainTags = (domainClass: string) =>
+    input.tier === "ruled"
+      ? [domainClass, CROSS_DOMAIN_MATERIAL_TAG]
+      : [domainClass];
+
   for (const [index, domainClass] of input.domainClasses.entries()) {
     const materialId = stanceMaterialId(profile.profileId, input.slug, domainClass, index === 0);
     materialIds.push(materialId);
@@ -127,9 +139,9 @@ export async function promoteStanceMaterial(
       update: {
         sourceType,
         sourceRef,
-        scope: { domains: [domainClass] },
+        scope: { domains: domainTags(domainClass) },
         domainClass,
-        domains: [domainClass],
+        domains: domainTags(domainClass),
         summary: input.summary,
         freshness: "current",
         evidenceGrade: tier.evidenceGrade,
@@ -144,10 +156,10 @@ export async function promoteStanceMaterial(
         profileVersionId: profile.currentVersionId ?? `${profile.profileId}-v1`,
         sourceType,
         sourceRef,
-        scope: { domains: [domainClass] },
+        scope: { domains: domainTags(domainClass) },
         domainClass,
         direction: "support",
-        domains: [domainClass],
+        domains: domainTags(domainClass),
         freshness: "current",
         evidenceGrade: tier.evidenceGrade,
         confidenceWeight: tier.confidenceWeight,

@@ -920,6 +920,7 @@
           "dependency_audit",
           "supply_chain_verify",
           "finding_create",
+          "initiative_security_review",
           "spec_plan_read",
           "web_search"
         ],
@@ -2082,6 +2083,7 @@
           "consumer_read",
           "policy_write",
           "policy_read",
+          "initiative_compliance_review",
           "spec_plan_read",
           "web_search"
         ],
@@ -2181,6 +2183,7 @@
           "sbom_read",
           "license_check",
           "regulatory_compliance_check",
+          "initiative_data_review",
           "tool_evaluation_read",
           "spec_plan_read"
         ],
@@ -2230,6 +2233,7 @@
           "registry_read",
           "backlog_write",
           "decision_record_create",
+          "initiative_ux_review",
           "web_search"
         ],
         "memory": {
@@ -2692,7 +2696,8 @@
           "release_plan_create",
           "release_plan_read",
           "coworker_screen_read",
-          "coworker_screen_drive"
+          "coworker_screen_drive",
+          "initiative_evidence_write"
         ]
       }
     },
@@ -2743,7 +2748,9 @@
           "architecture_read",
           "spec_plan_read",
           "backlog_read",
-          "registry_read"
+          "registry_read",
+          "initiative_design_review",
+          "initiative_domain_review"
         ]
       }
     },
@@ -2833,7 +2840,8 @@
           "backlog_read",
           "decision_record_create",
           "registry_read",
-          "web_search"
+          "web_search",
+          "initiative_architecture_review"
         ]
       }
     },
@@ -3235,7 +3243,8 @@
         "portfolio_read",
         "registry_read",
         "web_search",
-        "work_capsule_read"
+        "work_capsule_read",
+        "initiative_evidence_write"
       ]
       }
     },
@@ -3250,7 +3259,7 @@
       "tier": "specialist",
       "value_stream": "explore",
       "role": "specialist",
-      "capability_domain": "External coworker archetype reconnaissance. Scans approved external agent catalogs, detects meaningful platform gaps, and files governed backlog suggestions without importing code.",
+      "capability_domain": "External product/market reconnaissance. Scans approved external agent catalogs and the wider product/market source list, detects meaningful platform gaps and design challenges, and files governed backlog suggestions without importing code.",
       "human_supervisor_id": "HR-200",
       "hitl_tier_default": 1,
       "delegates_to": [],
@@ -3336,6 +3345,7 @@
           "portfolio_read",
           "registry_read",
           "registry_write",
+          "initiative_archetype_review",
           "web_search"
         ]
       }

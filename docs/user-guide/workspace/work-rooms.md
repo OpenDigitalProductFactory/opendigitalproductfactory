@@ -1,5 +1,5 @@
 ---
-title: "My Work and Work Rooms"
+title: "My Work and Workrooms"
 area: workspace
 order: 3
 relatedCode:
@@ -7,8 +7,8 @@ relatedCode:
   - apps/web/app/(shell)/workspace/cases/[caseKey]/page.tsx
   - apps/web/components/workspace/WorkCaseAttentionLens.tsx
   - apps/web/components/workspace/WorkCaseDetailView.tsx
-  - apps/web/components/workspace/work-room/WorkRoomCycles.tsx
-  - apps/web/components/workspace/work-room/WorkRoomParticipants.tsx
+  - apps/web/components/workspace/workroom/WorkroomCycles.tsx
+  - apps/web/components/workspace/workroom/WorkroomParticipants.tsx
   - apps/web/lib/work-management/room-channel-continuity.ts
   - apps/web/lib/work-management/room-channel-ingress.ts
   - apps/web/lib/work-management/room-participation.ts
@@ -18,13 +18,13 @@ relatedCode:
 
 ## Overview
 
-**My Work** is the Workspace view of active company work available to you. Each item opens a **Work Room**: a focused place where authorized people and AI coworkers coordinate toward a named outcome.
+**My Work** is the Workspace view of active company work available to you. Each item opens a **Workroom**: a focused place where authorized people and AI coworkers coordinate toward a named outcome.
 
-A Work Room is not an unbounded chat channel. It has a work boundary: purpose, outcome, scope, accountability, authority, sensitivity, measures, timing, and a closure rule. The platform keeps the underlying governed Work Case and its evidence; the room presents that structure in language suited to doing the work.
+A Workroom is not an unbounded chat channel. It has a work boundary: purpose, outcome, scope, accountability, authority, sensitivity, measures, timing, and a closure rule. The platform keeps the underlying governed Work Case and its evidence; the room presents that structure in language suited to doing the work.
 
 ## What You See First
 
-The top of a Work Room answers four questions:
+The top of a Workroom answers four questions:
 
 1. What outcome does this room own?
 2. What needs attention now?
@@ -61,7 +61,7 @@ Open **Participants** to see why each person or coworker is in the room, what th
 
 Room access has separate discovery, content, and action boundaries. Assignment or an explicit room policy admits a principal; a presence heartbeat never does. Sensitivity clearance is checked on the server before messages, participants, or context load. A person without content access receives the same not-found experience as an unknown room.
 
-When an existing communication adapter attaches a Teams, Slack, email, or other external conversation to a Work Room, DPF remains the canonical context:
+When an existing communication adapter attaches a Teams, Slack, email, or other external conversation to a Workroom, DPF remains the canonical context:
 
 - concise notifications carry a link back to the internal room and its canonical Work Case reference;
 - the channel binding resolves the external subject to one `Principal` before an inbound event can attach;
@@ -70,7 +70,7 @@ When an existing communication adapter attaches a Teams, Slack, email, or other 
 - sent or delivered status proves transport only, not that governed work completed;
 - if an adapter cannot receive or interact, the channel reports a degraded state while the DPF room remains usable.
 
-Unresolved external identities or room attachments are quarantined from room activity. Provider-specific setup and capabilities remain part of Employee Communication administration, not the Work Room itself.
+Unresolved external identities or room attachments are quarantined from room activity. Provider-specific setup and capabilities remain part of Employee Communication administration, not the Workroom itself.
 
 ## Finite and Standing Rooms
 
@@ -87,4 +87,4 @@ In a standing room, the **Current cycle** panel shows the objective, trigger, re
 
 If a room boundary is incomplete, the page identifies the missing elements instead of inventing them. If the source is unavailable, the last available projection is marked clearly and the page gives one recovery direction. If an AI coworker's current status is unavailable, the participant panel says so and directs you back to the room's next action instead of implying that the coworker is still working.
 
-If you do not have access, the internal room title, participants, source references, and sensitivity details are not shown. External customer case pages remain customer-safe case summaries; they do not expose internal Work Room controls or participants.
+If you do not have access, the internal room title, participants, source references, and sensitivity details are not shown. External customer case pages remain customer-safe case summaries; they do not expose internal Workroom controls or participants.

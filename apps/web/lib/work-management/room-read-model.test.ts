@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import type { WorkCaseDetail, WorkCaseSourceRef } from "./case-types";
 import {
-  buildWorkRoomView,
-  type BuildWorkRoomViewInput,
+  buildWorkroomView,
+  type BuildWorkroomViewInput,
 } from "./room-read-model";
 
 const sourceRef: WorkCaseSourceRef = {
@@ -39,7 +39,7 @@ function caseDetail(overrides: Partial<WorkCaseDetail["summary"]> = {}): WorkCas
   };
 }
 
-function completeBoundary(): BuildWorkRoomViewInput["boundary"] {
+function completeBoundary(): BuildWorkroomViewInput["boundary"] {
   return {
     purpose: "Coordinate the repair without losing customer context.",
     outcome: "Cooling is restored and verified.",
@@ -62,7 +62,7 @@ function completeBoundary(): BuildWorkRoomViewInput["boundary"] {
 
 describe("Work Room read model", () => {
   it("projects a finite Work Case without creating a second identity", () => {
-    const room = buildWorkRoomView({
+    const room = buildWorkroomView({
       caseKey: "booking%3ABK-100",
       detail: caseDetail(),
       boundary: completeBoundary(),
@@ -119,7 +119,7 @@ describe("Work Room read model", () => {
       id: "WEEKLY-CASH",
       sourceType: "scheduled",
     };
-    const room = buildWorkRoomView({
+    const room = buildWorkroomView({
       caseKey: "scheduled%3AWEEKLY-CASH",
       detail: caseDetail({
         caseId: "scheduled:WEEKLY-CASH",
@@ -144,7 +144,7 @@ describe("Work Room read model", () => {
       id: "EXT-1",
       sourceType: "external-ticket",
     };
-    const room = buildWorkRoomView({
+    const room = buildWorkroomView({
       caseKey: "external-ticket%3AEXT-1",
       detail: caseDetail({
         caseId: "external-ticket:EXT-1",
@@ -178,7 +178,7 @@ describe("Work Room read model", () => {
   });
 
   it("keeps participant roles, work state, and presence as separate axes", () => {
-    const room = buildWorkRoomView({
+    const room = buildWorkroomView({
       caseKey: "booking%3ABK-100",
       detail: caseDetail(),
       boundary: completeBoundary(),
@@ -228,14 +228,14 @@ describe("Work Room read model", () => {
         status: "comment",
       },
     };
-    const input: BuildWorkRoomViewInput = {
+    const input: BuildWorkroomViewInput = {
       caseKey: "booking%3ABK-100",
       detail: caseDetail(),
       activities: [activity, activity],
     };
 
-    const first = buildWorkRoomView(input);
-    const second = buildWorkRoomView(input);
+    const first = buildWorkroomView(input);
+    const second = buildWorkroomView(input);
 
     expect(first.activity).toHaveLength(1);
     expect(first.activity[0]).toMatchObject({
@@ -247,7 +247,7 @@ describe("Work Room read model", () => {
   });
 
   it("preserves terminal Work Case behavior without inferring completion facts", () => {
-    const room = buildWorkRoomView({
+    const room = buildWorkroomView({
       caseKey: "booking%3ABK-100",
       detail: caseDetail({
         state: "closed",

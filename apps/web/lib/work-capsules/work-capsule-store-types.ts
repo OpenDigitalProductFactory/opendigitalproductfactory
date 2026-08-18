@@ -5,14 +5,14 @@ export type WorkCapsuleActor = {
 };
 
 export type CapsuleDb = {
-  workCapsule: {
+  workroom: {
     create(args: unknown): Promise<any>;
     findFirst(args: unknown): Promise<any>;
     findUnique(args: unknown): Promise<any>;
     findMany(args: unknown): Promise<any[]>;
     update(args: unknown): Promise<any>;
   };
-  workCapsuleActivity: { create(args: unknown): Promise<any> };
+  workroomActivity: { create(args: unknown): Promise<any> };
   backlogItem?: {
     findFirst(args: unknown): Promise<any>;
     update(args: unknown): Promise<any>;

@@ -4,8 +4,8 @@ import { dirname, join } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { DELIBERATION_TOOLS } from "@/lib/mcp-tools-deliberation";
-import { SIEM_TOOLS } from "@/lib/mcp-tools-siem";
+import { DELIBERATION_TOOLS } from "@/lib/mcp/deliberation-handlers";
+import { SIEM_TOOLS } from "@/lib/mcp/siem-handlers";
 import { PLATFORM_TOOLS } from "@/lib/mcp-tools";
 import { isToolAllowedByGrants, TOOL_TO_GRANTS } from "@/lib/tak/agent-grants";
 
@@ -344,7 +344,7 @@ describe("composeToolPacks", () => {
         coworkerServiceCatalogPack.definitions.length,
     );
     expect(registry.getHandler("register_runtime_target")).toBeTypeOf("function");
-    expect(registry.getHandler("create_work_capsule")).toBeTypeOf("function");
+    expect(registry.getHandler("create_workroom")).toBeTypeOf("function");
     expect(registry.getHandler("workbook_list_tables")).toBeTypeOf("function");
     expect(registry.getHandler("report_quality_issue")).toBeTypeOf("function");
     expect(registry.getHandler("request_self_upgrade")).toBeTypeOf("function");

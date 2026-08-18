@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { respondToExpenseApproval, markExpenseReimbursed } from "@/lib/actions/expenses";
+import { Button } from "@/components/ui/Button";
+import { FormStatus } from "@/components/ui/form";
 
 interface Props {
   claimId: string;
@@ -71,38 +73,23 @@ export function ExpenseClaimActions({ claimId, status, approvalToken }: Props) {
               placeholder="Rejection reason (optional)"
               className="text-xs px-3 py-1.5 rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] text-[var(--dpf-text)] placeholder:text-[var(--dpf-muted)] focus:outline-none focus:border-[var(--dpf-accent)] w-56"
             />
-            <button
-              onClick={handleApprove}
-              disabled={isDisabled}
-              className="px-3 py-1.5 rounded-md text-xs font-medium text-white transition-opacity disabled:opacity-50"
-              style={{ backgroundColor: "var(--dpf-success)", color: "#000" }}
-            >
+            <Button size="sm" onClick={handleApprove} disabled={isDisabled}>
               {loading === "approve" ? "Approving…" : "Approve"}
-            </button>
-            <button
-              onClick={handleReject}
-              disabled={isDisabled}
-              className="px-3 py-1.5 rounded-md text-xs font-medium text-white transition-opacity disabled:opacity-50"
-              style={{ backgroundColor: "var(--dpf-error)" }}
-            >
+            </Button>
+            <Button size="sm" variant="danger" onClick={handleReject} disabled={isDisabled}>
               {loading === "reject" ? "Rejecting…" : "Reject"}
-            </button>
+            </Button>
           </div>
         </>
       )}
 
       {status === "approved" && (
-        <button
-          onClick={handleReimburse}
-          disabled={isDisabled}
-          className="px-3 py-1.5 rounded-md text-xs font-medium text-white transition-opacity disabled:opacity-50"
-          style={{ backgroundColor: "var(--dpf-success)" }}
-        >
+        <Button size="sm" onClick={handleReimburse} disabled={isDisabled}>
           {loading === "reimburse" ? "Marking…" : "Mark as Reimbursed"}
-        </button>
+        </Button>
       )}
 
-      {error && <p className="text-xs text-[var(--dpf-error)]">{error}</p>}
+      <FormStatus error={error} />
     </div>
   );
 }

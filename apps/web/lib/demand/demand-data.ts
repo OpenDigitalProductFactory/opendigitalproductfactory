@@ -168,7 +168,7 @@ export const getDemandItems = cache(async (
       : {};
     const rows = await prisma.backlogItem.findMany({
       where: {
-        status: { notIn: ["done", "deferred"] },
+        status: { notIn: ["done", "deferred", "retired"] },
         ...scopedWhere,
       },
       orderBy: [{ demandScore: "desc" }, { createdAt: "asc" }],

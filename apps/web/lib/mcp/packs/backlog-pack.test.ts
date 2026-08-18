@@ -12,9 +12,11 @@ const db = vi.hoisted(() => ({
   platformDevConfigFindUnique: vi.fn(),
   transaction: vi.fn(),
   txBacklogItemUpdate: vi.fn(),
+  txBacklogItemFindUnique: vi.fn(),
   txActivityCreate: vi.fn(),
   txBacklogItemCount: vi.fn(),
   txEpicUpdate: vi.fn(),
+  principalFindFirst: vi.fn(),
 }));
 vi.mock("@dpf/db", () => ({
   prisma: {
@@ -33,6 +35,9 @@ vi.mock("@dpf/db", () => ({
     platformDevConfig: {
       findUnique: (...a: unknown[]) => db.platformDevConfigFindUnique(...a),
     },
+    principal: {
+      findFirst: (...a: unknown[]) => db.principalFindFirst(...a),
+    },
     $transaction: (...a: unknown[]) => db.transaction(...a),
   },
 }));
@@ -47,7 +52,7 @@ vi.mock("@/lib/backlog/mcp-epic-tools", () => ({
 }));
 
 const updateHandler = vi.hoisted(() => ({ handleUpdateBacklogItem: vi.fn() }));
-vi.mock("@/lib/mcp-handlers/update-backlog-item", () => ({
+vi.mock("./backlog-update-item-handler", () => ({
   handleUpdateBacklogItem: (...a: unknown[]) => updateHandler.handleUpdateBacklogItem(...a),
 }));
 
@@ -88,6 +93,7 @@ beforeEach(() => {
   db.transaction.mockImplementation(async (callback: (tx: unknown) => Promise<unknown>) =>
     callback({
       backlogItem: {
+        findUnique: (...a: unknown[]) => db.txBacklogItemFindUnique(...a),
         update: (...a: unknown[]) => db.txBacklogItemUpdate(...a),
         count: (...a: unknown[]) => db.txBacklogItemCount(...a),
       },
@@ -96,6 +102,9 @@ beforeEach(() => {
       },
       epic: {
         update: (...a: unknown[]) => db.txEpicUpdate(...a),
+      },
+      principal: {
+        findFirst: (...a: unknown[]) => db.principalFindFirst(...a),
       },
     }),
   );
@@ -188,6 +197,38 @@ describe("backlog pack — handler behavior (delegation preserved)", () => {
     expect(db.transaction).not.toHaveBeenCalled();
   });
 
+  it("retire_backlog_item keeps the epic open when it retains wanted deferred work", async () => {
+    db.txBacklogItemFindUnique.mockResolvedValue({
+      id: "row-1",
+      itemId: "BI-1",
+      status: "open",
+      epicId: "epic-row-1",
+      activeBuildId: null,
+    });
+    db.principalFindFirst.mockResolvedValue({ id: "principal-row-1" });
+    db.txBacklogItemUpdate.mockResolvedValue({ itemId: "BI-1" });
+    db.txActivityCreate.mockResolvedValue({ id: "activity-1" });
+
+    const res = await backlogPack.handlers.retire_backlog_item(
+      {
+        itemId: "BI-1",
+        outcome: "defer",
+        rationale: "Still wanted after the predecessor ships.",
+        reason: "Predecessor is incomplete.",
+        deferral: {
+          reason: "Predecessor is incomplete.",
+          trigger: "Predecessor ships.",
+          reviewAt: "2099-11-15T12:00:00Z",
+          ownerPrincipalId: "PRN-OWNER",
+        },
+      },
+      "u1",
+    );
+
+    expect(res.success).toBe(true);
+    expect(db.txEpicUpdate).not.toHaveBeenCalled();
+  });
+
   it("get_backlog_item requires an itemId", async () => {
     const res = await backlogPack.handlers.get_backlog_item({}, "u1");
     expect(res.success).toBe(false);
@@ -201,6 +242,106 @@ describe("backlog pack — handler behavior (delegation preserved)", () => {
     );
     expect(res.success).toBe(false);
     expect(res.error).toBe("invalid_status");
+  });
+
+  it("update_backlog_item_status rejects a deferred transition without the complete contract", async () => {
+    const res = await backlogPack.handlers.update_backlog_item_status(
+      { itemId: "BI-1", status: "deferred" },
+      "u1",
+    );
+    expect(res.success).toBe(false);
+    expect(res.error).toBe("missing_deferral");
+    expect(db.backlogItemFindUnique).not.toHaveBeenCalled();
+  });
+
+  it("update_backlog_item_status reviews an already-deferred item instead of returning a no-op", async () => {
+    db.principalFindFirst.mockResolvedValue({ id: "principal-1" });
+    db.backlogItemFindUnique.mockResolvedValue({
+      id: "row-1",
+      status: "deferred",
+      epicId: null,
+      triageOutcome: "defer",
+      effortSize: null,
+      activeBuildId: null,
+      claimStatus: "released",
+      claimedById: null,
+      claimedByAgentId: null,
+      claimedAt: null,
+    });
+    db.txBacklogItemUpdate.mockResolvedValue({
+      itemId: "BI-1",
+      status: "deferred",
+      epicId: null,
+      completedAt: null,
+    });
+    db.txActivityCreate.mockResolvedValue({ id: "activity-1" });
+
+    const res = await backlogPack.handlers.update_backlog_item_status(
+      {
+        itemId: "BI-1",
+        status: "deferred",
+        deferral: {
+          reason: "Waiting for predecessor evidence.",
+          trigger: "EP-1 reaches done.",
+          reviewAt: "2026-11-15T12:00:00.000Z",
+          ownerPrincipalId: "principal-1",
+        },
+      },
+      "u1",
+    );
+
+    expect(res.success).toBe(true);
+    expect(db.transaction).toHaveBeenCalledOnce();
+    expect(db.txBacklogItemUpdate).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        deferReason: "Waiting for predecessor evidence.",
+        deferTrigger: "EP-1 reaches done.",
+        deferReviewAt: new Date("2026-11-15T12:00:00.000Z"),
+        deferOwnerPrincipalId: "principal-1",
+        deferredAt: expect.any(Date),
+      }),
+    }));
+    expect(db.txActivityCreate).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ kind: "deferral_review" }),
+    }));
+  });
+
+  it("update_backlog_item_status clears the active deferral projection when reactivated", async () => {
+    db.backlogItemFindUnique.mockResolvedValue({
+      id: "row-1",
+      status: "deferred",
+      epicId: null,
+      triageOutcome: "defer",
+      effortSize: null,
+      activeBuildId: null,
+      claimStatus: "released",
+      claimedById: null,
+      claimedByAgentId: null,
+      claimedAt: null,
+    });
+    db.txBacklogItemUpdate.mockResolvedValue({
+      itemId: "BI-1",
+      status: "open",
+      epicId: null,
+      completedAt: null,
+    });
+    db.txActivityCreate.mockResolvedValue({ id: "activity-1" });
+
+    const res = await backlogPack.handlers.update_backlog_item_status(
+      { itemId: "BI-1", status: "open" },
+      "u1",
+    );
+
+    expect(res.success).toBe(true);
+    expect(db.txBacklogItemUpdate).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        deferReason: null,
+        deferTrigger: null,
+        deferReviewAt: null,
+        deferOwnerPrincipalId: null,
+        deferredAt: null,
+      }),
+    }));
   });
 
   it("update_backlog_item_status exposes the typed completion evidence schema", () => {

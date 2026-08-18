@@ -27,23 +27,23 @@ import {
 import type { OperationalValueStreamStageKey } from "@dpf/storefront-templates";
 
 /** The room subject descriptor the loader builds from the subject's stored row. */
-export type WorkRoomStructureSubject =
+export type WorkroomStructureSubject =
   | { kind: "opportunity"; stage: string }
   | { kind: "customer-account"; status: string };
 
-export interface WorkRoomValueStream {
+export interface WorkroomValueStream {
   stage: OperationalValueStreamStageKey;
   label: string;
 }
 
-export interface WorkRoomLifecycleGate {
+export interface WorkroomLifecycleGate {
   toStage: string;
   toStageLabel: string;
   allowed: boolean;
   reason?: string;
 }
 
-export interface WorkRoomLifecycle {
+export interface WorkroomLifecycle {
   grammarKey: string;
   stage: string;
   stageLabel: string;
@@ -51,18 +51,18 @@ export interface WorkRoomLifecycle {
   stateLabel: string;
   band: string;
   /** The advancement gates from the current stage — what it would take to move on. */
-  nextGates: WorkRoomLifecycleGate[];
+  nextGates: WorkroomLifecycleGate[];
 }
 
-export interface WorkRoomStructure {
-  valueStream: WorkRoomValueStream | null;
-  lifecycle: WorkRoomLifecycle | null;
+export interface WorkroomStructure {
+  valueStream: WorkroomValueStream | null;
+  lifecycle: WorkroomLifecycle | null;
 }
 
-function buildLifecycle(grammar: LifecycleGrammar, point: LifecyclePoint): WorkRoomLifecycle {
+function buildLifecycle(grammar: LifecycleGrammar, point: LifecyclePoint): WorkroomLifecycle {
   const stageDef = getStage(grammar, point.stage);
   const stateDef = stageDef?.states.find((candidate) => candidate.key === point.state) ?? null;
-  const nextGates: WorkRoomLifecycleGate[] = (stageDef?.advancesTo ?? []).map((toStage) => {
+  const nextGates: WorkroomLifecycleGate[] = (stageDef?.advancesTo ?? []).map((toStage) => {
     const check = canAdvance(grammar, point, toStage);
     return {
       toStage,
@@ -87,7 +87,7 @@ function buildLifecycle(grammar: LifecycleGrammar, point: LifecyclePoint): WorkR
  * when the subject has no value-stream/lifecycle binding (e.g. a platform-development
  * subject that is not on the customer OVSM — a paved follow-up).
  */
-export function resolveWorkRoomStructure(subject: WorkRoomStructureSubject | null): WorkRoomStructure | null {
+export function resolveWorkroomStructure(subject: WorkroomStructureSubject | null): WorkroomStructure | null {
   if (!subject) return null;
 
   switch (subject.kind) {
@@ -116,11 +116,11 @@ export function resolveWorkRoomStructure(subject: WorkRoomStructureSubject | nul
  * development, workflow) — those fold onto the platform's own delivery stream in a
  * follow-up. `opportunityStage` / `accountStatus` are supplied by the loader.
  */
-export function workRoomStructureSubjectFor(input: {
+export function workroomStructureSubjectFor(input: {
   sourceType: string;
   opportunityStage?: string | null;
   accountStatus?: string | null;
-}): WorkRoomStructureSubject | null {
+}): WorkroomStructureSubject | null {
   if (input.sourceType === "opportunity" && input.opportunityStage) {
     return { kind: "opportunity", stage: input.opportunityStage };
   }

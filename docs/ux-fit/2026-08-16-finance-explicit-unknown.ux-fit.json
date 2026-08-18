@@ -1,0 +1,18 @@
+{
+  "version": "1",
+  "decidedOption": "explicit-unknown-stat-cards",
+  "decisionInteractionId": "DI-22A333BD5397",
+  "scope": {
+    "files": [
+      "apps/web/app/(shell)/finance/page.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "explicit-unknown-stat-cards",
+      "hide-until-recorded",
+      "zero-with-caveat"
+    ]
+  }
+}

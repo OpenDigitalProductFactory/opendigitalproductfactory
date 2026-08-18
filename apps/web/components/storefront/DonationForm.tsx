@@ -34,13 +34,13 @@ export function DonationForm({ orgSlug, currencySymbol = "£" }: { orgSlug: stri
       isAnonymous: fd.get("anonymous") === "on",
     });
 
-    if (!result.success) {
+    if (!result.ok) {
       setError(result.error);
       setLoading(false);
       return;
     }
 
-    router.push(`/s/${orgSlug}/checkout?ref=${result.ref}&type=donation`);
+    router.push(`/s/${orgSlug}/checkout?ref=${result.data.ref}&type=donation`);
   }
 
   return (

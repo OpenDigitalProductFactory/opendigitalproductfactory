@@ -44,7 +44,7 @@ export type TraceTargetType = (typeof TRACE_TARGET_TYPES)[number]["value"];
 export type CapabilityMaturityBand = "aligned" | "watch" | "gap";
 export type CapabilityOverlayMode = (typeof CAPABILITY_OVERLAY_MODES)[number]["value"];
 export type CapabilityOverlayTone = CapabilityMaturityBand | "neutral" | "covered" | "active";
-export type BacklogTraceStatus = "triaging" | "open" | "in-progress" | "done" | "deferred" | null;
+export type BacklogTraceStatus = "triaging" | "open" | "in-progress" | "done" | "deferred" | "retired" | null;
 
 export const IT4IT_VALUE_STREAM_SET = new Set<string>(
   IT4IT_VALUE_STREAMS.map((stream) => stream.slug),

@@ -33,13 +33,13 @@ export async function countAttributedWork(guards: readonly string[], store: Work
 type PrismaWorkAttributionClient = {
   featureBuild: { count(args: unknown): Promise<number> };
   taskRun: { count(args: unknown): Promise<number> };
-  workCapsule: { count(args: unknown): Promise<number> };
+  workroom: { count(args: unknown): Promise<number> };
 };
 
 export function createPrismaWorkAttributionStore(prisma: PrismaWorkAttributionClient): WorkAttributionStore {
   return {
     countActiveFeatureBuilds: () => prisma.featureBuild.count({ where: { abandonedAt: null, phase: { in: [...ACTIVE_BUILD_PHASES] } } }),
     countActiveTaskRuns: (source, states) => prisma.taskRun.count({ where: { source, status: { in: [...states] } } }),
-    countActiveWorkCapsules: (source, states) => prisma.workCapsule.count({ where: { source, status: { in: [...states] } } }),
+    countActiveWorkCapsules: (source, states) => prisma.workroom.count({ where: { source, status: { in: [...states] } } }),
   };
 }

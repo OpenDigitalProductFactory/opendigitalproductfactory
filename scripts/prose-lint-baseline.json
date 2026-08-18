@@ -1,5 +1,19 @@
 {
+  "apps/web/app/(auth)/error.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 16
+  },
   "apps/web/app/(auth)/forgot-password/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 2
+  },
+  "apps/web/app/(auth)/loading.tsx": {
     "vocabulary": 0,
     "genericLabels": 0,
     "readability": 0,
@@ -41,12 +55,47 @@
     "longSentences": 0,
     "textMass": 14
   },
+  "apps/web/app/(customer-auth)/error.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 16
+  },
+  "apps/web/app/(customer-auth)/loading.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 2
+  },
+  "apps/web/app/(portal)/error.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 17
+  },
   "apps/web/app/(portal)/layout.tsx": {
     "vocabulary": 0,
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
     "textMass": 2
+  },
+  "apps/web/app/(portal)/loading.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 4
+  },
+  "apps/web/app/(portal)/not-found.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 18
   },
   "apps/web/app/(portal)/portal/account/page.tsx": {
     "vocabulary": 0,
@@ -90,6 +139,20 @@
     "longSentences": 0,
     "textMass": 11
   },
+  "apps/web/app/(portal-auth)/error.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 16
+  },
+  "apps/web/app/(portal-auth)/loading.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 2
+  },
   "apps/web/app/(portal-auth)/portal/sign-in/page.tsx": {
     "vocabulary": 0,
     "genericLabels": 0,
@@ -103,6 +166,20 @@
     "readability": 0,
     "longSentences": 0,
     "textMass": 34
+  },
+  "apps/web/app/(setup)/error.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 20
+  },
+  "apps/web/app/(setup)/loading.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 2
   },
   "apps/web/app/(setup)/setup/AccountBootstrapForm.tsx": {
     "vocabulary": 0,
@@ -935,7 +1012,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 218
+    "textMass": 236
   },
   "apps/web/app/(shell)/finance/payment-runs/page.tsx": {
     "vocabulary": 0,
@@ -1189,12 +1266,26 @@
     "longSentences": 0,
     "textMass": 7
   },
+  "apps/web/app/(shell)/loading.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 4
+  },
   "apps/web/app/(shell)/member-equity/page.tsx": {
     "vocabulary": 0,
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
     "textMass": 14
+  },
+  "apps/web/app/(shell)/not-found.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 21
   },
   "apps/web/app/(shell)/ops/changes/page.tsx": {
     "vocabulary": 0,
@@ -1390,14 +1481,14 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 162
+    "textMass": 173
   },
   "apps/web/app/(shell)/platform/ai/providers/page.tsx": {
     "vocabulary": 0,
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 107
+    "textMass": 110
   },
   "apps/web/app/(shell)/platform/ai/readiness/page.tsx": {
     "vocabulary": 0,
@@ -1418,7 +1509,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 188
+    "textMass": 204
   },
   "apps/web/app/(shell)/platform/ai/skills/page.tsx": {
     "vocabulary": 0,
@@ -2007,6 +2098,20 @@
     "readability": 0,
     "longSentences": 0,
     "textMass": 6
+  },
+  "apps/web/app/(storefront)/error.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 16
+  },
+  "apps/web/app/(storefront)/loading.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 4
   },
   "apps/web/app/(storefront)/s/[slug]/book/[itemId]/page.tsx": {
     "vocabulary": 0,
@@ -3156,12 +3261,33 @@
     "longSentences": 0,
     "textMass": 29
   },
+  "apps/web/app/sandbox-restricted/error.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 16
+  },
   "apps/web/app/sandbox-restricted/page.tsx": {
     "vocabulary": 0,
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
     "textMass": 22
+  },
+  "apps/web/app/welcome/error.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 16
+  },
+  "apps/web/app/welcome/loading.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 2
   },
   "apps/web/app/welcome/page.tsx": {
     "vocabulary": 1,
@@ -5695,7 +5821,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 176
+    "textMass": 131
   },
   "apps/web/components/inventory/TopologyIntegritySummary.tsx": {
     "vocabulary": 0,
@@ -5891,14 +6017,14 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 42
+    "textMass": 37
   },
   "apps/web/components/ops/BacklogPanel.tsx": {
     "vocabulary": 0,
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 48
+    "textMass": 34
   },
   "apps/web/components/ops/BuildStamps.tsx": {
     "vocabulary": 0,
@@ -6430,7 +6556,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 297
+    "textMass": 333
   },
   "apps/web/components/platform/OperationsMapLiveShell.tsx": {
     "vocabulary": 0,
@@ -7937,6 +8063,13 @@
     "longSentences": 0,
     "textMass": 25
   },
+  "apps/web/components/ui/ErrorBoundaryCard.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 2
+  },
   "apps/web/components/ui/ReferenceTypeahead.tsx": {
     "vocabulary": 0,
     "genericLabels": 0,
@@ -7985,13 +8118,6 @@
     "readability": 0,
     "longSentences": 0,
     "textMass": 11
-  },
-  "apps/web/components/ui/form/styles.ts": {
-    "vocabulary": 0,
-    "genericLabels": 0,
-    "readability": 0,
-    "longSentences": 1,
-    "textMass": 93
   },
   "apps/web/components/ui/report-kit/Chart.tsx": {
     "vocabulary": 0,
@@ -8406,35 +8532,35 @@
     "longSentences": 0,
     "textMass": 39
   },
-  "apps/web/components/workspace/work-room/WorkRoomBody.tsx": {
+  "apps/web/components/workspace/workroom/WorkroomBody.tsx": {
     "vocabulary": 0,
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
     "textMass": 37
   },
-  "apps/web/components/workspace/work-room/WorkRoomCycles.tsx": {
+  "apps/web/components/workspace/workroom/WorkroomCycles.tsx": {
     "vocabulary": 0,
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
     "textMass": 39
   },
-  "apps/web/components/workspace/work-room/WorkRoomHeader.tsx": {
+  "apps/web/components/workspace/workroom/WorkroomHeader.tsx": {
     "vocabulary": 0,
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
     "textMass": 46
   },
-  "apps/web/components/workspace/work-room/WorkRoomParticipants.tsx": {
+  "apps/web/components/workspace/workroom/WorkroomParticipants.tsx": {
     "vocabulary": 0,
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
     "textMass": 31
   },
-  "apps/web/components/workspace/work-room/WorkRoomStructurePanel.tsx": {
+  "apps/web/components/workspace/workroom/WorkroomStructurePanel.tsx": {
     "vocabulary": 0,
     "genericLabels": 0,
     "readability": 0,

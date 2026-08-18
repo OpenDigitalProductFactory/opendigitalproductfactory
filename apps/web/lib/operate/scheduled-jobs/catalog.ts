@@ -27,6 +27,14 @@
 
 import { CODE_GRAPH_JOB_ID } from "@/lib/integrate/code-graph/constants";
 import {
+  EMBEDDING_COVERAGE_JOB_ID,
+  EMBEDDING_COVERAGE_JOB_NAME,
+  EMBEDDING_COVERAGE_INNGEST_ID,
+  EMBEDDING_COVERAGE_REQUESTED_EVENT,
+  EMBEDDING_COVERAGE_CRON,
+  EMBEDDING_COVERAGE_CADENCE,
+} from "@/lib/wiki/embedding-coverage-constants";
+import {
   BUSINESS_JOURNEY_WATCHDOG_CADENCE,
   BUSINESS_JOURNEY_WATCHDOG_CRON,
   BUSINESS_JOURNEY_WATCHDOG_INNGEST_ID,
@@ -53,30 +61,12 @@ import {
 
 /** core = platform-integrity cron, operator read-only. editable = cadence
  *  may be tuned by an operator after install. */
-export type JobCategory = "core" | "editable";
+import type { JobCategory, ScheduledJobCatalogEntry } from "./catalog-types";
 
-export interface ScheduledJobCatalogEntry {
-  /** Join key against ScheduledJob.jobId. For crons that maintain a row this
-   *  IS that row's jobId; for the rest it is a stable synthetic id (an
-   *  edit/enable upserts a row under this id on first mutation). */
-  jobId: string;
-  /** The Inngest function id (id passed to inngest.createFunction). */
-  inngestId: string;
-  /** Human-readable job name. */
-  name: string;
-  /** One-line purpose — what breaks if this never runs. */
-  purpose: string;
-  /** Raw cron expression as defined in code. */
-  cron: string;
-  /** Human cadence label for display (derived from `cron`). */
-  cadence: string;
-  category: JobCategory;
-  /** True when a ScheduledJob row carries live run data for this job. */
-  tracksRunData: boolean;
-  /** Inngest event name that triggers a one-shot manual run, or null when no
-   *  manual-trigger event function exists for this job. */
-  runNowEvent: string | null;
-}
+// Re-exported so existing importers of the catalog keep working; the types are
+// owned by ./catalog-types (BI-ED117C82).
+export type { JobCategory, ScheduledJobCatalogEntry };
+
 
 // Ordered roughly by operational prominence. core-locked jobs first.
 export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
@@ -176,6 +166,17 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
       "Refreshes the provider model catalog routing depends on. Stale data degrades model selection.",
     cron: "10 3 * * *",
     cadence: "Daily at 03:10",
+    category: "core",
+    tracksRunData: true,
+    runNowEvent: null,
+  },
+  {
+    jobId: "routing-reachability-preflight",
+    inngestId: "inference/routing-reachability-preflight",
+    name: "Coworker routing reachability preflight",
+    purpose: "Dry-runs routing per production coworker (incl. the payload-screening escalation ceiling); raises one owner-visible issue on zero eligible models so dead-ends are announced, not discovered mid-conversation.",
+    cron: "37 */6 * * *",
+    cadence: "Every 6 hours at :37",
     category: "core",
     tracksRunData: true,
     runNowEvent: null,
@@ -743,6 +744,18 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
     category: "editable",
     tracksRunData: false,
     runNowEvent: "ops/coworker-certification.requested",
+  },
+  {
+    jobId: EMBEDDING_COVERAGE_JOB_ID,
+    inngestId: EMBEDDING_COVERAGE_INNGEST_ID,
+    name: EMBEDDING_COVERAGE_JOB_NAME,
+    purpose:
+      "BI-ED117C82: re-embeds published wiki/stance pages that are missing a vector, so the decision engine can still retrieve the organisation's own doctrine. A page without a vector degrades stance relevance to lexical and the gate then escalates instead of deciding \u2014 which the operator experiences as coworkers re-asking settled questions. Retries every 2h because the local model is often busy at boot; reports coverage into the corpus-health Workroom so a run is visible. If it stops, silent corpus gaps accumulate with no symptom pointing at them.",
+    cron: EMBEDDING_COVERAGE_CRON,
+    cadence: EMBEDDING_COVERAGE_CADENCE,
+    category: "core",
+    tracksRunData: false,
+    runNowEvent: EMBEDDING_COVERAGE_REQUESTED_EVENT,
   },
   {
     jobId: BUSINESS_JOURNEY_WATCHDOG_JOB_ID,

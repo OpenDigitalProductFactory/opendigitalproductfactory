@@ -1,7 +1,7 @@
 // First scoped tool pack — BI-ARCH-TOOLPACKS.
 //
 // Deliberation + SIEM are the cleanest first extraction: both already live in
-// self-contained sibling modules (mcp-tools-deliberation.ts / mcp-tools-siem.ts)
+// self-contained sibling modules (lib/mcp/deliberation-handlers.ts / lib/mcp/siem-handlers.ts)
 // that mcp-tools.ts spreads into PLATFORM_TOOLS and dispatches by name. This pack
 // bundles their definitions, handlers, and grant metadata behind the ToolPack
 // shape so mcp-tools.ts composes the definitions from here instead of importing
@@ -11,7 +11,7 @@
 import {
   DELIBERATION_TOOLS,
   deliberateOnMcpHandler,
-} from "@/lib/mcp-tools-deliberation";
+} from "@/lib/mcp/deliberation-handlers";
 import {
   SIEM_TOOLS,
   getSecurityCaseHandler,
@@ -21,7 +21,7 @@ import {
   queryDetectionsHandler,
   querySecurityEventsHandler,
   updateSecurityCaseHandler,
-} from "@/lib/mcp-tools-siem";
+} from "@/lib/mcp/siem-handlers";
 import type { ToolPack } from "../tool-pack";
 
 export const deliberationSiemPack: ToolPack = {

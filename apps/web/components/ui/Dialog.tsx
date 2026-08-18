@@ -303,7 +303,7 @@ export function DialogHost() {
             data-dialog-action="confirm"
             onClick={onConfirm}
             disabled={confirmDisabled}
-            className={`rounded px-3 py-1.5 text-sm font-semibold text-white disabled:opacity-50 ${
+            className={`rounded px-3 py-1.5 text-sm font-semibold text-[var(--dpf-on-accent)] disabled:opacity-50 ${
               isDanger
                 ? "bg-[var(--dpf-error)] hover:opacity-90"
                 : "bg-[var(--dpf-accent)] hover:opacity-90"

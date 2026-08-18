@@ -43,7 +43,7 @@ principleOverlapScan:
 ## The three steps
 
 1. **Propose.** Either side names a piece of work, a decision, or an action and assigns a candidate owner.
-2. **Acknowledge.** The named owner explicitly accepts, modifies, or declines. **No mutation begins without this token.** The token is recorded as **state, not chat text** — a capsule lease, a `ToolExecution` row, a `DecisionInteraction` outcome, an operator click on a card.
+2. **Acknowledge.** The named owner explicitly accepts, modifies, or declines. **No mutation begins without this token.** The token is recorded as **state, not chat text** — a workroom lease, a `ToolExecution` row, a `DecisionInteraction` outcome, an operator click on a card.
 3. **Reassign.** Completion *or* mid-stream hand-back is also explicit: `session_detach(disposition)`, `release_capsule_scope`, a WWMD `escalate` / `defer`, a PR opened against the owner's branch. Silent abandonment is not a valid reassignment.
 
 The cycle then repeats. Either side can initiate the next Propose.
@@ -88,7 +88,7 @@ Unacceptable acknowledgement surfaces:
 ## Anti-pattern
 
 - Two Claude sessions in the same worktree, both staging files, one sweeping the other's stage into its commit via `git add -A`.
-- An autonomous agent that sees a stale capsule and silently picks up the work without filing an adopt-orphan proposal first.
+- An autonomous agent that sees a stale workroom and silently picks up the work without filing an adopt-orphan proposal first.
 - A spec-review thread that opens PRs against the spec author's working branch while the author is still editing the spec.
 - A coworker that asks "want me to continue?" three times in a row — that is a missing acknowledgement from the *prior* turn surfacing as repeated proposals instead of an actual ack.
 

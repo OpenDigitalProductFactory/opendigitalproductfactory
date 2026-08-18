@@ -9,14 +9,13 @@
 // Exit codes: 0 = clean (environment-skipped guards are warnings), 1 = at
 // least one guard reported a genuine violation.
 
-import { fileURLToPath } from "node:url";
-
 import {
   PREFLIGHT_SKIP_ENV,
   buildPreflightPlan,
   runPreflight,
 } from "./lib/pregate-preflight.mjs";
 import { checkStaleRootClone } from "./lib/stale-root-clone.mjs";
+import { isEntryModule } from "./lib/entry-module.mjs";
 
 export async function main() {
   if (process.argv.includes("--plan")) {
@@ -115,6 +114,6 @@ export async function main() {
   );
 }
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) {
+if (isEntryModule(import.meta.url)) {
   await main();
 }

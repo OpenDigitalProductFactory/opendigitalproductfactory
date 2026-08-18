@@ -19,6 +19,14 @@
 # service classification (Phase 1) and is not published to GHCR.
 
 services:
+  postgres:
+    # Built in the base compose (baked pgvector + inngest init script, no host
+    # bind mount). It must be pinned here too, or a consumer install -- which has
+    # no source checkout -- tries to build from ./docker and dies with
+    #   resolve : GetFileAttributesEx <install>\docker: The system cannot find the file specified.
+    image: ghcr.io/${GHCR_OWNER:-opendigitalproductfactory}/dpf-postgres:${DPF_IMAGE_TAG:-latest}
+    build: !reset null
+
   portal-init:
     # portal-init shares the portal image (Dockerfile target: runner).
     image: ghcr.io/${GHCR_OWNER:-opendigitalproductfactory}/dpf-portal:${DPF_IMAGE_TAG:-latest}

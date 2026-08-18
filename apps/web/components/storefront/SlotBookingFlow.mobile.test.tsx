@@ -123,7 +123,7 @@ describe("public booking mobile contract (390px floor)", () => {
       getRandomValues: (bytes: Uint8Array) => bytes.fill(9),
     });
     vi.mocked(submitBooking).mockResolvedValueOnce({
-      success: false,
+      ok: false,
       error: "Synthetic stop after idempotency assertion",
     });
 

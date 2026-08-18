@@ -1,10 +1,10 @@
 /**
- * Canonical WorkItem anchor for a WorkCapsule.
+ * Canonical WorkItem anchor for a Workroom.
  *
  * EP-WORK-CONVERGENCE (BI-650994D7). A capsule and a WorkItem could both describe
  * the same unit of work (both carry the backlog item) with nothing joining them —
  * two rows for one job. This resolves-or-creates the single canonical WorkItem for
- * the capsule's backlog item and links it via WorkCapsule.workItemId, so capsule and
+ * the capsule's backlog item and links it via Workroom.workItemId, so capsule and
  * case converge on one anchor.
  *
  * Pure core with injected ports (testable without a DB). The prisma binding lives in
@@ -41,7 +41,7 @@ export interface WorkItemAnchorPorts {
 
 export interface EnsureCapsuleWorkItemAnchorArgs {
   ports: WorkItemAnchorPorts;
-  /** WorkCapsule.capsuleId (WC-*) or id — whatever setCapsuleWorkItem keys on. */
+  /** Workroom.capsuleId (WC-*) or id — whatever setCapsuleWorkItem keys on. */
   capsuleId: string;
   backlogItemId: string | null | undefined;
   title: string;

@@ -15,7 +15,7 @@ const STALE = new Date("2026-05-26T21:30:00.000Z"); // 30 min ago — past 20-mi
 
 function makeDb() {
   return {
-    workCapsule: { findMany: vi.fn() },
+    workroom: { findMany: vi.fn() },
     runtimeTarget: { findMany: vi.fn() },
     runtimeVerification: { findMany: vi.fn() },
     nonProductionEnvironmentLease: { findMany: vi.fn() },
@@ -51,7 +51,7 @@ describe("loadContributorChangeLaneReadModel — Phase 3", () => {
 
   beforeEach(() => {
     db = makeDb();
-    db.workCapsule.findMany.mockResolvedValue([]);
+    db.workroom.findMany.mockResolvedValue([]);
     db.runtimeTarget.findMany.mockResolvedValue([]);
     db.runtimeVerification.findMany.mockResolvedValue([]);
     db.nonProductionEnvironmentLease.findMany.mockResolvedValue([]);
@@ -80,7 +80,7 @@ describe("loadContributorChangeLaneReadModel — Phase 3", () => {
   });
 
   it("maps Work Capsule scope fields into projected lanes", async () => {
-    db.workCapsule.findMany.mockResolvedValue([
+    db.workroom.findMany.mockResolvedValue([
       {
         capsuleId: "WC-SCOPED",
         title: "Customer onboarding",
@@ -110,7 +110,7 @@ describe("loadContributorChangeLaneReadModel — Phase 3", () => {
       now: NOW,
     });
 
-    expect(db.workCapsule.findMany).toHaveBeenCalledWith(expect.objectContaining({
+    expect(db.workroom.findMany).toHaveBeenCalledWith(expect.objectContaining({
       select: expect.objectContaining({
         decisionScope: true,
         portfolioRole: true,
@@ -347,7 +347,7 @@ describe("loadContributorChangeLaneReadModel — Phase 3", () => {
   });
 
   it("live Prisma source error: workCapsule read throws → state error for work-capsule only", async () => {
-    db.workCapsule.findMany.mockRejectedValueOnce(new Error("db offline"));
+    db.workroom.findMany.mockRejectedValueOnce(new Error("db offline"));
 
     const result = await loadContributorChangeLaneReadModel({
       db: dbAsAny(db),

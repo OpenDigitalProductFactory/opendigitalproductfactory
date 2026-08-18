@@ -206,7 +206,7 @@ The plugin also ships **hooks**: local, deterministic guards the client runs *be
 
 Don't loosen these. There is one narrow, documented escape hatch — the lease guard only — for a genuine local emergency: prefix the command with `DPF_ALLOW_UNGATED_SERVER=1`. Everything else is meant to hold.
 
-> **Codex, Grok, and Antigravity inherit the same guard contract.** The `dpf-platform` plugin ships `hooks/hooks.json` and surface manifests for the external clients. Where a client's hook plane is not yet proven to enforce a guard, comply **by construction**: claim a lease before launching any shared runtime, claim a Work Capsule before you start, record evidence as you go.
+> **Codex, Grok, and Antigravity inherit the same guard contract.** The `dpf-platform` plugin ships `hooks/hooks.json` and surface manifests for the external clients. Where a client's hook plane is not yet proven to enforce a guard, comply **by construction**: claim a lease before launching any shared runtime, claim a Workroom before you start, record evidence as you go.
 
 ---
 
@@ -260,7 +260,7 @@ DPF relies on local guardrails — the pre-commit secret scan + typecheck hook (
 #### Antigravity
 
 - **IDE plus `agy` CLI.** DPF supports Google Antigravity as a host contributor surface. The bootstrap detects `agy`; if it is missing, opt in to the vendor installer with `--install-antigravity` (macOS/Linux) or `-InstallAntigravity` (Windows). DPF does not silently install it.
-- **Authentication to Google** is owned by Antigravity itself. `agy` handles Google sign-in and stores its own credential; DPF only wires the DPF MCP token so Antigravity can see backlog, capsule, evidence, and lease tools.
+- **Authentication to Google** is owned by Antigravity itself. `agy` handles Google sign-in and stores its own credential; DPF only wires the DPF MCP token so Antigravity can see backlog, workroom, evidence, and lease tools.
 - **MCP can be session-sensitive.** At the start of an Antigravity thread, confirm `agy` can see the `dpf` MCP server. If it cannot, use the [Antigravity onboarding runbook](../../operations/antigravity-cli-onboarding.md) to add the server from inside `agy` and start a fresh session.
 - **Not a Build Studio dispatch engine yet.** Antigravity is supported for external contributor work, but the Build Studio sandbox does not dispatch builds to it until the remaining in-sandbox capability gate is proven.
 
@@ -270,7 +270,7 @@ DPF relies on local guardrails — the pre-commit secret scan + typecheck hook (
 
 All clients authenticate to the DPF MCP server with the same `DPF_MCP_BEARER_TOKEN` environment variable, referenced (never inlined) from each client's config. `.mcp.json` and `.vscode/mcp.json` are **gitignored credential files** — never commit them.
 
-- **Scopes.** Coarse `read` / `write` / `admin` plus granular per-tool grants. Default is `read` and cannot call side-effecting tools. Use **Issue write token** in Admin → Platform Development → MCP when an agent must create/update backlog items, evidence, capsules, or coordination records.
+- **Scopes.** Coarse `read` / `write` / `admin` plus granular per-tool grants. Default is `read` and cannot call side-effecting tools. Use **Issue write token** in Admin → Platform Development → MCP when an agent must create/update backlog items, evidence, workrooms, or coordination records.
 - **Scope escalation.** If a tool returns `insufficient_token_scope`, *stop* — do not fall back to `psql`/Prisma/direct DB edits. Issue a scoped token in the portal, update the client, call `/api/mcp/token/refresh`, and retry through MCP.
 - **Rotation** (no file edits): set the `DPF_MCP_BEARER_TOKEN` user environment variable to the new value, `POST /api/mcp/token/refresh` with the new token, then retry in the running session.
 
@@ -396,7 +396,7 @@ Don't confuse this server-side **webhook** with the client-side **[hooks](#hooks
 
 The agent surfaces are powerful precisely because they don't get a governance discount. Hold these whichever client you drive:
 
-- **MCP is the coordination plane.** Work tracking, capsule claims, and gate evidence live in the DPF MCP substrate. **If it isn't in the MCP plane, it didn't happen** — a thread that runs without claiming a capsule and recording evidence is invisible to coordination and cannot advance a gate.
+- **MCP is the coordination plane.** Work tracking, workroom claims, and gate evidence live in the DPF MCP substrate. **If it isn't in the MCP plane, it didn't happen** — a thread that runs without claiming a workroom and recording evidence is invisible to coordination and cannot advance a gate.
 - **All changes land via PR against `main`, DCO-signed.** One concern per branch, one concern per PR. **Open the PR only when it's green and ready to merge — no draft PRs**, no parking-place PRs.
 - **The build gate is mandatory** (unit tests, production build, UX verification, migration apply) and runtime-bound gates run on the canonical install or the leased sandbox — never a worktree-local harness. "Tests passed" is incomplete without naming **where** it ran.
 - **Documentation impact is mandatory.** If a change affects user workflows, AI coworkers, public positioning, setup/install, operations, architecture, prompts, route maps, or external-agent behavior, update the matching docs surface in the same branch. If no docs are needed, record the concrete reason in the plan, PR body, or evidence.

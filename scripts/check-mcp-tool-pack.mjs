@@ -12,16 +12,23 @@
 // tool to a pack removes its case, after which `--update` retightens the
 // baseline.
 //
+// W9 (BI-0E7B0953) extended this ratchet from "no NEW inline case" to "no
+// handler generation outside packs" now the inline set has reached zero:
+//   - the abandoned lib/mcp-handlers/ third-generation home must stay deleted;
+//   - PLATFORM_TOOLS in mcp-tools.ts must stay a pure pack-registry
+//     composition — no inline ToolDefinition may reappear in the array.
+//
 //   node scripts/check-mcp-tool-pack.mjs            # check (CI)
 //   node scripts/check-mcp-tool-pack.mjs --update   # regenerate the baseline
 
-import { readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { dirname, join, relative } from "node:path";
 
 const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const MCP_TOOLS_PATH = join(REPO_ROOT, "apps", "web", "lib", "mcp-tools.ts");
 const BASELINE_PATH = join(REPO_ROOT, "scripts", "mcp-tool-pack-baseline.json");
+const LEGACY_HANDLERS_DIR = join(REPO_ROOT, "apps", "web", "lib", "mcp-handlers");
 
 /**
  * The set of tool names dispatched by inline `case` arms of executeTool's
@@ -60,6 +67,40 @@ export function extractInlineCaseNames(source) {
   return names;
 }
 
+/**
+ * The PLATFORM_TOOLS array in mcp-tools.ts must be a pure composition of the
+ * pack registry: `...TOOL_PACK_REGISTRY.definitions` plus comments. Any inline
+ * ToolDefinition (detected by a `name:`/`inputSchema:` field inside the array
+ * literal) is a new tool registered outside a pack.
+ */
+export function extractInlinePlatformToolFields(source) {
+  const start = source.indexOf("export const PLATFORM_TOOLS: ToolDefinition[] = [");
+  if (start === -1) {
+    throw new Error(
+      "check-mcp-tool-pack: could not locate the PLATFORM_TOOLS array in mcp-tools.ts",
+    );
+  }
+  const end = source.indexOf("\n];", start);
+  if (end === -1) {
+    throw new Error("check-mcp-tool-pack: could not locate the end of the PLATFORM_TOOLS array");
+  }
+  const body = source.slice(start, end);
+  const offenders = [];
+  for (const line of body.split(/\r?\n/)) {
+    const code = line.replace(/\/\/.*$/, "");
+    if (/(?:^|[\s{])name:\s*["']/.test(code) || /inputSchema:\s*\{/.test(code)) {
+      offenders.push(line.trim());
+    }
+  }
+  return offenders;
+}
+
+/** Files present in the abandoned lib/mcp-handlers/ home (deleted in W9). */
+export function listLegacyHandlerFiles(dirPath = LEGACY_HANDLERS_DIR) {
+  if (!existsSync(dirPath)) return [];
+  return readdirSync(dirPath);
+}
+
 function readInlineCaseNames() {
   const source = readFileSync(MCP_TOOLS_PATH, "utf8");
   const names = extractInlineCaseNames(source);
@@ -84,6 +125,26 @@ function main() {
     console.error(
       `Missing baseline ${relative(REPO_ROOT, BASELINE_PATH)} — run: node scripts/check-mcp-tool-pack.mjs --update`,
     );
+    process.exit(1);
+  }
+
+  // W9 structural ratchets — independent of the case-name baseline.
+  const legacyFiles = listLegacyHandlerFiles();
+  if (legacyFiles.length > 0) {
+    console.error("Tool-pack ratchet failed (W9, BI-0E7B0953).\n");
+    console.error("apps/web/lib/mcp-handlers/ was deleted when the handler layer collapsed to");
+    console.error("one generation (packs). It must not come back. Found:\n");
+    for (const f of legacyFiles) console.error(`  - apps/web/lib/mcp-handlers/${f}`);
+    console.error("\nRegister the handler in a scoped pack (apps/web/lib/mcp/packs/*) instead.");
+    process.exit(1);
+  }
+  const inlineDefs = extractInlinePlatformToolFields(readFileSync(MCP_TOOLS_PATH, "utf8"));
+  if (inlineDefs.length > 0) {
+    console.error("Tool-pack ratchet failed (W9, BI-0E7B0953).\n");
+    console.error("PLATFORM_TOOLS in apps/web/lib/mcp-tools.ts is a pure pack-registry");
+    console.error("composition — no inline ToolDefinition may be added to the array. Found:\n");
+    for (const l of inlineDefs) console.error(`  - ${l}`);
+    console.error("\nMove the definition (and its handler) into a scoped pack (apps/web/lib/mcp/packs/*).");
     process.exit(1);
   }
 

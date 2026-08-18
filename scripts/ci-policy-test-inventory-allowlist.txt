@@ -20,8 +20,10 @@ scripts/check-compose-env-contract.test.mjs
 scripts/check-merge-queue-churn.test.mjs
 scripts/check-missing-ci-dispatch.test.mjs
 scripts/check-module-size.test.mjs
+scripts/check-no-adhoc-mcp-protocol-versions.test.mjs
 scripts/check-no-governed-surface-without-mcp-tool.test.mjs
 scripts/check-no-hand-rolled-loading.test.mjs
+scripts/check-no-local-action-result.test.mjs
 scripts/check-no-local-backup-helper.test.mjs
 scripts/check-no-local-client-credentials.test.mjs
 scripts/check-no-local-isrecord.test.mjs
@@ -29,7 +31,9 @@ scripts/check-no-local-liveness-literal.test.mjs
 scripts/check-no-local-oauth-refresh.test.mjs
 scripts/check-no-local-status-color.test.mjs
 scripts/check-no-merge-readiness-policy-drift.test.mjs
+scripts/check-no-expired-baseline-budgets.test.mjs
 scripts/check-no-nanoid-import.test.mjs
+scripts/check-no-new-closed-set-strings.test.mjs
 scripts/check-no-postgres-initdb-host-mount.test.mjs
 scripts/check-no-private-identity.test.mjs
 scripts/check-no-provider-local-connector-lifecycle.test.mjs

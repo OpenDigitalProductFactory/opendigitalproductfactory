@@ -20,6 +20,15 @@ WORKDIR /app
 # package.json.
 COPY pnpm-workspace.yaml pnpm-lock.yaml package.json ./
 
+# patchedDependencies in pnpm-workspace.yaml makes patches/ an INPUT to the
+# install, not an optional extra: pnpm hashes every referenced patch file
+# while resolving, so a missing one is a hard ENOENT rather than a skipped
+# patch. PR #4321 (image-size ICNS fix, CVE-2025-71330) added this repo's
+# first patched dependency and broke the edge-node image on exactly that.
+# Copy the whole directory — it is a handful of KB, and scoping it to
+# today's single patch would re-break the next time one is added.
+COPY patches ./patches
+
 # Every workspace package edge-node depends on (transitively). Today
 # that's @dpf/validators only; add more here if the dep tree grows.
 COPY packages/validators ./packages/validators
@@ -43,7 +52,16 @@ RUN pnpm --filter dpf-edge-node build
 # directory with REAL files in node_modules — no symlinks back into
 # /app/packages, no workspace context required at runtime. The
 # runner stage just copies /app/deploy/edge-node and runs it.
-RUN pnpm deploy --filter dpf-edge-node --prod --legacy --ignore-scripts /app/deploy/edge-node
+# allowUnusedPatches is scoped to THIS command on purpose. --prod prunes to
+# edge-node's runtime subgraph, which legitimately contains no image-size —
+# that patch belongs to a metro/Expo transitive of the mobile app — and pnpm
+# treats a declared-but-unapplied patch as a hard ERR_PNPM_UNUSED_PATCH.
+# Setting it workspace-wide would disarm the guard for the real install too,
+# and pnpm-workspace.yaml pins image-size to an exact version precisely so it
+# "fails loudly and forces a re-review" when metro moves off 1.2.1. So relax
+# it only here, where the patch cannot apply by construction.
+RUN pnpm --config.allowUnusedPatches=true deploy \
+    --filter dpf-edge-node --prod --legacy --ignore-scripts /app/deploy/edge-node
 # pnpm deploy --prod strips devDependencies but ALSO doesn't include
 # our just-built dist/. Copy it in explicitly.
 RUN cp -r /app/services/edge-node/dist /app/deploy/edge-node/dist

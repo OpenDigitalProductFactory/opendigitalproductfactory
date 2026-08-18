@@ -40,7 +40,7 @@ The operator-visible audit surface is **`/coworker-decisions/decisions`** (and d
 ## When to use
 
 - After `dpf-decision-via-kernel` / `principle_decide` returns a recommendation.
-- When the operator (or agent) **overrides** the kernel recommendation — the DI row exists; you still need to say so in capsule evidence.
+- When the operator (or agent) **overrides** the kernel recommendation — the DI row exists; you still need to say so in workroom evidence.
 - When handing off across surfaces (Grok → Claude → Build Studio) and the next thread must know which DI governed the choice.
 
 ## When NOT to use
@@ -60,15 +60,15 @@ The operator-visible audit surface is **`/coworker-decisions/decisions`** (and d
    - Hub path: `/coworker-decisions/decisions/<interactionId>`
    - `callingSurface` you passed (must be a **normalized** surface id — see `dpf-decision-via-kernel`)
 
-3. **Attach to the Work Capsule when one exists.** Call `record_capsule_evidence` with a short, operator-readable summary:
+3. **Attach to the Workroom when one exists.** Call `record_capsule_evidence` with a short, operator-readable summary:
    - decision question
    - chosen option (and whether it matched the kernel recommendation)
    - `interactionId`
    - next action
 
 4. **Human ratification / override.**
-   - High confidence + operator agrees → proceed; capsule evidence is enough.
-   - Low confidence / commandment conflict / operator override → state the override and rationale in capsule evidence (and escalate via open decision reviews when the outcome is `escalate`/`defer`).
+   - High confidence + operator agrees → proceed; workroom evidence is enough.
+   - Low confidence / commandment conflict / operator override → state the override and rationale in workroom evidence (and escalate via open decision reviews when the outcome is `escalate`/`defer`).
 
 5. **Do not** write a second decision record to notes-only tools for the same consult.
 
@@ -88,7 +88,7 @@ The operator-visible audit surface is **`/coworker-decisions/decisions`** (and d
 
 ## Guardrails
 
-- **Single source of truth** is `DecisionInteraction`. Capsule evidence **points at** the DI; it does not replace it.
+- **Single source of truth** is `DecisionInteraction`. Workroom evidence **points at** the DI; it does not replace it.
 - Never claim "no decisions are recorded" without checking `/coworker-decisions/decisions` or the DI id from `ledger`.
 - Never invent DI ids. Only use ids returned by MCP.
 - If MCP progressive loading hides a tool, `load_tools` then retry — do not skip the ledger path.
@@ -99,7 +99,7 @@ After WWMD selects "enforce-call-plus-observability" for external-agent process 
 
 1. `principle_decide` returns `ledger: { recorded: true, interactionId: "DI-24A1F966C697" }`.
 2. Report that DI and the hub path to the operator.
-3. `record_capsule_evidence` on the active WorkCapsule with the DI id and next action (file BIs / implement gateKey).
+3. `record_capsule_evidence` on the active Workroom with the DI id and next action (file BIs / implement gateKey).
 
 ## See also
 

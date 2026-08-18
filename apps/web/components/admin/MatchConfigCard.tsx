@@ -69,7 +69,7 @@ export function MatchConfigCard({
         staleAfterDays,
         survivorship,
       });
-      setMessage(result.ok ? "Saved." : result.message);
+      setMessage(result.ok ? "Saved." : result.error);
     });
   }
 

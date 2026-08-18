@@ -235,7 +235,7 @@ export function ReferenceTypeahead({
               onMouseEnter={() => setActiveIndex(idx)}
               className={`cursor-pointer px-3 py-2 text-sm ${
                 idx === activeIndex
-                  ? "bg-[var(--dpf-accent)] text-white"
+                  ? "bg-[var(--dpf-accent)] text-[var(--dpf-on-accent)]"
                   : "text-[var(--dpf-foreground)] hover:bg-[var(--dpf-surface-2)]"
               }`}
             >
@@ -252,7 +252,7 @@ export function ReferenceTypeahead({
               onMouseEnter={() => setActiveIndex(results.length)}
               className={`cursor-pointer border-t border-[var(--dpf-border)] px-3 py-2 text-sm ${
                 activeIndex === results.length
-                  ? "bg-[var(--dpf-accent)] text-white"
+                  ? "bg-[var(--dpf-accent)] text-[var(--dpf-on-accent)]"
                   : "text-[var(--dpf-muted)] hover:bg-[var(--dpf-surface-2)]"
               }`}
             >

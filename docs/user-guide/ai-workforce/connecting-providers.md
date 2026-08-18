@@ -87,6 +87,14 @@ The safeguard summary previews what may leave the installation, what remains con
 
 You can complete this review with the keyboard and a screen reader. The recommendation status, disclosure controls, each connection group, the next action, consultation failures, and setup progress are announced in text rather than by color alone. Long connection names wrap on small screens.
 
+Routing eligibility follows the provider's **connection**, not just the
+provider toggle. A provider whose default connection is disabled is shown with
+a connection-specific reason ("routing skips it until you reconnect") instead
+of a green active badge, on both the list and the provider detail page.
+Activating a provider brings its default connection along, and the platform
+heals a disabled-connection-behind-active-provider split automatically at
+startup — so a provider that reads active can actually route.
+
 If you choose **Skip safely** or **Review later**, DPF does not treat the provider as approved. Company and customer data stay restricted until the missing account, contract, region, or other evidence is reviewed. You can return to Providers & Routing and ask the COO again; a denied or unavailable consultation does not change provider posture.
 
 On each provider detail page, record:

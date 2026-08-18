@@ -3,15 +3,13 @@
 import { spawnSync } from "node:child_process";
 import { rmSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
 
 import {
   assertLocalCiCleanupTarget,
   createLocalCiSlotManifest,
   localCiSlotEnvironment,
 } from "./lib/local-ci-slot-manifest.mjs";
-
-const THIS_FILE = fileURLToPath(import.meta.url);
+import { isEntryModule } from "./lib/entry-module.mjs";
 
 export function createLocalCiCleanupPlan(manifest, composeFile) {
   assertLocalCiCleanupTarget(manifest, manifest.output.build);
@@ -126,7 +124,7 @@ function main() {
   process.stdout.write(`local-ci-slot-cleanup: released ${manifest.slotKey} resources\n`);
 }
 
-if (process.argv[1] === THIS_FILE) {
+if (isEntryModule(import.meta.url)) {
   try {
     main();
   } catch (error) {

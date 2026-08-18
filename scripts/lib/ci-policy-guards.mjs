@@ -44,6 +44,36 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
     guard("host-port-range-guard", "Host Port Range Guard", [
       node("--test", "scripts/check-host-port-range.test.mjs"),
     ]),
+    guard("shell-guard-shim-contract", "Shell Guard Shim Contract", [
+      node("--test", "scripts/check-shell-guard-shim-contract.test.mjs"),
+      // Drives the real POSIX guard under bash: a cached binary path goes stale on
+      // every toolchain upgrade (Docker Desktop relocated its CLI mid-install here),
+      // and the guard must re-resolve rather than bricking `docker` for the account.
+      node("--test", "scripts/safety/shell-guard-stale-cache.test.mjs"),
+    ]),
+    guard("release-compose-pins", "Release Compose Pins", [
+      node("--test", "scripts/check-release-compose-pins.test.mjs"),
+    ]),
+    guard("release-asset-contract", "Release Asset Contract", [
+      // The consumer install has no git checkout: whatever the installer copies
+      // out of the install dir must ship in the image's /dpf-release-assets.
+      node("--test", "scripts/check-release-asset-contract.test.mjs"),
+    ]),
+    guard("installer-skip-visibility", "Installer Skip Visibility", [
+      // A guarded install step that skips in silence reads as success, and is
+      // then recorded as done by Save-Progress. Optional-script guards must say so.
+      node("--test", "scripts/check-installer-skip-visibility.test.mjs"),
+    ]),
+    guard("installer-state-contract", "Installer State Contract", [
+      // Drives real bash: install-dpf.sh runs under `set -euo pipefail`, and the
+      // failure mode here is shell exit-status semantics, not source text.
+      node("--test", "scripts/installer/lib/state-cleanup-temps.test.mjs"),
+    ]),
+    guard("published-image-freshness", "Published Image Freshness", [
+      // Decision logic only — the live registry check needs Docker and runs on a
+      // schedule (.github/workflows/published-image-freshness.yml).
+      node("--test", "scripts/lib/published-image-freshness.test.mjs"),
+    ]),
     guard("docs-link-integrity", "Docs Link Integrity", [
       node("scripts/gen-doc-index.mjs", "--check"),
       node(
@@ -105,6 +135,11 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       node("scripts/check-build-script-policy.mjs"),
       node("--test", "scripts/check-build-script-policy.test.mjs"),
       node("--test", "scripts/check-root-script-runtime.test.mjs"),
+      // A `patchedDependencies` entry whose patch file never reaches the Docker
+      // build context fails `pnpm install` with ENOENT and breaks every image
+      // build (SUR-8AB3353C, regression from #4321).
+      node("scripts/check-docker-patch-context.mjs"),
+      node("--test", "scripts/check-docker-patch-context.test.mjs"),
     ]),
     guard("bundle-boundary-guard", "Bundle Boundary Guard", [
       node("scripts/check-bundle-boundaries.mjs"),
@@ -132,6 +167,39 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
     ]),
     guard("module-size-guard", "Module Size Guard", [
       node("scripts/check-module-size.mjs"),
+    ]),
+    // BI-640B011D: schema FK budgets (declared FKs without a leading index +
+    // bare unbacked *Id columns) may only shrink against the owned baseline.
+    guard("fk-index-coverage-guard", "FK Index Coverage Guard", [
+      node("--test", "scripts/check-fk-index-coverage.test.mjs"),
+      node("scripts/check-fk-index-coverage.mjs"),
+    ]),
+    // BI-D25ED55D: UX primitive-adoption budgets (inline accent-button/card
+    // strings outside components/ui + text-white) may only shrink against the
+    // owned baseline — the ratchet half of the W5 UX foundation pack.
+    guard("ux-primitive-adoption-guard", "UX Primitive Adoption Guard", [
+      node("--test", "scripts/check-ux-primitive-adoption.test.mjs"),
+      node("scripts/check-ux-primitive-adoption.mjs"),
+    ]),
+    // BI-3F17B16B: an EP-/BI- id cited in a CHANGED doc must exist in the live
+    // backlog (diff-scoped; grandfather baseline; degrades to warn-pass when no
+    // live install is reachable). Closes the unbacked-doc-anchor pattern (P3).
+    guard("doc-anchor-existence", "Doc Anchor Existence", [
+      node("--test", "scripts/check-doc-anchor-existence.test.mjs"),
+      node("scripts/check-doc-anchor-existence.mjs"),
+    ]),
+    // BI-79BCE3F2: ONE status/supersession frontmatter convention across
+    // docs/superpowers/{specs,plans} — new/changed files must carry
+    // status: draft|active|binding|superseded; supersededBy only on superseded.
+    guard("spec-status-frontmatter", "Spec Status Frontmatter", [
+      node("--test", "scripts/check-spec-status-frontmatter.test.mjs"),
+      node("scripts/check-spec-status-frontmatter.mjs"),
+    ]),
+    // BI-873F3C48: every growth-shaped (event/log/telemetry) model must be
+    // retention-enrolled (purge or retained) or deliberately allowlisted.
+    guard("retention-enrollment-guard", "Retention Enrollment Guard", [
+      node("--test", "scripts/check-retention-enrollment.test.mjs"),
+      node("scripts/check-retention-enrollment.mjs"),
     ]),
     // Diff-scoped by design: repo-wide, the pattern matches 255 fixtures across 125
     // files, nearly all legitimate (far-future sentinels, deliberately-expired rows).
@@ -179,6 +247,14 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
     guard("capability-consumer-guard", "Capability Consumer Guard", [
       node("--test", "scripts/check-capability-consumers.test.mjs"),
       node("scripts/check-capability-consumers.mjs"),
+    ]),
+    // W17 (BI-810BEC9C): every route handler under apps/web/app/api declares its
+    // exposure class at birth (@exposure pragma collected into route-manifest.json);
+    // the A2A cohort may never be grandfathered; "public" claims must agree with
+    // the proxy's path-segmentation allowlist.
+    guard("endpoint-classification-guard", "Endpoint Classification Guard", [
+      node("--test", "scripts/check-endpoint-classification.test.mjs"),
+      node("scripts/check-endpoint-classification.mjs"),
     ]),
     guard("finding-substrate-guard", "Finding Substrate Guard", [
       node("--test", "scripts/check-finding-substrate.test.mjs"),
@@ -228,6 +304,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         // (now with the liveness + abandoned-merge verdicts), the session
         // heartbeat liveness signal, and the root-clone fast-forward remedy.
         "scripts/lib/worktree-janitor-core.test.mjs",
+        "scripts/worktree-janitor.test.mjs",
         "scripts/lib/worktree-session-heartbeat.test.mjs",
         // BI-DBAD1A1B: SessionEnd process matching accepts only the canonical
         // worktree itself or descendants, never sibling worktrees/CI runners.
@@ -250,6 +327,9 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         // nothing about it.
         "scripts/lib/pregate-console.test.mjs",
         "scripts/lib/pregate-status.test.mjs",
+        // Symlink-robust entry guard shared by the pregate script family: a
+        // guard that misses makes the gate exit 0 silently (false pass).
+        "scripts/lib/entry-module.test.mjs",
       ),
       node("scripts/runtime-artifact-janitor.mjs", "--help"),
     ]),

@@ -21,10 +21,7 @@ import type {
   DecisionRiskTier,
 } from "@/lib/decision-perspective/types";
 import { sealDecision, type SealablePayload } from "@/lib/decision/decision-chain";
-import type { AdmissibleCitation } from "@/lib/decision/evidence-grounding";
-
-/** Grade → effective weight for the persisted source row. A most conclusive. */
-const GRADE_WEIGHT: Record<string, number> = { A: 1, B: 0.75, C: 0.5, D: 0.25 };
+import { citationsToSources, type AdmissibleCitation } from "@/lib/decision/evidence-grounding";
 
 type ProfileResolverDb = {
   decisionPerspectiveProfile: {
@@ -212,14 +209,12 @@ export async function recordKernelConsultInteraction(input: {
       : [];
 
     // Trust-envelope evidence grounding: bind each cited source onto the ledger
-    // row's `sources` column (was always empty on the kernel path).
-    const sources: DecisionPerspectiveEvaluationResult["sources"] = (input.citations ?? []).map(
-      (c) => ({
-        materialId: `${c.optionId}:${c.dimensionKey}`,
-        sourceType: c.locator.sourceType,
-        summary: c.excerpt ?? `${c.dimensionKey} cited from ${c.locator.sourceType}`,
-        effectiveWeight: GRADE_WEIGHT[c.grade] ?? 0.5,
-      }),
+    // row's `sources` column (was always empty on the kernel path). The row
+    // carries the structured locator (BI-8192557E phase 2a) so the independent
+    // re-verifier can re-resolve it against live source later; without it a
+    // recorded citation is permanently unverifiable.
+    const sources: DecisionPerspectiveEvaluationResult["sources"] = citationsToSources(
+      input.citations ?? [],
     );
 
     const evaluation: DecisionPerspectiveEvaluationResult = {

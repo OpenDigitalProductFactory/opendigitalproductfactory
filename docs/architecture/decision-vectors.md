@@ -251,6 +251,28 @@ routinely needs. How *conclusive* an investigation is, is not the same judgement
 material backs it — a security analyst separates them daily; elsewhere the difference does not pay
 for the extra axis, so it rolls up.
 
+### 4.1 Profession-declared (namespaced) axes
+
+Beyond the eight demoted spine axes above, a profession may declare **net-new namespaced axes**
+inside its own corpus (`<profession>/<axis>`, registry `packages/db/src/profession-local-axes.ts`),
+each typed benefit/cost, sourced, and projecting onto the spine with matching polarity. The
+registry currently carries:
+
+| Axis | Kind | Projects onto |
+|---|---|---|
+| `ux-design/hierarchy_flatness`, `ux-design/content_density`, `ux-design/disclosure_debt`, `ux-design/perceptual_clutter` | cost | `human_cognitive_load` |
+| `data-architect/referential_backing` | benefit | `long_term_maintainability` |
+| `data-architect/migration_fleet_risk` | **cost** | `blast_radius` |
+| `software-engineer/supersession_debt` | **cost** | `human_cognitive_load` |
+| `security/exposure_surface` | **cost** | `blast_radius` |
+| `devops-platform/upgrade_continuity` | benefit | `reversibility` |
+| `mcp-integration/protocol_window_conformance` | benefit | `governance_compliance` |
+| `mcp-integration/context_economy` | benefit | `cost_efficiency` |
+
+The internal-developer acumen set (everything below the ux-design rows) carries the
+architecture-shape principles of the 2026-08-16 simplify-strengthen pass into each craft's own
+decision vocabulary (BI-CC44E74F, EP-413F2602).
+
 ---
 
 ## 5. Where a weight comes from — sourcing classes
@@ -265,7 +287,7 @@ rather than describing the design as though it were the system.
 | Class | What the weight is | How it is refreshed | Status |
 |---|---|---|---|
 | **basic** | Hand-scored doctrine. Stable, shared, deliberate. | PR + ratification by the scope's owner. | **Shipped.** Every weight in the registry today is this class. |
-| **corpus-derived** | A profession-owned axis whose meaning comes from that profession's own corpus. | Corpus changes → re-derive. | **Mechanism shipped, unused.** The namespaced registry that holds these exists and currently ships empty. |
+| **corpus-derived** | A profession-owned axis whose meaning comes from that profession's own corpus. | Corpus changes → re-derive. | **In use.** The namespaced registry carries the ux-design set and the internal-developer acumen set (§4.1). |
 | **revealed** | A weight *inferred from rulings* — what the organisation's accumulated overrides reveal about a trade-off it actually makes. Never the axis *selection*, only the magnitude. | Statistical inference over past decisions, then a human ruling. | **Engine shipped and fed;** it proposes, it never applies. |
 | **external** | A live looked-up signal (a season, a market condition) that modulates a decision at inference time. | Validated against recorded outcome before it may score anything. | **Not built.** One pilot scoped. |
 
@@ -468,7 +490,7 @@ human, not to quietly inherit someone else's judgement.
 | Structured alignment scoring + inspectable contribution ledger | Shipped |
 | Evidence-graded confidence discounting | Shipped |
 | Weight inference from rulings (proposes only, never applies) | Shipped |
-| Profession-local axis registry | Shipped, ships empty |
+| Profession-local axis registry | Shipped, populated (§4.1) |
 | `dimensionSourcing` label on each axis | Designed, not built |
 | Five owner-facing business stance vectors, archetype-defaulted, with spend ceilings | Shipped |
 | Stance answers expressed as weights on the 20 axes | Not built (§8.2) |

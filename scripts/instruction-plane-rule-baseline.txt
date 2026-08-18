@@ -3,6 +3,7 @@ docs/founder-kernel/wiki/principles/always-push-after-committing.md	Always push 
 docs/founder-kernel/wiki/principles/architecture-over-shortcuts.md	Architecture over shortcuts.
 docs/founder-kernel/wiki/principles/branch-guard-before-implementation.md	Branch guard before implementation and commit:
 docs/founder-kernel/wiki/principles/build-gate-mandatory.md
+docs/founder-kernel/wiki/principles/claim-a-workroom-before-you-work.md	Claim a workroom before you work — every surface, including the external CLIs.
 docs/founder-kernel/wiki/principles/classify-ambiguous-requests-before-acting.md	Classify ambiguous requests before acting.
 docs/founder-kernel/wiki/principles/commons-are-curated-not-just-appended.md	Commons are curated, not just appended.
 docs/founder-kernel/wiki/principles/consult-specs-first.md	Ground new work in existing platform work.

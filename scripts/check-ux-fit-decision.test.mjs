@@ -9,6 +9,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
 import {
+  collectCopyPreservingRenames,
   MEASURED_AXES,
   MEASURED_AXIS_POLARITY,
   UI_CONTROL_RE,
@@ -295,4 +296,50 @@ test("polarity does not drift from lib/ux-budget/ratchet.ts", () => {
   );
   assert.deepEqual(MEASURED_AXIS_POLARITY, source);
   assert.deepEqual(Object.keys(MEASURED_AXIS_POLARITY).sort(), [...MEASURED_AXES].sort());
+});
+
+// ── Renamed components (BI-C2C16582) ────────────────────────────────────────────
+//
+// A `git mv` reads as delete+add without rename detection, so a pure rename used to
+// demand fresh measured UX evidence for a screen nobody changed. The exemption is
+// narrow ON PURPOSE: it forgives a move that introduces no new user-visible copy,
+// and nothing else. These fixtures pin both halves — especially that a rename which
+// DOES add copy still has to prove its fit, which is what stops the exemption from
+// becoming a way to smuggle UI in behind a file move.
+
+function fakeGit(nameStatus, bodies) {
+  return (...args) => {
+    if (args.includes("--name-status")) return nameStatus;
+    const newPath = args[args.length - 1];
+    return bodies[newPath] ?? "";
+  };
+}
+
+test("a rename that only re-cases identifiers is exempt", () => {
+  const ns = "R093\tapps/web/a/WorkRoomHeader.tsx\tapps/web/a/WorkroomHeader.tsx";
+  const body = [
+    '-import { WorkRoomView } from "@/lib/work-management/room-types";',
+    '+import { WorkroomView } from "@/lib/work-management/room-types";',
+    '-  <div data-testid="workRoomOutcomeHealth">Outcome health</div>',
+    '+  <div data-testid="workroomOutcomeHealth">Outcome health</div>',
+  ].join("\n");
+  const out = collectCopyPreservingRenames("base", fakeGit(ns, { "apps/web/a/WorkroomHeader.tsx": body }));
+  assert.equal(out.has("apps/web/a/WorkroomHeader.tsx"), true);
+});
+
+test("a rename that ADDS user-visible copy is NOT exempt", () => {
+  const ns = "R090\tapps/web/a/WorkRoomHeader.tsx\tapps/web/a/WorkroomHeader.tsx";
+  const body = [
+    '-  <div data-testid="workRoomOutcomeHealth">Outcome health</div>',
+    '+  <div data-testid="workroomOutcomeHealth">Outcome health</div>',
+    '+  <button>Archive this workroom</button>',
+  ].join("\n");
+  const out = collectCopyPreservingRenames("base", fakeGit(ns, { "apps/web/a/WorkroomHeader.tsx": body }));
+  assert.equal(out.has("apps/web/a/WorkroomHeader.tsx"), false);
+});
+
+test("a plain added file is never treated as a rename", () => {
+  const ns = "A\tapps/web/a/BrandNewPanel.tsx";
+  const out = collectCopyPreservingRenames("base", fakeGit(ns, {}));
+  assert.equal(out.size, 0);
 });

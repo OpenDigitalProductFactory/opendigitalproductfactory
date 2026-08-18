@@ -246,6 +246,23 @@ export const STATUS_INTENT: Record<string, Record<string, Intent>> = {
     rejected: "danger",
     paid: "success",
   },
+  // Finance approval-step lifecycle (was app/(shell)/finance/bills + expense-claims
+  // APPROVAL_STATUS_COLOURS raw-hex maps — BI-D25ED55D cohort migration).
+  financeApproval: {
+    pending: "warning",
+    approved: "success",
+    rejected: "danger",
+  },
+  // Finance expense-claim line category (was app/(shell)/finance/expense-claims
+  // CATEGORY_COLOURS raw-hex map). Taxonomy tint, same pattern as financeAssetCategory.
+  financeExpenseCategory: {
+    travel: "info",
+    meals: "warning",
+    accommodation: "accent",
+    supplies: "success",
+    mileage: "warning",
+    other: "neutral",
+  },
   // Finance recurring-schedule lifecycle (was app/(shell)/finance/recurring SCHEDULE_STATUS_COLOURS).
   financeRecurring: {
     active: "success",
@@ -433,6 +450,7 @@ export const STATUS_INTENT: Record<string, Record<string, Intent>> = {
     "in-progress": "accent",
     done: "success",
     deferred: "neutral",
+    retired: "neutral",
   },
   // Workspace Work Room semantics. These domains are shared by the My Work
   // lens and room detail shell so neither surface carries a private color map.
@@ -448,14 +466,14 @@ export const STATUS_INTENT: Record<string, Record<string, Intent>> = {
     closed: "neutral",
     cancelled: "neutral",
   },
-  workRoomOutcomeHealth: {
+  workroomOutcomeHealth: {
     "on-track": "success",
     "at-risk": "warning",
     blocked: "danger",
     idle: "neutral",
     unknown: "neutral",
   },
-  workRoomActivity: {
+  workroomActivity: {
     message: "neutral",
     ask: "warning",
     "coworker-joined": "accent",

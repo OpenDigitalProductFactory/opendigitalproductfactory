@@ -516,11 +516,8 @@ export async function runDimensionEval(
     };
   }
 
-  // Reap stale "running" rows older than the guard window so they don't pile
-  // up forever. The most common cause is an Inngest step timeout that cuts the
-  // function off after callProvider() has fired but before the terminal
-  // endpointTestRun.update() runs. Treat these as failed so operators can see
-  // them in the test-run history rather than silently disappearing.
+  // Reap stale "running" rows (step timeout or lease reclaiming the GPU). A
+  // reaped run never reached a verdict → "incomplete", not "failed" (BI-91F0E312).
   const reaped = await prisma.endpointTestRun.updateMany({
     where: {
       endpointId: providerId,
@@ -530,7 +527,7 @@ export async function runDimensionEval(
       startedAt: { lte: guardCutoff },
     },
     data: {
-      status: "failed",
+      status: "incomplete",
       completedAt: new Date(),
     },
   });
@@ -626,26 +623,36 @@ export async function runDimensionEval(
           },
         };
 
+  // BI-91F0E312: an inconclusive cycle measured nothing — bumping evalCount /
+  // profileConfidence would dampen the next REAL measurement. lastEvalAt stamps.
   await prisma.modelProfile.update({
     where: { providerId_modelId: { providerId, modelId } },
     data: {
       ...scoreUpdates,
       ...toolUseUpdate,
-      ...(hasRealScores ? { profileSource: "evaluated" as const } : {}),
-      profileConfidence: (currentEvalCount + 1) >= 5 ? "high" : "medium",
-      evalCount: { increment: 1 },
+      ...(hasRealScores
+        ? {
+            profileSource: "evaluated" as const,
+            profileConfidence: (currentEvalCount + 1) >= 5 ? "high" : "medium",
+            evalCount: { increment: 1 },
+          }
+        : {}),
       lastEvalAt: new Date(),
       ...(hasSevereDrift ? { modelStatus: "degraded" } : {}),
     },
   });
 
-  // Complete the test run record
+  // Nothing-measured cycles are INCOMPLETE; avgScore never comes from
+  // carried-forward previous scores (BI-91F0E312).
+  const conclusiveDimensions = dimensions.filter((d) => !d.inconclusive);
   await prisma.endpointTestRun.update({
     where: { runId },
     data: {
-      status: "completed",
+      status: allInconclusive ? "incomplete" : "completed",
       completedAt: new Date(),
-      avgScore: dimensions.reduce((a, d) => a + d.rawScore, 0) / dimensions.length,
+      avgScore: conclusiveDimensions.length > 0
+        ? conclusiveDimensions.reduce((a, d) => a + d.rawScore, 0) / conclusiveDimensions.length
+        : null,
       results: {
         dimensions: dimensions.map((d) => ({
           dimension: d.dimension,

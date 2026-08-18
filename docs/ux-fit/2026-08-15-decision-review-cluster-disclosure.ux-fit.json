@@ -1,0 +1,18 @@
+{
+  "version": "1",
+  "decidedOption": "progressive-disclosure",
+  "decisionInteractionId": "DI-6611D19CD6A8",
+  "scope": {
+    "files": [
+      "apps/web/components/wiki/OrgDecisionCaptureList.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "progressive-disclosure",
+      "bare-count-only",
+      "always-visible-variant-list"
+    ]
+  }
+}

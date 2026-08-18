@@ -1,3 +1,8 @@
+// @exposure authenticated — internal-a2a (the default) requires a session;
+// partner/external profiles are scope-gated to offers explicitly published at
+// that availabilityScope and cross-boundary POSTs additionally require the
+// GAID call chain + contract context, so the endpoint is not "public" in the
+// path-segmentation sense.
 import { NextResponse } from "next/server";
 
 import { auth } from "@/lib/auth";

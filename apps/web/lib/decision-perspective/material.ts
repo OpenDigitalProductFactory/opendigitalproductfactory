@@ -1,4 +1,4 @@
-import { DECISION_DOMAIN_CLASSES, type DecisionDomainClass } from "./types";
+import { CROSS_DOMAIN_MATERIAL_TAG, DECISION_DOMAIN_CLASSES, type DecisionDomainClass } from "./types";
 import { MARK_DPF_PLATFORM_PROFILE } from "./default-profile";
 import type {
   DecisionAutonomyPolicy,
@@ -114,8 +114,33 @@ function clamp01(value: number): number {
   return value;
 }
 
+/**
+ * Is this material eligible to inform a decision in `domain`? (BI-F5F2869D)
+ *
+ * This used to be exact equality on `domainClass`, which made a caller-supplied
+ * bucket the hard gate on which doctrine a decision could ever see. Relevance
+ * ranking runs AFTER this filter, so anything excluded here is invisible to the
+ * content-aware path no matter how on-point it is.
+ *
+ * That silently broke the "remember this" loop. `captureOrgDecisionOutcome`
+ * files a `ruled` material under the domainClass of the interaction being
+ * answered, and `evaluate_org_business_decision` takes domainClass as a
+ * caller-supplied argument — so the same business question asked twice, bucketed
+ * differently, cannot retrieve its own prior ruling. Live: the owner's ruling on
+ * "offer a self-hosted support subscription through MSP partners" sits in
+ * `plan-readiness`; the MSP question arrived as `risk-assessment`; the decision
+ * escalated with the answer already in the corpus.
+ *
+ * Matching is now ADDITIVE over the previously-dormant `domains[]` field, the
+ * direction the 2026-07-11 stance-onboarding design named at §a3 and the option
+ * the kernel scored highest (margin 3.08, no commandment conflict). Domain stays
+ * a real constraint — this widens eligibility, it does not remove it, and the
+ * relevance layer still decides what actually carries weight.
+ */
 export function isMaterialApplicable(material: PerspectiveMaterial, domain: DecisionDomainClass): boolean {
-  return material.domainClass === domain;
+  if (material.domainClass === domain) return true;
+  const tags = material.domains ?? [];
+  return tags.includes(domain) || tags.includes(CROSS_DOMAIN_MATERIAL_TAG);
 }
 
 export function scorePerspectiveMaterial(material: PerspectiveMaterial): PerspectiveMaterialScore {
@@ -280,7 +305,14 @@ export async function resolveProfileMaterial(input: {
     const rows = await input.db.perspectiveMaterial.findMany({
       where: {
         profileId: profile.profileId,
-        domainClass: input.domainClass,
+        // BI-F5F2869D: must mirror isMaterialApplicable. Narrowing here to an
+        // exact domainClass would re-impose the hard gate before the in-memory
+        // predicate ever runs, and the additive tag would be dead code.
+        OR: [
+          { domainClass: input.domainClass },
+          { domains: { has: input.domainClass } },
+          { domains: { has: CROSS_DOMAIN_MATERIAL_TAG } },
+        ],
         reviewStatus: "approved",
         promotionState: "promoted",
       },

@@ -1,6 +1,6 @@
 // BI-BB13B599 (EP-WORK-CONVERGENCE): the plain, business-safe customer-mode
 // status band. Reads the capsule-derived projection (projectBuildStudioCustomerStatus)
-// so external Claude/Codex/Grok work carried on the WorkCapsule is reflected in
+// so external Claude/Codex/Grok work carried on the Workroom is reflected in
 // one plain lifecycle line — never a raw phase, never an executor name. This is
 // the first-viewport "wife-test" status: what is being built, where it is, and
 // whether it needs the operator.

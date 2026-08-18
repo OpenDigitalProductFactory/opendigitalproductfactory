@@ -1,0 +1,18 @@
+{
+  "version": "1",
+  "decidedOption": "synchronized-progressive",
+  "decisionInteractionId": "DI-0B87641E5380",
+  "scope": {
+    "files": [
+      "apps/web/components/twin/hoa/HoaPropertyOperations.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "map-first-blocked",
+      "list-only",
+      "synchronized-progressive"
+    ]
+  }
+}

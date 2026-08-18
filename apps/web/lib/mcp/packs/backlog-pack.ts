@@ -17,7 +17,7 @@
 // resolution helpers rather than replicating them per pack.
 
 import { getErrorMessage } from "@/lib/shared/get-error-message";
-import { handleUpdateBacklogItem } from "@/lib/mcp-handlers/update-backlog-item";
+import { handleUpdateBacklogItem } from "./backlog-update-item-handler";
 import { updateBuildHappyPathState } from "@/lib/mcp/build-tool-helpers";
 import { optionalStringParam, stringArrayParam, validScopeKind } from "./backlog-scope-metadata";
 import { getBacklogItem, listBacklogItems, listEpics, queryBacklog } from "./backlog-pack-read-tools";
@@ -27,7 +27,11 @@ import type { ToolPack, ToolPackHandler } from "../tool-pack";
 import { tryAcquireBacklogClaimAtomic } from "@/lib/backlog/claim-on-start";
 import { normalizeCompletionEvidenceManifest } from "@/lib/backlog/completion-evidence-policy";
 import { backlogPackDefinitions as definitions } from "./backlog-pack-definitions";
-import { resolveDuplicateBacklogRowId } from "@/lib/backlog/duplicate-resolution";
+import {
+  CLEAR_DEFERRAL_PROJECTION,
+  normalizeDeferralInput,
+} from "@/lib/backlog/deferral-contract";
+import { retireBacklogItemTool, triageBacklogItemTool } from "@/lib/mcp/backlog-retirement-handlers";
 // ── Handlers (case bodies moved verbatim) ───────────────────────────────────
 
 async function createBacklogItem(
@@ -145,55 +149,7 @@ async function createBacklogItem(
 }
 
 async function triageBacklogItem(params: Record<string, unknown>): Promise<ToolResult> {
-  const { prisma } = await import("@dpf/db");
-  const itemId = String(params["itemId"] ?? "");
-  const outcome = String(params["outcome"] ?? "");
-  const rationale = String(params["rationale"] ?? "").trim();
-  const item = await prisma.backlogItem.findUnique({ where: { itemId } });
-  if (!item) {
-    return { success: false, error: "Item not found", message: `Item ${itemId} not found` };
-  }
-  if (item.status !== "triaging") {
-    return { success: false, error: "Item is not in triaging status", message: `Item ${itemId} is not in triaging status` };
-  }
-  if (!rationale) {
-    return { success: false, error: "Rationale is required", message: "Rationale is required" };
-  }
-  if (outcome === "build" && typeof params["effortSize"] !== "string") {
-    return { success: false, error: "effortSize is required for build outcomes", message: "effortSize is required for build outcomes" };
-  }
-  if (outcome === "duplicate" && typeof params["duplicateOfId"] !== "string") {
-    return { success: false, error: "duplicateOfId is required for duplicate outcomes", message: "duplicateOfId is required for duplicate outcomes" };
-  }
-  if ((outcome === "defer" || outcome === "discard") && typeof params["reason"] !== "string") {
-    return { success: false, error: "reason is required for defer/discard outcomes", message: "reason is required for defer/discard outcomes" };
-  }
-
-  const duplicateRef = typeof params["duplicateOfId"] === "string" ? params["duplicateOfId"] : "";
-  const duplicateRowId = outcome === "duplicate" ? await resolveDuplicateBacklogRowId(prisma, duplicateRef) : null;
-  if (outcome === "duplicate" && !duplicateRowId) {
-    return { success: false, error: "duplicate_not_found", message: `Canonical item ${duplicateRef} not found` };
-  }
-
-  const nextStatus = outcome === "build" || outcome === "runbook" || outcome === "coworker-task" ? "open" : "deferred";
-
-  await prisma.backlogItem.update({
-    where: { itemId },
-    data: {
-      status: nextStatus,
-      triageOutcome: outcome,
-      effortSize: typeof params["effortSize"] === "string" ? params["effortSize"] : null,
-      duplicateOfId: duplicateRowId,
-      resolution: rationale,
-      abandonReason: typeof params["reason"] === "string" ? params["reason"] : null,
-    },
-  });
-
-  return {
-    success: true,
-    entityId: itemId,
-    message: `Triaged ${itemId} as ${outcome}`,
-  };
+  return triageBacklogItemTool(params);
 }
 
 async function retireBacklogItem(
@@ -201,112 +157,7 @@ async function retireBacklogItem(
   userId: string,
   context?: { agentId?: string },
 ): Promise<ToolResult> {
-  const { prisma } = await import("@dpf/db");
-  const itemId = String(params["itemId"] ?? "");
-  const outcome = String(params["outcome"] ?? "");
-  const rationale = String(params["rationale"] ?? "").trim();
-  const reason = typeof params["reason"] === "string" ? params["reason"].trim() : "";
-  const duplicateOfId = typeof params["duplicateOfId"] === "string" ? params["duplicateOfId"].trim() : "";
-  const validOutcomes = new Set(["duplicate", "defer", "discard"]);
-
-  if (!itemId) {
-    return { success: false, error: "missing_itemId", message: "itemId is required" };
-  }
-  if (!validOutcomes.has(outcome)) {
-    return { success: false, error: "invalid_outcome", message: "outcome must be duplicate, defer, or discard" };
-  }
-  if (!rationale) {
-    return { success: false, error: "missing_rationale", message: "rationale is required" };
-  }
-  if (outcome === "duplicate" && !duplicateOfId) {
-    return { success: false, error: "missing_duplicateOfId", message: "duplicateOfId is required for duplicate retirement" };
-  }
-
-  const result = await prisma.$transaction(async (tx) => {
-    const item = await tx.backlogItem.findUnique({ where: { itemId } });
-    if (!item) {
-      return { success: false, error: "not_found", message: `Item ${itemId} not found` } satisfies ToolResult;
-    }
-    if ("activeBuildId" in item && item.activeBuildId) {
-      return {
-        success: false,
-        error: "active_build_exists",
-        message: `Item ${itemId} is attached to an active build and cannot be retired`,
-      } satisfies ToolResult;
-    }
-
-    let canonicalRowId: string | null = null;
-    if (outcome === "duplicate") {
-      canonicalRowId = await resolveDuplicateBacklogRowId(tx, duplicateOfId);
-      if (!canonicalRowId) {
-        return {
-          success: false,
-          error: "duplicate_not_found",
-          message: `Canonical item ${duplicateOfId} not found`,
-        } satisfies ToolResult;
-      }
-    }
-
-    const updated = await tx.backlogItem.update({
-      where: { id: item.id },
-      data: {
-        status: "deferred",
-        triageOutcome: outcome,
-        duplicateOfId: canonicalRowId,
-        resolution: rationale,
-        abandonReason: reason || rationale,
-        completedAt: new Date(),
-      },
-    });
-
-    await tx.backlogItemActivity.create({
-      data: {
-        backlogItemId: item.id,
-        kind: "status_change",
-        recordedById: userId,
-        recordedByAgentId: context?.agentId ?? null,
-        summary: `Retired ${itemId} as ${outcome}`,
-        payload: {
-          from: item.status,
-          to: "deferred",
-          outcome,
-          rationale,
-          reason: reason || null,
-          duplicateOfId: outcome === "duplicate" ? duplicateOfId : null,
-        },
-      },
-    });
-
-    if (item.epicId) {
-      const remainingOpenItems = await tx.backlogItem.count({
-        where: {
-          epicId: item.epicId,
-          status: { in: ["open", "in-progress"] },
-          id: { not: item.id },
-        },
-      });
-      if (remainingOpenItems === 0) {
-        await tx.epic.update({
-          where: { id: item.epicId },
-          data: { status: "done" },
-        });
-      }
-    }
-
-    return {
-      success: true,
-      entityId: updated.itemId,
-      message: `Retired ${itemId} as ${outcome}`,
-      data: {
-        itemId: updated.itemId,
-        status: "deferred",
-        outcome,
-        duplicateOfId: outcome === "duplicate" ? duplicateOfId : null,
-      },
-    } satisfies ToolResult;
-  });
-
-  return result;
+  return retireBacklogItemTool(params, userId, context);
 }
 
 async function sizeBacklogItem(params: Record<string, unknown>): Promise<ToolResult> {
@@ -407,8 +258,12 @@ async function updateBacklogItemStatus(
     return {
       success: false,
       error: "invalid_status",
-      message: `status must be one of triaging|open|in-progress|done|deferred, got ${target}`,
+      message: `status must be one of triaging|open|in-progress|done|deferred|retired, got ${target}`,
     };
+  const deferral = target === "deferred"
+    ? normalizeDeferralInput(params["deferral"])
+    : null;
+  if (deferral && !deferral.ok) return { success: false, error: deferral.error, message: deferral.message };
   const reason = typeof params["reason"] === "string" ? params["reason"] : null;
   const resolution = typeof params["resolution"] === "string" ? params["resolution"] : null;
   const completionEvidence =
@@ -436,6 +291,7 @@ async function updateBacklogItemStatus(
       claimedById: true,
       claimedByAgentId: true,
       claimedAt: true,
+      deferredAt: true,
     },
   });
   if (!item)
@@ -458,12 +314,38 @@ async function updateBacklogItemStatus(
   // race on the same row; the loser's WHERE fails (count=0) → claim_conflict.
   // Stale claims reclaim inline; force=true takes over. Release on leave.
   const forceClaim = params["force"] === true;
-  if (item.status === target) {
+  if (item.status === target && target !== "deferred") {
     return {
       success: true,
       entityId: itemIdRaw,
       message: `${itemIdRaw} already at status=${target} (no-op)`,
     };
+  }
+  if (target === "retired" && !reason) {
+    return {
+      success: false,
+      error: "missing_reason",
+      message: "reason is required when status=retired",
+    };
+  }
+  if (deferral?.ok) {
+    const owner = await prisma.principal.findFirst({
+      where: {
+        OR: [
+          { id: deferral.value.deferOwnerPrincipalId },
+          { principalId: deferral.value.deferOwnerPrincipalId },
+        ],
+      },
+      select: { id: true },
+    });
+    if (!owner) {
+      return {
+        success: false,
+        error: "defer_owner_not_found",
+        message: `Deferral owner ${deferral.value.deferOwnerPrincipalId} was not found`,
+      };
+    }
+    deferral.value.deferOwnerPrincipalId = owner.id;
   }
   // Retriage path (BI-7D4AF644): require a reason and clear the prior triage
   // decision so triage_backlog_item starts clean on the next pass.
@@ -504,11 +386,24 @@ async function updateBacklogItemStatus(
   }
 
   const updated = await prisma.$transaction(async (tx) => {
+    const transitionedAt = new Date();
     const next = await tx.backlogItem.update({
       where: { id: item.id },
       data: {
         status: target,
         ...(target === "done" ? { completedAt: new Date(), resolution } : {}),
+        ...(target === "retired" ? { completedAt: transitionedAt } : {}),
+        ...(target !== "done" && target !== "retired" && (item.status === "done" || item.status === "retired")
+          ? { completedAt: null }
+          : {}),
+        ...(deferral?.ok
+          ? {
+              ...deferral.value,
+              deferredAt: item.deferredAt ?? transitionedAt,
+            }
+          : target !== "deferred"
+            ? CLEAR_DEFERRAL_PROJECTION
+            : {}),
         ...(isRetriage ? { triageOutcome: null, effortSize: null, completedAt: null } : {}),
         // Claim fields written by tryAcquireBacklogClaimAtomic above.
         ...(item.status === "in-progress" && target !== "in-progress"
@@ -520,13 +415,23 @@ async function updateBacklogItemStatus(
     await tx.backlogItemActivity.create({
       data: {
         backlogItemId: item.id,
-        kind: "status_change",
+        kind: item.status === "deferred" && target === "deferred" ? "deferral_review" : "status_change",
         summary: `${item.status} → ${target}` + (reason ? ` — ${reason.slice(0, 160)}` : ""),
         payload: {
           from: item.status,
           to: target,
           reason: reason ?? null,
           resolution: resolution ?? null,
+          ...(deferral?.ok
+            ? {
+                deferral: {
+                  reason: deferral.value.deferReason,
+                  trigger: deferral.value.deferTrigger,
+                  reviewAt: deferral.value.deferReviewAt.toISOString(),
+                  ownerPrincipalId: deferral.value.deferOwnerPrincipalId,
+                },
+              }
+            : {}),
           ...(completionEvidence
             ? {
                 completionEvidence: {
@@ -555,14 +460,14 @@ async function updateBacklogItemStatus(
         recordedByAgentId: context?.agentId ?? null,
       },
     });
-    // Epic auto-close: when this item just reached done and every sibling is done/deferred,
-    // flip the epic to done. Mirrors AGENTS.md Epic Lifecycle Stewardship.
+    // Deferred work remains wanted and keeps the epic open. Only delivered or
+    // explicitly retired siblings are terminal for epic completion.
     if (target === "done" && item.epicId) {
       const remaining = await tx.backlogItem.count({
         where: {
           epicId: item.epicId,
           id: { not: item.id },
-          status: { notIn: ["done", "deferred"] },
+          status: { notIn: ["done", "retired"] },
         },
       });
       if (remaining === 0) {

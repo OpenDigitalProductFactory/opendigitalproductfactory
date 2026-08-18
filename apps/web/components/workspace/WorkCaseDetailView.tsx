@@ -1,8 +1,8 @@
 import { ArrowLeft, DoorClosed } from "lucide-react";
 
 import { EmptyState } from "@/components/ui/report-kit";
-import { WorkRoomBody } from "@/components/workspace/work-room/WorkRoomBody";
-import { WorkRoomHeader } from "@/components/workspace/work-room/WorkRoomHeader";
+import { WorkroomBody } from "@/components/workspace/workroom/WorkroomBody";
+import { WorkroomHeader } from "@/components/workspace/workroom/WorkroomHeader";
 import type { WorkspaceWorkCaseDetailView } from "@/lib/work-management/workspace-case-loader";
 
 type Props = {
@@ -39,8 +39,8 @@ export function WorkCaseDetailView({ detail }: Props) {
 
   return (
     <main className="space-y-5 text-[var(--dpf-text)]">
-      <WorkRoomHeader room={detail.room} summary={detail.summary} />
-      <WorkRoomBody detail={detail} room={detail.room} />
+      <WorkroomHeader room={detail.room} summary={detail.summary} />
+      <WorkroomBody detail={detail} room={detail.room} />
     </main>
   );
 }

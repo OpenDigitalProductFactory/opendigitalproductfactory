@@ -4,6 +4,7 @@ import {
   parseExplicitTier,
   defaultTierForClient,
   resolveEffectiveTier,
+  resolveEffectiveTierForAuthSource,
   selectToolsByTier,
   selectToolsForListing,
   resolveLoadToolsSelection,
@@ -70,6 +71,24 @@ describe("resolveEffectiveTier", () => {
     expect(resolveEffectiveTier(null, "claude-code/2")).toBe("full");
     expect(resolveEffectiveTier(undefined, "codex/1")).toBe("full");
     expect(resolveEffectiveTier("", undefined)).toBe("core");
+  });
+});
+
+describe("resolveEffectiveTierForAuthSource (W12, BI-EE64547B)", () => {
+  it("internal session-jwt callers default to full — per-call stateless, no session store to append from", () => {
+    expect(resolveEffectiveTierForAuthSource(null, "claude-code/2", "session-jwt")).toBe("full");
+    // Even an unidentified client (which would default core externally) lists
+    // full internally: the JWT scopes already bound the surface.
+    expect(resolveEffectiveTierForAuthSource(null, undefined, "session-jwt")).toBe("full");
+    expect(resolveEffectiveTierForAuthSource(undefined, "grok/1", "session-jwt")).toBe("full");
+  });
+  it("an explicit ?tier= still wins on the internal path", () => {
+    expect(resolveEffectiveTierForAuthSource("core", "claude-code/2", "session-jwt")).toBe("core");
+  });
+  it("external PAT callers keep the client-aware default unchanged", () => {
+    expect(resolveEffectiveTierForAuthSource(null, "claude-code/2", "pat")).toBe("full");
+    expect(resolveEffectiveTierForAuthSource(null, undefined, "pat")).toBe("core");
+    expect(resolveEffectiveTierForAuthSource("full", undefined, "pat")).toBe("full");
   });
 });
 

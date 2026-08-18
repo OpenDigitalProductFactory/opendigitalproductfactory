@@ -113,6 +113,7 @@ const definitions: ToolDefinition[] = [
     requiredCapability: "view_admin",
     executionMode: "immediate",
     sideEffect: true, // Tier 3: potentially destructive
+    consequence: "irreversible",
   },
 ];
 

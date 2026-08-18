@@ -24,8 +24,8 @@ describe("projectPhysicalTopology", () => {
 
     expect(result.data.nodes.map((node) => node.id)).toEqual(["gateway", "switch", "ap"]);
     expect(result.data.links).toEqual([
-      { source: "switch", target: "gateway", type: "CONNECTS_TO" },
-      { source: "ap", target: "switch", type: "CONNECTS_TO" },
+      { source: "gateway", target: "switch", type: "CONNECTS_TO" },
+      { source: "switch", target: "ap", type: "CONNECTS_TO" },
     ]);
     expect(result.integrity).toMatchObject({ state: "current", deviceCount: 3, physicalLinkCount: 2, sources: ["unifi"] });
   });
@@ -44,5 +44,47 @@ describe("projectPhysicalTopology", () => {
   it("marks old physical evidence stale", () => {
     const result = projectPhysicalTopology(data, new Date("2026-08-10T21:00:01.000Z"));
     expect(result.integrity.state).toBe("stale");
+  });
+
+  it("orients observed child-to-parent facts as WAN to gateway to switch to AP to client", () => {
+    const graph: GraphData = {
+      nodes: [
+        { id: "wan", name: "Starlink", label: "InfraCI", color: "", size: 1, ciType: "wan_uplink" },
+        { id: "gateway", name: "Gateway", label: "InfraCI", color: "", size: 1, ciType: "router" },
+        { id: "switch", name: "Switch", label: "InfraCI", color: "", size: 1, ciType: "switch" },
+        { id: "ap", name: "AP", label: "InfraCI", color: "", size: 1, ciType: "access_point" },
+        { id: "client", name: "Client", label: "InfraCI", color: "", size: 1, ciType: "network_client" },
+      ],
+      links: [
+        { source: "gateway", target: "wan", type: "UPLINKS_TO" },
+        { source: "switch", target: "gateway", type: "CONNECTS_TO" },
+        { source: "ap", target: "switch", type: "CONNECTS_TO" },
+        { source: "client", target: "ap", type: "CONNECTS_TO" },
+      ],
+    };
+
+    expect(projectPhysicalTopology(graph).data.links).toEqual([
+      { source: "wan", target: "gateway", type: "UPLINKS_TO" },
+      { source: "gateway", target: "switch", type: "CONNECTS_TO" },
+      { source: "switch", target: "ap", type: "CONNECTS_TO" },
+      { source: "ap", target: "client", type: "CONNECTS_TO" },
+    ]);
+  });
+
+  it("deduplicates corroborated physical facts after display orientation", () => {
+    const result = projectPhysicalTopology({
+      nodes: data.nodes,
+      links: [
+        { source: "switch", target: "gateway", type: "CONNECTS_TO" },
+        { source: "gateway", target: "switch", type: "CONNECTS_TO" },
+        { source: "ap", target: "switch", type: "CONNECTS_TO" },
+      ],
+    });
+
+    expect(result.data.links).toEqual([
+      { source: "gateway", target: "switch", type: "CONNECTS_TO" },
+      { source: "switch", target: "ap", type: "CONNECTS_TO" },
+    ]);
+    expect(result.integrity.physicalLinkCount).toBe(2);
   });
 });

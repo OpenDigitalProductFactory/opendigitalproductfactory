@@ -35,7 +35,6 @@ AgentToolGrantRevocation
 AiProviderConnection
 AiProviderFinanceProfile
 ApiToken
-AppointmentSyncEvent
 ApprovalRule
 ArtifactReceiptUsage
 AssuranceFinding
@@ -81,14 +80,12 @@ CapabilityMaturityDependency
 CareAppointment
 CareAppointmentParticipant
 CareAppointmentResource
-CareAppointmentStatusEvent
 CareConsentAttestation
 CareCoverageEvidence
 CareIntakeAccessGrant
 CareIntakeException
 CareIntakePacket
 CareIntakeResponse
-CareIntakeStatusEvent
 CareLocation
 CareResource
 CareSchedulingPolicy
@@ -465,8 +462,6 @@ WikiPage
 WikiPageLink
 WikiPageRevision
 WikiPageSource
-WorkCapsule
-WorkCapsuleActivity
 WorkEngagement
 WorkEngagementActivity
 WorkItem
@@ -483,3 +478,5 @@ WorkbookShare
 WorkbookTable
 WorkbookView
 WorkforceCandidateFact
+Workroom
+WorkroomActivity

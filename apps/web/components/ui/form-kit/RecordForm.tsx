@@ -207,7 +207,7 @@ export function RecordForm({
               type="button"
               onClick={handleSave}
               disabled={saving}
-              className="rounded-md bg-[var(--dpf-accent)] px-3 py-1.5 text-sm font-medium text-white disabled:opacity-60"
+              className="rounded-md bg-[var(--dpf-accent)] px-3 py-1.5 text-sm font-medium text-[var(--dpf-on-accent)] disabled:opacity-60"
             >
               {saving ? "Saving…" : "Save"}
             </button>

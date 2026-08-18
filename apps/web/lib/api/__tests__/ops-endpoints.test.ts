@@ -22,6 +22,9 @@ vi.mock("@dpf/db", () => ({
       update: vi.fn(),
       delete: vi.fn(),
     },
+    backlogItemActivity: {
+      count: vi.fn(),
+    },
     $transaction: vi.fn(),
   },
 }));
@@ -53,7 +56,7 @@ vi.mock("@dpf/validators", () => {
     updateBacklogItemSchema: z.object({
       title: z.string().min(1).max(200).optional(),
       body: z.string().max(10000).optional(),
-      status: z.enum(["open", "in-progress", "done", "deferred"]).optional(),
+      status: z.enum(["open", "in-progress", "done", "deferred", "retired"]).optional(),
       priority: z.number().int().min(0).max(999).optional(),
       epicId: z.string().nullable().optional(),
     }),
@@ -122,6 +125,7 @@ function deleteRequest(path: string): Request {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  (prisma.backlogItemActivity.count as ReturnType<typeof vi.fn>).mockResolvedValue(0);
 });
 
 // ===========================================================================

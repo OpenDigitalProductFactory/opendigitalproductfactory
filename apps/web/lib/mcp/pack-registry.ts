@@ -94,11 +94,14 @@ import { buildVisibilityPack } from "./packs/build-visibility-pack";
 import { buildEvidenceExtraPack } from "./packs/build-evidence-extra-pack";
 import { changeReviewPack } from "./packs/change-review-pack";
 import { principleDecidePack } from "./packs/principle-decide-pack";
+import { decisionReverifyPack } from "./packs/decision-reverify-pack";
 import { productOutcomesPack } from "./packs/product-outcomes-pack";
+import { initiativeReadinessPack } from "./packs/initiative-readiness-pack";
 
 import { grokSigninPack } from "./packs/grok-signin-pack";
 import { releasePack } from "./packs/release-pack";
 import { buildLifecyclePack } from "./packs/build-lifecycle-pack";
+import { buildReviewPack } from "./packs/build-review-pack";
 import { buildChangePack } from "./packs/build-change-pack";
 import { gateContextPack } from "./packs/gate-context-pack";
 
@@ -174,6 +177,7 @@ export const TOOL_PACK_REGISTRY = composeToolPacks([
   sandboxPack,
   releasePack,
   buildLifecyclePack,
+  buildReviewPack,
   buildChangePack,
   gateContextPack,
   adminPack,
@@ -185,6 +189,8 @@ export const TOOL_PACK_REGISTRY = composeToolPacks([
   buildEvidenceExtraPack,
   changeReviewPack,
   principleDecidePack,
+  decisionReverifyPack,
   productOutcomesPack,
+  initiativeReadinessPack,
   surfaceReadinessPack,
 ]);

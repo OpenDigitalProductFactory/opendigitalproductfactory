@@ -1,13 +1,13 @@
 #!/usr/bin/env node
 
 import { appendFileSync, writeFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
 
 import {
   POLICY_GUARD_PROFILES,
   formatRunSummary,
   runPolicyProfile,
 } from "./lib/ci-policy-guards.mjs";
+import { isEntryModule } from "./lib/entry-module.mjs";
 
 function argument(name) {
   const index = process.argv.indexOf(name);
@@ -79,6 +79,6 @@ export async function main() {
   if (!result.ok) process.exitCode = 1;
 }
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) {
+if (isEntryModule(import.meta.url)) {
   await main();
 }

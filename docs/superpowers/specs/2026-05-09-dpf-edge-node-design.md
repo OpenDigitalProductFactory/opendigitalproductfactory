@@ -1,3 +1,7 @@
+---
+status: binding
+---
+
 # DPF Edge Node and Discovery Plane Architecture
 
 > Status: **binding** as of 2026-05-12. The maturity gates from the
@@ -889,13 +893,15 @@ Edge Node submission
      })
   → Postgres (DiscoveryRun + DiscoveredItem + DiscoveredRelationship
               → InventoryEntity + InventoryRelationship)
-  → Neo4j projection (InfraCI + relationship types)
+  → graph projection (InfraCI + relationship types — the in-Postgres
+    graph_node/graph_edge mirror since BET-5 (BI-A1E864A5) retired Neo4j)
 ```
 
 `persistSubmittedDiscoveryRun` is a sibling of
 `persistBootstrapDiscoveryRun` that takes a *prepared* observation
 set instead of running collectors. The downstream
-deduplication / promotion / Neo4j-projection logic is shared between
+deduplication / promotion / graph-projection logic (in-Postgres
+since BET-5) is shared between
 them; only the source of the observation set differs. This is the
 function this epic introduces alongside the
 `/api/v1/edge/discovery-runs` route.
@@ -1773,7 +1779,8 @@ proceed against the phase sequence in
 - `docs/superpowers/specs/2026-04-22-enterprise-auth-directory-federation-design.md`
   — the authority/edge split this spec inherits and extends.
 - `docs/superpowers/specs/2026-04-01-platform-operational-health-monitoring-design.md`
-  — Qdrant silent-failure incident; observability invariants this
+  — the vector-store silent-failure incident (Qdrant-era, before
+  BET-5 moved vectors to pgvector); observability invariants this
   work must preserve.
 - `apps/web/app/api/mcp/v1/route.ts` — existing MCP transport
   template for governance, audit, and tokenization.

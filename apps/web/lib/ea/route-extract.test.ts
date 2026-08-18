@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { buildRouteModel, detectRedirectTarget, ROUTE_PACKAGE_KEY, type RouteManifestRow } from "./route-extract";
+import {
+  buildRouteModel,
+  detectRedirectTarget,
+  detectRouteExposure,
+  ROUTE_EXPOSURES,
+  ROUTE_PACKAGE_KEY,
+  type RouteManifestRow,
+} from "./route-extract";
 
 // Intentionally OMIT the "/build", "/build/work", and "/api" rows so the builder must
 // SYNTHESIZE those intermediate layout segments from their descendants' paths.
@@ -126,5 +133,33 @@ describe("detectRedirectTarget", () => {
 
   it("returns undefined for a normal page with no redirect", () => {
     expect(detectRedirectTarget('export default function P() { return <div className="x" />; }')).toBeUndefined();
+  });
+});
+
+describe("detectRouteExposure", () => {
+  it("detects each valid exposure class from a pragma line (W17, BI-810BEC9C)", () => {
+    for (const exposure of ROUTE_EXPOSURES) {
+      const src = `// @exposure ${exposure} — rationale\nexport async function GET() { return new Response("ok"); }`;
+      expect(detectRouteExposure(src)).toEqual({ kind: "exposure", exposure });
+    }
+  });
+
+  it("returns none when the file carries no pragma (grandfather-baseline territory)", () => {
+    expect(detectRouteExposure('export async function GET() { return new Response("ok"); }')).toEqual({ kind: "none" });
+  });
+
+  it("flags an unknown class as invalid — a typo must never demote a route to unclassified", () => {
+    expect(detectRouteExposure("// @exposure internal\n")).toEqual({ kind: "invalid", raw: "internal" });
+  });
+
+  it("tolerates repeated agreeing pragmas but flags conflicting ones", () => {
+    expect(detectRouteExposure("// @exposure public\n// @exposure public\n")).toEqual({
+      kind: "exposure",
+      exposure: "public",
+    });
+    expect(detectRouteExposure("// @exposure public\n// @exposure authenticated\n")).toEqual({
+      kind: "invalid",
+      raw: "public vs authenticated",
+    });
   });
 });

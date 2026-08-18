@@ -12,6 +12,7 @@ import {
   BACKLOG_WORK_TYPE_VALUES,
   EPIC_STATUSES,
 } from "@/lib/explore/backlog";
+import { DEFERRAL_INPUT_SCHEMA } from "@/lib/backlog/deferral-contract";
 import { backlogStatusToolDefinition } from "./backlog-status-tool-definition";
 
 export const backlogPackDefinitions: ToolDefinition[] = [
@@ -57,6 +58,7 @@ export const backlogPackDefinitions: ToolDefinition[] = [
         effortSize: { type: "string", enum: ["small", "medium", "large", "xlarge"], description: "Required when outcome=build" },
         duplicateOfId: { type: "string", description: "Canonical item ID; required when outcome=duplicate" },
         reason: { type: "string", description: "Reason text; required when outcome=defer or outcome=discard" },
+        deferral: DEFERRAL_INPUT_SCHEMA,
       },
       required: ["itemId", "outcome", "rationale"],
     },
@@ -65,7 +67,7 @@ export const backlogPackDefinitions: ToolDefinition[] = [
   },
   {
     name: "retire_backlog_item",
-    description: "Retire a backlog item as duplicate, deferred, or discarded after review. Use this for governed cleanup of non-buildable or superseded items without requiring backlog triage authority.",
+    description: "Remove a backlog item from executable demand as duplicate or discarded, or retain it as a governed deferral. Deferred outcomes require an owner, trigger, and review horizon.",
     inputSchema: {
       type: "object",
       properties: {
@@ -74,11 +76,13 @@ export const backlogPackDefinitions: ToolDefinition[] = [
         rationale: { type: "string", description: "Short prose rationale for retiring the item" },
         duplicateOfId: { type: "string", description: "Canonical item ID; required when outcome=duplicate" },
         reason: { type: "string", description: "Optional reason text for defer/discard outcomes" },
+        deferral: DEFERRAL_INPUT_SCHEMA,
       },
       required: ["itemId", "outcome", "rationale"],
     },
     requiredCapability: "manage_backlog",
     sideEffect: true,
+    consequence: "irreversible",
   },
   {
     name: "size_backlog_item",
@@ -142,6 +146,8 @@ export const backlogPackDefinitions: ToolDefinition[] = [
       type: "object",
       properties: {
         status: { type: "string", enum: [...BACKLOG_STATUS_VALUES], description: "Filter by status (optional)" },
+        deferralConformance: { type: "string", enum: ["compliant", "nonconformant"], description: "Filter deferred items by whether all required active-deferral fields are present." },
+        deferralReviewDueBefore: { type: "string", description: "Return deferred items whose reviewAt is on or before this ISO-8601 timestamp." },
         epicId: { type: "string", description: "Filter by semantic epic id (EP-*) or internal epic row id (optional). Returns epic_not_found rather than an empty list when it matches nothing." },
         ...backlogScopeFilterProperties,
         limit: { type: "number", description: "Max results (default 100, max 1000). Responses always report `total` and `truncated`." },
@@ -237,7 +243,9 @@ export const backlogPackDefinitions: ToolDefinition[] = [
     inputSchema: {
       type: "object",
       properties: {
-        status: { type: "string", enum: ["triaging", "open", "in-progress", "done", "deferred"] },
+        status: { type: "string", enum: [...BACKLOG_STATUS_VALUES] },
+        deferralConformance: { type: "string", enum: ["compliant", "nonconformant"], description: "Filter deferred items by whether all required active-deferral fields are present." },
+        deferralReviewDueBefore: { type: "string", description: "Return deferred items whose reviewAt is on or before this ISO-8601 timestamp." },
         type: { type: "string", enum: ["portfolio", "product"] },
         workType: { type: "string", enum: [...BACKLOG_WORK_TYPE_VALUES], description: "Filter by work-type (bug | feature | chore | doc | tool | skill | refactor)." },
         source: { type: "string", enum: [...BACKLOG_SOURCE_VALUES], description: "Filter by intake origin (user-request | automated-detection)." },

@@ -18,11 +18,10 @@ import { mergeRecords, MergeValidationFailure, type MergeableDomain } from "@/li
 import { saveMatchConfig, matchConfigSchema, type MatchConfig } from "@/lib/mdm/match-config";
 import type { DedupGatedDomain } from "@/lib/mdm/dedup-gate";
 import { runAutonomousStewardship } from "@/lib/mdm/autonomous-steward";
-
-type ActionResult<T = undefined> = { ok: true; data?: T } | { ok: false; message: string };
+import { ok, err, type ActionResult } from "@/lib/shared/action-result";
 
 async function requireAdmin(): Promise<
-  { denied: { ok: false; message: string } } | { userId: string }
+  { denied: { ok: false; error: string } } | { userId: string }
 > {
   const session = await auth();
   const user = session?.user;
@@ -30,7 +29,7 @@ async function requireAdmin(): Promise<
     !user ||
     !can({ platformRole: user.platformRole, isSuperuser: user.isSuperuser }, "view_admin")
   ) {
-    return { denied: { ok: false, message: "Not authorized." } };
+    return { denied: err("Not authorized.") };
   }
   return { userId: user.id ?? "admin" };
 }
@@ -43,7 +42,7 @@ export async function runStewardSweepAction(): Promise<
   if ("denied" in gate) return gate.denied;
   const summary = await runStewardSweep();
   revalidatePath("/admin/data-stewardship");
-  return { ok: true, data: summary };
+  return ok(summary);
 }
 
 /** Resolve a task without a merge (distinct / refreshed / dismissed). */
@@ -54,9 +53,9 @@ export async function resolveStewardTaskAction(
   const gate = await requireAdmin();
   if ("denied" in gate) return gate.denied;
   const result = await resolveStewardTask(taskId, resolution, gate.userId);
-  if (!result.ok) return result;
+  if (!result.ok) return err(result.message);
   revalidatePath("/admin/data-stewardship");
-  return { ok: true };
+  return ok();
 }
 
 /** Merge the pair of a duplicate task (subject survives) and resolve it. */
@@ -70,16 +69,16 @@ export async function mergeStewardTaskAction(
   if ("denied" in gate) return gate.denied;
   try {
     await mergeRecords(domain, loserId, survivorId);
-  } catch (err) {
-    if (err instanceof MergeValidationFailure) {
-      return { ok: false, message: `Merge rejected: ${err.reason}.` };
+  } catch (e) {
+    if (e instanceof MergeValidationFailure) {
+      return err(`Merge rejected: ${e.reason}.`);
     }
-    throw err;
+    throw e;
   }
   await resolveStewardTask(taskId, "resolved_merged", gate.userId);
   revalidatePath("/admin/data-stewardship");
   revalidatePath("/customer");
-  return { ok: true };
+  return ok();
 }
 
 /** Persist per-domain match-config overrides (validated by the shared schema). */
@@ -91,24 +90,23 @@ export async function saveMatchConfigAction(
   if ("denied" in gate) return gate.denied;
   const parsed = matchConfigSchema.partial().safeParse(raw);
   if (!parsed.success) {
-    return { ok: false, message: "Invalid configuration values." };
+    return err("Invalid configuration values.");
   }
   const next = await saveMatchConfig(domain, parsed.data, gate.userId);
   revalidatePath("/admin/data-stewardship");
-  return { ok: true, data: next };
+  return ok(next);
 }
 
 /** Trigger one autonomous Data Steward pass on demand (admin). */
 export async function runDataStewardAction(
   dryRun: boolean,
-): Promise<{ ok: true; summary: string } | { ok: false; message: string }> {
+): Promise<ActionResult<string>> {
   const gate = await requireAdmin();
   if ("denied" in gate) return gate.denied;
   const s = await runAutonomousStewardship({ dryRun });
   revalidatePath("/admin/data-stewardship");
   const merges = s.autoMerged.map((m) => `${m.loserLabel}→${m.survivorLabel}`).join(", ") || "none";
-  return {
-    ok: true,
-    summary: `${dryRun ? "[preview] " : ""}Swept ${s.sweep.duplicatesFound} duplicate pair(s), ${s.sweep.staleFound} stale; ${dryRun ? "would merge" : "merged"} ${s.autoMerged.length} (${merges}); ${s.escalated.length} escalated${s.capped ? "; cap hit" : ""}.`,
-  };
+  return ok(
+    `${dryRun ? "[preview] " : ""}Swept ${s.sweep.duplicatesFound} duplicate pair(s), ${s.sweep.staleFound} stale; ${dryRun ? "would merge" : "merged"} ${s.autoMerged.length} (${merges}); ${s.escalated.length} escalated${s.capped ? "; cap hit" : ""}.`,
+  );
 }

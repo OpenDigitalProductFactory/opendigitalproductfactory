@@ -138,7 +138,7 @@ async function defaultDeps(): Promise<AutonomousBuildPhaseRuntimeDeps> {
         },
       });
       if (!build) return null;
-      const capsule = await prisma.workCapsule.findFirst({
+      const capsule = await prisma.workroom.findFirst({
         where: { featureBuildId: build.id },
         select: { workspaceState: true },
         orderBy: { updatedAt: "desc" },

@@ -464,10 +464,10 @@
     "apps/web/components/workspace/WorkCaseDetailView.tsx": [
       "docs/user-guide/workspace/work-rooms.md"
     ],
-    "apps/web/components/workspace/work-room/WorkRoomCycles.tsx": [
+    "apps/web/components/workspace/workroom/WorkroomCycles.tsx": [
       "docs/user-guide/workspace/work-rooms.md"
     ],
-    "apps/web/components/workspace/work-room/WorkRoomParticipants.tsx": [
+    "apps/web/components/workspace/workroom/WorkroomParticipants.tsx": [
       "docs/user-guide/workspace/work-rooms.md"
     ],
     "apps/web/design/tokens-utilities.test.ts": [
@@ -782,6 +782,9 @@
     "apps/web/lib/mcp/packs/workbooks-pack.ts": [
       "docs/architecture/mcp-tool-packs.md"
     ],
+    "apps/web/lib/mcp/protocol-versions.ts": [
+      "docs/architecture/mcp-tool-authorization-runbook.md"
+    ],
     "apps/web/lib/mcp/tool-pack.ts": [
       "docs/architecture/mcp-tool-packs.md",
       "docs/architecture/mcp-tool-surface-ergonomics-audit.md"
@@ -804,6 +807,7 @@
       "docs/architecture/delivery-surfaces-runbook.md"
     ],
     "apps/web/lib/operate/retention/policies.ts": [
+      "docs/architecture/2026-08-16-simplify-and-strengthen-architecture-pass.md",
       "docs/architecture/enforced-ci-gates.md"
     ],
     "apps/web/lib/operate/sole-platform-readiness.ts": [
@@ -1013,6 +1017,9 @@
     "apps/web/lib/tak/delegation-authority.ts": [
       "docs/prompts/a2a-coworker-substrate-prompt.md"
     ],
+    "apps/web/lib/tak/escalation-ladder.ts": [
+      "docs/platform-usability-standards.md"
+    ],
     "apps/web/lib/tak/prompt-assembler.ts": [
       "docs/architecture/agent-standards-dpf-conformance.md",
       "docs/platform-usability-standards.md"
@@ -1191,6 +1198,9 @@
     ],
     "packages/db/src/capability-maturity.ts": [
       "docs/architecture/customer-zero-and-use-case-zero.md"
+    ],
+    "packages/db/src/device-placement.ts": [
+      "docs/architecture/2026-08-16-simplify-and-strengthen-architecture-pass.md"
     ],
     "packages/db/src/dimension-scope.ts": [
       "docs/architecture/decision-vectors.md"
@@ -1390,6 +1400,7 @@
       "docs/architecture/capability-driven-runtime-profiles.md"
     ],
     "scripts/check-application-boundaries.mjs": [
+      "docs/architecture/2026-08-16-simplify-and-strengthen-architecture-pass.md",
       "docs/architecture/application-boundaries.md"
     ],
     "scripts/check-build-namespace.mjs": [
@@ -1436,6 +1447,9 @@
     "scripts/check-module-size.mjs": [
       "docs/architecture/mcp-tool-packs.md",
       "docs/maintenance/staleness-report.md"
+    ],
+    "scripts/check-no-adhoc-mcp-protocol-versions.mjs": [
+      "docs/architecture/mcp-tool-authorization-runbook.md"
     ],
     "scripts/check-no-dialog-in-transition.mjs": [
       "docs/architecture/theme-aware-styling-runbook.md"
@@ -1525,6 +1539,9 @@
     "scripts/gate-worktree.sh": [
       "docs/testing/pre-pr-gate.md"
     ],
+    "scripts/gen-architecture-counts.mjs": [
+      "docs/architecture/architecture-counts.generated.md"
+    ],
     "scripts/harness/archetype-exercise.mjs": [
       "docs/testing/archetype-exercise-harness.md"
     ],
@@ -1535,6 +1552,9 @@
     "scripts/hooks/run-hook.mjs": [
       "docs/install/platform-support-watchlist.md",
       "docs/operations/session-transcript-recovery.md"
+    ],
+    "scripts/install-worktree-janitor-schedule.sh": [
+      "docs/install/worktree-janitor-schedule.md"
     ],
     "scripts/installer/install-state.schema.json": [
       "docs/operations/install.md"
@@ -1709,7 +1729,8 @@
       "docs/edge-node/deployment-topology.md"
     ],
     "scripts/worktree-janitor.mjs": [
-      "docs/architecture/branch-and-worktree-runbook.md"
+      "docs/architecture/branch-and-worktree-runbook.md",
+      "docs/install/worktree-janitor-schedule.md"
     ],
     "services/edge-node/scripts/verify-lifecycle.ts": [
       "docs/architecture/2026-06-19-edge-node-deployment-sysml-architecture-note.md",
@@ -1997,6 +2018,11 @@
       "packages/storefront-templates/src/archetype-readiness.ts",
       "scripts/check-package-boundaries.mjs"
     ],
+    "docs/architecture/2026-08-16-simplify-and-strengthen-architecture-pass.md": [
+      "apps/web/lib/operate/retention/policies.ts",
+      "packages/db/src/device-placement.ts",
+      "scripts/check-application-boundaries.mjs"
+    ],
     "docs/architecture/agent-client-capability-parity.md": [
       "apps/web/lib/build/unified-wip-query.ts",
       "apps/web/lib/build/unified-wip.ts",
@@ -2058,6 +2084,9 @@
     ],
     "docs/architecture/archetype-business-value-streams.md": [
       "packages/storefront-templates/src/types.ts"
+    ],
+    "docs/architecture/architecture-counts.generated.md": [
+      "scripts/gen-architecture-counts.mjs"
     ],
     "docs/architecture/background-operation-observation-contract.md": [
       "apps/web/components/ops/SelfUpgradeLiveProvider.tsx",
@@ -2215,8 +2244,10 @@
       "apps/web/lib/agent-grants.ts",
       "apps/web/lib/coworker-lifecycle/lifecycle-gate.ts",
       "apps/web/lib/govern/manager-scope.ts",
+      "apps/web/lib/mcp/protocol-versions.ts",
       "apps/web/lib/tak/tool-result-budget.ts",
       "apps/web/lib/tool-description-hygiene.test.ts",
+      "scripts/check-no-adhoc-mcp-protocol-versions.mjs",
       "scripts/lib/bootstrap-worktree-deps.mjs"
     ],
     "docs/architecture/mcp-tool-packs.md": [
@@ -2430,6 +2461,10 @@
       "apps/web/scripts/issue-edge-bootstrap-token.ts",
       "services/edge-node/scripts/verify-lifecycle.ts"
     ],
+    "docs/install/worktree-janitor-schedule.md": [
+      "scripts/install-worktree-janitor-schedule.sh",
+      "scripts/worktree-janitor.mjs"
+    ],
     "docs/maintenance/README.md": [
       ".github/workflows/refresh-docs-staleness.yml",
       "scripts/build-docs-staleness.mjs"
@@ -2535,6 +2570,7 @@
       "apps/web/lib/shared/use-save-state.test.ts",
       "apps/web/lib/shared/use-save-state.ts",
       "apps/web/lib/shell/shell-action-contract.ts",
+      "apps/web/lib/tak/escalation-ladder.ts",
       "apps/web/lib/tak/prompt-assembler.ts",
       "apps/web/lib/ux-budget/measure.ts",
       "apps/web/lib/workforce/oversight-copy.ts",
@@ -2773,8 +2809,8 @@
       "apps/web/app/(shell)/workspace/my-queue/page.tsx",
       "apps/web/components/workspace/WorkCaseAttentionLens.tsx",
       "apps/web/components/workspace/WorkCaseDetailView.tsx",
-      "apps/web/components/workspace/work-room/WorkRoomCycles.tsx",
-      "apps/web/components/workspace/work-room/WorkRoomParticipants.tsx",
+      "apps/web/components/workspace/workroom/WorkroomCycles.tsx",
+      "apps/web/components/workspace/workroom/WorkroomParticipants.tsx",
       "apps/web/lib/work-management/room-channel-continuity.ts",
       "apps/web/lib/work-management/room-channel-ingress.ts",
       "apps/web/lib/work-management/room-participation.ts",

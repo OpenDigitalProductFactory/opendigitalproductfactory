@@ -161,7 +161,13 @@ describe("runHiveScoutIngest ambiguity review", () => {
   function makePrisma() {
     return {
       platformConfig: {
-        findUnique: async (_args?: unknown) => null,
+        // Market-aperture pass is covered by market-sources.test.ts and the
+        // run-shaped integration test; keep this suite focused on catalog +
+        // review behaviour by disabling it through the real config mechanism.
+        findUnique: async (args?: unknown) => {
+          const key = (args as { where?: { key?: string } } | undefined)?.where?.key;
+          return key === "hive-scout.market.enabled" ? { key, value: false } : null;
+        },
       },
       eaReferenceModelElement: {
         findMany: async () => [{ name: "Operate" }],
@@ -247,7 +253,7 @@ describe("runHiveScoutIngest ambiguity review", () => {
     expect(created).toEqual([
       {
         title: "Coworker archetype: Meeting Notes Agent (Productivity)",
-        status: "deferred",
+        status: "triaging",
       },
     ]);
   });
@@ -350,7 +356,9 @@ describe("runHiveScoutIngest ambiguity review", () => {
     const prisma = makePrisma();
     (prisma.platformConfig as { findUnique: (args?: unknown) => Promise<unknown> }).findUnique = async (args?: unknown) => {
       const where = (args as { where: { key: string } }).where;
-      return where.key === "hive-scout.review.enabled" ? { key: where.key, value: false } : null;
+      return where.key === "hive-scout.review.enabled" || where.key === "hive-scout.market.enabled"
+        ? { key: where.key, value: false }
+        : null;
     };
 
     const result = await runHiveScoutIngest({
@@ -418,7 +426,7 @@ describe("runHiveScoutIngest ambiguity review", () => {
     expect(result.reviewCacheHits).toBe(1);
     expect(result.skippedByReview).toBe(1);
     expect(result.created).toBe(1);
-    expect(created).toEqual([{ status: "deferred" }]);
+    expect(created).toEqual([{ status: "triaging" }]);
   });
 
   it("treats fully cached review batches as successful review metrics", async () => {
@@ -665,7 +673,7 @@ describe("runHiveScoutIngest ambiguity review", () => {
         })),
     });
 
-    expect(result.deferred).toBe(1);
+    expect(result.needsReview).toBe(1);
     expect(activities[0].payload.ambiguityReview).toMatchObject({
       classification: "needs_human_review",
       rationale: "injection attempt",

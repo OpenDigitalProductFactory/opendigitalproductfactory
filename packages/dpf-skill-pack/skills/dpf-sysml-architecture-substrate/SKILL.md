@@ -150,7 +150,7 @@ work:
 - Requirement: external sessions must be evidence-gated like Build Studio.
 - Constraint: no surface may bypass MCP coordination or DCO/PR rules.
 - Interface: MCP work-capsule and evidence tools.
-- Allocation: Codex plugin skill pack, MCP server, FeatureBuild/WorkCapsule
+- Allocation: Codex plugin skill pack, MCP server, FeatureBuild/Workroom
   substrate, nonprod lease.
 - Verification case: source-local tests plus shared local-CI/canonical runtime
   build/UX evidence.

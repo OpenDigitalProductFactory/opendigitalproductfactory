@@ -8,23 +8,8 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { ExpenseClaimActions } from "@/components/finance/ExpenseClaimActions";
 import { LocalTime } from "@/components/ui/LocalTime";
-
-const STATUS_COLOURS: Record<string, string> = {
-  draft: "#8888a0",
-  submitted: "#a78bfa",
-  approved: "#4ade80",
-  rejected: "#ef4444",
-  paid: "#22c55e",
-};
-
-const CATEGORY_COLOURS: Record<string, string> = {
-  travel: "#38bdf8",
-  meals: "#fb923c",
-  accommodation: "#a78bfa",
-  supplies: "#4ade80",
-  mileage: "#fbbf24",
-  other: "#8888a0",
-};
+import { Notice, StatusBadge } from "@/components/ui/report-kit";
+import { Surface } from "@/components/ui/Surface";
 
 type Props = { params: Promise<{ id: string }> };
 
@@ -36,7 +21,6 @@ export default async function ExpenseClaimDetailPage({ params }: Props) {
   const orgSettings = await getOrgSettings();
   const sym = getCurrencySymbol(orgSettings.baseCurrency);
 
-  const statusColour = STATUS_COLOURS[claim.status] ?? "#6b7280";
   const formatMoney = (amount: unknown) =>
     Number(amount).toLocaleString("en-GB", { minimumFractionDigits: 2 });
 
@@ -64,12 +48,7 @@ export default async function ExpenseClaimDetailPage({ params }: Props) {
             <h1 className="text-xl font-bold text-[var(--dpf-text)] font-mono">
               {claim.claimId}
             </h1>
-            <span
-              className="text-[9px] px-1.5 py-0.5 rounded-full"
-              style={{ color: statusColour, backgroundColor: `${statusColour}20` }}
-            >
-              {claim.status}
-            </span>
+            <StatusBadge domain="financeExpenseClaim" status={claim.status} variant="soft" />
           </div>
           <p className="text-sm text-[var(--dpf-muted)]">
             {claim.employee.displayName} · {claim.title}
@@ -110,15 +89,12 @@ export default async function ExpenseClaimDetailPage({ params }: Props) {
             value: `${sym}${formatMoney(totalAmount)}`,
           },
         ].map(({ label, value }) => (
-          <div
-            key={label}
-            className="p-4 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)]"
-          >
+          <Surface key={label}>
             <p className="text-[10px] uppercase tracking-widest text-[var(--dpf-muted)] mb-1">
               {label}
             </p>
             <p className="text-sm text-[var(--dpf-text)]">{value}</p>
-          </div>
+          </Surface>
         ))}
       </div>
 
@@ -127,7 +103,7 @@ export default async function ExpenseClaimDetailPage({ params }: Props) {
         <h2 className="text-[10px] uppercase tracking-widest text-[var(--dpf-muted)] mb-3">
           Expense Items
         </h2>
-        <div className="rounded-lg border border-[var(--dpf-border)] overflow-hidden">
+        <Surface padding="none" className="overflow-hidden">
           <table className="w-full text-xs">
             <thead>
               <tr className="border-b border-[var(--dpf-border)]">
@@ -150,7 +126,6 @@ export default async function ExpenseClaimDetailPage({ params }: Props) {
             </thead>
             <tbody>
               {claim.items.map((item) => {
-                const catColour = CATEGORY_COLOURS[item.category] ?? "#6b7280";
                 return (
                   <tr
                     key={item.id}
@@ -160,12 +135,11 @@ export default async function ExpenseClaimDetailPage({ params }: Props) {
                       <LocalTime value={item.date} utc />
                     </td>
                     <td className="px-4 py-2.5">
-                      <span
-                        className="text-[9px] px-1.5 py-0.5 rounded-full"
-                        style={{ color: catColour, backgroundColor: `${catColour}20` }}
-                      >
-                        {item.category}
-                      </span>
+                      <StatusBadge
+                        domain="financeExpenseCategory"
+                        status={item.category}
+                        variant="soft"
+                      />
                     </td>
                     <td className="px-4 py-2.5 text-[var(--dpf-text)]">
                       {item.description}
@@ -206,7 +180,7 @@ export default async function ExpenseClaimDetailPage({ params }: Props) {
               </tr>
             </tfoot>
           </table>
-        </div>
+        </Surface>
       </section>
 
       {/* Notes */}
@@ -215,9 +189,9 @@ export default async function ExpenseClaimDetailPage({ params }: Props) {
           <h2 className="text-[10px] uppercase tracking-widest text-[var(--dpf-muted)] mb-3">
             Notes
           </h2>
-          <div className="p-4 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)]">
+          <Surface>
             <p className="text-sm text-[var(--dpf-text)] whitespace-pre-wrap">{claim.notes}</p>
-          </div>
+          </Surface>
         </section>
       )}
 
@@ -227,12 +201,7 @@ export default async function ExpenseClaimDetailPage({ params }: Props) {
           <h2 className="text-[10px] uppercase tracking-widest text-[var(--dpf-muted)] mb-3">
             Rejection Reason
           </h2>
-          <div
-            className="p-4 rounded-lg border"
-            style={{ borderColor: "#ef444440", backgroundColor: "#ef444410" }}
-          >
-            <p className="text-sm text-[var(--dpf-text)]">{claim.rejectedReason}</p>
-          </div>
+          <Notice variant="error">{claim.rejectedReason}</Notice>
         </section>
       )}
     </div>

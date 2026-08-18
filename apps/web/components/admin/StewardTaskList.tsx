@@ -40,12 +40,12 @@ export function StewardTaskList({ tasks }: { tasks: StewardTaskRow[] }) {
   const [busyTask, setBusyTask] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
-  function act(taskId: string, fn: () => Promise<{ ok: boolean; message?: string }>) {
+  function act(taskId: string, fn: () => Promise<{ ok: true } | { ok: false; error: string }>) {
     setBusyTask(taskId);
     setError(null);
     startTransition(async () => {
       const result = await fn();
-      if (!result.ok) setError(result.message ?? "Action failed.");
+      if (!result.ok) setError(result.error);
       setBusyTask(null);
     });
   }

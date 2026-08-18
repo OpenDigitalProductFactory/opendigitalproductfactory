@@ -26,7 +26,7 @@ import {
 import { GapAnswerForm } from "./gap-answer-form";
 import { WeightProposalForm } from "./weight-proposal-form";
 import { listOpenWeightAdjustmentProposals } from "@/lib/decision-perspective/weight-proposal-store";
-import { clusterDecisionReviewRows } from "@/lib/decision/review-identity";
+import { clusterDecisionReviewRowsSemantic } from "@/lib/decision/review-clustering";
 
 export const dynamic = "force-dynamic";
 
@@ -209,7 +209,13 @@ export default async function DecisionReviewPage() {
     driftKind: d.driftKind ?? "flip",
   }));
 
-  const openOrgDecisions: OpenOrgDecision[] = clusterDecisionReviewRows(openOrgRows).map((row) => ({
+  // BI-932C2A81: cluster paraphrases of the same decision, not just byte-identical
+  // repeats. Degrades to exact-lexical identity when embeddings are unavailable —
+  // an outage must never widen what a single answer resolves. The capture action
+  // re-derives the same clusters server-side, so what the card claims to close
+  // and what actually closes cannot drift apart.
+  const { clusters: orgClusters } = await clusterDecisionReviewRowsSemantic(openOrgRows);
+  const openOrgDecisions: OpenOrgDecision[] = orgClusters.map(({ representative: row, members }) => ({
     interactionId: row.interactionId,
     question: row.question,
     riskTier: row.riskTier,
@@ -221,7 +227,12 @@ export default async function DecisionReviewPage() {
         .map((option) => ({ id: option.id as string, description: option.description as string }))
       : null,
     recommendedOptionId: row.recommendedOptionId ?? null,
-    occurrenceCount: row.occurrenceCount,
+    occurrenceCount: members.length,
+    // The operator must see what one answer will close (design §"show the
+    // operator what is being collapsed"), not just a count.
+    variantQuestions: members
+      .filter((m) => m.interactionId !== row.interactionId)
+      .map((m) => m.question),
   }));
 
   const findings = buildReviewFindings({

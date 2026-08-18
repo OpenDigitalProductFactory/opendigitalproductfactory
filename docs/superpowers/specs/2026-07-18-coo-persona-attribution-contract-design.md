@@ -1,7 +1,7 @@
 # AI Overseer Persona & Attribution Contract — design decision
 
 - **BI:** BI-7D29937E (EP-COWORKER-INTERACTIVITY)
-- **Status:** Draft for deliberation (2026-07-18)
+- **Status:** RATIFIED by the founder 2026-07-18 — Option A (role-only, reframed). See the Decision section below. Identity reconciliation and the attribution resolver are implemented; see Implementation status below.
 - **Decision type:** architecture-decision (platform-wide persona/attribution contract) — escalated to a formal deliberation given diversity-of-thought stakes.
 - **Teed up from:** the 2026-07-17 Needs-you / cognitive-load thread. The Attention Surface must attribute a recommendation to *someone* ("____ recommends: pay this bill"); choosing that voice forces an unresolved, platform-wide question.
 
@@ -91,6 +91,32 @@ Grounded 3-branch debate panel (the governed `start_deliberation` run returned i
 **Unanimous hard guardrail (any option):** no attribution string may imply an accountable actor the system cannot produce on demand from the attribution spine; every recommendation stays AI-labeled; the engine/model badge stays separate; no fabricated confidence; no self-granted authority (rides the L0→L3 trust ladder + proactivity dial).
 
 Synthesis confidence ≈ 0.7 (branches converge A > C > B; the reframe strengthens A). This reverses the accidental status quo and sets a product stance, so it is recorded as a **recommendation for founder ratification**, not an executed decision.
+
+## Implementation status (2026-08-15)
+
+Recorded because the stale header above caused a later session to read this
+document as an open question and hold dependent work. It is not open. The
+ratified decision is largely built.
+
+| Ratified item | State | Evidence |
+| --- | --- | --- |
+| (1) Reconcile the three COO identity sources to one role-based identity, retiring "Jiminy" | **Done** | `prompts/route-persona/coo.prompt.md` is version 4, `displayName: COO`, zero occurrences of "Jiminy", and its body states *"You are an AI coworker, identified by your role, not a human name."* `ROUTE_AGENT_MAP["coo"]` in `apps/web/lib/tak/agent-routing.ts` is `agentName: "COO"` with *"You are the Chief Operating Officer (COO)."* `AGENT_IDENTITY_OVERRIDES` forces `displayName: "COO"`. All three sources agree. |
+| (2) Attribute to the authenticated triple; author field on `AttentionItem` | **Done** | `AttentionAuthor` in `apps/web/lib/attention/types.ts`; `AttentionItem.author`; `attentionAuthorForAgent` and `formatAttentionByline` in `apps/web/lib/attention/attribution.ts`. |
+| (3) Collapse to one attribution resolver; kill raw-agentId leaks | **Done** | Everything resolves through `resolveAgentRoleLabel` from `@dpf/db/agent-identity`. The leak this document names — *"Drafted by marketing-specialist"* — survives only in a stale `.next/standalone` build artifact; live source reads `AI-drafted by your {resolveAgentRoleLabel(...)}`. |
+
+Open residue, tracked separately:
+
+- `AttentionAuthor.trustLevel` is declared and populated but never rendered, so
+  the byline does not yet ride the L0–L3 ladder the guardrail requires
+  (`BI-A013BBA9`).
+- `attribution.ts` cites `BI-AB12B3D3`, which no longer resolves in the backlog
+  — most likely orphaned by a reseed rather than fictitious, since the code it
+  describes is fully built.
+
+Dependent work unblocked by this correction: `BI-80ADD3A8` (COO as front door
+and coordinator). Note the binding constraint from the reframe — the COO may be
+the presentation label and coordinator, but the byline attributes to the
+authenticated triple, never to the persona.
 
 ## Design grounding
 

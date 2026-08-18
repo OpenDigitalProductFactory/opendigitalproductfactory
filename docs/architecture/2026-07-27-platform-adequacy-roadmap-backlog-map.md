@@ -105,7 +105,7 @@ Branch:
 
 `doc/platform-adequacy-roadmap-backlog`
 
-Work Capsule:
+Workroom:
 
 `WC-A8D21315`
 

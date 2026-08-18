@@ -259,6 +259,46 @@ export const ROUTE_CONTEXT_MAP: Record<string, RouteContextDef> = {
     ],
   },
 
+  // Sensitivity MUST match ROUTE_AGENT_MAP["/ea/data-model"] (LIFE-007).
+  "/ea/data-model": {
+    routePrefix: "/ea/data-model",
+    domain: "Data Architecture",
+    sensitivity: "internal",
+    domainContext:
+      "This page shows the Prisma→EA data-model mirror: the entity-relationship view of the live schema with models, declared relations, keys, indexes, and enums. The Data Architect stewards it with 3NF/DAMA-DMBOK discipline — referential integrity is declared, not implied, and schema evolution must be fleet-safe (forward-only, expand → migrate → contract, safe at any data state).",
+    domainTools: [
+      "wiki_query",
+      "evaluate_profession_decision",
+      "describe_model",
+      "validate_schema",
+      "search_knowledge",
+      "search_knowledge_base",
+    ],
+    docsPath: "/docs/architecture/index",
+    skills: [
+      {
+        label: "Review a model",
+        description: "Assess a model's normalization, relations, and index hygiene",
+        capability: "view_ea_modeler",
+        prompt:
+          "Review the model I'm looking at: normalization, declared relations, keys, enums, and index coverage in both directions.",
+      },
+      {
+        label: "Validate a schema change",
+        description: "Check a proposed change for fleet-safe evolution",
+        capability: "view_ea_modeler",
+        prompt:
+          "I'm considering a schema change. Walk it through the expand → migrate → contract lens and tell me whether it is safe at any data state.",
+      },
+      {
+        label: "Report an issue",
+        description: "Report a bug or give feedback",
+        capability: null,
+        prompt: "I'd like to report an issue or give feedback about this page.",
+      },
+    ],
+  },
+
   "/employee": {
     routePrefix: "/employee",
     domain: "Employee Management",
@@ -820,6 +860,45 @@ When generating or reviewing UI code, enforce these rules:
     ],
   },
 
+  // Sensitivity MUST match ROUTE_AGENT_MAP["/platform/integrations"] (LIFE-007).
+  "/platform/integrations": {
+    routePrefix: "/platform/integrations",
+    domain: "Integrations & Coordination Plane",
+    sensitivity: "internal",
+    domainContext:
+      "This page shows the platform's connected integrations, sync status, and connector configuration. The MCP & Integration Engineer stewards the coordination plane as a set of contracts: the MCP protocol version window is N/N-1 with a written retirement procedure, tool names are frozen contracts (a rename ships as an alias with identical grants and a stated expiry), and the tool surface is held to a context budget with bounded results.",
+    domainTools: [
+      "wiki_query",
+      "evaluate_profession_decision",
+      "search_integrations",
+      "search_knowledge",
+      "search_knowledge_base",
+    ],
+    docsPath: "/docs/platform/index",
+    skills: [
+      {
+        label: "Review an integration",
+        description: "Assess a connector's contract, grants, and exposure",
+        capability: "view_platform",
+        prompt:
+          "Review the integration I'm looking at: its contract shape, grant mapping, endpoint classification, and any layer-separation concerns.",
+      },
+      {
+        label: "Audit the tool surface",
+        description: "Review tool-name stability and context economy",
+        capability: "view_platform",
+        prompt:
+          "Audit the tool surface: flag renamed tools missing aliases, oversized schemas, and unbounded results that blow the context budget.",
+      },
+      {
+        label: "Report an issue",
+        description: "Report a bug or give feedback",
+        capability: null,
+        prompt: "I'd like to report an issue or give feedback about this page.",
+      },
+    ],
+  },
+
   "/admin/issue-reports": {
     routePrefix: "/admin/issue-reports",
     domain: "Admin Issue Triage",
@@ -1036,6 +1115,44 @@ When generating or reviewing UI code, enforce these rules:
         capability: "manage_compliance",
         taskType: "analysis",
         prompt: "Help the user onboard a new regulation, standard, or framework. Ask what they want to onboard. Then: (1) Research it — use web search for public standards, or ask for a document upload for proprietary ones. (2) Extract the obligation structure — titles, references (article/clause numbers), categories, frequency, applicability. (3) Suggest control mappings where obvious. (4) Call prefill_onboarding_wizard with the drafted structure to create a draft and navigate the user to the onboarding wizard for review.",
+      },
+      {
+        label: "Report an issue",
+        description: "Report a bug or give feedback",
+        capability: null,
+        prompt: "I'd like to report an issue or give feedback about this page.",
+      },
+    ],
+  },
+
+  // Sensitivity MUST match ROUTE_AGENT_MAP["/governance"] (LIFE-007).
+  "/governance": {
+    routePrefix: "/governance",
+    domain: "Governance & Security Stewardship",
+    sensitivity: "confidential",
+    domainContext:
+      "This page is the governance surface, where oversight records and accountability live. Data here is classified as confidential. The Security Engineer stewards platform exposure from here: every surface (endpoint, MCP/A2A plane, connector) is classified at birth as public, authenticated, or private-mesh — default private — and an unauthenticated externally reachable surface is sev-high by classification. Findings are filed as backlog items; the coworker never blocks merges itself.",
+    domainTools: [
+      "wiki_query",
+      "evaluate_profession_decision",
+      "search_knowledge",
+      "search_knowledge_base",
+    ],
+    docsPath: "/docs/compliance/index",
+    skills: [
+      {
+        label: "Classify a surface",
+        description: "Assign an exposure class to an endpoint or plane",
+        capability: "view_compliance",
+        prompt:
+          "Help me classify the exposure of a platform surface: public, authenticated, or private-mesh — and record what evidence supports it.",
+      },
+      {
+        label: "Triage advisories",
+        description: "Rank open vulnerability and supply-chain findings",
+        capability: "view_compliance",
+        prompt:
+          "Triage the open vulnerability and supply-chain advisories: rank them by reachability and exposure class, and tell me which need a backlog item.",
       },
       {
         label: "Report an issue",

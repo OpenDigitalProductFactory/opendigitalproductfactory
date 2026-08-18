@@ -5,12 +5,12 @@ import type {
 } from "./case-types";
 import type { ReceiptEnvelope } from "./receipt-envelope";
 import {
-  normalizeWorkRoomActivities,
-  type WorkRoomActivityInput,
+  normalizeWorkroomActivities,
+  type WorkroomActivityInput,
 } from "./room-activity";
 import {
-  buildWorkRoomBoundary,
-  type WorkRoomBoundaryInput,
+  buildWorkroomBoundary,
+  type WorkroomBoundaryInput,
 } from "./room-boundary";
 import {
   dedupeRoomSourceRefs,
@@ -21,36 +21,36 @@ import {
   type WorkCaseSourceRegistryEntry,
 } from "./source-registry";
 import type {
-  WorkRoomBoundaryGap,
-  WorkRoomContextView,
-  WorkRoomCycleView,
-  WorkRoomOutcomePacket,
-  WorkRoomOutcomeView,
-  WorkRoomParticipantView,
-  WorkRoomView,
+  WorkroomBoundaryGap,
+  WorkroomContextView,
+  WorkroomCycleView,
+  WorkroomOutcomePacket,
+  WorkroomOutcomeView,
+  WorkroomParticipantView,
+  WorkroomView,
 } from "./room-types";
 
-export type { WorkRoomActivityInput } from "./room-activity";
-export type { WorkRoomBoundaryInput } from "./room-boundary";
+export type { WorkroomActivityInput } from "./room-activity";
+export type { WorkroomBoundaryInput } from "./room-boundary";
 
-export interface BuildWorkRoomViewInput {
+export interface BuildWorkroomViewInput {
   caseKey: string;
   detail: WorkCaseDetail;
-  boundary?: Partial<WorkRoomBoundaryInput>;
-  currentCycle?: WorkRoomCycleView | null;
-  completedCycles?: readonly WorkRoomCycleView[];
-  participants?: readonly WorkRoomParticipantView[];
-  activities?: readonly WorkRoomActivityInput[];
-  context?: Partial<WorkRoomContextView>;
-  outcomePacket?: WorkRoomOutcomePacket | null;
-  outcomeHealth?: WorkRoomOutcomeView["health"];
+  boundary?: Partial<WorkroomBoundaryInput>;
+  currentCycle?: WorkroomCycleView | null;
+  completedCycles?: readonly WorkroomCycleView[];
+  participants?: readonly WorkroomParticipantView[];
+  activities?: readonly WorkroomActivityInput[];
+  context?: Partial<WorkroomContextView>;
+  outcomePacket?: WorkroomOutcomePacket | null;
+  outcomeHealth?: WorkroomOutcomeView["health"];
   receipts?: readonly ReceiptEnvelope[];
-  sourceHealth?: WorkRoomView["projection"]["sourceHealth"];
+  sourceHealth?: WorkroomView["projection"]["sourceHealth"];
   /**
    * The subject's value-stream + lifecycle structure, pre-resolved by the loader via
-   * `resolveWorkRoomStructure` (kept out of this pure build, like `sourceHealth`).
+   * `resolveWorkroomStructure` (kept out of this pure build, like `sourceHealth`).
    */
-  structure?: WorkRoomView["structure"];
+  structure?: WorkroomView["structure"];
 }
 
 function primarySourceRef(detail: WorkCaseDetail): WorkCaseSourceRef {
@@ -59,7 +59,7 @@ function primarySourceRef(detail: WorkCaseDetail): WorkCaseSourceRef {
     ?? { kind: "source", id: detail.summary.caseId };
 }
 
-function caseRefForDetail(detail: WorkCaseDetail): WorkRoomView["caseRef"] {
+function caseRefForDetail(detail: WorkCaseDetail): WorkroomView["caseRef"] {
   const source = primarySourceRef(detail);
   const separator = detail.summary.caseId.indexOf(":");
   return {
@@ -89,26 +89,26 @@ function blockingActorKindForState(
 }
 
 function sourceHealth(
-  input: BuildWorkRoomViewInput,
+  input: BuildWorkroomViewInput,
   source: WorkCaseSourceRegistryEntry | null,
-): WorkRoomView["projection"]["sourceHealth"] {
+): WorkroomView["projection"]["sourceHealth"] {
   if (input.sourceHealth) return input.sourceHealth;
   return source ? "ok" : "partial";
 }
 
 function projectionConfidence(
   source: WorkCaseSourceRegistryEntry | null,
-  health: WorkRoomView["projection"]["sourceHealth"],
-  gaps: readonly WorkRoomBoundaryGap[],
-): WorkRoomView["projection"]["confidence"] {
+  health: WorkroomView["projection"]["sourceHealth"],
+  gaps: readonly WorkroomBoundaryGap[],
+): WorkroomView["projection"]["confidence"] {
   if (!source || health === "unavailable") return "low";
   if (health === "partial" || gaps.length > 0) return "medium";
   return "high";
 }
 
-export function buildWorkRoomView(
-  input: BuildWorkRoomViewInput,
-): WorkRoomView {
+export function buildWorkroomView(
+  input: BuildWorkroomViewInput,
+): WorkroomView {
   const expectedCaseKey = encodeURIComponent(input.detail.summary.caseId);
   if (input.caseKey !== expectedCaseKey) {
     throw new Error(
@@ -118,12 +118,12 @@ export function buildWorkRoomView(
 
   const source = sourceEntryForDetail(input.detail);
   const participants = [...(input.participants ?? [])];
-  const context: WorkRoomContextView = {
+  const context: WorkroomContextView = {
     refs: dedupeRoomSourceRefs(input.context?.refs ?? []),
     digest: roomText(input.context?.digest),
     sensitivityCeiling: roomText(input.context?.sensitivityCeiling),
   };
-  const boundary = buildWorkRoomBoundary({
+  const boundary = buildWorkroomBoundary({
     detail: input.detail,
     boundary: input.boundary,
     participants,
@@ -157,7 +157,7 @@ export function buildWorkRoomView(
     currentCycle: input.currentCycle ?? null,
     completedCycles: [...(input.completedCycles ?? [])],
     participants,
-    activity: normalizeWorkRoomActivities(input.activities ?? []),
+    activity: normalizeWorkroomActivities(input.activities ?? []),
     work: {
       nextAction: standingIdle
         ? "Open next cycle"

@@ -8,6 +8,8 @@ import { existsSync, statSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 
+import { isEntryModule } from "./entry-module.mjs";
+
 /**
  * @param {string} cwd
  * @param {string[]} args
@@ -173,10 +175,7 @@ export function ensureFullHistory(opts) {
 }
 
 // CLI: node scripts/lib/git-shallow-preflight.mjs [cwd]
-const invoked =
-  process.argv[1] &&
-  process.argv[1].replace(/\\/g, "/").endsWith("git-shallow-preflight.mjs");
-if (invoked) {
+if (isEntryModule(import.meta.url)) {
   const cwd = process.argv[2] || process.cwd();
   const result = ensureFullHistory({ cwd, fetch: true });
   if (!result.ok) {

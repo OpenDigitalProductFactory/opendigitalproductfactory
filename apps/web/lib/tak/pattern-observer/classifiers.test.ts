@@ -234,8 +234,8 @@ describe("pattern observer classifiers", () => {
       succeeded: 12,
       accuracy: 1,
       perTool: {
-        create_work_capsule: { total: 4, succeeded: 4, accuracy: 1 },
-        record_capsule_evidence: { total: 8, succeeded: 8, accuracy: 1 },
+        create_workroom: { total: 4, succeeded: 4, accuracy: 1 },
+        record_workroom_evidence: { total: 8, succeeded: 8, accuracy: 1 },
       },
     };
 

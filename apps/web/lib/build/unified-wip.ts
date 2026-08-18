@@ -2,7 +2,7 @@
 //
 // BI-937128F6 / EP-UNIFIED-TRACKING — unified WIP across all delivery surfaces.
 //
-// Founder directive (Mark, 2026-06-26): the unit of WIP is the WorkCapsule, not
+// Founder directive (Mark, 2026-06-26): the unit of WIP is the Workroom, not
 // the Build Studio build. Forcing all work through BS to gain central tracking
 // was futile; instead every surface (BS + external Claude/Codex/Grok CLIs)
 // registers a capsule, and the platform's WIP picture derives from active
@@ -28,7 +28,7 @@ export type WipPool = "bs-sandbox" | "shared-lease" | "host-worktree" | "none";
 
 /** A single unit of active work, surface-tagged via its capsule executorKind. */
 export interface ActiveWipItem {
-  /** WorkCapsule executorKind: build-studio | claude/codex/grok/antigravity-desktop | dpf-native | human | git-webhook. */
+  /** Workroom executorKind: build-studio | claude/codex/grok/antigravity-desktop | dpf-native | human | git-webhook. */
   readonly executorKind: string;
   /** True when this work currently holds a shared singleton lease (e.g. the :3001 nonprod lease). */
   readonly holdsSharedLease?: boolean;

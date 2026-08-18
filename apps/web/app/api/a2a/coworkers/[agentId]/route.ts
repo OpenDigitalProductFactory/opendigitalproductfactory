@@ -7,6 +7,11 @@
 // (each offer keeps its own card at ./offers/[offerId]) and reuses the offer
 // card's access model (internal-a2a requires a session; partner/external are
 // scope-gated). Discovery only — engagement still POSTs to a specific offer.
+//
+// @exposure authenticated — internal-a2a (the default) requires a session;
+// partner/external profiles are scope-gated to offers explicitly published at
+// that availabilityScope (never anonymous-by-accident), so the endpoint is not
+// "public" in the path-segmentation sense.
 import { prisma } from "@dpf/db";
 
 import { auth } from "@/lib/auth";

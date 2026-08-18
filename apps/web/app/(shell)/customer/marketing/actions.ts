@@ -14,11 +14,10 @@ import {
   type OutboundDraftStatus,
 } from "@/lib/marketing/execution";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
+import { ok, err, type ActionResult } from "@/lib/shared/action-result";
 import { guardDraftArchetypeFit } from "@/lib/marketing/fit-guard";
 
-type ActionResult =
-  | { ok: true; draftId: string; status: OutboundDraftStatus }
-  | { ok: false; error: string };
+type DraftReceipt = { draftId: string; status: OutboundDraftStatus };
 
 async function requireOperator(): Promise<{ userId: string } | { error: string }> {
   const session = await auth();
@@ -35,19 +34,19 @@ async function decideOnDraft(
   editedBody: string | null,
   notes: string | null,
   reviewerUserId: string,
-): Promise<ActionResult> {
+): Promise<ActionResult<DraftReceipt>> {
   const draft = await prisma.outboundDraft.findUnique({
     where: { draftId },
     select: { draftId: true, status: true },
   });
-  if (!draft) return { ok: false, error: "Draft not found" };
+  if (!draft) return err("Draft not found");
 
   const currentStatus = draft.status as OutboundDraftStatus;
   const nextStatus = draftStatusForDecision(decision);
   try {
     assertDraftTransition(currentStatus, nextStatus);
-  } catch (err) {
-    return { ok: false, error: getErrorMessage(err) };
+  } catch (e) {
+    return err(getErrorMessage(e));
   }
 
   await prisma.$transaction([
@@ -67,22 +66,22 @@ async function decideOnDraft(
   ]);
 
   revalidatePath("/customer/marketing");
-  return { ok: true, draftId, status: nextStatus };
+  return ok({ draftId, status: nextStatus });
 }
 
 export async function approveOutboundDraftAction(
   draftId: string,
   editedBody?: string,
   notes?: string,
-): Promise<ActionResult> {
+): Promise<ActionResult<DraftReceipt>> {
   const auth = await requireOperator();
-  if ("error" in auth) return { ok: false, error: auth.error };
+  if ("error" in auth) return err(auth.error);
 
   // Archetype-fit guard: never approve software-platform / off-archetype-block
   // copy for a real audience. Checks the operator's edited body when provided,
   // since they may have fixed the leak before approving.
   const fit = await guardDraftArchetypeFit({ draftId, contentOverride: editedBody ?? null });
-  if (fit && !fit.ok) return { ok: false, error: fit.error };
+  if (fit && !fit.ok) return err(fit.error);
 
   return decideOnDraft(draftId, "approved", editedBody ?? null, notes ?? null, auth.userId);
 }
@@ -90,11 +89,11 @@ export async function approveOutboundDraftAction(
 export async function requestChangesOnDraftAction(
   draftId: string,
   notes: string,
-): Promise<ActionResult> {
+): Promise<ActionResult<DraftReceipt>> {
   const auth = await requireOperator();
-  if ("error" in auth) return { ok: false, error: auth.error };
+  if ("error" in auth) return err(auth.error);
   if (!notes || notes.trim().length === 0) {
-    return { ok: false, error: "Notes are required when requesting changes" };
+    return err("Notes are required when requesting changes");
   }
   return decideOnDraft(draftId, "needs-changes", null, notes, auth.userId);
 }
@@ -102,9 +101,9 @@ export async function requestChangesOnDraftAction(
 export async function rejectOutboundDraftAction(
   draftId: string,
   notes?: string,
-): Promise<ActionResult> {
+): Promise<ActionResult<DraftReceipt>> {
   const auth = await requireOperator();
-  if ("error" in auth) return { ok: false, error: auth.error };
+  if ("error" in auth) return err(auth.error);
   return decideOnDraft(draftId, "rejected", null, notes ?? null, auth.userId);
 }
 
@@ -116,7 +115,7 @@ export async function draftMarketingAssetAction(
   | { ok: false; error: string }
 > {
   const auth = await requireOperator();
-  if ("error" in auth) return { ok: false, error: auth.error };
+  if ("error" in auth) return err(auth.error);
 
   const { draftMarketingAsset } = await import("@/lib/marketing/draft-builder");
   const result = await draftMarketingAsset({
@@ -138,7 +137,7 @@ export async function publishOutboundDraftAction(
   | { ok: false; error: string }
 > {
   const auth = await requireOperator();
-  if ("error" in auth) return { ok: false, error: auth.error };
+  if ("error" in auth) return err(auth.error);
 
   const { publishApprovedDraft } = await import("@/lib/marketing/publish");
   const result = await publishApprovedDraft({

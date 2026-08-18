@@ -22,6 +22,8 @@
 import { lstatSync, readdirSync, rmdirSync, unlinkSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 
+import { isEntryModule } from "./entry-module.mjs";
+
 // node_modules is THE reparse-point vector in DPF worktrees: <wt>/node_modules
 // and the workspace packages' <wt>/{apps,packages,services}/*/node_modules.
 const NODE_MODULES = "node_modules";
@@ -164,7 +166,6 @@ function main(argv) {
 }
 
 // Run only when invoked directly (not when imported by a test).
-const invokedPath = process.argv[1] ? process.argv[1].replace(/\\/g, "/") : "";
-if (invokedPath.endsWith("junction-safe-worktree-remove.mjs")) {
+if (isEntryModule(import.meta.url)) {
   main(process.argv.slice(2));
 }

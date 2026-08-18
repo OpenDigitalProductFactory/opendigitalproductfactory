@@ -1,5 +1,6 @@
 import { prometheusPoll, fullDiscoverySweep } from "./discovery-poll";
 import { modelDiscoveryRefresh } from "./model-discovery-refresh";
+import { routingReachabilityPreflight } from "./routing-reachability-preflight";
 import { infraPrune } from "./infra-prune";
 import { rateRecovery } from "./rate-recovery";
 import { mcpCatalogSync } from "./mcp-catalog-sync";
@@ -94,6 +95,10 @@ import {
   businessJourneyWatchdogScheduled,
   businessJourneyWatchdogRunNow,
 } from "./business-journey-watchdog";
+import {
+  embeddingCoverageReconcileScheduled,
+  embeddingCoverageReconcileRunNow,
+} from "./embedding-coverage-reconcile";
 import { memoryConsolidationNightly } from "./memory-consolidation-nightly";
 import {
   semanticMemoryReconcileScheduled,
@@ -113,6 +118,7 @@ export const scheduledFunctions = [
   prometheusPoll,
   fullDiscoverySweep,
   modelDiscoveryRefresh,
+  routingReachabilityPreflight, // BI-E2CCFAC1: coworker routing dead-ends surface before a human hits one
   infraPrune,
   codeGraphReconcileScheduled,
   issueReportTriage,
@@ -162,6 +168,7 @@ export const scheduledFunctions = [
   identityInferenceFallbackScheduled, // EP-ASSET-INTELLIGENCE: weekly cheap-model AI resolution of the unresolved-identity tail (batched, budget-capped), Tue 04:43
   remoteActionClaimTimeout,   // EP-REMOTE-ACTION P2: time out stale claimed RemoteActions so the pull queue can't wedge, every 10m (flag-gated)
   coworkerCertificationNightly, // EP-COWORKER-LIFECYCLE P2 (BI-DE9CC88B): nightly golden-journey certification of every roster coworker, 04:40
+  embeddingCoverageReconcileScheduled, // BI-ED117C82: re-embeds published pages a boot hook could not reach; retries every 2h so a silent corpus gap self-heals
   businessJourneyWatchdogScheduled, // BI-E105303D / EP-PROACTIVE-OPS: exercises the install's critical business journeys against the running system, Mon/Wed/Fri 06:00
   canonicalImprovementDigest, // BI-8996BBBB: weekly [reference-doc] proposal digest -> canonical-source chore BI
   memoryConsolidationNightly, // BI-907C4327: EP-8C706944 P2 autoDream — nightly batch-dedupe + expire coworker notes / user facts, 04:20
@@ -204,6 +211,7 @@ export const eventFunctions = [
   catalogEnrichmentSweepRequested, // EP-ASSET-INTELLIGENCE: catalog enrichment "run now" (poll-on-request)
   identityInferenceFallbackRequested, // EP-ASSET-INTELLIGENCE: AI identity-resolution fallback "run now" (poll-on-request)
   coworkerCertificationRunNow, // EP-COWORKER-LIFECYCLE P2 (BI-DE9CC88B): operator "run now" certification sweep
+  embeddingCoverageReconcileRunNow, // BI-ED117C82: operator/agent "run now" embedding-coverage reconcile
   businessJourneyWatchdogRunNow, // BI-E105303D: operator "run now" business-journey watchdog sweep
   semanticMemoryReconcileRequested, // BI-DG-001: operator "run now" semantic-memory orphan reconciliation
   postmarkCallbackDispatchRequested,

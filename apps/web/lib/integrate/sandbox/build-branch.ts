@@ -864,7 +864,7 @@ export async function startBuildBranch(buildId: string): Promise<SandboxSourceCu
     },
   });
 
-  const capsule = await prisma.workCapsule.findUnique({
+  const capsule = await prisma.workroom.findUnique({
     where: { idempotencyKey: `build-studio:${buildId}` },
     select: { id: true },
   });

@@ -16,8 +16,9 @@
  *     file is not available when the mount is gone.
  */
 
-import { existsSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 /**
  * @typedef {{ ok: true } | { ok: false; reason: string; detail: string }} PreflightResult
@@ -185,11 +186,22 @@ function main() {
   process.exit(preflightExitCode(result));
 }
 
-const entry = typeof process.argv[1] === "string" ? process.argv[1].replace(/\\/g, "/") : "";
-const isMain =
-  entry.endsWith("/dev-portal-workspace-preflight.mjs")
-  || entry.endsWith("dev-portal-workspace-preflight.mjs");
+// Self-contained mirror of scripts/lib/entry-module.mjs `isEntryModule` — this
+// file is baked ALONE into the image at /usr/local/bin (Dockerfile), where a
+// relative import cannot resolve. Realpath both spellings so a symlinked
+// invocation path (macOS /var tmpdir) cannot make the guard silently skip main().
+function isEntryScript() {
+  const argvPath = process.argv[1];
+  if (!argvPath) return false;
+  const thisFile = fileURLToPath(import.meta.url);
+  if (argvPath === thisFile) return true;
+  try {
+    return realpathSync(argvPath) === realpathSync(thisFile);
+  } catch {
+    return false;
+  }
+}
 
-if (isMain) {
+if (isEntryScript()) {
   main();
 }

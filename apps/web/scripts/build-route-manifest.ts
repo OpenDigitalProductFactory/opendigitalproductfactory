@@ -21,7 +21,7 @@
 
 import { readdirSync, readFileSync, writeFileSync, existsSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { detectRedirectTarget, type RouteManifestRow } from "../lib/ea/route-extract";
+import { detectRedirectTarget, detectRouteExposure, type RouteManifestRow } from "../lib/ea/route-extract";
 
 // ─── Repo root (same ascent as audit-architecture-parity.ts) ─────────────────
 
@@ -108,6 +108,26 @@ function buildManifest(): { generator: string; routeCount: number; routes: Route
         if (target) row.redirectTo = target;
       } catch {
         /* unreadable — leave as a normal page */
+      }
+    }
+    // Route handlers only: collect the `// @exposure <class>` declaration (W17,
+    // BI-810BEC9C). An INVALID pragma is a hard generation failure — a typo must
+    // never silently demote a route to "unclassified" (which the grandfather
+    // baseline would then mask). Absent pragma stays absent; the endpoint-
+    // classification guard decides whether that is allowed (baseline) or not (new file).
+    if (row.kind === "route") {
+      try {
+        const scan = detectRouteExposure(readFileSync(join(appDir, relFile), "utf8"));
+        if (scan.kind === "invalid") {
+          console.error(
+            `[route-manifest] INVALID @exposure pragma in ${row.file}: "${scan.raw}" — ` +
+              `must be one of public | authenticated | private-mesh (exactly one).`,
+          );
+          process.exit(1);
+        }
+        if (scan.kind === "exposure") row.exposure = scan.exposure;
+      } catch {
+        /* unreadable — leave unclassified; the guard governs it */
       }
     }
     return row;

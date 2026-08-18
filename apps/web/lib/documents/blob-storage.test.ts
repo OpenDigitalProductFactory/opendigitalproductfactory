@@ -1,10 +1,11 @@
 import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   DOCUMENT_TEXT_INLINE_LIMIT_BYTES,
   buildDocumentBlobStorageKey,
+  deleteDocumentBlob,
   hashDocumentBlobContent,
   resolveDocumentBlobStorageRoot,
   writeDocumentBlob,
@@ -44,6 +45,16 @@ describe("document blob storage", () => {
     await expect(fs.readFile(path.join(tmpRoot, first.storageKey), "utf-8")).resolves.toBe(content.toString("utf-8"));
   });
 
+  it("refuses to reuse corrupt bytes found at a content-addressed key", async () => {
+    const content = Buffer.from("expected managed document payload");
+    const sha256 = hashDocumentBlobContent(content);
+    const storageKey = buildDocumentBlobStorageKey(sha256);
+    await fs.mkdir(path.dirname(path.join(tmpRoot, storageKey)), { recursive: true });
+    await fs.writeFile(path.join(tmpRoot, storageKey), "corrupt bytes");
+
+    await expect(writeDocumentBlob({ content, storageRoot: tmpRoot })).rejects.toThrow(/existing document blob bytes/i);
+  });
+
   it("resolves PlatformConfig upload roots before environment fallback", () => {
     const cwd = path.join(tmpRoot, "cwd");
     const envRoot = path.join(tmpRoot, "env");
@@ -57,5 +68,90 @@ describe("document blob storage", () => {
     expect(resolveDocumentBlobStorageRoot({ configuredPath: null, cwd, env: {} })).toBe(
       path.resolve(cwd, "./data/uploads"),
     );
+  });
+
+  it("refuses storage GC for a blob retained by an initiative baseline", async () => {
+    const written = await writeDocumentBlob({ content: "permanent design", storageRoot: tmpRoot });
+    const events: string[] = [];
+    await expect(deleteDocumentBlob({
+      documentBlobId: "blob-1",
+      storageKey: written.storageKey,
+      expectedSha256: written.sha256,
+      storageRoot: tmpRoot,
+      db: {
+        $transaction: async (work) => work({
+          $queryRaw: async <T>() => { events.push("lock"); return [{ id: "blob-1", storageKey: written.storageKey, sha256: written.sha256 }] as unknown as T; },
+          initiativeArtifactRetentionPin: { count: async () => { events.push("count"); return 1; } },
+          documentBlob: { delete: async () => { events.push("delete"); return { id: "blob-1" }; } },
+        }),
+      },
+    })).rejects.toMatchObject({ code: "INITIATIVE_GOVERNANCE_RETENTION" });
+    expect(events).toEqual(["lock", "count"]);
+    await expect(fs.readFile(path.join(tmpRoot, written.storageKey), "utf8")).resolves.toBe("permanent design");
+  });
+
+  it("allows the canonical GC door to delete an unpinned blob", async () => {
+    const written = await writeDocumentBlob({ content: "disposable design", storageRoot: tmpRoot });
+    const events: string[] = [];
+    await deleteDocumentBlob({
+      documentBlobId: "blob-2",
+      storageKey: written.storageKey,
+      expectedSha256: written.sha256,
+      storageRoot: tmpRoot,
+      db: {
+        $transaction: async (work) => work({
+          $queryRaw: async <T>() => { events.push("lock"); return [{ id: "blob-2", storageKey: written.storageKey, sha256: written.sha256 }] as unknown as T; },
+          initiativeArtifactRetentionPin: { count: async () => { events.push("count"); return 0; } },
+          documentBlob: { delete: async () => { events.push("delete"); return { id: "blob-2" }; } },
+        }),
+      },
+    });
+    expect(events).toEqual(["lock", "count", "delete"]);
+    await expect(fs.access(path.join(tmpRoot, written.storageKey))).rejects.toBeDefined();
+  });
+
+  it("rejects cross-identity GC inputs before touching either blob", async () => {
+    const unpinned = await writeDocumentBlob({ content: "unpinned metadata row", storageRoot: tmpRoot });
+    const pinned = await writeDocumentBlob({ content: "pinned evidence bytes", storageRoot: tmpRoot });
+    const deleteMetadata = vi.fn(async () => ({ id: "blob-unpinned" }));
+
+    await expect(deleteDocumentBlob({
+      documentBlobId: "blob-unpinned",
+      storageKey: pinned.storageKey,
+      expectedSha256: pinned.sha256,
+      storageRoot: tmpRoot,
+      db: {
+        $transaction: async (work) => work({
+          $queryRaw: async <T>() => [{
+            id: "blob-unpinned",
+            storageKey: unpinned.storageKey,
+            sha256: unpinned.sha256,
+          }] as unknown as T,
+          initiativeArtifactRetentionPin: { count: async () => 0 },
+          documentBlob: { delete: deleteMetadata },
+        }),
+      },
+    })).rejects.toThrow(/metadata does not match/i);
+    expect(deleteMetadata).not.toHaveBeenCalled();
+    await expect(fs.readFile(path.join(tmpRoot, unpinned.storageKey), "utf8")).resolves.toBe("unpinned metadata row");
+    await expect(fs.readFile(path.join(tmpRoot, pinned.storageKey), "utf8")).resolves.toBe("pinned evidence bytes");
+  });
+
+  it("restores quarantined bytes when the metadata transaction cannot delete the blob", async () => {
+    const written = await writeDocumentBlob({ content: "still referenced", storageRoot: tmpRoot });
+    await expect(deleteDocumentBlob({
+      documentBlobId: "blob-3",
+      storageKey: written.storageKey,
+      expectedSha256: written.sha256,
+      storageRoot: tmpRoot,
+      db: {
+        $transaction: async (work) => work({
+          $queryRaw: async <T>() => [{ id: "blob-3", storageKey: written.storageKey, sha256: written.sha256 }] as unknown as T,
+          initiativeArtifactRetentionPin: { count: async () => 0 },
+          documentBlob: { delete: async () => { throw new Error("foreign key restrict"); } },
+        }),
+      },
+    })).rejects.toThrow("foreign key restrict");
+    await expect(fs.readFile(path.join(tmpRoot, written.storageKey), "utf8")).resolves.toBe("still referenced");
   });
 });

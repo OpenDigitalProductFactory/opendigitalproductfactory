@@ -1,32 +1,37 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  authorizeWorkRoomAccess,
-  projectWorkRoomDiscovery,
-  projectWorkRoomParticipants,
+  authorizeWorkroomAccess,
+  projectWorkroomDiscovery,
+  projectWorkroomParticipants,
 } from "./room-participation";
 import {
-  bindWorkRoomShape,
-  getWorkRoomShape,
-  WORK_ROOM_SHAPE_KEYS,
+  bindWorkroomShape,
+  getWorkroomShape,
+  WORKROOM_SHAPE_KEYS,
 } from "./room-shapes";
 
 describe("Work Room participation", () => {
-  it("registers the five consequential collaboration shapes", () => {
-    expect(WORK_ROOM_SHAPE_KEYS).toEqual([
+  it("registers the consequential collaboration shapes plus the standing craft shape", () => {
+    expect(WORKROOM_SHAPE_KEYS).toEqual([
       "specialist-alignment", "approval-sign-off", "outward-review",
-      "change-consequential", "escalation",
+      "change-consequential", "escalation", "craft-stewardship",
     ]);
-    expect(getWorkRoomShape("specialist-alignment")).toMatchObject({
+    expect(getWorkroomShape("specialist-alignment")).toMatchObject({
       authorityLadderLevel: "action",
       inclusionOrder: ["coordinator", "specialist", "approver"],
+    });
+    expect(getWorkroomShape("craft-stewardship")).toMatchObject({
+      authorityLadderLevel: "content",
+      sensitivityStepUp: false,
+      inclusionOrder: ["coordinator", "specialist"],
     });
   });
 
   it.each(["person", "agent"] as const)(
     "requires the same specialist-alignment roles for a %s initiator",
     (kind) => {
-      const binding = bindWorkRoomShape({
+      const binding = bindWorkroomShape({
         shape: "specialist-alignment",
         initiator: { principalRef: "PRN-INIT", kind },
         participants: {
@@ -43,7 +48,7 @@ describe("Work Room participation", () => {
   );
 
   it("fails closed when a shape-required participant is absent", () => {
-    expect(bindWorkRoomShape({
+    expect(bindWorkroomShape({
       shape: "outward-review",
       initiator: { principalRef: "PRN-INIT", kind: "person" },
       participants: { coordinator: "PRN-INIT", specialist: "PRN-BRAND" },
@@ -52,7 +57,7 @@ describe("Work Room participation", () => {
   });
 
   it("keeps an unauthorized room non-discoverable", () => {
-    expect(authorizeWorkRoomAccess({
+    expect(authorizeWorkroomAccess({
       requested: "content",
       principalRef: "PRN-OUTSIDER",
       assignedPrincipalRefs: ["PRN-OWNER"],
@@ -64,7 +69,7 @@ describe("Work Room participation", () => {
   });
 
   it("limits discover-only participants to explicitly safe metadata", () => {
-    const decision = authorizeWorkRoomAccess({
+    const decision = authorizeWorkroomAccess({
       requested: "content",
       principalRef: "PRN-OBSERVER",
       assignedPrincipalRefs: ["PRN-OWNER"],
@@ -74,7 +79,7 @@ describe("Work Room participation", () => {
       isSuperuser: false,
     });
     expect(decision).toEqual({ level: "discover", reason: "discover-only" });
-    expect(projectWorkRoomDiscovery({
+    expect(projectWorkroomDiscovery({
       decision,
       allowedFields: ["title", "mode"],
       metadata: {
@@ -91,7 +96,7 @@ describe("Work Room participation", () => {
   });
 
   it("never lets presence expand authority", () => {
-    expect(authorizeWorkRoomAccess({
+    expect(authorizeWorkroomAccess({
       requested: "action",
       principalRef: "PRN-PRESENT",
       assignedPrincipalRefs: [],
@@ -104,7 +109,7 @@ describe("Work Room participation", () => {
   });
 
   it("projects assigned people and lineage-derived AI coworkers with accountability", () => {
-    expect(projectWorkRoomParticipants({
+    expect(projectWorkroomParticipants({
       assignments: [{
         principalRef: "PRN-HUMAN",
         displayName: "Mara Chen",

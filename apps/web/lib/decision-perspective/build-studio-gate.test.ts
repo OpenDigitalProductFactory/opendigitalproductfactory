@@ -130,7 +130,10 @@ function makeDb() {
       })),
     },
     escalationCapture: {
-      count: vi.fn().mockResolvedValue(0),
+      // BI-ACF0D6D4: the gate now reads captures and compares each interaction's
+      // recommended option against the one the human chose, so a mere count can
+      // no longer stand in for "the owner overruled us".
+      findMany: vi.fn().mockResolvedValue([]),
     },
   };
 }
@@ -258,7 +261,13 @@ describe("evaluateBuildStudioPlanAdvancementGate", () => {
 
   it("uses recent same-domain overrides to lower confidence for the current gate", async () => {
     const db = makeDb();
-    db.escalationCapture.count.mockResolvedValue(3);
+    // Three captures where the human chose something OTHER than the gate's
+    // recommendation — genuine overrules, which still lower confidence.
+    db.escalationCapture.findMany.mockResolvedValue([
+      { interaction: { recommendedOptionId: "opt-a", chosenOptionId: "opt-b" } },
+      { interaction: { recommendedOptionId: "opt-a", chosenOptionId: "opt-c" } },
+      { interaction: { recommendedOptionId: "opt-d", chosenOptionId: "opt-e" } },
+    ]);
 
     const result = await evaluateBuildStudioPlanAdvancementGate({
       db: db as never,
@@ -266,16 +275,48 @@ describe("evaluateBuildStudioPlanAdvancementGate", () => {
       now: new Date("2026-05-17T12:00:00.000Z"),
     });
 
-    expect(db.escalationCapture.count).toHaveBeenCalledWith({
+    expect(db.escalationCapture.findMany).toHaveBeenCalledWith({
       where: {
         domainClass: PLAN_READINESS_DOMAIN_CLASS,
         createdAt: { gte: new Date("2026-04-17T12:00:00.000Z") },
-        interaction: { profileId: MARK_DPF_PLATFORM_PROFILE.profileId },
+        interaction: {
+          profileId: MARK_DPF_PLATFORM_PROFILE.profileId,
+          recommendedOptionId: { not: null },
+        },
+      },
+      select: {
+        interaction: { select: { recommendedOptionId: true, chosenOptionId: true } },
       },
     });
     expect(result.allowed).toBe(false);
     expect(result.evaluation.outcomeType).toBe("escalate");
     expect(result.evaluation.confidenceScore).toBe(0.6);
+  });
+
+  // The regression BI-ACF0D6D4 fixes: three ANSWERS that agreed with the gate
+  // must not read as three overrules. Same volume, opposite meaning.
+  it("does not lower confidence when the owner AGREED with the gate", async () => {
+    const db = makeDb();
+    db.escalationCapture.findMany.mockResolvedValue([
+      { interaction: { recommendedOptionId: "opt-a", chosenOptionId: "opt-a" } },
+      { interaction: { recommendedOptionId: "opt-a", chosenOptionId: "opt-a" } },
+      { interaction: { recommendedOptionId: "opt-b", chosenOptionId: "opt-b" } },
+    ]);
+
+    const agreed = await evaluateBuildStudioPlanAdvancementGate({
+      db: db as never,
+      build: makeBuild(),
+      now: new Date("2026-05-17T12:00:00.000Z"),
+    });
+
+    const clean = makeDb();
+    const baseline = await evaluateBuildStudioPlanAdvancementGate({
+      db: clean as never,
+      build: makeBuild(),
+      now: new Date("2026-05-17T12:00:00.000Z"),
+    });
+
+    expect(agreed.evaluation.confidenceScore).toBe(baseline.evaluation.confidenceScore);
   });
 
   it("preserves a caller-provided graduated risk tier", async () => {
@@ -351,5 +392,61 @@ describe("evaluateBuildStudioPlanAdvancementGate", () => {
 
     vi.useRealTimers();
     trace.mockRestore();
+  });
+});
+
+describe("acumen phase consults (W16, BI-18519A73)", () => {
+  it("does not run consults and attaches nothing when plannedFilePaths is absent (byte-identical legacy path)", async () => {
+    const db = makeDb();
+    const runner = vi.fn();
+
+    const result = await evaluateBuildStudioPlanAdvancementGate({
+      db: db as never,
+      build: makeBuild(),
+      acumenConsultRunner: runner as never,
+    });
+
+    expect(runner).not.toHaveBeenCalled();
+    expect(result.acumenConsults).toBeUndefined();
+  });
+
+  it("attaches advisory consults and summarizes them without changing the allowed verdict", async () => {
+    const db = makeDb();
+    const runner = vi.fn().mockResolvedValue([
+      {
+        professionKey: "data-architect",
+        interactionId: "DI-ACU-1",
+        outcomeType: "escalate",
+        confidenceScore: 0.35,
+        rationale: "no craft material for this class",
+        professionProfileSelected: false,
+      },
+    ]);
+
+    const result = await evaluateBuildStudioPlanAdvancementGate({
+      db: db as never,
+      build: makeBuild(),
+      plannedFilePaths: ["packages/db/src/schema-helper.ts"],
+      acumenConsultRunner: runner as never,
+    });
+
+    // The main WWMD verdict (recommend/allowed) is untouched by the escalating consult.
+    expect(result.allowed).toBe(true);
+    expect(result.acumenConsults).toEqual([
+      expect.objectContaining({ professionKey: "data-architect", outcomeType: "escalate" }),
+    ]);
+    expect(result.operatorMessage).toContain(
+      "data-architect: escalate (0.35) — no craft material for this class",
+    );
+    expect(runner).toHaveBeenCalledWith(
+      expect.objectContaining({
+        filePaths: ["packages/db/src/schema-helper.ts"],
+        callingPopulation: "build_studio_phase_gate",
+        phaseFrom: "plan",
+        phaseTo: "build",
+      }),
+    );
+    // The real gap-nomination dep is registered at the gate call site.
+    expect(runner.mock.calls[0]![0].nominateGap).toBeTypeOf("function");
   });
 });

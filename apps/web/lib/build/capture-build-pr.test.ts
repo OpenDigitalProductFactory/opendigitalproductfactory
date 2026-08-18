@@ -11,10 +11,10 @@ function mkDb(count = 1) {
     })),
   );
   const updateMany = vi.fn().mockResolvedValue({ count: 1 });
-  return { db: { workCapsule: { findMany, updateMany } }, findMany, updateMany };
+  return { db: { workroom: { findMany, updateMany } }, findMany, updateMany };
 }
 
-describe("captureBuildPrOntoCapsule (delivery visibility — PR capture onto the WorkCapsule)", () => {
+describe("captureBuildPrOntoCapsule (delivery visibility — PR capture onto the Workroom)", () => {
   it("stamps url + number onto the build's capsule(s), keyed by featureBuildId (the cuid)", async () => {
     const { db, updateMany } = mkDb(1);
     const out = await captureBuildPrOntoCapsule({

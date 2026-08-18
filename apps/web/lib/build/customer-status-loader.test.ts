@@ -13,7 +13,7 @@ function dbWith(
 ) {
   const findMany = vi.fn().mockResolvedValue(capsuleRows.map((row) => ({ workspaceState: {}, ...row })));
   const groupBy = vi.fn().mockResolvedValue(activityRows);
-  return { db: { workCapsule: { findMany }, buildActivity: { groupBy } }, findMany, groupBy };
+  return { db: { workroom: { findMany }, buildActivity: { groupBy } }, findMany, groupBy };
 }
 
 describe("loadBuildStudioCustomerStatuses (BI-BB13B599)", () => {

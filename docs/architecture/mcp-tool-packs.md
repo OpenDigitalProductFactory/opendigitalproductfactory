@@ -1,16 +1,18 @@
 # Scoped MCP Tool Packs
 
-Status: standard, in migration (BI-ARCH-TOOLPACKS, EP-PLATFORM-CONSOLIDATION)
+Status: standard, migration COMPLETE (BI-ARCH-TOOLPACKS, EP-PLATFORM-CONSOLIDATION; final consolidation W9 BI-0E7B0953, 2026-08-18)
 Spec: [`docs/superpowers/specs/2026-06-25-platform-consolidation-spine-design.md`](../superpowers/specs/2026-06-25-platform-consolidation-spine-design.md) §6.2
 
-`apps/web/lib/mcp-tools.ts` is a ~17k-line mega-module: it declares the entire
-`PLATFORM_TOOLS` registry (251 tools) and dispatches every one through a single giant
-`executeTool` switch. That single growing surface is a product risk, not just a style one —
-the local-model path can only carry ~15 tools (`LOCAL_FALLBACK_MAX_TOOLS`), so an unscoped
-registry that grows with every AI capability erodes the local economy.
-
-The target is **domain-owned tool packs** that compose into the registry, with
-`mcp-tools.ts` reduced to a thin composition layer over time.
+`apps/web/lib/mcp-tools.ts` was once a ~17k-line mega-module declaring the entire
+`PLATFORM_TOOLS` registry inline and dispatching through one giant `executeTool`
+switch. As of W9 (BI-0E7B0953) the migration is COMPLETE: every tool lives in a
+domain-owned pack, `mcp-tools.ts` is a ~700-line composition layer whose
+`PLATFORM_TOOLS` is purely the pack-registry spread, the legacy `lib/mcp-handlers/`
+directory is deleted, and `check-mcp-tool-pack.mjs` refuses any new inline case,
+inline ToolDefinition, or handler outside packs (the inline baseline is frozen at
+zero). The historical motivation stands: the local-model path can only carry ~15
+tools (`LOCAL_FALLBACK_MAX_TOOLS`), so the registry composes from scoped packs
+rather than one unbounded surface.
 
 `surface-pack.ts` is the cross-domain projection pack for the Authorized Surface Contract. Its six generic tools (`surface_list`, `surface_open`, `surface_snapshot`, `surface_query`, `surface_act`, and `surface_close`) stay together; domain packs continue to own the underlying business actions, and persistent surface actions dispatch back through the governed executor. This avoids both an unbounded page-specific tool inventory and a parallel execution path.
 

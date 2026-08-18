@@ -20,7 +20,7 @@ describe("Work Room channel continuity", () => {
     })).toEqual({
       summary: "Approval is needed before Friday.",
       deepLink: "https://dpf.example/workspace/cases/booking%3ABK-1",
-      metadata: { workRoom: room },
+      metadata: { workroom: room },
     });
   });
 

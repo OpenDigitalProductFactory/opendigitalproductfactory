@@ -68,8 +68,8 @@ export type WikiSearchResult = {
   kernelPageId: string | null;
   /** Cosine score from Qdrant. */
   score: number;
-  /** Which retrieval pass surfaced this row: "org" or "kernel". */
-  source: "org" | "kernel";
+  /** Which retrieval pass surfaced this row: "org", "kernel", or "profession". */
+  source: "org" | "kernel" | "profession";
   // ─── Principle-only metadata (populated when pageKind === "principle") ────
   // Surfaced from the Qdrant payload written by storeWikiPage. Absent for
   // non-principle pages so callers can branch on pageKind === "principle"
@@ -95,6 +95,20 @@ export type SearchWikiPagesInput = {
   pageKinds?: string[];
   /** Total results to return across both passes. Default 5. */
   limit?: number;
+  /**
+   * Opt-in third pass over the WSID profession corpus (BI-CC44E74F). Profession
+   * pages are seeded `isKernel: false` with `organizationId: null`, so the
+   * org/kernel passes exclude them by construction; callers that want craft
+   * doctrine (wiki_query, coworker surfaces) set this. Default false so the
+   * governed org→kernel overlay contract of existing callers is unchanged.
+   */
+  includeProfessionCorpus?: boolean;
+  /**
+   * With `includeProfessionCorpus`, restrict the profession pass to these
+   * professionKeys (slug prefix `professions/<key>/`). Empty/omitted = every
+   * profession family.
+   */
+  professionKeys?: string[];
   /** Cosine score threshold per pass. Default 0.55, matching `searchKnowledgeArticles`. */
   scoreThreshold?: number;
   // ─── Principle-only filters (Phase 2 of principles-as-wiki-kind) ──────────
@@ -137,11 +151,24 @@ function lexicalTokens(value: string): string[] {
 export async function searchWikiPagesLexically(
   input: SearchWikiPagesInput,
 ): Promise<WikiSearchResult[]> {
+  // The profession clause mirrors the semantic pass-C cohort: isKernel:false,
+  // organizationId:null, slug under professions/ (optionally scoped to keys).
+  const professionClause = input.includeProfessionCorpus
+    ? (input.professionKeys?.length
+        ? input.professionKeys.map((key) => ({
+            isKernel: false,
+            organizationId: null,
+            slug: { startsWith: `professions/${key}/` },
+          }))
+        : [{ isKernel: false, organizationId: null, slug: { startsWith: "professions/" } }])
+    : [];
   const where: Record<string, unknown> = {
     status: "published",
     ...(input.organizationId
-      ? { OR: [{ organizationId: input.organizationId }, { isKernel: true }] }
-      : { isKernel: true }),
+      ? { OR: [{ organizationId: input.organizationId }, { isKernel: true }, ...professionClause] }
+      : professionClause.length > 0
+        ? { OR: [{ isKernel: true }, ...professionClause] }
+        : { isKernel: true }),
     ...(input.pageKinds?.length
       ? { pageKind: { in: input.pageKinds } }
       : input.pageKind ? { pageKind: input.pageKind } : {}),
@@ -189,7 +216,11 @@ export async function searchWikiPagesLexically(
       organizationId: row.organizationId,
       kernelPageId: row.kernelPageId,
       score: Math.min(1, rank / Math.max(1, tokens.length + 5)),
-      source: row.isKernel ? "kernel" : "org",
+      source: row.isKernel
+        ? ("kernel" as const)
+        : row.organizationId === null && row.slug.startsWith("professions/")
+          ? ("profession" as const)
+          : ("org" as const),
       ...(row.pageKind === "principle" ? {
         principleTier: row.principleTier ?? undefined,
         principleAppliesTo: row.principleAppliesTo,
@@ -414,7 +445,11 @@ export async function searchWikiPages(input: SearchWikiPagesInput): Promise<Wiki
     orgResults = orgRaw.map((r) => projectResult(r, "org"));
   }
 
-  if (orgResults.length >= limit) return orgResults.slice(0, limit);
+  // With the profession pass opted in, a full pass-A page cannot short-circuit —
+  // the caller asked for craft doctrine, which pass A can never contain.
+  if (orgResults.length >= limit && !input.includeProfessionCorpus) {
+    return orgResults.slice(0, limit);
+  }
 
   // ── Pass B — kernel fallback, masking any kernel pages the org has overridden ──
   // The set of kernelPageIds claimed by pass A (org rows that override kernel pages).
@@ -442,7 +477,37 @@ export async function searchWikiPages(input: SearchWikiPagesInput): Promise<Wiki
   );
   const kernelResults = kernelRaw.map((r) => projectResult(r, "kernel"));
 
-  const semanticResults = [...orgResults, ...kernelResults].slice(0, limit);
+  // ── Pass C — WSID profession corpus, opt-in (BI-CC44E74F) ──
+  // Profession pages are the isKernel:false / organizationId:null cohort — the
+  // exact rows passes A and B exclude by construction. Fetched at full `limit`
+  // (not `remaining`) because the slug post-filter below may discard rows when
+  // the caller scoped to specific professionKeys; Qdrant cannot express a slug
+  // prefix over the existing payload without a schema backfill.
+  let professionResults: WikiSearchResult[] = [];
+  if (input.includeProfessionCorpus) {
+    const professionFilter: Record<string, unknown> = {
+      must: [
+        ...baseFilter,
+        { key: "isKernel", match: { value: false } },
+        { key: "organizationId", match: { value: null } },
+      ],
+    };
+    if (ringScopeShould.length > 0) professionFilter.should = ringScopeShould;
+    const professionRaw = await searchSimilar(
+      QDRANT_COLLECTIONS.WIKI_PAGES,
+      vector,
+      professionFilter,
+      limit,
+      scoreThreshold,
+    );
+    const keyPrefixes = (input.professionKeys ?? []).map((k) => `professions/${k}/`);
+    professionResults = professionRaw
+      .map((r) => projectResult(r, "profession"))
+      .filter((r) => r.slug.startsWith("professions/"))
+      .filter((r) => keyPrefixes.length === 0 || keyPrefixes.some((p) => r.slug.startsWith(p)));
+  }
+
+  const semanticResults = [...orgResults, ...kernelResults, ...professionResults].slice(0, limit);
   if (semanticResults.length === 0) {
     // A healthy embedding provider does not prove the vector index contains
     // every published Postgres row. Preserve Postgres as doctrine truth when
@@ -456,7 +521,7 @@ export async function searchWikiPages(input: SearchWikiPagesInput): Promise<Wiki
 
 function projectResult(
   r: { score: number; payload: Record<string, unknown> },
-  source: "org" | "kernel",
+  source: "org" | "kernel" | "profession",
 ): WikiSearchResult {
   const result: WikiSearchResult = {
     pageId: String(r.payload["entityId"] ?? ""),

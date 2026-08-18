@@ -2506,9 +2506,9 @@ are not included; each future source requires a new locator and SourceUseDecisio
 
 | Source ID | Exact locator | Bounded content |
 |---|---|---|
-| `OP-FPAW-01` | 2026-08-01 operator turn beginning “this is a deep research and documentation exercise”; Work Capsule `WC-1B88712B` | the requested four-portfolio, archetype, non-digital-work, human/AI-coworker, job/skill, value-stream, and standards-bridge direction |
-| `OP-CSDM-02` | 2026-08-01 operator turn beginning “one of the more interesting aspects of the digital product definition”; same capsule | the AI-coworker-as-DigitalProduct proposition, CSDM/TAK relationship, CSDM-origin/video provenance statement, and instruction to include named local references |
-| `OP-RIGHTS-03` | 2026-08-01 operator turn beginning “for the IT4IT standard, I was a contributor”; same capsule | the named-contributor and retained-rights assertion plus permission to research; not a grant by The Open Group or an employer |
+| `OP-FPAW-01` | 2026-08-01 operator turn beginning “this is a deep research and documentation exercise”; Workroom `WC-1B88712B` | the requested four-portfolio, archetype, non-digital-work, human/AI-coworker, job/skill, value-stream, and standards-bridge direction |
+| `OP-CSDM-02` | 2026-08-01 operator turn beginning “one of the more interesting aspects of the digital product definition”; same workroom | the AI-coworker-as-DigitalProduct proposition, CSDM/TAK relationship, CSDM-origin/video provenance statement, and instruction to include named local references |
+| `OP-RIGHTS-03` | 2026-08-01 operator turn beginning “for the IT4IT standard, I was a contributor”; same workroom | the named-contributor and retained-rights assertion plus permission to research; not a grant by The Open Group or an employer |
 
 ### 20.2 Complete SourceUseDecision records
 

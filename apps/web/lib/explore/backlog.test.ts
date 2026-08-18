@@ -107,6 +107,7 @@ describe("BACKLOG_STATUS_COLOURS", () => {
     expect(BACKLOG_STATUS_COLOURS["in-progress"]).toBeDefined();
     expect(BACKLOG_STATUS_COLOURS["done"]).toBeDefined();
     expect(BACKLOG_STATUS_COLOURS["deferred"]).toBeDefined();
+    expect(BACKLOG_STATUS_COLOURS["retired"]).toBeDefined();
   });
 });
 

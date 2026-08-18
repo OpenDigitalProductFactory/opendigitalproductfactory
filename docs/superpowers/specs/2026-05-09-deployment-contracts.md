@@ -1,3 +1,7 @@
+---
+status: draft
+---
+
 # Canonical Deployment Contracts (DRAFT)
 
 > Status: **doctrine spec** — establishes the binding contracts every
@@ -84,8 +88,10 @@ TAPPaaS module's `install.sh` / `update.sh` / `delete.sh` scripts
 on a TAPPaaS deployment), but the *operations* are the same.
 
 The update operation must support pre-update logical backups
-(Postgres / Neo4j / Qdrant exports) regardless of whether the
-substrate also takes its own snapshot.
+(Postgres exports — since BET-5 (BI-A1E864A5) retired Neo4j and
+Qdrant onto PostgreSQL, the graph mirror and pgvector data ride in
+the same Postgres backup) regardless of whether the substrate also
+takes its own snapshot.
 
 ### 4. Identity
 
@@ -403,6 +409,7 @@ ingress requirements. Wrappers must wire them all consistently.
 | Storefront public | `/s/**` | public / customer | public (often custom domain) | tenant-branded; CORS rules differ from admin |
 | Customer portal | `/portal/**` | customer session | public | CustomerContact-scoped |
 | Mobile API | `/api/v1/**` | JWT today; OIDC + PKCE per Mobile spec evolution | public or private | mobile clients |
+| Managed Station / Device Client | `/api/v1/**` | device `Principal` credential plus an optional, separately scoped human session | public HTTPS or private network | managed Android attended clients; EMM supplies policy/bootstrap configuration, never identity authority or durable secrets |
 | External MCP transport | `/api/mcp/v1` | `dpfmcp_*` bearer | usually private (origin + TLS validated) | spec § 8 of AGENTS.md; ingress must pass `X-Forwarded-Proto` / `X-Forwarded-Host` |
 | Edge Node ingestion | `/api/v1/edge/**` | `dpfedge_*` machine token | public HTTPS or private mesh | per Edge Node spec |
 | OAuth callback | `/api/v1/auth/provider-oauth/callback` | OAuth state | publicly reachable | provider OAuth + Anthropic sub OAuth |
@@ -411,14 +418,27 @@ ingress requirements. Wrappers must wire them all consistently.
 | Android app links | `/.well-known/assetlinks.json` | unauthenticated | publicly reachable | required for Android App Links per the Mobile spec; served by the Authority Core's domain |
 
 **Client identity convergence (binding direction).** Browser UI,
-mobile app, Edge Node, and external MCP clients are all clients
+mobile app, managed Station/Device Client, Edge Node, and external MCP clients are all clients
 of the Authority Core but use different auth surfaces (browser
-session, mobile JWT/OIDC, `dpfedge_*` machine token, `dpfmcp_*`
+session, mobile JWT/OIDC, device principal credential plus optional
+human session, `dpfedge_*` machine token, `dpfmcp_*`
 MCP token). Per the Enterprise Auth spec's principal-convergence
 addendum: `User`, `CustomerContact`, `Agent`, `EdgeNode`,
-`MobileDevice`, and `ServiceAccount` all eventually resolve to a
+`MobileDevice`, managed attended devices, and `ServiceAccount` all eventually resolve to a
 single `Principal` / `PrincipalAlias` model. New surfaces must not
 become parallel identity islands.
+
+**Managed attended client boundary.** DPF Mobile and DPF Station share
+the Device Client contracts, but Station is a distinct managed Android
+package so dedicated-device policy, private distribution, kiosk behavior,
+and native peripheral permissions do not leak into the personal Mobile
+package. EMM/MDM is operator-selected and remains the device-policy
+authority. DPF consumes non-secret managed configuration; enrollment
+creates the durable device credential and converges it on
+`Principal`/`PrincipalAlias`. Continuous polling, discovery, industrial
+protocols, and background LAN services remain Edge Node concerns. The
+target-specific architecture and proof contract live in
+[`2026-08-15-attended-device-client-and-archetype-hardware-enablement-design.md`](2026-08-15-attended-device-client-and-archetype-hardware-enablement-design.md).
 
 ### 11. Agent-to-agent coordination constraints
 
@@ -520,6 +540,13 @@ GA on a given substrate:
 - Surface-cross-contamination: a `dpfmcp_*` token must not
   authenticate against `/api/v1/edge/**` (different
   surface-namespace), and vice versa.
+- Managed-client cross-contamination: a Station device credential must
+  not authenticate as a browser user, Edge Node, or MCP client; a human
+  session alone must not impersonate a managed device.
+- An attended command made under a human session on a managed Station
+  preserves both the human principal and device principal in its audit
+  context; ending the human session does not silently revoke the device,
+  and revoking the device blocks later commands independently.
 
 These tests are part of the Authority Core's per-PR CI; they don't
 gate substrate-specific deployment templates, but they gate the
@@ -643,6 +670,7 @@ this section.
 | MCP transport hardening (`MCP_PUBLIC_URL`, `MCP_ALLOWED_ORIGIN_HOSTS`, `TRUST_PROXY_HEADERS`) | Planned | Planned | Planned | Planned | Planned | Planned | Planned | Planned |
 | OAuth provider callbacks | GA | Planned | Planned | Planned (sticky host) | Planned (sticky LB host) | Planned (Ingress) | Planned (Caddy proxyDomain) | Inherits Single VM |
 | Mobile API + universal links (`/.well-known/...`) | Planned | Planned | Planned | Planned | Planned | Planned | Planned | Planned |
+| Managed Station / Device Client API | Planned | Planned | Planned | Planned | Planned | Planned | Planned | Planned |
 | Storefront custom domains (multi-domain TLS) | Planned | Planned | Planned | Planned | Planned | Planned | Planned | Inherits Single VM |
 | **Edge Node (Contract 5)** | | | | | | | | |
 | Edge Node binary (Mode B) | Planned | Planned | n/a (Mode A container preferred) | n/a | n/a | n/a | n/a | n/a |
@@ -654,7 +682,7 @@ this section.
 | `identityEdgeMode=customer-provided` | Planned | Planned | Planned | Planned | Planned | Planned | Planned | Planned |
 | `identityEdgeMode=tappaas-upstream` | n/a | n/a | n/a | n/a | n/a | n/a | Blocked (TAPPaaS identity automation maturity) | n/a |
 | **Lifecycle (Contract 3)** | | | | | | | | |
-| Backup / restore (logical Postgres / Neo4j / Qdrant exports) | Planned | Planned | Planned | Planned | Substrate-managed (PITR + snapshots) | Substrate-managed | Inherits Single VM + TAPPaaS VM snapshots | Inherits Single VM |
+| Backup / restore (logical Postgres exports; graph + vector data live in Postgres since BET-5) | Planned | Planned | Planned | Planned | Substrate-managed (PITR + snapshots) | Substrate-managed | Inherits Single VM + TAPPaaS VM snapshots | Inherits Single VM |
 | Update / rollback | GA (`dpf-reinstall.ps1`) | Planned | Planned | Planned (Terraform re-apply) | Planned (Helm/Terraform) | Planned (Helm) | TAPPaaS-managed (snapshot + post-update tests + rollback on fatal) | Marketplace listing version |
 
 ### Reading the matrix
@@ -696,6 +724,7 @@ from spelunking through five docs to find the canonical answer.
 | Client / API surface governance | This doctrine (Contract 10) |
 | MCP transport hardening (origin, forwarded headers) | This doctrine (Contract 10) + `docs/superpowers/specs/2026-05-09-cloud-deployment-design.md` |
 | Mobile client packaging | `docs/superpowers/specs/2026-03-19-mobile-companion-app-design.md` (treated as a Contract-10 client packaging target) |
+| Managed Station / attended Device Client packaging and hardware proof | `docs/superpowers/specs/2026-08-15-attended-device-client-and-archetype-hardware-enablement-design.md` |
 | Storefront / customer portal surfaces | `docs/superpowers/specs/2026-03-19-storefront-foundation-design.md` |
 | Observability invariants (Qdrant-silent-failure precedent, alerts) | `docs/superpowers/specs/2026-04-01-platform-operational-health-monitoring-design.md` |
 | Secrets (logical schema; substrate-specific stores) | This doctrine (Contract 8) |
@@ -801,7 +830,8 @@ doctrine; that's the point of having a uniform gate.
 - [ ] Research & Benchmarking section complete (per AGENTS.md §10).
 - [ ] Open questions resolved or explicitly deferred to a named
       follow-up spec / epic.
-- [ ] Schema impact reviewed (Prisma, Neo4j, Postgres) — including
+- [ ] Schema impact reviewed (Prisma / Postgres, including the
+      in-Postgres graph mirror and pgvector) — including
       backward-compat implications and migration story.
 - [ ] Canonical contracts updated if the spec changes shared
       behavior (this doctrine; or another doctrine if one is

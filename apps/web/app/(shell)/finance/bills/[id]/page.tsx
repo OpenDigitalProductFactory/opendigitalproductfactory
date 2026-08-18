@@ -7,21 +7,8 @@ import Link from "next/link";
 import { SubmitBillButton } from "@/components/finance/SubmitBillButton";
 import { RecordBillPaymentButton } from "@/components/finance/RecordBillPaymentButton";
 import { LocalTime } from "@/components/ui/LocalTime";
-
-const STATUS_COLOURS: Record<string, string> = {
-  draft: "#8888a0",
-  awaiting_approval: "#a78bfa",
-  approved: "#38bdf8",
-  partially_paid: "#fbbf24",
-  paid: "#4ade80",
-  void: "#6b7280",
-};
-
-const APPROVAL_STATUS_COLOURS: Record<string, string> = {
-  pending: "#fbbf24",
-  approved: "#4ade80",
-  rejected: "#ef4444",
-};
+import { StatusBadge } from "@/components/ui/report-kit";
+import { Surface } from "@/components/ui/Surface";
 
 type Props = { params: Promise<{ id: string }> };
 
@@ -33,7 +20,6 @@ export default async function BillDetailPage({ params }: Props) {
   const orgSettings = await getOrgSettings();
   const sym = getCurrencySymbol(orgSettings.baseCurrency);
 
-  const statusColour = STATUS_COLOURS[bill.status] ?? "#6b7280";
   const formatMoney = (amount: unknown) =>
     Number(amount).toLocaleString("en-GB", { minimumFractionDigits: 2 });
 
@@ -57,12 +43,12 @@ export default async function BillDetailPage({ params }: Props) {
         <div>
           <div className="flex items-center gap-3 mb-1">
             <h1 className="text-xl font-bold text-[var(--dpf-text)]">{bill.billRef}</h1>
-            <span
-              className="text-[9px] px-2 py-0.5 rounded-full"
-              style={{ color: statusColour, backgroundColor: `${statusColour}20` }}
-            >
-              {bill.status.replace(/_/g, " ")}
-            </span>
+            <StatusBadge
+              domain="financeBill"
+              status={bill.status}
+              label={bill.status.replace(/_/g, " ")}
+              variant="soft"
+            />
           </div>
           <p className="text-sm text-[var(--dpf-muted)]">{bill.supplier.name}</p>
         </div>
@@ -84,13 +70,10 @@ export default async function BillDetailPage({ params }: Props) {
           { label: "Currency", value: bill.currency },
           { label: "Invoice Ref", value: bill.invoiceRef ?? "—" },
         ].map(({ label, value }) => (
-          <div
-            key={label}
-            className="p-4 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)]"
-          >
+          <Surface key={label}>
             <p className="text-[10px] uppercase tracking-widest text-[var(--dpf-muted)] mb-1">{label}</p>
             <p className="text-sm text-[var(--dpf-text)]">{value}</p>
-          </div>
+          </Surface>
         ))}
       </div>
 
@@ -99,7 +82,7 @@ export default async function BillDetailPage({ params }: Props) {
         <h2 className="text-[10px] uppercase tracking-widest text-[var(--dpf-muted)] mb-3">
           Line Items
         </h2>
-        <div className="rounded-lg border border-[var(--dpf-border)] overflow-hidden">
+        <Surface padding="none" className="overflow-hidden">
           <table className="w-full text-xs">
             <thead>
               <tr className="border-b border-[var(--dpf-border)]">
@@ -168,7 +151,7 @@ export default async function BillDetailPage({ params }: Props) {
               )}
             </tfoot>
           </table>
-        </div>
+        </Surface>
       </section>
 
       {/* Approval timeline */}
@@ -179,11 +162,10 @@ export default async function BillDetailPage({ params }: Props) {
           </h2>
           <div className="flex flex-col gap-2">
             {bill.approvals.map((approval) => {
-              const colour = APPROVAL_STATUS_COLOURS[approval.status] ?? "#6b7280";
               return (
-                <div
+                <Surface
                   key={approval.id}
-                  className="p-4 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] flex items-start justify-between gap-4"
+                  className="flex items-start justify-between gap-4"
                 >
                   <div>
                     <p className="text-sm text-[var(--dpf-text)]">{approval.approver.email}</p>
@@ -192,19 +174,14 @@ export default async function BillDetailPage({ params }: Props) {
                     )}
                   </div>
                   <div className="flex flex-col items-end gap-1 shrink-0">
-                    <span
-                      className="text-[9px] px-1.5 py-0.5 rounded-full"
-                      style={{ color: colour, backgroundColor: `${colour}20` }}
-                    >
-                      {approval.status}
-                    </span>
+                    <StatusBadge domain="financeApproval" status={approval.status} variant="soft" />
                     {approval.respondedAt && (
                       <p className="text-[9px] text-[var(--dpf-muted)]">
                         <LocalTime value={approval.respondedAt} mode="date" />
                       </p>
                     )}
                   </div>
-                </div>
+                </Surface>
               );
             })}
           </div>
@@ -217,7 +194,7 @@ export default async function BillDetailPage({ params }: Props) {
           <h2 className="text-[10px] uppercase tracking-widest text-[var(--dpf-muted)] mb-3">
             Payment Allocations
           </h2>
-          <div className="rounded-lg border border-[var(--dpf-border)] overflow-hidden">
+          <Surface padding="none" className="overflow-hidden">
             <table className="w-full text-xs">
               <thead>
                 <tr className="border-b border-[var(--dpf-border)]">
@@ -240,7 +217,7 @@ export default async function BillDetailPage({ params }: Props) {
                 ))}
               </tbody>
             </table>
-          </div>
+          </Surface>
         </section>
       )}
     </div>

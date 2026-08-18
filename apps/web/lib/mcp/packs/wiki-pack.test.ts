@@ -79,6 +79,35 @@ describe("wiki pack — handler behavior (delegation preserved)", () => {
     expect(embeddings.searchWikiPages).toHaveBeenCalledTimes(1);
   });
 
+  it("wiki_query includes the WSID profession corpus by default and maps professionKey (BI-CC44E74F)", async () => {
+    db.organization.findFirst.mockResolvedValue({ id: "org-1", wikiRetrievalMode: "vector" });
+    embeddings.searchWikiPages.mockResolvedValue([]);
+    await wikiPack.handlers.wiki_query({ query: "referential integrity" }, "u1", {});
+    expect(embeddings.searchWikiPages).toHaveBeenCalledWith(
+      expect.objectContaining({ includeProfessionCorpus: true, professionKeys: undefined }),
+    );
+
+    embeddings.searchWikiPages.mockClear();
+    await wikiPack.handlers.wiki_query(
+      { query: "referential integrity", professionKey: "data-architect" },
+      "u1",
+      {},
+    );
+    expect(embeddings.searchWikiPages).toHaveBeenCalledWith(
+      expect.objectContaining({ professionKeys: ["data-architect"] }),
+    );
+
+    embeddings.searchWikiPages.mockClear();
+    await wikiPack.handlers.wiki_query(
+      { query: "referential integrity", includeProfessionCorpus: false },
+      "u1",
+      {},
+    );
+    expect(embeddings.searchWikiPages).toHaveBeenCalledWith(
+      expect.objectContaining({ includeProfessionCorpus: false }),
+    );
+  });
+
   it("wiki_lint reports no scope linted when scope=org and no org exists", async () => {
     db.organization.findFirst.mockResolvedValue(null);
     const res = await wikiPack.handlers.wiki_lint({ scope: "org" }, "u1", {});

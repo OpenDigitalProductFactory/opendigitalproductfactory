@@ -39,7 +39,7 @@ Verified 2026-06-26 against the delivery-surface optimization study (`docs/super
 - **Deterministic guards (hooks):** Codex hooks are now **officially documented** (plugin-bundled + managed-trust); DPF has structural hook wiring for Claude/Codex/Grok (`packages/dpf-skill-pack/hooks/plugin-hooks-wired.test.mjs`). **Functional proof on Codex/Grok still pending** (BI-14E9F7CE), including the Grok `GROK_PLUGIN_ROOT` vs `CLAUDE_PLUGIN_ROOT` portability seam.
 - **Lean tool surface:** external CLI core-tier discovery (~29 tools) is the default for clients without proven host-side lazy attachment. Claude Code and Codex keep the full authorized server catalogue for their native lazy registries; Grok/generic/unknown callers keep core unless they opt into `?tier=full`. Core includes **WWMD** (`principle_decide`, `wiki_query`) for clients without host ToolSearch.
 - **Code-graph for external sessions:** ⬜→◐ a **code-graph-first standing rule** added to AGENTS.md §8 for direct Claude/Codex/Grok sessions (BI-0FD9E685).
-- **Unified WIP across surfaces:** capsule-plane foundation shipped (BI-937128F6; `apps/web/lib/build/unified-wip.ts`) + §17 doctrine — the unit of WIP is the WorkCapsule, not the Build Studio build. The **enforced** admission cap is now wired to that plane: the two build-entry gates (`createFeatureBuild`, `promote_to_build_studio`) derive their decision from the unified, **pool-aware** pressure (`apps/web/lib/build/unified-wip-query.ts` → `decideUnifiedWip`), so a promote is blocked only when the finite pool it contends on (`gatingPool`) is saturated across ALL surfaces — not a BS-only build count. Per-pool capacities are named constants in `wip-cap.ts` (`WIP_POOL_CAPACITY`); the live `bs-sandbox` limit stays `BUILD_WIP_CAP=3` (unchanged). bs-sandbox pressure is still read from the authoritative `FeatureBuild` count — build-studio capsule status is not synced on build terminality, so counting those capsules would mis-gate.
+- **Unified WIP across surfaces:** workroom-plane foundation shipped (BI-937128F6; `apps/web/lib/build/unified-wip.ts`) + §17 doctrine — the unit of WIP is the Workroom, not the Build Studio build. The **enforced** admission cap is now wired to that plane: the two build-entry gates (`createFeatureBuild`, `promote_to_build_studio`) derive their decision from the unified, **pool-aware** pressure (`apps/web/lib/build/unified-wip-query.ts` → `decideUnifiedWip`), so a promote is blocked only when the finite pool it contends on (`gatingPool`) is saturated across ALL surfaces — not a BS-only build count. Per-pool capacities are named constants in `wip-cap.ts` (`WIP_POOL_CAPACITY`); the live `bs-sandbox` limit stays `BUILD_WIP_CAP=3` (unchanged). bs-sandbox pressure is still read from the authoritative `FeatureBuild` count — build-studio workroom status is not synced on build terminality, so counting those workrooms would mis-gate.
 - **Cross-surface review:** golden-triangle activation policy for independent deliberation on external artifacts (BI-A245FE00; `apps/web/lib/deliberation/external-review-activation.ts`).
 - **MCP token var:** active standard is **`DPF_MCP_BEARER_TOKEN`** (stale `DPF_MCP_TOKEN` survives only in the gitignored local `.mcp.json`).
 - **Grok Build (xAI):** GA CLI launched 2026-05-25; reads `.claude/` directly (CLAUDE.md, marketplaces, skills, MCP) but exposes `GROK_PLUGIN_ROOT` (the hook seam above).
@@ -69,7 +69,7 @@ Reconciles the "Functional proof on Codex/Grok still pending" line above (2026-0
 | **G3 Plane-1 hooks** | lease / lease-punt / root-clone / compose / decision-routing / plan-backlog fire and can deny |
 | **G4 Session plane** | SessionStart process-spine + competitive; SessionEnd/Stop uncommitted + lease/capsule release where events exist |
 | **G5 MCP** | `DPF_MCP_BEARER_TOKEN` wired; tools reachable when portal not quiescing |
-| **G6 Capsule** | Work claims a capsule / FeatureBuild; orphans detectable |
+| **G6 Workroom** | Work claims a workroom / FeatureBuild; orphans detectable |
 | **G7 Worktree lifecycle** | Canonical sibling base; Tier-A reaping; no nested-root sprawl as steady state |
 | **G8 Headless-safe** | Always-approve / non-interactive still honors deny; no operator TUI required |
 | **G9 Readiness** | `record_surface_readiness` / bootstrap readiness observable |
@@ -97,7 +97,7 @@ Promote a suggested client only after each gate has evidence (or an explicit “
 3. **G3 Plane-1 hooks** — lease / root-clone / compose deny, or documented substitute.
 4. **G4 Session** — SessionStart/End plane where the client exposes events.
 5. **G5 MCP** — token env + snippet format.
-6. **G6 Capsule** — external executor kind + evidence attribution.
+6. **G6 Workroom** — external executor kind + evidence attribution.
 7. **G7 Worktree** — canonical sibling base + hygiene hooks when events exist.
 8. **G8 Headless** — non-interactive still honors deny.
 9. **G9 Readiness** — bootstrap or dispatch readiness observable.

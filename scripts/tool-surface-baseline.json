@@ -3,14 +3,14 @@
   "selectionCliff": 15,
   "entries": {
     "registry.toolDefinitions": {
-      "value": 378,
-      "reason": "Adds propose_crm_enrichment and apply_crm_enrichment (BI-B2497DFB) — the two governed doors of proactive CRM enrichment (raise from the 376 that already includes EP-WORKROOM-COMMS's room tools). They are distinct contracts: propose is a non-destructive, scope-confirmed web-research stewardship step (grants web_search+crm_read) that files a steward proposal with the scant→enriched diff and no fabricated values; apply is the separate consequential CRM write (grant crm_write) that materializes an approved proposal with provenance. No existing tool carries either: enrich_customer_account is single-source own-website-only and files-but-never-applies, and the merge/steward tools resolve duplicates, not gap-fill enrichment.",
-      "recordedAt": "2026-08-14"
+      "value": 391,
+      "reason": "Relocation, not growth (W9, BI-0E7B0953): saveBuildEvidence, reviewDesignDoc and reviewBuildPlan moved verbatim out of the mcp-tools.ts legacy monolith (which this guard never counted) into build-review-pack. The model-facing tool surface is unchanged — the same three frozen names were already served from PLATFORM_TOOLS; they now live where every other tool lives.",
+      "recordedAt": "2026-08-18"
     },
     "registry.packFiles": {
-      "value": 91,
-      "reason": "Adds one focused crm-enrichment pack (BI-B2497DFB) so the propose/apply pair, their web_search/crm_read/crm_write grants, and the propose-vs-apply governance boundary stay one bounded MCP surface. Folding into mdm-stewardship (duplicate resolution) or crm-sales-pipeline (deal/quote lifecycle) would blur the distinct proactive-enrichment contract and its two-step permission model.",
-      "recordedAt": "2026-08-14"
+      "value": 95,
+      "reason": "Adds build-review-pack (the last three executeTool inline cases, W9 BI-0E7B0953) and backlog-update-item-handler.ts relocated from the deleted lib/mcp-handlers/ third-generation home. Both are relocations of existing capability into the single pack generation, not new surface.",
+      "recordedAt": "2026-08-18"
     },
     "tier.coreToolNames": {
       "value": 30,

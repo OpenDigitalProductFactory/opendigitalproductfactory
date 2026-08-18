@@ -5,7 +5,7 @@ vi.mock("@dpf/db", () => ({
     externalEvidenceRecord: {
       create: vi.fn(),
     },
-    workCapsule: {
+    workroom: {
       findMany: vi.fn(),
     },
   },
@@ -20,7 +20,7 @@ describe("external evidence", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     // Default: no capsule linked to any build (the buildId-resolve path is a no-op).
-    mockPrisma.workCapsule.findMany.mockResolvedValue([]);
+    mockPrisma.workroom.findMany.mockResolvedValue([]);
   });
 
   it("writes a normalized external evidence record", async () => {
@@ -84,7 +84,7 @@ describe("external evidence", () => {
   });
 
   it("resolves the capsule from buildId and inherits its executorKind when exactly one matches", async () => {
-    mockPrisma.workCapsule.findMany.mockResolvedValue([
+    mockPrisma.workroom.findMany.mockResolvedValue([
       { id: "WC-1", executorKind: "codex-desktop" },
     ]);
     mockPrisma.externalEvidenceRecord.create.mockResolvedValue({ id: "evidence-3" });
@@ -99,7 +99,7 @@ describe("external evidence", () => {
       buildId: "FB-777",
     });
 
-    expect(mockPrisma.workCapsule.findMany).toHaveBeenCalledWith(
+    expect(mockPrisma.workroom.findMany).toHaveBeenCalledWith(
       expect.objectContaining({ where: { featureBuildId: "FB-777" }, take: 2 }),
     );
     expect(mockPrisma.externalEvidenceRecord.create).toHaveBeenCalledWith({
@@ -111,7 +111,7 @@ describe("external evidence", () => {
   });
 
   it("leaves the capsule unset when more than one build match is ambiguous", async () => {
-    mockPrisma.workCapsule.findMany.mockResolvedValue([
+    mockPrisma.workroom.findMany.mockResolvedValue([
       { id: "WC-1", executorKind: "codex-desktop" },
       { id: "WC-2", executorKind: "claude-desktop" },
     ]);
@@ -150,7 +150,7 @@ describe("external evidence", () => {
     });
 
     // Explicit workCapsuleId short-circuits the buildId resolution.
-    expect(mockPrisma.workCapsule.findMany).not.toHaveBeenCalled();
+    expect(mockPrisma.workroom.findMany).not.toHaveBeenCalled();
     expect(mockPrisma.externalEvidenceRecord.create).toHaveBeenCalledWith({
       data: expect.objectContaining({
         workCapsuleId: "WC-EXPLICIT",

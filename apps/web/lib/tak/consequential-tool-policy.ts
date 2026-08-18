@@ -1,7 +1,7 @@
-import type { ToolDefinition } from "@/lib/mcp-tools";
+import type { ToolConsequence, ToolDefinition } from "@/lib/mcp-tools";
 import { getWorkCaseAction } from "@/lib/work-management/action-registry";
 import type { WorkCaseExecutionContext } from "@/lib/work-management/work-case-governance-hook";
-import type { WorkRoomShapeKey } from "@/lib/work-management/room-shapes";
+import type { WorkroomShapeKey } from "@/lib/work-management/room-shapes";
 
 export const CONSEQUENCE_CLASSES = ["routine-read", "ordinary-mutation", "consequential-mutation"] as const;
 export type ConsequenceClass = (typeof CONSEQUENCE_CLASSES)[number];
@@ -11,30 +11,50 @@ export type ConsequentialToolClassification = {
   consequential: boolean;
   alignmentRequired: boolean;
   preconditionRequired: boolean;
-  collaborationShape: WorkRoomShapeKey | null;
-  reason: "read-only" | "ordinary-side-effect" | "explicit-policy" | "work-case-consequential";
+  collaborationShape: WorkroomShapeKey | null;
+  reason:
+    | "read-only"
+    | "ordinary-side-effect"
+    | "explicit-policy"
+    | "work-case-consequential"
+    | "declared-outward"
+    | "declared-irreversible";
 };
 
+/**
+ * Legacy name-keyed alignment list, kept only for tools that predate the
+ * declared `ToolDefinition.consequence` axis.
+ *
+ * It previously carried nine names, SEVEN of which matched nothing in the
+ * codebase (`create_product`, `create_product_line`, `launch_campaign`,
+ * `publish_storefront`, `send_quote`, `send_invoice`, `execute_change`). A
+ * name that resolves to no tool gates nothing, so the list read as broad
+ * coverage while alignment actually ran on two real tools. The dead names are
+ * removed and `every name resolves` is now a conformance test — the drift, not
+ * the list, was the defect.
+ */
 export const ALIGNMENT_CONSEQUENTIAL_TOOL_NAMES = [
   "create_digital_product",
-  "create_product",
-  "create_product_line",
   "create_marketing_campaign",
-  "launch_campaign",
-  "publish_storefront",
-  "send_quote",
-  "send_invoice",
-  "execute_change",
 ] as const;
 const EXPLICIT = new Set<string>(ALIGNMENT_CONSEQUENTIAL_TOOL_NAMES);
 const PRECONDITION = new Set(["transition_employee_status"]);
 
-export function collaborationShapeForTool(toolName: string): WorkRoomShapeKey | null {
-  if (["create_digital_product", "create_product", "create_product_line", "create_marketing_campaign", "launch_campaign"]
-    .includes(toolName)) return "specialist-alignment";
-  if (["publish_storefront", "send_quote", "send_invoice"].includes(toolName)) return "outward-review";
-  if (toolName === "execute_change") return "change-consequential";
+/** Alignment applies to what leaves the business, not to internal platform ops. */
+function alignmentRequiredFor(toolName: string, consequence: ToolConsequence | undefined): boolean {
+  return consequence === "outward" || EXPLICIT.has(toolName);
+}
+
+export function collaborationShapeForTool(
+  toolName: string,
+  consequence?: ToolConsequence,
+): WorkroomShapeKey | null {
+  if (["create_digital_product", "create_marketing_campaign"].includes(toolName)) {
+    return "specialist-alignment";
+  }
   if (toolName === "transition_employee_status") return "change-consequential";
+  if (consequence === "outward") return "outward-review";
+  if (consequence === "irreversible") return "change-consequential";
   return null;
 }
 
@@ -44,26 +64,41 @@ export function collaborationShapeForTool(toolName: string): WorkRoomShapeKey | 
  * Work Case metadata may elevate but never downgrade a call.
  */
 export function classifyConsequentialTool(input: {
-  tool: Pick<ToolDefinition, "sideEffect">;
+  tool: Pick<ToolDefinition, "sideEffect" | "consequence">;
   toolName: string;
   workCase?: WorkCaseExecutionContext;
 }): ConsequentialToolClassification {
+  const consequence = input.tool.consequence;
   const action = input.workCase ? getWorkCaseAction(input.workCase.action) : undefined;
   if (action?.consequential) {
     return {
       class: "consequential-mutation",
       consequential: true,
-      alignmentRequired: EXPLICIT.has(input.toolName),
+      alignmentRequired: alignmentRequiredFor(input.toolName, consequence),
       preconditionRequired: PRECONDITION.has(input.toolName),
-      collaborationShape: collaborationShapeForTool(input.toolName) ?? "change-consequential",
+      collaborationShape: collaborationShapeForTool(input.toolName, consequence) ?? "change-consequential",
       reason: "work-case-consequential",
+    };
+  }
+  // A declared reach is the tool's own claim about itself and outranks the
+  // legacy name list. `outward` additionally requires WWWD alignment;
+  // `irreversible` is receipted and reserved but not alignment-gated.
+  if (input.tool.sideEffect && consequence) {
+    return {
+      class: "consequential-mutation",
+      consequential: true,
+      alignmentRequired: alignmentRequiredFor(input.toolName, consequence),
+      preconditionRequired: PRECONDITION.has(input.toolName),
+      collaborationShape: collaborationShapeForTool(input.toolName, consequence),
+      reason: consequence === "outward" ? "declared-outward" : "declared-irreversible",
     };
   }
   if (input.tool.sideEffect && (EXPLICIT.has(input.toolName) || PRECONDITION.has(input.toolName))) {
     return {
-      class: "consequential-mutation", consequential: true, alignmentRequired: EXPLICIT.has(input.toolName),
+      class: "consequential-mutation", consequential: true,
+      alignmentRequired: alignmentRequiredFor(input.toolName, consequence),
       preconditionRequired: PRECONDITION.has(input.toolName),
-      collaborationShape: collaborationShapeForTool(input.toolName), reason: "explicit-policy",
+      collaborationShape: collaborationShapeForTool(input.toolName, consequence), reason: "explicit-policy",
     };
   }
   if (input.tool.sideEffect) {

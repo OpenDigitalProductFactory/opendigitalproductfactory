@@ -47,8 +47,16 @@ export async function PATCH(
       lifecycleTags,
     } = parsed.data;
 
-    const isNowDone = status === "done" || status === "deferred";
-    const wasDone = existing.status === "done" || existing.status === "deferred";
+    if (status === "deferred" || status === "retired") {
+      throw apiError(
+        "VALIDATION_ERROR",
+        "Use the governed backlog lifecycle action for deferred or retired decisions.",
+        422,
+      );
+    }
+
+    const isNowDone = status === "done";
+    const wasDone = existing.status === "done" || existing.status === "retired";
 
     const item = await prisma.backlogItem.update({
       where: { id },
@@ -95,11 +103,19 @@ export async function DELETE(
       throw apiError("NOT_FOUND", "Backlog item not found", 404);
     }
 
+    const { assertBacklogItemGovernanceDeletable } = await import("@/lib/backlog/initiative-governance-deletion");
+    await assertBacklogItemGovernanceDeletable(id);
     await prisma.backlogItem.delete({ where: { id } });
 
     return apiSuccess({ deleted: true });
   } catch (e) {
     if (e instanceof ApiError) return e.toResponse();
+    if (e instanceof Error && "code" in e && e.code === "INITIATIVE_GOVERNANCE_RETENTION") {
+      return NextResponse.json(
+        { code: "INITIATIVE_GOVERNANCE_RETENTION", message: e.message },
+        { status: 409 },
+      );
+    }
     return NextResponse.json(
       { code: "INTERNAL_ERROR", message: "An unexpected error occurred" },
       { status: 500 },

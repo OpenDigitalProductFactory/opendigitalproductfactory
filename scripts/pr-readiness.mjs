@@ -7,7 +7,6 @@
 
 import { execFileSync, spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
 
 import { buildGatePlan, evaluateReadiness, formatReadinessReport } from "./pr-readiness/core.mjs";
 import { collectWorktreeDiff } from "./gate-context.mjs";
@@ -15,6 +14,7 @@ import { resolvePolicyGuardInvocation } from "./lib/ci-policy-guards.mjs";
 import { buildGateContext } from "./lib/gate-context.mjs";
 import { fetchOriginMainSharedSafe, isShallowRepository } from "./lib/git-fetch-shared-safe.mjs";
 import { isEnvironmentFailureOutput } from "./lib/pregate-preflight.mjs";
+import { isEntryModule } from "./lib/entry-module.mjs";
 
 function git(args, { allowFail = false } = {}) {
   try {
@@ -187,4 +187,4 @@ function main() {
   process.exit(verdict.ready ? 0 : 1);
 }
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) main();
+if (isEntryModule(import.meta.url)) main();

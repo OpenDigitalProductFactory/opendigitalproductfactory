@@ -46,7 +46,7 @@ export async function attachBuildStudioWorkCapsule(args: {
   actor: WorkCapsuleActor;
 }) {
   const idempotencyKey = `build-studio:${args.build.buildId}`;
-  const existing = await args.db.workCapsule.findUnique({
+  const existing = await args.db.workroom.findUnique({
     where: { idempotencyKey },
   });
   if (existing) return existing;

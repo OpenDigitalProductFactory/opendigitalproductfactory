@@ -55,7 +55,7 @@ The order is fixed: **BI first, then plan.** [`dpf-file-backlog-item`](../dpf-fi
    - `mcp__dpf__search_code_graph` — find the real files/contracts the plan will touch.
    - This is the `consult-specs-first` + `research-before-implementing` discipline applied to planning.
 
-3. **Consume the start-of-work impact contract.** Once exact edit paths are claimed, read the Work Capsule's `verificationState.changeImpactContract` (also returned by `claim_capsule_scope`). Put every `testImpact` and `guardObligation` in the relevant phase before implementation begins. If the contract is `unresolved`, plan exhaustive verification and an explicit impact-resolution step; never translate missing advice into an exemption.
+3. **Consume the start-of-work impact contract.** Once exact edit paths are claimed, read the Workroom's `verificationState.changeImpactContract` (also returned by `claim_capsule_scope`). Put every `testImpact` and `guardObligation` in the relevant phase before implementation begins. If the contract is `unresolved`, plan exhaustive verification and an explicit impact-resolution step; never translate missing advice into an exemption.
 
 4. **Write phased steps and classify delivery boundaries.** Each phase needs a concrete deliverable, touched files, dependencies, and functional verification. Mark whether it is independently shippable or only internal sequencing. For every independently shippable deliverable, query for an existing covering BI and reuse it when present; otherwise compose with `dpf-file-backlog-item` and file it. An `xlarge` umbrella always requires this decomposition decision before implementation.
 

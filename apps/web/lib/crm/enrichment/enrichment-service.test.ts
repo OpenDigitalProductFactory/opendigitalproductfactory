@@ -51,6 +51,7 @@ const PROPOSAL: EnrichmentProposal = {
   unresolvedGaps: [{ field: "notes", reason: "left blank; please confirm" }],
   rejected: [],
   scope: { sources: ["website", "web-search"], fields: ["industry", "employeeCount", "location", "notes"] },
+  identity: { score: 1, agreements: ["domain"], conflicts: [], verdict: "agree" },
 };
 
 describe("fileEnrichmentProposal (AC7 — propose-to-queue, no direct write)", () => {

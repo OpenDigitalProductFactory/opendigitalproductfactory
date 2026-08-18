@@ -505,6 +505,9 @@ fi
 if DPF_HOST_PROFILE_JSON="$(pnpm --filter @dpf/db exec -- tsx "$REPO_ROOT/scripts/detect-hardware-host.ts" 2>/dev/null)"; then
   export DPF_HOST_PROFILE="$DPF_HOST_PROFILE_JSON"
   DPF_SELECTED_MODEL="$(printf '%s' "$DPF_HOST_PROFILE_JSON" | sed -nE 's/.*"selectedModel"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/p')"
+  # Known-good content digest for the selected model, when the tier pins one.
+  # Empty for curated ai/ tiers (Docker Hub already pins bytes to a tag).
+  DPF_EXPECTED_DIGEST="$(printf '%s' "$DPF_HOST_PROFILE_JSON" | sed -nE 's/.*"expectedDigest"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/p')"
   if [ -n "$DPF_SELECTED_MODEL" ]; then
     ok "Hardware profile detected — selected AI model (pull form): $DPF_SELECTED_MODEL"
     info "  (Will register under short form for runtime references; normalized after pull.)"
@@ -514,6 +517,38 @@ if DPF_HOST_PROFILE_JSON="$(pnpm --filter @dpf/db exec -- tsx "$REPO_ROOT/script
 else
   warn "Host hardware detection failed (non-fatal); portal-init will skip the profile step."
 fi
+
+# Compare the pulled model's content digest against the tier's pinned value.
+# WHY: a HuggingFace reference names a FILE, not an immutable revision, and
+# `docker model pull` takes no flags, so nothing pins bytes at pull time. Model
+# weights are a control-plane input -- they decide tool-calling behaviour -- so a
+# silent substitution is a behavioural compromise, not just a data one.
+# This is DETECTION, not prevention: warn loudly, never fail the install. A
+# legitimate republish should prompt re-evaluation, not brick a new machine.
+# (BI-73E9A282.)
+verify_model_digest() {
+  _vmd_runtime="$1"
+  _vmd_expected="$2"
+  [ -n "$_vmd_expected" ] || return 0
+  _vmd_actual="$(docker model inspect "$_vmd_runtime" 2>/dev/null \
+    | sed -nE 's/.*"id"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/p' | head -1)"
+  if [ -z "$_vmd_actual" ]; then
+    warn "Could not read the model digest to verify it; continuing."
+    return 0
+  fi
+  if [ "$_vmd_actual" = "$_vmd_expected" ]; then
+    ok "Model integrity verified (digest matches the pinned value)"
+    return 0
+  fi
+  warn "MODEL DIGEST MISMATCH for $_vmd_runtime"
+  warn "  expected: $_vmd_expected"
+  warn "  actual:   $_vmd_actual"
+  warn "  The upstream model was republished, or the download differs from what"
+  warn "  this release pinned. The model still works, but its behaviour is no"
+  warn "  longer the version this install was tested against. Treat this as a"
+  warn "  security event and re-run the tool evaluation before relying on it."
+  return 0
+}
 
 # 8b. Set up Docker Model Runner and pull the selected chat model.
 #     Mirrors install-dpf.ps1 §Step 7 (lines 1895-1985). Docker Model
@@ -566,11 +601,35 @@ if [ "$DPF_PLATFORM" = "darwin" ] && command -v docker >/dev/null 2>&1; then
       # calls use the exact string the model-runner knows. This prevents the
       # "failed to get model: model not found" seen in inference.model-manager
       # logs even when the pull command itself was issued.
+      #
+      # HuggingFace sources normalize differently from the `ai/` catalog. Verified
+      # on-box 2026-08-16: pulling `hf.co/ggml-org/Qwen3.8-27B-GGUF:Q4_K_M` lists as
+      # `huggingface.co/ggml-org/qwen3.8-27b-gguf:Q4_K_M` — the host is rewritten to
+      # its long form, the repo path is lowercased, and the quant tag KEEPS its case.
+      # Stripping `ai/` alone leaves the pull form unchanged for these, so the
+      # already-on-disk check never matches and the model re-downloads every run.
       _pull_name="$DPF_SELECTED_MODEL"
-      _runtime_model="$(printf '%s' "$_pull_name" | sed 's|^ai/||')"
+      case "$_pull_name" in
+        hf.co/*|huggingface.co/*)
+          case "$_pull_name" in
+            *:*) _hf_tag="${_pull_name##*:}"; _hf_path="${_pull_name%:*}" ;;
+            *)   _hf_tag=""; _hf_path="$_pull_name" ;;
+          esac
+          _hf_path="$(printf '%s' "$_hf_path" | sed 's|^hf\.co/|huggingface.co/|' | tr '[:upper:]' '[:lower:]')"
+          if [ -n "$_hf_tag" ]; then
+            _runtime_model="${_hf_path}:${_hf_tag}"
+          else
+            _runtime_model="$_hf_path"
+          fi
+          ;;
+        *)
+          _runtime_model="$(printf '%s' "$_pull_name" | sed 's|^ai/||')"
+          ;;
+      esac
       if docker model list 2>/dev/null | awk 'NR>1{print $1}' | grep -Fxq "$_runtime_model"; then
         ok "Model $_runtime_model already on disk"
         DPF_SELECTED_MODEL="$_runtime_model"
+        verify_model_digest "$_runtime_model" "${DPF_EXPECTED_DIGEST:-}"
       else
         # Print expected size upfront (user request for time estimation given
         # internet speed). Uses cheap manifest inspect (no blob download).
@@ -602,6 +661,7 @@ except Exception:
         if docker model list 2>/dev/null | awk 'NR>1{print $1}' | grep -Fxq "$_runtime_model"; then
           ok "AI Coworker model ready: $_runtime_model"
           DPF_SELECTED_MODEL="$_runtime_model"
+          verify_model_digest "$_runtime_model" "${DPF_EXPECTED_DIGEST:-}"
         else
           warn "Model pull may have failed. You can retry later: docker model pull $_pull_name"
         fi

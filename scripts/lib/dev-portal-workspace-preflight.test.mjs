@@ -4,7 +4,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, writeFileSync, chmodSync, readFileSync } from "node:fs";
+import { mkdtempSync, writeFileSync, chmodSync, readFileSync, rmSync, symlinkSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
@@ -191,6 +191,35 @@ exit 99
       false,
       "pnpm/dev chain must not run when preflight fails",
     );
+  });
+
+  // BI-FFFEFBCC: this file is baked ALONE into the image (no lib/entry-module.mjs
+  // beside it), so its entry guard is a self-contained realpath mirror. Pin that
+  // the guard still fires — main() runs and reports the empty workspace — when
+  // the script is invoked through a symlinked directory (macOS /var tmpdir shape).
+  it("still runs main() when invoked through a symlinked path", (t) => {
+    const temp = mkdtempSync(join(tmpdir(), "dpf-preflight-symlink-"));
+    const link = join(temp, "lib-link");
+    try {
+      // "junction" keeps this runnable on Windows hosts without symlink privilege.
+      symlinkSync(here, link, "junction");
+    } catch (error) {
+      rmSync(temp, { recursive: true, force: true });
+      t.skip(`cannot create a directory symlink on this host: ${error.code}`);
+      return;
+    }
+    try {
+      const empty = mkdtempSync(join(tmpdir(), "dpf-empty-ws-"));
+      const run = spawnSync(process.execPath, [join(link, "dev-portal-workspace-preflight.mjs")], {
+        env: { ...process.env, DPF_DEV_PORTAL_WORKSPACE_ROOT: empty },
+        encoding: "utf8",
+      });
+      assert.notEqual(run.status, 0, "main() must run under a symlinked argv[1], not silently exit 0");
+      assert.match(run.stderr || "", /BI-0DF1F354|package-json-missing|STOPPING/i);
+      rmSync(empty, { recursive: true, force: true });
+    } finally {
+      rmSync(temp, { recursive: true, force: true });
+    }
   });
 
   it("Dockerfile bakes preflight into the image path (structural)", () => {

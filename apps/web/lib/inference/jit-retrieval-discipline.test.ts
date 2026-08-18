@@ -33,6 +33,15 @@ const ALLOWED_EMBEDDING_CALLERS: ReadonlySet<string> = new Set([
   "apps/web/lib/mcp/packs/principle-decide-pack.ts", // principle-direction + semantic-decision knowledge
   "apps/web/lib/decision/evidence-grounding.ts", // embeds the option DESCRIPTION (transient decision input) for principle_decide's semantic fallback — same purpose as the pack entry, extracted here for module size; embeds no operational record (EP-VERIFICATION-INTEGRITY)
   "apps/web/lib/decision-perspective/stance-relevance.ts", // embeds the decision QUESTION (transient input) + WWWD stance SUMMARIES (durable knowledge corpus) to score question↔stance relevance for the org business-decision gate; nothing is persisted to the vector store, no operational record (BI-7E1F128A)
+  // Reviewed against this guard's contract, not waved through. It embeds the
+  // QUESTION TEXT of unresolved DecisionInteraction rows to detect that two
+  // escalations are the same decision phrased differently. The DecisionInteraction
+  // ledger IS an operational record — but it is not memorized: the embeddings are
+  // computed per request, compared in memory, and discarded. Nothing reaches
+  // upsertVectors, so no reasoning ever runs against a stale snapshot; the rows
+  // stay fetched live via Prisma exactly as the discipline requires. Same shape as
+  // the stance-relevance entry above (BI-932C2A81).
+  "apps/web/lib/decision/review-clustering.ts",
 ]);
 
 function repoRoot(): string {

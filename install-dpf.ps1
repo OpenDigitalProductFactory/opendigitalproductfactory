@@ -1380,15 +1380,26 @@ if (-not (Test-StepDone "hardware")) {
     # (same module) catches any drift.
     #
     # Thresholds = model weights + ~5 GB headroom (measured: a 30B at a 24k build
-    # context uses ~20.7 GB on a 24 GB card). So a 24 GB 4090 lands on the 30B
-    # coder, NOT the 35B -- which would fill the card and over-commit the moment a
-    # build runs. Pinned quant tags (never bare :latest) for reproducible sizes.
+    # context uses ~20.7 GB on a 24 GB card). Pinned quant tags (never bare
+    # :latest) for reproducible sizes.
+    #
+    # A 24 GB card lands on Qwen3.8-27B (17.66 GiB measured + headroom = 23). That
+    # model is DENSE, so it is ~4x slower per turn than the MoE tiers around it --
+    # a deliberate trade for thoroughness over time-to-answer.
+    #
+    # Qwen3.8 is pulled from HuggingFace (hf.co/...), not the curated ai/ namespace,
+    # because ai/qwen3.8 publishes only the 2.4T "Max". docker model pull accepts
+    # both sources; the runtime name it registers under differs (see the sh
+    # installer's normalization note).
     if ($gpuVRAM_GB -ge 53) {
         $selectedModel = "ai/qwen3-coder-next"
         $modelReason = "Qwen3-Coder-Next 80B (MoE) -- top agentic coder, fits your $gpuVRAM_GB GB VRAM with headroom"
-    } elseif ($gpuVRAM_GB -ge 27) {
-        $selectedModel = "ai/qwen3.6:35B-A3B-UD-Q4_K_M"
-        $modelReason = "Qwen3.6 35B-A3B (MoE) -- strong agentic model, fits your $gpuVRAM_GB GB VRAM with headroom"
+    } elseif ($gpuVRAM_GB -ge 23) {
+        $selectedModel = "hf.co/ggml-org/Qwen3.8-27B-GGUF:Q4_K_M"
+        # Known-good content digest for this tier. Mirrors LocalModelTier.expectedDigest
+        # and SELECTION_TIERS in scripts/detect-hardware-host.ts -- keep in sync.
+        $expectedDigest = "sha256:66c4f325bc71350f07fb2da4f92455553c7bbc8af5d7ee2095fbeac79b9e66c9"
+        $modelReason = "Qwen3.8 27B (dense, vision) -- most thorough local model, fits your $gpuVRAM_GB GB VRAM with headroom"
     } elseif ($gpuVRAM_GB -ge 21) {
         $selectedModel = "ai/qwen3-coder"
         $modelReason = "Qwen3-Coder 30B (MoE) -- serves chat + code, fits your $gpuVRAM_GB GB VRAM with headroom"
@@ -1586,8 +1597,13 @@ Copy-Item -Path (Join-Path $DPF_DIR "scripts\safety\dpf-shell-guard-fallback-pat
 # basename as -BinName. The shim's filename (docker.cmd) is what `where docker`
 # resolves to; the guard receives the intended tool name explicitly so
 # basename-based detection isn't fragile.
+# NOTE: no `--` separator before %*. With `pwsh -File`, PowerShell parses `--` as a
+# parameter prefix with an EMPTY name and aborts every guarded command with
+# "Parameter cannot be processed because the parameter name '' is ambiguous" --
+# which breaks git/docker/prisma for the whole user account, because safety-bin is
+# prepended to the user PATH below. The guard collects %* from the automatic $args.
 foreach ($tool in @("docker", "git", "prisma")) {
-    $shimContent = "@echo off`r`npwsh -NoProfile -ExecutionPolicy Bypass -File `"%~dp0dpf-shell-guard.ps1`" -BinName $tool -- %*`r`n"
+    $shimContent = "@echo off`r`npwsh -NoProfile -ExecutionPolicy Bypass -File `"%~dp0dpf-shell-guard.ps1`" -BinName $tool %*`r`n"
     Set-Content -Path (Join-Path $safetyBin "$tool.cmd") -Value $shimContent -Encoding ASCII -NoNewline
 }
 
@@ -1836,6 +1852,14 @@ if (-not (Test-StepDone "started")) {
 if (-not (Test-StepDone "mcp_seed")) {
     # Seed per-worktree MCP config first (idempotent; needs the token already
     # generated at Admin > Platform Development > MCP).
+    # Neither of the two scripts below ships in the release bundle, so on a
+    # `consumer` install both Test-Path checks are false. That is expected --
+    # install-dpf.sh gates the same convergence on contributor mode ("customer
+    # installs don't need agent CLIs wired up") -- but it must not be SILENT.
+    # Without an else branch, "the script isn't here" is indistinguishable from
+    # "it ran and succeeded", and we then Save-Progress the step as done. A user
+    # expecting MCP-connected agents after install gets no signal about why they
+    # are absent. install-dpf.sh already warns in this case; match it.
     $seedScript = Join-Path $DPF_DIR "scripts\seed-worktree-mcp.ps1"
     if (Test-Path $seedScript) {
         Write-Action "Seeding MCP token to worktrees..."
@@ -1844,6 +1868,8 @@ if (-not (Test-StepDone "mcp_seed")) {
         } catch {
             Write-Warn "MCP seed step encountered an issue (non-fatal): $_"
         }
+    } else {
+        Write-Warn "scripts\seed-worktree-mcp.ps1 not found; skipping MCP token seeding."
     }
 
     # Converge the agent toolchain (Claude + Codex + kernel memory + state).
@@ -1855,6 +1881,11 @@ if (-not (Test-StepDone "mcp_seed")) {
         } catch {
             Write-Warn "Agent toolchain bootstrap encountered an issue (non-fatal): $_"
         }
+    } else {
+        Write-Warn "scripts\dpf-bootstrap-agent-toolchain.ps1 not found; skipping agent toolchain convergence."
+        Write-Warn "Agent CLIs (Claude Code / Codex) will NOT be wired to this install's MCP endpoint."
+        Write-Warn "To connect one later: Admin > Platform Development > MCP, issue a token, then add the"
+        Write-Warn "'dpf' server to your agent client's config using that token."
     }
     Save-Progress "mcp_seed"
 }
@@ -1965,8 +1996,27 @@ if (-not (Test-StepDone "model")) {
     # files to the runtime name so that portal /v1/models discovery and inference
     # references match exactly what the model-runner serves (prevents "model not found"
     # in inference.model-manager even when pull was executed).
+    #
+    # HuggingFace sources normalize differently from the ai/ catalog. Verified on-box
+    # 2026-08-16: pulling hf.co/ggml-org/Qwen3.8-27B-GGUF:Q4_K_M lists as
+    # huggingface.co/ggml-org/qwen3.8-27b-gguf:Q4_K_M -- host rewritten to its long
+    # form, repo path lowercased, quant tag case PRESERVED. Stripping ai/ alone is a
+    # no-op on those refs, so the post-pull presence check below could never match and
+    # the installer would warn "pull reported success but not listed" on every run.
     $pullName = $selectedModel
-    $runtimeModel = $pullName -replace '^ai/',''
+    if ($pullName -match '^(hf\.co|huggingface\.co)/') {
+        if ($pullName -match '^(.*):([^:/]+)$') {
+            $hfPath = $Matches[1]
+            $hfTag  = $Matches[2]
+        } else {
+            $hfPath = $pullName
+            $hfTag  = ''
+        }
+        $hfPath = ($hfPath -replace '^hf\.co/','huggingface.co/').ToLowerInvariant()
+        if ($hfTag) { $runtimeModel = "${hfPath}:${hfTag}" } else { $runtimeModel = $hfPath }
+    } else {
+        $runtimeModel = $pullName -replace '^ai/',''
+    }
     # Expected size upfront (manifest only) so user with known bandwidth can estimate duration.
     $sizeMB = 0
     try {
@@ -1993,6 +2043,31 @@ if (-not (Test-StepDone "model")) {
     } catch {}
     if ($isPresent) {
         $selectedModel = $runtimeModel
+        # Integrity check: a HuggingFace ref names a FILE, not an immutable
+        # revision, and `docker model pull` takes no flags, so nothing pins bytes
+        # at pull time. Model weights are a control-plane input, so a silent
+        # substitution is a behavioural compromise. DETECTION only -- warn
+        # loudly, never fail the install. (BI-73E9A282.)
+        if ($expectedDigest) {
+            $actualDigest = $null
+            try {
+                $inspected = docker model inspect $runtimeModel 2>$null | ConvertFrom-Json -ErrorAction SilentlyContinue
+                if ($inspected) { $actualDigest = $inspected.id }
+            } catch {}
+            if (-not $actualDigest) {
+                Write-Warn "Could not read the model digest to verify it; continuing."
+            } elseif ($actualDigest -eq $expectedDigest) {
+                Write-OK "Model integrity verified (digest matches the pinned value)"
+            } else {
+                Write-Warn "MODEL DIGEST MISMATCH for $runtimeModel"
+                Write-Warn "  expected: $expectedDigest"
+                Write-Warn "  actual:   $actualDigest"
+                Write-Warn "  The upstream model was republished, or the download differs from"
+                Write-Warn "  what this release pinned. The model still works, but its behaviour"
+                Write-Warn "  is no longer the version this install was tested against. Treat as"
+                Write-Warn "  a security event and re-run the tool evaluation before relying on it."
+            }
+        }
         # Persist the accurate runtime name for compose env + portal-init host_profile
         $selectedModel | Set-Content "$DPF_DIR\.selected-model" -ErrorAction SilentlyContinue
         $hpPath = "$DPF_DIR\.host-profile.json"

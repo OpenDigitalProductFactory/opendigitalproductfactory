@@ -53,7 +53,7 @@ export function MergeCustomerAccountButton({ accountId, accountName }: { account
     startTransition(async () => {
       const result = await listCustomerAccountMergeTargets(accountId);
       if (result.ok) setTargets(result.data);
-      else setError(result.message);
+      else setError(result.error);
     });
   }
 
@@ -65,7 +65,7 @@ export function MergeCustomerAccountButton({ accountId, accountName }: { account
     startTransition(async () => {
       const result = await previewCustomerAccountMerge(accountId, id);
       if (result.ok) setPreview(result.data);
-      else setError(result.message);
+      else setError(result.error);
     });
   }
 
@@ -74,7 +74,7 @@ export function MergeCustomerAccountButton({ accountId, accountName }: { account
     startTransition(async () => {
       const result = await mergeCustomerAccounts(accountId, survivorId);
       if (!result.ok) {
-        setError(result.message);
+        setError(result.error);
         return;
       }
       setOpen(false);

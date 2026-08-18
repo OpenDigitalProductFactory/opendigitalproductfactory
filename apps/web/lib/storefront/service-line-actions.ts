@@ -9,14 +9,12 @@ import {
   type CompositionArtifactClient,
 } from "./seed-composition-artifacts";
 
+import { ok, err, type ActionResult } from "@/lib/shared/action-result";
+
 const MAX_SECONDARY_LINES = 2;
 
-type ActionResult = { success: true } | { error: string };
-
-/** Result of a mutating service-line action that retains or removes artifacts. */
-type ArtifactActionResult =
-  | { success: true; affected: { items: number; sections: number } }
-  | { error: string };
+/** Payload of a mutating service-line action that retains or removes artifacts. */
+type ArtifactCounts = { items: number; sections: number };
 
 /** A removed-but-retained service line whose generated content still exists. */
 export interface RetainedServiceLine {
@@ -32,10 +30,10 @@ export interface RetainedServiceLine {
 async function requireAdmin(): Promise<{ organizationId: string } | { error: string }> {
   const session = await auth();
   if (!session?.user || (session.user as { type?: string }).type !== "admin") {
-    return { error: "Unauthorized" };
+    return err("Unauthorized");
   }
   const org = await prisma.organization.findFirst({ select: { id: true } });
-  if (!org) return { error: "Organization not found" };
+  if (!org) return err("Organization not found");
   return { organizationId: org.id };
 }
 
@@ -49,22 +47,22 @@ export async function addStorefrontServiceLine(
   secondaryArchetypeSlug: string,
 ): Promise<ActionResult> {
   const auth = await requireAdmin();
-  if ("error" in auth) return auth;
+  if ("error" in auth) return err(auth.error);
 
   const storefront = await prisma.storefrontConfig.findFirst({
     where: { id: storefrontId, organizationId: auth.organizationId },
     select: { id: true, archetypeId: true },
   });
-  if (!storefront) return { error: "Storefront not found" };
+  if (!storefront) return err("Storefront not found");
 
   const secondaryArchetype = await prisma.storefrontArchetype.findUnique({
     where: { archetypeId: secondaryArchetypeSlug },
   });
-  if (!secondaryArchetype) return { error: "Archetype not found" };
+  if (!secondaryArchetype) return err("Archetype not found");
 
   // Guard: cannot add the primary as a secondary
   if (secondaryArchetype.id === storefront.archetypeId) {
-    return { error: "Primary archetype cannot be added as a secondary" };
+    return err("Primary archetype cannot be added as a secondary");
   }
 
   // Guard: max service lines
@@ -72,7 +70,7 @@ export async function addStorefrontServiceLine(
     where: { storefrontId, role: "secondary", removedAt: null },
   });
   if (activeSecondaries >= MAX_SECONDARY_LINES) {
-    return { error: `Maximum ${MAX_SECONDARY_LINES} secondary service lines allowed` };
+    return err(`Maximum ${MAX_SECONDARY_LINES} secondary service lines allowed`);
   }
 
   // Guard: already added and active
@@ -80,7 +78,7 @@ export async function addStorefrontServiceLine(
     where: { storefrontId_archetypeId: { storefrontId, archetypeId: secondaryArchetype.id } },
   });
   if (existing && !existing.removedAt) {
-    return { error: "This service line is already active" };
+    return err("This service line is already active");
   }
 
   // Get highest existing sortOrder
@@ -110,7 +108,7 @@ export async function addStorefrontServiceLine(
       // Sections were seeded hidden and stay hidden until the operator reveals
       // them, matching the original add behavior.
       revalidatePath("/storefront");
-      return { success: true };
+      return ok();
     }
     // Legacy row with no provenance-tagged artifacts: fall through and seed.
   }
@@ -141,7 +139,7 @@ export async function addStorefrontServiceLine(
   });
 
   revalidatePath("/storefront");
-  return { success: true };
+  return ok();
 }
 
 /**
@@ -154,7 +152,7 @@ export async function removeStorefrontServiceLine(
   compositionId: string,
 ): Promise<ActionResult> {
   const auth = await requireAdmin();
-  if ("error" in auth) return auth;
+  if ("error" in auth) return err(auth.error);
 
   const composition = await prisma.storefrontArchetypeComposition.findFirst({
     where: {
@@ -164,8 +162,8 @@ export async function removeStorefrontServiceLine(
       removedAt: null,
     },
   });
-  if (!composition) return { error: "Service line not found" };
-  if (composition.role === "primary") return { error: "Primary service line cannot be removed" };
+  if (!composition) return err("Service line not found");
+  if (composition.role === "primary") return err("Primary service line cannot be removed");
 
   // Deactivate seeded items and hide seeded sections
   await Promise.all([
@@ -184,7 +182,7 @@ export async function removeStorefrontServiceLine(
   ]);
 
   revalidatePath("/storefront");
-  return { success: true };
+  return ok();
 }
 
 /**
@@ -195,9 +193,9 @@ export async function removeStorefrontServiceLine(
 export async function restoreStorefrontServiceLine(
   storefrontId: string,
   compositionId: string,
-): Promise<ArtifactActionResult> {
+): Promise<ActionResult<{ affected: ArtifactCounts }>> {
   const auth = await requireAdmin();
-  if ("error" in auth) return auth;
+  if ("error" in auth) return err(auth.error);
 
   const composition = await prisma.storefrontArchetypeComposition.findFirst({
     where: {
@@ -208,8 +206,8 @@ export async function restoreStorefrontServiceLine(
     },
     select: { id: true, role: true },
   });
-  if (!composition) return { error: "Removed service line not found" };
-  if (composition.role === "primary") return { error: "Primary service line cannot be restored" };
+  if (!composition) return err("Removed service line not found");
+  if (composition.role === "primary") return err("Primary service line cannot be restored");
 
   // Guard the max-active limit: a restore re-activates a line, so it must not
   // exceed the same ceiling the add path enforces.
@@ -217,7 +215,7 @@ export async function restoreStorefrontServiceLine(
     where: { storefrontId, role: "secondary", removedAt: null },
   });
   if (activeSecondaries >= MAX_SECONDARY_LINES) {
-    return { error: `Maximum ${MAX_SECONDARY_LINES} active service lines — remove one before restoring.` };
+    return err(`Maximum ${MAX_SECONDARY_LINES} active service lines — remove one before restoring.`);
   }
 
   const [itemUpdate, sectionCount] = await Promise.all([
@@ -233,7 +231,7 @@ export async function restoreStorefrontServiceLine(
   ]);
 
   revalidatePath("/storefront");
-  return { success: true, affected: { items: itemUpdate.count, sections: sectionCount } };
+  return ok({ affected: { items: itemUpdate.count, sections: sectionCount } });
 }
 
 /**
@@ -245,9 +243,9 @@ export async function restoreStorefrontServiceLine(
 export async function purgeRemovedServiceLine(
   storefrontId: string,
   compositionId: string,
-): Promise<ArtifactActionResult> {
+): Promise<ActionResult<{ affected: ArtifactCounts }>> {
   const auth = await requireAdmin();
-  if ("error" in auth) return auth;
+  if ("error" in auth) return err(auth.error);
 
   const composition = await prisma.storefrontArchetypeComposition.findFirst({
     where: {
@@ -258,8 +256,8 @@ export async function purgeRemovedServiceLine(
     },
     select: { id: true, role: true },
   });
-  if (!composition) return { error: "Removed service line not found" };
-  if (composition.role === "primary") return { error: "Primary service line cannot be purged" };
+  if (!composition) return err("Removed service line not found");
+  if (composition.role === "primary") return err("Primary service line cannot be purged");
 
   const seededItems = await prisma.storefrontItem.findMany({
     where: { sourceCompositionId: compositionId },
@@ -283,7 +281,7 @@ export async function purgeRemovedServiceLine(
   });
 
   revalidatePath("/storefront");
-  return { success: true, affected: { items: seededItemIds.length, sections: sectionCount } };
+  return ok({ affected: { items: seededItemIds.length, sections: sectionCount } });
 }
 
 /**

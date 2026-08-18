@@ -41,6 +41,14 @@ export type DecisionGateKey = typeof DECISION_GATE_KEYS[number];
 
 export const DECISION_DOMAIN_CLASSES = ["plan-readiness", "architecture-tradeoff", "risk-assessment", "professional-practice", "kernel-consult"] as const;
 export type DecisionDomainClass = typeof DECISION_DOMAIN_CLASSES[number];
+
+/**
+ * Topic tag on `PerspectiveMaterial.domains` marking material that governs every
+ * business domain class rather than one bucket (BI-F5F2869D). Lives here, on the
+ * shared leaf, so `material.ts` (which reads it) and `stance-promotion.ts`
+ * (which writes it) need no import between them.
+ */
+export const CROSS_DOMAIN_MATERIAL_TAG = "all-business-domains";
 export const PLAN_READINESS_DOMAIN_CLASS = "plan-readiness" satisfies DecisionDomainClass;
 
 export const PERSPECTIVE_MATERIAL_FRESHNESS = ["current", "stale", "superseded", "contradicted"] as const;
@@ -223,13 +231,45 @@ export type DecisionPerspectiveEvaluationResult = {
   constitutionalAlignment?: import("./alignment-criteria").ConstitutionalAlignmentResult;
   rationale: string;
   materialScores: PerspectiveMaterialScore[];
-  sources: Array<{
-    materialId: string;
-    sourceType: string;
-    summary: string;
-    effectiveWeight: number;
-  }>;
-  gapReason?: "no-applicable-material" | "material-below-confidence";
+  sources: Array<DecisionEvaluationSource>;
+  gapReason?:
+    | "no-applicable-material"
+    | "material-below-confidence"
+    // BI-F5F2869D: not a gap at all — recorded doctrine is consistent with the
+    // proposal, but nobody has ruled on this question, so it goes to the owner
+    // as a NEW idea to weigh rather than as missing policy.
+    | "aligned-not-settled";
+};
+
+/**
+ * One cited source on a recorded decision.
+ *
+ * The first four fields are the original contract (every gate populates them).
+ * The rest are the trust-envelope re-verification fields (BI-8192557E phase 2a):
+ * before them only `sourceType` — a bare string — survived the write, so a
+ * recorded citation could be proven un-tampered-with (via the sealed
+ * `evidenceDigests` hash chain) but never re-resolved against live source. A
+ * digest cannot answer "was this citation ever TRUE"; the structured locator can.
+ *
+ * All five are optional and additive: rows written before this carry none of
+ * them, and their absence must read as UNVERIFIABLE — never as confirmed
+ * (see `recordedCitationsFromSources`).
+ */
+export type DecisionEvaluationSource = {
+  materialId: string;
+  sourceType: string;
+  summary: string;
+  effectiveWeight: number;
+  /** Structured locator, re-resolvable against live source by the re-verifier. */
+  locator?: import("@/lib/deliberation/evidence").StructuredLocator;
+  /** Evidence grade the citation was admitted at (A/B/C; D is inadmissible). */
+  grade?: string;
+  /** The scored option this citation backs. */
+  optionId?: string;
+  /** The scored dimension this citation backs. */
+  dimensionKey?: string;
+  /** The excerpt the score relied on, as recorded at decision time. */
+  excerpt?: string | null;
 };
 
 export type DecisionInteractionGateView = {

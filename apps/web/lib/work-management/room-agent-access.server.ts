@@ -9,11 +9,11 @@ import { prisma } from "@dpf/db";
 
 import { ensureAgentPrincipalIdentity } from "@/lib/identity/principal-linking";
 import { authorizeAgentRoomAccess } from "./room-agent-access";
-import type { WorkRoomAccessDecision, WorkRoomAccessLevel } from "./room-participation";
+import type { WorkroomAccessDecision, WorkroomAccessLevel } from "./room-participation";
 import { readWorkspaceRoomPolicy } from "./workspace-room-access";
 
 export interface AgentRoomAccessResult {
-  decision: WorkRoomAccessDecision;
+  decision: WorkroomAccessDecision;
   agentPrincipalId: string | null;
 }
 
@@ -26,7 +26,7 @@ const DEFAULT_AGENT_CLEARANCE = ["public", "internal"] as const;
  */
 export async function resolveAgentRoomAccess(input: {
   agentId: string;
-  requested: Exclude<WorkRoomAccessLevel, "none">;
+  requested: Exclude<WorkroomAccessLevel, "none">;
   workItem: { id: string; evidence: unknown; assignedToAgentId: string | null };
 }): Promise<AgentRoomAccessResult> {
   const principal = await ensureAgentPrincipalIdentity(input.agentId);
@@ -38,7 +38,7 @@ export async function resolveAgentRoomAccess(input: {
   }
 
   const [capsules, assignedPrincipal] = await Promise.all([
-    prisma.workCapsule.findMany({
+    prisma.workroom.findMany({
       where: { workItemId: input.workItem.id },
       select: {
         leaseHolderPrincipalId: true,
