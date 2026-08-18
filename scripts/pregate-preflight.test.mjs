@@ -8,6 +8,8 @@
 
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
+import { mkdtempSync, rmSync, symlinkSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 
@@ -334,6 +336,36 @@ test("pregate-preflight.mjs --plan emits the JSON plan without running guards", 
   assert.ok(plan.length > 0);
   assert.ok(plan.some((entry) => entry.id === "module-size-guard"));
   assert.ok(plan.every((entry) => entry.commands.every((c) => !c.startsWith("node --test"))));
+});
+
+// BI-FFFEFBCC (follow-on to BI-745658D7): Node realpath-resolves the ESM entry
+// module, so under a symlinked invocation path (macOS /var tmpdir → /private/var)
+// the naive `process.argv[1] === fileURLToPath(import.meta.url)` guard is false,
+// main() silently never runs, and the process exits 0 with no output. This pins
+// the isEntryModule adoption: main() must run whichever spelling the caller used.
+test("pregate-preflight.mjs still runs main() when invoked through a symlinked path", (t) => {
+  const temp = mkdtempSync(join(tmpdir(), "dpf-preflight-symlink-"));
+  const link = join(temp, "repo-link");
+  try {
+    // "junction" keeps this runnable on Windows hosts without symlink privilege.
+    symlinkSync(repoRoot, link, "junction");
+  } catch (error) {
+    rmSync(temp, { recursive: true, force: true });
+    t.skip(`cannot create a directory symlink on this host: ${error.code}`);
+    return;
+  }
+  try {
+    const result = spawnSync(
+      process.execPath,
+      [join(link, "scripts", "pregate-preflight.mjs"), "--plan"],
+      { cwd: repoRoot, encoding: "utf8" },
+    );
+    assert.equal(result.status, 0, result.stderr);
+    const plan = JSON.parse(result.stdout);
+    assert.ok(plan.length > 0, "main() must run under a symlinked argv[1], not silently exit 0");
+  } finally {
+    rmSync(temp, { recursive: true, force: true });
+  }
 });
 
 test("pregate.mjs --dry-run skips the preflight and still reaches gate routing", () => {

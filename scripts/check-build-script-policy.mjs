@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 
 import { readFile } from "node:fs/promises";
-import { fileURLToPath } from "node:url";
+
+import { isEntryModule } from "./lib/entry-module.mjs";
 
 function unquote(value) {
   if (
@@ -86,6 +87,6 @@ async function main() {
   console.log(`Build-script policy guard passed (${result.scanned} explicit decisions).`);
 }
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) {
+if (isEntryModule(import.meta.url)) {
   await main();
 }

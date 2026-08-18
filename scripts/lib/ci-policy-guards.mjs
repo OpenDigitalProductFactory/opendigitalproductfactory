@@ -319,6 +319,9 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         // nothing about it.
         "scripts/lib/pregate-console.test.mjs",
         "scripts/lib/pregate-status.test.mjs",
+        // Symlink-robust entry guard shared by the pregate script family: a
+        // guard that misses makes the gate exit 0 silently (false pass).
+        "scripts/lib/entry-module.test.mjs",
       ),
       node("scripts/runtime-artifact-janitor.mjs", "--help"),
     ]),

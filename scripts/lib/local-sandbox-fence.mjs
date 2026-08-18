@@ -8,9 +8,9 @@ import {
   unlinkSync,
   writeFileSync,
 } from "node:fs";
-import { fileURLToPath } from "node:url";
 
-const THIS_FILE = fileURLToPath(import.meta.url);
+import { isEntryModule } from "./entry-module.mjs";
+
 const DEFAULT_MAX_HEARTBEAT_AGE_MS = 8 * 60 * 1000;
 
 function readFence(path) {
@@ -255,7 +255,7 @@ function cli() {
   process.stdout.write(`${JSON.stringify(result)}\n`);
 }
 
-if (process.argv[1] === THIS_FILE) {
+if (isEntryModule(import.meta.url)) {
   try {
     cli();
   } catch (error) {

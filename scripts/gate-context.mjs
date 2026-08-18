@@ -18,9 +18,9 @@
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
 
 import { buildGateContext, formatGateContextMarkdown } from "./lib/gate-context.mjs";
+import { isEntryModule } from "./lib/entry-module.mjs";
 
 // Same conservative ref/path pinning as the gate checkers
 // (js/indirect-command-line-injection): execFile arg arrays, no shell, and a
@@ -131,6 +131,6 @@ export async function main() {
   process.stdout.write(`${formatGateContextMarkdown(context)}\n`);
 }
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) {
+if (isEntryModule(import.meta.url)) {
   await main();
 }
