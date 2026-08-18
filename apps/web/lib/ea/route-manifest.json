@@ -418,7 +418,8 @@
       "dynamicParams": [
         "agentId"
       ],
-      "file": "apps/web/app/api/a2a/coworkers/[agentId]/route.ts"
+      "file": "apps/web/app/api/a2a/coworkers/[agentId]/route.ts",
+      "exposure": "authenticated"
     },
     {
       "routePath": "/api/a2a/coworkers/[agentId]/offers/[offerId]",
@@ -435,7 +436,8 @@
         "agentId",
         "offerId"
       ],
-      "file": "apps/web/app/api/a2a/coworkers/[agentId]/offers/[offerId]/route.ts"
+      "file": "apps/web/app/api/a2a/coworkers/[agentId]/offers/[offerId]/route.ts",
+      "exposure": "authenticated"
     },
     {
       "routePath": "/api/a2a/tasks/[taskId]",
@@ -449,7 +451,8 @@
       "dynamicParams": [
         "taskId"
       ],
-      "file": "apps/web/app/api/a2a/tasks/[taskId]/route.ts"
+      "file": "apps/web/app/api/a2a/tasks/[taskId]/route.ts",
+      "exposure": "authenticated"
     },
     {
       "routePath": "/api/admin/bs-dispatch-test",

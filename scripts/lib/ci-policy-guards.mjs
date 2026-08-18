@@ -248,6 +248,14 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       node("--test", "scripts/check-capability-consumers.test.mjs"),
       node("scripts/check-capability-consumers.mjs"),
     ]),
+    // W17 (BI-810BEC9C): every route handler under apps/web/app/api declares its
+    // exposure class at birth (@exposure pragma collected into route-manifest.json);
+    // the A2A cohort may never be grandfathered; "public" claims must agree with
+    // the proxy's path-segmentation allowlist.
+    guard("endpoint-classification-guard", "Endpoint Classification Guard", [
+      node("--test", "scripts/check-endpoint-classification.test.mjs"),
+      node("scripts/check-endpoint-classification.mjs"),
+    ]),
     guard("finding-substrate-guard", "Finding Substrate Guard", [
       node("--test", "scripts/check-finding-substrate.test.mjs"),
       node("scripts/check-finding-substrate.mjs"),
