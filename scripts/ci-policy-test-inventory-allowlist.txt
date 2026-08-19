@@ -36,6 +36,7 @@ scripts/check-no-monolith-schema.test.mjs
 scripts/check-no-nanoid-import.test.mjs
 scripts/check-no-new-closed-set-strings.test.mjs
 scripts/check-no-new-resource-clone-models.test.mjs
+scripts/check-no-new-notactive-conventions.test.mjs
 scripts/check-no-postgres-initdb-host-mount.test.mjs
 scripts/check-no-private-identity.test.mjs
 scripts/check-no-provider-local-connector-lifecycle.test.mjs
