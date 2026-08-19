@@ -149,6 +149,12 @@ export const TABLE_CLASSIFICATION: Record<string, TableSensitivity> = {
   HospitalityResource: "internal",
   HospitalityCapacityPool: "internal",
   HospitalityResourceAvailability: "internal",
+  // W19 (BI-99C76A90): unified resource-scheduling family — same class as the
+  // vertical clones it will absorb.
+  Resource: "internal",
+  ResourceAvailability: "internal",
+  ResourceCapacityPool: "internal",
+  ResourceCapacityAllocation: "internal",
   BeautyResource: "internal",
   BeautyResourceService: "internal",
   BeautyResourceAvailability: "internal",

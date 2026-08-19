@@ -1,0 +1,72 @@
+{
+  "version": "1",
+  "accountableOwner": "Mark Bodman (markdbodman@gmail.com)",
+  "summary": "BI-99C76A90 (Simplify & Strengthen B5 Seam D / W19, architecture pass 2026-08-16 §3.2-c). EXPAND phase of the vertical clone collapse: migration 20260818090000 creates the unified resource-scheduling family — Resource, ResourceAvailability, ResourceCapacityPool, ResourceCapacityAllocation (all EMPTY at birth, discriminated by the new ResourceDomain enum, born on the W20 RecordLifecycle convention, sourceRef provenance keys for idempotent backfill) — plus one nullable all-NULL RecurringSchedule.recurrenceScheduleId FK (NOT VALID) folding finance billing cadence onto the ONE canonical RecurrenceSchedule. NO row is read, written, or dropped; NO existing column changes; the clone families (Beauty*/Hospitality*/ProviderAvailability) remain authoritative. Dual-read adapters: apps/web/lib/resource-scheduling/ (pure, unit-tested, unmappable legacy values warn instead of coercing). Data backfill + dual-write + clone drop are OPERATOR-REVIEW-REQUIRED per docs/superpowers/plans/2026-08-18-w19-vertical-clone-collapse-data-migration-plan.md — nothing destructive ships in this PR. New CI ratchet: check-no-new-resource-clone-models.mjs (8-clone shrink-only baseline, owner platform-architecture, expiry 2026-11-16) blocks NEW *Availability/*CapacityAllocation/*CapacityPool/*RecurrenceSchedule/*RecurringSchedule-shaped models outside the unified family. No sensitive/subject fields: rows describe operating fixtures (chairs, tables, pools) and time windows; the only person-adjacent columns are opaque provenance refs (subjectRef/sourceRef) to rows already governed in their identity homes.",
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "Resource",
+      "lifecycleDisposition": "domain-lifecycle-managed (RecordLifecycle enum + lifecycleAt; not growth-shaped, no retention enrollment required)",
+      "fields": [
+        {
+          "resolution": "not-applicable",
+          "reason": "Operating-fixture descriptors (kindSlug/label/capacity) plus opaque provenance refs; no personal or sensitive data is stored, subjectRef/sourceRef only point at rows governed in their identity homes.",
+          "provenance": "packages/db/prisma/schema/resource-scheduling.prisma",
+          "flags": []
+        }
+      ]
+    },
+    {
+      "kind": "model",
+      "assetId": "ResourceAvailability",
+      "lifecycleDisposition": "domain-lifecycle-managed (RecordLifecycle enum + lifecycleAt)",
+      "fields": [
+        {
+          "resolution": "not-applicable",
+          "reason": "Time windows against a Resource row; no personal data beyond what the referenced resource already carries.",
+          "provenance": "packages/db/prisma/schema/resource-scheduling.prisma",
+          "flags": []
+        }
+      ]
+    },
+    {
+      "kind": "model",
+      "assetId": "ResourceCapacityPool",
+      "lifecycleDisposition": "domain-lifecycle-managed (RecordLifecycle enum + lifecycleAt)",
+      "fields": [
+        {
+          "resolution": "not-applicable",
+          "reason": "Aggregate capacity descriptors (covers, batches, delivery windows); no personal data.",
+          "provenance": "packages/db/prisma/schema/resource-scheduling.prisma",
+          "flags": []
+        }
+      ]
+    },
+    {
+      "kind": "model",
+      "assetId": "ResourceCapacityAllocation",
+      "lifecycleDisposition": "domain-lifecycle-managed (RecordLifecycle enum + lifecycleAt; append-preserving ledger, releasedAt retained; retention posture inherits the clone ledgers' until the operator-reviewed migration)",
+      "fields": [
+        {
+          "resolution": "inherited",
+          "reason": "bookingId/bookingHoldId/demandRef mirror the exact link shape of the clone ledgers (BeautyCapacityAllocation/HospitalityCapacityAllocation); customer-adjacent data stays in StorefrontBooking under its existing governance.",
+          "provenance": "packages/db/prisma/schema/verticals-beauty-hospitality.prisma (clone contract) → packages/db/prisma/schema/resource-scheduling.prisma",
+          "flags": []
+        }
+      ]
+    },
+    {
+      "kind": "model",
+      "assetId": "RecurringSchedule",
+      "lifecycleDisposition": "unchanged (one nullable all-NULL FK column added; finance billing lifecycle unaffected)",
+      "fields": [
+        {
+          "resolution": "not-applicable",
+          "reason": "recurrenceScheduleId is a nullable FK to RecurrenceSchedule, NULL for every existing row; frequency remains authoritative until the operator-reviewed fold.",
+          "provenance": "packages/db/prisma/schema/finance.prisma",
+          "flags": []
+        }
+      ]
+    }
+  ]
+}

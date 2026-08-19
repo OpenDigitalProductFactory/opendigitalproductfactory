@@ -62,6 +62,10 @@ model StorefrontConfig {
   beautyResources                BeautyResource[]
   beautyResourceServices         BeautyResourceService[]
   beautyCapacityAllocations      BeautyCapacityAllocation[]
+  // W19 unified resource-scheduling family (BI-99C76A90).
+  resources                      Resource[]                       @relation("ResourceStorefront")
+  resourceCapacityPools          ResourceCapacityPool[]           @relation("ResourceCapacityPoolStorefront")
+  resourceCapacityAllocations    ResourceCapacityAllocation[]     @relation("ResourceCapacityAllocationStorefront")
 
   @@unique([id, organizationId])
   @@index([archetypeId]) // FK-leading (spine): storefront-by-archetype relation join, apps/web/lib/demo/load-demo-business.ts:335
@@ -223,6 +227,7 @@ model StorefrontBooking {
   hospitalityAllocations      HospitalityCapacityAllocation[] @relation("HospitalityAllocationBooking")
   hospitalityServiceTurn      HospitalityServiceTurn?         @relation("HospitalityServiceTurnBooking")
   beautyAllocations           BeautyCapacityAllocation[]      @relation("BeautyAllocationBooking")
+  resourceAllocations         ResourceCapacityAllocation[]    @relation("ResourceAllocationBooking")
   parentBooking               StorefrontBooking?              @relation("BookingRecurrence", fields: [parentBookingId], references: [id])
   childBookings               StorefrontBooking[]             @relation("BookingRecurrence")
   careAppointment             CareAppointment?
@@ -317,6 +322,7 @@ model BookingHold {
   hospitalityResource    HospitalityResource?            @relation("HospitalityHoldResource", fields: [hospitalityResourceId, organizationId], references: [id, organizationId], onDelete: Restrict)
   hospitalityAllocations HospitalityCapacityAllocation[] @relation("HospitalityAllocationHold")
   beautyAllocations      BeautyCapacityAllocation[]      @relation("BeautyAllocationHold")
+  resourceAllocations    ResourceCapacityAllocation[]    @relation("ResourceAllocationHold")
 
   @@unique([id, organizationId])
   @@index([storefrontId, slotStart, slotEnd])

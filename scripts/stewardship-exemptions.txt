@@ -70,6 +70,10 @@ LifecycleEvent  domain-lifecycle-managed  # Append-only transition evidence foll
 PlateauMembership  derived-projection  # Baseline intervals are rebuilt from canonical operational evidence, while curated target membership is changed through the owning architecture lifecycle; neither is independently age-purged.
 LifecycleGap  domain-lifecycle-managed  # Gap rows close, dismiss, or scope through explicit lifecycle-gap reconciliation and remain as decision provenance; age alone cannot decide whether the signal or linked work is still material.
 OperationalSceneLayout  domain-lifecycle-managed  # Operator-authored geometry follows the owning organization's explicit layout lifecycle and cascades with the organization; an age-based sweep could delete an active floor plan.
+Resource  domain-lifecycle-managed  # W19 unified resource: retires through explicit operating actions and follows its organization/storefront lifecycle; age cannot determine service status.
+ResourceAvailability  domain-lifecycle-managed  # Follows its Resource and cascades with it; independent age-based deletion would silently reopen or close an active resource.
+ResourceCapacityPool  domain-lifecycle-managed  # Pooled capacity follows its storefront's operating configuration; not an age-purgeable record.
+ResourceCapacityAllocation  domain-lifecycle-managed  # Allocation ledger rows follow their booking/hold lifecycle (audit of seated demand); the W19 migration plan owns any future windowing decision.
 HospitalityResource  domain-lifecycle-managed  # Physical venue resources retire through explicit operating actions and follow their organization/storefront lifecycle; age cannot determine whether a table or station is still in service.
 HospitalityCapacityPool  domain-lifecycle-managed  # Aggregate kitchen, bake, and delivery capacity retires through explicit operating actions; an age sweep could remove a still-active capacity definition.
 HospitalityResourceAvailability  domain-lifecycle-managed  # Availability windows follow their HospitalityResource and cascade with it; independent age-based deletion would silently reopen or close an active resource.
