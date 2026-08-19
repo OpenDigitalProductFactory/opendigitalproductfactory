@@ -30,7 +30,7 @@ Use this skill when someone — in Build Studio **or on-demand in chat** — ask
 
 ## The loop you steward
 
-1. **Extract** — `parsePrismaSchema` reads `schema.prisma` into models, fields, relations, cardinality, and FK-index facts (`apps/web/lib/integrate/code-graph/extractors/prisma-schema-adapter.ts`).
+1. **Extract** — `parsePrismaSchema` reads `schema.prisma` into models, fields, relations, cardinality, and FK-index facts (`apps/web/lib/build/code-graph/extractors/prisma-schema-adapter.ts`).
 2. **Mirror** — `reconcileDataModelMirror` projects those facts into the EA substrate as `data_object` elements + `associated_with` relationships, idempotently, under the system-owned **Data Model** view; it writes an `EaSnapshot` on material change and **stops** (with a conformance issue) on duplicate identity (`apps/web/lib/ea/data-model-mirror-apply.ts`).
 3. **View** — the ERD renders at `/ea/data-model` (and the generic `/ea/views/[id]` renderer) with an evolution timeline.
 4. **Steward** — `runDataArchitectureSteward` runs deterministic drift detectors (FK-without-index, missing-inverse-relation, orphan-model, ignored-model) and reconciles them into self-healing `EaConformanceIssue` rows (`apps/web/lib/ea/data-architecture-steward-apply.ts`).

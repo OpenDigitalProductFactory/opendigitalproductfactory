@@ -13,7 +13,7 @@
 //
 // Pure: no DB, no graph traversal here. The caller supplies the report.
 
-import type { ChangeImpactReport } from "@/lib/integrate/change-impact";
+import type { ChangeImpactReport } from "@/lib/build/change-impact";
 import type { BlastRadius } from "./work-warrant";
 
 /**

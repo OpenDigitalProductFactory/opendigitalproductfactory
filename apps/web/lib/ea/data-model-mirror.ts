@@ -18,7 +18,7 @@ import type {
   PrismaSchemaFacts,
   PrismaModelFact,
   PrismaRelationFact,
-} from "../integrate/code-graph/extractors/prisma-schema-adapter";
+} from "../build/code-graph/extractors/prisma-schema-adapter";
 import { DATA_ASSET_REGISTRY, lookupAssetByPrismaModel } from "../govern/data/assets";
 
 export const DATA_MODEL_MIRROR_VERSION = "data-model-mirror-v1";

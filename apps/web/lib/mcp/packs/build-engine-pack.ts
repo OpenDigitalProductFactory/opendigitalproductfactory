@@ -79,7 +79,7 @@ const definitions: ToolDefinition[] = [
 
 async function reconcileBuildEnginesHandler(params: Record<string, unknown>, userId: string): Promise<ToolResult> {
   const offline = params["offline"] === true;
-  const { reconcileBuildEngines } = await import("@/lib/integrate/build-engine-reconcile");
+  const { reconcileBuildEngines } = await import("@/lib/build/build-engine-reconcile");
   const summary = await reconcileBuildEngines({ offline, actorUserId: userId });
   return {
     success: true,
@@ -103,7 +103,7 @@ async function provisionBuildEngineHandler(params: Record<string, unknown>, user
     };
   }
   const offline = params["offline"] === true;
-  const { provisionBuildEngine } = await import("@/lib/integrate/build-engine-provision");
+  const { provisionBuildEngine } = await import("@/lib/build/build-engine-provision");
   const outcome = await provisionBuildEngine(engineId, { offline, actorUserId: userId });
   const ok = outcome.kind === "provisioned" || outcome.kind === "already-present";
   const message =
@@ -125,7 +125,7 @@ async function getBuildEngineReadinessHandler(params: Record<string, unknown>): 
   // + "Probe all engines" action: one implementation of
   // load-vs-live-probe. Live rows carry the per-engine failure reason.
   const { loadBuildEngineReadiness, probeBuildEngineReadiness } = await import(
-    "@/lib/integrate/build-engine-readiness"
+    "@/lib/build/build-engine-readiness"
   );
   const readiness = refresh
     ? await probeBuildEngineReadiness()

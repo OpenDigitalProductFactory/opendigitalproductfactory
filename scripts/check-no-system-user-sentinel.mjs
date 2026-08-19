@@ -41,9 +41,9 @@ export const ALLOWLIST = new Set([
   // Two non-FK uses: (1) the in-memory getAvailableTools() admin context, never
   // persisted; (2) runAgenticLoop(), which writes only ToolExecution.userId — a
   // plain String column with no @relation to User.
-  "apps/web/lib/integrate/build-pipeline.ts",
+  "apps/web/lib/build/build-pipeline.ts",
   // Writes ToolExecution.userId — a non-referential String column, not a User FK.
-  "apps/web/lib/integrate/sandbox/agents/dpf-native-agent-runner.ts",
+  "apps/web/lib/build/sandbox/agents/dpf-native-agent-runner.ts",
 ]);
 
 export const PATTERNS = [

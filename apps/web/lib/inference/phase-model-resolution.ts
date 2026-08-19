@@ -53,12 +53,12 @@ import {
 import {
   getBuildStudioConfig,
   type BuildStudioDispatchConfig,
-} from "@/lib/integrate/build-studio-config";
+} from "@/lib/build/build-studio-config";
 import {
   preflightLocalEndpoint,
   isLikelyNonChatModel,
   OPENCODE_MIN_CONTEXT_TOKENS,
-} from "@/lib/integrate/opencode-dispatch";
+} from "@/lib/build/opencode-dispatch";
 import { getOllamaBaseUrl } from "@/lib/inference/ollama-url";
 
 // ─── Public types ─────────────────────────────────────────────────────────────

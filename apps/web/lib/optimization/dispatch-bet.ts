@@ -136,7 +136,7 @@ export async function dispatchConsolidationBet(input: {
       ideateDispatched = true;
       void (async () => {
         try {
-          const { dispatchIdeateForApprovedBuild } = await import("@/lib/integrate/ideate-on-approval");
+          const { dispatchIdeateForApprovedBuild } = await import("@/lib/build/ideate-on-approval");
           await dispatchIdeateForApprovedBuild({ buildId: result.build.buildId, userId: input.userId });
         } catch (err) {
           console.error(

@@ -29,7 +29,7 @@ vi.mock("@dpf/db", () => ({
   },
 }));
 
-vi.mock("@/lib/integrate/build-studio-config", () => ({
+vi.mock("@/lib/build/build-studio-config", () => ({
   getBuildStudioConfig: vi.fn().mockResolvedValue({}),
 }));
 

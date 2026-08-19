@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import { CodeIntelligenceStatusCard } from "./CodeIntelligenceStatusCard";
-import type { CodeGraphFreshness } from "@/lib/integrate/code-graph-access";
+import type { CodeGraphFreshness } from "@/lib/build/code-graph-access";
 import { buildCodeGraphFreshnessTrust } from "@/lib/trust-vector/adapters/code-graph";
 
 function freshness(overrides: Partial<CodeGraphFreshness> = {}): CodeGraphFreshness {

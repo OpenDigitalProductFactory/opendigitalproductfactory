@@ -177,7 +177,7 @@ Three prompt sources compose into the system context:
 
 - **`PromptTemplate`** (schema ~line 9524) — versioned, overridable templates seeded from `prompts/<category>/<slug>.prompt.md`. Frontmatter carries `name`, `category` (`route-persona`, `build-phase`, `specialist`, `platform-identity`, …), `agent_id`, `reports_to`, `value_stream`, `hitl_tier`, `composesFrom` (for `{{include:...}}` composition), `perspective`, `heuristics`, `interpretiveModel`. Hardcoded TS constants are fallback only (AGENTS.md §2).
 - **`AgentPromptContext`** (schema ~line attached to `Agent`) — the agent's cognitive frame, per Scott Page: `perspective` (how it frames problems), `heuristics` (how it searches), `interpretiveModel` (what it optimises for), `domainTools`.
-- **Phase prompts** — Build Studio assembles `ideate → plan → build → review → ship` prompts in `apps/web/lib/integrate/build-agent-prompts.ts`, injecting IT4IT context, project context, and prior-phase evidence.
+- **Phase prompts** — Build Studio assembles `ideate → plan → build → review → ship` prompts in `apps/web/lib/build/build-agent-prompts.ts`, injecting IT4IT context, project context, and prior-phase evidence.
 
 ### 3.5 Skills — *packaged, reusable competencies*
 
@@ -315,7 +315,7 @@ flowchart TB
 | Identity — projection | `apps/web/lib/identity/aidoc-resolver.ts` (`InternalAIDoc`, `projectInternalAIDoc`) |
 | LLM routing | `AgentModelConfig`, `AgentExecutionConfig`; `docs/user-guide/ai-workforce/model-routing-lifecycle.md`; `apps/web/lib/ai-inference.ts` |
 | MCP servers & tools | `McpServer`, `McpServerTool`, `AgentToolGrant`; `apps/web/app/api/mcp/v1/route.ts`; `apps/web/lib/mcp-tools.ts`; `apps/web/lib/agent-grants.ts` |
-| Prompts | `prompts/<category>/<slug>.prompt.md`; `PromptTemplate`; `AgentPromptContext`; `apps/web/lib/integrate/build-agent-prompts.ts` |
+| Prompts | `prompts/<category>/<slug>.prompt.md`; `PromptTemplate`; `AgentPromptContext`; `apps/web/lib/build/build-agent-prompts.ts` |
 | Skills | `SkillDefinition`, `SkillAssignment`; `packages/dpf-skill-pack/skills/<slug>/SKILL.md` |
 | Governance & authority | `AgentGovernanceProfile`, `DelegationGrant`, `DelegationChain`, `AuthorityBinding`, `CoworkerActionEnvelope`; `apps/web/lib/govern/authority/`; `apps/web/lib/mcp-governed-execute.ts`; `packages/db/src/seed-ea-sysml-agent-authority.ts`; AGENTS.md §8 |
 | Lifecycle & performance | `Agent.status/lifecycleStage`, `AgentPerformance`, `CoworkerSelfAssessment`, `CoworkerCapabilityNeed` |

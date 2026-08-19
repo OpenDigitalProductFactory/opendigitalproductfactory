@@ -6,7 +6,7 @@
 
 ## Why this is a runbook, not a code change
 
-Both flags already exist and merge inert (`apps/web/lib/integrate/build-studio-config.ts`):
+Both flags already exist and merge inert (`apps/web/lib/build/build-studio-config.ts`):
 
 - `DPF_BUILD_MODEL_TIER_ROUTING` — routes `robust`-tier builds to the configured frontier provider (Claude > Codex > Grok). Default **off**.
 - `DPF_BUILD_QUALITY_FIRST_RIGHTSIZING` — quality-first defaults (robust for all substantive work; local only for the trivial small doc/chore tail) **and** the deliverable-sensitivity risk axis (a HIGH-sensitivity change escalates its build process regardless of size). Default **off**.

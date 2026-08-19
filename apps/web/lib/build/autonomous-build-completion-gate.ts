@@ -1,4 +1,4 @@
-import type { AutonomousPlaybookMode } from "@/lib/integrate/build-studio-config";
+import type { AutonomousPlaybookMode } from "@/lib/build/build-studio-config";
 
 type Logger = Pick<Console, "log" | "error">;
 
@@ -12,7 +12,7 @@ type CompletionGateDeps = {
 
 async function defaultDeps(): Promise<CompletionGateDeps> {
   const { getAutonomousPlaybookMode } = await import(
-    "@/lib/integrate/build-studio-config"
+    "@/lib/build/build-studio-config"
   );
   const { resolveAutonomousBuildPhaseEligibility } = await import(
     "@/lib/build/autonomous-build-phase-runtime"

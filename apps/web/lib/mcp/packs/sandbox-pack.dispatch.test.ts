@@ -37,15 +37,15 @@ vi.mock("@/lib/tak/prompt-loader", () => ({
   loadPrompt: vi.fn(async (_category: string, _slug: string, fallback: string) => fallback),
 }));
 
-vi.mock("@/lib/integrate/sandbox/sandbox-admin", () => ({
+vi.mock("@/lib/build/sandbox/sandbox-admin", () => ({
   diagnoseSandboxReadiness: mockDiagnoseSandboxReadiness,
 }));
 
-vi.mock("@/lib/integrate/sandbox/sandbox-recovery", () => ({
+vi.mock("@/lib/build/sandbox/sandbox-recovery", () => ({
   recoverSandbox: mockRecoverSandbox,
 }));
 
-vi.mock("@/lib/integrate/identity-privacy", () => ({
+vi.mock("@/lib/build/identity-privacy", () => ({
   resolveHiveToken: mockResolveHiveToken,
   getPlatformIdentity: vi.fn(async () => ({
     authorName: "dpf-agent-a1b2c3d4",
@@ -58,7 +58,7 @@ vi.mock("@/lib/integrate/identity-privacy", () => ({
   generateAnonymousCommitMessage: vi.fn(() => "feat: Sandbox fix\n\nSigned-off-by: dpf-agent-a1b2c3d4 <agent-a1b2c3d4@hive.dpf>"),
 }));
 
-vi.mock("@/lib/integrate/github-api-commit", () => ({
+vi.mock("@/lib/build/github-api-commit", () => ({
   createBranchAndPR: mockCreateBranchAndPR,
 }));
 
@@ -67,7 +67,7 @@ vi.mock("@/lib/platform-dev-policy", () => ({
 }));
 
 import { executeTool, PLATFORM_TOOLS } from "@/lib/mcp-tools";
-import { getBuildPhasePrompt } from "@/lib/integrate/build-agent-prompts";
+import { getBuildPhasePrompt } from "@/lib/build/build-agent-prompts";
 
 const FORBIDDEN_SANDBOX_HANDOFF_PATTERNS = [
   "user must run",

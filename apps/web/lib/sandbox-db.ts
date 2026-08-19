@@ -1,2 +1,2 @@
-// Shim — moved to lib/integrate/sandbox/sandbox-db.ts (Phase 10 refactoring)
-export * from "./integrate/sandbox/sandbox-db";
+// Shim — moved to lib/build/sandbox/sandbox-db.ts (Phase 10 refactoring)
+export * from "./build/sandbox/sandbox-db";

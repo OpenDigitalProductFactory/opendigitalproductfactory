@@ -132,7 +132,7 @@ vi.mock("@dpf/db", () => ({
 }));
 
 const buildBranch = vi.hoisted(() => ({ abandonBuildBranch: vi.fn(async () => {}) }));
-vi.mock("@/lib/integrate/sandbox/build-branch", () => buildBranch);
+vi.mock("@/lib/build/sandbox/build-branch", () => buildBranch);
 
 async function runTx(cb: (tx: unknown) => Promise<boolean>) {
   return cb({

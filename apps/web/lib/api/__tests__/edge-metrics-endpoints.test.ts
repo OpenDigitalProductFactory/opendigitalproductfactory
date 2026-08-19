@@ -16,8 +16,8 @@ vi.mock("../../auth/edge-node-token.js", () => ({
 }));
 
 import { resolveEdgeNodeAuth } from "../../auth/edge-node-token.js";
-import { metricsCache } from "../../edge/metrics-cache.js";
-import { resetEdgeMetricsRateLimitForTesting } from "../../edge/metrics-rate-limit.js";
+import { metricsCache } from "../../edge-node/metrics-cache.js";
+import { resetEdgeMetricsRateLimitForTesting } from "../../edge-node/metrics-rate-limit.js";
 import { POST as metricsPost } from "../../../app/api/v1/edge/metrics/route.js";
 
 const mockAuth = vi.mocked(resolveEdgeNodeAuth);

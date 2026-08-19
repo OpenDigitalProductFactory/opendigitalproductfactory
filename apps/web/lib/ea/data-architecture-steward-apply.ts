@@ -10,7 +10,7 @@ import {
   reconcileConformanceIssues,
   type ConformanceIssueClient,
 } from "./conformance-issue-reconciler";
-import type { PrismaSchemaFacts } from "../integrate/code-graph/extractors/prisma-schema-adapter";
+import type { PrismaSchemaFacts } from "../build/code-graph/extractors/prisma-schema-adapter";
 
 const STEWARD_ISSUE_TYPES = [
   "fk-without-index",

@@ -16,7 +16,7 @@
 
 import { prisma } from "@dpf/db";
 
-import { SANDBOX_RECOVERY_ACTIONS, isSandboxRecoveryAction } from "@/lib/integrate/sandbox/sandbox-admin-types";
+import { SANDBOX_RECOVERY_ACTIONS, isSandboxRecoveryAction } from "@/lib/build/sandbox/sandbox-admin-types";
 import { lazyFsPromises, lazyPath, lazyChildProcess, lazyUtil } from "@/lib/shared/lazy-node";
 import { resolveActiveBuildId, extractBuildIdHint, logBuildActivity } from "@/lib/mcp/build-tool-helpers";
 import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
@@ -255,7 +255,7 @@ async function diagnoseSandbox(params: Record<string, unknown>, userId: string):
   const buildId = await resolveActiveBuildId(userId, extractBuildIdHint(params));
   if (!buildId) return { success: false, error: "No active build.", message: "No active build." };
 
-  const { diagnoseSandboxReadiness } = await import("@/lib/integrate/sandbox/sandbox-admin");
+  const { diagnoseSandboxReadiness } = await import("@/lib/build/sandbox/sandbox-admin");
   const snapshot = await diagnoseSandboxReadiness({
     buildId,
     expectedWorkspaceRoot: optionalString(params["expectedWorkspaceRoot"]),
@@ -286,7 +286,7 @@ async function recoverSandboxTool(params: Record<string, unknown>, userId: strin
   const confirmation = params["confirmation"] && typeof params["confirmation"] === "object"
     ? params["confirmation"] as { discardSandboxChanges?: boolean; acknowledgeReset?: boolean; reason?: string }
     : null;
-  const { recoverSandbox } = await import("@/lib/integrate/sandbox/sandbox-recovery");
+  const { recoverSandbox } = await import("@/lib/build/sandbox/sandbox-recovery");
   const result = await recoverSandbox({
     buildId,
     action,
@@ -365,7 +365,7 @@ async function startSandbox(_params: Record<string, unknown>, userId: string): P
           // may have lost any on-demand-provisioned engine. Restore desired,
           // previously-provisioned, now-absent engines in the background —
           // a no-op for fresh or baked-only sandboxes.
-          void import("@/lib/integrate/build-engine-reconcile")
+          void import("@/lib/build/build-engine-reconcile")
             .then((m) => m.reconcileBuildEngines({ actorUserId: userId }))
             .catch(() => undefined);
           return { success: true, message: `Sandbox (${sandboxId}) started successfully and is ready.`, data: { status: "running" } };
@@ -395,7 +395,7 @@ async function runSandboxTestsTool(
   const buildId = await resolveActiveBuildId(userId, extractBuildIdHint(params));
   if (!buildId) return { success: false, error: "No active build.", message: "No active build." };
 
-  const { isSandboxAvailable: rstAvail } = await import("@/lib/integrate/sandbox/build-branch");
+  const { isSandboxAvailable: rstAvail } = await import("@/lib/build/sandbox/build-branch");
   if (!(await rstAvail())) {
     return { success: false, error: "Sandbox not running.", message: "The sandbox (dpf-sandbox-1) is not running. Call start_build first." };
   }
@@ -622,7 +622,7 @@ async function runSandboxFileTool(
 
   // Simple availability check — no slot management, no pool acquisition.
   // If the sandbox container is running, it is available. Period.
-  const { isSandboxAvailable } = await import("@/lib/integrate/sandbox/build-branch");
+  const { isSandboxAvailable } = await import("@/lib/build/sandbox/build-branch");
   const { execInSandbox: sbExec } = await import("@/lib/sandbox");
   const available = await isSandboxAvailable();
   if (!available) {

@@ -23,7 +23,7 @@ vi.mock("@dpf/db", () => ({
 }));
 
 vi.mock("@/lib/actions/shared/guards", () => ({ requireCapability: vi.fn() }));
-vi.mock("@/lib/integrate/identity-privacy", () => ({
+vi.mock("@/lib/build/identity-privacy", () => ({
   getDisplayPseudonym: vi.fn(async () => "contributor-123"),
 }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));

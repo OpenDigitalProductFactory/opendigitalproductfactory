@@ -55,7 +55,7 @@ export function scheduleInitialCodeGraphBootstrap(input: {
     void (async () => {
       try {
         const ensure = input.ensure ?? (async () => {
-          const { ensureCodeGraphInitialized } = await import("@/lib/integrate/code-graph-refresh");
+          const { ensureCodeGraphInitialized } = await import("@/lib/build/code-graph-refresh");
           await ensureCodeGraphInitialized();
         });
         await ensure();
@@ -320,8 +320,8 @@ export async function recoverContradictoryBuildExecStatesOnBoot(
   if (process.env.NEXT_RUNTIME && process.env.NEXT_RUNTIME !== "nodejs") return null;
   try {
     const { prisma, Prisma } = await import("@dpf/db");
-    const { planExecStateRecovery } = await import("@/lib/integrate/build-exec-types");
-    type ExecStateLike = import("@/lib/integrate/build-exec-types").ExecStateLike;
+    const { planExecStateRecovery } = await import("@/lib/build/build-exec-types");
+    type ExecStateLike = import("@/lib/build/build-exec-types").ExecStateLike;
     // Scan only rows still in the build phase; filter the null/contradictory
     // discrimination in JS to avoid Prisma JSON-null filter subtleties.
     const candidates = await prisma.featureBuild.findMany({
@@ -468,7 +468,7 @@ export async function reconcileDeployedShipBuilds(
   logger: Pick<Console, "log" | "error"> = console,
 ): Promise<{ completed: number } | null> {
   if (process.env.NEXT_RUNTIME && process.env.NEXT_RUNTIME !== "nodejs") return null;
-  const { isAutoCompleteEnabled } = await import("@/lib/integrate/ship-on-review-approval");
+  const { isAutoCompleteEnabled } = await import("@/lib/build/ship-on-review-approval");
   if (!isAutoCompleteEnabled()) return null;
   try {
     const { prisma } = await import("@dpf/db");
@@ -608,13 +608,13 @@ export async function resumeStrandedBuildsOnBoot(
   try {
     const { prisma } = await import("@dpf/db");
     const { classifyContradictoryExecState } = await import(
-      "@/lib/integrate/build-exec-types"
+      "@/lib/build/build-exec-types"
     );
-    type ExecStateLike = import("@/lib/integrate/build-exec-types").ExecStateLike;
+    type ExecStateLike = import("@/lib/build/build-exec-types").ExecStateLike;
     // Age-out cap primitives (BI-A009313E). Lazy-imported to keep the boot module
     // graph small, matching this file's convention.
     const { isStrandedPreBuildAbandonable, STRANDED_ABANDON_MS } = await import(
-      "@/lib/integrate/resume-pre-build-phase"
+      "@/lib/build/resume-pre-build-phase"
     );
     const now = new Date();
     const cutoff = new Date(now.getTime() - staleAfterMs);
@@ -649,7 +649,7 @@ export async function resumeStrandedBuildsOnBoot(
       opts.resumePreBuild ??
       ((args: { buildId: string; phase: string; userId: string }) => {
         void (async () => {
-          const { resumePreBuildPhase } = await import("@/lib/integrate/resume-pre-build-phase");
+          const { resumePreBuildPhase } = await import("@/lib/build/resume-pre-build-phase");
           const outcome = await resumePreBuildPhase(args);
           await prisma.buildActivity
             .create({
@@ -702,7 +702,7 @@ export async function resumeStrandedBuildsOnBoot(
       opts.abandonStale ??
       (async (args: { buildId: string; phase: string; ageMs: number }) => {
         const { abandonStrandedPreBuild } = await import(
-          "@/lib/integrate/resume-pre-build-phase"
+          "@/lib/build/resume-pre-build-phase"
         );
         return abandonStrandedPreBuild(args);
       });
@@ -1464,7 +1464,7 @@ export async function register() {
       setTimeout(async () => {
         try {
           const { initializePool } = await import(
-            "@/lib/integrate/sandbox/sandbox-pool"
+            "@/lib/build/sandbox/sandbox-pool"
           );
           await initializePool();
           console.log(

@@ -3,7 +3,7 @@
 // Grok (xAI) device-code OAuth — the "sign in with Google" alternative to pasting an xAI
 // API key. These server actions are the operator (UI) entry points: they add the
 // manage_provider_connections session check, then delegate to the shared, auth-free core
-// in lib/integrate/grok-device-login-core.ts. The same core is reused by the MCP tools
+// in lib/build/grok-device-login-core.ts. The same core is reused by the MCP tools
 // (grok_signin_start / grok_signin_status), which gate on the same capability via the
 // bearer token before dispatch.
 //
@@ -20,7 +20,7 @@ import { requireCapability } from "@/lib/actions/shared/guards";
 import {
   grokDeviceLoginStart,
   grokDeviceLoginComplete,
-} from "@/lib/integrate/grok-device-login-core";
+} from "@/lib/build/grok-device-login-core";
 
 async function requireManageProviders(): Promise<void> {
   await requireCapability("manage_provider_connections");

@@ -1819,7 +1819,7 @@ export async function sendMessage(input: {
     }
 
     if (activeBuild && buildPlan?.tasks?.length && !buildAlreadyComplete) {
-      const { runBuildOrchestrator } = await import("@/lib/integrate/build-orchestrator");
+      const { runBuildOrchestrator } = await import("@/lib/build/build-orchestrator");
       const { agentEventBus } = await import("@/lib/agent-event-bus");
 
       const orchestratorResult = await runBuildOrchestrator({
@@ -2030,7 +2030,7 @@ export async function sendMessage(input: {
         agentEventBus.emit(input.threadId, { type: "tool:start", tool: "scout_research", iteration: 0 });
 
         try {
-          const { dispatchScoutResearch } = await import("@/lib/integrate/scout-dispatch");
+          const { dispatchScoutResearch } = await import("@/lib/build/scout-dispatch");
           const scoutResult = await dispatchScoutResearch({
             buildId: resolvedBuildId,
             featureTitle: buildForScout?.title ?? "",
@@ -2084,8 +2084,8 @@ export async function sendMessage(input: {
         agentEventBus.emit(input.threadId, { type: "tool:start", tool: "codebase_research", iteration: 0 });
 
         try {
-          const { dispatchIdeateResearch } = await import("@/lib/integrate/ideate-dispatch");
-          const { getBuildStudioConfig } = await import("@/lib/integrate/build-studio-config");
+          const { dispatchIdeateResearch } = await import("@/lib/build/ideate-dispatch");
+          const { getBuildStudioConfig } = await import("@/lib/build/build-studio-config");
           const config = await getBuildStudioConfig();
           console.log(`[coworker] Ideate research requested — dispatching to ${config.provider === "claude" ? "Claude" : config.provider === "grok" ? "Grok" : "Codex"} CLI`);
 

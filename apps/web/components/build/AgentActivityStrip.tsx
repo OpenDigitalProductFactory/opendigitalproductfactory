@@ -12,7 +12,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, useRef } from "react";
-import { buildDependencyGraph } from "@/lib/integrate/task-dependency-graph";
+import { buildDependencyGraph } from "@/lib/build/task-dependency-graph";
 import type { FeatureBuildRow } from "@/lib/feature-build-types";
 
 // ─── Types ──────────────────────────────────────────────────────────────────

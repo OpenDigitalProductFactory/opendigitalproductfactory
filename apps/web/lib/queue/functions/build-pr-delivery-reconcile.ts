@@ -17,7 +17,7 @@ export async function runBuildPrDeliveryReconcile(): Promise<{
   const {
     observeGithubPullRequest,
     projectGithubPrReadiness,
-  } = await import("@/lib/integrate/github-pr-readiness");
+  } = await import("@/lib/build/github-pr-readiness");
   const {
     executeBuildPrDeliveryAction,
     resolveBuildPrReconcilerMode,
@@ -87,7 +87,7 @@ export async function runBuildPrDeliveryReconcile(): Promise<{
 
     try {
       const { getAutonomousPlaybookMode } = await import(
-        "@/lib/integrate/build-studio-config"
+        "@/lib/build/build-studio-config"
       );
       const autonomousMode = getAutonomousPlaybookMode();
       let semanticBuildId: string | null = null;

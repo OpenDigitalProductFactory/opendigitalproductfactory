@@ -243,7 +243,7 @@ async function promoteToBuildStudioHandler(params: Record<string, unknown>, user
   if (result.autoApprovedDispatchEligible) {
     void (async () => {
       try {
-        const { dispatchIdeateForApprovedBuild } = await import("@/lib/integrate/ideate-on-approval");
+        const { dispatchIdeateForApprovedBuild } = await import("@/lib/build/ideate-on-approval");
         await dispatchIdeateForApprovedBuild({ buildId: result.build.buildId, userId });
       } catch (err) {
         console.error(
@@ -353,7 +353,7 @@ async function proposeFileChangeHandler(
   userId: string,
   context?: { threadId?: string },
 ): Promise<ToolResult> {
-  const { readProjectFile, writeProjectFile, generateSimpleDiff } = await import("@/lib/integrate/codebase-tools");
+  const { readProjectFile, writeProjectFile, generateSimpleDiff } = await import("@/lib/build/codebase-tools");
   const path = String(params.path ?? "");
   const newContent = String(params.newContent ?? "");
   const description = String(params.description ?? "");

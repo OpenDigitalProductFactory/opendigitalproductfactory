@@ -3,7 +3,7 @@ import type { Prisma } from "@dpf/db";
 import { isRecord } from "@/lib/shared/coerce";
 import {
   parsePersistedWorkPatternExperimentExecution,
-} from "@/lib/integrate/work-pattern-experiment-runtime";
+} from "@/lib/build/work-pattern-experiment-runtime";
 
 import {
   activateWorkPattern,

@@ -38,7 +38,7 @@ import {
 } from "@/lib/build/business-build-brief";
 import { routeAndCall } from "@/lib/routed-inference";
 import * as crypto from "crypto";
-import { listReleasableSandboxFiles } from "@/lib/integrate/sandbox/sandbox";
+import { listReleasableSandboxFiles } from "@/lib/build/sandbox/sandbox";
 import {
   attachBuildStudioWorkCapsule,
   type BuildStudioCapsuleDb,
@@ -126,7 +126,7 @@ export async function createFeatureBuild(input: {
   });
 
   // EP-COST Phase 3: start ideate-phase tracking (fire-and-forget). .catch swallows the drain-time QuiescingError startBuildPhaseRun throws (BI-QUIESCE-005).
-  const { startBuildPhaseRun } = await import("@/lib/integrate/build-phase-run");
+  const { startBuildPhaseRun } = await import("@/lib/build/build-phase-run");
   void startBuildPhaseRun(result.buildId, "ideate").catch(() => {});
 
   return { ok: true, buildId: result.buildId };
@@ -193,7 +193,7 @@ export async function approveBuildStart(buildId: string): Promise<{ approvedAt: 
   if (build.originatingBacklogItemId) {
     void (async () => {
       try {
-        const { dispatchIdeateForApprovedBuild } = await import("@/lib/integrate/ideate-on-approval");
+        const { dispatchIdeateForApprovedBuild } = await import("@/lib/build/ideate-on-approval");
         await dispatchIdeateForApprovedBuild({ buildId, userId });
       } catch (err) {
         // dispatchIdeateForApprovedBuild already catches internally and writes
@@ -536,7 +536,7 @@ export async function advanceBuildPhase(
     // "medium" default) so a config/derive error never changes the gate.
     let graduatedRiskTier: "low" | "medium" | "high" | "critical" | undefined;
     try {
-      const { isGraduatedGateAutonomyEnabled } = await import("@/lib/integrate/build-studio-config");
+      const { isGraduatedGateAutonomyEnabled } = await import("@/lib/build/build-studio-config");
       if (isGraduatedGateAutonomyEnabled()) {
         const { deriveDeliverableSensitivity } = await import("@/lib/explore/build-process-matrix");
         const { deriveTransitionRiskTier } = await import("@/lib/decision-perspective/graduated-autonomy");
@@ -569,7 +569,7 @@ export async function advanceBuildPhase(
     if (!build.sandboxId) {
       throw new Error("Build Studio cannot advance to review because the sandbox is no longer available.");
     }
-    const { getClientIdentity } = await import("@/lib/integrate/sandbox/build-branch");
+    const { getClientIdentity } = await import("@/lib/build/sandbox/build-branch");
     const { clientBranch } = await getClientIdentity();
     const releasableFiles = await listReleasableSandboxFiles(build.sandboxId, { baseRef: clientBranch });
     if (releasableFiles.length === 0) {
@@ -585,7 +585,7 @@ export async function advanceBuildPhase(
     if (!build.sandboxId) {
       throw new Error("Build Studio cannot continue to release because the sandbox is no longer available.");
     }
-    const { getClientIdentity } = await import("@/lib/integrate/sandbox/build-branch");
+    const { getClientIdentity } = await import("@/lib/build/sandbox/build-branch");
     const { clientBranch } = await getClientIdentity();
     const releasableFiles = await listReleasableSandboxFiles(build.sandboxId, { baseRef: clientBranch });
     if (releasableFiles.length === 0) {
@@ -751,7 +751,7 @@ export async function autoExecuteBuild(buildId: string): Promise<void> {
   // so the four call sites (and their retries) collapse duplicate dispatches
   // of the same logical attempt into one durable run.
   const { isBuildDurableExecutionEnabled, buildExecuteSendId } = await import(
-    "@/lib/integrate/build-execute-helpers"
+    "@/lib/build/build-execute-helpers"
   );
   if (isBuildDurableExecutionEnabled()) {
     const current = await prisma.featureBuild.findUnique({
@@ -1055,7 +1055,7 @@ export async function resumeBuildImplementation(buildId: string): Promise<Resume
     if (!build.sandboxId) {
       throw new Error("This release-phase build has no sandbox attached, so implementation cannot be resumed safely.");
     }
-    const { getClientIdentity } = await import("@/lib/integrate/sandbox/build-branch");
+    const { getClientIdentity } = await import("@/lib/build/sandbox/build-branch");
     const { clientBranch } = await getClientIdentity();
     const releasableFiles = await listReleasableSandboxFiles(build.sandboxId, { baseRef: clientBranch });
     if (releasableFiles.length > 0) {
@@ -1100,7 +1100,7 @@ export async function resumeBuildImplementation(buildId: string): Promise<Resume
   }
 
   try {
-    const { isSandboxAvailable, startBuildBranch } = await import("@/lib/integrate/sandbox/build-branch");
+    const { isSandboxAvailable, startBuildBranch } = await import("@/lib/build/sandbox/build-branch");
     if (await isSandboxAvailable()) {
       await startBuildBranch(buildId);
     }
@@ -1528,7 +1528,7 @@ export async function completeBuild(buildId: string): Promise<void> {
     console.error("[completeBuild] dependency readiness check failed:", err);
   });
   // BI-8BD61C30: drop sandbox .builds/<id> when the build completes (best-effort).
-  void import("@/lib/integrate/sandbox/sandbox-build-gc")
+  void import("@/lib/build/sandbox/sandbox-build-gc")
     .then((m) => m.releaseSandboxForTerminalBuild(buildId, { deleteBranch: false }))
     .catch(() => {});
   revalidatePath("/build");
@@ -1557,7 +1557,7 @@ export async function createBuildEpic(input: {
   // backlog item is created separately by the auto-intake path in reviewDesignDoc.
   // Feedback items should be auto-created on actual ship. Removed per Mark's
   // observation 2026-04-20.
-  const { autoCreateBuildEpic } = await import("@/lib/integrate/auto-intake-epic");
+  const { autoCreateBuildEpic } = await import("@/lib/build/auto-intake-epic");
   const epic = await autoCreateBuildEpic({
     db: prisma,
     title: input.title,

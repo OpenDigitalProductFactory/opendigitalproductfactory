@@ -135,7 +135,7 @@ The team adopted both. The advisory turned a two-table, new-agent design into a 
 ## See also
 
 - **Spec artifact format is opt-in.** When a finding recommends a new spec or a major spec edit and the content leans on a flow/state diagram, a multi-column table, or side-by-side option fan-out, an HTML spec artifact often reads better than Markdown — see [`html-artifacts-guide.md`](../../../../docs/superpowers/html-artifacts-guide.md) and [`_templates/spec.template.html`](../../../../docs/superpowers/_templates/spec.template.html). Additive only; Markdown specs remain the default, and HTML-only specs should leave a Markdown stub so `search_specs_and_plans` still indexes them.
-- In-portal reviewer wiring: [`apps/web/lib/integrate/build-reviewers.ts`](../../../../apps/web/lib/integrate/build-reviewers.ts) (`buildArchitectureReviewPrompt`, `ARCHITECTURE_REVIEW_REFERENCES`)
+- In-portal reviewer wiring: [`apps/web/lib/build/build-reviewers.ts`](../../../../apps/web/lib/build/build-reviewers.ts) (`buildArchitectureReviewPrompt`, `ARCHITECTURE_REVIEW_REFERENCES`)
 - Persona: [`prompts/route-persona/ea-architect.prompt.md`](../../../../prompts/route-persona/ea-architect.prompt.md) (Enterprise Architect, spec-review remit)
 - Build Studio capability packs: [`packages/dpf-skill-pack/capability-packs.json`](../capability-packs.json) (`architecture`, `review-ship`)
 - Decision escalation: [`dpf-decision-via-kernel`](../dpf-decision-via-kernel/SKILL.md)

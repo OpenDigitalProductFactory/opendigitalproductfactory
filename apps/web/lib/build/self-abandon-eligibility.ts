@@ -253,7 +253,7 @@ export async function abandonOwnStalledBuild(params: {
   // Best-effort sandbox/git cleanup — never blocks the abandon on a sandbox
   // hiccup; the FeatureBuild row is already the source of truth once the
   // transaction above commits.
-  const { abandonBuildBranch } = await import("@/lib/integrate/sandbox/build-branch");
+  const { abandonBuildBranch } = await import("@/lib/build/sandbox/build-branch");
   await abandonBuildBranch(buildId).catch(() => {});
 
   return { kind: "abandoned", buildId };

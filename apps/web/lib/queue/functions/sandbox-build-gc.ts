@@ -5,7 +5,7 @@
 
 import { cron } from "inngest";
 import { inngest } from "../inngest-client";
-import { runSandboxBuildGc } from "@/lib/integrate/sandbox/sandbox-build-gc";
+import { runSandboxBuildGc } from "@/lib/build/sandbox/sandbox-build-gc";
 
 export const sandboxBuildGc = inngest.createFunction(
   {

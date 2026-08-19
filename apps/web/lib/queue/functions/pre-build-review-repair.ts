@@ -19,7 +19,7 @@ export const preBuildReviewRepair = inngest.createFunction(
 
     if (kind === "design") {
       const outcome = await step.run("repair-design-review", async () => {
-        const { dispatchDesignReviewFixLoop } = await import("@/lib/integrate/ideate-on-approval");
+        const { dispatchDesignReviewFixLoop } = await import("@/lib/build/ideate-on-approval");
         return dispatchDesignReviewFixLoop({ buildId, userId });
       });
       logBuildActivity(
@@ -31,7 +31,7 @@ export const preBuildReviewRepair = inngest.createFunction(
     }
 
     const outcome = await step.run("repair-plan-review", async () => {
-      const { dispatchPlanForApprovedBuild } = await import("@/lib/integrate/plan-on-approval");
+      const { dispatchPlanForApprovedBuild } = await import("@/lib/build/plan-on-approval");
       return dispatchPlanForApprovedBuild({ buildId, userId, forceRegenerate: true });
     });
     logBuildActivity(buildId, "plan_dispatch", `In-place plan repair finished: ${outcome.kind}.`);

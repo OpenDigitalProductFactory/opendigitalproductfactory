@@ -296,7 +296,7 @@ export async function recordReadyDependentsAfterCompletion(args: {
   const dispatchPlanForChild =
     args.dispatchPlanForChild ??
     (async (params: { buildId: string; userId: string }) => {
-      const { dispatchPlanForApprovedBuild } = await import("@/lib/integrate/plan-on-approval");
+      const { dispatchPlanForApprovedBuild } = await import("@/lib/build/plan-on-approval");
       return dispatchPlanForApprovedBuild(params);
     });
   await Promise.all(

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import { ContributionModelBanner } from "@/components/admin/ContributionModelBanner";
-import { CONTRIBUTION_COPY } from "@/lib/integrate/contribution-copy";
+import { CONTRIBUTION_COPY } from "@/lib/build/contribution-copy";
 
 describe("ContributionModelBanner", () => {
   const baseProps = {

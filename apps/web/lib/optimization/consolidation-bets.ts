@@ -109,8 +109,8 @@ export const CONSOLIDATION_BETS: readonly ConsolidationBet[] = [
       files: [
         "apps/web/lib/work-management/portal-case-loader.ts",
         "apps/web/lib/work-management/workspace-case-loader.ts",
-        "apps/web/lib/integrate/build-orchestrator.ts",
-        "apps/web/lib/integrate/build-pipeline.ts",
+        "apps/web/lib/build/build-orchestrator.ts",
+        "apps/web/lib/build/build-pipeline.ts",
         "apps/web/lib/queue/functions/build-execute.ts",
       ],
     },

@@ -6,7 +6,7 @@ import { can } from "@/lib/permissions";
 import {
   pollAccessToken,
   requestDeviceCode,
-} from "@/lib/integrate/github-oauth";
+} from "@/lib/build/github-oauth";
 import { validateGitHubToken } from "@/lib/actions/platform-dev-config";
 import { encryptSecret } from "@/lib/credential-crypto";
 

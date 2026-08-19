@@ -11,7 +11,7 @@ const toolPack = readFileSync(
   "utf8",
 );
 const prompt = readFileSync(
-  new URL("../apps/web/lib/integrate/build-agent-prompts.ts", import.meta.url),
+  new URL("../apps/web/lib/build/build-agent-prompts.ts", import.meta.url),
   "utf8",
 );
 

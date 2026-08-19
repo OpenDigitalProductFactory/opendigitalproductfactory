@@ -586,7 +586,7 @@ export async function configureForkSetup(input: {
   }
   const { owner: upstreamOwner, repo: upstreamRepo } = upstream;
 
-  const { forkExistsAndIsFork, createForkAndWait } = await import("@/lib/integrate/github-fork");
+  const { forkExistsAndIsFork, createForkAndWait } = await import("@/lib/build/github-fork");
 
   // Does the contributor already own a fork? Three cases:
   //   (a) exists + is fork of upstream → use it.

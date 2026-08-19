@@ -12,13 +12,13 @@ const {
   mockTraceCodeSurface: vi.fn(),
 }));
 
-vi.mock("@/lib/integrate/code-graph/graph-queries", () => ({
+vi.mock("@/lib/build/code-graph/graph-queries", () => ({
   findRelatedTests: mockFindRelatedTests,
   searchCodeGraph: mockSearchCodeGraph,
   traceCodeSurface: mockTraceCodeSurface,
 }));
 
-vi.mock("@/lib/integrate/code-graph-access", () => ({
+vi.mock("@/lib/build/code-graph-access", () => ({
   getCodeGraphFreshness: mockGetCodeGraphFreshness,
 }));
 

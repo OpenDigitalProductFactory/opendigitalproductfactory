@@ -94,7 +94,7 @@ async function reverifyDecisionEvidenceHandler(
   );
   const { createRepoLocatorResolver } = await import("@/lib/decision/locator-resolver");
   const { isDevInstance, getProjectRoot, isPathAllowedSync } = await import(
-    "@/lib/integrate/codebase-tools"
+    "@/lib/build/codebase-tools"
   );
 
   // Source reachability is decided BEFORE resolving anything, so an install

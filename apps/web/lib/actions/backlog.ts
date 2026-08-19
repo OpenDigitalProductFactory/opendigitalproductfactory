@@ -354,13 +354,13 @@ export type EscalateResult =
 
 export async function escalateBacklogItemUpstream(id: string): Promise<EscalateResult> {
   await requireManageBacklog();
-  const { escalateToUpstreamIssue } = await import("@/lib/integrate/issue-bridge");
+  const { escalateToUpstreamIssue } = await import("@/lib/build/issue-bridge");
   return escalateToUpstreamIssue({ kind: "backlog", id });
 }
 
 export async function escalateEpicUpstream(id: string): Promise<EscalateResult> {
   await requireManageBacklog();
-  const { escalateToUpstreamIssue } = await import("@/lib/integrate/issue-bridge");
+  const { escalateToUpstreamIssue } = await import("@/lib/build/issue-bridge");
   return escalateToUpstreamIssue({ kind: "epic", id });
 }
 

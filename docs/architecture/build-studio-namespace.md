@@ -22,7 +22,7 @@ production namespace singular and enforcing it.
 
 ## Enforcement
 
-- **Plan-path convergence.** `apps/web/lib/integrate/build-plan-paths.ts` rewrites any
+- **Plan-path convergence.** `apps/web/lib/build/build-plan-paths.ts` rewrites any
   agent-generated `components/build-studio/*` path onto `components/build/*` (a folder
   fallback plus three legacy exact aliases). `build-plan-paths.test.ts` asserts arbitrary
   build-studio paths converge — so a model that picks the wrong namespace is corrected

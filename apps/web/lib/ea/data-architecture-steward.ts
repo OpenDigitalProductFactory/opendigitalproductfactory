@@ -12,7 +12,7 @@
 import type {
   PrismaSchemaFacts,
   PrismaRelationFact,
-} from "../integrate/code-graph/extractors/prisma-schema-adapter";
+} from "../build/code-graph/extractors/prisma-schema-adapter";
 
 export const STEWARD_VERSION = "data-architecture-steward-v1";
 

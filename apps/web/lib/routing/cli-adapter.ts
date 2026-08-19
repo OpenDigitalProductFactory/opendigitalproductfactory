@@ -21,7 +21,7 @@ import { InferenceError } from "@/lib/ai-inference";
 import { getDecryptedCredential, getProviderBearerToken } from "@/lib/inference/ai-provider-internals";
 import { registerExecutionAdapter } from "./execution-adapter-registry";
 import { lazyChildProcess, lazyUtil } from "@/lib/shared/lazy-node";
-import { writeSandboxFile } from "@/lib/integrate/sandbox/agent-cli-runtime";
+import { writeSandboxFile } from "@/lib/build/sandbox/agent-cli-runtime";
 import { extractToolCalls as extractToolCallsFromText } from "./extract-tool-calls";
 import { createMcpSessionToken } from "@/lib/mcp/session-token";
 import { getToolGrantMapping } from "@/lib/tak/agent-grants";

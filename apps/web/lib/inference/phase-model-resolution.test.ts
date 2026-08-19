@@ -6,7 +6,7 @@ const mockGetConfig = vi.fn();
 const mockPreviewRoute = vi.fn();
 const mockPreflight = vi.fn();
 
-vi.mock("@/lib/integrate/build-studio-config", () => ({
+vi.mock("@/lib/build/build-studio-config", () => ({
   getBuildStudioConfig: async () => withSelection(await mockGetConfig()),
 }));
 vi.mock("@/lib/inference/routed-inference", () => ({
@@ -26,7 +26,7 @@ vi.mock("@dpf/db", () => ({
     },
   },
 }));
-vi.mock("@/lib/integrate/opencode-dispatch", () => ({
+vi.mock("@/lib/build/opencode-dispatch", () => ({
   preflightLocalEndpoint: (...args: unknown[]) => mockPreflight(...args),
   isLikelyNonChatModel: (m: string) =>
     /embed|nomic|bge[-_]|rerank|whisper/i.test(m),

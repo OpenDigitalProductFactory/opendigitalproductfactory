@@ -4,7 +4,7 @@ import { can } from "@/lib/permissions";
 import { headers } from "next/headers";
 import { getProviders } from "@/lib/inference/ai-provider-data";
 import { prisma } from "@dpf/db";
-import { getBuildStudioConfig } from "@/lib/integrate/build-studio-config";
+import { getBuildStudioConfig } from "@/lib/build/build-studio-config";
 import { getContributorMcpReadiness, type ContributorMcpReadiness } from "@/lib/mcp/contributor-readiness";
 import {
   CONTRIBUTOR_MCP_READINESS_REQUIRED_GRANTS,

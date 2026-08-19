@@ -195,7 +195,7 @@ export const buildReviewVerification = inngest.createFunction(
     };
 
     const steps: UxTestStep[] = await step.run("run-tests", async () => {
-      const { resolveSandboxUrl } = await import("@/lib/integrate/sandbox/resolve-sandbox-url");
+      const { resolveSandboxUrl } = await import("@/lib/build/sandbox/resolve-sandbox-url");
       const { runBrowserUseTests } = await import("@/lib/operate/browser-use-client");
       const sandboxUrl = resolveSandboxUrl(build.sandboxId!, build.sandboxPort!).internal;
       try {
@@ -242,7 +242,7 @@ export const buildReviewVerification = inngest.createFunction(
         );
         const cases = parseAdversarialCases(gen.content);
         if (cases.length === 0) return;
-        const { resolveSandboxUrl } = await import("@/lib/integrate/sandbox/resolve-sandbox-url");
+        const { resolveSandboxUrl } = await import("@/lib/build/sandbox/resolve-sandbox-url");
         const { runBrowserUseTests } = await import("@/lib/operate/browser-use-client");
         const sandboxUrl = resolveSandboxUrl(build.sandboxId!, build.sandboxPort!).internal;
         const advSteps = await runBrowserUseTests(sandboxUrl, cases, { buildId });
@@ -368,7 +368,7 @@ export async function autoDispatchShipForCompletedVerification(
   });
   const { resolveScheduledOwnerUserId } = await import("../scheduled-owner");
   const actorUserId = b?.createdById ?? (await resolveScheduledOwnerUserId());
-  const { dispatchShipForVerifiedBuild } = await import("@/lib/integrate/ship-on-review-approval");
+  const { dispatchShipForVerifiedBuild } = await import("@/lib/build/ship-on-review-approval");
   const outcome = await dispatchShipForVerifiedBuild({
     buildId,
     userId: actorUserId,

@@ -22,7 +22,7 @@ const schemaValidator = vi.hoisted(() => ({
   describeModel: vi.fn(),
   formatModelDescription: vi.fn(),
 }));
-vi.mock("@/lib/integrate/schema-validator", () => schemaValidator);
+vi.mock("@/lib/build/schema-validator", () => schemaValidator);
 
 const sandbox = vi.hoisted(() => ({ execInSandbox: vi.fn() }));
 vi.mock("@/lib/sandbox", () => sandbox);

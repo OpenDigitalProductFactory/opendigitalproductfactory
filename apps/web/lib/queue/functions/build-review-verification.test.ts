@@ -30,7 +30,7 @@ vi.mock("../scheduled-owner", () => ({
   }),
 }));
 
-vi.mock("@/lib/integrate/ship-on-review-approval", () => ({
+vi.mock("@/lib/build/ship-on-review-approval", () => ({
   dispatchShipForVerifiedBuild: vi.fn(
     async (params: { buildId: string; userId: string; verificationStatus: string }) => {
       state.dispatchCalls.push(params);

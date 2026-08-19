@@ -11,7 +11,6 @@
       "allowedDependencies": [
         "actions",
         "queue",
-        "integrate",
         "build",
         "tak",
         "inference",
@@ -23,7 +22,6 @@
       "description": "Next.js server-action adapters and browser-session edge behavior.",
       "allowedDependencies": [
         "queue",
-        "integrate",
         "build",
         "tak",
         "inference",
@@ -34,7 +32,6 @@
       "owner": "runtime-execution",
       "description": "Durable scheduling and event-handler adapters.",
       "allowedDependencies": [
-        "integrate",
         "integrations",
         "build",
         "tak",
@@ -46,16 +43,6 @@
       "owner": "integration-platform",
       "description": "External-connector registry and connector-intake normalization (kernel, per-provider connectors, import staging/review). Leaf context: connectors may not reach into orchestration.",
       "allowedDependencies": []
-    },
-    "integrate": {
-      "owner": "integration-platform",
-      "description": "External-system normalization and integration orchestration.",
-      "allowedDependencies": [
-        "build",
-        "tak",
-        "inference",
-        "routing"
-      ]
     },
     "build": {
       "owner": "build-platform",
@@ -101,90 +88,6 @@
       "reviewBy": "2026-11-01"
     },
     {
-      "key": "apps/web/lib/build/approve-decomposition.ts|@/lib/integrate/plan-on-approval|integrate",
-      "owner": "build-platform",
-      "rationale": "Pre-existing reverse dependency captured by BI-2E9F6D37; remove through the owning context refactor.",
-      "reviewBy": "2026-11-01"
-    },
-    {
-      "key": "apps/web/lib/build/auto-accept.ts|@/lib/integrate/build-studio-config|integrate",
-      "owner": "build-platform",
-      "rationale": "Pre-existing reverse dependency captured by BI-2E9F6D37; remove through the owning context refactor.",
-      "reviewBy": "2026-11-01"
-    },
-    {
-      "key": "apps/web/lib/build/autonomous-build-completion-gate.ts|@/lib/integrate/build-studio-config|integrate",
-      "owner": "build-platform",
-      "rationale": "Pre-existing reverse dependency captured by BI-2E9F6D37; remove through the owning context refactor.",
-      "reviewBy": "2026-11-01"
-    },
-    {
-      "key": "apps/web/lib/build/autonomous-build-phase-runtime.ts|@/lib/integrate/build-studio-config|integrate",
-      "owner": "build-platform",
-      "rationale": "Pre-existing reverse dependency captured by BI-2E9F6D37; remove through the owning context refactor.",
-      "reviewBy": "2026-11-01"
-    },
-    {
-      "key": "apps/web/lib/build/autonomous-build-phase-runtime.ts|@/lib/integrate/sandbox/build-branch|integrate",
-      "owner": "build-platform",
-      "rationale": "Pre-existing reverse dependency captured by BI-2E9F6D37; remove through the owning context refactor.",
-      "reviewBy": "2026-11-01"
-    },
-    {
-      "key": "apps/web/lib/build/autonomous-tee-up.ts|@/lib/integrate/build-studio-config|integrate",
-      "owner": "build-platform",
-      "rationale": "Pre-existing reverse dependency captured by BI-2E9F6D37; remove through the owning context refactor.",
-      "reviewBy": "2026-11-01"
-    },
-    {
-      "key": "apps/web/lib/build/build-pr-delivery-reconciler.ts|@/lib/integrate/github-pr-readiness|integrate",
-      "owner": "build-platform",
-      "rationale": "Pre-existing reverse dependency captured by BI-2E9F6D37; remove through the owning context refactor.",
-      "reviewBy": "2026-11-01"
-    },
-    {
-      "key": "apps/web/lib/build/build-pr-delivery-state.ts|@/lib/integrate/github-pr-readiness|integrate",
-      "owner": "build-platform",
-      "rationale": "Pre-existing reverse dependency captured by BI-2E9F6D37; remove through the owning context refactor.",
-      "reviewBy": "2026-11-01"
-    },
-    {
-      "key": "apps/web/lib/build/escalate-build-to-human.ts|@/lib/integrate/sandbox/sandbox-build-gc|integrate",
-      "owner": "build-platform",
-      "rationale": "Pre-existing reverse dependency captured by BI-2E9F6D37; remove through the owning context refactor.",
-      "reviewBy": "2026-11-01"
-    },
-    {
-      "key": "apps/web/lib/build/feature-build-dependencies.ts|@/lib/integrate/plan-on-approval|integrate",
-      "owner": "build-platform",
-      "rationale": "Pre-existing reverse dependency captured by BI-2E9F6D37; remove through the owning context refactor.",
-      "reviewBy": "2026-11-01"
-    },
-    {
-      "key": "apps/web/lib/build/inert-build-reaper.ts|@/lib/integrate/sandbox/sandbox-build-gc|integrate",
-      "owner": "build-platform",
-      "rationale": "Pre-existing reverse dependency captured by BI-2E9F6D37; remove through the owning context refactor.",
-      "reviewBy": "2026-11-01"
-    },
-    {
-      "key": "apps/web/lib/build/process-graph-builder.ts|@/lib/integrate/task-dependency-graph|integrate",
-      "owner": "build-platform",
-      "rationale": "Pre-existing reverse dependency captured by BI-2E9F6D37; remove through the owning context refactor.",
-      "reviewBy": "2026-11-01"
-    },
-    {
-      "key": "apps/web/lib/build/sandbox-state.ts|@/lib/integrate/sandbox/sandbox-source-currency|integrate",
-      "owner": "build-platform",
-      "rationale": "Pre-existing reverse dependency captured by BI-2E9F6D37; remove through the owning context refactor.",
-      "reviewBy": "2026-11-01"
-    },
-    {
-      "key": "apps/web/lib/build/self-abandon-eligibility.ts|@/lib/integrate/sandbox/build-branch|integrate",
-      "owner": "build-platform",
-      "rationale": "Pre-existing reverse dependency captured by BI-2E9F6D37; remove through the owning context refactor.",
-      "reviewBy": "2026-11-01"
-    },
-    {
       "key": "apps/web/lib/inference/ai-provider-internals.ts|@/lib/queue/inngest-client|queue",
       "owner": "ai-platform",
       "rationale": "Pre-existing reverse dependency captured by BI-2E9F6D37; remove through the owning context refactor.",
@@ -197,13 +100,13 @@
       "reviewBy": "2026-11-01"
     },
     {
-      "key": "apps/web/lib/inference/phase-model-resolution.ts|@/lib/integrate/build-studio-config|integrate",
+      "key": "apps/web/lib/inference/phase-model-resolution.ts|@/lib/build/build-studio-config|build",
       "owner": "ai-platform",
       "rationale": "Pre-existing reverse dependency captured by BI-2E9F6D37; remove through the owning context refactor.",
       "reviewBy": "2026-11-01"
     },
     {
-      "key": "apps/web/lib/inference/phase-model-resolution.ts|@/lib/integrate/opencode-dispatch|integrate",
+      "key": "apps/web/lib/inference/phase-model-resolution.ts|@/lib/build/opencode-dispatch|build",
       "owner": "ai-platform",
       "rationale": "Pre-existing reverse dependency captured by BI-2E9F6D37; remove through the owning context refactor.",
       "reviewBy": "2026-11-01"
@@ -221,49 +124,49 @@
       "reviewBy": "2026-11-01"
     },
     {
-      "key": "apps/web/lib/integrate/build-orchestrator.ts|@/lib/actions/deliberation|actions",
+      "key": "apps/web/lib/build/build-orchestrator.ts|@/lib/actions/deliberation|actions",
       "owner": "integration-platform",
       "rationale": "Pre-existing reverse dependency captured by BI-2E9F6D37; remove through the owning context refactor.",
       "reviewBy": "2026-11-01"
     },
     {
-      "key": "apps/web/lib/integrate/code-graph/scheduler.ts|@/lib/queue/inngest-client|queue",
+      "key": "apps/web/lib/build/code-graph/scheduler.ts|@/lib/queue/inngest-client|queue",
       "owner": "integration-platform",
       "rationale": "Pre-existing reverse dependency captured by BI-2E9F6D37; remove through the owning context refactor.",
       "reviewBy": "2026-11-01"
     },
     {
-      "key": "apps/web/lib/integrate/git-promotion-intake.ts|@/lib/queue/inngest-client|queue",
+      "key": "apps/web/lib/build/git-promotion-intake.ts|@/lib/queue/inngest-client|queue",
       "owner": "integration-platform",
       "rationale": "Pre-existing reverse dependency captured by BI-2E9F6D37; remove through the owning context refactor.",
       "reviewBy": "2026-11-01"
     },
     {
-      "key": "apps/web/lib/integrate/opencode-dispatch.ts|@/lib/queue/resource-lane|queue",
+      "key": "apps/web/lib/build/opencode-dispatch.ts|@/lib/queue/resource-lane|queue",
       "owner": "integration-platform",
       "rationale": "Pre-existing reverse dependency captured by BI-2E9F6D37; remove through the owning context refactor.",
       "reviewBy": "2026-11-01"
     },
     {
-      "key": "apps/web/lib/integrate/plan-to-build-transition.ts|@/lib/mcp/build-tool-helpers|mcp",
+      "key": "apps/web/lib/build/plan-to-build-transition.ts|@/lib/mcp/build-tool-helpers|mcp",
       "owner": "integration-platform",
       "rationale": "Pre-existing reverse dependency captured by BI-2E9F6D37; remove through the owning context refactor.",
       "reviewBy": "2026-11-01"
     },
     {
-      "key": "apps/web/lib/integrate/pre-build-review-auto-repair.ts|@/lib/queue/inngest-client|queue",
+      "key": "apps/web/lib/build/pre-build-review-auto-repair.ts|@/lib/queue/inngest-client|queue",
       "owner": "integration-platform",
       "rationale": "Pre-existing reverse dependency captured by BI-2E9F6D37; remove through the owning context refactor.",
       "reviewBy": "2026-11-01"
     },
     {
-      "key": "apps/web/lib/integrate/sandbox/sandbox-pool.ts|@/lib/queue/queue-telemetry|queue",
+      "key": "apps/web/lib/build/sandbox/sandbox-pool.ts|@/lib/queue/queue-telemetry|queue",
       "owner": "integration-platform",
       "rationale": "Pre-existing reverse dependency captured by BI-2E9F6D37; remove through the owning context refactor.",
       "reviewBy": "2026-11-01"
     },
     {
-      "key": "apps/web/lib/integrate/ship-on-review-approval.ts|@/lib/queue/scheduled-owner|queue",
+      "key": "apps/web/lib/build/ship-on-review-approval.ts|@/lib/queue/scheduled-owner|queue",
       "owner": "integration-platform",
       "rationale": "Pre-existing reverse dependency captured by BI-2E9F6D37; remove through the owning context refactor.",
       "reviewBy": "2026-11-01"
@@ -311,7 +214,7 @@
       "reviewBy": "2026-11-01"
     },
     {
-      "key": "apps/web/lib/routing/cli-adapter.ts|@/lib/integrate/sandbox/agent-cli-runtime|integrate",
+      "key": "apps/web/lib/routing/cli-adapter.ts|@/lib/build/sandbox/agent-cli-runtime|build",
       "owner": "ai-platform",
       "rationale": "Pre-existing reverse dependency captured by BI-2E9F6D37; remove through the owning context refactor.",
       "reviewBy": "2026-11-01"
@@ -425,7 +328,7 @@
       "reviewBy": "2026-11-01"
     },
     {
-      "key": "apps/web/lib/tak/tool-script.ts|@/lib/integrate/sandbox/sandbox|integrate",
+      "key": "apps/web/lib/tak/tool-script.ts|@/lib/build/sandbox/sandbox|build",
       "owner": "agent-runtime",
       "rationale": "Pre-existing reverse dependency captured by BI-2E9F6D37; remove through the owning context refactor.",
       "reviewBy": "2026-11-01"
@@ -437,13 +340,13 @@
       "reviewBy": "2026-11-01"
     },
     {
-      "key": "apps/web/lib/tak/work-pattern-experiment-promotion.ts|@/lib/integrate/work-pattern-experiment-runtime|integrate",
+      "key": "apps/web/lib/tak/work-pattern-experiment-promotion.ts|@/lib/build/work-pattern-experiment-runtime|build",
       "owner": "agent-runtime",
       "rationale": "Pre-existing reverse dependency captured by BI-2E9F6D37; remove through the owning context refactor.",
       "reviewBy": "2026-11-01"
     },
     {
-      "key": "apps/web/lib/tak/work-pattern-experiment-scheduler.ts|@/lib/integrate/work-pattern-experiment-runtime|integrate",
+      "key": "apps/web/lib/tak/work-pattern-experiment-scheduler.ts|@/lib/build/work-pattern-experiment-runtime|build",
       "owner": "agent-runtime",
       "rationale": "Pre-existing reverse dependency captured by BI-2E9F6D37; remove through the owning context refactor.",
       "reviewBy": "2026-11-01"

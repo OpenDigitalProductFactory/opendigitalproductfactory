@@ -5,7 +5,7 @@
 
 import { prisma } from "@dpf/db";
 import { ROUTE_CONTEXT_MAP, UNIVERSAL_SKILLS } from "@/lib/tak/route-context-map";
-import { SPECIALIST_AGENT_IDS } from "@/lib/integrate/specialist-prompts";
+import { SPECIALIST_AGENT_IDS } from "@/lib/build/specialist-prompts";
 import type {
   SkillEvidenceResult,
   SkillEvidenceSearchInput,

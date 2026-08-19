@@ -1,16 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const reconcile = vi.hoisted(() => ({ reconcileBuildEngines: vi.fn() }));
-vi.mock("@/lib/integrate/build-engine-reconcile", () => reconcile);
+vi.mock("@/lib/build/build-engine-reconcile", () => reconcile);
 
 const provision = vi.hoisted(() => ({ provisionBuildEngine: vi.fn() }));
-vi.mock("@/lib/integrate/build-engine-provision", () => provision);
+vi.mock("@/lib/build/build-engine-provision", () => provision);
 
 const readiness = vi.hoisted(() => ({
   loadBuildEngineReadiness: vi.fn(),
   probeBuildEngineReadiness: vi.fn(),
 }));
-vi.mock("@/lib/integrate/build-engine-readiness", () => readiness);
+vi.mock("@/lib/build/build-engine-readiness", () => readiness);
 
 import { buildEnginePack } from "./build-engine-pack";
 import { isToolAllowedByGrants } from "@/lib/tak/agent-grants";

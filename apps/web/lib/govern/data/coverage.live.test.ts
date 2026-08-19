@@ -7,7 +7,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
-import { parsePrismaSchema } from "@/lib/integrate/code-graph/extractors/prisma-schema-adapter";
+import { parsePrismaSchema } from "@/lib/build/code-graph/extractors/prisma-schema-adapter";
 import { DATA_ASSET_REGISTRY } from "./assets";
 import {
   assertBaselineDidNotGrow,

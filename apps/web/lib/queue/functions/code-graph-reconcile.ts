@@ -14,7 +14,7 @@ const CODE_GRAPH_STALE_THRESHOLDS = {
 async function recordCodeGraphJob(status: "ok" | "error", error?: string): Promise<void> {
   const { prisma } = await import("@dpf/db");
   const { computeNextRunAt } = await import("@/lib/ai-provider-types");
-  const { CODE_GRAPH_JOB_ID } = await import("@/lib/integrate/code-graph-refresh");
+  const { CODE_GRAPH_JOB_ID } = await import("@/lib/build/code-graph-refresh");
   const { evaluateJobStaleness, readStalenessState, mergeStalenessState, escalateStaleScheduledJob } = await import(
     "@/lib/operate/scheduled-jobs/staleness-escalation"
   );
@@ -61,7 +61,7 @@ async function recordCodeGraphJob(status: "ok" | "error", error?: string): Promi
 // ascent scan, BI-A028AA14) instead of vanishing. Mirrors recordCodeGraphJob.
 async function recordCodeGraphDefer(): Promise<void> {
   const { prisma } = await import("@dpf/db");
-  const { CODE_GRAPH_JOB_ID } = await import("@/lib/integrate/code-graph-refresh");
+  const { CODE_GRAPH_JOB_ID } = await import("@/lib/build/code-graph-refresh");
   const { readStalenessState, recordJobDefer, mergeStalenessState } = await import(
     "@/lib/operate/scheduled-jobs/staleness-escalation"
   );
@@ -103,14 +103,14 @@ export const codeGraphReconcileScheduled = inngest.createFunction(
     // enabled when no row exists, so a never-touched job runs normally.
     const enabled = await step.run("check-job-enabled", async () => {
       const { isJobEnabled } = await import("@/lib/operate/scheduled-jobs/core");
-      const { CODE_GRAPH_JOB_ID } = await import("@/lib/integrate/code-graph/constants");
+      const { CODE_GRAPH_JOB_ID } = await import("@/lib/build/code-graph/constants");
       return isJobEnabled(CODE_GRAPH_JOB_ID);
     });
     if (!enabled) return { skipped: true, reason: "job_disabled_by_operator" };
 
     try {
       const result = await step.run("reconcile-code-graph-scheduled", async () => {
-        const { reconcileCodeGraph } = await import("@/lib/integrate/code-graph-refresh");
+        const { reconcileCodeGraph } = await import("@/lib/build/code-graph-refresh");
         return reconcileCodeGraph({ reason: "scheduled" });
       });
       await step.run("record-job-ok", async () => {
@@ -136,7 +136,7 @@ export const codeGraphReconcileEvent = inngest.createFunction(
   async ({ event, step }) => {
     try {
       const result = await step.run("reconcile-code-graph-event", async () => {
-        const { reconcileCodeGraph } = await import("@/lib/integrate/code-graph-refresh");
+        const { reconcileCodeGraph } = await import("@/lib/build/code-graph-refresh");
         return reconcileCodeGraph({
           reason: event.data.reason,
           graphKey: event.data.graphKey,

@@ -15,7 +15,7 @@ const attribution = vi.hoisted(() => ({
   formatAttributionRecommendation: vi.fn(),
   confirmFeatureTaxonomy: vi.fn(),
 }));
-vi.mock("@/lib/integrate/feature-attribution", () => ({
+vi.mock("@/lib/build/feature-attribution", () => ({
   attributeFeatureBuild: (...a: unknown[]) => attribution.attributeFeatureBuild(...a),
   formatAttributionRecommendation: (...a: unknown[]) => attribution.formatAttributionRecommendation(...a),
   confirmFeatureTaxonomy: (...a: unknown[]) => attribution.confirmFeatureTaxonomy(...a),

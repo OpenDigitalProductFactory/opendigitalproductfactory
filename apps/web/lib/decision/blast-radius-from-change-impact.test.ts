@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { blastRadiusFromChangeImpact } from "./blast-radius-from-change-impact";
-import type { ChangeImpactReport } from "@/lib/integrate/change-impact";
+import type { ChangeImpactReport } from "@/lib/build/change-impact";
 
 function report(overrides: Omit<Partial<ChangeImpactReport>, "blastRadius"> & {
   blastRadius?: Partial<ChangeImpactReport["blastRadius"]>;

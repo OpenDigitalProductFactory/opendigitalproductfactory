@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 
-import { projectHiveResultBundle } from "@/lib/integrate/contribution-egress";
+import { projectHiveResultBundle } from "@/lib/build/contribution-egress";
 
 const OPAQUE_RECEIPT_RE = /^(?!BI-|WC-|FB-|EP-)[A-Za-z0-9._:-]{8,200}$/i;
 const MAX_HIVE_RESULT_BYTES = 48 * 1024;

@@ -21,7 +21,7 @@ import {
   type IntegrationDeploymentMode,
   type IntegrationProfileTag,
   type IntegrationTreatment,
-} from "@/lib/integrate/integration-benchmarking";
+} from "@/lib/build/integration-benchmarking";
 import { getToolMarketplaceReadiness } from "@/lib/actions/tool-marketplace-readiness";
 import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
