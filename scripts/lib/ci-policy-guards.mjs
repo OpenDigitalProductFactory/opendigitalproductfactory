@@ -59,6 +59,14 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       // out of the install dir must ship in the image's /dpf-release-assets.
       node("--test", "scripts/check-release-asset-contract.test.mjs"),
     ]),
+    guard("db-commandment-coverage", "DB Commandment Coverage", [
+      // The never-wipe-db commandment guarded two spellings and allowed three
+      // equivalents, including `docker system prune -a --volumes` and every
+      // `compose -f ... down -v` -- i.e. how the platform's own scripts invoke it.
+      // Nothing tested the guard's own coverage; this does, for both the
+      // commandment frontmatter and the offline fallback.
+      node("--test", "scripts/check-db-commandment-coverage.test.mjs"),
+    ]),
     guard("installer-skip-visibility", "Installer Skip Visibility", [
       // A guarded install step that skips in silence reads as success, and is
       // then recorded as done by Save-Progress. Optional-script guards must say so.
