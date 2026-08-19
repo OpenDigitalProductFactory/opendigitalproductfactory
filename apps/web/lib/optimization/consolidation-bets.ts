@@ -128,7 +128,7 @@ export const CONSOLIDATION_BETS: readonly ConsolidationBet[] = [
       models: ["DecisionInteraction"],
       tools: ["principle_decide"],
       files: [
-        "apps/web/lib/govern/governance-resolver.ts",
+        "apps/web/lib/governance/governance-resolver.ts",
         "apps/web/lib/authority/effective-authority.ts",
         "apps/web/lib/decision-perspective/evaluator.ts",
         "apps/web/lib/actions/shared/guards.ts",
