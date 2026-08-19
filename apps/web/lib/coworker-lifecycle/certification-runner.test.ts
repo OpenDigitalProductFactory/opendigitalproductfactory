@@ -12,6 +12,9 @@ type FindingRow = { findingKey: string; status: string };
 function makeDeps(overrides?: {
   loopContent?: string;
   executedTools?: Array<{ name: string; result: { success: boolean } }>;
+  /** Governed ToolExecution audit evidence returned for each journey's thread
+   *  (BI-68BBF206) — the native-mcp/CLI-subprocess execution record. */
+  governedEvidence?: Array<{ name: string; success: boolean }>;
   tools?: Array<{ name: string; sideEffect?: boolean }>;
   existingFindings?: FindingRow[];
   superuser?: { id: string } | null;
@@ -46,6 +49,7 @@ function makeDeps(overrides?: {
         { name: "query_backlog", result: { success: true } },
       ],
     }),
+    fetchToolEvidence: vi.fn().mockResolvedValue(overrides?.governedEvidence ?? []),
     db: {
       user: {
         findFirst: vi
@@ -239,6 +243,89 @@ describe("coworker certification runner (EP-COWORKER-LIFECYCLE Phase 2)", () => 
   it("routes certification through the coworker's bound route, workspace otherwise", () => {
     expect(certificationRouteFor("marketing-specialist")).not.toBe("/workspace");
     expect(certificationRouteFor("dispatcher")).toBe("/workspace");
+  });
+});
+
+describe("governed ToolExecution evidence union (BI-68BBF206, native-mcp dispatch)", () => {
+  // Under cli-adapter native-mcp mode the model's MCP tool calls execute inside
+  // the CLI subprocess against the governed MCP server: ToolExecution audit rows
+  // are written, but the in-process loop's executedTools list stays empty.
+  // Pre-fix, ORACLE-TOOL failed every such journey with "attempted: none" even
+  // though ORACLE-SURFACE passed and the reply cited real tool results.
+  it("passes ORACLE-TOOL when the in-process list is empty but audit rows show a successful in-surface call", async () => {
+    const { deps, created } = makeDeps({
+      executedTools: [],
+      governedEvidence: [{ name: "query_backlog", success: true }],
+    });
+
+    const sweep = await runCoworkerCertificationSweep({ agentIds: ["coo"], deps });
+
+    expect(sweep.failed).toBe(0);
+    expect(sweep.results[0].status).toBe("passed");
+    expect((created.runs[0] as Record<string, unknown>).status).toBe("passed");
+    const journey = sweep.results[0].journeys[0];
+    expect(journey.executedToolNames).toContain("query_backlog");
+    const toolVerdict = journey.verdicts.find((v) => v.oracleId === "ORACLE-TOOL");
+    expect(toolVerdict?.passed).toBe(true);
+  });
+
+  it("scopes the audit query to the journey's thread, agent, and execution window", async () => {
+    const { deps } = makeDeps();
+    await runCoworkerCertificationSweep({ agentIds: ["coo"], deps });
+
+    expect(deps.fetchToolEvidence).toHaveBeenCalled();
+    const call = (deps.fetchToolEvidence as ReturnType<typeof vi.fn>).mock.calls[0]![0];
+    // Thread naming observed live: certification:<agentId>/<journeyId>.
+    expect(call.threadId).toBe("certification:coo/derived-read-probe");
+    expect(call.agentId).toBe("coo");
+    expect(call.since).toBeInstanceOf(Date);
+    expect(call.until).toBeInstanceOf(Date);
+    expect(call.until.getTime()).toBeGreaterThanOrEqual(call.since.getTime());
+  });
+
+  it("fails ORACLE-PURITY when audit rows show a tool outside the offered read-only surface", async () => {
+    const { deps, created } = makeDeps({
+      governedEvidence: [{ name: "create_backlog_item", success: true }],
+    });
+
+    const sweep = await runCoworkerCertificationSweep({ agentIds: ["coo"], deps });
+
+    expect(sweep.failed).toBe(1);
+    expect((created.runs[0] as Record<string, unknown>).status).toBe("failed");
+    const purity = sweep.results[0].journeys[0].verdicts.find(
+      (v) => v.oracleId === "ORACLE-PURITY",
+    );
+    expect(purity?.passed).toBe(false);
+    const keys = (created.findings as Array<{ findingKey: string }>).map((f) => f.findingKey);
+    expect(
+      keys.some((k) => k.startsWith("coworker-cert:coo:") && k.endsWith("ORACLE-PURITY")),
+    ).toBe(true);
+  });
+
+  it("an audit-read failure falls back to in-loop evidence instead of failing the coworker", async () => {
+    const { deps } = makeDeps();
+    (deps.fetchToolEvidence as ReturnType<typeof vi.fn>).mockRejectedValue(
+      new Error("db unavailable"),
+    );
+
+    const sweep = await runCoworkerCertificationSweep({ agentIds: ["coo"], deps });
+
+    // In-loop evidence (successful query_backlog) still certifies the journey.
+    expect(sweep.failed).toBe(0);
+    expect(sweep.results[0].status).toBe("passed");
+  });
+
+  it("does not consult audit evidence for a capacity-inconclusive journey", async () => {
+    const { deps } = makeDeps();
+    const capacityErr = Object.assign(new Error("inference admission timeout"), {
+      code: "INFERENCE_ADMISSION_TIMEOUT",
+    });
+    (deps.runLoop as ReturnType<typeof vi.fn>).mockRejectedValue(capacityErr);
+
+    const sweep = await runCoworkerCertificationSweep({ agentIds: ["coo"], deps });
+
+    expect(sweep.results[0].status).toBe("inconclusive");
+    expect(deps.fetchToolEvidence).not.toHaveBeenCalled();
   });
 });
 

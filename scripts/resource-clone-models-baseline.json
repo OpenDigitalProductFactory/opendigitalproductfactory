@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "owner": "platform-architecture",
+  "expiry": "2026-11-16",
+  "note": "Resource-clone model ratchet baseline (BI-99C76A90, pass §3.2-c). Shrink-only: a clone leaves this list when the operator-reviewed W19 data migration retires it — never by expanding the baseline. New scheduling models join the unified resource-scheduling family instead. Regenerate with: node scripts/check-no-new-resource-clone-models.mjs --update",
+  "entries": [
+    "BeautyCapacityAllocation",
+    "BeautyResourceAvailability",
+    "EmployeeAvailabilityWindow",
+    "HospitalityCapacityAllocation",
+    "HospitalityCapacityPool",
+    "HospitalityResourceAvailability",
+    "ProviderAvailability",
+    "RecurringSchedule"
+  ]
+}

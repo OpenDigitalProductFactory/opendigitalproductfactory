@@ -1,0 +1,227 @@
+// ─── Unified resource scheduling (Simplify & Strengthen W19, BI-99C76A90) ────
+// Architecture pass 2026-08-16 §3.2-c: BeautyResource*/Hospitality* repeat one
+// concern field-for-field, and each new archetype wave adds more clones. This
+// domain file is the ONE Resource / ResourceAvailability / ResourceCapacityPool /
+// ResourceCapacityAllocation family, discriminated by `domain`, that replaces
+// them.
+//
+// EXPAND PHASE ONLY. The clone families stay authoritative until the operator-
+// reviewed data migration runs (docs/superpowers/plans/
+// 2026-08-18-w19-vertical-clone-collapse-data-migration-plan.md). Dual-read
+// adapters live in apps/web/lib/resource-scheduling/. `sourceRef` carries the
+// clone-row provenance key that makes backfill idempotent and dual-read
+// dedupe deterministic.
+//
+// These models are also the W20 lifecycle-convention pilot family (BI-C357FA5A,
+// pass §3.2-d): born on `lifecycle RecordLifecycle` + `lifecycleAt` instead of
+// any of the six legacy not-active conventions.
+
+// W20 (§3.2-d): THE one "not active" convention. A record is `active` or it
+// carries exactly one of these states plus `lifecycleAt` (when it left active)
+// and optionally `lifecycleReason`. Successor pointers (supersede/merge chains)
+// are DECLARED self-relations with a leading index in the owning family — never
+// bare id columns. Definition of record: docs/architecture/
+// data-model-stewardship-runbook.md §"Record lifecycle convention".
+enum RecordLifecycle {
+  active
+  archived
+  retired
+  superseded
+  merged
+  quarantined
+}
+
+// Closed set of scheduling domains being unified. Widening it for a new
+// archetype wave is a migration (AGENTS.md §8), which is exactly the visibility
+// the clone collapse wants: a new vertical joins THIS family instead of
+// cloning it.
+enum ResourceDomain {
+  beauty
+  hospitality
+  care
+  provider
+  workforce
+}
+
+enum AvailabilityWindowKind {
+  available
+  blocked
+}
+
+// Allocation business state, superset of the clone `lifecycle String` values
+// observed in the repositories (beauty: held/confirmed/active/released;
+// hospitality default: reserved; quarantined mirrors conflictQuarantinedAt).
+enum CapacityAllocationState {
+  reserved
+  held
+  confirmed
+  active
+  released
+  quarantined
+}
+
+/// Unified fixed/discrete operating resource (chair, station, treatment room,
+/// table, rentable lane, ...). People remain in ServiceProvider / Staffing;
+/// bookings remain in StorefrontBooking; geometry remains in
+/// OperationalSceneLayout. `subjectRef` links a human-backed resource row to
+/// its identity home (for example ServiceProvider or EmployeeProfile row keys)
+/// without cloning it.
+model Resource {
+  id              String          @id @default(cuid())
+  resourceKey     String // stable business key within (organization, domain) — the clone families call this resourceId
+  organizationId  String
+  storefrontId    String?
+  domain          ResourceDomain
+  kindSlug        String // open per-domain vocabulary: chair, station, treatment_room, table, kitchen, ...
+  label           String
+  capacity        Int             @default(1)
+  capacityUnit    String          @default("units")
+  serviceArea     String?
+  blockedReason   String?
+  attributes      Json?
+  subjectRef      String? // provenance key of a human identity home backing this resource, e.g. ServiceProvider row id
+  sourceRef       String?         @unique // clone-row provenance key for idempotent backfill, e.g. BeautyResource:<id>
+  lifecycle       RecordLifecycle @default(active)
+  lifecycleAt     DateTime?
+  lifecycleReason String?
+  version         Int             @default(1)
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  organization Organization                 @relation("ResourceOrganization", fields: [organizationId], references: [id], onDelete: Restrict)
+  storefront   StorefrontConfig?            @relation("ResourceStorefront", fields: [storefrontId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  availability ResourceAvailability[]
+  allocations  ResourceCapacityAllocation[]
+
+  @@unique([id, organizationId])
+  @@unique([organizationId, domain, resourceKey])
+  // FK-leading (storefrontId+organizationId): storefront-scoped roster reads in the dual-read repository.
+  @@index([storefrontId, organizationId, kindSlug])
+  // FK-leading (organizationId): org roster by domain and lifecycle in the dual-read repository.
+  @@index([organizationId, domain, lifecycle])
+}
+
+/// Unified recurring or dated availability/block window for a resource.
+/// Replaces BeautyResourceAvailability, HospitalityResourceAvailability, and
+/// (via adapters) ProviderAvailability. Recurring windows may reference the
+/// canonical RFC-5545 RecurrenceSchedule instead of the legacy days[] shape.
+model ResourceAvailability {
+  id                   String                 @id @default(cuid())
+  organizationId       String
+  resourceId           String
+  windowKind           AvailabilityWindowKind @default(available)
+  days                 Int[]                  @default([])
+  startTime            String?
+  endTime              String?
+  timezone             String                 @default("UTC")
+  date                 DateTime?
+  startsAt             DateTime?
+  endsAt               DateTime?
+  recurrenceScheduleId String?
+  reason               String?
+  sourceRef            String?                @unique // clone-row provenance key, e.g. ProviderAvailability:<id>
+  lifecycle            RecordLifecycle        @default(active)
+  lifecycleAt          DateTime?
+  lifecycleReason      String?
+  version              Int                    @default(1)
+  createdAt            DateTime               @default(now())
+  updatedAt            DateTime               @updatedAt
+
+  organization       Organization        @relation("ResourceAvailabilityOrganization", fields: [organizationId], references: [id], onDelete: Restrict)
+  resource           Resource            @relation(fields: [resourceId, organizationId], references: [id, organizationId], onDelete: Cascade)
+  recurrenceSchedule RecurrenceSchedule? @relation(fields: [recurrenceScheduleId], references: [id], onDelete: Restrict)
+
+  // FK-leading (resourceId+organizationId): per-resource window reads in the dual-read repository.
+  @@index([resourceId, organizationId, date])
+  // FK-leading (organizationId): org-wide window scans by kind.
+  @@index([organizationId, windowKind])
+  // FK-leading (recurrenceScheduleId): materializer reverse lookup.
+  @@index([recurrenceScheduleId])
+  @@index([startsAt, endsAt])
+}
+
+/// Unified aggregate time-bounded capacity (kitchen covers, bake batches,
+/// delivery windows). Replaces HospitalityCapacityPool.
+model ResourceCapacityPool {
+  id              String          @id @default(cuid())
+  poolKey         String // stable business key within (organization, domain) — HospitalityCapacityPool calls this poolId
+  organizationId  String
+  storefrontId    String?
+  domain          ResourceDomain
+  kindSlug        String
+  label           String
+  capacity        Int
+  capacityUnit    String
+  intervalMinutes Int?
+  attributes      Json?
+  sourceRef       String?         @unique // clone-row provenance key, e.g. HospitalityCapacityPool:<id>
+  lifecycle       RecordLifecycle @default(active)
+  lifecycleAt     DateTime?
+  lifecycleReason String?
+  version         Int             @default(1)
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  organization Organization                 @relation("ResourceCapacityPoolOrganization", fields: [organizationId], references: [id], onDelete: Restrict)
+  storefront   StorefrontConfig?            @relation("ResourceCapacityPoolStorefront", fields: [storefrontId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  allocations  ResourceCapacityAllocation[]
+
+  @@unique([id, organizationId])
+  @@unique([organizationId, domain, poolKey])
+  // FK-leading (storefrontId+organizationId): storefront-scoped pool reads.
+  @@index([storefrontId, organizationId, kindSlug])
+  // FK-leading (organizationId): org pool roster by domain and lifecycle.
+  @@index([organizationId, domain, lifecycle])
+}
+
+/// Unified append-preserving capacity consumption ledger. A row reserves
+/// exactly one discrete resource OR one aggregate pool for one demand (the
+/// operator-reviewed migration carries the CHECK invariant). Replaces
+/// BeautyCapacityAllocation and HospitalityCapacityAllocation.
+model ResourceCapacityAllocation {
+  id              String                  @id @default(cuid())
+  organizationId  String
+  storefrontId    String?
+  domain          ResourceDomain
+  resourceId      String?
+  poolId          String?
+  bookingId       String?
+  bookingHoldId   String?
+  demandSlug      String // open demand vocabulary carried verbatim from the clones: booking, hold, service-turn, ...
+  demandRef       String
+  startsAt        DateTime
+  endsAt          DateTime
+  quantity        Int                     @default(1)
+  state           CapacityAllocationState @default(confirmed)
+  idempotencyKey  String?
+  releasedAt      DateTime?
+  releaseReason   String?
+  sourceRef       String?                 @unique // clone-row provenance key, e.g. HospitalityCapacityAllocation:<id>
+  lifecycle       RecordLifecycle         @default(active)
+  lifecycleAt     DateTime?
+  lifecycleReason String?
+  version         Int                     @default(1)
+  createdAt       DateTime                @default(now())
+  updatedAt       DateTime                @updatedAt
+
+  organization Organization          @relation("ResourceCapacityAllocationOrganization", fields: [organizationId], references: [id], onDelete: Restrict)
+  storefront   StorefrontConfig?     @relation("ResourceCapacityAllocationStorefront", fields: [storefrontId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  resource     Resource?             @relation(fields: [resourceId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  pool         ResourceCapacityPool? @relation(fields: [poolId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  booking      StorefrontBooking?    @relation("ResourceAllocationBooking", fields: [bookingId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  bookingHold  BookingHold?          @relation("ResourceAllocationHold", fields: [bookingHoldId, organizationId], references: [id, organizationId], onDelete: Restrict)
+
+  @@unique([organizationId, idempotencyKey])
+  // FK-leading (resourceId+organizationId): per-resource conflict window scan.
+  @@index([resourceId, organizationId, startsAt])
+  // FK-leading (poolId+organizationId): per-pool conflict window scan.
+  @@index([poolId, organizationId, startsAt])
+  // FK-leading (storefrontId+organizationId): storefront demand lookup.
+  @@index([storefrontId, organizationId, demandSlug])
+  // FK-leading (bookingId+organizationId): allocations-for-booking release path.
+  @@index([bookingId, organizationId])
+  // FK-leading (bookingHoldId+organizationId): allocations-for-hold release path.
+  @@index([bookingHoldId, organizationId])
+  @@index([organizationId, state, startsAt])
+  @@index([startsAt, endsAt])
+}

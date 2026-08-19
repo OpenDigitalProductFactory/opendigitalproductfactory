@@ -1174,6 +1174,9 @@
       "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md",
       "docs/architecture/dpf-patterns.md"
     ],
+    "packages/db/prisma/schema/resource-scheduling.prisma": [
+      "docs/architecture/data-model-stewardship-runbook.md"
+    ],
     "packages/db/prisma/schema/work-coordination.prisma": [
       "docs/architecture/dpf-patterns.md"
     ],
@@ -1475,6 +1478,12 @@
     "scripts/check-no-native-dialogs.mjs": [
       "docs/architecture/theme-aware-styling-runbook.md",
       "docs/founder-kernel/wiki/principles/no-native-browser-dialogs.md"
+    ],
+    "scripts/check-no-new-closed-set-strings.mjs": [
+      "docs/architecture/data-model-stewardship-runbook.md"
+    ],
+    "scripts/check-no-new-notactive-conventions.mjs": [
+      "docs/architecture/data-model-stewardship-runbook.md"
     ],
     "scripts/check-no-private-identity.mjs": [
       "docs/operations/oss-repo-identity-hygiene.md"
@@ -2192,7 +2201,10 @@
       "apps/web/lib/shared/action-result.ts",
       "apps/web/lib/shared/coerce.ts",
       "apps/web/lib/shared/org-address.ts",
-      "scripts/check-no-local-isrecord.mjs"
+      "packages/db/prisma/schema/resource-scheduling.prisma",
+      "scripts/check-no-local-isrecord.mjs",
+      "scripts/check-no-new-closed-set-strings.mjs",
+      "scripts/check-no-new-notactive-conventions.mjs"
     ],
     "docs/architecture/decision-vectors.md": [
       "apps/web/lib/decision-perspective/material.ts",
