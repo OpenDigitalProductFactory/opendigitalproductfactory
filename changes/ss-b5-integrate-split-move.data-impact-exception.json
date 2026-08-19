@@ -1,0 +1,9 @@
+{
+  "scope": "W10 lib/integrate split (BI-AB17E1A8): move-only re-homing of apps/web/lib namespaces. The flagged persistent surface (code-graph projection modules, e.g. apps/web/lib/build/code-graph/neo4j-projection.ts) moved from lib/integrate/code-graph to lib/build/code-graph with content unchanged — git rename detection confirms no semantic diff; no asset, field, policy, or lifecycle change of any persistent surface occurred.",
+  "approver": "platform-architecture (autonomous under EP-413F2602, kernel ruling DI-9CA3854D4287; operator: cmq5kqds509j25nr0drfyyd3f)",
+  "rationale": "Pure file relocation with import-specifier rewrites. A DataImpactManifest would fabricate change kinds for surfaces whose bytes did not change. Characterization parity was verified per slice (per-file test-count diffs empty modulo renamed paths) and on the full merged tree (2794 test files / 23,855 tests green).",
+  "compensatingControl": "Characterization test parity per slice + full-suite green + guard loop 33/33; scripts/check-no-retired-lib-namespaces.mjs prevents the old namespace from silently reappearing with divergent copies of these modules.",
+  "expiry": "2026-09-18T00:00:00.000Z",
+  "remediationBI": "BI-AB17E1A8",
+  "waives": []
+}
