@@ -88,6 +88,17 @@ type LoopResult = {
   executedTools: Array<{ name: string; result: { success: boolean } }>;
 };
 
+/** One executed-tool evidence record, transport-agnostic. */
+export type ToolEvidence = { name: string; success: boolean };
+
+/** The thread name a journey executes under. Single source for both the loop
+ *  dispatch and the governed-audit evidence query — they must never drift
+ *  (journeyId is already `<agentId>/<journey>`, matching the live thread
+ *  naming `certification:<agentId>/<journeyId>`). */
+export function certificationThreadId(journeyId: string): string {
+  return `certification:${journeyId}`;
+}
+
 export type CertificationDeps = {
   resolveAgent: typeof resolveAutonomousWorkAgent;
   resolveTools: typeof resolveAutonomousWorkTools;
@@ -102,6 +113,18 @@ export type CertificationDeps = {
     requireTools: boolean;
     modelRequirements?: Record<string, unknown>;
   }) => Promise<LoopResult>;
+  /** Governed audit evidence (BI-68BBF206): the ToolExecution rows written for
+   *  this journey's thread within the journey's execution window. The in-loop
+   *  executed-tools list only sees calls the in-process loop dispatched itself;
+   *  native-mcp transports execute the model's MCP tool calls inside the CLI
+   *  subprocess against the governed MCP server, which writes ToolExecution
+   *  audit rows the loop counter never observes. Oracles judge the UNION. */
+  fetchToolEvidence: (params: {
+    threadId: string;
+    agentId: string;
+    since: Date;
+    until: Date;
+  }) => Promise<ToolEvidence[]>;
   db: typeof prisma;
   now: () => Date;
 };
@@ -118,7 +141,7 @@ async function defaultRunLoop(
     userId: params.userId,
     routeContext: params.routeContext,
     agentId: params.journey.agentId,
-    threadId: `certification:${params.journey.journeyId}`,
+    threadId: certificationThreadId(params.journey.journeyId),
     interactionMode: "chat",
     requireTools: params.requireTools,
     ...(params.modelRequirements && Object.keys(params.modelRequirements).length > 0
@@ -135,14 +158,54 @@ async function defaultRunLoop(
   };
 }
 
+async function defaultFetchToolEvidence(
+  params: Parameters<CertificationDeps["fetchToolEvidence"]>[0],
+): Promise<ToolEvidence[]> {
+  // Scoped to one journey's thread AND agent AND its execution window: the
+  // thread name is deterministic per journey, so the createdAt bounds are what
+  // exclude rows from earlier sweeps that reused the same threadId. Bounded
+  // take is belt-and-braces — a single journey executes a handful of calls.
+  const rows = await prisma.toolExecution.findMany({
+    where: {
+      threadId: params.threadId,
+      agentId: params.agentId,
+      createdAt: { gte: params.since, lte: params.until },
+    },
+    select: { toolName: true, success: true },
+    orderBy: { createdAt: "asc" },
+    take: 500,
+  });
+  return rows.map((r) => ({ name: r.toolName, success: r.success }));
+}
+
 function defaultDeps(): CertificationDeps {
   return {
     resolveAgent: resolveAutonomousWorkAgent,
     resolveTools: resolveAutonomousWorkTools,
     runLoop: defaultRunLoop,
+    fetchToolEvidence: defaultFetchToolEvidence,
     db: prisma,
     now: () => new Date(),
   };
+}
+
+/** Union in-loop and governed-audit tool evidence, deduped by (name, success).
+ *  The in-loop list stays authoritative-and-cheap for in-process providers;
+ *  the ToolExecution rows are the audited truth for transports (native-mcp
+ *  CLI subprocess) whose calls never pass through the in-process counter. */
+export function unionToolEvidence(
+  inLoop: ToolEvidence[],
+  governed: ToolEvidence[],
+): ToolEvidence[] {
+  const seen = new Set<string>();
+  const union: ToolEvidence[] = [];
+  for (const t of [...inLoop, ...governed]) {
+    const key = `${t.success ? "ok" : "fail"}:${t.name}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    union.push(t);
+  }
+  return union;
 }
 
 function inferenceInconclusiveJourney(
@@ -223,12 +286,34 @@ async function executeJourney(
       return inferenceInconclusiveJourney(journey, startedAt, deps);
     }
 
+    // BI-68BBF206: under native-mcp dispatch the model's tool calls execute
+    // inside the CLI subprocess against the governed MCP server — ToolExecution
+    // audit rows are written, but the in-process executedTools list stays
+    // empty, so ORACLE-TOOL read every journey as "attempted: none". The
+    // audited rows are the source of truth for governed tool use; union them
+    // with the in-loop list (which remains correct — and cheaper — for
+    // in-process providers) and judge the union.
+    const inLoopEvidence: ToolEvidence[] = loop.executedTools.map((t) => ({
+      name: t.name,
+      success: t.result.success,
+    }));
+    let governedEvidence: ToolEvidence[] = [];
+    try {
+      governedEvidence = await deps.fetchToolEvidence({
+        threadId: certificationThreadId(journey.journeyId),
+        agentId: journey.agentId,
+        since: new Date(startedAt),
+        until: deps.now(),
+      });
+    } catch {
+      // An audit-read failure must not fail the coworker: fall back to the
+      // in-loop evidence only (the pre-fix behavior), never to a verdict.
+    }
+    const executedTools = unionToolEvidence(inLoopEvidence, governedEvidence);
+
     const verdicts = evaluateJourneyOracles({
       content: loop.content,
-      executedTools: loop.executedTools.map((t) => ({
-        name: t.name,
-        success: t.result.success,
-      })),
+      executedTools,
       offeredToolNames: readOnlyTools.map((t) => t.name),
       downgraded: loop.downgraded,
     });
@@ -239,7 +324,7 @@ async function executeJourney(
       passed: journeyPassed(verdicts),
       capacityInconclusive: false,
       verdicts,
-      executedToolNames: [...new Set(loop.executedTools.map((t) => t.name))],
+      executedToolNames: [...new Set(executedTools.map((t) => t.name))],
       downgraded: loop.downgraded,
       durationMs: deps.now().getTime() - startedAt,
     };
