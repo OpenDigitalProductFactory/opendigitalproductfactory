@@ -412,6 +412,11 @@ model Organization {
   beautyCapacityAllocations         BeautyCapacityAllocation[]         @relation("BeautyAllocationOrganization")
   hospitalityServiceTurns           HospitalityServiceTurn[]           @relation("HospitalityServiceTurnOrganization")
   hospitalityServiceTurnEvents      HospitalityServiceTurnEvent[]      @relation("HospitalityServiceTurnEventOrganization")
+  // W19 unified resource-scheduling family (BI-99C76A90) — replaces the Beauty*/Hospitality* clone relations above after the operator-reviewed migration.
+  resources                         Resource[]                         @relation("ResourceOrganization")
+  resourceAvailability              ResourceAvailability[]             @relation("ResourceAvailabilityOrganization")
+  resourceCapacityPools             ResourceCapacityPool[]             @relation("ResourceCapacityPoolOrganization")
+  resourceCapacityAllocations       ResourceCapacityAllocation[]       @relation("ResourceCapacityAllocationOrganization")
   hospitalityBookingHolds           BookingHold[]                      @relation("BookingHoldOrganization")
   businessContext                   BusinessContext?
   marketingStrategy                 MarketingStrategy?

@@ -148,6 +148,12 @@ model RecurrenceSchedule {
   supersedes       RecurrenceSchedule[] @relation("RecurrenceSupersede")
   workEngagements  WorkEngagement[]
   careAppointments CareAppointment[]
+  // W19 (BI-99C76A90, pass §3.2-c): RecurrenceSchedule is the ONE canonical
+  // recurrence primitive. Unified availability windows reference it, and
+  // finance RecurringSchedule folds its `frequency` semantics onto it via
+  // recurrenceScheduleId (expand phase — see the W19 migration plan doc).
+  resourceAvailability      ResourceAvailability[]
+  recurringBillingSchedules RecurringSchedule[]
 
   @@index([active])
   @@index([supersededByScheduleId])

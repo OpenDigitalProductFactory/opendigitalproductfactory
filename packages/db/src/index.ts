@@ -16,6 +16,12 @@ export type {
   PrismaClient,
   PayRunStatus,
   PayslipDisbursementStatus,
+  // W19 unified resource-scheduling family (BI-99C76A90) + the W20 record
+  // lifecycle convention enum (BI-C357FA5A).
+  RecordLifecycle,
+  ResourceDomain,
+  AvailabilityWindowKind,
+  CapacityAllocationState,
 } from "../generated/client/client";
 export { WriteGateRequirement } from "../generated/client/client";
 export {

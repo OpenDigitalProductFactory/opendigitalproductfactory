@@ -848,9 +848,15 @@ model RecurringSchedule {
 
   // The support contract this schedule renews, if it was minted from one.
   subscriptionId String?             @unique
+  // W19 fold (BI-99C76A90, pass §3.2-c): billing cadence delegates to the ONE
+  // canonical RFC-5545 RecurrenceSchedule primitive. Expand phase: nullable and
+  // dual-read (`frequency` stays authoritative until the operator-reviewed
+  // backfill in the W19 migration plan doc flips the convention).
+  recurrenceScheduleId String?       @unique
   account        CustomerAccount     @relation(fields: [accountId], references: [id])
   createdBy      User?               @relation("RecurringScheduleCreations", fields: [createdById], references: [id])
   subscription   Subscription?       @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
+  recurrenceSchedule RecurrenceSchedule? @relation(fields: [recurrenceScheduleId], references: [id], onDelete: Restrict)
   lineItems      RecurringLineItem[]
 
   @@index([accountId])
