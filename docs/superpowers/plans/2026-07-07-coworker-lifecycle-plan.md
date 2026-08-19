@@ -136,6 +136,12 @@ or unknown. Applied uniformly to in-loop and audited evidence, so offered-surfac
 remains a sufficient fast path and the prior check is subsumed, never weakened. A grant-fetch
 failure classifies conservatively (fails; never a silent pass).
 
-**Standing rule for future oracles:** an oracle asserts a property of the *governed record*,
-never of a transport-specific counter. If a new oracle reads loop-local state, it must state
+**Standard alignment.** This assurance approach is now normative in the TAK-JSI standard
+(`docs/architecture/job-specific-intelligence.md` §11.4), which names these checks *assessment
+criteria* rather than oracles and states the evidence-source and authorization-envelope rules as
+conformance requirements. Renaming the implementation to match (`ORACLE-*` → `AC-*`), with the
+alias window the live `findingKey` unique column requires, is tracked as BI-5C774C84.
+
+**Standing rule for future criteria:** a criterion asserts a property of the *governed record*,
+never of a transport-specific counter. If a new criterion reads loop-local state, it must state
 why that state is authoritative for every dispatch mode the runner supports.
