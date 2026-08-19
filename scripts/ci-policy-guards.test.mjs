@@ -19,6 +19,7 @@ const EXPECTED_LEGACY_JOBS = [
   "compose-resource-budgets-guard",
   "context-economy-guard",
   "data-impact-gate",
+  "db-commandment-coverage",
   "decision-baseline",
   "derived-artifact-registry",
   "design-grounding-gate",
