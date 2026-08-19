@@ -1,4 +1,4 @@
-// apps/web/lib/operations-run/reap.ts — EP-8DC217EB BET-10
+// apps/web/lib/operate/reap.ts — EP-8DC217EB BET-10
 //
 // One skeleton for the 4-5 reapers that share the same shape:
 //
@@ -13,7 +13,8 @@
 // reaper's observable behavior is unchanged — this is a control-flow
 // consolidation, not a policy change.
 //
-// NEUTRAL-HOME RULE (plan §4): this lives in lib/operations-run/, deliberately
+// NEUTRAL-HOME RULE (plan §4): this lives in lib/operate/ (the ONE operations
+// namespace after the Simplify & Strengthen W10 merge), deliberately
 // OUTSIDE the collision hot-zones (lib/queue, lib/tak, lib/routing, lib/govern).
 // The Inngest cron wiring stays in lib/queue/functions/* as a thin shell that
 // imports this framework; the reaper primitives themselves are neutral.

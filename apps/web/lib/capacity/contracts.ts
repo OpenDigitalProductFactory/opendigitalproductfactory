@@ -2,7 +2,7 @@ import type {
   ResourceCapacityAuthority,
   ResourceCapacityProfile,
 } from "@dpf/storefront-templates";
-import type { OperationalSourceWatermark } from "@/lib/operations/source-health";
+import type { OperationalSourceWatermark } from "@/lib/operate/source-health";
 
 export const CAPACITY_RESOURCE_STATUSES = [
   "available",
