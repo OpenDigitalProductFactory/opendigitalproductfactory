@@ -45,7 +45,7 @@ const MANAGED_JOBS_BY_ID: Record<string, ManagedJob> = Object.fromEntries(
 export async function registerScheduledJobs(): Promise<void> {
   const now = new Date();
   const { registerModelDiscoveryJob } = await import("../inference/model-discovery-scheduler");
-  const { registerCodeGraphScheduledJob } = await import("../integrate/code-graph-refresh");
+  const { registerCodeGraphScheduledJob } = await import("../build/code-graph-refresh");
   await Promise.all([
     ...MANAGED_JOBS.map((job) =>
       prisma.scheduledJob.upsert({

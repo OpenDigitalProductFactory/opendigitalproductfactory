@@ -29,7 +29,7 @@ export const assuranceRemediationTeeUpScheduled = inngest.createFunction(
         isAssuranceRemediationWindowOpen,
         resolveRemediationBudget,
       } = await import("@/lib/assurance/remediation-teeup");
-      const { dispatchApprovedIdeateBuilds } = await import("@/lib/integrate/ideate-on-approval");
+      const { dispatchApprovedIdeateBuilds } = await import("@/lib/build/ideate-on-approval");
       const { resolveScheduledOwnerUserId } = await import("../scheduled-owner");
 
       const now = new Date();

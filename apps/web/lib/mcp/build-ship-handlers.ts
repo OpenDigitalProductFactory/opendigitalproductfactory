@@ -48,8 +48,8 @@ export async function deployFeature(params: Record<string, unknown>, userId: str
     };
   }
 
-  const { diagnoseSandboxReadiness } = await import("@/lib/integrate/sandbox/sandbox-admin");
-  const { assertSandboxReadyForDeploy } = await import("@/lib/integrate/sandbox/sandbox-readiness-gate");
+  const { diagnoseSandboxReadiness } = await import("@/lib/build/sandbox/sandbox-admin");
+  const { assertSandboxReadyForDeploy } = await import("@/lib/build/sandbox/sandbox-readiness-gate");
   const readiness = await diagnoseSandboxReadiness({ buildId });
   const readinessGate = assertSandboxReadyForDeploy(readiness);
   if (!readinessGate.ok) {
@@ -82,8 +82,8 @@ export async function deployFeature(params: Record<string, unknown>, userId: str
   // is captured — without the base ref, `git diff --cached` only sees
   // staged-but-uncommitted changes and returns empty for any build whose
   // agent committed before deploy_feature ran.
-  const { extractAndCategorizeDiff, scanForDestructiveOps, isNowInWindow } = await import("@/lib/integrate/sandbox/sandbox-promotion");
-  const { getClientIdentity } = await import("@/lib/integrate/sandbox/build-branch");
+  const { extractAndCategorizeDiff, scanForDestructiveOps, isNowInWindow } = await import("@/lib/build/sandbox/sandbox-promotion");
+  const { getClientIdentity } = await import("@/lib/build/sandbox/build-branch");
   const { clientBranch } = await getClientIdentity();
   const extracted = await extractAndCategorizeDiff(build.sandboxId, { baseRef: clientBranch });
   if (!extracted.fullDiff.trim()) {
@@ -134,7 +134,7 @@ export async function deployFeature(params: Record<string, unknown>, userId: str
   // commits being submitted. Without this, FB.gitCommitHashes stays
   // empty for committed-work builds and contribute_to_hive cannot
   // attribute the PR's commits back to specific FBs.
-  const { listSandboxCommitsAheadOfBase } = await import("@/lib/integrate/sandbox/sandbox");
+  const { listSandboxCommitsAheadOfBase } = await import("@/lib/build/sandbox/sandbox");
   const commitHashes = await listSandboxCommitsAheadOfBase(build.sandboxId, clientBranch);
 
   await prisma.featureBuild.update({
@@ -151,9 +151,9 @@ export async function deployFeature(params: Record<string, unknown>, userId: str
   // the final call via set_change_disposition; this only pre-fills.
   // Non-fatal — a failed suggestion leaves the fail-closed default.
   try {
-    const { suggestDisposition } = await import("@/lib/integrate/disposition");
+    const { suggestDisposition } = await import("@/lib/build/disposition");
     const { loadPrivatePathPatterns, compilePrivatePathMatcher, stripPrivatePathsFromDiff } =
-      await import("@/lib/integrate/private-paths");
+      await import("@/lib/build/private-paths");
     const outboundEmpty = !stripPrivatePathsFromDiff(
       extracted.fullDiff,
       compilePrivatePathMatcher(await loadPrivatePathPatterns({ prisma })),
@@ -175,13 +175,13 @@ export async function deployFeature(params: Record<string, unknown>, userId: str
     }
     let orgSpecificHits = 0;
     try {
-      const { runSanitizationScan } = await import("@/lib/integrate/contribution-review");
+      const { runSanitizationScan } = await import("@/lib/build/contribution-review");
       const san = await runSanitizationScan(extracted.fullDiff);
       orgSpecificHits = san.mustFixCount;
     } catch { /* sanitization optional */ }
     let archetypeMarketFit: "high" | "medium" | "low" | "unknown" = "unknown";
     try {
-      const { tagBusinessVerticals } = await import("@/lib/integrate/contribution-review");
+      const { tagBusinessVerticals } = await import("@/lib/build/contribution-review");
       const verticals = await tagBusinessVerticals(build.brief as Record<string, unknown> | null, extracted.fullDiff);
       const primary = verticals.applicableVerticals.filter((vertical) => vertical.relevance === "primary").length;
       const applicable = verticals.applicableVerticals.filter((vertical) => vertical.relevance === "applicable").length;
@@ -427,13 +427,13 @@ export async function createPortalPr(params: Record<string, unknown>, userId: st
       where: { id: "singleton" },
       select: { upstreamRemoteUrl: true },
     });
-    const { classifyEgress } = await import("@/lib/integrate/contribution-egress");
+    const { classifyEgress } = await import("@/lib/build/contribution-egress");
     const egress = classifyEgress({ owner: repoOwner, repo: repoName }, _egCfg?.upstreamRemoteUrl);
     if (egress === "public-hive") {
       // Fail-closed disposition gate (EP-1A78BAE1): a public-hive PR may only
       // carry a change confirmed "shareable". Own-repo PRs skip this — that
       // is the install's private home.
-      const { mayShareToPublicHive, privateDispositionBlockMessage } = await import("@/lib/integrate/disposition");
+      const { mayShareToPublicHive, privateDispositionBlockMessage } = await import("@/lib/build/disposition");
       if (!mayShareToPublicHive(build.disposition)) {
         logBuildActivity(buildId, "create_portal_pr", "blocked: change disposition is private (public-hive target)");
         return {
@@ -443,7 +443,7 @@ export async function createPortalPr(params: Record<string, unknown>, userId: st
         };
       }
       const { loadPrivatePathPatterns, compilePrivatePathMatcher, stripPrivatePathsFromDiff } =
-        await import("@/lib/integrate/private-paths");
+        await import("@/lib/build/private-paths");
       shareableDiff = stripPrivatePathsFromDiff(
         diff,
         compilePrivatePathMatcher(await loadPrivatePathPatterns({ prisma })),
@@ -460,7 +460,7 @@ export async function createPortalPr(params: Record<string, unknown>, userId: st
   }
 
   // Resolve token
-  const { resolveHiveToken, getPlatformIdentity, generatePrivateBranchName, generateAnonymousCommitMessage } = await import("@/lib/integrate/identity-privacy");
+  const { resolveHiveToken, getPlatformIdentity, generatePrivateBranchName, generateAnonymousCommitMessage } = await import("@/lib/build/identity-privacy");
   const token = await resolveHiveToken();
   if (!token) {
     return { success: false, error: "No GitHub token available.", message: "Configure HIVE_CONTRIBUTION_TOKEN or a git credential to create PRs." };
@@ -518,7 +518,7 @@ export async function createPortalPr(params: Record<string, unknown>, userId: st
 
   const prTitle = `feat(${buildId}): ${build.title}`;
   const labels = ["build-studio", "automated"];
-  const { publishBranchCommit, openPullRequest } = await import("@/lib/integrate/github-api-commit");
+  const { publishBranchCommit, openPullRequest } = await import("@/lib/build/github-api-commit");
 
   const published = await publishBranchCommit({
     headOwner: repoOwner,
@@ -533,7 +533,7 @@ export async function createPortalPr(params: Record<string, unknown>, userId: st
     buildPublishedReadinessCommand,
     evaluateBuildVerificationReadiness,
     parsePublishedReadinessOutput,
-  } = await import("@/lib/integrate/build-studio-pr-readiness");
+  } = await import("@/lib/build/build-studio-pr-readiness");
   const verificationReadiness = evaluateBuildVerificationReadiness({
     typecheckPassed,
     testsFailed,
@@ -546,7 +546,7 @@ export async function createPortalPr(params: Record<string, unknown>, userId: st
   };
   if (build.sandboxId && build.buildBranch) {
     try {
-      const { execInSandboxWithStdin } = await import("@/lib/integrate/sandbox/sandbox");
+      const { execInSandboxWithStdin } = await import("@/lib/build/sandbox/sandbox");
       const output = await execInSandboxWithStdin(
         build.sandboxId,
         buildPublishedReadinessCommand({

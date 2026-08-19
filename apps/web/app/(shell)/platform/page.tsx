@@ -5,7 +5,7 @@ import { PlatformReadinessMatrix } from "@/components/workspace/PlatformReadines
 import { getProposalStats } from "@/lib/evaluate/proposal-data";
 import { getToolExecutionStats } from "@/lib/tool-execution-data";
 import { buildAuthoritySummaryMetrics, getPlatformAuthoritySummary } from "@/lib/platform-authority-summary";
-import { loadWorkspaceCommandCenter } from "@/lib/workspace/command-center";
+import { loadWorkspaceCommandCenter } from "@/lib/workspace-home/command-center";
 
 export default async function PlatformPage() {
   const [

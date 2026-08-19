@@ -143,7 +143,7 @@ export const infraPrune = inngest.createFunction(
     // Once a week is plenty for a 15-min-TTL transient.
     await step.run("prune-device-code-sessions", async () => {
       const { cleanupExpiredDeviceCodeSessions } = await import(
-        "@/lib/integrate/github-oauth"
+        "@/lib/build/github-oauth"
       );
       const removed = await cleanupExpiredDeviceCodeSessions();
       return { removedDeviceCodeSessions: removed };

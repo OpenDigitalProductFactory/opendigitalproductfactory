@@ -1,2 +1,2 @@
-// Shim — moved to lib/integrate/manifest-generator.ts (Phase 10 refactoring)
-export * from "./integrate/manifest-generator";
+// Shim — moved to lib/build/manifest-generator.ts (Phase 10 refactoring)
+export * from "./build/manifest-generator";

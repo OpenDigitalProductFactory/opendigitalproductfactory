@@ -31,13 +31,13 @@ export async function POST(req: Request) {
   }
 
   if (dispatchPhase === "build") {
-    const { dispatchBuildForApprovedPlan } = await import("@/lib/integrate/build-on-plan-approval");
+    const { dispatchBuildForApprovedPlan } = await import("@/lib/build/build-on-plan-approval");
     const result = await dispatchBuildForApprovedPlan({ buildId, userId });
     return NextResponse.json(result);
   }
 
   // Default: dispatch plan generation
-  const { dispatchPlanForApprovedBuild } = await import("@/lib/integrate/plan-on-approval");
+  const { dispatchPlanForApprovedBuild } = await import("@/lib/build/plan-on-approval");
   const result = await dispatchPlanForApprovedBuild({ buildId, userId });
   return NextResponse.json(result);
 }

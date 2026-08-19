@@ -4,7 +4,7 @@ import { LocalTime } from "@/components/ui/LocalTime";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { decryptJson } from "@/lib/govern/credential-crypto";
-import { loadFacebookPagesPreview } from "@/lib/integrate/facebook-pages/preview";
+import { loadFacebookPagesPreview } from "@/lib/integrations/facebook-pages/preview";
 import {
   FacebookPagesConnectPanel,
   type FacebookPagesConnectionState,

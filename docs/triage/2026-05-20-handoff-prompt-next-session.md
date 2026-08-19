@@ -35,9 +35,9 @@ though the work is genuinely done.
 There is a missing step (or a broken one) between "sandbox has commits"
 and "FB row has diffPatch + gitCommitHashes." Find it. Likely
 candidates:
-- `apps/web/lib/integrate/build-pipeline.ts` step ordering
-- `apps/web/lib/integrate/coding-agent.ts` finalization
-- `apps/web/lib/integrate/sandbox/sandbox.ts` (the `listReleasableSandboxFiles`
+- `apps/web/lib/build/build-pipeline.ts` step ordering
+- `apps/web/lib/build/coding-agent.ts` finalization
+- `apps/web/lib/build/sandbox/sandbox.ts` (the `listReleasableSandboxFiles`
   cousin)
 - Maybe a step that exists only on the OLD `autoExecuteBuild` path and
   was lost in the checkpoint-pipeline refactor

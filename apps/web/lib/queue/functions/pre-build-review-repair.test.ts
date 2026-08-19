@@ -18,11 +18,11 @@ vi.mock("@dpf/db", () => ({
   },
 }));
 
-vi.mock("@/lib/integrate/ideate-on-approval", () => ({
+vi.mock("@/lib/build/ideate-on-approval", () => ({
   dispatchDesignReviewFixLoop: (...args: unknown[]) => dispatchDesignReviewFixLoopMock(...args),
 }));
 
-vi.mock("@/lib/integrate/plan-on-approval", () => ({
+vi.mock("@/lib/build/plan-on-approval", () => ({
   dispatchPlanForApprovedBuild: (...args: unknown[]) => dispatchPlanForApprovedBuildMock(...args),
 }));
 

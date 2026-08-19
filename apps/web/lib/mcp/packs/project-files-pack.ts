@@ -93,7 +93,7 @@ const definitions: ToolDefinition[] = [
 ];
 
 async function listProjectDirectoryHandler(params: Record<string, unknown>): Promise<ToolResult> {
-  const { listProjectDirectory } = await import("@/lib/integrate/codebase-tools");
+  const { listProjectDirectory } = await import("@/lib/build/codebase-tools");
   const result = await listProjectDirectory(String(params.path ?? "."));
   if ("error" in result) return { success: false, error: result.error, message: result.error };
   const summary = result.entries.map((e) => `${e.type === "dir" ? "[dir]" : "     "} ${e.path}`).join("\n");
@@ -101,7 +101,7 @@ async function listProjectDirectoryHandler(params: Record<string, unknown>): Pro
 }
 
 async function readProjectFileHandler(params: Record<string, unknown>): Promise<ToolResult> {
-  const { readProjectFile } = await import("@/lib/integrate/codebase-tools");
+  const { readProjectFile } = await import("@/lib/build/codebase-tools");
   const opts: { startLine?: number; endLine?: number } = {};
   if (typeof params.startLine === "number") opts.startLine = params.startLine;
   if (typeof params.endLine === "number") opts.endLine = params.endLine;
@@ -111,7 +111,7 @@ async function readProjectFileHandler(params: Record<string, unknown>): Promise<
 }
 
 async function searchProjectFilesHandler(params: Record<string, unknown>): Promise<ToolResult> {
-  const { searchProjectFiles } = await import("@/lib/integrate/codebase-tools");
+  const { searchProjectFiles } = await import("@/lib/build/codebase-tools");
   let query = String(params.query ?? "");
   const opts: { glob?: string; maxResults?: number } = {};
 
@@ -140,7 +140,7 @@ async function searchProjectFilesHandler(params: Record<string, unknown>): Promi
 }
 
 async function generateCodebaseManifestHandler(params: Record<string, unknown>): Promise<ToolResult> {
-  const { isDevInstance } = await import("@/lib/integrate/codebase-tools");
+  const { isDevInstance } = await import("@/lib/build/codebase-tools");
   if (!isDevInstance()) return { success: false, error: "Manifest generation is only available on dev instances.", message: "Dev-only tool." };
 
   const { generateManifest } = await import("@/lib/manifest-generator");
@@ -189,7 +189,7 @@ async function readCodebaseManifestHandler(params: Record<string, unknown>): Pro
   }
 
   // Fall back to reading the file (dev instances only)
-  const { isDevInstance, readProjectFile } = await import("@/lib/integrate/codebase-tools");
+  const { isDevInstance, readProjectFile } = await import("@/lib/build/codebase-tools");
   if (isDevInstance()) {
     const result = await readProjectFile("codebase-manifest.json");
     if ("content" in result) {

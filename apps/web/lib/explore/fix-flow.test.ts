@@ -6,7 +6,7 @@ import {
   deriveFixUxTestCases,
   type FixContext,
 } from "./feature-build-types";
-import { getBuildPhasePrompt } from "@/lib/integrate/build-agent-prompts";
+import { getBuildPhasePrompt } from "@/lib/build/build-agent-prompts";
 
 vi.mock("@/lib/tak/prompt-loader", () => ({
   loadPrompt: vi.fn(async (_category: string, _slug: string, fallback?: string) => fallback ?? ""),

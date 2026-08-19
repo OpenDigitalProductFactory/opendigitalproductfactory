@@ -7,7 +7,7 @@
 
 import { NextResponse } from "next/server";
 import { apiSuccess } from "@/lib/api/response";
-import { getPublicStorefront } from "@/lib/release/storefront-data";
+import { getPublicStorefront } from "@/lib/storefront/storefront-data";
 import { groupMenu } from "@/lib/storefront/menu";
 import type { PublicMenu } from "@dpf/types";
 

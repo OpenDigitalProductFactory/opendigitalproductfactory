@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
-import { connectQuickBooks } from "@/lib/integrate/quickbooks/connect-action";
+import { connectQuickBooks } from "@/lib/integrations/quickbooks/connect-action";
 
 export async function POST(request: Request) {
   const session = await auth();

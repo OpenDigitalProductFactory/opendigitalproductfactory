@@ -1,4 +1,4 @@
-import { CONTRIBUTION_COPY } from "@/lib/integrate/contribution-copy";
+import { CONTRIBUTION_COPY } from "@/lib/build/contribution-copy";
 
 // Server-rendered banner that surfaces when an install is on a non-fork_only
 // contribution mode but hasn't yet chosen a contributionModel after the

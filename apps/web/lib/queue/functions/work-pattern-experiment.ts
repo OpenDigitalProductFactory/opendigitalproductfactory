@@ -113,7 +113,7 @@ export const workPatternExperimentRun = inngest.createFunction(
               );
             }
             const { executePersistedWorkPatternExperimentCell } = await import(
-              "@/lib/integrate/work-pattern-experiment-runtime"
+              "@/lib/build/work-pattern-experiment-runtime"
             );
             return executePersistedWorkPatternExperimentCell(
               cell.taskRunId,
@@ -134,7 +134,7 @@ export const workPatternExperimentRun = inngest.createFunction(
             } = await import("@/lib/tak/work-pattern-experiment-types");
             const {
               parsePersistedWorkPatternExperimentExecution,
-            } = await import("@/lib/integrate/work-pattern-experiment-runtime");
+            } = await import("@/lib/build/work-pattern-experiment-runtime");
             const parentMetadata = isRecord(parentRow?.a2aMetadata)
               ? parentRow.a2aMetadata
               : {};

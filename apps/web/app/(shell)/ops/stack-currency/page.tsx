@@ -6,7 +6,7 @@ import {
   assessPlatformStack,
   stackCurrencySummary,
   ACTIONABLE_CURRENCIES,
-} from "@/lib/ops/platform-stack";
+} from "@/lib/operate/platform-stack";
 
 // Computed from live dates on each request — never statically cached.
 export const dynamic = "force-dynamic";

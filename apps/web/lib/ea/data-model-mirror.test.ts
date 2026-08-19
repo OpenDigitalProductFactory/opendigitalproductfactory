@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
-import { parsePrismaSchema } from "../integrate/code-graph/extractors/prisma-schema-adapter";
+import { parsePrismaSchema } from "../build/code-graph/extractors/prisma-schema-adapter";
 import {
   buildDesiredState,
   planMirror,

@@ -57,7 +57,7 @@ This skill is the handoff for the subset of backlog work that should enter the e
 |---|---|---|
 | BI state | `mcp__dpf__get_backlog_item({ itemId })` | Current status, triageOutcome, effortSize, body — promotion preconditions |
 | BS runtime health | `mcp__dpf__list_build_activity_since` or the `/build` page | Whether the BS runtime is online and has capacity |
-| BS pipeline phases | [`apps/web/lib/integrate/build-orchestrator.ts`](../../../../apps/web/lib/integrate/build-orchestrator.ts) | The lifecycle gates this BI will traverse (Ideate → Plan → Build → Verify → Ship) |
+| BS pipeline phases | [`apps/web/lib/build/build-orchestrator.ts`](../../../../apps/web/lib/build/build-orchestrator.ts) | The lifecycle gates this BI will traverse (Ideate → Plan → Build → Verify → Ship) |
 | Delivery-surface doctrine | [`AGENTS.md §17`](../../../../AGENTS.md#17-delivery-surfaces--execution-alignment) | BS is optional; external host-worktree builds are peers when centrally tracked |
 
 ## Enforces
@@ -130,7 +130,7 @@ For future work, those conditions are examples, not a three-part exception test.
 ## See also
 
 - Predecessor skill: [`dpf-file-backlog-item`](../dpf-file-backlog-item/SKILL.md)
-- BS orchestrator: [`apps/web/lib/integrate/build-orchestrator.ts`](../../../../apps/web/lib/integrate/build-orchestrator.ts)
+- BS orchestrator: [`apps/web/lib/build/build-orchestrator.ts`](../../../../apps/web/lib/build/build-orchestrator.ts)
 - Delivery-surface doctrine: [`AGENTS.md §17`](../../../../AGENTS.md#17-delivery-surfaces--execution-alignment)
 - BS lifecycle status: `project_build_studio_lifecycle_status` (user memory)
 - Reset Build for stuck FeatureBuilds: `EP-BUILD-64B599` (see live epic list)

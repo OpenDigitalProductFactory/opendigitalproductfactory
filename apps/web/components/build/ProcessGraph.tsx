@@ -15,9 +15,9 @@ import "@xyflow/react/dist/style.css";
 import "./process-graph.css";
 
 import type { BuildPhase, FeatureBuildRow } from "@/lib/feature-build-types";
-import type { AssignedTask } from "@/lib/integrate/task-dependency-graph";
+import type { AssignedTask } from "@/lib/build/task-dependency-graph";
 import type { BuildProgressVisibility } from "@/lib/build/progress-visibility";
-import { buildDependencyGraph } from "@/lib/integrate/task-dependency-graph";
+import { buildDependencyGraph } from "@/lib/build/task-dependency-graph";
 import { lookupAssignedTaskByTitle, type ProcessGraphNodeClickInfo } from "./ProcessGraphClickInfo";
 export type { ProcessGraphNodeKind, ProcessGraphNodeClickInfo } from "./ProcessGraphClickInfo";
 import {

@@ -17,8 +17,8 @@ import {
   summarizeCodeGraphCoverage,
   type CodeGraphCoverageSummary,
   type CodeGraphFreshness,
-} from "@/lib/integrate/code-graph-access";
-import { traceCodeSurface, type CodeSurfaceTraceResult } from "@/lib/integrate/code-graph";
+} from "@/lib/build/code-graph-access";
+import { traceCodeSurface, type CodeSurfaceTraceResult } from "@/lib/build/code-graph";
 import { CONSOLIDATION_BETS, type ConsolidationBet } from "./consolidation-bets";
 
 export type BetBacklogStatus = {

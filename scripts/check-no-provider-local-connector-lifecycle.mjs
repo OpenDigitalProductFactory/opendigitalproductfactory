@@ -25,7 +25,7 @@ const PROOF_PREFIXES = [
   "apps/web/components/integrations/Microsoft365CommunicationsConnectPanel",
   "apps/web/lib/integrations/connectors/microsoft365-communications",
   "apps/web/lib/integrations/connectors/email-postmark",
-  "apps/web/lib/integrate/microsoft365-communications/",
+  "apps/web/lib/integrations/microsoft365-communications/",
   "apps/web/lib/marketing/channels/email-postmark/",
   "apps/web/app/api/integrations/email-postmark/",
 ];

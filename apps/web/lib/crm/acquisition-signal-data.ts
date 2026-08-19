@@ -1,5 +1,5 @@
 import { prisma } from "@dpf/db";
-import { getFacebookLeadAdsAcquisitionSignal } from "@/lib/integrate/facebook-lead-ads/signal";
+import { getFacebookLeadAdsAcquisitionSignal } from "@/lib/integrations/facebook-lead-ads/signal";
 import {
   buildAcquisitionSignalWorkspace,
   type AcquisitionSignalInput,

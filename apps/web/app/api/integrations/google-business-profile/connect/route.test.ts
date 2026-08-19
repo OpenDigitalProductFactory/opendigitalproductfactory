@@ -10,7 +10,7 @@ vi.mock("@/lib/auth", () => ({
   })),
 }));
 
-vi.mock("@/lib/integrate/google-business-profile/connect-action", () => ({
+vi.mock("@/lib/integrations/google-business-profile/connect-action", () => ({
   connectGoogleBusinessProfile: mockConnectGoogleBusinessProfile,
 }));
 

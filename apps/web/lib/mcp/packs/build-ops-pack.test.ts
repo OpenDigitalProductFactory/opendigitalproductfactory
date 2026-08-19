@@ -69,7 +69,7 @@ const unifiedWipQuery = vi.hoisted(() => ({
 vi.mock("@/lib/build/unified-wip-query", () => unifiedWipQuery);
 
 const ideateOnApproval = vi.hoisted(() => ({ dispatchIdeateForApprovedBuild: vi.fn() }));
-vi.mock("@/lib/integrate/ideate-on-approval", () => ideateOnApproval);
+vi.mock("@/lib/build/ideate-on-approval", () => ideateOnApproval);
 
 const preflight = vi.hoisted(() => ({ resolveLiveInstallReadiness: vi.fn() }));
 vi.mock("@/lib/verify/preflight-service", () => preflight);
@@ -82,7 +82,7 @@ const codebaseTools = vi.hoisted(() => ({
   writeProjectFile: vi.fn(),
   generateSimpleDiff: vi.fn(() => "diff"),
 }));
-vi.mock("@/lib/integrate/codebase-tools", () => codebaseTools);
+vi.mock("@/lib/build/codebase-tools", () => codebaseTools);
 
 const gitUtils = vi.hoisted(() => ({
   isGitAvailable: vi.fn(async () => false),

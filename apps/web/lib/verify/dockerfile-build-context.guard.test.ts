@@ -3,7 +3,7 @@
 //
 // WHY THIS EXISTS (self-upgrade failure SUR-BCFB72BB, 2026-07-11 / BI-062CFB41):
 // PR #2776 added `config/seed-content-paths.json` at the repo root and statically
-// imported it from apps/web/lib/integrate/seed-contribution-fit.ts. The production
+// imported it from apps/web/lib/build/seed-contribution-fit.ts. The production
 // Dockerfile's build stage COPYs a NARROW allowlist (apps/web/, packages/,
 // docs/professions/, a few named root files) and never copied `config/`. So:
 //   - CI's "Production Build" gate runs plain `next build` against the full

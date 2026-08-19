@@ -3,8 +3,8 @@ import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { QuickBooksConnectPanel } from "@/components/integrations/QuickBooksConnectPanel";
 import { IntegrationReadinessPanel } from "@/components/integrations/IntegrationReadinessPanel";
-import { buildQuickBooksReadinessDescriptor } from "@/lib/integrate/quickbooks/readiness";
-import { loadQuickBooksReadinessConnection } from "@/lib/integrate/quickbooks/connection-state";
+import { buildQuickBooksReadinessDescriptor } from "@/lib/integrations/quickbooks/readiness";
+import { loadQuickBooksReadinessConnection } from "@/lib/integrations/quickbooks/connection-state";
 
 export default async function QuickBooksIntegrationPage() {
   const session = await auth();

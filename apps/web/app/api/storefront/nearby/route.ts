@@ -15,7 +15,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@dpf/db";
 import { apiSuccess } from "@/lib/api/response";
-import { getPublicStorefront } from "@/lib/release/storefront-data";
+import { getPublicStorefront } from "@/lib/storefront/storefront-data";
 import {
   extractCoordinates,
   haversineMeters,

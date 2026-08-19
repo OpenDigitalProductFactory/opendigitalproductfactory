@@ -1,4 +1,4 @@
-import { resolveSandboxUrl } from "@/lib/integrate/sandbox/resolve-sandbox-url";
+import { resolveSandboxUrl } from "@/lib/build/sandbox/resolve-sandbox-url";
 
 import type { RuntimeTargetInput } from "./types";
 

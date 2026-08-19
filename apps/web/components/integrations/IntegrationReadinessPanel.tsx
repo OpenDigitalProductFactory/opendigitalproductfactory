@@ -3,9 +3,9 @@ import { LocalTime } from "@/components/ui/LocalTime";
 import type {
   IntegrationReadinessDescriptor,
   IntegrationReadinessState,
-} from "@/lib/integrate/readiness";
-import type { IntegrationImportStagingDescriptor } from "@/lib/integrate/import-staging";
-import type { IntegrationImportReviewPosture } from "@/lib/integrate/import-review";
+} from "@/lib/integrations/readiness";
+import type { IntegrationImportStagingDescriptor } from "@/lib/integrations/import-staging";
+import type { IntegrationImportReviewPosture } from "@/lib/integrations/import-review";
 
 interface IntegrationReadinessPanelProps {
   descriptor: IntegrationReadinessDescriptor;

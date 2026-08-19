@@ -13,7 +13,7 @@ import {
   shellQuote,
   type ValidateTokenInput,
   type ValidateTokenResult,
-} from "@/lib/platform-config/platform-dev-config-core";
+} from "@/lib/platform/platform-dev-config-core";
 import { assertSafeOutboundUrl } from "@/lib/security/safe-fetch";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 import { lazyChildProcess, lazyFs, lazyPath, lazyUtil } from "@/lib/shared/lazy-node";
@@ -586,7 +586,7 @@ export async function configureForkSetup(input: {
   }
   const { owner: upstreamOwner, repo: upstreamRepo } = upstream;
 
-  const { forkExistsAndIsFork, createForkAndWait } = await import("@/lib/integrate/github-fork");
+  const { forkExistsAndIsFork, createForkAndWait } = await import("@/lib/build/github-fork");
 
   // Does the contributor already own a fork? Three cases:
   //   (a) exists + is fork of upstream → use it.

@@ -22,7 +22,7 @@ import {
   type MirrorPlan,
 } from "./data-model-mirror";
 import type { Prisma } from "@dpf/db";
-import type { PrismaSchemaFacts } from "../integrate/code-graph/extractors/prisma-schema-adapter";
+import type { PrismaSchemaFacts } from "../build/code-graph/extractors/prisma-schema-adapter";
 
 const NOTATION_SLUG = "archimate4";
 const ELEMENT_TYPE_SLUG = "data_object";

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
-import { connectStripe } from "@/lib/integrate/stripe/connect-action";
+import { connectStripe } from "@/lib/integrations/stripe/connect-action";
 
 export async function POST(request: Request) {
   const session = await auth();

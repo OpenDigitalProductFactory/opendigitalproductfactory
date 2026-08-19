@@ -29,7 +29,7 @@ import { isStallWatchdogEnabled } from "@/lib/shared/feature-flags";
 import { reapInertStuckBuilds } from "@/lib/build/inert-build-reaper";
 import { TASK_LIVE_STATES } from "@/lib/tak/task-states";
 import { newestSignal, isStale } from "@/lib/shared/staleness";
-import { reap } from "@/lib/operations-run/reap";
+import { reap } from "@/lib/operate/reap";
 import { Prisma } from "@dpf/db";
 
 // QUIESCENCE EXEMPTION (BI-QUIESCE-004a + spec §6.1 extension): this

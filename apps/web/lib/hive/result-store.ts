@@ -2,7 +2,7 @@ import { prisma, Prisma } from "@dpf/db";
 
 import { normalizeHiveResultIntake, resolveHiveDeliveryAttempt } from "./result-intake";
 import { GitHubForgeAdapter, parseGitHubRepositoryUrl } from "@/lib/forge/github-adapter";
-import { resolveHiveToken } from "@/lib/integrate/identity-privacy";
+import { resolveHiveToken } from "@/lib/build/identity-privacy";
 
 interface HiveResultRow {
   id: string;

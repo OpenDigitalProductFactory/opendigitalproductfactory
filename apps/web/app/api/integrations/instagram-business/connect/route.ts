@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
-import { connectInstagramBusiness } from "@/lib/integrate/instagram-business/connect-action";
+import { connectInstagramBusiness } from "@/lib/integrations/instagram-business/connect-action";
 
 export async function POST(request: Request) {
   const session = await auth();

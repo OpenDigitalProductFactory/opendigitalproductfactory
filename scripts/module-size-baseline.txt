@@ -42,9 +42,9 @@ apps/web/lib/explore/build-process-matrix.ts	832
 apps/web/lib/explore/feature-build-types.ts	1098
 apps/web/lib/finance/ai-provider-finance.ts	1309
 apps/web/lib/inference/ai-provider-internals.ts	1266
-apps/web/lib/integrate/build-agent-prompts.ts	1075
-apps/web/lib/integrate/build-orchestrator.ts	1801
-apps/web/lib/integrate/sandbox/build-branch.ts	949
+apps/web/lib/build/build-agent-prompts.ts	1075
+apps/web/lib/build/build-orchestrator.ts	1801
+apps/web/lib/build/sandbox/build-branch.ts	949
 apps/web/lib/marketing.ts	1369
 apps/web/lib/mcp/packs/backlog-pack.dispatch.test.ts	874
 apps/web/lib/mcp/packs/contribution-hive-pack.ts	855
@@ -69,5 +69,5 @@ apps/web/lib/work-capsules/work-capsule-store.test.ts	1085
 apps/web/lib/work-capsules/work-capsule-store.ts	1034
 apps/web/lib/workbooks/platform-tables.ts	938
 apps/web/lib/workforce/calendar-data.ts	1134
-apps/web/lib/workspace/command-center.ts	1118
+apps/web/lib/workspace-home/command-center.ts	1118
 packages/db/src/wiki-store.test.ts	824

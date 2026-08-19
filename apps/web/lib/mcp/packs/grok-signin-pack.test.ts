@@ -4,7 +4,7 @@ const service = vi.hoisted(() => ({
   grokDeviceLoginStart: vi.fn(),
   grokDeviceLoginComplete: vi.fn(),
 }));
-vi.mock("@/lib/integrate/grok-device-login-core", () => service);
+vi.mock("@/lib/build/grok-device-login-core", () => service);
 
 import { grokSigninPack } from "./grok-signin-pack";
 import { isToolAllowedByGrants } from "@/lib/tak/agent-grants";

@@ -42,7 +42,7 @@ const definitions: ToolDefinition[] = [
 
 async function getChangeGateContext(params: Record<string, unknown>, userId: string): Promise<ToolResult> {
   const { plannedChangesFromPlan, computeGateContextMarkdown } = await import(
-    "@/lib/integrate/gate-context-bridge"
+    "@/lib/build/gate-context-bridge"
   );
 
   let changedFiles = Array.isArray(params.paths)

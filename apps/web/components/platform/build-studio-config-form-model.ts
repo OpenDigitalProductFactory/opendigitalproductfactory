@@ -1,4 +1,4 @@
-import type { BuildStudioDispatchConfig } from "@/lib/integrate/build-studio-config";
+import type { BuildStudioDispatchConfig } from "@/lib/build/build-studio-config";
 import type { ContributorMcpReadiness } from "@/lib/mcp/contributor-readiness";
 import type { EngineReadinessBadge, ProviderOption } from "./BuildStudioProviderControls";
 

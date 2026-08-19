@@ -105,7 +105,7 @@ async function describeModelHandler(params: Record<string, unknown>, userId: str
   // Read the schema. During ideate/plan phases no sandbox exists yet, so try
   // the project filesystem first (same root as read_project_file). Fall back
   // to the sandbox only if the build has one already provisioned.
-  const { describeModel, formatModelDescription } = await import("@/lib/integrate/schema-validator");
+  const { describeModel, formatModelDescription } = await import("@/lib/build/schema-validator");
 
   const tryDirectRead = async (): Promise<string | null> => {
     try {

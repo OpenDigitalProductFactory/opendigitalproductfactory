@@ -6,7 +6,7 @@ const { mockAuth, mockConnectFacebookLeadAds } = vi.hoisted(() => ({
 }));
 
 vi.mock("@/lib/auth", () => ({ auth: mockAuth }));
-vi.mock("@/lib/integrate/facebook-lead-ads/connect-action", () => ({
+vi.mock("@/lib/integrations/facebook-lead-ads/connect-action", () => ({
   connectFacebookLeadAds: mockConnectFacebookLeadAds,
 }));
 

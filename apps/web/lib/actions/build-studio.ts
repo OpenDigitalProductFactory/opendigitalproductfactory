@@ -2,9 +2,9 @@
 
 import { prisma, type Prisma } from "@dpf/db";
 import { requireCapability } from "@/lib/actions/shared/guards";
-import type { BuildStudioDispatchConfig } from "@/lib/integrate/build-studio-config";
+import type { BuildStudioDispatchConfig } from "@/lib/build/build-studio-config";
 import { getOllamaBaseUrl, getOllamaApiRoot, resolveOpencodeProviderBaseUrl } from "@/lib/inference/ollama-url";
-import { preflightLocalEndpoint, OPENCODE_MIN_CONTEXT_TOKENS, type LocalEndpointPreflight } from "@/lib/integrate/opencode-dispatch";
+import { preflightLocalEndpoint, OPENCODE_MIN_CONTEXT_TOKENS, type LocalEndpointPreflight } from "@/lib/build/opencode-dispatch";
 import { setServedContextTokens } from "@/lib/inference/dmr-runtime-config";
 import { getLocalOnlyInference, setLocalOnlyInference } from "@/lib/inference/local-only";
 import { sanitizeForLog } from "@/lib/security/safe-log";

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { parsePrismaSchema } from "../integrate/code-graph/extractors/prisma-schema-adapter";
+import { parsePrismaSchema } from "../build/code-graph/extractors/prisma-schema-adapter";
 import { reconcileDataModelMirror, type MirrorPrismaClient } from "./data-model-mirror-apply";
 import { modelSourceKey } from "./data-model-mirror";
 

@@ -34,7 +34,7 @@ vi.mock("@/lib/govern/credential-crypto", () => ({
   decryptJson: vi.fn((value: string) => JSON.parse(value)),
 }));
 
-vi.mock("@/lib/integrate/whatsapp-business/preview", () => ({
+vi.mock("@/lib/integrations/whatsapp-business/preview", () => ({
   loadWhatsAppBusinessPreview: mockLoadPreview,
 }));
 

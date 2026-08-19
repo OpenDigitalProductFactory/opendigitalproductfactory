@@ -20,7 +20,7 @@ vi.mock("@dpf/db", () => ({
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 
-vi.mock("@/lib/integrate/github-fork", () => ({
+vi.mock("@/lib/build/github-fork", () => ({
   forkExistsAndIsFork: mockForkExistsAndIsFork,
   createForkAndWait: mockCreateForkAndWait,
 }));

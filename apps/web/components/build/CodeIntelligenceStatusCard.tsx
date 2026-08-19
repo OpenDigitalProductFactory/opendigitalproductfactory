@@ -2,7 +2,7 @@
 
 import { AlertTriangle, CheckCircle2, GitBranch, Network } from "lucide-react";
 
-import type { CodeGraphFreshness } from "@/lib/integrate/code-graph-access";
+import type { CodeGraphFreshness } from "@/lib/build/code-graph-access";
 import { TrustBadge } from "@/components/ui/TrustBadge";
 
 type Props = {

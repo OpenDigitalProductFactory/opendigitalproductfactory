@@ -70,7 +70,7 @@ export const gitPromotionSandboxVerification = inngest.createFunction(
 
     const repositoryCloneUrl = candidate.repositoryCloneUrl;
     const afterSha = candidate.afterSha;
-    const { getBuildExecutionProvider } = await import("@/lib/integrate/sandbox/providers");
+    const { getBuildExecutionProvider } = await import("@/lib/build/sandbox/providers");
     const provider = getBuildExecutionProvider("local-docker");
 
     await step.run("mark-running", async () => {

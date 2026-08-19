@@ -14,7 +14,7 @@ vi.mock("../inference/model-discovery-scheduler", () => ({
   registerModelDiscoveryJob: vi.fn().mockResolvedValue(undefined),
 }));
 
-vi.mock("../integrate/code-graph-refresh", () => ({
+vi.mock("../build/code-graph-refresh", () => ({
   registerCodeGraphScheduledJob: vi.fn().mockResolvedValue(undefined),
 }));
 
@@ -25,7 +25,7 @@ vi.mock("@/lib/hive/contribute-fingerprint", () => ({
 // Must import after mock setup
 import { runPrometheusTargetCheck, runFullDiscoverySweep, registerScheduledJobs, recordJobRun } from "./discovery-scheduler";
 import { registerModelDiscoveryJob } from "../inference/model-discovery-scheduler";
-import { registerCodeGraphScheduledJob } from "../integrate/code-graph-refresh";
+import { registerCodeGraphScheduledJob } from "../build/code-graph-refresh";
 
 describe("registerScheduledJobs", () => {
   it("upserts every managed ScheduledJob row", async () => {

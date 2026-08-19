@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
-import { connectHubSpot } from "@/lib/integrate/hubspot/connect-action";
+import { connectHubSpot } from "@/lib/integrations/hubspot/connect-action";
 
 export async function POST(request: Request) {
   const session = await auth();

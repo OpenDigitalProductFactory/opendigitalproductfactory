@@ -6,7 +6,7 @@ const codebaseTools = vi.hoisted(() => ({
   searchProjectFiles: vi.fn(),
   isDevInstance: vi.fn(),
 }));
-vi.mock("@/lib/integrate/codebase-tools", () => codebaseTools);
+vi.mock("@/lib/build/codebase-tools", () => codebaseTools);
 
 const manifestGenerator = vi.hoisted(() => ({ generateManifest: vi.fn() }));
 vi.mock("@/lib/manifest-generator", () => manifestGenerator);

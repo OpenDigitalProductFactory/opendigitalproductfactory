@@ -5,7 +5,7 @@
 // tool-call payload) to a usable primitive" chain that was hand-copied at 20+
 // call sites. The `isRecord` object-guard alone was duplicated verbatim in
 // ≥6 files (lib/build/{decomposition-candidates,amend-epic-decomposition,
-// task-results,verification-output,sandbox-state}, lib/integrate/
+// task-results,verification-output,sandbox-state}, lib/build/
 // build-requirements-context, lib/brand/task-status, lib/mobile/manifest, …),
 // each re-deriving the same `typeof === "object" && !== null && !isArray`
 // predicate with cosmetic divergences (`!!value` vs `value !== null` vs

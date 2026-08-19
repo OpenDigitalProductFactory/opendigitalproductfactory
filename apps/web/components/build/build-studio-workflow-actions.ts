@@ -14,7 +14,7 @@ import { derivePlanOscillationDecompositionAffordance } from "@/lib/build/plan-o
 import {
   isContradictoryExecState,
   type ExecStateLike,
-} from "@/lib/integrate/build-exec-types";
+} from "@/lib/build/build-exec-types";
 import type { BuildProgressVisibility } from "@/lib/build/progress-visibility";
 import type {
   BuildFailureAxis,

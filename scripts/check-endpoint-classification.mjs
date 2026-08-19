@@ -7,7 +7,7 @@
 //
 // THE PROBLEM: apps/web/app/api has 260+ route handlers and NOTHING that says,
 // per endpoint, who is allowed to reach it. Reachability policy lives only in
-// the proxy's path-segmentation (lib/release/storefront-middleware.ts) plus
+// the proxy's path-segmentation (lib/storefront/storefront-middleware.ts) plus
 // per-handler auth() calls, so "is this endpoint supposed to be public?" is
 // unanswerable from source — the exact gap the edge-reachability plan needs
 // closed before endpoints ride a public relay.
@@ -60,7 +60,7 @@ const SCRIPTS_DIR = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = join(SCRIPTS_DIR, "..");
 
 export const MANIFEST_REL = "apps/web/lib/ea/route-manifest.json";
-export const PROXY_CLASSIFIER_REL = "apps/web/lib/release/storefront-middleware.ts";
+export const PROXY_CLASSIFIER_REL = "apps/web/lib/storefront/storefront-middleware.ts";
 export const BASELINE_REL = "scripts/endpoint-classification-baseline.txt";
 
 /** Route-handler files this guard governs (manifest `file` prefix). */

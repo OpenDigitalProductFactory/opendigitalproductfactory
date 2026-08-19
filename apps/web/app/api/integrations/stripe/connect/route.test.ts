@@ -6,7 +6,7 @@ const { mockAuth, mockConnectStripe } = vi.hoisted(() => ({
 }));
 
 vi.mock("@/lib/auth", () => ({ auth: mockAuth }));
-vi.mock("@/lib/integrate/stripe/connect-action", () => ({
+vi.mock("@/lib/integrations/stripe/connect-action", () => ({
   connectStripe: mockConnectStripe,
 }));
 

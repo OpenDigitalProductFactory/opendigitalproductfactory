@@ -14,9 +14,9 @@ vi.mock("@/lib/auth", () => ({
 
 vi.mock("@/lib/permissions", () => ({ can: vi.fn(() => true) }));
 
-vi.mock("@/lib/integrate/identity-privacy", async () => {
-  const actual = await vi.importActual<typeof import("@/lib/integrate/identity-privacy")>(
-    "@/lib/integrate/identity-privacy",
+vi.mock("@/lib/build/identity-privacy", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/build/identity-privacy")>(
+    "@/lib/build/identity-privacy",
   );
   return {
     ...actual,
@@ -25,9 +25,9 @@ vi.mock("@/lib/integrate/identity-privacy", async () => {
   };
 });
 
-vi.mock("@/lib/integrate/issue-bridge", async () => {
-  const actual = await vi.importActual<typeof import("@/lib/integrate/issue-bridge")>(
-    "@/lib/integrate/issue-bridge",
+vi.mock("@/lib/build/issue-bridge", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/build/issue-bridge")>(
+    "@/lib/build/issue-bridge",
   );
   return {
     ...actual,
@@ -44,15 +44,15 @@ vi.mock("@/lib/integrate/issue-bridge", async () => {
   };
 });
 
-vi.mock("@/lib/integrate/feedback-transport", async () => {
-  const actual = await vi.importActual<typeof import("@/lib/integrate/feedback-transport")>(
-    "@/lib/integrate/feedback-transport",
+vi.mock("@/lib/build/feedback-transport", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/build/feedback-transport")>(
+    "@/lib/build/feedback-transport",
   );
   return { ...actual, selectTransport: vi.fn() };
 });
 
 import { prisma } from "@dpf/db";
-import { selectTransport, type FeedbackTransportResult } from "@/lib/integrate/feedback-transport";
+import { selectTransport, type FeedbackTransportResult } from "@/lib/build/feedback-transport";
 import { fileUpstreamFeedback, setUpstreamFeedbackOptIn } from "./feedback-escalation";
 
 const mockConfigFind = vi.mocked(prisma.platformDevConfig.findUnique);

@@ -1,2 +1,2 @@
-// Shim — moved to lib/integrate/build-pipeline.ts (Phase 10 refactoring)
-export * from "./integrate/build-pipeline";
+// Shim — moved to lib/build/build-pipeline.ts (Phase 10 refactoring)
+export * from "./build/build-pipeline";

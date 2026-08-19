@@ -21,7 +21,7 @@ vi.mock("@/lib/permissions", () => ({ can: mockCan }));
 vi.mock("@/lib/govern/credential-crypto", () => ({
   decryptJson: vi.fn((value: string) => JSON.parse(value)),
 }));
-vi.mock("@/lib/integrate/instagram-business/preview", () => ({
+vi.mock("@/lib/integrations/instagram-business/preview", () => ({
   loadInstagramBusinessPreview: mockLoadPreview,
 }));
 vi.mock("@/components/integrations/InstagramBusinessConnectPanel", () => ({

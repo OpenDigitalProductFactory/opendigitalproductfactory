@@ -16,7 +16,7 @@ import {
   listPrivatePathRules,
 } from "@/lib/actions/platform-dev-config";
 import { isContributionModelEnabled } from "@/lib/flags/contribution-model";
-import { getDisplayPseudonym } from "@/lib/integrate/identity-privacy";
+import { getDisplayPseudonym } from "@/lib/build/identity-privacy";
 import type { PlatformDevPolicyState } from "@/lib/platform-dev-policy";
 
 export default async function AdminPlatformDevelopmentPage() {

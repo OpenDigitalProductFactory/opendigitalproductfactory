@@ -1,7 +1,7 @@
 /**
  * BI-89030C9B Phase 1 — durable build execution.
  *
- * Runs the existing checkpoint pipeline (lib/integrate/build-pipeline.ts) as
+ * Runs the existing checkpoint pipeline (lib/build/build-pipeline.ts) as
  * an Inngest function with one journaled `step.run` per STEP_ORDER entry, so
  * a portal recycle mid-build resumes from the engine's journal instead of
  * relying on boot-time reconciliation hooks. Flag-gated by
@@ -52,7 +52,7 @@ export const buildExecute = inngest.createFunction(
       console.error(
         `[build-execute] terminal engine failure for build ${JSON.stringify(buildId)}: ${error instanceof Error ? JSON.stringify(error.message) : "unknown"}`,
       );
-      const { releaseSandbox } = await import("@/lib/integrate/sandbox/sandbox-pool");
+      const { releaseSandbox } = await import("@/lib/build/sandbox/sandbox-pool");
       await releaseSandbox(buildId).catch(() => {});
       const { prisma } = await import("@dpf/db");
       await prisma.taskRun
@@ -77,13 +77,13 @@ export const buildExecute = inngest.createFunction(
     await gateBetweenSteps(step as unknown as GateBetweenStepsRunner, "build-execute-entry");
 
     const taskRunId = (await step.run("ensure-task-run", async () => {
-      const { ensureBuildTaskRun } = await import("@/lib/integrate/build-execute-helpers");
+      const { ensureBuildTaskRun } = await import("@/lib/build/build-execute-helpers");
       return ensureBuildTaskRun(buildId);
     })) as string;
 
     const autonomy = (await step.run("autonomous-eligibility", async () => {
       const { recheckAutonomousBuildExecution } = await import(
-        "@/lib/integrate/build-execute-helpers"
+        "@/lib/build/build-execute-helpers"
       );
       return recheckAutonomousBuildExecution({ buildId, taskRunId });
     })) as { mayContinue: boolean; reason: string | null };
@@ -97,21 +97,21 @@ export const buildExecute = inngest.createFunction(
     }
 
     let state = (await step.run("load-exec-state", async () => {
-      const { loadBuildExecState } = await import("@/lib/integrate/build-execute-helpers");
+      const { loadBuildExecState } = await import("@/lib/build/build-execute-helpers");
       return loadBuildExecState(buildId);
     })) as BuildExecutionState | null;
 
     for (const pipelineStep of STEP_ORDER) {
       if (pipelineStep === "complete" || pipelineStep === "failed") break;
       state = (await step.run(`pipeline:${pipelineStep}`, async () => {
-        const { runPipelineStepDurable } = await import("@/lib/integrate/build-execute-helpers");
+        const { runPipelineStepDurable } = await import("@/lib/build/build-execute-helpers");
         return runPipelineStepDurable({ buildId, taskRunId, step: pipelineStep, state });
       })) as BuildExecutionState;
       if (state.step === "failed") break;
     }
 
     const summary = (await step.run("finalize", async () => {
-      const { finalizeDurableBuild } = await import("@/lib/integrate/build-execute-helpers");
+      const { finalizeDurableBuild } = await import("@/lib/build/build-execute-helpers");
       return finalizeDurableBuild({ buildId, taskRunId, state });
     })) as { terminal: string };
 

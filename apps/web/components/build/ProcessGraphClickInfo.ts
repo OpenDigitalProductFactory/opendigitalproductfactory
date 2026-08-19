@@ -9,8 +9,8 @@
 // provided, ProcessGraph keeps its legacy internal-inspector behavior.
 
 import type { BuildPhase, FeatureBuildRow } from "@/lib/feature-build-types";
-import type { AssignedTask } from "@/lib/integrate/task-dependency-graph";
-import { buildDependencyGraph } from "@/lib/integrate/task-dependency-graph";
+import type { AssignedTask } from "@/lib/build/task-dependency-graph";
+import { buildDependencyGraph } from "@/lib/build/task-dependency-graph";
 
 /** Discriminator for what kind of graph node was clicked. */
 export type ProcessGraphNodeKind = "phase" | "task" | "forkJoin";

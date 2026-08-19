@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
-import { connectFacebookPages } from "@/lib/integrate/facebook-pages/connect-action";
+import { connectFacebookPages } from "@/lib/integrations/facebook-pages/connect-action";
 
 export async function POST(request: Request) {
   const session = await auth();

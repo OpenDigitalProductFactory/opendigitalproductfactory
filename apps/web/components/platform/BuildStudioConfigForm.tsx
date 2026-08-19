@@ -4,7 +4,7 @@ import { useState, useTransition, useEffect, useRef } from "react";
 import Link from "next/link";
 import { saveBuildStudioConfig, checkLocalEndpoint, applyLocalModelContext } from "@/lib/actions/build-studio";
 import { probeBuildEnginesAction } from "@/lib/actions/build-engine-actions";
-import type { LocalEndpointPreflight } from "@/lib/integrate/opencode-dispatch";
+import type { LocalEndpointPreflight } from "@/lib/build/opencode-dispatch";
 import { BUILD_STUDIO_CONFIG_ROUTE_COPY } from "./build-studio-route-copy";
 import { ContributorMcpReadinessCard } from "./ContributorMcpReadinessCard";
 import { ServedContextSummary } from "./ServedContextSummary";

@@ -4,7 +4,7 @@ import { CAPABILITY_INSTALL_SCOPES } from "@dpf/db/capability-maturity";
 import { isRecord } from "@/lib/shared/coerce";
 import {
   parsePersistedWorkPatternExperimentExecution,
-} from "@/lib/integrate/work-pattern-experiment-runtime";
+} from "@/lib/build/work-pattern-experiment-runtime";
 import { enqueueWorkPatternExperiment } from "@/lib/queue/functions/work-pattern-experiment";
 
 import {

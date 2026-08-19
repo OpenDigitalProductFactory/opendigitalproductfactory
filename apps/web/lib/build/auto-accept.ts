@@ -2,7 +2,7 @@ import { prisma } from "@dpf/db";
 import { saveBuildArtifactRevision } from "@/lib/build/build-artifact-provenance";
 import { getProcessPolicy } from "@/lib/explore/build-process-matrix";
 import type { AcceptanceCriterion, VerificationOutput } from "@/lib/explore/feature-build-types";
-import { isEvidenceAutoAcceptEnabled } from "@/lib/integrate/build-studio-config";
+import { isEvidenceAutoAcceptEnabled } from "@/lib/build/build-studio-config";
 
 /**
  * Evidence-gated autonomous build acceptance + the shared acceptance write.

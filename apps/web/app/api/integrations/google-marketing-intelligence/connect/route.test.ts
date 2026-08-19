@@ -6,7 +6,7 @@ const { mockAuth, mockConnectGoogleMarketingIntelligence } = vi.hoisted(() => ({
 }));
 
 vi.mock("@/lib/auth", () => ({ auth: mockAuth }));
-vi.mock("@/lib/integrate/google-marketing-intelligence/connect-action", () => ({
+vi.mock("@/lib/integrations/google-marketing-intelligence/connect-action", () => ({
   connectGoogleMarketingIntelligence: mockConnectGoogleMarketingIntelligence,
 }));
 

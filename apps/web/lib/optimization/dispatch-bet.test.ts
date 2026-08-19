@@ -25,7 +25,7 @@ vi.mock("@/lib/build/wip-cap", () => ({
   wipCapReached: mocks.wipCapReached,
   TERMINAL_BUILD_PHASES: ["shipped", "abandoned"],
 }));
-vi.mock("@/lib/integrate/ideate-on-approval", () => ({
+vi.mock("@/lib/build/ideate-on-approval", () => ({
   dispatchIdeateForApprovedBuild: mocks.dispatchIdeateForApprovedBuild,
 }));
 

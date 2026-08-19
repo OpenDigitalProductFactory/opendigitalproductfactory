@@ -4,7 +4,7 @@ import { auth } from "@/lib/auth";
 import {
   getCodeGraphFreshness,
   type CodeGraphFreshness,
-} from "@/lib/integrate/code-graph-access";
+} from "@/lib/build/code-graph-access";
 
 export async function getCodeGraphFreshnessAction(): Promise<CodeGraphFreshness> {
   const session = await auth();

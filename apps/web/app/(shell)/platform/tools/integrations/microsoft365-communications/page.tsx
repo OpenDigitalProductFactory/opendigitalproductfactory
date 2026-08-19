@@ -4,7 +4,7 @@ import { LocalTime } from "@/components/ui/LocalTime";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { decryptJson } from "@/lib/govern/credential-crypto";
-import { loadMicrosoft365CommunicationsPreview } from "@/lib/integrate/microsoft365-communications/preview";
+import { loadMicrosoft365CommunicationsPreview } from "@/lib/integrations/microsoft365-communications/preview";
 import {
   Microsoft365CommunicationsConnectPanel,
   type Microsoft365CommunicationsConnectionState,

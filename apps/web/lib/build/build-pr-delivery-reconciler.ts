@@ -5,7 +5,7 @@ import {
   updatePullRequestBranch,
   type GithubPrObservation,
   type GithubPrReadiness,
-} from "@/lib/integrate/github-pr-readiness";
+} from "@/lib/build/github-pr-readiness";
 import {
   createBuildPrDeliveryState,
   type BuildPrDeliveryStateV1,

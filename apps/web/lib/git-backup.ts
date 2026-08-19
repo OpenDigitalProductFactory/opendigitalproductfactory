@@ -112,7 +112,7 @@ export async function backupPromotionToGit(input: {
             data: { gitCommitHashes: [...build.gitCommitHashes, hash] },
           });
         }
-        void import("@/lib/integrate/code-graph-refresh").then(({ queueCodeGraphReconcile }) =>
+        void import("@/lib/build/code-graph-refresh").then(({ queueCodeGraphReconcile }) =>
           queueCodeGraphReconcile({
             reason: "git-backup",
             headSha: hash,

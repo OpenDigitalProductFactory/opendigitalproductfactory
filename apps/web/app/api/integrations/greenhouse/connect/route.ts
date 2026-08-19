@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { apiErrorResponse } from "@/lib/api/error";
-import { connectGreenhouse } from "@/lib/integrate/greenhouse/connect-action";
+import { connectGreenhouse } from "@/lib/integrations/greenhouse/connect-action";
 
 export async function POST(request: Request) {
   const session = await auth();

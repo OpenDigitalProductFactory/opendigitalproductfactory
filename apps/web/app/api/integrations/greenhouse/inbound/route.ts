@@ -1,9 +1,9 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { prisma } from "@dpf/db";
 import { apiErrorResponse } from "@/lib/api/error";
-import { handleGreenhouseWebhook } from "@/lib/integrate/greenhouse/greenhouse-webhook";
-import { readGreenhouseWebhookSecret } from "@/lib/integrate/greenhouse/import-greenhouse";
-import type { HireLandingClient } from "@/lib/integrate/greenhouse/land-hire";
+import { handleGreenhouseWebhook } from "@/lib/integrations/greenhouse/greenhouse-webhook";
+import { readGreenhouseWebhookSecret } from "@/lib/integrations/greenhouse/import-greenhouse";
+import type { HireLandingClient } from "@/lib/integrations/greenhouse/land-hire";
 
 // Greenhouse inbound webhook. The raw body is read exactly once and the HMAC
 // signature is verified before parsing; `hire_candidate` lands an onboarding

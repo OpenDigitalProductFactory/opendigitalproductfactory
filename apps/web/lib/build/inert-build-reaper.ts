@@ -228,7 +228,7 @@ export async function reapInertStuckBuilds(
       );
       // BI-8BD61C30: free sandbox .builds/<id> — inert reaper previously left worktrees behind.
       const { releaseSandboxForTerminalBuild } = await import(
-        "@/lib/integrate/sandbox/sandbox-build-gc"
+        "@/lib/build/sandbox/sandbox-build-gc"
       );
       await releaseSandboxForTerminalBuild(c.buildId, { deleteBranch: false }).catch(() => {});
       // WS9 (BI-CBAAEA94): a terminal build must not leave a zombie "working"

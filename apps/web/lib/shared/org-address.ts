@@ -5,7 +5,7 @@
 //
 // Several readers already consume this blob with slightly different key
 // expectations: org-identity.formatAddress (invoices/emails), marketing
-// summarizeAddress, release/storefront-data (StorefrontAddress { street, city,
+// summarizeAddress, storefront/storefront-data (StorefrontAddress { street, city,
 // postcode, country }), and the directory `nearby` route (city/region + lat/lng).
 // This module is the one place that knows the canonical key set, parses the
 // historical variants tolerantly, and serializes a form back in a shape every

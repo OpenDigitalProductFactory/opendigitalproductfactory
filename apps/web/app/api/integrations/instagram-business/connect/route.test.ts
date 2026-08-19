@@ -8,7 +8,7 @@ const { mockAuth, mockCan, mockConnectInstagramBusiness } = vi.hoisted(() => ({
 
 vi.mock("@/lib/auth", () => ({ auth: mockAuth }));
 vi.mock("@/lib/permissions", () => ({ can: mockCan }));
-vi.mock("@/lib/integrate/instagram-business/connect-action", () => ({
+vi.mock("@/lib/integrations/instagram-business/connect-action", () => ({
   connectInstagramBusiness: mockConnectInstagramBusiness,
 }));
 
