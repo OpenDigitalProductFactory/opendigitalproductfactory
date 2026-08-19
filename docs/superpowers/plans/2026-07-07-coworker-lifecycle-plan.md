@@ -1,3 +1,7 @@
+---
+status: binding
+---
+
 # AI Coworker Lifecycle — implementation plan
 
 - **Epic:** EP-COWORKER-LIFECYCLE · **Spec:** docs/superpowers/specs/2026-07-07-coworker-lifecycle-standard-design.md
