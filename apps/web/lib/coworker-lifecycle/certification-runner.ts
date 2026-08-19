@@ -8,7 +8,10 @@
 //
 // Non-destructive by construction: the tool surface is post-filtered to
 // sideEffect=false tools, journeys instruct read-only behavior, and
-// ORACLE-PURITY asserts nothing ran outside that surface. Execution goes
+// ORACLE-PURITY asserts nothing ran outside the authorization envelope
+// (that offered surface, plus any grant-authorized side-effect-free catalog
+// tool — native-mcp transports expose the full grant-derived read-only
+// toolset, wider than the attachment list; BI-68BBF206). Execution goes
 // through runAgenticLoop directly (not executeAutonomousAgenticLoop) with
 // interactionMode "chat" and a synthetic threadId, so no AgentThread /
 // AgentMessage / TaskRun / reflection-observer rows are created — the only
@@ -24,7 +27,8 @@ import {
   resolveAutonomousWorkTools,
   type AutonomousWorkUserContext,
 } from "@/lib/tak/autonomous-work-run";
-import { toolsToOpenAIFormat } from "@/lib/mcp-tools";
+import { PLATFORM_TOOLS, toolsToOpenAIFormat } from "@/lib/mcp-tools";
+import { getAgentToolGrantsAsync, isToolAllowedByGrants } from "@/lib/tak/agent-grants";
 import { applyProviderRouteModelPreference } from "@/lib/ai-provider-route-context";
 import { ROUTE_AGENT_MAP_ENTRIES } from "@/lib/tak/agent-routing";
 import { journeysForCoworker, type GoldenJourney } from "./golden-journeys";
@@ -32,6 +36,7 @@ import {
   evaluateJourneyOracles,
   journeyPassed,
   type OracleVerdict,
+  type ToolAuthorizationClass,
 } from "./certification-oracles";
 
 import { COWORKER_CERT_ADAPTER_KEY } from "./certification-status";
@@ -125,6 +130,11 @@ export type CertificationDeps = {
     since: Date;
     until: Date;
   }) => Promise<ToolEvidence[]>;
+  /** The agent's grant keys, resolved the same way the platform resolves them
+   *  for tool gating (DB-first, JSON-registry fallback). Consulted only when
+   *  executed evidence contains a tool outside the offered surface, to decide
+   *  whether it was still inside the authorization envelope (BI-68BBF206). */
+  fetchAgentGrants: (agentId: string) => Promise<string[]>;
   db: typeof prisma;
   now: () => Date;
 };
@@ -184,6 +194,7 @@ function defaultDeps(): CertificationDeps {
     resolveTools: resolveAutonomousWorkTools,
     runLoop: defaultRunLoop,
     fetchToolEvidence: defaultFetchToolEvidence,
+    fetchAgentGrants: getAgentToolGrantsAsync,
     db: prisma,
     now: () => new Date(),
   };
@@ -206,6 +217,26 @@ export function unionToolEvidence(
     union.push(t);
   }
   return union;
+}
+
+/** Classify one executed tool against the authorization envelope
+ *  (BI-68BBF206). The TAK grant registry defines authorization; the catalog's
+ *  sideEffect flag defines consequence. A tool is inside the envelope only
+ *  when it exists in the platform catalog, is DECLARED sideEffect:false, and
+ *  the agent's grants allow it (same grant expansion the platform's tool
+ *  gating uses). Everything else is outside: side-effecting, unauthorized, or
+ *  unknown. Offered-surface tools never reach this — surface membership is
+ *  the fast-path pass. */
+export function classifyToolAuthorization(
+  toolName: string,
+  agentGrants: string[],
+): ToolAuthorizationClass {
+  const catalogEntry = PLATFORM_TOOLS.find((t) => t.name === toolName);
+  if (!catalogEntry) return "unknown";
+  if (catalogEntry.sideEffect !== false) return "side-effecting";
+  return isToolAllowedByGrants(toolName, agentGrants)
+    ? "grant-authorized-read-only"
+    : "unauthorized";
 }
 
 function inferenceInconclusiveJourney(
@@ -311,10 +342,41 @@ async function executeJourney(
     }
     const executedTools = unionToolEvidence(inLoopEvidence, governedEvidence);
 
+    // BI-68BBF206 follow-up: under native-mcp dispatch the CLI subprocess
+    // exposes the coworker's FULL grant-derived read-only MCP toolset, while
+    // readOnlyTools above is the narrower attachment the runner offered — so
+    // governed evidence routinely contains grant-authorized side-effect-free
+    // calls the attachment list never named. PURITY guards the authorization
+    // envelope, not attachment membership: classify every executed tool that
+    // is outside the offered surface (in-loop and DB-derived alike — the rule
+    // is uniform, and offered-surface tools always pass) against the catalog's
+    // sideEffect declaration and the agent's grants.
+    const offeredToolNames = readOnlyTools.map((t) => t.name);
+    const offeredSet = new Set(offeredToolNames);
+    let judgedTools: Array<ToolEvidence & { authorization?: ToolAuthorizationClass }> =
+      executedTools;
+    if (executedTools.some((t) => !offeredSet.has(t.name))) {
+      let agentGrants: string[] = [];
+      try {
+        agentGrants = await deps.fetchAgentGrants(journey.agentId);
+      } catch {
+        // Conservative on failure: with no resolvable grants, a non-offered
+        // tool cannot be proven authorized, so it fails PURITY as
+        // unauthorized rather than silently passing. (The default resolver
+        // already falls back to the JSON registry internally, so this path is
+        // a hard infra failure, not a routine miss.)
+      }
+      judgedTools = executedTools.map((t) =>
+        offeredSet.has(t.name)
+          ? t
+          : { ...t, authorization: classifyToolAuthorization(t.name, agentGrants) },
+      );
+    }
+
     const verdicts = evaluateJourneyOracles({
       content: loop.content,
-      executedTools,
-      offeredToolNames: readOnlyTools.map((t) => t.name),
+      executedTools: judgedTools,
+      offeredToolNames,
       downgraded: loop.downgraded,
     });
 
