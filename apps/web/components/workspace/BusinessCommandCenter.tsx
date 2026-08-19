@@ -16,7 +16,7 @@
 // an empty state when there is nothing, never synthesized rows.
 
 import { StatCard } from "@/components/ui/report-kit";
-import type { CommandSeverity, WorkspaceCommandCenterView } from "@/lib/workspace/command-center";
+import type { CommandSeverity, WorkspaceCommandCenterView } from "@/lib/workspace-home/command-center";
 
 type Props = {
   view: WorkspaceCommandCenterView;

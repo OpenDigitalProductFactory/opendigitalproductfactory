@@ -11,7 +11,7 @@
 // without a bespoke profile fall back to a safe generic profile — we never
 // invent a specific legal/payment claim the business has not configured.
 
-import type { PublicStorefrontConfig } from "@/lib/release/storefront-types";
+import type { PublicStorefrontConfig } from "@/lib/storefront/storefront-types";
 import { prisma } from "@dpf/db";
 import { profileHoursToSchedule } from "@/lib/operating-hours-read";
 import type { WeeklySchedule } from "@/lib/operating-hours-types";

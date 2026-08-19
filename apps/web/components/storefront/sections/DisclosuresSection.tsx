@@ -1,4 +1,4 @@
-import type { PublicDisplayObligation } from "@/lib/release/storefront-types";
+import type { PublicDisplayObligation } from "@/lib/storefront/storefront-types";
 
 // Regulatory disclosures band for banking-financial-services storefronts
 // (BI-5D9DCDE6 spec §9.3). Renders ONLY confirmed display obligations — the

@@ -286,7 +286,7 @@
     "apps/web/components/workspace/CalendarSyncPanel.tsx": 2,
     "apps/web/components/workspace/InstallationPurposePanel.tsx": 1,
     "apps/web/components/workspace/WorkItemCommentBox.tsx": 1,
-    "apps/web/lib/integrate/coding-agent.ts": 1,
+    "apps/web/lib/build/coding-agent.ts": 1,
     "apps/web/lib/surface-data-provenance.ts": 1,
     "apps/web/lib/tak/prompt-assembler.ts": 1
   },
@@ -1012,10 +1012,10 @@
     "apps/web/components/workbooks/CreateWorkbookButton.tsx": 2,
     "apps/web/components/workbooks/Grid.tsx": 1,
     "apps/web/lib/change-review/semantic-change-review.ts": 2,
-    "apps/web/lib/integrate/build-agent-prompts.ts": 2,
-    "apps/web/lib/integrate/build-project-context.ts": 1,
-    "apps/web/lib/integrate/coding-agent.ts": 2,
-    "apps/web/lib/integrate/specialist-prompts.ts": 1,
+    "apps/web/lib/build/build-agent-prompts.ts": 2,
+    "apps/web/lib/build/build-project-context.ts": 1,
+    "apps/web/lib/build/coding-agent.ts": 2,
+    "apps/web/lib/build/specialist-prompts.ts": 1,
     "apps/web/lib/tak/prompt-assembler.ts": 2
   }
 }

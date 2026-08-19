@@ -1,7 +1,7 @@
 "use client";
 
 import { DataTable, StatusBadge, type Column } from "@/components/ui/report-kit";
-import type { AssessedStackComponent, StackCurrency } from "@/lib/ops/platform-stack";
+import type { AssessedStackComponent, StackCurrency } from "@/lib/operate/platform-stack";
 
 const CURRENCY_INTENT: Record<StackCurrency, "success" | "warning" | "danger" | "neutral"> = {
   current: "success",

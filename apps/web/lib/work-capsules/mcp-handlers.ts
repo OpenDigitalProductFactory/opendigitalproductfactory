@@ -1,6 +1,6 @@
 import { prisma } from "@dpf/db";
 import { ensureCapsuleWorkItemAnchorNonFatal, ensureCapsuleWorkItemAnchorWithPrisma } from "@/lib/work-capsules/capsule-workitem-anchor.server";
-import { computeChangeImpactContract } from "@/lib/integrate/gate-context-bridge";
+import { computeChangeImpactContract } from "@/lib/build/gate-context-bridge";
 import type { ToolResult } from "@/lib/mcp-tools";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 import {

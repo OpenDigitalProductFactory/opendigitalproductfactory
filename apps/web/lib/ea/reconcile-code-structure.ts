@@ -11,8 +11,8 @@
 // IT4IT reference model is absent). db / freshness are injected for tests.
 
 import { prisma } from "@dpf/db";
-import { getCodeGraphFreshness } from "@/lib/integrate/code-graph-access";
-import { CODE_GRAPH_GRAPH_KEY } from "@/lib/integrate/code-graph/constants";
+import { getCodeGraphFreshness } from "@/lib/build/code-graph-access";
+import { CODE_GRAPH_GRAPH_KEY } from "@/lib/build/code-graph/constants";
 import { buildCodeStructureModel, type CodeImportEdge } from "./code-structure-extract";
 import { applySysmlModel, type SysmlSeedResult } from "./sysml-model-seed";
 

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
-import { connectAdp } from "@/lib/integrate/adp/connect-action";
+import { connectAdp } from "@/lib/integrations/adp/connect-action";
 
 export async function POST(request: Request) {
   const session = await auth();

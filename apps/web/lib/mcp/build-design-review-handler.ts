@@ -21,8 +21,8 @@ import {
   resolveActiveBuildId,
   updateBuildHappyPathState,
 } from "@/lib/mcp/build-tool-helpers";
-import type { ReviewBranchInput } from "@/lib/integrate/build-reviewers";
-import { triggerDesignReviewAutoRepair } from "@/lib/integrate/pre-build-review-auto-repair";
+import type { ReviewBranchInput } from "@/lib/build/build-reviewers";
+import { triggerDesignReviewAutoRepair } from "@/lib/build/pre-build-review-auto-repair";
 import { toFailureResult } from "./build-review-handlers";
 
 type HandlerContext = Parameters<ToolPackHandler>[2];
@@ -68,11 +68,11 @@ export async function reviewDesignDoc(params: Record<string, unknown>, userId: s
           const fixPlan = (build.plan as Record<string, unknown> | null);
           const gate = checkPhaseGate("ideate", "plan", { kind: "fix", processSize: fixProcessSize, deliverableSensitivity: fixPlan?.deliverableSensitivity, qualityFirst: fixPlan?.qualityFirst === true, fixContext: fc, designReview: review });
           if (gate.allowed) {
-            const { completeBuildPhaseRun, startBuildPhaseRun } = await import("@/lib/integrate/build-phase-run");
+            const { completeBuildPhaseRun, startBuildPhaseRun } = await import("@/lib/build/build-phase-run");
             void completeBuildPhaseRun(buildId, "ideate");
             void startBuildPhaseRun(buildId, "plan").catch(() => {}); // swallow QuiescingError thrown during a self-upgrade drain (BI-QUIESCE-005)
             if (context?.threadId) {
-              const { persistPhaseHandoffSummary } = await import("@/lib/integrate/phase-compaction-wire");
+              const { persistPhaseHandoffSummary } = await import("@/lib/build/phase-compaction-wire");
               void persistPhaseHandoffSummary(context.threadId, "ideate");
             }
             await prisma.featureBuild.update({ where: { buildId }, data: { phase: "plan" } });
@@ -174,7 +174,7 @@ export async function reviewDesignDoc(params: Record<string, unknown>, userId: s
       // only; never gates. Strict no-op when the flag is off (skipped=true).
       try {
         const { runGovernedDaConsultationViaRouteAndCall } = await import(
-          "@/lib/integrate/governed-data-architect-consultation"
+          "@/lib/build/governed-data-architect-consultation"
         );
         const daAdvisory = await runGovernedDaConsultationViaRouteAndCall({
           doc: typeof build.designDoc === "string" ? build.designDoc : JSON.stringify(designDocTyped),
@@ -245,7 +245,7 @@ export async function reviewDesignDoc(params: Record<string, unknown>, userId: s
         // risks in the deliberation summary but never flip the gate.
         if (archReview) reviewerBranches.push({ branchNodeId: "architect", role: "architect", review: archReview });
         if (reviewerBranches.length > 0) {
-          const { runBuildReviewDeliberation } = await import("@/lib/integrate/build-orchestrator");
+          const { runBuildReviewDeliberation } = await import("@/lib/build/build-orchestrator");
           await runBuildReviewDeliberation({
             userId,
             buildId,
@@ -436,7 +436,7 @@ export async function reviewDesignDoc(params: Record<string, unknown>, userId: s
           // whose headers() throws on autonomous resume — see auto-intake-epic.ts).
           if (!happyPathState.intake.epicId) {
             try {
-              const { autoCreateBuildEpic } = await import("@/lib/integrate/auto-intake-epic");
+              const { autoCreateBuildEpic } = await import("@/lib/build/auto-intake-epic");
               const epicTitle = updatedBuild.title || happyPathState.intake.constrainedGoal || "Build Studio feature";
               const createdEpic = await autoCreateBuildEpic({
                 db: prisma,
@@ -559,11 +559,11 @@ export async function reviewDesignDoc(params: Record<string, unknown>, userId: s
           });
           if (gate.allowed) {
             // EP-COST Phase 3: record ideate-phase cost rollup, start plan tracking, and compact thread
-            const { completeBuildPhaseRun, startBuildPhaseRun } = await import("@/lib/integrate/build-phase-run");
+            const { completeBuildPhaseRun, startBuildPhaseRun } = await import("@/lib/build/build-phase-run");
             void completeBuildPhaseRun(buildId, "ideate");
             void startBuildPhaseRun(buildId, "plan").catch(() => {}); // swallow QuiescingError thrown during a self-upgrade drain (BI-QUIESCE-005)
             if (context?.threadId) {
-              const { persistPhaseHandoffSummary } = await import("@/lib/integrate/phase-compaction-wire");
+              const { persistPhaseHandoffSummary } = await import("@/lib/build/phase-compaction-wire");
               void persistPhaseHandoffSummary(context.threadId, "ideate");
             }
             await prisma.featureBuild.update({ where: { buildId }, data: { phase: "plan" } });
@@ -572,7 +572,7 @@ export async function reviewDesignDoc(params: Record<string, unknown>, userId: s
             // Auto-dispatch plan generation so the build advances without
             // waiting for the operator to manually prompt the coworker. Mirrors
             // the ideate auto-dispatch pattern (plan-on-approval.ts).
-            void import("@/lib/integrate/plan-on-approval").then(m =>
+            void import("@/lib/build/plan-on-approval").then(m =>
               m.dispatchPlanForApprovedBuild({ buildId, userId })
                 .catch(err => console.error("[plan-on-approval] auto-dispatch failed:", err))
             );

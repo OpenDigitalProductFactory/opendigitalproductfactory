@@ -25,7 +25,7 @@
 // invisible on the admin Scheduled Jobs surface — until this catalog was
 // reconciled (scheduling-surface review, 2026-06-21). Keep the parity test real.
 
-import { CODE_GRAPH_JOB_ID } from "@/lib/integrate/code-graph/constants";
+import { CODE_GRAPH_JOB_ID } from "@/lib/build/code-graph/constants";
 import {
   EMBEDDING_COVERAGE_JOB_ID,
   EMBEDDING_COVERAGE_JOB_NAME,

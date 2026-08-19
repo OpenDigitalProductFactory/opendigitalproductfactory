@@ -1,0 +1,531 @@
+model BrandingConfig {
+  id             String        @id @default(cuid())
+  scope          String        @unique
+  label          String        @default("")
+  tokens         Json
+  updatedAt      DateTime      @updatedAt
+  logoUrlLight   String?
+  organizationId String?       @unique
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+}
+
+model PlatformCapability {
+  id           String   @id @default(cuid())
+  capabilityId String   @unique
+  name         String
+  description  String?
+  state        String   @default("inactive")
+  manifest     Json
+  updatedAt    DateTime @updatedAt
+}
+
+/// Durable receipt for the portal-to-host runtime capability transition saga.
+/// The partial unique index limiting active transitions is defined in SQL.
+model RuntimeCapabilityTransition {
+  id                String                             @id @default(cuid())
+  transitionId      String                             @unique
+  previousKeys      String[]
+  desiredKeys       String[]
+  previousProfiles  String[]
+  desiredProfiles   String[]
+  previousServices  String[]
+  desiredServices   String[]
+  previousStates    Json
+  desiredStates     Json
+  previousStateHash String
+  desiredStateHash  String
+  catalogHash       String
+  issuedAt          DateTime?
+  expiresAt         DateTime?
+  envelope          Json?
+  envelopeSignature String?
+  status            String                             @default("pending")
+  hostReceipt       Json?
+  failure           Json?
+  requestedById     String?
+  createdAt         DateTime                           @default(now())
+  hostAppliedAt     DateTime?
+  completedAt       DateTime?
+  updatedAt         DateTime                           @updatedAt
+  events            RuntimeCapabilityTransitionEvent[]
+
+  @@index([status, createdAt])
+}
+
+/// Append-only governance audit for every terminal runtime transition outcome.
+model RuntimeCapabilityTransitionEvent {
+  id           String                      @id @default(cuid())
+  transitionId String
+  outcome      String
+  detail       Json
+  createdAt    DateTime                    @default(now())
+  transition   RuntimeCapabilityTransition @relation(fields: [transitionId], references: [transitionId], onDelete: Restrict)
+
+  @@index([transitionId, createdAt])
+  @@index([createdAt]) // retention sweep cutoff scan, apps/web/lib/operate/retention/execute.ts:99
+}
+
+model ScheduledJob {
+  id         String    @id @default(cuid())
+  jobId      String    @unique
+  name       String
+  schedule   String    @default("weekly")
+  lastRunAt  DateTime?
+  nextRunAt  DateTime?
+  lastStatus String?
+  lastError  String?
+  // Per-job durable scratch state owned by the runner. Used today by
+  // jobId="contributor-inventory-sync" to store the GitHub etag
+  // (`githubPrEtag`) so conditional requests survive the retention
+  // sweep that prunes ContributorInventorySyncRun history.
+  // Spec: docs/superpowers/specs/2026-05-26-contributor-inventory-sync-design.md §Etag persistence.
+  metadata   Json?
+  // Classification + per-job control (BI-5A42E572 / EP-PROACTIVE-OPS).
+  // The static SCHEDULED_JOB_CATALOG (apps/web/lib/operate/scheduled-jobs/
+  // catalog.ts) is authoritative for known jobs; these columns persist
+  // classification for rows with no catalog entry plus any audited override.
+  //   category — "core" (platform-integrity cron, operator read-only) vs
+  //              "editable" (operationally tunable after install).
+  //   locked   — blocks operator edits even for an "editable" job until an
+  //              explicit override clears it; always true for core jobs.
+  //   enabled  — per-job kill switch complementing the global
+  //              DPF_SCHEDULED_INNGEST_FUNCTIONS_ENABLED gate. Jobs that
+  //              honour it skip execution when false (the visibility gap the
+  //              13-day silent code-graph outage exposed).
+  category   String    @default("editable")
+  locked     Boolean   @default(false)
+  enabled    Boolean   @default(true)
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+}
+
+// Per-run audit log for platform-managed backups (Postgres in Slice 1; Neo4j/
+// Qdrant in later slices). The ScheduledJob row with jobId
+// "postgres-daily-backup" is the live heartbeat; BackupRun rows are durable
+// history surfaced in the /admin/backups UX.
+// See docs/superpowers/specs/2026-05-17-postgres-daily-backup-design.md §4.7.
+model BackupRun {
+  id           String    @id @default(cuid())
+  target       String    @default("postgres")
+  startedAt    DateTime  @default(now())
+  finishedAt   DateTime?
+  status       String
+  trigger      String
+  schedule     String?
+  sizeBytes    BigInt?
+  durationMs   Int?
+  sha256       String?
+  pgVersion    String?
+  dpfVersion   String?
+  storagePath  String
+  errorMessage String?
+  prunedAt     DateTime?
+  createdAt    DateTime  @default(now())
+
+  restoresFrom BackupRestore[] @relation("BackupRestoreSource")
+  safetyFor    BackupRestore[] @relation("BackupRestoreSafety")
+
+  @@index([startedAt])
+  @@index([status])
+  @@index([target, status])
+}
+
+// Audit row for every restore operation. Strongly gated in the UX (typed
+// confirmation); never automatic. Each restore writes a pre-restore safety
+// dump first; preRestoreBackupRunId points at that BackupRun.
+model BackupRestore {
+  id                    String    @id @default(cuid())
+  startedAt             DateTime  @default(now())
+  finishedAt            DateTime?
+  status                String
+  initiatedByUserId     String?
+  sourceBackupRunId     String
+  preRestoreBackupRunId String?
+  errorMessage          String?
+  // What kind of restore this row records:
+  //   "operator-restore"     — operator-triggered full restore (default; preserves
+  //                             prior rows that lack this field on backfill).
+  //   "trial-verification"   — automated nightly trial restore into a temp DB
+  //                             that asserts critical-table row counts; never
+  //                             touches the production DB. preRestoreBackupRunId
+  //                             is null in this case.
+  // BI-31C9FBDF (EP-DR-HARDENING-2026-05-23).
+  trigger               String?
+  createdAt             DateTime  @default(now())
+
+  sourceBackup     BackupRun  @relation("BackupRestoreSource", fields: [sourceBackupRunId], references: [id])
+  preRestoreBackup BackupRun? @relation("BackupRestoreSafety", fields: [preRestoreBackupRunId], references: [id])
+
+  @@index([startedAt])
+  @@index([status])
+  @@index([trigger])
+}
+
+model PlatformSetupProgress {
+  id             String    @id @default(cuid())
+  userId         String?   @unique
+  organizationId String?   @unique
+  currentStep    String    @default("business-identity")
+  steps          Json      @default("{}")
+  context        Json      @default("{}")
+  pausedAt       DateTime?
+  completedAt    DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  user         User?         @relation("UserSetupProgress", fields: [userId], references: [id])
+  organization Organization? @relation("OrgSetupProgress", fields: [organizationId], references: [id])
+}
+
+model RuntimeAdvisory {
+  id          String   @id @default(cuid())
+  content     Json
+  generatedAt DateTime @default(now())
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  type      String
+  title     String
+  body      String?
+  deepLink  String?
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id])
+
+  @@index([userId, read])
+  @@index([createdAt])
+}
+
+// BI-997503EC (EP-CLAUDE-INSIDE-OUT): user-configurable notification rules —
+// "notify me when a record in category X matching filter Y changes". A rule is a
+// durable subscription owned by a user: an event category, an optional equality
+// filter over event attributes, a channel, and a cadence. When an event is
+// dispatched, active immediate rules whose filter matches produce a Notification
+// row for the owner. Replaces code-only notification delivery with an end-user
+// rule surface. Slice 1 = model + matcher + dispatch + door; wiring concrete
+// record-change event sources is Slice 2 (see BI follow-up).
+model NotificationSubscription {
+  id            String   @id @default(cuid())
+  userId        String
+  eventCategory String // e.g. "backlog", "service-ticket", "build"
+  filter        Json? // equality filter {attr: value}; null/empty = all in category
+  channel       String   @default("in_app") // in_app (Notification row); extensible
+  cadence       String   @default("immediate") // immediate | digest (digest = Slice 2)
+  active        Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  user          User     @relation("NotificationSubscriptionUser", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, active])
+  @@index([eventCategory, active])
+}
+
+model PlatformNotification {
+  id         String    @id @default(cuid())
+  severity   String // "info" | "warning" | "critical" | "expired"
+  category   String // e.g. "token-expiry"
+  subjectId  String? // e.g. CredentialEntry.providerId
+  message    String    @db.Text
+  createdAt  DateTime  @default(now())
+  resolvedAt DateTime?
+
+  @@index([category, resolvedAt])
+}
+
+model PushDeviceRegistration {
+  id        String   @id @default(cuid())
+  userId    String
+  token     String   @unique
+  platform  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id])
+
+  @@unique([userId, platform])
+}
+
+model DynamicForm {
+  id                  String               @id @default(cuid())
+  formId              String               @unique
+  title               String
+  version             Int                  @default(1)
+  fields              Json
+  submitAction        String?
+  offlineCapable      Boolean              @default(false)
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  careIntakeResponses CareIntakeResponse[]
+
+  @@unique([id, version])
+}
+
+model DynamicView {
+  id         String   @id @default(cuid())
+  viewId     String   @unique
+  title      String
+  type       String
+  layout     Json
+  dataSource String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+model PlatformIssueReport {
+  id                  String                @id @default(cuid())
+  reportId            String                @unique
+  type                String
+  severity            String                @default("medium")
+  status              String                @default("open")
+  title               String
+  description         String?
+  routeContext        String?
+  errorStack          String?
+  // BI-B4F401B3: crash-boundary diagnostics. errorDigest is the Next.js server
+  // digest token (stable per real error on a build) — it lets operators and AI
+  // clients grep server logs for the message Next.js sanitizes away, and lets
+  // triage dedup a whole crash incident across routes. deployedSha anchors the
+  // diagnostic prompt to the exact image SHA that crashed.
+  errorDigest         String?
+  deployedSha         String?
+  userAgent           String?
+  reportedById        String?
+  digitalProductId    String?
+  portfolioId         String?
+  agentId             String?
+  featureBuildId      String?
+  triggerKind         String?
+  supportSessionId    String?
+  source              String                @default("manual")
+  // BI-3E0EE3BA: self-fix-feasibility class for escalations raised by an
+  // autonomous producer (Build Studio) that gave up self-repairing. One of
+  // auto-recoverable | needs-human | needs-external-capability. Null for
+  // ordinary issue reports. Lets hive learning (BI-76B4317F) key off the
+  // failure class and support-tier routing (BI-5090F4AA) route by it.
+  selfFixClass        String?
+  // BI-5FE8656F (EP-FULL-OBS Tier 2): stable idempotency key for automated
+  // producers (the log-signature scanner files `log-sig:<service>:<sigId>`).
+  // A partial UNIQUE index — open rows only — lives in the migration (Prisma
+  // can't express partial-unique predicates); it lets a resolved signature
+  // re-file when the problem recurs while preventing duplicate open reports.
+  dedupeKey           String?
+  // BI-854A9A5C: retained issue-report merge lineage. Integrity repair keeps
+  // every reportId and diagnostic payload while suppressing duplicate active
+  // identities; mergedInto points each retained loser at the canonical report.
+  mergedIntoId        String?
+  suppressionReason   String?               @db.VarChar(80)
+  // Governed Hermes learning Slice 1: link runtime issues to the thread/run
+  // that produced them so reflection can avoid route/time-window heuristics.
+  threadId            String?
+  taskRunId           String?
+  // BI-51F6A428 (reach-threshold + staging gate): accrual + staging fields that
+  // stop the PIR treadmill. A reach-gated automated signal (the log-signature
+  // "noise-digest" stream) is born `stagedUntilPromoted=true` instead of minting
+  // a BI on first sight; each re-occurrence bumps occurrenceCount + lastSeenAt,
+  // and it is projected into the backlog only once it crosses the reach+recency
+  // bar (apps/web/lib/quality/issue-report-promotion.ts). A staged signal that
+  // stops recurring is aged out (status→suppressed) with no BI. High/critical
+  // signals bypass the gate and project on first occurrence.
+  occurrenceCount     Int                   @default(1)
+  firstSeenAt         DateTime?
+  lastSeenAt          DateTime?
+  stagedUntilPromoted Boolean               @default(false)
+  // BI-0ACD9AB2 §5.3/§14 dial-up: the autonomous responder sweep pre-computes a
+  // WWMD recommendation (status / recommended action / reason) here so the /ops
+  // attention lens shows it without an operator click. Advisory only — the human
+  // still decides. responderDecidedAt is also the "already consulted" marker.
+  responderDecision   Json?
+  responderDecidedAt  DateTime?
+  createdAt           DateTime              @default(now())
+  updatedAt           DateTime              @updatedAt
+  upstreamIssueNumber Int?
+  upstreamIssueUrl    String?
+  upstreamSyncedAt    DateTime?
+  reportedBy          User?                 @relation(fields: [reportedById], references: [id])
+  featureBuild        FeatureBuild?         @relation(fields: [featureBuildId], references: [id], onDelete: SetNull)
+  mergedInto          PlatformIssueReport?  @relation("PlatformIssueReportMerge", fields: [mergedIntoId], references: [id], onDelete: SetNull)
+  mergedFrom          PlatformIssueReport[] @relation("PlatformIssueReportMerge")
+
+  @@unique([reportedById, supportSessionId])
+  @@index([featureBuildId])
+  @@index([threadId, createdAt(sort: Desc)])
+  @@index([taskRunId])
+  // BI-B4F401B3: digest lookup powers cross-route incident dedup at triage time.
+  @@index([errorDigest])
+  // BI-5FE8656F: dedupeKey lookup powers the scanner's idempotency check.
+  @@index([dedupeKey])
+  @@index([mergedIntoId])
+  @@index([reportedById, supportSessionId, createdAt(sort: Desc)])
+}
+
+model ImprovementSignal {
+  id                        String   @id @default(cuid())
+  signalId                  String   @unique
+  sourceType                String
+  sourceId                  String
+  title                     String
+  description               String?  @db.Text
+  evidence                  Json     @default("{}")
+  recurrenceCount           Int      @default(1)
+  status                    String   @default("open")
+  routeContext              String?
+  agentId                   String?
+  threadId                  String?
+  buildId                   String?
+  providerId                String?
+  toolName                  String?
+  digitalProductId          String?
+  portfolioId               String?
+  suspectedRootCause        String?
+  objectiveImpactHypothesis String?
+  graphNodeRefs             String[] @default([])
+  graphEdgeRefs             String[] @default([])
+  // EP-INTAKE-UNIFY / BI-B716B387: back-link to the BacklogItem a persistent
+  // signal was projected into (semantic itemId, BI-…). Null until the signal
+  // crosses the recurrence threshold and is filed through the shared front door.
+  backlogItemId             String?
+  createdAt                 DateTime @default(now())
+  updatedAt                 DateTime @updatedAt
+  lastSeenAt                DateTime @default(now())
+
+  @@unique([sourceType, sourceId])
+  @@index([status, createdAt(sort: Desc)])
+  @@index([routeContext, createdAt(sort: Desc)])
+  @@index([agentId, createdAt(sort: Desc)])
+  @@index([toolName, createdAt(sort: Desc)])
+  @@index([backlogItemId])
+}
+
+model PlatformConfig {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     Json
+  updatedAt DateTime @updatedAt
+}
+
+// PrivatePathRule — operator-managed overrides that merge with the checked-in
+// `.dpf/private-paths` manifest. Paths matching either source are NEVER
+// included in a public-hive contribution diff (Private/Public Change
+// Segregation, EP-1A78BAE1). gitignore-style glob in `pattern`.
+model PrivatePathRule {
+  id          String   @id @default(cuid())
+  pattern     String   @unique
+  reason      String?
+  createdById String?
+  createdBy   User?    @relation("PrivatePathRuleCreatedBy", fields: [createdById], references: [id])
+  createdAt   DateTime @default(now())
+}
+
+model PlatformDevConfig {
+  id                        String    @id @default("singleton")
+  contributionMode          String    @default("selective")
+  // Values: "fork_only" | "selective" | "contribute_all"
+  gitRemoteUrl              String? // Reserved for future git push capability
+  updatePending             Boolean   @default(false)
+  pendingVersion            String?
+  configuredAt              DateTime  @default(now())
+  configuredById            String?
+  configuredBy              User?     @relation("PlatformDevConfiguredBy", fields: [configuredById], references: [id])
+  dcoAcceptedAt             DateTime?
+  dcoAcceptedById           String?
+  dcoAcceptedBy             User?     @relation("PlatformDevDcoAcceptedBy", fields: [dcoAcceptedById], references: [id])
+  upstreamRemoteUrl         String?
+  // Client identity — generated once at install, never changes.
+  // Used as the git author for all agent commits so contributions are
+  // indistinguishable by name but unique and traceable by email hash.
+  clientId                  String? // UUID, generated at first seed
+  gitAgentEmail             String? // agent-<sha256(clientId)[:16]>@hive.dpf
+  // Which push model to use when contributionMode is selective | contribute_all.
+  // null = unconfigured; explicit value required before contribute_to_hive runs.
+  // "maintainer-direct" — push directly to upstream (legacy path, requires upstream write)
+  // "fork-pr"          — push to contributor-owned fork, open cross-repo PR (public-repo default)
+  contributionModel         String?
+  contributorForkOwner      String?
+  contributorForkRepo       String?
+  forkVerifiedAt            DateTime?
+  backlogTeeUpDailyCap      Int       @default(3)
+  governedBacklogEnabled    Boolean   @default(false)
+  // Demand-management policy (EP-DEMAND-MGMT Phase 4): the operator-owned,
+  // audited scoring policy the demand engine reads instead of a hardcoded
+  // default. demandFramework = active scoring framework (rice|wsjf|value_effort|
+  // weighted); demandBucketTargets = org-wide default investment allocation,
+  // e.g. { "run": 70, "grow": 20, "transform": 10 }. null = built-in defaults
+  // (rice, 70/20/10). §11.
+  demandFramework           String?
+  demandBucketTargets       Json?
+  // Use-it-or-lose-it capacity draining (EP-DEMAND-MGMT / capacity automation).
+  // When enabled, near the weekly pre-paid LLM allocation reset with a healthy
+  // (non-exhausted) pool and free build slots, the scheduled evaluator dispatches
+  // top demand-ranked ready work up to the WIP cap so allocation is not wasted.
+  // All nullable/defaulted → off by default (opt-in). See lib/capacity/drain-policy.ts.
+  capacityDrainEnabled      Boolean   @default(false)
+  /// Weekly reset day-of-week in UTC (0=Sun … 6=Sat). Default Monday.
+  capacityResetDow          Int       @default(1)
+  /// Weekly reset hour in UTC (0–23).
+  capacityResetHourUtc      Int       @default(0)
+  /// Start draining once within this many hours of the reset.
+  capacityDrainWindowHours  Int       @default(12)
+  /// Max builds to dispatch per drain evaluation (still bounded by the WIP cap).
+  capacityDrainMaxDispatch  Int       @default(3)
+  // Hive Contributions consent (spec §6.1). Device-fingerprint contribution is
+  // opt-in, DEFAULTED ON because outbound fingerprints are PII-free
+  // (redactFingerprintEvidence, fail-closed). The master pause halts ALL
+  // contribution types immediately.
+  deviceFingerprintOptIn    Boolean   @default(true)
+  hiveContributionsPaused   Boolean   @default(false)
+  // Upstream feedback escalation consent (BI-6D45BA27, spec 2026-06-06 §3).
+  // OPT-IN, defaulted OFF: nothing leaves the install until a user explicitly
+  // consents. The AI coworker surfaces the consent prompt and the
+  // "Report to the project team" action.
+  upstreamFeedbackOptIn     Boolean   @default(false)
+  upstreamFeedbackOptInAt   DateTime?
+  upstreamFeedbackOptInById String?
+  upstreamFeedbackOptInBy   User?     @relation("PlatformDevUpstreamFeedbackOptInBy", fields: [upstreamFeedbackOptInById], references: [id])
+  // Configurable intake relay target (spec §4). When set, the install posts
+  // redacted reports here (install-authenticated) instead of calling GitHub
+  // directly — the no-token consumer path and the reseller seam.
+  upstreamRelayUrl          String?
+}
+
+enum BusinessMetricAvailability {
+  available
+  unavailable
+}
+
+enum PerformanceMetricUnit {
+  count
+  currency
+  percent
+  rate
+  duration
+}
+
+/// Tenant-scoped, definition-versioned historical metric read model. Source
+/// systems remain authoritative; this table exists so owner/manager reads never
+/// run historical aggregation on the operational hot path.
+model BusinessMetricRollup {
+  id                String                     @id @default(cuid())
+  organizationId    String
+  metricKey         String
+  periodStart       DateTime
+  periodEnd         DateTime
+  timezone          String
+  dimensionsHash    String
+  dimensions        Json
+  value             Decimal?                   @db.Decimal(20, 6)
+  unit              PerformanceMetricUnit
+  availability      BusinessMetricAvailability
+  unavailableReason String?
+  definitionVersion String
+  sourceWatermark   DateTime
+  sourceLineage     Json
+  computedAt        DateTime                   @default(now())
+  createdAt         DateTime                   @default(now())
+  updatedAt         DateTime                   @updatedAt
+
+  organization Organization @relation("BusinessMetricRollupOrganization", fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, metricKey, periodStart, periodEnd, dimensionsHash, definitionVersion], map: "business_metric_rollup_identity")
+  @@index([organizationId, periodStart, periodEnd])
+  @@index([organizationId, metricKey, sourceWatermark])
+}

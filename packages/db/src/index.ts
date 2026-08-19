@@ -16,6 +16,12 @@ export type {
   PrismaClient,
   PayRunStatus,
   PayslipDisbursementStatus,
+  // W19 unified resource-scheduling family (BI-99C76A90) + the W20 record
+  // lifecycle convention enum (BI-C357FA5A).
+  RecordLifecycle,
+  ResourceDomain,
+  AvailabilityWindowKind,
+  CapacityAllocationState,
 } from "../generated/client/client";
 export { WriteGateRequirement } from "../generated/client/client";
 export {
@@ -349,6 +355,8 @@ export {
 export { projectDocImpactManifest } from "./doc-impact-graph-sync";
 export {
   readCanonicalPrismaSchema,
+  listCanonicalPrismaSchemaFiles,
+  CANONICAL_PRISMA_SCHEMA_DIR,
   CANONICAL_PRISMA_SCHEMA_PATH,
 } from "./schema-source";
 export { DATA_MODEL_MIRROR_TASK_ID } from "./data-model-mirror-config";

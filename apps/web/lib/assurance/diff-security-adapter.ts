@@ -1,4 +1,4 @@
-import { scanDiffForSecurityIssues, type ScanFinding } from "@/lib/integrate/security-scan";
+import { scanDiffForSecurityIssues, type ScanFinding } from "@/lib/build/security-scan";
 import type { AssuranceAdapter, AssuranceRunInput, AssuranceRunOutput } from "./adapter-contract";
 import { createFindingKey, normalizeVendorIdentifier } from "./finding-key";
 import type {

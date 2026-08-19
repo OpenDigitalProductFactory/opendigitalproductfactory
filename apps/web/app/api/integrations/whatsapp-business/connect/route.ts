@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
-import { connectWhatsAppBusiness } from "@/lib/integrate/whatsapp-business/connect-action";
+import { connectWhatsAppBusiness } from "@/lib/integrations/whatsapp-business/connect-action";
 
 export async function POST(request: Request) {
   const session = await auth();

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef } from "react";
-import type { AssignedTask } from "@/lib/integrate/task-dependency-graph";
+import type { AssignedTask } from "@/lib/build/task-dependency-graph";
 import type {
   NodeStatus,
   NormalizedStoredTaskResult,

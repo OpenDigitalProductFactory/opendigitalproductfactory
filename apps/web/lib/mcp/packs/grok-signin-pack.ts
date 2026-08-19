@@ -30,7 +30,7 @@ const definitions: ToolDefinition[] = [
 ];
 
 async function grokSigninStartHandler(): Promise<ToolResult> {
-  const { grokDeviceLoginStart } = await import("@/lib/integrate/grok-device-login-core");
+  const { grokDeviceLoginStart } = await import("@/lib/build/grok-device-login-core");
   const result = await grokDeviceLoginStart();
   if ("error" in result) {
     return { success: false, error: "device_login_failed", message: result.error };
@@ -43,7 +43,7 @@ async function grokSigninStartHandler(): Promise<ToolResult> {
 }
 
 async function grokSigninStatusHandler(): Promise<ToolResult> {
-  const { grokDeviceLoginComplete } = await import("@/lib/integrate/grok-device-login-core");
+  const { grokDeviceLoginComplete } = await import("@/lib/build/grok-device-login-core");
   const result = await grokDeviceLoginComplete();
   if (result.status === "ok") {
     return {

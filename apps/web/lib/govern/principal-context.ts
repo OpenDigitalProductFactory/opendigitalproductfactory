@@ -1,4 +1,4 @@
-import type { PrincipalContext } from "./governance-types";
+import type { PrincipalContext } from "../governance/governance-types";
 
 type SessionUser = {
   id: string;

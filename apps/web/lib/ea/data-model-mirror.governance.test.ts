@@ -6,7 +6,7 @@ import { buildDesiredState } from "./data-model-mirror";
 import type {
   PrismaModelFact,
   PrismaSchemaFacts,
-} from "../integrate/code-graph/extractors/prisma-schema-adapter";
+} from "../build/code-graph/extractors/prisma-schema-adapter";
 
 function field(name: string): PrismaModelFact["fields"][number] {
   return {

@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { MERGE_ADAPTERS } from "./merge";
+import { readCanonicalPrismaSchema } from "@dpf/db/schema-source";
 
 /**
  * Adapter completeness guard (spec §5.4): every FK relation in schema.prisma
@@ -14,7 +15,6 @@ import { MERGE_ADAPTERS } from "./merge";
  * their single home (reviewed in PR); this guard covers the FK side.
  */
 
-const SCHEMA_PATH = join(__dirname, "..", "..", "..", "..", "packages", "db", "prisma", "schema.prisma");
 
 /** Relations intentionally NOT repointed, with the reason. */
 const WAIVED: Record<string, string> = {
@@ -49,7 +49,7 @@ function lowerFirst(name: string): string {
 
 /** Parse `Model.field` pairs for FK relations targeting `target`. */
 function schemaRelationsTargeting(target: string): string[] {
-  const schema = readFileSync(SCHEMA_PATH, "utf8");
+  const schema = readCanonicalPrismaSchema();
   const results: string[] = [];
   const modelBlocks = schema.matchAll(/model (\w+) \{([\s\S]*?)\n\}/g);
   for (const [, modelName, body] of modelBlocks) {

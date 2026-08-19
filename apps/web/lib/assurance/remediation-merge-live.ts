@@ -20,7 +20,7 @@ import { createPlatformIssueReport } from "@/lib/quality/platform-issue-reports"
 import {
   enablePullRequestAutoMerge,
   resolvePullRequestNodeId,
-} from "@/lib/integrate/github-pr-readiness";
+} from "@/lib/build/github-pr-readiness";
 import { ASSURANCE_ORIGIN_MARKER } from "./remediation-teeup";
 import type { MergeGateAdapters, PrReadiness, ReadyRemediationPR } from "./remediation-merge-orchestrator";
 

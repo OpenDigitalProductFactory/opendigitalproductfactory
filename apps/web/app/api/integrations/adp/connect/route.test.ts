@@ -6,7 +6,7 @@ const { mockAuth, mockConnectAdp } = vi.hoisted(() => ({
 }));
 
 vi.mock("@/lib/auth", () => ({ auth: mockAuth }));
-vi.mock("@/lib/integrate/adp/connect-action", () => ({ connectAdp: mockConnectAdp }));
+vi.mock("@/lib/integrations/adp/connect-action", () => ({ connectAdp: mockConnectAdp }));
 
 import { POST } from "./route";
 

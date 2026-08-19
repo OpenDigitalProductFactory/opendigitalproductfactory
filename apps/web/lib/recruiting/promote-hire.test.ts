@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { promoteGreenhouseHireToNative, type PromoteHireClient } from "./promote-hire";
-import type { GreenhouseHire } from "@/lib/integrate/greenhouse/land-hire";
+import type { GreenhouseHire } from "@/lib/integrations/greenhouse/land-hire";
 
 function hire(overrides: Partial<GreenhouseHire> = {}): GreenhouseHire {
   return {

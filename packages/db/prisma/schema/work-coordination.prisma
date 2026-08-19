@@ -1,0 +1,831 @@
+enum InitiativeGateKey {
+  classification
+  research
+  design_spec            @map("design-spec")
+  spec_approval          @map("spec-approval")
+  architecture_review    @map("architecture-review")
+  data_review            @map("data-review")
+  ux_fit_review          @map("ux-fit-review")
+  security_review        @map("security-review")
+  compliance_review      @map("compliance-review")
+  domain_review          @map("domain-review")
+  plan_review            @map("plan-review")
+  dependency_disposition @map("dependency-disposition")
+  archetype_provisioning @map("archetype-provisioning")
+  archetype_completeness @map("archetype-completeness")
+}
+
+enum InitiativeArtifactSourceKind {
+  build_artifact_revision @map("build-artifact-revision")
+  document_version        @map("document-version")
+  repository_blob_archive @map("repository-blob-archive")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Closed-set vocabularies (BI-817ED2D4, Simplify & Strengthen W4, architecture
+// pass 2026-08-16 §3.2-a). Closed-set string fields are typed enums (AGENTS.md
+// §8); long-lived columns migrate expand→contract because fleet installs may
+// hold drifted values.
+//
+// Two groups below:
+//   1. IN USE — the column is already this enum type (direct conversion per
+//      the 20260815200100 payroll precedent; each conversion's data-safety
+//      argument lives in migration 20260816110000).
+//   2. CONTRACT-PENDING — the Postgres type exists and the column carries a
+//      `*_closed_set` CHECK (NOT VALID) enforcing new writes, but the Prisma
+//      field stays String until the contract step normalizes legacy values and
+//      flips the type. Ordered plan (operator-review-required):
+//      docs/superpowers/plans/2026-08-16-enum-contract-step-proposal.md
+//
+// New closed-set String columns are blocked by
+// scripts/check-no-new-closed-set-strings.mjs (baseline may only shrink).
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ── Group 1: in use ──
+
+// BacklogItem.sensitivity — cross-org sharing classification (BI-DC4E526E).
+// Canonical union: apps/web/lib/federation/cross-org-sharing.ts
+enum BacklogSensitivity {
+  public
+  internal
+  confidential
+  restricted
+}
+
+// BacklogItem.estimateSource — estimate provenance (BI-E731A6C1).
+// Canonical union: apps/web/lib/demand/estimate-provenance.ts
+enum EstimateSource {
+  ai
+  human
+  agreed
+}
+
+// BacklogItem.demandStage — demand funnel (EP-DEMAND-MGMT, DI-5CB3AFE78912).
+enum DemandStage {
+  raw
+  screened
+  shaped
+  ready
+}
+
+// BacklogItem.demandScoreFramework — pluggable scoring (DI-4CEA0F5FACCE).
+enum DemandScoreFramework {
+  rice
+  wsjf
+  value_effort
+  weighted
+}
+
+// BacklogItem.investmentBucket — Run/Grow/Transform (DI-8E489A791375).
+enum InvestmentBucket {
+  run
+  grow
+  transform
+}
+
+// Workroom.decisionScope — which decision surface governs the work.
+// Canonical union: apps/web/lib/work-capsules.ts
+enum DecisionScope {
+  wwmd
+  wwwd
+  wsid
+}
+
+// Workroom.portfolioRole — FPAW portfolio attribution.
+// Canonical union: apps/web/lib/work-capsules.ts
+enum WorkPortfolioRole {
+  foundational
+  manufactureAndDeliver
+  forEmployees
+  productsAndServicesSold
+}
+
+model BacklogItem {
+  id                      String                        @id @default(cuid())
+  itemId                  String                        @unique
+  title                   String
+  status                  String
+  type                    String
+  // Cross-org sharing classification (BI-DC4E526E). Deny-by-default — only
+  // `public` may cross an organization boundary in federated demand (kernel
+  // DI-3E77E48D5710). Default `internal` so unclassified proprietary demand
+  // never leaks upstream.
+  sensitivity             BacklogSensitivity            @default(internal)
+  body                    String?
+  createdAt               DateTime                      @default(now())
+  updatedAt               DateTime                      @updatedAt
+  priority                Int?
+  digitalProductId        String?
+  // Product-management demand scope (EP-ED496EB0 Phase 8). Business Product
+  // and EEMD DigitalProduct remain separate targets; application invariants
+  // require organization context and at most one narrower target. Nullable
+  // expand-first columns preserve historical rows as explicitly unclassified.
+  organizationId          String?
+  productLineId           String?
+  businessProductId       String?
+  taxonomyNodeId          String?
+  epicId                  String?
+  portfolioId             String?
+  source                  String?
+  workType                String?
+  triageOutcome           String?
+  effortSize              String?
+  proposedOutcome         String?
+  // Demand-management scoring (EP-DEMAND-MGMT Phase 1). Store the scoring
+  // INPUTS as first-class nullable fields; the score is COMPUTED by a pluggable
+  // framework (apps/web/lib/demand/scoring.ts). null = not yet scored. reach
+  // seeds from occurrenceCount and jobSize from effortSize when the explicit
+  // field is absent. demandStage is an additive funnel facet orthogonal to
+  // status (which continues to gate work-claims). Spec:
+  // docs/superpowers/specs/2026-07-10-demand-management-design.md §5.
+  demandStage             DemandStage?
+  reach                   Int?
+  impact                  Float?
+  confidence              Float?
+  businessValue           Int?
+  timeCriticality         Int?
+  riskOpportunity         Int?
+  jobSize                 Float?
+  demandScore             Float?
+  demandScoreFramework    DemandScoreFramework?
+  demandScoreComputedAt   DateTime?
+  // Investment bucket (EP-DEMAND-MGMT Phase 3): run | grow | transform. The
+  // strategic-balance dimension so demand is prioritized against a target
+  // allocation, not a flat list. Default derived from workType. §8.
+  investmentBucket        InvestmentBucket?
+  // Backlog archetype scope (BI-E387A203). Nullable/additive so existing
+  // planning rows honestly remain unclassified until backfilled.
+  scopeKind               String?
+  archetypeCategories     String[]                      @default([])
+  archetypeIds            String[]                      @default([])
+  scopeRationale          String?
+  lifecycleTags           String[]                      @default([])
+  // Estimate provenance (EP-DELIVERY-FLOW BI-E731A6C1). The effort estimate
+  // (jobSize) is the value/effort score's DENOMINATOR; these facets attribute
+  // WHOSE number it is — an AI coworker's first-pass proposal and a human's
+  // confirm/overrule — so the Delivery Flow can show AI<->human divergence, a
+  // reconcile affordance, and mark the score trustworthy once agreed. jobSize
+  // stays the effective denominator scoring reads; the write door
+  // (record_effort_estimate) mirrors the resolved effective estimate into it.
+  // All additive-nullable — null = no attributed estimate yet; the
+  // jobSize/effortSize fallbacks feed scoring unchanged. Resolver:
+  // apps/web/lib/demand/estimate-provenance.ts. Spec: 2026-07-12-delivery-flow
+  // -demand-backlog-unification-design.md §"Collaborative estimation".
+  estimateAiJobSize       Float?
+  estimateAiById          String?
+  estimateAiAt            DateTime?
+  estimateHumanJobSize    Float?
+  estimateHumanById       String?
+  estimateHumanAt         DateTime?
+  estimateSource          EstimateSource?
+  estimateAgreed          Boolean?
+  activeBuildId           String?                       @unique
+  activeEpicId            String?                       @unique
+  duplicateOfId           String?
+  resolution              String?
+  abandonReason           String?
+  stalenessDetectedAt     DateTime?
+  occurrenceCount         Int                           @default(1)
+  lastSeenAt              DateTime?
+  submittedById           String?
+  completedAt             DateTime?
+  agentId                 String?
+  accountableEmployeeId   String?
+  claimedById             String?
+  claimedByAgentId        String?
+  claimedAt               DateTime?
+  claimStatus             String?
+  // Governed active-deferral projection (DI-03B7564E648A). History remains in
+  // BacklogItemActivity; these fields answer why/when/who without replaying it.
+  deferReason             String?
+  deferTrigger            String?
+  deferReviewAt           DateTime?
+  deferOwnerPrincipalId   String?
+  deferredAt              DateTime?
+  upstreamIssueNumber     Int?
+  upstreamIssueUrl        String?
+  upstreamSyncedAt        DateTime?
+  accountableEmployee     EmployeeProfile?              @relation("ItemAccountable", fields: [accountableEmployeeId], references: [id])
+  deferOwnerPrincipal     Principal?                    @relation("BacklogDeferralOwner", fields: [deferOwnerPrincipalId], references: [id], onDelete: SetNull)
+  activeBuild             FeatureBuild?                 @relation("BacklogItemActiveBuild", fields: [activeBuildId], references: [id])
+  activeEpic              Epic?                         @relation("BacklogItemActiveEpic", fields: [activeEpicId], references: [id])
+  originatingEpic         Epic?                         @relation("EpicOriginatingItem")
+  digitalProduct          DigitalProduct?               @relation(fields: [digitalProductId], references: [id])
+  organization            Organization?                 @relation("BacklogItemOrganization", fields: [organizationId], references: [id], onDelete: Restrict)
+  productLine             ProductLine?                  @relation("BacklogItemProductLine", fields: [productLineId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  businessProduct         Product?                      @relation("BacklogItemBusinessProduct", fields: [businessProductId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  duplicateOf             BacklogItem?                  @relation("BacklogItemDuplicates", fields: [duplicateOfId], references: [id])
+  duplicates              BacklogItem[]                 @relation("BacklogItemDuplicates")
+  epic                    Epic?                         @relation(fields: [epicId], references: [id])
+  featureBuilds           FeatureBuild[]                @relation("BacklogItemOriginator")
+  submittedBy             User?                         @relation("BacklogSubmissions", fields: [submittedById], references: [id])
+  taxonomyNode            TaxonomyNode?                 @relation(fields: [taxonomyNodeId], references: [id])
+  activities              BacklogItemActivity[]
+  demandEvidenceLinks     DemandEvidenceLink[]
+  coworkerNeeds           CoworkerCapabilityNeed[]      @relation("BacklogItemCoworkerCapabilityNeeds")
+  businessCapabilityLinks BusinessCapabilityTraceLink[] @relation("BusinessCapabilityBacklogLinks")
+  founderDemandClusters   FounderDemandCluster[]
+  productObjectiveWork    ProductObjectiveWork[]
+
+  @@index([portfolioId])
+  @@index([organizationId])
+  @@index([productLineId])
+  @@index([businessProductId])
+  @@index([status])
+  @@index([status, updatedAt])
+  @@index([status, deferReviewAt])
+  @@index([deferOwnerPrincipalId, status])
+  @@index([portfolioId, demandScore])
+  @@index([demandStage])
+  @@index([scopeKind])
+  @@index([duplicateOfId]) // FK-leading (self-relation): duplicate-chain reverse lookup, apps/web/lib/mcp/backlog-retirement-handlers.ts:55
+  @@index([epicId]) // FK-leading (spine): open-items-per-epic scan, apps/web/lib/mcp/backlog-retirement-handlers.ts:168
+}
+
+// Direct, queryable evidence linked to the canonical BacklogItem demand record.
+// The source remains authoritative in its own domain. This child owns only the
+// reviewed link, evidence-at-link snapshot, and provenance used to explain an
+// investment score without hiding current references in activity JSON.
+model DemandEvidenceLink {
+  id                  String      @id @default(cuid())
+  evidenceLinkId      String      @unique
+  backlogItemId       String
+  sourceKind          String
+  sourceRef           String
+  wikiPageId          String?
+  title               String
+  summary             String?     @db.Text
+  confidence          Float?
+  reviewedAt          DateTime?
+  status              String      @default("active")
+  provenance          Json?
+  linkedByPrincipalId String?
+  createdAt           DateTime    @default(now())
+  updatedAt           DateTime    @updatedAt
+  backlogItem         BacklogItem @relation(fields: [backlogItemId], references: [id], onDelete: Cascade)
+  wikiPage            WikiPage?   @relation(fields: [wikiPageId], references: [id], onDelete: SetNull)
+
+  @@unique([backlogItemId, sourceKind, sourceRef])
+  @@index([backlogItemId, status])
+  @@index([sourceKind, sourceRef])
+  @@index([wikiPageId])
+}
+
+// Per-item timeline. Cross-cutting tool audit lives in ToolExecution; this is
+// the entity-scoped view used by get_backlog_item and the UI.
+model BacklogItemActivity {
+  id                String                          @id @default(cuid())
+  backlogItemId     String
+  kind              String
+  gateKey           InitiativeGateKey?
+  summary           String
+  payload           Json                            @default("{}")
+  recordedAt        DateTime                        @default(now())
+  recordedById      String?
+  recordedByAgentId String?
+  toolExecutionId   String?
+  backlogItem       BacklogItem                     @relation(fields: [backlogItemId], references: [id], onDelete: Cascade)
+  retentionPin      InitiativeArtifactRetentionPin?
+
+  @@index([backlogItemId, recordedAt(sort: Desc)])
+  @@index([backlogItemId, gateKey, recordedAt(sort: Desc), id(sort: Desc)])
+  @@index([kind, recordedAt(sort: Desc)])
+  @@index([recordedAt]) // retention sweep cutoff scan, apps/web/lib/operate/retention/execute.ts:99
+}
+
+model InitiativeArtifactRetentionPin {
+  id                      String                       @id @default(cuid())
+  baselineActivityId      String                       @unique
+  sourceKind              InitiativeArtifactSourceKind
+  artifactDigest          String
+  artifactLocator         Json
+  buildArtifactRevisionId String?
+  documentVersionId       String?
+  documentBlobId          String?
+  createdAt               DateTime                     @default(now())
+  baselineActivity        BacklogItemActivity          @relation(fields: [baselineActivityId], references: [id], onDelete: Restrict)
+  buildArtifactRevision   BuildArtifactRevision?       @relation(fields: [buildArtifactRevisionId], references: [id], onDelete: Restrict)
+  documentVersion         DocumentVersion?             @relation(fields: [documentVersionId], references: [id], onDelete: Restrict)
+  documentBlob            DocumentBlob?                @relation(fields: [documentBlobId], references: [id], onDelete: Restrict)
+
+  @@index([buildArtifactRevisionId])
+  @@index([documentVersionId])
+  @@index([documentBlobId])
+  @@index([sourceKind, createdAt(sort: Desc)])
+}
+
+/// The Workroom is the canonical unit of what we claim and where we work
+/// (founder-directed 2026-08-15, renamed from WorkCapsule). @@map retains the
+/// physical table name so this rename is metadata-only over live rows; the
+/// physical move, the `capsuleId` semantic key and the workCapsuleId/capsule
+/// FIELD vocabulary are separate phases — this phase renames model identity only.
+model Workroom {
+  id                      String                   @id @default(cuid())
+  capsuleId               String                   @unique
+  title                   String
+  objective               String                   @db.Text
+  status                  String                   @default("draft")
+  source                  String
+  executorKind            String?
+  executorRef             String?
+  backlogItemId           String?
+  epicId                  String?
+  workItemId              String?
+  featureBuildId          String?
+  taskRunId               String?
+  gitPromotionCandidateId String?
+  changePromotionId       String?
+  decisionScope           DecisionScope?
+  portfolioRole           WorkPortfolioRole?
+  servedPersona           String?
+  activityKind            String?
+  outcomeAnchor           Json                     @default("{}")
+  servesPortfolioRoles    Json                     @default("[]")
+  dependsOnPortfolioRoles Json                     @default("[]")
+  repositoryFullName      String?
+  baseBranch              String?
+  baseSha                 String?
+  headBranch              String?
+  headSha                 String?
+  worktreePath            String?
+  pullRequestUrl          String?
+  pullRequestNumber       Int?
+  sandboxProviderId       String?
+  sandboxId               String?
+  scopeClaims             Json                     @default("[]")
+  workspaceState          Json                     @default("{}")
+  verificationState       Json                     @default("{}")
+  providerRequirements    Json                     @default("[]")
+  promotionPolicy         Json                     @default("{}")
+  contributionMode        String                   @default("private")
+  branchTaxonomy          String?
+  idempotencyKey          String?                  @unique
+  leaseHolderPrincipalId  String?
+  leaseExpiresAt          DateTime?
+  createdByPrincipalId    String?
+  // EP-WORK-CONVERGENCE (BI-B24F96D0): first-class Requester — the principal who
+  // commissioned the work, distinct from the creator/executor. Nullable; the
+  // stable human-quotable key already exists as capsuleId (WC-*).
+  requestedByPrincipalId  String?
+  createdAt               DateTime                 @default(now())
+  updatedAt               DateTime                 @updatedAt
+  lastSyncedAt            DateTime?
+  archivedAt              DateTime?
+  activities              WorkroomActivity[]
+  runtimeTargets          RuntimeTarget[]
+  runtimeVerifications    RuntimeVerification[]
+  externalEvidence        ExternalEvidenceRecord[]
+  workItem                WorkItem?                @relation("WorkCapsuleWorkItem", fields: [workItemId], references: [id], onDelete: SetNull)
+  // BI-640B011D: real FK relations for the previously bare *Id link columns.
+  // Constraints land NOT VALID (legacy installs may hold orphan values; new
+  // writes are enforced) with ON DELETE SET NULL for these optional links.
+  // backlogItemId and epicId are deliberately NOT declared: live writers store
+  // mixed key shapes (BI-*/EP-* semantic keys vs cuid row ids), so a single FK
+  // target would break one writer family — normalize the writers first.
+  featureBuild            FeatureBuild?            @relation("WorkroomFeatureBuild", fields: [featureBuildId], references: [id], onDelete: SetNull)
+  taskRun                 TaskRun?                 @relation("WorkroomTaskRun", fields: [taskRunId], references: [id], onDelete: SetNull)
+  gitPromotionCandidate   GitPromotionCandidate?   @relation("WorkroomGitPromotionCandidate", fields: [gitPromotionCandidateId], references: [id], onDelete: SetNull)
+  changePromotion         ChangePromotion?         @relation("WorkroomChangePromotion", fields: [changePromotionId], references: [id], onDelete: SetNull)
+  leaseHolderPrincipal    Principal?               @relation("WorkroomLeaseHolder", fields: [leaseHolderPrincipalId], references: [id], onDelete: SetNull)
+  createdByPrincipal      Principal?               @relation("WorkroomCreator", fields: [createdByPrincipalId], references: [id], onDelete: SetNull)
+  requestedByPrincipal    Principal?               @relation("WorkroomRequester", fields: [requestedByPrincipalId], references: [id], onDelete: SetNull)
+
+  @@index([status, updatedAt])
+  @@index([backlogItemId])
+  @@index([featureBuildId])
+  @@index([taskRunId])
+  @@index([gitPromotionCandidateId])
+  @@index([changePromotionId])
+  @@index([epicId])
+  @@index([decisionScope])
+  @@index([portfolioRole])
+  @@index([activityKind])
+  @@index([headBranch])
+  @@index([sandboxId])
+  @@index([leaseExpiresAt])
+  @@index([requestedByPrincipalId])
+  @@index([workItemId])
+  @@index([leaseHolderPrincipalId]) // FK-leading: SET NULL on Principal delete + lease-holder lookups
+  @@index([createdByPrincipalId]) // FK-leading: SET NULL on Principal delete
+  @@map("WorkCapsule")
+}
+
+model WorkroomActivity {
+  id                String   @id @default(cuid())
+  workCapsuleId     String
+  kind              String
+  summary           String
+  payload           Json     @default("{}")
+  recordedAt        DateTime @default(now())
+  recordedById      String?
+  recordedByAgentId String?
+  toolExecutionId   String?
+  capsule           Workroom @relation(fields: [workCapsuleId], references: [id], onDelete: Cascade)
+
+  @@index([workCapsuleId, recordedAt(sort: Desc)])
+  @@index([workCapsuleId, kind, recordedAt(sort: Desc), id(sort: Desc)])
+  @@index([kind, recordedAt(sort: Desc)])
+  @@index([recordedAt]) // retention sweep cutoff scan, apps/web/lib/operate/retention/execute.ts:99
+  @@map("WorkCapsuleActivity")
+}
+
+model Epic {
+  id                       String                   @id @default(cuid())
+  epicId                   String                   @unique
+  title                    String
+  description              String?
+  status                   String                   @default("open")
+  priority                 Int?
+  // Investment bucket (EP-DEMAND-MGMT Phase 3): run | grow | transform.
+  investmentBucket         String?
+  // Backlog archetype scope (BI-E387A203). Mirrors BacklogItem so roadmap
+  // epics can be budgeted by platform/common/vertical scope.
+  scopeKind                String?
+  archetypeCategories      String[]                 @default([])
+  archetypeIds             String[]                 @default([])
+  scopeRationale           String?
+  lifecycleTags            String[]                 @default([])
+  createdAt                DateTime                 @default(now())
+  updatedAt                DateTime                 @updatedAt
+  submittedById            String?
+  agentId                  String?
+  completedAt              DateTime?
+  accountableEmployeeId    String?
+  claimedById              String?
+  claimedByAgentId         String?
+  claimedAt                DateTime?
+  claimStatus              String?
+  upstreamIssueNumber      Int?
+  upstreamIssueUrl         String?
+  upstreamSyncedAt         DateTime?
+  // Design-time decomposition substrate (Phase 1, spec
+  // docs/superpowers/specs/2026-05-24-build-studio-design-time-decomposition-design.md).
+  // Null on portfolio-organizational Epics (the existing use); populated on
+  // execution-organizational Epics created via the decomposition gate.
+  designDoc                Json?
+  designReview             Json?
+  decompositionState       Json?
+  originatingBacklogItemId String?                  @unique
+  items                    BacklogItem[]
+  originatingBacklogItem   BacklogItem?             @relation("EpicOriginatingItem", fields: [originatingBacklogItemId], references: [id])
+  activeForBacklogItem     BacklogItem?             @relation("BacklogItemActiveEpic")
+  featureBuilds            FeatureBuild[]           @relation("EpicFeatureBuilds")
+  supersededBuilds         FeatureBuild[]           @relation("EpicSupersededBuilds")
+  dependencies             FeatureBuildDependency[] @relation("EpicDependencies")
+  accountableEmployee      EmployeeProfile?         @relation("EpicAccountable", fields: [accountableEmployeeId], references: [id])
+  submittedBy              User?                    @relation("EpicSubmissions", fields: [submittedById], references: [id])
+  portfolios               EpicPortfolio[]
+
+  @@index([originatingBacklogItemId])
+  @@index([scopeKind])
+}
+
+model EpicPortfolio {
+  epicId      String
+  portfolioId String
+  epic        Epic      @relation(fields: [epicId], references: [id], onDelete: Cascade)
+  portfolio   Portfolio @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
+
+  @@id([epicId, portfolioId])
+  @@index([portfolioId]) // FK-leading (join table): portfolio-side lookups; @@id only covers epicId
+}
+
+model ImprovementProposal {
+  id                  String    @id @default(cuid())
+  proposalId          String    @unique
+  title               String
+  description         String
+  category            String
+  severity            String    @default("medium")
+  submittedById       String
+  agentId             String
+  routeContext        String
+  threadId            String?
+  conversationExcerpt String?
+  observedFriction    String?
+  status              String    @default("proposed")
+  reviewedById        String?
+  reviewedAt          DateTime?
+  prioritizedAt       DateTime?
+  backlogItemId       String?
+  buildId             String?
+  rejectionReason     String?
+  verifiedAt          DateTime?
+  contributionStatus  String    @default("local")
+  // Governed Hermes learning Slice 3: when category="skill", this links the
+  // proposal to the SkillDefinition.skillId it targets. Nullable for the
+  // existing non-skill proposal flow.
+  targetSkillId       String?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  reviewedBy          User?     @relation("ImprovementReviews", fields: [reviewedById], references: [id])
+  submittedBy         User      @relation("ImprovementSubmissions", fields: [submittedById], references: [id])
+
+  @@index([status])
+  @@index([submittedById])
+  @@index([targetSkillId])
+  @@index([routeContext])
+}
+
+// Founder Hub's shared-portfolio curation layer. FederatedRecordMirror remains
+// the immutable inbox; BacklogItem remains the canonical work authority. These
+// rows only preserve clustering, reach, disposition, and environment promotion.
+model FounderDemandCluster {
+  id                       String                       @id @default(cuid())
+  clusterId                String                       @unique
+  organizationId           String
+  title                    String
+  status                   String                       @default("proposed")
+  confidence               Float?
+  founderDisposition       String?
+  canonicalBacklogItemId   String?
+  releaseApplicability     Json?
+  dispositionAt            DateTime?
+  dispositionByPrincipalId String?
+  createdAt                DateTime                     @default(now())
+  updatedAt                DateTime                     @updatedAt
+  organization             Organization                 @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  canonicalBacklogItem     BacklogItem?                 @relation(fields: [canonicalBacklogItemId], references: [id], onDelete: SetNull)
+  members                  FounderDemandClusterMember[]
+
+  @@index([organizationId, status])
+  @@index([canonicalBacklogItemId])
+}
+
+// One underlying installation-originated envelope counts once, even when the
+// same signal reaches the Founder Hub over both direct and reseller paths.
+model FounderDemandClusterMember {
+  id                     String               @id @default(cuid())
+  memberId               String               @unique
+  founderDemandClusterId String
+  originInstallationId   String
+  envelopeId             String
+  environmentClass       String               @default("development")
+  promotedAt             DateTime?
+  promotedByPrincipalId  String?
+  mirrorRefs             String[]
+  routeAttestations      Json
+  signalSnapshot         Json
+  createdAt              DateTime             @default(now())
+  updatedAt              DateTime             @updatedAt
+  cluster                FounderDemandCluster @relation(fields: [founderDemandClusterId], references: [id], onDelete: Cascade)
+
+  @@unique([originInstallationId, envelopeId])
+  @@index([founderDemandClusterId])
+  @@index([environmentClass, promotedAt])
+}
+
+// ─── Value Stream Team Architecture (EP-VST-001) ─────────────────────────────
+// Spec: docs/superpowers/specs/2026-04-03-value-stream-team-architecture-design.md
+model ValueStreamTeam {
+  id                  String                @id @default(cuid())
+  name                String
+  valueStream         String // IT4IT value stream slug: evaluate|explore|integrate|deploy|release|consume|operate
+  teamPattern         String // specialist-dispatch|review-board|pair|swarm|pipeline
+  coordinationPattern Json // CoordinationPattern structure
+  eaProcessId         String? // Link to EaElement (bpmn_process)
+  eaViewId            String? // Link to EaView
+  portfolioId         String?
+  portfolio           Portfolio?            @relation(fields: [portfolioId], references: [id])
+  roles               ValueStreamTeamRole[]
+  hitlGates           ValueStreamHitlGate[]
+  queues              WorkQueue[]
+  workItems           WorkItem[]
+  isActive            Boolean               @default(true)
+  createdAt           DateTime              @default(now())
+  updatedAt           DateTime              @updatedAt
+
+  @@index([portfolioId])
+  @@index([valueStream])
+}
+
+model ValueStreamTeamRole {
+  id                String          @id @default(cuid())
+  teamId            String
+  team              ValueStreamTeam @relation(fields: [teamId], references: [id])
+  roleName          String
+  workerType        String // ai-agent|human|either
+  agentId           String? // References Agent.id (cuid PK), not Agent.agentId
+  agent             Agent?          @relation(fields: [agentId], references: [id])
+  humanRoleId       String? // PlatformRole reference
+  perspective       String? // Diversity of Thought: how this role frames problems
+  heuristics        String? // Diversity of Thought: strategies for finding solutions
+  interpretiveModel String? // Diversity of Thought: what "good" means to this role
+  priority          Int             @default(0)
+  grantScope        String[]        @default([]) // AgentToolGrant keys resolved to tool names at dispatch
+  modelTier         String? // frontier|strong|adequate|basic
+  bpmnLaneId        String? // Link to EaElement (bpmn_lane)
+  maxRetries        Int             @default(2)
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  @@index([teamId])
+  @@index([agentId])
+}
+
+model ValueStreamHitlGate {
+  id                       String          @id @default(cuid())
+  teamId                   String
+  team                     ValueStreamTeam @relation(fields: [teamId], references: [id])
+  triggerPoint             String // phase-transition|before-tool|after-evaluation|on-error
+  condition                Json? // JSON expression evaluating context
+  requiredRole             String // PlatformRole code (e.g., "HR-500", "HR-000")
+  escalationTimeoutMinutes Int             @default(30)
+  escalationPath           String[]        @default([])
+  channels                 String[]        @default([]) // in-app|slack|email|sms
+  emergencyBypass          Boolean         @default(false)
+  bpmnGatewayId            String? // Link to EaElement (bpmn_gateway)
+  createdAt                DateTime        @default(now())
+  updatedAt                DateTime        @updatedAt
+
+  @@index([teamId])
+}
+
+// ---- Collaborative Work Queue (EP-CWQ-001) ----
+model WorkQueue {
+  id               String           @id @default(cuid())
+  queueId          String           @unique @default(cuid())
+  name             String
+  queueType        String // team | personal | triage | escalation
+  teamId           String?
+  team             ValueStreamTeam? @relation(fields: [teamId], references: [id])
+  routingPolicy    Json
+  slaMinutes       Json?
+  isActive         Boolean          @default(true)
+  portfolioId      String?
+  portfolio        Portfolio?       @relation(fields: [portfolioId], references: [id])
+  digitalProductId String?
+  digitalProduct   DigitalProduct?  @relation(fields: [digitalProductId], references: [id])
+  items            WorkItem[]
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  @@index([teamId])
+  @@index([portfolioId])
+  @@index([queueType, isActive])
+}
+
+model WorkItem {
+  id                            String                 @id @default(cuid())
+  itemId                        String                 @unique @default(cuid())
+  sourceType                    String
+  sourceId                      String?
+  // Idempotent adapter-owned identity for queue jobs whose source must have at
+  // most one live WorkItem (for example federation-demand:<mirrorId>).
+  sourceKey                     String?                @unique
+  title                         String
+  description                   String                 @db.Text
+  urgency                       String                 @default("routine")
+  effortClass                   String                 @default("medium")
+  workerConstraint              Json
+  teamId                        String?
+  team                          ValueStreamTeam?       @relation(fields: [teamId], references: [id])
+  queueId                       String
+  queue                         WorkQueue              @relation(fields: [queueId], references: [id])
+  status                        String                 @default("queued")
+  assignedToType                String?
+  assignedToUserId              String?
+  assignedToUser                User?                  @relation("WorkItemAssignee", fields: [assignedToUserId], references: [id])
+  assignedToAgentId             String?
+  assignedToAgent               Agent?                 @relation("WorkItemAgent", fields: [assignedToAgentId], references: [id])
+  assignedThreadId              String?
+  claimedAt                     DateTime?
+  dueAt                         DateTime?
+  calendarEventId               String?
+  calendarEvent                 CalendarEvent?         @relation(fields: [calendarEventId], references: [id])
+  evidence                      Json?
+  parentItemId                  String?
+  parentItem                    WorkItem?              @relation("WorkItemHierarchy", fields: [parentItemId], references: [id])
+  childItems                    WorkItem[]             @relation("WorkItemHierarchy")
+  a2aTaskId                     String?
+  messages                      WorkItemMessage[]
+  presence                      WorkItemPresence[]
+  capsules                      Workroom[]             @relation("WorkCapsuleWorkItem")
+  governedDataControlOperations DataControlOperation[] @relation("DataControlOperationGovernedCase")
+  routingDecision               Json?
+  // Generic retry scheduling owned by the canonical queue. Domain mirrors keep
+  // domain/version state; they do not grow their own transport scheduler.
+  attemptCount                  Int                    @default(0)
+  nextAttemptAt                 DateTime?
+  lastAttemptAt                 DateTime?
+  lastError                     String?                @db.Text
+  completedAt                   DateTime?
+  createdAt                     DateTime               @default(now())
+  updatedAt                     DateTime               @updatedAt
+
+  @@index([queueId, status])
+  @@index([assignedToUserId, status])
+  @@index([assignedToAgentId, status])
+  @@index([teamId, status])
+  @@index([parentItemId])
+  @@index([sourceType, sourceId])
+  @@index([status, nextAttemptAt])
+  @@index([urgency, status])
+  @@index([dueAt])
+}
+
+model WorkItemMessage {
+  id                String    @id @default(cuid())
+  messageId         String    @unique @default(cuid())
+  workItemId        String
+  workItem          WorkItem  @relation(fields: [workItemId], references: [id], onDelete: Cascade)
+  senderType        String
+  senderUserId      String?
+  senderAgentId     String?
+  messageType       String
+  body              String    @db.Text
+  structuredPayload Json?
+  channel           String    @default("in-app")
+  deliveredAt       DateTime?
+  readAt            DateTime?
+  respondedAt       DateTime?
+  response          Json?
+  createdAt         DateTime  @default(now())
+
+  @@index([workItemId, createdAt])
+  @@index([senderUserId])
+}
+
+// BI-B416B12A (EP-WORK-CONVERGENCE): lightweight presence on a work item — who
+// (human or coworker) is currently viewing/working it. Heartbeated on lastSeenAt;
+// "active" is a time-window read (see filterActivePresence). One row per
+// (workItem, principal); the client heartbeats, the read filters by recency.
+model WorkItemPresence {
+  id            String   @id @default(cuid())
+  workItemId    String
+  workItem      WorkItem @relation(fields: [workItemId], references: [id], onDelete: Cascade)
+  principalType String
+  principalId   String
+  displayLabel  String?
+  lastSeenAt    DateTime @default(now())
+
+  @@unique([workItemId, principalType, principalId])
+  @@index([workItemId, lastSeenAt])
+}
+
+model WorkSchedule {
+  id                String   @id @default(cuid())
+  workerType        String
+  userId            String?  @unique
+  user              User?    @relation(fields: [userId], references: [id])
+  agentId           String?  @unique
+  agent             Agent?   @relation("WorkScheduleAgent", fields: [agentId], references: [id])
+  timezone          String   @default("UTC")
+  workingHours      Json
+  maxConcurrent     Int      @default(5)
+  autoAccept        Boolean  @default(false)
+  notificationPrefs Json?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
+// ---- Reusable Queueing Substrate — shared flow telemetry (EP-3516E23D) ----
+// Spec: docs/superpowers/specs/2026-07-06-reusable-queueing-substrate-design.md
+// The ONE telemetry contract every queue (compute admission lanes AND CWQ work
+// queues) emits into. QueueTelemetryEvent is the append-only per-item stream;
+// QueueMetricSnapshot is the periodic rollup (per queueKey × period) the human
+// tiles and the coworker MCP pack both read from — same numbers, one source.
+model QueueTelemetryEvent {
+  id         String   @id @default(cuid())
+  queueKey   String // stable queue identifier, e.g. "cwq:triage-default" | "compute:sandbox-pool"
+  itemKind   String // "work-item" | "sandbox-slot" | "inference" | ...
+  itemId     String // source record id (WorkItem.itemId, buildId, ...)
+  transition String // enqueued | started | finished | cancelled | requeued (flow-metrics.ts)
+  outcome    String? // success | failed | cancelled — set on finished/cancelled
+  laneKey    String? // sub-lane within the queue (e.g. GPU id, container id)
+  actorType  String? // human | ai-agent | system
+  actorId    String?
+  occurredAt DateTime @default(now())
+  createdAt  DateTime @default(now())
+
+  @@index([queueKey, occurredAt])
+  @@index([itemKind, itemId])
+  @@index([occurredAt])
+  @@index([createdAt]) // retention sweep cutoff scan, apps/web/lib/operate/retention/execute.ts:99
+}
+
+model QueueMetricSnapshot {
+  id              String   @id @default(cuid())
+  queueKey        String
+  period          String // day-grain "YYYY-MM-DD" (UTC) — mirrors SkillMetric (subject,period)
+  depth           Int      @default(0) // point-in-time queued count at computedAt
+  wip             Int      @default(0) // queued + in-progress at computedAt
+  arrivals        Int      @default(0) // enqueued in window
+  throughput      Int      @default(0) // finished in window
+  waitP50Ms       Int?
+  waitP95Ms       Int?
+  processP50Ms    Int?
+  processP95Ms    Int?
+  cycleP50Ms      Int?
+  cycleP95Ms      Int?
+  firstPassYield  Float? // 0..1 — % correct without rework
+  slaAttainment   Float? // 0..1 — null when no finished item carried an SLA
+  abandonmentRate Float? // 0..1
+  computedAt      DateTime @default(now())
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([queueKey, period])
+  @@index([queueKey, period])
+  @@index([period])
+}

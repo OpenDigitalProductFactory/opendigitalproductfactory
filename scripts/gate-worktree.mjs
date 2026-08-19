@@ -56,6 +56,7 @@ import {
   installBrokenPipeTolerance,
   isVerboseGateConsole,
 } from "./lib/pregate-console.mjs";
+import { isEntryModule } from "./lib/entry-module.mjs";
 
 const THIS_FILE = fileURLToPath(import.meta.url);
 const SCRIPT_DIR = dirname(THIS_FILE);
@@ -1850,7 +1851,10 @@ function writeState(stateFile, {
   });
 }
 
-if (process.argv[1] === THIS_FILE) {
+// A gate that silently skips main() exits 0 — a false "pass" — so the entry
+// check must survive symlinked invocation paths (macOS /var tmpdir, symlinked
+// checkouts) where argv[1] and import.meta.url spell the same file differently.
+if (isEntryModule(import.meta.url)) {
   main().catch((error) => {
     die(error?.stack || String(error));
   });

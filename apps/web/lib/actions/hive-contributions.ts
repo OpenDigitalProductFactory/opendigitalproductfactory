@@ -7,13 +7,13 @@ import {
   type HiveContributionTypeStatus,
 } from "@dpf/db";
 import { requireCapability } from "@/lib/actions/shared/guards";
-import { getDisplayPseudonym } from "@/lib/integrate/identity-privacy";
+import { getDisplayPseudonym } from "@/lib/build/identity-privacy";
 import {
   findCanonicalSeedContentPaths,
   SEED_CONTRIBUTION_FIT_DECISIONS,
   type SeedContributionFitDecision,
   type SeedDistributionScope,
-} from "@/lib/integrate/seed-contribution-fit";
+} from "@/lib/build/seed-contribution-fit";
 import { revalidatePath } from "next/cache";
 import { deliverHiveResultToConfiguredForge } from "@/lib/hive/result-store";
 import { resolvePrincipalIdForUser } from "@/lib/identity/principal-linking";

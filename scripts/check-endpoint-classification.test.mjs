@@ -148,7 +148,7 @@ describe("checkEndpointClassification", () => {
     const { fileURLToPath } = await import("node:url");
     const root = join(dirname(fileURLToPath(import.meta.url)), "..");
     const live = extractPublicApiPrefixes(
-      readFileSync(join(root, "apps/web/lib/release/storefront-middleware.ts"), "utf8"),
+      readFileSync(join(root, "apps/web/lib/storefront/storefront-middleware.ts"), "utf8"),
     );
     assert.ok(live.length > 0, "live proxy classifier must yield at least one PublicApi prefix");
     assert.ok(live.includes("/api/auth/"), "the /api/auth/ prefix is a stable expectation");

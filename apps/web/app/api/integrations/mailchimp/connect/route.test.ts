@@ -10,7 +10,7 @@ vi.mock("@/lib/auth", () => ({
   })),
 }));
 
-vi.mock("@/lib/integrate/mailchimp/connect-action", () => ({
+vi.mock("@/lib/integrations/mailchimp/connect-action", () => ({
   connectMailchimp: mockConnectMailchimp,
 }));
 

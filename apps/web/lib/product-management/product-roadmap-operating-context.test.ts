@@ -3,6 +3,7 @@ import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import type { ProductOperatingContext } from "./product-operating-context";
 import { projectProductRoadmapFromOperatingContext } from "./product-roadmap-operating-context";
+import { readCanonicalPrismaSchema } from "@dpf/db/schema-source";
 
 const NOW = new Date("2026-07-28T12:00:00.000Z");
 
@@ -76,10 +77,7 @@ describe("product roadmap operating-context adapter", () => {
   });
 
   it("guards against a persisted roadmap authority", () => {
-    const schema = readFileSync(
-      resolve(process.cwd(), "../../packages/db/prisma/schema.prisma"),
-      "utf8",
-    );
+    const schema = readCanonicalPrismaSchema();
 
     expect(schema).not.toMatch(/^model Roadmap(?:Item)?\s*\{/m);
   });

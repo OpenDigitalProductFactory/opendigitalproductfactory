@@ -21,7 +21,7 @@ import {
   OPERATOR_TRIAGE_REASON_HINT,
   type OperatorTriageEntry,
   type OperatorTriageReason,
-} from "@/lib/ops/operator-triage";
+} from "@/lib/operate/operator-triage";
 import type { BacklogItemWithRelations } from "@/lib/backlog";
 
 const MAX_VISIBLE = 7;

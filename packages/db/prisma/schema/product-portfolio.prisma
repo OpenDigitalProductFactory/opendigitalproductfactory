@@ -1,0 +1,894 @@
+model Portfolio {
+  id                            String                         @id @default(cuid())
+  slug                          String                         @unique
+  name                          String
+  description                   String?
+  rootNodeId                    String?
+  createdAt                     DateTime                       @default(now())
+  updatedAt                     DateTime                       @updatedAt
+  budgetKUsd                    Int?
+  // Target investment-bucket allocation (EP-DEMAND-MGMT Phase 3), e.g.
+  // { "run": 70, "grow": 20, "transform": 10 }. null = use the default split.
+  bucketTargets                 Json?
+  agents                        Agent[]
+  products                      DigitalProduct[]
+  coworkerServices              CoworkerService[]              @relation("CoworkerServicePortfolio")
+  eaElements                    EaElement[]
+  epicPortfolios                EpicPortfolio[]
+  inventoryEntities             InventoryEntity[]
+  portfolioQualityIssues        PortfolioQualityIssue[]
+  capabilityMaturityAssessments CapabilityMaturityAssessment[]
+  knowledgeArticles             KnowledgeArticlePortfolio[]
+  valueStreamTeams              ValueStreamTeam[]
+  workQueues                    WorkQueue[]
+}
+
+model DigitalProduct {
+  id                            String                         @id @default(cuid())
+  productId                     String                         @unique
+  name                          String
+  portfolioId                   String?
+  createdAt                     DateTime                       @default(now())
+  updatedAt                     DateTime                       @updatedAt
+  taxonomyNodeId                String?
+  lifecycleStage                String                         @default("plan")
+  lifecycleStatus               String                         @default("draft")
+  version                       String                         @default("1.0.0")
+  description                   String?
+  observationConfig             Json?
+  coverageStatus                String?
+  sourceKind                    String?
+  // Enrichment status roll-up (BI-70469721) — written by the enrich-digital-product pipeline.
+  enrichmentStatus              String?                        @default("pending") // pending | enriched | partial | failed
+  lastEnrichedAt                DateTime?
+  backlogItems                  BacklogItem[]
+  manifests                     CodebaseManifest[]
+  assuranceFindings             AssuranceFinding[]
+  assuranceRuns                 AssuranceRun[]
+  bomDocuments                  BomDocument[]
+  portfolio                     Portfolio?                     @relation(fields: [portfolioId], references: [id])
+  taxonomyNode                  TaxonomyNode?                  @relation(fields: [taxonomyNodeId], references: [id])
+  eaElements                    EaElement[]
+  featureBuilds                 FeatureBuild[]
+  inventoryEntities             InventoryEntity[]
+  portfolioQualityIssues        PortfolioQualityIssue[]
+  capabilityMaturityAssessments CapabilityMaturityAssessment[]
+  versions                      ProductVersion[]
+  serviceOfferings              ServiceOffering[]
+  coworkerServices              CoworkerService[]
+  coworkerOffers                CoworkerOffer[]
+  quoteLineItems                QuoteLineItem[]
+  changeItems                   ChangeItem[]                   @relation("ChangeItemProduct")
+  businessModels                ProductBusinessModel[]
+  businessModelRoleAssignments  BusinessModelRoleAssignment[]
+  knowledgeArticles             KnowledgeArticleProduct[]
+  researchProposals             ResearchProposal[]
+  marketingBattlecards          MarketingBattlecard[]
+  workQueues                    WorkQueue[]
+  businessCapabilityLinks       BusinessCapabilityTraceLink[]  @relation("BusinessCapabilityProductLinks")
+  dependencyEdgesFrom           ProductDependency[]            @relation("ProductDependencyFrom")
+  dependencyEdgesTo             ProductDependency[]            @relation("ProductDependencyTo")
+
+  @@index([portfolioId]) // FK-leading (spine): portfolio coverage listing, apps/web/app/(shell)/portfolio/[[...slug]]/page.tsx:106
+  @@index([taxonomyNodeId]) // FK-leading (spine): sibling-products-by-node, apps/web/lib/explore/feature-build-data.ts:455
+}
+
+// Organization-owned business product hierarchy (EP-ED496EB0 Phase 1).
+// This is intentionally separate from DigitalProduct, which remains the
+// digital-architecture product model.
+model ProductLine {
+  id                    String                          @id @default(cuid())
+  lineId                String                          @unique
+  organizationId        String
+  parentId              String?
+  key                   String
+  name                  String
+  description           String?
+  sortOrder             Int                             @default(0)
+  sourceKind            String?
+  sourceRef             String?
+  effectiveFrom         DateTime                        @default(now())
+  effectiveTo           DateTime?
+  createdAt             DateTime                        @default(now())
+  updatedAt             DateTime                        @updatedAt
+  organization          Organization                    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  parent                ProductLine?                    @relation("ProductLineHierarchy", fields: [parentId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  children              ProductLine[]                   @relation("ProductLineHierarchy")
+  products              Product[]
+  researchProposals     ResearchProposal[]              @relation("ResearchProposalProductLine")
+  marketingBattlecards  MarketingBattlecard[]           @relation("MarketingBattlecardProductLine")
+  scheduledAgentTasks   ScheduledAgentTask[]            @relation("ScheduledAgentTaskProductLine")
+  backlogItems          BacklogItem[]                   @relation("BacklogItemProductLine")
+  storefrontComposition StorefrontArchetypeComposition?
+
+  @@unique([organizationId, key])
+  @@unique([id, organizationId])
+  @@index([organizationId, sortOrder])
+  @@index([parentId])
+  @@index([effectiveTo])
+  @@index([parentId, organizationId]) // FK-leading (tree parent): product-line hierarchy traversal
+}
+
+model Product {
+  id                   String                @id @default(cuid())
+  productId            String                @unique
+  organizationId       String
+  productLineId        String
+  key                  String
+  name                 String
+  description          String?
+  sortOrder            Int                   @default(0)
+  sourceKind           String?
+  sourceRef            String?
+  effectiveFrom        DateTime              @default(now())
+  effectiveTo          DateTime?
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+  organization         Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  productLine          ProductLine           @relation(fields: [productLineId, organizationId], references: [id, organizationId], onDelete: Cascade)
+  offerings            ProductOffering[]
+  productSolds         ProductSold[]
+  researchProposals    ResearchProposal[]    @relation("ResearchProposalBusinessProduct")
+  marketingBattlecards MarketingBattlecard[] @relation("MarketingBattlecardBusinessProduct")
+  scheduledAgentTasks  ScheduledAgentTask[]  @relation("ScheduledAgentTaskBusinessProduct")
+  backlogItems         BacklogItem[]         @relation("BacklogItemBusinessProduct")
+  objectives           ProductObjective[]
+
+  @@unique([productLineId, key])
+  @@unique([id, organizationId])
+  @@index([organizationId, sortOrder])
+  @@index([productLineId, sortOrder])
+  @@index([effectiveTo])
+}
+
+// Minimum product objective and outcome-learning contract
+// (EP-ED496EB0 Phase 9 / BI-162FBDCC). Business Product owns the objective;
+// DigitalProduct remains an architecture/delivery authority. Product-line
+// posture is derived through Product rather than persisted as a second ledger.
+model ProductObjective {
+  id                String                      @id @default(cuid())
+  objectiveId       String                      @unique
+  organizationId    String
+  productId         String
+  title             String
+  problemStatement  String?                     @db.Text
+  outcomeHypothesis String                      @db.Text
+  ownerPrincipalId  String?
+  measureKind       String
+  measureDefinition String                      @db.Text
+  measureUnit       String?
+  baselineValue     Decimal?                    @db.Decimal(20, 6)
+  targetValue       Decimal?                    @db.Decimal(20, 6)
+  baselineNarrative String?                     @db.Text
+  targetNarrative   String?                     @db.Text
+  status            String                      @default("draft")
+  reviewCadence     String?
+  reviewAt          DateTime?
+  reviewedAt        DateTime?
+  activatedAt       DateTime?
+  closedAt          DateTime?
+  archivedAt        DateTime?
+  createdAt         DateTime                    @default(now())
+  updatedAt         DateTime                    @updatedAt
+  organization      Organization                @relation("ProductObjectiveOrganization", fields: [organizationId], references: [id], onDelete: Cascade)
+  product           Product                     @relation(fields: [productId, organizationId], references: [id, organizationId], onDelete: Cascade)
+  ownerPrincipal    Principal?                  @relation("ProductObjectiveOwner", fields: [ownerPrincipalId], references: [id], onDelete: SetNull)
+  contributingWork  ProductObjectiveWork[]
+  observations      ProductOutcomeObservation[]
+
+  @@unique([id, organizationId])
+  @@index([organizationId, status, reviewAt])
+  @@index([productId, status])
+  @@index([ownerPrincipalId])
+}
+
+// Link only: canonical demand and delivery state remains on BacklogItem.
+model ProductObjectiveWork {
+  id               String           @id @default(cuid())
+  objectiveId      String
+  backlogItemId    String
+  contributionKind String
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+  objective        ProductObjective @relation(fields: [objectiveId], references: [id], onDelete: Cascade)
+  backlogItem      BacklogItem      @relation(fields: [backlogItemId], references: [id], onDelete: Cascade)
+
+  @@unique([objectiveId, backlogItemId])
+  @@index([backlogItemId])
+  @@index([contributionKind])
+}
+
+// Append-only learned evidence. Corrections create a new observation that
+// supersedes one current row; there is deliberately no mutable "current value".
+model ProductOutcomeObservation {
+  id                      String                     @id @default(cuid())
+  observationId           String                     @unique
+  objectiveId             String
+  observedAt              DateTime
+  numericValue            Decimal?                   @db.Decimal(20, 6)
+  narrative               String?                    @db.Text
+  measureKind             String
+  measureUnit             String?
+  sourceKind              String
+  sourceRef               String?
+  confidence              Float?
+  provenance              Json?
+  recordedByPrincipalId   String?
+  supersedesObservationId String?                    @unique
+  createdAt               DateTime                   @default(now())
+  objective               ProductObjective           @relation(fields: [objectiveId], references: [id], onDelete: Cascade)
+  recordedByPrincipal     Principal?                 @relation("ProductOutcomeObservationRecorder", fields: [recordedByPrincipalId], references: [id], onDelete: SetNull)
+  supersedes              ProductOutcomeObservation? @relation("ProductOutcomeObservationCorrection", fields: [supersedesObservationId], references: [id], onDelete: Restrict)
+  supersededBy            ProductOutcomeObservation? @relation("ProductOutcomeObservationCorrection")
+
+  @@index([objectiveId, observedAt])
+  @@index([sourceKind, sourceRef])
+  @@index([recordedByPrincipalId])
+}
+
+// Organization-owned commercial promise for a business Product
+// (EP-ED496EB0 Phase 2). ServiceOffering remains the digital operational-
+// commitment model; the nullable trace below exists only when that real
+// operational commitment realizes this commercial promise.
+model ProductOffering {
+  id                           String           @id @default(cuid())
+  offeringId                   String           @unique
+  organizationId               String
+  productId                    String
+  providerOrganizationId       String
+  operationalServiceOfferingId String?          @unique
+  key                          String
+  name                         String
+  description                  String?
+  status                       String           @default("draft")
+  isDefault                    Boolean          @default(false)
+  terms                        Json?
+  sourceKind                   String?
+  sourceRef                    String?
+  effectiveFrom                DateTime         @default(now())
+  effectiveTo                  DateTime?
+  createdAt                    DateTime         @default(now())
+  updatedAt                    DateTime         @updatedAt
+  organization                 Organization     @relation("ProductOfferingOrganization", fields: [organizationId], references: [id], onDelete: Cascade)
+  providerOrganization         Organization     @relation("ProductOfferingProviderOrganization", fields: [providerOrganizationId], references: [id], onDelete: Restrict)
+  product                      Product          @relation(fields: [productId, organizationId], references: [id, organizationId], onDelete: Cascade)
+  operationalServiceOffering   ServiceOffering? @relation(fields: [operationalServiceOfferingId], references: [id], onDelete: SetNull)
+  catalogItems                 CatalogItem[]
+  productSolds                 ProductSold[]
+
+  @@unique([productId, key])
+  @@unique([id, organizationId])
+  @@index([organizationId, status])
+  @@index([providerOrganizationId])
+  @@index([effectiveTo])
+}
+
+// Canonical selectable/requestable commercial object. Channel-specific rows
+// such as StorefrontItem project this definition instead of owning a copy.
+model CatalogItem {
+  id                       String                           @id @default(cuid())
+  catalogItemId            String                           @unique
+  organizationId           String
+  offeringId               String
+  key                      String
+  name                     String
+  description              String?
+  status                   String                           @default("draft")
+  priceType                String?
+  priceAmount              Decimal?
+  priceCurrency            String                           @default("USD")
+  quoteRequired            Boolean                          @default(false)
+  fulfillmentRoute         String?
+  availabilityPolicy       Json?
+  sourceKind               String?
+  sourceRef                String?
+  effectiveFrom            DateTime                         @default(now())
+  effectiveTo              DateTime?
+  createdAt                DateTime                         @default(now())
+  updatedAt                DateTime                         @updatedAt
+  organization             Organization                     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  offering                 ProductOffering                  @relation(fields: [offeringId, organizationId], references: [id, organizationId], onDelete: Cascade)
+  configurations           ProductConfiguration[]
+  skus                     CatalogSku[]
+  storefrontItems          StorefrontItem[]
+  quoteLineItems           QuoteLineItem[]
+  bundleComponents         CatalogBundleComponent[]         @relation("CatalogBundleParent")
+  componentOfBundles       CatalogBundleComponent[]         @relation("CatalogBundleComponentItem")
+  priceListEntries         CatalogPriceListEntry[]
+  promotionItems           CatalogPromotionItem[]
+  channelEligibility       CatalogChannelEligibility[]
+  storefrontOrderLines     StorefrontOrderLineItem[]
+  productSolds             ProductSold[]
+  soldComponentAllocations ProductSoldComponentAllocation[]
+
+  @@unique([offeringId, key])
+  @@unique([id, organizationId])
+  @@index([organizationId, status])
+  @@index([effectiveTo])
+}
+
+// Deliberately reusable product configuration. One-off sale configurations
+// stay as immutable QuoteLineItem.configurationSnapshot JSON and do not create
+// permanent catalog rows.
+model ProductConfiguration {
+  id                          String         @id @default(cuid())
+  configurationId             String         @unique
+  organizationId              String
+  catalogItemId               String
+  key                         String
+  name                        String
+  description                 String?
+  kind                        String         @default("reusable")
+  status                      String         @default("draft")
+  specification               Json
+  sourceKind                  String?
+  sourceRef                   String?
+  promotedFromQuoteLineItemId String?
+  promotionSnapshot           Json?
+  promotedAt                  DateTime?
+  effectiveFrom               DateTime       @default(now())
+  effectiveTo                 DateTime?
+  createdAt                   DateTime       @default(now())
+  updatedAt                   DateTime       @updatedAt
+  organization                Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  catalogItem                 CatalogItem    @relation(fields: [catalogItemId, organizationId], references: [id, organizationId], onDelete: Cascade)
+  promotedFromQuoteLineItem   QuoteLineItem? @relation("PromotedConfigurationQuoteLine", fields: [promotedFromQuoteLineItemId], references: [id], onDelete: SetNull)
+  skus                        CatalogSku[]
+  productSolds                ProductSold[]
+
+  @@unique([catalogItemId, key])
+  @@unique([id, organizationId])
+  @@index([organizationId, status])
+  @@index([promotedFromQuoteLineItemId])
+  @@index([effectiveTo])
+}
+
+// Optional reusable stock-keeping identity. A CatalogItem does not need a SKU;
+// one is created only when the operator deliberately publishes a reusable
+// configuration or inventory identity.
+model CatalogSku {
+  id                   String                    @id @default(cuid())
+  skuId                String                    @unique
+  organizationId       String
+  catalogItemId        String
+  configurationId      String?
+  code                 String
+  name                 String?
+  status               String                    @default("draft")
+  sourceKind           String?
+  sourceRef            String?
+  effectiveFrom        DateTime                  @default(now())
+  effectiveTo          DateTime?
+  createdAt            DateTime                  @default(now())
+  updatedAt            DateTime                  @updatedAt
+  organization         Organization              @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  catalogItem          CatalogItem               @relation(fields: [catalogItemId, organizationId], references: [id, organizationId], onDelete: Cascade)
+  configuration        ProductConfiguration?     @relation(fields: [configurationId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  rentableUnits        RentableUnit[]
+  priceListEntries     CatalogPriceListEntry[]
+  quoteLineItems       QuoteLineItem[]
+  storefrontOrderLines StorefrontOrderLineItem[]
+  productSolds         ProductSold[]
+
+  @@unique([organizationId, code])
+  @@unique([id, organizationId])
+  @@index([catalogItemId, status])
+  @@index([configurationId])
+  @@index([effectiveTo])
+}
+
+// A CatalogItem can package other CatalogItems without changing any Product or
+// ProductLine parentage. Component attribution is non-additive: the package
+// sale is counted once and these rows explain its component contribution.
+model CatalogBundleComponent {
+  id                     String       @id @default(cuid())
+  componentId            String       @unique
+  organizationId         String
+  parentCatalogItemId    String
+  componentCatalogItemId String
+  quantity               Decimal      @default(1)
+  eligibility            String       @default("standalone-and-bundle")
+  allocationMode         String       @default("unallocated")
+  allocationPercent      Decimal?
+  sortOrder              Int          @default(0)
+  sourceKind             String?
+  sourceRef              String?
+  effectiveFrom          DateTime     @default(now())
+  effectiveTo            DateTime?
+  createdAt              DateTime     @default(now())
+  updatedAt              DateTime     @updatedAt
+  organization           Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  parentCatalogItem      CatalogItem  @relation("CatalogBundleParent", fields: [parentCatalogItemId, organizationId], references: [id, organizationId], onDelete: Cascade)
+  componentCatalogItem   CatalogItem  @relation("CatalogBundleComponentItem", fields: [componentCatalogItemId, organizationId], references: [id, organizationId], onDelete: Restrict)
+
+  @@unique([parentCatalogItemId, componentCatalogItemId])
+  @@index([organizationId, effectiveTo])
+  @@index([componentCatalogItemId])
+}
+
+model CatalogPriceList {
+  id             String                  @id @default(cuid())
+  priceListId    String                  @unique
+  organizationId String
+  key            String
+  name           String
+  description    String?
+  currency       String
+  status         String                  @default("draft")
+  sourceKind     String?
+  sourceRef      String?
+  effectiveFrom  DateTime                @default(now())
+  effectiveTo    DateTime?
+  createdAt      DateTime                @default(now())
+  updatedAt      DateTime                @updatedAt
+  organization   Organization            @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  entries        CatalogPriceListEntry[]
+  promotionItems CatalogPromotionItem[]
+
+  @@unique([organizationId, key])
+  @@unique([id, organizationId])
+  @@index([organizationId, status, effectiveFrom])
+  @@index([effectiveTo])
+}
+
+model CatalogPriceListEntry {
+  id              String           @id @default(cuid())
+  entryId         String           @unique
+  organizationId  String
+  priceListId     String
+  catalogItemId   String
+  catalogSkuId    String?
+  priceType       String           @default("fixed")
+  priceAmount     Decimal
+  minimumQuantity Decimal          @default(1)
+  sourceKind      String?
+  sourceRef       String?
+  effectiveFrom   DateTime         @default(now())
+  effectiveTo     DateTime?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  organization    Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  priceList       CatalogPriceList @relation(fields: [priceListId, organizationId], references: [id, organizationId], onDelete: Cascade)
+  catalogItem     CatalogItem      @relation(fields: [catalogItemId, organizationId], references: [id, organizationId], onDelete: Cascade)
+  catalogSku      CatalogSku?      @relation(fields: [catalogSkuId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  productSolds    ProductSold[]
+
+  @@unique([priceListId, catalogItemId, catalogSkuId, effectiveFrom])
+  @@unique([id, organizationId])
+  @@index([organizationId, catalogItemId, effectiveFrom])
+  @@index([catalogSkuId])
+  @@index([effectiveTo])
+}
+
+model CatalogPromotion {
+  id              String                 @id @default(cuid())
+  promotionId     String                 @unique
+  organizationId  String
+  key             String
+  name            String
+  description     String?
+  status          String                 @default("draft")
+  adjustmentType  String
+  adjustmentValue Decimal
+  sourceKind      String?
+  sourceRef       String?
+  effectiveFrom   DateTime               @default(now())
+  effectiveTo     DateTime?
+  createdAt       DateTime               @default(now())
+  updatedAt       DateTime               @updatedAt
+  organization    Organization           @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  items           CatalogPromotionItem[]
+  productSolds    ProductSold[]
+
+  @@unique([organizationId, key])
+  @@unique([id, organizationId])
+  @@index([organizationId, status, effectiveFrom])
+  @@index([effectiveTo])
+}
+
+model CatalogPromotionItem {
+  id              String            @id @default(cuid())
+  promotionItemId String            @unique
+  organizationId  String
+  promotionId     String
+  catalogItemId   String
+  priceListId     String?
+  createdAt       DateTime          @default(now())
+  organization    Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  promotion       CatalogPromotion  @relation(fields: [promotionId, organizationId], references: [id, organizationId], onDelete: Cascade)
+  catalogItem     CatalogItem       @relation(fields: [catalogItemId, organizationId], references: [id, organizationId], onDelete: Cascade)
+  priceList       CatalogPriceList? @relation(fields: [priceListId, organizationId], references: [id, organizationId], onDelete: Cascade)
+
+  @@unique([promotionId, catalogItemId, priceListId])
+  @@index([organizationId, catalogItemId])
+  @@index([priceListId])
+}
+
+model CatalogChannelEligibility {
+  id             String       @id @default(cuid())
+  eligibilityId  String       @unique
+  organizationId String
+  catalogItemId  String
+  channelKey     String
+  eligibility    String       @default("eligible")
+  sourceKind     String?
+  sourceRef      String?
+  effectiveFrom  DateTime     @default(now())
+  effectiveTo    DateTime?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  catalogItem    CatalogItem  @relation(fields: [catalogItemId, organizationId], references: [id, organizationId], onDelete: Cascade)
+
+  @@unique([catalogItemId, channelKey, effectiveFrom])
+  @@index([organizationId, channelKey, eligibility])
+  @@index([effectiveTo])
+}
+
+// Immutable organization-scoped commercial sale fact (EP-ED496EB0 Phase 4).
+// Existing transaction and fulfillment models remain their own authorities;
+// ProductSold snapshots the selected commercial contract and links to those
+// authorities through typed ProductSoldEvidence rows.
+model ProductSold {
+  id                     String                           @id @default(cuid())
+  productSoldId          String                           @unique
+  materializationKey     String                           @unique
+  organizationId         String
+  providerOrganizationId String
+  productId              String
+  offeringId             String
+  catalogItemId          String
+  catalogSkuId           String?
+  configurationId        String?
+  priceListEntryId       String?
+  promotionId            String?
+  status                 String                           @default("purchased")
+  quantity               Decimal                          @default(1)
+  unitPrice              Decimal?
+  discountAmount         Decimal?
+  taxAmount              Decimal?
+  totalAmount            Decimal
+  currency               String                           @default("USD")
+  purchasedAt            DateTime                         @default(now())
+  cancelledAt            DateTime?
+  refundedAt             DateTime?
+  configurationSnapshot  Json?
+  pricingSnapshot        Json
+  commercialSnapshot     Json
+  sourceKind             String?
+  sourceRef              String?
+  createdAt              DateTime                         @default(now())
+  updatedAt              DateTime                         @updatedAt
+  organization           Organization                     @relation("ProductSoldOrganization", fields: [organizationId], references: [id], onDelete: Cascade)
+  providerOrganization   Organization                     @relation("ProductSoldProviderOrganization", fields: [providerOrganizationId], references: [id], onDelete: Restrict)
+  product                Product                          @relation(fields: [productId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  offering               ProductOffering                  @relation(fields: [offeringId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  catalogItem            CatalogItem                      @relation(fields: [catalogItemId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  catalogSku             CatalogSku?                      @relation(fields: [catalogSkuId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  configuration          ProductConfiguration?            @relation(fields: [configurationId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  priceListEntry         CatalogPriceListEntry?           @relation(fields: [priceListEntryId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  promotion              CatalogPromotion?                @relation(fields: [promotionId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  evidence               ProductSoldEvidence[]
+  parties                ProductSoldParty[]
+  entitlements           ProductSoldEntitlement[]
+  fulfillmentInstances   ProductFulfillmentInstance[]
+  componentAllocations   ProductSoldComponentAllocation[]
+
+  @@unique([id, organizationId])
+  @@index([organizationId, status, purchasedAt])
+  @@index([providerOrganizationId, purchasedAt])
+  @@index([productId, purchasedAt])
+  @@index([offeringId])
+  @@index([catalogItemId])
+  @@index([catalogSkuId])
+  @@index([configurationId])
+  @@index([priceListEntryId])
+  @@index([promotionId])
+}
+
+// One row per typed transaction or fulfillment authority observed for a sale.
+// The SQL migration enforces exactly one source FK on every evidence row.
+model ProductSoldEvidence {
+  id                        String                       @id @default(cuid())
+  evidenceId                String                       @unique
+  organizationId            String
+  productSoldId             String
+  evidenceKind              String
+  quoteLineItemId           String?                      @unique
+  salesOrderId              String?
+  storefrontOrderLineItemId String?                      @unique
+  storefrontBookingId       String?                      @unique
+  rentalAgreementId         String?                      @unique
+  subscriptionId            String?
+  observedAt                DateTime                     @default(now())
+  evidenceSnapshot          Json
+  sourceKind                String?
+  sourceRef                 String?
+  createdAt                 DateTime                     @default(now())
+  updatedAt                 DateTime                     @updatedAt
+  organization              Organization                 @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  productSold               ProductSold                  @relation(fields: [productSoldId, organizationId], references: [id, organizationId], onDelete: Cascade)
+  quoteLineItem             QuoteLineItem?               @relation("ProductSoldEvidenceQuoteLine", fields: [quoteLineItemId], references: [id], onDelete: Restrict)
+  salesOrder                SalesOrder?                  @relation("ProductSoldEvidenceSalesOrder", fields: [salesOrderId], references: [id], onDelete: Restrict)
+  storefrontOrderLineItem   StorefrontOrderLineItem?     @relation("ProductSoldEvidenceStorefrontOrderLine", fields: [storefrontOrderLineItemId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  storefrontBooking         StorefrontBooking?           @relation("ProductSoldEvidenceBooking", fields: [storefrontBookingId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  rentalAgreement           RentalAgreement?             @relation("ProductSoldEvidenceRentalAgreement", fields: [rentalAgreementId], references: [id], onDelete: Restrict)
+  subscription              Subscription?                @relation("ProductSoldEvidenceSubscription", fields: [subscriptionId], references: [id], onDelete: Restrict)
+  parties                   ProductSoldParty[]
+  entitlements              ProductSoldEntitlement[]
+  fulfillmentInstances      ProductFulfillmentInstance[]
+
+  @@unique([id, organizationId])
+  @@unique([productSoldId, salesOrderId])
+  @@unique([productSoldId, subscriptionId])
+  @@index([organizationId, evidenceKind, observedAt])
+  @@index([productSoldId, observedAt])
+  @@index([salesOrderId])
+  @@index([subscriptionId])
+}
+
+// Evidence-backed role projection. Account, consumer, and subscriber are roles,
+// not synonyms; SQL requires exactly one canonical account or contact target.
+model ProductSoldParty {
+  id              String              @id @default(cuid())
+  partyId         String              @unique
+  organizationId  String
+  productSoldId   String
+  evidenceId      String
+  role            String
+  accountId       String?
+  contactId       String?
+  observedAt      DateTime            @default(now())
+  displaySnapshot Json
+  sourceKind      String?
+  sourceRef       String?
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+  organization    Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  productSold     ProductSold         @relation(fields: [productSoldId, organizationId], references: [id, organizationId], onDelete: Cascade)
+  evidence        ProductSoldEvidence @relation(fields: [evidenceId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  account         CustomerAccount?    @relation("ProductSoldPartyAccount", fields: [accountId], references: [id], onDelete: Restrict)
+  contact         CustomerContact?    @relation("ProductSoldPartyContact", fields: [contactId], references: [id], onDelete: Restrict)
+
+  @@unique([productSoldId, role, accountId])
+  @@unique([productSoldId, role, contactId])
+  @@index([organizationId, role])
+  @@index([accountId])
+  @@index([contactId])
+  @@index([evidenceId])
+}
+
+// Optional rights record. A sale alone does not create an entitlement; a row
+// requires evidence and exactly one canonical beneficiary.
+model ProductSoldEntitlement {
+  id              String              @id @default(cuid())
+  entitlementId   String              @unique
+  entitlementKey  String              @unique
+  organizationId  String
+  productSoldId   String
+  evidenceId      String
+  accountId       String?
+  contactId       String?
+  subscriptionId  String?
+  entitlementKind String
+  status          String              @default("active")
+  quantity        Decimal?
+  rightSnapshot   Json
+  validFrom       DateTime
+  validTo         DateTime?
+  sourceKind      String?
+  sourceRef       String?
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+  organization    Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  productSold     ProductSold         @relation(fields: [productSoldId, organizationId], references: [id, organizationId], onDelete: Cascade)
+  evidence        ProductSoldEvidence @relation(fields: [evidenceId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  account         CustomerAccount?    @relation("ProductSoldEntitlementAccount", fields: [accountId], references: [id], onDelete: Restrict)
+  contact         CustomerContact?    @relation("ProductSoldEntitlementContact", fields: [contactId], references: [id], onDelete: Restrict)
+  subscription    Subscription?       @relation("ProductSoldEntitlementSubscription", fields: [subscriptionId], references: [id], onDelete: Restrict)
+
+  @@index([organizationId, status, validFrom])
+  @@index([productSoldId])
+  @@index([accountId])
+  @@index([contactId])
+  @@index([subscriptionId])
+  @@index([evidenceId])
+  @@index([validTo])
+}
+
+// Optional realization or consumption record. A completed one-time service,
+// booking, rental unit, or supported EdgeNode can be represented without
+// pretending that each is a Subscription or installed asset.
+model ProductFulfillmentInstance {
+  id                  String              @id @default(cuid())
+  instanceId          String              @unique
+  instanceKey         String              @unique
+  organizationId      String
+  productSoldId       String
+  evidenceId          String
+  instanceKind        String
+  status              String              @default("active")
+  storefrontBookingId String?
+  rentalAgreementId   String?
+  rentableUnitId      String?
+  edgeNodeId          String?
+  startedAt           DateTime?
+  completedAt         DateTime?
+  endedAt             DateTime?
+  fulfillmentSnapshot Json
+  sourceKind          String?
+  sourceRef           String?
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+  organization        Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  productSold         ProductSold         @relation(fields: [productSoldId, organizationId], references: [id, organizationId], onDelete: Cascade)
+  evidence            ProductSoldEvidence @relation(fields: [evidenceId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  storefrontBooking   StorefrontBooking?  @relation("ProductFulfillmentBooking", fields: [storefrontBookingId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  rentalAgreement     RentalAgreement?    @relation("ProductFulfillmentRentalAgreement", fields: [rentalAgreementId], references: [id], onDelete: Restrict)
+  rentableUnit        RentableUnit?       @relation("ProductFulfillmentRentableUnit", fields: [rentableUnitId], references: [id], onDelete: Restrict)
+  edgeNode            EdgeNode?           @relation("ProductFulfillmentEdgeNode", fields: [edgeNodeId], references: [id], onDelete: Restrict)
+
+  @@index([organizationId, instanceKind, status])
+  @@index([productSoldId])
+  @@index([evidenceId])
+  @@index([storefrontBookingId])
+  @@index([rentalAgreementId])
+  @@index([rentableUnitId])
+  @@index([edgeNodeId])
+}
+
+// Non-additive explanation of a package sale. Revenue remains counted only at
+// ProductSold; these rows expose component contribution without a second sale.
+model ProductSoldComponentAllocation {
+  id                     String       @id @default(cuid())
+  allocationId           String       @unique
+  organizationId         String
+  productSoldId          String
+  componentCatalogItemId String
+  quantity               Decimal      @default(1)
+  allocationMode         String       @default("unallocated")
+  allocatedAmount        Decimal?
+  allocationPercent      Decimal?
+  reportingTreatment     String       @default("non-additive")
+  componentSnapshot      Json
+  sourceKind             String?
+  sourceRef              String?
+  createdAt              DateTime     @default(now())
+  updatedAt              DateTime     @updatedAt
+  organization           Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  productSold            ProductSold  @relation(fields: [productSoldId, organizationId], references: [id, organizationId], onDelete: Cascade)
+  componentCatalogItem   CatalogItem  @relation(fields: [componentCatalogItemId, organizationId], references: [id, organizationId], onDelete: Restrict)
+
+  @@unique([productSoldId, componentCatalogItemId])
+  @@index([organizationId, componentCatalogItemId])
+}
+
+/// Product-to-product dependency graph (BI-PORTPRIO-2) — the rail for the DPPM
+/// line-of-sight priority cascade: a Products & Services Sold offering's priority
+/// floors the priority of the Foundational / Manufacturing & Delivery products it
+/// depends on. relationType: "depends_on" | "part_of". source = the
+/// PortfolioSourceKind that asserted the edge (registry backfill, projector, …).
+model ProductDependency {
+  id            String         @id @default(cuid())
+  fromProductId String
+  toProductId   String
+  relationType  String
+  source        String?
+  createdAt     DateTime       @default(now())
+  fromProduct   DigitalProduct @relation("ProductDependencyFrom", fields: [fromProductId], references: [id], onDelete: Cascade)
+  toProduct     DigitalProduct @relation("ProductDependencyTo", fields: [toProductId], references: [id], onDelete: Cascade)
+
+  @@unique([fromProductId, toProductId, relationType])
+  @@index([fromProductId])
+  @@index([toProductId])
+}
+
+model BusinessModel {
+  id          String                 @id @default(cuid())
+  modelId     String                 @unique
+  name        String
+  description String?
+  isBuiltIn   Boolean                @default(false)
+  status      String                 @default("active")
+  createdAt   DateTime               @default(now())
+  updatedAt   DateTime               @updatedAt
+  roles       BusinessModelRole[]
+  products    ProductBusinessModel[]
+}
+
+model BusinessModelRole {
+  id              String                        @id @default(cuid())
+  roleId          String                        @unique
+  name            String
+  authorityDomain String?
+  it4itAlignment  String?
+  hitlTierDefault Int                           @default(2)
+  escalatesTo     String?
+  isBuiltIn       Boolean                       @default(false)
+  status          String                        @default("active")
+  businessModelId String
+  businessModel   BusinessModel                 @relation(fields: [businessModelId], references: [id], onDelete: Cascade)
+  assignments     BusinessModelRoleAssignment[]
+
+  @@index([businessModelId])
+}
+
+model ProductBusinessModel {
+  id              String         @id @default(cuid())
+  productId       String
+  businessModelId String
+  assignedAt      DateTime       @default(now())
+  product         DigitalProduct @relation(fields: [productId], references: [id], onDelete: Cascade)
+  businessModel   BusinessModel  @relation(fields: [businessModelId], references: [id], onDelete: Cascade)
+
+  @@unique([productId, businessModelId])
+  @@index([businessModelId])
+}
+
+model BusinessModelRoleAssignment {
+  id                  String            @id @default(cuid())
+  userId              String
+  businessModelRoleId String
+  productId           String
+  assignedAt          DateTime          @default(now())
+  revokedAt           DateTime?
+  user                User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  businessModelRole   BusinessModelRole @relation(fields: [businessModelRoleId], references: [id], onDelete: Cascade)
+  product             DigitalProduct    @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, businessModelRoleId, productId])
+  @@index([productId])
+  @@index([userId])
+  @@index([businessModelRoleId]) // FK-leading (join table): role-side lookups; @@unique leads on userId, @@index on productId
+}
+
+model ProductVersion {
+  id               String            @id @default(cuid())
+  digitalProductId String
+  version          String
+  gitTag           String
+  gitCommitHash    String
+  featureBuildId   String?
+  shippedBy        String
+  shippedAt        DateTime          @default(now())
+  manifestId       String?           @unique
+  changeCount      Int               @default(0)
+  changeSummary    String?
+  promotions       ChangePromotion[]
+  digitalProduct   DigitalProduct    @relation(fields: [digitalProductId], references: [id])
+  featureBuild     FeatureBuild?     @relation(fields: [featureBuildId], references: [id])
+  manifest         CodebaseManifest? @relation(fields: [manifestId], references: [id])
+
+  @@unique([digitalProductId, version])
+  @@index([gitTag])
+  @@index([featureBuildId]) // FK-leading (spine): open promotions per build, apps/web/instrumentation.ts:503
+}
+
+model ServiceOffering {
+  id                  String               @id @default(cuid())
+  offeringId          String               @unique
+  digitalProductId    String
+  name                String
+  description         String?
+  consumers           Json
+  availabilityTarget  Float?
+  mttrHours           Float?
+  mtbfHours           Float?
+  rtoHours            Float?
+  rpoHours            Float?
+  supportHours        String?
+  claRef              String?
+  olaRef              String?
+  status              String               @default("draft")
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  effectiveFrom       DateTime?
+  effectiveTo         DateTime?
+  digitalProduct      DigitalProduct       @relation(fields: [digitalProductId], references: [id])
+  commercialOffering  ProductOffering?
+  coworkerServices    CoworkerService[]
+  partnerEntitlements PartnerEntitlement[]
+
+  @@index([digitalProductId])
+  @@index([status])
+}

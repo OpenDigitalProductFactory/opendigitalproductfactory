@@ -1,8 +1,7 @@
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
+import { readCanonicalPrismaSchema } from "./schema-source";
 
-const schema = readFileSync(resolve(__dirname, "../prisma/schema.prisma"), "utf8");
+const schema = readCanonicalPrismaSchema();
 
 describe("payroll persistence schema", () => {
   it("keeps PayRun and Payslip lifecycle fields database-enforced enums", () => {

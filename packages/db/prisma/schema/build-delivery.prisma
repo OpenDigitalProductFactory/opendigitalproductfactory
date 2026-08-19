@@ -1,0 +1,1476 @@
+enum IntakeSource {
+  user_conversation
+  artifact_reference
+  existing_example
+  coworker_proposal
+  innovation_radar
+}
+
+enum BriefConfidence {
+  high
+  medium
+  low
+}
+
+enum BriefStatus {
+  draft
+  gathering_evidence
+  redacting
+  interpreting
+  awaiting_clarification
+  accepted
+  converted_to_build
+  rejected
+  superseded
+}
+
+// FeatureBuild.kind — work-kind discriminator.
+// Canonical union: apps/web/lib/explore/feature-build-types.ts
+enum FeatureBuildKind {
+  feature
+  fix
+  chore
+  doc
+}
+
+// FeatureBuild.disposition — private/public change segregation (EP-1A78BAE1).
+enum ChangeDisposition {
+  private
+  shareable
+}
+
+// FeatureBuild.uxVerificationStatus — UX verification outcome.
+enum UxVerificationStatus {
+  running
+  complete
+  failed
+  skipped
+}
+
+model ChangePromotion {
+  id                      String           @id @default(cuid())
+  promotionId             String           @unique
+  productVersionId        String
+  status                  String           @default("pending")
+  requestedBy             String
+  approvedBy              String?
+  approvedAt              DateTime?
+  rejectedBy              String?
+  rejectedAt              DateTime?
+  rationale               String?
+  deployedAt              DateTime?
+  deploymentLog           String?
+  rolledBackAt            DateTime?
+  rolledBackBy            String?
+  rollbackReason          String?
+  windowOverrideReason    String?
+  destructiveAcknowledged Boolean          @default(false)
+  createdAt               DateTime         @default(now())
+  updatedAt               DateTime         @updatedAt
+  backupId                String?
+  backup                  PromotionBackup? @relation(fields: [backupId], references: [id])
+  productVersion          ProductVersion   @relation(fields: [productVersionId], references: [id])
+  changeItem              ChangeItem?
+  workrooms               Workroom[]       @relation("WorkroomChangePromotion")
+
+  @@index([status])
+  @@index([productVersionId])
+}
+
+model ChangeRequest {
+  id                     String            @id @default(cuid())
+  rfcId                  String            @unique
+  title                  String
+  description            String
+  type                   String            @default("normal")
+  scope                  String            @default("platform")
+  riskLevel              String            @default("low")
+  status                 String            @default("draft")
+  submittedAt            DateTime?
+  assessedAt             DateTime?
+  approvedAt             DateTime?
+  scheduledAt            DateTime?
+  startedAt              DateTime?
+  completedAt            DateTime?
+  closedAt               DateTime?
+  requestedById          String?
+  assessedById           String?
+  approvedById           String?
+  executedById           String?
+  deploymentWindowId     String?
+  plannedStartAt         DateTime?
+  plannedEndAt           DateTime?
+  calendarEventId        String?
+  impactReport           Json?
+  outcome                String?
+  outcomeNotes           String?
+  postChangeVerification Json?
+  changeItems            ChangeItem[]
+  requestedBy            EmployeeProfile?  @relation("ChangeRequestedBy", fields: [requestedById], references: [id])
+  assessedBy             EmployeeProfile?  @relation("ChangeAssessedBy", fields: [assessedById], references: [id])
+  approvedBy             EmployeeProfile?  @relation("ChangeApprovedBy", fields: [approvedById], references: [id])
+  executedBy             EmployeeProfile?  @relation("ChangeExecutedBy", fields: [executedById], references: [id])
+  deploymentWindow       DeploymentWindow? @relation(fields: [deploymentWindowId], references: [id])
+  selfUpgradeRun         SelfUpgradeRun?   @relation("SelfUpgradeChangeRecord")
+  createdAt              DateTime          @default(now())
+  updatedAt              DateTime          @updatedAt
+
+  @@index([status])
+  @@index([type])
+  @@index([requestedById])
+  @@index([deploymentWindowId])
+  @@index([plannedStartAt])
+}
+
+model ChangeItem {
+  id                String           @id @default(cuid())
+  changeRequestId   String
+  itemType          String
+  title             String
+  description       String?
+  impactDescription String?
+  inventoryEntityId String?
+  digitalProductId  String?
+  externalSystemRef String?
+  changePromotionId String?          @unique
+  status            String           @default("pending")
+  executionOrder    Int              @default(0)
+  executionNotes    String?
+  completedAt       DateTime?
+  rollbackPlan      String?
+  rollbackSnapshot  Json?
+  rolledBackAt      DateTime?
+  rollbackNotes     String?
+  changeRequest     ChangeRequest    @relation(fields: [changeRequestId], references: [id], onDelete: Cascade)
+  inventoryEntity   InventoryEntity? @relation(fields: [inventoryEntityId], references: [id])
+  digitalProduct    DigitalProduct?  @relation("ChangeItemProduct", fields: [digitalProductId], references: [id])
+  changePromotion   ChangePromotion? @relation(fields: [changePromotionId], references: [id])
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+
+  @@index([changeRequestId])
+  @@index([inventoryEntityId])
+  @@index([digitalProductId])
+  @@index([status])
+}
+
+model DeploymentWindow {
+  id                   String          @id @default(cuid())
+  businessProfileId    String
+  windowKey            String          @unique
+  name                 String
+  description          String?
+  dayOfWeek            Int[]
+  startTime            String
+  endTime              String
+  maxConcurrentChanges Int             @default(1)
+  allowedChangeTypes   String[]        @default(["standard", "normal"])
+  allowedRiskLevels    String[]        @default(["low", "medium"])
+  enforcement          String          @default("advisory")
+  businessProfile      BusinessProfile @relation(fields: [businessProfileId], references: [id])
+  changeRequests       ChangeRequest[]
+  createdAt            DateTime        @default(now())
+  updatedAt            DateTime        @updatedAt
+
+  @@index([businessProfileId])
+}
+
+model BlackoutPeriod {
+  id                String          @id @default(cuid())
+  businessProfileId String
+  name              String
+  reason            String?
+  startAt           DateTime
+  endAt             DateTime
+  scope             String          @default("all")
+  exceptions        String[]        @default([])
+  calendarEventId   String?
+  businessProfile   BusinessProfile @relation(fields: [businessProfileId], references: [id])
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  @@index([businessProfileId])
+  @@index([startAt, endAt])
+}
+
+model StandardChangeCatalog {
+  id              String          @id @default(cuid())
+  catalogKey      String          @unique
+  title           String
+  description     String
+  category        String
+  preAssessedRisk String
+  templateItems   Json
+  approvalPolicy  String          @default("auto")
+  validFrom       DateTime        @default(now())
+  validUntil      DateTime?
+  approvedById    String
+  approvedBy      EmployeeProfile @relation("StandardChangeApprover", fields: [approvedById], references: [id])
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+}
+
+model CodebaseManifest {
+  id               String          @id @default(cuid())
+  version          String
+  gitRef           String
+  manifest         Json
+  digitalProductId String?
+  generatedAt      DateTime        @default(now())
+  digitalProduct   DigitalProduct? @relation(fields: [digitalProductId], references: [id])
+  productVersion   ProductVersion?
+
+  @@unique([version, digitalProductId])
+  @@index([digitalProductId])
+}
+
+model RuntimeTarget {
+  id                     String                @id @default(cuid())
+  targetId               String                @unique
+  kind                   String
+  status                 String
+  workCapsuleId          String?
+  featureBuildId         String?
+  sandboxId              String?
+  slotId                 String?
+  composeProjectName     String?
+  serviceName            String?
+  containerName          String?
+  hostUrl                String?
+  internalUrl            String?
+  port                   Int?
+  serviceVersion         String?
+  acceptanceRoleOverride String?
+  debugReason            String?
+  expiresAt              DateTime?
+  lastHeartbeatAt        DateTime?
+  metadata               Json                  @default("{}")
+  createdAt              DateTime              @default(now())
+  updatedAt              DateTime              @updatedAt
+  featureBuild           FeatureBuild?         @relation(fields: [featureBuildId], references: [id], onDelete: SetNull)
+  sandbox                Sandbox?              @relation(fields: [sandboxId], references: [id], onDelete: SetNull)
+  slot                   SandboxSlot?          @relation(fields: [slotId], references: [id], onDelete: SetNull)
+  verifications          RuntimeVerification[]
+  workCapsule            Workroom?             @relation(fields: [workCapsuleId], references: [id], onDelete: SetNull)
+
+  @@index([kind, status])
+  @@index([workCapsuleId])
+  @@index([featureBuildId])
+  @@index([sandboxId])
+  @@index([slotId])
+}
+
+model RuntimeVerification {
+  id                      String                 @id @default(cuid())
+  verificationId          String                 @unique
+  kind                    String
+  status                  String
+  runtimeTargetId         String?
+  workCapsuleId           String?
+  featureBuildId          String?
+  gitPromotionCandidateId String?
+  command                 String?
+  url                     String?
+  evidenceUrl             String?
+  screenshotUrl           String?
+  toolExecutionId         String?
+  buildActivityId         String?
+  backlogActivityId       String?
+  capsuleActivityId       String?
+  startedAt               DateTime?
+  completedAt             DateTime?
+  result                  Json                   @default("{}")
+  createdAt               DateTime               @default(now())
+  updatedAt               DateTime               @updatedAt
+  featureBuild            FeatureBuild?          @relation(fields: [featureBuildId], references: [id], onDelete: SetNull)
+  gitPromotionCandidate   GitPromotionCandidate? @relation(fields: [gitPromotionCandidateId], references: [id], onDelete: SetNull)
+  runtimeTarget           RuntimeTarget?         @relation(fields: [runtimeTargetId], references: [id], onDelete: SetNull)
+  workCapsule             Workroom?              @relation(fields: [workCapsuleId], references: [id], onDelete: SetNull)
+
+  @@index([runtimeTargetId, createdAt(sort: Desc)])
+  @@index([featureBuildId, kind, status])
+  @@index([workCapsuleId, kind, status])
+  @@index([kind, status])
+}
+
+// Per-run audit row for the contributor-inventory-sync Inngest cron. Mirrors
+// BackupRun's role for the postgres-daily-backup cron: the ScheduledJob row
+// with jobId "contributor-inventory-sync" is the live heartbeat surfaced in
+// /platform/development/change-lanes; ContributorInventorySyncRun rows are
+// the durable per-run audit referenced by latest-successful-per-source
+// resolution in the read model.
+//
+// Spec: docs/superpowers/specs/2026-05-26-contributor-inventory-sync-design.md
+model ContributorInventorySyncRun {
+  id              String    @id @default(cuid())
+  syncRunId       String    @unique
+  startedAt       DateTime  @default(now())
+  completedAt     DateTime?
+  // "running" | "completed" | "partial" | "failed"
+  // status is audit-only; the read model resolves per-source from
+  // perSourceResult.<source>.ok, not from this rollup.
+  status          String    @default("running")
+  // Per-source result map written by the runner:
+  //   { "git-worktree": { ok, count, error?, ... }, "git-branch": {...}, "github-pr": {...} }
+  perSourceResult Json      @default("{}")
+  // "cron" | "mcp" | "ui" — for audit only.
+  triggeredBy     String    @default("cron")
+  durationMs      Int?
+
+  snapshots ContributorInventorySnapshot[]
+
+  @@index([startedAt])
+  @@index([status, startedAt])
+}
+
+// One row per inventory item, partitioned by source. Rows are written in
+// bulk by the contributor-inventory-sync cron and read by latest-successful-
+// per-source resolution in apps/web/lib/contributor-change-lanes/read-model.ts.
+// The retention sweep deletes rows whose syncRunId belongs to a
+// ContributorInventorySyncRun older than 7 days AND whose syncRunId is not
+// the latest successful for any of the three sources (preservation guard).
+//
+// Spec: docs/superpowers/specs/2026-05-26-contributor-inventory-sync-design.md
+model ContributorInventorySnapshot {
+  id        String   @id @default(cuid())
+  // One of: "git-worktree" | "git-branch" | "github-pr"
+  source    String
+  // Stable identity within a source — branch name, worktree path, PR
+  // number as string. Combined with syncRunId for the dedupe unique key.
+  sourceKey String
+  // The snapshot row payload, shape-compatible with
+  // GitWorktreeSnapshot / GitBranchSnapshot / PullRequestSnapshot from
+  // apps/web/lib/contributor-change-lanes/types.ts. JSON so the projection
+  // layer can evolve its shapes without a migration per shape change —
+  // same pattern as EaSnapshot.graphJson.
+  payload   Json
+  syncRunId String
+  fetchedAt DateTime @default(now())
+  createdAt DateTime @default(now())
+
+  syncRun ContributorInventorySyncRun @relation(fields: [syncRunId], references: [syncRunId], onDelete: Cascade)
+
+  @@unique([source, sourceKey, syncRunId])
+  @@index([source, syncRunId])
+  @@index([source, fetchedAt])
+}
+
+model CodeGraphIndexState {
+  graphKey                 String              @id
+  graphVersion             Int                 @default(1)
+  indexStatus              String              @default("stale")
+  workspaceRoot            String
+  lastIndexedAt            DateTime?
+  lastIndexedBranch        String?
+  lastIndexedHeadSha       String?
+  workspaceDirty           Boolean             @default(false)
+  workspaceDirtyObservedAt DateTime?
+  indexedFileCount         Int                 @default(0)
+  lastError                String?
+  createdAt                DateTime            @default(now())
+  updatedAt                DateTime            @updatedAt
+  fileHashes               CodeGraphFileHash[]
+}
+
+model CodeGraphFileHash {
+  id            String              @id @default(cuid())
+  graphKey      String
+  filePath      String
+  checksum      String
+  authority     String              @default("git")
+  lastIndexedAt DateTime            @default(now())
+  indexState    CodeGraphIndexState @relation(fields: [graphKey], references: [graphKey], onDelete: Cascade)
+
+  @@unique([graphKey, filePath])
+  @@index([graphKey])
+}
+
+model ExternalEvidenceRecord {
+  id                    String    @id @default(cuid())
+  actorUserId           String
+  routeContext          String
+  operationType         String
+  target                String
+  provider              String
+  resultSummary         String
+  details               Json?
+  buildId               String?
+  taskRunId             String?
+  // EP-WORK-CONVERGENCE Phase 1 (BI-D6FA8641): bind external evidence to the
+  // durable Workroom with producer identity, so external Claude/Codex/Grok
+  // work rolls up onto the capsule timeline. All nullable — additive, no
+  // backfill required to migrate. executorKind mirrors Workroom.executorKind;
+  // recordedBy* mirror WorkroomActivity's producer-identity fields.
+  workCapsuleId         String?
+  executorKind          String?
+  recordedByPrincipalId String?
+  recordedByAgentId     String?
+  createdAt             DateTime  @default(now())
+  actorUser             User      @relation(fields: [actorUserId], references: [id], onDelete: Cascade)
+  workCapsule           Workroom? @relation(fields: [workCapsuleId], references: [id], onDelete: SetNull)
+
+  @@index([actorUserId, createdAt])
+  @@index([routeContext, operationType])
+  @@index([operationType, createdAt])
+  @@index([buildId, createdAt])
+  @@index([taskRunId, createdAt])
+  @@index([workCapsuleId, createdAt])
+}
+
+model NonProductionEnvironmentLease {
+  id                  String    @id @default(cuid())
+  leaseId             String    @unique
+  // Stable identity for one gate attempt. Repeated claims with the same key
+  // observe the same queued/admitted row instead of creating polling races.
+  claimKey            String?   @unique
+  environmentKey      String
+  // Mirrors "<environmentKey>:<slotKey>" only while admitted. slotKey retains
+  // the assigned slot for terminal audit/telemetry; activeKey becomes NULL.
+  // The @@unique below makes "at most one active lease per environmentKey" a DB
+  // invariant at capacity one (Postgres allows many NULLs). Phase 2 expands the
+  // same invariant to independently isolated slot keys.
+  activeKey           String?
+  slotKey             String?
+  status              String    @default("queued")
+  ownerProvider       String
+  ownerSessionId      String
+  purpose             String
+  worktreePath        String?
+  branchName          String?
+  buildId             String?
+  taskRunId           String?
+  // Null means a legacy singleton-only claimant. Version 1 proves the runner
+  // can bind the server-assigned slot manifest before any host mutation.
+  slotManifestVersion Int?
+  url                 String
+  ports               Int[]     @default([])
+  cleanupCommand      String?
+  evidenceRecordId    String?
+  requestedTtlMs      Int       @default(900000)
+  expiresAt           DateTime
+  releasedAt          DateTime?
+  queuedAt            DateTime?
+  admittedAt          DateTime?
+  cancelledAt         DateTime?
+  heartbeatAt         DateTime?
+  phase               String?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  @@unique([activeKey])
+  @@index([environmentKey, status])
+  @@index([environmentKey, status, queuedAt])
+  @@index([ownerProvider, ownerSessionId])
+  @@index([buildId, createdAt])
+  @@index([taskRunId, createdAt])
+  @@index([expiresAt])
+}
+
+model FeatureBuild {
+  id                          String                   @id @default(cuid())
+  buildId                     String                   @unique
+  title                       String
+  description                 String?
+  // Work kind discriminator (FEATURE_BUILD_KIND_VALUES in
+  // apps/web/lib/explore/feature-build-types.ts).
+  // Default "feature" backfills all existing/in-flight builds with no behavior
+  // change. Derived from BacklogItem.source ("bug" -> "fix") at promote time.
+  kind                        FeatureBuildKind         @default(feature)
+  portfolioId                 String?
+  originatingBacklogItemId    String?
+  brief                       Json?
+  plan                        Json?
+  phase                       String                   @default("ideate")
+  sandboxId                   String?
+  sandboxPort                 Int?
+  buildBranch                 String? // git branch in sandbox: "build/<buildId>"
+  diffSummary                 String?
+  changeNarrative             Json?
+  diffPatch                   String?
+  codingProvider              String?
+  threadId                    String?
+  createdById                 String
+  createdAt                   DateTime                 @default(now())
+  updatedAt                   DateTime                 @updatedAt
+  digitalProductId            String?
+  designDoc                   Json?
+  designReview                Json?
+  buildPlan                   Json?
+  planReview                  Json?
+  taskResults                 Json?
+  taskResultsVersion          Int                      @default(0)
+  verificationOut             Json?
+  acceptanceMet               Json?
+  scoutFindings               Json?
+  accountableEmployeeId       String?
+  claimedByAgentId            String?
+  claimedAt                   DateTime?
+  claimStatus                 String?
+  gitCommitHashes             String[]                 @default([])
+  // Private/Public Change Segregation (EP-1A78BAE1). Per-change disposition,
+  // fail-closed to "private": no public-hive egress unless explicitly
+  // "shareable". `dispositionSuggested`/`Reason` cache the AI suggestion from
+  // review signals; `dispositionSource` is null until a human makes the final
+  // call ("operator") or the suggestion is recorded ("suggested").
+  disposition                 ChangeDisposition        @default(private)
+  dispositionReason           String?
+  dispositionSource           String?
+  dispositionDecidedAt        DateTime?
+  dispositionDecidedById      String?
+  dispositionSuggested        String?
+  dispositionSuggestionReason String?
+  uxTestResults               Json?
+  uxVerificationStatus        UxVerificationStatus?
+  deliberationSummary         Json? // compact BuildDeliberationSummary (see apps/web/lib/feature-build-types.ts)
+  buildExecState              Json?
+  taxonomyAttribution         Json?
+  releaseBundleId             String?
+  calendarEventId             String?
+  abandonedAt                 DateTime?
+  abandonReason               String?
+  draftApprovedAt             DateTime?
+  // Design-time decomposition substrate (Phase 1). When non-null, this build
+  // is a child of an execution-organizational Epic; its plan implements a
+  // subset of the parent Epic's designDoc ACs. Recursive decomposition is
+  // forbidden (a child cannot itself be decomposed) — enforced at the
+  // invariant layer, not the schema.
+  parentEpicId                String?
+  childOrder                  Int?
+  supersededByEpicId          String?
+  activities                  BuildActivity[]
+  dispatchAttempts            BuildDispatchAttempt[]
+  artifactRevisions           BuildArtifactRevision[]
+  assuranceFindings           AssuranceFinding[]
+  assuranceRuns               AssuranceRun[]
+  bomDocuments                BomDocument[]
+  phaseHandoffs               PhaseHandoff[]
+  phaseRuns                   BuildPhaseRun[]
+  toolExecutionReceipts       ToolExecutionReceipt[]
+  taxonomyProposals           TaxonomyProposal[]
+  dependenciesOut             FeatureBuildDependency[] @relation("DependentBuild")
+  dependenciesIn              FeatureBuildDependency[] @relation("DependsOnBuild")
+  activeForBacklogItem        BacklogItem?             @relation("BacklogItemActiveBuild")
+  accountableEmployee         EmployeeProfile?         @relation("BuildAccountable", fields: [accountableEmployeeId], references: [id])
+  createdBy                   User                     @relation(fields: [createdById], references: [id])
+  digitalProduct              DigitalProduct?          @relation(fields: [digitalProductId], references: [id])
+  originator                  BacklogItem?             @relation("BacklogItemOriginator", fields: [originatingBacklogItemId], references: [id])
+  parentEpic                  Epic?                    @relation("EpicFeatureBuilds", fields: [parentEpicId], references: [id])
+  supersededByEpic            Epic?                    @relation("EpicSupersededBuilds", fields: [supersededByEpicId], references: [id])
+  releaseBundle               ReleaseBundle?           @relation(fields: [releaseBundleId], references: [id])
+  productVersions             ProductVersion[]
+  promotionBackups            PromotionBackup[]
+  issueReports                PlatformIssueReport[]
+  runtimeTargets              RuntimeTarget[]
+  runtimeVerifications        RuntimeVerification[]
+  sandboxes                   Sandbox[]
+  decisionInteractions        DecisionInteraction[]
+  workrooms                   Workroom[]               @relation("WorkroomFeatureBuild")
+  businessBuildBrief          BusinessBuildBrief?
+
+  @@index([phase])
+  @@index([createdById])
+  @@index([digitalProductId])
+  @@index([originatingBacklogItemId])
+  @@index([releaseBundleId])
+  @@index([parentEpicId, childOrder])
+  @@index([supersededByEpicId])
+}
+
+// FeatureBuildDependency — sibling-dependency edges between child FeatureBuilds
+// within the same parent Epic. Phase 1 substrate for design-time decomposition.
+// Invariants (enforced at apps/web/lib/build/epic-decomposition-invariants.ts):
+//   - dependent.parentEpicId === dependsOn.parentEpicId === this.parentEpicId
+//   - dependent.id !== dependsOn.id (no self-loops)
+//   - the dependency graph is acyclic
+model FeatureBuildDependency {
+  id               String       @id @default(cuid())
+  dependentBuildId String
+  dependsOnBuildId String
+  parentEpicId     String
+  createdAt        DateTime     @default(now())
+  dependent        FeatureBuild @relation("DependentBuild", fields: [dependentBuildId], references: [id], onDelete: Cascade)
+  dependsOn        FeatureBuild @relation("DependsOnBuild", fields: [dependsOnBuildId], references: [id], onDelete: Cascade)
+  parentEpic       Epic         @relation("EpicDependencies", fields: [parentEpicId], references: [id], onDelete: Cascade)
+
+  @@unique([dependentBuildId, dependsOnBuildId])
+  @@index([parentEpicId])
+  @@index([dependsOnBuildId])
+}
+
+model BusinessBuildBrief {
+  id                      String           @id @default(cuid())
+  briefId                 String           @unique
+  orgId                   String
+  status                  BriefStatus
+  intakeSource            IntakeSource
+  capabilityPackId        String?
+  featureBuildId          String?          @unique
+  backlogItemId           String?
+  businessOutcome         String
+  affectedPeople          Json             @default("[]")
+  affectedWorkflow        String?
+  sourceEvidence          Json             @default("[]")
+  successSignals          String[]
+  constraints             String[]
+  businessInterpretation  String?
+  technicalInterpretation Json             @default("{}")
+  riskProfile             Json             @default("{}")
+  hiveReadiness           Json             @default("{}")
+  openQuestions           String[]
+  confidence              BriefConfidence?
+  confidenceRationale     String?
+  submittedByAgentId      String?
+  submittedByPseudonym    String?
+  submittedByUserId       String?
+  acceptedByUserId        String?
+  acceptedAt              DateTime?
+  createdAt               DateTime         @default(now())
+  updatedAt               DateTime         @updatedAt
+  featureBuild            FeatureBuild?    @relation(fields: [featureBuildId], references: [id], onDelete: SetNull)
+
+  @@index([orgId, status])
+  @@index([orgId, capabilityPackId])
+  @@index([featureBuildId])
+}
+
+model BuildArtifactRevision {
+  id                      String                           @id @default(cuid())
+  buildId                 String
+  field                   String
+  revisionNumber          Int
+  value                   Json
+  valueDigest             String
+  savedByUserId           String
+  savedByAgentId          String?
+  threadId                String?
+  status                  String                           @default("accepted")
+  legacyEvidence          Boolean                          @default(false)
+  createdAt               DateTime                         @default(now())
+  build                   FeatureBuild                     @relation(fields: [buildId], references: [buildId], onDelete: Cascade)
+  receiptUsages           ArtifactReceiptUsage[]
+  bomDocuments            BomDocument[]
+  initiativeRetentionPins InitiativeArtifactRetentionPin[]
+
+  @@unique([buildId, field, revisionNumber])
+  @@index([buildId, field, createdAt(sort: Desc)])
+}
+
+model ArtifactReceiptUsage {
+  id                 String                @id @default(cuid())
+  artifactRevisionId String
+  receiptId          String
+  role               String?
+  createdAt          DateTime              @default(now())
+  artifactRevision   BuildArtifactRevision @relation(fields: [artifactRevisionId], references: [id], onDelete: Cascade)
+  receipt            ToolExecutionReceipt  @relation(fields: [receiptId], references: [id], onDelete: Cascade)
+
+  @@unique([artifactRevisionId, receiptId])
+  @@index([receiptId])
+}
+
+model AssuranceRun {
+  id                     String                @id @default(cuid())
+  runId                  String                @unique
+  scopeType              String
+  scopeId                String
+  policyKey              String?
+  adapterKey             String
+  adapterVersion         String
+  status                 String                @default("running")
+  summary                Json                  @default("{}")
+  startedAt              DateTime              @default(now())
+  completedAt            DateTime?
+  buildId                String?
+  digitalProductId       String?
+  releaseBundleId        String?
+  toolExecutionId        String?               @unique
+  toolExecutionReceiptId String?               @unique
+  createdAt              DateTime              @default(now())
+  updatedAt              DateTime              @updatedAt
+  build                  FeatureBuild?         @relation(fields: [buildId], references: [buildId], onDelete: SetNull)
+  digitalProduct         DigitalProduct?       @relation(fields: [digitalProductId], references: [id], onDelete: SetNull)
+  releaseBundle          ReleaseBundle?        @relation(fields: [releaseBundleId], references: [id], onDelete: SetNull)
+  toolExecution          ToolExecution?        @relation(fields: [toolExecutionId], references: [id], onDelete: SetNull)
+  toolExecutionReceipt   ToolExecutionReceipt? @relation(fields: [toolExecutionReceiptId], references: [id], onDelete: SetNull)
+  findings               AssuranceFinding[]
+  bomDocuments           BomDocument[]
+
+  @@index([scopeType, scopeId, startedAt(sort: Desc)])
+  @@index([buildId, startedAt(sort: Desc)])
+  @@index([digitalProductId, startedAt(sort: Desc)])
+  @@index([adapterKey, status])
+}
+
+model BomDocument {
+  id                 String                   @id @default(cuid())
+  documentId         String                   @unique
+  format             String
+  formatVersion      String
+  serialNumber       String?
+  version            Int
+  digest             String
+  sourceKind         String
+  sourceDigest       String
+  componentCount     Int
+  raw                Json
+  status             String                   @default("current")
+  generatedAt        DateTime                 @default(now())
+  createdAt          DateTime                 @default(now())
+  updatedAt          DateTime                 @updatedAt
+  buildId            String?
+  digitalProductId   String?
+  assuranceRunId     String?
+  artifactRevisionId String?
+  build              FeatureBuild?            @relation(fields: [buildId], references: [buildId], onDelete: SetNull)
+  digitalProduct     DigitalProduct?          @relation(fields: [digitalProductId], references: [id], onDelete: SetNull)
+  assuranceRun       AssuranceRun?            @relation(fields: [assuranceRunId], references: [id], onDelete: SetNull)
+  artifactRevision   BuildArtifactRevision?   @relation(fields: [artifactRevisionId], references: [id], onDelete: SetNull)
+  findings           AssuranceFinding[]
+  occurrences        BomComponentOccurrence[]
+
+  @@index([buildId, generatedAt(sort: Desc)])
+  @@index([digitalProductId, generatedAt(sort: Desc)])
+  @@index([digest])
+  @@index([status])
+}
+
+model BomComponent {
+  id                String                   @id @default(cuid())
+  componentKey      String                   @unique
+  componentType     String
+  name              String
+  version           String?
+  packageUrl        String?
+  supplierName      String?
+  licenseExpression String?
+  ecosystem         String?
+  scope             String?
+  metadata          Json                     @default("{}")
+  firstSeenAt       DateTime                 @default(now())
+  lastSeenAt        DateTime                 @default(now())
+  // Enrichment linkage to the canonical identity spine (BI-877FE5D4, spec §4.8): the
+  // generic component identity the SBOM bridge resolves this component to. Public/
+  // shareable catalog knowledge; the proprietary product↔component graph lives on
+  // BomComponentOccurrence and is never linked here.
+  catalogIdentityId String?
+  findings          AssuranceFinding[]
+  occurrences       BomComponentOccurrence[]
+  catalogIdentity   CatalogIdentity?         @relation(fields: [catalogIdentityId], references: [id], onDelete: SetNull)
+
+  @@index([componentType, name])
+  @@index([packageUrl])
+  @@index([ecosystem])
+  @@index([catalogIdentityId])
+}
+
+model BomComponentOccurrence {
+  id             String       @id @default(cuid())
+  occurrenceKey  String       @unique
+  bomDocumentId  String
+  componentId    String
+  workspaceName  String?
+  workspacePath  String?
+  dependencyKind String?
+  direct         Boolean      @default(false)
+  evidence       Json         @default("{}")
+  createdAt      DateTime     @default(now())
+  bomDocument    BomDocument  @relation(fields: [bomDocumentId], references: [id], onDelete: Cascade)
+  component      BomComponent @relation(fields: [componentId], references: [id], onDelete: Cascade)
+
+  @@index([bomDocumentId])
+  @@index([componentId])
+  @@index([workspacePath])
+  @@index([dependencyKind])
+}
+
+model AssuranceFinding {
+  id                  String          @id @default(cuid())
+  findingKey          String
+  assuranceRunId      String?
+  findingKind         String
+  title               String
+  description         String?
+  affectedType        String
+  affectedId          String
+  adapterKey          String
+  vendorIdentifier    String
+  sourceSeverity      String?
+  policySeverity      String
+  releaseImpact       String          @default("track")
+  reachability        String          @default("unknown")
+  exposure            String          @default("unknown")
+  identifierStability String          @default("strong")
+  reopenCount         Int             @default(0)
+  status              String          @default("open")
+  firstSeenAt         DateTime        @default(now())
+  lastSeenAt          DateTime        @default(now())
+  resolvedAt          DateTime?
+  acceptedUntil       DateTime?
+  ownerAgentId        String?
+  ownerUserId         String?
+  source              Json            @default("{}")
+  evidence            Json            @default("{}")
+  remediationHint     Json            @default("{}")
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
+  buildId             String?
+  digitalProductId    String?
+  bomDocumentId       String?
+  bomComponentId      String?
+  assuranceRun        AssuranceRun?   @relation(fields: [assuranceRunId], references: [id], onDelete: SetNull)
+  build               FeatureBuild?   @relation(fields: [buildId], references: [buildId], onDelete: SetNull)
+  digitalProduct      DigitalProduct? @relation(fields: [digitalProductId], references: [id], onDelete: SetNull)
+  bomDocument         BomDocument?    @relation(fields: [bomDocumentId], references: [id], onDelete: SetNull)
+  bomComponent        BomComponent?   @relation(fields: [bomComponentId], references: [id], onDelete: SetNull)
+
+  @@unique([findingKey])
+  @@index([findingKind, status])
+  @@index([affectedType, affectedId])
+  @@index([policySeverity, releaseImpact])
+  @@index([lastSeenAt])
+  @@index([assuranceRunId])
+  @@index([buildId, status])
+  @@index([digitalProductId, status])
+  @@index([bomDocumentId])
+  @@index([bomComponentId])
+  @@index([adapterKey, findingKind])
+}
+
+model Sandbox {
+  id                   String          @id @default(cuid())
+  buildId              String
+  providerId           String
+  agentId              String?
+  portalInstanceId     String
+  state                String
+  startedAt            DateTime        @default(now())
+  destroyedAt          DateTime?
+  previewUrl           String?
+  capabilitiesSnapshot Json
+  featureBuild         FeatureBuild    @relation(fields: [buildId], references: [buildId], onDelete: Cascade)
+  runtimeTargets       RuntimeTarget[]
+
+  @@index([buildId])
+  @@index([state, startedAt])
+}
+
+model GitPromotionCandidate {
+  id                      String                @id @default(cuid())
+  candidateId             String                @unique
+  provider                String                @default("github")
+  deliveryKey             String                @unique
+  eventName               String
+  repositoryFullName      String
+  repositoryCloneUrl      String?
+  ref                     String?
+  branch                  String?
+  beforeSha               String?
+  afterSha                String?
+  status                  String                @default("queued")
+  statusReason            String?
+  sandboxProviderId       String?
+  sandboxId               String?
+  verificationStartedAt   DateTime?
+  verificationCompletedAt DateTime?
+  verificationResult      Json?
+  payload                 Json?
+  createdAt               DateTime              @default(now())
+  updatedAt               DateTime              @updatedAt
+  runtimeVerifications    RuntimeVerification[]
+  workrooms               Workroom[]            @relation("WorkroomGitPromotionCandidate")
+
+  @@index([status, createdAt])
+  @@index([repositoryFullName, afterSha])
+}
+
+model SandboxSlot {
+  id             String          @id @default(cuid())
+  slotIndex      Int             @unique
+  containerId    String
+  port           Int
+  status         String          @default("available")
+  buildId        String?         @unique
+  userId         String?
+  acquiredAt     DateTime?
+  releasedAt     DateTime?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  runtimeTargets RuntimeTarget[]
+
+  @@index([status])
+}
+
+model ReleaseBundle {
+  id                 String         @id @default(cuid())
+  bundleId           String         @unique
+  title              String
+  status             String         @default("assembling")
+  createdBy          String
+  combinedDiffPatch  String?        @db.Text
+  gateCheckResult    Json?
+  promotionId        String?        @unique
+  rfcId              String?
+  calendarEventId    String?
+  deploymentWindowId String?
+  scheduledAt        DateTime?
+  deployedAt         DateTime?
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+  builds             FeatureBuild[]
+  assuranceRuns      AssuranceRun[]
+
+  @@index([status])
+}
+
+model BuildActivity {
+  id        String       @id @default(cuid())
+  buildId   String
+  tool      String
+  summary   String
+  createdAt DateTime     @default(now())
+  build     FeatureBuild @relation(fields: [buildId], references: [buildId])
+
+  @@index([buildId, createdAt])
+  @@index([createdAt])
+}
+
+model BuildDispatchAttempt {
+  id               String       @id @default(cuid())
+  buildId          String
+  taskTitle        String
+  specialist       String?
+  providerId       String?
+  model            String?
+  attemptNumber    Int          @default(1)
+  startedAt        DateTime     @default(now())
+  completedAt      DateTime?
+  durationMs       Int?
+  exitCode         Int?
+  success          Boolean      @default(false)
+  failureAxis      String       @default("unknown")
+  stdoutExcerpt    String?      @db.Text
+  stderrExcerpt    String?      @db.Text
+  rootCauseSummary String?      @db.Text
+  rootCauseHash    String?
+  build            FeatureBuild @relation(fields: [buildId], references: [buildId], onDelete: Cascade)
+
+  @@index([buildId, startedAt])
+  @@index([buildId, taskTitle, startedAt])
+  @@index([failureAxis, startedAt])
+  @@index([startedAt])
+}
+
+// ─── EP-COST-001 Phase 3: Build Phase Run cost rollup ─────────────────────────
+//
+// One row per Build Studio phase (ideate, plan, build, review, ship) per build.
+// Written when the phase completes (gate passes or skip) with a token/cost rollup
+// from AdapterRunTelemetry rows created during the phase window.
+//
+// Spec: docs/superpowers/specs/2026-05-19-ai-cost-governance.md §Phase 3
+model BuildPhaseRun {
+  id                  String       @id @default(cuid())
+  buildId             String
+  phase               String // "ideate" | "plan" | "build" | "review" | "ship"
+  startedAt           DateTime
+  completedAt         DateTime?
+  durationMs          Int?
+  inputTokens         Int          @default(0)
+  outputTokens        Int          @default(0)
+  /// Estimated USD cost for this phase (token usage × model pricing)
+  costUsd             Decimal?     @db.Decimal(10, 6)
+  /// Primary provider used in this phase (populated on write; may be "mixed" for multi-provider phases)
+  providerId          String?
+  /// Compact immutable reference to the resolved work-pattern execution profile used by this actual phase.
+  executionProfileRef Json?
+  /// Number of AI inference calls made during this phase
+  inferenceCount      Int          @default(0)
+  build               FeatureBuild @relation(fields: [buildId], references: [buildId], onDelete: Cascade)
+
+  @@unique([buildId, phase])
+  @@index([buildId, phase])
+  @@index([buildId, startedAt])
+}
+
+/// Structured context passed between build phases. Written on phase advance,
+/// read by the next phase's agent as system prompt context instead of raw chat history.
+model PhaseHandoff {
+  id                String   @id @default(cuid())
+  buildId           String
+  fromPhase         String
+  toPhase           String
+  fromAgentId       String
+  toAgentId         String
+  summary           String /// 2-3 sentence plain language summary of what the phase accomplished
+  decisionsMade     String[] @default([])
+  openIssues        String[] @default([])
+  userPreferences   String[] @default([])
+  evidenceFields    String[] @default([]) /// Which evidence fields were populated (e.g., ["designDoc", "designReview"])
+  evidenceDigest    Json     @default("{}") /// One-line summary per evidence field
+  gateResult        Json     @default("{}") /// The gate check that allowed advancement
+  tokenBudgetUsed   Int      @default(0)
+  toolsUsed         String[] @default([])
+  iterationCount    Int      @default(0)
+  compressedSummary String? // EP-INF-UTIL-001: utility-tier generated summary for context budget
+  createdAt         DateTime @default(now())
+
+  build FeatureBuild @relation(fields: [buildId], references: [buildId])
+
+  @@index([buildId])
+}
+
+model PromotionBackup {
+  id         String            @id @default(cuid())
+  buildId    String
+  timestamp  DateTime          @default(now())
+  filePath   String
+  sizeBytes  Int
+  status     String            @default("complete")
+  promotions ChangePromotion[]
+  build      FeatureBuild      @relation(fields: [buildId], references: [buildId])
+
+  @@index([buildId])
+}
+
+model TaskRun {
+  id                   String                   @id @default(cuid())
+  taskRunId            String                   @unique
+  userId               String
+  threadId             String?
+  contextId            String?
+  buildId              String?
+  initiatingAgentId    String?
+  currentAgentId       String?
+  parentTaskRunId      String?
+  routeContext         String?
+  title                String
+  objective            String                   @db.Text
+  source               String                   @default("coworker") // coworker | build | skill | proactive
+  /// A2A-aligned task states: submitted | working | input-required | auth-required | completed | failed | canceled | rejected | archived
+  status               String                   @default("submitted")
+  authorityScope       Json?
+  a2aMetadata          Json?
+  progressPayload      Json?
+  repeatedPatternKey   String?
+  templateId           String?
+  startedAt            DateTime                 @default(now())
+  completedAt          DateTime?
+  archivedAt           DateTime?
+  // Cooperative heartbeat written by long-running loops (agent runtime,
+  // deliberation rounds, sandbox pipeline, Codex CLI) so the watchdog can
+  // distinguish a live task from a wedged one. See BI-4ab6be39 §6.1.
+  lastHeartbeatAt      DateTime?
+  // Timestamp when the Activity Quiescence coordinator flipped this row to
+  // status='quiescing' during a normal→draining transition. Null on rows
+  // that have never been part of a quiescence cycle. See spec
+  // docs/superpowers/specs/2026-05-24-activity-quiescence-protocol-design.md
+  // §5.1 + §6.2. BI-QUIESCE-001.
+  quiescedAt           DateTime?
+  createdAt            DateTime                 @default(now())
+  updatedAt            DateTime                 @updatedAt
+  user                 User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  nodes                TaskNode[]
+  messages             TaskMessage[]
+  artifacts            TaskArtifact[]
+  deliberationRuns     DeliberationRun[]
+  decisionInteractions DecisionInteraction[]
+  stallEvents          StallEvent[]
+  actionEnvelopes      CoworkerActionEnvelope[]
+  workrooms            Workroom[]               @relation("WorkroomTaskRun")
+
+  @@index([userId, status])
+  @@index([threadId])
+  @@index([contextId])
+  @@index([parentTaskRunId])
+  @@index([buildId, status])
+  @@index([routeContext, status])
+  @@index([repeatedPatternKey])
+  // Watchdog query: WHERE status = 'working' AND lastHeartbeatAt < ...
+  @@index([status, lastHeartbeatAt])
+}
+
+// ─── Build Studio Stall Detection — audit trail (BI-4ab6be39) ─────
+//
+// One row per stall detection or operator-initiated recovery action.
+// Captures the watchdog's decision evidence (reason, observed values,
+// thresholds in effect) and the resulting operator outcome (retry,
+// abandon, escalate). Used by the Build Studio phase panel history
+// strip and as candidate WWMD profile material in v2.
+model StallEvent {
+  id                  String    @id @default(cuid())
+  taskRunId           String
+  buildId             String?
+  phase               String? // FeatureBuild.phase at detection time
+  reason              String // "heartbeat_timeout" | "total_timeout" | "never_started" | "parent_stalled" | "parent_abandoned"
+  detectedAt          DateTime  @default(now())
+  lastHeartbeatAt     DateTime?
+  startedAt           DateTime
+  thresholdHeartbeatS Int
+  thresholdTotalS     Int
+  outcome             String? // null (pending) | "retry" | "abandoned" | "escalated" | "auto-recovered"
+  outcomeAt           DateTime?
+  outcomeBy           String? // User.id of operator who acted; null if watchdog auto-action
+  notes               String?   @db.Text
+  createdAt           DateTime  @default(now())
+
+  taskRun TaskRun @relation(fields: [taskRunId], references: [id], onDelete: Cascade)
+
+  @@index([taskRunId])
+  @@index([buildId])
+  @@index([phase, reason])
+  @@index([outcome])
+  @@index([createdAt])
+}
+
+// ─── Activity Quiescence Protocol — coordinator audit (BI-QUIESCE-001) ───
+//
+// One row per orchestrated drain attempt. Lifecycle:
+//   pending → preparing → draining → ready-to-swap → swapping → completed
+//                                          │              │
+//                                          └─→ aborted    └─→ failed
+//                            │
+//                            └─→ deferred (hard-blocker exceeded budget)
+//
+// Critical invariant (spec §5.2): every terminal transition emits the
+// "platform.quiescence-cleared" Inngest event so suspended functions resume
+// regardless of outcome. Otherwise a single coordinator crash would wedge
+// the Inngest queue forever.
+//
+// Independent of SelfUpgradeRun because quiescence is also triggerable from
+// manual maintenance and sandbox recovery flows; the trigger field carries
+// the caller, and triggerRefId links back when the caller has its own audit
+// substrate (e.g., SelfUpgradeRun.runId).
+//
+// Spec: docs/superpowers/specs/2026-05-24-activity-quiescence-protocol-design.md §5.1
+model QuiescenceRun {
+  id           String  @id @default(cuid())
+  // Public/human-readable id (e.g., "QR-2026-05-24-abc123"). Used in event
+  // payloads + URLs + log lines; the cuid `id` is internal FK substrate only.
+  runId        String  @unique
+  // Caller category: "self-upgrade" | "manual" | "sandbox-recovery"
+  trigger      String
+  // Caller's external reference (e.g., SelfUpgradeRun.runId). Echoed back
+  // on platform.quiescence-cleared so caller's step.waitForEvent can filter
+  // when multiple non-self-upgrade callers emit in close sequence (spec §5.3).
+  triggerRefId String?
+
+  // State machine value (see model comment above). String not enum so future
+  // additions don't require a schema migration — application-layer validation
+  // via the QUIESCENCE_RUN_STATUSES constant.
+  status          String
+  startedAt       DateTime  @default(now())
+  // Per-state entry timestamps: { draining: ts, "ready-to-swap": ts, ... }.
+  // JSON-of-timestamps rather than columns per state so adding telemetry
+  // fields later doesn't force a migration per signal added.
+  enteredStateAt  Json      @default("{}")
+  // Swap-window timestamps populated when the caller signals progress past
+  // the ready-to-swap handshake. Distinguished from completedAt because the
+  // outer coordinator lifetime extends past swap (final state transitions).
+  swapStartedAt   DateTime?
+  swapCompletedAt DateTime?
+  completedAt     DateTime?
+  // Coordinator function heartbeat — written every wait-loop tick (~5s).
+  // Stuck-coordinator detection in taskrunWatchdog (BI-QUIESCE-007) keys on
+  // this; mirrors the BI-4ab6be39 TaskRun.lastHeartbeatAt pattern.
+  lastHeartbeatAt DateTime?
+
+  // ActiveSessionBlockers shape (spec §5.6) captured at preparing transition.
+  initialSnapshot Json
+  // Latest snapshot at completion / defer; null while still in flight.
+  finalSnapshot   Json?
+
+  // Expected post-swap identity for boot reconcile (BI-QUIESCE-010). When the
+  // new bundle boots it can correlate against these fields to detect that a
+  // pending QuiescenceRun matches the now-running version.
+  targetVersion    String?
+  targetBundleHash String?
+
+  // Operator-promised wait budget (ms). Coordinator chooses regime at
+  // preparing time and may extend per spec §5.5 max(regimeBudget, phaseBudget)
+  // rule when a BuildPhaseRun blocker is present.
+  budgetMs     Int
+  // Actual wait time at terminal transition. Populated for success/defer paths.
+  actualWaitMs Int?
+
+  // Defer audit (populated when status='deferred').
+  deferReason    String?
+  deferSurface   String?
+  // List of surfaces force-cancelled past budget (e.g., ship-force override).
+  // JSON array of { surface, reason, forcedAt } objects.
+  forcedSurfaces Json    @default("[]")
+
+  // Terminal outcome label: succeeded | deferred-by-surface |
+  // aborted-by-operator | failed. Set together with status transition.
+  outcome          String?
+  // Where the terminal transition came from: caller | boot-reconciler | watchdog.
+  // Distinguishes "caller signaled swap-complete cleanly" from "post-swap boot
+  // reconciler had to close out a pending run" from "watchdog forced cleanup".
+  completionSource String?
+  outcomeNotes     String? @db.Text
+
+  // BI-4F3B2FA9: mid-flight emergency escalation. When an operator clicks
+  // "Force Now" on an ALREADY-RUNNING drain, these record when/who promoted it
+  // to forced mode. The coordinator re-reads shipForceEscalatedAt every wait
+  // tick and treats a non-null value as shipForce, so a stuck drain can be
+  // forced through without restarting the run. Null when started forced or
+  // never escalated; an audit entry is also appended to forcedSurfaces.
+  shipForceEscalatedAt DateTime?
+  shipForceEscalatedBy String?
+
+  @@index([trigger, startedAt])
+  // Stuck-coordinator query: status NOT IN (terminal) AND lastHeartbeatAt < cutoff.
+  @@index([status, lastHeartbeatAt])
+}
+
+model TaskMessage {
+  id               String   @id
+  messageId        String   @unique
+  taskRunId        String
+  contextId        String?
+  role             String
+  parts            Json
+  metadata         Json?
+  referenceTaskIds String[] @default([])
+  createdAt        DateTime @default(now())
+  taskRun          TaskRun  @relation(fields: [taskRunId], references: [id], onDelete: Cascade)
+
+  @@index([taskRunId, createdAt])
+  @@index([contextId])
+}
+
+model TaskArtifact {
+  id              String   @id
+  artifactId      String   @unique
+  taskRunId       String
+  name            String
+  description     String?
+  parts           Json
+  metadata        Json?
+  producerAgentId String?
+  producerNodeId  String?
+  createdAt       DateTime @default(now())
+  taskRun         TaskRun  @relation(fields: [taskRunId], references: [id], onDelete: Cascade)
+
+  @@index([taskRunId, createdAt])
+  @@index([producerAgentId])
+  @@index([producerNodeId])
+}
+
+model TaskNode {
+  id                 String           @id @default(cuid())
+  taskNodeId         String           @unique
+  taskRunId          String
+  parentNodeId       String?
+  nodeType           String // analyze | plan | execute | review | skeptical_review | activation_proposal | approval_gate | verify | summarize
+  title              String
+  objective          String           @db.Text
+  status             String           @default("queued") // queued | ready | running | blocked | awaiting_human | completed | failed | cancelled | superseded
+  workerRole         String // planner | researcher | executor | reviewer | skeptical_reviewer | verifier | activation_analyst | summarizer
+  dependencyMode     String? // all_of | any_of | after_parent
+  authorityEnvelope  Json?
+  evidenceContract   Json?
+  requestContract    Json?
+  routeDecision      Json?
+  inputSnapshot      Json?
+  outputSnapshot     Json?
+  costUsd            Float?
+  latencyMs          Int?
+  inputTokens        Int?
+  outputTokens       Int?
+  influenceLevel     String? // none | contextual | material
+  supersededByNodeId String?
+  deliberationRunId  String? // nullable — non-null only when this TaskNode is a deliberation branch
+  startedAt          DateTime?
+  completedAt        DateTime?
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+  taskRun            TaskRun          @relation(fields: [taskRunId], references: [id], onDelete: Cascade)
+  parentNode         TaskNode?        @relation("TaskNodeTree", fields: [parentNodeId], references: [id])
+  childNodes         TaskNode[]       @relation("TaskNodeTree")
+  incomingEdges      TaskNodeEdge[]   @relation("TaskNodeEdgeTo")
+  outgoingEdges      TaskNodeEdge[]   @relation("TaskNodeEdgeFrom")
+  deliberationRun    DeliberationRun? @relation("DeliberationRunBranchNodes", fields: [deliberationRunId], references: [id])
+  claimRecords       ClaimRecord[]    @relation("ClaimRecordBranchNode")
+  evidenceBundles    EvidenceBundle[] @relation("EvidenceBundleTaskNode")
+
+  @@index([taskRunId, status])
+  @@index([parentNodeId])
+  @@index([nodeType, status])
+  @@index([workerRole, status])
+  @@index([deliberationRunId])
+}
+
+model TaskNodeEdge {
+  id         String   @id @default(cuid())
+  fromNodeId String
+  toNodeId   String
+  edgeType   String // depends_on | informs | verifies | blocks | supersedes
+  createdAt  DateTime @default(now())
+  fromNode   TaskNode @relation("TaskNodeEdgeFrom", fields: [fromNodeId], references: [id], onDelete: Cascade)
+  toNode     TaskNode @relation("TaskNodeEdgeTo", fields: [toNodeId], references: [id], onDelete: Cascade)
+
+  @@unique([fromNodeId, toNodeId, edgeType])
+  @@index([toNodeId])
+}
+
+model FeaturePack {
+  id               String  @id @default(cuid())
+  packId           String  @unique
+  title            String
+  description      String?
+  portfolioContext String?
+  version          String  @default("1.0.0")
+  manifest         Json
+  screenshot       String?
+  buildId          String?
+  status           String  @default("local")
+
+  // Contribution review results (populated by contribution-review pipeline)
+  mergeReadiness      String? // "ready" | "needs-work" | "blocked"
+  applicableVerticals String[] // archetype categories, e.g. ["pet-services", "healthcare-wellness"]
+  sourceVertical      String? // contributing org's industry
+  reusabilityScope    String? // "one_off" | "parameterizable" | "already_generic"
+  prUrl               String? // GitHub PR URL
+  prNumber            Int? // GitHub PR number
+  reviewReport        Json? // Full structured ContributionReviewResult
+  reviewedAt          DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model SelfUpgradeRun {
+  id                    String    @id @default(cuid())
+  runId                 String    @unique
+  status                String    @default("queued")
+  trigger               String
+  currentSha            String?
+  targetSha             String?
+  deployedSha           String?
+  reason                String?
+  promoterContainerName String?
+  completionEvidence    Json?
+  failureLog            String?   @db.Text
+  startedAt             DateTime?
+  completedAt           DateTime?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  // The "What's in this update?" summary the operator reviewed when launching
+  // this upgrade — attached so the run records the changes it carried, and so
+  // the summary survives the process restart the swap triggers.
+  impactSummaryId String?
+  impactSummary   UpgradeImpactSummary? @relation(fields: [impactSummaryId], references: [id])
+
+  // The change-management record (RFC) this self-upgrade is registered as. Every
+  // self-upgrade is mirrored into the change register as an ITIL standard change
+  // so it is auditable for root-cause analysis. Nullable: no-op skipped ticks
+  // never open a record. See apps/web/lib/self-upgrade/change-record.ts.
+  changeRequestId String?        @unique
+  changeRequest   ChangeRequest? @relation("SelfUpgradeChangeRecord", fields: [changeRequestId], references: [id])
+
+  @@index([status, createdAt])
+  @@index([targetSha])
+  @@index([impactSummaryId])
+}
+
+/// Durable "What's in this update?" impact summary, keyed by the immutable
+/// (currentLineageSha, targetSha) pair. The commit range between two SHAs is
+/// fixed, so a computed summary for a pair never changes — it is cached here so
+/// it survives a page refresh AND the process restart every self-upgrade
+/// triggers (the prior in-memory cache died on both). The in-memory map
+/// (impact/cache.ts) is an L1 in front of this; the panel's Refresh forces a
+/// recompute. Only successful (ok:true) summaries are persisted.
+model UpgradeImpactSummary {
+  id                String           @id @default(cuid())
+  currentLineageSha String
+  targetSha         String
+  /// The full UpgradeImpactSummary object (the ok:true SummaryResult.summary).
+  summary           Json
+  generatedAt       DateTime         @default(now())
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+  runs              SelfUpgradeRun[]
+
+  @@unique([currentLineageSha, targetSha])
+  @@index([targetSha])
+}
+
+// ─── Build Studio Stall Detection (BI-4ab6be39) ───────────────────
+//
+// Per-phase timeout thresholds consumed by the taskrun-watchdog cron.
+// Operator-editable at runtime via Admin > Build Studio > Stall Thresholds.
+// See docs/superpowers/specs/2026-05-19-build-studio-stall-detection.md §7.2.
+model BuildStudioStallThreshold {
+  id                       String   @id @default(cuid())
+  scope                    String   @unique // "phase.ideate" | "phase.plan" | "phase.build" | "phase.review" | "phase.ship" | "default"
+  heartbeatTimeoutSeconds  Int
+  totalPhaseTimeoutSeconds Int
+  updatedAt                DateTime @updatedAt
+  updatedBy                String? // User.id of last operator edit; null if seeded
+
+  @@index([scope])
+}
+
+// EP-CORPUS-BOOTSTRAP BI-8A58C65A: scheduled, approval-gated AI research.
+// A per-org research run that has been PROPOSED (by schedule or gap-detection)
+// and awaits human approval before any web/LLM execution. On approval the
+// execution slice runs runMarketResearch() → enrichOrgCorpus(research→draft).
+// Nothing executes or publishes without human approval + draft review (BI-1378).
+model ResearchProposal {
+  id                String          @id @default(cuid())
+  proposalId        String          @unique @default(cuid())
+  organizationId    String
+  digitalProductId  String?
+  productLineId     String?
+  businessProductId String?
+  topic             String // short topic key, e.g. "competitive-landscape"
+  query             String          @db.Text // the research query/prompt
+  status            String          @default("pending") // pending | approved | declined | executed | failed
+  proposedBy        String          @default("schedule") // schedule | gap-detection | user
+  proposedAt        DateTime        @default(now())
+  decidedByUserId   String?
+  decidedAt         DateTime?
+  executedAt        DateTime?
+  resultSummary     String?         @db.Text
+  metadata          Json?
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  organization      Organization    @relation(fields: [organizationId], references: [id])
+  digitalProduct    DigitalProduct? @relation(fields: [digitalProductId], references: [id], onDelete: Restrict)
+  productLine       ProductLine?    @relation("ResearchProposalProductLine", fields: [productLineId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  businessProduct   Product?        @relation("ResearchProposalBusinessProduct", fields: [businessProductId, organizationId], references: [id, organizationId], onDelete: Restrict)
+
+  @@index([organizationId, status])
+  @@index([digitalProductId])
+  @@index([productLineId])
+  @@index([businessProductId])
+  @@index([status])
+}
+
+model BuildEngine {
+  engineId      String            @id
+  binary        String
+  verifyCommand String
+  versionRegex  String
+  bakeInDefault Boolean           @default(false)
+  recipes       Json
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+  state         BuildEngineState?
+
+  @@map("build_engine")
+}
+
+model BuildEngineState {
+  engineId          String      @id
+  engine            BuildEngine @relation(fields: [engineId], references: [engineId], onDelete: Cascade)
+  present           Boolean     @default(false)
+  version           String?
+  lastProbedAt      DateTime?
+  lastProvisionedAt DateTime?
+  recipeApplied     String?
+  desired           String      @default("present")
+  provisionedBy     String?
+
+  @@map("build_engine_state")
+}

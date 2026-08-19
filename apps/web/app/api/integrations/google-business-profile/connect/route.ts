@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
-import { connectGoogleBusinessProfile } from "@/lib/integrate/google-business-profile/connect-action";
+import { connectGoogleBusinessProfile } from "@/lib/integrations/google-business-profile/connect-action";
 
 export async function POST(request: Request) {
   const session = await auth();

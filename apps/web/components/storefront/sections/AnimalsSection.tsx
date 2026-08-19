@@ -1,4 +1,4 @@
-import type { PublicAdoptableAnimal } from "@/lib/release/storefront-types";
+import type { PublicAdoptableAnimal } from "@/lib/storefront/storefront-types";
 import { MediaImage } from "../MediaImage";
 
 // Legacy free-form shape (content.animals), kept as a fallback for storefronts

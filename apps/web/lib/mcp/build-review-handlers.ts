@@ -21,9 +21,9 @@ import {
   extractBuildIdHint,
   resolveActiveBuildId,
 } from "@/lib/mcp/build-tool-helpers";
-import type { ReviewBranchInput } from "@/lib/integrate/build-reviewers";
-import { triggerPlanReviewAutoRepair } from "@/lib/integrate/pre-build-review-auto-repair";
-import { normalizeBuildPlanPaths } from "@/lib/integrate/build-plan-paths";
+import type { ReviewBranchInput } from "@/lib/build/build-reviewers";
+import { triggerPlanReviewAutoRepair } from "@/lib/build/pre-build-review-auto-repair";
+import { normalizeBuildPlanPaths } from "@/lib/build/build-plan-paths";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 type HandlerContext = Parameters<ToolPackHandler>[2];
@@ -442,7 +442,7 @@ export async function reviewBuildPlan(params: Record<string, unknown>, userId: s
       // cannot reproduce downgrade to advisory. Fail-closed: a verifier error
       // leaves the finding blocking. Inert unless DPF_BUILD_VERIFIED_FINDING_REVIEW=1.
       if (mergedReview.decision === "fail") {
-        const { isVerifiedFindingReviewEnabled } = await import("@/lib/integrate/build-studio-config");
+        const { isVerifiedFindingReviewEnabled } = await import("@/lib/build/build-studio-config");
         if (isVerifiedFindingReviewEnabled()) {
           const { verifyReviewFindings } = await import("@/lib/build/verified-finding-review");
           const planArtifact = JSON.stringify(build.buildPlan ?? {}, null, 2);
@@ -506,7 +506,7 @@ export async function reviewBuildPlan(params: Record<string, unknown>, userId: s
         // deliberation summary without flipping the gate.
         if (archReview) reviewerBranches.push({ branchNodeId: "architect", role: "architect", review: archReview });
         if (reviewerBranches.length > 0) {
-          const { runBuildReviewDeliberation } = await import("@/lib/integrate/build-orchestrator");
+          const { runBuildReviewDeliberation } = await import("@/lib/build/build-orchestrator");
           await runBuildReviewDeliberation({
             userId,
             buildId,
@@ -587,7 +587,7 @@ export async function reviewBuildPlan(params: Record<string, unknown>, userId: s
       // COUNTS a branch-init/sandbox failure and escalates past a threshold
       // instead of silently looping forever (the flood that wedged self-upgrade).
       try {
-        const { performPlanToBuildTransition } = await import("@/lib/integrate/plan-to-build-transition");
+        const { performPlanToBuildTransition } = await import("@/lib/build/plan-to-build-transition");
         const outcome = await performPlanToBuildTransition({ buildId, userId, context });
         if (outcome.kind === "escalated") {
           logBuildActivity(buildId, "reviewBuildPlan", `plan → build escalated to operator after ${outcome.failures} failed transition attempts (${outcome.reason}).`);

@@ -1,4 +1,4 @@
-import { readFile as nativeReadFile } from "node:fs/promises";
+import { readFile as nativeReadFile, readdir as nativeReaddir } from "node:fs/promises";
 import { join } from "node:path";
 import {
   listModuleSourcePaths,
@@ -160,6 +160,27 @@ async function readRequired(repoRoot, path, readFile) {
   }
 }
 
+// The Prisma schema is a folder of domain files (packages/db/prisma/schema/*.prisma,
+// B5 Seam C split); read them concatenated in sorted filename order — the same
+// recursive load order the Prisma CLI uses — so model/line counts stay text-level.
+async function readRequiredPrismaSchema(repoRoot, readFile) {
+  const relativeDir = "packages/db/prisma/schema";
+  let names;
+  try {
+    names = await nativeReaddir(join(repoRoot, ...relativeDir.split("/")));
+  } catch (error) {
+    throw new Error(`Unable to read required repository file ${relativeDir}`, { cause: error });
+  }
+  const parts = [];
+  for (const name of names.filter((entry) => entry.endsWith(".prisma")).sort()) {
+    parts.push(await readRequired(repoRoot, `${relativeDir}/${name}`, readFile));
+  }
+  if (parts.length === 0) {
+    throw new Error(`Unable to read required repository file ${relativeDir} (no *.prisma files)`);
+  }
+  return parts.join("\n");
+}
+
 export async function collectRepositoryMeasurements({
   repoRoot,
   manifest,
@@ -171,7 +192,7 @@ export async function collectRepositoryMeasurements({
   const files = await listModuleSourcePaths({ repoRoot, readdir: io.readdir });
   const contents = await readModuleSources({ repoRoot, paths: files, readFile });
   const sizes = moduleSizesFromSources(contents);
-  const schemaContent = await readRequired(repoRoot, "packages/db/prisma/schema.prisma", readFile);
+  const schemaContent = await readRequiredPrismaSchema(repoRoot, readFile);
   const seedContent = await readRequired(repoRoot, "packages/db/src/seed.ts", readFile);
   const services = Array.isArray(manifest?.services) ? manifest.services : [];
   const byClass = {};

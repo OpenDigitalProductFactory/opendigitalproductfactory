@@ -545,11 +545,37 @@
     "apps/web/lib/build-pipeline.ts": [
       "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md"
     ],
+    "apps/web/lib/build/build-orchestrator.ts": [
+      "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md",
+      "docs/architecture/build-gate-runbook.md",
+      "docs/user-guide/build-studio/index.md"
+    ],
+    "apps/web/lib/build/build-pipeline.ts": [
+      "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md",
+      "docs/triage/2026-05-20-handoff-prompt-next-session.md"
+    ],
+    "apps/web/lib/build/build-plan-paths.ts": [
+      "docs/architecture/build-studio-namespace.md"
+    ],
+    "apps/web/lib/build/build-studio-config.ts": [
+      "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md",
+      "docs/operations/build-cost-flags-activation-runbook.md"
+    ],
+    "apps/web/lib/build/claude-dispatch.ts": [
+      "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md"
+    ],
+    "apps/web/lib/build/coding-agent.ts": [
+      "docs/architecture/build-gate-runbook.md",
+      "docs/triage/2026-05-20-handoff-prompt-next-session.md"
+    ],
     "apps/web/lib/build/ideate-build-resolution.ts": [
       "docs/dogfood/2026-05-23-dale-hvac-build-studio.md"
     ],
     "apps/web/lib/build/progress-visibility.ts": [
       "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md"
+    ],
+    "apps/web/lib/build/sandbox/sandbox.ts": [
+      "docs/triage/2026-05-20-handoff-prompt-next-session.md"
     ],
     "apps/web/lib/build/unified-wip-query.ts": [
       "docs/architecture/agent-client-capability-parity.md"
@@ -704,32 +730,6 @@
       "docs/architecture/2026-06-14-odysseus-review-depth-pass.md",
       "docs/architecture/ai-routing-document-map.md",
       "docs/maintenance/staleness-report.md"
-    ],
-    "apps/web/lib/integrate/build-orchestrator.ts": [
-      "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md",
-      "docs/architecture/build-gate-runbook.md",
-      "docs/user-guide/build-studio/index.md"
-    ],
-    "apps/web/lib/integrate/build-pipeline.ts": [
-      "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md",
-      "docs/triage/2026-05-20-handoff-prompt-next-session.md"
-    ],
-    "apps/web/lib/integrate/build-plan-paths.ts": [
-      "docs/architecture/build-studio-namespace.md"
-    ],
-    "apps/web/lib/integrate/build-studio-config.ts": [
-      "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md",
-      "docs/operations/build-cost-flags-activation-runbook.md"
-    ],
-    "apps/web/lib/integrate/claude-dispatch.ts": [
-      "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md"
-    ],
-    "apps/web/lib/integrate/coding-agent.ts": [
-      "docs/architecture/build-gate-runbook.md",
-      "docs/triage/2026-05-20-handoff-prompt-next-session.md"
-    ],
-    "apps/web/lib/integrate/sandbox/sandbox.ts": [
-      "docs/triage/2026-05-20-handoff-prompt-next-session.md"
     ],
     "apps/web/lib/integrations/connectors/index.ts": [
       "docs/architecture/unified-connector-kernel.md"
@@ -1163,10 +1163,22 @@
       "docs/architecture/capability-driven-runtime-profiles.md",
       "docs/architecture/platform-substrate-boundaries.md"
     ],
-    "packages/db/prisma/schema.prisma": [
-      "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md",
-      "docs/architecture/2026-06-14-odysseus-review-depth-pass.md",
+    "packages/db/prisma/schema": [
       "docs/architecture/platform-overview.md"
+    ],
+    "packages/db/prisma/schema/ai-coworker.prisma": [
+      "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md",
+      "docs/architecture/2026-06-14-odysseus-review-depth-pass.md"
+    ],
+    "packages/db/prisma/schema/build-delivery.prisma": [
+      "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md",
+      "docs/architecture/dpf-patterns.md"
+    ],
+    "packages/db/prisma/schema/resource-scheduling.prisma": [
+      "docs/architecture/data-model-stewardship-runbook.md"
+    ],
+    "packages/db/prisma/schema/work-coordination.prisma": [
+      "docs/architecture/dpf-patterns.md"
     ],
     "packages/db/scripts/check-cada-readiness.ts": [
       "docs/strategy/2026-09-cada-architects-forum-deck.md"
@@ -1467,6 +1479,12 @@
       "docs/architecture/theme-aware-styling-runbook.md",
       "docs/founder-kernel/wiki/principles/no-native-browser-dialogs.md"
     ],
+    "scripts/check-no-new-closed-set-strings.mjs": [
+      "docs/architecture/data-model-stewardship-runbook.md"
+    ],
+    "scripts/check-no-new-notactive-conventions.mjs": [
+      "docs/architecture/data-model-stewardship-runbook.md"
+    ],
     "scripts/check-no-private-identity.mjs": [
       "docs/operations/oss-repo-identity-hygiene.md"
     ],
@@ -1586,6 +1604,9 @@
     ],
     "scripts/lib/ensure-pre-push-hook.mjs": [
       "docs/testing/pre-pr-gate.md"
+    ],
+    "scripts/lib/entry-module.mjs": [
+      "docs/install/platform-support-watchlist.md"
     ],
     "scripts/lib/gate-context.mjs": [
       "docs/testing/pr-health.md"
@@ -1754,6 +1775,9 @@
     ],
     "tests/release/local-ci-gate-contract.test.mjs": [
       "docs/testing/pre-pr-gate.md"
+    ],
+    "tests/release/pregate-node-gate-contract.test.mjs": [
+      "docs/install/platform-support-watchlist.md"
     ]
   },
   "docToRoutes": {
@@ -1952,14 +1976,14 @@
       "apps/web/instrumentation.ts",
       "apps/web/lib/actions/build.ts",
       "apps/web/lib/build-pipeline.ts",
+      "apps/web/lib/build/build-orchestrator.ts",
+      "apps/web/lib/build/build-pipeline.ts",
+      "apps/web/lib/build/build-studio-config.ts",
+      "apps/web/lib/build/claude-dispatch.ts",
       "apps/web/lib/build/progress-visibility.ts",
       "apps/web/lib/coworker/authorized-surface-runtime.ts",
       "apps/web/lib/decision-perspective/build-studio-gate.ts",
       "apps/web/lib/explore/feature-build-types.ts",
-      "apps/web/lib/integrate/build-orchestrator.ts",
-      "apps/web/lib/integrate/build-pipeline.ts",
-      "apps/web/lib/integrate/build-studio-config.ts",
-      "apps/web/lib/integrate/claude-dispatch.ts",
       "apps/web/lib/marketing/scheduler.ts",
       "apps/web/lib/mcp/packs/surface-pack.ts",
       "apps/web/lib/queue/functions/deliberation-run.ts",
@@ -1971,7 +1995,8 @@
       "apps/web/lib/tak/agent-grants.ts",
       "apps/web/lib/tak/autonomous-work-run.ts",
       "docker-compose.yml",
-      "packages/db/prisma/schema.prisma"
+      "packages/db/prisma/schema/ai-coworker.prisma",
+      "packages/db/prisma/schema/build-delivery.prisma"
     ],
     "docs/architecture/2026-06-14-ai-cockpit-sysml-architecture-note.md": [
       "apps/web/lib/ea/ai-routing-architecture-extract.ts",
@@ -1989,7 +2014,7 @@
       "apps/web/lib/marketing/channels/email-postmark/responder.ts",
       "apps/web/lib/routing/pipeline-v2.ts",
       "apps/web/lib/routing/request-contract.ts",
-      "packages/db/prisma/schema.prisma"
+      "packages/db/prisma/schema/ai-coworker.prisma"
     ],
     "docs/architecture/2026-06-19-cada-cloud-sovereignty-architecture-note.md": [
       "apps/web/lib/routing/pipeline-v2.test.ts",
@@ -2115,8 +2140,8 @@
       "scripts/worktree-janitor.mjs"
     ],
     "docs/architecture/build-gate-runbook.md": [
-      "apps/web/lib/integrate/build-orchestrator.ts",
-      "apps/web/lib/integrate/coding-agent.ts",
+      "apps/web/lib/build/build-orchestrator.ts",
+      "apps/web/lib/build/coding-agent.ts",
       "apps/web/lib/queue/functions/build-review-verification.ts",
       "pnpm-lock.yaml",
       "scripts/lib/dco-signoff.mjs",
@@ -2124,7 +2149,7 @@
       "scripts/pregate-preflight.mjs"
     ],
     "docs/architecture/build-studio-namespace.md": [
-      "apps/web/lib/integrate/build-plan-paths.ts",
+      "apps/web/lib/build/build-plan-paths.ts",
       "scripts/check-build-namespace.mjs"
     ],
     "docs/architecture/business-commercial-catalog.md": [
@@ -2176,7 +2201,10 @@
       "apps/web/lib/shared/action-result.ts",
       "apps/web/lib/shared/coerce.ts",
       "apps/web/lib/shared/org-address.ts",
-      "scripts/check-no-local-isrecord.mjs"
+      "packages/db/prisma/schema/resource-scheduling.prisma",
+      "scripts/check-no-local-isrecord.mjs",
+      "scripts/check-no-new-closed-set-strings.mjs",
+      "scripts/check-no-new-notactive-conventions.mjs"
     ],
     "docs/architecture/decision-vectors.md": [
       "apps/web/lib/decision-perspective/material.ts",
@@ -2209,6 +2237,10 @@
       "scripts/sbom/internalization-candidates.mjs",
       "scripts/sbom/runtime-surface.mjs",
       "scripts/sbom/scan-dependencies.mjs"
+    ],
+    "docs/architecture/dpf-patterns.md": [
+      "packages/db/prisma/schema/build-delivery.prisma",
+      "packages/db/prisma/schema/work-coordination.prisma"
     ],
     "docs/architecture/enforced-ci-gates.md": [
       "apps/web/lib/docs-route-map.ts",
@@ -2292,7 +2324,7 @@
     "docs/architecture/platform-overview.md": [
       "docker-compose.yml",
       "monitoring/prometheus/prometheus.yml",
-      "packages/db/prisma/schema.prisma",
+      "packages/db/prisma/schema",
       "packages/db/src/pg-graph.ts",
       "packages/db/src/pgvector-store.ts"
     ],
@@ -2451,7 +2483,9 @@
       "packages/db/src/discovery-collectors/network.ts",
       "scripts/hooks/run-hook.mjs",
       "scripts/installer/lib/platform.sh",
-      "scripts/lib/dockerfile-portal-build.test.mjs"
+      "scripts/lib/dockerfile-portal-build.test.mjs",
+      "scripts/lib/entry-module.mjs",
+      "tests/release/pregate-node-gate-contract.test.mjs"
     ],
     "docs/install/scratch-install-rehearsal.md": [
       "scripts/fresh-install.ps1"
@@ -2498,7 +2532,7 @@
       "packages/db/src/provider-compliance-source-registry.ts"
     ],
     "docs/operations/build-cost-flags-activation-runbook.md": [
-      "apps/web/lib/integrate/build-studio-config.ts"
+      "apps/web/lib/build/build-studio-config.ts"
     ],
     "docs/operations/disaster-recovery.md": [
       "docker-compose.dev-against-live-db.yml",
@@ -2746,9 +2780,9 @@
       "tests/release/local-ci-gate-contract.test.mjs"
     ],
     "docs/triage/2026-05-20-handoff-prompt-next-session.md": [
-      "apps/web/lib/integrate/build-pipeline.ts",
-      "apps/web/lib/integrate/coding-agent.ts",
-      "apps/web/lib/integrate/sandbox/sandbox.ts"
+      "apps/web/lib/build/build-pipeline.ts",
+      "apps/web/lib/build/coding-agent.ts",
+      "apps/web/lib/build/sandbox/sandbox.ts"
     ],
     "docs/user-guide/ai-workforce/connecting-providers.md": [
       "apps/web/app/(shell)/platform/ai/providers/page.tsx",
@@ -2783,7 +2817,7 @@
       "apps/web/lib/routing/provider-suitability/workload-profile.ts"
     ],
     "docs/user-guide/build-studio/index.md": [
-      "apps/web/lib/integrate/build-orchestrator.ts"
+      "apps/web/lib/build/build-orchestrator.ts"
     ],
     "docs/user-guide/contributing/agent-dev-environments.md": [
       "scripts/dpf-bootstrap-agent-toolchain.ps1",

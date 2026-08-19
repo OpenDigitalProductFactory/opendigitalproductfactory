@@ -312,7 +312,7 @@ describe("deriveBuildStudioWorkflowAction", () => {
       build: makeBuild({
         draftApprovedAt: new Date("2026-04-25T13:00:00Z"),
         buildPlan: {
-          fileStructure: [{ path: "apps/web/lib/integrate/ollama-url.ts", action: "modify", purpose: "Add a clarifying comment." }],
+          fileStructure: [{ path: "apps/web/lib/build/ollama-url.ts", action: "modify", purpose: "Add a clarifying comment." }],
           tasks: [{ title: "Add comment", testFirst: "n/a for a comment", implement: "Add the comment", verify: "Read the file" }],
         },
         planReview: {
@@ -340,7 +340,7 @@ describe("deriveBuildStudioWorkflowAction", () => {
       build: makeBuild({
         draftApprovedAt: new Date("2026-04-25T13:00:00Z"),
         buildPlan: {
-          fileStructure: [{ path: "apps/web/lib/integrate/ollama-url.ts", action: "modify", purpose: "Add a clarifying comment." }],
+          fileStructure: [{ path: "apps/web/lib/build/ollama-url.ts", action: "modify", purpose: "Add a clarifying comment." }],
           tasks: [{ title: "Add comment", testFirst: "n/a for a comment", implement: "Add the comment", verify: "Read the file" }],
         },
         planReview: {
@@ -390,7 +390,7 @@ describe("deriveBuildStudioWorkflowAction", () => {
       build: makeBuild({
         draftApprovedAt: new Date("2026-04-25T13:00:00Z"),
         buildPlan: {
-          fileStructure: [{ path: "apps/web/lib/integrate/ollama-url.ts", action: "modify", purpose: "Add a clarifying comment." }],
+          fileStructure: [{ path: "apps/web/lib/build/ollama-url.ts", action: "modify", purpose: "Add a clarifying comment." }],
           tasks: [{ title: "Add comment", testFirst: "n/a", implement: "Add the comment", verify: "Read the file" }],
         },
         planReview: null,

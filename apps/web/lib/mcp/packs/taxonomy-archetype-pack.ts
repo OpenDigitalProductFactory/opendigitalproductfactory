@@ -315,7 +315,7 @@ async function suggestTaxonomyPlacementHandler(
   });
   if (!build?.brief) return { success: false, error: "No brief saved", message: "Save the feature brief first before requesting taxonomy placement." };
   const briefData = build.brief as Record<string, unknown>;
-  const { attributeFeatureBuild, formatAttributionRecommendation } = await import("@/lib/integrate/feature-attribution");
+  const { attributeFeatureBuild, formatAttributionRecommendation } = await import("@/lib/build/feature-attribution");
   const attribution = await attributeFeatureBuild(buildId, {
     title: String(briefData.title ?? ""),
     description: String(briefData.description ?? ""),
@@ -352,7 +352,7 @@ async function confirmTaxonomyPlacementHandler(
   try {
     const buildId = await resolveActiveBuildId(userId, extractBuildIdHint(params));
     if (!buildId) return { success: false, error: "No active build", message: "No active build found" };
-    const { confirmFeatureTaxonomy } = await import("@/lib/integrate/feature-attribution");
+    const { confirmFeatureTaxonomy } = await import("@/lib/build/feature-attribution");
     const nodeId = params["nodeId"] ? String(params["nodeId"]) : null;
     // Validate proposeNew structure before passing to Prisma.
     // Models often send proposeNew with empty strings alongside a valid nodeId

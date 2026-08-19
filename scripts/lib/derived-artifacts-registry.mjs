@@ -99,7 +99,7 @@ export const DERIVED_ARTIFACTS = [
     id: "architecture-counts",
     description: "Generated architecture counts include (models/enums/migrations/principles/routes)",
     sourceGlobs: [
-      "packages/db/prisma/schema.prisma",
+      "packages/db/prisma/schema/**",
       "packages/db/prisma/migrations/**",
       "docs/founder-kernel/wiki/principles/*.md",
       "apps/web/lib/ea/route-manifest.json",

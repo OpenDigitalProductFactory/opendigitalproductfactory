@@ -153,7 +153,7 @@ async function defaultDeps(): Promise<AutonomousBuildPhaseRuntimeDeps> {
     },
     getSelection: async ({ modelTier, sensitivity }) => {
       const { getBuildStudioConfig } = await import(
-        "@/lib/integrate/build-studio-config"
+        "@/lib/build/build-studio-config"
       );
       const selection = (await getBuildStudioConfig({
         modelTier,
@@ -195,7 +195,7 @@ async function defaultDeps(): Promise<AutonomousBuildPhaseRuntimeDeps> {
         return "drift";
       }
       const { isSandboxAvailable } = await import(
-        "@/lib/integrate/sandbox/build-branch"
+        "@/lib/build/sandbox/build-branch"
       );
       return await isSandboxAvailable() ? "ready" : "unavailable";
     },

@@ -166,7 +166,7 @@ async function assessContributionHandler(
   // Parse diff to understand scope
   const changedFiles = [...diff.matchAll(/^diff --git a\/(.+) b\/.+$/gm)].map((m) => m[1]);
   const newRoutes = changedFiles.filter((f) => f.includes("/app/") && f.endsWith("/page.tsx"));
-  const schemaChanges = changedFiles.filter((f) => f.includes("schema.prisma"));
+  const schemaChanges = changedFiles.filter((f) => /prisma\/schema(\.prisma$|\/[^/]+\.prisma$)/.test(f));
   const migrationFiles = changedFiles.filter((f) => f.startsWith("prisma/migrations/"));
   const hasNewModels = diff.includes("model ") && diff.includes("@id");
 
@@ -329,7 +329,7 @@ async function contributeToHiveHandler(
         "Upstream contributions require the Developer Certificate of Origin. Visit Admin > Platform Development and accept the DCO, then retry.",
     };
   }
-  const { resolveHiveToken: resolveHiveTokenEarly } = await import("@/lib/integrate/identity-privacy");
+  const { resolveHiveToken: resolveHiveTokenEarly } = await import("@/lib/build/identity-privacy");
   const hiveTokenEarly = await resolveHiveTokenEarly();
   if (!hiveTokenEarly) {
     return {
@@ -355,8 +355,8 @@ async function contributeToHiveHandler(
     return { success: false, error: "Build not found.", message: `No active build ${buildId} was found for this user.` };
   }
 
-  const { diagnoseSandboxReadiness } = await import("@/lib/integrate/sandbox/sandbox-admin");
-  const { assertSandboxReadyForContribution } = await import("@/lib/integrate/sandbox/sandbox-readiness-gate");
+  const { diagnoseSandboxReadiness } = await import("@/lib/build/sandbox/sandbox-admin");
+  const { assertSandboxReadyForContribution } = await import("@/lib/build/sandbox/sandbox-readiness-gate");
   const readiness = await diagnoseSandboxReadiness({ buildId });
   const readinessGate = assertSandboxReadyForContribution(readiness);
   if (!readinessGate.ok) {
@@ -378,7 +378,7 @@ async function contributeToHiveHandler(
   // manifest ships empty → no-op until opted in. Spec:
   // docs/superpowers/specs/2026-06-18-private-public-change-segregation-design.md
   const { loadPrivatePathPatterns: _loadPriv, compilePrivatePathMatcher: _compilePriv, stripPrivatePathsFromDiff: _stripPriv } =
-    await import("@/lib/integrate/private-paths");
+    await import("@/lib/build/private-paths");
   const shareableDiff = _stripPriv(diff, _compilePriv(await _loadPriv({ prisma }))).kept;
   if (!shareableDiff.trim()) {
     return {
@@ -393,7 +393,7 @@ async function contributeToHiveHandler(
   // public-hive egress, so a change may leave only when explicitly
   // "shareable". Default "private" blocks — the human's confirmation (via
   // set_change_disposition / the ship UI) is required first.
-  const { mayShareToPublicHive, privateDispositionBlockMessage } = await import("@/lib/integrate/disposition");
+  const { mayShareToPublicHive, privateDispositionBlockMessage } = await import("@/lib/build/disposition");
   if (!mayShareToPublicHive(build.disposition)) {
     logBuildActivity(buildId, "contribute_to_hive", "blocked: change disposition is private (not confirmed shareable)");
     return {
@@ -434,10 +434,10 @@ async function contributeToHiveHandler(
   const brief = build.brief as Record<string, unknown> | null;
 
   // Parse files from diff
-  const { allFiles, seedFit, securityScan } = await (await import("@/lib/integrate/contribution-review")).analyzeContributionSeedFit(shareableDiff, brief, build.designDoc);
+  const { allFiles, seedFit, securityScan } = await (await import("@/lib/build/contribution-review")).analyzeContributionSeedFit(shareableDiff, brief, build.designDoc);
   const migrationFiles = allFiles.filter((f) => f.startsWith("prisma/migrations/"));
   const codeFiles = allFiles.filter((f) => !f.startsWith("prisma/migrations/"));
-  const schemaFiles = allFiles.filter((f) => f.includes("schema.prisma"));
+  const schemaFiles = allFiles.filter((f) => /prisma\/schema(\.prisma$|\/[^/]+\.prisma$)/.test(f));
 
   // Build manifest
   const manifest = {
@@ -453,7 +453,7 @@ async function contributeToHiveHandler(
   // Real user identity stays in the local DB only; public git metadata
   // shows "dpf-agent-<shortId> <agent-<shortId>@hive.dpf>" so the community
   // can recognize repeat contributors without exposing the real user.
-  const { getPlatformIdentity } = await import("@/lib/integrate/identity-privacy");
+  const { getPlatformIdentity } = await import("@/lib/build/identity-privacy");
   const platformId = await getPlatformIdentity();
   const dcoAttestation = platformId.dcoSignoff;
 
@@ -514,7 +514,7 @@ async function contributeToHiveHandler(
     // DCO + token already validated up-front (see prerequisite checks
     // earlier in this case); reuse the resolved token so we don't hit
     // the credential store a second time.
-    const { generatePrivateBranchName, generateAnonymousCommitMessage } = await import("@/lib/integrate/identity-privacy");
+    const { generatePrivateBranchName, generateAnonymousCommitMessage } = await import("@/lib/build/identity-privacy");
     const hiveToken = hiveTokenEarly;
 
     {
@@ -522,7 +522,7 @@ async function contributeToHiveHandler(
       if (!upstreamMatch) {
         prError = `upstreamRemoteUrl "${upstreamUrl}" is not a recognizable GitHub URL.`;
       } else {
-        const { createBranchAndPR } = await import("@/lib/integrate/github-api-commit");
+        const { createBranchAndPR } = await import("@/lib/build/github-api-commit");
 
         const branchName = generatePrivateBranchName(platformId.clientId, build.title);
         const commitMessage = generateAnonymousCommitMessage({
@@ -579,7 +579,7 @@ async function contributeToHiveHandler(
           // Run contribution review pipeline — sanitization, parameterization, vertical tagging
           if (prResult.prNumber) {
             try {
-              const { runContributionReview } = await import("@/lib/integrate/contribution-review");
+              const { runContributionReview } = await import("@/lib/build/contribution-review");
               const reviewResult = await runContributionReview({
                 buildId,
                 prUrl: prResult.prUrl!,

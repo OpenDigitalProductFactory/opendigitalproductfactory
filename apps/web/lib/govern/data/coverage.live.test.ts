@@ -7,7 +7,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
-import { parsePrismaSchema } from "@/lib/integrate/code-graph/extractors/prisma-schema-adapter";
+import { parsePrismaSchema } from "@/lib/build/code-graph/extractors/prisma-schema-adapter";
 import { DATA_ASSET_REGISTRY } from "./assets";
 import {
   assertBaselineDidNotGrow,
@@ -15,11 +15,9 @@ import {
   computeCoverage,
 } from "./coverage";
 import { LEGACY_COVERAGE_BASELINE, SEALED_BASELINE_COUNT } from "./legacy-coverage-baseline";
+import { readCanonicalPrismaSchema } from "@dpf/db/schema-source";
 
-const schemaPath = fileURLToPath(
-  new URL("../../../../../packages/db/prisma/schema.prisma", import.meta.url),
-);
-const facts = parsePrismaSchema(readFileSync(schemaPath, "utf8"));
+const facts = parsePrismaSchema(readCanonicalPrismaSchema());
 
 describe("live data-governance coverage gate", () => {
   it("has a real denominator generated from the live schema", () => {

@@ -18,7 +18,7 @@ export function buildGitPromotionVerificationScript(input: {
     `git fetch --depth 1 origin ${shellQuote(input.afterSha)}`,
     `git checkout --detach ${shellQuote(input.afterSha)}`,
     "pnpm install --frozen-lockfile",
-    "pnpm --filter @dpf/db exec prisma generate --schema prisma/schema.prisma",
+    "pnpm --filter @dpf/db exec prisma generate --schema prisma/schema",
     "pnpm --filter web typecheck",
     "pnpm --filter web exec next build",
   ].join("\n");
@@ -70,7 +70,7 @@ export const gitPromotionSandboxVerification = inngest.createFunction(
 
     const repositoryCloneUrl = candidate.repositoryCloneUrl;
     const afterSha = candidate.afterSha;
-    const { getBuildExecutionProvider } = await import("@/lib/integrate/sandbox/providers");
+    const { getBuildExecutionProvider } = await import("@/lib/build/sandbox/providers");
     const provider = getBuildExecutionProvider("local-docker");
 
     await step.run("mark-running", async () => {

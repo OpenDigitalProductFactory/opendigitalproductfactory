@@ -4,7 +4,7 @@ import { LocalTime } from "@/components/ui/LocalTime";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { decryptJson } from "@/lib/govern/credential-crypto";
-import { loadGoogleBusinessProfilePreview } from "@/lib/integrate/google-business-profile/preview";
+import { loadGoogleBusinessProfilePreview } from "@/lib/integrations/google-business-profile/preview";
 import {
   GoogleBusinessProfileConnectPanel,
   type GoogleBusinessProfileConnectionState,

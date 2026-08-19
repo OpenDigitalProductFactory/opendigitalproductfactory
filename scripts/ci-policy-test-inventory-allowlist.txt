@@ -32,12 +32,16 @@ scripts/check-no-local-oauth-refresh.test.mjs
 scripts/check-no-local-status-color.test.mjs
 scripts/check-no-merge-readiness-policy-drift.test.mjs
 scripts/check-no-expired-baseline-budgets.test.mjs
+scripts/check-no-monolith-schema.test.mjs
 scripts/check-no-nanoid-import.test.mjs
 scripts/check-no-new-closed-set-strings.test.mjs
+scripts/check-no-new-resource-clone-models.test.mjs
+scripts/check-no-new-notactive-conventions.test.mjs
 scripts/check-no-postgres-initdb-host-mount.test.mjs
 scripts/check-no-private-identity.test.mjs
 scripts/check-no-provider-local-connector-lifecycle.test.mjs
 scripts/check-no-raw-route-error.test.mjs
+scripts/check-no-retired-lib-namespaces.test.mjs
 scripts/check-no-retired-superpowers-skills.test.mjs
 scripts/check-no-substrate-regression.test.mjs
 scripts/check-no-suitability-object-shorthand.test.mjs

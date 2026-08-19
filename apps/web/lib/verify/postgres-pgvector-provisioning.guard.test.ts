@@ -26,7 +26,7 @@ const REPO_ROOT = resolve(__dirname, "..", "..", "..", "..");
 // The known sites that provision a Postgres CONTAINER (docker run / compose image).
 // Add a site here when a new one is introduced — that is the point of the ratchet.
 const PROVISIONING_SITES = [
-  "apps/web/lib/integrate/sandbox/sandbox-db.ts",
+  "apps/web/lib/build/sandbox/sandbox-db.ts",
   "scripts/local-ci-runner.mjs",
   "docker-compose.yml",
 ];

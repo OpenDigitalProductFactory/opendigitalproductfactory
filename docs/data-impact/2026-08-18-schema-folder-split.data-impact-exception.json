@@ -1,0 +1,9 @@
+{
+  "scope": "schema: packages/db/prisma/schema.prisma -> packages/db/prisma/schema/*.prisma (B5 Seam C, BI-134DD02F)",
+  "approver": "platform-architecture",
+  "rationale": "Zero-semantic-change reorganization: the schema.prisma monolith is split into 24 domain files under packages/db/prisma/schema/ (Prisma 7 multi-file schema). No model, field, enum, index, or attribute was added, removed, or altered — `prisma migrate diff --from-schema <pre-split monolith> --to-schema prisma/schema` reports 'No difference detected' and the set-based schema-regression guard reports no removals across the split. A per-asset DataImpactManifest would restate 593 unchanged models; this exception records the reorganization instead.",
+  "compensatingControl": "Empty `prisma migrate diff` between the pre-split and post-split schema states; schema-regression-guard (reorder-tolerant set comparison) green across the boundary; migration chain untouched (no file under packages/db/prisma/migrations changed, migrations.path pinned in prisma.config.ts); scripts/check-no-monolith-schema.mjs ratchets that no model/enum is ever defined outside the schema folder again.",
+  "expiry": "2026-11-18",
+  "remediationBI": "BI-134DD02F",
+  "waives": []
+}

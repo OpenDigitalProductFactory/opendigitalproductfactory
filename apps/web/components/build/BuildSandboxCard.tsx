@@ -1,7 +1,7 @@
 "use client";
 
 import type { BuildSandboxState } from "@/lib/build/sandbox-state";
-import type { SandboxSourceCurrencyStatus } from "@/lib/integrate/sandbox/sandbox-source-currency";
+import type { SandboxSourceCurrencyStatus } from "@/lib/build/sandbox/sandbox-source-currency";
 import { getTruthSourceAge } from "@/lib/build/progress-visibility-types";
 import { TruthSourceBadge } from "./TruthSourceBadge";
 

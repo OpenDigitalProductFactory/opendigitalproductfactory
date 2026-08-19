@@ -43,7 +43,7 @@ export const ALLOWLIST = new Set([
   "apps/web/lib/build/business-build-brief.ts",
   "apps/web/lib/build/task-results.ts",
   "apps/web/lib/build/verification-output.ts",
-  "apps/web/lib/integrate/sandbox/build-branch.ts",
+  "apps/web/lib/build/sandbox/build-branch.ts",
   "apps/web/lib/marketing.ts",
   "apps/web/lib/release/branding.ts",
   "apps/web/lib/routing/chat-adapter.ts",

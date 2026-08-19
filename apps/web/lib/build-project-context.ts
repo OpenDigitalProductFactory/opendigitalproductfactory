@@ -1,2 +1,2 @@
-// Shim — moved to lib/integrate/build-project-context.ts (Phase 10 refactoring)
-export * from "./integrate/build-project-context";
+// Shim — moved to lib/build/build-project-context.ts (Phase 10 refactoring)
+export * from "./build/build-project-context";

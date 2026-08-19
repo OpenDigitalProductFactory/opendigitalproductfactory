@@ -9,7 +9,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { lookupAssignedTaskByTitle } from "./ProcessGraphClickInfo";
 
-vi.mock("@/lib/integrate/task-dependency-graph", () => ({
+vi.mock("@/lib/build/task-dependency-graph", () => ({
   buildDependencyGraph: (_fs: unknown, tasks: { title: string }[]) => {
     // Stub: pack all tasks into a single "phase" so the lookup walks them.
     return [

@@ -288,7 +288,7 @@ describe("reverifyDecisionEvidence", () => {
 describe("guardResolverPaths", () => {
   it("refuses a citation naming a blocked file instead of echoing its contents", async () => {
     const repoRoot = await fixtureRepo();
-    const { isPathAllowedSync } = await import("@/lib/integrate/codebase-tools");
+    const { isPathAllowedSync } = await import("@/lib/build/codebase-tools");
     const guarded = guardResolverPaths(createRepoLocatorResolver({ repoRoot }), isPathAllowedSync);
 
     // The cited path is INSIDE the repo root, so phase 1's confinement check
@@ -301,7 +301,7 @@ describe("guardResolverPaths", () => {
 
   it("still resolves an ordinary source path", async () => {
     const repoRoot = await fixtureRepo();
-    const { isPathAllowedSync } = await import("@/lib/integrate/codebase-tools");
+    const { isPathAllowedSync } = await import("@/lib/build/codebase-tools");
     const guarded = guardResolverPaths(createRepoLocatorResolver({ repoRoot }), isPathAllowedSync);
 
     const resolution = await guarded({ sourceType: "code", filePath: "apps/web/lib/real.ts", line: 2 });

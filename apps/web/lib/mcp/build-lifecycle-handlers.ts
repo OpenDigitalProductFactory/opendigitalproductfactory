@@ -223,7 +223,7 @@ export async function startBuild(params: Record<string, unknown>, userId: string
     };
   }
 
-  const { isSandboxAvailable, startBuildBranch } = await import("@/lib/integrate/sandbox/build-branch");
+  const { isSandboxAvailable, startBuildBranch } = await import("@/lib/build/sandbox/build-branch");
 
   const available = await isSandboxAvailable();
   if (!available) {
@@ -281,7 +281,7 @@ export async function runUxTest(params: Record<string, unknown>, userId: string,
     // browser-use runs inside the docker compose network — use the
     // internal service URL (http://sandbox:3000), not the host port,
     // so assets and API calls resolve correctly.
-    const { resolveSandboxUrl } = await import("@/lib/integrate/sandbox/resolve-sandbox-url");
+    const { resolveSandboxUrl } = await import("@/lib/build/sandbox/resolve-sandbox-url");
     const sandboxUrl = resolveSandboxUrl(build.sandboxId, build.sandboxPort).internal;
 
     const testRes = await fetch(BROWSER_USE_URL, {

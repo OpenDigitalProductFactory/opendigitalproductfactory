@@ -34,7 +34,7 @@ vi.mock("@/lib/govern/credential-crypto", () => ({
   decryptJson: vi.fn((value: string) => JSON.parse(value)),
 }));
 
-vi.mock("@/lib/integrate/microsoft365-communications/preview", () => ({
+vi.mock("@/lib/integrations/microsoft365-communications/preview", () => ({
   loadMicrosoft365CommunicationsPreview: mockLoadPreview,
 }));
 

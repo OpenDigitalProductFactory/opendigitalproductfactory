@@ -21,7 +21,7 @@ export const capacityDrainScheduled = inngest.createFunction(
     return step.run("evaluate-capacity-drain", async () => {
       const { prisma } = await import("@dpf/db");
       const { evaluateAndDrainCapacity } = await import("@/lib/capacity/evaluate-drain");
-      const { dispatchApprovedIdeateBuilds } = await import("@/lib/integrate/ideate-on-approval");
+      const { dispatchApprovedIdeateBuilds } = await import("@/lib/build/ideate-on-approval");
       const { resolveScheduledOwnerUserId } = await import("../scheduled-owner");
 
       // Refresh the REAL weekly-quota snapshot before evaluating, so the drain

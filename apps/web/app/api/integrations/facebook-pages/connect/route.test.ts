@@ -6,7 +6,7 @@ const { mockAuth, mockConnectFacebookPages } = vi.hoisted(() => ({
 }));
 
 vi.mock("@/lib/auth", () => ({ auth: mockAuth }));
-vi.mock("@/lib/integrate/facebook-pages/connect-action", () => ({
+vi.mock("@/lib/integrations/facebook-pages/connect-action", () => ({
   connectFacebookPages: mockConnectFacebookPages,
 }));
 

@@ -1,0 +1,240 @@
+// ── Group 2: contract-pending (column is String + `*_closed_set` CHECK) ──
+enum BacklogItemStatus {
+  triaging
+  open
+  in_progress @map("in-progress")
+  done
+  deferred
+  retired
+}
+
+enum BacklogItemType {
+  portfolio
+  product
+}
+
+enum BacklogWorkType {
+  bug
+  feature
+  chore
+  doc
+  tool
+  skill
+  refactor
+}
+
+enum BacklogTriageOutcome {
+  build
+  runbook
+  coworker_task @map("coworker-task")
+  defer
+  duplicate
+  discard
+}
+
+enum BacklogSource {
+  user_request        @map("user-request")
+  automated_detection @map("automated-detection")
+}
+
+enum BacklogEffortSize {
+  small
+  medium
+  large
+  xlarge
+}
+
+// Shared by BacklogItem.claimStatus and FeatureBuild.claimStatus — one claim
+// vocabulary (apps/web/lib/backlog/claim-on-start.ts).
+enum WorkClaimStatus {
+  active
+  released
+}
+
+enum EpicStatus {
+  open
+  in_progress @map("in-progress")
+  done
+}
+
+// Shared by BacklogItem.scopeKind and Epic.scopeKind (BI-E387A203).
+enum BacklogScopeKind {
+  platform
+  common
+  archetype_category @map("archetype-category")
+  archetype_leaf     @map("archetype-leaf")
+  multi_archetype    @map("multi-archetype")
+  unknown
+}
+
+// Workroom.status — apps/web/lib/work-capsules.ts WORK_CAPSULE_STATUSES.
+enum WorkroomStatus {
+  draft
+  ready
+  working
+  blocked
+  verifying
+  ready_for_review    @map("ready-for-review")
+  ready_for_promotion @map("ready-for-promotion")
+  complete
+  abandoned
+  archived
+}
+
+// Workroom.source — apps/web/lib/work-capsules.ts WORK_CAPSULE_SOURCES.
+enum WorkroomSource {
+  backlog
+  build_studio      @map("build-studio")
+  external_adoption @map("external-adoption")
+  git_promotion     @map("git-promotion")
+  manual
+  scheduled_steward @map("scheduled-steward")
+}
+
+// FeatureBuild.phase — apps/web/lib/explore/feature-build-types.ts BuildPhase.
+enum FeatureBuildPhase {
+  ideate
+  plan
+  build
+  review
+  ship
+  complete
+  failed
+  abandoned
+}
+
+// CustomerAccount.status — packages/db/src/customer-lifecycle.ts.
+enum CustomerAccountStatus {
+  prospect
+  qualified
+  onboarding
+  active
+  at_risk
+  suspended
+  closed
+  superseded
+  archived
+}
+
+// CustomerSite.status — packages/db/src/customer-lifecycle.ts.
+enum CustomerSiteStatus {
+  active
+  planned
+  inactive
+  superseded
+  archived
+}
+
+enum StaffingDemandShape {
+  coverage_floor
+  forecast_curve
+  fixed_slot
+  task_pipeline
+  census_load
+}
+
+enum StaffingDemandSourceType {
+  forecast
+  manual
+  booking
+  work
+  census
+}
+
+enum StaffingDemandStatus {
+  open
+  partially_covered
+  covered
+  cancelled
+}
+
+enum TaskNodeType {
+  analyze
+  plan
+  execute
+  review
+  skeptical_review
+  activation_proposal
+  approval_gate
+  verify
+  summarize
+}
+
+enum TaskNodeStatus {
+  queued
+  ready
+  running
+  blocked
+  awaiting_human
+  completed
+  failed
+  cancelled
+  superseded
+}
+
+enum TaskNodeWorkerRole {
+  planner
+  researcher
+  executor
+  reviewer
+  skeptical_reviewer
+  verifier
+  activation_analyst
+  summarizer
+}
+
+enum TaskNodeDependencyMode {
+  all_of
+  any_of
+  after_parent
+}
+
+enum TaskNodeInfluenceLevel {
+  none
+  contextual
+  material
+}
+
+enum TaskNodeEdgeType {
+  depends_on
+  informs
+  verifies
+  blocks
+  supersedes
+}
+
+enum KnowledgeArticleCategory {
+  process
+  policy
+  decision
+  how_to          @map("how-to")
+  reference
+  troubleshooting
+  runbook
+}
+
+// Shared by KnowledgeArticle.status and WikiPage.status — one document
+// lifecycle vocabulary.
+enum KnowledgeDocStatus {
+  draft
+  published
+  review_needed @map("review-needed")
+  archived
+}
+
+enum KnowledgeVisibility {
+  internal
+  team
+  public
+}
+
+enum WikiPageKind {
+  entity
+  summary
+  decision
+  runbook
+  index
+  stance
+  heuristic
+  principle
+}

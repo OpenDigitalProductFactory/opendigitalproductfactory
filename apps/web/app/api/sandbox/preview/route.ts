@@ -2,7 +2,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@dpf/db";
-import { resolveSandboxUrl } from "@/lib/integrate/sandbox/resolve-sandbox-url";
+import { resolveSandboxUrl } from "@/lib/build/sandbox/resolve-sandbox-url";
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
   const session = await auth();

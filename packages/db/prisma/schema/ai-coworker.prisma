@@ -1,0 +1,1465 @@
+model CoworkerService {
+  id                String               @id @default(cuid())
+  serviceId         String               @unique
+  providerAgentId   String
+  digitalProductId  String?
+  serviceOfferingId String?
+  portfolioId       String?
+  name              String
+  summary           String?
+  description       String?
+  status            String               @default("draft")
+  riskTier          String               @default("low")
+  hitlTier          Int?
+  authorityBoundary String               @default("advice-only")
+  availabilityScope String               @default("internal")
+  personas          Json                 @default("[]")
+  portfolioRoles    Json                 @default("[]")
+  valueStreams      Json                 @default("[]")
+  archetypes        Json                 @default("[]")
+  jurisdictions     Json                 @default("[]")
+  requiredInputs    Json                 @default("[]")
+  producedOutputs   Json                 @default("[]")
+  backingSkillIds   Json                 @default("[]")
+  backingToolNames  Json                 @default("[]")
+  backingGrantKeys  Json                 @default("[]")
+  costModel         Json                 @default("{}")
+  contractTerms     Json                 @default("{}")
+  dataBoundary      Json                 @default("{}")
+  metadata          Json                 @default("{}")
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+  provider          Agent                @relation(fields: [providerAgentId], references: [agentId], onDelete: Cascade)
+  digitalProduct    DigitalProduct?      @relation(fields: [digitalProductId], references: [productId])
+  serviceOffering   ServiceOffering?     @relation(fields: [serviceOfferingId], references: [offeringId])
+  portfolio         Portfolio?           @relation("CoworkerServicePortfolio", fields: [portfolioId], references: [id])
+  offers            CoworkerOffer[]
+  engagements       CoworkerEngagement[]
+
+  @@index([providerAgentId])
+  @@index([digitalProductId])
+  @@index([serviceOfferingId])
+  @@index([portfolioId])
+  @@index([status])
+  @@index([riskTier])
+  @@index([availabilityScope])
+}
+
+model CoworkerOffer {
+  id                   String               @id @default(cuid())
+  offerId              String               @unique
+  serviceId            String
+  digitalProductId     String?
+  name                 String
+  summary              String?
+  description          String?
+  status               String               @default("draft")
+  version              String               @default("1.0.0")
+  providerOrganization String?
+  availabilityScope    String               @default("internal")
+  riskTier             String               @default("low")
+  authorityBoundary    String               @default("advice-only")
+  eligibleConsumers    Json                 @default("[]")
+  budgetEnvelope       Json                 @default("{}")
+  sla                  Json                 @default("{}")
+  requiredApprovals    Json                 @default("[]")
+  legalTerms           Json                 @default("{}")
+  dataBoundary         Json                 @default("{}")
+  deliverables         Json                 @default("[]")
+  filters              Json                 @default("{}")
+  metadata             Json                 @default("{}")
+  expiresAt            DateTime?
+  createdAt            DateTime             @default(now())
+  updatedAt            DateTime             @updatedAt
+  service              CoworkerService      @relation(fields: [serviceId], references: [serviceId], onDelete: Cascade)
+  digitalProduct       DigitalProduct?      @relation(fields: [digitalProductId], references: [productId])
+  engagements          CoworkerEngagement[]
+
+  @@index([serviceId])
+  @@index([digitalProductId])
+  @@index([status])
+  @@index([riskTier])
+  @@index([availabilityScope])
+}
+
+model CoworkerEngagement {
+  id                  String          @id @default(cuid())
+  engagementId        String          @unique
+  offerId             String
+  serviceId           String
+  providerAgentId     String
+  requestedByUserId   String?
+  requestedByAgentId  String?
+  requestedForPersona String?
+  requestedOutcome    String          @db.Text
+  priority            String          @default("normal")
+  status              String          @default("requested")
+  inputPayload        Json            @default("{}")
+  fundingContext      Json            @default("{}")
+  contractContext     Json            @default("{}")
+  approvalContext     Json            @default("{}")
+  proposalId          String?
+  envelopeId          String?
+  workCapsuleId       String?
+  toolExecutionId     String?
+  auditRefs           Json            @default("{}")
+  metadata            Json            @default("{}")
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
+  acceptedAt          DateTime?
+  completedAt         DateTime?
+  offer               CoworkerOffer   @relation(fields: [offerId], references: [offerId])
+  service             CoworkerService @relation(fields: [serviceId], references: [serviceId])
+  provider            Agent           @relation(fields: [providerAgentId], references: [agentId])
+
+  @@index([offerId])
+  @@index([serviceId])
+  @@index([providerAgentId])
+  @@index([requestedByUserId, createdAt(sort: Desc)])
+  @@index([requestedByAgentId, createdAt(sort: Desc)])
+  @@index([status, createdAt(sort: Desc)])
+  @@index([proposalId])
+  @@index([envelopeId])
+  @@index([workCapsuleId])
+  @@index([toolExecutionId])
+}
+
+// ─── Recurring work-capture primitive (BI-4C5F7A2D, spec 2026-07-01) ──────────
+// Shared recurrence + activity-timeline + status-lifecycle for long-running work.
+// First consumer: WorkEngagement (a coworker's OWN recurring work — distinct from
+// the cross-agent CoworkerEngagement request model, per WWMD host-entity decision).
+
+// A reusable RFC-5545 recurrence rule. Referenced by nullable FK; occurrences are
+// materialized as child instance rows on the consumer. onDelete: Restrict on the
+// consumer side — a live rule must not be deleted out from under its instances.
+model RecurrenceSchedule {
+  id                     String    @id @default(cuid())
+  rrule                  String // RFC-5545 RRULE, evaluated in `timezone`, then stored UTC
+  timezone               String    @default("UTC") // IANA tz occurrences expand in
+  anchorAt               DateTime // DTSTART
+  until                  DateTime? // UNTIL bound; null = open-ended (materializer caps on horizon)
+  misfirePolicy          String    @default("skip") // skip | fire-once | fire-all
+  supersededByScheduleId String? // set when a "this-and-future" edit split the series
+  active                 Boolean   @default(true)
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
+
+  supersededBy     RecurrenceSchedule?  @relation("RecurrenceSupersede", fields: [supersededByScheduleId], references: [id], onDelete: SetNull)
+  supersedes       RecurrenceSchedule[] @relation("RecurrenceSupersede")
+  workEngagements  WorkEngagement[]
+  careAppointments CareAppointment[]
+  // W19 (BI-99C76A90, pass §3.2-c): RecurrenceSchedule is the ONE canonical
+  // recurrence primitive. Unified availability windows reference it, and
+  // finance RecurringSchedule folds its `frequency` semantics onto it via
+  // recurrenceScheduleId (expand phase — see the W19 migration plan doc).
+  resourceAvailability      ResourceAvailability[]
+  recurringBillingSchedules RecurringSchedule[]
+
+  @@index([active])
+  @@index([supersededByScheduleId])
+}
+
+// A coworker's long-running work unit. A parent may carry a RecurrenceSchedule;
+// materialized occurrences are child rows (self-relation) keyed by occurrenceAt.
+model WorkEngagement {
+  id               String  @id @default(cuid())
+  organizationId   String
+  status           String  @default("planned") // planned|in-progress|completed|cancelled|failed
+  title            String
+  requestedOutcome String? @db.Text
+  createdByAgentId String?
+
+  recurrenceScheduleId   String?
+  parentWorkEngagementId String?
+  instanceNumber         Int? // 1-based occurrence index for a materialized instance
+  occurrenceAt           DateTime? // UTC occurrence key (unique per schedule)
+  dueAt                  DateTime?
+  exceptionState         String    @default("none") // none|cancelled|overridden — survives re-materialization
+  lastActivityAt         DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  organization     Organization              @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  recurrence       RecurrenceSchedule?       @relation(fields: [recurrenceScheduleId], references: [id], onDelete: Restrict)
+  parent           WorkEngagement?           @relation("WorkEngagementInstances", fields: [parentWorkEngagementId], references: [id], onDelete: Restrict)
+  instances        WorkEngagement[]          @relation("WorkEngagementInstances")
+  activities       WorkEngagementActivity[]
+  scheduledActions ScheduledOutboundAction[]
+
+  // Idempotent materialization: two ticks / two sessions cannot double-create the
+  // same occurrence. (NULL occurrenceAt rows — parents & non-recurring — are exempt.)
+  @@unique([recurrenceScheduleId, occurrenceAt])
+  @@index([organizationId, status, createdAt(sort: Desc)])
+  @@index([parentWorkEngagementId])
+  @@index([dueAt])
+  @@index([status])
+}
+
+// Append-only activity timeline for a WorkEngagement. `seq` is monotonic per
+// engagement for strict ordering under concurrency (timestamps alone are unsafe).
+model WorkEngagementActivity {
+  id                String   @id @default(cuid())
+  workEngagementId  String
+  seq               Int // monotonic per engagement
+  kind              String
+  summary           String
+  payload           Json     @default("{}")
+  recordedAt        DateTime @default(now())
+  recordedById      String?
+  recordedByAgentId String?
+  toolExecutionId   String?
+
+  engagement WorkEngagement @relation(fields: [workEngagementId], references: [id], onDelete: Cascade)
+
+  @@unique([workEngagementId, seq])
+  @@index([workEngagementId, recordedAt(sort: Desc)])
+  @@index([kind, recordedAt(sort: Desc)])
+  @@index([recordedAt]) // retention sweep cutoff scan, apps/web/lib/operate/retention/execute.ts:99
+}
+
+model Agent {
+  id          String   @id @default(cuid())
+  agentId     String   @unique
+  slugId      String?  @unique // backward-compat alias ("coo", "build-specialist")
+  name        String
+  displayName String // EP-COWORKER-RT: canonical human-facing label (see packages/db/src/agent-identity.ts)
+  kind        String // role-type facet: orchestrator|specialist|advisor|engineer|analyst|coordinator
+  tier        Int
+  type        String
+  description String?
+  status      String   @default("active")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  portfolioId String?
+  archived    Boolean  @default(false)
+
+  // BI-REFACTOR-B6A61421: typed portal hive-mind role, authored in
+  // packages/db/data/agent_registry.json and loaded by the seed. The
+  // portal-context hive-mind resolver prefers this over keyword role inference
+  // (inferRole). Nullable + backfilled by the seed → @migration-safety: data-safe.
+  // Values: "builder"|"reviewer"|"architect"|"tester"|"operator"|"specialist".
+  role String?
+
+  // EP-AI-WORKFORCE-001: Unified agent lifecycle fields
+  valueStream       String? // "evaluate"|"explore"|"integrate"|"deploy"|"release"|"consume"|"operate"|"cross-cutting"
+  it4itSections     String[] @default([])
+  sensitivity       String   @default("internal") // "public"|"internal"|"confidential"|"restricted"
+  humanSupervisorId String? // "HR-000", "HR-100", etc.
+  hitlTierDefault   Int      @default(3) // 0=human-only, 1=approve, 2=review, 3=autonomous
+  escalatesTo       String? // HR role or agent ID
+  delegatesTo       String[] @default([])
+  lifecycleStage    String   @default("production") // "plan"|"design"|"build"|"production"|"retirement"
+
+  portfolio            Portfolio?                  @relation(fields: [portfolioId], references: [id])
+  governanceProfile    AgentGovernanceProfile?
+  ownerships           AgentOwnership[]
+  delegationGrants     DelegationGrant[]
+  executionConfig      AgentExecutionConfig?
+  skills               AgentSkillAssignment[]
+  toolGrants           AgentToolGrant[]
+  toolGrantRevocations AgentToolGrantRevocation[]
+  memoryNotes          CoworkerMemoryNote[]        @relation("CoworkerMemoryNoteAgent")
+  taskGoals            CoworkerTaskGoal[]          @relation("CoworkerTaskGoalAgent")
+  coworkerServices     CoworkerService[]
+  coworkerEngagements  CoworkerEngagement[]
+  coworkerAssessments  CoworkerSelfAssessment[]    @relation("CoworkerSelfAssessmentAgent")
+  coworkerNeeds        CoworkerCapabilityNeed[]    @relation("CoworkerCapabilityNeedAgent")
+  performanceProfiles  AgentPerformance[]
+  degradationMappings  FeatureDegradationMapping[]
+  promptContext        AgentPromptContext?
+  knowledgeArticles    KnowledgeArticle[]          @relation("KnowledgeArticleAgentAuthor")
+  wikiRevisions        WikiPageRevision[]          @relation("WikiRevisionAgentCreator")
+  wikiIngestEvents     WikiIngestEvent[]           @relation("WikiIngestEventAgent")
+  valueStreamTeamRoles ValueStreamTeamRole[]
+  workItemAssignments  WorkItem[]                  @relation("WorkItemAgent")
+  workSchedule         WorkSchedule?               @relation("WorkScheduleAgent")
+  authorityBindings    AuthorityBinding[]
+
+  @@index([portfolioId]) // FK-leading (spine): active-agents-per-portfolio groupBy, apps/web/lib/evaluate/portfolio-data.ts:72
+}
+
+model AgentOwnership {
+  id             String   @id @default(cuid())
+  agentId        String
+  teamId         String
+  responsibility String
+  createdAt      DateTime @default(now())
+  agent          Agent    @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  team           Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@unique([agentId, teamId, responsibility])
+  @@index([teamId])
+}
+
+model AgentCapabilityClass {
+  id                 String                   @id @default(cuid())
+  capabilityClassId  String                   @unique
+  name               String
+  description        String?
+  riskBand           String
+  defaultActionScope Json
+  createdAt          DateTime                 @default(now())
+  updatedAt          DateTime                 @updatedAt
+  governanceProfiles AgentGovernanceProfile[]
+}
+
+model DirectivePolicyClass {
+  id                 String                   @id @default(cuid())
+  policyClassId      String                   @unique
+  name               String
+  description        String?
+  configCategory     String
+  approvalMode       String
+  allowedRiskBand    String
+  createdAt          DateTime                 @default(now())
+  updatedAt          DateTime                 @updatedAt
+  governanceProfiles AgentGovernanceProfile[]
+}
+
+model AgentGovernanceProfile {
+  id                     String               @id @default(cuid())
+  agentId                String               @unique
+  capabilityClassId      String
+  directivePolicyClassId String
+  autonomyLevel          String
+  hitlPolicy             String
+  allowDelegation        Boolean              @default(true)
+  maxDelegationRiskBand  String?
+  createdAt              DateTime             @default(now())
+  updatedAt              DateTime             @updatedAt
+  agent                  Agent                @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  capabilityClass        AgentCapabilityClass @relation(fields: [capabilityClassId], references: [id])
+  directivePolicyClass   DirectivePolicyClass @relation(fields: [directivePolicyClassId], references: [id])
+
+  @@index([capabilityClassId])
+  @@index([directivePolicyClassId])
+}
+
+model DelegationGrant {
+  id             String                     @id @default(cuid())
+  grantId        String                     @unique
+  grantorUserId  String
+  granteeAgentId String
+  targetUserId   String?
+  scopeJson      Json
+  reason         String?
+  riskBand       String
+  status         String                     @default("active")
+  validFrom      DateTime
+  expiresAt      DateTime
+  maxUses        Int?
+  useCount       Int                        @default(0)
+  workflowKey    String?
+  objectRef      String?
+  createdAt      DateTime                   @default(now())
+  updatedAt      DateTime                   @updatedAt
+  decisionLogs   AuthorizationDecisionLog[]
+  granteeAgent   Agent                      @relation(fields: [granteeAgentId], references: [id], onDelete: Cascade)
+  grantorUser    User                       @relation("DelegationGrantGrantor", fields: [grantorUserId], references: [id])
+
+  @@index([grantorUserId])
+  @@index([granteeAgentId])
+  @@index([status, expiresAt])
+}
+
+// EP-AI-WORKFORCE-001: Unified Agent Lifecycle Models
+model AgentExecutionConfig {
+  id                String  @id @default(cuid())
+  agentId           String  @unique
+  defaultModelId    String? // e.g. "claude-sonnet-4-6"
+  temperature       Float   @default(0.3)
+  maxTokens         Int     @default(4096)
+  executionType     String  @default("in_process") // "in_process" | "sandbox" | "daemon"
+  timeoutSeconds    Int     @default(120)
+  concurrencyLimit  Int     @default(4)
+  dailyTokenLimit   Int     @default(200000)
+  perTaskTokenLimit Int     @default(20000)
+  memoryType        String  @default("session") // "none" | "session" | "persistent"
+  memoryBackend     String? // null | "redis" | "postgres"
+  agent             Agent   @relation(fields: [agentId], references: [id], onDelete: Cascade)
+}
+
+model AgentSkillAssignment {
+  id          String  @id @default(cuid())
+  agentId     String
+  label       String
+  description String
+  capability  String? // permission gate, e.g. "view_portfolio"
+  prompt      String
+  taskType    String  @default("conversation") // "conversation" | "code_generation" | "analysis"
+  sortOrder   Int     @default(0)
+  agent       Agent   @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@unique([agentId, label])
+  @@index([agentId])
+}
+
+model AgentToolGrant {
+  id        String   @id @default(cuid())
+  agentId   String
+  grantKey  String // e.g. "registry_read", "backlog_write"
+  grantedAt DateTime @default(now())
+  grantedBy String? // User ID who granted, null = seed
+  agent     Agent    @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@unique([agentId, grantKey])
+  @@index([grantKey])
+}
+
+// BI-4FA040D5: durable revocation tombstone. The boot seed re-applies grants
+// from HARDCODED_COWORKER_GRANTS/ONBOARDING_AGENT_GRANTS on every start, which
+// silently resurrected any seed grant an operator had revoked. A revoke now
+// writes a tombstone here; the seed/bootstrap paths skip any (agentId, grantKey)
+// that carries one, so operator revocations of seed grants are durable. A
+// subsequent (re-)grant deletes the tombstone. Additive-only — the hot
+// authorization read path (AgentToolGrant rows) is untouched: a revoked grant is
+// still a deleted row, so nothing here can authorize.
+model AgentToolGrantRevocation {
+  id        String   @id @default(cuid())
+  agentId   String // Agent.id (cuid), matches AgentToolGrant.agentId
+  grantKey  String
+  revokedBy String? // User ID who revoked, null = system
+  revokedAt DateTime @default(now())
+  agent     Agent    @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@unique([agentId, grantKey])
+  @@index([grantKey])
+}
+
+// BI-F9025BA0 (EP-CLAUDE-INSIDE-OUT): per-coworker durable working memory. The
+// shared WWMD/WWWD corpus and per-user facts already exist; this is the
+// role-local notes layer — a coworker's own techniques, workspace context, and
+// cautions that do not belong in the org corpus. Superseded-by-key (like
+// UserFact): recording the same (agentId, noteKind, noteKey) supersedes the
+// prior active row so the note stays current instead of accumulating. Confirmed
+// durable learnings should be routed onward to WWMD/WWWD via
+// dpf-route-learning-to-commons; this store is the staging/working layer.
+// BI-D6F6A313 (EP-CLAUDE-INSIDE-OUT): a verifiable completion condition attached
+// to a coworker. The external harness /goal blocks stopping until a natural-
+// language condition holds and re-invokes; the DPF analog persists that condition
+// here so an autonomous run can be judged "met/unmet" against a real evaluation
+// (the coworker-inline-review judge shape) instead of self-declaring done. Slice 1
+// persists + evaluates goals on demand via the MCP door; Slice 2 wires the
+// completion seam to auto-evaluate and gate re-dispatch (see BI follow-up).
+model CoworkerTaskGoal {
+  id               String    @id @default(cuid())
+  agentId          String // Agent.id (cuid) — the coworker this goal is for
+  scheduledTaskId  String? // optional link to the ScheduledAgentTask this goal gates
+  condition        String // the natural-language verifiable completion condition
+  status           String    @default("active") // active|met|unmet|abandoned
+  createdBy        String? // userId if a human set it; null = the coworker itself
+  createdAt        DateTime  @default(now())
+  lastEvaluatedAt  DateTime?
+  verdictRationale String? // the judge's rationale from the most recent evaluation
+  resolvedAt       DateTime?
+  agent            Agent     @relation("CoworkerTaskGoalAgent", fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@index([agentId, status])
+  @@index([scheduledTaskId])
+}
+
+model CoworkerMemoryNote {
+  id             String    @id @default(cuid())
+  agentId        String // Agent.id (cuid) — the coworker this note belongs to
+  noteKind       String // closed vocabulary: technique|context|preference|caution|reference
+  noteKey        String // short stable identifier for supersede-by-key
+  content        String
+  sourceRef      String? // free-form provenance (route/thread/task) for audit
+  createdBy      String? // userId if a human recorded it; null = the coworker itself
+  createdAt      DateTime  @default(now())
+  supersededAt   DateTime?
+  supersededById String?
+  // BI-153F7E4A (EP-8C706944 P2): usage-based expiry. lastAccessedAt/useCount are
+  // bumped when a note is recalled into context; the nightly pass expires notes
+  // unused past the retention window (LRU decay, supersede-don't-delete).
+  lastAccessedAt DateTime?
+  useCount       Int       @default(0)
+  agent          Agent     @relation("CoworkerMemoryNoteAgent", fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@index([agentId, supersededAt])
+  @@index([agentId, noteKind, noteKey])
+}
+
+// BI-D6DFC0E7 (EP-COMPETENCE-FLYWHEEL, host-agent scope). The last-known
+// readiness heartbeat of a build surface (Claude Code / Codex / Grok /
+// Antigravity / Build Studio) wired to THIS instance's durable memory. The
+// bootstrap already computes the state locally (@dpf/bootstrap
+// computeReadinessState); this is the reported, fleet-observable roll of it, so
+// the daily digest can raise a surface that is not-ready or has gone silent.
+// One row per surface — a heartbeat upserts on surfaceKey.
+model AgentSurfaceReadiness {
+  id                 String   @id @default(cuid())
+  // Stable identity of the reporting surface + machine, e.g. "claude-code@<machineId>".
+  surfaceKey         String   @unique
+  clientKind         String // claude-code | codex | grok | antigravity | build-studio
+  // Mirrors @dpf/bootstrap ReadinessState (ready | partial | missing_cli | …).
+  readinessState     String
+  dpfPlatformVersion String?
+  mcpOk              Boolean  @default(false)
+  mcpReason          String?
+  detail             Json?
+  reportedAt         DateTime @default(now())
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@index([clientKind])
+  @@index([reportedAt(sort: Desc)])
+}
+
+model CoworkerSelfAssessment {
+  id                String                   @id @default(cuid())
+  assessmentId      String                   @unique
+  agentId           String
+  trigger           String
+  routeContext      String?
+  verdict           String
+  confidence        String
+  missionSummary    String?
+  capabilitySummary String?
+  rawPayload        Json                     @default("{}")
+  createdAt         DateTime                 @default(now())
+  supersededAt      DateTime?
+  agent             Agent                    @relation("CoworkerSelfAssessmentAgent", fields: [agentId], references: [agentId], onDelete: Cascade)
+  needs             CoworkerCapabilityNeed[]
+
+  @@index([agentId, createdAt(sort: Desc)])
+  @@index([verdict, createdAt(sort: Desc)])
+  @@index([trigger, createdAt(sort: Desc)])
+}
+
+model CoworkerCapabilityNeed {
+  id                  String                   @id @default(cuid())
+  needId              String                   @unique
+  assessmentId        String
+  agentId             String
+  kind                String
+  severity            String
+  status              String                   @default("submitted")
+  need                String
+  blocks              String
+  evidenceJson        Json                     @default("{}")
+  readinessJson       Json                     @default("{}")
+  linkedBacklogItemId String?
+  duplicateOfId       String?
+  reviewerNote        String?
+  createdAt           DateTime                 @default(now())
+  updatedAt           DateTime                 @updatedAt
+  assessment          CoworkerSelfAssessment   @relation(fields: [assessmentId], references: [assessmentId], onDelete: Cascade)
+  agent               Agent                    @relation("CoworkerCapabilityNeedAgent", fields: [agentId], references: [agentId], onDelete: Cascade)
+  linkedBacklogItem   BacklogItem?             @relation("BacklogItemCoworkerCapabilityNeeds", fields: [linkedBacklogItemId], references: [itemId])
+  duplicateOf         CoworkerCapabilityNeed?  @relation("CoworkerCapabilityNeedDuplicates", fields: [duplicateOfId], references: [needId])
+  duplicates          CoworkerCapabilityNeed[] @relation("CoworkerCapabilityNeedDuplicates")
+
+  @@index([agentId, status])
+  @@index([status, severity])
+  @@index([kind, status])
+  @@index([linkedBacklogItemId])
+  @@index([assessmentId])
+  @@index([duplicateOfId]) // FK-leading (self-relation): duplicate-chain reverse lookup
+}
+
+model AgentPerformance {
+  id                   String    @id @default(cuid())
+  agentId              String
+  taskType             String
+  evaluationCount      Int       @default(0)
+  successCount         Int       @default(0)
+  avgOrchestratorScore Float     @default(0)
+  avgHumanScore        Float?
+  recentScores         Float[]   @default([])
+  instructionPhase     String    @default("learning") // "learning" | "practicing" | "innate"
+  profileConfidence    String    @default("low") // "low" | "medium" | "high"
+  lastEvaluatedAt      DateTime?
+  agent                Agent     @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@unique([agentId, taskType])
+  @@index([agentId])
+}
+
+model FeatureDegradationMapping {
+  id              String  @id @default(cuid())
+  agentId         String
+  featureRoute    String // e.g. "/build", "/portfolio"
+  featureName     String // e.g. "Build Studio code generation"
+  requiredTier    String // "frontier" | "strong" | "adequate" | "basic"
+  degradationMode String // "disabled" | "reduced" | "fallback_agent" | "manual_only"
+  fallbackAgentId String? // Agent that takes over when degraded
+  userMessage     String? // Shown to user when degraded
+  agent           Agent   @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@unique([agentId, featureRoute])
+  @@index([agentId])
+}
+
+model AgentPromptContext {
+  id                String   @id @default(cuid())
+  agentId           String   @unique
+  perspective       String? // Scott Page: how agent frames problems
+  heuristics        String? // How agent searches for solutions
+  interpretiveModel String? // What agent optimizes for
+  domainTools       String[] @default([]) // Tool names available to this domain
+  agent             Agent    @relation(fields: [agentId], references: [id], onDelete: Cascade)
+}
+
+// ─── Coworker Execution Adapter Substrate (Phase A1–A3) ──────────────────────
+// Spec: docs/superpowers/specs/2026-04-29-cli-execution-adapter-routing-design.md
+// Captures observed adapter capabilities per (adapterKind, adapterVersion).
+// Replaces hand-maintained capability tables with probe-populated rows.
+model AdapterCapabilityProfile {
+  id             String   @id @default(cuid())
+  adapterKind    String // "http-anthropic" | "claude-code-cli" | "codex-cli" | "codex-mcp" | "local-ollama"
+  adapterVersion String // e.g. "claude-code/1.2.3", "codex-cli/0.125.0", "anthropic-http/2024-06-01"
+  probedAt       DateTime
+  probedBy       String // host/process identity, for cache invalidation across replicas
+
+  // Observed capabilities — booleans, not aspirations
+  supportsStreamingEvents    Boolean
+  supportsMcpAttach          Boolean
+  supportsMcpAttachPerInvoke Boolean // Claude Code: yes (--mcp-config); Codex: no (static config only)
+  supportsSubagents          Boolean
+  supportsHooks              Boolean
+  supportsPlanState          Boolean
+  supportsTodoState          Boolean
+  supportsWebFetch           Boolean
+  supportsWebSearch          Boolean
+  supportsSessionResume      Boolean
+  supportsExtendedThinking   Boolean
+  supportsOutputSchema       Boolean
+
+  // Operating envelope
+  maxInteractiveLatencyMs Int // wall-clock budget for first event
+  supportedAuthModes      String[] // "api-key" | "oauth" | "local"
+
+  // Known landmines (Codex example: --json silently ignored when MCP active)
+  knownDegradations Json? // [{ trigger: string, behavior: string, source: string }]
+
+  @@unique([adapterKind, adapterVersion])
+  @@index([adapterKind, probedAt])
+}
+
+// One row per adapter execution attempt. Captures latency, tokens, cost,
+// quota pool, status, refusal/error class, tool-call validity, capability
+// usage, and schema-drift detection. Supports single/shadow/race execution
+// modes via raceCohortId grouping. Feeds nightly outcome scoring (§6.4).
+model AdapterRunTelemetry {
+  id             String  @id @default(cuid())
+  traceId        String? // W3C Trace Context-compatible request correlation id
+  threadId       String? // null for non-coworker runs (probes, eval)
+  agentMessageId String? // joins to AgentMessage when applicable
+  buildId        String? // for Build Studio dispatch via the substrate
+  agentId        String? // attribution (PR #607 convention)
+  skillId        String? // active skill at run time (PR #623 precedent)
+  adapterKind    String
+  adapterVersion String
+  providerId     String
+  modelId        String
+
+  executionMode String // "single" | "shadow-primary" | "shadow-alt" | "race-primary" | "race-loser"
+  raceCohortId  String? // groups concurrent race/shadow runs
+
+  startedAt           DateTime
+  finishedAt          DateTime?
+  durationMs          Int?
+  firstEventLatencyMs Int?
+
+  // Outcome dimensions (spec §5.4)
+  status                   String // "success" | "refusal" | "error" | "timeout" | "cancelled" | "policy-block"
+  httpStatus               Int? // raw HTTP status code from the provider (null for CLI adapters and successes without errors)
+  refusalReason            String?
+  errorClass               String?
+  inputTokens              Int?
+  cachedInputTokens        Int?
+  cacheCreationInputTokens Int? // tokens written into the Anthropic prompt cache this call
+  outputTokens             Int?
+
+  reasoningTokens   Int?
+  estimatedCostUsd  Decimal? @db.Decimal(10, 6)
+  quotaPoolConsumed String? // "anthropic-api" | "anthropic-oauth" | "openai-api" | "openai-chatgpt" | "local"
+
+  toolCallsTotal      Int      @default(0)
+  toolCallsInvalid    Int      @default(0) // fabricated tool names, schema mismatches
+  capabilitiesUsed    String[] // which capability booleans were actually exercised this run
+  schemaDriftDetected Boolean  @default(false) // adapter emitted unexpected event shape
+
+  userAccepted Boolean? // null = not yet decided; true = message kept; false = retried/discarded
+  acceptedAt   DateTime?
+
+  rawEventDigest String? // sha256 of normalized event log, for cross-adapter equivalence checks
+
+  @@index([adapterKind, startedAt])
+  @@index([raceCohortId])
+  @@index([threadId, startedAt])
+  @@index([agentId, startedAt])
+  @@index([startedAt])
+  @@index([traceId])
+}
+
+// EP-COST Phase 2 prerequisite — one row per budget event so the
+// budget gate in callProvider can enforce per-agent and per-build spend limits.
+// Spec: docs/superpowers/specs/2026-05-19-ai-cost-governance.md §3 Phase 2
+model AgentBudgetEvent {
+  id          String   @id @default(cuid())
+  agentId     String
+  buildRunId  String? // FK intentionally soft — build runs may be ephemeral
+  eventKind   String // "inference" | "tool_call" | "budget_exceeded"
+  amountUsd   Decimal  @db.Decimal(10, 6)
+  tokensTotal Int?
+  modelId     String?
+  providerId  String?
+  createdAt   DateTime @default(now())
+
+  @@index([agentId, createdAt])
+  @@index([buildRunId])
+  @@index([createdAt]) // retention sweep cutoff scan, apps/web/lib/operate/retention/execute.ts:99
+}
+
+// Voice Slice 2 — Transcript cleanup audit row.
+//
+// Spec: docs/superpowers/specs/2026-05-16-voice-input-and-transcription-design.md §8 Slice 2, §9
+// Plan: docs/superpowers/plans/2026-05-17-voice-input-slice-2-cleanup-and-bias.md
+//
+// Written only when the cleanup pass either (a) detected injection-shape,
+// or (b) materially rewrote the raw transcript (Levenshtein ratio > 0.3).
+// Per spec §9, no-op cleanups are NOT logged to avoid bloating the table
+// — quality regression is detected from the rows we do write.
+model TranscriptCleanupAudit {
+  id                  String   @id @default(cuid())
+  threadId            String?
+  agentMessageId      String?
+  userId              String?
+  rawText             String   @db.Text
+  cleanedText         String   @db.Text
+  levenshteinRatio    Float
+  injectionSuspected  Boolean  @default(false)
+  injectionIndicators String[] // populated when injectionSuspected = true
+  providerId          String? // cleanup-pass provider; null when short-circuited before LLM
+  modelId             String?
+  durationMs          Int?
+  createdAt           DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([injectionSuspected])
+  @@index([threadId, createdAt])
+}
+
+model AgentThread {
+  id          String                @id @default(cuid())
+  userId      String
+  contextKey  String                @default("coworker")
+  createdAt   DateTime              @default(now())
+  updatedAt   DateTime              @updatedAt
+  proposals   AgentActionProposal[]
+  attachments AgentAttachment[]
+  messages    AgentMessage[]
+  user        User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Coworker execution adapter substrate (Phase A3) — per-thread CLI session
+  // pinning. Null means no active CLI session; CliSessionService writes these
+  // when issuing a session and a sweeper expires stale rows via the
+  // cliSessionLastUsedAt index.
+  // Spec: docs/superpowers/specs/2026-04-29-cli-execution-adapter-routing-design.md §4.2
+  cliSessionId          String?
+  cliSessionAdapterKind String?
+  cliSessionContainerId String?
+  cliSessionLastUsedAt  DateTime?
+  cliSessionWorkdir     String?
+
+  // Specialist subtask thread spawning (feat/agent-thread-spawning)
+  parentThreadId String?
+  childCount     Int           @default(0)
+  cancelledAt    DateTime?
+  idempotencyKey String?
+  terminalError  Json?
+  executionPlan  Json? // BI-655507BA: crash-durable agentic-loop ExecutionPlan (goal+steps+status); written on each plan mutation, reloaded on resume.
+  parent         AgentThread?  @relation("AgentThreadChildren", fields: [parentThreadId], references: [id], onDelete: Restrict)
+  children       AgentThread[] @relation("AgentThreadChildren")
+
+  // BI-FDECBE0A (EP-8C706944 P1): durable rolling compaction checkpoint.
+  // `compactedSummary` is a persisted running summary of every turn OLDER than
+  // the live recency window, so long-thread continuity does not depend solely
+  // on vector recall. `compactionWatermarkAt` is the createdAt of the newest
+  // message already folded into the summary — the advance job only summarizes
+  // messages strictly newer than it, so a span is never re-summarized (the old
+  // in-flight compaction recomputed the same span every turn). `compactedTurnCount`
+  // is how many messages the summary condenses (display + refold heuristics).
+  compactedSummary      String?
+  compactionWatermarkAt DateTime?
+  compactedTurnCount    Int       @default(0)
+
+  @@unique([userId, contextKey])
+  @@index([cliSessionLastUsedAt])
+  @@index([parentThreadId])
+  @@index([updatedAt])
+}
+
+model AgentMessage {
+  id               String               @id @default(cuid())
+  threadId         String
+  taskRunId        String?
+  role             String
+  content          String
+  tone             String?
+  createdAt        DateTime             @default(now())
+  agentId          String?
+  routeContext     String?
+  providerId       String?
+  modelId          String?
+  taskType         String?
+  routedEndpointId String?
+  // BI-3E218D80: what the coworker was actually GIVEN on this turn, and what was dropped
+  // for budget. Extends EP-CTX-001 §9 (Observability), which specified aggregate Prometheus
+  // counters — never built — plus a dev-mode log; neither can answer "why didn't THIS
+  // coworker know X on THIS turn". Shape: lib/tak/arbitration-trace.ts (`ArbitrationTrace`,
+  // versioned). Holds SOURCE LABELS AND TOKEN COUNTS ONLY, never source content: that
+  // content is recalled user facts / page data already persisted elsewhere, and copying it
+  // here would create a second ungoverned retention surface. Nullable: every pre-existing
+  // row stays valid, and a turn that never arbitrates (system messages) simply has none.
+  contextTrace     Json?
+  proposal         AgentActionProposal?
+  attachments      AgentAttachment[]
+  thread           AgentThread          @relation(fields: [threadId], references: [id], onDelete: Cascade)
+
+  @@index([threadId])
+  @@index([taskRunId, createdAt])
+  @@index([createdAt])
+}
+
+model UserFact {
+  id                                String     @id @default(cuid())
+  userId                            String
+  category                          String // preference | decision | constraint | domain_context
+  key                               String
+  value                             String
+  confidence                        Float      @default(1.0)
+  sourceRoute                       String
+  sourceMessageId                   String?
+  sourceAgentId                     String?
+  sourceOperatingProfileFingerprint String?
+  lastValidatedAt                   DateTime?
+  validatedAgainstFingerprint       String?
+  supersededAt                      DateTime?
+  supersededById                    String?
+  // BI-153F7E4A (EP-8C706944 P2): usage-based expiry. lastAccessedAt/useCount are
+  // bumped when a fact is recalled into context; the nightly pass expires facts
+  // unused past the retention window via supersession (never a hard delete).
+  lastAccessedAt                    DateTime?
+  useCount                          Int        @default(0)
+  // BI-1772D0B7 (EP-8C706944 P4): two-scope memory. `scope` = "user" (private
+  // relationship memory, the default) or "org" (a durable business fact that
+  // belongs to the organization and is readable across every employee's session
+  // with the coworker). `sensitivity` = "normal" or "sensitive" (a sensitive fact
+  // never leaves its originating user, regardless of scope). Set at write time by
+  // the memory-scope classifier.
+  scope                             String     @default("user")
+  sensitivity                       String     @default("normal")
+  // BI-BC37727B (EP-27FD96BC P5): set by the nightly memory→corpus promoter when
+  // a durable org-scoped fact has been enriched into the WWWD corpus. NULL = not
+  // yet promoted; a superseded fact's replacement row starts NULL and re-promotes.
+  corpusPromotedAt                  DateTime?
+  createdAt                         DateTime   @default(now())
+  updatedAt                         DateTime   @updatedAt
+  user                              User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  supersededBy                      UserFact?  @relation("FactSupersession", fields: [supersededById], references: [id])
+  supersedes                        UserFact[] @relation("FactSupersession")
+
+  @@index([userId, category, key])
+  @@index([userId, supersededAt])
+  @@index([sourceAgentId, supersededAt])
+  @@index([scope, sensitivity, supersededAt])
+  @@index([supersededById]) // FK-leading (self-relation): supersession-chain reverse lookup, apps/web/lib/tak/user-facts.ts:440
+}
+
+// BI-23A65B81 (EP-8C706944 P3): shared working context for a multi-coworker,
+// multi-session EFFORT outside Build Studio. Substrate-verify finding: PhaseHandoff
+// is build-phase-scoped (FK to a FeatureBuild) and actively used by the BS phase
+// machine; the Workroom is a single-executor, single-lease unit of WIP. Neither
+// models context shared across many coworkers over an effort's lifetime, so the
+// kernel decision (DI-F69AE978B70C) sanctioned exactly this one new concept.
+// Keyed by a free effortKey (e.g. "epic:EP-XXX", "bi:BI-YYY"); any participating
+// coworker appends decisions / open questions / notes, and each session reads the
+// context to rehydrate (Linear's artifact-as-memory).
+model EffortContext {
+  id                  String   @id @default(cuid())
+  effortKey           String   @unique
+  title               String?
+  epicId              String?
+  backlogItemId       String?
+  decisions           String[] @default([])
+  openQuestions       String[] @default([])
+  notes               String[] @default([])
+  participantAgentIds String[] @default([])
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@index([epicId])
+  @@index([backlogItemId])
+}
+
+// BI-A9052DCB (EP-8C706944 P3): session-start projection briefing. A precomputed,
+// refreshable "what you should know" block distilled offline from governed records
+// (BusinessContext, top UserFacts, CoworkerMemoryNotes, recent decisions, thread
+// spend) — injected at session start instead of RAG over transcripts (ChatGPT's
+// reference-chat-history model). scope="user" keys on the userId; scope="org"
+// keys on the organizationId. sourceDigest lets the refresh skip regen when the
+// inputs are unchanged.
+model CoworkerBriefing {
+  id           String   @id @default(cuid())
+  agentId      String // Agent.id (cuid) — the coworker the briefing is for
+  scope        String // "user" | "org"
+  scopeKey     String // userId (scope=user) or organizationId (scope=org)
+  content      String
+  sourceDigest String
+  generatedAt  DateTime @default(now())
+
+  @@unique([agentId, scope, scopeKey])
+  @@index([agentId, scope])
+}
+
+model AgentActionProposal {
+  id               String          @id @default(cuid())
+  proposalId       String          @unique
+  threadId         String
+  taskRunId        String?
+  messageId        String          @unique
+  agentId          String
+  actionType       String
+  parameters       Json
+  status           String          @default("proposed")
+  proposedAt       DateTime        @default(now())
+  decidedAt        DateTime?
+  decidedById      String?
+  executedAt       DateTime?
+  resultEntityId   String?
+  resultError      String?
+  gitCommitHash    String?
+  toolEvaluationId String?
+  decidedBy        User?           @relation("ProposalDecisions", fields: [decidedById], references: [id])
+  message          AgentMessage    @relation(fields: [messageId], references: [id])
+  thread           AgentThread     @relation(fields: [threadId], references: [id])
+  toolEvaluation   ToolEvaluation? @relation(fields: [toolEvaluationId], references: [id])
+
+  @@index([threadId])
+  @@index([taskRunId])
+  @@index([status])
+}
+
+model ToolEvaluation {
+  id         String   @id @default(cuid())
+  toolName   String
+  toolType   String
+  version    String
+  sourceUrl  String
+  proposedBy String
+  proposedAt DateTime @default(now())
+
+  status     String @default("proposed")
+  verdict    Json?
+  conditions Json   @default("[]")
+
+  findings   Json      @default("[]")
+  reviewers  Json      @default("[]")
+  approvedBy String?
+  approvedAt DateTime?
+
+  reEvaluateAfter DateTime?
+  supersedes      String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  proposals        AgentActionProposal[]
+  skillDefinitions SkillDefinition[]
+
+  @@index([toolName, status])
+  @@index([status])
+  @@index([reEvaluateAfter])
+}
+
+model AdminActivity {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id])
+  toolName   String
+  parameters Json
+  result     String // "success" | "blocked" | "confirmed" | "denied"
+  summary    String?
+  tier       Int // 1, 2, or 3
+  createdAt  DateTime @default(now())
+
+  @@index([userId])
+  @@index([createdAt])
+  @@index([toolName])
+}
+
+model ToolExecution {
+  id                      String                   @id @default(cuid())
+  threadId                String
+  agentId                 String
+  userId                  String
+  toolName                String
+  parameters              Json
+  result                  Json
+  success                 Boolean
+  executionMode           String
+  routeContext            String?
+  durationMs              Int?
+  createdAt               DateTime                 @default(now())
+  // Phase 3: audit enrichment — nullable; backfill via backfill-capability-ids.ts
+  auditClass              String?
+  capabilityId            String?
+  summary                 String?
+  // External MCP transport (spec §13) — set when the tool call originated from
+  // a Bearer-token authenticated request through /api/mcp/v1.
+  apiTokenId              String?
+  // Autonomous coworker runtime Slice 1: nullable parent TaskRun link.
+  // Persisted by mcp-governed-execute.ts when context.taskRunId is provided.
+  taskRunId               String?
+  // Governed Hermes learning Slice 1: nullable active skill attribution.
+  skillId                 String?
+  // EP-COST-001 Phase 1: token metering for AI-backed tool execution paths.
+  // Populated by tools that make inference calls (design system generation,
+  // code review, etc.). Non-inference tools (file reads, sandbox runs) leave these null.
+  inputTokens             Int?
+  outputTokens            Int?
+  costUsd                 Float?
+  receipt                 ToolExecutionReceipt?
+  assuranceRun            AssuranceRun?
+  documentLifecycleEvents DocumentLifecycleEvent[]
+  lifecycleEvents         LifecycleEvent[]
+  // Pseudo-User Contract (spec §6.5 + §8). Dual-principal audit + envelope:
+  // delegatingUserId is the human the coworker acted for (distinct from
+  // userId which is the executing identity); chatMessageId is the
+  // AgentMessage that initiated this execution (null for non-chat runs);
+  // envelopeId points to the CoworkerActionEnvelope that approved a
+  // destructive action (null for non-envelope executions).
+  delegatingUserId        String?
+  chatMessageId           String?
+  envelopeId              String?
+  envelope                CoworkerActionEnvelope?  @relation(fields: [envelopeId], references: [id])
+  // EP-31815F97 S2 (BI-F82F4E04): chain-of-custody link. When this tool call is
+  // part of an agent→agent DelegationChain, this is that chain's grouping
+  // chainId; the human origin is on userId/delegatingUserId. Null for direct
+  // human→coworker calls (still traceable via userId). Joins ToolExecution to
+  // getChainOfCustody(chainId) so every action traces back to a human (TAK §7.1).
+  delegationChainId       String?
+
+  @@index([agentId, createdAt])
+  @@index([userId, createdAt])
+  @@index([toolName, createdAt])
+  @@index([threadId])
+  @@index([auditClass, createdAt(sort: Desc)])
+  @@index([capabilityId, createdAt(sort: Desc)])
+  @@index([apiTokenId, createdAt(sort: Desc)])
+  @@index([taskRunId, createdAt(sort: Desc)])
+  @@index([skillId, createdAt(sort: Desc)])
+  @@index([envelopeId])
+  @@index([delegatingUserId, createdAt(sort: Desc)])
+  @@index([delegationChainId])
+  @@index([createdAt])
+}
+
+// Pseudo-User Contract (spec §6.4 + §8): destructive-action confirmation
+// envelope. A coworker proposes a destructive action via screen_propose_action;
+// the user approves/declines; the underlying tool executes (or not) and the
+// outcome is recorded. Lifecycle: proposed → approved|declined →
+// executed|failed|cancelled (resolved). Coworker identity is captured as
+// coworkerAgentId (Agent.agentId semantic id), matching the existing
+// ToolExecution.agentId convention; Principal convergence is via
+// PrincipalAlias lookup at query time (AGENTS.md §11), not a direct FK.
+model CoworkerActionEnvelope {
+  id                         String    @id @default(cuid())
+  coworkerAgentId            String
+  delegatingUserId           String
+  threadId                   String
+  chatMessageId              String?
+  manifestActionId           String
+  argsJson                   Json
+  rationale                  String
+  status                     String    @default("proposed")
+  taskRunId                  String?
+  delegationChainId          String?
+  authorityDecisionId        String?
+  inputFingerprint           String?
+  approvalBindingFingerprint String?
+  expiresAt                  DateTime?
+  createdAt                  DateTime  @default(now())
+  resolvedAt                 DateTime?
+
+  toolExecutions    ToolExecution[]
+  taskRun           TaskRun?                  @relation(fields: [taskRunId], references: [taskRunId], onDelete: SetNull)
+  authorityDecision AuthorizationDecisionLog? @relation(fields: [authorityDecisionId], references: [decisionId], onDelete: SetNull)
+
+  @@index([threadId, createdAt(sort: Desc)])
+  @@index([coworkerAgentId, createdAt(sort: Desc)])
+  @@index([status])
+  @@index([chatMessageId])
+  @@index([taskRunId])
+  @@index([delegationChainId])
+  @@index([authorityDecisionId])
+  @@index([approvalBindingFingerprint])
+  @@index([expiresAt])
+}
+
+model ToolExecutionReceipt {
+  id               String                 @id @default(cuid())
+  toolExecutionId  String                 @unique
+  buildId          String?
+  receiptKind      String
+  receiptStatus    String                 @default("valid")
+  inputFingerprint String
+  outputDigest     Json
+  executionStatus  String
+  expiresAt        DateTime
+  createdAt        DateTime               @default(now())
+  build            FeatureBuild?          @relation(fields: [buildId], references: [buildId])
+  toolExecution    ToolExecution          @relation(fields: [toolExecutionId], references: [id], onDelete: Cascade)
+  usages           ArtifactReceiptUsage[]
+  assuranceRun     AssuranceRun?
+
+  @@index([buildId, createdAt(sort: Desc)])
+  @@index([receiptKind, createdAt(sort: Desc)])
+  @@index([receiptStatus, expiresAt])
+  @@index([createdAt]) // retention sweep cutoff scan, apps/web/lib/operate/retention/execute.ts:99
+}
+
+model AgentAttachment {
+  id            String        @id @default(cuid())
+  threadId      String
+  messageId     String?
+  fileName      String
+  mimeType      String
+  sizeBytes     Int
+  storageKey    String
+  parsedContent Json?
+  parsedAt      DateTime?
+  createdAt     DateTime      @default(now())
+  message       AgentMessage? @relation(fields: [messageId], references: [id])
+  thread        AgentThread   @relation(fields: [threadId], references: [id], onDelete: Cascade)
+
+  @@index([threadId])
+  @@index([messageId])
+}
+
+model ScheduledAgentTask {
+  id                String    @id @default(cuid())
+  taskId            String    @unique
+  agentId           String
+  title             String
+  prompt            String
+  routeContext      String
+  schedule          String // cron expression: "0 9 * * 1" (Mon 9am), "0 8 * * *" (daily 8am)
+  timezone          String    @default("UTC")
+  isActive          Boolean   @default(true)
+  ownerUserId       String
+  // Optional business scope for product-management watches. Null means the
+  // generic user-owned task remains outside product-management projection.
+  // ProductLine and Product are mutually exclusive and organization-consistent.
+  organizationId    String?
+  productLineId     String?
+  businessProductId String?
+  taskKind          String?
+  taskConfig        Json?
+  lastRunAt         DateTime?
+  nextRunAt         DateTime?
+  lastStatus        String? // ok | error
+  lastError         String?
+  lastThreadId      String?
+  // Autonomous coworker runtime Slice 1: latest TaskRun spawned by this schedule.
+  taskRunId         String?
+  // BI-754C9E82: consecutive failed attempts in the CURRENT retry cycle. The
+  // proactivity plan's followUpCadenceMinutes/maxAttempts drive short-cadence
+  // retries after a failure; reset on success or when the budget is exhausted
+  // (each cron cycle gets a fresh budget).
+  attempts          Int       @default(0)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  owner           User          @relation("ScheduledAgentTaskOwner", fields: [ownerUserId], references: [id])
+  organization    Organization? @relation("ScheduledAgentTaskOrganization", fields: [organizationId], references: [id], onDelete: Cascade)
+  productLine     ProductLine?  @relation("ScheduledAgentTaskProductLine", fields: [productLineId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  businessProduct Product?      @relation("ScheduledAgentTaskBusinessProduct", fields: [businessProductId, organizationId], references: [id, organizationId], onDelete: Restrict)
+
+  @@index([agentId])
+  @@index([ownerUserId])
+  @@index([organizationId])
+  @@index([productLineId])
+  @@index([businessProductId])
+  @@index([taskKind, isActive, nextRunAt])
+  @@index([isActive, nextRunAt])
+  @@index([taskRunId])
+}
+
+// EP-INF-012: Per-agent model assignment configuration (admin-overridable)
+model AgentModelConfig {
+  agentId              String   @id // e.g. "build-specialist", "coo"
+  minimumTier          String   @default("adequate") // "frontier" | "strong" | "adequate" | "basic"
+  pinnedProviderId     String?
+  pinnedModelId        String?
+  budgetClass          String   @default("balanced") // "minimize_cost" | "balanced" | "quality_first"
+  // EP-AGENT-CAP-002: Hard capability floor — model must satisfy ALL declared capabilities.
+  // Null = system default { "toolUse": true }.
+  // {} = passive agent (no capability floor — rare, must be explicit).
+  minimumCapabilities  Json?
+  // EP-AGENT-CAP-002: Minimum context window tokens for RAG/knowledge retrieval.
+  // Null = system default 16000.
+  minimumContextTokens Int?
+  configuredAt         DateTime @default(now())
+  configuredById       String?
+  configuredBy         User?    @relation("AgentModelConfiguredBy", fields: [configuredById], references: [id])
+}
+
+// EP-SKILL-001: AI Coworker Skills Marketplace
+model SkillDefinition {
+  id             String   @id @default(cuid())
+  skillId        String   @unique // e.g. "code-runner", "pr-summary"
+  name           String
+  description    String
+  version        String   @default("1.0.0")
+  sourceType     String // "marketplace" | "github" | "internal" | "community"
+  sourceUrl      String?
+  sourceRegistry String? // "skillsmp" | "skillsllm" | "anthropics" | "internal"
+  skillMdContent String // Full SKILL.md content
+  category       String // "ai-agents" | "mcp-servers" | "cli-tools" | "portfolio" | "operations" | "universal" | etc.
+  tags           String[] @default([])
+  author         String?
+  license        String?
+  riskBand       String   @default("low") // "low" | "medium" | "high" | "critical"
+  status         String   @default("discovered") // "discovered" | "evaluated" | "approved" | "installed" | "active" | "deprecated"
+
+  // --- SKILL.md pattern fields (Phase 2 enrichment) ---
+  triggerPattern      String? // regex/keywords for auto-suggestion (Anthropic's description-as-trigger)
+  userInvocable       Boolean  @default(true) // can humans invoke directly?
+  agentInvocable      Boolean  @default(true) // can other coworkers invoke?
+  allowedTools        String[] @default([]) // tools this skill may use
+  composesFrom        String[] @default([]) // other skillIds this skill builds on
+  contextRequirements String[] @default([]) // what context/data the skill needs
+  capability          String? // permission gate (e.g. "view_portfolio") — null = ungated
+  taskType            String   @default("conversation") // "conversation" | "code_generation" | "analysis"
+
+  evaluationId String?
+  installedAt  DateTime?
+  lastTestedAt DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  // Governed Hermes learning Slice 4: operational-health axis, separate from
+  // adoption-stage `status`. Typed at the application layer in
+  // apps/web/lib/skills/lifecycle.ts as
+  //   "active" | "stale" | "pinned" | "quarantined" | "archived"
+  // The curator writes this column on its scheduled run; operator pin /
+  // quarantine actions also write it. SkillDefinition.skillMdContent is
+  // never mutated by the curator.
+  lifecycleState String @default("active")
+
+  evaluation  ToolEvaluation?   @relation(fields: [evaluationId], references: [id])
+  assignments SkillAssignment[]
+  metrics     SkillMetric[]
+  usageEvents SkillUsageEvent[]
+  revisions   SkillRevision[]
+
+  @@index([status])
+  @@index([category])
+  @@index([sourceType])
+  @@index([lifecycleState])
+}
+
+model SkillSeedWarning {
+  id          String    @id @default(cuid())
+  warningId   String    @unique
+  skillId     String
+  warningType String
+  message     String
+  legacyPath  String?
+  pluginPath  String?
+  sourceType  String    @default("dpf-platform-plugin")
+  metadata    Json      @default("{}")
+  resolvedAt  DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([skillId])
+  @@index([warningType])
+  @@index([resolvedAt])
+}
+
+model SkillAssignment {
+  id         String   @id @default(cuid())
+  // Business skill identifier (e.g. "code-runner"), references SkillDefinition.skillId.
+  // Not the cuid primary key — the column name and every caller treat this as the
+  // stable business identifier so it stays legible in logs and cross-install exports.
+  skillId    String
+  agentId    String // Which coworker gets this skill
+  priority   Int      @default(0) // Higher = loaded first
+  enabled    Boolean  @default(true)
+  assignedBy String // User who approved
+  assignedAt DateTime @default(now())
+
+  skill SkillDefinition @relation(fields: [skillId], references: [skillId], onDelete: Cascade)
+
+  @@unique([skillId, agentId])
+  @@index([agentId])
+}
+
+model SkillMetric {
+  id              String   @id @default(cuid())
+  skillId         String // Business id; see SkillAssignment.skillId comment
+  agentId         String
+  period          String // "2026-W13", "2026-03"
+  invocationCount Int      @default(0)
+  successCount    Int      @default(0)
+  userRating      Float? // 1-5 average
+  avgLatencyMs    Int?
+  feedbackNotes   String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  skill SkillDefinition @relation(fields: [skillId], references: [skillId], onDelete: Cascade)
+
+  @@unique([skillId, agentId, period])
+  @@index([skillId])
+}
+
+model SkillUsageEvent {
+  id              String   @id @default(cuid())
+  eventId         String   @unique
+  skillId         String
+  agentId         String
+  userId          String?
+  threadId        String?
+  taskRunId       String?
+  toolExecutionId String?
+  routeContext    String?
+  phase           String
+  source          String   @default("coworker")
+  metadata        Json     @default("{}")
+  createdAt       DateTime @default(now())
+
+  skill SkillDefinition @relation(fields: [skillId], references: [skillId], onDelete: Cascade)
+
+  @@index([skillId, createdAt(sort: Desc)])
+  @@index([agentId, createdAt(sort: Desc)])
+  @@index([threadId, createdAt(sort: Desc)])
+  @@index([taskRunId, createdAt(sort: Desc)])
+  @@index([phase, createdAt(sort: Desc)])
+  @@index([createdAt])
+}
+
+// Governed Hermes learning Slice 3: immutable per-version snapshot of a
+// skill's SKILL.md content. Mirrors PromptRevision shape so operators who
+// already know the prompt revision pattern can navigate this without
+// retraining. Every approve and rollback writes a new row; the DB never
+// mutates SkillDefinition.skillMdContent in place without leaving a trail.
+model SkillRevision {
+  id           String   @id @default(cuid())
+  revisionId   String   @unique
+  skillId      String // SkillDefinition.skillId (business id)
+  version      Int
+  content      String // snapshot of skillMdContent at this version
+  metadata     Json?
+  changeReason String?
+  changedBy    String?
+  proposalId   String? // ImprovementProposal.proposalId when approved via proposal
+  createdAt    DateTime @default(now())
+
+  skill SkillDefinition @relation(fields: [skillId], references: [skillId], onDelete: Cascade)
+
+  @@unique([skillId, version])
+  @@index([skillId, createdAt(sort: Desc)])
+  @@index([proposalId])
+}
+
+// ─── EP-DELEG-001: Delegation Chain (Authority Propagation & Chain of Custody) ─
+model DelegationChain {
+  id              String    @id @default(cuid())
+  chainId         String // UUID grouping all links in one delegation flow
+  depth           Int // 0 = origin, 1 = first delegate, etc.
+  fromAgentId     String // delegating coworker
+  toAgentId       String // receiving coworker
+  skillId         String? // which skill triggered delegation
+  authorityScope  String[] // capabilities propagated from origin caller
+  originUserId    String // human who started the chain
+  originAuthority String[] // original user's granted capabilities
+  status          String    @default("active") // "active" | "completed" | "failed" | "blocked"
+  reason          String? // why delegation was made or blocked
+  parentLinkId    String? // previous link in chain (null for origin)
+  startedAt       DateTime  @default(now())
+  completedAt     DateTime?
+
+  @@index([chainId])
+  @@index([fromAgentId])
+  @@index([toAgentId])
+  @@index([status])
+}
+
+// ─── Prompt Templates ─────────────────────────────────────────────────────────
+// Editable AI coworker instructions. Source of truth: prompts/*.prompt.md files.
+// Seeded on deploy, overridable at runtime via Admin > Prompts.
+model PromptTemplate {
+  id            String   @id @default(cuid())
+  category      String // platform-identity | platform-preamble | route-persona | build-phase | specialist | reviewer | context
+  slug          String // filename stem (e.g. "portfolio-advisor")
+  name          String // human-readable display name
+  description   String? // what this prompt does
+  content       String // the markdown body (below YAML frontmatter)
+  contentFormat String   @default("markdown") // markdown | handlebars
+  composesFrom  String[] @default([]) // category/slug refs for {{include:...}} resolution
+  variables     Json? // declared template variables [{name, required}]
+  metadata      Json? // all other frontmatter (IT4IT, Scott Page, sensitivity)
+  isOverridden  Boolean  @default(false) // true when admin has edited from seed default
+  enabled       Boolean  @default(true)
+  version       Int      @default(1)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  updatedBy     String?
+
+  revisions PromptRevision[]
+
+  @@unique([category, slug])
+  @@index([category])
+}
+
+model PromptRevision {
+  id           String   @id @default(cuid())
+  templateId   String
+  version      Int
+  content      String // snapshot of content at this version
+  metadata     Json? // snapshot of metadata
+  changeReason String?
+  changedBy    String?
+  createdAt    DateTime @default(now())
+
+  template PromptTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  @@unique([templateId, version])
+  @@index([templateId])
+}
+
+model CoworkerTurnMetric {
+  id                           String   @id @default(cuid())
+  threadId                     String
+  agentMessageId               String
+  agentId                      String?
+  routeContext                 String?
+  taskType                     String?
+  providerId                   String?
+  modelId                      String?
+  dispatches                   Int      @default(0)
+  nudges                       Int      @default(0)
+  toolsAttached                Boolean  @default(false)
+  executedTools                Int      @default(0)
+  totalMs                      Int?
+  ctxPeakTokens                Int?
+  ctxWindowTokens              Int?
+  toolSurfaceCount             Int?
+  toolDefinitionTokens         Int?
+  toolSurfaceExceedsLocalCliff Boolean  @default(false)
+  toolSurfaceWindowShare       Float?
+  toolSelectionAccuracy        Float?
+  createdAt                    DateTime @default(now())
+
+  @@unique([threadId, agentMessageId])
+  @@index([createdAt])
+  @@index([agentId, routeContext, createdAt])
+  @@index([threadId, createdAt])
+}

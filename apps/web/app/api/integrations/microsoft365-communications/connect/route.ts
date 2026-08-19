@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
-import { connectMicrosoft365Communications } from "@/lib/integrate/microsoft365-communications/connect-action";
+import { connectMicrosoft365Communications } from "@/lib/integrations/microsoft365-communications/connect-action";
 
 export async function POST(request: Request) {
   const session = await auth();

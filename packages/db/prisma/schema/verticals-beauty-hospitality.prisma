@@ -1,0 +1,298 @@
+/// Beauty-owned fixed operating resource. People remain in ServiceProvider;
+/// bookings remain in StorefrontBooking; geometry remains in OperationalSceneLayout.
+model BeautyResource {
+  id             String   @id @default(cuid())
+  resourceId     String
+  organizationId String
+  storefrontId   String
+  kind           String
+  label          String
+  status         String   @default("active")
+  capacity       Int      @default(1)
+  capacityUnit   String   @default("appointments")
+  serviceArea    String?
+  blockedReason  String?
+  attributes     Json?
+  version        Int      @default(1)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization                 @relation("BeautyResourceOrganization", fields: [organizationId], references: [id], onDelete: Restrict)
+  storefront   StorefrontConfig             @relation(fields: [storefrontId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  services     BeautyResourceService[]
+  availability BeautyResourceAvailability[]
+  allocations  BeautyCapacityAllocation[]
+
+  @@unique([id, organizationId])
+  @@unique([id, storefrontId])
+  @@unique([storefrontId, resourceId])
+  @@index([organizationId, kind, status])
+  @@index([storefrontId, kind, status])
+}
+
+/// Explicit service eligibility for a chair, station, or treatment room.
+model BeautyResourceService {
+  id           String   @id @default(cuid())
+  storefrontId String
+  resourceId   String
+  itemId       String
+  createdAt    DateTime @default(now())
+
+  storefront StorefrontConfig @relation(fields: [storefrontId], references: [id], onDelete: Cascade)
+  resource   BeautyResource   @relation(fields: [resourceId, storefrontId], references: [id, storefrontId], onDelete: Cascade)
+  item       StorefrontItem   @relation(fields: [itemId, storefrontId], references: [id, storefrontId], onDelete: Cascade)
+
+  @@unique([resourceId, itemId])
+  @@index([storefrontId, itemId])
+}
+
+/// Recurring or dated availability/block window for a fixed beauty resource.
+/// Human working time remains in ProviderAvailability.
+model BeautyResourceAvailability {
+  id             String    @id @default(cuid())
+  availabilityId String    @unique
+  organizationId String
+  resourceId     String
+  kind           String    @default("available")
+  days           Int[]     @default([])
+  startTime      String?
+  endTime        String?
+  date           DateTime?
+  startsAt       DateTime?
+  endsAt         DateTime?
+  reason         String?
+  version        Int       @default(1)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  organization Organization   @relation("BeautyAvailabilityOrganization", fields: [organizationId], references: [id], onDelete: Restrict)
+  resource     BeautyResource @relation(fields: [resourceId, organizationId], references: [id, organizationId], onDelete: Cascade)
+
+  @@index([resourceId, date])
+  @@index([organizationId, kind])
+  @@index([startsAt, endsAt])
+}
+
+/// Append-preserving beauty capacity consumption ledger. Each row reserves one
+/// fixed resource for exactly one booking or temporary booking hold.
+model BeautyCapacityAllocation {
+  id             String    @id @default(cuid())
+  allocationId   String    @unique
+  organizationId String
+  storefrontId   String
+  resourceId     String
+  bookingId      String?
+  bookingHoldId  String?
+  demandType     String
+  demandRef      String
+  startsAt       DateTime
+  endsAt         DateTime
+  quantity       Int       @default(1)
+  lifecycle      String    @default("confirmed")
+  idempotencyKey String?
+  version        Int       @default(1)
+  releasedAt     DateTime?
+  releaseReason  String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  organization Organization       @relation("BeautyAllocationOrganization", fields: [organizationId], references: [id], onDelete: Restrict)
+  storefront   StorefrontConfig   @relation(fields: [storefrontId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  resource     BeautyResource     @relation(fields: [resourceId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  booking      StorefrontBooking? @relation("BeautyAllocationBooking", fields: [bookingId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  bookingHold  BookingHold?       @relation("BeautyAllocationHold", fields: [bookingHoldId, organizationId], references: [id, organizationId], onDelete: Restrict)
+
+  @@unique([organizationId, idempotencyKey])
+  @@index([resourceId, startsAt, endsAt])
+  @@index([organizationId, lifecycle, startsAt])
+  @@index([storefrontId, demandType, demandRef])
+}
+
+/// Food & Hospitality-owned discrete operating resource. People remain in
+/// ServiceProvider/Staffing; geometry remains in OperationalSceneLayout.
+model HospitalityResource {
+  id                      String   @id @default(cuid())
+  resourceId              String
+  organizationId          String
+  storefrontId            String
+  kind                    String
+  label                   String
+  status                  String   @default("active")
+  capacity                Int      @default(1)
+  capacityUnit            String   @default("seats")
+  serviceArea             String?
+  blockedReason           String?
+  attributes              Json?
+  version                 Int      @default(1)
+  legacyServiceProviderId String?  @unique
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+
+  organization          Organization                      @relation("HospitalityResourceOrganization", fields: [organizationId], references: [id], onDelete: Restrict)
+  storefront            StorefrontConfig                  @relation(fields: [storefrontId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  legacyServiceProvider ServiceProvider?                  @relation("HospitalityResourceLegacyProvider", fields: [legacyServiceProviderId], references: [id], onDelete: SetNull)
+  availability          HospitalityResourceAvailability[]
+  allocations           HospitalityCapacityAllocation[]
+  bookings              StorefrontBooking[]               @relation("HospitalityBookingResource")
+  bookingHolds          BookingHold[]                     @relation("HospitalityHoldResource")
+
+  @@unique([id, organizationId])
+  @@unique([storefrontId, resourceId])
+  @@index([organizationId, kind, status])
+  @@index([storefrontId, kind, status])
+}
+
+/// Aggregate time-bounded capacity such as kitchen covers, bake batches, or a
+/// delivery window. Event people remain in the staffing substrate.
+model HospitalityCapacityPool {
+  id              String   @id @default(cuid())
+  poolId          String
+  organizationId  String
+  storefrontId    String
+  kind            String
+  label           String
+  capacity        Int
+  capacityUnit    String
+  intervalMinutes Int?
+  status          String   @default("active")
+  version         Int      @default(1)
+  attributes      Json?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  organization Organization                    @relation("HospitalityCapacityPoolOrganization", fields: [organizationId], references: [id], onDelete: Restrict)
+  storefront   StorefrontConfig                @relation(fields: [storefrontId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  allocations  HospitalityCapacityAllocation[]
+
+  @@unique([id, organizationId])
+  @@unique([storefrontId, poolId])
+  @@index([organizationId, kind, status])
+  @@index([storefrontId, kind, status])
+}
+
+/// Recurring or dated availability/block window for a discrete hospitality
+/// resource. This is intentionally separate from human ProviderAvailability.
+model HospitalityResourceAvailability {
+  id             String    @id @default(cuid())
+  availabilityId String    @unique
+  organizationId String
+  resourceId     String
+  kind           String    @default("available")
+  days           Int[]     @default([])
+  startTime      String?
+  endTime        String?
+  date           DateTime?
+  startsAt       DateTime?
+  endsAt         DateTime?
+  reason         String?
+  version        Int       @default(1)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  organization Organization        @relation("HospitalityAvailabilityOrganization", fields: [organizationId], references: [id], onDelete: Restrict)
+  resource     HospitalityResource @relation(fields: [resourceId, organizationId], references: [id, organizationId], onDelete: Cascade)
+
+  @@index([resourceId, date])
+  @@index([organizationId, kind])
+  @@index([startsAt, endsAt])
+}
+
+/// Append-preserving capacity consumption ledger. A row targets exactly one
+/// discrete resource or aggregate pool; the migration owns that CHECK invariant.
+model HospitalityCapacityAllocation {
+  id                    String    @id @default(cuid())
+  allocationId          String    @unique
+  organizationId        String
+  storefrontId          String
+  resourceId            String?
+  poolId                String?
+  bookingId             String?
+  bookingHoldId         String?
+  serviceTurnId         String?
+  demandType            String
+  demandRef             String
+  startsAt              DateTime
+  endsAt                DateTime
+  quantity              Int       @default(1)
+  lifecycle             String    @default("reserved")
+  idempotencyKey        String?
+  version               Int       @default(1)
+  releasedAt            DateTime?
+  releaseReason         String?
+  conflictQuarantinedAt DateTime?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  organization Organization             @relation("HospitalityAllocationOrganization", fields: [organizationId], references: [id], onDelete: Restrict)
+  storefront   StorefrontConfig         @relation(fields: [storefrontId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  resource     HospitalityResource?     @relation(fields: [resourceId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  pool         HospitalityCapacityPool? @relation(fields: [poolId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  booking      StorefrontBooking?       @relation("HospitalityAllocationBooking", fields: [bookingId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  bookingHold  BookingHold?             @relation("HospitalityAllocationHold", fields: [bookingHoldId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  serviceTurn  HospitalityServiceTurn?  @relation(fields: [serviceTurnId, organizationId], references: [id, organizationId], onDelete: Restrict)
+
+  @@unique([organizationId, idempotencyKey])
+  @@index([resourceId, startsAt, endsAt])
+  @@index([poolId, startsAt, endsAt])
+  @@index([organizationId, lifecycle, startsAt])
+  @@index([storefrontId, demandType, demandRef])
+  @@index([serviceTurnId])
+}
+
+/// One party's authoritative in-service lifecycle across one or more table
+/// allocations. Reservation, capacity, commerce, staffing, and geometry remain
+/// separate authorities joined through this aggregate.
+model HospitalityServiceTurn {
+  id                   String    @id @default(cuid())
+  turnId               String    @unique
+  organizationId       String
+  storefrontId         String
+  bookingId            String?
+  staffingAssignmentId String?
+  demandType           String
+  demandRef            String
+  stage                String    @default("seated")
+  startedAt            DateTime
+  expectedEndAt        DateTime
+  closedAt             DateTime?
+  version              Int       @default(1)
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  organization       Organization                    @relation("HospitalityServiceTurnOrganization", fields: [organizationId], references: [id], onDelete: Restrict)
+  storefront         StorefrontConfig                @relation(fields: [storefrontId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  booking            StorefrontBooking?              @relation("HospitalityServiceTurnBooking", fields: [bookingId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  staffingAssignment StaffingAssignment?             @relation(fields: [staffingAssignmentId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  allocations        HospitalityCapacityAllocation[]
+  events             HospitalityServiceTurnEvent[]
+
+  @@unique([id, organizationId])
+  @@unique([bookingId, organizationId])
+  @@unique([storefrontId, demandType, demandRef])
+  @@index([organizationId, stage, startedAt])
+  @@index([staffingAssignmentId])
+}
+
+/// Append-only evidence for service-stage, table-assignment, and staffing
+/// changes. One event records each accepted aggregate version.
+model HospitalityServiceTurnEvent {
+  id             String   @id @default(cuid())
+  eventId        String   @unique
+  organizationId String
+  serviceTurnId  String
+  idempotencyKey String?
+  eventType      String
+  fromStage      String?
+  toStage        String?
+  atVersion      Int
+  actorRef       String?
+  detail         Json?
+  occurredAt     DateTime @default(now())
+
+  organization Organization           @relation("HospitalityServiceTurnEventOrganization", fields: [organizationId], references: [id], onDelete: Restrict)
+  serviceTurn  HospitalityServiceTurn @relation(fields: [serviceTurnId, organizationId], references: [id, organizationId], onDelete: Cascade)
+
+  @@unique([serviceTurnId, atVersion])
+  @@unique([organizationId, idempotencyKey])
+  @@index([organizationId, occurredAt])
+}

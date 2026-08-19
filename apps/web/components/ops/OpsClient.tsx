@@ -9,7 +9,7 @@ import { EpicPanel } from "./EpicPanel";
 import { OperatorTriageBand } from "./OperatorTriageBand";
 import { summarizeBacklogStatuses, visibleUnderActiveOnly } from "@/lib/backlog-visibility";
 import { FilterBar, type FacetDef } from "@/components/ui/report-kit";
-import { backlogItemOrigin, BACKLOG_ORIGIN_FILTERS } from "@/lib/ops/backlog-origin";
+import { backlogItemOrigin, BACKLOG_ORIGIN_FILTERS } from "@/lib/operate/backlog-origin";
 import type {
   BacklogItemWithRelations,
   DigitalProductSelect,

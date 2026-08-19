@@ -22,7 +22,7 @@ export async function GET(request: NextRequest) {
     return new Response("Access denied: unsupported file type", { status: 403 });
   }
 
-  const { readProjectFile, isPathAllowedSync: isPathAllowed } = await import(/* turbopackIgnore: true */ "../../../lib/integrate/codebase-tools");
+  const { readProjectFile, isPathAllowedSync: isPathAllowed } = await import(/* turbopackIgnore: true */ "../../../lib/build/codebase-tools");
   if (!isPathAllowed(path)) {
     return new Response("Access denied", { status: 403 });
   }

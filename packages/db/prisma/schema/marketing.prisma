@@ -1,0 +1,456 @@
+model MarketingStrategy {
+  strategyId            String    @id @default(cuid())
+  organizationId        String    @unique
+  storefrontId          String?
+  status                String    @default("draft")
+  primaryGoal           String?
+  routeToMarket         String    @default("hybrid")
+  localityModel         String    @default("regional")
+  geographicScope       String?
+  serviceTerritories    Json?
+  targetSegments        Json?
+  idealCustomerProfiles Json?
+  entryOffers           Json?
+  primaryChannels       String[]  @default([])
+  secondaryChannels     String[]  @default([])
+  differentiators       String[]  @default([])
+  proofAssets           Json?
+  seasonalityNotes      String?
+  constraints           Json?
+  reviewCadence         String    @default("quarterly")
+  lastReviewedAt        DateTime?
+  nextReviewAt          DateTime?
+  sourceSummary         String?
+  specialistNotes       String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  organization         Organization                   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  storefront           StorefrontConfig?              @relation(fields: [storefrontId], references: [id], onDelete: SetNull)
+  reviews              MarketingReview[]
+  campaigns            MarketingCampaign[]
+  campaignBriefs       MarketingCampaignBrief[]
+  assetTasks           MarketingAssetTask[]
+  kpiCheckpoints       MarketingKpiCheckpoint[]
+  automationCandidates MarketingAutomationCandidate[]
+
+  @@index([status])
+  @@index([storefrontId])
+  @@index([nextReviewAt])
+}
+
+// A first-class marketing campaign: the executable aggregate that ties an
+// objective + audience + channels + budget + timeline + KPI targets together
+// and owns its child briefs and asset tasks. Before this, briefs/tasks were
+// loose siblings off MarketingStrategy and the campaigns view reconstructed the
+// brief<->task link by fuzzy string matching; campaignId makes that a real
+// relation. Additive: campaignId on brief/task is nullable so legacy rows keep
+// working (the view falls back to fuzzy matching for null-campaign rows).
+model MarketingCampaign {
+  campaignId       String    @id @default(cuid())
+  organizationId   String
+  strategyId       String
+  name             String
+  objective        String
+  audience         String?
+  channels         String[]  @default([])
+  status           String    @default("draft")
+  budgetTotalCents Int?
+  budgetByChannel  Json?
+  startDate        DateTime?
+  endDate          DateTime?
+  kpiTargets       Json?
+  primaryCta       String?
+  notes            String?
+  createdByAgentId String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  organization Organization             @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  strategy     MarketingStrategy        @relation(fields: [strategyId], references: [strategyId], onDelete: Cascade)
+  briefs       MarketingCampaignBrief[]
+  assetTasks   MarketingAssetTask[]
+
+  @@index([organizationId, createdAt])
+  @@index([strategyId, createdAt])
+  @@index([status])
+}
+
+model MarketingReview {
+  reviewId         String   @id @default(cuid())
+  organizationId   String
+  strategyId       String
+  reviewType       String
+  summary          String
+  detectedChanges  Json?
+  funnelAssessment Json?
+  suggestedActions Json?
+  stalenessSignals Json?
+  createdByAgentId String?
+  createdAt        DateTime @default(now())
+
+  organization Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  strategy     MarketingStrategy @relation(fields: [strategyId], references: [strategyId], onDelete: Cascade)
+
+  @@index([organizationId, createdAt])
+  @@index([strategyId, createdAt])
+  @@index([reviewType])
+}
+
+model MarketingCampaignBrief {
+  briefId          String   @id @default(cuid())
+  organizationId   String
+  strategyId       String
+  campaignId       String?
+  title            String
+  objective        String
+  audience         String?
+  channels         String[] @default([])
+  cta              String?
+  proofAssets      String[] @default([])
+  kpis             String[] @default([])
+  notes            String?
+  status           String   @default("draft")
+  createdByAgentId String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  organization Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  strategy     MarketingStrategy  @relation(fields: [strategyId], references: [strategyId], onDelete: Cascade)
+  campaign     MarketingCampaign? @relation(fields: [campaignId], references: [campaignId], onDelete: SetNull)
+
+  @@index([organizationId, createdAt])
+  @@index([strategyId, createdAt])
+  @@index([campaignId])
+  @@index([status])
+}
+
+model MarketingAssetTask {
+  taskId           String   @id @default(cuid())
+  organizationId   String
+  strategyId       String
+  campaignId       String?
+  title            String
+  assetType        String
+  channel          String?
+  dueWindow        String?
+  brief            String?
+  status           String   @default("draft")
+  createdByAgentId String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  organization Organization            @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  strategy     MarketingStrategy       @relation(fields: [strategyId], references: [strategyId], onDelete: Cascade)
+  campaign     MarketingCampaign?      @relation(fields: [campaignId], references: [campaignId], onDelete: SetNull)
+  variants     MarketingAssetVariant[]
+
+  @@index([organizationId, createdAt])
+  @@index([strategyId, createdAt])
+  @@index([campaignId])
+  @@index([status])
+}
+
+// A/B copy variant of a MarketingAssetTask (EP-MARKETING-EXEC parity slice B).
+// Lets the coworker produce and compare multiple copy treatments for one asset,
+// record measured results per variant, and declare a winner. Metrics are stored
+// inline (impressions/clicks/conversions) so winner selection is a pure function
+// of the variant rows — no cross-table join needed at decision time.
+model MarketingAssetVariant {
+  variantId        String   @id @default(cuid())
+  organizationId   String
+  taskId           String
+  label            String
+  hypothesis       String?
+  headline         String?
+  body             String
+  status           String   @default("draft")
+  impressions      Int      @default(0)
+  clicks           Int      @default(0)
+  conversions      Int      @default(0)
+  createdByAgentId String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  organization Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  task         MarketingAssetTask @relation(fields: [taskId], references: [taskId], onDelete: Cascade)
+
+  @@index([organizationId, createdAt])
+  @@index([taskId])
+  @@index([status])
+}
+
+// Competitive battlecard (EP-MARKETING-EXEC parity slice C). Upgrades the
+// competitive-analysis skill from chat-only advice to a durable, reusable
+// artifact: one card per competitor with positioning, their strengths/
+// weaknesses, our differentiators, win themes, and structured objection
+// handling. Multiple cards project into a competitive matrix for the coworker.
+model MarketingBattlecard {
+  battlecardId       String   @id @default(cuid())
+  organizationId     String
+  digitalProductId   String?
+  productLineId      String?
+  businessProductId  String?
+  competitorName     String
+  positioning        String?
+  theirStrengths     String[] @default([])
+  theirWeaknesses    String[] @default([])
+  ourDifferentiators String[] @default([])
+  winThemes          String[] @default([])
+  objectionHandling  Json?
+  notes              String?
+  status             String   @default("active")
+  createdByAgentId   String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  organization    Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  digitalProduct  DigitalProduct? @relation(fields: [digitalProductId], references: [id], onDelete: Restrict)
+  productLine     ProductLine?    @relation("MarketingBattlecardProductLine", fields: [productLineId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  businessProduct Product?        @relation("MarketingBattlecardBusinessProduct", fields: [businessProductId, organizationId], references: [id, organizationId], onDelete: Restrict)
+
+  @@index([organizationId, createdAt])
+  @@index([digitalProductId])
+  @@index([productLineId])
+  @@index([businessProductId])
+  @@index([status])
+}
+
+model MarketingKpiCheckpoint {
+  checkpointId     String   @id @default(cuid())
+  organizationId   String
+  strategyId       String
+  metric           String
+  target           String?
+  cadence          String?
+  notes            String?
+  status           String   @default("active")
+  createdByAgentId String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  organization Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  strategy     MarketingStrategy @relation(fields: [strategyId], references: [strategyId], onDelete: Cascade)
+
+  @@index([organizationId, createdAt])
+  @@index([strategyId, createdAt])
+  @@index([metric])
+}
+
+model MarketingAutomationCandidate {
+  candidateId      String   @id @default(cuid())
+  organizationId   String
+  strategyId       String
+  title            String
+  trigger          String
+  action           String
+  approvalRequired Boolean  @default(true)
+  rationale        String?
+  status           String   @default("draft")
+  createdByAgentId String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  organization Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  strategy     MarketingStrategy @relation(fields: [strategyId], references: [strategyId], onDelete: Cascade)
+
+  @@index([organizationId, createdAt])
+  @@index([strategyId, createdAt])
+  @@index([status])
+}
+
+// ─── Outbound execution substrate (EP-MARKETING-EXEC Phase 1) ────────────────
+//
+// Generic outbound-execution tables with a `domain` discriminator. Marketing
+// is the first domain; customer-advisor outbound, ops-coordinator status
+// comms, and build-specialist contributor recruitment join later without a
+// rename migration. Typed status catalog lives at
+// apps/web/lib/marketing/execution.ts.
+model OutboundDraft {
+  draftId          String   @id @default(cuid())
+  organizationId   String
+  domain           String // "marketing" today; see OUTBOUND_DOMAIN catalog
+  sourceType       String // "marketing-asset-task" | "marketing-campaign-brief" | "inbound-channel-message" | "manual"
+  sourceId         String?
+  strategyId       String?
+  status           String // "draft" | "pending-review" | "approved" | "rejected" | "needs-changes" | "stale"
+  channelId        String // "linkedin" | "email" | "linkedin-ads" | ...
+  assetType        String // "linkedin-post" | "email" | "ad-creative" | "reply" | ...
+  body             String
+  bodyFormat       String // "markdown" | "html" | "plain"
+  metadata         Json?
+  createdByAgentId String?
+  originalPromptId String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  approvals    OutboundApprovalDecision[]
+  publications OutboundPublication[]
+  organization Organization               @relation(fields: [organizationId], references: [id])
+
+  @@index([organizationId, domain, status])
+  @@index([sourceType, sourceId])
+  @@index([channelId, status])
+}
+
+model OutboundApprovalDecision {
+  decisionId     String   @id @default(cuid())
+  draftId        String
+  reviewerUserId String
+  decision       String // "approved" | "rejected" | "needs-changes"
+  editedBody     String?
+  notes          String?
+  decidedAt      DateTime @default(now())
+
+  draft OutboundDraft @relation(fields: [draftId], references: [draftId], onDelete: Cascade)
+
+  @@index([draftId])
+  @@index([reviewerUserId, decidedAt])
+}
+
+// Phase 2: external publish/send record. credentialId is a string pointer to
+// IntegrationCredential.id (no FK — keeps the outbound substrate decoupled
+// from the integration custody layer per spec §5.3). toolExecutionId links
+// to the ToolExecution row written by the publish tool for /platform/ai/
+// authority cross-audit.
+model OutboundPublication {
+  publicationId       String    @id @default(cuid())
+  draftId             String
+  channelId           String
+  credentialId        String?
+  externalId          String
+  externalUrl         String?
+  publishedAt         DateTime  @default(now())
+  publishedByUserId   String
+  toolExecutionId     String?
+  channelMetadata     Json?
+  lastMetricsPolledAt DateTime?
+  lastMetricsSnapshot Json?
+
+  draft OutboundDraft @relation(fields: [draftId], references: [draftId], onDelete: Cascade)
+
+  @@unique([channelId, externalId])
+  @@index([draftId])
+  @@index([channelId, publishedAt])
+}
+
+// Phase 3: inbound channel message — captures one parsed inbound payload
+// (Postmark inbound webhook today; future: LinkedIn DM, X mentions, etc.).
+// classification populated by the responder agent (qualified-inquiry |
+// support | spam | other). routedEngagementId links a qualified inquiry to
+// the CRM Engagement created on the operator's behalf. metadata holds the
+// per-channel raw payload header keys for forensics — never the full body
+// (the parsed body lives in `body` for audit), and never the message-id
+// when the channel uses one we already capture in externalMessageId.
+model InboundChannelMessage {
+  inboundId          String       @id @default(cuid())
+  organizationId     String
+  domain             String // "marketing" today
+  channelId          String // "email-postmark" | ...
+  externalThreadId   String
+  externalMessageId  String?
+  fromAddress        String?
+  fromDisplayName    String?
+  subject            String?
+  body               String
+  receivedAt         DateTime     @default(now())
+  classification     String? // qualified-inquiry | support | spam | other
+  routedEngagementId String?
+  draftedReplyId     String?
+  metadata           Json?
+  organization       Organization @relation(fields: [organizationId], references: [id])
+
+  @@index([organizationId, domain, receivedAt])
+  @@index([channelId, externalThreadId])
+  @@index([classification])
+}
+
+// Phase 4: per-channel weekly spend ceiling. The hard backstop for paid
+// channels (LinkedIn Ads first; Google Ads / Meta Ads layer in later). The
+// spend gate sums OutboundPublication.channelMetadata.spendCents for the
+// rolling 7-day window and refuses placements that would cross weeklyCap
+// Cents — even when the operator clicked Place. Ceiling raising is
+// operator-only (manage_provider_connections capability) so the agent
+// can't escalate its own ceiling.
+model MarketingChannelSpendCeiling {
+  ceilingId       String       @id @default(cuid())
+  organizationId  String
+  channelId       String
+  weeklyCapCents  Int
+  notes           String?
+  lastSetByUserId String
+  lastSetAt       DateTime     @default(now())
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+  organization    Organization @relation(fields: [organizationId], references: [id])
+
+  @@unique([organizationId, channelId])
+  @@index([channelId])
+}
+
+// Phase 5: scheduled outbound action. One row per planned future
+// execution of a Phase 1-4 service (drafter run, publish, or KPI pull).
+// status transitions: pending → fired | failed | cancelled. paused is
+// reachable from pending. Terminal: fired, failed, cancelled.
+//
+// kind values:
+//   draft-marketing-asset      → calls draftMarketingAsset(assetTaskId)
+//   publish-approved-draft     → calls publishApprovedDraft(draftId)
+//   pull-channel-kpis          → calls pullChannelKpis(channelId)
+//
+// targetId carries the kind-specific reference: MarketingAssetTask.taskId
+// for the drafter, OutboundDraft.draftId for publish, channelId string
+// for pull-channel-kpis.
+model ScheduledOutboundAction {
+  scheduleId        String    @id @default(cuid())
+  organizationId    String
+  kind              String
+  targetId          String
+  scheduledFor      DateTime
+  status            String    @default("pending")
+  firedAt           DateTime?
+  lastError         String?
+  autopilotPolicyId String?
+  scheduledByUserId String?
+  notes             String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  // Typed link back to the WorkEngagement instance this action executes (record
+  // of intent/progress), vs. this row which is the executor. onDelete: SetNull —
+  // deleting an engagement instance must not delete its fired-action audit row.
+  workEngagementInstanceId String?
+  workEngagementInstance   WorkEngagement? @relation(fields: [workEngagementInstanceId], references: [id], onDelete: SetNull)
+  organization             Organization    @relation(fields: [organizationId], references: [id])
+
+  @@index([status, scheduledFor])
+  @@index([organizationId, kind, status])
+  @@index([targetId])
+  @@index([workEngagementInstanceId])
+}
+
+// Phase 5: per-channel bounded autopilot policy. enabled=false acts as
+// a hard pause without losing the configuration. autopilot is NEVER
+// allowed to fire on ad channels (channelId="linkedin-ads") or on
+// inbound-reply drafts (sourceType="inbound-channel-message") — the
+// runtime enforces those exclusions at the autopilot eligibility check
+// regardless of what the policy row says.
+model OutboundAutopilotPolicy {
+  policyId                String       @id @default(cuid())
+  organizationId          String
+  domain                  String       @default("marketing")
+  channelId               String
+  enabled                 Boolean      @default(false)
+  autoApproveBelowWords   Int?
+  autoPublishAfterMinutes Int?
+  weeklyCeiling           Int
+  enabledByUserId         String
+  enabledAt               DateTime     @default(now())
+  pausedReason            String?
+  createdAt               DateTime     @default(now())
+  updatedAt               DateTime     @updatedAt
+  organization            Organization @relation(fields: [organizationId], references: [id])
+
+  @@unique([organizationId, channelId])
+  @@index([channelId, enabled])
+}

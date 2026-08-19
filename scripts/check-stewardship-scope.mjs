@@ -29,6 +29,7 @@
 //   node scripts/check-stewardship-scope.mjs --update   # regenerate baseline
 
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
+import { readPrismaSchemaText } from "./lib/prisma-schema-source.mjs";
 import { fileURLToPath } from "node:url";
 import { dirname, join, relative } from "node:path";
 import {
@@ -42,7 +43,6 @@ const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const BASELINE_PATH = join(REPO_ROOT, "scripts", "stewardship-scope-baseline.txt");
 const EXEMPTIONS_PATH = join(REPO_ROOT, "scripts", "stewardship-exemptions.txt");
 
-const SCHEMA_PATH = "packages/db/prisma/schema.prisma";
 const CLASSIFICATION_PATH = "packages/db/src/table-classification.ts";
 const POLICIES_PATH = "apps/web/lib/operate/retention/policies.ts";
 
@@ -131,7 +131,7 @@ function serializeBaseline(models) {
 // ── Load ─────────────────────────────────────────────────────────────────────
 const policiesSource = rd(POLICIES_PATH);
 const input = {
-  models: persistentModels(rd(SCHEMA_PATH)),
+  models: persistentModels(readPrismaSchemaText(REPO_ROOT)),
   classified: classifiedModels(rd(CLASSIFICATION_PATH)),
   purgeModels: registryModels(policiesSource, "PURGE_POLICIES"),
   retainedModels: registryModels(policiesSource, "RETAINED_DATASETS"),

@@ -1125,7 +1125,8 @@
       "publishedPublic": true,
       "publishedPortal": false,
       "anchors": [
-        "data-model-stewardship-runbook"
+        "data-model-stewardship-runbook",
+        "record-lifecycle-convention"
       ]
     },
     "docs/architecture/decision-vectors-by-archetype.md": {

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { handleGitHubWebhook } from "@/lib/integrate/git-promotion-intake";
+import { handleGitHubWebhook } from "@/lib/build/git-promotion-intake";
 
 export async function POST(request: Request) {
   const rawBody = await request.text();

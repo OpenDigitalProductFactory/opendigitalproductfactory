@@ -6,7 +6,7 @@ const { mockAuth, mockConnectQuickBooks } = vi.hoisted(() => ({
 }));
 
 vi.mock("@/lib/auth", () => ({ auth: mockAuth }));
-vi.mock("@/lib/integrate/quickbooks/connect-action", () => ({
+vi.mock("@/lib/integrations/quickbooks/connect-action", () => ({
   connectQuickBooks: mockConnectQuickBooks,
 }));
 

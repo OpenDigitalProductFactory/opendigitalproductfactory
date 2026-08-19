@@ -5,7 +5,7 @@ import {
   buildEngineLabel,
   resolveModelSelectionByPhase,
 } from "@/lib/inference/phase-model-resolution";
-import { getBuildStudioConfig } from "@/lib/integrate/build-studio-config";
+import { getBuildStudioConfig } from "@/lib/build/build-studio-config";
 import type { RoutingEligibility } from "@/lib/routing/provider-routing-eligibility";
 import {
   cliAdapterTypeForProvider,

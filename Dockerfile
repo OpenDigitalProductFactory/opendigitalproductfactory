@@ -25,7 +25,7 @@ COPY patches/ ./patches/
 COPY scripts/set-hooks-path.mjs ./scripts/
 COPY apps/web/package.json ./apps/web/
 COPY packages/db/package.json ./packages/db/
-COPY packages/db/prisma/schema.prisma ./packages/db/prisma/
+COPY packages/db/prisma/schema ./packages/db/prisma/schema
 COPY packages/db/prisma.config.ts ./packages/db/
 COPY packages/db/src/load-env.ts ./packages/db/src/
 # EVERY workspace importer that later stages COPY into the image must have its
@@ -65,7 +65,7 @@ COPY apps/web/ ./apps/web/
 COPY packages/ ./packages/
 COPY docs/professions/ ./docs/professions/
 # Root-level config data statically imported at build time — e.g.
-# apps/web/lib/integrate/seed-contribution-fit.ts imports
+# apps/web/lib/build/seed-contribution-fit.ts imports
 # ../../../../config/seed-content-paths.json. Without this COPY the Next.js build
 # fails "Module not found" inside the image even though plain `next build` (CI)
 # passes, because CI builds the full checkout while the image build only sees this

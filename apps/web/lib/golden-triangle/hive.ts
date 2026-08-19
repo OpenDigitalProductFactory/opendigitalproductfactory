@@ -20,7 +20,7 @@ import { prisma } from "@dpf/db";
 import { buildLedgerEntry, isContributionEnabled, type HiveContributionConfig } from "@dpf/db/hive-contribution-settings";
 
 import type { GoldenTrianglePreference, GoldenTrianglePreset } from "@/lib/golden-triangle";
-import { getDisplayPseudonym } from "@/lib/integrate/identity-privacy";
+import { getDisplayPseudonym } from "@/lib/build/identity-privacy";
 
 const PLATFORM_PROFILE_ID = "mark-dpf-platform";
 const PRESETS: GoldenTrianglePreset[] = ["fast", "frugal", "assured", "balanced", "custom"];

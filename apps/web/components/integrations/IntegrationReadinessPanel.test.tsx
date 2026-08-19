@@ -3,7 +3,7 @@
 import "@testing-library/jest-dom/vitest";
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import { buildQuickBooksReadinessDescriptor } from "@/lib/integrate/quickbooks/readiness";
+import { buildQuickBooksReadinessDescriptor } from "@/lib/integrations/quickbooks/readiness";
 import { IntegrationReadinessPanel } from "./IntegrationReadinessPanel";
 
 describe("IntegrationReadinessPanel", () => {

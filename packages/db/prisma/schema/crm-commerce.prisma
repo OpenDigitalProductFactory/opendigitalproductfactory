@@ -1,0 +1,727 @@
+model CustomerContact {
+  id                           String                   @id @default(cuid())
+  email                        String                   @unique
+  passwordHash                 String?
+  accountId                    String
+  isActive                     Boolean                  @default(true)
+  createdAt                    DateTime                 @default(now())
+  name                         String? // Legacy — use firstName+lastName for new code
+  firstName                    String?
+  lastName                     String?
+  // MDM write-time dedup (EP-4A12A7CB WG-1): standardizeName of the display
+  // name (firstName+lastName, falling back to legacy name). Fuzzy-alert only —
+  // email stays the unique identity key.
+  nameNormalized               String                   @default("")
+  phone                        String?
+  // Field-service dispatch (BI-FS-003): how to reach this contact and whether
+  // the phone is SMS-capable. Nullable = operator has not set a preference yet.
+  // Allowed values enforced in packages/validators (not a Prisma enum — closed
+  // set may grow without a DB migration).
+  preferredNotificationChannel String? // sms | voice | email | none
+  phoneType                    String? // mobile | landline | unknown
+  jobTitle                     String?
+  linkedinUrl                  String?
+  source                       String? // web | referral | import | manual
+  doNotContact                 Boolean                  @default(false)
+  avatarUrl                    String?
+  // Merge tombstone (EP-4A12A7CB): contacts are identity-bearing, so a merge
+  // is a Principal convergence — loser keeps email/credentials, isActive
+  // false, mergedIntoId points at the surviving contact.
+  mergedIntoId                 String?
+  updatedAt                    DateTime                 @default(now()) @updatedAt
+  account                      CustomerAccount          @relation(fields: [accountId], references: [id])
+  mergedInto                   CustomerContact?         @relation("ContactMerge", fields: [mergedIntoId], references: [id])
+  mergedFrom                   CustomerContact[]        @relation("ContactMerge")
+  socialIdentities             SocialIdentity[]
+  accountRoles                 ContactAccountRole[]
+  invoices                     Invoice[]
+  engagements                  Engagement[]
+  opportunities                Opportunity[]
+  activities                   Activity[]
+  rentalAgreements             RentalAgreement[]
+  productSoldParties           ProductSoldParty[]       @relation("ProductSoldPartyContact")
+  productSoldEntitlements      ProductSoldEntitlement[] @relation("ProductSoldEntitlementContact")
+
+  @@index([lastName])
+  @@index([phone])
+  @@index([nameNormalized])
+  @@index([mergedIntoId])
+  @@index([accountId]) // FK-leading (spine): contacts-of-account join, apps/web/app/api/v1/customer/visits/route.ts:71
+}
+
+model CustomerAccount {
+  id                      String                      @id @default(cuid())
+  accountId               String                      @unique
+  name                    String
+  // MDM write-time dedup (EP-4A12A7CB WG-1): standardizeName(name) /
+  // standardizeDomain(website), maintained by the dedup gate + reconcile
+  // sweep. Backfilled in-migration with a SQL approximation; the TS
+  // standardize.ts form is canonical.
+  nameNormalized          String                      @default("")
+  domainNormalized        String                      @default("")
+  status                  String                      @default("prospect")
+  // prospect | qualified | onboarding | active | at_risk | suspended | closed
+  //   | superseded (merged away — mergedIntoId set) | archived
+  // Canonical union: packages/db/src/customer-lifecycle.ts
+  // Merge tombstone (EP-4A12A7CB WG-4): set when this row was merged into a
+  // survivor; superseded rows are excluded from default reads.
+  mergedIntoId            String?
+  website                 String?
+  industry                String?
+  employeeCount           Int?
+  annualRevenue           Decimal?
+  currency                String                      @default("USD")
+  notes                   String?
+  sourceSystem            String?
+  sourceId                String?
+  parentAccountId         String?
+  createdAt               DateTime                    @default(now())
+  updatedAt               DateTime                    @updatedAt
+  invites                 AccountInvite[]
+  contacts                CustomerContact[]
+  contactRoles            ContactAccountRole[]
+  customerSites           CustomerSite[]
+  configurationItems      CustomerConfigurationItem[]
+  edgeNodes               EdgeNode[]
+  edgeBootstrapTokens     BootstrapToken[]
+  discoveryRuns           DiscoveryRun[]
+  discoveryConnections    DiscoveryConnection[]
+  parentAccount           CustomerAccount?            @relation("AccountHierarchy", fields: [parentAccountId], references: [id])
+  childAccounts           CustomerAccount[]           @relation("AccountHierarchy")
+  mergedInto              CustomerAccount?            @relation("AccountMerge", fields: [mergedIntoId], references: [id])
+  mergedFrom              CustomerAccount[]           @relation("AccountMerge")
+  invoices                Invoice[]
+  engagements             Engagement[]
+  opportunities           Opportunity[]
+  activities              Activity[]
+  quotes                  Quote[]
+  salesOrders             SalesOrder[]
+  subscriptions           Subscription[]
+  productSoldParties      ProductSoldParty[]          @relation("ProductSoldPartyAccount")
+  productSoldEntitlements ProductSoldEntitlement[]    @relation("ProductSoldEntitlementAccount")
+  recurringSchedules      RecurringSchedule[]
+  inventoryEntities       InventoryEntity[]           @relation("InventoryEntityCustomerAccount")
+  inventoryRelationships  InventoryRelationship[]     @relation("InventoryRelationshipCustomerAccount")
+  masterDataSourceRefs    MasterDataSourceRef[]       @relation("CustomerAccountMdmSourceRef")
+  qualityIssues           PortfolioQualityIssue[]     @relation("QualityIssueCustomerAccount")
+  serviceTickets          ServiceTicket[]             @relation("ServiceTicketCustomerAccount")
+  memberEquityEntries     MemberEquityEntry[]
+  // EP-PARTNER-CHANNEL · Phase 2 (BI-DE47EC0B) — a partner org (e.g. a local
+  // IT MSP that resells and operates installs) is the SAME party model as any
+  // other account; partnership is a thin side table, exactly as EdgeNode and
+  // FederationLink are side tables on Principal. Its presence marks the
+  // partnership — there is deliberately no exclusive accountKind discriminator,
+  // because an MSP is routinely BOTH a customer (buys its own install) and a
+  // partner (resells). Schema audit: docs/superpowers/specs/2026-07-23-partner-identity-schema-audit.md
+  partnerEnrollment       PartnerProgramEnrollment?
+
+  @@index([status])
+  @@index([parentAccountId])
+  @@index([nameNormalized])
+  @@index([domainNormalized])
+  @@index([mergedIntoId])
+}
+
+/// Partner-program side table for a CustomerAccount that resells / delivers DPF
+/// (EP-PARTNER-CHANNEL Phase 2, BI-DE47EC0B). Carries ONLY partner-specific
+/// commercial attributes; every shared commercial fact (invoices, quotes,
+/// subscriptions, opportunities, sites, tickets) stays on CustomerAccount so the
+/// commercial spine is never forked. Tiering and territory are recorded as
+/// *prepared-not-prescribed*: the fields exist, the policy is deliberately not
+/// hardcoded until real local-partner deals shape it.
+model PartnerProgramEnrollment {
+  id                      String          @id @default(cuid())
+  enrollmentId            String          @unique
+  /// 1:1 with the party row — the side-table convergence pattern.
+  accountId               String          @unique
+  /// prospect | active | suspended | ended
+  status                  String          @default("prospect")
+  /// Free-form tier label; intentionally not an enum (prepared-not-prescribed).
+  tier                    String?
+  /// Soft local-area designation for the local-MSP channel. NOT an exclusivity
+  /// grant — exclusivity is a founder decision deferred until partner density.
+  territory               String?
+  agreementRef            String?
+  marginPercent           Decimal?
+  dealRegistrationEnabled Boolean         @default(false)
+  enrolledAt              DateTime?
+  endedAt                 DateTime?
+  notes                   String?
+  createdAt               DateTime        @default(now())
+  updatedAt               DateTime        @updatedAt
+  account                 CustomerAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@index([status])
+}
+
+model CustomerSite {
+  id                     String                      @id @default(cuid())
+  siteId                 String                      @unique
+  accountId              String
+  name                   String
+  // MDM write-time dedup (EP-4A12A7CB WG-1). The partial unique index
+  // CustomerSite_accountId_nameNormalized_active (raw SQL in the migration)
+  // enforces per-account uniqueness for non-superseded rows.
+  nameNormalized         String                      @default("")
+  siteType               String                      @default("office")
+  // active | planned | inactive | superseded (merged away) | archived
+  // Canonical union: packages/db/src/customer-lifecycle.ts
+  status                 String                      @default("active")
+  mergedIntoId           String?
+  primaryAddressId       String?
+  timezone               String?
+  accessInstructions     String?
+  hoursNotes             String?
+  serviceNotes           String?
+  createdAt              DateTime                    @default(now())
+  updatedAt              DateTime                    @updatedAt
+  account                CustomerAccount             @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  primaryAddress         Address?                    @relation(fields: [primaryAddressId], references: [id])
+  mergedInto             CustomerSite?               @relation("SiteMerge", fields: [mergedIntoId], references: [id])
+  mergedFrom             CustomerSite[]              @relation("SiteMerge")
+  configurationItems     CustomerConfigurationItem[]
+  nodes                  CustomerSiteNode[]
+  edgeNodes              EdgeNode[]
+  edgeBootstrapTokens    BootstrapToken[]
+  discoveryRuns          DiscoveryRun[]
+  discoveryConnections   DiscoveryConnection[]
+  inventoryEntities      InventoryEntity[]           @relation("InventoryEntityCustomerSite")
+  inventoryRelationships InventoryRelationship[]     @relation("InventoryRelationshipCustomerSite")
+  qualityIssues          PortfolioQualityIssue[]     @relation("QualityIssueCustomerSite")
+  serviceTickets         ServiceTicket[]             @relation("ServiceTicketCustomerSite")
+
+  @@index([accountId])
+  @@index([primaryAddressId])
+  @@index([status])
+  @@index([siteType])
+  @@index([mergedIntoId])
+}
+
+// ── EP-MSP-FEDERATION · A3 — customer service desk (BI-99FEA7FA) ──────────────
+// ONE canonical customer-facing work record discriminated by `ticketKind`
+// (incident | request | change | scheduled-review) — not four premature tables
+// (reviewed spec §6.A3). Distinct from the internal-ops PlatformIssueReport.
+// Born from A2 correlated incidents (correlatedIncidentKey) and routed by the
+// A1 estate-scope columns. Status/kind closed unions live in
+// packages/db/src/service-ticket-types.ts (hyphenated per the WS-0 convergence
+// rule). Soft references (configurationItemId, serviceAgreementId, edgeNodeId,
+// correlatedIncidentKey, ownerPrincipalId) keep cross-model blast radius low in
+// this slice; FK relations are added when the linked behaviors land.
+model ServiceTicket {
+  id                    String    @id @default(cuid())
+  ticketId              String    @unique
+  ticketKind            String    @default("incident")
+  status                String    @default("open")
+  priority              String    @default("normal")
+  severity              String?
+  title                 String
+  description           String?
+  // Estate scope (A1 routing columns; canonical source is the owning node/CI).
+  customerAccountId     String?
+  customerSiteId        String?
+  scopeKey              String?
+  // Linkage (soft references this slice).
+  configurationItemId   String?
+  serviceAgreementId    String?
+  edgeNodeId            String?
+  correlatedIncidentKey String?
+  // SLA + ownership.
+  slaPolicy             Json?
+  slaDueAt              DateTime?
+  ownerPrincipalId      String?
+  // Lifecycle timestamps.
+  openedAt              DateTime  @default(now())
+  acknowledgedAt        DateTime?
+  resolvedAt            DateTime?
+  closedAt              DateTime?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  customerAccount CustomerAccount?       @relation("ServiceTicketCustomerAccount", fields: [customerAccountId], references: [id], onDelete: SetNull)
+  customerSite    CustomerSite?          @relation("ServiceTicketCustomerSite", fields: [customerSiteId], references: [id], onDelete: SetNull)
+  comments        ServiceTicketComment[]
+
+  @@index([ticketKind])
+  @@index([status])
+  @@index([priority])
+  @@index([customerAccountId])
+  @@index([customerSiteId])
+  @@index([scopeKey])
+  @@index([correlatedIncidentKey])
+  @@index([slaDueAt])
+}
+
+model ServiceTicketComment {
+  id                String        @id @default(cuid())
+  ticketId          String
+  authorPrincipalId String?
+  // operator | customer | agent | system
+  authorKind        String        @default("operator")
+  body              String
+  // internal | customer  — gates what a federated/customer viewer may read.
+  visibility        String        @default("internal")
+  createdAt         DateTime      @default(now())
+  ticket            ServiceTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  @@index([ticketId])
+}
+
+model CustomerConfigurationItem {
+  id                    String          @id @default(cuid())
+  customerCiId          String          @unique
+  accountId             String
+  siteId                String?
+  name                  String
+  ciType                String
+  status                String          @default("active")
+  technologySourceType  String          @default("commercial")
+  supportModel          String?
+  manufacturer          String?
+  vendorName            String?
+  productName           String?
+  edition               String?
+  productModel          String?
+  serialNumber          String?
+  assetTag              String?
+  observedVersion       String?
+  normalizedVersion     String?
+  installDate           DateTime?
+  purchaseDate          DateTime?
+  firstSeenAt           DateTime?
+  warrantyStartAt       DateTime?
+  warrantyEndAt         DateTime?
+  endOfSaleAt           DateTime?
+  endOfSupportAt        DateTime?
+  endOfLifeAt           DateTime?
+  renewalDate           DateTime?
+  lifecycleStatus       String          @default("unknown")
+  supportStatus         String          @default("unknown")
+  recommendedAction     String?
+  lifecycleConfidence   Float?
+  lastLifecycleReviewAt DateTime?
+  nextLifecycleReviewAt DateTime?
+  lifecycleEvidence     Json?
+  licenseQuantity       Decimal?        @db.Decimal(12, 2)
+  billingCadence        String?
+  customerChargeModel   String?
+  unitCost              Decimal?        @db.Decimal(12, 2)
+  customerUnitPrice     Decimal?        @db.Decimal(12, 2)
+  currency              String          @default("USD")
+  properties            Json?
+  createdAt             DateTime        @default(now())
+  updatedAt             DateTime        @updatedAt
+  account               CustomerAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  site                  CustomerSite?   @relation(fields: [siteId], references: [id], onDelete: SetNull)
+
+  @@index([accountId])
+  @@index([siteId])
+  @@index([ciType])
+  @@index([status])
+  @@index([technologySourceType])
+}
+
+model CustomerSiteNode {
+  id           String             @id @default(cuid())
+  nodeId       String             @unique
+  siteId       String
+  parentNodeId String?
+  name         String
+  nodeType     String             @default("area")
+  status       String             @default("active")
+  notes        String?
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+  site         CustomerSite       @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  parentNode   CustomerSiteNode?  @relation("CustomerSiteNodeHierarchy", fields: [parentNodeId], references: [id], onDelete: Cascade)
+  childNodes   CustomerSiteNode[] @relation("CustomerSiteNodeHierarchy")
+
+  @@index([siteId])
+  @@index([parentNodeId])
+  @@index([status])
+  @@index([nodeType])
+}
+
+model ContactAccountRole {
+  id        String          @id @default(cuid())
+  contactId String
+  accountId String
+  roleTitle String? // e.g. "CEO", "Developer", "Consultant"
+  isPrimary Boolean         @default(false)
+  startedAt DateTime        @default(now())
+  endedAt   DateTime?
+  createdAt DateTime        @default(now())
+  contact   CustomerContact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  account   CustomerAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@unique([contactId, accountId, startedAt])
+  @@index([contactId])
+  @@index([accountId])
+  @@index([isPrimary])
+}
+
+model Engagement {
+  id            String   @id @default(cuid())
+  engagementId  String   @unique // ENG-<uuid>
+  title         String
+  status        String   @default("new")
+  // new | contacted | qualified | unqualified | converted
+  source        String? // web_inquiry | manual | referral | import
+  sourceRefId   String? // FK to StorefrontInquiry.id if source=web_inquiry
+  accountId     String?
+  contactId     String // Identity anchor — required
+  assignedToId  String?
+  notes         String?
+  convertedToId String? // FK to Opportunity.id when converted
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  account    CustomerAccount? @relation(fields: [accountId], references: [id])
+  contact    CustomerContact  @relation(fields: [contactId], references: [id])
+  assignedTo User?            @relation("EngagementAssignments", fields: [assignedToId], references: [id])
+
+  @@index([status])
+  @@index([accountId])
+  @@index([contactId])
+  @@index([assignedToId])
+}
+
+model Opportunity {
+  id             String    @id @default(cuid())
+  opportunityId  String    @unique // OPP-<uuid>
+  title          String
+  stage          String    @default("qualification")
+  // qualification | discovery | proposal | negotiation | closed_won | closed_lost
+  isDormant      Boolean   @default(false)
+  probability    Int       @default(10) // 0-100%
+  expectedValue  Decimal?
+  currency       String    @default("USD")
+  expectedClose  DateTime?
+  actualClose    DateTime?
+  lostReason     String?
+  accountId      String
+  contactId      String?
+  assignedToId   String?
+  engagementId   String? // FK to Engagement (if converted from engagement)
+  notes          String?
+  // The planned next step (call/meeting/follow-up) — the activity-based-selling
+  // loop: every open deal should have one; pipeline cards warn when it's missing
+  // and flag when it's overdue.
+  nextActivityAt DateTime?
+  stageChangedAt DateTime  @default(now())
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  account    CustomerAccount  @relation(fields: [accountId], references: [id])
+  contact    CustomerContact? @relation(fields: [contactId], references: [id])
+  assignedTo User?            @relation("OpportunityAssignments", fields: [assignedToId], references: [id])
+  activities Activity[]
+  quotes     Quote[]
+
+  @@index([stage])
+  @@index([accountId])
+  @@index([contactId])
+  @@index([assignedToId])
+  @@index([expectedClose])
+  @@index([isDormant])
+}
+
+model Quote {
+  id            String    @id @default(cuid())
+  quoteId       String    @unique // QUO-<uuid>
+  quoteNumber   String    @unique // QUO-2026-0001 (sequential)
+  version       Int       @default(1)
+  previousId    String? // FK to previous Quote version (amendment chain)
+  status        String    @default("draft")
+  // draft | sent | accepted | rejected | expired | superseded
+  opportunityId String
+  accountId     String
+  validFrom     DateTime  @default(now())
+  validUntil    DateTime
+  subtotal      Decimal // sum of line totals
+  discountType  String    @default("percentage") // percentage | fixed
+  discountValue Decimal   @default(0)
+  taxAmount     Decimal   @default(0)
+  totalAmount   Decimal
+  currency      String    @default("USD")
+  terms         String?
+  notes         String?
+  // Public accept-link token (mirrors Invoice.payToken): possession authorizes
+  // the customer to view and accept this quote at /s/quote/[token].
+  acceptToken   String?   @unique
+  sentAt        DateTime?
+  acceptedAt    DateTime?
+  rejectedAt    DateTime?
+  createdById   String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  opportunity Opportunity     @relation(fields: [opportunityId], references: [id])
+  account     CustomerAccount @relation(fields: [accountId], references: [id])
+  createdBy   User?           @relation("QuoteCreations", fields: [createdById], references: [id])
+  previous    Quote?          @relation("QuoteVersions", fields: [previousId], references: [id])
+  revisions   Quote[]         @relation("QuoteVersions")
+  lineItems   QuoteLineItem[]
+  salesOrder  SalesOrder?
+
+  @@index([opportunityId])
+  @@index([accountId])
+  @@index([status])
+  @@index([previousId]) // FK-leading (self-relation): quote revision-chain reverse lookup
+}
+
+model QuoteLineItem {
+  id                    String   @id @default(cuid())
+  quoteId               String
+  productId             String? // FK to DigitalProduct (optional — ad-hoc lines)
+  catalogItemId         String?
+  catalogSkuId          String?
+  configurationSnapshot Json?
+  description           String
+  quantity              Int      @default(1)
+  unitPrice             Decimal
+  discountPercent       Decimal  @default(0)
+  taxPercent            Decimal  @default(0)
+  lineTotal             Decimal // unitPrice * quantity * (1 - discountPercent/100)
+  sortOrder             Int      @default(0)
+  createdAt             DateTime @default(now())
+
+  quote                  Quote                  @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+  product                DigitalProduct?        @relation(fields: [productId], references: [id])
+  catalogItem            CatalogItem?           @relation(fields: [catalogItemId], references: [id], onDelete: SetNull)
+  catalogSku             CatalogSku?            @relation(fields: [catalogSkuId], references: [id], onDelete: SetNull)
+  promotedConfigurations ProductConfiguration[] @relation("PromotedConfigurationQuoteLine")
+  productSoldEvidence    ProductSoldEvidence[]  @relation("ProductSoldEvidenceQuoteLine")
+
+  @@index([quoteId])
+  @@index([catalogItemId])
+  @@index([catalogSkuId])
+}
+
+model SalesOrder {
+  id          String    @id @default(cuid())
+  orderRef    String    @unique // SO-2026-0001 (sequential)
+  status      String    @default("confirmed")
+  // confirmed | in_progress | fulfilled | cancelled
+  quoteId     String    @unique // 1:1 with accepted Quote
+  accountId   String
+  totalAmount Decimal
+  currency    String    @default("USD")
+  fulfilledAt DateTime?
+  cancelledAt DateTime?
+  notes       String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  quote               Quote                 @relation(fields: [quoteId], references: [id])
+  account             CustomerAccount       @relation(fields: [accountId], references: [id])
+  subscription        Subscription?
+  productSoldEvidence ProductSoldEvidence[] @relation("ProductSoldEvidenceSalesOrder")
+
+  @@index([accountId])
+  @@index([status])
+}
+
+// A support/service subscription — the "contract for supporting a customer's own
+// instance of DPF". Created from an accepted SalesOrder (convertOrderToSubscription),
+// scoped to a CustomerAccount, and optionally covering one or more EdgeNodes (the
+// customer's provisioned DPF instances). Closes the post-order gap: an order alone
+// says "they bought once"; a Subscription says "they are under an active support
+// contract with a renewal date". Recurring-billing materialization is a later slice.
+model Subscription {
+  id              String    @id @default(cuid())
+  subscriptionRef String    @unique // SUB-2026-0001 (sequential)
+  status          String    @default("active")
+  // active | suspended | expired | cancelled
+  accountId       String
+  salesOrderId    String?   @unique // the accepted order that created this contract
+  planName        String // e.g. "DPF Managed Instance — Support & Hosting"
+  billingCadence  String    @default("annual") // monthly | quarterly | annual
+  totalValue      Decimal
+  currency        String    @default("USD")
+  startDate       DateTime  @default(now())
+  renewalDate     DateTime
+  endDate         DateTime?
+  autoRenew       Boolean   @default(true)
+  notes           String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  account                 CustomerAccount          @relation(fields: [accountId], references: [id])
+  salesOrder              SalesOrder?              @relation(fields: [salesOrderId], references: [id])
+  edgeNodes               EdgeNode[]
+  renewalSchedule         RecurringSchedule?
+  productSoldEvidence     ProductSoldEvidence[]    @relation("ProductSoldEvidenceSubscription")
+  productSoldEntitlements ProductSoldEntitlement[] @relation("ProductSoldEntitlementSubscription")
+
+  @@index([accountId])
+  @@index([status])
+  @@index([renewalDate])
+}
+
+model Activity {
+  id            String    @id @default(cuid())
+  activityId    String    @unique // ACT-<uuid>
+  type          String
+  // note | call | email | meeting | task | status_change | quote_event | system
+  subject       String
+  body          String?
+  scheduledAt   DateTime?
+  completedAt   DateTime?
+  accountId     String?
+  contactId     String?
+  opportunityId String?
+  createdById   String? // null for system-generated events
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  account     CustomerAccount? @relation(fields: [accountId], references: [id])
+  contact     CustomerContact? @relation(fields: [contactId], references: [id])
+  opportunity Opportunity?     @relation(fields: [opportunityId], references: [id])
+  createdBy   User?            @relation("ActivityCreations", fields: [createdById], references: [id])
+
+  @@index([accountId])
+  @@index([contactId])
+  @@index([opportunityId])
+  @@index([createdAt])
+  @@index([type])
+}
+
+// EP-DELIVERY-FLOW federated demand Slice 3. Founder Hub owns the commercial
+// relationship with each reseller without reclassifying that external company
+// as a customer or creating a credential-bearing identity record. Human access
+// remains Principal-based; this is business account data only.
+model PartnerAccount {
+  id                      String    @id @default(cuid())
+  partnerId               String    @unique
+  organizationId          String
+  federationLinkId        String?   @unique
+  externalOrganizationRef String
+  displayName             String
+  // reseller | distributor | service-provider | technology-partner
+  partnerKind             String    @default("reseller")
+  // pending | active | at-risk | suspended | terminated
+  standing                String    @default("pending")
+  // registered | authorized | silver | gold | platinum
+  tier                    String    @default("registered")
+  enrolledAt              DateTime?
+  reviewedAt              DateTime?
+  notes                   String?
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @updatedAt
+
+  organization             Organization                     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  federationLink           FederationLink?                  @relation(fields: [federationLinkId], references: [linkId], onDelete: SetNull)
+  agreements               PartnerAgreement[]
+  entitlements             PartnerEntitlement[]
+  supportRoutes            PartnerSupportRoute[]
+  contributionRecognitions PartnerContributionRecognition[]
+
+  @@unique([organizationId, externalOrganizationRef])
+  @@index([organizationId, standing])
+  @@index([partnerKind, standing])
+}
+
+// Founder-owned agreement facts. The signed agreement may live in a document
+// system; DPF stores only its governed status, dates, reference, and safe terms.
+model PartnerAgreement {
+  id                String    @id @default(cuid())
+  agreementId       String    @unique
+  partnerAccountId  String
+  agreementType     String    @default("reseller")
+  status            String    @default("draft")
+  externalReference String?
+  effectiveFrom     DateTime?
+  effectiveTo       DateTime?
+  terms             Json?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  partnerAccount PartnerAccount       @relation(fields: [partnerAccountId], references: [id], onDelete: Cascade)
+  entitlements   PartnerEntitlement[]
+
+  @@index([partnerAccountId, status])
+  @@index([effectiveTo])
+}
+
+// A partner's right to offer/support an existing ServiceOffering. Catalog data
+// remains owned by ServiceOffering; this row owns only the partner-specific grant.
+model PartnerEntitlement {
+  id                String    @id @default(cuid())
+  entitlementId     String    @unique
+  partnerAccountId  String
+  agreementId       String?
+  serviceOfferingId String?
+  status            String    @default("pending")
+  scope             Json?
+  effectiveFrom     DateTime?
+  effectiveTo       DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  partnerAccount  PartnerAccount    @relation(fields: [partnerAccountId], references: [id], onDelete: Cascade)
+  agreement       PartnerAgreement? @relation(fields: [agreementId], references: [id], onDelete: SetNull)
+  serviceOffering ServiceOffering?  @relation(fields: [serviceOfferingId], references: [id], onDelete: SetNull)
+
+  @@index([partnerAccountId, status])
+  @@index([agreementId])
+  @@index([serviceOfferingId])
+  @@index([effectiveTo])
+}
+
+// Local operational routing for founder/reseller coordination. It never grants
+// remote execution or expands a FederationLink projection contract.
+model PartnerSupportRoute {
+  id               String   @id @default(cuid())
+  routeId          String   @unique
+  partnerAccountId String
+  name             String
+  channel          String
+  destination      String
+  priority         Int      @default(100)
+  active           Boolean  @default(true)
+  scope            Json?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  partnerAccount PartnerAccount @relation(fields: [partnerAccountId], references: [id], onDelete: Cascade)
+
+  @@index([partnerAccountId, active, priority])
+}
+
+// Recognition points to the existing immutable HiveContributionLedger; it does
+// not duplicate a submitted result or leak the contributor's local backlog.
+model PartnerContributionRecognition {
+  id                   String    @id @default(cuid())
+  recognitionId        String    @unique
+  partnerAccountId     String
+  contributionLedgerId String?
+  recognitionType      String    @default("contribution")
+  status               String    @default("recorded")
+  note                 String?
+  awardedAt            DateTime?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  partnerAccount PartnerAccount          @relation(fields: [partnerAccountId], references: [id], onDelete: Cascade)
+  contribution   HiveContributionLedger? @relation(fields: [contributionLedgerId], references: [id], onDelete: SetNull)
+
+  @@unique([partnerAccountId, contributionLedgerId])
+  @@index([partnerAccountId, status])
+  @@index([contributionLedgerId])
+}
+
+// ─── Customer Complaints ───────────────────────────────────────────
+model Complaint {
+  id           String   @id @default(cuid())
+  reference    String   @unique
+  customerName String
+  description  String
+  severity     String   @default("medium")
+  category     String   @default("Other")
+  status       String   @default("open")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([status])
+  @@index([createdAt])
+}

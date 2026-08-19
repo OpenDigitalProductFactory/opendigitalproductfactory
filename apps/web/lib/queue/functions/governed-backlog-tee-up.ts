@@ -16,7 +16,7 @@ export const governedBacklogTeeUpScheduled = inngest.createFunction(
     return step.run("tee-up-governed-backlog-daily", async () => {
       const { prisma } = await import("@dpf/db");
       const { runGovernedBacklogTeeUp } = await import("@/lib/governed-backlog-tee-up");
-      const { dispatchApprovedIdeateBuilds } = await import("@/lib/integrate/ideate-on-approval");
+      const { dispatchApprovedIdeateBuilds } = await import("@/lib/build/ideate-on-approval");
       const { resolveScheduledOwnerUserId } = await import("../scheduled-owner");
 
       const userId = await resolveScheduledOwnerUserId();
@@ -43,7 +43,7 @@ export const governedBacklogTeeUpRequested = inngest.createFunction(
     return step.run("tee-up-governed-backlog-manual", async () => {
       const { prisma } = await import("@dpf/db");
       const { runGovernedBacklogTeeUp } = await import("@/lib/governed-backlog-tee-up");
-      const { dispatchApprovedIdeateBuilds } = await import("@/lib/integrate/ideate-on-approval");
+      const { dispatchApprovedIdeateBuilds } = await import("@/lib/build/ideate-on-approval");
 
       const userId = event.data.userId;
       const teeUp = await runGovernedBacklogTeeUp({

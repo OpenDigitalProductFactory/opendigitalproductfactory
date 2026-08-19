@@ -1,6 +1,6 @@
 import { isRecord } from "@/lib/shared/coerce";
 import { getTruthSourceAge } from "./progress-visibility-types";
-import type { SandboxSourceCurrencySnapshot } from "@/lib/integrate/sandbox/sandbox-source-currency";
+import type { SandboxSourceCurrencySnapshot } from "@/lib/build/sandbox/sandbox-source-currency";
 
 export type BuildSandboxDiffEntry = {
   path: string;

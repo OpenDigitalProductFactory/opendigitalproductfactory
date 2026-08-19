@@ -175,7 +175,7 @@ const measurementManifest = {
 };
 
 const measurementFiles = {
-  "packages/db/prisma/schema.prisma": "model User {\n  id String @id\n}\n\nmodel Team {\n  id String @id\n}\n",
+  "packages/db/prisma/schema/models.prisma": "model User {\n  id String @id\n}\n\nmodel Team {\n  id String @id\n}\n",
   "packages/db/src/seed.ts": "export async function seed() {\n  return true;\n}\n",
   "apps/web/lib/domain/publish.ts": 'import { inngest } from "@/lib/queue/inngest-client";\n',
   "apps/web/lib/domain/multiline.ts": 'import {\n  inngest\n} from "@/lib/queue/inngest-client";\n',
@@ -244,12 +244,12 @@ test("requires the canonical schema and seed coordinator", async () => {
   await withFixture({ "scripts/check-module-size.mjs": "const SOFT_CEILING = 800;\n" }, async (repoRoot) => {
     await assert.rejects(
       collectRepositoryMeasurements({ repoRoot, manifest: measurementManifest }),
-      /packages\/db\/prisma\/schema\.prisma/,
+      /packages\/db\/prisma\/schema/,
     );
   });
   await withFixture({
     "scripts/check-module-size.mjs": "const SOFT_CEILING = 800;\n",
-    "packages/db/prisma/schema.prisma": "model User { id String @id }\n",
+    "packages/db/prisma/schema/models.prisma": "model User { id String @id }\n",
   }, async (repoRoot) => {
     await assert.rejects(
       collectRepositoryMeasurements({ repoRoot, manifest: measurementManifest }),

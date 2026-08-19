@@ -15,7 +15,7 @@ import {
   type AssignedTask,
   type ExecutionPhase,
   type SpecialistRole,
-} from "@/lib/integrate/task-dependency-graph";
+} from "@/lib/build/task-dependency-graph";
 import { normalizeTaskResults } from "./task-results";
 
 // ─── Constants ──────────────────────────────────────────────────────────────

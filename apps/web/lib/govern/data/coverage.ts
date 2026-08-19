@@ -10,7 +10,7 @@
 //
 // This module holds the algorithm and is unit-tested with synthetic schema facts. The
 // real 495-model gate wires parsePrismaSchema
-// (apps/web/lib/integrate/code-graph/extractors/prisma-schema-adapter.ts) to these
+// (apps/web/lib/build/code-graph/extractors/prisma-schema-adapter.ts) to these
 // functions; the immutable baseline is generated once from that same parser output so
 // the two never disagree.
 

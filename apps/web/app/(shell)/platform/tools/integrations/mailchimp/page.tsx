@@ -4,7 +4,7 @@ import { LocalTime } from "@/components/ui/LocalTime";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { decryptJson } from "@/lib/govern/credential-crypto";
-import { loadMailchimpPreview } from "@/lib/integrate/mailchimp/preview";
+import { loadMailchimpPreview } from "@/lib/integrations/mailchimp/preview";
 import {
   MailchimpConnectPanel,
   type MailchimpConnectionState,

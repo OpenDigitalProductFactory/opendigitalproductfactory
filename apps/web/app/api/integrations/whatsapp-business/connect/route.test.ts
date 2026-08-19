@@ -14,7 +14,7 @@ vi.mock("@/lib/permissions", () => ({
   can: mockCan,
 }));
 
-vi.mock("@/lib/integrate/whatsapp-business/connect-action", () => ({
+vi.mock("@/lib/integrations/whatsapp-business/connect-action", () => ({
   connectWhatsAppBusiness: mockConnectWhatsAppBusiness,
 }));
 

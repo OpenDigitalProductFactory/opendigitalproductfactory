@@ -1,4 +1,4 @@
-import type { GithubPrReadiness } from "@/lib/integrate/github-pr-readiness";
+import type { GithubPrReadiness } from "@/lib/build/github-pr-readiness";
 
 export const BUILD_PR_DELIVERY_STATUSES = [
   "created",

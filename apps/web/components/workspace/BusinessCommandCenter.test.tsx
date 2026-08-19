@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { BusinessCommandCenter } from "./BusinessCommandCenter";
-import type { WorkspaceCommandCenterView } from "@/lib/workspace/command-center";
+import type { WorkspaceCommandCenterView } from "@/lib/workspace-home/command-center";
 
 const fixtureView: WorkspaceCommandCenterView = {
   commandStrip: [

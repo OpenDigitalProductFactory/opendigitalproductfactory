@@ -673,7 +673,7 @@ export async function approveDecomposition(
       args.dispatchPlanForChild ??
       (async (params: { buildId: string; userId: string }) => {
         const { dispatchPlanForApprovedBuild } = await import(
-          "@/lib/integrate/plan-on-approval"
+          "@/lib/build/plan-on-approval"
         );
         return dispatchPlanForApprovedBuild(params);
       });

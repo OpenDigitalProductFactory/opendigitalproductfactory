@@ -26,6 +26,16 @@ const PARTS = [
   ["forge", "Forge Delivery Adapter", null, "Maps an accepted result to the configured forge; GitHub is delivery state, not backlog or federation authority."],
 ] as const;
 
+// Owning domain file per cited Prisma model (packages/db/prisma/schema/, B5 Seam C).
+const PRISMA_MODEL_FILES: Record<string, string> = {
+  BacklogItem: "packages/db/prisma/schema/work-coordination.prisma",
+  FederationPairingSession: "packages/db/prisma/schema/edge-federation.prisma",
+  FederatedRecordMirror: "packages/db/prisma/schema/edge-federation.prisma",
+  FounderDemandCluster: "packages/db/prisma/schema/work-coordination.prisma",
+  FounderDemandClusterMember: "packages/db/prisma/schema/work-coordination.prisma",
+  HiveContributionLedger: "packages/db/prisma/schema/knowledge-docs.prisma",
+};
+
 const PORTS = [
   ["discovery", "Discovery Port"], ["pairing", "Pairing Port"], ["inbox", "Federation Inbox"],
   ["outbox", "Federation Outbox"], ["delivery-flow", "Delivery Flow Adapter"],
@@ -65,7 +75,7 @@ export function buildFederatedDemandArchitectureModel(): SysmlDesiredModel {
     const key = `fdn:part:${id}`;
     elements.push({
       sysmlKey: key, typeSlug: "part_definition", name, description,
-      properties: { authorityOwner: name, prismaModel, sourceKey: prismaModel ? `packages/db/prisma/schema.prisma#${prismaModel}` : "apps/web/lib/forge/types.ts" },
+      properties: { authorityOwner: name, prismaModel, sourceKey: prismaModel ? `${PRISMA_MODEL_FILES[prismaModel]}#${prismaModel}` : "apps/web/lib/forge/types.ts" },
     });
     relationships.push({ fromKey: FEDERATED_DEMAND_PACKAGE_KEY, toKey: key, relSlug: "contains" });
   }

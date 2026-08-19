@@ -169,7 +169,7 @@ async function searchSpecsAndPlansHandler(params: Record<string, unknown>): Prom
 }
 
 async function getCodeGraphFreshnessHandler(): Promise<ToolResult> {
-  const { getCodeGraphFreshness } = await import("@/lib/integrate/code-graph-access");
+  const { getCodeGraphFreshness } = await import("@/lib/build/code-graph-access");
   const { buildTrustMessage } = await import("@/lib/trust-vector");
   const freshness = await getCodeGraphFreshness(undefined, { inspectStructuralHealth: true });
   return {
@@ -187,7 +187,7 @@ async function getCodeGraphFreshnessHandler(): Promise<ToolResult> {
 }
 
 async function searchCodeGraphHandler(params: Record<string, unknown>): Promise<ToolResult> {
-  const { searchCodeGraph } = await import("@/lib/integrate/code-graph/graph-queries");
+  const { searchCodeGraph } = await import("@/lib/build/code-graph/graph-queries");
   const result = await searchCodeGraph({
     query: String(params["query"] ?? ""),
     graphKey: optionalString(params["graphKey"]) ?? undefined,
@@ -200,7 +200,7 @@ async function searchCodeGraphHandler(params: Record<string, unknown>): Promise<
 }
 
 async function traceCodeSurfaceHandler(params: Record<string, unknown>): Promise<ToolResult> {
-  const { traceCodeSurface } = await import("@/lib/integrate/code-graph/graph-queries");
+  const { traceCodeSurface } = await import("@/lib/build/code-graph/graph-queries");
   const result = await traceCodeSurface({
     route: optionalString(params["route"]) ?? undefined,
     tool: optionalString(params["tool"]) ?? undefined,
@@ -214,7 +214,7 @@ async function traceCodeSurfaceHandler(params: Record<string, unknown>): Promise
 }
 
 async function findRelatedTestsHandler(params: Record<string, unknown>): Promise<ToolResult> {
-  const { findRelatedTests } = await import("@/lib/integrate/code-graph/graph-queries");
+  const { findRelatedTests } = await import("@/lib/build/code-graph/graph-queries");
   const result = await findRelatedTests({
     filePath: String(params["filePath"] ?? ""),
     graphKey: optionalString(params["graphKey"]) ?? undefined,

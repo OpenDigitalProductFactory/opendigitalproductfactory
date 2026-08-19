@@ -9,7 +9,7 @@
 
 import { prisma as defaultPrisma, readCanonicalPrismaSchema, syncEaElement, syncEaRelationship } from "@dpf/db";
 
-import { parsePrismaSchema } from "../integrate/code-graph/extractors/prisma-schema-adapter";
+import { parsePrismaSchema } from "../build/code-graph/extractors/prisma-schema-adapter";
 import { reconcileDataModelMirror, type MirrorPrismaClient, type MirrorResult } from "./data-model-mirror-apply";
 import { runDataArchitectureSteward, type StewardPrismaClient, type StewardResult } from "./data-architecture-steward-apply";
 

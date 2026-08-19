@@ -316,7 +316,7 @@ export async function GET(): Promise<Response> {
 
   // ─── Step 7: Build Studio Config ─────────────────────────────────────────
   steps.push(await runStep("7. Build Studio Config", async () => {
-    const { getBuildStudioConfig } = await import("@/lib/integrate/build-studio-config");
+    const { getBuildStudioConfig } = await import("@/lib/build/build-studio-config");
     const config = await getBuildStudioConfig();
 
     const providerLabel = config.provider === "claude" ? "Claude CLI"

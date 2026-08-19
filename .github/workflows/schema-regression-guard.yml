@@ -1,7 +1,7 @@
 name: Schema Regression Guard
 
 # Last-resort safety net: fail any PR that removes existing fields or model
-# declarations from packages/db/prisma/schema.prisma.
+# declarations from the Prisma schema (packages/db/prisma/schema/*.prisma).
 #
 # The primary defence is deploy_feature's runtime check (which blocks the
 # coworker before the PR is even opened). This CI job catches edge cases:
@@ -16,6 +16,7 @@ on:
   pull_request:
     paths:
       - "packages/db/prisma/schema.prisma"
+      - "packages/db/prisma/schema/**"
       # Also trigger when the guard machinery itself changes so a guard
       # regression can't slip through without exercising the CI path.
       - "packages/db/scripts/schema-regression-guard.mjs"

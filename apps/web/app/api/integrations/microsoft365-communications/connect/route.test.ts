@@ -6,7 +6,7 @@ const { mockAuth, mockConnectMicrosoft365Communications } = vi.hoisted(() => ({
 }));
 
 vi.mock("@/lib/auth", () => ({ auth: mockAuth }));
-vi.mock("@/lib/integrate/microsoft365-communications/connect-action", () => ({
+vi.mock("@/lib/integrations/microsoft365-communications/connect-action", () => ({
   connectMicrosoft365Communications: mockConnectMicrosoft365Communications,
 }));
 

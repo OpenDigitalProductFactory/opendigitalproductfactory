@@ -19,7 +19,7 @@ import {
   type BusinessDomainReadiness,
   type ReadinessCell,
   type ReadinessState,
-} from "@/lib/workspace/command-center";
+} from "@/lib/workspace-home/command-center";
 
 const STATE_LABEL: Record<ReadinessState, string> = {
   good: "Good",

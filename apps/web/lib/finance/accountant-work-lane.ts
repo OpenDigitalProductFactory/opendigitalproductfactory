@@ -1,8 +1,8 @@
 import {
   buildQuickBooksReadinessDescriptor,
   type QuickBooksReadinessConnection,
-} from "@/lib/integrate/quickbooks/readiness";
-import { loadQuickBooksReadinessConnection } from "@/lib/integrate/quickbooks/connection-state";
+} from "@/lib/integrations/quickbooks/readiness";
+import { loadQuickBooksReadinessConnection } from "@/lib/integrations/quickbooks/connection-state";
 import {
   TAX_REMITTANCE_PRODUCT_ID,
   TAX_REMITTANCE_TAXONOMY_NODE_ID,

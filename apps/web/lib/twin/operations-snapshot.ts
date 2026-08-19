@@ -19,7 +19,7 @@ import type {
 import type {
   OperationalDegradedSource,
   OperationalSourceWatermark,
-} from "@/lib/operations/source-health";
+} from "@/lib/operate/source-health";
 
 export const OPERATIONS_SNAPSHOT_SCHEMA_VERSION = "operations.v1" as const;
 

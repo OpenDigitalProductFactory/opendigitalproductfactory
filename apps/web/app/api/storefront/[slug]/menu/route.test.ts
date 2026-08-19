@@ -9,7 +9,7 @@ const { mockGetPublicStorefront } = vi.hoisted(() => ({
   mockGetPublicStorefront: vi.fn(),
 }));
 
-vi.mock("@/lib/release/storefront-data", () => ({
+vi.mock("@/lib/storefront/storefront-data", () => ({
   getPublicStorefront: mockGetPublicStorefront,
 }));
 

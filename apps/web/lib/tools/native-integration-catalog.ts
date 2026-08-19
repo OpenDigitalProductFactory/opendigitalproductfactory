@@ -1,4 +1,4 @@
-import { QUICKBOOKS_READINESS_ENTITY_FAMILIES } from "@/lib/integrate/quickbooks/readiness";
+import { QUICKBOOKS_READINESS_ENTITY_FAMILIES } from "@/lib/integrations/quickbooks/readiness";
 
 export type NativeIntegrationId =
   | "adp"

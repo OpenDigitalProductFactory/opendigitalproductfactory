@@ -29,12 +29,13 @@
 //   node scripts/check-retention-enrollment.mjs   # check (CI)
 
 import { readFileSync } from "node:fs";
+import { readPrismaSchemaText } from "./lib/prisma-schema-source.mjs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const SCRIPT_PATH = fileURLToPath(import.meta.url);
 const REPO_ROOT = join(dirname(SCRIPT_PATH), "..");
-export const SCHEMA_PATH = join(REPO_ROOT, "packages", "db", "prisma", "schema.prisma");
+export const SCHEMA_DIR = join(REPO_ROOT, "packages", "db", "prisma", "schema");
 export const POLICIES_PATH = join(REPO_ROOT, "apps", "web", "lib", "operate", "retention", "policies.ts");
 export const ALLOWLIST_PATH = join(REPO_ROOT, "scripts", "retention-enrollment-allowlist.json");
 
@@ -126,7 +127,7 @@ export function runCheck({ schemaSource, policiesSource, allowlist, today }) {
 }
 
 function main() {
-  const schemaSource = readFileSync(SCHEMA_PATH, "utf8");
+  const schemaSource = readPrismaSchemaText(REPO_ROOT);
   const policiesSource = readFileSync(POLICIES_PATH, "utf8");
   let allowlist;
   try {

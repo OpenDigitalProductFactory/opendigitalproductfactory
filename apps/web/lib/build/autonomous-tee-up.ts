@@ -40,7 +40,7 @@ export async function resolveAutonomousTeeUpStart(input: {
 }): Promise<AutonomousTeeUpStart> {
   const { item } = input;
   const { getAutonomousPlaybookMode, getBuildStudioConfig } = await import(
-    "@/lib/integrate/build-studio-config"
+    "@/lib/build/build-studio-config"
   );
   const mode = getAutonomousPlaybookMode();
   if (mode === "off") return { mode, eligibility: null };

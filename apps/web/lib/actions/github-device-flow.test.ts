@@ -23,7 +23,7 @@ vi.mock("@dpf/db", () => ({
   },
 }));
 
-vi.mock("@/lib/integrate/github-oauth", () => ({
+vi.mock("@/lib/build/github-oauth", () => ({
   requestDeviceCode: vi.fn(),
   pollAccessToken: vi.fn(),
 }));
@@ -42,7 +42,7 @@ import { prisma } from "@dpf/db";
 import {
   pollAccessToken,
   requestDeviceCode,
-} from "@/lib/integrate/github-oauth";
+} from "@/lib/build/github-oauth";
 import { validateGitHubToken } from "@/lib/actions/platform-dev-config";
 import { disconnectGitHub, initiateDeviceFlow, pollDeviceFlow } from "./github-device-flow";
 

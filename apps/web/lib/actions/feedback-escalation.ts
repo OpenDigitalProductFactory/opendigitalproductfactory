@@ -10,9 +10,9 @@
 import { createHash } from "node:crypto";
 import { prisma } from "@dpf/db";
 import { requireCapability, requireUserId } from "@/lib/actions/shared/guards";
-import { getDisplayPseudonym, resolveHiveToken } from "@/lib/integrate/identity-privacy";
-import { loadSource } from "@/lib/integrate/issue-bridge";
-import { buildRedactedFeedbackPayload, selectTransport } from "@/lib/integrate/feedback-transport";
+import { getDisplayPseudonym, resolveHiveToken } from "@/lib/build/identity-privacy";
+import { loadSource } from "@/lib/build/issue-bridge";
+import { buildRedactedFeedbackPayload, selectTransport } from "@/lib/build/feedback-transport";
 
 // Per-install escalation caps (counted from the contribution ledger).
 const RATE_LIMIT_MINUTE_WINDOW_MS = 60 * 1000;

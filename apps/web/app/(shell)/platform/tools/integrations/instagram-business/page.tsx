@@ -4,7 +4,7 @@ import { LocalTime } from "@/components/ui/LocalTime";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { decryptJson } from "@/lib/govern/credential-crypto";
-import { loadInstagramBusinessPreview } from "@/lib/integrate/instagram-business/preview";
+import { loadInstagramBusinessPreview } from "@/lib/integrations/instagram-business/preview";
 import {
   InstagramBusinessConnectPanel,
   type InstagramBusinessConnectionState,

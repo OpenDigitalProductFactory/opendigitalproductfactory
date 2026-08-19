@@ -4,7 +4,7 @@ const specPlan = vi.hoisted(() => ({ searchSpecsAndPlans: vi.fn() }));
 vi.mock("@/lib/backlog/spec-plan-search", () => specPlan);
 
 const codeGraphAccess = vi.hoisted(() => ({ getCodeGraphFreshness: vi.fn() }));
-vi.mock("@/lib/integrate/code-graph-access", () => codeGraphAccess);
+vi.mock("@/lib/build/code-graph-access", () => codeGraphAccess);
 
 const trustVector = vi.hoisted(() => ({ buildTrustMessage: vi.fn() }));
 vi.mock("@/lib/trust-vector", () => trustVector);
@@ -14,7 +14,7 @@ const graphQueries = vi.hoisted(() => ({
   traceCodeSurface: vi.fn(),
   findRelatedTests: vi.fn(),
 }));
-vi.mock("@/lib/integrate/code-graph/graph-queries", () => graphQueries);
+vi.mock("@/lib/build/code-graph/graph-queries", () => graphQueries);
 
 const canonical = vi.hoisted(() => ({ matchCanonicalPrimitives: vi.fn() }));
 vi.mock("@/lib/canonical-primitives", () => canonical);

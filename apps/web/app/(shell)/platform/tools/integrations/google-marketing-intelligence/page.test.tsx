@@ -34,7 +34,7 @@ vi.mock("@/lib/govern/credential-crypto", () => ({
   decryptJson: vi.fn((value: string) => JSON.parse(value)),
 }));
 
-vi.mock("@/lib/integrate/google-marketing-intelligence/preview", () => ({
+vi.mock("@/lib/integrations/google-marketing-intelligence/preview", () => ({
   loadGoogleMarketingPreview: mockLoadPreview,
 }));
 

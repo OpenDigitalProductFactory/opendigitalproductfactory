@@ -1,12 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { readCanonicalPrismaSchema } from "./schema-source";
 
 const repoRoot = join(__dirname, "..", "..", "..");
-const schema = readFileSync(
-  join(repoRoot, "packages/db/prisma/schema.prisma"),
-  "utf8",
-);
+const schema = readCanonicalPrismaSchema();
 const migrationPath = join(
   repoRoot,
   "packages/db/prisma/migrations/20260717120000_add_workforce_staffing_substrate/migration.sql",

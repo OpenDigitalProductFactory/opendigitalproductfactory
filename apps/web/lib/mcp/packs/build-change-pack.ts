@@ -54,7 +54,7 @@ async function validateSchema(params: Record<string, unknown>, userId: string): 
   if (!buildId) return { success: false, error: "No active build.", message: "No active build." };
 
   // Simple availability check — no slot management
-  const { isSandboxAvailable } = await import("@/lib/integrate/sandbox/build-branch");
+  const { isSandboxAvailable } = await import("@/lib/build/sandbox/build-branch");
   const vsAvailable = await isSandboxAvailable();
   if (!vsAvailable) {
     return {
@@ -69,9 +69,9 @@ async function validateSchema(params: Record<string, unknown>, userId: string): 
     const { execInSandbox } = await import("@/lib/sandbox");
     const schemaContent = await execInSandbox(
       vsSandboxId,
-      "cat /workspace/packages/db/prisma/schema.prisma",
+      "cat /workspace/packages/db/prisma/schema/*.prisma",
     );
-    const { validatePrismaSchema, formatSchemaValidation } = await import("@/lib/integrate/schema-validator");
+    const { validatePrismaSchema, formatSchemaValidation } = await import("@/lib/build/schema-validator");
     const result = validatePrismaSchema(schemaContent);
 
     logBuildActivity(buildId, "validate_schema", result.summary);

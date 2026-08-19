@@ -11,7 +11,7 @@ import {
   isContributionEnabled,
   type HiveContributionConfig,
 } from "@dpf/db/hive-contribution-settings";
-import { getDisplayPseudonym } from "@/lib/integrate/identity-privacy";
+import { getDisplayPseudonym } from "@/lib/build/identity-privacy";
 
 /**
  * The single entry point that contributes a resolved device fingerprint to the

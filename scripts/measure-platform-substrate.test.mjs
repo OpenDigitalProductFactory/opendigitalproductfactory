@@ -16,7 +16,7 @@ async function fixture(run) {
       "docker-compose.linux.yml": "services:\n",
       "packages/db/data/providers-registry.json": "[]\n",
       "packages/db/data/platform-runtime-capabilities.json": `${JSON.stringify({version:1,capabilities:[capability("runtime:core")]})}\n`,
-      "packages/db/prisma/schema.prisma": "model User { id String @id }\n",
+      "packages/db/prisma/schema/models.prisma": "model User { id String @id }\n",
       "packages/db/src/seed.ts": "export const seed = true;\n",
       "scripts/check-module-size.mjs": "const SOFT_CEILING = 800;\n",
     };

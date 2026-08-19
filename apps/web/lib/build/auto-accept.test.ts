@@ -31,7 +31,7 @@ vi.mock("@/lib/build/build-artifact-provenance", () => ({
   saveBuildArtifactRevision: mockSaveBuildArtifactRevision,
 }));
 
-vi.mock("@/lib/integrate/build-studio-config", () => ({
+vi.mock("@/lib/build/build-studio-config", () => ({
   isEvidenceAutoAcceptEnabled: mockIsEvidenceAutoAcceptEnabled,
 }));
 

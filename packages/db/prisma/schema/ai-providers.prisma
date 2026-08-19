@@ -1,0 +1,586 @@
+model ModelProvider {
+  id                       String                    @id @default(cuid())
+  providerId               String                    @unique
+  name                     String
+  families                 Json
+  status                   String                    @default("unconfigured")
+  updatedAt                DateTime                  @updatedAt
+  authHeader               String?
+  computeWatts             Float?
+  cliEngine                String? // "claude" | "codex" | "grok" | "opencode" — which CLI dispatch engine this provider works with (null = not CLI-dispatchable). "opencode" = local OpenAI-compatible endpoint (Docker Model Runner / Ollama).
+  costModel                String                    @default("token")
+  electricityRateKwh       Float?
+  enabledFamilies          Json                      @default("[]")
+  endpoint                 String?
+  inputPricePerMToken      Float?
+  outputPricePerMToken     Float?
+  category                 String                    @default("direct")
+  baseUrl                  String?
+  authMethod               String                    @default("api_key")
+  supportedAuthMethods     Json                      @default("[\"api_key\"]")
+  consoleUrl               String?
+  docsUrl                  String?
+  billingLabel             String?
+  authorizeUrl             String?
+  tokenUrl                 String?
+  oauthClientId            String?
+  oauthRedirectUri         String?
+  costPerformanceNotes     String?
+  endpointType             String                    @default("llm")
+  serviceKind              String?
+  sensitivityClearance     String[]                  @default([])
+  capabilityTier           String                    @default("basic")
+  costBand                 String                    @default("free")
+  taskTags                 String[]                  @default([])
+  mcpTransport             String?
+  maxConcurrency           Int?
+  catalogVisibility        String                    @default("visible")
+  catalogEntry             Json?
+  avgLatencyMs             Float?
+  codegen                  Int                       @default(50)
+  contextRetention         Int                       @default(50)
+  conversational           Int                       @default(50)
+  instructionFollowing     Int                       @default(50)
+  maxContextTokens         Int?
+  maxOutputTokens          Int?
+  modelRestrictions        String[]                  @default([])
+  profileSource            String                    @default("seed")
+  reasoning                Int                       @default(50)
+  recentFailureRate        Float                     @default(0)
+  retiredAt                DateTime?
+  retiredReason            String?
+  structuredOutput         Int                       @default(50)
+  supportsStreaming        Boolean                   @default(true)
+  supportsStructuredOutput Boolean                   @default(false)
+  supportsToolUse          Boolean                   @default(false)
+  toolFidelity             Int                       @default(50)
+  userFacingDescription    Json?
+  authMode                 String?
+  credentialOwnerMode      String?
+  modelProfiles            ModelProfile[]
+  financeProfile           AiProviderFinanceProfile?
+  capacityStatus           ProviderCapacityStatus?
+  connections              AiProviderConnection[]
+}
+
+// A configured account/channel for a provider catalog entry. Contract and
+// entitlement facts belong here so two accounts for one provider can never
+// inherit each other's evidence. ModelProvider remains the catalog/runtime
+// provider owner; this row is the organization-scoped access posture.
+model AiProviderConnection {
+  id                 String    @id @default(cuid())
+  connectionId       String    @unique
+  organizationId     String?
+  providerId         String
+  credentialEntryId  String?   @unique
+  financeProfileId   String?
+  supplierContractId String?
+  capacityStatusId   String?   @unique
+  label              String?
+  status             String    @default("unconfigured")
+  executionChannel   String
+  accountClass       String    @default("unknown")
+  commercialBasis    String    @default("unknown")
+  authMethod         String    @default("unknown")
+  contractEvidence   Json      @default("{}")
+  entitlements       Json      @default("{}")
+  evidenceStatus     String    @default("unreviewed")
+  lastReviewedAt     DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  organization     Organization?             @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  provider         ModelProvider             @relation(fields: [providerId], references: [providerId], onDelete: Cascade)
+  credentialEntry  CredentialEntry?          @relation(fields: [credentialEntryId], references: [id], onDelete: SetNull)
+  financeProfile   AiProviderFinanceProfile? @relation(fields: [financeProfileId], references: [id], onDelete: SetNull)
+  supplierContract SupplierContract?         @relation(fields: [supplierContractId], references: [id], onDelete: SetNull)
+  capacityStatus   ProviderCapacityStatus?   @relation(fields: [capacityStatusId], references: [id], onDelete: SetNull)
+  trustEvidence    ComplianceEvidence[]
+
+  @@index([organizationId, status])
+  @@index([providerId, status])
+  @@index([financeProfileId])
+  @@index([supplierContractId])
+}
+
+model DiscoveredModel {
+  id                   String   @id @default(cuid())
+  providerId           String
+  modelId              String
+  rawMetadata          Json
+  discoveredAt         DateTime @default(now())
+  lastSeenAt           DateTime @updatedAt
+  missedDiscoveryCount Int      @default(0)
+
+  @@unique([providerId, modelId])
+}
+
+model ModelProfile {
+  id                        String        @id @default(cuid())
+  providerId                String
+  modelId                   String
+  friendlyName              String
+  summary                   String
+  capabilityCategory        String
+  costTier                  String
+  bestFor                   Json
+  avoidFor                  Json
+  contextWindow             String?
+  speedRating               String?
+  generatedBy               String
+  generatedAt               DateTime      @default(now())
+  supportsToolUse           Boolean?
+  codingCapability          String?
+  instructionFollowing      String?
+  codegen                   Int           @default(50)
+  contextRetention          Int           @default(50)
+  conversational            Int           @default(50)
+  customScores              Json          @default("{}")
+  evalCount                 Int           @default(0)
+  inputPricePerMToken       Float?
+  instructionFollowingScore Int           @default(50)
+  lastEvalAt                DateTime?
+  lastSeenAt                DateTime?
+  maxContextTokens          Int?
+  maxOutputTokens           Int?
+  modelStatus               String        @default("active")
+  outputPricePerMToken      Float?
+  profileConfidence         String        @default("low")
+  profileSource             String        @default("seed")
+  reasoning                 Int           @default(50)
+  // Phase 1: stability — proportion of identical outputs across 3x temp=0 runs (0-100)
+  stabilityScore            Int?
+  lastStabilityCheckAt      DateTime?
+  retiredAt                 DateTime?
+  retiredReason             String?
+  structuredOutputScore     Int           @default(50)
+  supportedModalities       Json          @default("{\"input\": [\"text\"], \"output\": [\"text\"]}")
+  toolFidelity              Int           @default(50)
+  // EP-INF-012: Quality tier (frontier / strong / adequate / basic)
+  qualityTier               String?
+  qualityTierSource         String        @default("auto") // "auto" | "admin"
+  // EP-INF-003: ModelCard fields
+  modelFamily               String?
+  modelClass                String        @default("chat")
+  maxInputTokens            Int?
+  inputModalities           Json          @default("[\"text\"]")
+  outputModalities          Json          @default("[\"text\"]")
+  capabilities              Json          @default("{}")
+  pricing                   Json          @default("{}")
+  supportedParameters       Json          @default("[]")
+  defaultParameters         Json?
+  instructType              String?
+  trainingDataCutoff        String?
+  reliableKnowledgeCutoff   String?
+  deprecationDate           DateTime?
+  perRequestLimits          Json?
+  metadataSource            String        @default("inferred")
+  metadataConfidence        String        @default("low")
+  lastMetadataRefresh       DateTime?
+  rawMetadataHash           String?
+  driftDetectedAt           DateTime?
+  catalogHash               String?
+  discoveryHash             String?
+  capabilityOverrides       Json?
+  provider                  ModelProvider @relation(fields: [providerId], references: [providerId])
+
+  @@unique([providerId, modelId])
+}
+
+model ModelCapabilityChangeLog {
+  id         String   @id @default(cuid())
+  providerId String
+  modelId    String
+  field      String
+  oldValue   Json?
+  newValue   Json?
+  source     String
+  changedAt  DateTime @default(now())
+  changedBy  String?
+
+  @@index([providerId, changedAt])
+  @@index([modelId, changedAt])
+}
+
+model TokenUsage {
+  id           String   @id @default(cuid())
+  traceId      String?
+  agentId      String
+  providerId   String
+  contextKey   String
+  inputTokens  Int      @default(0)
+  outputTokens Int      @default(0)
+  inferenceMs  Int?
+  costUsd      Float    @default(0)
+  createdAt    DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([traceId])
+}
+
+model EndpointTaskPerformance {
+  id                      String    @id @default(cuid())
+  endpointId              String
+  taskType                String
+  evaluationCount         Int       @default(0)
+  successCount            Int       @default(0)
+  avgOrchestratorScore    Float     @default(0)
+  avgHumanScore           Float?
+  recentScores            Float[]   @default([])
+  currentInstructions     String?
+  instructionPhase        String    @default("learning")
+  pinned                  Boolean   @default(false)
+  blocked                 Boolean   @default(false)
+  avgLatencyMs            Float     @default(0)
+  avgTokensUsed           Float     @default(0)
+  // Phase 1: operational metrics from eval calls
+  tokensPerSecondAvg      Float?
+  ttftMsAvg               Float?
+  peakVramMbAvg           Float?
+  lastEvaluatedAt         DateTime?
+  lastInstructionUpdateAt DateTime?
+  dimensionScores         Json      @default("{}")
+  profileConfidence       String    @default("low")
+  modelId                 String?
+
+  @@unique([endpointId, taskType])
+}
+
+model TaskEvaluation {
+  id              String   @id @default(cuid())
+  threadId        String
+  endpointId      String
+  taskType        String
+  qualityScore    Float?
+  humanScore      Float?
+  taskContext     String
+  evaluationNotes String?
+  routeContext    String
+  createdAt       DateTime @default(now())
+  source          String?
+  toolName        String?
+
+  @@index([endpointId, taskType, createdAt])
+  @@index([threadId])
+  @@index([createdAt])
+}
+
+model EndpointTestRun {
+  id              String    @id @default(cuid())
+  runId           String    @unique
+  endpointId      String?
+  taskType        String?
+  probesOnly      Boolean   @default(false)
+  triggeredBy     String
+  probesPassed    Int       @default(0)
+  probesFailed    Int       @default(0)
+  scenariosPassed Int       @default(0)
+  scenariosFailed Int       @default(0)
+  avgScore        Float?
+  startedAt       DateTime  @default(now())
+  completedAt     DateTime?
+  status          String    @default("running")
+  results         Json?
+  modelId         String?
+
+  @@index([endpointId])
+  @@index([status])
+  @@index([startedAt])
+}
+
+// EP-INF-006: Outcome telemetry and recipe performance tracking
+model RouteOutcome {
+  id                String   @id @default(cuid())
+  requestId         String   @unique
+  traceId           String?
+  providerId        String
+  modelId           String
+  recipeId          String?
+  contractFamily    String
+  taskType          String
+  agentId           String?
+  latencyMs         Int
+  inputTokens       Int
+  outputTokens      Int
+  costUsd           Float?
+  schemaValid       Boolean?
+  toolSuccess       Boolean?
+  fallbackOccurred  Boolean  @default(false)
+  graderScore       Float?
+  humanScore        Float?
+  providerErrorCode String?
+  createdAt         DateTime @default(now())
+
+  @@index([recipeId, contractFamily])
+  @@index([providerId, modelId])
+  @@index([agentId, createdAt])
+  @@index([traceId])
+}
+
+model RecipePerformance {
+  id                 String    @id @default(cuid())
+  recipeId           String
+  contractFamily     String
+  sampleCount        Int       @default(0)
+  successCount       Int       @default(0)
+  avgLatencyMs       Float     @default(0)
+  avgCostUsd         Float     @default(0)
+  avgGraderScore     Float?
+  avgHumanScore      Float?
+  avgSchemaValidRate Float?
+  avgToolSuccessRate Float?
+  ewmaReward         Float     @default(0)
+  lastObservedAt     DateTime?
+
+  @@unique([recipeId, contractFamily])
+}
+
+model TaskRequirement {
+  id                        String    @id @default(cuid())
+  taskType                  String    @unique
+  description               String
+  selectionRationale        String
+  requiredCapabilities      Json      @default("{}")
+  preferredMinScores        Json      @default("{}")
+  maxLatencyMs              Int?
+  preferCheap               Boolean   @default(false)
+  defaultInstructions       String?
+  evaluationTokenLimit      Int       @default(500)
+  origin                    String    @default("system")
+  createdById               String?
+  approvedById              String?
+  approvedAt                DateTime?
+  createdAt                 DateTime  @default(now())
+  updatedAt                 DateTime  @updatedAt
+  // EP-INF-005a: Contract template fields
+  reasoningDepthDefault     String    @default("medium")
+  budgetClassDefault        String    @default("balanced")
+  interactionModeDefault    String    @default("sync")
+  supportedInputModalities  Json      @default("[\"text\"]")
+  supportedOutputModalities Json      @default("[\"text\"]")
+  residencyPolicy           String?
+  approvedBy                User?     @relation("TaskRequirementApprover", fields: [approvedById], references: [id])
+  createdBy                 User?     @relation("TaskRequirementCreator", fields: [createdById], references: [id])
+}
+
+model PolicyRule {
+  id             String    @id @default(cuid())
+  name           String
+  description    String
+  condition      Json
+  action         String    @default("exclude")
+  createdById    String?
+  version        Int       @default(1)
+  effectiveFrom  DateTime  @default(now())
+  effectiveUntil DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  createdBy      User?     @relation("PolicyRuleCreator", fields: [createdById], references: [id])
+}
+
+model RouteDecisionLog {
+  id                         String   @id @default(cuid())
+  traceId                    String?
+  designRevision             String?
+  agentMessageId             String?
+  actorKind                  String
+  actorId                    String
+  agentId                    String?
+  /// The portal route whose static context supplied `sensitivity` (e.g.
+  /// "/customer/marketing"). Nullable: non-route callers (scheduled jobs,
+  /// system tasks) have no route, and rows predating this column have none.
+  /// Without it a declared-vs-measured drift can only be attributed to an
+  /// agent, not to the route-context entry that actually declared the level.
+  routeContext               String?
+  selectedEndpointId         String
+  taskType                   String
+  sensitivity                String
+  reason                     String
+  fitnessScore               Float?
+  candidateTrace             Json
+  excludedTrace              Json
+  policyRulesApplied         String[] @default([])
+  fallbackChain              String[] @default([])
+  fallbacksUsed              Json?
+  shadowMode                 Boolean  @default(false)
+  createdAt                  DateTime @default(now())
+  selectedModelId            String?
+  suitabilityReceipt         Json?
+  inferenceDataScreenReceipt Json?
+
+  @@index([taskType])
+  @@index([actorKind, actorId, createdAt])
+  @@index([agentId, createdAt])
+  @@index([routeContext, createdAt])
+  @@index([selectedEndpointId])
+  @@index([createdAt])
+  @@index([traceId])
+  @@index([designRevision, createdAt])
+}
+
+model CustomEvalDimension {
+  id            String   @id @default(cuid())
+  name          String   @unique
+  description   String
+  evalScenarios Json     @default("[]")
+  createdById   String?
+  approvedById  String?
+  status        String   @default("draft")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  approvedBy    User?    @relation("CustomEvalDimensionApprover", fields: [approvedById], references: [id])
+  createdBy     User?    @relation("CustomEvalDimensionCreator", fields: [createdById], references: [id])
+}
+
+// ─── EP-INF-009d: Async/Long-Running Inference Operations ──────────
+model AsyncInferenceOp {
+  id             String  @id @default(cuid())
+  providerId     String
+  modelId        String
+  operationId    String? // Provider's operation/interaction ID
+  contractFamily String
+  requestContext Json // Serialized request params
+
+  status String @default("pending") // pending | running | completed | failed | cancelled | expired
+
+  resultText   String? @db.Text // Final text result
+  resultData   Json? // Full structured result
+  errorMessage String? @db.Text
+
+  progressPct     Int? // 0-100
+  progressMessage String?
+
+  createdAt   DateTime  @default(now())
+  startedAt   DateTime?
+  completedAt DateTime?
+  expiresAt   DateTime // Hard deadline
+
+  threadId      String? // Event bus key for SSE progress
+  callerContext Json? // Opaque caller context
+
+  @@index([status])
+  @@index([providerId, status])
+  @@index([threadId])
+}
+
+model AiProviderFinanceProfile {
+  id                     String    @id @default(cuid())
+  providerId             String    @unique
+  supplierId             String?
+  status                 String    @default("seeded")
+  reconciliationStrategy String    @default("provider_portal")
+  valuationMethod        String    @default("commitment_first")
+  planCurrency           String    @default("USD")
+  monthlyBudget          Decimal?
+  billingUrl             String?
+  usageUrl               String?
+  notes                  String?
+  lastEvaluatedAt        DateTime?
+  lastSnapshotAt         DateTime?
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
+
+  provider            ModelProvider          @relation(fields: [providerId], references: [providerId], onDelete: Cascade)
+  supplier            Supplier?              @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  supplierContracts   SupplierContract[]
+  financeWorkItems    FinanceWorkItem[]
+  providerConnections AiProviderConnection[]
+
+  @@index([supplierId])
+  @@index([status])
+}
+
+model ExecutionRecipe {
+  id               String    @id @default(cuid())
+  providerId       String
+  modelId          String
+  contractFamily   String
+  version          Int       @default(1)
+  status           String    @default("champion")
+  origin           String    @default("seed")
+  executionAdapter String    @default("chat")
+  providerSettings Json
+  toolPolicy       Json      @default("{}")
+  responsePolicy   Json      @default("{}")
+  parentRecipeId   String?
+  mutationSummary  String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  promotedAt       DateTime?
+  retiredAt        DateTime?
+
+  @@unique([providerId, modelId, contractFamily, version])
+  @@index([contractFamily, status])
+}
+
+// ─── EP-COST-001 Phase 4: CLI Pool Status ──────────────────────────────────
+//
+// Tracks the last-known rate-limit state for each CLI adapter pool.
+// Written by cli-adapter.ts and codex-cli-adapter.ts when they receive a
+// 429 / rate-limit error from the underlying subprocess. The orchestrator
+// consults this table before dispatching CLI-backed tasks so it can
+// wait or fall back to the API adapter rather than firing into a known-
+// exhausted pool.
+//
+// One row per adapter type; upserted on each 429 event.
+// The row is cleared (resetAt set to null) once the wall clock passes resetAt.
+//
+// Spec: docs/superpowers/specs/2026-05-19-ai-cost-governance.md §4d
+model CliPoolStatus {
+  id                String    @id @default(cuid())
+  /// "claude-cli" | "codex-cli"
+  adapterType       String    @unique
+  providerId        String
+  rateLimitedAt     DateTime
+  /// Best-effort reset time parsed from Retry-After/X-RateLimit-Reset in stderr.
+  /// Null when the CLI didn't emit a parseable header.
+  resetAt           DateTime?
+  retryAfterSeconds Int?
+  /// First 300 chars of the stderr / error message for debugging.
+  errorSnippet      String?
+  /// Real remaining-weekly-allocation signal (replaces the exhaustion proxy for
+  /// the capacity-drain policy). Fraction 0..1 of the weekly subscription window
+  /// consumed, from the provider's own quota surface (Anthropic unified-7d
+  /// headers / oauth usage, or codex account/rateLimits/read). Null until a
+  /// snapshot has been collected. See lib/routing/weekly-quota.ts.
+  weeklyUtilization Float?
+  /// Provider-authoritative weekly reset time (rolling ~72h anchored window, NOT
+  /// a fixed calendar day). Null when no snapshot / no reset reported.
+  weeklyResetAt     DateTime?
+  /// Which provider signal produced weeklyUtilization: "anthropic-unified-headers"
+  /// | "anthropic-oauth-usage" | "codex-app-server".
+  weeklySource      String?
+  /// When the weekly snapshot was taken — gates staleness (a stale read must not
+  /// be trusted as "plenty of quota").
+  weeklyObservedAt  DateTime?
+  updatedAt         DateTime  @updatedAt
+
+  @@index([adapterType, resetAt])
+}
+
+// Current live capacity state for a provider. This separates runtime capacity
+// (quota, throttles, credits, plan limits) from ModelProvider.status, which is
+// the configured/admin lifecycle state.
+model ProviderCapacityStatus {
+  id                    String                @id @default(cuid())
+  providerId            String                @unique
+  state                 String
+  action                String
+  retryAt               DateTime?
+  retryAfterSeconds     Int?
+  providerCode          String?
+  safeSummary           String
+  confidence            String
+  isHumanActionRequired Boolean               @default(false)
+  lastObservedAt        DateTime              @default(now())
+  lastSuccessAt         DateTime?
+  source                String
+  rawSnippet            String?
+  createdAt             DateTime              @default(now())
+  updatedAt             DateTime              @updatedAt
+  provider              ModelProvider         @relation(fields: [providerId], references: [providerId], onDelete: Cascade)
+  providerConnection    AiProviderConnection?
+
+  @@index([state, retryAt])
+  @@index([isHumanActionRequired, updatedAt])
+}

@@ -4,7 +4,7 @@ import { LocalTime } from "@/components/ui/LocalTime";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { decryptJson } from "@/lib/govern/credential-crypto";
-import { loadStripePreview } from "@/lib/integrate/stripe/preview";
+import { loadStripePreview } from "@/lib/integrations/stripe/preview";
 import {
   StripeConnectPanel,
   type StripeConnectionState,

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
-import { connectGoogleMarketingIntelligence } from "@/lib/integrate/google-marketing-intelligence/connect-action";
+import { connectGoogleMarketingIntelligence } from "@/lib/integrations/google-marketing-intelligence/connect-action";
 
 export async function POST(request: Request) {
   const session = await auth();

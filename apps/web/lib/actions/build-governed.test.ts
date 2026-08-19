@@ -101,12 +101,12 @@ vi.mock("@dpf/db", () => ({
 }));
 vi.mock("@/lib/platform-runtime/work-admission", () => ({ admitRuntimeGuardedWork: vi.fn() }));
 
-vi.mock("@/lib/integrate/sandbox/build-branch", () => ({
+vi.mock("@/lib/build/sandbox/build-branch", () => ({
   isSandboxAvailable: mockIsSandboxAvailable,
   startBuildBranch: mockStartBuildBranch,
   getClientIdentity: mockGetClientIdentity,
 }));
-vi.mock("@/lib/integrate/sandbox/sandbox-build-gc", () => ({ releaseSandboxForTerminalBuild: vi.fn(async () => {}) }));
+vi.mock("@/lib/build/sandbox/sandbox-build-gc", () => ({ releaseSandboxForTerminalBuild: vi.fn(async () => {}) }));
 vi.mock("@/lib/build-review-verification-trigger", () => ({
   queueBuildReviewVerification: mockQueueBuildReviewVerification,
 }));
@@ -115,7 +115,7 @@ vi.mock("@/lib/build/build-artifact-provenance", () => ({
   saveBuildArtifactRevision: mockSaveBuildArtifactRevision,
 }));
 
-vi.mock("@/lib/integrate/sandbox/sandbox", () => ({
+vi.mock("@/lib/build/sandbox/sandbox", () => ({
   listReleasableSandboxFiles: mockListReleasableSandboxFiles,
 }));
 

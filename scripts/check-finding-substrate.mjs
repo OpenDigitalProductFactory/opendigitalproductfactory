@@ -27,7 +27,7 @@
  *           silently landing while the unify vs. keep decision is open.
  * ─────────────────────────────────────────────────────────────────────────
  *
- * How it works: parse packages/db/prisma/schema.prisma for `model <Name> {`
+ * How it works: parse packages/db/prisma/schema/*.prisma for `model <Name> {`
  * declarations, flag any model whose name matches the finding-shape suffix
  * (`Finding` | `Issue` | `Report`) that is NOT in the explicit ALLOWLIST.
  * The allowlist is curated (not a pure heuristic) so unrelated suffix
@@ -36,12 +36,13 @@
  * Run: node scripts/check-finding-substrate.mjs
  */
 import { readFileSync } from "node:fs";
+import { readPrismaSchemaText } from "./lib/prisma-schema-source.mjs";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { dirname, join } from "node:path";
 
 const SCRIPTS_DIR = dirname(fileURLToPath(import.meta.url));
 export const REPO_ROOT = join(SCRIPTS_DIR, "..");
-export const SCHEMA_PATH = "packages/db/prisma/schema.prisma";
+export const SCHEMA_DIR = "packages/db/prisma/schema";
 
 // The frozen set of finding-shaped models — the six named in spec §3.3 plus
 // the seventh (AssuranceFinding) that Phase 1 landed. One comment per entry
@@ -109,7 +110,7 @@ export function findStaleExclusions(schema) {
 }
 
 export function readSchema(root = REPO_ROOT) {
-  return readFileSync(join(root, SCHEMA_PATH), "utf8");
+  return readPrismaSchemaText(root);
 }
 
 function main() {

@@ -16,11 +16,11 @@ import { NextResponse, type NextRequest } from "next/server";
 import { metricsEnvelopeSchema } from "@dpf/validators";
 
 import { resolveEdgeNodeAuth } from "@/lib/auth/edge-node-token";
-import { metricsCache } from "@/lib/edge/metrics-cache";
+import { metricsCache } from "@/lib/edge-node/metrics-cache";
 import {
   getEdgeMetricsRateLimit,
   markEdgeMetricsAccepted,
-} from "@/lib/edge/metrics-rate-limit";
+} from "@/lib/edge-node/metrics-rate-limit";
 
 const BODY_SIZE_CAP_BYTES = 64 * 1024; // 64 KB per spec §11
 const FRESHNESS_WINDOW_MS = 5 * 60 * 1000; // 5 minutes per spec §11

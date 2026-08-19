@@ -7,11 +7,11 @@ import { revalidatePath } from "next/cache";
 import {
   provisionBuildEngine,
   type ProvisionOutcome,
-} from "@/lib/integrate/build-engine-provision";
+} from "@/lib/build/build-engine-provision";
 import {
   probeBuildEngineReadiness,
   type BuildEngineReadinessRow,
-} from "@/lib/integrate/build-engine-readiness";
+} from "@/lib/build/build-engine-readiness";
 
 /** Shared operator gate: managing provider connections. Throws if not held. */
 async function requireManageProviders(): Promise<{ id: string }> {

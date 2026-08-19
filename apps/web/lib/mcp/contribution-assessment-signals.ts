@@ -1,5 +1,5 @@
-import type { ContributionSignalScore } from "@/lib/integrate/disposition";
-import { suggestDisposition } from "@/lib/integrate/disposition";
+import type { ContributionSignalScore } from "@/lib/build/disposition";
+import { suggestDisposition } from "@/lib/build/disposition";
 
 export type ContributionReusability = {
   scope?: string;
@@ -28,7 +28,7 @@ export async function deriveContributionAssessmentSignals(args: {
   let archetypeMarketFit: ContributionSignalScore = "unknown";
   let archetypeMarketReasoning = "Archetype and market fit was not assessed.";
   try {
-    const { tagBusinessVerticals } = await import("@/lib/integrate/contribution-review");
+    const { tagBusinessVerticals } = await import("@/lib/build/contribution-review");
     const verticals = await tagBusinessVerticals(args.brief, args.diff);
     const primary = verticals.applicableVerticals.filter((vertical) => vertical.relevance === "primary");
     const applicable = verticals.applicableVerticals.filter((vertical) => vertical.relevance === "applicable");
