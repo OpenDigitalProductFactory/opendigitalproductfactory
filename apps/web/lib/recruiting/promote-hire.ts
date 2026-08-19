@@ -5,7 +5,7 @@
 // Idempotent via the recruiting crosswalk. Complements the batch-1 hire->worker
 // landing (which creates the EmployeeProfile); this creates the recruiting record.
 
-import type { GreenhouseHire } from "@/lib/integrate/greenhouse/land-hire";
+import type { GreenhouseHire } from "@/lib/integrations/greenhouse/land-hire";
 import {
   RECRUITING_DOMAINS,
   registerRecruitingCrosswalk,

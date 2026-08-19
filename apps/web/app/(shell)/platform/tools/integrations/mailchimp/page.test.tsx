@@ -34,7 +34,7 @@ vi.mock("@/lib/govern/credential-crypto", () => ({
   decryptJson: vi.fn((value: string) => JSON.parse(value)),
 }));
 
-vi.mock("@/lib/integrate/mailchimp/preview", () => ({
+vi.mock("@/lib/integrations/mailchimp/preview", () => ({
   loadMailchimpPreview: mockLoadPreview,
 }));
 

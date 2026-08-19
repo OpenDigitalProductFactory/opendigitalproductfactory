@@ -3,7 +3,7 @@ import {
   importGreenhouseFromReaders,
   type GreenhouseReaders,
 } from "./import-greenhouse";
-import type { IntegrationImportReviewPersistenceClient } from "@/lib/integrate/import-review-store";
+import type { IntegrationImportReviewPersistenceClient } from "@/lib/integrations/import-review-store";
 
 function fakeDb() {
   const upsert = vi.fn().mockResolvedValue({});

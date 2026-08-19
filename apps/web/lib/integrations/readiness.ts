@@ -1,5 +1,5 @@
-import type { IntegrationImportStagingDescriptor } from "@/lib/integrate/import-staging";
-import type { IntegrationImportReviewPosture } from "@/lib/integrate/import-review";
+import type { IntegrationImportStagingDescriptor } from "@/lib/integrations/import-staging";
+import type { IntegrationImportReviewPosture } from "@/lib/integrations/import-review";
 
 export const INTEGRATION_READINESS_STATES = [
   "not-connected",

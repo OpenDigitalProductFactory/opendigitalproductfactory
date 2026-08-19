@@ -19,7 +19,7 @@ vi.mock("next/link", () => ({
 
 import { AccountantWorkLanePanel } from "./AccountantWorkLanePanel";
 import { buildBookkeeperAccountantWorkLane } from "@/lib/finance/accountant-work-lane";
-import type { QuickBooksReadinessConnection } from "@/lib/integrate/quickbooks/readiness";
+import type { QuickBooksReadinessConnection } from "@/lib/integrations/quickbooks/readiness";
 
 const CONNECTED: QuickBooksReadinessConnection = {
   status: "connected",

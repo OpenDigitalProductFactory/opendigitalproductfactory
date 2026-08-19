@@ -5,12 +5,12 @@ import { decryptJson } from "@/lib/govern/credential-crypto";
 import {
   probeMicrosoft365Communications,
   type Microsoft365CommunicationsProbeResult,
-} from "@/lib/integrate/microsoft365-communications/communications-client";
+} from "@/lib/integrations/microsoft365-communications/communications-client";
 import {
   exchangeMicrosoftGraphClientCredentials,
   Microsoft365CommunicationsAuthError,
   type ExchangeMicrosoftGraphClientCredentialsResult,
-} from "@/lib/integrate/microsoft365-communications/token-client";
+} from "@/lib/integrations/microsoft365-communications/token-client";
 
 import { parseConnectorDefinition } from "../kernel/definition";
 import { ConnectorError } from "../kernel/error";

@@ -4,7 +4,7 @@ import { LocalTime } from "@/components/ui/LocalTime";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { decryptJson } from "@/lib/govern/credential-crypto";
-import { loadGoogleMarketingPreview } from "@/lib/integrate/google-marketing-intelligence/preview";
+import { loadGoogleMarketingPreview } from "@/lib/integrations/google-marketing-intelligence/preview";
 import {
   GoogleMarketingIntelligenceConnectPanel,
   type GoogleMarketingIntelligenceConnectionState,

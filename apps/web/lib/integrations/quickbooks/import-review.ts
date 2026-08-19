@@ -1,7 +1,7 @@
 import {
   buildIntegrationImportReviewBatch,
   type IntegrationImportReviewBatch,
-} from "@/lib/integrate/import-review";
+} from "@/lib/integrations/import-review";
 import {
   stageQuickBooksCoreAccountingRecords,
   type QuickBooksCoreAccountingRecordsInput,

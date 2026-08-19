@@ -6,7 +6,7 @@ const { mockAuth, mockConnectHubSpot } = vi.hoisted(() => ({
 }));
 
 vi.mock("@/lib/auth", () => ({ auth: mockAuth }));
-vi.mock("@/lib/integrate/hubspot/connect-action", () => ({
+vi.mock("@/lib/integrations/hubspot/connect-action", () => ({
   connectHubSpot: mockConnectHubSpot,
 }));
 

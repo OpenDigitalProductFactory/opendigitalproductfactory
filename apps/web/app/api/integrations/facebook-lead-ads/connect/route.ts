@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
-import { connectFacebookLeadAds } from "@/lib/integrate/facebook-lead-ads/connect-action";
+import { connectFacebookLeadAds } from "@/lib/integrations/facebook-lead-ads/connect-action";
 
 export async function POST(request: Request) {
   const session = await auth();

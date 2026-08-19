@@ -4,7 +4,7 @@ import { LocalTime } from "@/components/ui/LocalTime";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { decryptJson } from "@/lib/govern/credential-crypto";
-import { loadWhatsAppBusinessPreview } from "@/lib/integrate/whatsapp-business/preview";
+import { loadWhatsAppBusinessPreview } from "@/lib/integrations/whatsapp-business/preview";
 import {
   WhatsAppBusinessConnectPanel,
   type WhatsAppBusinessConnectionState,

@@ -3,7 +3,7 @@
 // review store fingerprints and scrubs sensitive display fields downstream; we
 // additionally never place compensation, SSN, or contact PII in displayFields.
 
-import type { IntegrationImportStagingRecord } from "@/lib/integrate/import-staging";
+import type { IntegrationImportStagingRecord } from "@/lib/integrations/import-staging";
 
 const SOURCE = "greenhouse";
 

@@ -3,7 +3,7 @@ import {
   type IntegrationReadinessCapability,
   type IntegrationReadinessDescriptor,
   type IntegrationReadinessState,
-} from "@/lib/integrate/readiness";
+} from "@/lib/integrations/readiness";
 import {
   QUICKBOOKS_IMPORT_STAGING_ENTITY_FAMILIES,
   buildQuickBooksImportStagingDescriptor,

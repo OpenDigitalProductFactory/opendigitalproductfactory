@@ -35,11 +35,17 @@
       "description": "Durable scheduling and event-handler adapters.",
       "allowedDependencies": [
         "integrate",
+        "integrations",
         "build",
         "tak",
         "inference",
         "routing"
       ]
+    },
+    "integrations": {
+      "owner": "integration-platform",
+      "description": "External-connector registry and connector-intake normalization (kernel, per-provider connectors, import staging/review). Leaf context: connectors may not reach into orchestration.",
+      "allowedDependencies": []
     },
     "integrate": {
       "owner": "integration-platform",

@@ -5,11 +5,11 @@
 
 import { prisma } from "@dpf/db";
 import { decryptJson } from "@/lib/govern/credential-crypto";
-import { buildIntegrationImportReviewBatch } from "@/lib/integrate/import-review";
+import { buildIntegrationImportReviewBatch } from "@/lib/integrations/import-review";
 import {
   saveIntegrationImportReviewBatch,
   type IntegrationImportReviewPersistenceClient,
-} from "@/lib/integrate/import-review-store";
+} from "@/lib/integrations/import-review-store";
 import { harvestGetPaged, type HarvestFetch, type HarvestPageOptions } from "./harvest-client";
 import { GREENHOUSE_INTEGRATION_ID } from "./connect-action";
 import {

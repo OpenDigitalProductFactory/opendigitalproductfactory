@@ -2,7 +2,7 @@ import { createHash } from "crypto";
 import type {
   IntegrationImportDisplayField,
   IntegrationImportStagingRecord,
-} from "@/lib/integrate/import-staging";
+} from "@/lib/integrations/import-staging";
 
 export const INTEGRATION_IMPORT_REVIEW_STATUSES = [
   "candidate",

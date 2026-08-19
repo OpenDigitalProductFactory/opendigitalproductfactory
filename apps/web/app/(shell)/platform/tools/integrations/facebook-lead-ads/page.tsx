@@ -4,7 +4,7 @@ import { LocalTime } from "@/components/ui/LocalTime";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { decryptJson } from "@/lib/govern/credential-crypto";
-import { loadFacebookLeadAdsPreview } from "@/lib/integrate/facebook-lead-ads/preview";
+import { loadFacebookLeadAdsPreview } from "@/lib/integrations/facebook-lead-ads/preview";
 import {
   FacebookLeadAdsConnectPanel,
   type FacebookLeadAdsConnectionState,

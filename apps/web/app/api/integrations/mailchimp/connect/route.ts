@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
-import { connectMailchimp } from "@/lib/integrate/mailchimp/connect-action";
+import { connectMailchimp } from "@/lib/integrations/mailchimp/connect-action";
 
 export async function POST(request: Request) {
   const session = await auth();
