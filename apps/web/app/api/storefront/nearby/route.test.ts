@@ -13,7 +13,7 @@ const { mockOrgFindMany, mockGetPublicStorefront } = vi.hoisted(() => ({
 vi.mock("@dpf/db", () => ({
   prisma: { organization: { findMany: mockOrgFindMany } },
 }));
-vi.mock("@/lib/release/storefront-data", () => ({
+vi.mock("@/lib/storefront/storefront-data", () => ({
   getPublicStorefront: mockGetPublicStorefront,
 }));
 

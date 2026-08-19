@@ -30,7 +30,7 @@ export const ROUTE_PACKAGE_KEY = "route:pkg";
  * reach it, at birth:
  *   - "public"        — anonymously reachable by design (must also sit inside the
  *                       proxy's public path-segmentation allowlist, see
- *                       lib/release/storefront-middleware.ts RouteClass.PublicApi);
+ *                       lib/storefront/storefront-middleware.ts RouteClass.PublicApi);
  *   - "authenticated" — requires a session (or an equivalent scope/contract gate
  *                       enforced inside the handler);
  *   - "private-mesh"  — reachable only over the private install-to-install mesh

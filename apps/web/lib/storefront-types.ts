@@ -1,2 +1,2 @@
-// Shim — moved to lib/release/storefront-types.ts (Phase 6 refactoring)
-export * from "./release/storefront-types";
+// Shim — moved to lib/storefront/storefront-types.ts (Phase 6 refactoring)
+export * from "./storefront/storefront-types";

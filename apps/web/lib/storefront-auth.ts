@@ -1,2 +1,2 @@
-// Shim — moved to lib/release/storefront-auth.ts (Phase 6 refactoring)
-export * from "./release/storefront-auth";
+// Shim — moved to lib/storefront/storefront-auth.ts (Phase 6 refactoring)
+export * from "./storefront/storefront-auth";
