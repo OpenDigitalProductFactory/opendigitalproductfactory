@@ -20,7 +20,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { ReactNode } from "react";
+import type { ReactNode, RefObject } from "react";
 
 import {
   BUILD_STUDIO_TEST_IDS,
@@ -45,9 +45,13 @@ export type DetailsDrawerProps = {
   isOpen: boolean;
   onClose: () => void;
   sections: readonly DetailsDrawerSection[];
+  fallbackFocusRef?: RefObject<HTMLElement | null>;
 };
 
-export function DetailsDrawer({ isOpen, onClose, sections }: DetailsDrawerProps) {
+export function DetailsDrawer({ isOpen, onClose, sections, fallbackFocusRef }: DetailsDrawerProps) {
+  const drawerRef = useRef<HTMLElement>(null);
+  const initialSectionButtonRef = useRef<HTMLButtonElement>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
   // Track which sections are expanded. Re-seed from defaultOpen when sections
   // change (e.g. phase change reorders the default-open section).
   const initialOpen = useMemo(() => {
@@ -62,6 +66,27 @@ export function DetailsDrawer({ isOpen, onClose, sections }: DetailsDrawerProps)
   useEffect(() => {
     setOpenIds(initialOpen);
   }, [initialOpen]);
+
+  useEffect(() => {
+    if (!isOpen || typeof document === "undefined") return;
+    const returnFocus = document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null;
+    let cancelled = false;
+
+    queueMicrotask(() => {
+      if (cancelled) return;
+      (initialSectionButtonRef.current ?? closeButtonRef.current)?.focus();
+    });
+
+    return () => {
+      cancelled = true;
+      const focusTarget = returnFocus?.isConnected
+        ? returnFocus
+        : fallbackFocusRef?.current;
+      if (focusTarget?.isConnected) focusTarget.focus();
+    };
+  }, [fallbackFocusRef, isOpen]);
 
   // Esc to close — only when drawer is open, capture-phase so it wins over
   // nested inputs.
@@ -89,9 +114,11 @@ export function DetailsDrawer({ isOpen, onClose, sections }: DetailsDrawerProps)
 
   return (
     <aside
+      ref={drawerRef}
       role="region"
       aria-label="Build details"
       aria-hidden={!isOpen}
+      inert={!isOpen}
       data-testid={BUILD_STUDIO_TEST_IDS.detailsDrawer}
       data-open={isOpen ? "true" : "false"}
       className={getDetailsDrawerClassName(isOpen)}
@@ -101,6 +128,7 @@ export function DetailsDrawer({ isOpen, onClose, sections }: DetailsDrawerProps)
           Build details
         </h2>
         <button
+          ref={closeButtonRef}
           type="button"
           aria-label="Close details drawer"
           onClick={onClose}
@@ -130,6 +158,7 @@ export function DetailsDrawer({ isOpen, onClose, sections }: DetailsDrawerProps)
             >
               <h3 className="m-0">
                 <button
+                  ref={section.defaultOpen ? initialSectionButtonRef : undefined}
                   type="button"
                   id={headerId}
                   aria-expanded={open}

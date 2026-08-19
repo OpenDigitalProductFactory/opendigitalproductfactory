@@ -1,7 +1,7 @@
 "use client";
 import { MoreHorizontal } from "lucide-react";
 import { ArtifactTabs } from "./ArtifactTabs";
-import { BusinessBriefPanel } from "./BusinessBriefPanel";
+import { BusinessBriefPanel } from "@/components/build/BusinessBriefPanel";
 import { PreviewFrame } from "./PreviewFrame";
 import type { ArtifactView } from "./types";
 import type { BusinessBuildBrief } from "@/lib/build/business-build-brief";

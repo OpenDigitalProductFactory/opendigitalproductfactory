@@ -565,6 +565,7 @@ model FeatureBuild {
   sandboxes                   Sandbox[]
   decisionInteractions        DecisionInteraction[]
   workrooms                   Workroom[]               @relation("WorkroomFeatureBuild")
+  businessBuildBrief          BusinessBuildBrief?
 
   @@index([phase])
   @@index([createdById])
@@ -625,6 +626,7 @@ model BusinessBuildBrief {
   acceptedAt              DateTime?
   createdAt               DateTime         @default(now())
   updatedAt               DateTime         @updatedAt
+  featureBuild            FeatureBuild?    @relation(fields: [featureBuildId], references: [id], onDelete: SetNull)
 
   @@index([orgId, status])
   @@index([orgId, capabilityPackId])

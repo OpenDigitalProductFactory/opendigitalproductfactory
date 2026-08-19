@@ -21,6 +21,7 @@ CMD ["/usr/local/bin/dev-portal-entrypoint.sh"]
 # ─── Stage 2: deps ────────────────────────────────────────────────────────────
 FROM base AS deps
 COPY pnpm-workspace.yaml pnpm-lock.yaml package.json ./
+COPY patches/ ./patches/
 COPY scripts/set-hooks-path.mjs ./scripts/
 COPY apps/web/package.json ./apps/web/
 COPY packages/db/package.json ./packages/db/
@@ -64,7 +65,7 @@ COPY apps/web/ ./apps/web/
 COPY packages/ ./packages/
 COPY docs/professions/ ./docs/professions/
 # Root-level config data statically imported at build time — e.g.
-# apps/web/lib/integrate/seed-contribution-fit.ts imports
+# apps/web/lib/build/seed-contribution-fit.ts imports
 # ../../../../config/seed-content-paths.json. Without this COPY the Next.js build
 # fails "Module not found" inside the image even though plain `next build` (CI)
 # passes, because CI builds the full checkout while the image build only sees this

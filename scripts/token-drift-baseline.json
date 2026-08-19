@@ -320,7 +320,7 @@
       "motion": 0
     },
     "apps/web/app/(shell)/finance/bills/[id]/page.tsx": {
-      "type": 20,
+      "type": 18,
       "spacing": 0,
       "motion": 0
     },
@@ -335,7 +335,7 @@
       "motion": 0
     },
     "apps/web/app/(shell)/finance/expense-claims/[id]/page.tsx": {
-      "type": 14,
+      "type": 12,
       "spacing": 0,
       "motion": 0
     },
@@ -390,7 +390,7 @@
       "motion": 0
     },
     "apps/web/app/(shell)/finance/purchase-orders/[id]/page.tsx": {
-      "type": 17,
+      "type": 15,
       "spacing": 0,
       "motion": 0
     },
@@ -485,7 +485,7 @@
       "motion": 0
     },
     "apps/web/app/(shell)/finance/suppliers/[id]/page.tsx": {
-      "type": 17,
+      "type": 15,
       "spacing": 0,
       "motion": 0
     },
@@ -734,11 +734,6 @@
       "spacing": 1,
       "motion": 0
     },
-    "apps/web/components/build-studio/BusinessBriefPanel.tsx": {
-      "type": 19,
-      "spacing": 0,
-      "motion": 0
-    },
     "apps/web/components/build-studio/Composer.tsx": {
       "type": 4,
       "spacing": 1,
@@ -871,6 +866,11 @@
     },
     "apps/web/components/build/BuildVerificationScopedCard.tsx": {
       "type": 2,
+      "spacing": 0,
+      "motion": 0
+    },
+    "apps/web/components/build/BusinessBriefPanel.tsx": {
+      "type": 19,
       "spacing": 0,
       "motion": 0
     },
@@ -1515,7 +1515,7 @@
       "motion": 0
     },
     "apps/web/components/inventory/TopologyGraph.tsx": {
-      "type": 22,
+      "type": 21,
       "spacing": 0,
       "motion": 0
     },
@@ -1650,7 +1650,7 @@
       "motion": 0
     },
     "apps/web/components/ops/UpgradeImpactPanel.tsx": {
-      "type": 2,
+      "type": 1,
       "spacing": 0,
       "motion": 0
     },

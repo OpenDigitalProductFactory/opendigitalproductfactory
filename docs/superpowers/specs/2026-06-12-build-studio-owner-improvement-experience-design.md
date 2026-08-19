@@ -1,8 +1,8 @@
 ---
 title: Build Studio Owner Change Experience
-status: approved direction - current-main refresh applied 2026-07-31
+status: active
 date: 2026-06-12
-updated: 2026-07-31
+updated: 2026-08-15
 owner: platform
 specKind: design
 relatedSpecs:
@@ -30,6 +30,9 @@ relatedPrinciples:
   - docs/founder-kernel/wiki/principles/governance-approves-evidence-not-provenance.md
   - docs/founder-kernel/wiki/principles/no-hardcoded-colors.md
 ---
+
+> **Status note.** Approved direction, not yet binding. Reconciled against current `main` on 2026-08-15.
+
 
 # Build Studio Owner Change Experience
 
@@ -281,7 +284,7 @@ type OwnerChangeView = {
   outcome: string;
   now: string;
   next: string;
-  health: "working" | "waiting" | "needs-you" | "blocked" | "ready" | "live";
+  ownerState: "working" | "waiting-capacity" | "waiting-owner" | "blocked" | "inconclusive" | "failed" | "complete" | "not-started";
   brief: BusinessBuildBrief | null;
   proof: OwnerProofPacket;
   pendingDecisionId: string | null;
@@ -290,7 +293,7 @@ type OwnerChangeView = {
 };
 ```
 
-The projection must be deterministic from canonical records and safe to recompute. Missing evidence produces `not recorded` or `not applicable`, never an inferred pass.
+The projection must be deterministic from canonical records and safe to recompute. `ownerState` is consumed from the canonical reconciliation seam introduced by PR #4249, not re-derived from lifecycle copy inside the proof projection. Missing evidence produces `not recorded` or `not applicable`, never an inferred pass.
 
 ### 6.3 Business brief convergence
 

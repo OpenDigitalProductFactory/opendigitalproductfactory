@@ -9,6 +9,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import ReactMarkdown from "react-markdown";
 import { FeatureBriefPanel } from "./FeatureBriefPanel";
+import { BusinessBriefPanel } from "./BusinessBriefPanel";
+import { OwnerChangeProofPanel } from "./OwnerChangeProofPanel";
 import { ReviewPanel } from "./ReviewPanel";
 import { NodeInspector } from "./NodeInspector";
 import type { ProcessGraphNodeClickInfo } from "./ProcessGraphClickInfo";
@@ -35,7 +37,6 @@ import { PortalContextStrip } from "@/components/portal-context/PortalContextStr
 import { deriveBuildStudioWorkflowAction } from "./build-studio-workflow-actions";
 import { deriveBuildStudioCustodianPrompt, type BuildStudioCustodianPrompt } from "./build-studio-custodian";
 import { BuildDecisionLedgerBand } from "./BuildDecisionLedgerBand";
-import { BuildChangeSummaryBand } from "./BuildChangeSummaryBand";
 import { BuildSolutionSummaryBand } from "./BuildSolutionSummaryBand";
 import { BuildWorkWarrantBand } from "./BuildWorkWarrantBand";
 import {
@@ -72,6 +73,7 @@ import { STEP_LABELS } from "@/lib/build/build-exec-types";
 import type { PortfolioForSelect } from "@/lib/backlog-data";
 import { deriveLifecycleLabel } from "@/lib/governed-backlog-workflow";
 import type { PortalContextEnvelope } from "@/lib/portal-context";
+import { projectOwnerChangeView } from "@/lib/build/owner-change-view";
 import {
   BUILD_STUDIO_TEST_IDS,
   getBuildStudioGraphPanelClassName,
@@ -209,9 +211,9 @@ export function BuildStudio({
   const [pendingIntake, setPendingIntake] = useState<BuildStudioPendingIntake | null>(null);
   const [promotingItemId, setPromotingItemId] = useState<string | null>(null);
   const [intakeOpen, setIntakeOpen] = useState(() => buildRows.length === 0);
-  // One evidence drawer remains authoritative for progress, brief, review,
-  // runtime, and queue diagnostics. The operator overview stays primary;
-  // the graph and drawer mount only inside Technical details.
+  // One details drawer remains authoritative for the owner brief/review and
+  // technical diagnostics. It mounts only after an explicit owner or operator
+  // action, so closed evidence surfaces stay out of the default DOM.
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [drawerInitialSectionId, setDrawerInitialSectionId] = useState<string | null>(null);
   // Assurance + code-intel cards collapse so the workflow graph stays the
@@ -261,6 +263,11 @@ export function BuildStudio({
     activeBuild && !buildRows.some((build) => build.buildId === activeBuild.buildId)
       ? [activeBuild, ...buildRows]
       : buildRows;
+  const drivingBuild = computeDrivingBuild(supervisedBuildRows.map((build) => ({
+    buildCode: build.buildId,
+    sandboxPort: build.sandboxPort,
+    lastActivityAt: build.updatedAt,
+  })));
   const branchBadge = resolveBuildStudioBranchBadge({
     submissionBranchShortId,
     buildTitle: activeBuild?.title ?? null,
@@ -283,13 +290,26 @@ export function BuildStudio({
   // ─── Refetch deduplication: prevent triple-fetch from overlapping channels ─
   const lastFetchRef = useRef<number>(0);
   const fetchInFlightRef = useRef<boolean>(false);
+  const drawerFallbackFocusRef = useRef<HTMLButtonElement>(null);
   const [flowState, setFlowState] = useState<BuildFlowState | null>(null);
   const [progressVisibility, setProgressVisibility] = useState<BuildProgressVisibility | null>(null);
   const [codeGraphFreshness, setCodeGraphFreshness] = useState<CodeGraphFreshness | null>(null);
   const [bomSummary, setBomSummary] = useState<BomSummary>(MISSING_BOM_SUMMARY);
   const [assuranceFindings, setAssuranceFindings] = useState<ActiveAssuranceFindingRow[]>([]);
-  const [decisionLedger, setDecisionLedger] = useState<BuildDecisionLedgerEntry[]>([]);
-  const [changeNarrative, setChangeNarrative] = useState<BuildChangeNarrative | null>(null);
+  const [decisionLedgerResult, setDecisionLedgerResult] = useState<{
+    buildId: string;
+    entries: BuildDecisionLedgerEntry[];
+  } | null>(null);
+  const [changeNarrativeResult, setChangeNarrativeResult] = useState<{
+    buildId: string;
+    narrative: BuildChangeNarrative | null;
+  } | null>(null);
+  const decisionLedger = activeBuild && decisionLedgerResult?.buildId === activeBuild.buildId
+    ? decisionLedgerResult.entries
+    : [];
+  const changeNarrative = activeBuild && changeNarrativeResult?.buildId === activeBuild.buildId
+    ? changeNarrativeResult.narrative
+    : null;
   const autonomousCustody = activeBuild
     ? projectAutonomousBuildCustody({
       phase: activeBuild.phase,
@@ -303,6 +323,19 @@ export function BuildStudio({
         progress: progressVisibility,
       })
     : null;
+  const ownerChangeView = activeBuild
+    ? projectOwnerChangeView({
+      build: activeBuild,
+      status: ownerStatus,
+      previewDrivingBuildId: drivingBuild?.buildCode ?? null,
+    })
+    : null;
+  const ownerPreviewUrl =
+    ownerChangeView?.preview.drivingThisChange
+    && drivingBuild
+    && isValidSandboxPort(drivingBuild.sandboxPort)
+      ? `http://localhost:${drivingBuild.sandboxPort}`
+      : null;
   const ownerStateIsTerminal = ownerStatus?.ownerState === "complete"
     || ownerStatus?.ownerState === "failed";
   const workflowAction = activeBuild && !ownerStateIsTerminal
@@ -454,16 +487,17 @@ export function BuildStudio({
   // phase boundaries, so it stays off the hot SSE refresh path. BI-EC934FC6.
   useEffect(() => {
     if (!activeBuild) {
-      setDecisionLedger([]);
+      setDecisionLedgerResult(null);
       return;
     }
+    const buildId = activeBuild.buildId;
     let cancelled = false;
-    getBuildDecisionLedgerAction(activeBuild.buildId)
+    getBuildDecisionLedgerAction(buildId)
       .then((rows) => {
-        if (!cancelled) setDecisionLedger(rows);
+        if (!cancelled) setDecisionLedgerResult({ buildId, entries: rows });
       })
       .catch(() => {
-        if (!cancelled) setDecisionLedger([]);
+        if (!cancelled) setDecisionLedgerResult({ buildId, entries: [] });
       });
     return () => {
       cancelled = true;
@@ -475,16 +509,17 @@ export function BuildStudio({
   // path; null until the build completes and the narrative is generated. BI-D93CF6C0.
   useEffect(() => {
     if (!activeBuild) {
-      setChangeNarrative(null);
+      setChangeNarrativeResult(null);
       return;
     }
+    const buildId = activeBuild.buildId;
     let cancelled = false;
-    getBuildChangeNarrativeAction(activeBuild.buildId)
+    getBuildChangeNarrativeAction(buildId)
       .then((narrative) => {
-        if (!cancelled) setChangeNarrative(narrative);
+        if (!cancelled) setChangeNarrativeResult({ buildId, narrative });
       })
       .catch(() => {
-        if (!cancelled) setChangeNarrative(null);
+        if (!cancelled) setChangeNarrativeResult({ buildId, narrative: null });
       });
     return () => {
       cancelled = true;
@@ -833,11 +868,7 @@ export function BuildStudio({
             <>
               <BuildOperatorOverview
                 title={activeBuild.title}
-                outcome={
-                  activeBuild.designDoc?.problemStatement
-                  ?? activeBuild.description
-                  ?? activeBuild.originator?.resolution
-                }
+                outcome={ownerChangeView?.outcome}
                 phase={activeBuild.phase}
                 status={ownerStatus}
               />
@@ -894,8 +925,35 @@ export function BuildStudio({
                     )}
                   </div>
                 )}
+                {(activeBuild.designDoc?.proposedApproach || activeBuild.description || autonomousCustody) ? (
+                  <div className="border-t border-[var(--dpf-border)] px-5 py-5 sm:px-7">
+                    <BuildSolutionSummaryBand
+                      problemStatement={activeBuild.designDoc?.problemStatement ?? null}
+                      proposedApproach={activeBuild.designDoc?.proposedApproach ?? null}
+                      fallbackIntent={activeBuild.description}
+                      custody={autonomousCustody}
+                    />
+                  </div>
+                ) : null}
+                {ownerChangeView ? (
+                  <OwnerChangeProofPanel
+                    view={ownerChangeView}
+                    previewUrl={ownerPreviewUrl}
+                    changeNarrative={changeNarrative}
+                    decisionLedger={decisionLedger}
+                    onOpenBrief={() => {
+                      setDrawerInitialSectionId("brief");
+                      setDrawerOpen(true);
+                    }}
+                    onOpenProof={() => {
+                      setDrawerInitialSectionId("review");
+                      setDrawerOpen(true);
+                    }}
+                  />
+                ) : null}
                 <div className="border-t border-[var(--dpf-border)] px-4 py-3">
                   <button
+                    ref={drawerFallbackFocusRef}
                     type="button"
                     onClick={toggleEngineerView}
                     aria-expanded={engineerView}
@@ -945,21 +1003,6 @@ export function BuildStudio({
                     {activeWorkWarrant !== null && activeWorkWarrant !== undefined ? (
                       <div className="border-b border-[var(--dpf-border)] px-4 py-3">
                         <BuildWorkWarrantBand warrant={activeWorkWarrant} />
-                      </div>
-                    ) : null}
-                    {(activeBuild.designDoc?.proposedApproach || activeBuild.description || autonomousCustody) ? (
-                      <div className="border-b border-[var(--dpf-border)] px-4 py-3">
-                        <BuildSolutionSummaryBand
-                          problemStatement={activeBuild.designDoc?.problemStatement ?? null}
-                          proposedApproach={activeBuild.designDoc?.proposedApproach ?? null}
-                          fallbackIntent={activeBuild.description}
-                          custody={autonomousCustody}
-                        />
-                      </div>
-                    ) : null}
-                    {changeNarrative ? (
-                      <div className="border-b border-[var(--dpf-border)] px-4 py-3">
-                        <BuildChangeSummaryBand narrative={changeNarrative} />
                       </div>
                     ) : null}
                     {decisionLedger.length > 0 ? (
@@ -1024,20 +1067,24 @@ export function BuildStudio({
                           setDrawerInitialSectionId(null);
                         }}
                       />
-                      <DetailsDrawer
-                        isOpen={drawerOpen}
-                        onClose={() => setDrawerOpen(false)}
-                        sections={buildDetailsDrawerSections(
-                          activeBuild,
-                          progressVisibility,
-                          drawerInitialSectionId,
-                          supervisedBuildRows,
-                          changeNarrative,
-                          true,
-                        )}
-                      />
                     </div>
                   </section>
+                ) : null}
+                {drawerOpen ? (
+                  <DetailsDrawer
+                    isOpen
+                    onClose={() => setDrawerOpen(false)}
+                    fallbackFocusRef={drawerFallbackFocusRef}
+                    sections={buildDetailsDrawerSections(
+                      activeBuild,
+                      progressVisibility,
+                      drawerInitialSectionId,
+                      supervisedBuildRows,
+                      changeNarrative,
+                      engineerView,
+                      () => refreshActiveBuildState(activeBuild.buildId),
+                    )}
+                  />
                 ) : null}
               </div>
             </>
@@ -1095,6 +1142,7 @@ function buildDetailsDrawerSections(
   allBuilds: readonly FeatureBuildRow[],
   changeNarrative: BuildChangeNarrative | null,
   engineerView: boolean = false,
+  onBriefSaved?: () => void | Promise<void>,
 ): DetailsDrawerSection[] {
   // Default-open section depends on phase + explicit operator intent.
   // - When the queue header opened the drawer, BS-Queue is the explicit pick.
@@ -1123,15 +1171,22 @@ function buildDetailsDrawerSections(
     },
     {
       id: "brief",
-      title: activeBuild.phase === "complete" ? "Shipped — original brief" : "Brief / Design Doc",
+      title: activeBuild.phase === "complete" ? "Shipped — original outcome" : "Outcome and brief",
       defaultOpen: defaultId === "brief",
       content: (
-        <FeatureBriefPanel
-          brief={activeBuild.brief}
-          phase={activeBuild.phase}
-          changeNarrative={changeNarrative}
-          build={activeBuild}
-        />
+        activeBuild.businessBuildBrief ? (
+          <BusinessBriefPanel
+            brief={activeBuild.businessBuildBrief}
+            onSaved={onBriefSaved}
+          />
+        ) : (
+          <FeatureBriefPanel
+            brief={activeBuild.brief}
+            phase={activeBuild.phase}
+            changeNarrative={changeNarrative}
+            build={activeBuild}
+          />
+        )
       ),
     },
     {

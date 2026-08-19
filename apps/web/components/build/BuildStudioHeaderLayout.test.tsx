@@ -9,6 +9,7 @@ import {
   type FeatureBuildRow,
 } from "@/lib/feature-build-types";
 import type { EpicRollupView } from "@/lib/build/epic-rollup";
+import type { BusinessBuildBrief } from "@/lib/build/business-build-brief";
 import type { PortalContextEnvelope } from "@/lib/portal-context";
 
 afterEach(cleanup);
@@ -26,6 +27,11 @@ const backlogBuildMocks = vi.hoisted(() => ({
 const buildReadMocks = vi.hoisted(() => ({
   getFeatureBuild: vi.fn(),
   getFeatureBuildCustomerStatus: vi.fn(),
+}));
+
+const ownerProofMocks = vi.hoisted(() => ({
+  getBuildChangeNarrativeAction: vi.fn().mockResolvedValue(null),
+  getBuildDecisionLedgerAction: vi.fn().mockResolvedValue([]),
 }));
 
 vi.mock("next/navigation", () => ({
@@ -56,6 +62,14 @@ vi.mock("@/lib/actions/backlog-build", () => ({
 vi.mock("@/lib/actions/build-read", () => ({
   getFeatureBuild: buildReadMocks.getFeatureBuild,
   getFeatureBuildCustomerStatus: buildReadMocks.getFeatureBuildCustomerStatus,
+}));
+
+vi.mock("@/lib/actions/build-change-narrative", () => ({
+  getBuildChangeNarrativeAction: ownerProofMocks.getBuildChangeNarrativeAction,
+}));
+
+vi.mock("@/lib/actions/build-decision-ledger", () => ({
+  getBuildDecisionLedgerAction: ownerProofMocks.getBuildDecisionLedgerAction,
 }));
 
 vi.mock("@/lib/actions/build-flow", () => ({
@@ -231,9 +245,320 @@ function makeEpicRollup(overrides: Partial<EpicRollupView> = {}): EpicRollupView
 }
 
 describe("BuildStudio active-build header layout", () => {
+  it("opens the selected Change's canonical business brief from the owner view", () => {
+    const businessOutcome = "Customers can change a booking without calling.";
+    render(
+      <BuildStudio
+        builds={[makeBuild({
+          businessBuildBrief: {
+            briefId: "BBB-CHANGE-A",
+            title: "Make booking changes easier",
+            status: "accepted",
+            intakeSource: "user_conversation",
+            businessOutcome,
+            affectedPeople: ["Customer"],
+            affectedWorkflow: "Booking changes",
+            sourceEvidence: [],
+            successSignals: ["Fewer change calls"],
+            constraints: [],
+            businessInterpretation: businessOutcome,
+            capabilityPackId: "operations",
+            capabilityPack: "Operations",
+            riskProfile: {
+              customerFacing: true,
+              complianceSensitive: false,
+              revenueImpacting: false,
+              operationalRisk: false,
+              level: "medium",
+            },
+            technicalInterpretation: {
+              dataNeeds: null,
+              likelyWorkflowImpact: [],
+              verificationFocus: [],
+            },
+            openQuestions: [],
+            confidence: "high",
+          },
+        })]}
+        portfolios={[]}
+        governedBacklogEnabled
+      />,
+    );
+
+    expect(screen.getByText(businessOutcome)).not.toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Review outcome" }));
+
+    expect(screen.getByRole("heading", { name: "Build details" })).not.toBeNull();
+    expect(screen.getByText("Outcome and brief")).not.toBeNull();
+    expect(screen.queryByTestId("feature-brief-panel")).toBeNull();
+  });
+
+  it("moves focus into owner review sections and restores it when the drawer closes", async () => {
+    render(
+      <BuildStudio
+        builds={[makeBuild({ phase: "review" })]}
+        portfolios={[]}
+        governedBacklogEnabled
+      />,
+    );
+
+    const outcomeTrigger = screen.getByRole("button", { name: "Review outcome" });
+    outcomeTrigger.focus();
+    fireEvent.click(outcomeTrigger);
+    await waitFor(() => {
+      expect(document.activeElement).toBe(
+        screen.getByRole("button", { name: "Outcome and brief" }),
+      );
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Close details drawer" }));
+    expect(document.activeElement).toBe(outcomeTrigger);
+
+    const proofTrigger = screen.getByRole("button", { name: "Review proof" });
+    proofTrigger.focus();
+    fireEvent.click(proofTrigger);
+    await waitFor(() => {
+      const reviewSection = screen.getByTestId("details-drawer-section-review");
+      expect(document.activeElement).toBe(reviewSection.querySelector("button"));
+    });
+  });
+
+  it("keeps editable business briefs isolated across Change A, Change B, then A", () => {
+    const businessBrief = (
+      briefId: string,
+      title: string,
+      businessOutcome: string,
+    ): BusinessBuildBrief => ({
+      briefId,
+      title,
+      status: "accepted" as const,
+      intakeSource: "user_conversation" as const,
+      businessOutcome,
+      affectedPeople: ["Owner"],
+      affectedWorkflow: "Booking changes",
+      sourceEvidence: [],
+      successSignals: ["Fewer calls"],
+      constraints: [],
+      businessInterpretation: businessOutcome,
+      capabilityPackId: "operations",
+      capabilityPack: "Operations",
+      riskProfile: {
+        customerFacing: true,
+        complianceSensitive: false,
+        revenueImpacting: false,
+        operationalRisk: false,
+        level: "medium" as const,
+      },
+      technicalInterpretation: {
+        dataNeeds: null,
+        likelyWorkflowImpact: [],
+        verificationFocus: [],
+      },
+      openQuestions: [],
+      confidence: "high" as const,
+    });
+
+    render(
+      <BuildStudio
+        builds={[
+          makeBuild({
+            buildId: "FB-FIRST",
+            title: "First Change",
+            phase: "review",
+            businessBuildBrief: businessBrief(
+              "BBB-FIRST",
+              "First Change brief",
+              "First Change business outcome",
+            ),
+          }),
+          makeBuild({
+            id: "build-row-2",
+            buildId: "FB-SECOND",
+            title: "Second Change",
+            phase: "review",
+            businessBuildBrief: businessBrief(
+              "BBB-SECOND",
+              "Second Change brief",
+              "Second Change business outcome",
+            ),
+          }),
+        ]}
+        portfolios={[]}
+        governedBacklogEnabled
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Review outcome" }));
+    expect((screen.getByLabelText("Business outcome") as HTMLTextAreaElement).value)
+      .toBe("First Change business outcome");
+
+    fireEvent.click(screen.getByRole("button", { name: "Open build Second Change" }));
+    expect((screen.getByLabelText("Business outcome") as HTMLTextAreaElement).value)
+      .toBe("Second Change business outcome");
+
+    fireEvent.click(screen.getByRole("button", { name: "Open build First Change" }));
+    expect((screen.getByLabelText("Business outcome") as HTMLTextAreaElement).value)
+      .toBe("First Change business outcome");
+  });
+
+  it("keeps the change narrative and decision summary above Technical details", async () => {
+    ownerProofMocks.getBuildChangeNarrativeAction.mockResolvedValueOnce({
+      headline: "Customers can now change a booking online.",
+      bullets: ["Added self-service rescheduling."],
+      whyItMatters: "Customers get an answer without waiting on the phone.",
+      openQuestions: [],
+      generatedAt: "2026-07-30T12:00:00.000Z",
+      model: "test-model",
+    });
+    ownerProofMocks.getBuildDecisionLedgerAction.mockResolvedValueOnce([{
+      id: "decision-1",
+      phase: "review",
+      source: "kernel",
+      theCall: "Keep staff approval for late changes",
+      theOptions: ["Always automatic", "Approval after cutoff"],
+      theWhy: "Late changes can disrupt the next appointment.",
+      governance: true,
+      unresolvedRisks: [],
+    }]);
+
+    render(
+      <BuildStudio
+        builds={[makeBuild({ phase: "review" })]}
+        portfolios={[]}
+        governedBacklogEnabled
+      />,
+    );
+
+    const context = await screen.findByTestId("owner-proof-supporting-context");
+    const technicalToggle = screen.getByTestId("build-studio-engineer-view-toggle");
+    expect(context.textContent).toContain("Customers can now change a booking online.");
+    expect(context.textContent).toContain("Current call: Keep staff approval for late changes");
+    expect(context.compareDocumentPosition(technicalToggle) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.queryByTestId("build-studio-technical-details")).toBeNull();
+  });
+
+  it("never shows another Change's proof context during Change A, B, then A navigation", async () => {
+    let resolveSecondNarrative!: (value: {
+      headline: string;
+      bullets: string[];
+      whyItMatters: string;
+      openQuestions: string[];
+      generatedAt: string;
+      model: string;
+    }) => void;
+    let resolveSecondLedger!: (value: Array<{
+      id: string;
+      phase: "review";
+      source: "kernel";
+      theCall: string;
+      theOptions: string[];
+      theWhy: string;
+      governance: boolean;
+      unresolvedRisks: string[];
+    }>) => void;
+    const secondNarrative = new Promise<Parameters<typeof resolveSecondNarrative>[0]>((resolve) => {
+      resolveSecondNarrative = resolve;
+    });
+    const secondLedger = new Promise<Parameters<typeof resolveSecondLedger>[0]>((resolve) => {
+      resolveSecondLedger = resolve;
+    });
+
+    ownerProofMocks.getBuildChangeNarrativeAction
+      .mockResolvedValueOnce({
+        headline: "First Change narrative",
+        bullets: [],
+        whyItMatters: "First Change reason",
+        openQuestions: [],
+        generatedAt: "2026-07-30T12:00:00.000Z",
+        model: "test-model",
+      })
+      .mockReturnValueOnce(secondNarrative);
+    ownerProofMocks.getBuildDecisionLedgerAction
+      .mockResolvedValueOnce([{
+        id: "decision-first",
+        phase: "review",
+        source: "kernel",
+        theCall: "First Change decision",
+        theOptions: [],
+        theWhy: "First Change rationale",
+        governance: true,
+        unresolvedRisks: [],
+      }])
+      .mockReturnValueOnce(secondLedger);
+
+    render(
+      <BuildStudio
+        builds={[
+          makeBuild({ buildId: "FB-FIRST", title: "First Change", phase: "review" }),
+          makeBuild({ id: "build-row-2", buildId: "FB-SECOND", title: "Second Change", phase: "review" }),
+        ]}
+        portfolios={[]}
+        governedBacklogEnabled
+      />,
+    );
+
+    expect(await screen.findByText("First Change narrative")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Open build Second Change" }));
+
+    await waitFor(() => {
+      expect(screen.queryByText("First Change narrative")).toBeNull();
+      expect(screen.queryByText("Current call: First Change decision")).toBeNull();
+    });
+
+    resolveSecondNarrative({
+      headline: "Second Change narrative",
+      bullets: [],
+      whyItMatters: "Second Change reason",
+      openQuestions: [],
+      generatedAt: "2026-07-30T12:01:00.000Z",
+      model: "test-model",
+    });
+    resolveSecondLedger([{
+      id: "decision-second",
+      phase: "review",
+      source: "kernel",
+      theCall: "Second Change decision",
+      theOptions: [],
+      theWhy: "Second Change rationale",
+      governance: true,
+      unresolvedRisks: [],
+    }]);
+
+    expect(await screen.findByText("Second Change narrative")).toBeTruthy();
+    expect(screen.getByText("Current call: Second Change decision")).toBeTruthy();
+
+    ownerProofMocks.getBuildChangeNarrativeAction.mockResolvedValueOnce({
+      headline: "First Change narrative reloaded",
+      bullets: [],
+      whyItMatters: "First Change reason",
+      openQuestions: [],
+      generatedAt: "2026-07-30T12:02:00.000Z",
+      model: "test-model",
+    });
+    ownerProofMocks.getBuildDecisionLedgerAction.mockResolvedValueOnce([{
+      id: "decision-first-reloaded",
+      phase: "review",
+      source: "kernel",
+      theCall: "First Change decision reloaded",
+      theOptions: [],
+      theWhy: "First Change rationale",
+      governance: true,
+      unresolvedRisks: [],
+    }]);
+
+    fireEvent.click(screen.getByRole("button", { name: "Open build First Change" }));
+
+    expect(await screen.findByText("First Change narrative reloaded")).toBeTruthy();
+    expect(screen.getByText("Current call: First Change decision reloaded")).toBeTruthy();
+    expect(screen.queryByText("Second Change narrative")).toBeNull();
+    expect(screen.queryByText("Current call: Second Change decision")).toBeNull();
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
     localStorage.clear();
+    ownerProofMocks.getBuildChangeNarrativeAction.mockReset().mockResolvedValue(null);
+    ownerProofMocks.getBuildDecisionLedgerAction.mockReset().mockResolvedValue([]);
   });
 
   it("names the intake around the operator's outcome", () => {
@@ -498,6 +823,7 @@ describe("BuildStudio active-build header layout", () => {
     expect(html).toContain('data-testid="build-studio-operator-status"');
     expect(html).toContain('data-testid="build-studio-operator-next-action"');
     expect(html).toContain('data-testid="build-studio-activity-story"');
+    expect(html).toContain('data-testid="build-solution-summary-band"');
     expect(html).toContain(">Technical details<");
     expect(html).not.toContain(">Engineer view<");
     expect(html).not.toContain(">Work Control<");

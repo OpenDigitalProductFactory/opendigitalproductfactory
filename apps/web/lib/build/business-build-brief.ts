@@ -1,4 +1,5 @@
 import type { FeatureBrief } from "@/lib/feature-build-types";
+import type { Prisma } from "@dpf/db";
 
 export type BusinessBuildBriefSource =
   | "user_conversation"
@@ -163,6 +164,24 @@ export type BusinessBuildBriefRecordInput = {
   openQuestions: string[];
   confidence: BusinessBriefConfidence | null;
 };
+
+export const BUSINESS_BUILD_BRIEF_RECORD_SELECT = {
+  briefId: true,
+  status: true,
+  intakeSource: true,
+  capabilityPackId: true,
+  businessOutcome: true,
+  affectedPeople: true,
+  affectedWorkflow: true,
+  sourceEvidence: true,
+  successSignals: true,
+  constraints: true,
+  businessInterpretation: true,
+  technicalInterpretation: true,
+  riskProfile: true,
+  openQuestions: true,
+  confidence: true,
+} satisfies Prisma.BusinessBuildBriefSelect;
 
 export type BusinessBuildBriefEditInput = {
   briefId: string;

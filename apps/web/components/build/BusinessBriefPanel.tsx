@@ -1,7 +1,7 @@
 "use client";
 import { AlertCircle, CheckCircle2, FileText, Pencil, Save, Target, Users } from "lucide-react";
 import type { ReactNode } from "react";
-import { useState, useTransition } from "react";
+import { useId, useState, useTransition } from "react";
 import { updateBusinessBuildBrief } from "@/lib/actions/build";
 import type {
   BusinessBriefEvidence,
@@ -12,6 +12,7 @@ import type {
 
 interface Props {
   brief: BusinessBuildBrief;
+  onSaved?: () => void | Promise<void>;
 }
 
 function Section({
@@ -154,7 +155,13 @@ function SelectField({
   );
 }
 
-export function BusinessBriefPanel({ brief }: Props) {
+export function BusinessBriefPanel(props: Props) {
+  const briefIdentity = props.brief.briefId ?? `legacy:${props.brief.title}`;
+  return <BusinessBriefPanelContent key={briefIdentity} {...props} />;
+}
+
+function BusinessBriefPanelContent({ brief, onSaved }: Props) {
+  const headingId = useId();
   const needsClarification = brief.openQuestions.length > 0;
   const [isEditing, setIsEditing] = useState(Boolean(brief.briefId));
   const [isPending, startTransition] = useTransition();
@@ -189,6 +196,7 @@ export function BusinessBriefPanel({ brief }: Props) {
           openQuestionsText,
           accept,
         });
+        await onSaved?.();
         setMessage(accept ? "Brief accepted." : "Brief saved.");
       } catch (error) {
         setMessage(error instanceof Error ? error.message : "The brief could not be saved.");
@@ -197,7 +205,11 @@ export function BusinessBriefPanel({ brief }: Props) {
   }
 
   return (
-    <div className="h-full overflow-auto bg-[var(--dpf-bg)] text-[var(--dpf-text)]">
+    <div
+      role="region"
+      aria-labelledby={headingId}
+      className="h-full overflow-auto bg-[var(--dpf-bg)] text-[var(--dpf-text)]"
+    >
       <header className="border-b border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-5 py-4">
         <div className="mb-2 flex flex-wrap items-center gap-2">
           <Pill>{brief.capabilityPack}</Pill>
@@ -217,7 +229,7 @@ export function BusinessBriefPanel({ brief }: Props) {
             {needsClarification ? "Needs clarification" : "Ready for interpretation"}
           </span>
         </div>
-        <h2 className="m-0 text-[17px] font-bold tracking-normal text-[var(--dpf-text)]">
+        <h2 id={headingId} className="m-0 text-[17px] font-bold tracking-normal text-[var(--dpf-text)]">
           {brief.title}
         </h2>
         {brief.briefId && (
@@ -272,7 +284,7 @@ export function BusinessBriefPanel({ brief }: Props) {
                 type="button"
                 disabled={isPending}
                 onClick={() => saveBrief(true)}
-                className="inline-flex min-h-9 items-center gap-1.5 rounded-md bg-[var(--dpf-accent)] px-3 text-[13px] font-semibold text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+                className="inline-flex min-h-9 items-center gap-1.5 rounded-md bg-[var(--dpf-accent)] px-3 text-[13px] font-semibold text-[var(--dpf-on-accent,var(--dpf-surface-1))] transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <CheckCircle2 size={14} />
                 Accept brief
