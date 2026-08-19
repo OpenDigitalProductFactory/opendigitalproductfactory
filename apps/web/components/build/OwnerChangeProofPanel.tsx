@@ -1,5 +1,7 @@
 import { Eye, FileCheck2, Pencil } from "lucide-react";
+import { Button } from "@/components/ui/Button";
 import { StatusBadge } from "@/components/ui/report-kit";
+import { Surface } from "@/components/ui/Surface";
 import type { BuildDecisionLedgerEntry } from "@/lib/build/decision-ledger";
 import type { BuildChangeNarrative } from "@/lib/feature-build-types";
 import type { OwnerChangeView, OwnerProofState } from "@/lib/build/owner-change-view";
@@ -51,22 +53,24 @@ export function OwnerChangeProofPanel({
           </h3>
         </div>
         <div className="flex flex-wrap gap-2">
-          <button
+          <Button
             type="button"
+            variant="secondary"
             onClick={onOpenBrief}
-            className="inline-flex min-h-11 items-center gap-2 rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-3 text-sm font-semibold text-[var(--dpf-text)] transition-colors hover:border-[var(--dpf-accent)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--dpf-accent)]"
+            className="min-h-11 gap-2"
           >
             <Pencil size={15} aria-hidden="true" />
             Review outcome
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
+            variant="primary"
             onClick={onOpenProof}
-            className="inline-flex min-h-11 items-center gap-2 rounded-md bg-[var(--dpf-accent)] px-3 text-sm font-semibold text-[var(--dpf-on-accent,var(--dpf-surface-1))] transition-opacity hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--dpf-accent)]"
+            className="min-h-11 gap-2"
           >
             <FileCheck2 size={15} aria-hidden="true" />
             Review proof
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -109,9 +113,13 @@ export function OwnerChangeProofPanel({
 
         <div className="grid gap-2" aria-label="Recorded proof">
           {view.proof.checks.map((check) => (
-            <article
+            <Surface
+              as="article"
               key={check.key}
-              className="flex flex-col gap-2 rounded-xl border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-3 sm:flex-row sm:items-start sm:justify-between"
+              level={1}
+              padding="sm"
+              rounded="xl"
+              className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between"
             >
               <div className="min-w-0">
                 <p className="m-0 text-sm font-semibold text-[var(--dpf-text)]">{check.label}</p>
@@ -125,7 +133,7 @@ export function OwnerChangeProofPanel({
                 uppercase={false}
                 className="shrink-0"
               />
-            </article>
+            </Surface>
           ))}
         </div>
       </div>

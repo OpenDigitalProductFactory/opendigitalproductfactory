@@ -2,11 +2,14 @@
 title: Build Studio Owner Change Convergence Implementation Plan
 date: 2026-07-31
 updated: 2026-08-15
-status: in progress - current-main reconciliation applied
+status: active
 owner: platform
 backlogItem: BI-A40C8A70
 spec: docs/superpowers/specs/2026-06-12-build-studio-owner-improvement-experience-design.md
 ---
+
+> **Status note.** In progress. Reconciled against current `main` on 2026-08-15.
+
 
 # Build Studio Owner Change Convergence Implementation Plan
 

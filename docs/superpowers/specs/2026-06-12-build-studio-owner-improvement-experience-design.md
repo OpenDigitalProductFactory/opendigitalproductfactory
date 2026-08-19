@@ -1,6 +1,6 @@
 ---
 title: Build Studio Owner Change Experience
-status: approved direction - current-main reconciliation applied 2026-08-15
+status: active
 date: 2026-06-12
 updated: 2026-08-15
 owner: platform
@@ -30,6 +30,9 @@ relatedPrinciples:
   - docs/founder-kernel/wiki/principles/governance-approves-evidence-not-provenance.md
   - docs/founder-kernel/wiki/principles/no-hardcoded-colors.md
 ---
+
+> **Status note.** Approved direction, not yet binding. Reconciled against current `main` on 2026-08-15.
+
 
 # Build Studio Owner Change Experience
 
