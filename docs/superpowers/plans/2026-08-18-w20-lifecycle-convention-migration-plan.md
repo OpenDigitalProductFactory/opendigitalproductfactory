@@ -1,3 +1,7 @@
+---
+status: draft
+---
+
 # W20 record-lifecycle convention — migration plan (OPERATOR REVIEW REQUIRED)
 
 **Status: plan only — nothing in this document is executed by the W20 PR.**

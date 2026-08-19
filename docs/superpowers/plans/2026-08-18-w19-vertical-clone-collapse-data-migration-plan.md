@@ -1,3 +1,7 @@
+---
+status: draft
+---
+
 # W19 vertical clone collapse — data-migration plan (OPERATOR REVIEW REQUIRED)
 
 **Status: plan only — nothing in this document is executed by the W19 PR.**
