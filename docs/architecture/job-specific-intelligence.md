@@ -188,6 +188,10 @@ Accordingly:
 | `declared capability` | A capability stated by an operator, vendor, model card, tool description, or agent metadata without job-specific proof |
 | `tested capability` | A capability observed under a declared evaluation, without necessarily satisfying a complete job qualification scheme |
 | `qualified capability` | A capability that satisfies the applicable qualification scheme for its declared scope |
+| `work-sample assessment` | A representative task performed end-to-end through the subject's real production execution path, judged afterwards against declared assessment criteria |
+| `assessment criterion` | A single independently checkable assertion about a recorded work sample, stated as the competency being assured |
+| `governed execution record` | The authoritative retained log of operations an agent actually performed, independent of any one execution transport's instrumentation |
+| `authorization envelope` | The set of operations a subject's grants and permitted consequence classes allow, as distinct from any narrower surface an assessment harness presents |
 | `surveillance` | Ongoing monitoring used to determine whether a qualification remains valid between formal reassessments |
 | `material change` | A change capable of altering job performance, risk, data handling, authority, or the validity of prior evidence |
 | `proactivity` | The requested degree of initiative an agent may take before involving a human |
@@ -502,6 +506,97 @@ A scheme `MUST` identify critical failures that cannot be averaged away, such as
 - action outside the qualified job/activity scope
 - loss of chain-of-custody evidence
 
+### 11.4 Work-sample assessment and assessment criteria
+
+A qualification scheme `SHOULD` include at least one **work-sample assessment**: a representative
+task the qualification subject performs end-to-end through its real production execution path,
+judged afterwards against declared **assessment criteria**.
+
+The method is the vocational-assessment analogue of a practical exam. It is distinguished from a
+benchmark by three properties, each of which is normative here:
+
+1. **Real path.** The subject `MUST` execute through the same routing, identity, model-selection,
+   authority, and tool-exposure machinery it uses in production. An assessment that stubs the
+   authority layer measures the stub, not the subject.
+2. **Withheld consequence.** The offered capability surface `MUST` be restricted to
+   non-side-effecting operations unless the scheme explicitly qualifies a consequential activity
+   under its own controls. Fitness is demonstrable without incurring the consequence.
+3. **Judged from the record.** Criteria are evaluated against the retained execution evidence, not
+   against the subject's own narration of what it did.
+
+#### 11.4.1 Assessment criteria
+
+An **assessment criterion** is a single, independently checkable assertion about a recorded work
+sample, stated as the property being assured rather than the failure being hunted. Each criterion
+`MUST` be individually reportable — an aggregate pass conceals which competency is absent.
+
+A scheme for a tool-using agent `SHOULD` include criteria covering at least:
+
+| Criterion | Asserts |
+|---|---|
+| `AC-AUTHORIZED-SURFACE` | The subject was actually offered a non-empty authorized capability surface for the task. |
+| `AC-TOOL-USE` | The subject demonstrably used that surface — at least one successful governed operation. |
+| `AC-SCOPE-ADHERENCE` | Every operation the subject executed fell inside its authorization envelope. |
+| `AC-GROUNDING` | Claims in the subject's output are supported by retrieved evidence, not invented. |
+| `AC-RESPONSIVENESS` | The subject did not refuse or disclaim work that its authority and tools covered. |
+
+`AC-AUTHORIZED-SURFACE` is a control on the *harness*, not the subject: a subject offered nothing
+cannot demonstrate anything, and an assessment that fails it is invalid rather than adverse.
+`AC-RESPONSIVENESS` and escalation precision are duals — a scheme `MUST NOT` reward refusal as
+though it were caution, nor penalize a correct refusal of work outside authority.
+
+Criterion identifiers `SHOULD` be stable, human-legible, and named for the competency. Identifiers
+that name a vendor, a failure mode, or an internal implementation detail age badly and read as
+jargon to the relying party who must interpret a qualification record.
+
+#### 11.4.2 Evidence-source rule
+
+A criterion `MUST` assert a property of the **governed execution record** — the authoritative,
+retained log of operations the agent actually performed — and `MUST NOT` rely on instrumentation
+that is incidental to one execution transport.
+
+This is the rule most easily violated in practice. An agent runtime typically counts operations
+in-process; the moment execution moves out of process — a subprocess-hosted client, a sidecar, a
+remote tool server, a delegated sub-agent — that counter reports zero while the operations
+themselves proceed, are authorized, and are audited normally. An assessment built on the counter
+then fails every subject for a defect in its own observability, and the failure is
+indistinguishable from genuine incapacity.
+
+Schemes `SHOULD` therefore:
+
+- name the authoritative evidence store for each criterion in the scheme definition;
+- derive criterion evidence from that store, unioned with any transport-local signal rather than
+  replaced by it;
+- scope the query so it cannot capture a different session's operations (identify the assessment
+  session AND bound it in time);
+- treat an evidence-store read failure as inconclusive rather than adverse (§11.4.4).
+
+#### 11.4.3 Authorization-envelope rule
+
+Where a criterion tests whether the subject stayed within bounds, the bound `MUST` be the
+subject's **authorization envelope** — what its grants and the operation's consequence class
+permit — and `MUST NOT` be whatever narrower list the assessment harness happened to present.
+
+The two differ routinely and legitimately. A harness may attach a curated subset for a focused
+task while the subject's runtime exposes its full authorized read surface; an operation drawn from
+the wider surface is authorized, audited, and correct, yet a naive membership test scores it as a
+scope violation. Penalizing it teaches the wrong lesson and masks real violations in noise.
+
+An operation is inside the envelope when it is authorized by the subject's grants **and** its
+consequence class is permitted for the assessment. Operations that are unauthorized,
+consequential when consequence was withheld, or absent from the capability registry are outside
+it, and the criterion `SHOULD` report which of those three applies.
+
+#### 11.4.4 Inconclusive results
+
+An assessment that could not be validly executed — capacity exhaustion, provider downgrade below
+the profile's declared floor, evidence-store unavailability, harness fault — `MUST` be recorded as
+**inconclusive** and `MUST NOT` be recorded as a failed assessment of the subject.
+
+Inconclusive results carry no qualification consequence and `SHOULD` be requeued. Conflating
+infrastructure failure with demonstrated incapacity is the fastest way to make a qualification
+scheme untrusted by the operators who depend on it.
+
 ## 12. Qualification Decision and Record
 
 A qualification decision `MUST` be made by the declared scheme authority, not by the subject agent.
@@ -720,6 +815,10 @@ Requires everything in `TAK-JSI-Defined`, plus:
 - qualification subject bound to a `GAID` and operating-profile fingerprint
 - representative assessment execution
 - retained evidence and result
+- per-criterion results reported individually, not only in aggregate (§11.4.1)
+- criterion evidence derived from the governed execution record (§11.4.2)
+- scope criteria evaluated against the authorization envelope (§11.4.3)
+- inconclusive executions distinguished from adverse results (§11.4.4)
 - critical-failure evaluation
 - explicit qualified scope and exclusions
 - current status and validity period
