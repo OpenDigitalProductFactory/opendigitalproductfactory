@@ -6,7 +6,7 @@ import { getWorkspaceSections, type UserContext, type WorkspaceSection } from "@
 import {
   loadWorkspaceCommandCenter,
   type WorkspaceCommandCenterSummary,
-} from "@/lib/workspace/command-center";
+} from "@/lib/workspace-home/command-center";
 
 import type { WorkspaceHomeStorefrontConfigRef } from "./types";
 

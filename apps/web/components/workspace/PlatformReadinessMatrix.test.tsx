@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import { PlatformReadinessMatrix } from "./PlatformReadinessMatrix";
-import type { BusinessDomainReadiness } from "@/lib/workspace/command-center";
+import type { BusinessDomainReadiness } from "@/lib/workspace-home/command-center";
 
 const readiness: BusinessDomainReadiness[] = [
   {

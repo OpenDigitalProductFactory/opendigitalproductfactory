@@ -13,7 +13,7 @@ import {
   shellQuote,
   type ValidateTokenInput,
   type ValidateTokenResult,
-} from "@/lib/platform-config/platform-dev-config-core";
+} from "@/lib/platform/platform-dev-config-core";
 import { assertSafeOutboundUrl } from "@/lib/security/safe-fetch";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 import { lazyChildProcess, lazyFs, lazyPath, lazyUtil } from "@/lib/shared/lazy-node";

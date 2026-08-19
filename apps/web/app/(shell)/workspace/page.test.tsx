@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { getWorkspaceTiles } from "@/lib/permissions";
-import { buildWorkspaceCommandCenterView } from "@/lib/workspace/command-center";
+import { buildWorkspaceCommandCenterView } from "@/lib/workspace-home/command-center";
 import { loadPlatformWorkspaceHomeData } from "@/lib/workspace-home/platform-loader";
 
 describe("workspace tile derivation", () => {

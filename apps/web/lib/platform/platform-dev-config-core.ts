@@ -1,4 +1,4 @@
-// apps/web/lib/platform-config/platform-dev-config-core.ts
+// apps/web/lib/platform/platform-dev-config-core.ts
 //
 // Pure (no prisma / auth / Next.js / fs / child_process) domain helpers
 // extracted from lib/actions/platform-dev-config.ts (BI-OPT-FAT-ACTIONS,
