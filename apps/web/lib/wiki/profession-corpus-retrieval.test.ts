@@ -101,9 +101,12 @@ describe("semantic retrieval — profession pass (BI-CC44E74F)", () => {
     });
     // Pass B (kernel) + pass C (profession); no org pass without an org.
     expect(qdrant.searchSimilar).toHaveBeenCalledTimes(2);
-    const professionFilter = qdrant.searchSimilar.mock.calls[1][2] as {
-      must: Array<{ key: string; match: Record<string, unknown> }>;
-    };
+    // Located by its cohort filter rather than by call index: pass C runs
+    // before pass B (BI-F3FB4F41), so the ordinal is not part of the contract.
+    type Clause = { key: string; match: Record<string, unknown> };
+    const professionFilter = qdrant.searchSimilar.mock.calls
+      .map((c: unknown[]) => c[2] as { must: Clause[] })
+      .find((f) => f.must.some((m) => m.key === "isKernel" && m.match.value === false))!;
     expect(professionFilter.must).toEqual(
       expect.arrayContaining([
         { key: "isKernel", match: { value: false } },
@@ -119,5 +122,97 @@ describe("semantic retrieval — profession pass (BI-CC44E74F)", () => {
     ]);
     await searchWikiPages({ query: "anything", organizationId: null });
     expect(qdrant.searchSimilar).toHaveBeenCalledTimes(1);
+  });
+});
+
+// BI-F3FB4F41 — the profession pass must survive a DENSE corpus.
+//
+// The fixtures above are sparse: passes A and B return fewer rows than `limit`,
+// so a profession pass appended last still fits. Production is not sparse —
+// pass B sizes itself to `limit - orgResults.length`, so A and B together fill
+// `limit` exactly and anything concatenated after them is sliced away. These
+// tests pin the reserved-share behaviour against a corpus dense enough to
+// reproduce that, which is the only shape that catches the regression.
+describe("semantic retrieval — profession share on a dense corpus (BI-F3FB4F41)", () => {
+  const vec = Array.from({ length: 8 }, () => 0.1);
+
+  /** Qdrant-shaped hit whose payload carries the fields projectResult reads. */
+  const hit = (slug: string, isKernel: boolean, organizationId: string | null, score: number) => ({
+    id: slug,
+    score,
+    payload: {
+      entityId: slug,
+      entityType: "wiki-page",
+      slug,
+      title: slug,
+      status: "published",
+      pageKind: "principle",
+      isKernel,
+      organizationId,
+      kernelPageId: null,
+      contentPreview: slug,
+    },
+  });
+
+  /** Routes each pass by the filter it was called with, then honours its limit. */
+  const denseCorpus = () => {
+    qdrant.searchSimilar.mockImplementation(
+      async (_c: string, _v: number[], filter: Record<string, unknown>, lim: number) => {
+        const must = (filter.must ?? []) as Array<{ key: string; match: { value: unknown } }>;
+        const clause = (key: string) => must.find((m) => m.key === key)?.match?.value;
+        const isKernel = clause("isKernel");
+        const org = clause("organizationId");
+        if (isKernel === true) {
+          return Array.from({ length: 50 }, (_, i) => hit(`principles/kernel-${i}`, true, null, 0.9 - i / 100)).slice(0, lim);
+        }
+        if (isKernel === false && org === null) {
+          return Array.from({ length: 50 }, (_, i) =>
+            hit(`professions/data-architect/craft-${i}`, false, null, 0.95 - i / 100),
+          ).slice(0, lim);
+        }
+        if (typeof org === "string") {
+          return Array.from({ length: 50 }, (_, i) => hit(`stances/org-${i}`, false, org, 0.8 - i / 100)).slice(0, lim);
+        }
+        return [];
+      },
+    );
+    embedding.generateEmbedding.mockResolvedValue(vec);
+  };
+
+  beforeEach(denseCorpus);
+
+  it("returns profession pages even though org+kernel could fill the limit alone", async () => {
+    const results = await searchWikiPages({
+      query: "referential integrity",
+      organizationId: "org-1",
+      limit: 25,
+      includeProfessionCorpus: true,
+    });
+    expect(results).toHaveLength(25);
+    expect(results.filter((r) => r.source === "profession").length).toBeGreaterThan(0);
+  });
+
+  it("leads with craft doctrine when the caller scoped to a professionKey", async () => {
+    const results = await searchWikiPages({
+      query: "referential integrity",
+      organizationId: "org-1",
+      limit: 9,
+      includeProfessionCorpus: true,
+      professionKeys: ["data-architect"],
+    });
+    expect(results[0]?.source).toBe("profession");
+    // Scoped share is two thirds of the limit; kernel doctrine still present.
+    expect(results.filter((r) => r.source === "profession")).toHaveLength(6);
+    expect(results.some((r) => r.source !== "profession")).toBe(true);
+  });
+
+  it("keeps org+kernel whole when the profession pass is not opted in", async () => {
+    const results = await searchWikiPages({
+      query: "referential integrity",
+      organizationId: "org-1",
+      limit: 25,
+    });
+    expect(results).toHaveLength(25);
+    expect(results.every((r) => r.source !== "profession")).toBe(true);
   });
 });
