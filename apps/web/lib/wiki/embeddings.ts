@@ -451,38 +451,18 @@ export async function searchWikiPages(input: SearchWikiPagesInput): Promise<Wiki
     return orgResults.slice(0, limit);
   }
 
-  // ── Pass B — kernel fallback, masking any kernel pages the org has overridden ──
-  // The set of kernelPageIds claimed by pass A (org rows that override kernel pages).
-  const maskedKernelPageIds = orgResults
-    .map((r) => r.kernelPageId)
-    .filter((id): id is string => id !== null);
-
-  const kernelFilter: Record<string, unknown> = {
-    must: [...baseFilter, { key: "isKernel", match: { value: true } }],
-  };
-  if (maskedKernelPageIds.length > 0) {
-    kernelFilter.must_not = [
-      { key: "entityId", match: { any: maskedKernelPageIds } },
-    ];
-  }
-  if (ringScopeShould.length > 0) kernelFilter.should = ringScopeShould;
-
-  const remaining = limit - orgResults.length;
-  const kernelRaw = await searchSimilar(
-    QDRANT_COLLECTIONS.WIKI_PAGES,
-    vector,
-    kernelFilter,
-    remaining,
-    scoreThreshold,
-  );
-  const kernelResults = kernelRaw.map((r) => projectResult(r, "kernel"));
-
   // ── Pass C — WSID profession corpus, opt-in (BI-CC44E74F) ──
   // Profession pages are the isKernel:false / organizationId:null cohort — the
   // exact rows passes A and B exclude by construction. Fetched at full `limit`
   // (not `remaining`) because the slug post-filter below may discard rows when
   // the caller scoped to specific professionKeys; Qdrant cannot express a slug
   // prefix over the existing payload without a schema backfill.
+  //
+  // Runs BEFORE pass B (BI-F3FB4F41): pass B sizes itself to `limit` minus what
+  // passes A and C have already claimed. Ordered the other way round, passes A
+  // and B together fill `limit` exactly on any non-sparse corpus and the
+  // profession pass is sliced away every time — which made the opt-in inert in
+  // production even though the corpus was ingested and embedded.
   let professionResults: WikiSearchResult[] = [];
   if (input.includeProfessionCorpus) {
     const professionFilter: Record<string, unknown> = {
@@ -507,7 +487,64 @@ export async function searchWikiPages(input: SearchWikiPagesInput): Promise<Wiki
       .filter((r) => keyPrefixes.length === 0 || keyPrefixes.some((p) => r.slug.startsWith(p)));
   }
 
-  const semanticResults = [...orgResults, ...kernelResults, ...professionResults].slice(0, limit);
+  // The share of `limit` the profession pass may claim before pass B is sized.
+  // A caller that named professionKeys asked for that craft specifically, so
+  // craft doctrine leads and takes the larger share; the default broad include
+  // takes a minority share so org and kernel doctrine still dominate. Unused
+  // quota falls through to pass B — a thin profession corpus costs nothing.
+  const professionScoped = (input.professionKeys?.length ?? 0) > 0;
+  const professionQuota = input.includeProfessionCorpus
+    ? Math.max(1, Math.ceil((limit * (professionScoped ? 2 : 1)) / 3))
+    : 0;
+  const professionSlice = professionResults.slice(
+    0,
+    Math.min(professionResults.length, professionQuota),
+  );
+
+  // ── Pass B — kernel fallback, masking any kernel pages the org has overridden ──
+  // The set of kernelPageIds claimed by pass A (org rows that override kernel pages).
+  const maskedKernelPageIds = orgResults
+    .map((r) => r.kernelPageId)
+    .filter((id): id is string => id !== null);
+
+  const kernelFilter: Record<string, unknown> = {
+    must: [...baseFilter, { key: "isKernel", match: { value: true } }],
+  };
+  if (maskedKernelPageIds.length > 0) {
+    kernelFilter.must_not = [
+      { key: "entityId", match: { any: maskedKernelPageIds } },
+    ];
+  }
+  if (ringScopeShould.length > 0) kernelFilter.should = ringScopeShould;
+
+  // The profession share comes off the TOP of `limit`, not off pass B's
+  // leftovers: pass A alone can fill `limit` on a rich org overlay, which would
+  // truncate the profession slice just as surely as pass B did.
+  const nonProfessionBudget = Math.max(0, limit - professionSlice.length);
+  const orgSlice = orgResults.slice(0, nonProfessionBudget);
+  const remaining = Math.max(0, nonProfessionBudget - orgSlice.length);
+  const kernelRaw =
+    remaining > 0
+      ? await searchSimilar(
+          QDRANT_COLLECTIONS.WIKI_PAGES,
+          vector,
+          kernelFilter,
+          remaining,
+          scoreThreshold,
+        )
+      : [];
+  const kernelResults = kernelRaw.map((r) => projectResult(r, "kernel"));
+
+  // Org-over-kernel overlay precedence is deliberate and unchanged: an org page
+  // leads its kernel counterpart even at a lower cosine score. A global score
+  // sort would silently reorder org vs kernel for every existing caller, so the
+  // profession slice is placed rather than merged — leading when the caller
+  // scoped to a craft, trailing on the default broad include.
+  const semanticResults = (
+    professionScoped
+      ? [...professionSlice, ...orgSlice, ...kernelResults]
+      : [...orgSlice, ...kernelResults, ...professionSlice]
+  ).slice(0, limit);
   if (semanticResults.length === 0) {
     // A healthy embedding provider does not prove the vector index contains
     // every published Postgres row. Preserve Postgres as doctrine truth when
