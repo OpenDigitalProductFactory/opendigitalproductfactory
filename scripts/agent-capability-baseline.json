@@ -1,5 +1,7 @@
 {
-  "note": "Known-outstanding unbacked backingSkillIds. This list may only shrink. See BI-5C1978C7.",
+  "owner": "platform-governance",
+  "expiry": "2026-11-20",
+  "note": "Known-outstanding unbacked backingSkillIds \u2014 services citing a skill that does not exist. SHRINK-ONLY. Do NOT clear an entry by deleting the citation: evaluateCoworkerServiceReadiness already renders it as \"Missing skill: X\", so deletion flips the service from honestly-not-ready to falsely-ready. Clear it by writing the skill or retiring the service. See BI-5C1978C7.",
   "unbackedSkillIds": [
     "build-sensitive-domain-requirements",
     "compliance-requirements-review",

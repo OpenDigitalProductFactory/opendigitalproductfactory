@@ -75,10 +75,17 @@ function main() {
       console.error("\nWrite the missing skill, or retire the service that cites it.");
       process.exit(1);
     }
+    // Preserve the budget shape (owner + expiry). A baseline with neither turns
+    // "debt we intend to burn down" into "debt we have accepted forever", which
+    // is what scripts/check-no-expired-baseline-budgets.mjs exists to refuse.
     fs.writeFileSync(
       BASELINE,
       JSON.stringify({
-        note: "Known-outstanding unbacked backingSkillIds. This list may only shrink. See BI-5C1978C7.",
+        owner: baseline?.owner ?? "platform-governance",
+        expiry: baseline?.expiry ?? "2026-11-20",
+        note:
+          baseline?.note ??
+          "Known-outstanding unbacked backingSkillIds. SHRINK-ONLY. See BI-5C1978C7.",
         unbackedSkillIds: unbacked,
       }, null, 2) + "\n",
     );

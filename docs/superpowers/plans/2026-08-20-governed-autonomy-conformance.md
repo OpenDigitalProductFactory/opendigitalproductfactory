@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Governed Autonomy — TAK Conformance Implementation Plan
 
 **Epic:** `EP-1C37C089` (governance gate) and `EP-32B0E693` (capability completeness)
@@ -18,7 +22,7 @@ These exist, work, and are cited in the scope register. Extend them.
 
 | Capability | Where |
 |---|---|
-| Commandment veto at every tool dispatch | `apps/web/lib/mcp-tools.ts` (BI-43F95F77) |
+| Commandment veto at every tool dispatch | `apps/web/lib/mcp-tools.ts` |
 | Consult-before-consequential-act gate | `apps/web/lib/tak/decision-routing-governance-hook.ts` |
 | Autonomy boundary `advise` / `propose` / `act` | `apps/web/lib/actions/agent-task-scheduler.ts`, `apps/web/lib/proactivity/propose-interception.ts` |
 | Sealed decision record | `DecisionInteraction` + `apps/web/lib/decision/decision-chain.ts` |

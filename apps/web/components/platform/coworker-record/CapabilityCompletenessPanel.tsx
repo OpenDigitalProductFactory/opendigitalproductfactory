@@ -42,10 +42,9 @@ export function CapabilityCompletenessPanel({ agentId }: { agentId: string }) {
       action={deepLink("/docs/maintenance/capability-completeness", "Full measure")}
     >
       <p className="mb-1 text-sm text-muted-foreground">
-        A capability is real only when every plane resolves.{" "}
         <span className="font-medium text-foreground">{score.attainablePct}%</span> of what the
-        substrate currently permits;{" "}
-        <span className="font-medium text-foreground">{score.absolutePct}%</span> of the full design.
+        platform allows today;{" "}
+        <span className="font-medium text-foreground">{score.absolutePct}%</span> of the target.
       </p>
       <p className="mb-3 text-xs text-muted-foreground">
         {agent.identityClass}
@@ -78,7 +77,7 @@ export function CapabilityCompletenessPanel({ agentId }: { agentId: string }) {
 
       {capped.length > 0 ? (
         <div className="mt-3 rounded-md border border-border/60 px-3 py-2">
-          <p className="text-xs font-medium">Capped by missing platform substrate</p>
+          <p className="text-xs font-medium">Blocked by the platform, not this coworker</p>
           <ul className="mt-1 space-y-1">
             {capped.map((b) => (
               <li key={b.plane} className="text-xs text-muted-foreground">

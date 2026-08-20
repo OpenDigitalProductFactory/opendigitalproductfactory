@@ -385,6 +385,10 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         // the wrong gating decision. This list is hand-enumerated with no glob —
         // a test that is not named here never runs.
         "scripts/measure-doc-staleness-coverage.test.mjs",
+        // Same rule for the capability measure: the report is advisory, but its
+        // parsing and scoring are tested here because a mis-parsed registry
+        // under-reports gaps, and an under-reported gap reads as an all-clear.
+        "scripts/measure-capability-completeness.test.mjs",
       ),
       node("scripts/gen-doc-impact.mjs", "--check"),
       node("scripts/check-docs-impact.mjs"),

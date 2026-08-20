@@ -3,18 +3,18 @@
   "selectionCliff": 15,
   "entries": {
     "registry.toolDefinitions": {
-      "value": 391,
-      "reason": "Relocation, not growth (W9, BI-0E7B0953): saveBuildEvidence, reviewDesignDoc and reviewBuildPlan moved verbatim out of the mcp-tools.ts legacy monolith (which this guard never counted) into build-review-pack. The model-facing tool surface is unchanged — the same three frozen names were already served from PLATFORM_TOOLS; they now live where every other tool lives.",
-      "recordedAt": "2026-08-18"
+      "value": 392,
+      "reason": "Adds get_capability_completeness (BI-B6157AAB): a READ-ONLY door onto the platform's own capability measure \u2014 which of the seven planes resolve for each of the 82 agent identities, plus the repo-level reference defects. It earns a permanent place because the platform is supposed to close its own gaps: without it, only a human outside the system can see them, which is the condition this whole programme exists to end. It adds nothing to the ACTING surface \u2014 it reports, and never changes authority.",
+      "recordedAt": "2026-08-20"
     },
     "registry.packFiles": {
-      "value": 95,
-      "reason": "Adds build-review-pack (the last three executeTool inline cases, W9 BI-0E7B0953) and backlog-update-item-handler.ts relocated from the deleted lib/mcp-handlers/ third-generation home. Both are relocations of existing capability into the single pack generation, not new surface.",
-      "recordedAt": "2026-08-18"
+      "value": 96,
+      "reason": "Adds capability-completeness-pack, the single-tool pack serving get_capability_completeness. Kept as its own pack rather than folded into an existing one so its read-only contract stays legible: the pack declares one grant (registry_read) and no side-effecting handler.",
+      "recordedAt": "2026-08-20"
     },
     "tier.coreToolNames": {
       "value": 30,
-      "reason": "Promotes find_coworker into the lean core tier so peer CLIs without client-side ToolSearch (Grok, Codex) can discover the coworker roster to route A2A handoffs — same rationale that keeps principle_decide/wiki_query core. Discovery-only; execution still gates on grants. BI-5FB59BC6.",
+      "reason": "Promotes find_coworker into the lean core tier so peer CLIs without client-side ToolSearch (Grok, Codex) can discover the coworker roster to route A2A handoffs \u2014 same rationale that keeps principle_decide/wiki_query core. Discovery-only; execution still gates on grants. BI-5FB59BC6.",
       "recordedAt": "2026-08-08"
     },
     "dispatch.maxAttachedTools": {

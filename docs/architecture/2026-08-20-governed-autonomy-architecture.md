@@ -118,7 +118,7 @@ adjustment feed on, so wherever that gate does not reach, the loop cannot close.
 
 | Plane | Mechanism | Reach today |
 |---|---|---|
-| 1 · Commandment veto | `mcp-tools.ts` runtime kernel gate (BI-43F95F77) | **Every** MCP tool dispatch |
+| 1 · Commandment veto | `mcp-tools.ts` runtime kernel gate | **Every** MCP tool dispatch |
 | 2 · Autonomy boundary | `agent-task-scheduler.ts` + `propose-interception.ts` | **Scheduled/autonomous runs only** — not interactive chat |
 | 3 · Consequence gate | `decision-routing-governance-hook.ts` | **2 of 174** side-effecting tools |
 | 4 · Graduated transition | `graduated-autonomy.ts` | **Build Studio phase transitions only** |
@@ -296,7 +296,7 @@ item without a status claim.
 
 | # | Capability | Status | Evidence | Owning BI | Measured by |
 |---|---|---|---|---|---|
-| 1 | Commandment veto at tool dispatch | **Built** | `mcp-tools.ts` kernel gate | BI-43F95F77 | — |
+| 1 | Commandment veto at tool dispatch | **Built** | `mcp-tools.ts` kernel gate | — | — |
 | 2 | Consult-before-consequential-act gate | **Built** | `decision-routing-governance-hook.ts`, enforce by default | BI-B6690C11 (done) | `summary.consequentialGate.mechanism` |
 | 3 | Sealed decision record | **Built** | `DecisionInteraction` + hash chain, `decision-chain.ts` | BI-81CC5D8E | — |
 | 4 | Review — corpus drift | **Built** | `decision-drift.ts` golden scenarios | EP-0AF96937 | — |
@@ -312,7 +312,7 @@ item without a status claim.
 | 14 | **Action-outcome feedback** — TAK §13.3, `TAK-026`/`TAK-027` | **Missing** | no edge to `ToolExecution`; no observed outcome | **BI-23BF8131** | — |
 | 15 | Durable consult ledger | **Partial** | per-process in-memory map | **BI-AF7CE2BC** | — |
 | 16 | **Work-shape registry (stages + gates)** — TAK §8.11, `TAK-024` | **Missing** | plane 4 ceiling 0 | EP-WORK-CONVERGENCE / BI-A2234157 | `planeLevels.shape` |
-| 17 | Screen-manifest registry | **Empty** | `ALL_MANIFESTS = []` — the envelope's `manifestActionId` resolves against nothing | BI-6C9CC0EC | — |
+| 17 | Screen-manifest registry | **Empty** | `ALL_MANIFESTS = []` — the envelope's `manifestActionId` resolves against nothing | — *(unfiled)* | — |
 | 18 | Cadence trigger coverage | **Partial** | 4 of 82 agents registered | BI-E2DB8A43 | `planeLevels.cadence` |
 | 19 | Skills can declare a cadence | **Missing** | 0 of 68 | BI-EA406643 | `summary.skills.cadenceCapable` |
 | 20 | Deadline-horizon trigger — TAK §8.11.1, `TAK-025` | **Missing** | six dead columns | BI-B57CA395 | — |
