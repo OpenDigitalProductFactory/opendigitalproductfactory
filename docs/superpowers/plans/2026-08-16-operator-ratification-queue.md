@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Operator Ratification Queue — Simplify & Strengthen, Objective 2
 
 - **Date:** 2026-08-16
@@ -61,3 +65,64 @@ The four decisions the program cannot make for itself, stated as briefs with the
 | 2 | Tenancy posture | BI-F238FBE4 | DI-2A0379CE01D1 (7.92, +5.19) | install=tenant + estate hardening | kernel-page tier promotion; MSP Topology-A hardening; precedes Topology-B |
 | 3 | IA section taxonomy | BI-118EF48B | DI-7C77E1595FD4 (7.32, +5.55) | 4 portfolios + 2 cross-cuts, Workforce slice first | W13 execution |
 | 4 | Workroom gate enforce-mode | BI-E0BFFF77 | DI-6D5D686464DC (8.19, +5.10) | shadow now; enforce after W2 + telemetry review | enforce default; cohort widening |
+
+---
+
+## Post-deploy re-consult (2026-08-20) — the acumen corpus reaching the kernel
+
+The four consults above ran on 2026-08-16, when the WSID profession corpus was
+**ingested but unreachable**: `wiki_query` returned zero profession pages at any
+limit because the profession retrieval pass was concatenated after the org and
+kernel passes and then sliced off (BI-F3FB4F41, fixed in PR #4413, deployed to
+the live install at `dc0f42cbc`).
+
+All four were re-run after that deploy. Every recommendation held, and this time
+**acumen corpus pages appear in the contribution ledger** — the WSID layer is
+now materially weighing the decisions rather than being silently absent from
+them. This is the end-to-end evidence that the layer steers an outcome, not just
+that it records one.
+
+| # | Decision | Re-consult DI | Recommendation | Composite / margin | Acumen page contributing |
+|---|---|---|---|---|---|
+| 1 | MCP version window | DI-5AF2BF658EBD | ratify N/N-1 | 7.42 / +7.52 | Supersession Is a Mechanical Act (**+0.179** ratify vs **−0.048** support-all) |
+| 2 | Tenancy posture | DI-5232C96B1A49 | ratify install=tenant | 5.67 / +2.59 | Install Is the Tenant (+0.047 ratify vs +0.036 provisional) |
+| 3 | IA section taxonomy | DI-E7B35EDED31E | ratify closed enum | 11.83 / +8.60 | Endpoint Classification at Birth (**+0.026** enum vs **−0.012** open convention) |
+| 4 | Workroom gate enforce-mode | DI-15D2D4ABBE82 | hold shadow | 7.06 / +0.90 | A Gate's Coverage Must Match The Blast Radius Of What It Governs |
+
+All four: `confidence: high`, `autonomyEligible: true`, `structuredCoverage: strong`,
+`commandmentConflict: false`, `flippingPrincipleCount: 0`. Recommendations are
+unchanged from 2026-08-16, so the corpus becoming reachable **sharpened the
+evidence without moving any answer** — which is the outcome that should most
+increase confidence in ratifying them.
+
+Brief 4 is the one to read closely: its margin is +0.90, an order of magnitude
+tighter than the others, and it is the only brief where the kernel recommends
+*not* acting yet. Shadow-then-enforce survives the re-consult on its merits.
+
+### A structural limit the operator should know about
+
+These recommendations come from `principle_decide`, which resolves under the
+**platform** profile (`mark-dpf-platform`, `resolvedVia: calling-population`).
+The acumen tier participates by contributing principle pages to the ledger — it
+does not govern the call.
+
+Routing the same class of decision through `evaluate_profession_decision`, which
+*does* resolve to the acumen's own profile (`professionProfileSelected: true`),
+never yields a recommendation. Every seeded profession material row carries
+`confidenceWeight 0.6`, `evidenceGrade B`, so
+`effectiveWeight = 0.6 x 0.75 = 0.45` uniformly, and `baseScore` is their mean —
+0.45 regardless of how many rows a family holds. Against a 0.55 recommendation
+threshold the ceiling is below the floor at every risk tier (low 0.45, medium
+0.35, high 0.20, critical 0.00), so the craft tier can only ever escalate.
+
+Filed as **BI-0F3D5F94**. It may be intentional — derived material is
+machine-seeded, and only human-confirmed material arguably deserves decisive
+weight, the same logic as the high-stakes hold in BI-5F3BFD13. If so it should
+be stated, because the tier currently presents as able to recommend and never
+does. This is a fifth posture decision for this queue, and it is the one that
+determines how much authority the WSID layer actually holds.
+
+**Related gap:** `wsid-security` cannot consult at all — its six material rows
+are held `draft`/`candidate` by the high-stakes hold (contextSlugs include
+`compliance`), and no surface exposes held material for the human approval the
+hold requires (**BI-5F3BFD13**).
