@@ -56,6 +56,7 @@ the failure is measurable rather than arguable:
 | `TAK-020` | Every side-effecting tool carries a consequence class | **Fail** — 0 of 174 |
 | `TAK-021` | Gating derived, not an enumerated allowlist | **Fail** — `CONSEQUENTIAL_DECISION_TOOLS` is a 2-item literal |
 | `TAK-022` | Gate coverage reportable | **Pass** — `summary.consequentialGate`, per agent via `reachableGatedTools` |
+| — | Skill/service reference integrity | **Pass** — enforced by `scripts/check-agent-capability-integrity.mjs` in CI |
 | `TAK-023` | Autonomy bounded by coverage | **Fail** — not enforced; §7 states the rule, admission criterion A4 is its machine form |
 | `TAK-024` | Activity shapes bounded | **Partial** — `StoredCycleBoundary` carries the fields; no shape registry binds them |
 | `TAK-025` | Triggers declared; dead intent detected | **Partial** — trigger classes exist in practice, undeclared; six dead cadence columns found by hand |
@@ -316,6 +317,23 @@ item without a status claim.
 | 19 | Skills can declare a cadence | **Missing** | 0 of 68 | BI-EA406643 | `summary.skills.cadenceCapable` |
 | 20 | Deadline-horizon trigger — TAK §8.11.1, `TAK-025` | **Missing** | six dead columns | BI-B57CA395 | — |
 | 21 | Autonomy admission criteria (A1–A6) enforced — TAK §7.12.2, `TAK-023` | **Missing** | A4 fails for every agent | **BI-1DF04B7A** | `planes.governance.*` |
+
+| 22 | Skill `assignTo` referential integrity | **Built** | `scripts/check-agent-capability-integrity.mjs` + CI workflow; stranded skills enforced at zero | `BI-B6157AAB` | `summary.skills.stranded` |
+| 23 | Unbacked `backingSkillIds` ratchet | **Built (baseline 7)** | shrink-only `scripts/agent-capability-baseline.json` | `BI-5C1978C7` | `summary.unbackedSkillIds` |
+
+### 8.0 Landed in this pass
+
+| Change | Effect on the measure |
+|---|---|
+| `registry_read` granted to `compliance-officer`, `security-engineer`, `market-research-analyst` | Governance level-1 population 3 → 0; no roster coworker is now locked out of the kernel. Corpus level-3 25 → 28 |
+| 8 stranded skills repointed (`policy-specialist`→`compliance-officer`, `documentation-specialist`→`doc-specialist`, `coo-orchestrator`→`coo`) | `summary.skills.stranded` 8 → 0 |
+| Capability-integrity CI gate + shrink-only baseline | Stranded skills cannot regress; a net-new unbacked anchor fails the build |
+
+The seven unbacked `backingSkillIds` were **deliberately not removed**.
+`evaluateCoworkerServiceReadiness` already surfaces each as "Missing skill: X"
+with a *Review capabilities* recovery — so the service is honestly not-ready
+today. Deleting the citation would flip it to falsely-ready. Writing the seven
+skills is real domain work and remains `BI-5C1978C7`.
 
 ### 8.1 Reading the register
 

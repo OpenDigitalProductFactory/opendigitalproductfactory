@@ -52,14 +52,7 @@ export const GRANT_IMPLICATIONS: Readonly<Record<string, readonly string[]>> = {
   // overlay directly, so it implies the narrow critique-capture grant. One-way:
   // `critique_capture` never implies `registry_write` — that narrowing is the
   // entire point of splitting it out.
-  // Registry write authority implies registry read, mirroring crm_write ->
-  // crm_read and siem_investigate -> siem_read above: a holder that may CHANGE
-  // the registry can always inspect it. One-way, as ever. Without this a
-  // registry_write holder could not reach evaluate_profession_decision or
-  // principle_decide (both keyed on registry_read) — which is exactly how
-  // market-research-analyst ended up unable to consult the kernel while holding
-  // broader authority than the coworkers that could (BI-728FD7F2).
-  registry_write: ["registry_read", "critique_capture"],
+  registry_write: ["critique_capture"],
 };
 
 /** Expand a list of held grants by applying GRANT_IMPLICATIONS one-way.

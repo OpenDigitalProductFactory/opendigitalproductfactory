@@ -36,7 +36,7 @@ the platform is not".
   - Joined via COWORKER_SLUG_TO_CANONICAL_AGENT_ID; a handle-only join over-counts.
 - At 100% of attainable: **1**
 - Median attainable: **14%** · median absolute: **11%**
-- Skills: **68** total, **8** stranded, **0** able to declare a cadence
+- Skills: **68** total, **0** stranded, **0** able to declare a cadence
 - Unresolved `assignTo` targets: `external-coding-agent`
 - Unbacked `backingSkillIds`: `build-sensitive-domain-requirements`, `compliance-requirements-review`, `customer-intake-triage`, `external-catalog-scout`, `marketing-collaboration-intake`, `prepare-counsel-packet`, `provider-cost-intake`
 
@@ -71,7 +71,7 @@ The gate is built and enforced; its REACH is one hand-maintained set, and an und
 | Governance / WWWD | 2 | 3 | 54 | 0 | 11 | 17 | 17/82 |
 | Shape | 1 | 0 | 82 | 0 | 0 | 0 | 82/82 |
 | Cadence | 1 | 2 | 77 | 0 | 5 | 0 | 5/82 |
-| Tools + Skills | 2 | 3 | 52 | 14 | 4 | 12 | 12/82 |
+| Tools + Skills | 2 | 3 | 53 | 12 | 5 | 12 | 12/82 |
 | Evidence | 1 | 2 | 55 | 21 | 6 | 0 | 6/82 |
 
 ### Planes the substrate currently caps
@@ -197,13 +197,12 @@ _Certification exercises a real domain act, not a generic probe._
 | `AGT-ORCH-800` | declared-only | 14% | 11% | 1 | 2 | 0 | 0 | 0 | 0 | 0 |
 | `AGT-R2D-PB` | declared-only | 14% | 11% | 1 | 2 | 0 | 0 | 0 | 0 | 0 |
 | `AGT-S2P-PFB` | declared-only | 14% | 11% | 1 | 2 | 0 | 0 | 0 | 0 | 0 |
+| `AGT-S2P-POL` | declared-only | 14% | 11% | 1 | 2 | 0 | 0 | 0 | 0 | 0 |
 | `AGT-SOC-HUNTER` | active-registry-only | 14% | 11% | 1 | 2 | 0 | 0 | 0 | 0 | 0 |
 | `AGT-SOC-INVESTIGATOR` | active-registry-only | 14% | 11% | 1 | 2 | 0 | 0 | 0 | 0 | 0 |
 | `AGT-SOC-IR-LEAD` | active-registry-only | 14% | 11% | 1 | 2 | 0 | 0 | 0 | 0 | 0 |
 | `AGT-SOC-TRIAGE` | active-registry-only | 14% | 11% | 1 | 2 | 0 | 0 | 0 | 0 | 0 |
 | `AGT-904` | declared-only | 41% | 33% | 1 | 2 | 0 | 0 | 0 | 3 | 0 |
-| `AGT-S2P-POL` | declared-only | 41% | 33% | 1 | 2 | 0 | 0 | 0 | 3 | 0 |
-| `compliance-officer` | roster-only | 50% | 41% | 1 | 3 | 2 | 0 | 0 | 1 | 1 |
 | `data-architect` | roster-only | 50% | 41% | 1 | 3 | 2 | 0 | 0 | 1 | 1 |
 | `data-steward` | roster-only | 50% | 41% | 1 | 3 | 2 | 0 | 0 | 1 | 1 |
 | `dispatcher` | roster-only | 50% | 41% | 1 | 3 | 2 | 0 | 0 | 1 | 1 |
@@ -211,7 +210,7 @@ _Certification exercises a real domain act, not a generic probe._
 | `legal-operations-counsel` | roster-only | 50% | 41% | 1 | 3 | 2 | 0 | 0 | 1 | 1 |
 | `security-engineer` | roster-only | 50% | 41% | 1 | 3 | 2 | 0 | 0 | 1 | 1 |
 | `storefront-advisor` | roster-only | 50% | 41% | 1 | 3 | 2 | 0 | 0 | 1 | 1 |
-| `doc-specialist` | roster-only | 59% | 48% | 1 | 3 | 2 | 0 | 2 | 1 | 1 |
+| `compliance-officer` | roster-only | 59% | 48% | 1 | 3 | 2 | 0 | 0 | 2 | 1 |
 | `finance-controller` | roster-only | 59% | 48% | 1 | 3 | 2 | 0 | 2 | 1 | 1 |
 | `AGT-WS-FARM-RANCH` | defined-roster | 64% | 52% | 2 | 3 | 3 | 0 | 0 | 1 | 1 |
 | `AGT-906` | defined-roster | 68% | 56% | 2 | 3 | 3 | 0 | 0 | 1 | 2 |
@@ -222,6 +221,7 @@ _Certification exercises a real domain act, not a generic probe._
 | `AGT-WS-BUILD` | active-roster | 77% | 63% | 3 | 3 | 3 | 0 | 0 | 2 | 1 |
 | `AGT-WS-CUSTOMER` | active-roster | 77% | 63% | 3 | 3 | 3 | 0 | 0 | 2 | 1 |
 | `AGT-WS-SCOUT` | active-roster | 77% | 63% | 3 | 3 | 3 | 0 | 0 | 2 | 1 |
+| `doc-specialist` | roster-only | 77% | 63% | 1 | 3 | 2 | 0 | 2 | 3 | 1 |
 | `AGT-ORCH-000` | defined-roster | 82% | 67% | 2 | 3 | 3 | 0 | 0 | 3 | 1 |
 | `AGT-WS-ADMIN` | active-roster | 86% | 70% | 3 | 3 | 3 | 0 | 0 | 3 | 1 |
 | `AGT-WS-EA` | active-roster | 86% | 70% | 3 | 3 | 3 | 0 | 0 | 3 | 1 |
@@ -332,24 +332,6 @@ failure modes hide behind that, each needing a different fix:
 
 | Target | Health | Skills | What it needs |
 |---|---|---|---|
-| `coo-orchestrator` | unbridged | 2 | rewrite to the roster slug `coo` — the bridge already exists in agent-identity.ts, the seeder just does not consult it |
-| `documentation-specialist` | unseeded | 4 | names canonical `AGT-904` (status defined), declared but never seeded — seed it, or repoint the skill |
+| `documentation-specialist` | unseeded | 2 | names canonical `AGT-904` (status defined), declared but never seeded — seed it, or repoint the skill |
 | `external-coding-agent` | unresolved | 2 | in no namespace at all — decide whether this identity should exist |
-| `policy-specialist` | unseeded | 4 | names canonical `AGT-S2P-POL` (status defined), declared but never seeded — seed it, or repoint the skill |
-
-## Stranded skills
-
-Assigned to an identity in no namespace this inventory knows, so the assignment reaches nobody.
-`SkillAssignment.agentId` has no relation to any registry, so the write always succeeds.
-
-| Skill | assignTo | File |
-|---|---|---|
-| `add-regulation` | `policy-specialist` | `skills/compliance/add-regulation.skill.md` |
-| `gap-assessment` | `policy-specialist` | `skills/compliance/gap-assessment.skill.md` |
-| `onboard-regulation` | `policy-specialist` | `skills/compliance/onboard-regulation.skill.md` |
-| `posture-report` | `policy-specialist` | `skills/compliance/posture-report.skill.md` |
-| `generate-diagram` | `documentation-specialist` | `skills/docs/generate-diagram.skill.md` |
-| `review-structure` | `documentation-specialist` | `skills/docs/review-structure.skill.md` |
-| `backlog-status` | `coo-orchestrator` | `skills/workspace/backlog-status.skill.md` |
-| `create-task` | `coo-orchestrator` | `skills/workspace/create-task.skill.md` |
 

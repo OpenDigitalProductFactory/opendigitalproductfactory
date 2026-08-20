@@ -447,6 +447,7 @@
         "6-criteria-c-per-tool",
         "7-the-sequencing-rule",
         "8-implementation-scope-register",
+        "80-landed-in-this-pass",
         "81-reading-the-register",
         "9-open-decisions"
       ]
@@ -5044,8 +5045,7 @@
         "agt-120-product-backlog-prioritization-agent-declared-only-14-attainable",
         "agt-121-architecture-definition-agent-declared-only-14-attainable",
         "agt-122-roadmap-assembly-agent-declared-only-14-attainable",
-        "assignto-health",
-        "stranded-skills"
+        "assignto-health"
       ]
     },
     "docs/maintenance/staleness-coverage.md": {

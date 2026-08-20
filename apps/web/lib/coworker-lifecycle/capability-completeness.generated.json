@@ -235,9 +235,9 @@
         "ceiling": 3,
         "blocker": null,
         "distribution": {
-          "0": 52,
-          "1": 14,
-          "2": 4,
+          "0": 53,
+          "1": 12,
+          "2": 5,
           "3": 12
         },
         "atCeiling": 12
@@ -258,15 +258,15 @@
     },
     "skills": {
       "total": 68,
-      "stranded": 8,
+      "stranded": 0,
       "cadenceCapable": 0,
       "unresolvedAssignTargets": [
         "external-coding-agent"
       ],
       "assignToHealth": {
         "unresolved": 1,
-        "unseeded": 2,
-        "unbridged": 1
+        "unseeded": 1,
+        "unbridged": 0
       }
     },
     "unbackedSkillIds": [
@@ -7253,6 +7253,151 @@
       ]
     },
     {
+      "key": "AGT-S2P-POL",
+      "displayName": "policy-specialist",
+      "identityClass": "declared-only",
+      "handles": [
+        "policy-specialist"
+      ],
+      "registryStatus": "defined",
+      "valueStream": "evaluate",
+      "tier": "specialist",
+      "score": {
+        "earned": 3,
+        "attainableMax": 22,
+        "absoluteMax": 27,
+        "attainablePct": 14,
+        "absolutePct": 11
+      },
+      "planes": {
+        "identity": {
+          "level": 1,
+          "detail": "in the canonical registry only (status \"defined\"), never seeded onto the roster",
+          "handles": [
+            "policy-specialist"
+          ],
+          "levelKey": "declared",
+          "ceiling": 3,
+          "atCeiling": false
+        },
+        "corpus": {
+          "level": 2,
+          "professionKey": "legal-compliance",
+          "corpusPages": 16,
+          "missingGrants": [
+            "registry_read"
+          ],
+          "detail": "corpus exists (16 pages) but evaluate_profession_decision is unreachable — missing: registry_read",
+          "levelKey": "reachable",
+          "ceiling": 3,
+          "atCeiling": false
+        },
+        "governance": {
+          "level": 0,
+          "missingGrants": [
+            "registry_read"
+          ],
+          "escalatesTo": "HR-300",
+          "reachableSideEffectingTools": 17,
+          "reachableGatedTools": 0,
+          "ungatedConsequenceNote": "every one of its 17 reachable side-effecting tool(s) executes with no kernel consultation required",
+          "detail": "holds no grants at all — no tool surface is authorised",
+          "levelKey": "absent",
+          "ceiling": 3,
+          "atCeiling": false
+        },
+        "shape": {
+          "level": 0,
+          "detail": "no declared work shape — no room-shape registry exists yet",
+          "levelKey": "absent",
+          "ceiling": 0,
+          "atCeiling": true
+        },
+        "cadence": {
+          "level": 0,
+          "detail": "no recurring trigger — any Proactivity setting is a silent no-op",
+          "levelKey": "absent",
+          "ceiling": 2,
+          "atCeiling": false
+        },
+        "toolsAndSkills": {
+          "level": 0,
+          "directSkills": 0,
+          "wildcardSkills": 5,
+          "reachableTools": 7,
+          "heldGrants": [],
+          "services": 0,
+          "unbackedSkillIds": [],
+          "detail": "no grants and no skills — it cannot act",
+          "levelKey": "absent",
+          "ceiling": 3,
+          "atCeiling": false
+        },
+        "evidence": {
+          "level": 0,
+          "detail": "not on the roster, so the certification sweep never exercises it",
+          "levelKey": "absent",
+          "ceiling": 2,
+          "atCeiling": false
+        }
+      },
+      "gaps": [
+        {
+          "plane": "identity",
+          "level": 1,
+          "ceiling": 3,
+          "detail": "in the canonical registry only (status \"defined\"), never seeded onto the roster"
+        },
+        {
+          "plane": "corpus",
+          "level": 2,
+          "ceiling": 3,
+          "detail": "corpus exists (16 pages) but evaluate_profession_decision is unreachable — missing: registry_read"
+        },
+        {
+          "plane": "governance",
+          "level": 0,
+          "ceiling": 3,
+          "detail": "holds no grants at all — no tool surface is authorised"
+        },
+        {
+          "plane": "cadence",
+          "level": 0,
+          "ceiling": 2,
+          "detail": "no recurring trigger — any Proactivity setting is a silent no-op"
+        },
+        {
+          "plane": "toolsAndSkills",
+          "level": 0,
+          "ceiling": 3,
+          "detail": "no grants and no skills — it cannot act"
+        },
+        {
+          "plane": "evidence",
+          "level": 0,
+          "ceiling": 2,
+          "detail": "not on the roster, so the certification sweep never exercises it"
+        }
+      ],
+      "blockedPlanes": [
+        {
+          "plane": "shape",
+          "ceiling": 0,
+          "blocker": "No room-shape registry exists (design §4, new concept 1). Ceiling rises to 3 when it lands."
+        },
+        {
+          "plane": "cadence",
+          "ceiling": 2,
+          "blocker": "No skill can declare a cadence (0 of 67 have a recurring taskType). Ceiling rises to 3 when it lands."
+        },
+        {
+          "plane": "evidence",
+          "ceiling": 2,
+          "blocker": "A passing AssuranceRun is runtime state a static scan cannot see. Ceiling rises to 3 when the measure reads the ledger."
+        }
+      ]
+    },
+    {
       "key": "AGT-SOC-HUNTER",
       "displayName": "soc-threat-hunter",
       "identityClass": "active-registry-only",
@@ -7902,13 +8047,13 @@
         },
         "toolsAndSkills": {
           "level": 3,
-          "directSkills": 4,
+          "directSkills": 2,
           "wildcardSkills": 5,
           "reachableTools": 7,
           "heldGrants": [],
           "services": 0,
           "unbackedSkillIds": [],
-          "detail": "4 skill(s), 7 tool(s), all service backings resolve",
+          "detail": "2 skill(s), 7 tool(s), all service backings resolve",
           "levelKey": "proven",
           "ceiling": 3,
           "atCeiling": true
@@ -7951,290 +8096,6 @@
           "level": 0,
           "ceiling": 2,
           "detail": "not on the roster, so the certification sweep never exercises it"
-        }
-      ],
-      "blockedPlanes": [
-        {
-          "plane": "shape",
-          "ceiling": 0,
-          "blocker": "No room-shape registry exists (design §4, new concept 1). Ceiling rises to 3 when it lands."
-        },
-        {
-          "plane": "cadence",
-          "ceiling": 2,
-          "blocker": "No skill can declare a cadence (0 of 67 have a recurring taskType). Ceiling rises to 3 when it lands."
-        },
-        {
-          "plane": "evidence",
-          "ceiling": 2,
-          "blocker": "A passing AssuranceRun is runtime state a static scan cannot see. Ceiling rises to 3 when the measure reads the ledger."
-        }
-      ]
-    },
-    {
-      "key": "AGT-S2P-POL",
-      "displayName": "policy-specialist",
-      "identityClass": "declared-only",
-      "handles": [
-        "policy-specialist"
-      ],
-      "registryStatus": "defined",
-      "valueStream": "evaluate",
-      "tier": "specialist",
-      "score": {
-        "earned": 9,
-        "attainableMax": 22,
-        "absoluteMax": 27,
-        "attainablePct": 41,
-        "absolutePct": 33
-      },
-      "planes": {
-        "identity": {
-          "level": 1,
-          "detail": "in the canonical registry only (status \"defined\"), never seeded onto the roster",
-          "handles": [
-            "policy-specialist"
-          ],
-          "levelKey": "declared",
-          "ceiling": 3,
-          "atCeiling": false
-        },
-        "corpus": {
-          "level": 2,
-          "professionKey": "legal-compliance",
-          "corpusPages": 16,
-          "missingGrants": [
-            "registry_read"
-          ],
-          "detail": "corpus exists (16 pages) but evaluate_profession_decision is unreachable — missing: registry_read",
-          "levelKey": "reachable",
-          "ceiling": 3,
-          "atCeiling": false
-        },
-        "governance": {
-          "level": 0,
-          "missingGrants": [
-            "registry_read"
-          ],
-          "escalatesTo": "HR-300",
-          "reachableSideEffectingTools": 17,
-          "reachableGatedTools": 0,
-          "ungatedConsequenceNote": "every one of its 17 reachable side-effecting tool(s) executes with no kernel consultation required",
-          "detail": "holds no grants at all — no tool surface is authorised",
-          "levelKey": "absent",
-          "ceiling": 3,
-          "atCeiling": false
-        },
-        "shape": {
-          "level": 0,
-          "detail": "no declared work shape — no room-shape registry exists yet",
-          "levelKey": "absent",
-          "ceiling": 0,
-          "atCeiling": true
-        },
-        "cadence": {
-          "level": 0,
-          "detail": "no recurring trigger — any Proactivity setting is a silent no-op",
-          "levelKey": "absent",
-          "ceiling": 2,
-          "atCeiling": false
-        },
-        "toolsAndSkills": {
-          "level": 3,
-          "directSkills": 4,
-          "wildcardSkills": 5,
-          "reachableTools": 7,
-          "heldGrants": [],
-          "services": 0,
-          "unbackedSkillIds": [],
-          "detail": "4 skill(s), 7 tool(s), all service backings resolve",
-          "levelKey": "proven",
-          "ceiling": 3,
-          "atCeiling": true
-        },
-        "evidence": {
-          "level": 0,
-          "detail": "not on the roster, so the certification sweep never exercises it",
-          "levelKey": "absent",
-          "ceiling": 2,
-          "atCeiling": false
-        }
-      },
-      "gaps": [
-        {
-          "plane": "identity",
-          "level": 1,
-          "ceiling": 3,
-          "detail": "in the canonical registry only (status \"defined\"), never seeded onto the roster"
-        },
-        {
-          "plane": "corpus",
-          "level": 2,
-          "ceiling": 3,
-          "detail": "corpus exists (16 pages) but evaluate_profession_decision is unreachable — missing: registry_read"
-        },
-        {
-          "plane": "governance",
-          "level": 0,
-          "ceiling": 3,
-          "detail": "holds no grants at all — no tool surface is authorised"
-        },
-        {
-          "plane": "cadence",
-          "level": 0,
-          "ceiling": 2,
-          "detail": "no recurring trigger — any Proactivity setting is a silent no-op"
-        },
-        {
-          "plane": "evidence",
-          "level": 0,
-          "ceiling": 2,
-          "detail": "not on the roster, so the certification sweep never exercises it"
-        }
-      ],
-      "blockedPlanes": [
-        {
-          "plane": "shape",
-          "ceiling": 0,
-          "blocker": "No room-shape registry exists (design §4, new concept 1). Ceiling rises to 3 when it lands."
-        },
-        {
-          "plane": "cadence",
-          "ceiling": 2,
-          "blocker": "No skill can declare a cadence (0 of 67 have a recurring taskType). Ceiling rises to 3 when it lands."
-        },
-        {
-          "plane": "evidence",
-          "ceiling": 2,
-          "blocker": "A passing AssuranceRun is runtime state a static scan cannot see. Ceiling rises to 3 when the measure reads the ledger."
-        }
-      ]
-    },
-    {
-      "key": "compliance-officer",
-      "displayName": "Compliance Officer",
-      "identityClass": "roster-only",
-      "handles": [
-        "compliance-officer"
-      ],
-      "registryStatus": null,
-      "valueStream": null,
-      "tier": null,
-      "score": {
-        "earned": 11,
-        "attainableMax": 22,
-        "absoluteMax": 27,
-        "attainablePct": 50,
-        "absolutePct": 41
-      },
-      "planes": {
-        "identity": {
-          "level": 1,
-          "detail": "on the workforce roster but absent from the canonical agent registry",
-          "handles": [
-            "compliance-officer"
-          ],
-          "levelKey": "declared",
-          "ceiling": 3,
-          "atCeiling": false
-        },
-        "corpus": {
-          "level": 3,
-          "professionKey": "legal-compliance",
-          "corpusPages": 16,
-          "missingGrants": [],
-          "detail": "16 corpus pages, reachable",
-          "levelKey": "proven",
-          "ceiling": 3,
-          "atCeiling": true
-        },
-        "governance": {
-          "level": 2,
-          "missingGrants": [],
-          "escalatesTo": null,
-          "reachableSideEffectingTools": 54,
-          "reachableGatedTools": 1,
-          "ungatedConsequenceNote": null,
-          "detail": "principle_decide reachable, but no escalation target is declared",
-          "levelKey": "reachable",
-          "ceiling": 3,
-          "atCeiling": false
-        },
-        "shape": {
-          "level": 0,
-          "detail": "no declared work shape — no room-shape registry exists yet",
-          "levelKey": "absent",
-          "ceiling": 0,
-          "atCeiling": true
-        },
-        "cadence": {
-          "level": 0,
-          "detail": "no recurring trigger — any Proactivity setting is a silent no-op",
-          "levelKey": "absent",
-          "ceiling": 2,
-          "atCeiling": false
-        },
-        "toolsAndSkills": {
-          "level": 1,
-          "directSkills": 0,
-          "wildcardSkills": 5,
-          "reachableTools": 115,
-          "heldGrants": [
-            "policy_write",
-            "data_governance_validate",
-            "file_read",
-            "backlog_read",
-            "backlog_write",
-            "tool_evaluation_create",
-            "registry_read"
-          ],
-          "services": 1,
-          "unbackedSkillIds": [
-            "compliance-requirements-review"
-          ],
-          "detail": "no skill authored for it (5 wildcard only), 115 reachable tool(s)",
-          "levelKey": "declared",
-          "ceiling": 3,
-          "atCeiling": false
-        },
-        "evidence": {
-          "level": 1,
-          "detail": "derivedReadProbe only — passes certification with zero domain capability",
-          "levelKey": "declared",
-          "ceiling": 2,
-          "atCeiling": false
-        }
-      },
-      "gaps": [
-        {
-          "plane": "identity",
-          "level": 1,
-          "ceiling": 3,
-          "detail": "on the workforce roster but absent from the canonical agent registry"
-        },
-        {
-          "plane": "governance",
-          "level": 2,
-          "ceiling": 3,
-          "detail": "principle_decide reachable, but no escalation target is declared"
-        },
-        {
-          "plane": "cadence",
-          "level": 0,
-          "ceiling": 2,
-          "detail": "no recurring trigger — any Proactivity setting is a silent no-op"
-        },
-        {
-          "plane": "toolsAndSkills",
-          "level": 1,
-          "ceiling": 3,
-          "detail": "no skill authored for it (5 wildcard only), 115 reachable tool(s)"
-        },
-        {
-          "plane": "evidence",
-          "level": 1,
-          "ceiling": 2,
-          "detail": "derivedReadProbe only — passes certification with zero domain capability"
         }
       ],
       "blockedPlanes": [
@@ -9254,11 +9115,11 @@
       ]
     },
     {
-      "key": "doc-specialist",
-      "displayName": "Documentation Specialist",
+      "key": "compliance-officer",
+      "displayName": "Compliance Officer",
       "identityClass": "roster-only",
       "handles": [
-        "doc-specialist"
+        "compliance-officer"
       ],
       "registryStatus": null,
       "valueStream": null,
@@ -9275,7 +9136,7 @@
           "level": 1,
           "detail": "on the workforce roster but absent from the canonical agent registry",
           "handles": [
-            "doc-specialist"
+            "compliance-officer"
           ],
           "levelKey": "declared",
           "ceiling": 3,
@@ -9283,10 +9144,10 @@
         },
         "corpus": {
           "level": 3,
-          "professionKey": "documentation-content",
-          "corpusPages": 6,
+          "professionKey": "legal-compliance",
+          "corpusPages": 16,
           "missingGrants": [],
-          "detail": "6 corpus pages, reachable",
+          "detail": "16 corpus pages, reachable",
           "levelKey": "proven",
           "ceiling": 3,
           "atCeiling": true
@@ -9295,9 +9156,9 @@
           "level": 2,
           "missingGrants": [],
           "escalatesTo": null,
-          "reachableSideEffectingTools": 20,
-          "reachableGatedTools": 0,
-          "ungatedConsequenceNote": "every one of its 20 reachable side-effecting tool(s) executes with no kernel consultation required",
+          "reachableSideEffectingTools": 54,
+          "reachableGatedTools": 1,
+          "ungatedConsequenceNote": null,
           "detail": "principle_decide reachable, but no escalation target is declared",
           "levelKey": "reachable",
           "ceiling": 3,
@@ -9311,29 +9172,32 @@
           "atCeiling": true
         },
         "cadence": {
-          "level": 2,
-          "detail": "COWORKER_SELF_TASKS entry driven by its Proactivity setting",
-          "levelKey": "reachable",
+          "level": 0,
+          "detail": "no recurring trigger — any Proactivity setting is a silent no-op",
+          "levelKey": "absent",
           "ceiling": 2,
-          "atCeiling": true
+          "atCeiling": false
         },
         "toolsAndSkills": {
-          "level": 1,
-          "directSkills": 0,
+          "level": 2,
+          "directSkills": 4,
           "wildcardSkills": 5,
-          "reachableTools": 56,
+          "reachableTools": 115,
           "heldGrants": [
+            "policy_write",
+            "data_governance_validate",
             "file_read",
-            "registry_read",
-            "portfolio_read",
-            "document_read",
-            "document_write",
-            "document_publish"
+            "backlog_read",
+            "backlog_write",
+            "tool_evaluation_create",
+            "registry_read"
           ],
-          "services": 0,
-          "unbackedSkillIds": [],
-          "detail": "no skill authored for it (5 wildcard only), 56 reachable tool(s)",
-          "levelKey": "declared",
+          "services": 1,
+          "unbackedSkillIds": [
+            "compliance-requirements-review"
+          ],
+          "detail": "4 skill(s), 115 tool(s); 1 service backing skill(s) missing: compliance-requirements-review",
+          "levelKey": "reachable",
           "ceiling": 3,
           "atCeiling": false
         },
@@ -9359,10 +9223,16 @@
           "detail": "principle_decide reachable, but no escalation target is declared"
         },
         {
+          "plane": "cadence",
+          "level": 0,
+          "ceiling": 2,
+          "detail": "no recurring trigger — any Proactivity setting is a silent no-op"
+        },
+        {
           "plane": "toolsAndSkills",
-          "level": 1,
+          "level": 2,
           "ceiling": 3,
-          "detail": "no skill authored for it (5 wildcard only), 56 reachable tool(s)"
+          "detail": "4 skill(s), 115 tool(s); 1 service backing skill(s) missing: compliance-requirements-review"
         },
         {
           "plane": "evidence",
@@ -9995,7 +9865,8 @@
             "web_search",
             "crm_read",
             "document_write",
-            "registry_write"
+            "registry_write",
+            "registry_read"
           ],
           "services": 0,
           "unbackedSkillIds": [],
@@ -10692,6 +10563,136 @@
           "level": 2,
           "ceiling": 3,
           "detail": "1 skill(s), 90 tool(s); 1 service backing skill(s) missing: external-catalog-scout"
+        },
+        {
+          "plane": "evidence",
+          "level": 1,
+          "ceiling": 2,
+          "detail": "derivedReadProbe only — passes certification with zero domain capability"
+        }
+      ],
+      "blockedPlanes": [
+        {
+          "plane": "shape",
+          "ceiling": 0,
+          "blocker": "No room-shape registry exists (design §4, new concept 1). Ceiling rises to 3 when it lands."
+        },
+        {
+          "plane": "cadence",
+          "ceiling": 2,
+          "blocker": "No skill can declare a cadence (0 of 67 have a recurring taskType). Ceiling rises to 3 when it lands."
+        },
+        {
+          "plane": "evidence",
+          "ceiling": 2,
+          "blocker": "A passing AssuranceRun is runtime state a static scan cannot see. Ceiling rises to 3 when the measure reads the ledger."
+        }
+      ]
+    },
+    {
+      "key": "doc-specialist",
+      "displayName": "Documentation Specialist",
+      "identityClass": "roster-only",
+      "handles": [
+        "doc-specialist"
+      ],
+      "registryStatus": null,
+      "valueStream": null,
+      "tier": null,
+      "score": {
+        "earned": 17,
+        "attainableMax": 22,
+        "absoluteMax": 27,
+        "attainablePct": 77,
+        "absolutePct": 63
+      },
+      "planes": {
+        "identity": {
+          "level": 1,
+          "detail": "on the workforce roster but absent from the canonical agent registry",
+          "handles": [
+            "doc-specialist"
+          ],
+          "levelKey": "declared",
+          "ceiling": 3,
+          "atCeiling": false
+        },
+        "corpus": {
+          "level": 3,
+          "professionKey": "documentation-content",
+          "corpusPages": 6,
+          "missingGrants": [],
+          "detail": "6 corpus pages, reachable",
+          "levelKey": "proven",
+          "ceiling": 3,
+          "atCeiling": true
+        },
+        "governance": {
+          "level": 2,
+          "missingGrants": [],
+          "escalatesTo": null,
+          "reachableSideEffectingTools": 20,
+          "reachableGatedTools": 0,
+          "ungatedConsequenceNote": "every one of its 20 reachable side-effecting tool(s) executes with no kernel consultation required",
+          "detail": "principle_decide reachable, but no escalation target is declared",
+          "levelKey": "reachable",
+          "ceiling": 3,
+          "atCeiling": false
+        },
+        "shape": {
+          "level": 0,
+          "detail": "no declared work shape — no room-shape registry exists yet",
+          "levelKey": "absent",
+          "ceiling": 0,
+          "atCeiling": true
+        },
+        "cadence": {
+          "level": 2,
+          "detail": "COWORKER_SELF_TASKS entry driven by its Proactivity setting",
+          "levelKey": "reachable",
+          "ceiling": 2,
+          "atCeiling": true
+        },
+        "toolsAndSkills": {
+          "level": 3,
+          "directSkills": 2,
+          "wildcardSkills": 5,
+          "reachableTools": 56,
+          "heldGrants": [
+            "file_read",
+            "registry_read",
+            "portfolio_read",
+            "document_read",
+            "document_write",
+            "document_publish"
+          ],
+          "services": 0,
+          "unbackedSkillIds": [],
+          "detail": "2 skill(s), 56 tool(s), all service backings resolve",
+          "levelKey": "proven",
+          "ceiling": 3,
+          "atCeiling": true
+        },
+        "evidence": {
+          "level": 1,
+          "detail": "derivedReadProbe only — passes certification with zero domain capability",
+          "levelKey": "declared",
+          "ceiling": 2,
+          "atCeiling": false
+        }
+      },
+      "gaps": [
+        {
+          "plane": "identity",
+          "level": 1,
+          "ceiling": 3,
+          "detail": "on the workforce roster but absent from the canonical agent registry"
+        },
+        {
+          "plane": "governance",
+          "level": 2,
+          "ceiling": 3,
+          "detail": "principle_decide reachable, but no escalation target is declared"
         },
         {
           "plane": "evidence",
@@ -11812,147 +11813,14 @@
     }
   ],
   "orphans": {
-    "strandedSkills": [
-      {
-        "file": "skills/compliance/add-regulation.skill.md",
-        "name": "add-regulation",
-        "assignTo": [
-          "policy-specialist"
-        ],
-        "health": [
-          {
-            "target": "policy-specialist",
-            "health": "unseeded",
-            "rosterSlug": null,
-            "canonical": "AGT-S2P-POL"
-          }
-        ]
-      },
-      {
-        "file": "skills/compliance/gap-assessment.skill.md",
-        "name": "gap-assessment",
-        "assignTo": [
-          "policy-specialist"
-        ],
-        "health": [
-          {
-            "target": "policy-specialist",
-            "health": "unseeded",
-            "rosterSlug": null,
-            "canonical": "AGT-S2P-POL"
-          }
-        ]
-      },
-      {
-        "file": "skills/compliance/onboard-regulation.skill.md",
-        "name": "onboard-regulation",
-        "assignTo": [
-          "policy-specialist"
-        ],
-        "health": [
-          {
-            "target": "policy-specialist",
-            "health": "unseeded",
-            "rosterSlug": null,
-            "canonical": "AGT-S2P-POL"
-          }
-        ]
-      },
-      {
-        "file": "skills/compliance/posture-report.skill.md",
-        "name": "posture-report",
-        "assignTo": [
-          "policy-specialist"
-        ],
-        "health": [
-          {
-            "target": "policy-specialist",
-            "health": "unseeded",
-            "rosterSlug": null,
-            "canonical": "AGT-S2P-POL"
-          }
-        ]
-      },
-      {
-        "file": "skills/docs/generate-diagram.skill.md",
-        "name": "generate-diagram",
-        "assignTo": [
-          "documentation-specialist"
-        ],
-        "health": [
-          {
-            "target": "documentation-specialist",
-            "health": "unseeded",
-            "rosterSlug": null,
-            "canonical": "AGT-904"
-          }
-        ]
-      },
-      {
-        "file": "skills/docs/review-structure.skill.md",
-        "name": "review-structure",
-        "assignTo": [
-          "documentation-specialist"
-        ],
-        "health": [
-          {
-            "target": "documentation-specialist",
-            "health": "unseeded",
-            "rosterSlug": null,
-            "canonical": "AGT-904"
-          }
-        ]
-      },
-      {
-        "file": "skills/workspace/backlog-status.skill.md",
-        "name": "backlog-status",
-        "assignTo": [
-          "coo-orchestrator"
-        ],
-        "health": [
-          {
-            "target": "coo-orchestrator",
-            "health": "unbridged",
-            "rosterSlug": "coo",
-            "canonical": "AGT-ORCH-000"
-          }
-        ]
-      },
-      {
-        "file": "skills/workspace/create-task.skill.md",
-        "name": "create-task",
-        "assignTo": [
-          "coo-orchestrator"
-        ],
-        "health": [
-          {
-            "target": "coo-orchestrator",
-            "health": "unbridged",
-            "rosterSlug": "coo",
-            "canonical": "AGT-ORCH-000"
-          }
-        ]
-      }
-    ],
+    "strandedSkills": [],
     "assignToHealth": [
-      {
-        "target": "coo-orchestrator",
-        "health": "unbridged",
-        "rosterSlug": "coo",
-        "canonical": "AGT-ORCH-000",
-        "files": [
-          "skills/workspace/backlog-status.skill.md",
-          "skills/workspace/create-task.skill.md"
-        ]
-      },
       {
         "target": "documentation-specialist",
         "health": "unseeded",
         "canonical": "AGT-904",
         "status": "defined",
         "files": [
-          "skills/docs/generate-diagram.skill.md",
-          "skills/docs/review-structure.skill.md",
           "skills/platform/ingest-article-from-url.skill.md",
           "skills/platform/review-wiki-drafts.skill.md"
         ]
@@ -11963,18 +11831,6 @@
         "files": [
           "skills/platform/draft-kernel-edit-pr.skill.md",
           "skills/platform/ingest-article-from-url.skill.md"
-        ]
-      },
-      {
-        "target": "policy-specialist",
-        "health": "unseeded",
-        "canonical": "AGT-S2P-POL",
-        "status": "defined",
-        "files": [
-          "skills/compliance/add-regulation.skill.md",
-          "skills/compliance/gap-assessment.skill.md",
-          "skills/compliance/onboard-regulation.skill.md",
-          "skills/compliance/posture-report.skill.md"
         ]
       }
     ],

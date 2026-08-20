@@ -2,7 +2,7 @@
 name: review-structure
 description: "Review the structure of a document for quality and consistency"
 category: docs
-assignTo: ["documentation-specialist"]
+assignTo: ["doc-specialist"]
 capability: null
 taskType: "analysis"
 triggerPattern: "review|structure|heading|cross.reference"

@@ -2,7 +2,7 @@
 name: add-regulation
 description: "Register a new regulation to track"
 category: compliance
-assignTo: ["policy-specialist"]
+assignTo: ["compliance-officer"]
 capability: "manage_compliance"
 taskType: "conversation"
 triggerPattern: "add regulation|new regulation|register regulation"

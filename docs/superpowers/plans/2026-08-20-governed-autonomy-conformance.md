@@ -40,13 +40,14 @@ deferred.
 
 ---
 
-## Phase 0 — Unblock (small, independent, no behaviour risk)
+## Phase 0 — Unblock (small, independent, no behaviour risk) — **DONE**
 
 | # | Change | BI |
 |---|---|---|
-| 0.1 | Grant `registry_read` to `compliance-officer`, `security-engineer`, `market-research-analyst` | `BI-728FD7F2` |
-| 0.2 | Repoint the 8 stranded skills to handles that reach a coworker | `BI-B50D5E93` |
-| 0.3 | Resolve or remove the 7 unbacked `backingSkillIds` | `BI-5C1978C7` |
+| 0.1 | ✅ Grant `registry_read` to `compliance-officer`, `security-engineer`, `market-research-analyst` | `BI-728FD7F2` |
+| 0.2 | ✅ Repoint the 8 stranded skills to handles that reach a coworker | `BI-B50D5E93` |
+| 0.3 | ⏸ The 7 unbacked `backingSkillIds` are ratcheted, not removed — deleting a citation would flip its service from honestly-not-ready to falsely-ready. Writing the skills stays open. | `BI-5C1978C7` |
+| 0.4 | ✅ CI gate: stranded skills at zero, unbacked anchors shrink-only | `BI-B6157AAB` |
 
 **Exit:** no roster coworker sits below Governance level 2 (three do today: `compliance-officer`, `security-engineer`, `market-research-analyst`);
 `summary.skills.stranded` = 0. `capability-completeness.test.ts` has an expectation

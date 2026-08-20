@@ -1,0 +1,12 @@
+{
+  "note": "Known-outstanding unbacked backingSkillIds. This list may only shrink. See BI-5C1978C7.",
+  "unbackedSkillIds": [
+    "build-sensitive-domain-requirements",
+    "compliance-requirements-review",
+    "customer-intake-triage",
+    "external-catalog-scout",
+    "marketing-collaboration-intake",
+    "prepare-counsel-packet",
+    "provider-cost-intake"
+  ]
+}

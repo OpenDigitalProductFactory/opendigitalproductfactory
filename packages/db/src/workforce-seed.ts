@@ -382,7 +382,12 @@ export const HARDCODED_COWORKER_GRANTS: Record<string, readonly string[]> = {
   // document_read/code_graph_read arrive via COWORKER_READ_BASELINE_GRANTS. No
   // sandbox_execute: the Build-Studio scout/ideate research launchers are
   // feature-scoped, not owner-facing market research.
-  "market-research-analyst": ["web_search", "crm_read", "document_write", "registry_write"],
+  // registry_read is explicit rather than implied by registry_write: the
+  // implication would be a platform-wide change to the authority model, and
+  // wiki-overlay-pack.test.ts pins registry_write as NOT conferring read on the
+  // overlay list tool. Fix the coworker, not the semantics (BI-728FD7F2); the
+  // implication question is filed separately.
+  "market-research-analyst": ["web_search", "crm_read", "document_write", "registry_write", "registry_read"],
   // The Customer Success Manager operates the CRM (accounts, pipeline, quotes),
   // so it needs crm_read/crm_write — NOT backlog_write (which let it retire live
   // backlog items while flailing) or marketing_read (wrong domain). Its runtime

@@ -2,7 +2,7 @@
 name: generate-diagram
 description: "Generate a Mermaid diagram for a described concept"
 category: docs
-assignTo: ["documentation-specialist"]
+assignTo: ["doc-specialist"]
 capability: null
 taskType: "code_generation"
 triggerPattern: "diagram|mermaid|flowchart|sequence"

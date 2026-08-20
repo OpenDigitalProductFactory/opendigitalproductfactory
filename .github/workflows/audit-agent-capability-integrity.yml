@@ -1,0 +1,85 @@
+name: Agent Capability Integrity
+
+# CodeQL actions/missing-workflow-permissions: least-privilege default.
+# Read-only audit; needs no write surface.
+permissions:
+  contents: read
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "skills/**"
+      - "packages/dpf-skill-pack/skills/**"
+      - "packages/db/src/workforce-seed.ts"
+      - "packages/db/src/agent-identity.ts"
+      - "packages/db/src/coworker-service-catalog-seed.ts"
+      - "packages/db/data/agent_registry.json"
+      - "apps/web/lib/coworker-lifecycle/capability-completeness.generated.json"
+      - "scripts/measure-capability-completeness.mjs"
+      - "scripts/check-agent-capability-integrity.mjs"
+      - "scripts/agent-capability-baseline.json"
+      - ".github/workflows/audit-agent-capability-integrity.yml"
+  push:
+    branches: [main]
+
+concurrency:
+  group: audit-agent-capability-integrity-${{ github.ref }}
+  cancel-in-progress: true
+
+# What this guard does
+# --------------------
+# Two referential-integrity defects in the agent capability graph, both
+# statically decidable and both silently re-introducible because nothing in the
+# runtime validates either reference:
+#
+#   1. A skill's `assignTo` is written verbatim into SkillAssignment.agentId, a
+#      column with no relation to any registry. A skill assigned to an identity
+#      that no coworker answers to reaches nobody, and is indistinguishable in
+#      the database from one that works. Enforced at ZERO — the count was driven
+#      to zero in the change that added this gate, so any failure is a
+#      regression, not a legacy.
+#
+#   2. A service's `backingSkillIds` may cite a skill that does not exist. This
+#      is worse than inert: the service renders as not-ready with a "Review
+#      capabilities" recovery pointing the operator at a skill nobody can assign.
+#      Carries a shrink-only baseline (scripts/agent-capability-baseline.json)
+#      because seven such citations predate the gate.
+#
+# The check reads the committed capability-completeness artifact rather than
+# re-deriving, so there is one parser; the derived-artifacts gate already
+# guarantees that artifact matches source. This job regenerates first so a PR
+# that changes source but forgets the artifact fails here rather than passing on
+# a stale read.
+
+jobs:
+  audit:
+    name: Agent Capability Integrity
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - name: Regenerate the capability measure from source
+        run: node scripts/measure-capability-completeness.mjs
+
+      - name: Fail if the committed artifact was stale
+        run: node scripts/measure-capability-completeness.mjs --check
+
+      - name: Check agent capability integrity
+        run: node scripts/check-agent-capability-integrity.mjs
+
+      - name: Upload capability measure (always, for inspection)
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: agent-capability-completeness
+          path: |
+            apps/web/lib/coworker-lifecycle/capability-completeness.generated.json
+            docs/maintenance/capability-completeness.md
+          retention-days: 14

@@ -116,16 +116,26 @@ describe("capability completeness (derived artifact accessor)", () => {
   });
 
   it("classifies assignTo failure by the fix each one needs", () => {
-    const r = capabilityCompletenessReport();
-    const health = r.orphans.assignToHealth;
-    expect(health.length).toBeGreaterThan(0);
-    // unbridged is the cheap class: the coworker exists, only the handle is wrong.
-    const unbridged = health.find((h) => h.health === "unbridged");
-    expect(unbridged?.rosterSlug).toBeTruthy();
-    // unseeded names a real canonical agent that was never seeded anywhere.
-    const unseeded = health.find((h) => h.health === "unseeded");
-    expect(unseeded?.canonical).toMatch(/^AGT-/);
-    for (const h of health) expect(["unresolved", "unseeded", "unbridged"]).toContain(h.health);
+    // The three classes need three different fixes, so the report must keep
+    // them apart. This asserts the vocabulary and the shape of whatever is
+    // present rather than requiring a particular class to exist — the
+    // `unbridged` and `unseeded` cases were driven to zero by repointing the
+    // eight stranded skills, and a test that demands defects be present would
+    // fail as the platform improves.
+    const health = capabilityCompletenessReport().orphans.assignToHealth;
+    for (const h of health) {
+      expect(["unresolved", "unseeded", "unbridged"]).toContain(h.health);
+      // Each class must carry what its fix needs to be actionable.
+      if (h.health === "unbridged") expect(h.rosterSlug).toBeTruthy();
+      if (h.health === "unseeded") expect(h.canonical).toMatch(/^AGT-/);
+      expect(h.files.length).toBeGreaterThan(0);
+    }
+  });
+
+  it("keeps stranded skills at zero", () => {
+    // Driven to zero in the change that added the CI ratchet
+    // (scripts/check-agent-capability-integrity.mjs). Any regression is new.
+    expect(capabilityCompletenessReport().summary.skills.stranded).toBe(0);
   });
 
   it("lists stranded skills as repo-level orphans, not agent gaps", () => {

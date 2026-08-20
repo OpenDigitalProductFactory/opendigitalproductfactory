@@ -7,6 +7,7 @@
     "dev": "pnpm --filter web dev",
     "measure:capability-completeness": "node scripts/measure-capability-completeness.mjs",
     "measure:capability-completeness:check": "node scripts/measure-capability-completeness.mjs --check",
+    "check:agent-capability-integrity": "node scripts/check-agent-capability-integrity.mjs",
     "dev:web": "pnpm --filter web dev",
     "dev:portal": "sh scripts/dev-portal-lease.sh refresh",
     "contributor:preview": "sh scripts/dev-portal-lease.sh refresh",
