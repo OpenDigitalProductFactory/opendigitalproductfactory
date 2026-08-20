@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Operator Ratification Queue — Simplify & Strengthen, Objective 2
 
 - **Date:** 2026-08-16
