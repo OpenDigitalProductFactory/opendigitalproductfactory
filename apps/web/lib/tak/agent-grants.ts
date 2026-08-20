@@ -52,7 +52,14 @@ export const GRANT_IMPLICATIONS: Readonly<Record<string, readonly string[]>> = {
   // overlay directly, so it implies the narrow critique-capture grant. One-way:
   // `critique_capture` never implies `registry_write` — that narrowing is the
   // entire point of splitting it out.
-  registry_write: ["critique_capture"],
+  // Registry write authority implies registry read, mirroring crm_write ->
+  // crm_read and siem_investigate -> siem_read above: a holder that may CHANGE
+  // the registry can always inspect it. One-way, as ever. Without this a
+  // registry_write holder could not reach evaluate_profession_decision or
+  // principle_decide (both keyed on registry_read) — which is exactly how
+  // market-research-analyst ended up unable to consult the kernel while holding
+  // broader authority than the coworkers that could (BI-728FD7F2).
+  registry_write: ["registry_read", "critique_capture"],
 };
 
 /** Expand a list of held grants by applying GRANT_IMPLICATIONS one-way.
@@ -275,6 +282,10 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   // previously advertised `work_capsule_read`, which is unrelated — this gate
   // reads decision-perspective material, never a work capsule.
   evaluate_profession_decision: ["registry_read"],
+  // Read-only platform self-introspection: which agents are missing which of
+  // the seven capability planes. Same grant as the two decision doors above —
+  // it reports gaps and never changes authority.
+  get_capability_completeness: ["registry_read"],
 
   // Independent re-verification of a recorded decision's cited evidence
   // (BI-8192557E phase 2b). Same `registry_read` tier as its siblings: auditing

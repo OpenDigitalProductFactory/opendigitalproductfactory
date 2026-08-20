@@ -288,12 +288,12 @@
     ],
     ".github/workflows/codeql.yml": [
       "docs/security/2026-05-24-shift-left-rollout.md",
+      "docs/security/codeql-advanced-setup.md",
       "docs/security/secrets-scan.md",
       "docs/testing/pre-pr-gate.md"
     ],
     ".github/workflows/install-verification.yml": [
-      "docs/install/linux.md",
-      "docs/maintenance/staleness-report.md"
+      "docs/install/linux.md"
     ],
     ".github/workflows/migration-safety-guard.yml": [
       "docs/architecture/orientation.md"
@@ -312,7 +312,6 @@
       "docs/security/secrets-scan.md"
     ],
     ".github/workflows/security-inflow-gate.yml": [
-      "docs/maintenance/staleness-report.md",
       "docs/security/2026-05-24-shift-left-rollout.md",
       "docs/security/README.md",
       "docs/security/secrets-scan.md"
@@ -415,9 +414,6 @@
     "apps/web/components/monitoring/prometheus-config.test.ts": [
       "docs/install/platform-support-watchlist.md"
     ],
-    "apps/web/components/ops/SelfUpgradeLiveProvider.tsx": [
-      "docs/architecture/background-operation-observation-contract.md"
-    ],
     "apps/web/components/platform/AgentCardSupervisorPanel.tsx": [
       "docs/architecture/agent-standards-dpf-conformance.md"
     ],
@@ -427,15 +423,11 @@
     "apps/web/components/platform/StalledTaskRecoveryActions.tsx": [
       "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md"
     ],
-    "apps/web/components/platform/SystemEventProvider.tsx": [
-      "docs/architecture/background-operation-observation-contract.md"
-    ],
     "apps/web/components/proactivity/ProactivityRosterList.tsx": [
       "docs/user-guide/ai-workforce/coworker-proactivity.md"
     ],
     "apps/web/components/shell/SectionNav.tsx": [
-      "docs/architecture/section-navigation.md",
-      "docs/maintenance/staleness-report.md"
+      "docs/architecture/section-navigation.md"
     ],
     "apps/web/components/shell/shell-action-result-contract.test.tsx": [
       "docs/platform-usability-standards.md"
@@ -464,10 +456,10 @@
     "apps/web/components/workspace/WorkCaseDetailView.tsx": [
       "docs/user-guide/workspace/work-rooms.md"
     ],
-    "apps/web/components/workspace/workroom/WorkroomCycles.tsx": [
+    "apps/web/components/workspace/work-room/WorkRoomCycles.tsx": [
       "docs/user-guide/workspace/work-rooms.md"
     ],
-    "apps/web/components/workspace/workroom/WorkroomParticipants.tsx": [
+    "apps/web/components/workspace/work-room/WorkRoomParticipants.tsx": [
       "docs/user-guide/workspace/work-rooms.md"
     ],
     "apps/web/design/tokens-utilities.test.ts": [
@@ -523,9 +515,6 @@
     "apps/web/lib/ai-operations-map/project-routing-topology.ts": [
       "docs/specs/routing-resilience-and-failure-observability-spec.md"
     ],
-    "apps/web/lib/architecture/background-operation-observation-contract.test.ts": [
-      "docs/architecture/background-operation-observation-contract.md"
-    ],
     "apps/web/lib/assurance/cyclonedx-generator.ts": [
       "docs/architecture/dependency-reduction-routine.md"
     ],
@@ -545,37 +534,11 @@
     "apps/web/lib/build-pipeline.ts": [
       "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md"
     ],
-    "apps/web/lib/build/build-orchestrator.ts": [
-      "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md",
-      "docs/architecture/build-gate-runbook.md",
-      "docs/user-guide/build-studio/index.md"
-    ],
-    "apps/web/lib/build/build-pipeline.ts": [
-      "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md",
-      "docs/triage/2026-05-20-handoff-prompt-next-session.md"
-    ],
-    "apps/web/lib/build/build-plan-paths.ts": [
-      "docs/architecture/build-studio-namespace.md"
-    ],
-    "apps/web/lib/build/build-studio-config.ts": [
-      "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md",
-      "docs/operations/build-cost-flags-activation-runbook.md"
-    ],
-    "apps/web/lib/build/claude-dispatch.ts": [
-      "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md"
-    ],
-    "apps/web/lib/build/coding-agent.ts": [
-      "docs/architecture/build-gate-runbook.md",
-      "docs/triage/2026-05-20-handoff-prompt-next-session.md"
-    ],
     "apps/web/lib/build/ideate-build-resolution.ts": [
       "docs/dogfood/2026-05-23-dale-hvac-build-studio.md"
     ],
     "apps/web/lib/build/progress-visibility.ts": [
       "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md"
-    ],
-    "apps/web/lib/build/sandbox/sandbox.ts": [
-      "docs/triage/2026-05-20-handoff-prompt-next-session.md"
     ],
     "apps/web/lib/build/unified-wip-query.ts": [
       "docs/architecture/agent-client-capability-parity.md"
@@ -601,13 +564,6 @@
     ],
     "apps/web/lib/coworker-lifecycle/lifecycle-gate.ts": [
       "docs/architecture/mcp-tool-authorization-runbook.md"
-    ],
-    "apps/web/lib/coworker/authorized-surface-registry.ts": [
-      "docs/architecture/orientation.md"
-    ],
-    "apps/web/lib/coworker/authorized-surface-runtime.ts": [
-      "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md",
-      "docs/architecture/agent-standards-dpf-conformance.md"
     ],
     "apps/web/lib/decision-perspective/build-studio-gate.ts": [
       "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md"
@@ -635,6 +591,11 @@
     "apps/web/lib/decision/golden-decisions.test.ts": [
       "docs/founder-kernel/AUTHORING.md"
     ],
+    "apps/web/lib/decision/option-scoring.ts": [
+      "docs/architecture/decision-vectors.md",
+      "docs/architecture/vector-decisioning-and-jsi.md",
+      "docs/user-guide/ai-workforce/decision-perspective-in-practice.md"
+    ],
     "apps/web/lib/deliberation/external-review-activation.ts": [
       "docs/architecture/agent-client-capability-parity.md"
     ],
@@ -653,8 +614,7 @@
     ],
     "apps/web/lib/ea/ai-routing-architecture-registry.ts": [
       "docs/architecture/2026-06-14-ai-cockpit-sysml-architecture-note.md",
-      "docs/architecture/ai-routing-document-map.md",
-      "docs/maintenance/staleness-report.md"
+      "docs/architecture/ai-routing-document-map.md"
     ],
     "apps/web/lib/ea/reconcile-ai-routing-architecture.ts": [
       "docs/architecture/ai-routing-document-map.md"
@@ -665,17 +625,11 @@
     "apps/web/lib/explore/feature-build-types.ts": [
       "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md"
     ],
-    "apps/web/lib/federation/demand-response.ts": [
-      "docs/architecture/2026-08-09-portal-architecture-hardening-findings.md"
-    ],
     "apps/web/lib/finance/finance-validation.ts": [
       "docs/testing/handoff-invoice-gaps.md"
     ],
     "apps/web/lib/founder-review/queue.ts": [
       "docs/user-guide/ai-workforce/decision-perspective.md"
-    ],
-    "apps/web/lib/gear-interface/otel-exporter.ts": [
-      "docs/architecture/2026-08-09-portal-architecture-hardening-findings.md"
     ],
     "apps/web/lib/golden-triangle/compile.ts": [
       "docs/design/golden-triangle-vector-reference.md"
@@ -695,17 +649,8 @@
     "apps/web/lib/govern/data/policy-enforcement.ts": [
       "docs/architecture/ai-routing-document-map.md"
     ],
-    "apps/web/lib/govern/manager-scope.ts": [
-      "docs/architecture/mcp-tool-authorization-runbook.md"
-    ],
     "apps/web/lib/govern/permissions.ts": [
       "docs/architecture/delivery-ia.md"
-    ],
-    "apps/web/lib/hooks/useBackgroundOperationObserver.ts": [
-      "docs/architecture/background-operation-observation-contract.md"
-    ],
-    "apps/web/lib/hooks/useResilientEventSource.ts": [
-      "docs/architecture/background-operation-observation-contract.md"
     ],
     "apps/web/lib/identity/aidoc-resolver.ts": [
       "docs/architecture/agent-standards-dpf-conformance.md",
@@ -728,8 +673,33 @@
     ],
     "apps/web/lib/inference/routed-inference.ts": [
       "docs/architecture/2026-06-14-odysseus-review-depth-pass.md",
-      "docs/architecture/ai-routing-document-map.md",
-      "docs/maintenance/staleness-report.md"
+      "docs/architecture/ai-routing-document-map.md"
+    ],
+    "apps/web/lib/integrate/build-orchestrator.ts": [
+      "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md",
+      "docs/architecture/build-gate-runbook.md",
+      "docs/user-guide/build-studio/index.md"
+    ],
+    "apps/web/lib/integrate/build-pipeline.ts": [
+      "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md",
+      "docs/triage/2026-05-20-handoff-prompt-next-session.md"
+    ],
+    "apps/web/lib/integrate/build-plan-paths.ts": [
+      "docs/architecture/build-studio-namespace.md"
+    ],
+    "apps/web/lib/integrate/build-studio-config.ts": [
+      "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md",
+      "docs/operations/build-cost-flags-activation-runbook.md"
+    ],
+    "apps/web/lib/integrate/claude-dispatch.ts": [
+      "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md"
+    ],
+    "apps/web/lib/integrate/coding-agent.ts": [
+      "docs/architecture/build-gate-runbook.md",
+      "docs/triage/2026-05-20-handoff-prompt-next-session.md"
+    ],
+    "apps/web/lib/integrate/sandbox/sandbox.ts": [
+      "docs/triage/2026-05-20-handoff-prompt-next-session.md"
     ],
     "apps/web/lib/integrations/connectors/index.ts": [
       "docs/architecture/unified-connector-kernel.md"
@@ -740,9 +710,6 @@
     "apps/web/lib/marketing/archetype-fit.ts": [
       "docs/platform-usability-standards.md"
     ],
-    "apps/web/lib/marketing/channels/contracts.ts": [
-      "docs/architecture/unified-connector-kernel.md"
-    ],
     "apps/web/lib/marketing/channels/email-postmark/responder.ts": [
       "docs/architecture/2026-06-14-ai-cockpit-sysml-architecture-note.md",
       "docs/architecture/2026-06-14-odysseus-review-depth-pass.md"
@@ -750,18 +717,15 @@
     "apps/web/lib/marketing/scheduler.ts": [
       "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md"
     ],
-    "apps/web/lib/marketing/utm.ts": [
-      "docs/architecture/unified-connector-kernel.md"
-    ],
     "apps/web/lib/mcp-governed-execute.ts": [
       "docs/architecture/ai-agent-meta-model.md",
       "docs/architecture/mcp-tool-surface-ergonomics-audit.md"
     ],
-    "apps/web/lib/mcp/load-tools.ts": [
-      "docs/architecture/agent-standards-dpf-conformance.md"
-    ],
     "apps/web/lib/mcp/packs/backlog-pack.ts": [
       "docs/architecture/backlog-archetype-scope.md"
+    ],
+    "apps/web/lib/mcp/packs/compliance-scope-pack.ts": [
+      "docs/architecture/2026-08-20-recurring-obligation-work-shape-and-doc-robustness.md"
     ],
     "apps/web/lib/mcp/packs/deliberation-siem-pack.ts": [
       "docs/architecture/mcp-tool-packs.md"
@@ -772,18 +736,11 @@
     "apps/web/lib/mcp/packs/runtime-coordination-pack.ts": [
       "docs/architecture/mcp-tool-packs.md"
     ],
-    "apps/web/lib/mcp/packs/surface-pack.ts": [
-      "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md"
-    ],
     "apps/web/lib/mcp/packs/work-capsules-pack.ts": [
-      "docs/architecture/mcp-tool-packs.md",
-      "docs/maintenance/staleness-report.md"
+      "docs/architecture/mcp-tool-packs.md"
     ],
     "apps/web/lib/mcp/packs/workbooks-pack.ts": [
       "docs/architecture/mcp-tool-packs.md"
-    ],
-    "apps/web/lib/mcp/protocol-versions.ts": [
-      "docs/architecture/mcp-tool-authorization-runbook.md"
     ],
     "apps/web/lib/mcp/tool-pack.ts": [
       "docs/architecture/mcp-tool-packs.md",
@@ -800,8 +757,7 @@
       "docs/professions/data-architect/wiki/mdm-what-it-does-and-does-not-do.md"
     ],
     "apps/web/lib/navigation/section-nav-model.ts": [
-      "docs/architecture/section-navigation.md",
-      "docs/maintenance/staleness-report.md"
+      "docs/architecture/section-navigation.md"
     ],
     "apps/web/lib/operate/db-continuity.ts": [
       "docs/architecture/delivery-surfaces-runbook.md"
@@ -810,21 +766,17 @@
       "docs/architecture/2026-08-16-simplify-and-strengthen-architecture-pass.md",
       "docs/architecture/enforced-ci-gates.md"
     ],
-    "apps/web/lib/operate/sole-platform-readiness.ts": [
-      "docs/architecture/2026-07-27-platform-adequacy-roadmap-backlog-map.md"
+    "apps/web/lib/operate/scheduled-jobs/catalog.ts": [
+      "docs/architecture/2026-08-20-recurring-obligation-work-shape-and-doc-robustness.md"
     ],
-    "apps/web/lib/performance/business-analysis-watch-run.ts": [
-      "docs/architecture/agent-standards-dpf-conformance.md"
-    ],
-    "apps/web/lib/performance/business-performance-provider.ts": [
-      "docs/architecture/operations-hot-path.md"
+    "apps/web/lib/operate/scheduled-jobs/coworker-self-tasks.ts": [
+      "docs/architecture/2026-08-20-recurring-obligation-work-shape-and-doc-robustness.md"
     ],
     "apps/web/lib/platform-runtime/capability-service-projection.ts": [
       "docs/architecture/capability-driven-runtime-profiles.md"
     ],
     "apps/web/lib/platform-runtime/operational-state.ts": [
-      "docs/architecture/capability-driven-runtime-profiles.md",
-      "docs/maintenance/staleness-report.md"
+      "docs/architecture/capability-driven-runtime-profiles.md"
     ],
     "apps/web/lib/proactivity/proactivity-roster.ts": [
       "docs/user-guide/ai-workforce/coworker-proactivity.md"
@@ -943,17 +895,11 @@
     "apps/web/lib/security/safe-log.ts": [
       "docs/security/codeql-advanced-setup.md"
     ],
-    "apps/web/lib/self-upgrade/host-memory-preflight.ts": [
-      "docs/runbooks/bet5-windows-self-upgrade.md"
-    ],
     "apps/web/lib/self-upgrade/local-changes-ledger.ts": [
       "docs/architecture/branch-and-worktree-runbook.md"
     ],
     "apps/web/lib/self-upgrade/prepare-source.ts": [
       "docs/dev/collision-free-dev-workflow.md"
-    ],
-    "apps/web/lib/self-upgrade/status-snapshot.ts": [
-      "docs/architecture/background-operation-observation-contract.md"
     ],
     "apps/web/lib/shared/action-result.ts": [
       "docs/architecture/data-model-stewardship-runbook.md"
@@ -987,7 +933,6 @@
       "docs/architecture/agent-standards-dpf-conformance.md"
     ],
     "apps/web/lib/tak/agent-event-bus.ts": [
-      "docs/architecture/background-operation-observation-contract.md",
       "docs/prompts/a2a-coworker-substrate-prompt.md"
     ],
     "apps/web/lib/tak/agent-grants.ts": [
@@ -1017,18 +962,12 @@
     "apps/web/lib/tak/delegation-authority.ts": [
       "docs/prompts/a2a-coworker-substrate-prompt.md"
     ],
-    "apps/web/lib/tak/escalation-ladder.ts": [
-      "docs/platform-usability-standards.md"
-    ],
     "apps/web/lib/tak/prompt-assembler.ts": [
       "docs/architecture/agent-standards-dpf-conformance.md",
       "docs/platform-usability-standards.md"
     ],
     "apps/web/lib/tak/route-context.ts": [
       "docs/user-guide/ai-workforce/decision-perspective.md"
-    ],
-    "apps/web/lib/tak/tool-intent.ts": [
-      "docs/architecture/agent-standards-dpf-conformance.md"
     ],
     "apps/web/lib/tak/tool-result-budget.ts": [
       "docs/architecture/agent-standards-dpf-conformance.md",
@@ -1061,9 +1000,6 @@
     ],
     "apps/web/lib/work-management/room-participation.ts": [
       "docs/user-guide/workspace/work-rooms.md"
-    ],
-    "apps/web/lib/work-management/work-unit.ts": [
-      "docs/founder-kernel/wiki/principles/universal-work-formula.md"
     ],
     "apps/web/lib/work-management/workspace-case-loader.ts": [
       "docs/user-guide/workspace/work-rooms.md"
@@ -1133,6 +1069,9 @@
       "docs/install/macos.md",
       "docs/operations/observability-coverage.md"
     ],
+    "docker-compose.pki.yml": [
+      "docs/architecture/2026-08-20-recurring-obligation-work-shape-and-doc-robustness.md"
+    ],
     "docker-compose.tls.yml": [
       "docs/install/edge-node-multi-host.md"
     ],
@@ -1163,22 +1102,10 @@
       "docs/architecture/capability-driven-runtime-profiles.md",
       "docs/architecture/platform-substrate-boundaries.md"
     ],
-    "packages/db/prisma/schema": [
+    "packages/db/prisma/schema.prisma": [
+      "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md",
+      "docs/architecture/2026-06-14-odysseus-review-depth-pass.md",
       "docs/architecture/platform-overview.md"
-    ],
-    "packages/db/prisma/schema/ai-coworker.prisma": [
-      "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md",
-      "docs/architecture/2026-06-14-odysseus-review-depth-pass.md"
-    ],
-    "packages/db/prisma/schema/build-delivery.prisma": [
-      "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md",
-      "docs/architecture/dpf-patterns.md"
-    ],
-    "packages/db/prisma/schema/resource-scheduling.prisma": [
-      "docs/architecture/data-model-stewardship-runbook.md"
-    ],
-    "packages/db/prisma/schema/work-coordination.prisma": [
-      "docs/architecture/dpf-patterns.md"
     ],
     "packages/db/scripts/check-cada-readiness.ts": [
       "docs/strategy/2026-09-cada-architects-forum-deck.md"
@@ -1270,7 +1197,7 @@
       "docs/operations/ai-provider-compliance-source-renewal-runbook.md"
     ],
     "packages/db/src/regulation-applicability.ts": [
-      "docs/maintenance/staleness-report.md",
+      "docs/architecture/2026-08-20-recurring-obligation-work-shape-and-doc-robustness.md",
       "docs/strategy/2026-09-cada-architects-forum-deck.md"
     ],
     "packages/db/src/seed-decision-perspective.ts": [
@@ -1293,6 +1220,9 @@
     ],
     "packages/db/src/seed-skills.ts": [
       "docs/architecture/skill-surfaces-runbook.md"
+    ],
+    "packages/db/src/seed-software-horizontal-compliance.ts": [
+      "docs/architecture/2026-08-20-recurring-obligation-work-shape-and-doc-robustness.md"
     ],
     "packages/db/src/seed-wiki-kernel.ts": [
       "docs/founder-kernel/AUTHORING.md"
@@ -1323,9 +1253,6 @@
     "packages/dpf-skill-pack/hooks/process-spine-health-check.mjs": [
       "docs/architecture/skill-surfaces-runbook.md"
     ],
-    "packages/dpf-skill-pack/hooks/root-clone-freshness.mjs": [
-      "docs/architecture/branch-and-worktree-runbook.md"
-    ],
     "packages/dpf-skill-pack/hooks/tool-economy-precheck.mjs": [
       "docs/architecture/context-engineering-standards.md"
     ],
@@ -1341,12 +1268,8 @@
     "packages/integration-shared/src/credential-crypto.ts": [
       "docs/architecture/2026-06-22-platform-adequacy-architecture-review.md"
     ],
-    "packages/integration-shared/src/mcp-catalog-tier.ts": [
-      "docs/architecture/agent-standards-dpf-conformance.md"
-    ],
     "packages/storefront-templates/src/archetype-readiness.ts": [
-      "docs/architecture/2026-07-27-platform-adequacy-roadmap-backlog-map.md",
-      "docs/architecture/2026-08-09-portal-architecture-hardening-findings.md"
+      "docs/architecture/2026-07-27-platform-adequacy-roadmap-backlog-map.md"
     ],
     "packages/storefront-templates/src/archetypes/fitness-recreation.ts": [
       "docs/testing/findings/run-4-fresh-findings.md"
@@ -1356,7 +1279,6 @@
     ],
     "packages/storefront-templates/src/archetypes/index.ts": [
       "docs/architecture/four-portfolio-archetype-standard-profile-catalog.md",
-      "docs/maintenance/staleness-report.md",
       "docs/testing/archetype-audit-plan.md"
     ],
     "packages/storefront-templates/src/archetypes/retail-goods.ts": [
@@ -1365,17 +1287,11 @@
     "packages/storefront-templates/src/archetypes/trades-maintenance.ts": [
       "docs/personas/dale-hvac.md"
     ],
-    "packages/storefront-templates/src/business-view-profile.ts": [
-      "docs/architecture/operations-hot-path.md"
-    ],
     "packages/storefront-templates/src/twin-profile.ts": [
       "docs/architecture/operational-precedent-corpus.md"
     ],
     "packages/storefront-templates/src/types.ts": [
       "docs/architecture/archetype-business-value-streams.md"
-    ],
-    "packages/types/src/authorized-surface.ts": [
-      "docs/architecture/orientation.md"
     ],
     "packages/types/src/entities.ts": [
       "docs/architecture/package-boundaries.md"
@@ -1388,8 +1304,7 @@
     ],
     "pnpm-lock.yaml": [
       "docs/architecture/build-gate-runbook.md",
-      "docs/architecture/dependency-reduction-routine.md",
-      "docs/architecture/enforced-ci-gates.md"
+      "docs/architecture/dependency-reduction-routine.md"
     ],
     "scripts/backup-postgres.sh": [
       "docs/operations/disaster-recovery.md"
@@ -1431,6 +1346,7 @@
       "docs/architecture/enforced-ci-gates.md"
     ],
     "scripts/check-doc-links.mjs": [
+      "docs/architecture/2026-08-20-recurring-obligation-work-shape-and-doc-robustness.md",
       "docs/architecture/enforced-ci-gates.md"
     ],
     "scripts/check-doc-reference-integrity.mjs": [
@@ -1457,17 +1373,10 @@
       "docs/testing/pre-pr-gate.md"
     ],
     "scripts/check-module-size.mjs": [
-      "docs/architecture/mcp-tool-packs.md",
-      "docs/maintenance/staleness-report.md"
-    ],
-    "scripts/check-no-adhoc-mcp-protocol-versions.mjs": [
-      "docs/architecture/mcp-tool-authorization-runbook.md"
+      "docs/architecture/mcp-tool-packs.md"
     ],
     "scripts/check-no-dialog-in-transition.mjs": [
       "docs/architecture/theme-aware-styling-runbook.md"
-    ],
-    "scripts/check-no-governed-surface-without-mcp-tool.mjs": [
-      "docs/architecture/orientation.md"
     ],
     "scripts/check-no-hand-rolled-loading.mjs": [
       "docs/platform-usability-standards.md"
@@ -1479,12 +1388,6 @@
       "docs/architecture/theme-aware-styling-runbook.md",
       "docs/founder-kernel/wiki/principles/no-native-browser-dialogs.md"
     ],
-    "scripts/check-no-new-closed-set-strings.mjs": [
-      "docs/architecture/data-model-stewardship-runbook.md"
-    ],
-    "scripts/check-no-new-notactive-conventions.mjs": [
-      "docs/architecture/data-model-stewardship-runbook.md"
-    ],
     "scripts/check-no-private-identity.mjs": [
       "docs/operations/oss-repo-identity-hygiene.md"
     ],
@@ -1495,7 +1398,6 @@
       "docs/architecture/contributor-procedure-runbook.md"
     ],
     "scripts/check-package-boundaries.mjs": [
-      "docs/architecture/2026-08-09-portal-architecture-hardening-findings.md",
       "docs/architecture/package-boundaries.md"
     ],
     "scripts/check-retired-substrate.mjs": [
@@ -1509,7 +1411,6 @@
     ],
     "scripts/check-style-drift.mjs": [
       "docs/architecture/ui-token-styling.md",
-      "docs/maintenance/staleness-report.md",
       "docs/platform-usability-standards.md"
     ],
     "scripts/check-tool-surface.mjs": [
@@ -1544,7 +1445,6 @@
     ],
     "scripts/dpf-compose.mjs": [
       "docs/architecture/capability-driven-runtime-profiles.md",
-      "docs/maintenance/staleness-report.md",
       "docs/operations/install.md"
     ],
     "scripts/fresh-install.ps1": [
@@ -1557,9 +1457,6 @@
     "scripts/gate-worktree.sh": [
       "docs/testing/pre-pr-gate.md"
     ],
-    "scripts/gen-architecture-counts.mjs": [
-      "docs/architecture/architecture-counts.generated.md"
-    ],
     "scripts/harness/archetype-exercise.mjs": [
       "docs/testing/archetype-exercise-harness.md"
     ],
@@ -1570,9 +1467,6 @@
     "scripts/hooks/run-hook.mjs": [
       "docs/install/platform-support-watchlist.md",
       "docs/operations/session-transcript-recovery.md"
-    ],
-    "scripts/install-worktree-janitor-schedule.sh": [
-      "docs/install/worktree-janitor-schedule.md"
     ],
     "scripts/installer/install-state.schema.json": [
       "docs/operations/install.md"
@@ -1596,17 +1490,11 @@
     "scripts/lib/compose-safety.mjs": [
       "docs/architecture/delivery-surfaces-runbook.md"
     ],
-    "scripts/lib/dco-signoff.mjs": [
-      "docs/architecture/build-gate-runbook.md"
-    ],
     "scripts/lib/dockerfile-portal-build.test.mjs": [
       "docs/install/platform-support-watchlist.md"
     ],
     "scripts/lib/ensure-pre-push-hook.mjs": [
       "docs/testing/pre-pr-gate.md"
-    ],
-    "scripts/lib/entry-module.mjs": [
-      "docs/install/platform-support-watchlist.md"
     ],
     "scripts/lib/gate-context.mjs": [
       "docs/testing/pr-health.md"
@@ -1626,7 +1514,6 @@
     ],
     "scripts/lib/resolve-capability-compose-profiles.mjs": [
       "docs/architecture/capability-driven-runtime-profiles.md",
-      "docs/maintenance/staleness-report.md",
       "docs/operations/install.md"
     ],
     "scripts/local-ci-pilot-report.mjs": [
@@ -1662,20 +1549,11 @@
       "docs/architecture/platform-substrate-boundaries.md"
     ],
     "scripts/pr-health.mjs": [
-      "docs/maintenance/staleness-report.md",
       "docs/testing/pr-health.md",
       "docs/testing/pre-pr-gate.md"
     ],
     "scripts/pr-health.test.mjs": [
-      "docs/maintenance/staleness-report.md",
       "docs/testing/pr-health.md"
-    ],
-    "scripts/pre-push-dco-check.mjs": [
-      "docs/architecture/build-gate-runbook.md",
-      "docs/founder-kernel/wiki/principles/dco-sign-off-required.md"
-    ],
-    "scripts/pregate-preflight.mjs": [
-      "docs/architecture/build-gate-runbook.md"
     ],
     "scripts/probes/marketing-media/local-render-receipt.json": [
       "docs/security/tool-evaluations/2026-08-01-marketing-media-stack.md"
@@ -1706,9 +1584,6 @@
       "docs/architecture/dependency-reduction-routine.md"
     ],
     "scripts/sbom/check-singleton-safety.mjs": [
-      "docs/architecture/dependency-reduction-routine.md"
-    ],
-    "scripts/sbom/image-size-icns-loop.test.mjs": [
       "docs/architecture/dependency-reduction-routine.md"
     ],
     "scripts/sbom/internalization-candidates.mjs": [
@@ -1749,10 +1624,6 @@
       "docs/architecture/2026-06-19-edge-node-deployment-sysml-architecture-note.md",
       "docs/edge-node/deployment-topology.md"
     ],
-    "scripts/worktree-janitor.mjs": [
-      "docs/architecture/branch-and-worktree-runbook.md",
-      "docs/install/worktree-janitor-schedule.md"
-    ],
     "services/edge-node/scripts/verify-lifecycle.ts": [
       "docs/architecture/2026-06-19-edge-node-deployment-sysml-architecture-note.md",
       "docs/install/edge-node-multi-host.md",
@@ -1775,9 +1646,6 @@
     ],
     "tests/release/local-ci-gate-contract.test.mjs": [
       "docs/testing/pre-pr-gate.md"
-    ],
-    "tests/release/pregate-node-gate-contract.test.mjs": [
-      "docs/install/platform-support-watchlist.md"
     ]
   },
   "docToRoutes": {
@@ -1976,16 +1844,14 @@
       "apps/web/instrumentation.ts",
       "apps/web/lib/actions/build.ts",
       "apps/web/lib/build-pipeline.ts",
-      "apps/web/lib/build/build-orchestrator.ts",
-      "apps/web/lib/build/build-pipeline.ts",
-      "apps/web/lib/build/build-studio-config.ts",
-      "apps/web/lib/build/claude-dispatch.ts",
       "apps/web/lib/build/progress-visibility.ts",
-      "apps/web/lib/coworker/authorized-surface-runtime.ts",
       "apps/web/lib/decision-perspective/build-studio-gate.ts",
       "apps/web/lib/explore/feature-build-types.ts",
+      "apps/web/lib/integrate/build-orchestrator.ts",
+      "apps/web/lib/integrate/build-pipeline.ts",
+      "apps/web/lib/integrate/build-studio-config.ts",
+      "apps/web/lib/integrate/claude-dispatch.ts",
       "apps/web/lib/marketing/scheduler.ts",
-      "apps/web/lib/mcp/packs/surface-pack.ts",
       "apps/web/lib/queue/functions/deliberation-run.ts",
       "apps/web/lib/queue/functions/index.ts",
       "apps/web/lib/queue/functions/quiescence-run.ts",
@@ -1995,8 +1861,7 @@
       "apps/web/lib/tak/agent-grants.ts",
       "apps/web/lib/tak/autonomous-work-run.ts",
       "docker-compose.yml",
-      "packages/db/prisma/schema/ai-coworker.prisma",
-      "packages/db/prisma/schema/build-delivery.prisma"
+      "packages/db/prisma/schema.prisma"
     ],
     "docs/architecture/2026-06-14-ai-cockpit-sysml-architecture-note.md": [
       "apps/web/lib/ea/ai-routing-architecture-extract.ts",
@@ -2014,7 +1879,7 @@
       "apps/web/lib/marketing/channels/email-postmark/responder.ts",
       "apps/web/lib/routing/pipeline-v2.ts",
       "apps/web/lib/routing/request-contract.ts",
-      "packages/db/prisma/schema/ai-coworker.prisma"
+      "packages/db/prisma/schema.prisma"
     ],
     "docs/architecture/2026-06-19-cada-cloud-sovereignty-architecture-note.md": [
       "apps/web/lib/routing/pipeline-v2.test.ts",
@@ -2034,19 +1899,21 @@
       "packages/integration-shared/src/credential-crypto.ts"
     ],
     "docs/architecture/2026-07-27-platform-adequacy-roadmap-backlog-map.md": [
-      "apps/web/lib/operate/sole-platform-readiness.ts",
       "packages/storefront-templates/src/archetype-readiness.ts"
-    ],
-    "docs/architecture/2026-08-09-portal-architecture-hardening-findings.md": [
-      "apps/web/lib/federation/demand-response.ts",
-      "apps/web/lib/gear-interface/otel-exporter.ts",
-      "packages/storefront-templates/src/archetype-readiness.ts",
-      "scripts/check-package-boundaries.mjs"
     ],
     "docs/architecture/2026-08-16-simplify-and-strengthen-architecture-pass.md": [
       "apps/web/lib/operate/retention/policies.ts",
       "packages/db/src/device-placement.ts",
       "scripts/check-application-boundaries.mjs"
+    ],
+    "docs/architecture/2026-08-20-recurring-obligation-work-shape-and-doc-robustness.md": [
+      "apps/web/lib/mcp/packs/compliance-scope-pack.ts",
+      "apps/web/lib/operate/scheduled-jobs/catalog.ts",
+      "apps/web/lib/operate/scheduled-jobs/coworker-self-tasks.ts",
+      "docker-compose.pki.yml",
+      "packages/db/src/regulation-applicability.ts",
+      "packages/db/src/seed-software-horizontal-compliance.ts",
+      "scripts/check-doc-links.mjs"
     ],
     "docs/architecture/agent-client-capability-parity.md": [
       "apps/web/lib/build/unified-wip-query.ts",
@@ -2068,23 +1935,18 @@
       "apps/web/lib/actions/golden-triangle.ts",
       "apps/web/lib/autonomy/regulatory-ceiling.ts",
       "apps/web/lib/autonomy/trust-graduation.ts",
-      "apps/web/lib/coworker/authorized-surface-runtime.ts",
       "apps/web/lib/identity/aidoc-resolver.ts",
-      "apps/web/lib/mcp/load-tools.ts",
       "apps/web/lib/mcp/tool-tier.ts",
-      "apps/web/lib/performance/business-analysis-watch-run.ts",
       "apps/web/lib/tak/agent-card-service.ts",
       "apps/web/lib/tak/agent-grants.ts",
       "apps/web/lib/tak/agent-routing.ts",
       "apps/web/lib/tak/context-arbitrator.ts",
       "apps/web/lib/tak/context-economy-metrics.ts",
       "apps/web/lib/tak/prompt-assembler.ts",
-      "apps/web/lib/tak/tool-intent.ts",
       "apps/web/lib/tak/tool-result-budget.ts",
       "apps/web/lib/tak/tool-script.ts",
       "apps/web/lib/tool-description-hygiene.test.ts",
-      "packages/db/src/seed-decision-perspective.ts",
-      "packages/integration-shared/src/mcp-catalog-tier.ts"
+      "packages/db/src/seed-decision-perspective.ts"
     ],
     "docs/architecture/ai-agent-meta-model.md": [
       "apps/web/app/api/mcp/v1/route.ts",
@@ -2110,18 +1972,6 @@
     "docs/architecture/archetype-business-value-streams.md": [
       "packages/storefront-templates/src/types.ts"
     ],
-    "docs/architecture/architecture-counts.generated.md": [
-      "scripts/gen-architecture-counts.mjs"
-    ],
-    "docs/architecture/background-operation-observation-contract.md": [
-      "apps/web/components/ops/SelfUpgradeLiveProvider.tsx",
-      "apps/web/components/platform/SystemEventProvider.tsx",
-      "apps/web/lib/architecture/background-operation-observation-contract.test.ts",
-      "apps/web/lib/hooks/useBackgroundOperationObserver.ts",
-      "apps/web/lib/hooks/useResilientEventSource.ts",
-      "apps/web/lib/self-upgrade/status-snapshot.ts",
-      "apps/web/lib/tak/agent-event-bus.ts"
-    ],
     "docs/architecture/backlog-and-planning-runbook.md": [
       "apps/web/lib/govern/data/field-classification.ts",
       "packages/db/src/table-classification.ts"
@@ -2135,21 +1985,16 @@
     ],
     "docs/architecture/branch-and-worktree-runbook.md": [
       "apps/web/lib/self-upgrade/local-changes-ledger.ts",
-      "packages/dpf-skill-pack/hooks/root-clone-freshness.mjs",
-      "scripts/dpf-bootstrap-agent-toolchain.ps1",
-      "scripts/worktree-janitor.mjs"
+      "scripts/dpf-bootstrap-agent-toolchain.ps1"
     ],
     "docs/architecture/build-gate-runbook.md": [
-      "apps/web/lib/build/build-orchestrator.ts",
-      "apps/web/lib/build/coding-agent.ts",
+      "apps/web/lib/integrate/build-orchestrator.ts",
+      "apps/web/lib/integrate/coding-agent.ts",
       "apps/web/lib/queue/functions/build-review-verification.ts",
-      "pnpm-lock.yaml",
-      "scripts/lib/dco-signoff.mjs",
-      "scripts/pre-push-dco-check.mjs",
-      "scripts/pregate-preflight.mjs"
+      "pnpm-lock.yaml"
     ],
     "docs/architecture/build-studio-namespace.md": [
-      "apps/web/lib/build/build-plan-paths.ts",
+      "apps/web/lib/integrate/build-plan-paths.ts",
       "scripts/check-build-namespace.mjs"
     ],
     "docs/architecture/business-commercial-catalog.md": [
@@ -2201,13 +2046,11 @@
       "apps/web/lib/shared/action-result.ts",
       "apps/web/lib/shared/coerce.ts",
       "apps/web/lib/shared/org-address.ts",
-      "packages/db/prisma/schema/resource-scheduling.prisma",
-      "scripts/check-no-local-isrecord.mjs",
-      "scripts/check-no-new-closed-set-strings.mjs",
-      "scripts/check-no-new-notactive-conventions.mjs"
+      "scripts/check-no-local-isrecord.mjs"
     ],
     "docs/architecture/decision-vectors.md": [
       "apps/web/lib/decision-perspective/material.ts",
+      "apps/web/lib/decision/option-scoring.ts",
       "packages/db/src/dimension-scope.ts",
       "packages/db/src/profession-local-axes.ts"
     ],
@@ -2233,14 +2076,9 @@
       "scripts/sbom/check-new-dependencies.mjs",
       "scripts/sbom/check-sbom-drift.mjs",
       "scripts/sbom/check-singleton-safety.mjs",
-      "scripts/sbom/image-size-icns-loop.test.mjs",
       "scripts/sbom/internalization-candidates.mjs",
       "scripts/sbom/runtime-surface.mjs",
       "scripts/sbom/scan-dependencies.mjs"
-    ],
-    "docs/architecture/dpf-patterns.md": [
-      "packages/db/prisma/schema/build-delivery.prisma",
-      "packages/db/prisma/schema/work-coordination.prisma"
     ],
     "docs/architecture/enforced-ci-gates.md": [
       "apps/web/lib/docs-route-map.ts",
@@ -2250,7 +2088,6 @@
       "docs/_config.yml",
       "packages/db/src/table-classification.ts",
       "packages/dpf-skill-pack/hooks/design-grounding-precheck.mjs",
-      "pnpm-lock.yaml",
       "scripts/check-data-impact.mjs",
       "scripts/check-design-grounding-decision.mjs",
       "scripts/check-doc-links.mjs",
@@ -2275,11 +2112,8 @@
       "apps/web/app/api/mcp/v1/route.ts",
       "apps/web/lib/agent-grants.ts",
       "apps/web/lib/coworker-lifecycle/lifecycle-gate.ts",
-      "apps/web/lib/govern/manager-scope.ts",
-      "apps/web/lib/mcp/protocol-versions.ts",
       "apps/web/lib/tak/tool-result-budget.ts",
       "apps/web/lib/tool-description-hygiene.test.ts",
-      "scripts/check-no-adhoc-mcp-protocol-versions.mjs",
       "scripts/lib/bootstrap-worktree-deps.mjs"
     ],
     "docs/architecture/mcp-tool-packs.md": [
@@ -2304,16 +2138,9 @@
       "packages/db/src/portfolio-sources/vertical-incumbents-manifest.ts",
       "packages/storefront-templates/src/twin-profile.ts"
     ],
-    "docs/architecture/operations-hot-path.md": [
-      "apps/web/lib/performance/business-performance-provider.ts",
-      "packages/storefront-templates/src/business-view-profile.ts"
-    ],
     "docs/architecture/orientation.md": [
       ".github/workflows/migration-safety-guard.yml",
-      "apps/web/lib/ai-inference.ts",
-      "apps/web/lib/coworker/authorized-surface-registry.ts",
-      "packages/types/src/authorized-surface.ts",
-      "scripts/check-no-governed-surface-without-mcp-tool.mjs"
+      "apps/web/lib/ai-inference.ts"
     ],
     "docs/architecture/package-boundaries.md": [
       "apps/web/lib/contracts/entity-contract-drift.ts",
@@ -2324,7 +2151,7 @@
     "docs/architecture/platform-overview.md": [
       "docker-compose.yml",
       "monitoring/prometheus/prometheus.yml",
-      "packages/db/prisma/schema",
+      "packages/db/prisma/schema.prisma",
       "packages/db/src/pg-graph.ts",
       "packages/db/src/pgvector-store.ts"
     ],
@@ -2358,15 +2185,14 @@
     ],
     "docs/architecture/unified-connector-kernel.md": [
       "apps/web/lib/integrations/connectors/index.ts",
-      "apps/web/lib/marketing/channels/contracts.ts",
-      "apps/web/lib/marketing/utm.ts",
       "scripts/check-no-provider-local-connector-lifecycle.mjs"
     ],
     "docs/architecture/vector-decisioning-and-jsi.md": [
       "apps/web/lib/decision-perspective/evaluator.ts",
       "apps/web/lib/decision-perspective/material.ts",
       "apps/web/lib/decision-perspective/stance-promotion.ts",
-      "apps/web/lib/decision-perspective/weight-inference.ts"
+      "apps/web/lib/decision-perspective/weight-inference.ts",
+      "apps/web/lib/decision/option-scoring.ts"
     ],
     "docs/design/golden-triangle-design.md": [
       "apps/web/lib/queue/functions/deliberation-run.ts",
@@ -2421,17 +2247,11 @@
       "apps/web/lib/queue/functions/wiki-lint.ts",
       "packages/db/src/wiki-taxonomy.ts"
     ],
-    "docs/founder-kernel/wiki/principles/dco-sign-off-required.md": [
-      "scripts/pre-push-dco-check.mjs"
-    ],
     "docs/founder-kernel/wiki/principles/no-native-browser-dialogs.md": [
       "scripts/check-no-native-dialogs.mjs"
     ],
     "docs/founder-kernel/wiki/principles/outbound-actions-require-explicit-go.md": [
       "apps/web/lib/kernel/runtime-gate.ts"
-    ],
-    "docs/founder-kernel/wiki/principles/universal-work-formula.md": [
-      "apps/web/lib/work-management/work-unit.ts"
     ],
     "docs/founder-kernel/wiki/principles/worktree-per-session.md": [
       "scripts/seed-worktree-mcp.ps1",
@@ -2483,9 +2303,7 @@
       "packages/db/src/discovery-collectors/network.ts",
       "scripts/hooks/run-hook.mjs",
       "scripts/installer/lib/platform.sh",
-      "scripts/lib/dockerfile-portal-build.test.mjs",
-      "scripts/lib/entry-module.mjs",
-      "tests/release/pregate-node-gate-contract.test.mjs"
+      "scripts/lib/dockerfile-portal-build.test.mjs"
     ],
     "docs/install/scratch-install-rehearsal.md": [
       "scripts/fresh-install.ps1"
@@ -2495,10 +2313,6 @@
       "apps/web/scripts/issue-edge-bootstrap-token.ts",
       "services/edge-node/scripts/verify-lifecycle.ts"
     ],
-    "docs/install/worktree-janitor-schedule.md": [
-      "scripts/install-worktree-janitor-schedule.sh",
-      "scripts/worktree-janitor.mjs"
-    ],
     "docs/maintenance/README.md": [
       ".github/workflows/refresh-docs-staleness.yml",
       "scripts/build-docs-staleness.mjs"
@@ -2507,24 +2321,8 @@
       "scripts/measure-doc-staleness-coverage.mjs"
     ],
     "docs/maintenance/staleness-report.md": [
-      ".github/workflows/install-verification.yml",
-      ".github/workflows/security-inflow-gate.yml",
-      "apps/web/components/shell/SectionNav.tsx",
-      "apps/web/lib/ea/ai-routing-architecture-registry.ts",
-      "apps/web/lib/inference/routed-inference.ts",
-      "apps/web/lib/mcp/packs/work-capsules-pack.ts",
-      "apps/web/lib/navigation/section-nav-model.ts",
-      "apps/web/lib/platform-runtime/operational-state.ts",
-      "packages/db/src/regulation-applicability.ts",
-      "packages/storefront-templates/src/archetypes/index.ts",
       "scripts/build-docs-staleness.mjs",
-      "scripts/check-module-size.mjs",
-      "scripts/check-style-drift.mjs",
-      "scripts/dpf-compose.mjs",
-      "scripts/lib/ci-policy-guards.mjs",
-      "scripts/lib/resolve-capability-compose-profiles.mjs",
-      "scripts/pr-health.mjs",
-      "scripts/pr-health.test.mjs"
+      "scripts/lib/ci-policy-guards.mjs"
     ],
     "docs/operations/ai-provider-compliance-source-renewal-runbook.md": [
       "apps/web/lib/routing/provider-suitability/provider-compliance-advisory.ts",
@@ -2532,7 +2330,7 @@
       "packages/db/src/provider-compliance-source-registry.ts"
     ],
     "docs/operations/build-cost-flags-activation-runbook.md": [
-      "apps/web/lib/build/build-studio-config.ts"
+      "apps/web/lib/integrate/build-studio-config.ts"
     ],
     "docs/operations/disaster-recovery.md": [
       "docker-compose.dev-against-live-db.yml",
@@ -2604,7 +2402,6 @@
       "apps/web/lib/shared/use-save-state.test.ts",
       "apps/web/lib/shared/use-save-state.ts",
       "apps/web/lib/shell/shell-action-contract.ts",
-      "apps/web/lib/tak/escalation-ladder.ts",
       "apps/web/lib/tak/prompt-assembler.ts",
       "apps/web/lib/ux-budget/measure.ts",
       "apps/web/lib/workforce/oversight-copy.ts",
@@ -2641,7 +2438,6 @@
       "packages/db/src/migrations/exact-key-repair.ts"
     ],
     "docs/runbooks/bet5-windows-self-upgrade.md": [
-      "apps/web/lib/self-upgrade/host-memory-preflight.ts",
       "scripts/promote.sh"
     ],
     "docs/security/2026-05-24-shift-left-rollout.md": [
@@ -2658,6 +2454,7 @@
       ".github/codeql/codeql-config.yml",
       ".github/codeql/dpf-sanitizers/dpf-sanitizers.model.yml",
       ".github/codeql/dpf-sanitizers/qlpack.yml",
+      ".github/workflows/codeql.yml",
       "apps/web/lib/security/safe-log.ts"
     ],
     "docs/security/secrets-scan.md": [
@@ -2780,9 +2577,9 @@
       "tests/release/local-ci-gate-contract.test.mjs"
     ],
     "docs/triage/2026-05-20-handoff-prompt-next-session.md": [
-      "apps/web/lib/build/build-pipeline.ts",
-      "apps/web/lib/build/coding-agent.ts",
-      "apps/web/lib/build/sandbox/sandbox.ts"
+      "apps/web/lib/integrate/build-pipeline.ts",
+      "apps/web/lib/integrate/coding-agent.ts",
+      "apps/web/lib/integrate/sandbox/sandbox.ts"
     ],
     "docs/user-guide/ai-workforce/connecting-providers.md": [
       "apps/web/app/(shell)/platform/ai/providers/page.tsx",
@@ -2793,6 +2590,9 @@
       "apps/web/app/(shell)/coworker-decisions/proactivity/page.tsx",
       "apps/web/components/proactivity/ProactivityRosterList.tsx",
       "apps/web/lib/proactivity/proactivity-roster.ts"
+    ],
+    "docs/user-guide/ai-workforce/decision-perspective-in-practice.md": [
+      "apps/web/lib/decision/option-scoring.ts"
     ],
     "docs/user-guide/ai-workforce/decision-perspective.md": [
       "apps/web/lib/founder-review/queue.ts",
@@ -2817,7 +2617,7 @@
       "apps/web/lib/routing/provider-suitability/workload-profile.ts"
     ],
     "docs/user-guide/build-studio/index.md": [
-      "apps/web/lib/build/build-orchestrator.ts"
+      "apps/web/lib/integrate/build-orchestrator.ts"
     ],
     "docs/user-guide/contributing/agent-dev-environments.md": [
       "scripts/dpf-bootstrap-agent-toolchain.ps1",
@@ -2843,8 +2643,8 @@
       "apps/web/app/(shell)/workspace/my-queue/page.tsx",
       "apps/web/components/workspace/WorkCaseAttentionLens.tsx",
       "apps/web/components/workspace/WorkCaseDetailView.tsx",
-      "apps/web/components/workspace/workroom/WorkroomCycles.tsx",
-      "apps/web/components/workspace/workroom/WorkroomParticipants.tsx",
+      "apps/web/components/workspace/work-room/WorkRoomCycles.tsx",
+      "apps/web/components/workspace/work-room/WorkRoomParticipants.tsx",
       "apps/web/lib/work-management/room-channel-continuity.ts",
       "apps/web/lib/work-management/room-channel-ingress.ts",
       "apps/web/lib/work-management/room-participation.ts",

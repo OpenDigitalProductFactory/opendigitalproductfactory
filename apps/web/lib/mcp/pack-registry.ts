@@ -24,6 +24,7 @@ import { workbooksPack } from "./packs/workbooks-pack";
 import { feedbackPack } from "./packs/feedback-pack";
 import { orgDecisionPack } from "./packs/org-decision-pack";
 import { complianceScopePack } from "./packs/compliance-scope-pack";
+import { capabilityCompletenessPack } from "./packs/capability-completeness-pack";
 import { founderReviewPack } from "./packs/founder-review-pack";
 import { professionDecisionPack } from "./packs/profession-decision-pack";
 import { uxCritiquePack } from "./packs/ux-critique-pack";
@@ -114,6 +115,7 @@ export const TOOL_PACK_REGISTRY = composeToolPacks([
   feedbackPack,
   orgDecisionPack,
   complianceScopePack,
+  capabilityCompletenessPack,
   founderReviewPack,
   professionDecisionPack,
   uxCritiquePack,

@@ -460,6 +460,13 @@ export const HARDCODED_COWORKER_GRANTS: Record<string, readonly string[]> = {
     "backlog_read",
     "backlog_write",
     "tool_evaluation_create",
+    // registry_read reaches evaluate_profession_decision (WSID) and
+    // principle_decide (WWMD). Without it the coworker whose entire job is
+    // governance was the one coworker locked out of the governance kernel, and
+    // its own 11-page legal-compliance corpus was unreachable by the coworker it
+    // was written for. Both tools are read-only advisory doors: this widens
+    // judgement, not authority (BI-728FD7F2).
+    "registry_read",
   ],
   "legal-operations-counsel": ["file_read", "document_read", "document_write", "registry_read"],
   "finance-controller": ["registry_read", "backlog_read", "portfolio_read"],
@@ -521,6 +528,10 @@ export const HARDCODED_COWORKER_GRANTS: Record<string, readonly string[]> = {
     "backlog_write",
     "telemetry_read",
     "web_search",
+    // Same reason as compliance-officer: reaches the WSID craft-decision path
+    // and principle_decide. Its `security` profession family carries 8 corpus
+    // pages that were unreachable without it (BI-728FD7F2).
+    "registry_read",
   ],
   // MCP & Integration Engineer — must match the establish_coworker factory-door
   // grants exactly (BI-CC44E74F). registry_read reaches the WSID craft-decision

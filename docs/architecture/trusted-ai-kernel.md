@@ -664,6 +664,45 @@ An implementation `MAY` use progressive stages such as shadow, propose, bounded 
 review, and bounded autonomous execution. The exact labels are implementation-specific; reversible,
 evidence-based progression and enforcement are normative.
 
+#### 7.12.1 Autonomy Is Bounded by Gate Coverage
+
+An autonomy level is a statement about which controls stop applying. Progressive stages typically
+work by removing constraints in order: at the most supervised level the runtime withholds
+side-effecting tools entirely; at an intermediate level it diverts them to human proposal; at the
+most autonomous level it executes them directly. At that final level the per-action human control is
+gone by design, and the action gating of §8 is the only remaining control.
+
+It follows that autonomy cannot safely exceed gate coverage. A conforming implementation:
+
+- `MUST NOT` grant an agent an autonomy level at which side-effecting tools execute directly unless
+  the consequential tools reachable by that agent's authority are classified and gated under §8.1
+  and §8.4
+- `MUST` evaluate that condition against the tools the agent can actually reach, not the platform
+  tool surface as a whole
+- `SHOULD` state the coverage bound as the reason when a requested autonomy level is clamped
+- `SHOULD` re-evaluate the bound when an agent's authority widens, since a grant change can enlarge
+  the reachable consequential surface without any autonomy change
+
+This is the operational form of the §7.12 rule that hard ceilings apply before proactivity
+preferences. Raising a proactivity or autonomy setting does not create the risk; it converts an
+existing coverage gap from latent to live.
+
+#### 7.12.2 Admission Criteria for Autonomous Operation
+
+Before an agent operates at a level where side-effecting tools execute without per-action human
+decision, a conforming implementation `MUST` establish that the agent:
+
+- can consult the governing decision procedure before a consequential act
+- has a declared escalation target
+- has its reachable consequential tools classified and gated
+- operates inside an activity shape with declared stop conditions and a review point (see §8.11)
+
+and `SHOULD` establish that the agent has passed a behavioural evaluation that exercises a real
+action of its own domain rather than a generic capability probe (see §16.1).
+
+These criteria `SHOULD` be machine-evaluable. An admission rule that depends on human recollection
+degrades silently as the tool surface and the agent roster grow.
+
 ## 8. Tool Execution and Action Gating
 
 ### 8.1 Tool Definitions
@@ -676,8 +715,18 @@ A conforming implementation `MUST` define tools with machine-readable metadata s
 - whether the tool is side-effecting
 - its execution mode
 - required authority or capability class
+- its consequence class (see below)
 
 The runtime `MUST NOT` rely solely on natural-language tool descriptions for governance decisions.
+
+**Consequence class.** Implementation experience shows that a side-effect flag alone is not a sufficient governance discriminator: it separates tools that write from tools that read, but not tools whose effects are routinely reversible from tools that move money, reach a third party, change authority, or destroy state. A runtime that can only ask "does this write?" must either gate everything — which makes the gate unusable and invites operators to disable it — or gate a hand-picked subset, which is the failure mode §8.4 addresses.
+
+Each side-effecting tool `MUST` therefore declare a consequence class sufficient to distinguish at least:
+
+- **ordinary** — reversible within the system, effects contained, no external reach
+- **consequential** — hard to reverse, externally visible, or authority-, money-, or identity-affecting
+
+A runtime `MAY` define finer classes. An undeclared side-effecting tool `MUST` be treated as `consequential` until classified, never as `ordinary`.
 
 Declarative instruction artifacts such as `AGENTS.md` `MAY` provide human- and agent-readable operating guidance for coding or workflow agents, but the runtime `MUST` still maintain machine-readable tool and control metadata independently of those documents.
 
@@ -720,6 +769,25 @@ If a tool:
 - reaches across an organizational boundary with consequences
 
 then the runtime `MUST` default that tool to `proposal` unless a higher-assurance policy explicitly permits immediate execution.
+
+#### 8.4.1 Derived Classification, Not an Enumerated Allowlist
+
+The default in §8.4 is only real if the runtime can determine, for an arbitrary tool, whether the rule applies. A conforming implementation:
+
+- `MUST` derive the set of gated tools from the per-tool consequence class declared under §8.1
+- `MUST NOT` implement the gated set as a hand-maintained enumeration of tool names
+- `MUST` treat an undeclared side-effecting tool as consequential, so that omission fails closed
+- `SHOULD` fail its own build or conformance run when a side-effecting tool carries no consequence class
+
+**Normative anti-pattern.** A hand-maintained opt-in list of gated tools inverts §8.4: every tool not on the list is silently treated as ordinary, and the list does not grow as the tool surface grows. The resulting posture is indistinguishable, at runtime, from having no gate — the gate exists, is correctly implemented, is enforce-by-default, and governs almost nothing. This pattern is called out explicitly because it is a demonstrated real-implementation failure, not a theoretical one, and because it is invisible to every test that asks whether the gate works rather than what it covers.
+
+#### 8.4.2 Gate Coverage Is a Governed Metric
+
+Because the risk lives in the gate's reach rather than its correctness, a conforming implementation:
+
+- `MUST` be able to report gate coverage — the proportion of side-effecting tools carrying a consequence class, and the proportion of consequential tools actually gated
+- `SHOULD` report coverage per agent, over the tools that agent's authority can reach, since a platform-wide average conceals an individual agent with broad reach and no gating
+- `SHOULD` surface coverage wherever autonomy is configured, so the operator raising an autonomy level can see what that level is bounded by
 
 ### 8.5 Provider Budgets and Backpressure
 
@@ -943,6 +1011,59 @@ Illustrative examples:
 }
 ```
 
+### 8.11 Governed Activity Shapes and Triggers
+
+Action gating governs a single tool call. It does not govern the standing activity that produces a
+stream of such calls. Once an agent can initiate work — on a schedule, on an external signal, or on
+a deadline — the governed unit is no longer the call but the **activity shape**: the reusable
+structure describing what starts the work, what stages it moves through, what must be true to
+advance, who answers for it, and what ends it.
+
+An implementation that supports agent-initiated or recurring work `MUST` bind that work to a
+declared activity shape. Each shape `MUST` declare:
+
+- a stable identifier and version
+- its **trigger set** — the conditions that start or advance it
+- an **accountable principal** for each stage
+- the **advance conditions** for each stage, and which advances require a governed decision under
+  §8.4 rather than a status change
+- **stop conditions**, including the failure exit and not only the successful one
+- a **review point** at which the activity is examined regardless of whether it has progressed
+- the **evidence** the activity is expected to leave behind
+
+A conforming implementation `MUST NOT` allow recurring or agent-initiated work to run without stop
+conditions and a review point. An activity that can start itself and cannot stop itself is an
+unbounded grant of authority, however narrow each individual tool call may be.
+
+#### 8.11.1 Trigger Classes
+
+Triggers `SHOULD` be declared from an explicit vocabulary so that the runtime can reason about what
+may start work. At minimum an implementation `SHOULD` distinguish:
+
+| Trigger class | Starts work when |
+|---------------|------------------|
+| `claim` | A principal takes ownership of an identified unit of work |
+| `cadence` | A schedule elapses, subject to the agent's proactivity setting |
+| `deadline-horizon` | A recorded obligation, review, or expiry falls inside a look-ahead window |
+| `authority-change` | An external source of record is observed to have changed |
+| `estate-drift` | Observed state diverges from recorded state |
+| `evidence-decay` | Evidence supporting a prior conclusion passes its freshness budget |
+| `escalation` | Another activity escalates into this one |
+
+A recorded intention that no trigger consumes — a stored cadence, review date, or expiry with no
+reader — `SHOULD` be treated as a defect rather than as latent configuration. Such a field reads to
+an operator as a control that is in force, and behaves as one that is not.
+
+#### 8.11.2 Proactivity Does Not Widen a Shape
+
+A proactivity or autonomy setting `MAY` change how often a shape is triggered and how much of it
+proceeds without a human. It `MUST NOT` change the shape's stop conditions, its accountable
+principal, its review point, or which advances require a governed decision. Those are properties of
+the activity, not of the agent's eagerness.
+
+Where an agent exposes a proactivity control but is bound to no shape and no cadence trigger, the
+runtime `SHOULD` say so rather than presenting a setting that has no effect.
+
 ## 9. Human-in-the-Loop and Oversight Tiers
 
 ### 9.1 HITL Tiers
@@ -1124,6 +1245,9 @@ A conforming implementation `MUST` record, at minimum:
 - provider auth, billing, contract, or policy failures that affect execution
 - detected `GAID` scope or operating-surface violations
 - model and provider attribution for consequential actions
+- governed decisions taken before consequential actions, and the linkage between the decision and
+  the action it authorized
+- the observed outcome of an authorized consequential action
 
 ### 13.2 Evidence Fields
 
@@ -1143,7 +1267,35 @@ Audit records `SHOULD` include:
 - duration
 - success or failure
 
-### 13.3 Non-Repudiation
+### 13.3 Decision Records and the Review Loop
+
+Audit under §13.1 establishes what happened. It does not by itself establish whether the governing
+judgement was sound, or improve it. A runtime that gates consequential actions on a governed
+decision `MUST` also preserve that decision as a record, and `SHOULD` close the loop from the record
+back to the decision procedure.
+
+A conforming implementation:
+
+- `MUST` record, for each governed decision: the question, the options considered, the evidence and
+  its sources, the recommendation, the outcome, and the risk class
+- `MUST` bind the decision record to the action it authorized, so that an action can be traced to
+  its authorization and an authorization to its effect
+- `MUST` record the observed outcome of the authorized action — at minimum whether it succeeded,
+  failed, or was subsequently reversed
+- `SHOULD` protect decision records against retrospective alteration, for example by sealing them
+  into an append-only structure
+- `SHOULD` periodically re-evaluate whether the evidence a past decision relied on still holds
+- `SHOULD` detect drift in the decision procedure itself, for example by re-scoring a frozen panel
+  of canonical decisions against the current governing corpus and reporting changed outcomes
+
+**Why outcome linkage is normative rather than advisory.** Where a human reviews or overrules each
+action, the human's ruling is itself a corrective signal, and a runtime can improve from rulings
+alone. Under autonomous operation that signal disappears: nobody overrules anything, so a system
+that learns only from rulings stops learning at exactly the point where its judgement is least
+supervised. Outcome linkage is the only corrective signal available in that mode, and an
+implementation claiming autonomous operation without it has an open loop, not a closed one.
+
+### 13.4 Non-Repudiation
 
 For `TAK-Assured`, the runtime `SHOULD` support cryptographic binding or message-level evidence sufficient to prove:
 
@@ -1297,6 +1449,8 @@ At minimum, a conforming implementation `MUST` re-run the applicable evaluation 
 - layered authority mediation
 - tool metadata with execution modes
 - basic approval gating for consequential actions
+- a declared consequence class on every side-effecting tool (§8.1)
+- gating derived from tool metadata rather than an enumerated allowlist (§8.4.1)
 - provider-aware rate budgeting and backpressure
 - bounded, resumable inference queueing
 - immutable directive support
@@ -1316,6 +1470,9 @@ At minimum, a conforming implementation `MUST` re-run the applicable evaluation 
 - sensitivity-class-aware handling
 - qualification-aware action ceilings
 - explicit proactivity clamping and autonomy regression
+- gate-coverage reporting over the tool surface and per agent (§8.4.2)
+- autonomy bounded by gate coverage, with machine-evaluable admission criteria (§7.12.1-7.12.2)
+- bounded activity shapes with declared triggers, stop conditions, and review points (§8.11)
 
 ### 17.3 TAK-Assured
 
@@ -1328,6 +1485,9 @@ At minimum, a conforming implementation `MUST` re-run the applicable evaluation 
 - stronger traceability across delegation and cross-system flows
 - documented control ownership and change management
 - evidence-backed, scoped autonomy progression with qualification and operational-surveillance links
+- decision records bound to the actions they authorized, with observed outcomes (§13.3)
+- outcome feedback into the decision procedure where autonomy operates without a human (§13.3)
+- decision-procedure drift detection against a frozen canonical panel (§13.3)
 
 Implementations claiming any `TAK` profile `SHOULD` publish an assertion mapping, evidence pack, or equivalent rubric such as the companion `tak-conformance-tests.md` document.
 
@@ -1394,7 +1554,18 @@ The most useful near-term `DPF` outcomes under this standard include:
 - clearer supervisor-facing transparency for active runtime posture
 - qualification-aware runtime enforcement and revalidation through the companion `TAK-JSI` profile
 
-## 21. Summary
+## 21. Revision History
+
+| Revision | Change | Origin |
+|---|---|---|
+| 2026-08-20 | Added §7.12.1 (autonomy bounded by gate coverage), §7.12.2 (admission criteria), §8.1 consequence class, §8.4.1 (derived classification; enumerated-allowlist anti-pattern), §8.4.2 (gate coverage as a governed metric), §8.11 (governed activity shapes and triggers), §8.11.1 (trigger classes; dead-intent rule), §8.11.2 (proactivity does not widen a shape), §13.3 (decision records and the review loop). Profile requirements in §17 extended accordingly; assertions `TAK-020`–`TAK-028` added to the companion rubric. | Derived from operating a real implementation. Each addition addresses a failure observed in practice rather than an anticipated one: a correctly-implemented, enforce-by-default action gate that governed 2 of 169 side-effecting tools because its scope was an opt-in list; recurring agent-initiated activity with no declared stop condition; and a governance loop that could learn from human rulings but not from outcomes, leaving it open in precisely the autonomous mode it was built for. |
+
+This revision is **additive**: it introduces new normative requirements without
+weakening or contradicting existing ones, and is therefore a minor-version change
+under §2.1. Implementations conforming to the prior revision remain conformant to
+the requirements they already met, and will show gaps against the new assertions.
+
+## 22. Summary
 
 The key message of this standard is simple:
 
