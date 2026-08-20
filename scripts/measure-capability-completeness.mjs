@@ -934,7 +934,7 @@ export function renderMarkdown(r) {
 
   L.push("## Plane levels across the inventory", "");
   L.push("| Plane | Weight | Ceiling | L0 | L1 | L2 | L3 | At ceiling |", "|---|---|---|---|---|---|---|---|");
-  for (const [p, v] of Object.entries(S.planeLevels)) {
+  for (const [, v] of Object.entries(S.planeLevels)) {
     const d = v.distribution;
     L.push(`| ${v.label} | ${v.weight} | ${v.ceiling} | ${d[0]} | ${d[1]} | ${d[2]} | ${d[3]} | ${v.atCeiling}/${S.agents} |`);
   }
