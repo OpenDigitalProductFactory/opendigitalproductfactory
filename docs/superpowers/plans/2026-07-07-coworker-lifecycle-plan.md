@@ -1,3 +1,7 @@
+---
+status: binding
+---
+
 # AI Coworker Lifecycle — implementation plan
 
 - **Epic:** EP-COWORKER-LIFECYCLE · **Spec:** docs/superpowers/specs/2026-07-07-coworker-lifecycle-standard-design.md
@@ -101,3 +105,43 @@ As-built:
 - Phase 2: certification run against the live install produces AssuranceRun rows for all roster
   coworkers; the 76-never-exercised census drops to zero for roster coworkers.
 - Phase 3: an uncertified coworker cannot be summoned (functional test), roster shows stage.
+
+## Addendum (2026-08-19, BI-68BBF206) — the oracle contract's evidence source and purity envelope
+
+Phase 2 shipped the oracles but never pinned **where tool-call evidence comes from** or **what
+"purity" is measured against**. Certification ran green enough not to surface it until the
+whole roster failed at once. Both halves were the same transport mismatch: certification
+journeys dispatch through the cli-adapter in **native-mcp** mode, so the model's MCP calls
+execute inside the CLI subprocess against the governed server rather than through the
+in-process loop.
+
+**1. Evidence source — `ORACLE-TOOL` (PR #4408).** The oracle counted the loop's in-process
+executed-tools list, which stays empty in native-mcp mode. Every coworker fleet-wide failed
+with `attempted: none` while `ORACLE-SURFACE` passed and answers cited real tool results
+(`ORACLE-FABRICATE` passing was the tell). **Contract:** the audited `ToolExecution` record is
+the source of truth for what a journey executed. The runner unions in-loop evidence with
+`ToolExecution` rows scoped by the shared `certificationThreadId()` + `agentId` + the journey
+time window (the window is load-bearing — thread names are deterministic per journey, so prior
+sweeps share the threadId). An audit-read failure falls back to in-loop-only rather than
+failing the coworker.
+
+**2. Purity envelope — `ORACLE-PURITY` (this change).** With evidence flowing, purity failed on
+grant-authorized read-only calls (`security-engineer`: `list_my_backlog`) because the CLI
+exposes the coworker's full grant-derived toolset while the oracle compared against the
+narrower list the runner attached. **Contract:** purity guards the **authorization envelope**,
+not attachment-list membership. A tool is in-envelope iff it is in the offered surface **or**
+(present in the platform catalog with `sideEffect === false` **and** allowed by the agent's
+grants via `isToolAllowedByGrants`). Failures name the reason — side-effecting, unauthorized,
+or unknown. Applied uniformly to in-loop and audited evidence, so offered-surface membership
+remains a sufficient fast path and the prior check is subsumed, never weakened. A grant-fetch
+failure classifies conservatively (fails; never a silent pass).
+
+**Standard alignment.** This assurance approach is now normative in the TAK-JSI standard
+(`docs/architecture/job-specific-intelligence.md` §11.4), which names these checks *assessment
+criteria* rather than oracles and states the evidence-source and authorization-envelope rules as
+conformance requirements. Renaming the implementation to match (`ORACLE-*` → `AC-*`), with the
+alias window the live `findingKey` unique column requires, is tracked as BI-5C774C84.
+
+**Standing rule for future criteria:** a criterion asserts a property of the *governed record*,
+never of a transport-specific counter. If a new criterion reads loop-local state, it must state
+why that state is authoritative for every dispatch mode the runner supports.
