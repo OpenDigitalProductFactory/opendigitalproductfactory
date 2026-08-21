@@ -2,7 +2,7 @@
 name: onboard-regulation
 description: "Help onboard a new regulation, standard, or framework with guided analysis"
 category: compliance
-assignTo: ["policy-specialist"]
+assignTo: ["compliance-officer"]
 capability: "manage_compliance"
 taskType: "analysis"
 triggerPattern: "onboard|import|framework|standard"

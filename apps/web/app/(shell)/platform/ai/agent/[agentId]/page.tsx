@@ -56,6 +56,7 @@ import {
   DecisionsPanel,
 } from "@/components/platform/coworker-record/panels";
 import { NeedsAndPlaybooksPanel } from "@/components/platform/coworker-record/NeedsAndPlaybooksPanel";
+import { CapabilityCompletenessPanel } from "@/components/platform/coworker-record/CapabilityCompletenessPanel";
 import { MySurfaceBacklogPanel } from "@/components/platform/coworker-record/MySurfaceBacklogPanel";
 import { CooConversationalNameCard } from "@/components/platform/coworker-record/CooConversationalNameCard";
 import { isStandingCooAgentId } from "@/lib/coworker-presentation/coo-name";
@@ -602,6 +603,7 @@ export default async function AgentDetailPage({
             routingCard={routingCard}
             capabilitiesEditor={capabilitiesEditor}
           />
+          <CapabilityCompletenessPanel agentId={agent.agentId} />
           <NeedsAndPlaybooksPanel
             needs={capabilityNeedReview}
             workPatterns={workPatternReadModel}

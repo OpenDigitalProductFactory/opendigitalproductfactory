@@ -3849,13 +3849,6 @@
     "longSentences": 0,
     "textMass": 15
   },
-  "apps/web/components/build/BusinessBriefPanel.tsx": {
-    "vocabulary": 0,
-    "genericLabels": 0,
-    "readability": 0,
-    "longSentences": 0,
-    "textMass": 144
-  },
   "apps/web/components/build-studio/Composer.tsx": {
     "vocabulary": 0,
     "genericLabels": 0,
@@ -4065,6 +4058,13 @@
     "readability": 0,
     "longSentences": 0,
     "textMass": 17
+  },
+  "apps/web/components/build/BusinessBriefPanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 144
   },
   "apps/web/components/build/CodeIntelligenceStatusCard.tsx": {
     "vocabulary": 0,
@@ -6907,6 +6907,13 @@
     "readability": 0,
     "longSentences": 0,
     "textMass": 51
+  },
+  "apps/web/components/platform/coworker-record/CapabilityCompletenessPanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 16
   },
   "apps/web/components/platform/coworker-record/CooConversationalNameCard.tsx": {
     "vocabulary": 0,

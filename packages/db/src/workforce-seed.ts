@@ -382,7 +382,12 @@ export const HARDCODED_COWORKER_GRANTS: Record<string, readonly string[]> = {
   // document_read/code_graph_read arrive via COWORKER_READ_BASELINE_GRANTS. No
   // sandbox_execute: the Build-Studio scout/ideate research launchers are
   // feature-scoped, not owner-facing market research.
-  "market-research-analyst": ["web_search", "crm_read", "document_write", "registry_write"],
+  // registry_read is explicit rather than implied by registry_write: the
+  // implication would be a platform-wide change to the authority model, and
+  // wiki-overlay-pack.test.ts pins registry_write as NOT conferring read on the
+  // overlay list tool. Fix the coworker, not the semantics (BI-728FD7F2); the
+  // implication question is filed separately.
+  "market-research-analyst": ["web_search", "crm_read", "document_write", "registry_write", "registry_read"],
   // The Customer Success Manager operates the CRM (accounts, pipeline, quotes),
   // so it needs crm_read/crm_write — NOT backlog_write (which let it retire live
   // backlog items while flailing) or marketing_read (wrong domain). Its runtime
@@ -460,6 +465,13 @@ export const HARDCODED_COWORKER_GRANTS: Record<string, readonly string[]> = {
     "backlog_read",
     "backlog_write",
     "tool_evaluation_create",
+    // registry_read reaches evaluate_profession_decision (WSID) and
+    // principle_decide (WWMD). Without it the coworker whose entire job is
+    // governance was the one coworker locked out of the governance kernel, and
+    // its own 11-page legal-compliance corpus was unreachable by the coworker it
+    // was written for. Both tools are read-only advisory doors: this widens
+    // judgement, not authority (BI-728FD7F2).
+    "registry_read",
   ],
   "legal-operations-counsel": ["file_read", "document_read", "document_write", "registry_read"],
   "finance-controller": ["registry_read", "backlog_read", "portfolio_read"],
@@ -521,6 +533,10 @@ export const HARDCODED_COWORKER_GRANTS: Record<string, readonly string[]> = {
     "backlog_write",
     "telemetry_read",
     "web_search",
+    // Same reason as compliance-officer: reaches the WSID craft-decision path
+    // and principle_decide. Its `security` profession family carries 8 corpus
+    // pages that were unreachable without it (BI-728FD7F2).
+    "registry_read",
   ],
   // MCP & Integration Engineer — must match the establish_coworker factory-door
   // grants exactly (BI-CC44E74F). registry_read reaches the WSID craft-decision

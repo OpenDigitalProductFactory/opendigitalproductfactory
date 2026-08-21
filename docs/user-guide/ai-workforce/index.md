@@ -116,6 +116,55 @@ Expand it when a coworker seems not to know something it should. It separates th
 
 It reports **what was withheld from the model, not whether the reply was worse for it** — that judgement stays yours. "No turns recorded a trace" means nothing has arbitrated in the sample yet, which is different from nothing being left out. If one source dominates the table, that is the candidate for a larger budget or a smaller payload.
 
+## Capability Completeness
+
+Each coworker record carries a **Capability completeness** panel. It answers a
+question the roster alone cannot: not "is this coworker configured?" but "can it
+actually do its job?"
+
+A capability is only real when seven things all resolve for that coworker:
+
+| Plane | What it asserts |
+|-------|-----------------|
+| Identity | It is one reconciled identity, not a name in a single registry |
+| Corpus | It can reach its profession's craft corpus before deciding |
+| Governance | It can consult the kernel, and has somewhere to escalate |
+| Shape | Its work has declared stages and gates |
+| Cadence | Something makes it run without being asked |
+| Tools + Skills | It has skills assigned to it and tools it can call |
+| Evidence | Certification exercises a real act of its domain, not a generic probe |
+
+Each plane is graded **absent → declared → reachable → proven** rather than
+pass/fail, because a capability that is declared but unreachable is the failure
+that looks most like success.
+
+### Reading the two percentages
+
+The panel shows two numbers, and the gap between them is the point:
+
+- **of what the platform allows today** — how complete this coworker is against
+  what the platform currently supports.
+- **of the target** — how complete it is against the full design.
+
+A coworker at 100% of the first and well below the second is *finished*; the
+remaining gap belongs to the platform, not to this coworker. Planes in that
+state are labelled **Blocked by the platform, not this coworker** so you do not
+go looking for a setting to change.
+
+### What to watch
+
+- A plane showing a **gap** names the specific missing piece — often a permission.
+- **Cadence: absent** means this coworker has no recurring work, so raising its
+  Proactivity will not by itself make it act.
+- The measure is refreshed from the platform's own source, not hand-maintained.
+  It reflects the shipped build, not the running install's data.
+
+### What you must still do
+
+The panel reports; it never changes a coworker's authority. Granting a
+permission, assigning a skill, or raising an autonomy level remains a deliberate
+human action.
+
 ## Authority & Governance
 
 The **Authority** tab (`/platform/ai/authority`) provides visibility into the agent governance model:

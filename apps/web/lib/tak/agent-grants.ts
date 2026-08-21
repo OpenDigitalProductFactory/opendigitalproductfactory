@@ -275,6 +275,10 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   // previously advertised `work_capsule_read`, which is unrelated — this gate
   // reads decision-perspective material, never a work capsule.
   evaluate_profession_decision: ["registry_read"],
+  // Read-only platform self-introspection: which agents are missing which of
+  // the seven capability planes. Same grant as the two decision doors above —
+  // it reports gaps and never changes authority.
+  get_capability_completeness: ["registry_read"],
 
   // Independent re-verification of a recorded decision's cited evidence
   // (BI-8192557E phase 2b). Same `registry_read` tier as its siblings: auditing

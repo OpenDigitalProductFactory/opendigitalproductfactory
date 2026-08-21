@@ -763,6 +763,9 @@
     "apps/web/lib/mcp/packs/backlog-pack.ts": [
       "docs/architecture/backlog-archetype-scope.md"
     ],
+    "apps/web/lib/mcp/packs/compliance-scope-pack.ts": [
+      "docs/architecture/2026-08-20-recurring-obligation-work-shape-and-doc-robustness.md"
+    ],
     "apps/web/lib/mcp/packs/deliberation-siem-pack.ts": [
       "docs/architecture/mcp-tool-packs.md"
     ],
@@ -809,6 +812,12 @@
     "apps/web/lib/operate/retention/policies.ts": [
       "docs/architecture/2026-08-16-simplify-and-strengthen-architecture-pass.md",
       "docs/architecture/enforced-ci-gates.md"
+    ],
+    "apps/web/lib/operate/scheduled-jobs/catalog.ts": [
+      "docs/architecture/2026-08-20-recurring-obligation-work-shape-and-doc-robustness.md"
+    ],
+    "apps/web/lib/operate/scheduled-jobs/coworker-self-tasks.ts": [
+      "docs/architecture/2026-08-20-recurring-obligation-work-shape-and-doc-robustness.md"
     ],
     "apps/web/lib/operate/sole-platform-readiness.ts": [
       "docs/architecture/2026-07-27-platform-adequacy-roadmap-backlog-map.md"
@@ -1014,6 +1023,9 @@
       "docs/architecture/agent-standards-dpf-conformance.md",
       "docs/architecture/context-engineering-standards.md"
     ],
+    "apps/web/lib/tak/decision-routing-governance-hook.ts": [
+      "docs/architecture/2026-08-20-assurance-operating-loop-and-capability-completeness.md"
+    ],
     "apps/web/lib/tak/delegation-authority.ts": [
       "docs/prompts/a2a-coworker-substrate-prompt.md"
     ],
@@ -1058,6 +1070,9 @@
     ],
     "apps/web/lib/work-management/room-channel-ingress.ts": [
       "docs/user-guide/workspace/work-rooms.md"
+    ],
+    "apps/web/lib/work-management/room-cycle-adapter.ts": [
+      "docs/architecture/2026-08-20-governed-autonomy-architecture.md"
     ],
     "apps/web/lib/work-management/room-participation.ts": [
       "docs/user-guide/workspace/work-rooms.md"
@@ -1132,6 +1147,9 @@
     "docker-compose.macos.yml": [
       "docs/install/macos.md",
       "docs/operations/observability-coverage.md"
+    ],
+    "docker-compose.pki.yml": [
+      "docs/architecture/2026-08-20-recurring-obligation-work-shape-and-doc-robustness.md"
     ],
     "docker-compose.tls.yml": [
       "docs/install/edge-node-multi-host.md"
@@ -1270,6 +1288,7 @@
       "docs/operations/ai-provider-compliance-source-renewal-runbook.md"
     ],
     "packages/db/src/regulation-applicability.ts": [
+      "docs/architecture/2026-08-20-recurring-obligation-work-shape-and-doc-robustness.md",
       "docs/maintenance/staleness-report.md",
       "docs/strategy/2026-09-cada-architects-forum-deck.md"
     ],
@@ -1293,6 +1312,9 @@
     ],
     "packages/db/src/seed-skills.ts": [
       "docs/architecture/skill-surfaces-runbook.md"
+    ],
+    "packages/db/src/seed-software-horizontal-compliance.ts": [
+      "docs/architecture/2026-08-20-recurring-obligation-work-shape-and-doc-robustness.md"
     ],
     "packages/db/src/seed-wiki-kernel.ts": [
       "docs/founder-kernel/AUTHORING.md"
@@ -1411,6 +1433,9 @@
     "scripts/capability-service-catalog.generated.json": [
       "docs/architecture/capability-driven-runtime-profiles.md"
     ],
+    "scripts/check-agent-capability-integrity.mjs": [
+      "docs/architecture/2026-08-20-governed-autonomy-architecture.md"
+    ],
     "scripts/check-application-boundaries.mjs": [
       "docs/architecture/2026-08-16-simplify-and-strengthen-architecture-pass.md",
       "docs/architecture/application-boundaries.md"
@@ -1431,6 +1456,7 @@
       "docs/architecture/enforced-ci-gates.md"
     ],
     "scripts/check-doc-links.mjs": [
+      "docs/architecture/2026-08-20-recurring-obligation-work-shape-and-doc-robustness.md",
       "docs/architecture/enforced-ci-gates.md"
     ],
     "scripts/check-doc-reference-integrity.mjs": [
@@ -2047,6 +2073,22 @@
       "apps/web/lib/operate/retention/policies.ts",
       "packages/db/src/device-placement.ts",
       "scripts/check-application-boundaries.mjs"
+    ],
+    "docs/architecture/2026-08-20-assurance-operating-loop-and-capability-completeness.md": [
+      "apps/web/lib/tak/decision-routing-governance-hook.ts"
+    ],
+    "docs/architecture/2026-08-20-governed-autonomy-architecture.md": [
+      "apps/web/lib/work-management/room-cycle-adapter.ts",
+      "scripts/check-agent-capability-integrity.mjs"
+    ],
+    "docs/architecture/2026-08-20-recurring-obligation-work-shape-and-doc-robustness.md": [
+      "apps/web/lib/mcp/packs/compliance-scope-pack.ts",
+      "apps/web/lib/operate/scheduled-jobs/catalog.ts",
+      "apps/web/lib/operate/scheduled-jobs/coworker-self-tasks.ts",
+      "docker-compose.pki.yml",
+      "packages/db/src/regulation-applicability.ts",
+      "packages/db/src/seed-software-horizontal-compliance.ts",
+      "scripts/check-doc-links.mjs"
     ],
     "docs/architecture/agent-client-capability-parity.md": [
       "apps/web/lib/build/unified-wip-query.ts",
