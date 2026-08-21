@@ -10,7 +10,6 @@ import { describe, expect, it } from "vitest";
 import {
   deriveCoworkerActivityCount,
   deriveFleetCounts,
-  deriveNeedsAttention,
   deriveQueueState,
   formatOperatorFocusHeader,
   formatFleetHeader,
@@ -138,72 +137,6 @@ describe("deriveQueueState", () => {
   });
 });
 
-describe("deriveNeedsAttention", () => {
-  it("is true when phase=failed", () => {
-    expect(deriveNeedsAttention(makeBuild({ phase: "failed" }))).toBe(true);
-  });
-
-  it("is true when build phase carries an exec error", () => {
-    expect(
-      deriveNeedsAttention(
-        makeBuild({
-          phase: "build",
-          buildExecState: { error: "deps install failed" } as unknown as FeatureBuildRow["buildExecState"],
-        }),
-      ),
-    ).toBe(true);
-  });
-
-  it("is true when designReview decision=fail", () => {
-    expect(
-      deriveNeedsAttention(
-        makeBuild({
-          phase: "plan",
-          designReview: { decision: "fail" } as unknown as FeatureBuildRow["designReview"],
-        }),
-      ),
-    ).toBe(true);
-  });
-
-  it("is true when planReview decision=fail", () => {
-    expect(
-      deriveNeedsAttention(
-        makeBuild({
-          phase: "plan",
-          planReview: { decision: "fail" } as unknown as FeatureBuildRow["planReview"],
-        }),
-      ),
-    ).toBe(true);
-  });
-
-  it("is true when phase=ship + acceptanceMet is null (operator decision pending)", () => {
-    expect(
-      deriveNeedsAttention(makeBuild({ phase: "ship", acceptanceMet: null })),
-    ).toBe(true);
-  });
-
-  it("is true when claim is abandoned", () => {
-    expect(
-      deriveNeedsAttention(makeBuild({ phase: "build", claimStatus: "abandoned" as FeatureBuildRow["claimStatus"] })),
-    ).toBe(true);
-  });
-
-  it("is false for a healthy in-flight build (phase=build, no error, no failed reviews)", () => {
-    expect(
-      deriveNeedsAttention(
-        makeBuild({
-          phase: "build",
-          buildExecState: { step: "code_generated" } as unknown as FeatureBuildRow["buildExecState"],
-        }),
-      ),
-    ).toBe(false);
-  });
-
-  it("is false for an idle ideate build", () => {
-    expect(deriveNeedsAttention(makeBuild({ phase: "ideate" }))).toBe(false);
-  });
-});
-
 describe("deriveFleetCounts", () => {
   it("counts running, queued, and blocked states; ignores idle", () => {
     const counts = deriveFleetCounts([
@@ -235,7 +168,7 @@ describe("isOperatorFocusEntry", () => {
         {
           build,
           queueState: { kind: "idle" },
-          needsAttention: false,
+          attention: { needsOwner: false },
         },
         null,
       ),
@@ -252,7 +185,7 @@ describe("isOperatorFocusEntry", () => {
           {
             build: makeBuild({ buildId: `FB-${phase}`, phase }),
             queueState: { kind: "running", stepLabel: phase === "ideate" ? "Ideating" : "Planning" },
-            needsAttention: false,
+            attention: { needsOwner: false },
           },
           null,
         ),
@@ -268,7 +201,7 @@ describe("isOperatorFocusEntry", () => {
         {
           build,
           queueState: { kind: "idle" },
-          needsAttention: false,
+          attention: { needsOwner: false },
         },
         "FB-SELECTED",
       ),
@@ -283,7 +216,7 @@ describe("isOperatorFocusEntry", () => {
         {
           build: base,
           queueState: { kind: "running", stepLabel: "Generating code" },
-          needsAttention: false,
+          attention: { needsOwner: false },
         },
         null,
       ),
@@ -293,7 +226,7 @@ describe("isOperatorFocusEntry", () => {
         {
           build: base,
           queueState: { kind: "queued", position: 1, reason: "capacity", ahead: 0 },
-          needsAttention: false,
+          attention: { needsOwner: false },
         },
         null,
       ),
@@ -303,7 +236,7 @@ describe("isOperatorFocusEntry", () => {
         {
           build: base,
           queueState: { kind: "blocked", reason: "Plan review failed" },
-          needsAttention: false,
+          attention: { needsOwner: false },
         },
         null,
       ),
@@ -313,7 +246,7 @@ describe("isOperatorFocusEntry", () => {
         {
           build: base,
           queueState: { kind: "idle" },
-          needsAttention: true,
+          attention: { needsOwner: true },
         },
         null,
       ),
@@ -404,7 +337,7 @@ describe("stall detection (BI-46204009) — status reflects activity freshness",
   });
 
   it("routes a stalled build to Needs-you, and leaves a fresh one alone", () => {
-    expect(deriveNeedsAttention(makeBuild({ phase: "build", updatedAt: stale }), now)).toBe(true);
-    expect(deriveNeedsAttention(makeBuild({ phase: "build", updatedAt: fresh }), now)).toBe(false);
+    // Attention for a stalled build is asserted in build-attention.test.ts —
+    // this file now only owns queue/focus/count derivation.
   });
 });

@@ -28,13 +28,14 @@ import {
   formatOperatorFocusHeader,
 } from "./fleet-derivation";
 import type { BuildQueueState } from "./QueueStateBadge";
+import type { BuildAttention } from "@/lib/build/build-attention";
 
 /** Each visible entry: the FeatureBuildRow plus per-row queue/attention state. */
 export type FleetRailEntry = {
   build: FeatureBuildRow;
   lifecycleLabel: string | null;
   queueState: BuildQueueState;
-  needsAttention: boolean;
+  attention: BuildAttention | null;
 };
 
 export type FleetRailProps = {
@@ -73,7 +74,9 @@ export function sortFleetEntries(entries: readonly FleetRailEntry[]): FleetRailE
     idle: 3,
   };
   return [...entries].sort((a, b) => {
-    if (a.needsAttention !== b.needsAttention) return a.needsAttention ? -1 : 1;
+    const aNeeds = a.attention?.needsOwner ?? false;
+    const bNeeds = b.attention?.needsOwner ?? false;
+    if (aNeeds !== bNeeds) return aNeeds ? -1 : 1;
     const ra = kindRank[a.queueState.kind];
     const rb = kindRank[b.queueState.kind];
     if (ra !== rb) return ra - rb;
@@ -102,9 +105,9 @@ export function FleetRail({
   onDeleteBuild,
 }: FleetRailProps) {
   const sorted = sortFleetEntries(entries);
-  const needsYouCount = entries.filter((entry) => entry.needsAttention).length;
+  const needsYouCount = entries.filter((entry) => entry.attention?.needsOwner).length;
   const blockedCount = entries.filter((entry) =>
-    !entry.needsAttention && entry.queueState.kind === "blocked",
+    !entry.attention?.needsOwner && entry.queueState.kind === "blocked",
   ).length;
   const headerLabel = formatOperatorFocusHeader({
     needsYouCount,
@@ -157,7 +160,7 @@ export function FleetRail({
               isDevEnvironment={isDevEnvironment}
               density="fleet"
               queueState={entry.queueState}
-              needsAttention={entry.needsAttention}
+              attention={entry.attention}
               onSelect={() => onSelectBuild(entry.build)}
               onDelete={() => onDeleteBuild(entry.build)}
             />
