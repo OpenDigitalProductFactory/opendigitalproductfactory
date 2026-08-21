@@ -1,3 +1,4 @@
+import { formatOrgAddressLines } from "@/lib/shared/org-address";
 import Link from "next/link";
 import type { PublicStorefrontConfig } from "@/lib/storefront-types";
 import type { WeeklySchedule } from "@/lib/operating-hours-types";
@@ -32,11 +33,14 @@ export function StorefrontTrustFooter({
   hours: WeeklySchedule | null;
 }) {
   const { orgSlug, orgAddress } = storefront;
-  const addressLine = orgAddress
-    ? [orgAddress.street, orgAddress.city, orgAddress.postcode, orgAddress.country]
-        .filter(Boolean)
-        .join(", ")
-    : null;
+  // Use the canonical formatter rather than an ad-hoc join. Both storefront
+  // surfaces previously hand-joined a subset of keys and DROPPED the state/region:
+  // a Fort Worth address with stateCode "TX" rendered "Fort Worth, 76106" here and
+  // "Fort Worth, 76106, United States" in ContactSection — two different wrong
+  // answers from two copies of the same logic (IMP-034). formatOrgAddressLines
+  // covers both the legacy street/postcode keys and line1/postalCode, and includes
+  // region/state.
+  const addressLine = orgAddress ? formatOrgAddressLines(orgAddress).join(", ") || null : null;
   const socials = Object.entries(storefront.socialLinks ?? {}).filter(
     ([, url]) => typeof url === "string" && url.length > 0,
   ) as [string, string][];
