@@ -16,8 +16,8 @@ import { MarketContextFields } from "@/components/admin/MarketContextFields";
 import {
   COUNTRY_OPTIONS,
   US_STATES,
-  countryName,
-  usStateName,
+  applyCountrySelection,
+  applyStateSelection,
   type OrgAddress,
 } from "@/lib/shared/org-address";
 import { resolveTimezoneFromAddress } from "@/lib/timezone-from-location";
@@ -164,33 +164,15 @@ export function BusinessContextForm({ initial, archetypeSummary, isEdit, autoFil
 
   function onCountryChange(value: string) {
     setCountrySel(value);
-    const next: OrgAddress = { ...data.address };
-    // A country switch invalidates the previous state/province selection.
-    delete next.stateCode;
-    delete next.region;
-    if (!value) {
-      delete next.countryCode;
-      delete next.country;
-    } else if (value === OTHER_COUNTRY) {
-      delete next.countryCode; // free-text country input fills `country`
-      delete next.country;
-    } else {
-      next.countryCode = value;
-      next.country = countryName(value) ?? value;
-    }
-    setAddress(next);
+    // Logic lives in the canonical address module so it is testable without
+    // mounting the form, and so this component stays under the module-size
+    // ceiling. See applyCountrySelection for why a FIRST selection differs from a
+    // country switch (IMP-066).
+    setAddress(applyCountrySelection(data.address, value, countrySel, OTHER_COUNTRY));
   }
 
   function onStateChange(value: string) {
-    const next: OrgAddress = { ...data.address };
-    if (value) {
-      next.stateCode = value;
-      next.region = usStateName(value) ?? value;
-    } else {
-      delete next.stateCode;
-      delete next.region;
-    }
-    setAddress(next);
+    setAddress(applyStateSelection(data.address, value));
   }
 
   // Auto-derived from the captured address — shown read-only; the operator
