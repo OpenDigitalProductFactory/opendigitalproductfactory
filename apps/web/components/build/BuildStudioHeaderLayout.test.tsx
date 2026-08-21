@@ -1140,7 +1140,18 @@ describe("BuildStudio active-build header layout", () => {
     );
 
     expect(html).toContain("release-decision-panel");
-    expect(html).toContain("Preparing for release");
+    // Canonical wording from fallbackNow() in lib/build/owner-change-view.ts.
+    // The old assertion here was "Preparing for release", which came from a
+    // DUPLICATE phase-label map in BuildOperatorOverview that disagreed with
+    // the canonical one. That map is deleted (BI one-attention-truth).
+    expect(html).toContain("Ready for a release decision");
+
+    // The defect this work exists to close: a ship-phase build is waiting on
+    // the owner, so the surface must never tell them otherwise, and the row
+    // must say WHAT is wanted rather than only that something is.
+    expect(html).not.toContain("No action needed");
+    expect(html).toContain("Ready for your release decision.");
+    expect(html).toContain('title="Ready for your release decision."');
   });
 });
 

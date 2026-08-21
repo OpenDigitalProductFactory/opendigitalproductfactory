@@ -71,13 +71,18 @@ function makeBuild(overrides: Partial<FeatureBuildRow> = {}): FeatureBuildRow {
 function entry(
   buildId: string,
   queueState: FleetRailEntry["queueState"],
-  needsAttention = false,
+  needsOwner = false,
 ): FleetRailEntry {
   return {
     build: makeBuild({ buildId, title: `Build ${buildId}` }),
     lifecycleLabel: null,
     queueState,
-    needsAttention,
+    attention: {
+      state: needsOwner ? "waiting-owner" : "working",
+      reason: needsOwner ? "Ready for your release decision." : null,
+      needsOwner,
+      fromRuntimeSignal: false,
+    },
   };
 }
 

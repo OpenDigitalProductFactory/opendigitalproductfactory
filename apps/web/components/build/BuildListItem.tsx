@@ -11,6 +11,7 @@ import {
   ownerStateBadgeLabel,
   type BuildStudioOwnerState,
 } from "@/lib/build/owner-status-reconciliation";
+import type { BuildAttention } from "@/lib/build/build-attention";
 
 export type BuildListItemDensity = "comfortable" | "fleet";
 
@@ -27,10 +28,13 @@ type BuildListItemProps = {
   density?: BuildListItemDensity;
   /** Runtime queue state surfaced as a plain status label. Fleet density only. */
   queueState?: BuildQueueState;
-  /** Render "Needs you" as the row status when true. Fleet density only. */
-  needsAttention?: boolean;
-  /** Canonical selected-build owner state; takes priority over queue heuristics. */
-  ownerState?: BuildStudioOwnerState | null;
+  /**
+   * The row's ONE attention answer — canonical owner state plus the reason.
+   * Fleet density only. Replaces the old `needsAttention` boolean + separate
+   * `ownerState`: those were two answers to one question, and the boolean
+   * could contradict the Next card while naming no reason (BI one-attention-truth).
+   */
+  attention?: BuildAttention | null;
 };
 
 function formatUpdatedAt(value: Date | string) {
@@ -51,8 +55,7 @@ export function BuildListItem({
   onDelete,
   density = "comfortable",
   queueState,
-  needsAttention = false,
-  ownerState = null,
+  attention = null,
 }: BuildListItemProps) {
   if (density === "fleet") {
     return (
@@ -64,8 +67,7 @@ export function BuildListItem({
         onSelect={onSelect}
         onDelete={onDelete}
         queueState={queueState ?? { kind: "idle" }}
-        needsAttention={needsAttention}
-        ownerState={ownerState}
+        attention={attention}
       />
     );
   }
@@ -142,13 +144,14 @@ type FleetRowProps = {
   onSelect: () => void;
   onDelete: () => void;
   queueState: BuildQueueState;
-  needsAttention: boolean;
-  ownerState: BuildStudioOwnerState | null;
+  attention: BuildAttention | null;
 };
 
 type FleetRowStatus = {
   label: string;
   className: string;
+  /** Why this state, in operator language. Rendered as the row's title. */
+  reason: string | null;
 };
 
 function statusClassName(intent: "info" | "warning" | "danger" | "success" | "neutral"): string {
@@ -186,47 +189,51 @@ function ownerStateIntent(
 function deriveFleetRowStatus(
   build: FeatureBuildRow,
   queueState: BuildQueueState,
-  needsAttention: boolean,
-  ownerState: BuildStudioOwnerState | null,
+  attention: BuildAttention | null,
 ): FleetRowStatus {
-  if (ownerState) {
+  // ownerStateBadgeLabel is the ONLY producer of row status copy. The previous
+  // `if (needsAttention) return { label: "Needs you" }` branch hardcoded a
+  // second vocabulary that could disagree with the canonical one shown on the
+  // same screen — the rail said "Needs you" while the Next card said no action
+  // was needed. Every row now renders the same eight-state vocabulary, and
+  // carries the reason as its title.
+  if (attention) {
     return {
-      label: ownerStateBadgeLabel(ownerState),
-      className: statusClassName(ownerStateIntent(ownerState)),
+      label: ownerStateBadgeLabel(attention.state),
+      className: statusClassName(ownerStateIntent(attention.state)),
+      reason: attention.reason,
     };
   }
 
-  if (needsAttention) {
-    return { label: "Needs you", className: statusClassName("danger") };
-  }
-
+  // No attention answer (non-fleet callers / tests) — fall back to the runtime
+  // queue signal, then the phase. Never invents an attention state.
   if (queueState.kind === "blocked") {
-    return { label: "Blocked", className: statusClassName("warning") };
+    return { label: "Blocked", className: statusClassName("warning"), reason: queueState.reason ?? null };
   }
   if (queueState.kind === "queued") {
-    return { label: "Waiting", className: statusClassName("neutral") };
+    return { label: "Waiting", className: statusClassName("neutral"), reason: null };
   }
   if (queueState.kind === "running") {
-    return { label: "Working", className: statusClassName("info") };
+    return { label: "Working", className: statusClassName("info"), reason: null };
   }
 
   switch (build.phase) {
     case "ideate":
-      return { label: "Designing", className: statusClassName("neutral") };
+      return { label: "Designing", className: statusClassName("neutral"), reason: null };
     case "plan":
-      return { label: "Planning", className: statusClassName("neutral") };
+      return { label: "Planning", className: statusClassName("neutral"), reason: null };
     case "build":
-      return { label: "Building", className: statusClassName("info") };
+      return { label: "Building", className: statusClassName("info"), reason: null };
     case "review":
-      return { label: "Reviewing", className: statusClassName("info") };
+      return { label: "Reviewing", className: statusClassName("info"), reason: null };
     case "ship":
-      return { label: "Ready", className: statusClassName("warning") };
+      return { label: "Ready", className: statusClassName("warning"), reason: null };
     case "complete":
-      return { label: "Done", className: statusClassName("success") };
+      return { label: "Done", className: statusClassName("success"), reason: null };
     case "failed":
-      return { label: "Blocked", className: statusClassName("warning") };
+      return { label: "Blocked", className: statusClassName("warning"), reason: null };
     default:
-      return { label: "Queued", className: statusClassName("neutral") };
+      return { label: "Queued", className: statusClassName("neutral"), reason: null };
   }
 }
 
@@ -238,10 +245,9 @@ function FleetDensityRow({
   onSelect,
   onDelete,
   queueState,
-  needsAttention,
-  ownerState,
+  attention,
 }: FleetRowProps) {
-  const status = deriveFleetRowStatus(build, queueState, needsAttention, ownerState);
+  const status = deriveFleetRowStatus(build, queueState, attention);
   return (
     <div
       data-testid={BUILD_STUDIO_TEST_IDS.buildListItem}
@@ -278,7 +284,12 @@ function FleetDensityRow({
       >
         <span
           data-testid="fleet-row-status"
-          aria-label={`Status: ${status.label}`}
+          aria-label={
+            status.reason
+              ? `Status: ${status.label}. ${status.reason}`
+              : `Status: ${status.label}`
+          }
+          title={status.reason ?? undefined}
           className={status.className}
         >
           {status.label}

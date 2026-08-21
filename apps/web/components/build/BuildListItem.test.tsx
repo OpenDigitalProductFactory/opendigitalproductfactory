@@ -123,7 +123,7 @@ describe("BuildListItem fleet density", () => {
         isDevEnvironment={false}
         density="fleet"
         queueState={{ kind: "running", stepLabel: null }}
-        ownerState="not-started"
+        attention={{ state: "not-started", reason: null, needsOwner: false, fromRuntimeSignal: false }}
         onSelect={vi.fn()}
         onDelete={vi.fn()}
       />,
@@ -254,7 +254,7 @@ describe("BuildListItem fleet density", () => {
         lifecycleLabel={null}
         isDevEnvironment={false}
         density="fleet"
-        needsAttention
+        attention={{ state: "waiting-owner", reason: "Ready for your release decision.", needsOwner: true, fromRuntimeSignal: true }}
         onSelect={vi.fn()}
         onDelete={vi.fn()}
       />,
@@ -265,7 +265,7 @@ describe("BuildListItem fleet density", () => {
     expect(html).not.toContain('aria-label="Needs attention"');
   });
 
-  it("omits the needs-you status when needsAttention is false (default)", () => {
+  it("omits the needs-you status when no attention is supplied (default)", () => {
     const html = renderToStaticMarkup(
       <BuildListItem
         build={makeBuild()}
@@ -422,7 +422,7 @@ describe("BuildListItem fleet density", () => {
         isDevEnvironment={false}
         density="fleet"
         queueState={{ kind: "running", stepLabel: "Generate" }}
-        needsAttention
+        attention={{ state: "waiting-owner", reason: "Ready for your release decision.", needsOwner: true, fromRuntimeSignal: true }}
         onSelect={vi.fn()}
         onDelete={vi.fn()}
       />,

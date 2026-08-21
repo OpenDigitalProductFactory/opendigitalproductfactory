@@ -2,6 +2,8 @@ import type { BuildStudioCustomerStatus } from "@/lib/build/customer-status-proj
 import { ownerStateBadgeLabel } from "@/lib/build/owner-status-reconciliation";
 import type { BuildPhase } from "@/lib/feature-build-types";
 import { deriveBuildActivityStory } from "./build-studio-operator-view";
+import { fallbackNow, fallbackNext } from "@/lib/build/owner-change-view";
+import type { BuildAttention } from "@/lib/build/build-attention";
 
 const OWNER_STATE_BADGE = {
   working: "border-[var(--dpf-info)] bg-[var(--dpf-state-info)] text-[var(--dpf-info)]",
@@ -26,11 +28,16 @@ export function BuildOperatorOverview({
   outcome,
   phase,
   status,
+  attention,
 }: {
   title: string;
   outcome: string | null | undefined;
   phase: BuildPhase;
   status?: BuildStudioCustomerStatus | null;
+  /** The row's single attention answer. When it says the owner is needed, its
+   *  reason IS the next action — so this card can no longer say "no action
+   *  needed" about a build the rail is flagging. */
+  attention?: BuildAttention | null;
 }) {
   const ownerTitle = ownerSafeBuildText(title);
   const ownerOutcome = outcome ? ownerSafeBuildText(outcome) : outcome;
@@ -40,12 +47,18 @@ export function BuildOperatorOverview({
       ? (phase === "failed" ? "failed" : "abandoned")
       : phase;
   const activity = deriveBuildActivityStory(activityPhase);
-  const lifecyclePosition = status?.lifecyclePosition ?? fallbackStatus(phase);
-  const nextAction = status?.nextAction ?? fallbackNextAction(phase);
-  const ownerBadge = status?.ownerState
+  const lifecyclePosition = status?.lifecyclePosition ?? fallbackNow(phase);
+  // Precedence matters: an attention reason outranks the generic phase
+  // fallback, so the chip and this card cannot disagree.
+  const nextAction =
+    status?.nextAction
+    ?? (attention?.needsOwner ? attention.reason : null)
+    ?? fallbackNext(phase);
+  const badgeState = status?.ownerState ?? attention?.state;
+  const ownerBadge = badgeState
     ? {
-        label: ownerStateBadgeLabel(status.ownerState),
-        className: OWNER_STATE_BADGE[status.ownerState],
+        label: ownerStateBadgeLabel(badgeState),
+        className: OWNER_STATE_BADGE[badgeState],
       }
     : status?.needsYou
       ? {
@@ -180,23 +193,11 @@ export function ownerSafeBuildText(value: string): string {
     .replace(/\bFB-[A-Z0-9-]+\b/g, "this build");
 }
 
-function fallbackStatus(phase: BuildPhase): string {
-  const labels: Record<BuildPhase, string> = {
-    ideate: "Understanding the outcome",
-    plan: "Shaping the approach",
-    build: "Building the solution",
-    review: "Checking the work",
-    ship: "Preparing for release",
-    complete: "Ready to use",
-    failed: "Needs recovery",
-    abandoned: "Work stopped",
-  };
-  return labels[phase];
-}
-
-function fallbackNextAction(phase: BuildPhase): string {
-  if (phase === "failed") return "Resolve the blocker, then resume the governed build.";
-  if (phase === "abandoned") return "Resume this outcome only if it is still valuable.";
-  if (phase === "complete") return "No action needed. The evidence remains available in technical details.";
-  return "No action needed unless Build Studio asks for a decision.";
-}
+// fallbackStatus() and fallbackNextAction() were deleted here. They duplicated
+// fallbackNow()/fallbackNext() in lib/build/owner-change-view.ts and DISAGREED
+// with them: the same phase read "Building the solution" here and "Building the
+// change" there, and — the defect that mattered — ship phase returned "No action
+// needed unless Build Studio asks for a decision" here while the canonical map
+// correctly returned "Review the proof before release." A ship-phase build is
+// precisely the waiting-owner case, so this surface told the operator no action
+// was needed on the one build that was waiting for them.

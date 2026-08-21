@@ -202,7 +202,8 @@ function fallbackOwnerState(phase: BuildPhase): BuildStudioOwnerState {
   return "working";
 }
 
-function fallbackNow(phase: BuildPhase): string {
+/** Canonical phase -> plain-language position. The ONE map (BI one-attention-truth). */
+export function fallbackNow(phase: BuildPhase): string {
   const labels: Record<BuildPhase, string> = {
     ideate: "Understanding the outcome",
     plan: "Shaping the approach",
@@ -216,7 +217,9 @@ function fallbackNow(phase: BuildPhase): string {
   return labels[phase];
 }
 
-function fallbackNext(phase: BuildPhase): string {
+/** Canonical phase -> next action. Note ship returns a real action, never
+ *  "no action needed": a ship-phase build is waiting on the owner. */
+export function fallbackNext(phase: BuildPhase): string {
   if (phase === "complete") return "Review whether the outcome improves as expected.";
   if (phase === "failed") return "Resolve the blocker before work continues.";
   if (phase === "abandoned") return "Resume only if this outcome is still valuable.";

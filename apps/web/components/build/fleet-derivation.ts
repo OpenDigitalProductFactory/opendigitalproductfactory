@@ -10,41 +10,15 @@
 import type { FeatureBuildRow } from "@/lib/feature-build-types";
 import type { BuildQueueState } from "./QueueStateBadge";
 
-// BI-46204009: the fleet status must reflect ACTIVITY FRESHNESS, not just the
-// stored phase. A build frozen in an active phase (its watchdog stall never
-// remediated — see BI-EB33BD37) otherwise renders forever as an animated
-// "running / Working" badge, implying live work where there is none. A build in
-// build/review whose last update is older than this floor is treated as stalled
-// (→ needs-attention, off the "Working" count). Healthy builds checkpoint
-// FeatureBuild.updatedAt every few minutes, so a conservative 30-minute floor
-// avoids false positives on normal long-running steps. A BuildActivity-heartbeat
-// signal (tighter + join-based) is the ideal follow-up.
-export const STALL_THRESHOLD_MS = 30 * 60 * 1000;
+// The stall primitive moved to lib/build/build-attention.ts — it is a
+// projection input, and lib must not import from components. Re-exported here
+// so existing component-side callers and tests keep one import site.
+import { isBuildStalled, STALL_THRESHOLD_MS } from "@/lib/build/build-attention";
 
-function updatedMs(build: Pick<FeatureBuildRow, "updatedAt">): number {
-  // updatedAt is typed Date but arrives as an ISO string after RSC
-  // serialization on the client — new Date() handles both.
-  return new Date(build.updatedAt).getTime();
-}
-
-/**
- * True when a build sits in an active execution phase (build/review) but has had
- * no update for longer than {@link STALL_THRESHOLD_MS} — i.e. it is frozen, not
- * working. Only build/review can stall: ideate/plan are off-rail coworker
- * custody and ship/complete/failed/abandoned are terminal-ish.
- */
-export function isBuildStalled(
-  build: Pick<FeatureBuildRow, "phase" | "updatedAt">,
-  now: number = Date.now(),
-): boolean {
-  if (build.phase !== "build" && build.phase !== "review") return false;
-  const ms = updatedMs(build);
-  if (Number.isNaN(ms)) return false;
-  return now - ms > STALL_THRESHOLD_MS;
-}
+export { isBuildStalled, STALL_THRESHOLD_MS };
 
 function stalledReason(build: Pick<FeatureBuildRow, "updatedAt">, now: number): string {
-  const mins = Math.round((now - updatedMs(build)) / 60000);
+  const mins = Math.round((now - new Date(build.updatedAt).getTime()) / 60000);
   const label = mins >= 120 ? `${Math.round(mins / 60)}h` : `${mins} min`;
   return `Stalled — no activity for ${label}. Needs attention.`;
 }
@@ -134,44 +108,12 @@ function humanizeStep(step: string): string {
   return friendly[step] ?? step.replace(/_/g, " ");
 }
 
-/**
- * Does this build need the operator's attention right now?
- *
- * Heuristic — kept conservative so the attention dot stays meaningful:
- *   - phase=failed → yes (terminal)
- *   - phase=build/review + no update for > STALL_THRESHOLD_MS (stalled) → yes
- *   - phase=build + buildExecState.error set → yes
- *   - planReview / designReview with decision="fail" → yes (waiting on revision)
- *   - phase=ship with no acceptanceMet → yes (operator decision needed)
- *   - claim status indicates a stalled / abandoned claim → yes
- *
- * The fleet row renders this as the plain "Needs you" status so the cue is
- * readable without decoding symbols.
- */
-export function deriveNeedsAttention(build: FeatureBuildRow, now: number = Date.now()): boolean {
-  if (build.phase === "failed") return true;
-
-  // BI-46204009: a build frozen in an active phase (stalled watchdog, never
-  // remediated) needs the operator, not an animated "Working" badge.
-  if (isBuildStalled(build, now)) return true;
-
-  if (build.phase === "build") {
-    const exec = build.buildExecState as { error?: string | null } | null | undefined;
-    if (exec?.error) return true;
-  }
-
-  const designReview = build.designReview as { decision?: string } | null | undefined;
-  if (designReview?.decision === "fail") return true;
-
-  const planReview = build.planReview as { decision?: string } | null | undefined;
-  if (planReview?.decision === "fail") return true;
-
-  if (build.phase === "ship" && build.acceptanceMet === null) return true;
-
-  if (build.claimStatus === "abandoned") return true;
-
-  return false;
-}
+// deriveNeedsAttention() was deleted here. It returned a BOOLEAN over seven
+// distinct conditions, discarding which one fired, so a row could only ever
+// print the literal string "Needs you" — and it disagreed with the canonical
+// owner state that drove the Next card. Its replacement is
+// deriveBuildAttention() in lib/build/build-attention.ts, which returns the
+// canonical BuildStudioOwnerState plus the reason.
 
 /**
  * Counters for the FleetRail header label. Pure — operates over the
@@ -209,7 +151,8 @@ export function deriveCoworkerActivityCount(
 export type OperatorFocusEntry = {
   build: Pick<FeatureBuildRow, "buildId" | "phase">;
   queueState: BuildQueueState;
-  needsAttention: boolean;
+  /** From the single attention producer — see lib/build/build-attention.ts. */
+  attention: { needsOwner: boolean } | null;
 };
 
 /**
@@ -223,7 +166,7 @@ export function isOperatorFocusEntry(
   activeBuildId: string | null,
 ): boolean {
   if (activeBuildId && entry.build.buildId === activeBuildId) return true;
-  if (entry.needsAttention) return true;
+  if (entry.attention?.needsOwner) return true;
   // BI-5939B62F: ideate/plan now derive to "running" so they COUNT in the fleet
   // summary, but quiet ideation/planning probes still stay OUT of the operator
   // focus queue (AI-custody) unless selected or needing attention — the pre-fix

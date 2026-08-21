@@ -29,7 +29,6 @@ import { BuildAssuranceGateCard } from "./BuildAssuranceGateCard";
 import { BuildListItem } from "./BuildListItem";
 import { EpicRollupListItem } from "./EpicRollupListItem";
 import {
-  deriveNeedsAttention,
   deriveQueueState,
   isOperatorFocusEntry,
 } from "./fleet-derivation";
@@ -43,9 +42,11 @@ import {
   type BuildStudioCustomerStatus,
 } from "@/lib/build/customer-status-projection";
 import {
+  ownerStateBadgeLabel,
   reconcileBuildStudioCustomerStatus,
   type BuildStudioOwnerState,
 } from "@/lib/build/owner-status-reconciliation";
+import { deriveBuildAttention } from "@/lib/build/build-attention";
 import { projectAutonomousBuildCustody } from "@/lib/build/autonomous-build-custody";
 import { BuildOperatorHeaderDetails, formatOperatorPhaseLabel } from "./BuildOperatorContext";
 import { BuildOperatorOverview } from "./BuildOperatorOverview";
@@ -821,6 +822,7 @@ export function BuildStudio({
               queued → idle. Falls back to FB ascending for same-kind tie-break. */}
           <FleetRailZone
             buildRows={buildRows}
+            customerStatuses={customerStatuses}
             epicRollups={rollupRows}
             activeBuildId={activeBuild?.buildId ?? null}
             activeOwnerState={ownerStatus?.ownerState ?? null}
@@ -871,6 +873,10 @@ export function BuildStudio({
                 outcome={ownerChangeView?.outcome}
                 phase={activeBuild.phase}
                 status={ownerStatus}
+                attention={deriveBuildAttention(
+                  activeBuild,
+                  customerStatuses[activeBuild.id],
+                )}
               />
 
               {/* Error banner for failed builds */}
@@ -1081,6 +1087,7 @@ export function BuildStudio({
                       drawerInitialSectionId,
                       supervisedBuildRows,
                       changeNarrative,
+                      customerStatuses,
                       engineerView,
                       () => refreshActiveBuildState(activeBuild.buildId),
                     )}
@@ -1141,6 +1148,7 @@ function buildDetailsDrawerSections(
   initialSectionId: string | null,
   allBuilds: readonly FeatureBuildRow[],
   changeNarrative: BuildChangeNarrative | null,
+  customerStatuses: Record<string, BuildStudioCustomerStatus>,
   engineerView: boolean = false,
   onBriefSaved?: () => void | Promise<void>,
 ): DetailsDrawerSection[] {
@@ -1199,7 +1207,7 @@ function buildDetailsDrawerSections(
       id: "bs-queue",
       title: "BS Queue",
       defaultOpen: defaultId === "bs-queue",
-      content: <BsQueueSection builds={allBuilds} />,
+      content: <BsQueueSection builds={allBuilds} customerStatuses={customerStatuses} />,
     },
   ];
 }
@@ -1306,15 +1314,23 @@ function AssuranceRow({ expanded, onToggle, freshness, buildId, bomSummary, find
   );
 }
 
-function BsQueueSection({ builds }: { builds: readonly FeatureBuildRow[] }) {
+function BsQueueSection({
+  builds,
+  customerStatuses,
+}: {
+  builds: readonly FeatureBuildRow[];
+  customerStatuses: Record<string, BuildStudioCustomerStatus>;
+}) {
   const entries = builds.map((b) => ({
     build: b,
     queueState: deriveQueueState(b),
-    needsAttention: deriveNeedsAttention(b),
+    attention: deriveBuildAttention(b, customerStatuses[b.id]),
   }));
   const kindRank = { running: 0, blocked: 1, queued: 2, idle: 3 } as const;
   const sorted = [...entries].sort((a, b) => {
-    if (a.needsAttention !== b.needsAttention) return a.needsAttention ? -1 : 1;
+    const aNeeds = a.attention.needsOwner;
+    const bNeeds = b.attention.needsOwner;
+    if (aNeeds !== bNeeds) return aNeeds ? -1 : 1;
     const ra = kindRank[a.queueState.kind];
     const rb = kindRank[b.queueState.kind];
     if (ra !== rb) return ra - rb;
@@ -1333,7 +1349,9 @@ function BsQueueSection({ builds }: { builds: readonly FeatureBuildRow[] }) {
     { runningCount: 0, blockedCount: 0, queuedCount: 0 },
   );
   const labelForQueueState = (entry: (typeof entries)[number]) => {
-    if (entry.needsAttention) return "Needs you";
+    // Canonical vocabulary — same producer as the rail, so the two panels
+    // showing the same builds can no longer disagree.
+    if (entry.attention.needsOwner) return ownerStateBadgeLabel(entry.attention.state);
     if (entry.queueState.kind === "running") return "Working";
     if (entry.queueState.kind === "blocked") return "Blocked";
     if (entry.queueState.kind === "queued") return `Waiting ${entry.queueState.position}`;
@@ -1559,6 +1577,7 @@ function FleetRailZone({
   activeOwnerState,
   governedBacklogEnabled,
   isDevEnvironment,
+  customerStatuses,
   onSelectBuild,
   onSelectBuildById,
   onDeleteBuild,
@@ -1568,6 +1587,10 @@ function FleetRailZone({
   epicRollups: EpicRollupView[];
   activeBuildId: string | null;
   activeOwnerState: BuildStudioOwnerState | null;
+  /** Per-build canonical status. Already loaded for EVERY build by
+   *  loadBuildStudioCustomerStatuses; previously read only for the active
+   *  build while every other row fell back to a reasonless boolean. */
+  customerStatuses: Record<string, BuildStudioCustomerStatus>;
   governedBacklogEnabled: boolean;
   isDevEnvironment: boolean;
   onSelectBuild: (build: FeatureBuildRow) => void;
@@ -1577,13 +1600,13 @@ function FleetRailZone({
 }) {
   const [expandedEpicIds, setExpandedEpicIds] = useState<Set<string>>(() => new Set());
 
-  // Derive per-row fleet entries: queueState + needsAttention + lifecycle.
+  // Derive per-row fleet entries: queueState + attention + lifecycle.
   // queueState falls back to phase-based heuristics until the concurrency
   // dispatcher exposes real values (its thread owns that surface).
   const entries = buildRows.map((build) => ({
     build,
     queueState: deriveQueueState(build),
-    needsAttention: deriveNeedsAttention(build),
+    attention: deriveBuildAttention(build, customerStatuses[build.id]),
     lifecycleLabel: deriveLifecycleLabel({
       backlogItem: build.originator
         ? {
@@ -1603,7 +1626,7 @@ function FleetRailZone({
       title: entry.build.title,
       phase: entry.build.phase,
       updatedAt: entry.build.updatedAt,
-      needsYou: entry.needsAttention,
+      needsYou: entry.attention.needsOwner,
     })),
   );
 
@@ -1773,8 +1796,7 @@ function FleetRailZone({
               isDevEnvironment={isDevEnvironment}
               density="fleet"
               queueState={entry.queueState}
-              needsAttention={entry.needsAttention}
-              ownerState={activeBuildId === entry.build.buildId ? activeOwnerState : null}
+              attention={entry.attention}
               onSelect={() => onSelectBuild(entry.build)}
               onDelete={() => onDeleteBuild(entry.build)}
             />
@@ -1851,8 +1873,7 @@ function FleetRailZone({
                         isDevEnvironment={isDevEnvironment}
                         density="fleet"
                         queueState={entry.queueState}
-                        needsAttention={entry.needsAttention}
-                        ownerState={activeBuildId === entry.build.buildId ? activeOwnerState : null}
+                        attention={entry.attention}
                         onSelect={() => onSelectBuild(entry.build)}
                         onDelete={() => onDeleteBuild(entry.build)}
                       />
