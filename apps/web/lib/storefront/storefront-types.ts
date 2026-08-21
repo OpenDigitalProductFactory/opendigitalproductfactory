@@ -1,8 +1,32 @@
+/**
+ * Public-facing view of Organization.address.
+ *
+ * Declares BOTH key styles because the stored JSON carries either: the legacy
+ * street/postcode shape and the canonical OrgAddress line1/postalCode shape.
+ * storefront-data casts `org.address` straight onto this type, and a cast strips
+ * nothing at runtime — so when the interface listed only four legacy fields, the
+ * state was present in the object and invisible to every reader that trusted the
+ * type. That is what made a US address render as "Fort Worth, 76106" with
+ * stateCode "TX" stored correctly (IMP-034).
+ *
+ * Keep this a superset of what OrgAddress can hold, or the same class of silent
+ * drop returns.
+ */
 export interface StorefrontAddress {
+  /** Legacy keys — still written by older installs. */
   street?: string;
-  city?: string;
   postcode?: string;
+  /** Canonical OrgAddress keys. */
+  line1?: string;
+  line2?: string;
+  postalCode?: string;
+  city?: string;
+  /** State / province DISPLAY name, e.g. "Texas". This is what renders. */
+  region?: string;
+  /** Normalized 2-letter subdivision code, e.g. "TX". Not rendered directly. */
+  stateCode?: string;
   country?: string;
+  countryCode?: string;
 }
 
 export interface SocialLinks {
