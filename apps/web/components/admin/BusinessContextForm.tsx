@@ -18,6 +18,7 @@ import {
   US_STATES,
   countryName,
   usStateName,
+  usStateCode,
   type OrgAddress,
 } from "@/lib/shared/org-address";
 import { resolveTimezoneFromAddress } from "@/lib/timezone-from-location";
@@ -163,9 +164,18 @@ export function BusinessContextForm({ initial, archetypeSummary, isEdit, autoFil
   }
 
   function onCountryChange(value: string) {
+    const previous = countrySel;
     setCountrySel(value);
     const next: OrgAddress = { ...data.address };
-    // A country switch invalidates the previous state/province selection.
+
+    // Switching BETWEEN countries invalidates the previous state/province: a Texas
+    // code means nothing once the country is the UK. But the FIRST selection is not
+    // a switch, and clearing there silently discarded whatever the operator had
+    // already typed into the free-text region field -- they type "TX", pick United
+    // States, and the state vanishes with no message (IMP-066). The field also
+    // changes identity at that moment (free-text `region` -> `stateCode` picker),
+    // so the loss is invisible: the new control simply renders empty.
+    const carried = previous ? null : (data.address.region ?? "").trim();
     delete next.stateCode;
     delete next.region;
     if (!value) {
@@ -177,6 +187,18 @@ export function BusinessContextForm({ initial, archetypeSummary, isEdit, autoFil
     } else {
       next.countryCode = value;
       next.country = countryName(value) ?? value;
+      // Carry a first-selection region across. For the US the picker is code-based,
+      // so map "TX" or "Texas" onto the canonical code; anything unrecognised is
+      // kept as free text rather than dropped.
+      if (carried) {
+        const code = value === "US" ? usStateCode(carried) : null;
+        if (code) {
+          next.stateCode = code;
+          next.region = usStateName(code) ?? carried;
+        } else {
+          next.region = carried;
+        }
+      }
     }
     setAddress(next);
   }

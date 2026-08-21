@@ -151,6 +151,25 @@ export function usStateName(code: string | null | undefined): string | null {
   return (c && US_STATE_NAME_BY_CODE.get(c)) || null;
 }
 
+/**
+ * Canonical US state CODE from either a code ("tx") or a display name ("Texas"),
+ * or null when it matches neither.
+ *
+ * Exists so a state the operator typed as free text before picking a country can
+ * be carried into the code-based picker instead of being discarded (IMP-066).
+ */
+export function usStateCode(input: string | null | undefined): string | null {
+  const raw = input?.trim();
+  if (!raw) return null;
+  const upper = raw.toUpperCase();
+  if (US_STATE_NAME_BY_CODE.has(upper)) return upper;
+  const lower = raw.toLowerCase();
+  for (const { code, name } of US_STATES) {
+    if (name.toLowerCase() === lower) return code;
+  }
+  return null;
+}
+
 /** Display name for an ISO alpha-2 country code, or null when unknown. */
 export function countryName(code: string | null | undefined): string | null {
   const c = code?.trim().toUpperCase();
