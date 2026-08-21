@@ -1475,6 +1475,9 @@
     "scripts/check-instruction-plane-size.mjs": [
       "docs/architecture/context-engineering-standards.md"
     ],
+    "scripts/check-label-association.mjs": [
+      "docs/testing/pre-pr-gate.md"
+    ],
     "scripts/check-mcp-tool-pack.mjs": [
       "docs/architecture/mcp-tool-packs.md"
     ],
@@ -2809,6 +2812,7 @@
       "docker-compose.local-ci.yml",
       "packages/dpf-skill-pack/hooks/pregate-evidence-guard.mjs",
       "scripts/check-guards.mjs",
+      "scripts/check-label-association.mjs",
       "scripts/check-mobile-jest-pin.mjs",
       "scripts/ci-policy-guards.test.mjs",
       "scripts/gate-worktree.mjs",
