@@ -86,6 +86,11 @@ RUN NODE_OPTIONS="--max-old-space-size=8192" NEXT_TELEMETRY_DISABLED=1 pnpm --fi
 FROM deps AS init
 COPY pnpm-workspace.yaml tsconfig.base.json .gitignore ./
 COPY docker-compose.yml docker-compose.release.yml docker-compose.pki.yml docker-compose.organization-trust.yml docker-compose.tls.yml docker-compose.edge-actions.yml ./
+# The install docs tell operators to run these (docs/install/linux.md,
+# docs/install/cloud-single-vm.md), and a consumer install has no git checkout, so they
+# must ship in the bundle or the documented uninstall fails 'file not found' on every
+# Ready-to-go install. Both halves are required: this COPY and the cp below (IMP-043).
+COPY uninstall-dpf.sh uninstall-dpf.ps1 uninstall-dpf.bat ./
 COPY scripts/pki/edge-client.tpl ./scripts/pki/
 COPY scripts/set-hooks-path.mjs ./scripts/
 COPY scripts/lib/resolve-capability-compose-profiles.mjs ./scripts/lib/
@@ -176,6 +181,7 @@ RUN mkdir -p /dpf-release-assets/scripts/lib /dpf-release-assets/scripts/install
       /dpf-release-assets/monitoring && \
     cp docker-compose.yml docker-compose.release.yml docker-compose.pki.yml docker-compose.organization-trust.yml docker-compose.tls.yml docker-compose.edge-actions.yml /dpf-release-assets/ && \
     mkdir -p /dpf-release-assets/scripts/pki && cp scripts/pki/edge-client.tpl /dpf-release-assets/scripts/pki/ && \
+    cp uninstall-dpf.sh uninstall-dpf.ps1 uninstall-dpf.bat /dpf-release-assets/ && \
     cp scripts/bootstrap-organization-pki.ps1 /dpf-release-assets/scripts/ && \
     cp scripts/lib/resolve-capability-compose-profiles.mjs scripts/lib/govern-capability-compose-args.mjs scripts/lib/capability-state-hash.mjs /dpf-release-assets/scripts/lib/ && \
     cp scripts/capability-service-catalog.generated.json /dpf-release-assets/scripts/ && \

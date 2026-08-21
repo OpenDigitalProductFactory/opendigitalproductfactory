@@ -42,6 +42,22 @@ const REQUIRED_IN_BUNDLE = Object.freeze([
   "scripts/safety/dpf-shell-guard-fallback-patterns.json",
   "scripts/installer/lib/state.ps1",
   "scripts/bootstrap-organization-pki.ps1",
+  // The install guides tell operators to run these by name, so a consumer install
+  // that lacks them fails the documented uninstall with "file not found" — the
+  // only offered route to zero footprint (IMP-073).
+  "uninstall-dpf.sh",
+  "uninstall-dpf.ps1",
+  "uninstall-dpf.bat",
+]);
+
+/**
+ * Commands the published install guides instruct an operator to run by name.
+ * A documented command whose file never ships is worse than an undocumented gap:
+ * the operator follows the guide and gets "file not found".
+ */
+const DOCUMENTED_COMMANDS = Object.freeze([
+  { doc: "docs/install/linux.md", file: "uninstall-dpf.sh" },
+  { doc: "docs/install/cloud-single-vm.md", file: "uninstall-dpf.sh" },
 ]);
 
 /** The single RUN block that assembles /dpf-release-assets. */
@@ -85,8 +101,29 @@ test("every bundled asset is also COPYed into the build stage that assembles it"
   );
 });
 
+test("every documented command's file actually ships in the bundle", () => {
+  // IMP-073: docs/install/linux.md and cloud-single-vm.md both list
+  // `bash uninstall-dpf.sh` in their command tables, while the file shipped only
+  // in source. Following the guide on a Ready-to-go install produced "file not found".
+  const block = releaseAssetBlock(dockerfile);
+  for (const { doc, file } of DOCUMENTED_COMMANDS) {
+    const docPath = join(repoRoot, doc);
+    if (!existsSync(docPath)) continue;
+    const body = readFileSync(docPath, "utf8");
+    if (!body.includes(file)) continue;
+    assert.ok(
+      block.includes(file),
+      `${doc} tells the operator to run ${file}, but it is not in /dpf-release-assets — ` +
+        `the consumer install has no git checkout, so the documented command cannot work`,
+    );
+  }
+});
+
 test("every required path is actually referenced by an installer (no stale entries)", () => {
   for (const p of REQUIRED_IN_BUNDLE) {
+    // The uninstallers are referenced by the install GUIDES rather than by
+    // install-dpf.*, so the installer-reference check does not apply to them.
+    if (p.startsWith("uninstall-dpf.")) continue;
     const win = p.replace(/\//g, "\\\\");
     const referenced =
       psInstaller.includes(p) || psInstaller.includes(p.replace(/\//g, "\\")) ||
