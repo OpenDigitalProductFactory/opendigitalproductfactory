@@ -42,6 +42,33 @@ describe("StorefrontTrustFooter", () => {
     expect(html).toContain("/s/copper-kettle/policies#terms");
   });
 
+  // IMP-034: both storefront surfaces hand-joined a subset of address keys and
+  // dropped the state. It survived because every fixture here was a UK address
+  // (Bristol, BS1 1AA) which HAS no state — the test could not fail on a bug the
+  // data never exercised. A US address is the case that matters: "Fort Worth,
+  // 76106" without TX is not a usable business address.
+  it("includes the state for a US address", () => {
+    const html = renderToStaticMarkup(
+      <StorefrontTrustFooter
+        storefront={{
+          ...base,
+          orgAddress: {
+            line1: "4820 Ridgeline Parkway",
+            city: "Fort Worth",
+            region: "Texas",
+            stateCode: "TX",
+            postalCode: "76106",
+            country: "United States",
+          },
+        }}
+        hours={hours}
+      />,
+    );
+    expect(html).toContain("Texas");
+    expect(html).toContain("Fort Worth");
+    expect(html).toContain("76106");
+  });
+
   it("degrades gracefully when hours/contact/address are missing", () => {
     const html = renderToStaticMarkup(
       <StorefrontTrustFooter

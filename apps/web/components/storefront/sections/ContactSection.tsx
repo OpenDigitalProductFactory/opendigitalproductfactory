@@ -1,3 +1,4 @@
+import { formatOrgAddressLines } from "@/lib/shared/org-address";
 import type { PublicStorefrontConfig } from "@/lib/storefront-types";
 
 export function ContactSection({
@@ -24,7 +25,7 @@ export function ContactSection({
           <div>
             <span style={{ color: "var(--dpf-muted)", fontSize: 12 }}>Address</span><br />
             <span style={{ color: "var(--dpf-text)" }}>
-              {[storefront.orgAddress.street, storefront.orgAddress.city, storefront.orgAddress.postcode].filter(Boolean).join(", ")}
+              {formatOrgAddressLines(storefront.orgAddress).join(", ")}
             </span>
           </div>
         )}
