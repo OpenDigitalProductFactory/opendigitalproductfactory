@@ -211,26 +211,47 @@ export async function adoptWorktreeCapsule(args: {
     // has a null backlogItemId. When a claim now supplies one, bind the existing
     // capsule instead of leaving the work orphaned — this is what lets a worktree
     // cut before the BI was chosen still join the BI↔location record.
-    if (args.input.backlogItemId && existing.backlogItemId == null) {
+    const lateBind = Boolean(args.input.backlogItemId) && existing.backlogItemId == null;
+    // Head sync (BI-B9403248): headSha used to be written only on CREATE, so a
+    // capsule adopted or claimed before the artifact commit existed could never
+    // satisfy the plan-coverage ownership check, and any amend/rebase/squash
+    // after adoption stranded it for good. The branch head is the caller's own
+    // state, not privileged data, so re-adopting the same branch advances it.
+    const headSynced = Boolean(args.input.headSha) && args.input.headSha !== existing.headSha;
+    const baseSynced = Boolean(args.input.baseSha) && args.input.baseSha !== existing.baseSha;
+    if (lateBind || headSynced || baseSynced) {
       const bound = await inTransaction(args.db, async (tx) => {
         const updated = await tx.workroom.update({
           where: { capsuleId: existing.capsuleId },
           data: {
-            backlogItemId: args.input.backlogItemId,
-            ...(args.input.epicId && existing.epicId == null ? { epicId: args.input.epicId } : {}),
-            ...(args.input.executorRef && existing.executorRef == null
-              ? { executorRef: args.input.executorRef }
+            ...(lateBind
+              ? {
+                backlogItemId: args.input.backlogItemId,
+                ...(args.input.epicId && existing.epicId == null ? { epicId: args.input.epicId } : {}),
+                ...(args.input.executorRef && existing.executorRef == null
+                  ? { executorRef: args.input.executorRef }
+                  : {}),
+                ...(args.input.worktreePath && existing.worktreePath !== args.input.worktreePath
+                  ? { worktreePath: args.input.worktreePath }
+                  : {}),
+              }
               : {}),
-            ...(args.input.worktreePath && existing.worktreePath !== args.input.worktreePath
-              ? { worktreePath: args.input.worktreePath }
-              : {}),
+            ...(headSynced ? { headSha: args.input.headSha } : {}),
+            ...(baseSynced ? { baseSha: args.input.baseSha } : {}),
+            ...(headSynced || baseSynced ? { lastSyncedAt: now } : {}),
           },
         });
         await recordActivity(tx, {
           workCapsuleId: existing.id,
           kind: "adopted",
-          summary: `Late-bound ${existing.capsuleId} to ${args.input.backlogItemId}`,
-          payload: { backlogItemId: args.input.backlogItemId, lateBind: true },
+          summary: lateBind
+            ? `Late-bound ${existing.capsuleId} to ${args.input.backlogItemId}`
+            : `Synced ${existing.capsuleId} branch state for ${args.input.headBranch}`,
+          payload: {
+            ...(lateBind ? { backlogItemId: args.input.backlogItemId, lateBind: true } : {}),
+            ...(headSynced ? { headSha: args.input.headSha, previousHeadSha: existing.headSha ?? null } : {}),
+            ...(baseSynced ? { baseSha: args.input.baseSha, previousBaseSha: existing.baseSha ?? null } : {}),
+          },
           actor: args.actor,
         });
         return updated;
