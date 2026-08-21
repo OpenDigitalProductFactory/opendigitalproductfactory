@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useId, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { createCustomerContact } from "@/lib/actions/customer-contacts";
 import type { DedupCandidate } from "@/lib/mdm/dedup-gate";
@@ -24,6 +24,10 @@ export function AddContactButton({ accountId }: { accountId: string }) {
   const [phone, setPhone] = useState("");
   const [jobTitle, setJobTitle] = useState("");
   const [candidates, setCandidates] = useState<DedupCandidate[] | null>(null);
+  // Labels rendered next to these inputs but were never associated with them:
+  // no htmlFor, no id, no nesting. Sighted users saw "First name *"; screen
+  // readers announced five unlabelled edit fields (IMP-032 class).
+  const fieldId = useId();
 
   function reset() {
     setFirstName(""); setLastName(""); setEmail(""); setPhone(""); setJobTitle("");
@@ -108,26 +112,26 @@ export function AddContactButton({ accountId }: { accountId: string }) {
           <div className="space-y-3">
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className={labelClasses}>First name *</label>
-                <input className={inputClasses} value={firstName} onChange={(e) => setFirstName(e.target.value)} />
+                <label className={labelClasses} htmlFor={`${fieldId}-firstName`}>First name *</label>
+                <input id={`${fieldId}-firstName`} className={inputClasses} aria-required="true" value={firstName} onChange={(e) => setFirstName(e.target.value)} />
               </div>
               <div>
-                <label className={labelClasses}>Last name</label>
-                <input className={inputClasses} value={lastName} onChange={(e) => setLastName(e.target.value)} />
+                <label className={labelClasses} htmlFor={`${fieldId}-lastName`}>Last name</label>
+                <input id={`${fieldId}-lastName`} className={inputClasses} value={lastName} onChange={(e) => setLastName(e.target.value)} />
               </div>
             </div>
             <div>
-              <label className={labelClasses}>Email *</label>
-              <input className={inputClasses} type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+              <label className={labelClasses} htmlFor={`${fieldId}-email`}>Email *</label>
+              <input id={`${fieldId}-email`} className={inputClasses} type="email" aria-required="true" value={email} onChange={(e) => setEmail(e.target.value)} />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className={labelClasses}>Phone</label>
-                <input className={inputClasses} value={phone} onChange={(e) => setPhone(e.target.value)} />
+                <label className={labelClasses} htmlFor={`${fieldId}-phone`}>Phone</label>
+                <input id={`${fieldId}-phone`} className={inputClasses} value={phone} onChange={(e) => setPhone(e.target.value)} />
               </div>
               <div>
-                <label className={labelClasses}>Job title</label>
-                <input className={inputClasses} value={jobTitle} onChange={(e) => setJobTitle(e.target.value)} />
+                <label className={labelClasses} htmlFor={`${fieldId}-jobTitle`}>Job title</label>
+                <input id={`${fieldId}-jobTitle`} className={inputClasses} value={jobTitle} onChange={(e) => setJobTitle(e.target.value)} />
               </div>
             </div>
             {error && <p className="text-xs text-red-400">{error}</p>}
