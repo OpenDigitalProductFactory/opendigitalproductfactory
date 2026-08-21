@@ -201,6 +201,15 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       node("--test", "scripts/check-ux-primitive-adoption.test.mjs"),
       node("scripts/check-ux-primitive-adoption.mjs"),
     ]),
+    // BI-101C107C: the Build Studio operator UI surface (component count +
+    // non-test LOC under apps/web/components/build) may only shrink against
+    // the owned baseline. Five months of additive "simplification" produced 74
+    // components and one deletion because every UX gate was a presence check;
+    // this is the ratchet that makes a net-additive simplification fail.
+    guard("build-studio-surface-guard", "Build Studio Surface Guard", [
+      node("--test", "scripts/check-build-studio-surface-budget.test.mjs"),
+      node("scripts/check-build-studio-surface-budget.mjs"),
+    ]),
     // BI-3F17B16B: an EP-/BI- id cited in a CHANGED doc must exist in the live
     // backlog (diff-scoped; grandfather baseline; degrades to warn-pass when no
     // live install is reachable). Closes the unbacked-doc-anchor pattern (P3).

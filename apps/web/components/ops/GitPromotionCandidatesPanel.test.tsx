@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import "../build-studio/test-setup";
+import "@/test-setup";
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { GitPromotionCandidatesPanel } from "./GitPromotionCandidatesPanel";

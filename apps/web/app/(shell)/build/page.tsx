@@ -3,9 +3,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@dpf/db";
 import { getExecutionEpicRollups, getFeatureBuildById, getFeatureBuilds } from "@/lib/feature-build-data";
 import { getPortfoliosForSelect } from "@/lib/backlog-data";
-import { businessBuildBriefFromRecord } from "@/lib/build/business-build-brief";
 import { BuildStudio } from "@/components/build/BuildStudio";
-import { BuildStudioV2 } from "@/components/build-studio/BuildStudioV2";
 import { loadBuildStudioCapability } from "@/lib/build/build-studio-capability";
 import { loadBuildStudioCustomerStatuses, type CapsuleFindManyDelegate } from "@/lib/build/customer-status-loader";
 import { resolvePortalContextEnvelope } from "@/lib/portal-context";
@@ -15,7 +13,7 @@ import Link from "next/link";
 import { execSync } from "child_process";
 
 interface PageProps {
-  searchParams: Promise<{ v?: string; buildId?: string }>;
+  searchParams: Promise<{ buildId?: string }>;
 }
 
 function getProjectBranch(): string | null {
@@ -33,50 +31,7 @@ function getProjectBranch(): string | null {
 }
 
 export default async function BuildPage({ searchParams }: PageProps) {
-  const { v, buildId } = await searchParams;
-  if (v === "2") {
-    const session = await auth();
-    if (!session?.user?.id) return <BuildStudioV2 />;
-
-    const businessBriefRow = await prisma.businessBuildBrief.findFirst({
-      where: { submittedByUserId: session.user.id },
-      orderBy: { updatedAt: "desc" },
-      select: {
-        briefId: true,
-        status: true,
-        intakeSource: true,
-        capabilityPackId: true,
-        featureBuildId: true,
-        businessOutcome: true,
-        affectedPeople: true,
-        affectedWorkflow: true,
-        sourceEvidence: true,
-        successSignals: true,
-        constraints: true,
-        businessInterpretation: true,
-        technicalInterpretation: true,
-        riskProfile: true,
-        openQuestions: true,
-        confidence: true,
-      },
-    });
-
-    const featureBuild = businessBriefRow?.featureBuildId
-      ? await prisma.featureBuild.findUnique({
-        where: { id: businessBriefRow.featureBuildId },
-        select: { title: true },
-      })
-      : null;
-
-    const businessBrief = businessBriefRow
-      ? businessBuildBriefFromRecord({
-        title: featureBuild?.title ?? businessBriefRow.briefId,
-        row: businessBriefRow,
-      })
-      : undefined;
-
-    return <BuildStudioV2 businessBrief={businessBrief} />;
-  }
+  const { buildId } = await searchParams;
 
   const session = await auth();
   if (!session?.user?.id) return null;
@@ -254,7 +209,6 @@ export default async function BuildPage({ searchParams }: PageProps) {
       routeContext: "/build",
       buildId: buildId ?? null,
       searchParams: {
-        ...(v ? { v } : {}),
         ...(buildId ? { buildId } : {}),
       },
     },

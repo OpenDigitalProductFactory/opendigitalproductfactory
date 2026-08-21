@@ -15,7 +15,7 @@
 // We mock ProcessGraph to expose its onNodeClick prop via a global ref
 // so the test can fire it as if a real node click had happened.
 
-import "../build-studio/test-setup";
+import "@/test-setup";
 import "@testing-library/jest-dom/vitest";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";

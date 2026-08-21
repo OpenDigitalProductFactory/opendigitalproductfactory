@@ -11,7 +11,7 @@
 //       review/ship/complete → Review
 //   - Fleet queue header click opens drawer scrolled to BS-Queue.
 
-import "../build-studio/test-setup";
+import "@/test-setup";
 import "@testing-library/jest-dom/vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
