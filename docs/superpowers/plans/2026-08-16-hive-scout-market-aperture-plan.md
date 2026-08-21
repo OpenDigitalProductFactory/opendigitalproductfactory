@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Plan — Hive Scout market aperture: daily inbound product intelligence (BI-B8E4317D)
 
 **Date:** 2026-08-16
