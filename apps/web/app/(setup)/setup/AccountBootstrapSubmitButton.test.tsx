@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import "@/components/build-studio/test-setup";
+import "@/test-setup";
 import { render, screen } from "@testing-library/react";
 import { act } from "react";
 import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";

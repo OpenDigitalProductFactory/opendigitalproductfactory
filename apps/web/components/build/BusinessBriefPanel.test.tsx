@@ -1,9 +1,35 @@
 // @vitest-environment jsdom
-import "../build-studio/test-setup";
+import "@/test-setup";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { BusinessBriefPanel } from "./BusinessBriefPanel";
-import { DEMO_BUSINESS_BRIEF } from "@/lib/build-studio-demo";
+import { buildBusinessBuildBrief } from "@/lib/build/business-build-brief";
+import type { FeatureBrief } from "@/lib/feature-build-types";
+
+// Local fixture. Previously imported from lib/build-studio-demo, which existed
+// only to feed the retired `/build?v=2` prototype (BI-101C107C); a production
+// component's test should not depend on a demo surface's fixtures.
+const FEATURE_BRIEF: FeatureBrief = {
+  title: "Tenant API key rotation",
+  description:
+    "Tenant owners need to rotate API keys without losing access for live tenants.",
+  portfolioContext: "Platform governance",
+  targetRoles: ["Tenant owner", "Platform administrator"],
+  inputs: ["Existing Settings API Keys workflow", "Customer downtime incident notes"],
+  dataNeeds: "Key status, expiration window, owner, old key id, new key id, and audit event.",
+  acceptanceCriteria: [
+    "Tenant owners can rotate from Settings without downtime.",
+    "Old keys stop working after the agreed grace period.",
+    "Every rotation is visible in the audit log.",
+  ],
+};
+
+const DEMO_BUSINESS_BRIEF = buildBusinessBuildBrief({
+  source: "existing_example",
+  featureBrief: FEATURE_BRIEF,
+  exampleToEmulate: "Existing Settings invite flow",
+  constraints: ["Do not break active tenant API traffic."],
+});
 
 const updateBusinessBuildBrief = vi.hoisted(() => vi.fn());
 

@@ -1443,6 +1443,9 @@
     "scripts/check-build-namespace.mjs": [
       "docs/architecture/build-studio-namespace.md"
     ],
+    "scripts/check-build-studio-surface-budget.mjs": [
+      "docs/architecture/build-studio-namespace.md"
+    ],
     "scripts/check-capability-compose-profiles.mjs": [
       "docs/architecture/capability-driven-runtime-profiles.md"
     ],
@@ -2195,7 +2198,8 @@
     ],
     "docs/architecture/build-studio-namespace.md": [
       "apps/web/lib/build/build-plan-paths.ts",
-      "scripts/check-build-namespace.mjs"
+      "scripts/check-build-namespace.mjs",
+      "scripts/check-build-studio-surface-budget.mjs"
     ],
     "docs/architecture/business-commercial-catalog.md": [
       "apps/web/lib/product-management/product-direction-view.ts",

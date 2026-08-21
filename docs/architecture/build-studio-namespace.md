@@ -6,12 +6,17 @@ Spec: [`docs/superpowers/specs/2026-06-25-platform-consolidation-spine-design.md
 There is **one production Build Studio component namespace: `apps/web/components/build`.**
 Build plans, the build agent's generated file paths, tests, and docs all point there.
 
-`apps/web/components/build-studio` is a **quarantined prototype** — a chat-first "V2"
-shell (HeaderBar / ConversationPane / ArtifactPane / cards) last touched 2026-05-10. It is
-reachable only via the dev-only `/build?v=2` query param and renders largely demo data. It
-is **not** a build target and **not** the production surface. Its disposition (graduate
-into `components/build`, or retire) is an open operator decision the spec flagged; until
-then it is frozen, not grown.
+`apps/web/components/build-studio` was a chat-first "V2" prototype shell
+(HeaderBar / ConversationPane / ArtifactPane / cards) reachable via the `/build?v=2` query
+param and rendering largely demo data. It is **RETIRED** as of BI-101C107C: the directory,
+the `?v=2` route branch, and `lib/build-studio-demo.ts` are deleted. The disposition the
+spec flagged as an open operator decision — graduate or retire — is now settled as retire,
+sequenced by kernel consult `DI-BCC92F9AFC08`.
+
+The prototype survived roughly four months past the 2026-07-31 owner-change-convergence
+plan that scheduled its removal (Phase C). The freeze guard below is why it could: it
+capped the prototype's footprint but had no mechanism to require its removal, so a
+quarantine with no expiry read as permanent tolerance.
 
 ## Why this matters
 
@@ -27,11 +32,16 @@ production namespace singular and enforcing it.
   fallback plus three legacy exact aliases). `build-plan-paths.test.ts` asserts arbitrary
   build-studio paths converge — so a model that picks the wrong namespace is corrected
   before the build runs.
-- **Footprint freeze.** [`scripts/check-build-namespace.mjs`](../../scripts/check-build-namespace.mjs)
-  (CI job `Build Studio Namespace Guard`) fails if any NEW production file imports
-  `@/components/build-studio` beyond the two known, frozen importers
-  (`app/(shell)/build/page.tsx`'s `?v=2` branch and `lib/build-studio-demo.ts`). New Build
-  Studio UI must land in `components/build`.
+- **Retirement.** [`scripts/check-build-namespace.mjs`](../../scripts/check-build-namespace.mjs)
+  (CI job `Build Studio Namespace Guard`) fails if `components/build-studio` reappears at
+  all, or if any production file imports it. The allowed-importer set is empty and must
+  stay empty. New Build Studio UI must land in `components/build`.
+- **Surface ratchet.** [`scripts/check-build-studio-surface-budget.mjs`](../../scripts/check-build-studio-surface-budget.mjs)
+  (CI job `Build Studio Surface Guard`, BI-101C107C) holds `components/build` to a
+  shrink-only component-count and non-test-LOC budget against an owned, expiring baseline.
+  Between 2026-04 and 2026-08 that surface grew 8 -> 74 components across 39 specs and 28
+  plans with exactly one deletion, because every UX gate was a presence check. A
+  "simplification" that adds net lines now fails.
 
 ## Legacy plan-path aliases — intentionally retained
 

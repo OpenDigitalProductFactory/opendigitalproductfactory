@@ -47,6 +47,7 @@
     "check:module-size": "node scripts/check-module-size.mjs",
     "check:fk-index-coverage": "node scripts/check-fk-index-coverage.mjs",
     "check:ux-primitive-adoption": "node scripts/check-ux-primitive-adoption.mjs",
+    "check:build-studio-surface": "node scripts/check-build-studio-surface-budget.mjs",
     "check:retention-enrollment": "node scripts/check-retention-enrollment.mjs",
     "check:closed-set-strings": "node scripts/check-no-new-closed-set-strings.mjs",
     "check:doc-anchors": "node scripts/check-doc-anchor-existence.mjs",

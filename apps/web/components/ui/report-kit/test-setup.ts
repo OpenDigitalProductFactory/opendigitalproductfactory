@@ -2,7 +2,7 @@
 //
 // Most of this folder's tests assert on renderToStaticMarkup output and need
 // nothing; the interactive primitives (SearchableSelect) need jest-dom matchers
-// and Testing Library cleanup. Mirrors components/build-studio/test-setup.ts.
+// and Testing Library cleanup. Mirrors apps/web/test-setup.ts.
 //
 // Activated per-file via `import "./test-setup"` alongside
 // `// @vitest-environment jsdom`.

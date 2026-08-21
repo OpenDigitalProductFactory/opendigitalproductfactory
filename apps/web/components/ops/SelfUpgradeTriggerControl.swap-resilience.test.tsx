@@ -9,7 +9,7 @@
 // server"). The handlers must recognise the expected mid-swap disconnect and
 // hold a calm "reconnecting" state instead of escalating to the (shell) error
 // boundary.
-import "@/components/build-studio/test-setup";
+import "@/test-setup";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 

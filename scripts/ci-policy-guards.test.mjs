@@ -13,6 +13,7 @@ const EXPECTED_LEGACY_JOBS = [
   "application-boundary-guard",
   "archetype-completeness-guard",
   "build-studio-namespace-guard",
+  "build-studio-surface-guard",
   "bundle-boundary-guard",
   "capability-consumer-guard",
   "compose-env-contract-guard",
