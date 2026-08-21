@@ -74,6 +74,37 @@ the obligation record.
 - [Licensing readiness](licensing-readiness.md) — track permits, licenses,
   authority layers, credentials, fees, and unresolved questions.
 
+## What The Compliance Coworker Does
+
+**What it does.** The Compliance Officer coworker can onboard a regulation and
+draft its obligation structure from a source you point it at, run a gap
+assessment over obligations that have no active control, report the posture
+score and name its detractors, draft and version policies, capture what your
+business does with data so the right regulations apply, and open licensing
+readiness issues. It weighs its judgements against its profession corpus and the
+organization's own recorded stances rather than deciding unaided.
+
+**When it runs.** Today, only when you ask it. There is no recurring compliance
+audit: no scheduled job reviews obligations, controls, evidence freshness, policy
+review dates, or licence expiry, and the regulatory-change scan runs only when
+someone presses the button on the Regulations screen. The review dates and
+frequencies you record on obligations and controls are stored and displayed —
+nothing reads them to raise work when they fall due.
+
+**How it stays current.** Through you. The change scan compares a regulation
+against what it last recorded, but it is not scheduled and it does not subscribe
+to any official source. Treat regulatory currency as a human responsibility on a
+calendar you own, not as something the platform is watching for you.
+
+**What it will not do.** The coworker does not decide that you are compliant,
+does not renew a licence, does not submit a filing, and does not change a control
+status on its own. Consequential actions require your approval, and low-confidence
+or conflicting judgements escalate rather than resolve themselves.
+
+**What you must do.** Set and keep your own review cadence, re-check the official
+source before relying on any recorded requirement, and treat an unchanged posture
+score as evidence of nothing — it does not move when a deadline passes unnoticed.
+
 ## Read Posture Carefully
 
 The gap view classifies an active obligation as **covered** when it has at

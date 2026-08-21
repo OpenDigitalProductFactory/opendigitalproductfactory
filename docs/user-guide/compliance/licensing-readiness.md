@@ -37,7 +37,31 @@ The licensing readiness workspace is authoritative for the platform's tracked po
 
 ## AI Coworker Support
 
-The licensing specialist can investigate likely authority layers, summarize visible evidence, persist factual findings, and create readiness issues. It should ask for the next useful piece of context when the business posture is unclear and must avoid inventing legal conclusions.
+**What it does.** The licensing specialist investigates likely authority layers
+for a location and activity, summarizes the evidence it can see, persists factual
+findings against the record, and opens readiness issues for what it cannot
+resolve. It asks for the next useful piece of context when your business posture
+is unclear.
+
+**When it runs.** Only when you ask it. No scheduled job watches this workspace.
+Permit expiry dates, fee due dates, renewal cadence hints and staff credential
+expiries are recorded and shown, but nothing reads them to warn you before a date
+passes — an expired permit does not raise itself.
+
+**How it stays current.** It does not. Requirement references carry a
+last-researched date and a confidence, and they go stale silently. Re-verify
+against the issuing authority before relying on a recorded requirement,
+particularly one researched some time ago.
+
+**What it will not do.** The coworker does not grant permission to operate, does
+not renew a licence, does not pay a fee, and does not convert a likely lead into
+a confirmed requirement. Resolving a readiness issue asserts that the question was
+answered by a person; it is not a determination the coworker makes.
+
+**What you must do.** Own the renewal calendar yourself, open the official source
+rather than accepting a search result or an AI summary, and re-open readiness
+questions whenever you add a location, service, regulated activity, or credentialed
+member of staff.
 
 ## Decisions And Consequences
 

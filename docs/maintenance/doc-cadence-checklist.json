@@ -1,0 +1,874 @@
+{
+  "schemaVersion": "doc-cadence-checklist.v1",
+  "contract": {
+    "acts": "What it does",
+    "cadence": "When it runs",
+    "currency": "How it stays current",
+    "boundary": "What it will not do",
+    "humanStep": "What you must do"
+  },
+  "automatedAreas": {
+    "compliance": "Regulatory monitor, obligation and control review dates, licence renewal, policy review",
+    "security": "Patch assessment sweep (OSV/KEV), SIEM correlation, log-signature scan, catalog EOL/EOS",
+    "ai-workforce": "Coworker self-tasks, nightly coworker certification, model discovery refresh",
+    "platform": "Discovery sweeps, estate patch posture, token expiry monitor, runtime janitors",
+    "operations": "Backlog triage drain, quality-issue drift sweep, MDM data-steward sweep",
+    "finance": "Recurring invoice generator, capacity drain",
+    "build-studio": "Build Studio PR delivery reconcile, sandbox build GC, task-run watchdog",
+    "storefront": "Marketing scheduler, discovery attribution"
+  },
+  "summary": {
+    "pagesInScope": 56,
+    "complete": 2,
+    "byElement": {
+      "acts": 5,
+      "cadence": 11,
+      "currency": 6,
+      "boundary": 38,
+      "humanStep": 6
+    },
+    "note": "Detection is lexical and presence-only. A tick means the question is answered somewhere on the page, never that the answer is correct."
+  },
+  "pages": [
+    {
+      "path": "docs/user-guide/ai-workforce/coworker-proactivity.md",
+      "area": "ai-workforce",
+      "automation": "Coworker self-tasks, nightly coworker certification, model discovery refresh",
+      "elements": {
+        "acts": false,
+        "cadence": false,
+        "currency": false,
+        "boundary": false,
+        "humanStep": false
+      },
+      "answered": 0,
+      "total": 5,
+      "complete": false
+    },
+    {
+      "path": "docs/user-guide/ai-workforce/provider-anthropic.md",
+      "area": "ai-workforce",
+      "automation": "Coworker self-tasks, nightly coworker certification, model discovery refresh",
+      "elements": {
+        "acts": false,
+        "cadence": false,
+        "currency": false,
+        "boundary": false,
+        "humanStep": false
+      },
+      "answered": 0,
+      "total": 5,
+      "complete": false
+    },
+    {
+      "path": "docs/user-guide/ai-workforce/provider-developer-notes.md",
+      "area": "ai-workforce",
+      "automation": "Coworker self-tasks, nightly coworker certification, model discovery refresh",
+      "elements": {
+        "acts": false,
+        "cadence": false,
+        "currency": false,
+        "boundary": false,
+        "humanStep": false
+      },
+      "answered": 0,
+      "total": 5,
+      "complete": false
+    },
+    {
+      "path": "docs/user-guide/ai-workforce/provider-ollama.md",
+      "area": "ai-workforce",
+      "automation": "Coworker self-tasks, nightly coworker certification, model discovery refresh",
+      "elements": {
+        "acts": false,
+        "cadence": false,
+        "currency": false,
+        "boundary": false,
+        "humanStep": false
+      },
+      "answered": 0,
+      "total": 5,
+      "complete": false
+    },
+    {
+      "path": "docs/user-guide/compliance/audits-and-corrective-actions.md",
+      "area": "compliance",
+      "automation": "Regulatory monitor, obligation and control review dates, licence renewal, policy review",
+      "elements": {
+        "acts": false,
+        "cadence": false,
+        "currency": false,
+        "boundary": false,
+        "humanStep": false
+      },
+      "answered": 0,
+      "total": 5,
+      "complete": false
+    },
+    {
+      "path": "docs/user-guide/compliance/controls-and-evidence.md",
+      "area": "compliance",
+      "automation": "Regulatory monitor, obligation and control review dates, licence renewal, policy review",
+      "elements": {
+        "acts": false,
+        "cadence": false,
+        "currency": false,
+        "boundary": false,
+        "humanStep": false
+      },
+      "answered": 0,
+      "total": 5,
+      "complete": false
+    },
+    {
+      "path": "docs/user-guide/finance/expense-workflows.md",
+      "area": "finance",
+      "automation": "Recurring invoice generator, capacity drain",
+      "elements": {
+        "acts": false,
+        "cadence": false,
+        "currency": false,
+        "boundary": false,
+        "humanStep": false
+      },
+      "answered": 0,
+      "total": 5,
+      "complete": false
+    },
+    {
+      "path": "docs/user-guide/platform/authority-and-audit.md",
+      "area": "platform",
+      "automation": "Discovery sweeps, estate patch posture, token expiry monitor, runtime janitors",
+      "elements": {
+        "acts": false,
+        "cadence": false,
+        "currency": false,
+        "boundary": false,
+        "humanStep": false
+      },
+      "answered": 0,
+      "total": 5,
+      "complete": false
+    },
+    {
+      "path": "docs/user-guide/security/setup.md",
+      "area": "security",
+      "automation": "Patch assessment sweep (OSV/KEV), SIEM correlation, log-signature scan, catalog EOL/EOS",
+      "elements": {
+        "acts": false,
+        "cadence": false,
+        "currency": false,
+        "boundary": false,
+        "humanStep": false
+      },
+      "answered": 0,
+      "total": 5,
+      "complete": false
+    },
+    {
+      "path": "docs/user-guide/storefront/inbox-and-enquiries.md",
+      "area": "storefront",
+      "automation": "Marketing scheduler, discovery attribution",
+      "elements": {
+        "acts": false,
+        "cadence": false,
+        "currency": false,
+        "boundary": false,
+        "humanStep": false
+      },
+      "answered": 0,
+      "total": 5,
+      "complete": false
+    },
+    {
+      "path": "docs/user-guide/storefront/index.md",
+      "area": "storefront",
+      "automation": "Marketing scheduler, discovery attribution",
+      "elements": {
+        "acts": false,
+        "cadence": false,
+        "currency": false,
+        "boundary": false,
+        "humanStep": false
+      },
+      "answered": 0,
+      "total": 5,
+      "complete": false
+    },
+    {
+      "path": "docs/user-guide/ai-workforce/ai-cost-governance.md",
+      "area": "ai-workforce",
+      "automation": "Coworker self-tasks, nightly coworker certification, model discovery refresh",
+      "elements": {
+        "acts": false,
+        "cadence": true,
+        "currency": false,
+        "boundary": false,
+        "humanStep": false
+      },
+      "answered": 1,
+      "total": 5,
+      "complete": false
+    },
+    {
+      "path": "docs/user-guide/ai-workforce/connecting-providers.md",
+      "area": "ai-workforce",
+      "automation": "Coworker self-tasks, nightly coworker certification, model discovery refresh",
+      "elements": {
+        "acts": false,
+        "cadence": false,
+        "currency": false,
+        "boundary": true,
+        "humanStep": false
+      },
+      "answered": 1,
+      "total": 5,
+      "complete": false
+    },
+    {
+      "path": "docs/user-guide/ai-workforce/decision-perspective-in-practice.md",
+      "area": "ai-workforce",
+      "automation": "Coworker self-tasks, nightly coworker certification, model discovery refresh",
+      "elements": {
+        "acts": false,
+        "cadence": false,
+        "currency": false,
+        "boundary": true,
+        "humanStep": false
+      },
+      "answered": 1,
+      "total": 5,
+      "complete": false
+    },
+    {
+      "path": "docs/user-guide/ai-workforce/provider-codex.md",
+      "area": "ai-workforce",
+      "automation": "Coworker self-tasks, nightly coworker certification, model discovery refresh",
+      "elements": {
+        "acts": false,
+        "cadence": false,
+        "currency": false,
+        "boundary": false,
+        "humanStep": true
+      },
+      "answered": 1,
+      "total": 5,
+      "complete": false
+    },
+    {
+      "path": "docs/user-guide/ai-workforce/provider-xai.md",
+      "area": "ai-workforce",
+      "automation": "Coworker self-tasks, nightly coworker certification, model discovery refresh",
+      "elements": {
+        "acts": true,
+        "cadence": false,
+        "currency": false,
+        "boundary": false,
+        "humanStep": false
+      },
+      "answered": 1,
+      "total": 5,
+      "complete": false
+    },
+    {
+      "path": "docs/user-guide/ai-workforce/sensitive-data-policy-packs.md",
+      "area": "ai-workforce",
+      "automation": "Coworker self-tasks, nightly coworker certification, model discovery refresh",
+      "elements": {
+        "acts": false,
+        "cadence": false,
+        "currency": false,
+        "boundary": true,
+        "humanStep": false
+      },
+      "answered": 1,
+      "total": 5,
+      "complete": false
+    },
+    {
+      "path": "docs/user-guide/build-studio/autonomous-builds.md",
+      "area": "build-studio",
+      "automation": "Build Studio PR delivery reconcile, sandbox build GC, task-run watchdog",
+      "elements": {
+        "acts": false,
+        "cadence": false,
+        "currency": false,
+        "boundary": true,
+        "humanStep": false
+      },
+      "answered": 1,
+      "total": 5,
+      "complete": false
+    },
+    {
+      "path": "docs/user-guide/build-studio/index.md",
+      "area": "build-studio",
+      "automation": "Build Studio PR delivery reconcile, sandbox build GC, task-run watchdog",
+      "elements": {
+        "acts": false,
+        "cadence": false,
+        "currency": false,
+        "boundary": true,
+        "humanStep": false
+      },
+      "answered": 1,
+      "total": 5,
+      "complete": false
+    },
+    {
+      "path": "docs/user-guide/build-studio/sandbox.md",
+      "area": "build-studio",
+      "automation": "Build Studio PR delivery reconcile, sandbox build GC, task-run watchdog",
+      "elements": {
+        "acts": false,
+        "cadence": false,
+        "currency": false,
+        "boundary": true,
+        "humanStep": false
+      },
+      "answered": 1,
+      "total": 5,
+      "complete": false
+    },
+    {
+      "path": "docs/user-guide/compliance/incidents-risks-and-response.md",
+      "area": "compliance",
+      "automation": "Regulatory monitor, obligation and control review dates, licence renewal, policy review",
+      "elements": {
+        "acts": false,
+        "cadence": false,
+        "currency": false,
+        "boundary": true,
+        "humanStep": false
+      },
+      "answered": 1,
+      "total": 5,
+      "complete": false
+    },
+    {
+      "path": "docs/user-guide/compliance/policies-and-acknowledgements.md",
+      "area": "compliance",
+      "automation": "Regulatory monitor, obligation and control review dates, licence renewal, policy review",
+      "elements": {
+        "acts": false,
+        "cadence": false,
+        "currency": false,
+        "boundary": true,
+        "humanStep": false
+      },
+      "answered": 1,
+      "total": 5,
+      "complete": false
+    },
+    {
+      "path": "docs/user-guide/compliance/posture-and-gaps.md",
+      "area": "compliance",
+      "automation": "Regulatory monitor, obligation and control review dates, licence renewal, policy review",
+      "elements": {
+        "acts": false,
+        "cadence": false,
+        "currency": false,
+        "boundary": true,
+        "humanStep": false
+      },
+      "answered": 1,
+      "total": 5,
+      "complete": false
+    },
+    {
+      "path": "docs/user-guide/compliance/regulations-and-obligations.md",
+      "area": "compliance",
+      "automation": "Regulatory monitor, obligation and control review dates, licence renewal, policy review",
+      "elements": {
+        "acts": false,
+        "cadence": false,
+        "currency": false,
+        "boundary": true,
+        "humanStep": false
+      },
+      "answered": 1,
+      "total": 5,
+      "complete": false
+    },
+    {
+      "path": "docs/user-guide/compliance/regulatory-submissions.md",
+      "area": "compliance",
+      "automation": "Regulatory monitor, obligation and control review dates, licence renewal, policy review",
+      "elements": {
+        "acts": false,
+        "cadence": false,
+        "currency": false,
+        "boundary": true,
+        "humanStep": false
+      },
+      "answered": 1,
+      "total": 5,
+      "complete": false
+    },
+    {
+      "path": "docs/user-guide/finance/accounts-payable.md",
+      "area": "finance",
+      "automation": "Recurring invoice generator, capacity drain",
+      "elements": {
+        "acts": false,
+        "cadence": false,
+        "currency": false,
+        "boundary": true,
+        "humanStep": false
+      },
+      "answered": 1,
+      "total": 5,
+      "complete": false
+    },
+    {
+      "path": "docs/user-guide/finance/accounts-receivable.md",
+      "area": "finance",
+      "automation": "Recurring invoice generator, capacity drain",
+      "elements": {
+        "acts": false,
+        "cadence": false,
+        "currency": false,
+        "boundary": true,
+        "humanStep": false
+      },
+      "answered": 1,
+      "total": 5,
+      "complete": false
+    },
+    {
+      "path": "docs/user-guide/finance/banking-and-reconciliation.md",
+      "area": "finance",
+      "automation": "Recurring invoice generator, capacity drain",
+      "elements": {
+        "acts": false,
+        "cadence": false,
+        "currency": false,
+        "boundary": true,
+        "humanStep": false
+      },
+      "answered": 1,
+      "total": 5,
+      "complete": false
+    },
+    {
+      "path": "docs/user-guide/finance/controls-and-automation.md",
+      "area": "finance",
+      "automation": "Recurring invoice generator, capacity drain",
+      "elements": {
+        "acts": false,
+        "cadence": false,
+        "currency": false,
+        "boundary": true,
+        "humanStep": false
+      },
+      "answered": 1,
+      "total": 5,
+      "complete": false
+    },
+    {
+      "path": "docs/user-guide/finance/reporting-and-close.md",
+      "area": "finance",
+      "automation": "Recurring invoice generator, capacity drain",
+      "elements": {
+        "acts": false,
+        "cadence": false,
+        "currency": false,
+        "boundary": true,
+        "humanStep": false
+      },
+      "answered": 1,
+      "total": 5,
+      "complete": false
+    },
+    {
+      "path": "docs/user-guide/operations/business-journeys.md",
+      "area": "operations",
+      "automation": "Backlog triage drain, quality-issue drift sweep, MDM data-steward sweep",
+      "elements": {
+        "acts": false,
+        "cadence": false,
+        "currency": false,
+        "boundary": true,
+        "humanStep": false
+      },
+      "answered": 1,
+      "total": 5,
+      "complete": false
+    },
+    {
+      "path": "docs/user-guide/operations/index.md",
+      "area": "operations",
+      "automation": "Backlog triage drain, quality-issue drift sweep, MDM data-steward sweep",
+      "elements": {
+        "acts": false,
+        "cadence": false,
+        "currency": false,
+        "boundary": true,
+        "humanStep": false
+      },
+      "answered": 1,
+      "total": 5,
+      "complete": false
+    },
+    {
+      "path": "docs/user-guide/operations/self-upgrade.md",
+      "area": "operations",
+      "automation": "Backlog triage drain, quality-issue drift sweep, MDM data-steward sweep",
+      "elements": {
+        "acts": false,
+        "cadence": false,
+        "currency": false,
+        "boundary": true,
+        "humanStep": false
+      },
+      "answered": 1,
+      "total": 5,
+      "complete": false
+    },
+    {
+      "path": "docs/user-guide/platform/address-validation-providers.md",
+      "area": "platform",
+      "automation": "Discovery sweeps, estate patch posture, token expiry monitor, runtime janitors",
+      "elements": {
+        "acts": false,
+        "cadence": false,
+        "currency": true,
+        "boundary": false,
+        "humanStep": false
+      },
+      "answered": 1,
+      "total": 5,
+      "complete": false
+    },
+    {
+      "path": "docs/user-guide/platform/ai-operations.md",
+      "area": "platform",
+      "automation": "Discovery sweeps, estate patch posture, token expiry monitor, runtime janitors",
+      "elements": {
+        "acts": false,
+        "cadence": false,
+        "currency": false,
+        "boundary": true,
+        "humanStep": false
+      },
+      "answered": 1,
+      "total": 5,
+      "complete": false
+    },
+    {
+      "path": "docs/user-guide/platform/discovery-operations.md",
+      "area": "platform",
+      "automation": "Discovery sweeps, estate patch posture, token expiry monitor, runtime janitors",
+      "elements": {
+        "acts": false,
+        "cadence": false,
+        "currency": false,
+        "boundary": true,
+        "humanStep": false
+      },
+      "answered": 1,
+      "total": 5,
+      "complete": false
+    },
+    {
+      "path": "docs/user-guide/platform/edge-nodes.md",
+      "area": "platform",
+      "automation": "Discovery sweeps, estate patch posture, token expiry monitor, runtime janitors",
+      "elements": {
+        "acts": false,
+        "cadence": false,
+        "currency": false,
+        "boundary": true,
+        "humanStep": false
+      },
+      "answered": 1,
+      "total": 5,
+      "complete": false
+    },
+    {
+      "path": "docs/user-guide/platform/identity-and-access.md",
+      "area": "platform",
+      "automation": "Discovery sweeps, estate patch posture, token expiry monitor, runtime janitors",
+      "elements": {
+        "acts": false,
+        "cadence": false,
+        "currency": false,
+        "boundary": true,
+        "humanStep": false
+      },
+      "answered": 1,
+      "total": 5,
+      "complete": false
+    },
+    {
+      "path": "docs/user-guide/platform/index.md",
+      "area": "platform",
+      "automation": "Discovery sweeps, estate patch posture, token expiry monitor, runtime janitors",
+      "elements": {
+        "acts": false,
+        "cadence": false,
+        "currency": false,
+        "boundary": true,
+        "humanStep": false
+      },
+      "answered": 1,
+      "total": 5,
+      "complete": false
+    },
+    {
+      "path": "docs/user-guide/platform/tools-and-integrations.md",
+      "area": "platform",
+      "automation": "Discovery sweeps, estate patch posture, token expiry monitor, runtime janitors",
+      "elements": {
+        "acts": false,
+        "cadence": false,
+        "currency": false,
+        "boundary": true,
+        "humanStep": false
+      },
+      "answered": 1,
+      "total": 5,
+      "complete": false
+    },
+    {
+      "path": "docs/user-guide/security/index.md",
+      "area": "security",
+      "automation": "Patch assessment sweep (OSV/KEV), SIEM correlation, log-signature scan, catalog EOL/EOS",
+      "elements": {
+        "acts": false,
+        "cadence": false,
+        "currency": false,
+        "boundary": true,
+        "humanStep": false
+      },
+      "answered": 1,
+      "total": 5,
+      "complete": false
+    },
+    {
+      "path": "docs/user-guide/storefront/catalog-and-page-content.md",
+      "area": "storefront",
+      "automation": "Marketing scheduler, discovery attribution",
+      "elements": {
+        "acts": false,
+        "cadence": false,
+        "currency": true,
+        "boundary": false,
+        "humanStep": false
+      },
+      "answered": 1,
+      "total": 5,
+      "complete": false
+    },
+    {
+      "path": "docs/user-guide/storefront/settings-business-and-operations.md",
+      "area": "storefront",
+      "automation": "Marketing scheduler, discovery attribution",
+      "elements": {
+        "acts": false,
+        "cadence": true,
+        "currency": false,
+        "boundary": false,
+        "humanStep": false
+      },
+      "answered": 1,
+      "total": 5,
+      "complete": false
+    },
+    {
+      "path": "docs/user-guide/ai-workforce/decision-perspective.md",
+      "area": "ai-workforce",
+      "automation": "Coworker self-tasks, nightly coworker certification, model discovery refresh",
+      "elements": {
+        "acts": false,
+        "cadence": true,
+        "currency": false,
+        "boundary": true,
+        "humanStep": false
+      },
+      "answered": 2,
+      "total": 5,
+      "complete": false
+    },
+    {
+      "path": "docs/user-guide/ai-workforce/model-routing-lifecycle.md",
+      "area": "ai-workforce",
+      "automation": "Coworker self-tasks, nightly coworker certification, model discovery refresh",
+      "elements": {
+        "acts": true,
+        "cadence": false,
+        "currency": false,
+        "boundary": true,
+        "humanStep": false
+      },
+      "answered": 2,
+      "total": 5,
+      "complete": false
+    },
+    {
+      "path": "docs/user-guide/build-studio/deployment.md",
+      "area": "build-studio",
+      "automation": "Build Studio PR delivery reconcile, sandbox build GC, task-run watchdog",
+      "elements": {
+        "acts": false,
+        "cadence": false,
+        "currency": false,
+        "boundary": true,
+        "humanStep": true
+      },
+      "answered": 2,
+      "total": 5,
+      "complete": false
+    },
+    {
+      "path": "docs/user-guide/finance/ai-spend.md",
+      "area": "finance",
+      "automation": "Recurring invoice generator, capacity drain",
+      "elements": {
+        "acts": false,
+        "cadence": true,
+        "currency": false,
+        "boundary": true,
+        "humanStep": false
+      },
+      "answered": 2,
+      "total": 5,
+      "complete": false
+    },
+    {
+      "path": "docs/user-guide/operations/getting-reached.md",
+      "area": "operations",
+      "automation": "Backlog triage drain, quality-issue drift sweep, MDM data-steward sweep",
+      "elements": {
+        "acts": false,
+        "cadence": true,
+        "currency": false,
+        "boundary": true,
+        "humanStep": false
+      },
+      "answered": 2,
+      "total": 5,
+      "complete": false
+    },
+    {
+      "path": "docs/user-guide/operations/infrastructure-discovery.md",
+      "area": "operations",
+      "automation": "Backlog triage drain, quality-issue drift sweep, MDM data-steward sweep",
+      "elements": {
+        "acts": false,
+        "cadence": true,
+        "currency": false,
+        "boundary": true,
+        "humanStep": false
+      },
+      "answered": 2,
+      "total": 5,
+      "complete": false
+    },
+    {
+      "path": "docs/user-guide/security/operating.md",
+      "area": "security",
+      "automation": "Patch assessment sweep (OSV/KEV), SIEM correlation, log-signature scan, catalog EOL/EOS",
+      "elements": {
+        "acts": false,
+        "cadence": false,
+        "currency": false,
+        "boundary": true,
+        "humanStep": true
+      },
+      "answered": 2,
+      "total": 5,
+      "complete": false
+    },
+    {
+      "path": "docs/user-guide/storefront/setup-and-launch.md",
+      "area": "storefront",
+      "automation": "Marketing scheduler, discovery attribution",
+      "elements": {
+        "acts": false,
+        "cadence": true,
+        "currency": true,
+        "boundary": false,
+        "humanStep": false
+      },
+      "answered": 2,
+      "total": 5,
+      "complete": false
+    },
+    {
+      "path": "docs/user-guide/storefront/team-and-fulfilment.md",
+      "area": "storefront",
+      "automation": "Marketing scheduler, discovery attribution",
+      "elements": {
+        "acts": false,
+        "cadence": false,
+        "currency": true,
+        "boundary": true,
+        "humanStep": false
+      },
+      "answered": 2,
+      "total": 5,
+      "complete": false
+    },
+    {
+      "path": "docs/user-guide/ai-workforce/index.md",
+      "area": "ai-workforce",
+      "automation": "Coworker self-tasks, nightly coworker certification, model discovery refresh",
+      "elements": {
+        "acts": false,
+        "cadence": true,
+        "currency": false,
+        "boundary": true,
+        "humanStep": true
+      },
+      "answered": 3,
+      "total": 5,
+      "complete": false
+    },
+    {
+      "path": "docs/user-guide/finance/index.md",
+      "area": "finance",
+      "automation": "Recurring invoice generator, capacity drain",
+      "elements": {
+        "acts": true,
+        "cadence": true,
+        "currency": false,
+        "boundary": true,
+        "humanStep": false
+      },
+      "answered": 3,
+      "total": 5,
+      "complete": false
+    },
+    {
+      "path": "docs/user-guide/compliance/index.md",
+      "area": "compliance",
+      "automation": "Regulatory monitor, obligation and control review dates, licence renewal, policy review",
+      "elements": {
+        "acts": true,
+        "cadence": true,
+        "currency": true,
+        "boundary": true,
+        "humanStep": true
+      },
+      "answered": 5,
+      "total": 5,
+      "complete": true
+    },
+    {
+      "path": "docs/user-guide/compliance/licensing-readiness.md",
+      "area": "compliance",
+      "automation": "Regulatory monitor, obligation and control review dates, licence renewal, policy review",
+      "elements": {
+        "acts": true,
+        "cadence": true,
+        "currency": true,
+        "boundary": true,
+        "humanStep": true
+      },
+      "answered": 5,
+      "total": 5,
+      "complete": true
+    }
+  ]
+}

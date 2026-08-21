@@ -5065,6 +5065,18 @@
         "assignto-health"
       ]
     },
+    "docs/maintenance/doc-cadence-checklist.md": {
+      "publicHref": "/maintenance/doc-cadence-checklist/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "documentation-cadence-checklist",
+        "progress",
+        "checklist",
+        "areas-in-scope-and-what-automates-them"
+      ]
+    },
     "docs/maintenance/staleness-coverage.md": {
       "publicHref": "/maintenance/staleness-coverage/",
       "portalHref": null,
@@ -10858,6 +10870,7 @@
         "key-concepts",
         "before-you-change-a-record",
         "choose-the-workflow",
+        "what-the-compliance-coworker-does",
         "read-posture-carefully",
         "recovery-rule"
       ]
