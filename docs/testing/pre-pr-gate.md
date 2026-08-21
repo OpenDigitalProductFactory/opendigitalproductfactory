@@ -764,6 +764,32 @@ Name them so you catch yourself.
 | Trusting a worktree's typecheck/test failures | An unprovisioned worktree fails as `'next' is not recognized` / `Cannot find package 'react'`, which look like real breakage | `node scripts/lib/bootstrap-worktree-deps.mjs . --classify-only` before blaming your change |
 | Editing the PR body to satisfy a trailer gate, then re-running the job | `PR_BODY` / `PR_LABELS_JSON` come from `github.event.pull_request.*` — the **frozen webhook payload**. A rerun replays that same payload, so the edited body (or a new label) is invisible and the gate fails identically. `ci.yml` is triggered by bare `pull_request`, whose default types exclude `edited`. | Add the trailer, then **push a commit** — only a new `synchronize` event refreshes the payload. Budget for a re-gate: the new SHA makes your local-CI record `STALE`. |
 | Trusting a green test run without naming the tree | Sibling worktrees hold identical paths; shell cwd persists between calls | Check the runner's root banner; reconcile the test count against your file |
+| Adding a `<label>` next to its input and checking it in the browser | It renders, screenshots and inspects correctly while a screen reader announces an *unlabelled* field — every human check passes, so the Label Association Guard is the only thing that sees it | Bind it: `htmlFor={id}` with a matching `id`, or wrap the control inside the label |
+
+### Label Association Guard (ratchet)
+
+`scripts/check-label-association.mjs` fails a PR that adds a **net-new** form
+label bound to no control. A `<label>` reaches assistive tech only when it is
+tied to its input explicitly (`htmlFor` + matching `id`) or implicitly (the
+control nested inside the label). A label that merely sits *beside* its input is
+invisible in the accessibility tree.
+
+It is a ratchet, not a mass-rewrite: the portal carries a baselined backlog of
+pre-existing orphans (`scripts/label-association-baseline.json`), and the guard
+blocks growth rather than demanding a blind sweep of surfaces nobody is
+exercising. Implicit association already passes and is not counted as debt.
+
+```bash
+node scripts/check-label-association.mjs            # check (what CI runs)
+node scripts/check-label-association.mjs --report   # per-file table
+node scripts/check-label-association.mjs --update   # retighten after fixing a surface
+```
+
+Fix a surface's labels, then `--update` to retighten — the guard prints a
+`shrank in N file(s)` line to prompt you. For the rare label that names a
+composite widget rather than one control (a radio-group heading), add a
+`label-association-allow` comment on the same line stating why. Tracked debt
+paydown: `BI-6CDC9ADB`.
 
 ## What this gate is NOT
 
