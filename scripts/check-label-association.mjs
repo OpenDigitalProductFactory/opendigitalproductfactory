@@ -23,7 +23,7 @@
 //   node scripts/check-label-association.mjs --report   # per-file table
 //   node scripts/check-label-association.mjs --update   # regenerate the baseline
 
-import { readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
+import { readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join, relative } from "node:path";
 
@@ -97,7 +97,6 @@ function scan() {
     for (const file of walk(join(REPO_ROOT, root))) {
       let src;
       try {
-        if (!statSync(file).isFile()) continue;
         src = readFileSync(file, "utf8");
       } catch {
         continue;
