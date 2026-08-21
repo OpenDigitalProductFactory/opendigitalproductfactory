@@ -242,6 +242,112 @@ describe("work capsule store", () => {
     }));
   });
 
+  // BI-B9403248: headSha was written only on CREATE, so a capsule adopted or
+  // claimed before the plan commit existed could never satisfy the plan-coverage
+  // artifact-ownership check, and an amend/rebase/squash after adoption stranded
+  // it permanently. The branch head is the caller's own state, so the governed
+  // adopt path syncs it.
+  it("syncs a newer head sha onto an existing reusable capsule", async () => {
+    db.workroom.findFirst.mockResolvedValue({
+      id: "row-1",
+      capsuleId: "WC-SYNC01",
+      status: "ready",
+      backlogItemId: "BI-SYNC",
+      executorRef: "session-1",
+      headBranch: "feat/sync",
+      headSha: "old-head",
+      worktreePath: "/tmp/sync",
+    });
+    db.workroom.update.mockResolvedValue({ id: "row-1", capsuleId: "WC-SYNC01", headSha: "new-head" });
+
+    const result = await adoptWorktreeCapsule({
+      db: capsuleDb(),
+      input: {
+        title: "Sync head",
+        objective: "Advance the recorded branch head.",
+        repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory",
+        headBranch: "feat/sync",
+        worktreePath: "/tmp/sync",
+        backlogItemId: "BI-SYNC",
+        executorRef: "session-1",
+        headSha: "new-head",
+        baseSha: "new-base",
+      },
+      actor: { userId: "user-1", agentId: "claude", principalId: "principal-1" },
+    });
+
+    expect(result.headSha).toBe("new-head");
+    expect(db.workroom.update).toHaveBeenCalledWith(expect.objectContaining({
+      where: { capsuleId: "WC-SYNC01" },
+      data: expect.objectContaining({ headSha: "new-head", baseSha: "new-base" }),
+    }));
+    expect(db.workroomActivity.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ kind: "adopted" }),
+    }));
+    expect(db.workroom.create).not.toHaveBeenCalled();
+  });
+
+  it("leaves an existing capsule untouched when the adopt call repeats the same head", async () => {
+    db.workroom.findFirst.mockResolvedValue({
+      id: "row-1",
+      capsuleId: "WC-SYNC02",
+      status: "ready",
+      backlogItemId: "BI-SYNC",
+      executorRef: "session-1",
+      headBranch: "feat/sync",
+      headSha: "same-head",
+      worktreePath: "/tmp/sync",
+    });
+
+    const result = await adoptWorktreeCapsule({
+      db: capsuleDb(),
+      input: {
+        title: "Sync head",
+        objective: "Advance the recorded branch head.",
+        repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory",
+        headBranch: "feat/sync",
+        worktreePath: "/tmp/sync",
+        backlogItemId: "BI-SYNC",
+        executorRef: "session-1",
+        headSha: "same-head",
+      },
+      actor: { userId: "user-1", agentId: "claude", principalId: "principal-1" },
+    });
+
+    expect(result.capsuleId).toBe("WC-SYNC02");
+    expect(db.workroom.update).not.toHaveBeenCalled();
+  });
+
+  it("does not erase a recorded head when the adopt call omits one", async () => {
+    db.workroom.findFirst.mockResolvedValue({
+      id: "row-1",
+      capsuleId: "WC-SYNC03",
+      status: "ready",
+      backlogItemId: "BI-SYNC",
+      executorRef: "session-1",
+      headBranch: "feat/sync",
+      headSha: "recorded-head",
+      worktreePath: "/tmp/sync",
+    });
+
+    const result = await adoptWorktreeCapsule({
+      db: capsuleDb(),
+      input: {
+        title: "Sync head",
+        objective: "Rebind without branch state.",
+        repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory",
+        headBranch: "feat/sync",
+        worktreePath: "/tmp/sync",
+        backlogItemId: "BI-SYNC",
+        executorRef: "session-1",
+      },
+      actor: { userId: "user-1", agentId: "claude", principalId: "principal-1" },
+    });
+
+    expect(result.headSha).toBe("recorded-head");
+    expect(db.workroom.update).not.toHaveBeenCalled();
+  });
+
   it("persists scope metadata when adopting a platform worktree", async () => {
     db.workroom.findFirst.mockResolvedValue(null);
     db.workroom.create.mockResolvedValue({ id: "row-1", capsuleId: "WC-ADOPTSCOPE" });

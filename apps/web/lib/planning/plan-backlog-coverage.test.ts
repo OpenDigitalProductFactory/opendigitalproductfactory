@@ -52,7 +52,7 @@ const baselineRows = [{ payload: {
 } }];
 const resolvePlan = vi.fn(async () => ({
   ok: true as const,
-  artifact: { digest: "sha256:plan", bytes: Buffer.from(planText), authorPrincipalId: "p", authorAgentId: "a" },
+  artifact: { digest: "sha256:plan", bytes: Buffer.from(planText), authorPrincipalId: "p", authorAgentId: "a", authorEmail: "author@example.com" },
 }));
 
 describe("validatePlanBacklogCoverage", () => {
@@ -540,7 +540,7 @@ describe("recordPlanBacklogCoverage", () => {
     const { db, activityCreate } = fakeDb();
     const resolveArtifact = vi.fn(async () => ({
       ok: true as const,
-      artifact: { digest: "sha256:plan", bytes: Buffer.from(planText), authorPrincipalId: "p", authorAgentId: "a" },
+      artifact: { digest: "sha256:plan", bytes: Buffer.from(planText), authorPrincipalId: "p", authorAgentId: "a", authorEmail: "author@example.com" },
     }));
     const result = await recordPlanBacklogCoverage({
       itemId: "BI-PARENT",

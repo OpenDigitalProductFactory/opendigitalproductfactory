@@ -14,6 +14,9 @@ type RepositoryLocator = Extract<InitiativeArtifactRef, { kind: "repo-blob-at-co
 type RepositoryArtifactDb = {
   workroom: {
     findMany: (args: Record<string, unknown>) => Promise<Array<{
+      capsuleId: string;
+      headBranch: string | null;
+      headSha: string | null;
       createdByPrincipalId: string | null;
       activities: Array<{ recordedByAgentId: string | null }>;
     }>>;
@@ -29,8 +32,17 @@ type RepositoryArtifactDb = {
 export type ResolvedRepositoryArtifact = {
   digest: string;
   bytes: Uint8Array;
+  /**
+   * The principal accountable for the artifact: the capsule owner, corroborated
+   * by the commit's DCO sign-off. Authorship is EVIDENCE about who is answerable
+   * for the work, never a claim about which surface produced it (AGENTS.md §12,
+   * `governance-approves-evidence-not-provenance`) — BI-B9403248.
+   */
   authorPrincipalId: string;
-  authorAgentId: string;
+  /** Optional context: the single agent that recorded capsule activity, when there is exactly one bound to the author. */
+  authorAgentId: string | null;
+  /** The DCO sign-off identity the resolver actually read, retained as evidence. */
+  authorEmail: string;
 };
 
 export type ResolveRepositoryArtifactResult =
@@ -61,6 +73,18 @@ function dcoEmail(payload: unknown): string | null {
   const matches = [...message.matchAll(/^Signed-off-by:\s+.+?\s+<([^<>\s@]+@[^<>\s@]+)>\s*$/gim)];
   const emails = [...new Set(matches.map((match) => match[1]!.toLocaleLowerCase("en-US")))];
   return emails.length === 1 ? emails[0]! : null;
+}
+
+/**
+ * A subject carries a handful of live capsules (one per branch under work). The
+ * cap keeps the ownership read bounded while leaving room to name the candidates
+ * back to the caller.
+ */
+const CAPSULE_CANDIDATE_LIMIT = 20;
+
+function describeCapsuleHead(capsule: { capsuleId: string; headBranch: string | null; headSha: string | null }): string {
+  const branch = capsule.headBranch ?? "unknown branch";
+  return `${capsule.capsuleId} (${branch}) has ${capsule.headSha ? `head ${capsule.headSha}` : "no recorded head"}`;
 }
 
 export async function resolveRepositoryArtifact(args: {
@@ -95,16 +119,23 @@ export async function resolveRepositoryArtifact(args: {
   if (!subjectWhere) {
     return { ok: false, code: "CANONICAL_DESIGN_AMBIGUOUS", error: "Repository artifacts require a capsule-backed initiative subject." };
   }
-  const capsules = await db.workroom.findMany({
+  // Read every LIVE capsule for the subject rather than only the exact-head one,
+  // so a head mismatch can name the stale capsule and its remedy instead of
+  // failing as an undifferentiated "missing or ambiguous" (BI-B9403248). Bounded:
+  // a subject carries a handful of capsules, and the limit keeps it that way.
+  const candidates = await db.workroom.findMany({
     where: {
       ...subjectWhere,
       repositoryFullName: args.locator.repositoryFullName,
-      headSha: args.locator.commitSha,
       archivedAt: null,
       status: { notIn: ["abandoned", "cancelled"] },
     },
-    take: 2,
+    take: CAPSULE_CANDIDATE_LIMIT,
+    orderBy: [{ updatedAt: "desc" }, { id: "asc" }],
     select: {
+      capsuleId: true,
+      headBranch: true,
+      headSha: true,
       createdByPrincipalId: true,
       activities: {
         where: { recordedByAgentId: { not: null } },
@@ -113,8 +144,28 @@ export async function resolveRepositoryArtifact(args: {
       },
     },
   });
-  if (capsules.length !== 1) {
-    return { ok: false, code: "CANONICAL_DESIGN_AMBIGUOUS", error: "Repository artifact ownership is missing or ambiguous for this subject." };
+  const capsules = candidates.filter(
+    (candidate) => (candidate.headSha ?? "").toLocaleLowerCase("en-US") === args.locator.commitSha.toLocaleLowerCase("en-US"),
+  );
+  if (capsules.length > 1) {
+    return {
+      ok: false,
+      code: "CANONICAL_DESIGN_AMBIGUOUS",
+      error: `Commit ${args.locator.commitSha} is claimed by more than one live workroom for this subject (${
+        capsules.map(describeCapsuleHead).join("; ")
+      }). Complete or abandon the workrooms that no longer own this branch, leaving exactly one.`,
+    };
+  }
+  if (capsules.length === 0) {
+    return {
+      ok: false,
+      code: "CANONICAL_DESIGN_AMBIGUOUS",
+      error: candidates.length === 0
+        ? `No live workroom for this subject is bound to ${args.locator.repositoryFullName}. Claim or adopt the branch first (claim_backlog_item_for_work or adopt_worktree), then retry.`
+        : `No live workroom for this subject records head ${args.locator.commitSha}: ${
+          candidates.map(describeCapsuleHead).join("; ")
+        }${candidates.length === CAPSULE_CANDIDATE_LIMIT ? ` (first ${CAPSULE_CANDIDATE_LIMIT} shown)` : ""}. Sync the branch head with adopt_worktree(headBranch, headSha=${args.locator.commitSha}) — an amend, rebase, or squash after adoption rewrites the sha — then retry.`,
+    };
   }
   let token: string | null;
   try {
@@ -149,31 +200,61 @@ export async function resolveRepositoryArtifact(args: {
   }
   const email = dcoEmail(commitPayload);
   if (!email) {
-    return { ok: false, code: "ARTIFACT_AUTHOR_REQUIRED", error: "Repository commit has no single DCO sign-off identity." };
+    return {
+      ok: false,
+      code: "ARTIFACT_AUTHOR_REQUIRED",
+      error: `Commit ${args.locator.commitSha} carries no single "Signed-off-by: Name <email>" trailer. Sign the commit off (git commit -s), push the rewritten sha, re-sync the workroom head with adopt_worktree, then retry.`,
+    };
+  }
+  const capsule = capsules[0]!;
+  // The accountable author is the capsule owner. The DCO sign-off is the
+  // corroborating evidence: where the install has registered that email to a
+  // principal, it must be the SAME principal — a mismatch is a real conflict and
+  // fails loudly. Where no alias is registered, the absence is not evidence of
+  // wrongdoing and does not veto the capsule's own accountability record.
+  const authorPrincipalId = capsule.createdByPrincipalId;
+  if (!authorPrincipalId) {
+    return {
+      ok: false,
+      code: "ARTIFACT_AUTHOR_REQUIRED",
+      error: `Workroom ${capsule.capsuleId} has no accountable principal, so the artifact author cannot be recorded. Re-adopt the branch from an authenticated session (adopt_worktree) and retry.`,
+    };
   }
   const principals = await db.principalAlias.findMany({
     where: { aliasType: "email", aliasValue: email, issuer: "" },
     select: { principalId: true },
     take: 2,
   });
-  const principalId = principals.length === 1 ? principals[0]?.principalId : null;
-  const capsule = capsules[0];
+  if (principals.length > 1) {
+    return {
+      ok: false,
+      code: "ARTIFACT_AUTHOR_REQUIRED",
+      error: `DCO sign-off identity ${email} is registered to more than one principal, so authorship is ambiguous. Merge the duplicate principals or remove the stale email alias, then retry.`,
+    };
+  }
+  const signOffPrincipalId = principals.length === 1 ? principals[0]?.principalId ?? null : null;
+  if (signOffPrincipalId && signOffPrincipalId !== authorPrincipalId) {
+    return {
+      ok: false,
+      code: "ARTIFACT_AUTHOR_REQUIRED",
+      error: `Commit ${args.locator.commitSha} is signed off by ${email}, registered to principal ${signOffPrincipalId}, but workroom ${capsule.capsuleId} is owned by principal ${authorPrincipalId}. Record the artifact from the workroom whose owner signed the commit, or correct the email alias.`,
+    };
+  }
+  // Agent participation is optional context. An external Claude/Codex/Grok
+  // session records its activity under a human principal and has no agent id at
+  // all; requiring one asked which surface produced the artifact.
   const participatingAgentIds = new Set(
-    capsule?.activities.map((activity) => activity.recordedByAgentId).filter((id): id is string => Boolean(id)) ?? [],
+    capsule.activities.map((activity) => activity.recordedByAgentId).filter((id): id is string => Boolean(id)),
   );
-  const agentId = participatingAgentIds.size === 1 ? [...participatingAgentIds][0]! : null;
-  const agentAliases = principalId && agentId
+  const soleAgentId = participatingAgentIds.size === 1 ? [...participatingAgentIds][0]! : null;
+  const agentAliases = soleAgentId
     ? await db.principalAlias.findMany({
-      where: { principalId, aliasType: "agent", aliasValue: agentId, issuer: "" },
+      where: { principalId: authorPrincipalId, aliasType: "agent", aliasValue: soleAgentId, issuer: "" },
       select: { aliasValue: true },
       take: 2,
     })
     : [];
-  if (!principalId || !agentId
-    || capsule?.createdByPrincipalId !== principalId
-    || agentAliases.length !== 1) {
-    return { ok: false, code: "ARTIFACT_AUTHOR_REQUIRED", error: "Repository DCO author cannot be mapped unambiguously through capsule provenance." };
-  }
+  const authorAgentId = soleAgentId && agentAliases.length === 1 ? soleAgentId : null;
 
   let response: Response;
   try {
@@ -209,8 +290,9 @@ export async function resolveRepositoryArtifact(args: {
     artifact: {
       digest: `sha256:${createHash("sha256").update(bytes).digest("hex")}`,
       bytes,
-      authorPrincipalId: principalId,
-      authorAgentId: agentId,
+      authorPrincipalId,
+      authorAgentId,
+      authorEmail: email,
     },
   };
 }

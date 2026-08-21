@@ -200,13 +200,21 @@ export function validateInitiativeGateReceiptDraft(
     return reject("artifact-mismatch", "The submitted locator is not the server-resolved immutable artifact.");
   }
 
+  // Separation of duties is enforced between PRINCIPALS, which is the
+  // accountable identity on both sides. Agent identity is optional context and is
+  // compared only when both sides carry one — requiring an author agent locked
+  // out every externally-authored artifact regardless of who reviewed it
+  // (BI-B9403248). The independence rule itself is unchanged: an author still
+  // cannot approve their own artifact.
   const { authorPrincipalId, authorAgentId } = context.resolvedArtifact;
-  if (!authorPrincipalId || !authorAgentId || !context.reviewerPrincipalId || !context.reviewerAgentId
-    || (context.requiresIndependentReviewer !== false && (
-      context.reviewerPrincipalId === authorPrincipalId
-      || context.reviewerAgentId === authorAgentId
-    ))) {
-    return reject("reviewer-not-independent", "Author and reviewer identities must both be known and independent.");
+  if (!authorPrincipalId || !context.reviewerPrincipalId || !context.reviewerAgentId) {
+    return reject("reviewer-not-independent", "Author and reviewer identities must both be known.");
+  }
+  if (context.requiresIndependentReviewer !== false && (
+    context.reviewerPrincipalId === authorPrincipalId
+    || (authorAgentId !== null && context.reviewerAgentId === authorAgentId)
+  )) {
+    return reject("reviewer-not-independent", "An artifact author cannot review their own artifact; record this gate from an independent reviewer.");
   }
 
   const openFindings = new Set(context.openFindingRefs);
