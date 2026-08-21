@@ -10259,6 +10259,7 @@
         "appsmobile-jest-must-stay-on-29x",
         "appsweb-and-packagesdb-vitest",
         "common-drift-and-how-to-stay-on-script",
+        "label-association-guard-ratchet",
         "what-this-gate-is-not"
       ]
     },

@@ -1,0 +1,19 @@
+{
+  "version": "1",
+  "decidedOption": "htmlfor-useid",
+  "decisionInteractionId": "DI-948610EC33B9",
+  "scope": {
+    "files": [
+      "apps/web/components/customer/AddContactButton.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "htmlfor-useid",
+      "wrap-control-in-label",
+      "aria-label-on-input",
+      "aria-labelledby-on-input"
+    ]
+  }
+}

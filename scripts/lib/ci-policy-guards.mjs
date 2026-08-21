@@ -162,6 +162,12 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       node("--test", "scripts/check-application-boundaries.test.mjs"),
       node("scripts/check-application-boundaries.mjs"),
     ]),
+    guard("label-association-guard", "Label Association Guard", [
+      // A <label> bound to nothing renders, screenshots and inspects correctly
+      // while a screen reader announces an unlabelled field — every human check
+      // passes. Ratchet: blocks NET-NEW orphans, retightens as surfaces migrate.
+      node("scripts/check-label-association.mjs"),
+    ]),
     guard("style-drift-guard", "Style Drift Guard", [
       node("scripts/check-style-drift.mjs"),
     ]),
