@@ -1,13 +1,72 @@
 #Requires -Version 5.1
+# DELIBERATELY a *simple* param block: no [CmdletBinding()]. Adding it would turn
+# this into an advanced script, which enables prefix matching against the common
+# parameters -- the exact class of breakage that made every guarded command fail in
+# scripts/safety/dpf-shell-guard.ps1. Keep it simple; -Help is a plain switch.
 param(
     [string]$InstallDir,
     [string]$Version = "latest",
     [switch]$LibraryOnly,
     [switch]$WithEdge,
     [switch]$NoEdge,
-    [ValidateNotNullOrEmpty()][string]$OrganizationJoinPackage
+    [ValidateNotNullOrEmpty()][string]$OrganizationJoinPackage,
+    [switch]$Help
 )
 $ErrorActionPreference = "Stop"
+
+function Show-DPFInstallerUsage {
+    @'
+Open Digital Product Factory - Installer
+
+Usage:
+  powershell -ExecutionPolicy Bypass -File install-dpf.ps1 [flags]
+
+Flags:
+  -InstallDir <path>
+                Install location. Defaults to D:\DPF (or the drive with the
+                most free space). The consumer install has no git checkout;
+                everything it needs ships inside the release images.
+  -Version <tag>
+                Image tag to install. Defaults to "latest".
+  -LibraryOnly  Dot-source the script's functions without running the install
+                flow. Used by tests and by other scripts that reuse helpers.
+  -WithEdge     Bundle a local Edge Node alongside the Authority Core (network
+                discovery from this host). OPT-IN: not installed by default.
+                A node added this way auto-approves at enrollment.
+  -NoEdge       Force-skip the local Edge Node even if a prior install enabled
+                it (Edge is already off by default).
+  -OrganizationJoinPackage <file.dpfjoin>
+                Join an existing organization trust domain during install. The
+                private package is validated, consumed, and deleted on success;
+                certificates and restart wiring are automatic.
+  -Help         Show this help and exit without installing.
+
+Uninstall:
+  powershell -ExecutionPolicy Bypass -File uninstall-dpf.ps1
+
+The POSIX installer (install-dpf.sh) carries additional flags -- --dry-run,
+--headless, --customer, --contributor -- that this script does not yet accept.
+'@ | Write-Host
+}
+
+# Must run before ANY install work. Before this existed the script had no -Help
+# parameter at all, so `install-dpf.ps1 -Help` bound nothing, fell through to
+# $args, and ran a FULL UNATTENDED INSTALL -- while docs/install/windows.md told
+# the operator that exact command "documents every flag" (IMP-026).
+if ($Help) {
+    Show-DPFInstallerUsage
+    exit 0
+}
+
+# Reject unknown arguments rather than silently ignoring them, mirroring
+# install-dpf.sh's `*) echo "Unknown flag" >&2; exit 2`. A simple param block
+# collects undeclared tokens in $args, so a typo like -Helpp would otherwise
+# install silently.
+if ($args.Count -gt 0) {
+    Write-Host "install-dpf.ps1: unrecognized argument(s): $($args -join ' ')" -ForegroundColor Red
+    Write-Host "Run 'powershell -File install-dpf.ps1 -Help' for usage." -ForegroundColor Red
+    exit 2
+}
 $OrganizationJoinPackagePath = if ($OrganizationJoinPackage) { [IO.Path]::GetFullPath($OrganizationJoinPackage) } else { $null }
 if ($OrganizationJoinPackagePath -and -not (Test-Path -LiteralPath $OrganizationJoinPackagePath -PathType Leaf)) {
     throw "organization_join_package_not_found:$OrganizationJoinPackagePath"

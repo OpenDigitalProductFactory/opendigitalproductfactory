@@ -34,6 +34,7 @@ const EXPECTED_LEGACY_JOBS = [
   "fk-index-coverage-guard",
   "fpaw-standard-guard",
   "host-port-range-guard",
+  "installer-help-contract",
   "installer-skip-visibility",
   "installer-state-contract",
   "instruction-plane-guard",

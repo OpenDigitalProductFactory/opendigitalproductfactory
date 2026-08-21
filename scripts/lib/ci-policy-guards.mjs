@@ -67,6 +67,12 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       // commandment frontmatter and the offline fallback.
       node("--test", "scripts/check-db-commandment-coverage.test.mjs"),
     ]),
+    guard("installer-help-contract", "Installer Help Contract", [
+      // docs/install/windows.md documented `install-dpf.ps1 -Help`, which had no
+      // -Help parameter -- a simple param() block ignored it and ran a full
+      // unattended install. Asserts documented installer flags actually exist.
+      node("--test", "scripts/check-installer-help-contract.test.mjs"),
+    ]),
     guard("installer-skip-visibility", "Installer Skip Visibility", [
       // A guarded install step that skips in silence reads as success, and is
       // then recorded as done by Save-Progress. Optional-script guards must say so.
