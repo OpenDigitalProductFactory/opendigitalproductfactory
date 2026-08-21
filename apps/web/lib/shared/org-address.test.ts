@@ -10,6 +10,8 @@ import {
   serializeOrgAddress,
   usStateCode,
   usStateName,
+  applyCountrySelection,
+  applyStateSelection,
 } from "./org-address";
 import { COUNTRY_TO_TIMEZONE, US_STATE_TO_TIMEZONE } from "@/lib/timezone-from-location";
 
@@ -241,5 +243,70 @@ describe("usStateCode", () => {
       expect(usStateCode(name)).toBe(code);
       expect(usStateName(code)).toBe(name);
     }
+  });
+});
+
+describe("applyCountrySelection", () => {
+  const OTHER = "__other__";
+
+  // IMP-066: the state field changes identity when a country is picked — free-text
+  // `region` before, `stateCode` picker after — and the old handler cleared both
+  // unconditionally. A FIRST selection is not a switch.
+  it("carries a typed state across the first country selection", () => {
+    const out = applyCountrySelection({ city: "Fort Worth", region: "TX" }, "US", "", OTHER);
+    expect(out.stateCode).toBe("TX");
+    expect(out.region).toBe("Texas");
+    expect(out.countryCode).toBe("US");
+  });
+
+  it("accepts a typed full state name too", () => {
+    const out = applyCountrySelection({ region: "texas" }, "US", null, OTHER);
+    expect(out.stateCode).toBe("TX");
+    expect(out.region).toBe("Texas");
+  });
+
+  it("keeps an unrecognised region as free text rather than dropping it", () => {
+    const out = applyCountrySelection({ region: "Bavaria" }, "DE", "", OTHER);
+    expect(out.region).toBe("Bavaria");
+    expect(out.stateCode).toBeUndefined();
+  });
+
+  it("still clears when switching BETWEEN countries", () => {
+    // A Texas code is meaningless once the country is the UK.
+    const out = applyCountrySelection(
+      { region: "Texas", stateCode: "TX", countryCode: "US" },
+      "GB",
+      "US",
+      OTHER,
+    );
+    expect(out.stateCode).toBeUndefined();
+    expect(out.region).toBeUndefined();
+    expect(out.countryCode).toBe("GB");
+  });
+
+  it("clears country fields when the selection is emptied", () => {
+    const out = applyCountrySelection({ region: "Texas", stateCode: "TX", countryCode: "US" }, "", "US", OTHER);
+    expect(out.countryCode).toBeUndefined();
+    expect(out.country).toBeUndefined();
+  });
+
+  it("carries the region into the free-text country path", () => {
+    const out = applyCountrySelection({ region: "Jalisco" }, OTHER, "", OTHER);
+    expect(out.region).toBe("Jalisco");
+    expect(out.countryCode).toBeUndefined();
+  });
+});
+
+describe("applyStateSelection", () => {
+  it("keeps code and display name in step", () => {
+    const out = applyStateSelection({ city: "Austin" }, "TX");
+    expect(out.stateCode).toBe("TX");
+    expect(out.region).toBe("Texas");
+  });
+
+  it("clears both when the selection is emptied", () => {
+    const out = applyStateSelection({ stateCode: "TX", region: "Texas" }, "");
+    expect(out.stateCode).toBeUndefined();
+    expect(out.region).toBeUndefined();
   });
 });

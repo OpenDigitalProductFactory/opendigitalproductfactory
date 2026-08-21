@@ -170,6 +170,66 @@ export function usStateCode(input: string | null | undefined): string | null {
   return null;
 }
 
+/**
+ * Apply a country selection to an address, preserving a state the operator already
+ * typed.
+ *
+ * The state field changes identity when a country is picked: free-text `region`
+ * before, a code-based `stateCode` picker after. Switching BETWEEN countries must
+ * clear it (a Texas code is meaningless once the country is the UK), but the FIRST
+ * selection is not a switch — clearing there silently discarded typed input, and
+ * invisibly, because the replacement control just renders empty (IMP-066).
+ *
+ * `previousCountry` is the selection before this change ("" / null when none).
+ * Pure so the behaviour is testable without mounting the form.
+ */
+export function applyCountrySelection(
+  address: OrgAddress,
+  value: string,
+  previousCountry: string | null | undefined,
+  otherCountrySentinel: string,
+): OrgAddress {
+  const next: OrgAddress = { ...address };
+  const carried = previousCountry ? null : (address.region ?? "").trim();
+
+  delete next.stateCode;
+  delete next.region;
+
+  if (!value || value === otherCountrySentinel) {
+    delete next.countryCode;
+    delete next.country;
+    // A free-text country still deserves the carried region.
+    if (value === otherCountrySentinel && carried) next.region = carried;
+    return next;
+  }
+
+  next.countryCode = value;
+  next.country = countryName(value) ?? value;
+  if (carried) {
+    const code = value === "US" ? usStateCode(carried) : null;
+    if (code) {
+      next.stateCode = code;
+      next.region = usStateName(code) ?? carried;
+    } else {
+      next.region = carried;
+    }
+  }
+  return next;
+}
+
+/** Apply a state-picker selection, keeping code and display name in step. */
+export function applyStateSelection(address: OrgAddress, value: string): OrgAddress {
+  const next: OrgAddress = { ...address };
+  if (value) {
+    next.stateCode = value;
+    next.region = usStateName(value) ?? value;
+  } else {
+    delete next.stateCode;
+    delete next.region;
+  }
+  return next;
+}
+
 /** Display name for an ISO alpha-2 country code, or null when unknown. */
 export function countryName(code: string | null | undefined): string | null {
   const c = code?.trim().toUpperCase();
