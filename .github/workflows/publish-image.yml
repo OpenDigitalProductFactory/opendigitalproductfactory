@@ -21,8 +21,8 @@ name: Publish Docker Images
 #   buildx-with-QEMU. With native matrix jobs, each runner pushes a
 #   single-arch image referenced by its content digest; the merge job
 #   uses `docker buildx imagetools create` to assemble the multi-arch
-#   manifest list under the human-readable tag (e.g. dpf-portal:v4.0.0
-#   and dpf-portal:latest both point at the merged manifest list).
+#   manifest list under the immutable tag (e.g. dpf-portal:v2026.08.21).
+#   `latest` is a separate, verification-gated promotion - see promote-latest.
 
 on:
   push:
@@ -30,9 +30,9 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Image tag (e.g. v0.1.0). Defaults to latest."
+        description: "Immutable image tag to publish (e.g. v2026.08.21). Empty = this run's ref name."
         required: false
-        default: "latest"
+        default: ""
 
 env:
   REGISTRY: ghcr.io
@@ -47,7 +47,38 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    outputs:
+      # Resolved once here so merge, verify and promote-latest cannot disagree
+      # about which tag this run is publishing. Previously each job recomputed
+      # it, which is how `latest` ended up meaning two different things inside
+      # one run.
+      tag: ${{ steps.tag.outputs.version }}
     steps:
+      - name: Resolve the immutable tag for this run
+        id: tag
+        env:
+          INPUT_TAG: ${{ github.event.inputs.tag }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          TAG="${INPUT_TAG:-$REF_NAME}"
+
+          # `latest` is a PROMOTION result now, not something a run may publish
+          # directly — promoting it is what the verify gate below guards. A run
+          # that wrote it straight from the build would walk around that gate,
+          # which is exactly the failure this workflow had on 2026-08-16.
+          if [ "${TAG}" = "latest" ]; then
+            echo "::error::Refusing to publish the mutable 'latest' tag directly. Pass an immutable tag (e.g. v2026.08.21); 'latest' is promoted automatically once E2E install verification passes."
+            exit 1
+          fi
+          if [ -z "${TAG}" ]; then
+            echo "::error::Could not resolve a tag for this run."
+            exit 1
+          fi
+
+          echo "version=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "Publishing under immutable tag: ${TAG}"
+
       - uses: actions/checkout@v7
 
       - name: Set up Node.js
@@ -198,12 +229,12 @@ jobs:
 
   # ─── Stage 2: Assemble multi-arch manifest lists ─────────────────
   # One merge job per image. Each downloads the per-arch digests and
-  # uses `docker buildx imagetools create` to point the named tag
-  # (vX.Y.Z + latest) at a manifest list referencing both arch digests.
+  # uses `docker buildx imagetools create` to point the immutable tag
+  # (vX.Y.Z) at a manifest list referencing both arch digests.
   merge:
     name: Merge ${{ matrix.image }} manifest
     runs-on: ubuntu-latest
-    needs: build
+    needs: [build, gate]
     permissions:
       contents: read
       packages: write
@@ -233,18 +264,6 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Determine tag
-        id: tag
-        env:
-          INPUT_TAG: ${{ github.event.inputs.tag }}
-        run: |
-          if [[ "${{ github.event_name }}" == "push" ]]; then
-            TAG="${GITHUB_REF#refs/tags/}"
-          else
-            TAG="${INPUT_TAG}"
-          fi
-          echo "version=$TAG" >> "$GITHUB_OUTPUT"
-
       - name: Normalize image owner
         id: owner
         run: echo "value=${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_OUTPUT"
@@ -260,7 +279,7 @@ jobs:
         run: |
           set -euo pipefail
           IMAGE="${{ env.REGISTRY }}/${{ steps.owner.outputs.value }}/${{ matrix.image }}"
-          TAG="${{ steps.tag.outputs.version }}"
+          TAG="${{ needs.gate.outputs.tag }}"
 
           # Collect every digest file produced by the build matrix for
           # this image and turn them into fully-qualified
@@ -279,9 +298,12 @@ jobs:
             exit 1
           fi
 
+          # Immutable tag ONLY. `latest` is repointed by promote-latest once
+          # E2E install verification passes. Publishing it here put unverified
+          # images straight in front of customers, because installs
+          # self-upgrade against `latest`.
           docker buildx imagetools create \
             --tag "${IMAGE}:${TAG}" \
-            --tag "${IMAGE}:latest" \
             "${REFS[@]}"
 
       - name: Verify multi-arch manifest
@@ -291,7 +313,7 @@ jobs:
         run: |
           set -euo pipefail
           IMAGE="${{ env.REGISTRY }}/${{ steps.owner.outputs.value }}/${{ matrix.image }}"
-          TAG="${{ steps.tag.outputs.version }}"
+          TAG="${{ needs.gate.outputs.tag }}"
 
           docker buildx imagetools inspect "${IMAGE}:${TAG}"
 
@@ -310,13 +332,20 @@ jobs:
   # identical to the manual-dispatch install-verification.yml.
   verify:
     name: E2E install verification (release mode)
-    needs: merge
+    needs: [merge, gate]
     runs-on: ubuntu-latest
     timeout-minutes: 35
     permissions:
       contents: read
       packages: read
     env:
+      # Pin the install to the tag this run just published. Without this,
+      # docker-compose.release.yml resolves ${DPF_IMAGE_TAG:-latest} and the
+      # gate would install the PREVIOUS `latest` — verifying the wrong images
+      # and then promoting untested ones. The installer only ever reads
+      # DPF_IMAGE_TAG out of .env, never writes it, so the shell environment
+      # is what compose interpolates here.
+      DPF_IMAGE_TAG: ${{ needs.gate.outputs.tag }}
       DPF_MODEL_PULL_MODE: skip
       DPF_HEALTH_TIMEOUT: 900
       DPF_HEALTH_URL: http://localhost:3000/api/health
@@ -402,3 +431,65 @@ jobs:
       - name: Tear down (uninstall --purge)
         if: always()
         run: bash uninstall-dpf.sh --purge --headless --yes || true
+
+  # ─── Stage 4: Promote `latest` ───────────────────────────────────
+  # `latest` is what customer installs self-upgrade against, so it moves ONLY
+  # after stage 3 proves the freshly published images actually install. Until
+  # 2026-08-16 the merge job wrote it alongside the immutable tag, which meant
+  # a run whose E2E verification failed had already shipped to every install
+  # (run 31954043204: 12/12 builds green, 6/6 merges green, verify FAILED,
+  # `latest` already repointed). BI-FA7ECEF0.
+  #
+  # Retagging from the immutable tag — rather than re-assembling from digests —
+  # guarantees `latest` and the verified tag are the same bytes.
+  promote-latest:
+    name: Promote ${{ matrix.image }} to latest
+    needs: [verify, gate]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        image:
+          - dpf-portal
+          - dpf-sandbox
+          - dpf-promoter
+          - dpf-browser-use
+          - dpf-adp
+          - dpf-edge-node
+          - dpf-postgres
+
+    steps:
+      # CodeQL actions/unpinned-tag: SHA-pinned, matching the merge job.
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Normalize image owner
+        id: owner
+        run: echo "value=${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_OUTPUT"
+
+      - name: Repoint latest at the verified manifest
+        env:
+          TAG: ${{ needs.gate.outputs.tag }}
+        run: |
+          set -euo pipefail
+          IMAGE="${{ env.REGISTRY }}/${{ steps.owner.outputs.value }}/${{ matrix.image }}"
+
+          docker buildx imagetools create --tag "${IMAGE}:latest" "${IMAGE}:${TAG}"
+
+          # The retag must preserve both architectures; a single-arch `latest`
+          # silently breaks arm64 installs.
+          raw="$(docker buildx imagetools inspect "${IMAGE}:latest" --raw)"
+          echo "$raw" | grep -q '"architecture": "amd64"'             || { echo "::error::Missing linux/amd64 in ${IMAGE}:latest"; exit 1; }
+          echo "$raw" | grep -q '"architecture": "arm64"'             || { echo "::error::Missing linux/arm64 in ${IMAGE}:latest"; exit 1; }
+
+          echo "Promoted ${IMAGE}:${TAG} -> :latest"
