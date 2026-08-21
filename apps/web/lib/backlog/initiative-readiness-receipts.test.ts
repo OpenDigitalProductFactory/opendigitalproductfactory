@@ -62,6 +62,24 @@ describe("validateInitiativeGateReceiptDraft", () => {
       .toMatchObject({ ok: false, code: "reviewer-not-independent" });
   });
 
+  // BI-B9403248: an externally-authored artifact has no agent provenance at all.
+  // Separation of duties still binds — it binds between principals.
+  it("accepts an independent reviewer for an artifact with no author agent", () => {
+    const result = validateInitiativeGateReceiptDraft(draft, {
+      ...context,
+      resolvedArtifact: { ...context.resolvedArtifact, authorAgentId: null },
+    });
+    expect(result).toMatchObject({ ok: true, receipt: { artifactAuthorRef: "principal:principal-author|agent:null" } });
+  });
+
+  it("still refuses a self-review when the author agent is unknown", () => {
+    expect(validateInitiativeGateReceiptDraft(draft, {
+      ...context,
+      resolvedArtifact: { ...context.resolvedArtifact, authorAgentId: null },
+      reviewerPrincipalId: "principal-author",
+    })).toMatchObject({ ok: false, code: "reviewer-not-independent" });
+  });
+
   it("uses the server-resolved digest, author, subject, receipt id, and authority snapshot", () => {
     const result = validateInitiativeGateReceiptDraft(draft, context);
     expect(result).toMatchObject({

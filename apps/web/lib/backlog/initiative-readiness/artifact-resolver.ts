@@ -258,8 +258,12 @@ export async function resolveInitiativeArtifact(args: {
   } catch {
     return { ok: false, code: "CANONICAL_DESIGN_REQUIRED", error: "Repository provider could not resolve the immutable artifact." };
   }
-  if (!providerBlob?.authorPrincipalId || !providerBlob.authorAgentId) {
-    return authorRequired("Repository blob author could not be mapped unambiguously to a principal and agent.");
+  // BI-B9403248: the accountable author is a PRINCIPAL. Agent identity is
+  // optional context — an external Claude/Codex/Grok session records its work
+  // under a human principal and has no agent id at all, and demanding one asked
+  // which surface produced the artifact rather than reading its evidence.
+  if (!providerBlob?.authorPrincipalId) {
+    return authorRequired("Repository blob author could not be mapped to an accountable principal.");
   }
   return {
     ok: true,
