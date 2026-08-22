@@ -1,3 +1,9 @@
+---
+title: Agent instruction-plane split, discriminator reconciliation, and a re-accretion ratchet
+authoredAt: 2026-07-24
+status: active
+---
+
 # Agent instruction-plane split, discriminator reconciliation, and a re-accretion ratchet
 
 - **Backlog item:** BI-0020D511 — "Agent instruction-plane audit: 32k always-on preamble, and prose/code discriminator drift on load-bearing rules"
@@ -30,6 +36,8 @@ BI-0020D511 was scouted on a branch (`claude/feature-flags-modularity-d5725e`) t
 ### 1a. The always-on plane is *pointer-forced*, not harness-injected
 
 There is **no `SessionStart` hook that injects `AGENTS.md`** (`.claude/settings.json` `SessionStart` runs only `worktree-freshness`). `CLAUDE.md` is a **pointer**: *"Read /AGENTS.md at the repo root before any work."* In this very audit session, only `CLAUDE.md` (438 chars) was auto-loaded; `AGENTS.md` entered context because the agent *obeyed the pointer and read the whole file*.
+
+> **Correction, 2026-08-21 (BI-C6308D90).** The mechanism described in this section was compliance-dependent and it failed in practice: a markdown link in `CLAUDE.md` is inert prose, so whether `AGENTS.md` entered context depended on the model choosing to follow the pointer, and it silently stopped doing so. Claude Code auto-loads `CLAUDE.md` only, and 2.1.197 does not read `AGENTS.md` natively. `CLAUDE.md` now uses the harness's own import directive — a bare `@AGENTS.md` line — which inlines the rulebook deterministically at session start with no hook and no duplication. The rest of this section still holds: the pointer file remains the control point, and the manifest still measures whatever it forces.
 
 This is not a caveat — it is **the control point for the split.** The ~28k-token cost is incurred by a read the pointer *instructs*. If the pointer instructs the agent to read a small doctrine file always, and names the procedure/history files as *on-demand* reads, the split is enforced at the pointer with zero harness changes. The BI's "ALWAYS-ON, every thread" is true in effect but the mechanism is softer than "injected", and the softer mechanism is what makes the fix cheap.
 
