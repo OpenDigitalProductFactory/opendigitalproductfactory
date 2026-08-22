@@ -2,7 +2,8 @@
 // Compose the instance stance from its canonical authorities.
 //
 // Authority split preserved from the design:
-//   - environment class  → installer state (the local host fact)
+//   - environment class  → the precedence chain in ./environment-class, whose
+//                          canonical host tier is installer state
 //   - operating intent   → PlatformConfig `installation.operating-intent.v1`
 //   - source capability  → install host profile
 //   - uncaptured work    → backlog counts vs the last recorded durable capture
@@ -10,31 +11,30 @@
 // Every read fails open to the *most cautious* answer. An installation that
 // cannot prove it is disposable is treated as production.
 
-import { readFile } from "node:fs/promises";
-
+import type { PrismaClient } from "@dpf/db";
 import {
   resolveInstanceStance,
   type InstanceStanceProfile,
 } from "@dpf/db/installation-instance-stance";
 import {
-  UNDECLARED_ENVIRONMENT_CLASS,
   buildInstallationOperatingProfileSnapshot,
-  isInstallationEnvironmentClass,
   parseOperatingIntent,
-  type InstallationEnvironmentClass,
   type InstallationOperatingIntentV1,
 } from "@dpf/db/installation-operating-intent";
 
+import { loadEnvironmentClassResolution } from "@/lib/install/environment-class";
 import { readInstallHostProfile } from "@/lib/install/host-profile";
+
+// The installer-state read lives with the precedence chain that ranks it.
+// Re-exported here because this module is the composition entry point every
+// agent-facing surface already imports.
+export { readInstallEnvironmentClass } from "@/lib/install/environment-class";
 
 /** PlatformConfig key holding the stored semantic operating intent. */
 export const OPERATING_INTENT_CONFIG_KEY = "installation.operating-intent.v1";
 
 /** PlatformConfig key holding the last durable backlog capture receipt. */
 export const BACKLOG_CAPTURE_CONFIG_KEY = "installation.backlog-capture.v1";
-
-/** In-container path to the governed install snapshot. */
-const INSTALL_STATE_PATH = "/dpf-state/install-state.json";
 
 /** Backlog statuses whose work is not yet finished, and so cannot be recreated. */
 const UNFINISHED_STATUSES = ["triaging", "open", "in-progress"] as const;
@@ -51,28 +51,6 @@ export interface BacklogCaptureReceiptV1 {
   bundlePath: string;
   itemCount: number;
   unfinishedItemCount: number;
-}
-
-/**
- * Read the canonical environment class for this host.
- *
- * Installer state owns this fact. When it is absent or unreadable the caller gets
- * `production` — the cautious default — rather than a guess.
- */
-export async function readInstallEnvironmentClass(options: {
-  readText?: (path: string) => Promise<string>;
-} = {}): Promise<{ environmentClass: InstallationEnvironmentClass; declared: boolean }> {
-  const readText = options.readText ?? ((path: string) => readFile(path, "utf8"));
-  try {
-    const raw = JSON.parse(await readText(INSTALL_STATE_PATH)) as Record<string, unknown>;
-    const value = raw["environmentClass"];
-    if (isInstallationEnvironmentClass(value)) {
-      return { environmentClass: value, declared: true };
-    }
-  } catch {
-    // fall through to the cautious default
-  }
-  return { environmentClass: UNDECLARED_ENVIRONMENT_CLASS, declared: false };
 }
 
 function parseCaptureReceipt(raw: unknown): BacklogCaptureReceiptV1 | null {
@@ -109,6 +87,25 @@ export interface InstanceStanceStore {
 }
 
 /**
+ * Adapt Prisma to that store shape.
+ *
+ * The `import type` above is erased at build time, so this module still pulls in
+ * no database runtime. Both readers of the stance — the MCP handshake and the
+ * workspace identity panel — compose it through here, so neither can drift onto
+ * a different set of rows.
+ */
+export function prismaInstanceStanceStore(
+  prisma: Pick<PrismaClient, "platformConfig" | "backlogItem">,
+): InstanceStanceStore {
+  return {
+    readConfig: async (key) =>
+      (await prisma.platformConfig.findUnique({ where: { key } }))?.value ?? null,
+    countBacklogItemsByStatus: (statuses) =>
+      prisma.backlogItem.count({ where: { status: { in: [...statuses] } } }),
+  };
+}
+
+/**
  * Compose the full instance stance from every canonical authority.
  *
  * Fails open to the cautious stance on any read error: an instance that cannot
@@ -118,12 +115,13 @@ export async function loadInstanceStance(
   store: InstanceStanceStore,
   options: {
     readText?: (path: string) => Promise<string>;
+    env?: Record<string, string | undefined>;
     readHostProfile?: typeof readInstallHostProfile;
   } = {},
 ): Promise<InstanceStanceProfile> {
   const readHostProfile = options.readHostProfile ?? readInstallHostProfile;
   const [{ environmentClass }, hostProfile] = await Promise.all([
-    readInstallEnvironmentClass({ readText: options.readText }),
+    loadEnvironmentClassResolution(store, { readText: options.readText, env: options.env }),
     readHostProfile(),
   ]);
 
