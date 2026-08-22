@@ -379,7 +379,16 @@ export async function createEpic(input: EpicInput): Promise<CreateEpicResult> {
   try {
     const { searchPlatformKnowledge } = await import("@/lib/semantic-memory");
     const searchText = `${input.title} ${input.description ?? ""}`.trim();
-    const hits = await searchPlatformKnowledge({ query: searchText, entityType: "epic", limit: 5 });
+    const search = await searchPlatformKnowledge({ query: searchText, entityType: "epic", limit: 5 });
+    // BI-339C441F: an unavailable search is not "no similar epics". Leave the
+    // overlap list empty either way, but do not let a retrieval outage read as
+    // a clean duplicate check.
+    if (search.status === "unavailable") {
+      console.warn(
+        `[backlog] epic overlap check skipped — semantic search unavailable (${search.reason}).`,
+      );
+    }
+    const hits = search.results;
     if (hits.length > 0) {
       const epicRows = await prisma.epic.findMany({
         where: { epicId: { in: hits.map((h) => h.entityId) } },

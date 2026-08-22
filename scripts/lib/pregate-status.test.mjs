@@ -169,3 +169,65 @@ test("a PASS report does not tell you to re-run", () => {
   );
   assert.ok(!lines.some((l) => l.includes("next")), "a PASS has no next step");
 });
+
+// BI-465B3D60 — a failing record must say why, or say that it cannot.
+const failingRecord = (over = {}) => ({
+  sha: "abc123", branch: "topic", status: "failed", gatePassed: false, ...over,
+});
+const atHead = { headSha: "abc123", headBranch: "topic" };
+
+test("failing record names the recorded reason when there is one", () => {
+  const out = classifySlotRecord({
+    state: failingRecord({ failureReason: "web typecheck exited 2" }),
+    metadata: null, ...atHead,
+  });
+  assert.equal(out.verdict, "FAIL");
+  assert.match(out.reason, /web typecheck exited 2/);
+});
+
+test("failing record says outright that no reason was recorded", () => {
+  // Rather than implying the diff is bad when the record simply does not say.
+  const out = classifySlotRecord({ state: failingRecord(), metadata: null, ...atHead });
+  assert.equal(out.verdict, "FAIL");
+  assert.match(out.reason, /NO recorded reason/);
+});
+
+test("a started-then-released run with no failing command is a retry, not a verdict", () => {
+  // The observed shape: the run held the slot, ended early, recorded nothing.
+  // local-integration-ci runs at effectiveCapacity 1 and several sessions on
+  // this host gate at once.
+  const out = classifySlotRecord({
+    state: failingRecord({
+      leaseEvents: [
+        { type: "terminal-claim-replaced" },
+        { type: "queued", queuePosition: 1 },
+        { type: "started" },
+        { type: "released" },
+      ],
+    }),
+    metadata: null, ...atHead,
+  });
+  assert.match(out.reason, /contended slot is a retry/);
+  assert.match(out.reason, /not a verdict on your diff/);
+});
+
+test("flags a metadata file that describes a different run", () => {
+  // The trap this closes: failing runs never rewrote the metadata, so it kept
+  // reporting the PREVIOUS run's success. Reading it after a failure yields a
+  // confident, wrong "it passed" — only the file mtime gave it away.
+  const out = classifySlotRecord({
+    state: failingRecord(),
+    metadata: { candidateSha: "oldersha", execution: { status: "passed", exitCode: 0 } },
+    ...atHead,
+  });
+  assert.equal(out.staleness, "metadata-describes-another-run");
+});
+
+test("does not flag the metadata when it describes this run", () => {
+  const out = classifySlotRecord({
+    state: failingRecord(),
+    metadata: { candidateSha: "abc123", execution: { status: "failed" } },
+    ...atHead,
+  });
+  assert.equal(out.staleness, "");
+});
