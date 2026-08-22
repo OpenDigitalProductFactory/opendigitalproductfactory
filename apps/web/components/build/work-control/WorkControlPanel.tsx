@@ -38,8 +38,8 @@ export function WorkControlPanel({
           dual-intake IA confusion. */}
       <p className="max-w-2xl text-sm leading-relaxed text-[var(--dpf-muted)]">
         The governed engineering substrate for Build Studio — git branches,
-        worktrees, and work capsules for hands-on development and AI coding
-        agents. Every build you start already manages its own capsule here. To
+        worktrees, and workrooms for hands-on development and AI coding
+        agents. Every build you start already manages its own workroom here. To
         describe a feature in plain English and have your AI Coworker design,
         build, and ship it, use{" "}
         <Link
@@ -57,7 +57,7 @@ export function WorkControlPanel({
         <div className="rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-3">
           <div className="flex items-center gap-2 text-xs text-[var(--dpf-muted)]">
             <GitBranch className="h-4 w-4" aria-hidden="true" />
-            <span>Active capsules</span>
+            <span>Active workrooms</span>
           </div>
           <div className="mt-2 text-2xl font-semibold text-[var(--dpf-text)]">{capsules.length}</div>
         </div>
@@ -82,7 +82,7 @@ export function WorkControlPanel({
           >
             Start a new outcome
           </Link>{" "}
-          in Build Studio — your AI Coworker sets up the capsule and branch for
+          in Build Studio — your AI Coworker sets up the workroom and branch for
           you.
         </div>
       )}

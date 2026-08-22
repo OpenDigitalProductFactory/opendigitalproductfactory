@@ -62,7 +62,7 @@ export function ChangeLanesDashboard({
         </h1>
         <p className="text-sm text-[var(--dpf-muted)]">
           Every unit of development work — Build Studio, Claude Code, Codex, and Grok —
-          joined into one view: capsules, branches, worktrees, runtimes, and PRs. Start on
+          joined into one view: workrooms, branches, worktrees, runtimes, and PRs. Start on
           All work; the other lenses focus on what needs attention. Read-only.
         </p>
         <p className="text-[10px] text-[var(--dpf-muted)]">
@@ -145,7 +145,7 @@ export function filterLanes(
       return lanes.filter(
         (l) =>
           l.source === "git-branch" &&
-          l.blockers.some((b) => /no Work Capsule/i.test(b)),
+          l.blockers.some((b) => /no Workroom/i.test(b)),
       );
     default:
       return lanes;

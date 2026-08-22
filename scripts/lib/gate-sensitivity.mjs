@@ -74,11 +74,22 @@ export const UX_EXCLUDE_RE = /\.(test|spec|stories)\.tsx$/;
 // files the prose/style guards inspect.
 export const PROSE_LINT_SOURCE_RE =
   /^apps\/web\/(?:app|components)\/.*\.(?:ts|tsx)$/;
+// The retired-vocabulary axis of check-prose-lint reaches further than the
+// other four: a renamed term has to be caught wherever an operator can read
+// it, and lib/ builds owner-facing strings (attention signals, change-lane
+// blockers) that never appear in a component. Same shape as style drift.
+export const RETIRED_VOCAB_SOURCE_RE =
+  /^apps\/web\/(?:app|components|lib)\/.*\.(?:ts|tsx)$/;
 export const STYLE_DRIFT_SOURCE_RE =
   /^apps\/web\/(?:app|components|lib|hooks)\/.*\.(?:ts|tsx|mts|cts)$/;
 
 export function isProseLintSource(path) {
   return PROSE_LINT_SOURCE_RE.test(String(path ?? "").replace(/\\/g, "/")) &&
+    !/\.(?:test|spec)\.(?:ts|tsx)$/.test(path);
+}
+
+export function isRetiredVocabSource(path) {
+  return RETIRED_VOCAB_SOURCE_RE.test(String(path ?? "").replace(/\\/g, "/")) &&
     !/\.(?:test|spec)\.(?:ts|tsx)$/.test(path);
 }
 

@@ -554,7 +554,7 @@ export function McpTokenManager(props: McpTokenManagerProps) {
             onClick={issueWriteToken}
             disabled={pending}
             className={buttonClass("primary")}
-            title="One-click: issues a development-template token (read code/specs, write backlog/work-capsules, sandbox + iac_execute) valid for 90 days."
+            title="One-click: issues a development-template token (read code/specs, write backlog/workrooms, sandbox + iac_execute) valid for 90 days."
           >
             <ShieldCheck className="h-4 w-4" aria-hidden="true" />
             Issue development token

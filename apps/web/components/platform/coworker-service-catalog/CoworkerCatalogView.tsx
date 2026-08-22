@@ -120,7 +120,7 @@ export function CoworkerCatalogView({ catalog }: { catalog: CoworkerCatalog }) {
             <dl className="space-y-3 text-xs">
               <div>
                 <dt className="font-semibold text-[var(--dpf-muted)]">Engagement</dt>
-                <dd className="mt-1 text-[var(--dpf-text)]">Requests create engagements; accepted work links a Work Capsule.</dd>
+                <dd className="mt-1 text-[var(--dpf-text)]">Requests create engagements; accepted work links a Workroom.</dd>
               </div>
               <div>
                 <dt className="font-semibold text-[var(--dpf-muted)]">External providers</dt>
