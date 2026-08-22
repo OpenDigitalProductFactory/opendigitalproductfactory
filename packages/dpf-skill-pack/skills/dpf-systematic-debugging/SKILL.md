@@ -9,7 +9,7 @@ allowed-tools: Bash Grep Glob mcp__dpf__search_code_graph mcp__dpf__get_build_pr
 
 # DPF coworker fields (Surface B — in-portal seed loader)
 category: governance
-assignTo: ["*"]
+assignTo: ["build-specialist", "platform-engineer", "external-coding-agent", "software-engineer"]
 capability: null
 taskType: research
 triggerPattern: "debug|root cause|why is .* failing|stuck|wedged|not working|broken|reproduce the bug|investigate the (failure|error)"

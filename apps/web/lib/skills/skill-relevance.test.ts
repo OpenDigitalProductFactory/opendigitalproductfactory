@@ -79,25 +79,63 @@ describe("rankSkillsByRelevance", () => {
   });
 });
 
-describe("no coworker's agent-invocable set exceeds the cap (BI-8AD9D018)", () => {
-  // rankSkillsByRelevance silently drops past DEFAULT_SKILL_SUMMARY_CAP. That
-  // is correct behaviour for a runaway set, but a coworker that sits over the
-  // cap in the SEEDED corpus is shedding skills on every turn with nothing
-  // saying so — portfolio-advisor was eligible for 17 before this guard.
+describe("per-coworker eligible-set ratchet (BI-8AD9D018, corrected by BI-4B0C27D4)", () => {
+  // rankSkillsByRelevance silently drops past DEFAULT_SKILL_SUMMARY_CAP. A
+  // coworker over the cap in the SEEDED corpus is therefore shedding skills on
+  // every turn with nothing saying so.
   //
-  // Reads the shipped .skill.md corpus rather than the database so the check
-  // runs in CI without a seeded install: the files are what the seed loads.
-  const skillsDir = join(__dirname, "..", "..", "..", "..", "skills");
+  // TWO PLANES, NOT ONE. The first version of this guard read only skills/**
+  // and certified a bound it could not see: packages/db/src/seed-skills.ts
+  // loads BOTH that corpus AND packages/dpf-skill-pack/skills/*/SKILL.md into
+  // SkillAssignment, so a pack skill with assignTo ["*"] was eligible for every
+  // coworker too. Real sets were 16-32 while this guard reported them under 12.
+  //
+  // A RATCHET, NOT THE CAP. After BI-4B0C27D4's rescoping every business
+  // coworker sits well under 12, but three dev-facing roles legitimately hold
+  // more dev skills than that — for them the ranker doing its job is the
+  // correct behaviour, not a defect. Asserting the hard cap would either fail
+  // forever or force a dishonest demotion, so this pins a per-role baseline
+  // that may SHRINK and never grow. Same contract as the repo's other
+  // baselines: pre-existing weight is not failed, new weight is.
+  const repoRoot = join(__dirname, "..", "..", "..", "..");
 
-  function eligibleByCoworker() {
-    const files = globSync("**/*.skill.md", { cwd: skillsDir }).map((rel) => join(skillsDir, rel));
+  /** Frozen per-role eligible counts. Lower a number when you genuinely reduce
+   *  a role's set; never raise one without saying why in the PR. */
+  const ELIGIBLE_BASELINE: Record<string, number> = {
+    "admin-assistant": 2,
+    "build-specialist": 25,
+    "compliance-officer": 5,
+    coo: 8,
+    "customer-advisor": 5,
+    "data-architect": 4,
+    "doc-specialist": 6,
+    "documentation-specialist": 6,
+    "ea-architect": 12,
+    "external-catalog-scout": 3,
+    "external-coding-agent": 18,
+    "farm-ranch-steward": 2,
+    "hr-specialist": 4,
+    "inventory-specialist": 9,
+    "market-research-analyst": 3,
+    "marketing-specialist": 8,
+    "onboarding-coo": 2,
+    "ops-coordinator": 12,
+    "platform-engineer": 32,
+    "portfolio-advisor": 10,
+    "software-engineer": 10,
+  };
+
+  function eligibleByCoworker(): Map<string, number> {
+    const files = [
+      ...globSync("skills/**/*.skill.md", { cwd: repoRoot }),
+      ...globSync("packages/dpf-skill-pack/skills/*/SKILL.md", { cwd: repoRoot }),
+    ].map((rel) => join(repoRoot, rel));
     expect(files.length).toBeGreaterThan(0);
 
     const parsed = files.map((filePath) => {
       const frontmatter = readFileSync(filePath, "utf8").split("---")[1] ?? "";
       const assignTo = /^assignTo: \[(.*)\]/m.exec(frontmatter)?.[1] ?? "";
       return {
-        file: filePath,
         roles: assignTo.replace(/"/g, "").split(",").map((role) => role.trim()).filter(Boolean),
         // Mirrors normalizeSkillFrontmatterForSeed: an explicit agentInvocable
         // wins; absent, the loader derives it from disable-model-invocation, so
@@ -111,16 +149,40 @@ describe("no coworker's agent-invocable set exceeds the cap (BI-8AD9D018)", () =
     const wildcard = parsed.filter((s) => s.roles.includes("*") && s.agentInvocable).length;
     const roles = new Set(parsed.flatMap((s) => s.roles).filter((role) => role !== "*"));
 
-    return [...roles].map((role) => ({
+    return new Map([...roles].map((role) => [
       role,
-      eligible: parsed.filter((s) => s.roles.includes(role) && s.agentInvocable).length + wildcard,
-    }));
+      parsed.filter((s) => s.roles.includes(role) && s.agentInvocable).length + wildcard,
+    ]));
   }
 
-  it("keeps every coworker at or under DEFAULT_SKILL_SUMMARY_CAP", () => {
-    const over = eligibleByCoworker()
-      .filter((entry) => entry.eligible > DEFAULT_SKILL_SUMMARY_CAP)
-      .map((entry) => `${entry.role}: ${entry.eligible}`);
+  it("counts BOTH planes — a pack skill assigned to a coworker reaches that coworker", () => {
+    // The blind spot this replaces. dpf-tdd is a pack skill; if the guard only
+    // read skills/**, it would score zero for a role that actually holds it.
+    const eligible = eligibleByCoworker();
+    expect(eligible.get("build-specialist")).toBeGreaterThan(10);
+  });
+
+  it("no role's eligible set grew past its baseline", () => {
+    const grew = [...eligibleByCoworker().entries()]
+      .filter(([role, count]) => count > (ELIGIBLE_BASELINE[role] ?? 0))
+      .map(([role, count]) => `${role}: ${count} > ${ELIGIBLE_BASELINE[role] ?? 0}`);
+
+    expect(grew).toEqual([]);
+  });
+
+  it("keeps every non-dev coworker under the per-turn cap", () => {
+    // The roles that were paying for dev skills they never invoke. Unlike the
+    // dev roles, there is no honest reason for these to sit over the cap.
+    const eligible = eligibleByCoworker();
+    const businessRoles = [
+      "marketing-specialist", "inventory-specialist", "portfolio-advisor",
+      "customer-advisor", "hr-specialist", "compliance-officer",
+      "admin-assistant", "onboarding-coo", "farm-ranch-steward",
+    ];
+
+    const over = businessRoles
+      .filter((role) => (eligible.get(role) ?? 0) > DEFAULT_SKILL_SUMMARY_CAP)
+      .map((role) => `${role}: ${eligible.get(role)}`);
 
     expect(over).toEqual([]);
   });

@@ -9,7 +9,7 @@ allowed-tools: Read Grep Glob mcp__dpf__search_specs_and_plans mcp__dpf__search_
 
 # DPF coworker fields (Surface B — in-portal seed loader)
 category: design
-assignTo: ["*"]
+assignTo: ["build-specialist", "platform-engineer", "external-coding-agent", "software-engineer"]
 capability: null
 taskType: workflow
 triggerPattern: "write (a |the )?plan|implementation plan|plan (out |this )?work|phased plan|how do we build|break .* into steps"

@@ -5,7 +5,7 @@ disable-model-invocation: false
 user-invocable: true
 allowed-tools: mcp__dpf__propose_improvement mcp__dpf__doc_save mcp__dpf__propose_skill_improvement mcp__dpf__create_backlog_item mcp__dpf__save_build_notes mcp__dpf__contribute_to_hive mcp__dpf__escalate_feedback_upstream mcp__dpf__flag_stale_knowledge
 category: governance
-assignTo: ["*"]
+assignTo: ["documentation-specialist", "doc-specialist", "platform-engineer", "external-coding-agent"]
 capability: null
 taskType: reflection
 triggerPattern: "route .*(learning|finding|insight)|share (this|the) (learning|finding)|capture .*(learning|insight)|propagate|to the commons|to the hive|don't silo|remember this for (everyone|all agents)|promote to (WWMD|WWWD|WSID)|end of (session|task) learnings"

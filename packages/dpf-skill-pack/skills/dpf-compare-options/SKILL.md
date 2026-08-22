@@ -5,7 +5,7 @@ disable-model-invocation: false
 user-invocable: true
 allowed-tools: mcp__dpf__principle_decide mcp__dpf__wiki_query
 category: governance
-assignTo: ["*"]
+assignTo: ["ea-architect", "platform-engineer", "coo", "ops-coordinator", "external-coding-agent"]
 capability: null
 taskType: deliberation
 triggerPattern: "compare options|score options|which option|WWMD compare|kernel scoring|decision options"

@@ -9,7 +9,7 @@ allowed-tools: Grep Glob mcp__dpf__search_code_graph mcp__dpf__list_epics mcp__d
 
 # DPF coworker fields (Surface B — in-portal seed loader)
 category: governance
-assignTo: ["*"]
+assignTo: ["build-specialist", "platform-engineer", "external-coding-agent", "software-engineer"]
 capability: null
 taskType: research
 triggerPattern: "new table|new type|new capability|new epic|new tool|new agent|new schema|propose .* new|we'll need|need to add"

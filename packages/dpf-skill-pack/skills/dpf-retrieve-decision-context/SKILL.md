@@ -5,7 +5,7 @@ disable-model-invocation: false
 user-invocable: true
 allowed-tools: mcp__dpf__wiki_query mcp__dpf__search_specs_and_plans mcp__dpf__list_backlog_items mcp__dpf__list_epics Bash(rg *)
 category: governance
-assignTo: ["*"]
+assignTo: ["ea-architect", "platform-engineer", "coo", "ops-coordinator", "external-coding-agent"]
 capability: null
 taskType: deliberation
 triggerPattern: "decision context|retrieve context|before WWMD|kernel context|principle context"

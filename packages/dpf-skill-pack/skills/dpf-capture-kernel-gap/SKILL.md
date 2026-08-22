@@ -5,7 +5,7 @@ disable-model-invocation: false
 user-invocable: true
 allowed-tools: mcp__dpf__save_build_notes mcp__dpf__create_backlog_item
 category: governance
-assignTo: ["*"]
+assignTo: ["ea-architect", "platform-engineer", "coo", "ops-coordinator", "external-coding-agent"]
 capability: null
 taskType: deliberation
 triggerPattern: "kernel gap|WWMD cannot answer|principle gap|evidence gap|founder review|volunteers dilemma"

@@ -5,7 +5,7 @@ disable-model-invocation: false
 user-invocable: true
 allowed-tools: mcp__dpf__principle_decide mcp__dpf__record_capsule_evidence mcp__dpf__wiki_query
 category: governance
-assignTo: ["*"]
+assignTo: ["ea-architect", "platform-engineer", "coo", "ops-coordinator", "external-coding-agent"]
 capability: null
 taskType: evidence
 triggerPattern: "record decision|save decision outcome|decision evidence|capture recommendation|record WWMD|ledger recorded"

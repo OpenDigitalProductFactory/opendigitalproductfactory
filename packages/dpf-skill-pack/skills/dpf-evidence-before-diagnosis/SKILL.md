@@ -9,7 +9,7 @@ allowed-tools: Bash Grep mcp__dpf__get_backlog_item mcp__dpf__get_build_progress
 
 # DPF coworker fields (Surface B — in-portal seed loader)
 category: governance
-assignTo: ["*"]
+assignTo: ["build-specialist", "platform-engineer", "external-coding-agent", "software-engineer"]
 capability: null
 taskType: research
 triggerPattern: "what's wrong|why is .* failing|why does .* not work|the cause is|looks like .* is broken|diagnose"
