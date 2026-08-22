@@ -1,0 +1,21 @@
+{
+  "version": "1",
+  "decidedOption": "shape-first-toggleable",
+  "decisionInteractionId": "DI-B4DCDB1F0848",
+  "scope": {
+    "files": [
+      "apps/web/components/workspace/workroom/ShapeViewToggle.tsx",
+      "apps/web/components/workspace/workroom/WorkroomShapeSection.tsx",
+      "apps/web/components/platform/coworker-record/CoworkerShapePanel.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "shape-first-toggleable",
+      "detail-first-toggleable",
+      "shape-only-no-toggle"
+    ],
+    "rationale": "principle_decide (WWMD, consumerContexts=[ui]) recommended shape-first-toggleable at composite 8.693 with margin 0.927 \u2014 high confidence, autonomy eligible, no commandment conflict, sensitivity stable across 41 applied principles. The picture answers 'where is this and what is holding it' without reading, which is the whole reason the view exists; the toggle keeps it optional, and the full detail renders either way so nothing is hidden behind the choice. shape-only-no-toggle scored materially lower on reversibility and governance_compliance: a view an operator cannot turn off is not a view they chose."
+  }
+}

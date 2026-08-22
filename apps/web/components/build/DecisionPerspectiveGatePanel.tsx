@@ -19,21 +19,15 @@ type Props = {
 
 type ConfidenceTier = "High" | "Medium" | "Low";
 
-function outcomeLabel(outcomeType: DecisionInteractionGateView["outcomeType"]): string {
-  switch (outcomeType) {
-    case "recommend":
-      return "Recommended";
-    case "arbitrate":
-      return "Arbitrated";
-    case "escalate":
-      return "Escalation required";
-    case "defer":
-      return "Coverage gap - deferred";
-    // BI-2107B5D2: a decline is an assurance, not a pending item.
-    case "decline":
-      return "Declined";
-  }
-}
+// BI-2107B5D2: a total lookup, not a switch — "decline" (an assurance, not a
+// pending item) joins as one row rather than three lines of control flow.
+const OUTCOME_LABEL: Record<DecisionInteractionGateView["outcomeType"], string> = {
+  recommend: "Recommended",
+  arbitrate: "Arbitrated",
+  escalate: "Escalation required",
+  defer: "Coverage gap - deferred",
+  decline: "Declined",
+};
 
 function confidenceTier(score: number): ConfidenceTier {
   if (score >= 0.85) return "High";
@@ -105,7 +99,7 @@ export function DecisionPerspectiveGatePanel({ interaction, onCapture, voiceOutp
   }
 
   const activeInteraction = interaction;
-  const label = outcomeLabel(activeInteraction.outcomeType);
+  const label = OUTCOME_LABEL[activeInteraction.outcomeType];
   const tier = confidenceTier(activeInteraction.confidenceScore);
   const prompt = actionPrompt(activeInteraction);
   const buttonLabel = captureLabel(activeInteraction.outcomeType);
