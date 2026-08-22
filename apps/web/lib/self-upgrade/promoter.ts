@@ -399,6 +399,8 @@ export const PROMOTER_JIT_BUILD_SCRIPT =
   "cp /promoter/promoter-contract.json \"$BDIR/promoter-contract.json\" && " +
   "mkdir -p \"$BDIR/scripts\" && mkdir -p \"$BDIR/scripts/installer\" && mkdir -p \"$BDIR/scripts/lib\" && " +
   "cp /promoter/scripts/promote.sh \"$BDIR/scripts/promote.sh\" && " +
+  "cp /promoter/scripts/governed-teardown.mjs \"$BDIR/scripts/governed-teardown.mjs\" && " +
+  "cp /promoter/scripts/salvage-sweep.mjs \"$BDIR/scripts/salvage-sweep.mjs\" && " +
   "cp /promoter/scripts/apply-runtime-capability-transition.mjs \"$BDIR/scripts/apply-runtime-capability-transition.mjs\" && " +
   "cp /promoter/scripts/runtime-transition-authority.mjs \"$BDIR/scripts/runtime-transition-authority.mjs\" && " +
   "cp /promoter/scripts/rotate-runtime-transition-secret.mjs \"$BDIR/scripts/rotate-runtime-transition-secret.mjs\" && " +

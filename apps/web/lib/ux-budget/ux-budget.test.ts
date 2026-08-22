@@ -437,7 +437,9 @@ describe("generated route-shell registry", () => {
     // fixture, so it is not measured (not a live-state exclusion, a fixture one).
     // 123 -> 124: /ops/stack-currency (BI-6328BCA6) joins the wall-clock exclusions — it
     // renders currency relative to `now` (approaching-eol window, daysUntilEol).
-    expect(registry.routes.filter((route) => !route.sweepEligible)).toHaveLength(124);
+    // 124 -> 125: /ops/teardown reads a host evidence collection that a detached
+    // lifecycle runner can update concurrently with the sweep.
+    expect(registry.routes.filter((route) => !route.sweepEligible)).toHaveLength(125);
   });
 
   it("keeps contextual sweep exclusions explicit, valid, and non-stale", () => {
