@@ -135,27 +135,30 @@ export function InstallationIdentityPanel({ view }: { view: InstallationIdentity
     <section
       className="border-b border-[var(--dpf-border)] px-4 py-4 sm:px-6"
       aria-labelledby="installation-identity-heading"
-      data-dpf-lead="installation-identity"
     >
-      <div className="mb-2 flex items-start justify-between gap-4">
-        <div>
-          <h2
-            id="installation-identity-heading"
-            className="text-base font-semibold text-[var(--dpf-text)]"
-          >
-            What this installation is
-          </h2>
-          <p className="mt-1 text-sm text-[var(--dpf-muted)]">
-            Its identity decides what your AI coworkers may do here.
-          </p>
+      {/* The lead band is the identity statement itself — the first thing the
+          operator reads. The stance rationales below are detail, not lead. */}
+      <div data-dpf-lead="installation-identity">
+        <div className="mb-2 flex items-start justify-between gap-4">
+          <div>
+            <h2
+              id="installation-identity-heading"
+              className="text-base font-semibold text-[var(--dpf-text)]"
+            >
+              What this installation is
+            </h2>
+            <p className="mt-1 text-sm text-[var(--dpf-muted)]">
+              Its identity decides what your AI coworkers may do here.
+            </p>
+          </div>
+          <StatusBadge intent={confirmation.intent} label={confirmation.label} size="md" />
         </div>
-        <StatusBadge intent={confirmation.intent} label={confirmation.label} size="md" />
-      </div>
 
-      <p className="text-sm text-[var(--dpf-text)]">{view.headline}</p>
-      {view.detail ? (
-        <p className="mt-1 text-xs text-[var(--dpf-muted)]">{view.detail}</p>
-      ) : null}
+        <p className="text-sm text-[var(--dpf-text)]">{view.headline}</p>
+        {view.detail ? (
+          <p className="mt-1 text-xs text-[var(--dpf-muted)]">{view.detail}</p>
+        ) : null}
+      </div>
 
       {view.environment.shadowedPortalDeclaration ? (
         <Notice variant="warn" title="Your saved choice is not the one in force." className="mt-3">
@@ -193,7 +196,7 @@ export function InstallationIdentityPanel({ view }: { view: InstallationIdentity
         approved links.
       </p>
 
-      <div className="mt-4">
+      <div className="mt-4" data-owner-first-next-action="change-installation-identity">
         <ExpandableCard
           id="installation-identity-change"
           open={open}
