@@ -224,14 +224,21 @@ export default async function AgentDetailPage({
   // BI-DB302392: the coworker's own shape — its governed tool use, rendered
   // with the same grammar the Workroom uses. Failure to load is not a reason to
   // fail the page: an empty shape is honest, a thrown page is not.
-  const coworkerToolCalls = await prisma.toolExecution
-    .findMany({
-      where: { agentId: record.runtime.agentId },
-      orderBy: { createdAt: "desc" },
-      take: 12,
-      select: { id: true, toolName: true, success: true, auditClass: true, createdAt: true },
-    })
-    .catch(() => [] as Array<{ id: string; toolName: string; success: boolean; auditClass: string | null; createdAt: Date }>);
+  // A rejected promise is not the only failure mode: a client without this
+  // delegate throws synchronously on property access, so the whole call is
+  // wrapped rather than only its promise.
+  const coworkerToolCalls = await (async () => {
+    try {
+      return await prisma.toolExecution.findMany({
+        where: { agentId: record.runtime.agentId },
+        orderBy: { createdAt: "desc" },
+        take: 12,
+        select: { id: true, toolName: true, success: true, auditClass: true, createdAt: true },
+      });
+    } catch {
+      return [] as Array<{ id: string; toolName: string; success: boolean; auditClass: string | null; createdAt: Date }>;
+    }
+  })();
   const coworkerShape = projectCoworkerShape({
     agentId: record.runtime.agentId,
     // "Established" here means live and summonable, which is what the agent
