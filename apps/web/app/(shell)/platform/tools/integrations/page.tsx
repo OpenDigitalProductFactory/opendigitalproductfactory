@@ -1,4 +1,5 @@
 import { prisma } from "@dpf/db";
+import { IntegrationCoverageDisclosure } from "@/components/integrations/IntegrationCoverageDisclosure";
 import { PlatformSummaryCard } from "@/components/platform/PlatformSummaryCard";
 import { getMatrixByOrg } from "@/lib/actions/integration-coverage";
 import {
@@ -206,14 +207,8 @@ export default async function EnterpriseIntegrationsPage() {
         />
       </div>
 
-      <details
-        data-testid="integration-coverage-disclosure"
-        className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-5"
-      >
-        <summary className="cursor-pointer text-sm font-semibold text-[var(--dpf-text)]">
-          Employee coverage
-        </summary>
-        <div className="mt-5">
+      <IntegrationCoverageDisclosure>
+        <div>
           <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
           <div>
             <p className="text-[11px] uppercase tracking-[0.18em] text-[var(--dpf-muted)]">
@@ -318,7 +313,7 @@ export default async function EnterpriseIntegrationsPage() {
           </table>
           </div>
         </div>
-      </details>
+      </IntegrationCoverageDisclosure>
 
       <section className="space-y-3">
         <div>

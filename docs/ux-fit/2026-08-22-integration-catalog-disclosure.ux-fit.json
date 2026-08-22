@@ -1,9 +1,10 @@
 {
   "version": "1",
-  "decidedOption": "progressively-disclose-secondary-employee-coverage",
+  "decidedOption": "controlled-progressive-disclosure-for-secondary-employee-coverage",
   "scope": {
     "files": [
-      "apps/web/app/(shell)/platform/tools/integrations/page.tsx"
+      "apps/web/app/(shell)/platform/tools/integrations/page.tsx",
+      "apps/web/components/integrations/IntegrationCoverageDisclosure.tsx"
     ]
   },
   "evidence": {
