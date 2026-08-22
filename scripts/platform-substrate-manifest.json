@@ -573,13 +573,11 @@
     },
     {
       "service": "redis",
-      "class": "capability-activated",
-      "capability": "runtime:durable-automation",
-      "boundaryReason": "Separate redis runtime retained for its current lifecycle, isolation, protocol, hardware, distribution, or development boundary.",
-      "defaultRequired": false,
-      "profiles": [
-        "runtime-durable-automation"
-      ],
+      "class": "universal-core",
+      "capability": "runtime:core",
+      "boundaryReason": "Universal queue store required by the portal's always-configured durable execution endpoint.",
+      "defaultRequired": true,
+      "profiles": [],
       "ports": [
         "6379:6379"
       ],
@@ -595,7 +593,7 @@
         "macos",
         "linux"
       ],
-      "targetClassification": "capability-activated"
+      "targetClassification": "universal-core"
     },
     {
       "service": "redis-exporter",
@@ -623,13 +621,11 @@
     },
     {
       "service": "inngest",
-      "class": "capability-activated",
-      "capability": "runtime:durable-automation",
-      "boundaryReason": "Separate inngest runtime retained for its current lifecycle, isolation, protocol, hardware, distribution, or development boundary.",
-      "defaultRequired": false,
-      "profiles": [
-        "runtime-durable-automation"
-      ],
+      "class": "universal-core",
+      "capability": "runtime:core",
+      "boundaryReason": "Universal durable execution endpoint required by the portal's unconditional INNGEST_BASE_URL contract.",
+      "defaultRequired": true,
+      "profiles": [],
       "ports": [
         "8288:8288",
         "8289:8289"
@@ -647,7 +643,7 @@
         "macos",
         "linux"
       ],
-      "targetClassification": "capability-activated"
+      "targetClassification": "universal-core"
     },
     {
       "service": "dpf-stt",

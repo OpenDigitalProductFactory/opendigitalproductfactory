@@ -51,6 +51,22 @@ test("resolves_each_fixture_dependency_closure", async () => {
   assert.deepEqual(linuxExternal.composeServices, linuxExternal.projectedServices);
 });
 
+test("core starts the durable automation services required by the portal", async () => {
+  const compose = await readFile(new URL("../docker-compose.yml", import.meta.url), "utf8");
+  const substrate = JSON.parse(await readFile(new URL("./platform-substrate-manifest.json", import.meta.url), "utf8"));
+  const capabilities = JSON.parse(await readFile(new URL("../packages/db/data/platform-runtime-capabilities.json", import.meta.url), "utf8")).capabilities;
+  const catalog = JSON.parse(await readFile(new URL("./capability-service-catalog.generated.json", import.meta.url), "utf8"));
+  const result = checkCapabilityComposeProfiles({ composeSource: compose, substrate, capabilities, catalog });
+  const core = result.resolveFixture(
+    await loadCapabilityProfileFixture(new URL("./fixtures/capability-profiles/core.env", import.meta.url)),
+  );
+
+  assert.ok(core.composeServices.includes("redis"), "core must start Inngest's queue store");
+  assert.ok(core.composeServices.includes("inngest"), "portal always configures INNGEST_BASE_URL, so Inngest is core");
+  assert.equal(substrate.services.find((service) => service.service === "redis")?.defaultRequired, true);
+  assert.equal(substrate.services.find((service) => service.service === "inngest")?.defaultRequired, true);
+});
+
 test("classifies_every_platform_overlay_service", async () => {
   const compose = await readFile(new URL("../docker-compose.yml", import.meta.url), "utf8");
   const macos = await readFile(new URL("../docker-compose.macos.yml", import.meta.url), "utf8");

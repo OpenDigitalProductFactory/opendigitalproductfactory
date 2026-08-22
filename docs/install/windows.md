@@ -113,6 +113,22 @@ not the machine's LAN IP.
 
 `powershell -File install-dpf.ps1 -Help` documents every flag.
 
+For unattended installs, use one explicit mode flag. `-Headless` never calls an
+interactive prompt and defaults to consumer mode when neither mode is named:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File install-dpf.ps1 -Headless -Consumer
+# or, for a source workspace:
+powershell -ExecutionPolicy Bypass -File install-dpf.ps1 -Headless -Contributor
+```
+
+`-Consumer` and `-Contributor` are mutually exclusive. If the release registry
+requires authentication, a headless consumer install stops with instructions to
+run `docker login ghcr.io`; it never waits for hidden credential input. After a
+release pull, the installer prints the repository digest and image creation date.
+When `latest` is more than 24 hours older than `main`, it also warns that the
+published release may be stale without blocking an otherwise valid install.
+
 ## Docker memory
 
 The Next.js production build needs ~4 GB of Node.js heap; with parallel
@@ -231,6 +247,8 @@ Run anyway**.
 | Command | What it removes |
 |---------|-----------------|
 | `.\dpf-stop.ps1` | Stops the running containers. Preserves volumes, `.env`, `%USERPROFILE%\.dpf`. |
+| `.\uninstall-dpf.ps1` | Soft uninstall: stops every installed Compose overlay and removes autostart tasks. Preserves volumes, `.env`, install files, and state for recovery. |
+| `.\uninstall-dpf.ps1 -Purge` | **Destructive.** Deletes DPF volumes, install files, and state after typing `purge`. Automation must pass `-Headless -Purge -Yes`; use `-KeepEnv` or `-KeepState` only when deliberately retaining those artifacts. |
 | `.\dpf-reinstall.ps1` | **Destructive.** Wipes and rebuilds. Removes DPF docker volumes (filtered by the `com.docker.compose.project=dpf` label so other stacks are untouched). Irreversible. |
 
 ## Going further

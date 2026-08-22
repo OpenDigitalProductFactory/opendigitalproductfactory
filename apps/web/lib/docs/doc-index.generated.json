@@ -5336,6 +5336,7 @@
         "quick-start",
         "capability-resolved-runtime-profiles",
         "consumer-release-assets",
+        "fresh-install-runtime-and-recovery",
         "optional-services-backup-and-health",
         "agent-toolchain-readiness",
         "why-each-state-appears",

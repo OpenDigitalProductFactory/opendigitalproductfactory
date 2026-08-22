@@ -20,11 +20,19 @@ import {
   canCall,
   expandGrants,
   objectLiteralBody,
+  normalizeGeneratedPath,
   parseSkillFrontmatter,
   parseStringArrayMap,
   parseTopLevelKeys,
   stripLineComments,
 } from "./measure-capability-completeness.mjs";
+
+test("generated capability paths use repository-stable separators", () => {
+  assert.equal(
+    normalizeGeneratedPath("skills\\platform\\ingest-article.skill.md"),
+    "skills/platform/ingest-article.skill.md",
+  );
+});
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 

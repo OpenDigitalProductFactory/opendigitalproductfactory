@@ -163,13 +163,42 @@ export function localInputModalities(prior: LocalModelCapabilityPrior): string[]
  * route* until the deterministic eval measures the real model.
  */
 export function deriveLocalModelCapabilityPrior(modelId: string): LocalModelCapabilityPrior {
-  const base = derivePriorBase(modelId);
+  const normalizedId = normalizeLocalModelId(modelId);
+  const base = isBundledQwen38Model(normalizedId)
+    ? bundledQwen38Prior()
+    : derivePriorBase(modelId);
   return {
     ...base,
     // Vision/audio are orthogonal to the text/tool family; embedding models are
     // never multimodal-routable. Bootstrap priors — the activation eval calibrates.
     supportsVision: base.isEmbedding ? false : detectLocalModelVision(modelId),
     supportsAudio: base.isEmbedding ? false : detectLocalModelAudio(modelId),
+  };
+}
+
+/**
+ * The consumer image provisions this exact model. Its provisional floor is
+ * intentionally model-specific: fresh installs must remain routable while the
+ * durable eval queue catches up, without overstating smaller generic Qwen models.
+ */
+function isBundledQwen38Model(normalizedId: string): boolean {
+  return normalizedId.includes("ggml-org/qwen3.8-27b-gguf");
+}
+
+function bundledQwen38Prior(): Omit<LocalModelCapabilityPrior, "supportsVision" | "supportsAudio"> {
+  return {
+    isEmbedding: false,
+    capabilityCategory: "standard",
+    supportsToolUse: true,
+    reasoning: 85,
+    codegen: 85,
+    toolFidelity: 85,
+    instructionFollowingScore: 78,
+    structuredOutputScore: 85,
+    conversational: 75,
+    contextRetention: 70,
+    bestFor: ["reasoning", "coding", "tool-use", "general"],
+    avoidFor: [],
   };
 }
 
