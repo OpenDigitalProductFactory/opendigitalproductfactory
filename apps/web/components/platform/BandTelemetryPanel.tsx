@@ -1,4 +1,19 @@
-import type { BandTelemetry } from "@/lib/decision/band-telemetry";
+import { DataTable, type Column } from "@/components/ui/report-kit";
+import type { BandReversal, BandTelemetry } from "@/lib/decision/band-telemetry";
+
+const REVERSAL_COLUMNS: Column<BandReversal>[] = [
+  { key: "verdict", header: "Band", cell: (b) => <span className="capitalize">{b.verdict}</span> },
+  { key: "judged", header: "Judged", align: "right", cell: (b) => b.judged },
+  {
+    key: "reversed",
+    header: "Reversed",
+    align: "right",
+    // A rate of null is reported as unjudgeable, never as a flattering 0%.
+    cell: (b) => (b.rate == null
+      ? <span className="text-[var(--dpf-muted)]">no call could be checked</span>
+      : `${b.reversed} (${Math.round(b.rate * 100)}%)`),
+  },
+];
 
 /**
  * BI-3217C098. The tuning instrument: where decisions land, and whether the
@@ -43,14 +58,17 @@ export function BandTelemetryPanel({ telemetry }: { telemetry: BandTelemetry }) 
             title={`${bucket.count} decision(s) with a margin of ${bucket.from.toFixed(2)}–${bucket.to.toFixed(2)}`}
           >
             <span
-              className={
-                bucket.insideUncertainBand
-                  ? "w-full rounded-t-sm bg-[var(--dpf-warning)]"
-                  : "w-full rounded-t-sm bg-[var(--dpf-accent)]"
-              }
-              style={{ height: `${Math.max(2, (bucket.count / peak) * 64)}px` }}
+              className="w-full rounded-t-sm"
+              style={{
+                height: `${Math.max(2, (bucket.count / peak) * 64)}px`,
+                // Semantic, not decorative: inside the band is unresolved,
+                // clear of it is an assurance.
+                background: bucket.insideUncertainBand
+                  ? "var(--dpf-warning)"
+                  : "var(--dpf-success)",
+              }}
             />
-            <span className="text-[10px] text-[var(--dpf-muted)]">{bucket.from.toFixed(1)}</span>
+            <span className="text-xs text-[var(--dpf-muted)]">{bucket.from.toFixed(1)}</span>
           </li>
         ))}
       </ul>
@@ -60,29 +78,15 @@ export function BandTelemetryPanel({ telemetry }: { telemetry: BandTelemetry }) 
         decisions the gate could not call either way.
       </p>
 
-      <table className="mt-4 w-full text-sm">
-        <caption className="sr-only">Reversal rate by verdict band</caption>
-        <thead>
-          <tr className="text-left text-xs text-[var(--dpf-muted)]">
-            <th scope="col" className="pb-1 font-normal">Band</th>
-            <th scope="col" className="pb-1 font-normal">Judged</th>
-            <th scope="col" className="pb-1 font-normal">Reversed</th>
-          </tr>
-        </thead>
-        <tbody>
-          {telemetry.reversals.map((band) => (
-            <tr key={band.verdict} className="border-t border-[var(--dpf-border)]">
-              <td className="py-1.5 capitalize text-[var(--dpf-text)]">{band.verdict}</td>
-              <td className="py-1.5 text-[var(--dpf-muted)]">{band.judged}</td>
-              <td className="py-1.5 text-[var(--dpf-text)]">
-                {band.rate == null
-                  ? <span className="text-[var(--dpf-muted)]">no call could be checked</span>
-                  : `${band.reversed} (${Math.round(band.rate * 100)}%)`}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      <div className="mt-4">
+        <DataTable
+          ariaLabel="Reversal rate by verdict band"
+          columns={REVERSAL_COLUMNS}
+          rows={telemetry.reversals}
+          getRowKey={(band) => band.verdict}
+          dense
+        />
+      </div>
     </section>
   );
 }

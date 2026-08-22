@@ -11,7 +11,7 @@
 // The definition moved verbatim out of the inline PLATFORM_TOOLS array; grants
 // mirror agent-grants.ts TOOL_TO_GRANTS, which stays the gating source.
 
-import { DECISION_STAKES, type DecisionStakes } from "@/lib/decision/option-scoring";
+import { parseDecisionStakes } from "@/lib/decision/option-scoring";
 import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
 import {
@@ -85,8 +85,7 @@ const definitions: ToolDefinition[] = [
         stakes: {
           type: "string",
           enum: ["routine", "elevated", "high"],
-          description:
-            "BI-1BBB2136. How consequential this decision is. Stakes widen or narrow the UNCERTAIN band from both sides: a high-stakes call demands more separation before it will call anything an assurance, and less opposition before it declines. Defaults to 'elevated' (the historical behaviour). Pass the caller's real risk tier rather than leaving it to the default — an unset tier means every decision, however consequential, is weighed at the same bar.",
+          description: "How consequential this decision is (BI-1BBB2136). Stakes widen or narrow the UNCERTAIN band from both sides: a high-stakes call demands more separation before it calls anything an assurance, and less opposition before it declines. Defaults to 'elevated'. Pass your real risk tier — leaving it unset weighs every decision, however consequential, at the same bar.",
         },
         ringScope: {
           type: "array",
@@ -281,11 +280,7 @@ async function principleDecide(
     typeof params["tieMargin"] === "number"
       ? params["tieMargin"]
       : PRINCIPLE_DECIDE_DEFAULTS.tieMargin;
-  // BI-1BBB2136: an unrecognised value falls back to the default rather than
-  // failing the call — a mistyped tier must not block a governance consult.
-  const stakes = (DECISION_STAKES as readonly string[]).includes(String(params["stakes"]))
-    ? (params["stakes"] as DecisionStakes)
-    : undefined;
+  const stakes = parseDecisionStakes(params["stakes"]);
   const contextualThreshold =
     PRINCIPLE_DECIDE_DEFAULTS.contextualSimilarityThreshold;
   const semanticWarnRatio =
