@@ -213,28 +213,27 @@ One new generic model is justified:
 ```text
 ExternalChannelProjection
   projectionId             stable semantic id
-  organizationId
   connectorKey             wordpress-self-hosted (future providers reuse model)
   connectionId             stable IntegrationCredential.integrationId target
   credentialId?            credential row used for the last operation/audit
-  sourceType / sourceId     canonical DPF object
-  sourceVersionId?          immutable version/snapshot when available
-  resourceKind              post | page | media | provider-declared kind
-  locale                    default en-US, explicit when projected
-  externalId?               absent while reserved/ambiguous before reconciliation
+  sourceType / sourceRef    governed canonical DPF object kind and identity
+  sourceVersion             immutable version/snapshot identity
+  resourceKind              post | page | media
+  locale                    default und, explicit when projected
+  externalRef?              absent while reserved/ambiguous before reconciliation
   externalUrl?
   localFingerprint          hash of approved serialized payload
   remoteFingerprint?        hash of normalized last-read remote payload
   remoteModifiedAt?
-  state                     reserved | draft | live | ambiguous | drifted
-                            | unavailable | detached | retired
-  lastProjectedAt?
-  lastObservedAt?
+  state                     reserved | current | ambiguous | drifted | detached
+  lifecycle / lifecycleAt   canonical active/retired record lifecycle
+  projectedAt?
+  observedAt?
   metadata                  bounded provider metadata; no secrets/full payload
   createdAt / updatedAt
 
-  unique(connectorKey, connectionId, sourceType, sourceId, resourceKind, locale)
-  unique(connectorKey, connectionId, resourceKind, externalId)
+  unique(connectorKey, connectionId, sourceType, sourceRef, resourceKind, locale)
+  unique(connectorKey, connectionId, resourceKind, externalRef)
 ```
 
 `connectionId` is the unique `IntegrationCredential.integrationId`, which the connector kernel already treats as the connection/single-flight identity. Credential rotation updates secret custody without changing the projection target. `credentialId` remains optional audit provenance, matching the existing `OutboundPublication` pointer.
