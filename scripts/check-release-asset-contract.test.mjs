@@ -30,6 +30,7 @@ const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
 const dockerfile = readFileSync(join(repoRoot, "Dockerfile"), "utf8");
 const psInstaller = readFileSync(join(repoRoot, "install-dpf.ps1"), "utf8");
 const shInstaller = readFileSync(join(repoRoot, "install-dpf.sh"), "utf8");
+const agentPointerPath = "config/consumer-install/agent-pointer.md";
 
 /**
  * Repo-relative paths the installers copy out of the install directory with no
@@ -161,4 +162,18 @@ test("SHA256SUMS is generated last, so newly added assets are covered", () => {
     "assets must be copied BEFORE the manifest is generated, or the installer's " +
       "Test-DPFReleaseAssetManifest -RejectUnlisted will reject them",
   );
+});
+
+test("consumer installs ship a minimal AGENTS.md pointer before checksums", () => {
+  assert.ok(existsSync(join(repoRoot, agentPointerPath)), "consumer agent pointer source must exist");
+  assert.ok(
+    block.includes(`${agentPointerPath} /dpf-release-assets/AGENTS.md`),
+    "the neutral source asset must be renamed to AGENTS.md only in the release bundle",
+  );
+  const pointer = readFileSync(join(repoRoot, agentPointerPath), "utf8");
+  assert.match(pointer, /runtime install/i);
+  assert.match(pointer, /not a source (checkout|repository)/i);
+  assert.match(pointer, /MCP/i);
+  assert.match(pointer, /authoritative/i);
+  assert.ok(pointer.split(/\s+/).length < 120, "the pointer must not duplicate the contributor rulebook");
 });

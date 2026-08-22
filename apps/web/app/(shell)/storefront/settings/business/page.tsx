@@ -74,13 +74,17 @@ export default async function StorefrontBusinessSettingsPage() {
   const archetypeSummary = storefrontConfig?.archetype
     ? { name: storefrontConfig.archetype.name, category: storefrontConfig.archetype.category }
     : null;
+  const entityNoun = archetypeSummary?.category === "nonprofit-community" ? "Organization" : "Business";
+  const entityNounLower = entityNoun.toLowerCase();
 
   return (
     <div>
       <div className="mb-6">
-        <h2 className="text-lg font-semibold text-[var(--dpf-text)]">Your Business</h2>
+        <h2 className="text-lg font-semibold text-[var(--dpf-text)]">Your {entityNoun}</h2>
         <p className="mt-0.5 text-sm text-[var(--dpf-muted)]">
-          {businessContext ? "Keep your business context current for the portal and AI coworkers." : "Tell the platform what your business does and who it serves."}
+          {businessContext
+            ? `Keep your ${entityNounLower} context current for the portal and AI coworkers.`
+            : `Tell the platform what your ${entityNounLower} does and who it serves.`}
         </p>
       </div>
 

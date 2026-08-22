@@ -36,6 +36,10 @@ vi.mock("@/lib/self-upgrade/config", () => ({
   nextMaintenanceWindowStart: vi.fn().mockReturnValue(null),
 }));
 
+vi.mock("@/lib/self-upgrade/support", () => ({
+  readSelfUpgradeSupport: vi.fn(),
+}));
+
 vi.mock("@/lib/self-upgrade/version", () => ({
   resolveTargetSha: vi.fn(),
   isShaFresh: vi.fn(),
@@ -164,6 +168,7 @@ import { prisma } from "@dpf/db";
 import { getSelfUpgradeConfig } from "@/lib/self-upgrade/config";
 import { resolveTargetSha, isShaFresh } from "@/lib/self-upgrade/version";
 import { getDeployedSha } from "@/lib/self-upgrade/completion";
+import { readSelfUpgradeSupport } from "@/lib/self-upgrade/support";
 import { createRun, getLatestRun, getLatestSucceededRun } from "@/lib/self-upgrade/run-store";
 import {
   getCurrentImpactSummaryId,
@@ -184,45 +189,23 @@ import {
   rollbackSelfUpgrade,
   triggerSelfUpgrade,
 } from "./promotions";
-
-const mockSession = {
-  user: {
-    id: "user-ops-1",
-    email: "ops@test.com",
-    platformRole: "OPS-000",
-    isSuperuser: false,
-  },
-};
-
-const mockConfig = {
-  enabled: true,
-  channel: "stable",
-  checkIntervalHours: 24,
-  healthTarget: 100,
-  maintenanceWindows: [],
-};
-
-const mockRun = {
-  id: "cuid-1",
-  runId: "SUR-AAAA0001",
-  status: "succeeded",
-  trigger: "scheduled",
-  currentSha: "abc1234",
-  targetSha: "def5678",
-  deployedSha: "def5678",
-  startedAt: new Date("2026-05-20T02:00:00Z"),
-  completedAt: new Date("2026-05-20T02:05:00Z"),
-  completionEvidence: null,
-  failureLog: null,
-  createdAt: new Date("2026-05-20T02:00:00Z"),
-  updatedAt: new Date("2026-05-20T02:05:00Z"),
-};
+import { mockConfig, mockRun, mockSession } from "./promotions.self-upgrade.test-fixtures";
 
 beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(auth).mockResolvedValue(mockSession as never);
   vi.mocked(can).mockReturnValue(true);
   vi.mocked(getSelfUpgradeConfig).mockResolvedValue(mockConfig as never);
+  vi.mocked(readSelfUpgradeSupport).mockImplementation(async (configuredEnabled) => ({
+    configuredEnabled,
+    supported: true,
+    enabled: configuredEnabled,
+    targetKind: "git-source",
+    reason: configuredEnabled ? "enabled" : "disabled-by-config",
+    message: configuredEnabled
+      ? null
+      : "Automatic updates are turned off for this source-backed install.",
+  }));
   vi.mocked(getLatestRun).mockResolvedValue(null);
   vi.mocked(getLatestSucceededRun).mockResolvedValue(null);
   vi.mocked(createRun).mockResolvedValue({

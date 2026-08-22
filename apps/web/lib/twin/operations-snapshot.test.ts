@@ -17,6 +17,7 @@ function twinFixture(): TwinSnapshot {
     capacityChips: [{ key: "open", label: "Tables open", value: 4 }],
     stageFlow: [{ stageKey: "serve", label: "Serve", order: 1, loadBearing: true, count: 2 }],
     outcomes: [{ key: "served", label: "Served", value: "12" }],
+    outcomesHeading: "Guest outcomes",
     zones: [{ key: "floor", units: [{ key: "t1", label: "Table 1", state: "Available" }] }],
     workItems: [{ key: "b1", label: "Party · Table 2" }],
     queues: [{ key: "waitlist", items: [{ key: "p1", label: "Party of 4" }] }],
@@ -51,6 +52,7 @@ describe("VersionedOperationsSnapshot", () => {
       capacityChips: twin.capacityChips,
       stageFlow: twin.stageFlow,
       outcomes: twin.outcomes,
+      outcomesHeading: twin.outcomesHeading,
       quests: twin.quests,
       utility: twin.utility,
     });

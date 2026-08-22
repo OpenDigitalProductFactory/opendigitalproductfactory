@@ -2,6 +2,7 @@ import { formatOrgAddressLines } from "@/lib/shared/org-address";
 import Link from "next/link";
 import type { PublicStorefrontConfig } from "@/lib/storefront-types";
 import type { WeeklySchedule } from "@/lib/operating-hours-types";
+import { resolveTrustProfile } from "@/lib/storefront/public-trust";
 
 const DAYS: { key: keyof WeeklySchedule; label: string }[] = [
   { key: "monday", label: "Mon" },
@@ -29,10 +30,11 @@ export function StorefrontTrustFooter({
   storefront: Pick<
     PublicStorefrontConfig,
     "orgName" | "orgSlug" | "orgAddress" | "contactEmail" | "contactPhone" | "socialLinks" | "timezone"
-  >;
+  > & Partial<Pick<PublicStorefrontConfig, "archetypeId" | "archetypeCategory">>;
   hours: WeeklySchedule | null;
 }) {
   const { orgSlug, orgAddress } = storefront;
+  const trust = resolveTrustProfile(storefront.archetypeCategory, storefront.archetypeId);
   // Use the canonical formatter rather than an ad-hoc join. Both storefront
   // surfaces previously hand-joined a subset of keys and DROPPED the state/region:
   // a Fort Worth address with stateCode "TX" rendered "Fort Worth, 76106" here and
@@ -145,7 +147,7 @@ export function StorefrontTrustFooter({
           <ul style={{ listStyle: "none", margin: 0, padding: 0, fontSize: 14, lineHeight: 1.9 }}>
             <li>
               <Link href={`/s/${orgSlug}/policies`} style={linkStyle}>
-                Booking &amp; cancellation
+                {trust.policyLinkLabel}
               </Link>
             </li>
             <li>

@@ -30,6 +30,7 @@ describe("ProductMixSetupFieldset", () => {
   it("shows one required primary line and optional adjacent suggestions", () => {
     render(
       <ProductMixSetupFieldset
+        archetypeCategory="beauty-personal-care"
         productMix={mix}
         value={defaultProductLineSelections(mix)}
         onChange={vi.fn()}
@@ -50,6 +51,7 @@ describe("ProductMixSetupFieldset", () => {
     const onChange = vi.fn();
     const { rerender } = render(
       <ProductMixSetupFieldset
+        archetypeCategory="beauty-personal-care"
         productMix={mix}
         value={defaultProductLineSelections(mix)}
         onChange={onChange}
@@ -71,6 +73,7 @@ describe("ProductMixSetupFieldset", () => {
 
     rerender(
       <ProductMixSetupFieldset
+        archetypeCategory="beauty-personal-care"
         productMix={mix}
         value={[
           { suggestionKey: "salon-services", label: "Salon services" },
@@ -84,5 +87,23 @@ describe("ProductMixSetupFieldset", () => {
     expect(onChange).toHaveBeenLastCalledWith([
       { suggestionKey: "salon-services", label: "Salon services" },
     ]);
+  });
+
+  it("uses programme and supporter language for nonprofit setup", () => {
+    render(
+      <ProductMixSetupFieldset
+        archetypeCategory="nonprofit-community"
+        productMix={mix}
+        value={defaultProductLineSelections(mix)}
+        onChange={vi.fn()}
+      />,
+    );
+
+    expect(
+      screen.getByRole("group", { name: "What does your organization offer?" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Main programme")).toBeInTheDocument();
+    expect(screen.getByText(/supporters or the people you serve/i)).toBeInTheDocument();
+    expect(screen.queryByText(/customers buy|main product line/i)).toBeNull();
   });
 });

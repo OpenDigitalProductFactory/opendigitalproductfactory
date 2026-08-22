@@ -28,7 +28,7 @@ export default async function BookItemPage({
   if (!storefront || !item) notFound();
 
   const formSchema = await resolveInquiryFormSchema(storefront.archetypeId);
-  const trust = resolveTrustProfile(storefront.archetypeCategory);
+  const trust = resolveTrustProfile(storefront.archetypeCategory, storefront.archetypeId);
   const capitalizedNoun = trust.bookingNoun.charAt(0).toUpperCase() + trust.bookingNoun.slice(1);
 
   // For a capacity archetype (Restaurant FLOOR), availability reads in table

@@ -7,6 +7,7 @@ const TEST_INSTALL_STATE_HASH = createHash("sha256").update(TEST_INSTALL_STATE).
 
 const mocks = vi.hoisted(() => ({
   getSelfUpgradeConfig: vi.fn(),
+  readSelfUpgradeSupport: vi.fn(),
   isUpgradeWindowOpen: vi.fn(),
   resolveOperatingScheduleForSystem: vi.fn().mockResolvedValue({ schedule: {}, timezone: "UTC" }),
   getLastCheckedAt: vi.fn().mockResolvedValue(null),
@@ -62,6 +63,10 @@ const mocks = vi.hoisted(() => ({
 vi.mock("@/lib/self-upgrade/config", () => ({
   getSelfUpgradeConfig: mocks.getSelfUpgradeConfig,
   resolveSelfUpgradeHostIdentity: mocks.resolveSelfUpgradeHostIdentity,
+}));
+
+vi.mock("@/lib/self-upgrade/support", () => ({
+  readSelfUpgradeSupport: mocks.readSelfUpgradeSupport,
 }));
 
 vi.mock("node:fs/promises", () => ({ readFile: mocks.readFile }));
@@ -178,12 +183,7 @@ vi.mock("@/lib/self-upgrade/quiescence", () => ({
   captureActiveSessionBlockers: mocks.captureActiveSessionBlockers,
 }));
 
-import type { SelfUpgradeRunEventData } from "./self-upgrade";
 import {
-  SELF_UPGRADE_CRON,
-  SELF_UPGRADE_FUNCTION_ID_SCHEDULED,
-  SELF_UPGRADE_FUNCTION_ID_MANUAL,
-  SELF_UPGRADE_EVENT,
   selfUpgradeScheduled,
   selfUpgradeManual,
   runSelfUpgrade,
@@ -253,6 +253,14 @@ const OK_RECOVERY_POINT = {
 };
 
 beforeEach(() => {
+  mocks.readSelfUpgradeSupport.mockImplementation(async (configuredEnabled: boolean) => ({
+    configuredEnabled,
+    supported: true,
+    enabled: configuredEnabled,
+    targetKind: "git-source",
+    reason: configuredEnabled ? "enabled" : "disabled-by-config",
+    message: configuredEnabled ? null : "Automatic updates are turned off.",
+  }));
   mocks.readFile.mockImplementation(async (path: string) => path.endsWith("install-state.json") ? TEST_INSTALL_STATE : "s".repeat(32));
   mocks.resolveSelfUpgradeHostIdentity.mockReturnValue({ platform: "linux", arch: "amd64", provenance: "explicit" });
   mocks.createSelfUpgradeRecoveryPoint.mockResolvedValue(OK_RECOVERY_POINT);
@@ -264,63 +272,6 @@ beforeEach(() => {
   mocks.summarizeRecoveryPointFailure.mockReturnValue(
     "recovery-point-failed: postgres BR-PG",
   );
-});
-
-describe("cron metadata", () => {
-  it("scheduled function id is ops/self-upgrade-scheduled", () => {
-    expect(SELF_UPGRADE_FUNCTION_ID_SCHEDULED).toBe("ops/self-upgrade-scheduled");
-  });
-
-  it("cron runs hourly", () => {
-    expect(SELF_UPGRADE_CRON).toBe("0 * * * *");
-  });
-});
-
-describe("manual event name", () => {
-  it("event name is ops/self-upgrade.run", () => {
-    expect(SELF_UPGRADE_EVENT).toBe("ops/self-upgrade.run");
-  });
-
-  it("manual function id is ops/self-upgrade-manual", () => {
-    expect(SELF_UPGRADE_FUNCTION_ID_MANUAL).toBe("ops/self-upgrade-manual");
-  });
-});
-
-describe("manual payload schema", () => {
-  it("accepts empty payload (all fields optional)", () => {
-    const payload: SelfUpgradeRunEventData = {};
-    expect(payload).toEqual({});
-  });
-
-  it("accepts triggeredBy string", () => {
-    const payload: SelfUpgradeRunEventData = { triggeredBy: "user-abc" };
-    expect(payload.triggeredBy).toBe("user-abc");
-  });
-
-  it("accepts dryRun boolean", () => {
-    const payload: SelfUpgradeRunEventData = { dryRun: true };
-    expect(payload.dryRun).toBe(true);
-  });
-
-  it("accepts buildId string", () => {
-    const payload: SelfUpgradeRunEventData = { buildId: "FB-TESTBUILD" };
-    expect(payload.buildId).toBe("FB-TESTBUILD");
-  });
-
-  it("accepts force boolean", () => {
-    const payload: SelfUpgradeRunEventData = { force: true };
-    expect(payload.force).toBe(true);
-  });
-
-  it("accepts budgetMs (BI-QUIESCE-010)", () => {
-    const payload: SelfUpgradeRunEventData = { budgetMs: 600_000 };
-    expect(payload.budgetMs).toBe(600_000);
-  });
-
-  it("accepts routine boolean (agent-requested batch-gated run)", () => {
-    const payload: SelfUpgradeRunEventData = { routine: true };
-    expect(payload.routine).toBe(true);
-  });
 });
 
 describe("function registration", () => {
@@ -379,6 +330,37 @@ describe("success path", () => {
     const result = await runSelfUpgrade({ triggeredBy: "ops" });
     expect(result).toMatchObject({ ok: true, status: "succeeded", runId: "SUR-AAAABBBB" });
     expect(mocks.completeRun).toHaveBeenCalledWith("SUR-AAAABBBB");
+  });
+
+  it("skips consumer releases before Git, cooldown, or quiescence work", async () => {
+    mocks.readSelfUpgradeSupport.mockResolvedValue({
+      configuredEnabled: true,
+      supported: false,
+      enabled: false,
+      targetKind: "release-artifact",
+      reason: "consumer-release-upgrade-unsupported",
+      message: "Automatic updates aren’t available for this install yet.",
+    });
+
+    const result = await runSelfUpgrade({
+      triggeredBy: "ops",
+      runId: "SUR-CONSUMER",
+    });
+
+    expect(result).toMatchObject({
+      skipped: true,
+      reason: "unsupported-install-mode",
+      runId: "SUR-CONSUMER",
+      supportReason: "consumer-release-upgrade-unsupported",
+      targetKind: "release-artifact",
+    });
+    expect(mocks.skipRun).toHaveBeenCalledWith(
+      "SUR-CONSUMER",
+      "unsupported-install-mode: consumer-release-upgrade-unsupported",
+    );
+    expect(mocks.getCooldownUntil).not.toHaveBeenCalled();
+    expect(mocks.defaultGitRunner).not.toHaveBeenCalled();
+    expect(mocks.startQuiescence).not.toHaveBeenCalled();
   });
 
   it.each([

@@ -18,7 +18,12 @@ import type { LocalChangesResult } from "@/lib/self-upgrade/local-changes-ledger
 import { describeSkipReason } from "@/lib/self-upgrade/skip-reason";
 
 /** The release state an owner cares about — deliberately coarser than the run status machine. */
-export type OwnerReleaseState = "up-to-date" | "update-available" | "in-progress" | "failed";
+export type OwnerReleaseState =
+  | "up-to-date"
+  | "update-available"
+  | "in-progress"
+  | "failed"
+  | "unavailable";
 
 /** Notice/badge tone paired with each state, resolved through the report-kit intent model by the card. */
 export type OwnerReleaseTone = "success" | "info" | "warning" | "danger";
@@ -64,6 +69,12 @@ export interface OwnerReleaseSummary {
  */
 export interface OwnerReleaseInput {
   enabled: boolean;
+  support: {
+    supported: boolean;
+    targetKind: "git-source" | "release-artifact" | "unknown";
+    reason: string;
+    message: string | null;
+  };
   isFresh: boolean;
   targetSha: string | null;
   deployedSha: string | null;
@@ -139,17 +150,21 @@ export function buildOwnerReleaseSummary(
   const inFlight = runStatus != null && IN_FLIGHT.has(runStatus);
   const failed = runStatus === "failed";
 
-  const state: OwnerReleaseState = inFlight
-    ? "in-progress"
-    : failed
-      ? "failed"
-      : input.isFresh || !input.targetSha
-        ? "up-to-date"
-        : "update-available";
+  const state: OwnerReleaseState = !input.support.supported
+    ? "unavailable"
+    : inFlight
+      ? "in-progress"
+      : failed
+        ? "failed"
+        : input.isFresh || !input.targetSha
+          ? "up-to-date"
+          : "update-available";
 
   const tone: OwnerReleaseTone =
     state === "up-to-date"
       ? "success"
+      : state === "unavailable"
+        ? "warning"
       : state === "failed"
         ? "danger"
         : state === "in-progress"
@@ -198,32 +213,36 @@ export function buildOwnerReleaseSummary(
   const rollbackAvailable = input.rollbackAvailable;
   const rollback = {
     available: rollbackAvailable,
-    detail: rollbackAvailable
+    detail: state === "unavailable"
+      ? "There is no automatic update action to undo on this install."
+      : rollbackAvailable
       ? "You can restore the version from before the last update — a recovery point was saved."
       : "A recovery point is saved automatically before each update, so an update can be undone.",
   };
 
   const breaking = input.latestRunImpact?.counts.breaking ?? 0;
   const whatCouldGoWrong: string[] = [];
-  if (breaking > 0) {
+  if (state !== "unavailable" && breaking > 0) {
     whatCouldGoWrong.push(
       `This update includes ${breaking} higher-impact change${plural(breaking)} — open "What's in this update" below before installing.`,
     );
   }
-  if (keptLocally.count > 0) {
+  if (state !== "unavailable" && keptLocally.count > 0) {
     whatCouldGoWrong.push(
       "Your local changes are merged in automatically; a rare conflict would pause the update for review rather than lose your work.",
     );
   }
-  if (failed) {
+  if (state !== "unavailable" && failed) {
     whatCouldGoWrong.push(
       "The previous attempt didn't finish — check the details below before you retry.",
     );
   }
   // Always reassure with the safety net, last.
-  whatCouldGoWrong.push(
-    "If an update fails, the platform restores the previous version on its own.",
-  );
+  if (state !== "unavailable") {
+    whatCouldGoWrong.push(
+      "If an update fails, the platform restores the previous version on its own.",
+    );
+  }
 
   let headline: string;
   let recommendedAction: { label: string; detail: string };
@@ -241,6 +260,20 @@ export function buildOwnerReleaseSummary(
       };
 
   switch (state) {
+    case "unavailable":
+      headline =
+        input.support.message?.replace(/[.]$/, "") ??
+        "Automatic updates aren’t available for this install yet";
+      recommendedAction = {
+        label: "No automatic update action",
+        detail:
+          input.support.targetKind === "release-artifact"
+            ? "DPF will not queue a source-based upgrade here. Follow the installer guidance for the consumer release you want to move to."
+            : "DPF will not queue an update until this install’s identity can be verified. Try again when status is available.",
+      };
+      ifYouDoNothing =
+        "Your current release keeps running. Nothing is queued or changed automatically.";
+      break;
     case "up-to-date":
       headline = "Your platform is up to date";
       recommendedAction = {

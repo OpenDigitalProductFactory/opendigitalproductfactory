@@ -934,7 +934,7 @@ export default function SelfUpgradeClient({
                   {explanation.remedy && (
                     <div className="text-[var(--dpf-muted)]">{explanation.remedy}</div>
                   )}
-                  {(latestRun.reason ?? "").startsWith("promoter-unavailable") && (
+                  {enabled && (latestRun.reason ?? "").startsWith("promoter-unavailable") && (
                     <div className="pt-1 space-y-1">
                       <button
                         type="button"

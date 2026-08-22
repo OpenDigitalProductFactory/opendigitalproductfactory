@@ -461,6 +461,7 @@ export function SetupWizard({
         />
         {selected?.productMix && (
           <ProductMixSetupFieldset
+            archetypeCategory={selected.category}
             productMix={selected.productMix}
             value={productLineSelections}
             onChange={setProductLineSelections}
