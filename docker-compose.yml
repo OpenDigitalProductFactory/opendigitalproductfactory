@@ -803,7 +803,6 @@ services:
 
   # ─── Durable Execution (Inngest + Redis) ──────────────────────────────
   redis:
-    profiles: ["runtime-durable-automation"]
     image: redis:7-alpine
     restart: unless-stopped
     logging: *default-logging
@@ -834,7 +833,6 @@ services:
     # scraping /metrics is the effective health signal.
 
   inngest:
-    profiles: ["runtime-durable-automation"]
     # Pinned (was :latest). :latest drifted onto 1.26.0, which has a
     # self-hosted `inngest start` regression: every queued item fails its
     # capacity-lease with "missing envID" (itemLeaseConstraintCheck) and

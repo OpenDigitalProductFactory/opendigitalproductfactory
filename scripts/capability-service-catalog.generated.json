@@ -179,6 +179,32 @@
       "externalRuntimes": [],
       "services": [
         {
+          "backupPolicy": "separate-required",
+          "boundaryReason": "Universal durable execution endpoint required by the portal's unconditional INNGEST_BASE_URL contract.",
+          "canonicalDataOwner": "postgres-and-redis",
+          "capability": "runtime:core",
+          "class": "universal-core",
+          "defaultRequired": true,
+          "dependsOn": [
+            "postgres",
+            "redis"
+          ],
+          "healthSemantics": "compose-healthcheck",
+          "hostPlatforms": [
+            "linux",
+            "macos",
+            "windows"
+          ],
+          "ports": [
+            "8288:8288",
+            "8289:8289"
+          ],
+          "profiles": [],
+          "service": "inngest",
+          "targetClassification": "universal-core",
+          "volumes": []
+        },
+        {
           "backupPolicy": "included",
           "boundaryReason": "Universal canonical platform contract.",
           "canonicalDataOwner": "postgres",
@@ -283,6 +309,30 @@
             "${DPF_BACKUPS_HOST_PATH:-${DPF_HOST_INSTALL_PATH:-.}/backups}:/backups",
             "${DPF_HOST_INSTALL_PATH:-.}:/host-source:ro",
             "/var/run/docker.sock:/var/run/docker.sock"
+          ]
+        },
+        {
+          "backupPolicy": "separate-required",
+          "boundaryReason": "Universal queue store required by the portal's always-configured durable execution endpoint.",
+          "canonicalDataOwner": "redis",
+          "capability": "runtime:core",
+          "class": "universal-core",
+          "defaultRequired": true,
+          "dependsOn": [],
+          "healthSemantics": "compose-healthcheck",
+          "hostPlatforms": [
+            "linux",
+            "macos",
+            "windows"
+          ],
+          "ports": [
+            "6379:6379"
+          ],
+          "profiles": [],
+          "service": "redis",
+          "targetClassification": "universal-core",
+          "volumes": [
+            "redis_data:/data"
           ]
         }
       ],
@@ -652,60 +702,6 @@
       ],
       "externalRuntimes": [],
       "services": [
-        {
-          "backupPolicy": "separate-required",
-          "boundaryReason": "Separate inngest runtime retained for its current lifecycle, isolation, protocol, hardware, distribution, or development boundary.",
-          "canonicalDataOwner": "postgres-and-redis",
-          "capability": "runtime:durable-automation",
-          "class": "capability-activated",
-          "defaultRequired": false,
-          "dependsOn": [
-            "postgres",
-            "redis"
-          ],
-          "healthSemantics": "compose-healthcheck",
-          "hostPlatforms": [
-            "linux",
-            "macos",
-            "windows"
-          ],
-          "ports": [
-            "8288:8288",
-            "8289:8289"
-          ],
-          "profiles": [
-            "runtime-durable-automation"
-          ],
-          "service": "inngest",
-          "targetClassification": "capability-activated",
-          "volumes": []
-        },
-        {
-          "backupPolicy": "separate-required",
-          "boundaryReason": "Separate redis runtime retained for its current lifecycle, isolation, protocol, hardware, distribution, or development boundary.",
-          "canonicalDataOwner": "redis",
-          "capability": "runtime:durable-automation",
-          "class": "capability-activated",
-          "defaultRequired": false,
-          "dependsOn": [],
-          "healthSemantics": "compose-healthcheck",
-          "hostPlatforms": [
-            "linux",
-            "macos",
-            "windows"
-          ],
-          "ports": [
-            "6379:6379"
-          ],
-          "profiles": [
-            "runtime-durable-automation"
-          ],
-          "service": "redis",
-          "targetClassification": "capability-activated",
-          "volumes": [
-            "redis_data:/data"
-          ]
-        },
         {
           "backupPolicy": "excluded-stateless",
           "boundaryReason": "Separate redis-exporter runtime retained for its current lifecycle, isolation, protocol, hardware, distribution, or development boundary.",
@@ -1169,7 +1165,7 @@
       ]
     }
   ],
-  "catalogHash": "0d23205cbadd063e14d63ab45835f19f212d6b9cb76808abd75665259f52229c",
+  "catalogHash": "c83c56c0e3602293ee01abd1d5f068380d23de3244b4d2a05b06f26a12ce3cb9",
   "catalogVersion": 1,
   "substrateManifestVersion": 2
 }

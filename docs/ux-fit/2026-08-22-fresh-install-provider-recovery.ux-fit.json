@@ -1,0 +1,20 @@
+{
+  "version": "1",
+  "decidedOption": "bounded-skeleton-actionable-recovery-local-first",
+  "decisionInteractionId": "DI-6D78A3E2B411",
+  "scope": {
+    "files": [
+      "apps/web/app/(shell)/platform/ai/providers/loading.tsx",
+      "apps/web/components/platform/ProviderDetailForm.tsx",
+      "apps/web/components/workspace-home/LocalOnlyProviderNotice.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "bounded-skeleton-actionable-recovery-local-first",
+      "indefinite-skeleton-with-global-error-boundary",
+      "immediate-blocking-error-with-cloud-first-onboarding"
+    ]
+  }
+}

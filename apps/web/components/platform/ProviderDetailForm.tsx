@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition, useEffect } from "react";
+import { useState, useTransition, useEffect, useId } from "react";
 import { useRouter } from "next/navigation";
 import { useSearchParams } from "next/navigation";
 import { configureProvider, testProviderAuth, discoverModels, profileModels } from "@/lib/actions/ai-providers";
@@ -44,6 +44,7 @@ type Props = {
 export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActiveProvider, routingProfiles }: Props) {
   const { provider, credential } = pw;
   const router = useRouter();
+  const fieldId = useId();
   const [isPending, startTransition] = useTransition();
   const isClaudeSubscription = provider.providerId === "anthropic-sub";
   const isZaiCodingProvider = provider.providerId === "zai-coding";
@@ -251,10 +252,11 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
       {/* Custom endpoint (Azure OpenAI etc.) */}
       {needsEndpoint && (
         <div style={{ marginBottom: 16 }}>
-          <label style={labelStyle}>
+          <label htmlFor={`${fieldId}-endpoint`} style={labelStyle}>
             Custom endpoint URL
           </label>
           <input
+            id={`${fieldId}-endpoint`}
             value={endpoint}
             onChange={(e) => setEndpoint(e.target.value)}
             disabled={!canWrite || isPending}
@@ -266,11 +268,12 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
 
       {/* Auth method */}
       <div style={{ marginBottom: 16 }}>
-        <label style={labelStyle}>
+        <label htmlFor={`${fieldId}-auth-method`} style={labelStyle}>
           Authentication method
         </label>
         {hasDualAuth ? (
           <select
+            id={`${fieldId}-auth-method`}
             value={selectedAuthMethod}
             onChange={(e) => setSelectedAuthMethod(e.target.value)}
             disabled={!canWrite || isPending}
@@ -347,7 +350,7 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
               )}
             </div>
           )}
-          <label style={labelStyle}>
+          <label htmlFor={`${fieldId}-secret`} style={labelStyle}>
             {isAnthropicSub ? "Subscription Token" : isAnthropicApi ? "API Key" : "API Key"}
             {credential?.secretHint && !secretRef && (
               <span style={{ color: isAnthropicSub ? "var(--dpf-success)" : "var(--dpf-accent)", marginLeft: 8 }}>
@@ -356,6 +359,7 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
             )}
           </label>
           <input
+            id={`${fieldId}-secret`}
             type="password"
             value={secretRef}
             onChange={(e) => setSecretRef(e.target.value)}
@@ -399,10 +403,11 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
       {selectedAuthMethod === "oauth2_client_credentials" && (
         <>
           <div style={{ marginBottom: 16 }}>
-            <label style={labelStyle}>
+            <label htmlFor={`${fieldId}-client-id`} style={labelStyle}>
               Client ID
             </label>
             <input
+              id={`${fieldId}-client-id`}
               value={clientId}
               onChange={(e) => setClientId(e.target.value)}
               disabled={!canWrite || isPending}
@@ -411,13 +416,14 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
             />
           </div>
           <div style={{ marginBottom: 16 }}>
-            <label style={labelStyle}>
+            <label htmlFor={`${fieldId}-client-secret`} style={labelStyle}>
               Client Secret
               {credential?.clientSecretHint && !clientSecret && (
                 <span style={{ color: "var(--dpf-success)", marginLeft: 8 }}>{credential.clientSecretHint}</span>
               )}
             </label>
             <input
+              id={`${fieldId}-client-secret`}
               type="password"
               value={clientSecret}
               onChange={(e) => setClientSecret(e.target.value)}
@@ -427,10 +433,11 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
             />
           </div>
           <div style={{ marginBottom: 16 }}>
-            <label style={labelStyle}>
+            <label htmlFor={`${fieldId}-token-endpoint`} style={labelStyle}>
               Token Endpoint
             </label>
             <input
+              id={`${fieldId}-token-endpoint`}
               value={tokenEndpoint}
               onChange={(e) => setTokenEndpoint(e.target.value)}
               disabled={!canWrite || isPending}
@@ -439,10 +446,11 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
             />
           </div>
           <div style={{ marginBottom: 16 }}>
-            <label style={labelStyle}>
+            <label htmlFor={`${fieldId}-scope`} style={labelStyle}>
               Scope
             </label>
             <input
+              id={`${fieldId}-scope`}
               value={scope}
               onChange={(e) => setScope(e.target.value)}
               disabled={!canWrite || isPending}
@@ -562,8 +570,9 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
       {isCompute && (
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 16 }}>
           <div>
-            <label style={labelStyle}>GPU/CPU wattage</label>
+            <label htmlFor={`${fieldId}-compute-watts`} style={labelStyle}>GPU/CPU wattage</label>
             <input
+              id={`${fieldId}-compute-watts`}
               type="number"
               value={computeWatts}
               onChange={(e) => setComputeWatts(e.target.value)}
@@ -572,8 +581,9 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
             />
           </div>
           <div>
-            <label style={labelStyle}>Electricity rate ($/kWh)</label>
+            <label htmlFor={`${fieldId}-electricity-rate`} style={labelStyle}>Electricity rate ($/kWh)</label>
             <input
+              id={`${fieldId}-electricity-rate`}
               type="number"
               step="0.01"
               value={electricityRate}
