@@ -1,11 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("@/lib/routing/local-provider-capacity", () => ({
+vi.mock("@/lib/routing/local-provider-capacity", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/routing/local-provider-capacity")>()),
   assertLocalProviderCapacityAvailable: vi.fn(),
 }));
 
-import { assertLocalProviderCapacityAvailable } from "@/lib/routing/local-provider-capacity";
-import { generateEmbedding, isOversizeRejection } from "./embedding";
+import {
+  assertLocalProviderCapacityAvailable,
+  LocalProviderCapacityDeferredError,
+} from "@/lib/routing/local-provider-capacity";
+import { generateEmbedding, generateEmbeddingDetailed, isOversizeRejection } from "./embedding";
 
 /** The exact rejection llama.cpp emits once n_batch is clamped to n_ubatch. */
 const OVERSIZE_BODY =
@@ -26,7 +30,7 @@ beforeEach(() => {
 describe("generateEmbedding local-CI arbitration", () => {
   it("does not contact the local embedding provider while local CI owns capacity", async () => {
     vi.mocked(assertLocalProviderCapacityAvailable).mockRejectedValue(
-      new Error("local-ci-active-capacity-reservation"),
+      new LocalProviderCapacityDeferredError("local-ci-active-capacity-reservation"),
     );
     const fetchSpy = vi.spyOn(globalThis, "fetch");
 
@@ -129,5 +133,40 @@ describe("source hygiene - no literal control bytes", () => {
       });
       expect({ name, offenders }).toEqual({ name, offenders: [] });
     }
+  });
+});
+
+describe("generateEmbeddingDetailed reports WHY it produced no vector (BI-339C441F)", () => {
+  it("reports a capacity deferral as deferred, carrying the lease reason", async () => {
+    // The regression this closes: the deferral was caught alongside real
+    // errors and collapsed to null, so a colleague's pre-PR gate read as a
+    // broken embedding model across the whole install.
+    vi.mocked(assertLocalProviderCapacityAvailable).mockRejectedValue(
+      new LocalProviderCapacityDeferredError("local-ci-active-capacity-reservation"),
+    );
+
+    const result = await generateEmbeddingDetailed("anything");
+
+    expect(result.status).toBe("deferred");
+    if (result.status === "deferred") {
+      expect(result.reason).toBe("local-ci-active-capacity-reservation");
+    }
+  });
+
+  it("reports a genuine backend error as failed, not deferred", async () => {
+    vi.mocked(assertLocalProviderCapacityAvailable).mockResolvedValue(undefined);
+    vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("connect ECONNREFUSED"));
+
+    const result = await generateEmbeddingDetailed("anything");
+
+    expect(result.status).toBe("failed");
+  });
+
+  it("keeps generateEmbedding null-returning, so its existing callers are untouched", async () => {
+    vi.mocked(assertLocalProviderCapacityAvailable).mockRejectedValue(
+      new LocalProviderCapacityDeferredError("local-ci-active-capacity-reservation"),
+    );
+
+    await expect(generateEmbedding("anything")).resolves.toBeNull();
   });
 });

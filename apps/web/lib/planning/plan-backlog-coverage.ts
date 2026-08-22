@@ -685,7 +685,16 @@ export async function recordPlanBacklogCoverage(args: {
       select: { payload: true },
     }));
     if (!baseline) {
-      return { ok: false as const, code: "traceability-incomplete" as const, error: "Current scope baseline could not be resolved." };
+      // BI-B9403248: this used to say only "could not be resolved", which named
+      // neither the missing artifact nor a way to produce one. The baseline is
+      // minted by the initiative spec-approval gate — no MCP tool exposes it —
+      // so a caller who does not know that has no route forward and no way to
+      // learn there is one. Say what is missing and who can mint it.
+      return {
+        ok: false as const,
+        code: "traceability-incomplete" as const,
+        error: `BacklogItem ${currentParent.itemId} has no initiative scope baseline, so plan coverage cannot be bound to a governed scope. The baseline is recorded as an \`initiative_scope_baseline\` activity when the initiative's spec-approval gate passes; it is not currently reachable from an MCP session. Take the item through initiative spec approval first, or record the plan's coverage table in the plan and cite BI-B9403248 for the blocked receipt.`,
+      };
     }
     const receipt: PlanBacklogCoverageReceipt = {
       schemaVersion: 2,
