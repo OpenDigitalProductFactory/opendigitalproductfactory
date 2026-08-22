@@ -81,6 +81,7 @@ silent drift.
 
 ## Related
 
+- [Work shapes and the decision gate](work-shapes-and-the-decision-gate.md) — the shape axes, where the kernel gates autonomy, and what the shape does next
 - [Claim a workroom before you work](../founder-kernel/wiki/principles/claim-a-workroom-before-you-work.md)
 - [Workroom participation and channel continuity](work-room-participation-and-channel-continuity.md)
 - Plan: `docs/superpowers/plans/2026-08-15-workroom-canonical-rename.md`

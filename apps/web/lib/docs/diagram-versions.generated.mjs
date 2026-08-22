@@ -37,5 +37,6 @@ export const DIAGRAM_VERSIONS = Object.freeze({
   "architecture/platform-overview/6": "2c35a3c490b4c41e",
   "architecture/trusted-ai-kernel/0": "b5261b7f0efa7aff",
   "architecture/trusted-ai-kernel/1": "ac612ecb7861818f",
-  "architecture/unified-development-tracking/0": "207be4c1c22032b0"
+  "architecture/unified-development-tracking/0": "207be4c1c22032b0",
+  "architecture/work-shapes-and-the-decision-gate/0": "59649abaf4662286"
 });

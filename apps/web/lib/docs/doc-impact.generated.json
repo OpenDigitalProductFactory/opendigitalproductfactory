@@ -772,6 +772,9 @@
     "apps/web/lib/mcp/packs/feedback-pack.ts": [
       "docs/architecture/mcp-tool-packs.md"
     ],
+    "apps/web/lib/mcp/packs/profession-decision-pack.ts": [
+      "docs/architecture/work-shapes-and-the-decision-gate.md"
+    ],
     "apps/web/lib/mcp/packs/runtime-coordination-pack.ts": [
       "docs/architecture/mcp-tool-packs.md"
     ],
@@ -1024,7 +1027,8 @@
       "docs/architecture/context-engineering-standards.md"
     ],
     "apps/web/lib/tak/decision-routing-governance-hook.ts": [
-      "docs/architecture/2026-08-20-assurance-operating-loop-and-capability-completeness.md"
+      "docs/architecture/2026-08-20-assurance-operating-loop-and-capability-completeness.md",
+      "docs/architecture/work-shapes-and-the-decision-gate.md"
     ],
     "apps/web/lib/tak/delegation-authority.ts": [
       "docs/prompts/a2a-coworker-substrate-prompt.md"
@@ -1065,6 +1069,12 @@
     "apps/web/lib/wiki/principle-lint-detectors.ts": [
       "docs/operations/runtime-kernel-commandments.md"
     ],
+    "apps/web/lib/work-capsules.ts": [
+      "docs/architecture/work-shapes-and-the-decision-gate.md"
+    ],
+    "apps/web/lib/work-management/autonomy-envelope.ts": [
+      "docs/architecture/work-shapes-and-the-decision-gate.md"
+    ],
     "apps/web/lib/work-management/room-channel-continuity.ts": [
       "docs/user-guide/workspace/work-rooms.md"
     ],
@@ -1076,6 +1086,9 @@
     ],
     "apps/web/lib/work-management/room-participation.ts": [
       "docs/user-guide/workspace/work-rooms.md"
+    ],
+    "apps/web/lib/work-management/room-types.ts": [
+      "docs/architecture/work-shapes-and-the-decision-gate.md"
     ],
     "apps/web/lib/work-management/work-unit.ts": [
       "docs/founder-kernel/wiki/principles/universal-work-formula.md"
@@ -2416,6 +2429,13 @@
       "apps/web/lib/decision-perspective/material.ts",
       "apps/web/lib/decision-perspective/stance-promotion.ts",
       "apps/web/lib/decision-perspective/weight-inference.ts"
+    ],
+    "docs/architecture/work-shapes-and-the-decision-gate.md": [
+      "apps/web/lib/mcp/packs/profession-decision-pack.ts",
+      "apps/web/lib/tak/decision-routing-governance-hook.ts",
+      "apps/web/lib/work-capsules.ts",
+      "apps/web/lib/work-management/autonomy-envelope.ts",
+      "apps/web/lib/work-management/room-types.ts"
     ],
     "docs/design/golden-triangle-design.md": [
       "apps/web/lib/queue/functions/deliberation-run.ts",

@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 671,
+  "pageCount": 672,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -2270,6 +2270,23 @@
         "authorization-boundary",
         "participant-projection",
         "external-channel-continuity"
+      ]
+    },
+    "docs/architecture/work-shapes-and-the-decision-gate.md": {
+      "publicHref": "/architecture/work-shapes-and-the-decision-gate/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "work-shapes-and-the-decision-gate",
+        "the-flow",
+        "shape-is-four-orthogonal-choices-not-one-taxonomy",
+        "the-gate-which-scope-decides",
+        "what-the-gate-does-to-the-turn",
+        "what-is-actually-enforced-today",
+        "the-shapes-next-steps-after-the-gate",
+        "known-gaps",
+        "related"
       ]
     },
     "docs/architecture/workos-iam-equivalence-scorecard.md": {
