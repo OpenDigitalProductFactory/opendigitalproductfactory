@@ -13,6 +13,32 @@ type InitializeAuthority = {
   scopes: readonly string[];
 };
 
+/**
+ * Resolve the instance stance for the connect-time briefing.
+ *
+ * Imported lazily and separately from the org-context bundle so a database or
+ * install-state read failure degrades this one block rather than the whole
+ * handshake. Returns `undefined` on failure, which omits the briefing instead of
+ * asserting a stance the server could not establish.
+ */
+async function composeInstanceStance() {
+  try {
+    const [{ loadInstanceStance }, { prisma }] = await Promise.all([
+      import("@/lib/install/instance-stance"),
+      import("@dpf/db"),
+    ]);
+    return await loadInstanceStance({
+      readConfig: async (key) =>
+        (await prisma.platformConfig.findUnique({ where: { key } }))?.value ?? null,
+      countBacklogItemsByStatus: (statuses) =>
+        prisma.backlogItem.count({ where: { status: { in: [...statuses] } } }),
+    });
+  } catch (error) {
+    console.warn("[mcp/initialize] instance-stance compose failed (fail-open):", error);
+    return undefined;
+  }
+}
+
 export async function buildMcpInitializeResult(args: {
   params?: Record<string, unknown>;
   authority: InitializeAuthority;
@@ -30,6 +56,7 @@ export async function buildMcpInitializeResult(args: {
     instructions += `\n\n${buildAgentHostInstructions(
       await readInstallHostProfile(),
       args.authority,
+      await composeInstanceStance(),
     )}`;
   } catch (error) {
     console.warn("[mcp/initialize] agent-host compose failed (fail-open):", error);

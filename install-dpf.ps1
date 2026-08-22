@@ -12,6 +12,10 @@ param(
     [switch]$Headless,
     [switch]$Consumer,
     [switch]$Contributor,
+    # Declares what this installation IS, so agents and lifecycle tooling can tell a
+    # production install from a disposable one. Recorded in installer state as the
+    # canonical local host fact; an undeclared install is treated as production.
+    [ValidateSet("production", "development", "test")][string]$EnvironmentClass,
     [ValidateNotNullOrEmpty()][string]$OrganizationJoinPackage,
     [switch]$Help
 )
@@ -1725,6 +1729,15 @@ if (-not (Test-StepDone "started")) {
         installMode = $InstallMode
         imageTag = $(if ($InstallMode -eq "consumer") { $Version } else { $null })
         edge = @{ enabled = $resolvedEdgeEnabled; mode = $(if ($resolvedEdgeEnabled) { "local" } else { $null }) }
+    }
+    # Record the environment class only when the operator declared one. Writing a
+    # default here would let an unasserted install claim to be development and
+    # unlock teardown it should never have.
+    if ($EnvironmentClass) {
+        Set-DpfStateValues -Values @{ environmentClass = $EnvironmentClass }
+        Write-OK "Installation environment class: $EnvironmentClass"
+    } else {
+        Write-Host "  No environment class declared; this install is treated as production until one is set." -ForegroundColor Yellow
     }
     $capabilityProjection = Resolve-DpfCapabilityComposeProfiles -InstallDir $DPF_DIR
     $env:COMPOSE_PROFILES = (@($capabilityProjection.composeProfiles) -join ',')

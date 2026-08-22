@@ -326,3 +326,41 @@ export function computeProfileFingerprint(
 
   return createHash("sha256").update(JSON.stringify(payload)).digest("hex");
 }
+
+/**
+ * Build the derived profile snapshot from the stored intent and the canonical
+ * environment class.
+ *
+ * The snapshot is a projection, never a second writable truth. Environment class
+ * is supplied by its own authority — installer state for the local host fact —
+ * rather than read back out of the semantic intent, which does not own it.
+ */
+export function buildInstallationOperatingProfileSnapshot(input: {
+  intent: InstallationOperatingIntentV1;
+  environmentClass: InstallationEnvironmentClass;
+}): InstallationOperatingProfileSnapshot {
+  const { intent, environmentClass } = input;
+  const base: Omit<InstallationOperatingProfileSnapshot, "profileFingerprint"> = {
+    schemaVersion: 1,
+    environmentClass,
+    primaryPurpose: intent.primaryPurpose,
+    secondaryPurposes: [...intent.secondaryPurposes],
+    relationshipIntents: [...intent.relationshipIntents],
+    pairedProductionInstallationRef: intent.pairedProductionInstallationRef,
+    confidence: intent.confidence,
+    confirmationStatus: intent.confirmation.status,
+    confirmedAt: intent.confirmation.confirmedAt,
+    confirmedByPrincipalId: intent.confirmation.confirmedByPrincipalId,
+    evidence: [...intent.evidence],
+  };
+  return { ...base, profileFingerprint: computeProfileFingerprint(base) };
+}
+
+/**
+ * The environment class to assume when no authority has recorded one.
+ *
+ * Unknown environment is treated as production. An installation that has not
+ * declared itself gets the most cautious stances, so a missing declaration can
+ * never be the reason an agent tore something down.
+ */
+export const UNDECLARED_ENVIRONMENT_CLASS: InstallationEnvironmentClass = "production";

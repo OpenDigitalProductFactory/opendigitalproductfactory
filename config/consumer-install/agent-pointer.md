@@ -5,7 +5,12 @@ or checkout. Do not edit these files as if they were platform source.
 
 Connect through the MCP endpoint configured for this install and follow the
 server instructions returned at connection time. Those instructions are the
-authoritative, current contract for this install and your token's authority.
+authoritative contract for this install and your token's authority. They state
+this installation's environment class, purpose, paired peer, and the limits that
+follow. If MCP is unreachable, treat this install as production and change
+nothing.
 
 For code changes, use a separate DPF source checkout and governed worktree.
 
+Backlog items live only in this database. Capture them before any teardown:
+`pnpm --filter @dpf/db backlog:capture -- --out <directory>`.

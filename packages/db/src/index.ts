@@ -544,6 +544,7 @@ export * from "./device-catalog";
 // `./discovery-fingerprint-catalog` in tests, not via the barrel.
 export * from "./discovery-fingerprint-store";
 export * from "./installation-operating-intent";
+export * from "./installation-instance-stance";
 
 // Contributor-inventory-sync ScheduledJob constants — shared between the
 // seed helper and the apps/web Inngest runner so the heartbeat row's name +

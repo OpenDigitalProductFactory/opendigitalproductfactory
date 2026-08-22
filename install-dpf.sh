@@ -181,6 +181,8 @@ while [ $# -gt 0 ]; do
     --release)              DPF_MODE="release"; DPF_MODE_EXPLICIT=1 ;;
     --dev)                  DPF_MODE="dev"; DPF_MODE_EXPLICIT=1 ;;
     --customer)             DPF_INSTALL_MODE="customer" ;;
+    --environment-class)    shift; DPF_ENVIRONMENT_CLASS="${1:-}" ;;
+    --environment-class=*)  DPF_ENVIRONMENT_CLASS="${1#*=}" ;;
     --contributor)          DPF_INSTALL_MODE="contributor" ;;
     --dev-workspace-path)   shift; DPF_DEV_WORKSPACE_PATH_ARG="${1:-}" ;;
     --dev-workspace-path=*) DPF_DEV_WORKSPACE_PATH_ARG="${1#*=}" ;;
@@ -333,6 +335,26 @@ if [ "$DPF_DRY_RUN" != "1" ]; then
   dpf_state_write installMode "$DPF_INSTALL_MODE" 2>/dev/null || true
 fi
 ok "Install mode: $DPF_INSTALL_MODE (compose mode: $DPF_MODE)"
+
+# Declare what this installation IS. Agents and lifecycle tooling read this to
+# tell a production install from a disposable one. Only a declared value is
+# recorded: an undeclared install is treated as production, so a missing
+# declaration can never be the reason something gets torn down.
+if [ -n "${DPF_ENVIRONMENT_CLASS:-}" ]; then
+  case "$DPF_ENVIRONMENT_CLASS" in
+    production|development|test)
+      if [ "$DPF_DRY_RUN" != "1" ]; then
+        dpf_state_write environmentClass "$DPF_ENVIRONMENT_CLASS" 2>/dev/null || true
+      fi
+      ok "Installation environment class: $DPF_ENVIRONMENT_CLASS"
+      ;;
+    *)
+      fail "--environment-class must be one of: production, development, test"
+      ;;
+  esac
+else
+  warn "No environment class declared; this install is treated as production until one is set."
+fi
 
 # Edge Node deploy gate (opt-in; BI-72CFF89D / edge-topology design §5).
 # Resolve whether to bundle the local Edge Node BEFORE assembling the chain:
