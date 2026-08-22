@@ -1,0 +1,22 @@
+{
+  "version": "1",
+  "decidedOption": "bounded-archetype-presentation-and-outcome-resolvers",
+  "decisionInteractionId": "DI-5BD0E3E076F8",
+  "scope": {
+    "files": [
+      "apps/web/app/(storefront)/s/[slug]/item/[itemId]/page.tsx",
+      "apps/web/components/storefront-admin/ProductMixSetupFieldset.tsx",
+      "apps/web/components/storefront-admin/StorefrontDashboard.tsx",
+      "apps/web/components/storefront/StorefrontTrustFooter.tsx",
+      "apps/web/components/twin/OutcomesStrip.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "route-local-archetype-conditionals",
+      "bounded-archetype-presentation-and-outcome-resolvers",
+      "general-purpose-metric-query-framework"
+    ]
+  }
+}
