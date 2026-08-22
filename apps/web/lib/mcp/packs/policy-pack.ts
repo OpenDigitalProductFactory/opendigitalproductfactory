@@ -86,6 +86,8 @@ const definitions: ToolDefinition[] = [
     requiredCapability: "manage_compliance",
     executionMode: "immediate",
     sideEffect: true,
+    // changes identity or authority → consult-gated (TAK §8.4.1).
+    consequence: "authority",
     annotations: { readOnlyHint: false, idempotentHint: false },
   },
   {
@@ -108,6 +110,8 @@ const definitions: ToolDefinition[] = [
     requiredCapability: "manage_compliance",
     executionMode: "immediate",
     sideEffect: true,
+    // changes identity or authority → consult-gated (TAK §8.4.1).
+    consequence: "authority",
     annotations: { readOnlyHint: false, idempotentHint: true },
   },
   {

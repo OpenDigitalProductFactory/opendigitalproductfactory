@@ -19,6 +19,8 @@ const definitions: ToolDefinition[] = [
     inputSchema: { type: "object", properties: {} },
     requiredCapability: "manage_provider_connections",
     sideEffect: true,
+    // reaches a third party → consult-gated (TAK §8.4.1).
+    consequence: "outward",
   },
   {
     name: "grok_signin_status",

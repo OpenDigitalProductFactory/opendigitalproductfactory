@@ -48,6 +48,8 @@ const definitions: ToolDefinition[] = [
     requiredCapability: "view_operations",
     executionMode: "immediate",
     sideEffect: true,
+    // destroys state → consult-gated (TAK §8.4.1).
+    consequence: "irreversible",
     buildPhases: ["ship"],
   },
   {
@@ -110,6 +112,8 @@ const definitions: ToolDefinition[] = [
     requiredCapability: "view_operations",
     executionMode: "immediate",
     sideEffect: true,
+    // destroys state → consult-gated (TAK §8.4.1).
+    consequence: "irreversible",
   },
   {
     name: "get_release_status",

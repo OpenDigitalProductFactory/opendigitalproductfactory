@@ -71,6 +71,8 @@ const definitions: ToolDefinition[] = [
     requiredCapability: "manage_user_lifecycle",
     executionMode: "immediate",
     sideEffect: true,
+    // changes identity or authority → consult-gated (TAK §8.4.1).
+    consequence: "authority",
   },
   {
     name: "transition_employee_status",
@@ -87,6 +89,8 @@ const definitions: ToolDefinition[] = [
     requiredCapability: "manage_user_lifecycle",
     executionMode: "immediate",
     sideEffect: true,
+    // changes identity or authority → consult-gated (TAK §8.4.1).
+    consequence: "authority",
   },
   {
     name: "propose_leave_policy",

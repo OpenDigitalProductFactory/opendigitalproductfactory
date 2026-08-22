@@ -19,6 +19,8 @@ const definitions: ToolDefinition[] = [
     requiredCapability: "manage_provider_connections",
     executionMode: "immediate",
     sideEffect: true,
+    // destroys state → consult-gated (TAK §8.4.1).
+    consequence: "irreversible",
   },
   {
     name: "repair_promoter_image",
@@ -32,6 +34,8 @@ const definitions: ToolDefinition[] = [
     requiredCapability: "manage_provider_connections",
     executionMode: "immediate",
     sideEffect: true,
+    // destroys state → consult-gated (TAK §8.4.1).
+    consequence: "irreversible",
   },
   {
     name: "get_self_upgrade_queue_status",
