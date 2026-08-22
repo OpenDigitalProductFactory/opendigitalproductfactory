@@ -7,7 +7,9 @@ status: binding
 **Date:** 2026-08-22
 
 **Status:** Implemented
-**Scope:** Consumer runtime readiness, provider recovery UI, installer identity, PowerShell lifecycle parity, repository salvage, and scoped label association
+**Scope:** Consumer runtime readiness, provider recovery UI, archetype-aware
+generated surfaces, installer identity, PowerShell lifecycle parity, repository
+salvage, and scoped label association
 
 ## Problem
 
@@ -19,6 +21,9 @@ could enter `Read-Host`, lifecycle scripts assembled different Compose chains,
 and uninstall deleted data by default. The provider route could display a
 skeleton indefinitely, while its onboarding copy implied the working local model
 was inadequate. Install output named a mutable tag but not the installed digest.
+The generated pet-rescue portal also inherited commercial chrome: product-line
+setup, customer publishing language, booking policies, and revenue/job workspace
+outcomes contradicted the nonprofit archetype selected during onboarding.
 
 ## Goals and non-goals
 
@@ -27,6 +32,10 @@ was inadequate. Install output named a mutable tag but not the installed digest.
 - Preserve strict routing floors and scope the provisional prior to the exact
   bundled model.
 - Give provider loading a bounded, actionable, accessible state.
+- Keep generated operator, public, and workspace language aligned with the
+  selected archetype without forking the canonical product-line data model.
+- Derive rescue mission outcomes only from real donation and adoption records;
+  name missing foster substrate instead of fabricating a zero.
 - Make Windows install automation prompt-free and lifecycle teardown
   data-preserving by default.
 - Use one PowerShell Compose-chain owner across install/start/stop/uninstall.
@@ -90,6 +99,15 @@ and third-party ownership assumptions. Source: [git rev-list](https://git-scm.co
 8. **Salvage is bounded and read-only.** The sweep accepts explicit repository
    paths, classifies remote ownership, reports unreachable commits/dirty paths/
    stashes, and exits nonzero for risk. It never enumerates a drive or mutates Git.
+9. **Presentation follows archetype authorities.** Operator setup and publishing
+   copy resolve beside `ArchetypeVocabulary`; public policy copy composes category
+   defaults with a leaf-archetype trust override. Routes consume those projections
+   and do not embed pet-rescue conditionals.
+10. **Outcome projection is bounded and source-honest.** A small archetype outcome
+    resolver preserves revenue and delivered-work defaults for commercial
+    archetypes. Pet rescue reads 90-day donations and adopted-animal counts scoped
+    to the active storefront. Foster activity is `Unavailable` until a canonical
+    foster record exists; mixed currencies are not combined into a false total.
 
 ## Accessibility and UX fit
 
@@ -98,6 +116,11 @@ dependency timeout. The retry is a real button using the shared themed primitive
 The provider configuration form now binds nine visible labels through unique
 `id`/`htmlFor` pairs, reducing the repository ratchet from 435 to 426 without a
 blind cross-product rewrite.
+
+The nonprofit changes add no controls or interaction paths. They replace chrome
+through existing semantic headings, fields, links, and outcome cards. Commercial
+defaults remain unchanged, and the pet-rescue policy page names adoption and
+surrender rather than exposing booking vocabulary.
 
 ## Verification
 

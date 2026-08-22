@@ -378,6 +378,56 @@ describe("loadLivingBusinessSnapshot — loader", () => {
     expect(localeFailing!.freshness).toBe("degraded");
   });
 
+  it("projects pet-rescue mission outcomes from donation and adoption records", async () => {
+    const db = {
+      ...emptyRoster,
+      storefrontConfig: {
+        findFirst: async () => ({
+          id: "sf-rescue",
+          timezone: "America/Chicago",
+          archetype: { archetypeId: "pet-rescue", name: "Pet rescue" },
+        }),
+      },
+      orgSettings: {
+        findFirst: async () => ({
+          baseCurrency: "USD",
+          locale: "en-US",
+          countryCode: "US",
+        }),
+      },
+      bill: { findMany: async () => [] },
+      taxObligationPeriod: { findMany: async () => [] },
+      obligation: { findMany: async () => [] },
+      invoice: { findMany: async () => [] },
+      storefrontBooking: { findMany: async () => [] },
+      serviceProvider: { findMany: async () => [] },
+      hospitalityResource: { findMany: async () => [] },
+      hospitalityCapacityAllocation: { findMany: async () => [] },
+      storefrontDonation: {
+        findMany: async () => [
+          { amount: 200, currency: "USD" },
+          { amount: 75, currency: "USD" },
+        ],
+      },
+      adoptableAnimal: { count: async () => 2 },
+    } as unknown as LivingBusinessClient;
+
+    const snapshot = await loadLivingBusinessSnapshot({ db, now: NOW });
+
+    expect(snapshot?.outcomesHeading).toBe("Mission impact");
+    expect(snapshot?.outcomes?.map((outcome) => outcome.label)).toEqual([
+      "Donations received",
+      "Animals placed",
+      "Fosters active",
+    ]);
+    expect(snapshot?.outcomes?.[0]?.value).toContain("$275");
+    expect(snapshot?.outcomes?.[1]?.value).toBe("2 animals");
+    expect(snapshot?.outcomes?.[2]).toMatchObject({
+      value: "Unavailable",
+      hint: "No foster record source yet",
+    });
+  });
+
   it("keeps a restaurant busy-shift snapshot bounded to the operational read contract", async () => {
     const bookings = Array.from({ length: 24 }, (_, index) => ({
       id: `booking-${index + 1}`,

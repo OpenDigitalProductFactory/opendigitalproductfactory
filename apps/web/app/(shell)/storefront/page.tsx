@@ -224,6 +224,8 @@ export default async function StorefrontPage() {
             ctaType: config.archetype?.ctaType ?? "inquiry",
             sectionCount: visibleSectionCount,
             itemCount: activeItemCount,
+            portalLabel: vocabulary.portalLabel,
+            stakeholderLabel: vocabulary.stakeholderLabel,
           }}
           counts={{ inquiries: inquiryCount, bookings: bookingCount, orders: orderCount, donations: donationCount }}
         />

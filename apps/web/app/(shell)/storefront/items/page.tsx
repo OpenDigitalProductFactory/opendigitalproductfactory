@@ -83,6 +83,7 @@ export default async function ItemsPage() {
         };
       })}
       vocabulary={vocabulary}
+      archetypeCategory={config.archetype.category}
       categorySuggestions={categorySuggestions}
       defaultCtaType={config.archetype.ctaType}
       defaultCurrency={orgSettings?.baseCurrency ?? "USD"}
