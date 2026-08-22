@@ -56,7 +56,7 @@
     "jsep": "^1.4.0",
     "libphonenumber-js": "^1.13.9",
     "lucide-react": "^1.26.0",
-    "mammoth": "^1.12.0",
+    "mammoth": "^1.12.1",
     "next": "^16.3.0",
     "next-auth": "5.0.0-beta.32",
     "nodemailer": "^9.0.3",
