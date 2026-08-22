@@ -48,6 +48,7 @@ import { estimateContextTokens, classifyContextPressure, deriveCompactionCaps } 
 import { clampToolResultForModel, resolveToolResultCharCap } from "./tool-result-budget";
 import { applyBacklogCreateClaimGuard } from "./backlog-create-claim-guard";
 import { applyEscalationLadderGuard, buildHumanHandoff } from "./escalation-ladder";
+import { analyzeGeneratedProse } from "../prose/generated-prose";
 import { assessToolSurface, computeToolSelectionAccuracy, contextEconomyTurnMetricFields } from "./context-economy-metrics";
 import { summarizeDroppedMessages } from "./compaction-digest";
 import { describeContextCapacityFailure } from "./context-capacity-failure";
@@ -2436,6 +2437,24 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
       }
       const finalContent = applyEscalationLadderGuard(applyBacklogCreateClaimGuard(
         trimmed.length > 0 ? result.content : (bestPreNudgeContent || result.content), executedTools), executedTools);
+      // BI-41F15FD7 — generated-prose gauge. Observability ONLY: the content is
+      // returned unchanged; this makes the slop density of what we actually
+      // emit visible, the same way [context-pressure] made prompt fill visible.
+      // Authored UI copy has been ratcheted by scripts/check-prose-lint.ts for
+      // a while; the text a model produces at runtime was never measured, and
+      // it is the text customers read most. Logged only when it is not clean,
+      // so a healthy turn stays silent. See ../prose/generated-prose.
+      const prose = analyzeGeneratedProse(finalContent);
+      if (prose.zone !== "clean") {
+        console.log(
+          sanitizeForLog(
+            `[generated-prose] thread=${JSON.stringify(threadId)} zone=${prose.zone} ` +
+              `tells=${prose.tells} puffery=${prose.puffery} ing=${prose.superficialIng} ` +
+              `filler=${prose.chatbotFiller} longSentences=${prose.longSentences} ` +
+              `sentences=${prose.sentences} model=${JSON.stringify(result.modelId)}`,
+          ),
+        );
+      }
       logTurnSummary(result.providerId, result.modelId);
       return {
         content: finalContent,
