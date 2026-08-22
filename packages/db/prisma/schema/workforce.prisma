@@ -86,6 +86,10 @@ model EmployeeProfile {
   changeRequestsApproved       ChangeRequest[]               @relation("ChangeApprovedBy")
   changeRequestsExecuted       ChangeRequest[]               @relation("ChangeExecutedBy")
   standardChangesApproved      StandardChangeCatalog[]       @relation("StandardChangeApprover")
+  vehicles                     Vehicle[]                     @relation("VehicleDriver")
+  trips                        Trip[]                        @relation("TripDriver")
+  tripClassificationRules      TripClassificationRule[]      @relation("TripRuleDriver")
+  driverLocationConsents       DriverLocationConsent[]       @relation("DriverConsentDriver")
 
   @@index([status])
   @@index([departmentId])
@@ -1244,4 +1248,196 @@ model DemographicResponse {
 
   @@index([applicationId])
   @@index([jurisdiction])
+}
+
+// ---------------------------------------------------------------------------
+// Mileage capture (EP-MILEAGE-ABSORB, BI-6D98AD8A)
+//
+// Absorbs the MileIQ-class job: a driver's business trips are captured without
+// them acting, classified by rule where possible, and monetised onto the
+// existing ExpenseClaim spine (finance.prisma) rather than a parallel
+// reimbursement path. Capture is consent-gated — DriverLocationConsent is a
+// precondition for any background fix, not an afterthought.
+// ---------------------------------------------------------------------------
+
+enum VehicleOwnershipKind {
+  company
+  personal
+}
+
+enum TripCaptureKind {
+  automatic
+  manual
+  imported
+}
+
+enum TripClassificationKind {
+  unclassified
+  business
+  personal
+  commute
+}
+
+enum TripClassifierKind {
+  driver
+  rule
+  admin
+}
+
+enum MileageRuleKind {
+  repeated_route
+  work_hours
+  commute_exclusion
+}
+
+enum MileageRuleScopeKind {
+  driver
+  team
+  organization
+}
+
+enum DriverLocationConsentStatus {
+  pending
+  granted
+  revoked
+  expired
+}
+
+/// A vehicle a driver logs business mileage against. Company-owned vehicles
+/// point at the FixedAsset row so depreciation and mileage share one asset.
+model Vehicle {
+  id                String               @id @default(cuid())
+  vehicleId         String               @unique
+  organizationId    String
+  employeeProfileId String?
+  fixedAssetId      String?              @unique
+  label             String
+  ownership         VehicleOwnershipKind
+  registrationRef   String?
+  lifecycle         RecordLifecycle      @default(active)
+  lifecycleAt       DateTime?
+  lifecycleReason   String?
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+
+  organization    Organization     @relation("VehicleOrganization", fields: [organizationId], references: [id], onDelete: Restrict)
+  employeeProfile EmployeeProfile? @relation("VehicleDriver", fields: [employeeProfileId], references: [id], onDelete: SetNull)
+  fixedAsset      FixedAsset?      @relation("VehicleFixedAsset", fields: [fixedAssetId], references: [id], onDelete: SetNull)
+  trips           Trip[]
+
+  // FK-leading (organizationId): org fleet roster filtered by live rows.
+  @@index([organizationId, lifecycle])
+  // FK-leading (employeeProfileId): a driver's own vehicle picker in the mobile app.
+  @@index([employeeProfileId, lifecycle])
+}
+
+/// One captured drive. Distance is stored in metres as an integer so no
+/// rounding is baked in at capture time; the reimbursable money is derived from
+/// the effective-dated MileageRate in force on startedAt, never from today's rate.
+model Trip {
+  id                   String                 @id @default(cuid())
+  tripId               String                 @unique
+  organizationId       String
+  employeeProfileId    String
+  vehicleId            String?
+  startedAt            DateTime
+  endedAt              DateTime
+  startLatitude        Decimal                @db.Decimal(10, 7)
+  startLongitude       Decimal                @db.Decimal(10, 7)
+  endLatitude          Decimal                @db.Decimal(10, 7)
+  endLongitude         Decimal                @db.Decimal(10, 7)
+  startPlaceLabel      String?
+  endPlaceLabel        String?
+  distanceMeters       Int
+  captureKind          TripCaptureKind
+  classification       TripClassificationKind @default(unclassified)
+  classifiedByKind     TripClassifierKind?
+  classifiedAt         DateTime?
+  classificationRuleId String?
+  customerAccountId    String?
+  mileageRateId        String?
+  reimbursableAmount   Decimal?
+  currency             String                 @default("USD")
+  expenseItemId        String?                @unique
+  notes                String?
+  lifecycle            RecordLifecycle        @default(active)
+  lifecycleAt          DateTime?
+  lifecycleReason      String?
+  createdAt            DateTime               @default(now())
+  updatedAt            DateTime               @updatedAt
+
+  organization       Organization           @relation("TripOrganization", fields: [organizationId], references: [id], onDelete: Restrict)
+  employeeProfile    EmployeeProfile        @relation("TripDriver", fields: [employeeProfileId], references: [id], onDelete: Cascade)
+  vehicle            Vehicle?               @relation(fields: [vehicleId], references: [id], onDelete: SetNull)
+  classificationRule TripClassificationRule? @relation(fields: [classificationRuleId], references: [id], onDelete: SetNull)
+  customerAccount    CustomerAccount?       @relation("TripCustomerAccount", fields: [customerAccountId], references: [id], onDelete: SetNull)
+  mileageRate        MileageRate?           @relation("TripMileageRate", fields: [mileageRateId], references: [id], onDelete: Restrict)
+  expenseItem        ExpenseItem?           @relation("TripExpenseItem", fields: [expenseItemId], references: [id], onDelete: SetNull)
+
+  // FK-leading (employeeProfileId): the driver's own trip list, newest first.
+  @@index([employeeProfileId, startedAt])
+  // FK-leading (organizationId): admin review queue of unclassified/business trips in a period.
+  @@index([organizationId, classification, startedAt])
+  // FK-leading (vehicleId): per-vehicle mileage totals for an asset.
+  @@index([vehicleId, startedAt])
+  // FK-leading (classificationRuleId): which trips a rule has claimed, for rule review.
+  @@index([classificationRuleId])
+  // FK-leading (customerAccountId): job-costed and rebillable mileage per customer.
+  @@index([customerAccountId, startedAt])
+  // FK-leading (mileageRateId): rate-change impact analysis over already-priced trips.
+  @@index([mileageRateId])
+}
+
+/// Auto-classification rules. One model covers all three MileIQ-class behaviours
+/// (repeated route, work hours, commute exclusion) because they differ only in
+/// predicate, not in shape. Scope widens driver -> team -> organization.
+model TripClassificationRule {
+  id                 String                 @id @default(cuid())
+  tripClassificationRuleId             String                 @unique
+  organizationId     String
+  employeeProfileId  String?
+  ruleKind           MileageRuleKind
+  scopeKind          MileageRuleScopeKind
+  resultClassification TripClassificationKind
+  predicate          Json
+  priority           Int                    @default(100)
+  lifecycle          RecordLifecycle        @default(active)
+  lifecycleAt        DateTime?
+  lifecycleReason    String?
+  createdAt          DateTime               @default(now())
+  updatedAt          DateTime               @updatedAt
+
+  organization    Organization     @relation("TripRuleOrganization", fields: [organizationId], references: [id], onDelete: Cascade)
+  employeeProfile EmployeeProfile? @relation("TripRuleDriver", fields: [employeeProfileId], references: [id], onDelete: Cascade)
+  trips           Trip[]
+
+  // FK-leading (organizationId): rule evaluation order for an org's captured trip.
+  @@index([organizationId, lifecycle, priority])
+  // FK-leading (employeeProfileId): a driver's own rules.
+  @@index([employeeProfileId, lifecycle])
+}
+
+/// Explicit, revocable consent for background location capture. No background
+/// fix may be recorded without a granted row; revocation stops capture and is
+/// retained so the consent history itself is auditable.
+model DriverLocationConsent {
+  id                 String                      @id @default(cuid())
+  driverLocationConsentId          String                      @unique
+  organizationId     String
+  employeeProfileId  String
+  consentStatus      DriverLocationConsentStatus @default(pending)
+  grantedAt          DateTime?
+  revokedAt          DateTime?
+  retentionDays      Int                         @default(365)
+  policyVersion      String
+  createdAt          DateTime                    @default(now())
+  updatedAt          DateTime                    @updatedAt
+
+  organization    Organization    @relation("DriverConsentOrganization", fields: [organizationId], references: [id], onDelete: Cascade)
+  employeeProfile EmployeeProfile @relation("DriverConsentDriver", fields: [employeeProfileId], references: [id], onDelete: Cascade)
+
+  // One live consent record per driver per policy version.
+  @@unique([employeeProfileId, policyVersion])
+  // FK-leading (organizationId): org-wide consent posture review.
+  @@index([organizationId, consentStatus])
 }

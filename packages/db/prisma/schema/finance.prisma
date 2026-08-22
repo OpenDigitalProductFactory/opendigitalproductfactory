@@ -102,6 +102,7 @@ model TaxJurisdictionReference {
   updatedAt               DateTime  @updatedAt
 
   registrations TaxRegistration[]
+  mileageRatePlans MileageRatePlan[] @relation("MileageRatePlanJurisdiction")
 
   @@index([countryCode, stateProvinceCode])
   @@index([authorityType])
@@ -964,6 +965,7 @@ model ExpenseItem {
   createdAt      DateTime @default(now())
 
   claim ExpenseClaim @relation(fields: [claimId], references: [id], onDelete: Cascade)
+  trip Trip? @relation("TripExpenseItem")
 
   @@index([claimId])
 }
@@ -991,6 +993,7 @@ model FixedAsset {
   notes                   String?
   createdAt               DateTime  @default(now())
   updatedAt               DateTime  @updatedAt
+  vehicle Vehicle? @relation("VehicleFixedAsset")
 
   @@index([status])
   @@index([category])
@@ -1100,4 +1103,66 @@ model JournalLine {
 
   @@index([journalEntryId])
   @@index([accountId])
+}
+
+// ---------------------------------------------------------------------------
+// Mileage rates (EP-MILEAGE-ABSORB, BI-E17E0034)
+//
+// Effective-dated reimbursement rates. A trip must price at the rate in force on
+// the day it was driven, so rates are never edited in place — a change closes the
+// current row (effectiveTo) and opens a new one. An org may override the
+// statutory rate with its own company-wide rate, which is the MileIQ Pro
+// "custom rates" job.
+// ---------------------------------------------------------------------------
+
+enum MileageRatePurposeKind {
+  business
+  medical
+  moving
+  charitable
+}
+
+model MileageRatePlan {
+  id                String          @id @default(cuid())
+  mileageRatePlanId            String          @unique
+  organizationId    String
+  jurisdictionRefId String?
+  name              String
+  isOrgOverride     Boolean         @default(false)
+  lifecycle         RecordLifecycle @default(active)
+  lifecycleAt       DateTime?
+  lifecycleReason   String?
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  organization          Organization              @relation("MileageRatePlanOrganization", fields: [organizationId], references: [id], onDelete: Cascade)
+  jurisdictionReference TaxJurisdictionReference? @relation("MileageRatePlanJurisdiction", fields: [jurisdictionRefId], references: [id], onDelete: SetNull)
+  rates                 MileageRate[]
+
+  // FK-leading (organizationId): the org's live rate plans, override first.
+  @@index([organizationId, lifecycle, isOrgOverride])
+  // FK-leading (jurisdictionRefId): statutory rate lookup by authority.
+  @@index([jurisdictionRefId])
+}
+
+model MileageRate {
+  id            String                @id @default(cuid())
+  mileageRateId        String                @unique
+  planId        String
+  purposeKind   MileageRatePurposeKind @default(business)
+  amountPerMile Decimal               @db.Decimal(10, 4)
+  currency      String                @default("USD")
+  effectiveFrom DateTime
+  effectiveTo   DateTime?
+  sourceUrl     String?
+  createdAt     DateTime              @default(now())
+  updatedAt     DateTime              @updatedAt
+
+  plan  MileageRatePlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  trips Trip[]          @relation("TripMileageRate")
+
+  // One open rate per plan and purpose at a time.
+  @@unique([planId, purposeKind, effectiveFrom])
+  // FK-leading (planId): resolve the rate in force for a trip date.
+  @@index([planId, purposeKind, effectiveFrom, effectiveTo])
 }
