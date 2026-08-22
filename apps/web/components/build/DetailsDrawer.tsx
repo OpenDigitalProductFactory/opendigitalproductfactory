@@ -146,8 +146,9 @@ export function DetailsDrawer({ isOpen, onClose, sections, fallbackFocusRef }: D
           const open = openIds.has(section.id);
           const headerId = `details-drawer-${section.id}-header`;
           const panelId = `details-drawer-${section.id}-panel`;
-          const sectionTestId =
-            section.id === "bs-queue" ? BUILD_STUDIO_TEST_IDS.detailsDrawerQueue : `details-drawer-section-${section.id}`;
+          // One id rule for every section. The former `bs-queue` special case
+          // named a section that no longer exists.
+          const sectionTestId = `details-drawer-section-${section.id}`;
           return (
             <section
               key={section.id}

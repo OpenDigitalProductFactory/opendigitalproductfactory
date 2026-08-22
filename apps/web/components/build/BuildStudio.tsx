@@ -79,6 +79,7 @@ import {
   BUILD_STUDIO_TEST_IDS,
   getBuildStudioGraphPanelClassName,
   getBuildStudioShellClassName,
+  getBuildStudioContentPaneClassName,
   getBuildStudioSidebarClassName,
   shouldOpenBuildStudioSidebarByDefault,
 } from "./build-studio-layout";
@@ -851,14 +852,14 @@ export function BuildStudio({
             }}
             onOpenQueueDrawer={() => {
               setEngineerView(true);
-              setDrawerInitialSectionId("bs-queue");
+              setDrawerInitialSectionId("progress");
               setDrawerOpen(true);
             }}
           />
         </div>
 
         {/* Right: Preview or Brief */}
-        <div className="flex min-w-0 flex-1 flex-col overflow-x-hidden overflow-y-auto bg-[var(--dpf-surface-1)]">
+        <div className={getBuildStudioContentPaneClassName(drawerOpen)}>
           {engineerView ? (
             <PortalContextStrip
               envelope={portalContext ?? null}
@@ -1203,12 +1204,6 @@ function buildDetailsDrawerSections(
       defaultOpen: defaultId === "review",
       content: <ReviewPanel build={activeBuild} />,
     },
-    {
-      id: "bs-queue",
-      title: "BS Queue",
-      defaultOpen: defaultId === "bs-queue",
-      content: <BsQueueSection builds={allBuilds} customerStatuses={customerStatuses} />,
-    },
   ];
 }
 
@@ -1314,82 +1309,12 @@ function AssuranceRow({ expanded, onToggle, freshness, buildId, bomSummary, find
   );
 }
 
-function BsQueueSection({
-  builds,
-  customerStatuses,
-}: {
-  builds: readonly FeatureBuildRow[];
-  customerStatuses: Record<string, BuildStudioCustomerStatus>;
-}) {
-  const entries = builds.map((b) => ({
-    build: b,
-    queueState: deriveQueueState(b),
-    attention: deriveBuildAttention(b, customerStatuses[b.id]),
-  }));
-  const kindRank = { running: 0, blocked: 1, queued: 2, idle: 3 } as const;
-  const sorted = [...entries].sort((a, b) => {
-    const aNeeds = a.attention.needsOwner;
-    const bNeeds = b.attention.needsOwner;
-    if (aNeeds !== bNeeds) return aNeeds ? -1 : 1;
-    const ra = kindRank[a.queueState.kind];
-    const rb = kindRank[b.queueState.kind];
-    if (ra !== rb) return ra - rb;
-    if (a.queueState.kind === "queued" && b.queueState.kind === "queued") {
-      return a.queueState.position - b.queueState.position;
-    }
-    return a.build.buildId.localeCompare(b.build.buildId);
-  });
-  const counts = entries.reduce(
-    (acc, entry) => {
-      if (entry.queueState.kind === "running") acc.runningCount += 1;
-      if (entry.queueState.kind === "blocked") acc.blockedCount += 1;
-      if (entry.queueState.kind === "queued") acc.queuedCount += 1;
-      return acc;
-    },
-    { runningCount: 0, blockedCount: 0, queuedCount: 0 },
-  );
-  const labelForQueueState = (entry: (typeof entries)[number]) => {
-    // Canonical vocabulary — same producer as the rail, so the two panels
-    // showing the same builds can no longer disagree.
-    if (entry.attention.needsOwner) return ownerStateBadgeLabel(entry.attention.state);
-    if (entry.queueState.kind === "running") return "Working";
-    if (entry.queueState.kind === "blocked") return "Blocked";
-    if (entry.queueState.kind === "queued") return `Waiting ${entry.queueState.position}`;
-    return formatOperatorPhaseLabel(entry.build.phase);
-  };
-
-  return (
-    <div className="flex flex-col gap-2">
-      <p className="text-[var(--dpf-muted)]">
-        AI Coworker workload, read-only here. Use the build's main action when
-        one of these needs you.
-      </p>
-      <div className="flex flex-wrap gap-3 text-[11px] text-[var(--dpf-text)]">
-        <span>Working: <span className="font-semibold">{counts.runningCount}</span></span>
-        <span>Blocked: <span className="font-semibold text-[var(--dpf-warning)]">{counts.blockedCount}</span></span>
-        <span>Waiting: <span className="font-semibold">{counts.queuedCount}</span></span>
-      </div>
-      <ul className="flex flex-col gap-1">
-        {sorted.map((entry) => (
-          <li
-            key={entry.build.buildId}
-            className="flex items-center gap-2 rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-2 py-1 text-[11px]"
-            data-build-id={entry.build.buildId}
-            data-queue-kind={entry.queueState.kind}
-          >
-            <span className="min-w-0 flex-1 truncate text-[var(--dpf-text)]">{entry.build.title}</span>
-            <span className="ml-auto shrink-0 text-[10px] font-semibold text-[var(--dpf-muted)]">
-              {labelForQueueState(entry)}
-            </span>
-          </li>
-        ))}
-        {sorted.length === 0 && (
-          <li className="text-[var(--dpf-muted)]">No builds.</li>
-        )}
-      </ul>
-    </div>
-  );
-}
+// BsQueueSection was deleted here. It re-listed the SAME builds the fleet rail
+// already shows, in a different vocabulary, and its counters tallied only
+// running/blocked/queued while its list rendered every entry — so it could
+// display "Working: 1  Blocked: 0  Waiting: 0" above a list of four rows. Its
+// own copy told the operator it was read-only and to go act somewhere else: a
+// panel that cost attention and returned no action. The rail is the one list.
 
 /* ────────────────────────────────────────────────────────────────────────── */
 /* NodeInspector helpers — derive title + body + coworker-prefill from click. */
@@ -1755,7 +1680,7 @@ function FleetRailZone({
         onClick={onOpenQueueDrawer}
         role="status"
         aria-live="polite"
-        aria-label="Open technical build queue details"
+        aria-label="Open build progress details"
         data-testid="build-studio-fleet-header"
         className="flex w-full shrink-0 cursor-pointer items-center justify-between border-b border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-3 py-1.5 text-left text-[11px] font-semibold text-[var(--dpf-text)] transition-colors hover:bg-[var(--dpf-surface-3)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--dpf-accent)]"
       >

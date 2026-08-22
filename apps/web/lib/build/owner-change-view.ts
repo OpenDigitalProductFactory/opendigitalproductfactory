@@ -53,13 +53,13 @@ export function projectOwnerChangeView(input: {
   previewDrivingBuildId?: string | null;
 }): OwnerChangeView {
   const { build, status } = input;
-  const outcome = firstText(
+  const outcome = toOutcomeStatement(firstText(
     build.businessBuildBrief?.businessOutcome,
     build.designDoc?.problemStatement,
     build.description,
     build.originator?.resolution,
     build.title,
-  );
+  ));
   const previewAvailable =
     build.sandboxPort !== null && ["build", "review", "ship"].includes(build.phase);
   const pendingDecision = build.decisionInteraction;
@@ -225,6 +225,88 @@ export function fallbackNext(phase: BuildPhase): string {
   if (phase === "abandoned") return "Resume only if this outcome is still valuable.";
   if (phase === "ship") return "Review the proof before release.";
   return "No action is needed unless Build Studio asks for a decision.";
+}
+
+
+/** Longest an outcome statement may be before it is clamped. */
+export const OUTCOME_STATEMENT_MAX = 240;
+
+/**
+ * Reduce whatever the fallback chain found to ONE readable sentence.
+ *
+ * The chain's third entry is `build.description`, which for any build promoted
+ * from the backlog is the WHOLE markdown BI body — "## Problem ... ## Scope ...
+ * ## Acceptance criteria". BuildOperatorOverview rendered that into a single
+ * plain <p>, so the operator's first viewport was a wall of unrendered markdown
+ * (literal "##" and "> **" on screen), unclamped and occluded by the details
+ * drawer. The full text is not lost: the drawer's Canonical doc section already
+ * renders the same string as proper formatted markdown.
+ *
+ * So this is deliberately lossy. The Outcome slot answers "what did I ask for?"
+ * in one line; anything longer belongs behind disclosure.
+ */
+export function toOutcomeStatement(raw: string): string {
+  let text = raw.trim();
+  if (!text) return text;
+
+  // Drop fenced code blocks entirely — never a useful outcome statement.
+  text = text.replace(/```[\s\S]*?```/g, " ");
+
+  const lines = text.split(/\r?\n/);
+  const prose: string[] = [];
+  for (const line of lines) {
+    let s = line.trim();
+    if (!s) {
+      // A blank line ends the first paragraph once we have prose.
+      if (prose.length > 0) break;
+      continue;
+    }
+    // Skip structural markdown: headings, list bullets, table rows, rules.
+    if (/^#{1,6}\s/.test(s)) continue;
+    if (/^[-*+]\s/.test(s) || /^\d+\.\s/.test(s)) continue;
+    if (/^\|/.test(s) || /^[-=]{3,}$/.test(s)) continue;
+    // Blockquote markers are noise, but the quoted text may be the statement.
+    s = s.replace(/^>\s?/, "");
+    if (!s) continue;
+    prose.push(s);
+  }
+
+  // When a body carries no prose at all (headings + bullets only), fall back to
+  // the raw text — but still strip the structural markers, or the operator sees
+  // literal "##" and "-" in the Outcome slot.
+  let statement = (
+    prose.length > 0
+      ? prose.join(" ")
+      : text
+        .replace(/^#{1,6}\s+/gm, "")
+        .replace(/^[-*+]\s+/gm, "")
+        .replace(/^\d+\.\s+/gm, "")
+        .replace(/^>\s?/gm, "")
+  ).trim();
+
+  // Strip inline markdown emphasis/code, and reduce links to their label.
+  statement = statement
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
+    .replace(/`([^`]*)`/g, "$1")
+    .replace(/\*\*([^*]+)\*\*/g, "$1")
+    .replace(/(?<!\w)[*_]([^*_]+)[*_](?!\w)/g, "$1")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (statement.length <= OUTCOME_STATEMENT_MAX) return statement;
+
+  // Prefer a sentence boundary inside the budget; otherwise clamp on a word.
+  const window = statement.slice(0, OUTCOME_STATEMENT_MAX);
+  const sentenceEnd = Math.max(
+    window.lastIndexOf(". "),
+    window.lastIndexOf("? "),
+    window.lastIndexOf("! "),
+  );
+  if (sentenceEnd > OUTCOME_STATEMENT_MAX * 0.4) {
+    return statement.slice(0, sentenceEnd + 1);
+  }
+  const wordEnd = window.lastIndexOf(" ");
+  return `${statement.slice(0, wordEnd > 0 ? wordEnd : OUTCOME_STATEMENT_MAX).trimEnd()}\u2026`;
 }
 
 function firstText(...values: Array<string | null | undefined>): string {

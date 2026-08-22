@@ -28,7 +28,6 @@ export const BUILD_STUDIO_TEST_IDS = {
   nodeInspectorExpand: "build-studio-node-inspector-expand",
   detailsDrawer: "build-studio-details-drawer",
   detailsDrawerPill: "build-studio-details-drawer-pill",
-  detailsDrawerQueue: "build-studio-details-drawer-queue",
   buildListItem: "build-studio-build-list-item",
   phaseMiniRail: "build-studio-phase-mini-rail",
   queueStateBadge: "build-studio-queue-state-badge",
@@ -209,6 +208,24 @@ export function getWorkflowCanvasClassName(): string {
  * DetailsDrawer container — slides in from the right edge of the workflow
  * region. NEVER covers the coworker zone (the parent shell already separates them).
  */
+/**
+ * The centre content pane. When the DetailsDrawer is open it reserves the
+ * drawer's width as right padding.
+ *
+ * The drawer is `absolute right-0 z-20`, so it OVERLAYS rather than displaces:
+ * the canvas kept its full width and its text was occluded mid-sentence with no
+ * reflow and no scroll affordance. Reserving the width here restores reflow
+ * while keeping the drawer's translate-x slide (a flex sibling would have to
+ * animate width instead, which is visibly janky).
+ *
+ * Padding is dropped below the `lg` breakpoint, where the drawer covers most of
+ * the viewport and displacing the canvas would leave nothing readable.
+ */
+export function getBuildStudioContentPaneClassName(drawerOpen: boolean): string {
+  const base = "flex min-w-0 flex-1 flex-col overflow-x-hidden overflow-y-auto bg-[var(--dpf-surface-1)] transition-[padding] duration-200 motion-reduce:transition-none";
+  return drawerOpen ? `${base} lg:pr-[min(480px,40vw)]` : base;
+}
+
 export function getDetailsDrawerClassName(isOpen: boolean): string {
   const base = [
     "absolute",

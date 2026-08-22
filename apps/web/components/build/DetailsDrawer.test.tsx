@@ -120,11 +120,15 @@ describe("DetailsDrawer", () => {
     expect(screen.queryByText("brief body")).not.toBeInTheDocument();
   });
 
-  it("the BS-queue section uses the canonical detailsDrawerQueue test ID for integration", () => {
+  it("gives every section the same id shape — no per-section special cases", () => {
     render(
       <DetailsDrawer isOpen onClose={vi.fn()} sections={sampleSections()} />,
     );
-    expect(screen.getByTestId(BUILD_STUDIO_TEST_IDS.detailsDrawerQueue)).toBeInTheDocument();
+    for (const section of sampleSections()) {
+      expect(
+        screen.getByTestId(`details-drawer-section-${section.id}`),
+      ).toBeInTheDocument();
+    }
   });
 
   it("Esc closes the drawer when open", () => {
