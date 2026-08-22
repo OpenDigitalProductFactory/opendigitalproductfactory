@@ -4,7 +4,7 @@
 
 **Status:** Proposed
 
-**Backlog:** `BI-11D611B3`
+**Backlog:** `BI-9549EE48` (umbrella); `BI-11D611B3` (source-free entry slice)
 
 **Epic:** `EP-1FABA22D`
 

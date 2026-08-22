@@ -4,7 +4,7 @@
 
 **Status:** Proposed
 
-**Umbrella backlog item:** `BI-11D611B3`
+**Umbrella backlog item:** `BI-9549EE48`
 
 **Epic:** `EP-1FABA22D`
 
@@ -54,13 +54,13 @@ The delivery budget reserves one independent convergence stream, `R1`, and conve
 
 The live backlog contains one umbrella and eight independently shippable deliverables. The governed coverage receipt will be recorded against the first committed plan blob before publication.
 
-- Parent: `BI-11D611B3`
+- Parent: `BI-9549EE48`
 - Decision: `decomposed`
 - Receipt: `PENDING-FIRST-COMMIT`
 
 | Key | Backlog item | Deliverable | Depends on |
 |---|---|---|---|
-| `p0` | `BI-4B171FF0` | operating-profile compiler, MCP/A2A entry, generated pointer | installation-intent substrate |
+| `p0` | `BI-11D611B3` | operating-profile compiler, MCP/A2A entry, generated pointer | installation-intent substrate |
 | `p1` | `BI-D4C110BC` | Work Packet, leases, multi-agent collaboration, durable recovery | `p0`, Work Case/TaskRun completion substrate |
 | `p2` | `BI-0A40E66A` | archetype and GTM executable work projections | `p0`, `p1`, purpose-aware journey compiler |
 | `p3` | `BI-AF8A8173` | operator My Queue/Inbox/Case detail and connection UX | `p0`, `p1` |
@@ -105,7 +105,7 @@ Indicative capacity by independently reviewed delivery:
 
 These percentages are planning guardrails, not effort estimates or funding approvals. Each child is sized and sequenced independently.
 
-## 5. P0 — operating profile and source-free entry (`BI-4B171FF0`)
+## 5. P0 — operating profile and source-free entry (`BI-11D611B3`)
 
 ### Deliverable
 
