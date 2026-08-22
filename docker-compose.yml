@@ -814,6 +814,11 @@ services:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
       timeout: 5s
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+          cpus: "0.5"
 
   # redis-exporter — ~4 MB sidecar that scrapes the redis:6379 INFO output and
   # exposes it on :9121/metrics in Prometheus format. Lets the platform Health
@@ -881,6 +886,11 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
+    deploy:
+      resources:
+        limits:
+          memory: 1g
+          cpus: "1.0"
 
   # ─── Voice Input — Speech-to-text sidecar (capability-owned, CPU) ──────────
   # Owning spec: docs/superpowers/specs/2026-05-17-voice-input-slice-1-5-default-on-cpu.md

@@ -4,9 +4,7 @@
   "decisionInteractionId": "DI-6D78A3E2B411",
   "scope": {
     "files": [
-      "apps/web/app/(shell)/platform/ai/providers/loading.tsx",
-      "apps/web/components/platform/ProviderDetailForm.tsx",
-      "apps/web/components/workspace-home/LocalOnlyProviderNotice.tsx"
+      "apps/web/app/(shell)/platform/ai/providers/loading.tsx"
     ]
   },
   "evidence": {

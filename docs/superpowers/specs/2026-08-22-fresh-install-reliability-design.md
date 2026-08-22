@@ -1,3 +1,7 @@
+---
+status: binding
+---
+
 # Fresh-install reliability design
 
 **Date:** 2026-08-22
