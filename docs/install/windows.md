@@ -138,6 +138,9 @@ On Windows, Docker Desktop ships **Docker Model Runner**, which hosts the
 local LLM behind an OpenAI-compatible endpoint. The installer auto-detects
 it and sets `DPF_LLM_PROVIDER=model-runner` per the
 [provider contract](../superpowers/specs/2026-05-09-deployment-contracts.md).
+After a model pull is verified, first boot discovers that model and enables
+both the local provider and its routing connection automatically; no provider
+toggle is required before using an AI coworker.
 
 To use an external endpoint (Anthropic, OpenAI, hosted Ollama, etc.) set
 `LLM_BASE_URL` in `.env` before re-running the installer:

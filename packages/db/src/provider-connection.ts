@@ -66,6 +66,33 @@ export async function ensureDefaultProviderConnection(
   await refreshDefaultProviderConnectionOwners(prisma, entry.providerId);
 }
 
+/**
+ * Activate a provider and the canonical connection routing evaluates for it.
+ *
+ * Keeping these writes in one transaction prevents the provider registry from
+ * advertising an active provider while its default connection still vetoes
+ * dispatch. `update` is intentional: a missing canonical connection is an
+ * invariant violation and must roll back the provider activation.
+ */
+export async function activateProviderWithDefaultConnection(
+  prisma: PrismaClient,
+  input: { providerId: string; sensitivityClearance: string[] },
+): Promise<void> {
+  await prisma.$transaction(async (tx) => {
+    await tx.modelProvider.update({
+      where: { providerId: input.providerId },
+      data: {
+        status: "active",
+        sensitivityClearance: input.sensitivityClearance,
+      },
+    });
+    await tx.aiProviderConnection.update({
+      where: { connectionId: `provider-default-${input.providerId}` },
+      data: { status: "active" },
+    });
+  });
+}
+
 export async function refreshDefaultProviderConnectionOwners(
   prisma: PrismaClient,
   providerId: string,
