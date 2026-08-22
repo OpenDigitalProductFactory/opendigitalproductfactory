@@ -20,19 +20,20 @@ const INTENT_COLOR: Record<Intent, string> = {
 
 export interface OutcomesStripProps {
   outcomes: TwinOutcome[];
+  heading?: string;
   className?: string;
 }
 
-export function OutcomesStrip({ outcomes, className = "" }: OutcomesStripProps) {
+export function OutcomesStrip({ outcomes, heading = "Delivered", className = "" }: OutcomesStripProps) {
   if (outcomes.length === 0) return null;
 
   return (
     <div
       className={`flex flex-wrap items-stretch gap-2 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface)] p-3 ${className}`.trim()}
-      aria-label="Customer outcomes"
+      aria-label={`${heading} outcomes`}
     >
       <div className="mr-1 flex items-center text-[10px] font-semibold uppercase tracking-wide text-[var(--dpf-muted)]">
-        Delivered
+        {heading}
       </div>
       {outcomes.map((o) => (
         <div key={o.key} className="flex min-w-[110px] flex-col rounded-md bg-[var(--dpf-surface-2)] px-3 py-1.5">

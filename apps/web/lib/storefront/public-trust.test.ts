@@ -69,6 +69,17 @@ describe("resolveTrustProfile", () => {
     expect(p.bookingPolicy).toBeTruthy();
     expect(p.cancellationPolicy).toBeTruthy();
   });
+
+  it("gives a pet rescue adoption and surrender policy without booking language", () => {
+    const p = resolveTrustProfile("nonprofit-community", "pet-rescue");
+
+    expect(p.policyLinkLabel).toBe("Adoption & surrender");
+    expect(p.pageTitle).toBe("Policies & supporter information");
+    expect(p.policyHeading).toBe("Adoption & surrender");
+    expect(p.pageIntro).toMatch(/adoption and surrender enquiries/i);
+    expect(p.termsPolicy).toMatch(/animal welfare|capacity|fit/i);
+    expect(`${p.pageIntro} ${p.termsPolicy}`).not.toMatch(/bookings|menus/i);
+  });
 });
 
 describe("getPublicOperatingHours", () => {

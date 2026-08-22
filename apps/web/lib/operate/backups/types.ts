@@ -23,7 +23,8 @@ export type BackupTrigger =
   | "scheduled"
   | "manual"
   | "pre-restore-safety"
-  | "pre-upgrade-recovery";
+  | "pre-upgrade-recovery"
+  | "pre-teardown-recovery";
 export type BackupRunStatus = "running" | "ok" | "failed";
 export type BackupTarget = "postgres" | "neo4j" | "qdrant";
 

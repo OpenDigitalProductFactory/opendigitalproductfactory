@@ -12,7 +12,7 @@ export default async function StorefrontPoliciesPage({
   const storefront = await getPublicStorefront(slug);
   if (!storefront) notFound();
 
-  const trust = resolveTrustProfile(storefront.archetypeCategory);
+  const trust = resolveTrustProfile(storefront.archetypeCategory, storefront.archetypeId);
   const takesPayment = isJourneySupported(storefront, "order");
   const contactBits = [storefront.contactEmail, storefront.contactPhone].filter(Boolean).join(" · ");
 
@@ -23,14 +23,14 @@ export default async function StorefrontPoliciesPage({
   return (
     <div style={{ maxWidth: 720, paddingTop: 40 }}>
       <h1 style={{ fontSize: 28, fontWeight: 700, marginBottom: 8, color: "var(--dpf-text)" }}>
-        Policies &amp; customer information
+        {trust.pageTitle}
       </h1>
       <p style={{ ...pStyle, marginBottom: 32 }}>
-        How {storefront.orgName} handles bookings, your information, and getting in touch.
+        {storefront.orgName}: {trust.pageIntro}
       </p>
 
       <section id="booking" style={sectionStyle}>
-        <h2 style={h2Style}>Booking &amp; cancellation</h2>
+        <h2 style={h2Style}>{trust.policyHeading}</h2>
         <p style={pStyle}>{trust.bookingPolicy}</p>
         <p style={pStyle}>{trust.cancellationPolicy}</p>
       </section>
@@ -57,7 +57,7 @@ export default async function StorefrontPoliciesPage({
         <h2 style={h2Style}>Privacy</h2>
         <p style={pStyle}>
           The details you enter (such as your name, contact details, and any notes) are used only to
-          handle your booking, order, or enquiry with {storefront.orgName}. They are not sold, and
+          handle your {trust.privacyRequestKinds} with {storefront.orgName}. They are not sold, and
           are shared only as needed to fulfil your request.
         </p>
         <p style={pStyle}>
@@ -69,9 +69,7 @@ export default async function StorefrontPoliciesPage({
       <section id="terms" style={sectionStyle}>
         <h2 style={h2Style}>Terms</h2>
         <p style={pStyle}>
-          Submitting a booking or enquiry is a request, not a guaranteed reservation, until {storefront.orgName}{" "}
-          confirms it. Prices, availability, and menus may change. These are the business&apos;s standard
-          terms; contact us with any questions before you book.
+          {trust.termsPolicy}
         </p>
       </section>
 

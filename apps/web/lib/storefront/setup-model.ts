@@ -201,10 +201,12 @@ export function deriveStorefrontSetupModel(input: SetupModelInput): StorefrontSe
     href: "/storefront/settings/business",
   });
 
-  // 2 — Menu / items
+  // 2 — Archetype-owned public offerings. `itemsLabel` is already the complete
+  // plural label; appending a guessed singular produced labels such as
+  // "Campaigns & Appeals & campaigns".
   steps.push({
     key: "items",
-    title: `${v.itemsLabel} & ${v.singleItemLabel.toLowerCase()}s`,
+    title: v.itemsLabel,
     description: `The ${v.itemsLabel.toLowerCase()} ${v.stakeholderLabel.toLowerCase()} browse and act on.`,
     status: content.activeItemCount > 0 ? "complete" : "not-started",
     hint: content.activeItemCount > 0 ? undefined : `Add your first ${v.singleItemLabel.toLowerCase()}.`,

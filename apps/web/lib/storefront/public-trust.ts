@@ -1,6 +1,6 @@
 // apps/web/lib/storefront/public-trust.ts
 //
-// Single source of truth for the customer-facing TRUST layer of the public
+// Single source of truth for the public-facing TRUST layer of the public
 // storefront (`/s/[slug]/*`): archetype-appropriate policy/dietary/payment copy,
 // customer-account vocabulary, and the journey-support predicate that decides
 // whether an archetype-specific path (donation / order / booking) is actually
@@ -61,6 +61,18 @@ export type TrustProfile = {
   paymentNote: string;
   /** What the customer account is for, in archetype terms. */
   accountPurpose: string;
+  /** Label used by public footer and item-detail policy links. */
+  policyLinkLabel: string;
+  /** Page-level policy framing; avoids hardcoded commercial language. */
+  pageTitle: string;
+  pageIntro: string;
+  policyHeading: string;
+  /** The request kinds named in the privacy explanation. */
+  privacyRequestKinds: string;
+  /** Archetype-appropriate terms, without invented guarantees. */
+  termsPolicy: string;
+  /** Prompt shown beside the item-level contact link. */
+  contactPrompt: string;
 };
 
 const GENERIC_TRUST: TrustProfile = {
@@ -73,9 +85,17 @@ const GENERIC_TRUST: TrustProfile = {
   paymentNote:
     "You won't be asked for payment to make this request. Any payment is handled directly with the business.",
   accountPurpose: "manage your bookings and requests",
+  policyLinkLabel: "Booking & cancellation",
+  pageTitle: "Policies & customer information",
+  pageIntro: "How we handle bookings, your information, and getting in touch.",
+  policyHeading: "Booking & cancellation",
+  privacyRequestKinds: "booking, order, or enquiry",
+  termsPolicy:
+    "Submitting a booking or enquiry is a request, not a guaranteed reservation, until it is confirmed. Prices and availability may change; contact us with questions before you book.",
+  contactPrompt: "Questions before you book?",
 };
 
-const TRUST_BY_CATEGORY: Record<string, TrustProfile> = {
+const TRUST_BY_CATEGORY: Record<string, Partial<TrustProfile>> = {
   "food-hospitality": {
     bookingNoun: "reservation",
     bookingPolicy:
@@ -145,9 +165,50 @@ const TRUST_BY_CATEGORY: Record<string, TrustProfile> = {
   },
 };
 
-/** Resolve the trust profile for an archetype category (falls back to generic). */
-export function resolveTrustProfile(category: string | null | undefined): TrustProfile {
-  return TRUST_BY_CATEGORY[category ?? ""] ?? GENERIC_TRUST;
+const TRUST_BY_ARCHETYPE: Record<string, Partial<TrustProfile>> = {
+  "pet-rescue": {
+    bookingNoun: "request",
+    bookingPolicy:
+      "Sending an adoption or surrender enquiry shares your details with the rescue team. It does not reserve an animal or guarantee intake.",
+    cancellationPolicy:
+      "If your circumstances change, contact the rescue promptly so the team can update your enquiry and plan care safely.",
+    paymentNote:
+      "No payment is taken to send an adoption or surrender enquiry. Donation amounts and any adoption fees are shown before you confirm them.",
+    accountPurpose: "manage your adoption, surrender, volunteer, and support enquiries",
+    policyLinkLabel: "Adoption & surrender",
+    pageTitle: "Policies & supporter information",
+    pageIntro:
+      "How we handle adoption and surrender enquiries, donations, your information, and getting in touch.",
+    policyHeading: "Adoption & surrender",
+    privacyRequestKinds: "adoption, surrender, volunteer, donation, or other enquiry",
+    termsPolicy:
+      "Submitting an enquiry is a request, not a guarantee of adoption or intake. Decisions depend on animal welfare, available capacity, and a safe fit. Donation and adoption-fee terms are shown before confirmation.",
+    contactPrompt: "Questions about adopting, surrendering, or supporting?",
+  },
+  "animal-shelter": {
+    bookingNoun: "request",
+    policyLinkLabel: "Adoption & surrender",
+    pageTitle: "Policies & supporter information",
+    pageIntro:
+      "How we handle adoption and surrender enquiries, donations, your information, and getting in touch.",
+    policyHeading: "Adoption & surrender",
+    privacyRequestKinds: "adoption, surrender, volunteer, donation, or other enquiry",
+    termsPolicy:
+      "Submitting an enquiry is a request, not a guarantee of adoption or intake. Decisions depend on animal welfare, available capacity, and a safe fit.",
+    contactPrompt: "Questions about adopting, surrendering, or supporting?",
+  },
+};
+
+/** Resolve category defaults, then the more specific leaf archetype override. */
+export function resolveTrustProfile(
+  category: string | null | undefined,
+  archetypeId?: string | null,
+): TrustProfile {
+  return {
+    ...GENERIC_TRUST,
+    ...(TRUST_BY_CATEGORY[category ?? ""] ?? {}),
+    ...(TRUST_BY_ARCHETYPE[archetypeId ?? ""] ?? {}),
+  };
 }
 
 /**

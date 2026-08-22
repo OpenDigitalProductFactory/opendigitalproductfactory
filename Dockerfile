@@ -120,6 +120,7 @@ COPY monitoring/ ./monitoring/
 COPY scripts/backup-postgres.sh ./scripts/
 COPY scripts/restore-postgres.sh ./scripts/
 COPY scripts/postgres-trial-restore.sh ./scripts/
+COPY scripts/salvage-sweep.mjs ./scripts/
 # Work Capsule change-impact planning executes the canonical gate-context CLI
 # at runtime. Package its exact transitive source closure into the image so a
 # mutable /host-dpf checkout can never substitute different rule bytes.
@@ -336,6 +337,8 @@ RUN if [ -n "$DPF_PLATFORM_VERSION" ]; then \
 COPY Dockerfile.promoter /promoter/Dockerfile.promoter
 COPY promoter-contract.json /promoter/promoter-contract.json
 COPY scripts/promote.sh /promoter/scripts/promote.sh
+COPY scripts/governed-teardown.mjs /promoter/scripts/governed-teardown.mjs
+COPY scripts/salvage-sweep.mjs /promoter/scripts/salvage-sweep.mjs
 COPY Dockerfile /promoter/Dockerfile
 COPY scripts/apply-runtime-capability-transition.mjs /promoter/scripts/apply-runtime-capability-transition.mjs
 COPY scripts/runtime-transition-authority.mjs /promoter/scripts/runtime-transition-authority.mjs

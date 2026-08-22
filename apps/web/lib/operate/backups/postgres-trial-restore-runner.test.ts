@@ -9,7 +9,7 @@ vi.mock("@/lib/operate/metrics", () => ({
 
 vi.mock("@dpf/db", () => ({
   prisma: {
-    backupRun: { findMany: vi.fn() },
+    backupRun: { findMany: vi.fn(), findUnique: vi.fn() },
     backupRestore: { create: vi.fn() },
     scheduledJob: { update: vi.fn() },
     platformNotification: { create: vi.fn(), updateMany: vi.fn() },
@@ -21,6 +21,7 @@ import { prisma } from "@dpf/db";
 
 type Mock = ReturnType<typeof vi.fn>;
 const findManyMock = prisma.backupRun.findMany as unknown as Mock;
+const findUniqueMock = prisma.backupRun.findUnique as unknown as Mock;
 const createMock = prisma.backupRestore.create as unknown as Mock;
 const scheduledJobUpdateMock = prisma.scheduledJob.update as unknown as Mock;
 const notificationCreateMock = prisma.platformNotification.create as unknown as Mock;
@@ -28,6 +29,7 @@ const notificationUpdateManyMock = prisma.platformNotification.updateMany as unk
 
 beforeEach(() => {
   findManyMock.mockReset();
+  findUniqueMock.mockReset();
   createMock.mockReset();
   scheduledJobUpdateMock.mockReset();
   notificationCreateMock.mockReset();
@@ -83,6 +85,43 @@ describe("runPostgresTrialRestore", () => {
     stderr: "",
     exitCode: 0,
   };
+
+  it("trial-restores the explicitly requested backup instead of a newer unrelated run", async () => {
+    const { promises: fs } = await import("node:fs");
+    const accessSpy = vi.spyOn(fs, "access").mockResolvedValue(undefined);
+    let selectedDump = "";
+    try {
+      findUniqueMock.mockResolvedValue({
+        id: "teardown_recovery",
+        storagePath: "postgres/teardown-recovery",
+        target: "postgres",
+        status: "ok",
+        prunedAt: null,
+      });
+      findManyMock.mockResolvedValue([
+        { id: "newer_but_unrelated", storagePath: "postgres/newer" },
+      ]);
+
+      const result = await runPostgresTrialRestore({
+        sourceBackupRunId: "teardown_recovery",
+        backupsRoot: "/test/backups",
+        runScript: async (_script, env) => {
+          selectedDump = env.DUMP_PATH ?? "";
+          return okScript;
+        },
+      });
+
+      expect(result.status).toBe("ok");
+      expect(selectedDump).toBe("/test/backups/postgres/teardown-recovery/dpf.dump");
+      expect(findUniqueMock).toHaveBeenCalledWith(expect.objectContaining({ where: { id: "teardown_recovery" } }));
+      expect(findManyMock).not.toHaveBeenCalled();
+      expect(createMock).toHaveBeenCalledWith(expect.objectContaining({
+        data: expect.objectContaining({ sourceBackupRunId: "teardown_recovery" }),
+      }));
+    } finally {
+      accessSpy.mockRestore();
+    }
+  });
 
   it("returns skipped + writes no BackupRestore row when no eligible backup exists", async () => {
     findManyMock.mockResolvedValue([]);

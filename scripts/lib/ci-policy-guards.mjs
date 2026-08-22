@@ -95,6 +95,10 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         "scripts/salvage-sweep.test.mjs",
       ),
     ]),
+    guard("governed-teardown-guard", "Governed Teardown Contract", [
+      node("--test", "scripts/check-governed-teardown-contract.test.mjs", "scripts/governed-teardown.test.mjs"),
+      node("scripts/check-governed-teardown-contract.mjs"),
+    ]),
     guard("published-image-freshness", "Published Image Freshness", [
       // Decision logic only — the live registry check needs Docker and runs on a
       // schedule (.github/workflows/published-image-freshness.yml).
