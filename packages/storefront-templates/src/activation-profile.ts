@@ -10,8 +10,10 @@ import {
 } from "./capability-registry";
 import type {
   ActivationProfile,
+  ArchetypeProcessProfile,
   ArchetypeModule,
   BillingPatternProfile,
+  CatalogMode,
   CapabilityActivation,
   CapabilityApplicability,
   CapabilityOverride,
@@ -54,6 +56,17 @@ const PROFILE_TYPES = new Set(["standard", "managed-service-provider"] as const)
 const BILLING_MODES = new Set(["none", "prepared-not-prescribed"] as const);
 const GRAPH_MODES = new Set<CustomerGraphMode>(["none", "separate-customer-projection"]);
 const ESTATE_MODES = new Set<EstateSeparationMode>(["shared", "strict"]);
+const CATALOG_MODES = new Set<CatalogMode>(["priced", "donation", "unpriced"]);
+const PROCESS_PROFILE_KEYS = new Set([
+  "catalogModes",
+  "subjectTypes",
+  "housesSubjects",
+  "schedulesSubjects",
+  "resourceKinds",
+]);
+const PROCESS_SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+const MAX_PROCESS_SLUG_LENGTH = 63;
+const MAX_RESOURCE_CAPACITY = 1_000_000;
 
 const FORM_VALUES = new Set<OperatingModelForm>(["goods", "services"]);
 const DELIVERY_VALUES = new Set<OperatingModelDelivery>(["digital", "physical", "hybrid"]);
@@ -159,6 +172,7 @@ export interface NormalizedActivationProfile extends ActivationProfile {
   billingProfile: BillingPatternProfile;
   partnerProgram: PartnerProgramProfile;
   capabilityActivations: CapabilityActivation[];
+  processProfile: ArchetypeProcessProfile;
 }
 
 function isRecord(value: unknown): value is UnknownRecord {
@@ -167,6 +181,83 @@ function isRecord(value: unknown): value is UnknownRecord {
 
 function isStringArray(value: unknown): value is string[] {
   return Array.isArray(value) && value.every((item) => typeof item === "string");
+}
+
+function isProcessSlug(value: unknown): value is string {
+  return (
+    typeof value === "string" &&
+    value.length <= MAX_PROCESS_SLUG_LENGTH &&
+    PROCESS_SLUG.test(value)
+  );
+}
+
+function hasUniqueValues(values: string[]): boolean {
+  return new Set(values).size === values.length;
+}
+
+function readProcessProfile(raw: unknown): ArchetypeProcessProfile | null {
+  if (raw === undefined) {
+    return {
+      catalogModes: [],
+      subjectTypes: [],
+      housesSubjects: false,
+      schedulesSubjects: false,
+      resourceKinds: [],
+    };
+  }
+
+  if (
+    !isRecord(raw) ||
+    Object.keys(raw).some((key) => !PROCESS_PROFILE_KEYS.has(key)) ||
+    !Array.isArray(raw.catalogModes) ||
+    raw.catalogModes.some(
+      (mode) => typeof mode !== "string" || !CATALOG_MODES.has(mode as CatalogMode),
+    ) ||
+    !hasUniqueValues(raw.catalogModes as string[]) ||
+    !Array.isArray(raw.subjectTypes) ||
+    raw.subjectTypes.some((subjectType) => !isProcessSlug(subjectType)) ||
+    !hasUniqueValues(raw.subjectTypes as string[]) ||
+    typeof raw.housesSubjects !== "boolean" ||
+    typeof raw.schedulesSubjects !== "boolean" ||
+    !Array.isArray(raw.resourceKinds)
+  ) {
+    return null;
+  }
+
+  const resourceKinds = [];
+  for (const resourceKind of raw.resourceKinds) {
+    if (
+      !isRecord(resourceKind) ||
+      Object.keys(resourceKind).some(
+        (key) => !["kindSlug", "capacityUnit", "maxCapacity"].includes(key),
+      ) ||
+      !isProcessSlug(resourceKind.kindSlug) ||
+      !isProcessSlug(resourceKind.capacityUnit) ||
+      !Number.isInteger(resourceKind.maxCapacity) ||
+      (resourceKind.maxCapacity as number) < 1 ||
+      (resourceKind.maxCapacity as number) > MAX_RESOURCE_CAPACITY
+    ) {
+      return null;
+    }
+
+    resourceKinds.push({
+      kindSlug: resourceKind.kindSlug,
+      capacityUnit: resourceKind.capacityUnit,
+      maxCapacity: resourceKind.maxCapacity as number,
+    });
+  }
+
+  if (!hasUniqueValues(resourceKinds.map((resourceKind) => resourceKind.kindSlug))) {
+    return null;
+  }
+
+  return {
+    catalogModes: raw.catalogModes as CatalogMode[],
+    subjectTypes: raw.subjectTypes as string[],
+    housesSubjects: raw.housesSubjects,
+    schedulesSubjects: raw.schedulesSubjects,
+    resourceKinds,
+  };
 }
 
 function readAxes(raw: unknown): NormalizedOperatingModelAxes | null {
@@ -423,6 +514,9 @@ export function readActivationProfile(raw: unknown): NormalizedActivationProfile
   const capabilityOverrides = readCapabilityOverrides(raw.capabilityOverrides);
   if (!capabilityOverrides) return null;
 
+  const processProfile = readProcessProfile(raw.processProfile);
+  if (!processProfile) return null;
+
   const capabilityMap = deriveCapabilityApplicability(axes, portfolios, capabilityOverrides);
   const billingProfile = deriveBillingPatternProfile(axes);
   const partnerProgram = derivePartnerProgramProfile(axes, portfolios);
@@ -444,6 +538,7 @@ export function readActivationProfile(raw: unknown): NormalizedActivationProfile
     billingProfile,
     partnerProgram,
     capabilityActivations: Array.from(capabilityMap.values()),
+    processProfile,
     ...(raw.seededServiceCategories !== undefined && isStringArray(raw.seededServiceCategories)
       ? { seededServiceCategories: raw.seededServiceCategories }
       : {}),

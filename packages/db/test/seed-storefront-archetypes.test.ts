@@ -2,6 +2,53 @@ import { describe, expect, it, vi } from "vitest";
 import { seedStorefrontArchetypes } from "../src/seed-storefront-archetypes";
 
 describe("seedStorefrontArchetypes", () => {
+  it("persists typed process profiles for restaurant and animal-welfare archetypes", async () => {
+    const upsert = vi.fn().mockResolvedValue(undefined);
+    const prisma = {
+      storefrontArchetype: {
+        upsert,
+      },
+    } as never;
+
+    await seedStorefrontArchetypes(prisma);
+
+    const expectedProfiles = {
+      restaurant: {
+        catalogModes: ["priced"],
+        subjectTypes: [],
+        housesSubjects: false,
+        schedulesSubjects: false,
+        resourceKinds: [
+          { kindSlug: "table", capacityUnit: "seats", maxCapacity: 100 },
+        ],
+      },
+      "pet-rescue": {
+        catalogModes: ["donation", "unpriced"],
+        subjectTypes: ["animal"],
+        housesSubjects: true,
+        schedulesSubjects: true,
+        resourceKinds: [
+          { kindSlug: "kennel", capacityUnit: "animals", maxCapacity: 100 },
+        ],
+      },
+      "animal-shelter": {
+        catalogModes: ["donation", "unpriced"],
+        subjectTypes: ["animal"],
+        housesSubjects: true,
+        schedulesSubjects: true,
+        resourceKinds: [
+          { kindSlug: "kennel", capacityUnit: "animals", maxCapacity: 100 },
+        ],
+      },
+    } as const;
+
+    for (const [archetypeId, processProfile] of Object.entries(expectedProfiles)) {
+      const call = upsert.mock.calls.find(([args]) => args.where.archetypeId === archetypeId);
+      expect(call?.[0].create.activationProfile).toMatchObject({ processProfile });
+      expect(call?.[0].update.activationProfile).toMatchObject({ processProfile });
+    }
+  });
+
   it("persists activationProfile for the MSP archetype", async () => {
     const upsert = vi.fn().mockResolvedValue(undefined);
     const prisma = {

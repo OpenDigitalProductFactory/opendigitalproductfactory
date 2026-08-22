@@ -22,7 +22,8 @@ vi.mock("@dpf/db", () => {
     storefrontConfig: { findFirst: vi.fn() },
     serviceProvider: { create: vi.fn() },
     providerService: { createMany: vi.fn() },
-    hospitalityResource: { create: vi.fn() },
+    hospitalityResource: { findMany: vi.fn(), create: vi.fn() },
+    resource: { findMany: vi.fn(), upsert: vi.fn() },
     $transaction: vi.fn(
       async (callback: (transaction: unknown) => Promise<unknown>) =>
         callback(prisma),
@@ -32,7 +33,24 @@ vi.mock("@dpf/db", () => {
 });
 
 import { prisma } from "@dpf/db";
-import { POST } from "./route";
+import { GET, POST } from "./route";
+
+const restaurantActivationProfile = {
+  profileType: "standard",
+  modules: [],
+  billingReadinessMode: "none",
+  customerGraph: "none",
+  estateSeparation: "shared",
+  processProfile: {
+    catalogModes: ["priced"],
+    subjectTypes: [],
+    housesSubjects: false,
+    schedulesSubjects: false,
+    resourceKinds: [
+      { kindSlug: "table", capacityUnit: "seats", maxCapacity: 100 },
+    ],
+  },
+};
 
 function request(body: Record<string, unknown>) {
   return { json: vi.fn(async () => body) };
@@ -45,6 +63,8 @@ describe("hospitality table creation", () => {
       id: "storefront-1",
       organizationId: "organization-1",
       items: [],
+      timezone: "UTC",
+      archetype: { activationProfile: restaurantActivationProfile },
     } as never);
     vi.mocked(prisma.serviceProvider.create).mockResolvedValue({
       id: "provider-1",
@@ -52,6 +72,8 @@ describe("hospitality table creation", () => {
     vi.mocked(prisma.hospitalityResource.create).mockResolvedValue({
       id: "table-1",
       resourceId: "HR-1",
+      organizationId: "organization-1",
+      storefrontId: "storefront-1",
       label: "Aster",
       kind: "table",
       status: "active",
@@ -64,7 +86,10 @@ describe("hospitality table creation", () => {
         combinationGroup: "main-banquette",
       },
       version: 1,
+      legacyServiceProviderId: "provider-1",
     } as never);
+    vi.mocked(prisma.resource.findMany).mockResolvedValue([] as never);
+    vi.mocked(prisma.resource.upsert).mockResolvedValue({ id: "canonical-1" } as never);
   });
 
   it("persists validated table shape and combination structure", async () => {
@@ -98,6 +123,76 @@ describe("hospitality table creation", () => {
       shape: "booth",
       combinationGroup: "main-banquette",
     });
+    expect(prisma.resource.upsert).toHaveBeenCalledWith({
+      where: { sourceRef: "HospitalityResource:table-1" },
+      create: expect.objectContaining({
+        domain: "hospitality",
+        kindSlug: "table",
+        capacityUnit: "seats",
+        sourceRef: "HospitalityResource:table-1",
+      }),
+      update: expect.objectContaining({
+        label: "Aster",
+        capacity: 4,
+        capacityUnit: "seats",
+      }),
+    });
+  });
+
+  it("prefers canonical resource values while retaining the legacy public id", async () => {
+    vi.mocked(prisma.storefrontConfig.findFirst).mockResolvedValue({
+      id: "storefront-1",
+      organizationId: "organization-1",
+      timezone: "UTC",
+      archetype: { activationProfile: restaurantActivationProfile },
+    } as never);
+    vi.mocked(prisma.resource.findMany).mockResolvedValue([
+      {
+        id: "canonical-1",
+        resourceKey: "HR-1",
+        label: "Aster canonical",
+        kindSlug: "table",
+        lifecycle: "active",
+        capacity: 6,
+        capacityUnit: "seats",
+        serviceArea: "Main dining",
+        blockedReason: null,
+        attributes: { shape: "round" },
+        sourceRef: "HospitalityResource:table-1",
+        version: 2,
+        availability: [],
+      },
+    ] as never);
+    vi.mocked(prisma.hospitalityResource.findMany).mockResolvedValue([
+      {
+        id: "table-1",
+        resourceId: "HR-1",
+        label: "Aster legacy",
+        kind: "table",
+        status: "active",
+        capacity: 4,
+        capacityUnit: "seats",
+        serviceArea: "Main dining",
+        blockedReason: null,
+        attributes: { shape: "round" },
+        version: 1,
+        availability: [],
+      },
+    ] as never);
+
+    const response = (await GET()) as unknown as {
+      status: number;
+      body: { resources: Array<{ id: string; label: string; capacity: number }> };
+    };
+
+    expect(response.status).toBe(200);
+    expect(response.body.resources).toEqual([
+      expect.objectContaining({
+        id: "table-1",
+        label: "Aster canonical",
+        capacity: 6,
+      }),
+    ]);
   });
 
   it("rejects an unsupported shape before creating compatibility records", async () => {

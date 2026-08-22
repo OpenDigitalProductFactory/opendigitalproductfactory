@@ -8,6 +8,98 @@ import {
 import { ALL_ARCHETYPES } from "./archetypes";
 
 describe("readActivationProfile", () => {
+  it("defaults legacy records to an inert process profile", () => {
+    const profile = readActivationProfile({
+      profileType: "standard",
+      modules: [],
+      billingReadinessMode: "none",
+      customerGraph: "none",
+      estateSeparation: "shared",
+    });
+
+    expect(profile?.processProfile).toEqual({
+      catalogModes: [],
+      subjectTypes: [],
+      housesSubjects: false,
+      schedulesSubjects: false,
+      resourceKinds: [],
+    });
+  });
+
+  it("strictly normalizes typed process semantics", () => {
+    const profile = readActivationProfile({
+      profileType: "standard",
+      modules: [],
+      billingReadinessMode: "none",
+      customerGraph: "none",
+      estateSeparation: "shared",
+      processProfile: {
+        catalogModes: ["priced", "donation"],
+        subjectTypes: ["patient-profile", "animal"],
+        housesSubjects: true,
+        schedulesSubjects: true,
+        resourceKinds: [
+          { kindSlug: "table", capacityUnit: "seats", maxCapacity: 100 },
+        ],
+      },
+    });
+
+    expect(profile?.processProfile).toEqual({
+      catalogModes: ["priced", "donation"],
+      subjectTypes: ["patient-profile", "animal"],
+      housesSubjects: true,
+      schedulesSubjects: true,
+      resourceKinds: [
+        { kindSlug: "table", capacityUnit: "seats", maxCapacity: 100 },
+      ],
+    });
+  });
+
+  it.each([
+    {
+      catalogModes: ["sale"],
+      subjectTypes: [],
+      housesSubjects: false,
+      schedulesSubjects: false,
+      resourceKinds: [],
+    },
+    {
+      catalogModes: ["priced"],
+      subjectTypes: ["Animal"],
+      housesSubjects: false,
+      schedulesSubjects: false,
+      resourceKinds: [],
+    },
+    {
+      catalogModes: ["priced"],
+      subjectTypes: [],
+      housesSubjects: false,
+      schedulesSubjects: false,
+      resourceKinds: [
+        { kindSlug: "table", capacityUnit: "seats", maxCapacity: Number.POSITIVE_INFINITY },
+      ],
+    },
+    {
+      catalogModes: ["priced"],
+      subjectTypes: [],
+      housesSubjects: false,
+      schedulesSubjects: false,
+      resourceKinds: [],
+      rules: { canBook: true },
+    },
+  ])("rejects malformed or free-form process profiles", (processProfile) => {
+    expect(
+      readActivationProfile({
+        profileType: "standard",
+        modules: [],
+        billingReadinessMode: "none",
+        customerGraph: "none",
+        estateSeparation: "shared",
+        processProfile,
+      }),
+    ).toBeNull();
+  });
+
   it("normalizes legacy MSP modules into operating axes and derived capabilities", () => {
     const profile = readActivationProfile({
       profileType: "managed-service-provider",

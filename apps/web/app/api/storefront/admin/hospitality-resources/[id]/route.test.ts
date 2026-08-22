@@ -33,6 +33,11 @@ vi.mock("@dpf/db", () => {
       createMany: vi.fn(),
     },
     serviceProvider: { update: vi.fn() },
+    resource: { upsert: vi.fn() },
+    resourceAvailability: {
+      deleteMany: vi.fn(),
+      createMany: vi.fn(),
+    },
     $transaction: vi.fn(
       async (callback: (transaction: unknown) => Promise<unknown>) =>
         callback(prisma),
@@ -50,14 +55,45 @@ function request(body: Record<string, unknown>) {
 
 const routeContext = { params: Promise.resolve({ id: "resource-1" }) };
 
+const restaurantActivationProfile = {
+  profileType: "standard",
+  modules: [],
+  billingReadinessMode: "none",
+  customerGraph: "none",
+  estateSeparation: "shared",
+  processProfile: {
+    catalogModes: ["priced"],
+    subjectTypes: [],
+    housesSubjects: false,
+    schedulesSubjects: false,
+    resourceKinds: [
+      { kindSlug: "table", capacityUnit: "seats", maxCapacity: 100 },
+    ],
+  },
+};
+
 describe("hospitality resource schedule management", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(prisma.hospitalityResource.findFirst).mockResolvedValue({
       id: "resource-1",
       organizationId: "org-1",
+      storefrontId: "storefront-1",
+      resourceId: "HR-1",
+      label: "Aster",
+      kind: "table",
+      status: "active",
+      capacity: 4,
+      capacityUnit: "seats",
+      serviceArea: "Dining room",
+      blockedReason: null,
+      version: 1,
       legacyServiceProviderId: "provider-1",
       attributes: { shape: "round" },
+      storefront: {
+        timezone: "UTC",
+        archetype: { activationProfile: restaurantActivationProfile },
+      },
     } as never);
     vi.mocked(
       prisma.hospitalityResourceAvailability.deleteMany,
@@ -71,9 +107,16 @@ describe("hospitality resource schedule management", () => {
     vi.mocked(prisma.providerAvailability.createMany).mockResolvedValue({
       count: 2,
     } as never);
+    vi.mocked(prisma.resource.upsert).mockResolvedValue({
+      id: "canonical-1",
+    } as never);
+    vi.mocked(prisma.resourceAvailability.deleteMany).mockResolvedValue({ count: 0 } as never);
+    vi.mocked(prisma.resourceAvailability.createMany).mockResolvedValue({ count: 2 } as never);
     vi.mocked(prisma.hospitalityResource.findUnique).mockResolvedValue({
       id: "resource-1",
       resourceId: "HR-1",
+      organizationId: "org-1",
+      storefrontId: "storefront-1",
       label: "Aster",
       kind: "table",
       status: "active",
@@ -82,7 +125,8 @@ describe("hospitality resource schedule management", () => {
       serviceArea: "Dining room",
       blockedReason: null,
       attributes: { shape: "booth", combinationGroup: "main-banquette" },
-      version: 1,
+      version: 2,
+      legacyServiceProviderId: "provider-1",
       availability: [
         {
           id: "availability-1",
@@ -149,6 +193,26 @@ describe("hospitality resource schedule management", () => {
         expect.objectContaining({
           providerId: "provider-1",
           isBlocked: true,
+          reason: "Private event",
+        }),
+      ]),
+    });
+    expect(prisma.resource.upsert).toHaveBeenCalledWith({
+      where: { sourceRef: "HospitalityResource:resource-1" },
+      create: expect.objectContaining({ sourceRef: "HospitalityResource:resource-1" }),
+      update: expect.objectContaining({ resourceKey: "HR-1" }),
+    });
+    expect(prisma.resourceAvailability.createMany).toHaveBeenCalledWith({
+      data: expect.arrayContaining([
+        expect.objectContaining({
+          organizationId: "org-1",
+          resourceId: "canonical-1",
+          windowKind: "available",
+        }),
+        expect.objectContaining({
+          organizationId: "org-1",
+          resourceId: "canonical-1",
+          windowKind: "blocked",
           reason: "Private event",
         }),
       ]),
@@ -222,6 +286,16 @@ describe("hospitality resource schedule management", () => {
     expect(response.body.resource.attributes).toEqual({
       shape: "booth",
       combinationGroup: "main-banquette",
+    });
+    expect(prisma.resource.upsert).toHaveBeenCalledWith({
+      where: { sourceRef: "HospitalityResource:resource-1" },
+      create: expect.objectContaining({ label: "Aster", capacity: 4 }),
+      update: expect.objectContaining({
+        label: "Aster",
+        capacity: 4,
+        lifecycle: "active",
+        version: 2,
+      }),
     });
   });
 });
