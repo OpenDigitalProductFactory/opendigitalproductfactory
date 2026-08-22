@@ -178,6 +178,8 @@ const definitions: ToolDefinition[] = [
     },
     requiredCapability: "manage_backlog",
     sideEffect: true,
+    // changes identity or authority → consult-gated (TAK §8.4.1).
+    consequence: "authority",
   },
   {
     name: "heartbeat_workroom",
@@ -240,6 +242,8 @@ const definitions: ToolDefinition[] = [
     },
     requiredCapability: "manage_backlog",
     sideEffect: true,
+    // changes identity or authority → consult-gated (TAK §8.4.1).
+    consequence: "authority",
   },
   {
     name: "record_workroom_evidence",
@@ -279,6 +283,8 @@ const definitions: ToolDefinition[] = [
     },
     requiredCapability: "manage_backlog",
     sideEffect: true,
+    // changes identity or authority → consult-gated (TAK §8.4.1).
+    consequence: "authority",
   },
   {
     name: "start_external_work",

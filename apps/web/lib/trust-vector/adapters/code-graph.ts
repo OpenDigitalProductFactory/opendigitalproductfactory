@@ -10,8 +10,32 @@ type CodeGraphFreshnessTrustInput = {
   indexedFileCount: number;
   lastError: string | null;
   relationshipCounts?: Record<string, number>;
+  /**
+   * Branch the index was built from (BI-6CFC5429). Freshness previously scored
+   * only how recently the INDEXER RAN, not how old the CONTENT it indexed was —
+   * so re-indexing a 10-week-old branch every hour scored a permanent 1.0/high.
+   * Observed live 2026-08-19: `my-changes` @ 2026-06-08 reporting "high".
+   */
+  lastIndexedBranch?: string | null;
   asOf?: Date | string;
 };
+
+/**
+ * Branch names that mean "the tree everyone builds against". Anything else is a
+ * side branch: it may be perfectly current, but it is not what the default
+ * branch says, so the graph cannot claim unqualified freshness.
+ */
+const DEFAULT_BRANCH_NAMES = new Set(["main", "master", "HEAD"]);
+
+/** Recency alone cannot score above this when the graph indexed a side branch. */
+const OFF_DEFAULT_BRANCH_FRESHNESS_CAP = 0.4;
+
+function indexedOffDefaultBranch(branch: string | null | undefined): boolean {
+  if (typeof branch !== "string") return false;
+  const trimmed = branch.trim();
+  if (trimmed.length === 0) return false;
+  return !DEFAULT_BRANCH_NAMES.has(trimmed);
+}
 
 type CodeGraphCoverageTrustInput = {
   graphKey: string;
@@ -157,6 +181,23 @@ function buildFreshnessDimension(
   const ageMs = Math.max(0, asOf.getTime() - indexedAt.getTime());
   const ageHours = ageMs / (1000 * 60 * 60);
   const ageDays = Math.floor(ageHours / 24);
+
+  // BI-6CFC5429: a recent index of the WRONG tree is not fresh. Recency is only
+  // evidence of freshness when the indexed ref is the one everyone builds
+  // against — otherwise the score describes the indexer's cron, not the code.
+  if (indexedOffDefaultBranch(input.lastIndexedBranch)) {
+    return {
+      key: "freshness",
+      label: "Freshness",
+      score: Math.min(OFF_DEFAULT_BRANCH_FRESHNESS_CAP, ageHours <= 24 ? 0.4 : 0.2),
+      weight: 2,
+      rationale:
+        `Code graph was indexed from branch "${input.lastIndexedBranch}", not the default branch — `
+        + "recency does not establish that its content matches the tree builds edit.",
+      measuredAt: indexedAt.toISOString(),
+      evidenceRefs: [],
+    };
+  }
 
   if (ageHours <= 24) {
     return {

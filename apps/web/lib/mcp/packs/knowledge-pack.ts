@@ -110,11 +110,25 @@ const definitions: ToolDefinition[] = [
 
 async function searchKnowledgeHandler(params: Record<string, unknown>): Promise<ToolResult> {
   const { searchPlatformKnowledge } = await import("@/lib/semantic-memory");
-  const results = await searchPlatformKnowledge({
+  const search = await searchPlatformKnowledge({
     query: String(params["query"] ?? ""),
     entityType: typeof params["type"] === "string" ? params["type"] : undefined,
     limit: typeof params["limit"] === "number" ? params["limit"] : 5,
   });
+  // BI-339C441F: never report "nothing matched" when we could not look. A
+  // caller told to search before creating will read an empty array as
+  // permission to proceed, so the difference has to reach them.
+  if (search.status === "unavailable") {
+    return {
+      success: false,
+      message:
+        `Semantic search is unavailable — ${search.reason}. This is NOT "no results": ` +
+        "the corpus was never queried. Do not treat this as evidence that nothing matches. " +
+        "Fall back to list_backlog_items or query_backlog and say the check was lexical only.",
+      data: { results: [], searchStatus: "unavailable" },
+    };
+  }
+  const results = search.results;
   if (results.length === 0) {
     return { success: true, message: "No matching knowledge found.", data: { results: [] } };
   }

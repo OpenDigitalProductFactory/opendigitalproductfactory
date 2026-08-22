@@ -26,7 +26,7 @@ apps/web/lib/actions/agent-task-scheduler.test.ts	1132
 apps/web/lib/actions/agent-task-scheduler.ts	807
 apps/web/lib/actions/ai-providers.ts	914
 apps/web/lib/actions/build-governed.test.ts	1149
-apps/web/lib/actions/build.ts	1744
+apps/web/lib/actions/build.ts	1747
 apps/web/lib/actions/compliance.ts	867
 apps/web/lib/actions/crm.ts	1043
 apps/web/lib/actions/ea.ts	918
@@ -45,7 +45,7 @@ apps/web/lib/inference/ai-provider-internals.ts	1266
 apps/web/lib/marketing.ts	1369
 apps/web/lib/mcp/packs/backlog-pack.dispatch.test.ts	874
 apps/web/lib/mcp/packs/contribution-hive-pack.ts	855
-apps/web/lib/mcp/packs/sandbox-pack.ts	920
+apps/web/lib/mcp/packs/sandbox-pack.ts	921
 apps/web/lib/navigation/portal-navigation-model.ts	965
 apps/web/lib/operate/coworker-regression-detector.ts	935
 apps/web/lib/queue/functions/self-upgrade.test.ts	1422

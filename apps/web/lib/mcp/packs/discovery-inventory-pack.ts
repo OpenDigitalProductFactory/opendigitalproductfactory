@@ -76,6 +76,8 @@ const definitions: ToolDefinition[] = [
     },
     requiredCapability: "manage_provider_connections",
     sideEffect: true,
+    // reaches a third party → consult-gated (TAK §8.4.1).
+    consequence: "outward",
   },
   {
     name: "run_discovery_triage",
@@ -108,6 +110,8 @@ const definitions: ToolDefinition[] = [
     requiredCapability: "manage_backlog",
     executionMode: "immediate",
     sideEffect: true,
+    // reaches a third party → consult-gated (TAK §8.4.1).
+    consequence: "outward",
   },
   {
     name: "attribute_entity_to_product",
@@ -136,6 +140,8 @@ const definitions: ToolDefinition[] = [
     },
     requiredCapability: "manage_provider_connections",
     sideEffect: true,
+    // destroys state → consult-gated (TAK §8.4.1).
+    consequence: "irreversible",
   },
   {
     name: "resolve_portfolio_quality_issue",
@@ -164,6 +170,8 @@ const definitions: ToolDefinition[] = [
     requiredCapability: "manage_provider_connections",
     executionMode: "immediate",
     sideEffect: true,
+    // reaches a third party → consult-gated (TAK §8.4.1).
+    consequence: "outward",
   },
   {
     name: "request_re_enrichment",
@@ -178,6 +186,8 @@ const definitions: ToolDefinition[] = [
     },
     requiredCapability: "manage_provider_connections",
     sideEffect: true,
+    // reaches a third party → consult-gated (TAK §8.4.1).
+    consequence: "outward",
   },
   {
     name: "list_discovery_connections",
@@ -205,6 +215,8 @@ const definitions: ToolDefinition[] = [
     },
     requiredCapability: "manage_provider_connections",
     sideEffect: true,
+    // reaches a third party → consult-gated (TAK §8.4.1).
+    consequence: "outward",
   },
   {
     name: "configure_and_test_discovery_connection",

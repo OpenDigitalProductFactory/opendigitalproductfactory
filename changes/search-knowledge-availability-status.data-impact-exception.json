@@ -1,0 +1,9 @@
+{
+  "scope": "BI-339C441F. apps/web/lib/inference/semantic-memory.ts matches the [ai-context] persistent-surface rule, but the change is confined to the RETURN TYPE of searchPlatformKnowledge: it now answers a discriminated { status: \"ok\" | \"unavailable\" } instead of a bare array, so a caller can tell 'the corpus holds nothing' from 'the query could not be embedded, so the corpus was never queried'. No vector is written, read differently, or reshaped; QDRANT_COLLECTIONS.PLATFORM_KNOWLEDGE, the embedding call, the filter, the similarity threshold and the payload projection are all byte-identical. No asset, field, policy, or lifecycle change to any persistent surface occurred.",
+  "approver": "platform-architecture (autonomous; operator-directed delivery of the filed BI-339C441F remediation)",
+  "rationale": "A DataImpactManifest would have to fabricate change kinds for a stored surface whose shape did not change. The only new value in the system is an in-memory status discriminator on a function result. Callers were updated in the same commit and the type change surfaced a third caller (app/api/v1/ops/epics) that a documented convention would have missed.",
+  "compensatingControl": "apps/web/lib/inference/semantic-memory-availability.test.ts pins the distinction directly — an embedding failure and an empty corpus must not produce the same status, and the test asserts they carry identical results while differing in status. The full lib/inference suite (48 files, 504 tests) and the knowledge-pack handler suite pass on the success path, and tsc proves every caller was updated.",
+  "expiry": "2026-11-21T00:00:00.000Z",
+  "remediationBI": "BI-339C441F",
+  "waives": []
+}

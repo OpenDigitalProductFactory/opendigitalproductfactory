@@ -126,7 +126,16 @@ export async function POST(request: Request) {
     try {
       const { searchPlatformKnowledge } = await import("@/lib/semantic-memory");
       const searchText = `${title} ${description ?? ""}`.trim();
-      const hits = await searchPlatformKnowledge({ query: searchText, entityType: "epic", limit: 5 });
+      const search = await searchPlatformKnowledge({ query: searchText, entityType: "epic", limit: 5 });
+      // BI-339C441F: an unavailable search is not "no similar epics". The
+      // overlap list stays empty either way, but the outage gets said out loud
+      // instead of passing for a clean check.
+      if (search.status === "unavailable") {
+        console.warn(
+          `[ops/epics] overlap check skipped — semantic search unavailable (${search.reason}).`,
+        );
+      }
+      const hits = search.results;
       if (hits.length > 0) {
         const epicRows = await prisma.epic.findMany({
           where: { epicId: { in: hits.map((h) => h.entityId) } },

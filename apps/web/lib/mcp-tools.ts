@@ -72,7 +72,19 @@ export type ToolAnnotations = {
  * Closed set: a new axis is a deliberate widening of what the gate governs,
  * not a string literal someone invents at a call site.
  */
-export type ToolConsequence = "outward" | "irreversible";
+export type ToolConsequence = "outward" | "irreversible" | "authority";
+
+/**
+ * The closed set, as a runtime value. `deriveConsequentialToolNames`
+ * (apps/web/lib/tak/consequential-tool-coverage.ts) derives the consult-gated
+ * set from `sideEffect && consequence != null` — TAK §8.4.1, classification is
+ * derived from a declared property, never re-enumerated in a second allowlist.
+ */
+export const TOOL_CONSEQUENCES: readonly ToolConsequence[] = [
+  "outward",
+  "irreversible",
+  "authority",
+] as const;
 
 export type ToolDefinition = {
   name: string;
@@ -95,8 +107,15 @@ export type ToolDefinition = {
    * `outward` = leaves the platform (third party, publish, spend) → the
    * business stance governs it, so it is alignment-gated. `irreversible` =
    * stays inside but no inverse call restores prior state → receipted, not
-   * alignment-gated. Absent = ordinary, which is a claim the coverage test
-   * pins rather than a default. Rationale: consequential-tool-policy.ts.
+   * alignment-gated. `authority` = changes who may act, on whose behalf, or
+   * under what policy (identity, grants, leases, autonomy policy) — reversible
+   * as a row, but every act taken under the changed authority in the meantime
+   * is not. Absent = ordinary, which is a claim the coverage test pins rather
+   * than a default. Rationale: consequential-tool-policy.ts.
+   *
+   * A declared consequence is ALSO what puts the tool behind the
+   * consult-before-consequential-act gate (TAK §8.4.1: derived, not
+   * enumerated). See apps/web/lib/tak/consequential-tool-coverage.ts.
    */
   consequence?: ToolConsequence;
   /**

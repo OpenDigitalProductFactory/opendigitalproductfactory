@@ -143,8 +143,8 @@ export const PLANE_CONTRACT = {
     label: "Shape",
     asserts: "Its work has declared stages and gates.",
     weight: 1,
-    ceiling: 0,
-    blocker: "No room-shape registry exists (design §4, new concept 1). Ceiling rises to 3 when it lands.",
+    ceiling: 2,
+    blocker: "The work-shape registry has landed (apps/web/lib/work-management/work-shapes.ts). Level 3 needs an observed running instance, which nothing records yet — the ceiling rises to 3 when instance evidence lands.",
     criteria: {
       0: "No declared work shape.",
       1: "A shape is named but has no stages or gates.",
@@ -156,8 +156,8 @@ export const PLANE_CONTRACT = {
     label: "Cadence",
     asserts: "Something makes it run without being asked.",
     weight: 1,
-    ceiling: 2,
-    blocker: "No skill can declare a cadence (0 of 67 have a recurring taskType). Ceiling rises to 3 when it lands.",
+    ceiling: 3,
+    blocker: null,
     criteria: {
       0: "No recurring trigger — any Proactivity setting is a silent no-op.",
       1: "Named by a scheduled job, but owns no self-task of its own.",
@@ -394,6 +394,7 @@ export function loadSubstrate() {
       name: fm.name ?? path.basename(file, ".skill.md"),
       assignTo: Array.isArray(fm.assignTo) ? fm.assignTo : [],
       taskType: fm.taskType ?? null,
+      cadence: fm.cadence ?? null,
     });
   }
   const packSkillNames = new Set();
@@ -407,6 +408,15 @@ export function loadSubstrate() {
       packSkillNames.add(fm?.name ?? entry.name);
       packSkillNames.add(entry.name);
     }
+  }
+
+  // ── Shape sources: the declared work-shape registry (TAK §8.11).
+  const shapesSrc = stripLineComments(read("apps/web/lib/work-management/work-shapes.ts"));
+  const shapeAgents = new Map();
+  for (const m2 of shapesSrc.matchAll(/accountablePrincipalRef:\s*"agent:([a-z0-9-]+)"/g)) {
+    const stagesDeclared = /stages:\s*\[/.test(shapesSrc);
+    const gatesDeclared = /kind:\s*"governed-decision"/.test(shapesSrc);
+    shapeAgents.set(m2[1], { stagesDeclared, gatesDeclared });
   }
 
   // ── Cadence sources.
@@ -440,21 +450,35 @@ export function loadSubstrate() {
     let mm;
     while ((mm = re.exec(src)) !== null) {
       const se = /sideEffect:\s*(true|false)/.exec(mm[2]);
-      if (se && !toolDefs.has(mm[1])) toolDefs.set(mm[1], { sideEffect: se[1] === "true" });
+      const cq = /consequence:\s*"([a-z]+)"/.exec(mm[2]);
+      if (se && !toolDefs.has(mm[1])) {
+        toolDefs.set(mm[1], { sideEffect: se[1] === "true", consequence: cq ? cq[1] : null });
+      }
     }
   }
+  // The gated set mirrors deriveConsequentialToolNames() in
+  // apps/web/lib/tak/consequential-tool-coverage.ts: the transitional SEED,
+  // UNIONED with every side-effecting tool that DECLARES a consequence. Source
+  // text, not runtime, so the number is reproducible in CI without a database.
   const gateSrc = read("apps/web/lib/tak/decision-routing-governance-hook.ts");
-  const consequentialTools = new Set(
-    (() => {
-      const i = gateSrc.indexOf("CONSEQUENTIAL_DECISION_TOOLS");
-      if (i === -1) return [];
-      const open = gateSrc.indexOf("[", i);
-      const close = gateSrc.indexOf("]", open);
-      return open === -1 || close === -1
-        ? []
-        : [...gateSrc.slice(open, close).matchAll(/"([a-z0-9_]+)"/g)].map((x) => x[1]);
-    })(),
-  );
+  const seedNames = (() => {
+    const i = gateSrc.indexOf("export const CONSEQUENTIAL_DECISION_TOOLS");
+    if (i === -1) return [];
+    const open = gateSrc.indexOf("[", i);
+    const close = gateSrc.indexOf("]", open);
+    return open === -1 || close === -1
+      ? []
+      : [...gateSrc.slice(open, close).matchAll(/"([a-z0-9_]+)"/g)].map((x) => x[1]);
+  })();
+  const consequentialTools = new Set(seedNames);
+  for (const [name, def] of toolDefs) {
+    if (def.sideEffect && def.consequence) consequentialTools.add(name);
+  }
+  // The gate can only REACH the derived set if the composition root installs
+  // the resolver. If that call is ever dropped the gate silently falls back to
+  // the seed, so coverage is reported as the seed rather than as the intent.
+  const resolverInstalled = read("apps/web/lib/governance/register-tool-governance-hooks.ts")
+    .includes("installConsequentialToolResolver(getConsequentialToolNames)");
 
   // ── Service catalog: provider agent -> declared backing skills.
   const catalogSrc = read("packages/db/src/coworker-service-catalog-seed.ts");
@@ -473,7 +497,8 @@ export function loadSubstrate() {
     registry, roster, rosterNames, slugToCanonical, heldGrants, grantImplications,
     toolToGrants, professionOfRole, corpusPages, skills, packSkillNames,
     selfTaskAgents, jobCatalog, curatedJourneyAgents, servicesByAgent, allBackingSkillIds,
-    onboardingAgents, toolDefs, consequentialTools,
+    shapeAgents,
+    onboardingAgents, toolDefs, consequentialTools, resolverInstalled, seedNames,
   };
 }
 
@@ -619,19 +644,39 @@ export function scoreIdentity(ident, s) {
   };
 
   // ── Plane 4: Shape ─────────────────────────────────────────────────────
-  const shape = { level: 0, detail: "no declared work shape — no room-shape registry exists yet" };
+  // A shape counts for an identity when the registry names it as accountable
+  // for at least one stage. L2 = the shape declares stages AND at least one
+  // advance that requires a governed decision rather than a status write.
+  const shapeEntry = [...ident.handles].map((h) => s.shapeAgents?.get(h)).find(Boolean);
+  const shape = shapeEntry
+    ? {
+        level: shapeEntry.stagesDeclared && shapeEntry.gatesDeclared ? 2 : 1,
+        detail: shapeEntry.stagesDeclared && shapeEntry.gatesDeclared
+          ? "accountable for a stage of a declared work shape with stages and governed-decision gates"
+          : "named by a work shape that declares no stages or no gates",
+      }
+    : { level: 0, detail: "no declared work shape — nothing bounds what its standing work may do" };
 
   // ── Plane 5: Cadence ───────────────────────────────────────────────────
   const hasSelfTask = [...ident.handles].some((h) => s.selfTaskAgents.has(h));
   const namedInJob = [...ident.handles].some((h) => s.jobCatalog.includes(`"${h}"`));
-  const cadenceLevel = hasSelfTask ? 2 : namedInJob ? 1 : 0;
+  // L3 additionally requires a skill ASSIGNED TO THIS IDENTITY that declares
+  // its own cadence — the coworker's own definition says when it runs, rather
+  // than the schedule living only in a hand-written registry (TAK §8.11).
+  const cadenceSkill = (s.skills ?? []).find(
+    (sk) => sk.taskType === "recurring" && sk.cadence
+      && sk.assignTo.some((t) => ident.handles.has(t) || t === "*"),
+  );
+  const cadenceLevel = hasSelfTask && cadenceSkill ? 3 : hasSelfTask ? 2 : namedInJob ? 1 : 0;
   const cadence = {
     level: cadenceLevel,
-    detail: hasSelfTask
-      ? "COWORKER_SELF_TASKS entry driven by its Proactivity setting"
-      : namedInJob
-        ? "named by a scheduled job, but owns no self-task"
-        : "no recurring trigger — any Proactivity setting is a silent no-op",
+    detail: cadenceLevel === 3
+      ? `self-task PLUS a cadence declared on skill "${cadenceSkill.name}" (${cadenceSkill.cadence})`
+      : hasSelfTask
+        ? "COWORKER_SELF_TASKS entry driven by its Proactivity setting"
+        : namedInJob
+          ? "named by a scheduled job, but owns no self-task"
+          : "no recurring trigger — any Proactivity setting is a silent no-op",
   };
 
   // ── Plane 6: Tools + Skills ────────────────────────────────────────────
@@ -844,16 +889,29 @@ export function measure(s) {
         const defs = [...(s.toolDefs ?? new Map()).entries()];
         const sideEffecting = defs.filter(([, d]) => d.sideEffect).map(([n]) => n);
         const classified = sideEffecting.filter((n) => (s.consequentialTools ?? new Set()).has(n));
+        const byClass = { outward: 0, irreversible: 0, authority: 0 };
+        for (const [name, d] of defs) {
+          if (d.sideEffect && d.consequence && byClass[d.consequence] !== undefined) {
+            byClass[d.consequence]++;
+          }
+          void name;
+        }
         return {
           mechanism:
             "apps/web/lib/tak/decision-routing-governance-hook.ts — principle_decide must be consulted before a consequential tool; a consult clears the gate for CONSULT_WINDOW_MS. Enforce by default, fail-open.",
+          derivation:
+            "DERIVED from ToolDefinition.consequence (TAK §8.4.1), unioned with the transitional CONSEQUENTIAL_DECISION_TOOLS seed. See apps/web/lib/tak/consequential-tool-coverage.ts.",
+          resolverInstalled: s.resolverInstalled === true,
+          seedOnly: (s.seedNames ?? []).slice().sort(),
+          byConsequenceClass: byClass,
           sideEffectingTools: sideEffecting.length,
           gateClassified: classified.length,
           ungated: sideEffecting.length - classified.length,
           coveragePct: sideEffecting.length === 0 ? 0 : Math.round((classified.length / sideEffecting.length) * 100),
           classifiedTools: classified.sort(),
-          note:
-            "The gate is built and enforced; its REACH is one hand-maintained set, and an undeclared tool is ordinary by default. Coverage — not existence — is the live risk to autonomous operation.",
+          note: s.resolverInstalled === true
+            ? "The gate is built, enforced, and its reach is derived from each tool's declared consequence. What remains ungated is every side-effecting tool that has declared NOTHING — deliberately still ordinary by default, because flipping that default moves the whole remainder behind the gate at once."
+            : "REGRESSION: register-tool-governance-hooks.ts no longer installs the derived resolver, so the live gate has fallen back to the transitional seed regardless of what is declared.",
         };
       })(),
     },

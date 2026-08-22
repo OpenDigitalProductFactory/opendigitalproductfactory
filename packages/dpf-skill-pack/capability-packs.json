@@ -2,31 +2,62 @@
   {
     "id": "architecture",
     "label": "Architecture",
-    "skillIds": ["dpf-retrieve-decision-context", "dpf-compare-options", "dpf-decision-via-kernel", "dpf-architecture-review"]
+    "skillIds": [
+      "dpf-retrieve-decision-context",
+      "dpf-compare-options",
+      "dpf-decision-via-kernel",
+      "dpf-architecture-review"
+    ]
   },
   {
     "id": "design",
     "label": "Design",
-    "skillIds": ["dpf-retrieve-decision-context", "dpf-compare-options", "dpf-ux-fit-review", "dpf-capture-kernel-gap"]
+    "skillIds": [
+      "dpf-retrieve-decision-context",
+      "dpf-compare-options",
+      "dpf-ux-fit-review",
+      "dpf-capture-kernel-gap"
+    ]
   },
   {
     "id": "implementation",
     "label": "Implementation",
-    "skillIds": ["dpf-worktree-per-session", "dpf-worktree-hygiene", "dpf-use-shared-nonprod-environment", "dpf-evidence-before-diagnosis"]
+    "skillIds": [
+      "dpf-worktree-per-session",
+      "dpf-worktree-hygiene",
+      "dpf-use-shared-nonprod-environment",
+      "dpf-evidence-before-diagnosis",
+      "dpf-blast-radius"
+    ]
   },
   {
     "id": "verification",
     "label": "Verification",
-    "skillIds": ["dpf-evidence-before-diagnosis", "dpf-external-evidence-handoff", "dpf-record-decision-outcome"]
+    "skillIds": [
+      "dpf-evidence-before-diagnosis",
+      "dpf-external-evidence-handoff",
+      "dpf-record-decision-outcome"
+    ]
   },
   {
     "id": "review-ship",
     "label": "Review/Ship",
-    "skillIds": ["dpf-architecture-review", "dpf-pr-with-dco", "dpf-local-merge-ci-before-push", "dpf-record-decision-outcome"]
+    "skillIds": [
+      "dpf-architecture-review",
+      "dpf-pr-with-dco",
+      "dpf-local-merge-ci-before-push",
+      "dpf-record-decision-outcome",
+      "dpf-blast-radius",
+      "dpf-unslop"
+    ]
   },
   {
     "id": "recovery",
     "label": "Recovery",
-    "skillIds": ["dpf-evidence-before-diagnosis", "dpf-capture-kernel-gap", "dpf-use-shared-nonprod-environment"]
+    "skillIds": [
+      "dpf-evidence-before-diagnosis",
+      "dpf-capture-kernel-gap",
+      "dpf-use-shared-nonprod-environment"
+    ]
   }
 ]

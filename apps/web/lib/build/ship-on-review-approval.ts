@@ -26,6 +26,8 @@
 
 import { prisma } from "@dpf/db";
 
+import { resolveShippedFilePaths } from "@/lib/decision-perspective/planned-file-paths";
+
 function logBuildActivity(buildId: string, tool: string, summary: string): Promise<void> {
   return prisma.buildActivity.create({ data: { buildId, tool, summary } }).then(() => void 0).catch(() => void 0);
 }
@@ -162,6 +164,7 @@ export async function advanceReviewedBuildToShip(
   const build = await prisma.featureBuild.findUnique({
     where: { buildId },
     select: {
+      id: true,
       phase: true,
       kind: true,
       brief: true,
@@ -214,6 +217,14 @@ export async function advanceReviewedBuildToShip(
         },
         sensitivity: actualSensitivity,
         triggeredByUserId: build.createdById,
+        // BI-70280889: at ship time the realized diff is the truth about which
+        // acumens this change impacts — better evidence than any plan.
+        plannedFilePaths: await resolveShippedFilePaths({
+          db: prisma,
+          buildId,
+          buildRowId: build.id,
+          diffPatch: (build.diffPatch as string | null) ?? null,
+        }),
       });
       if (!shipGate.allowed && autonomousMode === "enforce") {
         await log(

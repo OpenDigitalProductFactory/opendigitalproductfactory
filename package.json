@@ -5,6 +5,8 @@
   "packageManager": "pnpm@10.33.2",
   "scripts": {
     "dev": "pnpm --filter web dev",
+    "measure:doc-cadence": "node scripts/measure-doc-cadence-coverage.mjs",
+    "measure:doc-cadence:check": "node scripts/measure-doc-cadence-coverage.mjs --check",
     "measure:capability-completeness": "node scripts/measure-capability-completeness.mjs",
     "measure:capability-completeness:check": "node scripts/measure-capability-completeness.mjs --check",
     "check:agent-capability-integrity": "node scripts/check-agent-capability-integrity.mjs",

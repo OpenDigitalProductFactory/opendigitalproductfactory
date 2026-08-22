@@ -1,6 +1,6 @@
 ---
 name: dpf-writing-plans
-description: "Use when a filed DPF backlog item needs an implementation plan before code is written — a multi-step build, a migration, a refactor with ordering constraints. A plan is for a BI, not for floating intent: file the BI first (dpf-file-backlog-item), then write a phased plan grounded in the existing substrate and saved to docs/superpowers/plans/. The DPF-native planning step; replaces the retired upstream superpowers writing-plans dependency."
+description: "Use when a filed DPF backlog item needs an implementation plan before code is written — a multi-step build, a migration, a refactor with ordering constraints. A plan is for a BI, not for floating intent: file the BI first (dpf-file-backlog-item), then write a phased plan grounded in the existing substrate and saved to docs/superpowers/plans/."
 
 # Agent Skills standard fields (Surface A — Claude Code)
 disable-model-invocation: false

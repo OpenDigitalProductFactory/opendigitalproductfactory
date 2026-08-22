@@ -22,6 +22,8 @@ export type SkillFrontmatter = {
   assignTo?: string[];       // ["agent-id"] or ["*"] for all agents
   capability?: string | null;
   taskType?: string;
+  /** Cron expression (UTC). Meaningful only with taskType: "recurring". */
+  cadence?: string | null;
   triggerPattern?: string | null;
   userInvocable?: boolean;
   agentInvocable?: boolean;
@@ -77,6 +79,7 @@ export type NormalizedSkillSeed = {
     contextRequirements: string[];
     capability: string | null;
     taskType: string;
+    cadence: string | null;
   };
   assignTo: string[];
 };
@@ -292,6 +295,27 @@ function booleanOrUndefined(value: unknown): boolean | undefined {
   return typeof value === "boolean" ? value : undefined;
 }
 
+/**
+ * The taskType that makes a skill schedulable (TAK §8.11 — recurring work must
+ * be declarable). Before this, 0 of 68 skills could say "runs weekly": the
+ * cadence lived only in a hand-written self-task registry, so a skill's own
+ * definition could not express the one thing an operator most wants to read
+ * off it.
+ */
+export const RECURRING_SKILL_TASK_TYPE = "recurring";
+
+export const SKILL_TASK_TYPES = [
+  "conversation",
+  "code_generation",
+  "analysis",
+  RECURRING_SKILL_TASK_TYPE,
+] as const;
+
+/** Five space-separated cron fields. Deliberately shape-only — the scheduler owns semantics. */
+export function isCronExpression(value: unknown): value is string {
+  return typeof value === "string" && /^\S+(\s+\S+){4}$/.test(value.trim());
+}
+
 export function normalizeSkillFrontmatterForSeed(input: {
   frontmatter: SkillFrontmatter;
   raw: string;
@@ -308,6 +332,7 @@ export function normalizeSkillFrontmatterForSeed(input: {
   const userInvocable =
     booleanOrUndefined(frontmatter.userInvocable) ??
     (booleanOrUndefined(frontmatter["user-invocable"]) !== false);
+  const taskType = typeof frontmatter.taskType === "string" ? frontmatter.taskType : "conversation";
 
   return {
     skillId,
@@ -327,7 +352,13 @@ export function normalizeSkillFrontmatterForSeed(input: {
       composesFrom: asStringArray(frontmatter.composesFrom),
       contextRequirements: asStringArray(frontmatter.contextRequirements),
       capability: typeof frontmatter.capability === "string" ? frontmatter.capability : null,
-      taskType: typeof frontmatter.taskType === "string" ? frontmatter.taskType : "conversation",
+      taskType,
+      // A cadence is only meaningful on a recurring skill. Declared on any
+      // other taskType it is dropped rather than stored, so the column never
+      // holds a schedule that nothing will ever read (TAK §8.11.1).
+      cadence: taskType === RECURRING_SKILL_TASK_TYPE && isCronExpression(frontmatter.cadence)
+        ? frontmatter.cadence.trim()
+        : null,
     },
     assignTo: asStringArray(frontmatter.assignTo),
   };

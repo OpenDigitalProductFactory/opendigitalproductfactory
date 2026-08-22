@@ -52,9 +52,15 @@ test("baseline round-trips with the budget header and skips comments", () => {
 });
 
 test("interpretToolResponse: not_found is missing; echoed id is exists; errors are unknown", () => {
+  // Real shape, captured from a live portal: a genuine miss is an ERROR RESULT
+  // (`isError: true`) carrying the not_found marker. The fixture previously
+  // omitted isError, which let a looser content match look correct (BI-34C7A7F8).
   const notFound = JSON.stringify({
     jsonrpc: "2.0", id: 1,
-    result: { content: [{ type: "text", text: '{"success":false,"error":"not_found","message":"Item BI-C04CAD7F not found"}' }] },
+    result: {
+      content: [{ type: "text", text: '{"success":false,"error":"not_found","message":"Item BI-C04CAD7F not found"}' }],
+      isError: true,
+    },
   });
   assert.equal(interpretToolResponse("backlog-item", "BI-C04CAD7F", notFound), "missing");
 
@@ -103,4 +109,38 @@ test("verifyAnchors sorts pairs into missing/verified/skipped/unverifiable via t
   assert.deepEqual(result.unverifiable.map((p) => p.id), ["WC-A843A014"]);
   // The unverifiable id never reached the lookup (no HTTP for WC-/DI-).
   assert.ok(!calls.some((c) => c.includes("WC-")));
+});
+
+// BI-34C7A7F8: the verdict must key on the ERROR RESULT, not on the words
+// "not found" appearing anywhere in the payload. get_backlog_item returns the
+// item's full body and every attached evidence record, and bug reports quote
+// that phrase constantly — a content match declared real items missing and
+// blocked commits that cited them correctly.
+test("interpretToolResponse: a real item whose body quotes 'not found' still exists", () => {
+  const bodyQuotesNotFound = JSON.stringify({
+    jsonrpc: "2.0", id: 1,
+    result: {
+      content: [{
+        type: "text",
+        text: JSON.stringify({
+          itemId: "BI-6CFC5429",
+          title: "ideate agent is blind to real source",
+          body: 'list_project_directory{path:"apps/web/lib/attention"} -> "Directory not found". '
+            + 'Also observed: "Build not found" in the ship path.',
+        }),
+      }],
+    },
+  });
+  assert.equal(interpretToolResponse("backlog-item", "BI-6CFC5429", bodyQuotesNotFound), "exists");
+});
+
+test("interpretToolResponse: an error result without not_found stays unknown, never missing", () => {
+  const scopeError = JSON.stringify({
+    jsonrpc: "2.0", id: 1,
+    result: {
+      content: [{ type: "text", text: '{"success":false,"error":"insufficient_scope"}' }],
+      isError: true,
+    },
+  });
+  assert.equal(interpretToolResponse("backlog-item", "BI-3F17B16B", scopeError), "unknown");
 });

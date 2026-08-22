@@ -98,6 +98,8 @@ const definitions: ToolDefinition[] = [
     requiresExternalAccess: true,
     executionMode: "immediate",
     sideEffect: true,
+    // reaches a third party → consult-gated (TAK §8.4.1).
+    consequence: "outward",
   },
   {
     name: "setup_email",
@@ -119,6 +121,8 @@ const definitions: ToolDefinition[] = [
     },
     requiredCapability: "manage_provider_connections",
     sideEffect: true,
+    // reaches a third party → consult-gated (TAK §8.4.1).
+    consequence: "outward",
   },
   {
     name: "list_patch_posture",
