@@ -1,3 +1,7 @@
+---
+status: draft
+---
+
 # External Agent Operating Contract Design
 
 **Date:** 2026-08-22

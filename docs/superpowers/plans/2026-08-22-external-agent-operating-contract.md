@@ -1,3 +1,7 @@
+---
+status: draft
+---
+
 # External Agent Operating Contract Implementation Plan
 
 **Date:** 2026-08-22
@@ -69,7 +73,7 @@ The live backlog contains one umbrella and eight independently shippable deliver
 | `p6` | `BI-669D2B04` | Hive participation, drift repair, and productivity evidence | `p5` |
 | `r1` | `BI-F509CC59` | converge ingress, session, carrier, and completion adapters | `p0`, `p1`; then continuous |
 
-Capability-owner dependencies are not re-filed. Before work begins, re-query the current owning BIs for the purpose-aware journey compiler and Workspace companion (`BI-91EF130B`, `BI-1E91D091`), static setup convergence (`BI-4FCBA4B2`), governed TaskRun completion (`BI-441BECAC`), same-org A2A/federated identity (`BI-BE0E14E0`, `BI-E2398997`), and initiative readiness/completion program (`BI-CF5A1078`). A missing, deferred, or changed dependency updates the plan or blocks only the affected slice; it does not authorize a local substitute.
+Capability-owner dependencies are not re-filed. Before work begins, re-query the current owning BIs for the purpose-aware journey compiler and Workspace companion (`BI-91EF130B`, `BI-1E91D091`), static setup convergence (`BI-4FCBA4B2`), governed TaskRun completion (`BI-441BECAC`), and initiative readiness/completion program (`BI-CF5A1078`). Same-organization A2A and federated identity remain owned by their existing source contracts and federation program; re-query the live backlog for their current item IDs rather than copying historical anchors from older plans. A missing, deferred, or changed dependency updates the plan or blocks only the affected slice; it does not authorize a local substitute.
 
 Before starting any child BI, call `check_plan_backlog_coverage` with the recorded receipt and re-query its dependencies.
 
