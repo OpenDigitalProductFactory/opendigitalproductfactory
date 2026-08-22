@@ -34,6 +34,14 @@ overrides:
   # bypassing the 5.0.8 mitigation — found on PR #3893's OSV scan). Floor
   # every transitive line to the current patched release, 5.0.9.
   'brace-expansion@<=5.0.8': '5.0.9'
+  # deepmerge-ts < 8.0.0: GHSA-ggr8-5vv4-36mx / CVE-2026-40345 (Dependabot #155,
+  # high) — deepmerge()/deepmergeInto() recurse per property with no visited-pair
+  # tracking, so two records that self-reference at the same key path recurse until
+  # RangeError. Transitive of @prisma/config, which merges our own repo-committed
+  # prisma config at CLI time rather than an attacker-supplied object graph — but
+  # 8.0.0 is a clean upstream fix with zero runtime dependencies and the same
+  # `node >=16` engine, so floor it instead of accepting the finding.
+  deepmerge-ts: '^8.0.0'
   lodash: '4.18.0'
   lodash-es: '4.18.0'
   node-forge: '1.4.0'
