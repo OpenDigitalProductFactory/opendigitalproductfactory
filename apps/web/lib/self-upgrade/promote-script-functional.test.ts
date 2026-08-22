@@ -16,6 +16,8 @@ import { join, resolve } from "node:path";
 
 const SCRIPT = resolve(__dirname, "../../../../scripts/promote.sh");
 const REPO_ROOT = resolve(__dirname, "../../../..");
+const MIGRATOR = join(REPO_ROOT, "scripts", "installer", "migrate-install-state.mjs");
+const CATALOG = join(REPO_ROOT, "scripts", "capability-service-catalog.generated.json");
 const gitBash = join(process.env.ProgramFiles ?? "C:\\Program Files", "Git", "bin", "bash.exe");
 const BASH_COMMAND = process.platform === "win32" && existsSync(gitBash) ? gitBash : "bash";
 const BASH_OK = spawnSync(BASH_COMMAND, ["--version"], { encoding: "utf8" }).status === 0;
@@ -160,11 +162,19 @@ function runPromote(opts: {
   const secretPath = join(stateDir, "runtime-transition.secret");
   writeFileSync(secretPath, secret);
   const stateBytes = readFileSync(join(stateDir, "install-state.json"));
+  // Ask the canonical migrator for the real projection. The previous fixture
+  // asserted `projectionHash === sourceHash`, which is never true of an actual
+  // projection; it went unnoticed only because promote.sh skipped the migrator
+  // whenever the schema version did not change, so the carrier's CAS binding
+  // was never checked (BI-AA6FBAD0).
+  const projection = JSON.parse(execFileSync(process.execPath, [MIGRATOR,
+    "--state", join(stateDir, "install-state.json"), "--catalog", CATALOG,
+    "--host-platform", "linux", "--host-arch", "amd64"], { encoding: "utf8" })) as { sourceHash: string; projectionHash: string };
   const envelope = {
     kind: "install-state-migration", version: 1, runId: "SUR-FUNCTIONAL",
     promoterDigest: `sha256:${"d".repeat(64)}`,
-    sourceHash: createHash("sha256").update(stateBytes).digest("hex"),
-    projectionHash: createHash("sha256").update(stateBytes).digest("hex"),
+    sourceHash: projection.sourceHash,
+    projectionHash: projection.projectionHash,
     fromSchemaVersion: 2, toSchemaVersion: 2,
     hostIdentity: { platform: "linux", arch: "amd64", provenance: "explicit" },
     issuedAt: new Date(Date.now() - 1_000).toISOString(),
@@ -231,13 +241,17 @@ function makeScratch(): { root: string; source: string; backup: string; fakeBin:
   const backup = join(root, "backup");
   const stateDir = join(backup, "state");
   mkdirSync(stateDir, { recursive: true });
-  const catalog = JSON.parse(readFileSync(join(REPO_ROOT, "scripts", "capability-service-catalog.generated.json"), "utf8")) as { catalogHash: string; capabilities: Array<{ capabilityId: string }> };
-  // The historical functional fixture exercises sandbox refresh, which is
-  // owned by the build capability in the governed catalog.
-  const enabledRuntimeCapabilities = ["runtime:build", "runtime:core"];
-  const stateLines = catalog.capabilities.map(({ capabilityId }) => `${capabilityId}=${enabledRuntimeCapabilities.includes(capabilityId) ? "active" : "disabled"}`).sort().join("\n");
-  const capabilityStateVersion = createHash("sha256").update(`${catalog.catalogHash}\n${stateLines}`).digest("hex");
-  writeFileSync(join(stateDir, "install-state.json"), JSON.stringify({ platform: "linux", enabledRuntimeCapabilities, capabilityCatalogHash: catalog.catalogHash, capabilityStateVersion }));
+  // Produce the install-state the way an install actually gets one: hand a
+  // legacy state to the canonical migrator. Hand-assembling the capability
+  // snapshot here re-derived the closure by hand and drifted from the resolver;
+  // the legacy default already enables `runtime:build`, which is what the
+  // sandbox-refresh path in this fixture exercises.
+  writeFileSync(join(stateDir, "install-state.json"), JSON.stringify({
+    schemaVersion: 1, installerVersion: "functional", platform: "linux", arch: "amd64",
+    installPath: "/opt/dpf", stateDir: "/dpf-state", composeProjectName: "dpf",
+  }));
+  execFileSync(process.execPath, [MIGRATOR, "--state", join(stateDir, "install-state.json"),
+    "--catalog", CATALOG, "--host-platform", "linux", "--host-arch", "amd64", "--write"], { encoding: "utf8" });
   return { root, source, backup, fakeBin, head };
 }
 

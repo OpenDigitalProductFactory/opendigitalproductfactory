@@ -6,6 +6,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 
+import { computeCapabilityStateVersion } from "../lib/capability-state-hash.mjs";
 import { projectInstallState } from "./migrate-install-state.mjs";
 import { resolveHostIdentity } from "./resolve-host-identity.mjs";
 
@@ -43,9 +44,48 @@ test("returns a valid v2 state idempotently", async () => {
   assert.deepEqual(result.projectedState, migrated.projectedState);
 });
 
-test("refuses contradictory capability snapshots", async () => {
-  const state = { ...legacy, enabledRuntimeCapabilities: ["runtime:core"], capabilityCatalogHash: "0".repeat(64), capabilityStateVersion: "0".repeat(64) };
-  await assert.rejects(projectInstallState({ bytes: Buffer.from(JSON.stringify(state)), hostIdentity: identity, catalog }), /capability_state_stale/);
+const catalogCapabilityIds = catalog.capabilities.map(({ capabilityId }) => capabilityId);
+const migratedState = async () =>
+  (await projectInstallState({ bytes: Buffer.from(JSON.stringify(legacy)), hostIdentity: identity, catalog })).projectedState;
+
+test("migrates a v2 install-state across a shipped capability-catalog change", async () => {
+  // Every live install carries the catalog hash of the release it was installed
+  // from, so a release that adds or moves a service leaves that hash behind.
+  // That is the ORDINARY case on every upgrade, not corruption: refusing it
+  // wedges every existing install, because the upgrade that would restamp the
+  // state IS the blocked upgrade (BI-AA6FBAD0, live run SUR-C45B5F4B).
+  const current = await migratedState();
+  const previousCatalogHash = "1".repeat(64);
+  const stale = {
+    ...current,
+    capabilityCatalogHash: previousCatalogHash,
+    capabilityStateVersion: computeCapabilityStateVersion(previousCatalogHash, current.enabledRuntimeCapabilities, catalogCapabilityIds),
+  };
+
+  const result = await projectInstallState({ bytes: Buffer.from(JSON.stringify(stale)), hostIdentity: identity, catalog });
+
+  assert.equal(result.migrationRequired, true, "a moved catalog must be persisted, not silently re-derived every upgrade");
+  assert.equal(result.projectedState.capabilityCatalogHash, catalog.catalogHash);
+  assert.equal(result.projectedState.capabilityStateVersion, computeCapabilityStateVersion(catalog.catalogHash, current.enabledRuntimeCapabilities, catalogCapabilityIds));
+  assert.deepEqual(result.projectedState.enabledRuntimeCapabilities, current.enabledRuntimeCapabilities, "the operator's enabled set survives the catalog move");
+});
+
+test("refuses a capability snapshot the catalog cannot explain", async () => {
+  // Catalog UNCHANGED but the snapshot disagrees with it: the enabled set was
+  // edited without restamping. That is not the platform's doing, so migration
+  // must not paper over it.
+  const current = await migratedState();
+  const tampered = { ...current, capabilityStateVersion: "0".repeat(64) };
+  await assert.rejects(projectInstallState({ bytes: Buffer.from(JSON.stringify(tampered)), hostIdentity: identity, catalog }), /capability_state_stale/);
+});
+
+test("refuses a capability the candidate catalog no longer defines", async () => {
+  const current = await migratedState();
+  const retired = { ...current, enabledRuntimeCapabilities: [...current.enabledRuntimeCapabilities, "runtime:retired-by-this-release"] };
+  await assert.rejects(
+    projectInstallState({ bytes: Buffer.from(JSON.stringify(retired)), hostIdentity: identity, catalog }),
+    /unknown_runtime_capability:runtime:retired-by-this-release/,
+  );
 });
 
 test("refuses unverifiable and future-version state", async () => {

@@ -205,6 +205,55 @@ let the next cron tick retry. The `build-failure-classifier` now labels this cla
 (environment), so the failure surfaces as retryable rather than the old generic
 `promoter-readiness-failed (unclassified)`.
 
+## Failure class: capability-state-stale (a release moved the capability catalog)
+
+Promoter **readiness** refuses before quiescence with:
+
+```
+promoter-readiness-failed: Promoter readiness check failed: capability_projection_failed
+failures: [capability_projection_failed, install_state_projection_failed]
+```
+
+Canonical case **SUR-C45B5F4B (2026-08-22)**: the install was healthy and already at install-state
+`schemaVersion: 2`. The candidate simply carried a capability service catalog in which `inngest` and
+`redis` had moved from `runtime:durable-automation` into `runtime:core`. That legitimately moves
+`catalogHash`, so the install's recorded `capabilityCatalogHash` was one release behind and every
+projection refused with `capability_state_stale`.
+
+Like the OOM class above, this dies **before any portal swap** — a safe refusal, not a bad deploy.
+
+**This was a platform defect, now fixed.** The install-state migrator treated migration as purely a
+*schema-version* edge, so a schema-2 state could never have its capability snapshot re-projected. The
+first release to move the catalog therefore wedged every existing install, and the upgrade that would
+have restamped the state *was* the blocked upgrade. A catalog that moves within schema 2 is now a
+first-class migration: readiness re-projects it, and the promoter persists the restamp under the same
+lock and compare-and-swap binding as a schema migration. See
+[the design amendment](../superpowers/specs/2026-07-18-install-state-readiness-migration-design.md) §7.
+
+**Recovery for a run that already failed this way:** none needed — nothing was deployed. Upgrade to a
+build carrying the fix and re-trigger; the run restamps the install-state itself.
+
+**A refusal still means something.** These two codes fail closed for causes that are *not* the
+platform's doing, and they still do:
+
+- the enabled capability set was edited without restamping (`capabilityStateVersion` disagrees with an
+  **unchanged** catalog);
+- the state names a capability the candidate catalog no longer defines
+  (`unknown_runtime_capability:<id>`).
+
+To tell them apart, read the failure `message`, not just the code — every readiness probe now carries
+its underlying error, e.g. `capability_projection_failed: capability_state_stale`. Reproduce a refusal
+by hand against the mounted state with:
+
+```bash
+docker run --rm --read-only -v "$PWD:/host-source:ro" -v "$HOME/.dpf:/dpf-state:ro" \
+  -e DPF_PROMOTER_STATE_DIR=/dpf-state -e DPF_PROMOTER_DOCKER_PREFLIGHT=ready \
+  -e PROMOTE_SOURCE=/host-source -e PROMOTE_TARGET_SHA="<target>" \
+  -e PROMOTE_HEALTH_URL=http://host.docker.internal:3000/api/health \
+  -e PROMOTE_COMPOSE_PROJECT=dpf -e PROMOTE_BACKUP_PATH=/backups/recovery \
+  dpf-promoter:<target> --readiness
+```
+
 ## Failure class: migration-unique-violation (P3018 + 23505)
 
 A data migration's bulk UPDATE/INSERT hits `duplicate key value violates unique constraint` and the

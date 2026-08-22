@@ -150,6 +150,51 @@ jobs:
             -e PROMOTE_BACKUP_PATH=/backups/recovery \
             "$DPF_ACCEPTANCE_IMAGE" --readiness --json | tee "$DPF_N1_EVIDENCE/readiness-success.json"
           jq -e '.result == "ready" and .quiescenceBegan == false and (.failures | length == 0)' "$DPF_N1_EVIDENCE/readiness-success.json"
+      # BI-AA6FBAD0: the step above seeds a schemaVersion-1 state, which is
+      # UNVERSIONED for capability purposes and so skips every capability check.
+      # Every live install is v2 and carries the catalog hash of the release it
+      # was installed from, so that is the shape that actually breaks: the first
+      # release to move the catalog wedged every existing install with
+      # `capability_state_stale`, and this gate was structurally unable to see it.
+      # The fixture below is the candidate's own projection restamped with a
+      # previous catalog hash - exactly what an install looks like one release
+      # behind.
+      - name: Readiness migrates a v2 install carrying the previous catalog hash
+        env:
+          STATE_OUT: ${{ runner.temp }}/dpf-state/install-state.json
+        run: |
+          node --input-type=module -e '
+            import { readFile, writeFile } from "node:fs/promises";
+            const { projectInstallState } = await import("./scripts/installer/migrate-install-state.mjs");
+            const { computeCapabilityStateVersion } = await import("./scripts/lib/capability-state-hash.mjs");
+            const catalog = JSON.parse(await readFile("scripts/capability-service-catalog.generated.json", "utf8"));
+            const baseline = { schemaVersion: 1, installerVersion: "acceptance", platform: "linux", arch: "amd64", installPath: "/opt/dpf", stateDir: "/dpf-state", composeProjectName: "dpf" };
+            const hostIdentity = { platform: "linux", arch: "amd64", capabilityHostPlatform: "linux", provenance: "installer" };
+            const { projectedState } = await projectInstallState({ bytes: Buffer.from(JSON.stringify(baseline)), hostIdentity, catalog });
+            const previousCatalogHash = "1".repeat(64);
+            const stale = {
+              ...projectedState,
+              capabilityCatalogHash: previousCatalogHash,
+              capabilityStateVersion: computeCapabilityStateVersion(previousCatalogHash, projectedState.enabledRuntimeCapabilities, catalog.capabilities.map(({ capabilityId }) => capabilityId)),
+            };
+            await writeFile(process.env.STATE_OUT, `${JSON.stringify(stale, null, 2)}\n`);
+          '
+          docker run --rm --read-only \
+            -v "$PWD:/host-source:ro" \
+            -v "$RUNNER_TEMP/dpf-state:/dpf-state:ro" \
+            -v "$RUNNER_TEMP/dpf-backups:/backups:ro" \
+            -e DPF_PROMOTER_STATE_DIR=/dpf-state \
+            -e DPF_PROMOTER_DOCKER_PREFLIGHT=ready \
+            -e PROMOTE_SOURCE=/host-source \
+            -e PROMOTE_TARGET_SHA="$GITHUB_SHA" \
+            -e PROMOTE_HEALTH_URL=http://host.docker.internal:3000/api/health \
+            -e PROMOTE_COMPOSE_PROJECT="$DPF_N1_PROJECT" \
+            -e PROMOTE_BACKUP_PATH=/backups/recovery \
+            "$DPF_ACCEPTANCE_IMAGE" --readiness --json | tee "$DPF_N1_EVIDENCE/readiness-stale-catalog.json"
+          jq -e '.result == "ready" and .quiescenceBegan == false and (.failures | length == 0)' "$DPF_N1_EVIDENCE/readiness-stale-catalog.json"
+          jq -e '.migrationRequired == true' "$DPF_N1_EVIDENCE/readiness-stale-catalog.json"
+      # A readiness failure must name its cause: a bare code cost hours of live
+      # diagnosis on SUR-C45B5F4B.
       - name: Invalid state refuses before quiescence
         run: |
           printf '%s\n' '{}' > "$RUNNER_TEMP/dpf-state/install-state.json"
@@ -173,6 +218,7 @@ jobs:
           set -e
           test "$status" -eq 78
           jq -e '.result == "failed" and .quiescenceBegan == false and (.failures | length > 0)' "$DPF_N1_EVIDENCE/readiness-refusal.json"
+          jq -e '[.failures[] | select(.message | test("failed: [a-z_]+: .+"))] | length > 0' "$DPF_N1_EVIDENCE/readiness-refusal.json"
       - name: Record bounded PR compatibility evidence
         if: github.event_name == 'pull_request'
         run: |

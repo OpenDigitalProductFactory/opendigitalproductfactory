@@ -43,30 +43,42 @@ done
 
 if [[ $_readiness -eq 1 ]]; then
   _readiness_failures=()
+  # A bare failure code cost hours of live diagnosis on SUR-C45B5F4B: readiness
+  # reported `capability_projection_failed` while discarding the one line that
+  # named the cause (`capability_state_stale`). Every probe below now carries its
+  # own error text out with it. No temp files - the acceptance gate runs this
+  # container `--read-only`, so the node probes report failure as data on stdout
+  # rather than as a stream the shell would have to spool.
+  _readiness_details=()
+  _readiness_fail() { _readiness_failures+=("$1"); _readiness_details+=("$(printf '%s' "${2-}" | tr -d '\000\r' | tr '\n' ' ' | cut -c1-400)"); }
   _contract="${DPF_PROMOTER_CONTRACT:-/app/promoter-contract.json}"
-  [[ -r "$_contract" ]] || _readiness_failures+=(contract_unreadable)
+  [[ -r "$_contract" ]] || _readiness_fail contract_unreadable "no readable promoter contract at $_contract"
   if [[ -r "$_contract" ]]; then
     while IFS= read -r _required_file; do
-      [[ -r "$_required_file" ]] || _readiness_failures+=(required_file_unreadable)
+      [[ -r "$_required_file" ]] || _readiness_fail required_file_unreadable "contract requires unreadable file: $_required_file"
     done < <(jq -r '.requiredFiles[]? // empty' "$_contract" 2>/dev/null)
   fi
-  [[ -x "$_promoter_dir/promote.sh" ]] || _readiness_failures+=(entrypoint_unavailable)
+  [[ -x "$_promoter_dir/promote.sh" ]] || _readiness_fail entrypoint_unavailable "$_promoter_dir/promote.sh is not executable"
   if [[ "${DPF_PROMOTER_DOCKER_PREFLIGHT:-}" != "ready" ]] || ! command -v docker >/dev/null 2>&1 || ! docker --version >/dev/null 2>&1; then
-    _readiness_failures+=(docker_unavailable)
+    _readiness_fail docker_unavailable "docker preflight=${DPF_PROMOTER_DOCKER_PREFLIGHT:-<unset>} and no usable docker CLI"
   fi
-  [[ -d "${PROMOTE_SOURCE:-}" && -r "${PROMOTE_SOURCE:-}" ]] || _readiness_failures+=(source_mount_unreadable)
-  [[ -n "${PROMOTE_TARGET_SHA:-}" ]] || _readiness_failures+=(target_sha_missing)
-  [[ -n "${PROMOTE_HEALTH_URL:-}" ]] || _readiness_failures+=(health_url_missing)
+  [[ -d "${PROMOTE_SOURCE:-}" && -r "${PROMOTE_SOURCE:-}" ]] || _readiness_fail source_mount_unreadable "candidate source mount ${PROMOTE_SOURCE:-<unset>} is not a readable directory"
+  [[ -n "${PROMOTE_TARGET_SHA:-}" ]] || _readiness_fail target_sha_missing "PROMOTE_TARGET_SHA is unset"
+  [[ -n "${PROMOTE_HEALTH_URL:-}" ]] || _readiness_fail health_url_missing "PROMOTE_HEALTH_URL is unset"
   _state_dir="${DPF_PROMOTER_STATE_DIR:-/dpf-state}"
   _state_file="$_state_dir/install-state.json"
-  [[ -d "$_state_dir" && -r "$_state_dir" ]] || _readiness_failures+=(state_mount_unreadable)
+  [[ -d "$_state_dir" && -r "$_state_dir" ]] || _readiness_fail state_mount_unreadable "state mount $_state_dir is not a readable directory"
   _state_validator="$_promoter_dir/installer/validate-install-state.mjs"
-  if [[ ! -r "$_state_file" ]] || [[ ! -f "$_state_validator" ]] || ! node "$_state_validator" "$_state_file" >/dev/null 2>&1; then
-    _readiness_failures+=(install_state_invalid)
+  if [[ ! -r "$_state_file" ]] || [[ ! -f "$_state_validator" ]]; then
+    _readiness_fail install_state_invalid "no readable install-state at $_state_file"
+  elif ! _state_error="$(node "$_state_validator" "$_state_file" 2>&1 >/dev/null)"; then
+    _readiness_fail install_state_invalid "$_state_error"
   fi
   _profile_adapter="${PROMOTE_SOURCE:-}/scripts/lib/resolve-capability-compose-profiles.mjs"
-  if [[ ! -f "$_profile_adapter" ]] || ! node "$_profile_adapter" --state "$_state_file" --overlay promote --migrate >/dev/null 2>&1; then
-    _readiness_failures+=(capability_projection_failed)
+  if [[ ! -f "$_profile_adapter" ]]; then
+    _readiness_fail capability_projection_failed "candidate source has no profile adapter at $_profile_adapter"
+  elif ! _profile_error="$(node "$_profile_adapter" --state "$_state_file" --overlay promote --migrate 2>&1 >/dev/null)"; then
+    _readiness_fail capability_projection_failed "$_profile_error"
   fi
   # Host identity is resolved by the shipped resolver, not read raw from the caller's env.
   # The promoter is candidate-owned but launched by the DEPLOYED portal, so an N-1 caller
@@ -74,35 +86,47 @@ if [[ $_readiness -eq 1 ]]; then
   # since the upgrade that teaches the caller to send it IS the blocked upgrade. The
   # resolver still prefers explicit env, falls back to the installer-owned identity in the
   # mounted install-state, and fails closed on contradictory or unverifiable evidence.
+  # Both probes report refusal as `{"error":...}` on stdout instead of dying on
+  # stderr, so the reason survives into the readiness report.
   _migration_projection=""
+  _readiness_error() { printf '%s' "$1" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{let v;try{v=JSON.parse(s)}catch{return process.stdout.write(s?`unparseable probe output: ${s}`:"probe produced no output")}process.stdout.write(typeof v?.error==="string"?v.error:"")})' 2>/dev/null; }
   _host_identity="$(STATE_FILE="$_state_file" PROMOTER_DIR="$_promoter_dir" node --input-type=module -e '
     import { readFile } from "node:fs/promises"; import { pathToFileURL } from "node:url";
-    const { resolveHostIdentity } = await import(pathToFileURL(process.env.PROMOTER_DIR + "/installer/resolve-host-identity.mjs").href);
-    const state=JSON.parse((await readFile(process.env.STATE_FILE)).toString("utf8").replace(/^\uFEFF/,""));
-    process.stdout.write(JSON.stringify(resolveHostIdentity({state,env:process.env})));
-  ' 2>/dev/null)" || _host_identity=""
-  if [[ -n "$_host_identity" ]]; then
+    try {
+      const { resolveHostIdentity } = await import(pathToFileURL(process.env.PROMOTER_DIR + "/installer/resolve-host-identity.mjs").href);
+      const state=JSON.parse((await readFile(process.env.STATE_FILE)).toString("utf8").replace(/^\uFEFF/,""));
+      process.stdout.write(JSON.stringify(resolveHostIdentity({state,env:process.env})));
+    } catch (error) { process.stdout.write(JSON.stringify({error:String(error?.message ?? error)})); }
+  ' 2>&1)" || _host_identity=""
+  _host_identity_error="$(_readiness_error "$_host_identity")"
+  if [[ -n "$_host_identity" && -z "$_host_identity_error" ]]; then
     _migration_projection="$(STATE_FILE="$_state_file" PROMOTER_DIR="$_promoter_dir" DPF_HOST_IDENTITY="$_host_identity" node --input-type=module -e '
       import { readFile } from "node:fs/promises"; import { pathToFileURL } from "node:url";
-      const { projectInstallState } = await import(pathToFileURL(process.env.PROMOTER_DIR + "/installer/migrate-install-state.mjs").href);
-      const bytes=await readFile(process.env.STATE_FILE); const source=JSON.parse(bytes.toString("utf8").replace(/^\uFEFF/,"")); const catalog=JSON.parse(await readFile(process.env.PROMOTER_DIR+"/capability-service-catalog.generated.json","utf8"));
-      const hostIdentity=JSON.parse(process.env.DPF_HOST_IDENTITY);
-      const r=await projectInstallState({bytes,hostIdentity,catalog}); process.stdout.write(JSON.stringify({sourceHash:r.sourceHash,projectionHash:r.projectionHash,migrationRequired:r.migrationRequired,fromSchemaVersion:source.schemaVersion??1,toSchemaVersion:r.projectedState.schemaVersion}));
-    ' 2>/dev/null)" || _readiness_failures+=(install_state_projection_failed)
+      try {
+        const { projectInstallState } = await import(pathToFileURL(process.env.PROMOTER_DIR + "/installer/migrate-install-state.mjs").href);
+        const bytes=await readFile(process.env.STATE_FILE); const source=JSON.parse(bytes.toString("utf8").replace(/^\uFEFF/,"")); const catalog=JSON.parse(await readFile(process.env.PROMOTER_DIR+"/capability-service-catalog.generated.json","utf8"));
+        const hostIdentity=JSON.parse(process.env.DPF_HOST_IDENTITY);
+        const r=await projectInstallState({bytes,hostIdentity,catalog}); process.stdout.write(JSON.stringify({sourceHash:r.sourceHash,projectionHash:r.projectionHash,migrationRequired:r.migrationRequired,fromSchemaVersion:source.schemaVersion??1,toSchemaVersion:r.projectedState.schemaVersion}));
+      } catch (error) { process.stdout.write(JSON.stringify({error:String(error?.message ?? error)})); }
+    ' 2>&1)" || _migration_projection=""
+    _projection_error="$(_readiness_error "$_migration_projection")"
+    if [[ -n "$_projection_error" ]]; then
+      _migration_projection=""
+      _readiness_fail install_state_projection_failed "$_projection_error"
+    fi
   else
-    _readiness_failures+=(host_identity_missing)
+    _readiness_fail host_identity_missing "${_host_identity_error:-the shipped resolver produced no host identity}"
   fi
-  [[ -n "${PROMOTE_COMPOSE_PROJECT:-}" ]] || _readiness_failures+=(compose_identity_missing)
-  [[ -n "${PROMOTE_BACKUP_PATH:-}" && -d "$(dirname "${PROMOTE_BACKUP_PATH:-/missing}")" ]] || _readiness_failures+=(recovery_parent_unavailable)
-  [[ -d "$_state_dir" ]] || _readiness_failures+=(transition_secret_parent_unavailable)
+  [[ -n "${PROMOTE_COMPOSE_PROJECT:-}" ]] || _readiness_fail compose_identity_missing "PROMOTE_COMPOSE_PROJECT is unset"
+  [[ -n "${PROMOTE_BACKUP_PATH:-}" && -d "$(dirname "${PROMOTE_BACKUP_PATH:-/missing}")" ]] || _readiness_fail recovery_parent_unavailable "no writable parent for PROMOTE_BACKUP_PATH=${PROMOTE_BACKUP_PATH:-<unset>}"
+  [[ -d "$_state_dir" ]] || _readiness_fail transition_secret_parent_unavailable "state dir $_state_dir is not a directory"
   if [[ ${#_readiness_failures[@]} -gt 0 ]]; then
-    printf '{"stage":"preflight","result":"failed","quiescenceBegan":false,"failures":['
-    _sep=""
-    for _failure in "${_readiness_failures[@]}"; do
-      printf '%s{"code":"%s","message":"Promoter readiness check failed: %s"}' "$_sep" "$_failure" "$_failure"
-      _sep=,
-    done
-    printf ']}\n'
+    _failures_json="$(
+      for _index in "${!_readiness_failures[@]}"; do
+        printf '%s\n%s\n' "${_readiness_failures[$_index]}" "${_readiness_details[$_index]-}"
+      done | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const l=s.split("\n"),o=[];for(let i=0;i+1<l.length;i+=2){const code=l[i],detail=(l[i+1]||"").trim();o.push({code,message:`Promoter readiness check failed: ${code}${detail?`: ${detail}`:""}`})}process.stdout.write(JSON.stringify(o))})'
+    )"
+    printf '{"stage":"preflight","result":"failed","quiescenceBegan":false,"failures":%s}\n' "$_failures_json"
     exit 78
   fi
   printf '%s\n' "$_migration_projection" | jq -c '. + {stage:"preflight",result:"ready",quiescenceBegan:false,failures:[]}'
@@ -302,19 +326,22 @@ if [[ $_dry_run -eq 0 ]]; then
   _migration_field() {
     printf '%s' "$_migration_envelope" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const v=JSON.parse(s);const p=process.argv[1].split(".");let x=v;for(const k of p)x=x?.[k];if(typeof x!=="string"&&typeof x!=="number")process.exit(2);process.stdout.write(String(x))})' "$1"
   }
-  _migration_from="$(_migration_field fromSchemaVersion)"
-  _migration_to="$(_migration_field toSchemaVersion)"
-  if [[ "$_migration_from" != "$_migration_to" ]]; then
-    node "$_promoter_dir/installer/migrate-install-state.mjs" \
-      --state "$_install_state" \
-      --catalog "$_promoter_dir/capability-service-catalog.generated.json" \
-      --host-platform "$(_migration_field hostIdentity.platform)" \
-      --host-arch "$(_migration_field hostIdentity.arch)" \
-      --expected-source-hash "$(_migration_field sourceHash)" \
-      --expected-projection-hash "$(_migration_field projectionHash)" \
-      --recovery-path "$_capability_recovery" \
-      --write >/dev/null
-  fi
+  # The migrator itself decides whether there is anything to write - it no-ops
+  # unless its own projection reports migrationRequired, under the same lock and
+  # CAS the expected-hash flags below bind. Gating the call on a schema-version
+  # bump duplicated that decision in the shell and got it wrong: a capability
+  # catalog that moves WITHIN schema v2 is a real migration, and skipping the
+  # write left every install re-deriving the same restamp on every upgrade,
+  # never persisting it (BI-AA6FBAD0).
+  node "$_promoter_dir/installer/migrate-install-state.mjs" \
+    --state "$_install_state" \
+    --catalog "$_promoter_dir/capability-service-catalog.generated.json" \
+    --host-platform "$(_migration_field hostIdentity.platform)" \
+    --host-arch "$(_migration_field hostIdentity.arch)" \
+    --expected-source-hash "$(_migration_field sourceHash)" \
+    --expected-projection-hash "$(_migration_field projectionHash)" \
+    --recovery-path "$_capability_recovery" \
+    --write >/dev/null
 fi
 
 # Real platform version from the source's git release tags, baked into the new

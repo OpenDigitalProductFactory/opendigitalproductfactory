@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Install-State Readiness Migration Design
 
 **Date:** 2026-07-18
@@ -173,3 +177,31 @@ PR acceptance is tiered rather than monolithic. The required Production Build ow
 9. The existing `dpf_state_migrate()` (`state.sh`) and `Test-DpfStateSchema` older-version path (`state.ps1`) delegate to the one canonical migrator; no shell/PowerShell path stamps `schemaVersion` independently, and `validate-install-state.mjs` dispatches by version.
 10. Rollback reuses the governed `$PROMOTE_BACKUP_PATH/install-state.json` recovery copy and its existing `EXIT`-trap restore; no second `pre-migration` artifact is introduced.
 11. Install-state signing/locking follows governed substrate decision `DI-6D6D452E46D5`: reuse transition-protocol signing and promote.sh recovery; use one cross-runtime filesystem lock/CAS protocol for offline writers.
+
+## 7. Amendment 2026-08-22 — migration is not only a schema-version edge (BI-AA6FBAD0)
+
+**Incident.** `SUR-C45B5F4B` failed at pre-quiescence readiness with `promoter-readiness-failed: capability_projection_failed`. The install was healthy and already at schema 2; the candidate simply carried a capability catalog in which `inngest` and `redis` had moved from `runtime:durable-automation` to `runtime:core`. That legitimately moves `catalogHash`, so the install's recorded `capabilityCatalogHash` was one release behind and every projection refused with `capability_state_stale`.
+
+**Blind spot.** §3 modelled migration entirely as a **schema-version edge**, and the implementation followed:
+
+- `projectInstallState` resolved capabilities with `migrate: source.schemaVersion === 1`, so a schema-2 state always took the strict equality path;
+- it returned the source unchanged for schema 2, so the capability fields could never be re-projected;
+- `migrationRequired` was defined as `schemaVersion !== 2`;
+- `promote.sh` only invoked the migrator when `fromSchemaVersion != toSchemaVersion`.
+
+Together these made the capability snapshot **immutable after the v1→v2 migration**. The first release to move the catalog therefore wedged every existing install, and the upgrade that would have restamped the state *was* the blocked upgrade — the same self-wedging shape §3 already recognised for host identity.
+
+**Correction.** A capability catalog that moves **within** schema 2 is a real migration:
+
+- `projectInstallState` always resolves in migrate mode — it *is* the migrator — and always projects `enabledRuntimeCapabilities`, `capabilityCatalogHash`, and `capabilityStateVersion`;
+- `migrationRequired` is true when the schema version **or** any projected capability field differs from source;
+- `promote.sh` always calls the migrator and lets `migrationRequired` decide the write, rather than duplicating that decision in shell.
+
+Acceptance criterion 4 stands unchanged — capability fields still come only from the canonical resolver — and the fail-closed causes are unchanged: a snapshot that disagrees with an **unchanged** catalog, and a capability the candidate catalog no longer defines, both still refuse.
+
+**Why the gate could not see it.** Two independent coverage holes, both now closed:
+
+1. `scripts/self-upgrade-sensitive-paths.mjs` owned only part of the promoter's baked closure — the generated capability catalog, the profile resolver, and the transition/teardown scripts were unowned, so changing them never triggered the acceptance workflow. Ownership is now derived mechanically from `Dockerfile.promoter`'s `COPY` inputs by a colocated test, so a newly baked file cannot escape the gate.
+2. The acceptance workflow only ever exercised readiness against a **schema-1** fixture, which is unversioned for capability purposes and skips every capability check. It now also asserts readiness against the shape every live install actually has: schema 2 carrying the **previous** release's catalog hash.
+
+**Diagnosability.** Readiness reported the bare code `capability_projection_failed` while discarding the one line that named the cause. Every readiness probe now carries its own error text into the failure `message`, and the acceptance workflow asserts a refusal message names its cause.
