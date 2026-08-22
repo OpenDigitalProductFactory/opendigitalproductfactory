@@ -70,6 +70,15 @@ The kernel selected the explicit bundle. It has the smallest governed blast radi
 
 The manifest, validator, reconciler, tests, and operator runbook form one atomic deliverable: the manifest without a validated importer is not recoverable, and an importer without this governed bundle does not preserve the requested work.
 
+### Governed traceability contract
+
+- **Requirements:** `OBJ-PABR-001`, `OBJ-PABR-002`, `OBJ-PABR-003`, and `OBJ-PABR-004` from the approved recovery scope baseline.
+- **Contract:** `CONTRACT-PABR-RECOVERY-BUNDLE` binds the closed recovery manifest, create-missing/skip-existing reconciliation policy, and explicit operator entry point into one usable compatibility boundary.
+- **Flow:** `FLOW-PABR-RECONCILE` is preview → validate → open transaction → create missing epic/items/activities in dependency order → commit or roll back → report stable IDs and counts.
+- **Verification:** `AC-PABR-001`, `AC-PABR-002`, `AC-PABR-003`, `AC-PABR-004`, `AC-PABR-005`, and `AC-PABR-006` cover the complete atomic deliverable.
+
+The live coverage receipt records one deliverable with key `purpose-aware-recovery`, all four requirement references, the recovery-bundle contract, the reconciliation flow, and all six acceptance references. No phase is independently shippable and the deliverable has no dependency on another deliverable.
+
 ## 5. TDD implementation sequence
 
 ### Red 1 — validate the portable contract
