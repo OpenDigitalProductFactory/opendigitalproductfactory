@@ -11821,16 +11821,16 @@
         "canonical": "AGT-904",
         "status": "defined",
         "files": [
-          "skills\\platform\\ingest-article-from-url.skill.md",
-          "skills\\platform\\review-wiki-drafts.skill.md"
+          "skills/platform/ingest-article-from-url.skill.md",
+          "skills/platform/review-wiki-drafts.skill.md"
         ]
       },
       {
         "target": "external-coding-agent",
         "health": "unresolved",
         "files": [
-          "skills\\platform\\draft-kernel-edit-pr.skill.md",
-          "skills\\platform\\ingest-article-from-url.skill.md"
+          "skills/platform/draft-kernel-edit-pr.skill.md",
+          "skills/platform/ingest-article-from-url.skill.md"
         ]
       }
     ],
@@ -11838,8 +11838,8 @@
       {
         "target": "external-coding-agent",
         "files": [
-          "skills\\platform\\draft-kernel-edit-pr.skill.md",
-          "skills\\platform\\ingest-article-from-url.skill.md"
+          "skills/platform/draft-kernel-edit-pr.skill.md",
+          "skills/platform/ingest-article-from-url.skill.md"
         ]
       }
     ],

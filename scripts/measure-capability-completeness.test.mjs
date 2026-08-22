@@ -17,11 +17,19 @@ import {
   canCall,
   expandGrants,
   objectLiteralBody,
+  normalizeGeneratedPath,
   parseSkillFrontmatter,
   parseStringArrayMap,
   parseTopLevelKeys,
   stripLineComments,
 } from "./measure-capability-completeness.mjs";
+
+test("generated capability paths use repository-stable separators", () => {
+  assert.equal(
+    normalizeGeneratedPath("skills\\platform\\ingest-article.skill.md"),
+    "skills/platform/ingest-article.skill.md",
+  );
+});
 
 test("objectLiteralBody brace-matches instead of stopping at the first close", () => {
   const src = `export const X = { a: ["p"], b: { c: ["q"] }, d: ["r"] };`;

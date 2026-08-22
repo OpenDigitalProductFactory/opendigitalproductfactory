@@ -212,6 +212,10 @@ function read(rel) {
   return fs.readFileSync(full, "utf8");
 }
 
+export function normalizeGeneratedPath(value) {
+  return value.replaceAll("\\", "/");
+}
+
 /** Strip line comments so a commented-out example never parses as a real entry. */
 export function stripLineComments(src) {
   return src.replace(/^\s*\/\/.*$/gm, "");
@@ -386,7 +390,7 @@ export function loadSubstrate() {
     const fm = parseSkillFrontmatter(fs.readFileSync(file, "utf8"));
     if (!fm) continue;
     skills.push({
-      file: path.relative(REPO_ROOT, file),
+      file: normalizeGeneratedPath(path.relative(REPO_ROOT, file)),
       name: fm.name ?? path.basename(file, ".skill.md"),
       assignTo: Array.isArray(fm.assignTo) ? fm.assignTo : [],
       taskType: fm.taskType ?? null,
@@ -1025,7 +1029,7 @@ function main() {
     const drift = [];
     for (const [file, want] of [[JSON_OUT, json], [MD_OUT, md]]) {
       const have = fs.existsSync(file) ? fs.readFileSync(file, "utf8") : null;
-      if (have !== want) drift.push(path.relative(REPO_ROOT, file));
+      if (have !== want) drift.push(normalizeGeneratedPath(path.relative(REPO_ROOT, file)));
     }
     if (drift.length) {
       console.error("Capability-completeness artifacts are out of sync:");
@@ -1057,8 +1061,8 @@ function main() {
     console.log(`    ${v.label.padEnd(20)} ${d[0]}/${d[1]}/${d[2]}/${d[3]}   ceiling ${v.ceiling}`);
   }
   console.log(`  skills: ${S.skills.stranded}/${S.skills.total} stranded · ${S.skills.cadenceCapable} can declare a cadence`);
-  console.log(`\nWrote ${path.relative(REPO_ROOT, JSON_OUT)}`);
-  console.log(`Wrote ${path.relative(REPO_ROOT, MD_OUT)}`);
+  console.log(`\nWrote ${normalizeGeneratedPath(path.relative(REPO_ROOT, JSON_OUT))}`);
+  console.log(`Wrote ${normalizeGeneratedPath(path.relative(REPO_ROOT, MD_OUT))}`);
 }
 
 if (process.argv[1]?.endsWith("measure-capability-completeness.mjs")) {
