@@ -119,6 +119,20 @@ describe("install-state migration promotion carrier", () => {
 });
 
 describe("resolvePromoterArtifact", () => {
+  it("pulls an exact verified release-tag reference while validating its source SHA", async () => {
+    const manifest = JSON.stringify({ schemaVersion: 1, callerProtocol: { min: 1, max: 1 } });
+    const contractDigest = `sha256:${(await import("node:crypto")).createHash("sha256").update(manifest).digest("hex")}`;
+    const digest = `sha256:${"e".repeat(64)}`;
+    const calls: string[][] = [];
+    await resolvePromoterArtifact({ promoterImage: "ghcr.io/owner/dpf-promoter:v2.0.0", candidateReference: "ghcr.io/owner/dpf-promoter:v2.0.0", targetSha: "b".repeat(40) }, async (args) => {
+      calls.push(args);
+      if (args[0] === "pull") return { exitCode: 0, stdout: "", stderr: "" };
+      if (args[0] === "image") return { exitCode: 0, stdout: JSON.stringify({ RepoDigests: [`ghcr.io/owner/dpf-promoter@${digest}`], Config: { Labels: { "org.opencontainers.image.revision": "b".repeat(40), "org.opendpf.promoter.contract-schema": "1", "org.opendpf.promoter.contract-digest": contractDigest } } }), stderr: "" };
+      return { exitCode: 0, stdout: manifest, stderr: "" };
+    });
+    expect(calls[0]).toEqual(["pull", "ghcr.io/owner/dpf-promoter:v2.0.0"]);
+  });
+
   it("pulls a target-SHA tag once and returns its immutable digest", async () => {
     const manifest = JSON.stringify({ schemaVersion: 1, callerProtocol: { min: 1, max: 1 } });
     const contractDigest = `sha256:${(await import("node:crypto")).createHash("sha256").update(manifest).digest("hex")}`;
@@ -198,6 +212,19 @@ describe("buildCandidatePromoterImage", () => {
 });
 
 describe("buildPromoterCommand", () => {
+  it("launches release promotion with a narrowly writable install and immutable release identity", () => {
+    const { args } = buildPromoterCommand({
+      ...BASE,
+      release: { tag: "v2026.08.23", ghcrOwner: "opendigitalproductfactory" },
+    });
+    expect(args).toContain("/Users/me/dpf:/host-source");
+    expect(args).not.toContain("/Users/me/dpf:/host-source:ro");
+    expect(args).toContain("DPF_PROMOTION_MODE=release");
+    expect(args).toContain("DPF_RELEASE_TAG=v2026.08.23");
+    expect(args).toContain("GHCR_OWNER=opendigitalproductfactory");
+    expect(args).toContain("PROMOTE_TARGET_SHA=abc1234");
+  });
+
   it("reserves host transition authority without requiring an apply envelope", () => {
     const { args } = buildPromoterCommand({ ...BASE, runtimeCapabilityTransitionId: "RCT-123", stateDirHostPath: "/state", runtimeTransitionAuthorityOperation: "reserve" });
     expect(args.slice(-3)).toEqual(["--runtime-transition-authority", "reserve", "RCT-123"]);

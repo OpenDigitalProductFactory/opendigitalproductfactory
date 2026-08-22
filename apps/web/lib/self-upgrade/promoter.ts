@@ -70,7 +70,7 @@ export async function buildCandidatePromoterImage(
 
 /** Pulls/inspects a target reference once and verifies its embedded contract. */
 export async function resolvePromoterArtifact(
-  params: { promoterImage?: string; targetSha: string; callerProtocol?: number; timeoutMs?: number },
+  params: { promoterImage?: string; candidateReference?: string; targetSha: string; callerProtocol?: number; timeoutMs?: number },
   runDocker?: PromoterDockerRunner,
 ): Promise<ResolvedPromoterArtifact> {
   return resolveCandidatePromoterArtifact(
@@ -151,6 +151,8 @@ export type PromoterParams = {
   installStateMigrationRunId?: string;
   /** Exact portal-verified carrier retained for orchestration identity/audit. */
   installStateMigrationHandoff?: InstallStateMigrationHandoff;
+  /** Verified registry release promoted without a source checkout/build. */
+  release?: { tag: string; ghcrOwner: string };
 };
 
 export type PromoterResult = {
@@ -163,6 +165,8 @@ const RUNTIME_TRANSITION_ID = /^RCT-[A-Za-z0-9-]{1,48}$/;
 const RUNTIME_TRANSITION_TOKEN = /^[a-f0-9]{64}$/;
 const RUNTIME_TRANSITION_ENVELOPE = /^[A-Za-z0-9_-]{16,65536}$/;
 const RUNTIME_HOST_PATH_SEGMENT = /^[A-Za-z0-9._ -]+$/;
+const RELEASE_TAG = /^v\d+\.\d+\.\d+(?:[-+][A-Za-z0-9.-]+)?$/;
+const REGISTRY_OWNER = /^[A-Za-z0-9](?:[A-Za-z0-9._-]{0,253}[A-Za-z0-9])?$/;
 
 function isSafeRuntimeHostPath(value: string): boolean {
   if (value.length < 2 || value.length > 1024 || /[\0\r\n]/.test(value)) return false;
@@ -198,6 +202,9 @@ function validateRuntimeTransitionCommandInputs(params: PromoterParams): void {
   }
   if (params.installStateMigrationEnvelope && !RUNTIME_TRANSITION_ENVELOPE.test(params.installStateMigrationEnvelope)) throw new Error("invalid_install_state_migration_envelope");
   if (params.installStateMigrationSignature && !RUNTIME_TRANSITION_TOKEN.test(params.installStateMigrationSignature)) throw new Error("invalid_install_state_migration_signature");
+  if (params.release && (!RELEASE_TAG.test(params.release.tag) || !REGISTRY_OWNER.test(params.release.ghcrOwner))) {
+    throw new Error("invalid_release_identity");
+  }
 }
 
 /**
@@ -245,7 +252,7 @@ export function buildPromoterCommand(
     "/var/run/docker.sock:/var/run/docker.sock",
     // Host source tree (read-only): build context + backup source.
     "-v",
-    `${params.hostInstallPath}:${PROMOTER_CONTAINER_SOURCE}:ro`,
+    `${params.hostInstallPath}:${PROMOTER_CONTAINER_SOURCE}${params.release ? "" : ":ro"}`,
   );
 
   if (params.backupHostPath && params.backupHostPath.length > 0) {
@@ -274,6 +281,17 @@ export function buildPromoterCommand(
     "-e",
     `PROMOTE_HEALTH_URL=${healthUrl}`,
   );
+
+  if (params.release) {
+    args.push(
+      "-e",
+      "DPF_PROMOTION_MODE=release",
+      "-e",
+      `DPF_RELEASE_TAG=${params.release.tag}`,
+      "-e",
+      `GHCR_OWNER=${params.release.ghcrOwner}`,
+    );
+  }
 
   if (params.composeEnvFileHostPath && params.composeEnvFileHostPath.length > 0) {
     args.push("-e", `PROMOTE_COMPOSE_ENV_FILE=${PROMOTER_COMPOSE_ENV_FILE}`);
@@ -408,6 +426,7 @@ export const PROMOTER_JIT_BUILD_SCRIPT =
   "cp /promoter/scripts/installer/migrate-install-state.mjs \"$BDIR/scripts/installer/migrate-install-state.mjs\" && " +
   "cp /promoter/scripts/installer/resolve-host-identity.mjs \"$BDIR/scripts/installer/resolve-host-identity.mjs\" && " +
   "cp /promoter/scripts/installer/install-state-transaction.mjs \"$BDIR/scripts/installer/install-state-transaction.mjs\" && " +
+  "cp /promoter/scripts/installer/install-release-assets.mjs \"$BDIR/scripts/installer/install-release-assets.mjs\" && " +
   "cp /promoter/scripts/installer/install-state-lock-contract.json \"$BDIR/scripts/installer/install-state-lock-contract.json\" && " +
   "cp /promoter/scripts/installer/install-state-schema-registry.mjs \"$BDIR/scripts/installer/install-state-schema-registry.mjs\" && " +
   "cp /promoter/scripts/installer/install-state.schema.json \"$BDIR/scripts/installer/install-state.schema.json\" && " +

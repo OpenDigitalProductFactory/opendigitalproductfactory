@@ -37,6 +37,7 @@ export const PROMOTER_BUILD_CONTEXT_SOURCES: readonly string[] = [
   "scripts/installer/migrate-install-state.mjs",
   "scripts/installer/resolve-host-identity.mjs",
   "scripts/installer/install-state-transaction.mjs",
+  "scripts/installer/install-release-assets.mjs",
   "scripts/installer/install-state-lock-contract.json",
   "scripts/installer/install-state-schema-registry.mjs",
   "scripts/installer/install-state.schema.json",

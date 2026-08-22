@@ -43,6 +43,8 @@ export type ReleaseStampStatus =
 
 export type ReleaseStampSnapshot = {
   tag: string;
+  /** Immutable source revision baked into every image for this release. */
+  headSha: string | null;
   runId: number;
   runUrl: string;
   status: ReleaseStampStatus;
@@ -64,6 +66,7 @@ export type ReleaseRunsDeps = {
 type RawWorkflowRun = {
   id?: number;
   head_branch?: string | null;
+  head_sha?: string | null;
   event?: string;
   status?: string | null;
   conclusion?: string | null;
@@ -110,6 +113,7 @@ export async function readLatestReleaseStamp(
 
   const base: Omit<ReleaseStampSnapshot, "status"> = {
     tag: latest.head_branch as string,
+    headSha: latest.head_sha ?? null,
     runId: latest.id as number,
     runUrl:
       latest.html_url ??

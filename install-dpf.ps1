@@ -1714,15 +1714,30 @@ if (-not (Test-StepDone "started")) {
     $stateLib = Join-Path $DPF_DIR "scripts\installer\lib\state.ps1"
     if (-not (Test-Path -LiteralPath $stateLib)) { throw "capability_state_helper_missing" }
     . $stateLib
+    Initialize-DpfState -InstallerVersion $Version -InstallPath $DPF_DIR
     if ($WithEdge) { $env:DPF_INCLUDE_EDGE = '1' }
     elseif ($NoEdge) { $env:DPF_INCLUDE_EDGE = '0' }
     $resolvedEdgeEnabled = Resolve-DpfEdgeEnabled -InstallDir $DPF_DIR
     $env:DPF_INCLUDE_EDGE = if ($resolvedEdgeEnabled) { '1' } else { '0' }
-    Set-DpfStateValue -Key "edge" -Value @{ enabled = $resolvedEdgeEnabled; mode = $(if ($resolvedEdgeEnabled) { "local" } else { $null }) }
+    Set-DpfStateValues -Values @{
+        installerVersion = $Version
+        installPath = $DPF_DIR
+        installMode = $InstallMode
+        imageTag = $(if ($InstallMode -eq "consumer") { $Version } else { $null })
+        edge = @{ enabled = $resolvedEdgeEnabled; mode = $(if ($resolvedEdgeEnabled) { "local" } else { $null }) }
+    }
     $capabilityProjection = Resolve-DpfCapabilityComposeProfiles -InstallDir $DPF_DIR
     $env:COMPOSE_PROFILES = (@($capabilityProjection.composeProfiles) -join ',')
     Import-DPFComposeChain -InstallDir $DPF_DIR
     $coreComposeArgs = Get-DPFComposeArgs -InstallDir $DPF_DIR -IncludeEdge:$false -IncludeRelease:($InstallMode -eq "consumer")
+    $recordedComposeFiles = @()
+    for ($i = 0; $i -lt $coreComposeArgs.Count; $i++) {
+        if ($coreComposeArgs[$i] -eq "-f" -and ($i + 1) -lt $coreComposeArgs.Count) {
+            $recordedComposeFiles += [string]$coreComposeArgs[$i + 1]
+            $i++
+        }
+    }
+    Set-DpfStateValues -Values @{ composeFiles = $recordedComposeFiles }
 
     if ($InstallMode -eq "consumer") {
         Write-Action "Pulling pre-built images (this may take a few minutes, be patient)..."
@@ -1896,6 +1911,14 @@ if (-not (Test-StepDone "started")) {
     }
 
     Write-OK "All services healthy"
+    Set-DpfStateValues -Values @{
+        installerVersion = $Version
+        lastSuccessfulInstallVersion = $Version
+        installPath = $DPF_DIR
+        installMode = $InstallMode
+        composeFiles = $recordedComposeFiles
+        imageTag = $(if ($InstallMode -eq "consumer") { $Version } else { $null })
+    }
 
     # For customizer mode: generate Prisma client on the host so local `pnpm dev` works
     if ($InstallMode -eq "customizer") {

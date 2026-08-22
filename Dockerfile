@@ -187,7 +187,7 @@ RUN mkdir -p /dpf-release-assets/scripts/lib /dpf-release-assets/scripts/install
     cp scripts/lib/resolve-capability-compose-profiles.mjs scripts/lib/govern-capability-compose-args.mjs scripts/lib/capability-state-hash.mjs /dpf-release-assets/scripts/lib/ && \
     cp scripts/capability-service-catalog.generated.json /dpf-release-assets/scripts/ && \
     cp scripts/installer/validate-install-state.mjs /dpf-release-assets/scripts/installer/ && \
-    cp scripts/installer/install-state-transaction.mjs scripts/installer/install-state-lock-contract.json /dpf-release-assets/scripts/installer/ && \
+    cp scripts/installer/install-state-transaction.mjs scripts/installer/install-release-assets.mjs scripts/installer/install-state-lock-contract.json /dpf-release-assets/scripts/installer/ && \
     cp scripts/installer/install-state-schema-registry.mjs /dpf-release-assets/scripts/installer/ && \
     cp scripts/installer/install-state.schema.json /dpf-release-assets/scripts/installer/ && \
     cp scripts/installer/install-state.v1.schema.json /dpf-release-assets/scripts/installer/ && \
@@ -343,6 +343,7 @@ COPY scripts/lib/transition-signing.mjs /promoter/scripts/lib/transition-signing
 COPY scripts/promoter-migration-envelope.mjs /promoter/scripts/promoter-migration-envelope.mjs
 COPY scripts/installer/validate-install-state.mjs /promoter/scripts/installer/validate-install-state.mjs
 COPY scripts/installer/install-state-transaction.mjs /promoter/scripts/installer/install-state-transaction.mjs
+COPY scripts/installer/install-release-assets.mjs /promoter/scripts/installer/install-release-assets.mjs
 COPY scripts/installer/install-state-lock-contract.json /promoter/scripts/installer/install-state-lock-contract.json
 COPY scripts/installer/migrate-install-state.mjs /promoter/scripts/installer/migrate-install-state.mjs
 COPY scripts/installer/resolve-host-identity.mjs /promoter/scripts/installer/resolve-host-identity.mjs
