@@ -3,6 +3,11 @@ export const SCHEDULED_AGENT_TASK_KINDS = [
   "product-intelligence-watch",
   "product-management-playbook",
   "business-analysis-watch",
+  // TAK §8.11 — a standing watch over recorded obligations, reviews, and
+  // expiries. Distinct from the product/business watches above because its
+  // trigger is `deadline-horizon` (a recorded due date entering a look-ahead
+  // window), not a cadence over free-form research.
+  "assurance-watch",
 ] as const;
 
 export type ScheduledAgentTaskKind =
@@ -10,6 +15,9 @@ export type ScheduledAgentTaskKind =
 
 export const BUSINESS_ANALYSIS_WATCH_TASK_KIND =
   SCHEDULED_AGENT_TASK_KINDS[2];
+
+export const ASSURANCE_WATCH_TASK_KIND =
+  SCHEDULED_AGENT_TASK_KINDS[3];
 
 export function isScheduledAgentTaskKind(
   value: unknown,

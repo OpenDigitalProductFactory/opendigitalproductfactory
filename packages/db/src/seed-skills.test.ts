@@ -464,3 +464,42 @@ describe("invocation classification is populated, not uniform (BI-8AD9D018)", ()
     expect(contradictions).toEqual([]);
   });
 });
+
+describe("declared cadence (TAK §8.11)", () => {
+  const base = {
+    raw: "---\nname: x\n---\nbody",
+    category: "compliance",
+    sourceType: LEGACY_SKILL_SOURCE_TYPE,
+  } as const;
+
+  it("carries a cron cadence off a recurring skill", () => {
+    const seed = normalizeSkillFrontmatterForSeed({
+      ...base,
+      frontmatter: { name: "watch", taskType: "recurring", cadence: "11 6 * * *" },
+    });
+    expect(seed.skillDefinition.taskType).toBe("recurring");
+    expect(seed.skillDefinition.cadence).toBe("11 6 * * *");
+  });
+
+  it("drops a cadence on a non-recurring skill rather than storing a schedule nothing reads", () => {
+    const seed = normalizeSkillFrontmatterForSeed({
+      ...base,
+      frontmatter: { name: "chat", taskType: "conversation", cadence: "11 6 * * *" },
+    });
+    expect(seed.skillDefinition.cadence).toBeNull();
+  });
+
+  it("drops text that is not a cron expression", () => {
+    const seed = normalizeSkillFrontmatterForSeed({
+      ...base,
+      frontmatter: { name: "watch", taskType: "recurring", cadence: "every so often" },
+    });
+    expect(seed.skillDefinition.cadence).toBeNull();
+  });
+
+  it("leaves an ordinary skill with no cadence", () => {
+    const seed = normalizeSkillFrontmatterForSeed({ ...base, frontmatter: { name: "chat" } });
+    expect(seed.skillDefinition.taskType).toBe("conversation");
+    expect(seed.skillDefinition.cadence).toBeNull();
+  });
+});

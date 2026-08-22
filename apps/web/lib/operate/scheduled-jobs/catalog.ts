@@ -43,6 +43,14 @@ import {
   BUSINESS_JOURNEY_WATCHDOG_REQUESTED_EVENT,
 } from "@/lib/business-journeys/watchdog-constants";
 import {
+  OBLIGATION_WATCH_JOB_ID,
+  OBLIGATION_WATCH_JOB_NAME,
+  OBLIGATION_WATCH_INNGEST_ID,
+  OBLIGATION_WATCH_REQUESTED_EVENT,
+  OBLIGATION_WATCH_CRON,
+  OBLIGATION_WATCH_CADENCE,
+} from "@/lib/compliance/obligation-watch-constants";
+import {
   CATALOG_SWEEP_JOB_ID,
   CATALOG_SWEEP_JOB_NAME,
   CATALOG_SWEEP_SCHEDULED_INNGEST_ID,
@@ -768,6 +776,18 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
     category: "editable",
     tracksRunData: false,
     runNowEvent: BUSINESS_JOURNEY_WATCHDOG_REQUESTED_EVENT,
+  },
+  {
+    jobId: OBLIGATION_WATCH_JOB_ID,
+    inngestId: OBLIGATION_WATCH_INNGEST_ID,
+    name: OBLIGATION_WATCH_JOB_NAME,
+    purpose:
+      "TAK §8.11 obligation-assurance-watch: sweeps recorded obligations, control reviews, and licence expiries against a 30-day look-ahead and raises an assurance finding for each one falling due, plus for any recurrence that has no next date. The accountable owner (\"compliance-officer\") decides the response; this job never decides it. If it stops, six recorded cadence columns go back to reading as controls in force while behaving as controls that are not.",
+    cron: OBLIGATION_WATCH_CRON,
+    cadence: OBLIGATION_WATCH_CADENCE,
+    category: "editable",
+    tracksRunData: false,
+    runNowEvent: OBLIGATION_WATCH_REQUESTED_EVENT,
   },
   {
     jobId: "memory-consolidation-nightly",

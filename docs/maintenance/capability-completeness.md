@@ -36,7 +36,7 @@ the platform is not".
   - Joined via COWORKER_SLUG_TO_CANONICAL_AGENT_ID; a handle-only join over-counts.
 - At 100% of attainable: **1**
 - Median attainable: **14%** · median absolute: **11%**
-- Skills: **68** total, **0** stranded, **0** able to declare a cadence
+- Skills: **69** total, **0** stranded, **1** able to declare a cadence
 - Unresolved `assignTo` targets: `external-coding-agent`
 - Unbacked `backingSkillIds`: `build-sensitive-domain-requirements`, `compliance-requirements-review`, `customer-intake-triage`, `external-catalog-scout`, `marketing-collaboration-intake`, `prepare-counsel-packet`, `provider-cost-intake`
 
@@ -70,7 +70,7 @@ The gate is built and enforced; its REACH is one hand-maintained set, and an und
 | Corpus / WSID | 1 | 3 | 0 | 0 | 54 | 28 | 28/82 |
 | Governance / WWWD | 2 | 3 | 54 | 0 | 11 | 17 | 17/82 |
 | Shape | 1 | 0 | 82 | 0 | 0 | 0 | 82/82 |
-| Cadence | 1 | 2 | 77 | 0 | 5 | 0 | 5/82 |
+| Cadence | 1 | 2 | 76 | 0 | 6 | 0 | 6/82 |
 | Tools + Skills | 2 | 3 | 53 | 12 | 5 | 12 | 12/82 |
 | Evidence | 1 | 2 | 55 | 21 | 6 | 0 | 6/82 |
 
@@ -210,11 +210,11 @@ _Certification exercises a real domain act, not a generic probe._
 | `legal-operations-counsel` | roster-only | 50% | 41% | 1 | 3 | 2 | 0 | 0 | 1 | 1 |
 | `security-engineer` | roster-only | 50% | 41% | 1 | 3 | 2 | 0 | 0 | 1 | 1 |
 | `storefront-advisor` | roster-only | 50% | 41% | 1 | 3 | 2 | 0 | 0 | 1 | 1 |
-| `compliance-officer` | roster-only | 59% | 48% | 1 | 3 | 2 | 0 | 0 | 2 | 1 |
 | `finance-controller` | roster-only | 59% | 48% | 1 | 3 | 2 | 0 | 2 | 1 | 1 |
 | `AGT-WS-FARM-RANCH` | defined-roster | 64% | 52% | 2 | 3 | 3 | 0 | 0 | 1 | 1 |
 | `AGT-906` | defined-roster | 68% | 56% | 2 | 3 | 3 | 0 | 0 | 1 | 2 |
 | `AGT-WS-TIME-OFF` | defined-roster | 68% | 56% | 2 | 3 | 3 | 0 | 0 | 1 | 2 |
+| `compliance-officer` | roster-only | 68% | 56% | 1 | 3 | 2 | 0 | 2 | 2 | 1 |
 | `market-research-analyst` | roster-only | 68% | 56% | 1 | 3 | 2 | 0 | 0 | 3 | 1 |
 | `AGT-WS-ONBOARD` | active-registry-only | 73% | 59% | 1 | 3 | 3 | 0 | 0 | 3 | 0 |
 | `AGT-WS-REVIEW` | active-roster | 73% | 59% | 3 | 3 | 3 | 0 | 0 | 1 | 2 |

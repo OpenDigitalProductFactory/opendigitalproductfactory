@@ -1235,7 +1235,14 @@ model SkillDefinition {
   composesFrom        String[] @default([]) // other skillIds this skill builds on
   contextRequirements String[] @default([]) // what context/data the skill needs
   capability          String? // permission gate (e.g. "view_portfolio") — null = ungated
-  taskType            String   @default("conversation") // "conversation" | "code_generation" | "analysis"
+  taskType            String   @default("conversation") // "conversation" | "code_generation" | "analysis" | "recurring"
+  // TAK §8.11 — a skill that runs on a schedule must be able to SAY so. Cron
+  // expression (UTC) declared in the .skill.md frontmatter alongside
+  // taskType: "recurring". Null = the skill only runs when invoked. A cadence
+  // recorded here with no trigger reading it is a defect, not latent config
+  // (§8.11.1): the reader is
+  // apps/web/lib/operate/scheduled-jobs/coworker-self-tasks.ts.
+  cadence             String?
 
   evaluationId String?
   installedAt  DateTime?
