@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 674,
+  "pageCount": 675,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -5099,6 +5099,18 @@
         "progress",
         "checklist",
         "areas-in-scope-and-what-automates-them"
+      ]
+    },
+    "docs/maintenance/obligation-cadence-coverage.md": {
+      "publicHref": "/maintenance/obligation-cadence-coverage/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "obligation-cadence-coverage",
+        "common-applies-whatever-the-business-is",
+        "archetype-coverage",
+        "trigger-classes-across-every-pack"
       ]
     },
     "docs/maintenance/staleness-coverage.md": {
@@ -10978,6 +10990,7 @@
         "decisions-and-consequences",
         "what-runs-on-its-own",
         "what-it-does",
+        "not-every-obligation-is-on-a-schedule",
         "when-it-runs",
         "how-it-stays-current",
         "what-it-will-not-do",

@@ -18,6 +18,7 @@
 // runner (deadline-horizon-runner.ts) does the I/O.
 
 import { createFindingKey, normalizeVendorIdentifier } from "@/lib/assurance/finding-key";
+import { classifyObligationFrequency } from "./obligation-cadence";
 import type {
   AssurancePolicySeverity,
   NormalizedAssuranceFinding,
@@ -34,32 +35,7 @@ export const MAX_FINDINGS_PER_RUN = 200;
 
 const DAY_MS = 86_400_000;
 
-/**
- * Recurrence words the compliance surfaces actually write, mapped to days.
- * Unrecognised text is NOT guessed at: it yields a `no next date` finding, which
- * is the honest outcome — a cadence nobody can compute is not a control.
- */
-const CADENCE_DAYS: Record<string, number> = {
-  daily: 1,
-  weekly: 7,
-  biweekly: 14,
-  fortnightly: 14,
-  monthly: 30,
-  bimonthly: 60,
-  quarterly: 91,
-  "semi-annual": 182,
-  semiannual: 182,
-  "half-yearly": 182,
-  annual: 365,
-  annually: 365,
-  yearly: 365,
-  biennial: 730,
-};
-
-export function cadenceToDays(value: string | null | undefined): number | null {
-  if (typeof value !== "string") return null;
-  return CADENCE_DAYS[value.trim().toLowerCase()] ?? null;
-}
+export type { ObligationTriggerClass } from "./obligation-cadence";
 
 export type SweepObligation = {
   obligationId: string;
@@ -107,6 +83,7 @@ type Reason =
   | "due-inside-horizon"
   | "overdue"
   | "recurrence-with-no-next-date"
+  | "uncomputable-frequency"
   | "evidence-stale";
 
 /** Overdue is high; inside the horizon is medium; an unreadable recurrence is low but visible. */
@@ -115,6 +92,9 @@ function severityFor(reason: Reason): AssurancePolicySeverity {
   if (reason === "due-inside-horizon" || reason === "evidence-stale") return "medium";
   return "low";
 }
+
+/** Re-exported so callers share one vocabulary rather than re-deriving days. */
+export { cadenceToDays } from "./obligation-cadence";
 
 function daysBetween(from: Date, to: Date): number {
   return Math.round((to.getTime() - from.getTime()) / DAY_MS);
@@ -193,8 +173,8 @@ export function sweepDeadlineHorizon(input: DeadlineHorizonInput): DeadlineHoriz
   // ── Obligation.frequency + reviewDate ──────────────────────────────────────
   for (const obligation of input.obligations) {
     if (obligation.status !== "active") continue;
-    const cadenceDays = cadenceToDays(obligation.frequency);
-    const declaresRecurrence = Boolean(obligation.frequency?.trim());
+    const cadence = classifyObligationFrequency(obligation.frequency);
+    const cadenceDays = cadence.periodDays;
 
     if (obligation.reviewDate) {
       if (obligation.reviewDate > horizonEnd) continue;
@@ -226,27 +206,64 @@ export function sweepDeadlineHorizon(input: DeadlineHorizonInput): DeadlineHoriz
       continue;
     }
 
-    if (declaresRecurrence) {
+    // ONLY a genuine recurrence needs an anchor date. `continuous` (a standing
+    // control, in force every day) and `event-driven` (started by an occurrence)
+    // are CORRECTLY dateless — reporting them was 88 of the first live sweep's
+    // 141 findings, every one of them false.
+    if (cadence.requiresAnchorDate) {
       findings.push(finding({
         affectedId: `obligation:${obligation.obligationId}`,
         vendorIdentifier: `obligation:${obligation.obligationId}:no-next-date`,
         title: `Recurring obligation with no next date: ${obligation.title}`,
         description:
-          `Obligation ${obligation.obligationId} declares a ${obligation.frequency} recurrence and `
-          + "has no review date, so nothing will ever fall due. The recurrence reads as a control "
-          + "in force and is not.",
+          `Obligation ${obligation.obligationId} recurs ${obligation.frequency} and has no review `
+          + "date, so nothing will ever fall due. The recurrence reads as a control in force and "
+          + "is not.",
         reason: "recurrence-with-no-next-date",
         evidence: {
           source: "Obligation.frequency",
           obligationId: obligation.obligationId,
           frequency: obligation.frequency,
+          triggerClass: cadence.triggerClass,
+          periodDays: cadenceDays,
           reviewDate: null,
         },
         remediationHint: {
-          action: "Set a review date, or clear the frequency if the obligation is not recurring.",
+          action: "Set the review date this obligation next falls due.",
           suggestedReviewDate: cadenceDays
             ? new Date(now.getTime() + cadenceDays * DAY_MS).toISOString()
             : null,
+        },
+      }));
+      continue;
+    }
+
+    // Words are recorded and mean something to a person, but nothing can turn
+    // them into a date. Reported as its own low finding rather than guessed at
+    // — a fabricated due date in front of a compliance owner is worse than a
+    // missing one.
+    if (cadence.triggerClass === "unrecognised") {
+      findings.push(finding({
+        affectedId: `obligation:${obligation.obligationId}`,
+        vendorIdentifier: `obligation:${obligation.obligationId}:uncomputable-frequency`,
+        title: `Frequency nothing can compute: ${obligation.title}`,
+        description:
+          `Obligation ${obligation.obligationId} records a frequency of "${obligation.frequency}", `
+          + "which is neither a recognised recurrence nor a declared standing or event-driven "
+          + "obligation. Nothing can derive a date from it, so it is watched by nothing.",
+        reason: "uncomputable-frequency",
+        evidence: {
+          source: "Obligation.frequency",
+          obligationId: obligation.obligationId,
+          frequency: obligation.frequency,
+          triggerClass: cadence.triggerClass,
+          reviewDate: null,
+        },
+        remediationHint: {
+          action:
+            "Record a recognised recurrence (e.g. quarterly, annual), or declare the obligation "
+            + "continuous or event-driven if it is not on a schedule.",
+          suggestedReviewDate: null,
         },
       }));
     }
@@ -255,8 +272,8 @@ export function sweepDeadlineHorizon(input: DeadlineHorizonInput): DeadlineHoriz
   // ── Control.reviewFrequency / nextReviewDate / lastReviewedAt ──────────────
   for (const control of input.controls) {
     if (control.status !== "active") continue;
-    const cadenceDays = cadenceToDays(control.reviewFrequency);
-    const declaresRecurrence = Boolean(control.reviewFrequency?.trim());
+    const controlCadence = classifyObligationFrequency(control.reviewFrequency);
+    const cadenceDays = controlCadence.periodDays;
 
     // nextReviewDate wins; otherwise derive it from lastReviewedAt + cadence.
     const derivedFrom = control.nextReviewDate
@@ -300,19 +317,22 @@ export function sweepDeadlineHorizon(input: DeadlineHorizonInput): DeadlineHoriz
       continue;
     }
 
-    if (declaresRecurrence) {
+    // Same rule as obligations: only a real recurrence needs a date. A control
+    // declared continuous is operating every day, not overdue for review.
+    if (controlCadence.requiresAnchorDate) {
       findings.push(finding({
         affectedId: `control:${control.controlId}`,
         vendorIdentifier: `control:${control.controlId}:no-next-date`,
         title: `Control declares a review cadence but has never been reviewed: ${control.title}`,
         description:
-          `Control ${control.controlId} declares a ${control.reviewFrequency} review cadence with `
-          + "neither a last-reviewed date nor a next-review date, so no review will ever fall due.",
+          `Control ${control.controlId} is reviewed ${control.reviewFrequency} and has neither a `
+          + "last-reviewed date nor a next-review date, so no review will ever fall due.",
         reason: "recurrence-with-no-next-date",
         evidence: {
           source: "Control.reviewFrequency",
           controlId: control.controlId,
           reviewFrequency: control.reviewFrequency,
+          triggerClass: controlCadence.triggerClass,
           lastReviewedAt: null,
           nextReviewDate: null,
         },
