@@ -9,6 +9,8 @@ import {
   type DecisionInteractionQueueRow,
 } from "@/lib/founder-review/queue";
 import type { WikiPerspective } from "@/lib/wiki/perspective-intent";
+import { BandTelemetryPanel } from "@/components/platform/BandTelemetryPanel";
+import { computeBandTelemetry, type BandTelemetryRow } from "@/lib/decision/band-telemetry";
 
 type PageProps = {
   searchParams?: Promise<{ mode?: string; profile?: string }>;
@@ -93,10 +95,41 @@ export default async function FounderReviewPage({ searchParams }: PageProps) {
     .filter((candidate) => !mode || candidate.perspective === mode);
   const visibleCandidates = dedupeFounderReviewCandidates(candidates);
   const groups = groupFounderReviewCandidates(visibleCandidates);
+
+  // BI-3217C098: the tuning instrument. Read-only aggregation over recorded
+  // decisions; a failure here must not take down the review inbox.
+  const telemetry = await (async () => {
+    try {
+      const rows = await prisma.decisionInteraction.findMany({
+        where: profileFilter ? { profileId: profileFilter } : {},
+        orderBy: { createdAt: "desc" },
+        take: 500,
+        select: {
+          outcomePayload: true,
+          recommendedOptionId: true,
+          chosenOptionId: true,
+        },
+      });
+      return computeBandTelemetry(rows.map((r) => {
+        const payload = (r.outcomePayload ?? {}) as Record<string, unknown>;
+        return {
+          margin: typeof payload["margin"] === "number" ? payload["margin"] : null,
+          verdict: (payload["verdict"] as BandTelemetryRow["verdict"]) ?? null,
+          bandUpper: typeof payload["bandUpper"] === "number" ? payload["bandUpper"] : null,
+          recommendedOptionId: r.recommendedOptionId,
+          chosenOptionId: r.chosenOptionId,
+        };
+      }));
+    } catch {
+      return null;
+    }
+  })();
   const title = titleForMode(mode);
 
   return (
     <main className="space-y-6 text-[var(--dpf-text)]">
+      {telemetry ? <BandTelemetryPanel telemetry={telemetry} /> : null}
+
       <div>
         <h1 className="text-lg font-semibold">{title}</h1>
         <p className="mt-1 text-sm text-[var(--dpf-muted)]">
