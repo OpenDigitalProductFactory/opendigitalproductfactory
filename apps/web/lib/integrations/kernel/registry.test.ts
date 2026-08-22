@@ -108,13 +108,15 @@ describe("canonical connector registry", () => {
     ])).toEqual([
       ["email-postmark", 1],
       ["microsoft365-communications", 1],
+      ["wordpress-self-hosted", 1],
     ]);
   });
 
   it.each([
-    ["email-postmark", "postmark"],
-    ["microsoft365-communications", "microsoft365"],
-  ])("projects shared safe state, health, and capabilities for %s", (key, provider) => {
+    ["email-postmark", "postmark", 300],
+    ["microsoft365-communications", "microsoft365", 300],
+    ["wordpress-self-hosted", "wordpress", 3_600],
+  ])("projects shared safe state, health, and capabilities for %s", (key, provider, probeIntervalSeconds) => {
     const sourceDate = new Date("2026-07-17T12:00:00.000Z");
     const sourceProjection = { account: "safe-value", nested: { enabled: true } };
     const projected = connectorRegistry.project(key, {
@@ -129,7 +131,7 @@ describe("canonical connector registry", () => {
     expect(projected).toMatchObject({
       schemaVersion: 1,
       key,
-      health: { status: "degraded", probeIntervalSeconds: 300 },
+      health: { status: "degraded", probeIntervalSeconds },
       state: {
         provider,
         status: "degraded",

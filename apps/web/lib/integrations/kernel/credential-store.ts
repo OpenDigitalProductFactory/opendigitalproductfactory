@@ -97,6 +97,10 @@ export interface ConnectorSafeError {
   safeMessage: string;
 }
 
+export type ConnectorHealthProbeOutcome =
+  | { succeeded: true }
+  | { succeeded: false; error: ConnectorSafeError };
+
 export interface FailedConnectorCredential extends Omit<SuccessfulConnectorCredential, "safeProjection"> {
   reconnectFieldsReusable: boolean;
   /** Defaults to failure-time for compatibility; use preserve when a failed attempt is not a successful test. */
@@ -347,6 +351,42 @@ export function createConnectorCredentialStore<TTransactionContext = ConnectorCr
       async disconnect(integrationId: string): Promise<void> {
         await transaction.delete({ integrationId });
       },
+
+      async recordHealthProbe(integrationId: string, outcome: ConnectorHealthProbeOutcome): Promise<void> {
+        const existing = await transaction.findUnique({ integrationId });
+        if (!existing) throw new Error("Connector credential is not configured.");
+        const testedAt = currentTime();
+        await transaction.update({
+          integrationId,
+          data: outcome.succeeded
+            ? { status: "connected", lastTestedAt: testedAt, lastErrorAt: null, lastErrorMsg: null }
+            : {
+                lastTestedAt: testedAt,
+                lastErrorAt: testedAt,
+                lastErrorMsg: sanitizeErrorMessage(outcome.error.safeMessage),
+              },
+        });
+      },
+
+      async updateSafeProjection(
+        integrationId: string,
+        transform: (projection: ConnectorSafeProjection) => ConnectorSafeProjection,
+      ): Promise<ConnectorSafeProjection> {
+        const existing = await transaction.findUnique({ integrationId });
+        if (!existing) throw new Error("Connector credential is not configured.");
+        const envelope = parseFieldsEnvelope(credentialCrypto.decryptJson(existing.fieldsEnc));
+        const tokens = existing.tokenCacheEnc
+          ? parseTokenEnvelope(credentialCrypto.decryptJson(existing.tokenCacheEnc))
+          : { schemaVersion: 1 as const, tokenEnvelope: {} };
+        if (!envelope || !tokens) throw new Error(UNREADABLE_CREDENTIAL_MESSAGE);
+        const transformed = transform(redactSafeProjection(envelope.safeProjection));
+        if (!isCredentialRecord(transformed)) throw new Error("Connector safe projection is not bounded.");
+        if (!readinessAlreadyChecked) await credentialCrypto.assertReadyForWrite();
+        const safeProjection = redactSafeProjection(transformed, envelope.secretFields, tokens.tokenEnvelope);
+        const fieldsEnc = credentialCrypto.encryptJson({ ...envelope, safeProjection } satisfies StoredCredentialFieldsEnvelope);
+        await transaction.update({ integrationId, data: { fieldsEnc } });
+        return safeProjection;
+      },
     };
   }
 
@@ -364,6 +404,18 @@ export function createConnectorCredentialStore<TTransactionContext = ConnectorCr
 
     async disconnect(integrationId: string): Promise<void> {
       await runTransactionWithRetry((transaction) => boundStore(transaction).disconnect(integrationId));
+    },
+
+    async recordHealthProbe(integrationId: string, outcome: ConnectorHealthProbeOutcome): Promise<void> {
+      await runTransactionWithRetry((transaction) => boundStore(transaction).recordHealthProbe(integrationId, outcome));
+    },
+
+    async updateSafeProjection(
+      integrationId: string,
+      transform: (projection: ConnectorSafeProjection) => ConnectorSafeProjection,
+    ): Promise<ConnectorSafeProjection> {
+      await credentialCrypto.assertReadyForWrite();
+      return runTransactionWithRetry((transaction) => boundStore(transaction, true).updateSafeProjection(integrationId, transform));
     },
 
     withTransaction: boundStore,
