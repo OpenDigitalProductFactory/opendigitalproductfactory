@@ -7,13 +7,15 @@ import { updateBacklogItemSchema } from "@dpf/validators";
 import { authenticateRequest } from "@/lib/api/auth-middleware";
 import { ApiError, apiError } from "@/lib/api/error";
 import { apiSuccess } from "@/lib/api/response";
+import { completeBacklogItemTransition } from "@/lib/backlog/initiative-readiness/backlog-terminal-transition";
+import { terminalTransitionConflict } from "@/lib/backlog/initiative-readiness/terminal-transition-response";
 
 export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    await authenticateRequest(request);
+    const { user } = await authenticateRequest(request);
 
     const { id } = await params;
 
@@ -28,7 +30,7 @@ export async function PATCH(
 
     const existing = await prisma.backlogItem.findUnique({
       where: { id },
-      select: { id: true, status: true },
+      select: { id: true, itemId: true, status: true, organizationId: true },
     });
     if (!existing) {
       throw apiError("NOT_FOUND", "Backlog item not found", 404);
@@ -58,23 +60,59 @@ export async function PATCH(
     const isNowDone = status === "done";
     const wasDone = existing.status === "done" || existing.status === "retired";
 
-    const item = await prisma.backlogItem.update({
-      where: { id },
-      data: {
-        ...(title !== undefined && { title: title.trim() }),
-        ...(itemBody !== undefined && { body: itemBody.trim() || null }),
-        ...(status !== undefined && { status }),
-        ...(priority !== undefined && { priority }),
-        ...(epicId !== undefined && { epicId }),
-        ...(scopeKind !== undefined && { scopeKind }),
-        ...(archetypeCategories !== undefined && { archetypeCategories }),
-        ...(archetypeIds !== undefined && { archetypeIds }),
-        ...(scopeRationale !== undefined && { scopeRationale: scopeRationale?.trim() || null }),
-        ...(lifecycleTags !== undefined && { lifecycleTags }),
-        ...(isNowDone && !wasDone ? { completedAt: new Date() } : {}),
-        ...(!isNowDone && wasDone ? { completedAt: null } : {}),
-      },
-    });
+    const updateData = {
+      ...(title !== undefined && { title: title.trim() }),
+      ...(itemBody !== undefined && { body: itemBody.trim() || null }),
+      ...(status !== undefined && { status }),
+      ...(priority !== undefined && { priority }),
+      ...(epicId !== undefined && { epicId }),
+      ...(scopeKind !== undefined && { scopeKind }),
+      ...(archetypeCategories !== undefined && { archetypeCategories }),
+      ...(archetypeIds !== undefined && { archetypeIds }),
+      ...(scopeRationale !== undefined && { scopeRationale: scopeRationale?.trim() || null }),
+      ...(lifecycleTags !== undefined && { lifecycleTags }),
+      ...(!isNowDone && wasDone ? { completedAt: null } : {}),
+    };
+
+    if (isNowDone && !wasDone) {
+      const terminal = await completeBacklogItemTransition({
+        itemId: existing.itemId,
+        expectedStatus: existing.status,
+        resolution: typeof body.resolution === "string" && body.resolution.trim()
+          ? body.resolution.trim()
+          : "Completed through the operations API by an authorized operator.",
+        completionEvidence: body.completionEvidence,
+        additionalData: updateData,
+        actor: {
+          actorType: "human",
+          actorRef: user.id,
+          humanContextRef: user.id,
+          agentContextRef: null,
+        },
+        authority: {
+          organizationId: existing.organizationId,
+          actionKey: "update_backlog_item",
+          objectRef: existing.itemId,
+          rationale: { capability: "manage_backlog", source: "ops-api" },
+          authoritySnapshot: {
+            decision: "allow",
+            effectiveHumanCapability: "manage_backlog",
+            effectiveAgentGrant: "human-session",
+            tokenScope: "organization",
+            organizationId: existing.organizationId ?? "platform",
+            actionKey: "update_backlog_item",
+            policyVersion: "coworker-authority.v1",
+          },
+        },
+      });
+      if (!terminal.ok) {
+        return terminalTransitionConflict(terminal);
+      }
+      const item = await prisma.backlogItem.findUnique({ where: { id } });
+      return apiSuccess(item);
+    }
+
+    const item = await prisma.backlogItem.update({ where: { id }, data: updateData });
 
     return apiSuccess(item);
   } catch (e) {

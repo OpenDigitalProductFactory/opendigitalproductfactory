@@ -1,6 +1,10 @@
 import { prisma } from "@dpf/db";
 import * as crypto from "crypto";
 import { BACKLOG_SCOPE_KIND_VALUES, BACKLOG_SOURCE_VALUES, EPIC_STATUSES } from "@/lib/explore/backlog";
+import {
+  completeEpicTransition,
+  convergeEpicReceiptAnchor,
+} from "@/lib/backlog/initiative-readiness/epic-terminal-transition";
 
 type ToolExecutionContext = {
   agentId?: string;
@@ -257,6 +261,13 @@ export async function createEpicTool(
 
   const statusResult = parseEpicStatus(params["status"]);
   if (!statusResult.ok) return statusResult.result;
+  if (statusResult.status === "done") {
+    return {
+      success: false,
+      error: "classification_required",
+      message: "Create the Epic as open, converge its canonical backlog receipt anchor, then request governed completion.",
+    };
+  }
   const priorityResult = parsePriority(params["priority"]);
   if (!priorityResult.ok) return priorityResult.result;
   const sourceResult = parseSource(params["source"]);
@@ -304,7 +315,6 @@ export async function createEpicTool(
       ...(description ? { description } : {}),
       ...(priority !== undefined ? { priority } : {}),
       ...(ownerResult.owner ? { accountableEmployeeId: ownerResult.owner.id } : {}),
-      ...(statusResult.status === "done" ? { completedAt: new Date() } : {}),
       ...(scopeKindResult.scopeKind ? { scopeKind: scopeKindResult.scopeKind } : {}),
       ...(archetypeCategories ? { archetypeCategories } : {}),
       ...(archetypeIds ? { archetypeIds } : {}),
@@ -363,7 +373,11 @@ export async function createEpicTool(
   };
 }
 
-export async function updateEpicTool(params: Record<string, unknown>): Promise<ToolResult> {
+export async function updateEpicTool(
+  params: Record<string, unknown>,
+  userId: string,
+  context?: ToolExecutionContext,
+): Promise<ToolResult> {
   const epicRaw = String(params["epicId"] ?? "").trim();
   if (!epicRaw) {
     return { success: false, error: "missing_epicId", message: "epicId is required" };
@@ -384,6 +398,7 @@ export async function updateEpicTool(params: Record<string, unknown>): Promise<T
       archetypeIds: true,
       scopeRationale: true,
       lifecycleTags: true,
+      originatingBacklogItemId: true,
     },
   });
   if (!existing) {
@@ -391,6 +406,7 @@ export async function updateEpicTool(params: Record<string, unknown>): Promise<T
   }
 
   const data: Record<string, unknown> = {};
+  let requestsCompletion = false;
   if (typeof params["title"] === "string") {
     const title = params["title"].trim();
     if (!title) {
@@ -405,12 +421,13 @@ export async function updateEpicTool(params: Record<string, unknown>): Promise<T
   if (typeof params["status"] === "string") {
     const statusResult = parseEpicStatus(params["status"]);
     if (!statusResult.ok) return statusResult.result;
-    data["status"] = statusResult.status;
     if (statusResult.status === "done" && existing.status !== "done") {
-      data["completedAt"] = new Date();
-    }
-    if (statusResult.status !== "done" && existing.status === "done") {
-      data["completedAt"] = null;
+      requestsCompletion = true;
+    } else {
+      data["status"] = statusResult.status;
+      if (statusResult.status !== "done" && existing.status === "done") {
+        data["completedAt"] = null;
+      }
     }
   }
   const priorityResult = parsePriority(params["priority"]);
@@ -435,12 +452,74 @@ export async function updateEpicTool(params: Record<string, unknown>): Promise<T
   const planPath = optionalString(params, "planPath");
   const rationale = optionalString(params, "rationale");
 
-  const updated = Object.keys(data).length === 0
-    ? existing
-    : await prisma.epic.update({
+  const requestedAnchor = optionalString(params, "originatingBacklogItemId");
+  if (requestedAnchor) {
+    try {
+      await convergeEpicReceiptAnchor({
+        epicId: existing.epicId,
+        backlogItemId: requestedAnchor,
+        actor: {
+          actorType: context?.agentId ? "agent" : "human",
+          actorRef: context?.agentId ?? userId,
+          humanContextRef: userId,
+          agentContextRef: context?.agentId ?? null,
+        },
+      });
+    } catch (error) {
+      return {
+        success: false,
+        error: "epic_anchor_conflict",
+        message: error instanceof Error ? error.message : "Could not converge the Epic receipt anchor.",
+      };
+    }
+  }
+
+  let updated: typeof existing;
+  if (requestsCompletion) {
+    const terminal = await completeEpicTransition({
+      epicId: existing.epicId,
+      expectedStatus: existing.status,
+      additionalData: data,
+      actor: {
+        actorType: context?.agentId ? "agent" : "human",
+        actorRef: context?.agentId ?? userId,
+        humanContextRef: userId,
+        agentContextRef: context?.agentId ?? null,
+      },
+      authority: {
+        organizationId: null,
+        actionKey: "update_epic",
+        objectRef: existing.epicId,
+        rationale: { capability: "manage_backlog", grant: "backlog_write", source: "mcp" },
+        authoritySnapshot: {
+          decision: "allow",
+          effectiveHumanCapability: "manage_backlog",
+          effectiveAgentGrant: "backlog_write",
+          tokenScope: "organization",
+          organizationId: "platform",
+          actionKey: "update_epic",
+          policyVersion: "coworker-authority.v1",
+        },
+      },
+    });
+    if (!terminal.ok) {
+      return {
+        success: false,
+        entityId: existing.epicId,
+        error: "initiative_not_ready",
+        message: `Epic completion is blocked by ${terminal.code}.`,
+        data: { code: terminal.code, readiness: terminal.decision },
+      };
+    }
+    updated = { ...existing, ...data, status: "done", completedAt: new Date() } as typeof existing;
+  } else {
+    updated = Object.keys(data).length === 0
+      ? existing
+      : await prisma.epic.update({
         where: { id: existing.id },
         data,
       });
+  }
 
   indexEpicContext({
     epicId: updated.epicId,

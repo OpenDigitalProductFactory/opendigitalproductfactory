@@ -55,7 +55,7 @@ import {
 } from "@/lib/build/build-actions-core";
 import { admitRuntimeGuardedWork } from "@/lib/platform-runtime/work-admission";
 import { assertBuildPhaseInitiativeReadiness } from "@/lib/build/build-entry-gate";
-
+import { assertFeatureBuildCompletion } from "@/lib/backlog/initiative-readiness/build-terminal-transition";
 // ─── Auth Guard ──────────────────────────────────────────────────────────────
 
 async function requireBuildAccess(): Promise<string> {
@@ -429,7 +429,8 @@ export async function advanceBuildPhase(
     throw new Error(`Cannot transition from ${currentPhase} to ${targetPhase}`);
   }
 
-  await assertBuildPhaseInitiativeReadiness({ buildId, currentPhase, targetPhase });
+  if (targetPhase === "complete") await assertFeatureBuildCompletion({ buildId, expectedPhase: currentPhase });
+  else await assertBuildPhaseInitiativeReadiness({ buildId, currentPhase, targetPhase });
 
   if (currentPhase === "ideate" && targetPhase === "plan") {
     const businessBrief = await prisma.businessBuildBrief.findUnique({
@@ -603,10 +604,12 @@ export async function advanceBuildPhase(
     }
   }
 
-  await prisma.featureBuild.update({
-    where: { buildId },
-    data: { phase: targetPhase },
-  });
+  if (targetPhase !== "complete") {
+    await prisma.featureBuild.update({
+      where: { buildId },
+      data: { phase: targetPhase },
+    });
+  }
   revalidatePortalContextForBuild(buildId);
 
   // Ephemeral ship-phase token lifecycle (BI-9866659C AC #4). Reduces
@@ -1523,10 +1526,7 @@ export async function completeBuild(buildId: string): Promise<void> {
   if (!build) throw new Error("Build not found");
   if (build.createdById !== userId) throw new Error("Forbidden");
 
-  await prisma.featureBuild.update({
-    where: { buildId },
-    data: { phase: "complete" },
-  });
+  await assertFeatureBuildCompletion({ buildId, expectedPhase: build.phase });
   revalidatePortalContextForBuild(buildId);
   await recordReadyDependentsAfterCompletion({ db: prisma, buildId }).catch((err) => {
     console.error("[completeBuild] dependency readiness check failed:", err);

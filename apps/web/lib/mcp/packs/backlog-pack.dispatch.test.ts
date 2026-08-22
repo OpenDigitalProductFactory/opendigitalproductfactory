@@ -1,9 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-
 vi.spyOn(console, "log").mockImplementation(() => undefined);
 vi.spyOn(console, "info").mockImplementation(() => undefined);
-
-const { mockPrisma, mockInngest } = vi.hoisted(() => ({
+const { mockPrisma, mockInngest, terminalMocks } = vi.hoisted(() => ({
+  terminalMocks: { backlog: vi.fn(), epic: vi.fn(), anchor: vi.fn() },
   mockPrisma: {
     backlogItem: {
       create: vi.fn(),
@@ -58,15 +57,14 @@ const { mockPrisma, mockInngest } = vi.hoisted(() => ({
     send: vi.fn(),
   },
 }));
-
 vi.mock("@dpf/db", () => ({
   prisma: mockPrisma,
 }));
-
+vi.mock("@/lib/backlog/initiative-readiness/backlog-terminal-transition", () => ({ completeBacklogItemTransition: terminalMocks.backlog }));
+vi.mock("@/lib/backlog/initiative-readiness/epic-terminal-transition", () => ({ completeEpicTransition: terminalMocks.epic, convergeEpicReceiptAnchor: terminalMocks.anchor }));
 vi.mock("@/lib/queue/inngest-client", () => ({
   inngest: mockInngest,
 }));
-
 // promote_to_build_studio fires a detached `void (async () => …)()` that
 // dynamically imports this module and dispatches Ideate. With the real module
 // in place that fire-and-forget rejects under the mocked prisma and calls
@@ -115,6 +113,7 @@ describe("backlog MCP tool execution", () => {
     mockPrisma.featureBuild.count.mockResolvedValue(0);
     mockPrisma.featureBuild.update.mockResolvedValue({});
     mockPrisma.buildActivity.create.mockResolvedValue({});
+    terminalMocks.backlog.mockResolvedValue({ ok: true }); terminalMocks.epic.mockResolvedValue({ ok: true }); terminalMocks.anchor.mockResolvedValue({ changed: true });
 
     mockPrisma.$transaction.mockImplementation(async (callback: (tx: typeof mockPrisma) => Promise<unknown>) => {
       return callback(mockPrisma);
@@ -311,16 +310,16 @@ describe("backlog MCP tool execution", () => {
     );
 
     expect(result.success).toBe(true);
-    expect(mockPrisma.epic.update).toHaveBeenCalledWith(
+    expect(terminalMocks.epic).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { id: "epic-row-1" },
-        data: expect.objectContaining({
+        epicId: "EP-WWMD",
+        expectedStatus: "open",
+        additionalData: expect.objectContaining({
           description: "Updated description",
-          status: "done",
-          completedAt: expect.any(Date),
         }),
       }),
     );
+    expect(mockPrisma.epic.update).not.toHaveBeenCalled();
   });
 
   it("update_epic updates priority and preserves spec/plan context in the response", async () => {
@@ -865,9 +864,10 @@ describe("backlog MCP tool execution", () => {
         { agentId: "AGT-1" },
       );
       expect(result.success).toBe(true);
-      expect(mockPrisma.backlogItem.update).toHaveBeenCalledWith(
-        expect.objectContaining({ data: expect.objectContaining({ status: "done", claimStatus: "released" }) }),
+      expect(terminalMocks.backlog).toHaveBeenCalledWith(
+        expect.objectContaining({ itemId: "BI-CLAIM01", expectedStatus: "in-progress", resolution: "Shipped." }),
       );
+      expect(mockPrisma.backlogItem.update).not.toHaveBeenCalled();
     });
   });
 });

@@ -59,6 +59,9 @@ vi.mock("./backlog-update-item-handler", () => ({
 const backlogBridge = vi.hoisted(() => ({ bridgeBacklogItemToWorkItem: vi.fn() }));
 vi.mock("@/lib/queue/bridges/backlog-bridge", () => backlogBridge);
 
+const terminalTransition = vi.hoisted(() => ({ completeBacklogItemTransition: vi.fn() }));
+vi.mock("@/lib/backlog/initiative-readiness/backlog-terminal-transition", () => terminalTransition);
+
 const specPlanSearch = vi.hoisted(() => ({
   buildSpecPlanReferenceIndex: vi.fn(async () => ({
     specs: new Map<string, string>(),
@@ -90,6 +93,11 @@ const EXPECTED_TOOLS = [
 
 beforeEach(() => {
   vi.clearAllMocks();
+  terminalTransition.completeBacklogItemTransition.mockResolvedValue({
+    ok: true,
+    authorityDecisionId: "DI-1",
+    decision: { verdict: "allowed", blockers: [], unmet: [] },
+  });
   db.transaction.mockImplementation(async (callback: (tx: unknown) => Promise<unknown>) =>
     callback({
       backlogItem: {
@@ -361,7 +369,7 @@ describe("backlog pack — handler behavior (delegation preserved)", () => {
     expect(completionEvidence?.properties?.evidenceActivityIds.maxItems).toBe(50);
   });
 
-  it("update_backlog_item_status records the normalized completion evidence receipt", async () => {
+  it("update_backlog_item_status routes completion through the canonical terminal transition", async () => {
     db.backlogItemFindUnique.mockResolvedValue({
       id: "row-1",
       status: "in-progress",
@@ -399,15 +407,14 @@ describe("backlog pack — handler behavior (delegation preserved)", () => {
       { agentId: "agent-1" },
     );
     expect(res.success).toBe(true);
-    const payload = db.txActivityCreate.mock.calls[0][0].data.payload;
-    expect(payload.completionEvidence).toEqual({
-      workClass: "implementation",
-      evidenceActivityIds: ["source", "tests"],
-      useActiveBuildEvidence: false,
-      ux: { disposition: "not-applicable", reason: "No user interface files or routes changed." },
-      migration: { disposition: "not-applicable", reason: "No database schema or persisted data changed." },
-    });
-    expect(payload.completionEvidence.callerVerdict).toBeUndefined();
+    expect(terminalTransition.completeBacklogItemTransition).toHaveBeenCalledWith(expect.objectContaining({
+      itemId: "BI-1",
+      expectedStatus: "in-progress",
+      resolution: "Delivered through PR #1.",
+      actor: expect.objectContaining({ actorType: "agent", agentContextRef: "agent-1" }),
+      authority: expect.objectContaining({ actionKey: "update_backlog_item_status" }),
+    }));
+    expect(db.transaction).not.toHaveBeenCalled();
   });
 
   it("update_backlog_item_status keeps an already-done retry a no-op without a new receipt", async () => {
@@ -577,7 +584,7 @@ describe("backlog pack — handler behavior (delegation preserved)", () => {
     epicTools.updateEpicTool.mockResolvedValue({ success: true, entityId: "EP-1" });
     const res = await backlogPack.handlers.update_epic({ epicId: "EP-1", title: "t" }, "u1");
     expect(res).toEqual({ success: true, entityId: "EP-1" });
-    expect(epicTools.updateEpicTool).toHaveBeenCalledWith({ epicId: "EP-1", title: "t" });
+    expect(epicTools.updateEpicTool).toHaveBeenCalledWith({ epicId: "EP-1", title: "t" }, "u1", undefined);
   });
 
   it("update_backlog_item delegates to the shared handler", async () => {

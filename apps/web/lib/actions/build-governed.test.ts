@@ -95,7 +95,7 @@ const { mockGetQuiescenceLevel } = vi.hoisted(() => ({
 const { mockEnforceBuildInitiativeReadiness } = vi.hoisted(() => ({
   mockEnforceBuildInitiativeReadiness: vi.fn(),
 }));
-
+const mockAssertFeatureBuildCompletion = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/auth", () => ({
   auth: mockAuth,
 }));
@@ -135,6 +135,7 @@ vi.mock("@/lib/build/build-entry-gate", () => ({
   enforceBuildInitiativeReadiness: mockEnforceBuildInitiativeReadiness,
   assertBuildPhaseInitiativeReadiness: mockEnforceBuildInitiativeReadiness,
 }));
+vi.mock("@/lib/backlog/initiative-readiness/build-terminal-transition", () => ({ assertFeatureBuildCompletion: mockAssertFeatureBuildCompletion }));
 
 vi.mock("next/cache", () => ({
   revalidatePath: vi.fn(),
@@ -991,9 +992,9 @@ describe("governed build start approvals", () => {
 
     await completeBuild("FB-READ");
 
-    expect(mockPrisma.featureBuild.update).toHaveBeenCalledWith({
-      where: { buildId: "FB-READ" },
-      data: { phase: "complete" },
+    expect(mockAssertFeatureBuildCompletion).toHaveBeenCalledWith({
+      buildId: "FB-READ",
+      expectedPhase: undefined,
     });
     expect(mockPrisma.buildActivity.create).toHaveBeenCalledWith(
       expect.objectContaining({

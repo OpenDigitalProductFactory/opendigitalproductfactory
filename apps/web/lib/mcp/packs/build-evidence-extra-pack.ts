@@ -272,7 +272,25 @@ const savePhaseHandoff: ToolPackHandler = async (params, userId, context) => {
         })
         .catch(() => {});
       if (gate.allowed) {
-        await prisma.featureBuild.update({ where: { buildId: latestBuild.buildId }, data: { phase: toPhase } });
+        if (toPhase === "complete") {
+          const { completeFeatureBuildTransition } = await import(
+            "@/lib/backlog/initiative-readiness/build-terminal-transition"
+          );
+          const terminal = await completeFeatureBuildTransition({
+            buildId: latestBuild.buildId,
+            expectedPhase: latestBuild.phase,
+          });
+          if (!terminal.ok) {
+            return {
+              success: false,
+              error: "initiative_not_ready",
+              message: `Build completion is blocked by ${terminal.code}.`,
+              data: { code: terminal.code, readiness: terminal.decision },
+            };
+          }
+        } else {
+          await prisma.featureBuild.update({ where: { buildId: latestBuild.buildId }, data: { phase: toPhase } });
+        }
         if (toPhase === "review") {
           const { queueBuildReviewVerification } = await import("@/lib/build-review-verification-trigger");
           await queueBuildReviewVerification(latestBuild.buildId);

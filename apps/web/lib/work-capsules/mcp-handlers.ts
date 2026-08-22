@@ -40,6 +40,7 @@ import {
   recordWorkCapsuleEvidence,
   recordAgentActivity,
   updateWorkCapsuleStatus,
+  WorkCapsuleCompletionDeniedError,
   ScopeOverlapError,
   type CapsuleDb,
   type WorkCapsuleActor,
@@ -405,18 +406,31 @@ export async function updateWorkCapsuleStatusTool(
   }
 
   const db = workCapsuleDb();
-  const renewedCapsule = await runAutoRenewedCapsuleWrite({
-    capsuleId,
-    userId,
-    context,
-    write: (currentActor) => updateWorkCapsuleStatus({
-      db,
+  let renewedCapsule;
+  try {
+    renewedCapsule = await runAutoRenewedCapsuleWrite({
       capsuleId,
-      status,
-      reason,
-      actor: currentActor,
-    }),
-  });
+      userId,
+      context,
+      write: (currentActor) => updateWorkCapsuleStatus({
+        db,
+        capsuleId,
+        status,
+        reason,
+        actor: currentActor,
+      }),
+    });
+  } catch (error) {
+    if (error instanceof WorkCapsuleCompletionDeniedError) {
+      return {
+        success: false,
+        error: "initiative_not_ready",
+        message: `Work Capsule completion is blocked by ${error.result.code}.`,
+        data: { code: error.result.code, readiness: error.result.decision },
+      };
+    }
+    throw error;
+  }
 
   return {
     success: true,

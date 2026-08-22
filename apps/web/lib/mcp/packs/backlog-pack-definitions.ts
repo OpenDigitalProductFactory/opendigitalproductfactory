@@ -196,7 +196,7 @@ export const backlogPackDefinitions: ToolDefinition[] = [
   },
   {
     name: "update_epic",
-    description: "Update a generic backlog epic's editable fields through the governed MCP surface. Use this for title, description, and status changes; status=done stamps completedAt, and reopening clears it.",
+    description: "Update a generic backlog epic through the governed MCP surface. status=done is allowed only after the canonical receipt anchor, child delivery, and objective evidence reconcile.",
     inputSchema: {
       type: "object",
       properties: {
@@ -209,6 +209,7 @@ export const backlogPackDefinitions: ToolDefinition[] = [
         specPath: { type: "string", description: "Optional related spec path for audit/index context" },
         planPath: { type: "string", description: "Optional related implementation plan path for audit/index context" },
         rationale: { type: "string", description: "Optional short rationale captured by ToolExecution" },
+        originatingBacklogItemId: { type: "string", description: "Optional BI-* or row id to converge as this Epic's canonical readiness-receipt anchor. Existing conflicting anchors are refused." },
       },
       required: ["epicId"],
     },

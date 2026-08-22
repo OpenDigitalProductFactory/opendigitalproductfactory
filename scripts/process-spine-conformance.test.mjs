@@ -113,12 +113,11 @@ test("every direct protected FeatureBuild phase writer references the canonical 
   visit(root);
   const directWriter = /featureBuild\.(?:update|updateMany)\s*\([\s\S]{0,300}?data:\s*\{[\s\S]{0,160}?phase:\s*(?:"plan"|"build"|"ship"|"complete"|targetPhase)/;
   const writers = files
-    .filter((path) => directWriter.test(readFileSync(path, "utf8")))
+    .filter((path) => !path.includes(`${join("initiative-readiness")}\\`) && directWriter.test(readFileSync(path, "utf8")))
     .map((path) => path.slice(repoRoot.length + 1).replaceAll("\\", "/"))
     .sort();
   assert.deepEqual(writers, [
     "apps/web/lib/actions/build.ts",
-    "apps/web/lib/build-flow-state.ts",
     "apps/web/lib/build/build-on-plan-approval.ts",
     "apps/web/lib/build/plan-to-build-transition.ts",
     "apps/web/lib/build/ship-on-review-approval.ts",
@@ -129,4 +128,76 @@ test("every direct protected FeatureBuild phase writer references the canonical 
     assert.match(source, /from "@\/lib\/build\/build-entry-gate"/);
     assert.match(source, /(?:enforceBuildInitiativeReadiness|assertBuildPhaseInitiativeReadiness)/);
   }
+});
+
+test("protected terminal success rows are written only by initiative terminal repositories", () => {
+  const root = join(repoRoot, "apps/web");
+  const files = [];
+  const visit = (dir) => {
+    for (const name of readdirSync(dir)) {
+      if (name === "node_modules" || name === ".next") continue;
+      const path = join(dir, name);
+      if (statSync(path).isDirectory()) visit(path);
+      else if (name.endsWith(".ts") && !name.endsWith(".test.ts")) files.push(path);
+    }
+  };
+  visit(root);
+
+  const contracts = [
+    {
+      label: "BacklogItem done",
+      pattern: /backlogItem\.(?:update|updateMany)\s*\([\s\S]{0,500}?data:\s*\{[\s\S]{0,260}?status:\s*"done"/,
+      allowed: ["apps/web/lib/backlog/initiative-readiness/backlog-terminal-transition.ts"],
+    },
+    {
+      label: "Epic done",
+      pattern: /epic\.(?:update|updateMany)\s*\([\s\S]{0,500}?data:\s*\{[\s\S]{0,260}?status:\s*"done"/,
+      allowed: ["apps/web/lib/backlog/initiative-readiness/epic-terminal-transition.ts"],
+    },
+    {
+      label: "FeatureBuild complete",
+      pattern: /featureBuild\.(?:update|updateMany)\s*\([\s\S]{0,500}?data:\s*\{[\s\S]{0,260}?phase:\s*"complete"/,
+      allowed: ["apps/web/lib/backlog/initiative-readiness/build-terminal-transition.ts"],
+    },
+    {
+      label: "Workroom complete",
+      pattern: /workroom\.(?:update|updateMany)\s*\([\s\S]{0,500}?data:\s*\{[\s\S]{0,260}?status:\s*"complete"/,
+      allowed: ["apps/web/lib/backlog/initiative-readiness/work-capsule-terminal-transition.ts"],
+    },
+  ];
+
+  for (const contract of contracts) {
+    const writers = files
+      .filter((path) => contract.pattern.test(readFileSync(path, "utf8")))
+      .map((path) => path.slice(repoRoot.length + 1).replaceAll("\\", "/"))
+      .sort();
+    assert.deepEqual(writers, contract.allowed, `${contract.label} bypassed the canonical terminal boundary`);
+  }
+
+  const routedSurfaces = [
+    "apps/web/app/api/v1/ops/backlog/[id]/route.ts",
+    "apps/web/app/api/v1/ops/epics/[id]/route.ts",
+    "apps/web/lib/actions/backlog.ts",
+    "apps/web/lib/mcp/packs/backlog-pack.ts",
+    "apps/web/lib/backlog/mcp-epic-tools.ts",
+    "apps/web/lib/build-flow-state.ts",
+    "apps/web/lib/actions/build.ts",
+    "apps/web/lib/mcp/packs/build-evidence-extra-pack.ts",
+    "apps/web/lib/work-capsules/work-capsule-store.ts",
+  ];
+  for (const path of routedSurfaces) {
+    assert.match(
+      readFileSync(join(repoRoot, path), "utf8"),
+      /(?:complete(?:BacklogItem|Epic|FeatureBuild|WorkCapsule)Transition|assertFeatureBuildCompletion|completeGovernedWorkCapsuleStatus)/,
+      `${path} must route terminal success through the canonical repository`,
+    );
+  }
+
+  const backlogActions = readFileSync(join(repoRoot, "apps/web/lib/actions/backlog.ts"), "utf8");
+  const epicTools = readFileSync(join(repoRoot, "apps/web/lib/backlog/mcp-epic-tools.ts"), "utf8");
+  const capsuleStore = readFileSync(join(repoRoot, "apps/web/lib/work-capsules/work-capsule-store.ts"), "utf8");
+  assert.match(backlogActions, /input\.status === "done"[\s\S]{0,180}?Create the item as open/);
+  assert.match(backlogActions, /input\.status === "done"[\s\S]{0,180}?Create the Epic as open/);
+  assert.match(epicTools, /statusResult\.status === "done"[\s\S]{0,220}?Create the Epic as open/);
+  assert.match(capsuleStore, /input\.status === "complete"[\s\S]{0,220}?non-terminal state/);
 });

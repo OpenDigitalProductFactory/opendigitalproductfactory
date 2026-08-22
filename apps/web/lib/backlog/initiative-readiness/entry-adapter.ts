@@ -221,6 +221,14 @@ export function projectBacklogItemReadiness(args: {
   capsuleIdentity: ReadinessEvidenceState;
   planCoverage?: ReadinessEvidenceState;
   artifactHints?: { hasSpec: boolean; hasPlan: boolean };
+  completion?: {
+    deliveryEvidence: ReadinessEvidenceState;
+    acceptanceEvidence: ReadinessEvidenceState;
+    objectiveReconciliation: ReadinessEvidenceState;
+    evidenceRefs?: InitiativeReadinessFacts["evidenceRefs"];
+    objectiveBaselineConflict?: boolean;
+    projectionError?: boolean;
+  };
   evaluatedAt: string;
 }): {
   governed: boolean;
@@ -266,10 +274,11 @@ export function projectBacklogItemReadiness(args: {
     authorization: args.authorization,
     artifactAuthor: baselineState,
     capsuleIdentity: args.capsuleIdentity,
-    deliveryEvidence: "missing",
-    acceptanceEvidence: "missing",
+    deliveryEvidence: args.completion?.deliveryEvidence ?? "missing",
+    acceptanceEvidence: args.completion?.acceptanceEvidence ?? "missing",
     objectiveBaseline: baselineState,
-    objectiveReconciliation: "missing",
+    objectiveBaselineConflict: args.completion?.objectiveBaselineConflict,
+    objectiveReconciliation: args.completion?.objectiveReconciliation ?? "missing",
     archetypeProvisioning: {
       templateSubstrate: archetypeProvisioning,
       professionCorpus: archetypeProvisioning,
@@ -277,7 +286,8 @@ export function projectBacklogItemReadiness(args: {
       skillsAndTools: archetypeProvisioning,
     },
     archetypeCompleteness: state(evidence, "archetype-completeness"),
-    projectionError: baseline.malformed || receipts.malformed,
+    projectionError: baseline.malformed || receipts.malformed || args.completion?.projectionError,
+    evidenceRefs: args.completion?.evidenceRefs,
   };
   return {
     governed,
