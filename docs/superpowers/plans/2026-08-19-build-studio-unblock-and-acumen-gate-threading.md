@@ -4,7 +4,7 @@ status: active
 
 # Unblock Build Studio dispatch and make the acumen phase gates actually fire
 
-**Backlog items:** BI-B24D4C84, BI-6CFC5429, BI-70280889
+**Backlog items:** BI-B24D4C84, BI-6CFC5429, BI-70280889 (+ BI-34C7A7F8, found while landing these)
 **Status:** implemented
 **Date:** 2026-08-19
 
@@ -69,6 +69,29 @@ Wired into all four call sites: `advance-phase/route.ts`, `actions/build.ts`, `p
 - The code-graph freshness dimension now receives `lastIndexedBranch` and caps its score when the graph was indexed off a non-default branch, with a rationale that names the branch.
 
 The guard deliberately does **not** auto-correct `PROJECT_ROOT` — only the operator knows which tree is intended, and silently rewriting it would hide the misconfiguration. Repointing the env var remains an operator action.
+
+### 4. Doc-anchor guard false positive (BI-34C7A7F8, found while landing this)
+
+Committing this plan was blocked by `check-doc-anchor-existence.mjs` reporting
+BI-6CFC5429 and BI-0AA9B679 as non-existent. Both exist. The guard decided
+`missing` by substring-matching `/not_found|not found/` across the **entire**
+`get_backlog_item` payload — which includes the item's own body and every
+attached evidence record. BI-6CFC5429's body quotes `"Directory not found"` and
+BI-0AA9B679's evidence quotes `"Build not found"`, so each item declared itself
+missing. Three cited BIs without that phrase verified fine.
+
+This is the guard's own failure mode turned on itself: content treated as
+evidence of absence. It is self-reinforcing — the more precisely a BI documents
+something not being found, the less citable it becomes — and the remedy it
+prints ("File the epic/BI first, or correct the id") is impossible to act on.
+
+Fixed by keying the `missing` verdict on the **error result** (`isError: true`
+plus a `not_found` marker), which is the live shape a genuine miss returns.
+Reordering the checks would not do: a real miss also echoes the requested id.
+An error result without the marker stays `unknown` (warn-skip), preserving the
+function's contract that auth/scope/transport failures never fabricate a missing
+anchor. The existing test fixture omitted `isError`, which had let the looser
+match look correct; it now matches a captured live response.
 
 ## Deliberately out of scope
 
