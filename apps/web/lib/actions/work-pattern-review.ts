@@ -436,6 +436,10 @@ export async function recordWorkPatternReview(formData: FormData): Promise<Revie
   const recommendedOptionId = await recommendOptionAgainstCommandments({
     db: prisma,
     scoredOptions,
+    // BI-1BBB2136: weigh the options at the SAME consequence tier this
+    // interaction is about to be recorded under, so the band edges match the
+    // stakes rather than defaulting for every decision alike.
+    riskTier: riskTierFor(shadowEvaluation?.riskClass ?? shadowRiskClass),
   });
 
   await prisma.$transaction(async (tx) => {
@@ -628,6 +632,8 @@ export async function resolveWorkPatternCaseProposal(formData: FormData): Promis
   const recommendedOptionId = await recommendOptionAgainstCommandments({
     db: prisma,
     scoredOptions,
+    // BI-1BBB2136: same tier this interaction records, so the bar matches the stakes.
+    riskTier: riskTierFor(reviewState.riskClass),
   });
 
   await prisma.$transaction(async (tx) => {
