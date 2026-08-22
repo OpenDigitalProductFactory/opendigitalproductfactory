@@ -1,0 +1,10 @@
+{
+  "owner": "platform-governance",
+  "expiry": "2026-11-20",
+  "note": "Archetype obligation coverage. categoriesCoveredFloor is RISE-ONLY (reach to hold). ungatedPacks is SHRINK-ONLY (debt to burn down): a pack with no structured RegulationApplicability surfaces on installs the regime does not pertain to (BI-9DED0CE8). Clear an entry by giving the pack a real applicability spec, never by deleting the pack.",
+  "categoriesCoveredFloor": 3,
+  "archetypeCategories": 25,
+  "ungatedPacks": [
+    "uk-corp-gov-compliance"
+  ]
+}

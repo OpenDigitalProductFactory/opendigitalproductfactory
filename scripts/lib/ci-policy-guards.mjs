@@ -422,6 +422,11 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         // parsing and scoring are tested here because a mis-parsed registry
         // under-reports gaps, and an under-reported gap reads as an all-clear.
         "scripts/measure-capability-completeness.test.mjs",
+        // Archetype obligation coverage: same rule again, plus a lockstep check
+        // that this measure classifies a frequency exactly as the runtime sweep
+        // does — a report that disagrees with the ledger it reports on is worse
+        // than no report.
+        "scripts/measure-obligation-cadence-coverage.test.mjs",
       ),
       node("scripts/gen-doc-impact.mjs", "--check"),
       node("scripts/check-docs-impact.mjs"),

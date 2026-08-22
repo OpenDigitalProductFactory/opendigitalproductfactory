@@ -5101,6 +5101,19 @@
         "areas-in-scope-and-what-automates-them"
       ]
     },
+    "docs/maintenance/obligation-cadence-coverage.md": {
+      "publicHref": "/maintenance/obligation-cadence-coverage/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "obligation-cadence-coverage",
+        "ungated-packs-a-defect-not-coverage",
+        "common-applies-whatever-the-business-is",
+        "archetype-coverage",
+        "trigger-classes-across-every-pack"
+      ]
+    },
     "docs/maintenance/staleness-coverage.md": {
       "publicHref": "/maintenance/staleness-coverage/",
       "portalHref": null,
@@ -10978,6 +10991,7 @@
         "decisions-and-consequences",
         "what-runs-on-its-own",
         "what-it-does",
+        "not-every-obligation-is-on-a-schedule",
         "when-it-runs",
         "how-it-stays-current",
         "what-it-will-not-do",

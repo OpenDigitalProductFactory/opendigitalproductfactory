@@ -229,6 +229,22 @@ export const DERIVED_ARTIFACTS = [
     check: ["node", "scripts/measure-capability-completeness.mjs", "--check"],
   },
   {
+    id: "obligation-cadence-coverage",
+    description: "Archetype obligation cadence coverage (common vs archetype packs)",
+    sourceGlobs: [
+      "packages/storefront-templates/src/archetypes/*.ts",
+      "packages/db/src/seed-*compliance*.ts",
+      "apps/web/lib/compliance/obligation-cadence.ts",
+      "scripts/measure-obligation-cadence-coverage.mjs",
+    ],
+    artifactPaths: [
+      "apps/web/lib/compliance/obligation-cadence-coverage.generated.json",
+      "docs/maintenance/obligation-cadence-coverage.md",
+    ],
+    generate: ["node", "scripts/measure-obligation-cadence-coverage.mjs"],
+    check: ["node", "scripts/measure-obligation-cadence-coverage.mjs", "--check"],
+  },
+  {
     id: "capability-service-catalog",
     description: "Compiled capability/service catalog",
     sourceGlobs: [

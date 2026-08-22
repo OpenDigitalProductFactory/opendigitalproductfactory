@@ -1,0 +1,378 @@
+{
+  "generatedBy": "scripts/measure-obligation-cadence-coverage.mjs",
+  "summary": {
+    "archetypeCategories": 25,
+    "archetypes": 107,
+    "categoriesCovered": 3,
+    "categoriesWithoutPack": 22,
+    "categoriesWithoutRecurring": 0,
+    "coveragePct": 12,
+    "common": {
+      "packs": [
+        "hr-employment-compliance",
+        "software-horizontal-compliance"
+      ],
+      "obligations": 70,
+      "recurringObligations": 11,
+      "note": "Obligations that apply whatever the business IS, gated instead by jurisdiction or by what it DOES with data. Every qualifying install inherits these; they do NOT substitute for an archetype pack, whose whole purpose is what a generic pack cannot know."
+    },
+    "ungatedPacks": {
+      "packs": [
+        "uk-corp-gov-compliance"
+      ],
+      "obligations": 4,
+      "note": "DEFECT, not coverage. A pack with no structured RegulationApplicability falls back to the legacy industry string matcher (BI-9DED0CE8) and surfaces on installs the regime does not pertain to. It is not common — it is addressed to everyone."
+    },
+    "triggerClasses": {
+      "cadence": 34,
+      "continuous": 46,
+      "event-driven": 42,
+      "unrecognised": 0,
+      "unspecified": 0
+    },
+    "note": "An archetype with no obligations reads to an operator as 'nothing is due', which is indistinguishable from 'nothing was ever entered' — and raises no finding, so nobody is told. Source-derived from the archetype definitions and the compliance seed packs."
+  },
+  "packs": [
+    {
+      "pack": "banking-compliance",
+      "file": "packages/db/src/seed-banking-compliance.ts",
+      "scope": "archetype",
+      "gatesOn": [
+        "banking-financial-services",
+        "community-bank",
+        "credit-union"
+      ],
+      "gatesOnJurisdiction": true,
+      "gatesOnDataHandling": false,
+      "hasStructuredSpec": true,
+      "obligations": 14,
+      "byTriggerClass": {
+        "cadence": 5,
+        "continuous": 5,
+        "event-driven": 4,
+        "unrecognised": 0,
+        "unspecified": 0
+      }
+    },
+    {
+      "pack": "cooperative-compliance",
+      "file": "packages/db/src/seed-cooperative-compliance.ts",
+      "scope": "archetype",
+      "gatesOn": [
+        "agricultural-cooperative",
+        "cooperative"
+      ],
+      "gatesOnJurisdiction": true,
+      "gatesOnDataHandling": false,
+      "hasStructuredSpec": true,
+      "obligations": 8,
+      "byTriggerClass": {
+        "cadence": 6,
+        "continuous": 2,
+        "event-driven": 0,
+        "unrecognised": 0,
+        "unspecified": 0
+      }
+    },
+    {
+      "pack": "hr-employment-compliance",
+      "file": "packages/db/src/seed-hr-employment-compliance.ts",
+      "scope": "conditional",
+      "gatesOn": [],
+      "gatesOnJurisdiction": true,
+      "gatesOnDataHandling": false,
+      "hasStructuredSpec": true,
+      "obligations": 19,
+      "byTriggerClass": {
+        "cadence": 0,
+        "continuous": 13,
+        "event-driven": 6,
+        "unrecognised": 0,
+        "unspecified": 0
+      }
+    },
+    {
+      "pack": "law-enforcement-compliance",
+      "file": "packages/db/src/seed-law-enforcement-compliance.ts",
+      "scope": "archetype",
+      "gatesOn": [
+        "law-enforcement-agency"
+      ],
+      "gatesOnJurisdiction": true,
+      "gatesOnDataHandling": false,
+      "hasStructuredSpec": true,
+      "obligations": 8,
+      "byTriggerClass": {
+        "cadence": 2,
+        "continuous": 3,
+        "event-driven": 3,
+        "unrecognised": 0,
+        "unspecified": 0
+      }
+    },
+    {
+      "pack": "public-sector-compliance",
+      "file": "packages/db/src/seed-public-sector-compliance.ts",
+      "scope": "archetype",
+      "gatesOn": [
+        "municipal-utility",
+        "public-sector",
+        "small-town-municipality"
+      ],
+      "gatesOnJurisdiction": true,
+      "gatesOnDataHandling": false,
+      "hasStructuredSpec": true,
+      "obligations": 18,
+      "byTriggerClass": {
+        "cadence": 8,
+        "continuous": 2,
+        "event-driven": 8,
+        "unrecognised": 0,
+        "unspecified": 0
+      }
+    },
+    {
+      "pack": "software-horizontal-compliance",
+      "file": "packages/db/src/seed-software-horizontal-compliance.ts",
+      "scope": "conditional",
+      "gatesOn": [],
+      "gatesOnJurisdiction": true,
+      "gatesOnDataHandling": true,
+      "hasStructuredSpec": true,
+      "obligations": 51,
+      "byTriggerClass": {
+        "cadence": 11,
+        "continuous": 20,
+        "event-driven": 20,
+        "unrecognised": 0,
+        "unspecified": 0
+      }
+    },
+    {
+      "pack": "uk-corp-gov-compliance",
+      "file": "packages/db/src/seed-uk-corp-gov-compliance.ts",
+      "scope": "ungated",
+      "gatesOn": [],
+      "gatesOnJurisdiction": false,
+      "gatesOnDataHandling": false,
+      "hasStructuredSpec": false,
+      "obligations": 4,
+      "byTriggerClass": {
+        "cadence": 2,
+        "continuous": 1,
+        "event-driven": 1,
+        "unrecognised": 0,
+        "unspecified": 0
+      }
+    }
+  ],
+  "categories": [
+    {
+      "category": "agriculture-ranching",
+      "archetypes": 3,
+      "packs": [],
+      "obligations": 0,
+      "recurringObligations": 0,
+      "status": "no-pack"
+    },
+    {
+      "category": "asset-rental",
+      "archetypes": 3,
+      "packs": [],
+      "obligations": 0,
+      "recurringObligations": 0,
+      "status": "no-pack"
+    },
+    {
+      "category": "automotive-services",
+      "archetypes": 6,
+      "packs": [],
+      "obligations": 0,
+      "recurringObligations": 0,
+      "status": "no-pack"
+    },
+    {
+      "category": "banking-financial-services",
+      "archetypes": 3,
+      "packs": [
+        "banking-compliance"
+      ],
+      "obligations": 14,
+      "recurringObligations": 5,
+      "status": "covered"
+    },
+    {
+      "category": "beauty-personal-care",
+      "archetypes": 6,
+      "packs": [],
+      "obligations": 0,
+      "recurringObligations": 0,
+      "status": "no-pack"
+    },
+    {
+      "category": "education-training",
+      "archetypes": 4,
+      "packs": [],
+      "obligations": 0,
+      "recurringObligations": 0,
+      "status": "no-pack"
+    },
+    {
+      "category": "fabric-care-services",
+      "archetypes": 3,
+      "packs": [],
+      "obligations": 0,
+      "recurringObligations": 0,
+      "status": "no-pack"
+    },
+    {
+      "category": "fitness-recreation",
+      "archetypes": 3,
+      "packs": [],
+      "obligations": 0,
+      "recurringObligations": 0,
+      "status": "no-pack"
+    },
+    {
+      "category": "food-hospitality",
+      "archetypes": 3,
+      "packs": [],
+      "obligations": 0,
+      "recurringObligations": 0,
+      "status": "no-pack"
+    },
+    {
+      "category": "healthcare-wellness",
+      "archetypes": 9,
+      "packs": [],
+      "obligations": 0,
+      "recurringObligations": 0,
+      "status": "no-pack"
+    },
+    {
+      "category": "hoa-property-management",
+      "archetypes": 3,
+      "packs": [],
+      "obligations": 0,
+      "recurringObligations": 0,
+      "status": "no-pack"
+    },
+    {
+      "category": "live-events-venues",
+      "archetypes": 3,
+      "packs": [],
+      "obligations": 0,
+      "recurringObligations": 0,
+      "status": "no-pack"
+    },
+    {
+      "category": "manufacturing",
+      "archetypes": 1,
+      "packs": [],
+      "obligations": 0,
+      "recurringObligations": 0,
+      "status": "no-pack"
+    },
+    {
+      "category": "media-production",
+      "archetypes": 3,
+      "packs": [],
+      "obligations": 0,
+      "recurringObligations": 0,
+      "status": "no-pack"
+    },
+    {
+      "category": "moving-and-logistics",
+      "archetypes": 5,
+      "packs": [],
+      "obligations": 0,
+      "recurringObligations": 0,
+      "status": "no-pack"
+    },
+    {
+      "category": "nonprofit-community",
+      "archetypes": 8,
+      "packs": [
+        "cooperative-compliance"
+      ],
+      "obligations": 8,
+      "recurringObligations": 6,
+      "status": "covered"
+    },
+    {
+      "category": "pet-services",
+      "archetypes": 5,
+      "packs": [],
+      "obligations": 0,
+      "recurringObligations": 0,
+      "status": "no-pack"
+    },
+    {
+      "category": "professional-services",
+      "archetypes": 8,
+      "packs": [],
+      "obligations": 0,
+      "recurringObligations": 0,
+      "status": "no-pack"
+    },
+    {
+      "category": "public-sector",
+      "archetypes": 3,
+      "packs": [
+        "law-enforcement-compliance",
+        "public-sector-compliance"
+      ],
+      "obligations": 26,
+      "recurringObligations": 10,
+      "status": "covered"
+    },
+    {
+      "category": "real-estate-construction",
+      "archetypes": 2,
+      "packs": [],
+      "obligations": 0,
+      "recurringObligations": 0,
+      "status": "no-pack"
+    },
+    {
+      "category": "retail-goods",
+      "archetypes": 5,
+      "packs": [],
+      "obligations": 0,
+      "recurringObligations": 0,
+      "status": "no-pack"
+    },
+    {
+      "category": "security-services",
+      "archetypes": 2,
+      "packs": [],
+      "obligations": 0,
+      "recurringObligations": 0,
+      "status": "no-pack"
+    },
+    {
+      "category": "software-platform",
+      "archetypes": 1,
+      "packs": [],
+      "obligations": 0,
+      "recurringObligations": 0,
+      "status": "no-pack"
+    },
+    {
+      "category": "trades-maintenance",
+      "archetypes": 11,
+      "packs": [],
+      "obligations": 0,
+      "recurringObligations": 0,
+      "status": "no-pack"
+    },
+    {
+      "category": "warehousing-fulfilment",
+      "archetypes": 4,
+      "packs": [],
+      "obligations": 0,
+      "recurringObligations": 0,
+      "status": "no-pack"
+    }
+  ]
+}
