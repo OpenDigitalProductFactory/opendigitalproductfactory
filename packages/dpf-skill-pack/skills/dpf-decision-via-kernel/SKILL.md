@@ -1,7 +1,7 @@
 ---
 # Single fields shared by both surfaces
 name: dpf-decision-via-kernel
-description: "Use when working in the DPF codebase and facing an open question with 2+ architecturally-distinct options. Maps each option to the closed PRINCIPLE_DIMENSIONS registry, invokes the principle_decide MCP tool, surfaces the contribution ledger to the operator, and defers if a commandment conflict is flagged. Composes with dpf-brainstorming as the predecessor step. The DPF gate that sits in front of any decision the kernel can weigh."
+description: "Use when working in the DPF codebase and facing an open question with 2+ architecturally-distinct options. Maps each option to the closed PRINCIPLE_DIMENSIONS registry, invokes the principle_decide MCP tool, surfaces the contribution ledger to the operator, and defers if a commandment conflict is flagged. Composes with dpf-brainstorming as the predecessor step."
 
 # Agent Skills standard fields (Surface A — Claude Code)
 disable-model-invocation: false

@@ -1,6 +1,6 @@
 ---
 name: dpf-brainstorming
-description: "Use when an open problem needs candidate approaches before a decision — authoring a spec, scoping a feature, choosing a design. Generate 2-4 architecturally-distinct options grounded in the existing substrate (grep + code graph + specs) rather than invented in a vacuum, then hand off to dpf-decision-via-kernel when the options are distinct enough to weigh. The DPF-native ideation step; design docs land in docs/superpowers/specs/. Replaces the retired upstream superpowers brainstorming dependency."
+description: "Use when an open problem needs candidate approaches before a decision — authoring a spec, scoping a feature, choosing a design. Generate 2-4 architecturally-distinct options grounded in the existing substrate (grep + code graph + specs) rather than invented in a vacuum, then hand off to dpf-decision-via-kernel when the options are distinct enough to weigh. The DPF-native ideation step; design docs land in docs/superpowers/specs/."
 
 # Agent Skills standard fields (Surface A — Claude Code)
 disable-model-invocation: false
