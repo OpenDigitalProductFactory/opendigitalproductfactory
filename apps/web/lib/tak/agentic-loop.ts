@@ -48,7 +48,7 @@ import { estimateContextTokens, classifyContextPressure, deriveCompactionCaps } 
 import { clampToolResultForModel, resolveToolResultCharCap } from "./tool-result-budget";
 import { applyBacklogCreateClaimGuard } from "./backlog-create-claim-guard";
 import { applyEscalationLadderGuard, buildHumanHandoff } from "./escalation-ladder";
-import { analyzeGeneratedProse } from "../prose/generated-prose";
+import { logGeneratedProse } from "../prose/generated-prose"; // BI-41F15FD7
 import { assessToolSurface, computeToolSelectionAccuracy, contextEconomyTurnMetricFields } from "./context-economy-metrics";
 import { summarizeDroppedMessages } from "./compaction-digest";
 import { describeContextCapacityFailure } from "./context-capacity-failure";
@@ -595,30 +595,15 @@ function buildDowngradedFabricationMessage(): string {
 }
 
 function buildLocalToolCallFailureMessage(_result: RoutedInferenceResult): string {
-  // User-facing message: respects IDENTITY_BLOCK rule #5 — never expose
-  // infrastructure names ("Docker Model Runner"), model IDs, or routing
-  // architecture. The internal route + model details are already recorded
-  // for engineers via RoutedInferenceResult.
-  //
-  // Honest copy (G2, 2026-05-23): the prior version promised "I'll route
-  // through a different model" which the loop never delivered. On a single-
-  // provider install the promise was mathematically impossible; on a multi-
-  // provider install the re-route call simply isn't wired. Replaced with
-  // honest copy that points at the actual fix.
-  //
-  // Rung 4 of the escalation ladder (BI-33F1EA72): connecting a provider is
-  // work only the human can do, so this is a hand-off, not an apology. The
-  // prior copy was honest about the limitation but ended there, which leaves
-  // the user holding a dead end. buildHumanHandoff keeps the same facts and
-  // adds the two halves that make it actionable: the steps, and the promise
-  // that the work resumes.
+  // Respects IDENTITY_BLOCK rule #5 — no infrastructure names, model ids, or
+  // routing architecture; engineers get those from RoutedInferenceResult.
+  // Copy must stay honest (G2, 2026-05-23): an earlier version promised a
+  // re-route the loop never performs.
+  // Rung 4 (BI-33F1EA72): connecting a provider is work only the human can do,
+  // so this hands off rather than apologizing — steps, then the resumption.
   return buildHumanHandoff({
-    blocker:
-      "I'm on the local AI here, and it couldn't carry this one through.",
-    steps: [
-      "Open Platform > AI > Providers.",
-      "Connect a stronger provider — Claude, Gemini, or OpenAI.",
-    ],
+    blocker: "I'm on the local AI here, and it couldn't carry this one through.",
+    steps: ["Open Platform > AI > Providers.", "Connect a stronger provider — Claude, Gemini, or OpenAI."],
     verify: "confirm the stronger provider is live",
   });
 }
@@ -2437,24 +2422,8 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
       }
       const finalContent = applyEscalationLadderGuard(applyBacklogCreateClaimGuard(
         trimmed.length > 0 ? result.content : (bestPreNudgeContent || result.content), executedTools), executedTools);
-      // BI-41F15FD7 — generated-prose gauge. Observability ONLY: the content is
-      // returned unchanged; this makes the slop density of what we actually
-      // emit visible, the same way [context-pressure] made prompt fill visible.
-      // Authored UI copy has been ratcheted by scripts/check-prose-lint.ts for
-      // a while; the text a model produces at runtime was never measured, and
-      // it is the text customers read most. Logged only when it is not clean,
-      // so a healthy turn stays silent. See ../prose/generated-prose.
-      const prose = analyzeGeneratedProse(finalContent);
-      if (prose.zone !== "clean") {
-        console.log(
-          sanitizeForLog(
-            `[generated-prose] thread=${JSON.stringify(threadId)} zone=${prose.zone} ` +
-              `tells=${prose.tells} puffery=${prose.puffery} ing=${prose.superficialIng} ` +
-              `filler=${prose.chatbotFiller} longSentences=${prose.longSentences} ` +
-              `sentences=${prose.sentences} model=${JSON.stringify(result.modelId)}`,
-          ),
-        );
-      }
+      // BI-41F15FD7 — observability only; content is returned unchanged.
+      logGeneratedProse(finalContent, { threadId, modelId: result.modelId }, sanitizeForLog);
       logTurnSummary(result.providerId, result.modelId);
       return {
         content: finalContent,

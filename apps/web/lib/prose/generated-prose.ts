@@ -151,3 +151,33 @@ export function classifyGeneratedProse(tells: number, sentences: number): Genera
   if (density >= 0.5 || tells >= 6) return "slop";
   return "noticeable";
 }
+
+/**
+ * Emit the gauge for one generated response.
+ *
+ * Lives here rather than inline in the agentic loop because that file is the
+ * largest module in the repo and its size ratchet only permits shrinking —
+ * observability should not spend that budget. Silent on a clean turn.
+ *
+ * `redact` is the caller's log sanitizer, injected so this module stays
+ * import-free and unit-testable.
+ */
+export function logGeneratedProse(
+  text: string,
+  context: { threadId?: string | null; modelId?: string | null },
+  redact: (line: string) => string = (line) => line,
+): GeneratedProseReading {
+  const reading = analyzeGeneratedProse(text);
+  if (reading.zone !== "clean") {
+    console.log(
+      redact(
+        `[generated-prose] thread=${JSON.stringify(context.threadId ?? null)} ` +
+          `zone=${reading.zone} tells=${reading.tells} puffery=${reading.puffery} ` +
+          `ing=${reading.superficialIng} filler=${reading.chatbotFiller} ` +
+          `longSentences=${reading.longSentences} sentences=${reading.sentences} ` +
+          `model=${JSON.stringify(context.modelId ?? null)}`,
+      ),
+    );
+  }
+  return reading;
+}
