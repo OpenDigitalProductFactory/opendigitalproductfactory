@@ -29,7 +29,6 @@ import { fileURLToPath } from "node:url";
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const P = (...parts) => path.join(REPO_ROOT, ...parts);
-const read = (rel) => (fs.existsSync(P(rel)) ? fs.readFileSync(P(rel), "utf8") : "");
 
 // Mirrors classifyObligationFrequency in
 // apps/web/lib/compliance/obligation-cadence.ts. A conformance test pins the two

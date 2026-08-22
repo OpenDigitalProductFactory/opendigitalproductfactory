@@ -18,7 +18,7 @@
 // runner (deadline-horizon-runner.ts) does the I/O.
 
 import { createFindingKey, normalizeVendorIdentifier } from "@/lib/assurance/finding-key";
-import { cadenceToDays, classifyObligationFrequency } from "./obligation-cadence";
+import { classifyObligationFrequency } from "./obligation-cadence";
 import type {
   AssurancePolicySeverity,
   NormalizedAssuranceFinding,

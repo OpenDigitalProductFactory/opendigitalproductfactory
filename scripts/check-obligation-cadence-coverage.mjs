@@ -29,6 +29,16 @@ const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..
 const ARTIFACT = path.join(REPO_ROOT, "apps", "web", "lib", "compliance", "obligation-cadence-coverage.generated.json");
 const BASELINE = path.join(REPO_ROOT, "scripts", "obligation-cadence-baseline.json");
 
+/** Null when the file is not there; still throws on a real read or parse error. */
+function readJsonIfPresent(file) {
+  try {
+    return JSON.parse(fs.readFileSync(file, "utf8"));
+  } catch (error) {
+    if (error && error.code === "ENOENT") return null;
+    throw error;
+  }
+}
+
 function main() {
   const update = process.argv.includes("--update");
   if (!fs.existsSync(ARTIFACT)) {
@@ -36,7 +46,10 @@ function main() {
     process.exit(1);
   }
   const S = JSON.parse(fs.readFileSync(ARTIFACT, "utf8")).summary;
-  const prior = fs.existsSync(BASELINE) ? JSON.parse(fs.readFileSync(BASELINE, "utf8")) : null;
+  // Read directly and treat "absent" as a read failure rather than checking
+  // existence first: the exists-then-read pair is a race, and the only case it
+  // has to distinguish is first-run bootstrap.
+  const prior = readJsonIfPresent(BASELINE);
   const ungated = [...S.ungatedPacks.packs].sort();
 
   if (update) {
