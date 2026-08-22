@@ -634,6 +634,7 @@ async function getNextRecommendedWork(params: Record<string, unknown>): Promise<
   const { prisma } = await import("@dpf/db");
   const { rankCandidates } = await import("@/lib/backlog/recommend");
   const { buildSpecPlanReferenceIndex } = await import("@/lib/backlog/spec-plan-search");
+  const { projectBacklogItemReadinessSummary } = await import("@/lib/backlog/initiative-readiness/entry-adapter");
 
   const count = typeof params["count"] === "number" ? params["count"] : undefined;
   const epicIdRaw = typeof params["epicId"] === "string" ? params["epicId"].trim() : "";
@@ -641,6 +642,9 @@ async function getNextRecommendedWork(params: Record<string, unknown>): Promise<
   const excludeItemIds = Array.isArray(params["excludeItemIds"])
     ? (params["excludeItemIds"] as unknown[]).filter((x): x is string => typeof x === "string")
     : [];
+  const mode = params["mode"] === "implementation-ready"
+    ? "implementation-ready"
+    : "design-candidate";
 
   const where: Record<string, unknown> = {
     status: { in: ["open", "triaging"] },
@@ -671,11 +675,24 @@ async function getNextRecommendedWork(params: Record<string, unknown>): Promise<
       demandScore: true,
       effortSize: true,
       triageOutcome: true,
+      type: true,
+      source: true,
+      workType: true,
+      scopeKind: true,
+      archetypeCategories: true,
+      archetypeIds: true,
       activeBuildId: true,
       claimedById: true,
       claimedByAgentId: true,
       updatedAt: true,
       epic: { select: { epicId: true, status: true } },
+      activeBuild: { select: { kind: true } },
+      activities: {
+        where: { kind: { in: ["initiative_gate_receipt", "initiative_scope_baseline", "plan_backlog_coverage"] } },
+        orderBy: [{ recordedAt: "desc" }, { id: "desc" }],
+        take: 100,
+        select: { id: true, kind: true, gateKey: true, recordedAt: true, payload: true },
+      },
     },
   });
 
@@ -686,6 +703,23 @@ async function getNextRecommendedWork(params: Record<string, unknown>): Promise<
       refIndex.specs.has(i.itemId) || (semanticEpic ? refIndex.specs.has(semanticEpic) : false);
     const hasPlan =
       refIndex.plans.has(i.itemId) || (semanticEpic ? refIndex.plans.has(semanticEpic) : false);
+    const readiness = projectBacklogItemReadinessSummary({
+      item: {
+        id: i.itemId,
+        itemId: i.itemId,
+        type: i.type,
+        source: i.source,
+        workType: i.workType,
+        scopeKind: i.scopeKind,
+        archetypeCategories: i.archetypeCategories,
+        archetypeIds: i.archetypeIds,
+        activeBuildKind: i.activeBuild?.kind ?? null,
+      },
+      activities: (i.activities ?? []).map((activity) => ({ ...activity, gateKey: activity.gateKey ?? null })),
+      hasSpec,
+      hasPlan,
+      evaluatedAt: new Date().toISOString(),
+    });
     return {
       itemId: i.itemId,
       title: i.title,
@@ -701,6 +735,7 @@ async function getNextRecommendedWork(params: Record<string, unknown>): Promise<
       epicStatus: i.epic?.status ?? null,
       hasSpec,
       hasPlan,
+      implementationReadinessVerdict: readiness.decisions.implementation.verdict,
       updatedAt: i.updatedAt,
     };
   });
@@ -709,12 +744,15 @@ async function getNextRecommendedWork(params: Record<string, unknown>): Promise<
     excludeItemIds,
     forAgentId,
     count,
+    mode,
   });
 
   return {
     success: true,
-    message: `Recommending ${ranked.length} item(s).`,
-    data: { recommendations: ranked },
+    message: mode === "implementation-ready"
+      ? `Recommending ${ranked.length} implementation-ready item(s).`
+      : `Recommending ${ranked.length} design candidate(s).`,
+    data: { mode, recommendations: ranked },
   };
 }
 

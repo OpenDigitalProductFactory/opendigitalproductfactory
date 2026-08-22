@@ -13,6 +13,7 @@ export type RecommendCandidate = {
   epicStatus: string | null;
   hasSpec: boolean;
   hasPlan: boolean;
+  implementationReadinessVerdict: "allowed" | "input-required" | "denied";
   updatedAt: Date;
 };
 
@@ -22,6 +23,7 @@ export type RankedCandidate = {
   rationale: string;
   rank: number;
   score: number;
+  nextAction: "start-implementation" | "continue-design";
   signals: {
     hasSpec: boolean;
     hasPlan: boolean;
@@ -31,6 +33,7 @@ export type RankedCandidate = {
     priority: number | null;
     epicStatus: string | null;
     demandScore: number | null;
+    implementationReadinessVerdict: "allowed" | "input-required" | "denied";
   };
 };
 
@@ -38,6 +41,7 @@ export type RankOptions = {
   excludeItemIds?: readonly string[];
   forAgentId?: string | null;
   count?: number;
+  mode?: "design-candidate" | "implementation-ready";
 };
 
 const DEFAULT_COUNT = 3;
@@ -97,7 +101,9 @@ export function rankCandidates(
   const forAgentId = opts.forAgentId ?? null;
 
   const eligible = items.filter(
-    (item) => !exclude.has(item.itemId) && isPickable(item, forAgentId),
+    (item) => !exclude.has(item.itemId)
+      && isPickable(item, forAgentId)
+      && (opts.mode !== "implementation-ready" || item.implementationReadinessVerdict === "allowed"),
   );
 
   // Batch-relative demand-value term: normalize each item's demandScore against
@@ -139,6 +145,9 @@ export function rankCandidates(
     rationale: buildRationale(entry.firedSignals),
     rank: idx + 1,
     score: Math.round(entry.score * 100) / 100,
+    nextAction: entry.item.implementationReadinessVerdict === "allowed"
+      ? "start-implementation"
+      : "continue-design",
     signals: {
       hasSpec: entry.item.hasSpec,
       hasPlan: entry.item.hasPlan,
@@ -150,6 +159,7 @@ export function rankCandidates(
       priority: entry.item.priority,
       epicStatus: entry.item.epicStatus,
       demandScore: entry.item.demandScore,
+      implementationReadinessVerdict: entry.item.implementationReadinessVerdict,
     },
   }));
 }
