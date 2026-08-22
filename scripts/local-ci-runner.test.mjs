@@ -12,6 +12,7 @@ import {
   planPostgresOwnership,
   preparePinnedPnpmEnvironment,
   executableOnPath,
+  resolveLocalCiPnpmInvocation,
   resetOwnedSlotDatabase,
 } from "./local-ci-runner.mjs";
 
@@ -217,6 +218,23 @@ test("Windows executable lookup accepts the canonical Path environment key", () 
       platform: "win32",
     }),
     shim,
+  );
+});
+
+test("Windows pnpm execution uses ComSpec without reparsing a spaced profile path", () => {
+  assert.deepEqual(
+    resolveLocalCiPnpmInvocation(
+      "C:\\Users\\Mark Bodman\\AppData\\Roaming\\npm\\pnpm.CMD",
+      ["--version"],
+      {
+        platform: "win32",
+        env: { ComSpec: "C:\\Windows\\System32\\cmd.exe" },
+      },
+    ),
+    {
+      command: "C:\\Windows\\System32\\cmd.exe",
+      args: ["/d", "/s", "/c", "pnpm --version"],
+    },
   );
 });
 

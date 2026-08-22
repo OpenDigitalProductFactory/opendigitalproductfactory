@@ -29,6 +29,7 @@ import {
 import { ensureFullHistory } from "./lib/git-shallow-preflight.mjs";
 import { parseRepositoryPnpmVersion, resolvePinnedPnpmInvocation } from "./lib/pinned-pnpm.mjs";
 import { isEntryModule } from "./lib/entry-module.mjs";
+import { resolveHostCommandInvocation } from "./lib/host-command-invocation.mjs";
 
 function die(message) {
   // BI-8304AB09: write BOTH streams so gate-worktree log capture cannot drop the cause.
@@ -91,6 +92,16 @@ export function executableOnPath(command, { env = process.env, platform = proces
   return "";
 }
 
+export function resolveLocalCiPnpmInvocation(
+  hostPnpm,
+  args,
+  { env = process.env, platform = process.platform } = {},
+) {
+  return platform === "win32"
+    ? resolveHostCommandInvocation("pnpm", args, { env, platform })
+    : { command: hostPnpm, args };
+}
+
 function shellSingleQuote(value) {
   return `'${String(value).replaceAll("'", `'"'"'`)}'`;
 }
@@ -106,8 +117,17 @@ export function preparePinnedPnpmEnvironment({
   if (!expectedVersion) throw new Error(`local CI requires packageManager=pnpm@<version>; received ${packageManager || "missing"}`);
   const hostPnpm = executableOnPath("pnpm", { env, platform });
   if (!hostPnpm) throw new Error("local CI could not resolve pnpm on the admitted PATH");
-  const runOptions = { encoding: "utf8", env, shell: platform === "win32" };
-  const observed = spawnSyncImpl(hostPnpm, ["--version"], runOptions);
+  const runOptions = { encoding: "utf8", env };
+  const observedInvocation = resolveLocalCiPnpmInvocation(
+    hostPnpm,
+    ["--version"],
+    { env, platform },
+  );
+  const observed = spawnSyncImpl(
+    observedInvocation.command,
+    observedInvocation.args,
+    runOptions,
+  );
   if (observed.status !== 0) {
     throw new Error(`local CI could not inspect host pnpm: ${(observed.stderr || observed.stdout || "unknown error").trim()}`);
   }
@@ -124,7 +144,16 @@ export function preparePinnedPnpmEnvironment({
 
   const pinnedInvocation = resolvePinnedPnpmInvocation(hostPnpm, actualVersion, expectedVersion, []);
   const pinnedPrefix = pinnedInvocation.args;
-  const bootstrap = spawnSyncImpl(pinnedInvocation.command, [...pinnedPrefix, "--version"], runOptions);
+  const bootstrapInvocation = resolveLocalCiPnpmInvocation(
+    pinnedInvocation.command,
+    [...pinnedPrefix, "--version"],
+    { env, platform },
+  );
+  const bootstrap = spawnSyncImpl(
+    bootstrapInvocation.command,
+    bootstrapInvocation.args,
+    runOptions,
+  );
   if (bootstrap.status !== 0 || bootstrap.stdout.trim() !== expectedVersion) {
     throw new Error(
       `local CI could not provision repository-pinned pnpm ${expectedVersion}: ` +
