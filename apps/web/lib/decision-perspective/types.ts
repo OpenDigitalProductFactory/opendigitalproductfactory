@@ -13,7 +13,10 @@ export type DecisionPerspectiveProfileKind = typeof DECISION_PROFILE_KINDS[numbe
 export const DECISION_RISK_TIERS = ["low", "medium", "high", "critical"] as const;
 export type DecisionRiskTier = typeof DECISION_RISK_TIERS[number];
 
-export const DECISION_OUTCOME_TYPES = ["recommend", "arbitrate", "escalate", "defer"] as const;
+// BI-2107B5D2: "decline" is an ASSURANCE, not a failure to decide — the gate
+// weighed the question and the answer is no, with a named cause. Before this
+// existed a decisive no was indistinguishable from "could not be weighed".
+export const DECISION_OUTCOME_TYPES = ["recommend", "arbitrate", "escalate", "defer", "decline"] as const;
 export type DecisionOutcomeType = typeof DECISION_OUTCOME_TYPES[number];
 
 // The governance gates that can produce a DecisionInteraction (BI-1BE30A9A).

@@ -58,6 +58,8 @@ const definitions: ToolDefinition[] = [
     },
     requiredCapability: "operate_customer",
     sideEffect: true,
+    // destroys state → consult-gated (TAK §8.4.1).
+    consequence: "irreversible",
   },
   {
     name: "merge_customer_contacts",
@@ -104,6 +106,8 @@ const definitions: ToolDefinition[] = [
     },
     requiredCapability: "operate_customer",
     sideEffect: true,
+    // reaches a third party → consult-gated (TAK §8.4.1).
+    consequence: "outward",
     requiresExternalAccess: true,
   },
   {

@@ -150,14 +150,27 @@ export async function dispatchIdeateForApprovedBuild(params: {
     }
 
     const { getModelTier, deriveDeliverableSensitivity } = await import("@/lib/explore/build-process-matrix");
-    const { getBuildStudioConfig, isModelTierRoutingEnabled } = await import("@/lib/build/build-studio-config");
-    const modelTier = (await isModelTierRoutingEnabled())
-      ? getModelTier(null, bi.effortSize)
-      : undefined;
+    const {
+      getBuildStudioConfig,
+      isModelTierRoutingEnabled,
+      isQualityFirstRightsizingEnabled,
+    } = await import("@/lib/build/build-studio-config");
     const deliverableSensitivity = deriveDeliverableSensitivity({
       text: `${bi.title}\n${bi.body ?? ""}`,
       workType: bi.workType,
     });
+    // BI-B24D4C84: pass the rightsizing opts, as the autonomous callers already
+    // do. Without them getModelTier fell through to the legacy size-only branch
+    // (`large|xlarge ? robust : local`), so EVERY small/medium item was pinned to
+    // the local tier — which forces residencyPolicy=local_only downstream and
+    // excluded every cloud engine. Quality-first is ON by default and routes
+    // substantive work to `robust`, keeping local for the trivial doc/chore tail.
+    const modelTier = (await isModelTierRoutingEnabled())
+      ? getModelTier(bi.workType, bi.effortSize, {
+          qualityFirst: await isQualityFirstRightsizingEnabled(),
+          sensitivity: deliverableSensitivity,
+        })
+      : undefined;
     const routingSensitivity = deliverableSensitivity === "high" ? "confidential" as const : "internal" as const;
 
     // Resolve the same task-qualified selection used by model-selection preview

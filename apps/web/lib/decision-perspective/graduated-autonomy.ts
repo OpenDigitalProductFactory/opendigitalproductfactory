@@ -76,14 +76,17 @@ export type GraduatedGateOutcome = {
   /** A human must decide (escalate/defer, or a non-proceed outcome). */
   requiresHuman: boolean;
   /** Machine reason for the decision. */
-  reason: "recommend" | "arbitrate" | "escalate" | "defer";
+  reason: DecisionOutcomeType;
 };
 
 /**
  * PURE. Read an evaluator outcome into an auto-proceed / requires-human
  * decision. This is the single definition of "allowed" for a governed Build
  * Studio transition: only a `recommend` or `arbitrate` outcome auto-proceeds;
- * `escalate` and `defer` always go to a human. The risk-graduation itself is
+ * `escalate`, `defer` and `decline` never do. BI-2107B5D2: a `decline` is a
+ * decisive no, so it does not auto-proceed — but it reaches a human as a
+ * settled answer to act on, not as an unresolved question to re-litigate.
+ * The risk-graduation itself is
  * already encoded upstream — the evaluator forces `escalate` at high/critical
  * risk — so this stays a thin, total mapping over the outcome.
  */

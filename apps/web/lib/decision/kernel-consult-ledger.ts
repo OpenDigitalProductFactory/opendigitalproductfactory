@@ -10,7 +10,13 @@
 // outcome is always observable in the tool response (`ledger.recorded`),
 // per make-silent-failures-observable.
 
-import type { DecisionResult } from "@/lib/decision/option-scoring";
+import {
+  readVerdict,
+  VERDICT_RETRY_HINTS,
+  verdictConfidence,
+  type DecisionResult,
+  type DecisionVerdictCause,
+} from "@/lib/decision/option-scoring";
 import type { DecisionCallerContext } from "@/lib/decision/caller-context";
 import {
   persistDecisionInteraction,
@@ -87,23 +93,60 @@ export function mapConsultOutcome(result: DecisionResult): {
   outcomeType: DecisionOutcomeType;
   riskTier: DecisionRiskTier;
   confidenceScore: number;
+  /** BI-2107B5D2: why the verdict is not `proceed`; null when it is, or when nothing was weighed. */
+  verdictCause: DecisionVerdictCause | "insufficient-signal" | "no-applicable-principles" | null;
+  /** BI-2107B5D2: what the caller must change before a retry is worth running. Null when retrying cannot help. */
+  retryHint: string | null;
 } {
   if (!result.recommendation) {
     // BI-5CE7CF0B: insufficient signal is a real question the gate could not
     // weigh (options carried nothing scoreable) — that needs a human review,
     // not a coverage-gap shrug.
     if (result.flags.insufficientSignal) {
-      return { outcomeType: "escalate", riskTier: "medium", confidenceScore: 0 };
+      return {
+        outcomeType: "escalate",
+        riskTier: "medium",
+        confidenceScore: 0,
+        verdictCause: "insufficient-signal",
+        // BI-2107B5D2: a corpus gap re-run against the same empty corpus
+        // returns the same nothing. The input must change, or the retry is a
+        // loop wearing the costume of diligence.
+        retryHint: "Supply per-option `features` maps or embeddings — the options carry nothing scoreable, so re-running unchanged returns the same result.",
+      };
     }
-    return { outcomeType: "defer", riskTier: "medium", confidenceScore: 0 };
+    return {
+      outcomeType: "defer",
+      riskTier: "medium",
+      confidenceScore: 0,
+      verdictCause: "no-applicable-principles",
+      retryHint: "Cover this decision in the corpus — no principle applied to it.",
+    };
   }
-  if (result.flags.commandmentConflict) {
-    return { outcomeType: "escalate", riskTier: "high", confidenceScore: 0.3 };
+
+  // BI-2107B5D2: the verdict decides the outcome, and the confidence score is
+  // COMPUTED from the real margin rather than stamped as a constant. The old
+  // 0.9 / 0.5 / 0.3 / 0 constants meant every ledger row carried one of four
+  // values, so the distribution the bands are tuned against did not exist.
+  const { verdict, verdictCause } = readVerdict(result.recommendation, result.flags);
+  const confidenceScore = verdictConfidence(result.recommendation);
+  const retryHint = verdictCause ? VERDICT_RETRY_HINTS[verdictCause] : null;
+
+  if (verdict === "decline") {
+    // A decline is an ASSURANCE — the gate weighed it and the answer is no.
+    // Risk stays high for a commandment conflict because a human should see
+    // that the kernel's own commandments were the blocker.
+    return {
+      outcomeType: "decline",
+      riskTier: verdictCause === "commandment-conflict" ? "high" : "medium",
+      confidenceScore,
+      verdictCause,
+      retryHint,
+    };
   }
-  if (result.recommendation.confidence === "low") {
-    return { outcomeType: "escalate", riskTier: "medium", confidenceScore: 0.5 };
+  if (verdict === "uncertain") {
+    return { outcomeType: "escalate", riskTier: "medium", confidenceScore, verdictCause, retryHint };
   }
-  return { outcomeType: "recommend", riskTier: "low", confidenceScore: 0.9 };
+  return { outcomeType: "recommend", riskTier: "low", confidenceScore, verdictCause: null, retryHint: null };
 }
 
 export async function recordKernelConsultInteraction(input: {
@@ -189,7 +232,13 @@ export async function recordKernelConsultInteraction(input: {
       return { recorded: false, profileId, reason: "profile-not-provisioned" };
     }
 
-    const { outcomeType, riskTier, confidenceScore } = mapConsultOutcome(input.result);
+    const { outcomeType, riskTier, confidenceScore, verdictCause, retryHint } =
+      mapConsultOutcome(input.result);
+    // BI-2107B5D2: read through readVerdict so the edges recorded are the ones
+    // actually applied — including for a legacy result that carried none.
+    const recordedVerdict = input.result.recommendation
+      ? readVerdict(input.result.recommendation, input.result.flags)
+      : null;
 
     // Top contributions for the recommended option — the "why" the audit
     // drill-in shows without replaying the scoring math.
@@ -284,6 +333,16 @@ export async function recordKernelConsultInteraction(input: {
         composite: input.result.recommendation?.composite ?? null,
         margin: input.result.recommendation?.margin ?? null,
         recommendationConfidence: input.result.recommendation?.confidence ?? null,
+        // BI-2107B5D2: the three-band verdict, its cause, the band edges in
+        // force, and what to change before retrying. Persisting the EDGES
+        // alongside the margin is what lets a later histogram tell a moved bar
+        // from a changed result.
+        verdict: recordedVerdict?.verdict ?? null,
+        verdictCause,
+        retryHint,
+        bandUpper: recordedVerdict?.bands.upper ?? null,
+        bandLower: recordedVerdict?.bands.lower ?? null,
+        bandStakes: recordedVerdict?.bands.stakes ?? null,
         insufficientSignal: input.result.flags.insufficientSignal === true,
         commandmentConflictPrinciples: input.result.flags.commandmentConflictPrinciples,
         structuredCoverage: input.result.flags.structuredCoverage,

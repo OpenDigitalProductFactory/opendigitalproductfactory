@@ -35,14 +35,6 @@ import {
   EMBEDDING_COVERAGE_CADENCE,
 } from "@/lib/wiki/embedding-coverage-constants";
 import {
-  BUSINESS_JOURNEY_WATCHDOG_CADENCE,
-  BUSINESS_JOURNEY_WATCHDOG_CRON,
-  BUSINESS_JOURNEY_WATCHDOG_INNGEST_ID,
-  BUSINESS_JOURNEY_WATCHDOG_JOB_ID,
-  BUSINESS_JOURNEY_WATCHDOG_JOB_NAME,
-  BUSINESS_JOURNEY_WATCHDOG_REQUESTED_EVENT,
-} from "@/lib/business-journeys/watchdog-constants";
-import {
   CATALOG_SWEEP_JOB_ID,
   CATALOG_SWEEP_JOB_NAME,
   CATALOG_SWEEP_SCHEDULED_INNGEST_ID,
@@ -62,6 +54,7 @@ import {
 /** core = platform-integrity cron, operator read-only. editable = cadence
  *  may be tuned by an operator after install. */
 import type { JobCategory, ScheduledJobCatalogEntry } from "./catalog-types";
+import { WATCH_JOB_CATALOG_ENTRIES } from "./catalog-watches";
 
 // Re-exported so existing importers of the catalog keep working; the types are
 // owned by ./catalog-types (BI-ED117C82).
@@ -758,18 +751,6 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
     runNowEvent: EMBEDDING_COVERAGE_REQUESTED_EVENT,
   },
   {
-    jobId: BUSINESS_JOURNEY_WATCHDOG_JOB_ID,
-    inngestId: BUSINESS_JOURNEY_WATCHDOG_INNGEST_ID,
-    name: BUSINESS_JOURNEY_WATCHDOG_JOB_NAME,
-    purpose:
-      "BI-E105303D / EP-PROACTIVE-OPS: exercises the install's critical business journeys (front door, enquiry, booking, sign-in, checkout) against the running system, records evidence, and raises a journey_failure issue the Needs-you inbox surfaces. If it stops, a broken signup or booking path goes unnoticed until a customer complains.",
-    cron: BUSINESS_JOURNEY_WATCHDOG_CRON,
-    cadence: BUSINESS_JOURNEY_WATCHDOG_CADENCE,
-    category: "editable",
-    tracksRunData: false,
-    runNowEvent: BUSINESS_JOURNEY_WATCHDOG_REQUESTED_EVENT,
-  },
-  {
     jobId: "memory-consolidation-nightly",
     inngestId: "coworker/memory-consolidation-nightly",
     name: "Coworker memory consolidation",
@@ -781,6 +762,7 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
     tracksRunData: false,
     runNowEvent: null,
   },
+  ...WATCH_JOB_CATALOG_ENTRIES,
 ] as const;
 
 const CATALOG_BY_JOB_ID = new Map<string, ScheduledJobCatalogEntry>(

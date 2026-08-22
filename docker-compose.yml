@@ -214,7 +214,32 @@ services:
       DPF_BACKUPS_HOST_PATH: ${DPF_BACKUPS_HOST_PATH:-}
       DPF_SELF_UPGRADE_HOST_SOURCE_MOUNT: /host-dpf
       INSTANCE_TYPE: dev
-      PROJECT_ROOT: /workspace
+      # Agent codebase tools (search_project_files, list_project_directory,
+      # read_project_file, writeProjectFile) resolve through this root.
+      #
+      # It used to be `/workspace` — the `dpf-source-code` named volume. NOTHING
+      # POPULATES THAT VOLUME: no compose service, no script. Docker creates it
+      # empty and whatever seeded it once drifts forever. On 2026-08-19 it held a
+      # 2026-06-08 commit on a stray branch `my-changes` with 4,444 of the repo's
+      # ~10,000 files, so agent code search returned success=true with EMPTY
+      # results for files that plainly exist. The Build Studio ideate agent
+      # searched correctly, found nothing, looped, and the operator was told "the
+      # local AI wasn't strong enough — connect a stronger provider" (BI-6CFC5429).
+      #
+      # `/sandbox-workspace` is the `sandbox_workspace` volume the build sandboxes
+      # mount as their own `/workspace` — the tree a build actually edits, and
+      # already the intended target for writeProjectFile. Kernel decision
+      # DI-9EC6B0895748 selected it over the read-write host bind `/host-dpf`,
+      # which scored roughly half: `/host-dpf` reads current but would let agent
+      # tooling write into the operator's real git clone (negative contributions
+      # on "Least privilege, deny by default" and "Outbound and irreversible
+      # actions require explicit go").
+      #
+      # NOT changed in the sibling compose files, whose /workspace is populated:
+      # docker-compose.local-ci.yml binds a per-slot source volume from the slot
+      # manifest; docker-compose.dev-against-live-db.yml bind-mounts the dev
+      # worktree. Only this base file pointed at the orphaned volume.
+      PROJECT_ROOT: /sandbox-workspace
       SANDBOX_PREVIEW_URL: http://sandbox:3000
       GITHUB_TOKEN: ${GITHUB_TOKEN:-}
       HIVE_CONTRIBUTION_TOKEN: ${HIVE_CONTRIBUTION_TOKEN:-}
@@ -803,7 +828,6 @@ services:
 
   # ─── Durable Execution (Inngest + Redis) ──────────────────────────────
   redis:
-    profiles: ["runtime-durable-automation"]
     image: redis:7-alpine
     restart: unless-stopped
     logging: *default-logging
@@ -815,6 +839,11 @@ services:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
       timeout: 5s
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+          cpus: "0.5"
 
   # redis-exporter — ~4 MB sidecar that scrapes the redis:6379 INFO output and
   # exposes it on :9121/metrics in Prometheus format. Lets the platform Health
@@ -834,7 +863,6 @@ services:
     # scraping /metrics is the effective health signal.
 
   inngest:
-    profiles: ["runtime-durable-automation"]
     # Pinned (was :latest). :latest drifted onto 1.26.0, which has a
     # self-hosted `inngest start` regression: every queued item fails its
     # capacity-lease with "missing envID" (itemLeaseConstraintCheck) and
@@ -883,6 +911,11 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
+    deploy:
+      resources:
+        limits:
+          memory: 1g
+          cpus: "1.0"
 
   # ─── Voice Input — Speech-to-text sidecar (capability-owned, CPU) ──────────
   # Owning spec: docs/superpowers/specs/2026-05-17-voice-input-slice-1-5-default-on-cpu.md

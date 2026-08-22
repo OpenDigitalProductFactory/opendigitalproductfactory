@@ -11,6 +11,8 @@ import {
   createLocalIntegrationChildInvocation,
   planPostgresOwnership,
   preparePinnedPnpmEnvironment,
+  executableOnPath,
+  resolveLocalCiPnpmInvocation,
   resetOwnedSlotDatabase,
 } from "./local-ci-runner.mjs";
 
@@ -203,6 +205,37 @@ test("local CI shadows pnpm 11 with the repository-pinned version", () => {
   assert.equal(pinned.status, 0, pinned.stderr);
   assert.equal(pinned.stdout.trim(), "10.33.2");
   assert.match(readFileSync(join(toolchainDir, "pnpm"), "utf8"), /with.*10\.33\.2/);
+});
+
+test("Windows executable lookup accepts the canonical Path environment key", () => {
+  const fixture = mkdtempSync(join(tmpdir(), "dpf-local-ci-path-case-"));
+  const shim = join(fixture, "pnpm.CMD");
+  writeFileSync(shim, "@echo off\r\n");
+
+  assert.equal(
+    executableOnPath("pnpm", {
+      env: { Path: fixture, PATHEXT: ".CMD" },
+      platform: "win32",
+    }),
+    shim,
+  );
+});
+
+test("Windows pnpm execution uses ComSpec without reparsing a spaced profile path", () => {
+  assert.deepEqual(
+    resolveLocalCiPnpmInvocation(
+      "C:\\Users\\Mark Bodman\\AppData\\Roaming\\npm\\pnpm.CMD",
+      ["--version"],
+      {
+        platform: "win32",
+        env: { ComSpec: "C:\\Windows\\System32\\cmd.exe" },
+      },
+    ),
+    {
+      command: "C:\\Windows\\System32\\cmd.exe",
+      args: ["/d", "/s", "/c", "pnpm --version"],
+    },
+  );
 });
 
 test("local CI keeps an already-matching pnpm without a shim", () => {

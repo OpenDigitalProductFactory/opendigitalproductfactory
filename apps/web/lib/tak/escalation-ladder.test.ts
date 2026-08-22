@@ -4,6 +4,8 @@ import {
   UNESCALATED_FILE_OFFER,
   classifyLadderActivity,
   applyEscalationLadderGuard,
+  ESCALATION_RUNGS,
+  buildHumanHandoff,
 } from "./escalation-ladder";
 
 const ok = (name: string) => ({ name, result: { success: true, entityId: "BI-FBDF739F" } });
@@ -115,5 +117,53 @@ describe("ESCALATION_LADDER_BLOCK", () => {
 
   it("keeps operating-principle 5 intact — peers are described to users by role, not id", () => {
     expect(ESCALATION_LADDER_BLOCK).toMatch(/never a tool name or an internal id/);
+  });
+});
+
+describe("rung 4 — hand off to the human (BI-33F1EA72)", () => {
+  it("tells coworkers not to route or file a blocker only a person can clear", () => {
+    expect(ESCALATION_LADDER_BLOCK).toMatch(/HAND OFF/);
+    expect(ESCALATION_LADDER_BLOCK).toMatch(/do not route it and do not file it/);
+  });
+
+  it("keeps FILE as the last rung after the hand-off is inserted", () => {
+    const handoffAt = ESCALATION_LADDER_BLOCK.indexOf("HAND OFF");
+    const fileAt = ESCALATION_LADDER_BLOCK.indexOf("FILE —");
+    expect(handoffAt).toBeGreaterThan(-1);
+    expect(fileAt).toBeGreaterThan(handoffAt);
+  });
+
+  it("does NOT count a hand-off as a peer attempt", () => {
+    // The guard exists to catch "filed without asking a colleague". A hand-off
+    // involves the human, so counting it here would let a coworker satisfy the
+    // guard by telling the user to fix it themselves and filing anyway.
+    expect(ESCALATION_RUNGS).not.toContain("handoff");
+  });
+
+  it("renders the blocker, numbered steps, and what gets re-checked", () => {
+    const message = buildHumanHandoff({
+      blocker: "I can't sign in to the billing portal from here.",
+      steps: ["Open the billing portal.", "Approve the pending access request."],
+      verify: "retry the sync",
+    });
+
+    expect(message).toContain("I can't sign in to the billing portal from here.");
+    expect(message).toContain("1. Open the billing portal.");
+    expect(message).toContain("2. Approve the pending access request.");
+    expect(message).toContain("I'll retry the sync");
+  });
+
+  it("never ends on the limitation — the last line hands the work back", () => {
+    // The failure this rung exists to fix: naming what could not be done and
+    // stopping there. The closing line must be the resumption, not the blocker.
+    const message = buildHumanHandoff({
+      blocker: "Blocked.",
+      steps: ["Do the thing."],
+      verify: "check it took",
+    });
+
+    const lastLine = message.trimEnd().split("\n").pop() ?? "";
+    expect(lastLine).toMatch(/pick this straight back up/);
+    expect(lastLine).not.toMatch(/^Blocked\.$/);
   });
 });

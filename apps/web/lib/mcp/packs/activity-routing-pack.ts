@@ -28,6 +28,8 @@ const definitions: ToolDefinition[] = [
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: true,
+    // changes identity or authority → consult-gated (TAK §8.4.1).
+    consequence: "authority",
   },
 ];
 

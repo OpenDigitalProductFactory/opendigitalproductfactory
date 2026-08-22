@@ -47,7 +47,8 @@ import { persistExecutionPlan, loadExecutionPlan } from "./execution-plan-store"
 import { estimateContextTokens, classifyContextPressure, deriveCompactionCaps } from "./context-pressure";
 import { clampToolResultForModel, resolveToolResultCharCap } from "./tool-result-budget";
 import { applyBacklogCreateClaimGuard } from "./backlog-create-claim-guard";
-import { applyEscalationLadderGuard } from "./escalation-ladder";
+import { applyEscalationLadderGuard, buildHumanHandoff } from "./escalation-ladder";
+import { logGeneratedProse } from "../prose/generated-prose"; // BI-41F15FD7
 import { assessToolSurface, computeToolSelectionAccuracy, contextEconomyTurnMetricFields } from "./context-economy-metrics";
 import { summarizeDroppedMessages } from "./compaction-digest";
 import { describeContextCapacityFailure } from "./context-capacity-failure";
@@ -594,23 +595,17 @@ function buildDowngradedFabricationMessage(): string {
 }
 
 function buildLocalToolCallFailureMessage(_result: RoutedInferenceResult): string {
-  // User-facing message: respects IDENTITY_BLOCK rule #5 — never expose
-  // infrastructure names ("Docker Model Runner"), model IDs, or routing
-  // architecture. The internal route + model details are already recorded
-  // for engineers via RoutedInferenceResult.
-  //
-  // Honest copy (G2, 2026-05-23): the prior version promised "I'll route
-  // through a different model" which the loop never delivered. On a single-
-  // provider install the promise was mathematically impossible; on a multi-
-  // provider install the re-route call simply isn't wired. Replaced with
-  // honest copy that points at the actual fix.
-  return (
-    "I'm on a local AI that wasn't strong enough to finish this. "
-    + "Connecting a stronger provider (Claude, Gemini, or OpenAI) at "
-    + "Platform > AI > Providers unlocks the work I'm built for. "
-    + "If a stronger provider is already connected, try rephrasing or breaking "
-    + "the request into a smaller step."
-  );
+  // Respects IDENTITY_BLOCK rule #5 — no infrastructure names, model ids, or
+  // routing architecture; engineers get those from RoutedInferenceResult.
+  // Copy must stay honest (G2, 2026-05-23): an earlier version promised a
+  // re-route the loop never performs.
+  // Rung 4 (BI-33F1EA72): connecting a provider is work only the human can do,
+  // so this hands off rather than apologizing — steps, then the resumption.
+  return buildHumanHandoff({
+    blocker: "I'm on the local AI here, and it couldn't carry this one through.",
+    steps: ["Open Platform > AI > Providers.", "Connect a stronger provider — Claude, Gemini, or OpenAI."],
+    verify: "confirm the stronger provider is live",
+  });
 }
 
 type ExecutedTool = { name: string; args?: Record<string, unknown>; result: ToolResult };
@@ -2427,6 +2422,8 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
       }
       const finalContent = applyEscalationLadderGuard(applyBacklogCreateClaimGuard(
         trimmed.length > 0 ? result.content : (bestPreNudgeContent || result.content), executedTools), executedTools);
+      // BI-41F15FD7 — observability only; content is returned unchanged.
+      logGeneratedProse(finalContent, { threadId, modelId: result.modelId }, sanitizeForLog);
       logTurnSummary(result.providerId, result.modelId);
       return {
         content: finalContent,

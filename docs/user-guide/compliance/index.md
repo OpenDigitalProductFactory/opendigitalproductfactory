@@ -74,6 +74,52 @@ the obligation record.
 - [Licensing readiness](licensing-readiness.md) — track permits, licenses,
   authority layers, credentials, fees, and unresolved questions.
 
+## What The Compliance Coworker Does
+
+**What it does.** The Compliance Officer coworker can onboard a regulation and
+draft its obligation structure from a source you point it at, run a gap
+assessment over obligations that have no active control, report the posture
+score and name its detractors, draft and version policies, capture what your
+business does with data so the right regulations apply, and open licensing
+readiness issues. It weighs its judgements against its profession corpus and the
+organization's own recorded stances rather than deciding unaided.
+
+**When it runs.** Two things now run without being asked, and one still does not.
+
+The **obligation assurance watch** runs daily at 05:40 UTC. It reads the review
+dates and frequencies you record on obligations and controls, and the freshness
+budget on licence requirement references, and raises a finding for anything
+falling due inside the next 30 days or already past. It also reports anything
+that declares a recurrence with no date attached, because that reads on screen
+as a control in force and behaves as one that is not. You can change its cadence
+or run it now from `/admin/scheduled-jobs`.
+
+The **Compliance Officer** then reports those findings to you on its Proactivity
+setting — weekly at Balanced, daily at Assertive, not at all at Quiet.
+
+What still does **not** run on a schedule is the regulatory-change scan. It runs
+only when someone presses the button on the Regulations screen, and that is
+deliberate: it asks a model from recall rather than reading an authoritative
+feed, so running it daily would manufacture compliance noise rather than detect
+regulatory change.
+
+**How it stays current.** Your recorded dates are watched daily; the outside
+world is not. The watch re-reads the records on every run, so correcting a date
+is reflected the next morning and a completed review closes its finding. But
+nothing subscribes to any official source, and the change scan compares a
+regulation only against what it last recorded. Treat *regulatory* currency as a
+human responsibility on a calendar you own; the platform now watches whether you
+are keeping to that calendar, not whether the calendar is still right.
+
+**What it will not do.** The coworker does not decide that you are compliant,
+does not renew a licence, does not submit a filing, and does not change a control
+status on its own. Consequential actions require your approval, and low-confidence
+or conflicting judgements escalate rather than resolve themselves.
+
+**What you must do.** Set and keep your own review cadence, re-check the official
+source before relying on any recorded requirement, and treat an unchanged posture
+score as evidence of nothing — it does not move when a deadline passes unnoticed.
+
 ## Read Posture Carefully
 
 The gap view classifies an active obligation as **covered** when it has at

@@ -10,6 +10,8 @@ Common portal surfaces get continuous UX attention. Each business archetype stil
 
 Use it for Restaurant today and for any of the archetype categories under `packages/storefront-templates/src/archetypes`.
 
+> **This rubric audits surfaces, not the domain.** It presumes an operating model exists and asks whether the UI represents it well. An archetype can pass this pass convincingly while being unable to run the business for a single day — see [Archetype Operating-Model Audit](./archetype-operating-model-audit.md), which asks the prior question. Run both; an archetype must pass both.
+
 ## Study unit
 
 One **archetype pass** = one leaf archetype (or the category demo install) audited against this checklist in a single evidence package (notes, counts, screenshots optional).

@@ -1,7 +1,7 @@
 // apps/web/lib/semantic-memory.ts
 // Store and recall conversation memories using Qdrant vector database.
 
-import { generateEmbedding } from "./embedding";
+import { generateEmbedding, generateEmbeddingDetailed } from "./embedding";
 import {
   upsertVectors,
   searchSimilar,
@@ -409,13 +409,58 @@ export async function storePlatformKnowledge(params: {
 
 // ─── Search Platform Knowledge ──────────────────────────────────────────────
 
+export type PlatformKnowledgeHit = {
+  entityId: string;
+  entityType: string;
+  title: string;
+  score: number;
+};
+
+/**
+ * Why this returns a status and not just an array (BI-339C441F).
+ *
+ * This function used to answer `[]` when generateEmbedding() returned null —
+ * making "the corpus holds nothing like your query" and "I could not embed
+ * your query, so I never looked" the same answer. Callers cannot tell those
+ * apart, and one of them is a lie by omission.
+ *
+ * It matters most where an empty result is treated as PERMISSION. create_backlog_item
+ * and dpf-file-backlog-item both say "search before you create"; with retrieval
+ * down, that check returns its cleanest possible result at the exact moment it
+ * is least trustworthy, and duplicates get filed with an audit trail claiming
+ * they were checked. Observed 2026-08-21: three consecutive queries returned
+ * empty, including a control that certainly matched a live epic.
+ *
+ * `unavailable` is not an error — the caller decides whether to proceed. It
+ * just has to know it is proceeding blind.
+ */
+export type PlatformKnowledgeSearch =
+  | { status: "ok"; results: PlatformKnowledgeHit[] }
+  | { status: "unavailable"; reason: string; results: [] };
+
 export async function searchPlatformKnowledge(params: {
   query: string;
   entityType?: string;
   limit?: number;
-}): Promise<Array<{ entityId: string; entityType: string; title: string; score: number }>> {
-  const embedding = await generateEmbedding(params.query);
-  if (!embedding) return [];
+}): Promise<PlatformKnowledgeSearch> {
+  const embedded = await generateEmbeddingDetailed(params.query);
+  if (embedded.status !== "ok") {
+    // The reason matters. A capacity deferral is retryable and says nothing
+    // about the corpus or the model; a failure is neither. Reporting the
+    // former as the latter is what made a busy host look like a broken
+    // embedding model for the whole session this was found in.
+    console.warn(
+      `[semantic-memory] searchPlatformKnowledge did not query the corpus — ${embedded.status}: ${embedded.reason}`,
+    );
+    return {
+      status: "unavailable",
+      reason: embedded.status === "deferred"
+        ? `semantic search is deferred while local CI holds host capacity (${embedded.reason}) — retryable`
+        : `the embedding step failed (${embedded.reason})`,
+      results: [],
+    };
+  }
+  const embedding = embedded.embedding;
 
   const filter = params.entityType
     ? { must: [{ key: "entityType", match: { value: params.entityType } }] }
@@ -429,12 +474,15 @@ export async function searchPlatformKnowledge(params: {
     0.6,
   );
 
-  return results.map((r) => ({
-    entityId: String(r.payload["entityId"] ?? ""),
-    entityType: String(r.payload["entityType"] ?? ""),
-    title: String(r.payload["title"] ?? ""),
-    score: r.score,
-  }));
+  return {
+    status: "ok",
+    results: results.map((r) => ({
+      entityId: String(r.payload["entityId"] ?? ""),
+      entityType: String(r.payload["entityType"] ?? ""),
+      title: String(r.payload["title"] ?? ""),
+      score: r.score,
+    })),
+  };
 }
 
 // ─── Store Capability Knowledge ────────────────────────────────────────────

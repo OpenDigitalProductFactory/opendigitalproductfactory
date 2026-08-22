@@ -60,8 +60,15 @@ describe("capability completeness (derived artifact accessor)", () => {
 
   it("distinguishes attainable from absolute so a platform cap is not read as an agent defect", () => {
     const r = capabilityCompletenessReport();
-    // Shape has no substrate at all, so no agent can ever reach 100% absolute.
-    expect(planeContract("shape").ceiling).toBe(0);
+    // Shape used to have no substrate at all (ceiling 0). The work-shape
+    // registry landed, so the ceiling rose to 2 — level 3 still waits on
+    // observed running instances. The assertion tracks the invariant rather
+    // than the old number: at least one plane is capped BELOW the top of the
+    // ladder, so no agent can reach 100% absolute and attainable must stay
+    // above absolute for every agent.
+    const ceilings = CAPABILITY_PLANES.map((plane) => planeContract(plane).ceiling);
+    expect(Math.min(...ceilings)).toBeLessThan(3);
+    expect(planeContract("shape").ceiling).toBeLessThan(3);
     for (const a of r.agents) {
       expect(a.score.attainablePct).toBeGreaterThanOrEqual(a.score.absolutePct);
     }

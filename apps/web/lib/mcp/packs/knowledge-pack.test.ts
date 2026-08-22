@@ -56,9 +56,10 @@ describe("knowledge pack — registration", () => {
 
 describe("knowledge pack — handler behavior (delegation preserved)", () => {
   it("search_knowledge summarizes semantic results from the service", async () => {
-    semanticMemory.searchPlatformKnowledge.mockResolvedValue([
-      { entityType: "backlog", entityId: "BI-1", title: "Widget", score: 0.9 },
-    ]);
+    semanticMemory.searchPlatformKnowledge.mockResolvedValue({
+      status: "ok",
+      results: [{ entityType: "backlog", entityId: "BI-1", title: "Widget", score: 0.9 }],
+    });
     const res = await knowledgePack.handlers.search_knowledge({ query: "widget" }, "u1");
     expect(res.success).toBe(true);
     expect(res.message).toContain("backlog:BI-1");
@@ -71,10 +72,27 @@ describe("knowledge pack — handler behavior (delegation preserved)", () => {
   });
 
   it("search_knowledge returns an empty result set when nothing matches", async () => {
-    semanticMemory.searchPlatformKnowledge.mockResolvedValue([]);
+    semanticMemory.searchPlatformKnowledge.mockResolvedValue({ status: "ok", results: [] });
     const res = await knowledgePack.handlers.search_knowledge({ query: "none" }, "u1");
     expect(res.success).toBe(true);
     expect(res.data).toEqual({ results: [] });
+  });
+
+  it("search_knowledge fails loudly when retrieval is unavailable (BI-339C441F)", async () => {
+    // The regression: this used to be indistinguishable from the case above,
+    // so a caller told to "search before you create" read an outage as a
+    // clean duplicate check.
+    semanticMemory.searchPlatformKnowledge.mockResolvedValue({
+      status: "unavailable",
+      reason: "the embedding model did not return a vector for this query",
+      results: [],
+    });
+    const res = await knowledgePack.handlers.search_knowledge({ query: "none" }, "u1");
+
+    expect(res.success).toBe(false);
+    expect(res.message).toContain("unavailable");
+    expect(res.message).toContain('NOT "no results"');
+    expect(res.data).toMatchObject({ searchStatus: "unavailable" });
   });
 
   it("search_knowledge_base forwards the article filters to the service", async () => {

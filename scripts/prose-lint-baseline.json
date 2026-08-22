@@ -1376,7 +1376,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 92
+    "textMass": 95
   },
   "apps/web/app/(shell)/platform/ai/assignments/bindings/[bindingId]/page.tsx": {
     "vocabulary": 0,
@@ -1482,6 +1482,13 @@
     "readability": 0,
     "longSentences": 0,
     "textMass": 173
+  },
+  "apps/web/app/(shell)/platform/ai/providers/loading.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 43
   },
   "apps/web/app/(shell)/platform/ai/providers/page.tsx": {
     "vocabulary": 0,
@@ -3828,83 +3835,6 @@
     "longSentences": 0,
     "textMass": 4
   },
-  "apps/web/components/build-studio/ArtifactTabs.tsx": {
-    "vocabulary": 0,
-    "genericLabels": 0,
-    "readability": 0,
-    "longSentences": 0,
-    "textMass": 4
-  },
-  "apps/web/components/build-studio/Bubble.tsx": {
-    "vocabulary": 0,
-    "genericLabels": 0,
-    "readability": 0,
-    "longSentences": 0,
-    "textMass": 22
-  },
-  "apps/web/components/build-studio/BuildStudioV2.tsx": {
-    "vocabulary": 0,
-    "genericLabels": 0,
-    "readability": 0,
-    "longSentences": 0,
-    "textMass": 15
-  },
-  "apps/web/components/build-studio/Composer.tsx": {
-    "vocabulary": 0,
-    "genericLabels": 0,
-    "readability": 0,
-    "longSentences": 0,
-    "textMass": 14
-  },
-  "apps/web/components/build-studio/HeaderBar.tsx": {
-    "vocabulary": 0,
-    "genericLabels": 0,
-    "readability": 0,
-    "longSentences": 0,
-    "textMass": 24
-  },
-  "apps/web/components/build-studio/PreviewFrame.tsx": {
-    "vocabulary": 0,
-    "genericLabels": 0,
-    "readability": 0,
-    "longSentences": 0,
-    "textMass": 42
-  },
-  "apps/web/components/build-studio/cards/DecisionCard.tsx": {
-    "vocabulary": 0,
-    "genericLabels": 0,
-    "readability": 0,
-    "longSentences": 0,
-    "textMass": 11
-  },
-  "apps/web/components/build-studio/cards/FilesTouchedCard.tsx": {
-    "vocabulary": 0,
-    "genericLabels": 0,
-    "readability": 0,
-    "longSentences": 0,
-    "textMass": 3
-  },
-  "apps/web/components/build-studio/cards/PlanSummaryCard.tsx": {
-    "vocabulary": 0,
-    "genericLabels": 0,
-    "readability": 0,
-    "longSentences": 0,
-    "textMass": 6
-  },
-  "apps/web/components/build-studio/cards/StepRefCard.tsx": {
-    "vocabulary": 0,
-    "genericLabels": 0,
-    "readability": 0,
-    "longSentences": 0,
-    "textMass": 9
-  },
-  "apps/web/components/build-studio/cards/VerificationStripCard.tsx": {
-    "vocabulary": 0,
-    "genericLabels": 0,
-    "readability": 0,
-    "longSentences": 0,
-    "textMass": 15
-  },
   "apps/web/components/build/ActionBanner.tsx": {
     "vocabulary": 0,
     "genericLabels": 0,
@@ -3918,13 +3848,6 @@
     "readability": 0,
     "longSentences": 0,
     "textMass": 18
-  },
-  "apps/web/components/build/AgentSessionFeed.tsx": {
-    "vocabulary": 0,
-    "genericLabels": 0,
-    "readability": 0,
-    "longSentences": 0,
-    "textMass": 14
   },
   "apps/web/components/build/AgentSessionFeedLive.tsx": {
     "vocabulary": 0,
@@ -3953,13 +3876,6 @@
     "readability": 0,
     "longSentences": 0,
     "textMass": 10
-  },
-  "apps/web/components/build/BuildCustomerStatusBand.tsx": {
-    "vocabulary": 0,
-    "genericLabels": 0,
-    "readability": 0,
-    "longSentences": 0,
-    "textMass": 5
   },
   "apps/web/components/build/BuildDecisionLedgerBand.tsx": {
     "vocabulary": 0,
@@ -4029,7 +3945,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 1,
-    "textMass": 403
+    "textMass": 382
   },
   "apps/web/components/build/BuildStudioCustodianCallout.tsx": {
     "vocabulary": 0,
@@ -4247,13 +4163,6 @@
     "readability": 0,
     "longSentences": 0,
     "textMass": 4
-  },
-  "apps/web/components/build/TestRunnerPanel.tsx": {
-    "vocabulary": 0,
-    "genericLabels": 0,
-    "readability": 0,
-    "longSentences": 0,
-    "textMass": 15
   },
   "apps/web/components/build/UnifiedEvidenceTimeline.tsx": {
     "vocabulary": 0,
@@ -8404,7 +8313,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 27
+    "textMass": 36
   },
   "apps/web/components/workspace-home/OperatorCockpit.tsx": {
     "vocabulary": 0,
@@ -8539,6 +8448,13 @@
     "longSentences": 0,
     "textMass": 39
   },
+  "apps/web/components/workspace/workroom/ShapeViewToggle.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 2
+  },
   "apps/web/components/workspace/workroom/WorkroomBody.tsx": {
     "vocabulary": 0,
     "genericLabels": 0,
@@ -8567,11 +8483,57 @@
     "longSentences": 0,
     "textMass": 31
   },
+  "apps/web/components/workspace/workroom/WorkroomShape.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 26
+  },
   "apps/web/components/workspace/workroom/WorkroomStructurePanel.tsx": {
     "vocabulary": 0,
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
     "textMass": 4
+  },
+  "apps/web/lib/build/customer-status-projection.ts": {
+    "retiredVocabulary": 1
+  },
+  "apps/web/lib/build/evidence-timeline.ts": {
+    "retiredVocabulary": 1
+  },
+  "apps/web/lib/mcp/packs/build-evidence-extra-pack.ts": {
+    "retiredVocabulary": 3
+  },
+  "apps/web/lib/mcp/packs/change-review-pack.ts": {
+    "retiredVocabulary": 4
+  },
+  "apps/web/lib/mcp/packs/decomposition-pack.ts": {
+    "retiredVocabulary": 1
+  },
+  "apps/web/lib/mcp/packs/runtime-coordination-pack.ts": {
+    "retiredVocabulary": 4
+  },
+  "apps/web/lib/mcp/packs/work-capsules-pack.ts": {
+    "retiredVocabulary": 6
+  },
+  "apps/web/lib/tak/change-reviewer-route.ts": {
+    "retiredVocabulary": 1
+  },
+  "apps/web/lib/tak/route-context/providers/build.ts": {
+    "retiredVocabulary": 1
+  },
+  "apps/web/lib/work-capsules/capsule-workitem-anchor.ts": {
+    "retiredVocabulary": 2
+  },
+  "apps/web/lib/work-capsules/mcp-result-errors.ts": {
+    "retiredVocabulary": 1
+  },
+  "apps/web/lib/work-capsules/work-capsule-reaper.ts": {
+    "retiredVocabulary": 1
+  },
+  "apps/web/lib/work-management/source-registry.ts": {
+    "retiredVocabulary": 1
   }
 }

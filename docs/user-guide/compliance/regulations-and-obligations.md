@@ -78,6 +78,64 @@ controls when reviewing inactive history. The scope is retained in the URL.
 - The platform records your interpretation; the official source remains
   authoritative.
 
+## What Runs On Its Own
+
+### What it does
+
+The **obligation assurance watch** reads every active obligation's recorded
+review date and frequency and raises a finding on the assurance ledger for each
+one falling due. The coworker reviews what the sweep raised and reports it to you in plain
+language: what is overdue, oldest first, with the recorded owner; what
+falls due in the next 30 days; and — most important — any obligation that
+declares a recurrence with **no next date**.
+
+That last case is why the watch exists. An obligation with `frequency: annual`
+and no review date reads on screen as a control that is in force, and behaves as
+one that is not: nothing will ever fall due, so nobody will ever be told about
+it again. The watch reports it as a defect rather than as configuration.
+
+### When it runs
+
+The sweep runs **daily at 05:40 UTC** and looks 30 days ahead. It is listed on
+`/admin/scheduled-jobs` as **Obligation assurance watch**, where you can change
+its cadence or run it now.
+
+The compliance specialist's own report runs on its Proactivity setting: **weekly**
+on Mondays at Balanced, **daily** at Assertive, and not at all at Quiet — at Quiet
+the findings are still raised, you just read them yourself.
+
+### How it stays current
+
+Nothing is cached. Each run re-reads the obligation records as they stand, so
+correcting a review date is reflected the next morning. A finding is keyed to the
+record *and its due date*: re-running the sweep updates the same finding rather
+than creating a duplicate, and once a date has been dealt with and moved beyond
+the horizon its finding closes on the next run.
+
+If the sweep cannot read the compliance records at all, it stops and says so. It
+does **not** report a clean compliance position from an empty database — an
+unread estate and a clear one look identical on screen and are not the same
+thing.
+
+### What it will not do
+
+- The automation **will not decide** the response to anything it finds.
+  Accepting a lapse, deferring a review, or remediating it is your decision, and
+  the platform requires an explicit governed decision to record it.
+- It does not read your regulator. It only reads what is recorded here, so an
+  obligation nobody entered is an obligation nobody is watching.
+- It never estimates a due date. Every date it reports traces to a recorded
+  column, named in the finding's evidence.
+
+### What you must do
+
+- Give every recurring obligation a **review date**, not just a frequency. The
+  frequency alone schedules nothing.
+- Name an accountable owner. A finding with no owner still gets raised, but it
+  arrives addressed to nobody.
+- Decide the response when a finding lands. That step requires human approval
+  and will not clear itself.
+
 ## Evidence Of A Good Record
 
 - the source URL opens the exact official material used

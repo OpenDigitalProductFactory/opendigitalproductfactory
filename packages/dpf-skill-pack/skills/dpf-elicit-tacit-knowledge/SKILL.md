@@ -1,6 +1,6 @@
 ---
 name: dpf-elicit-tacit-knowledge
-description: "Use in the DPF codebase when durable knowledge lives only in a human's head and needs to enter the system — a founder/operator decision rationale, the 'why' behind a choice, a profession technique, domain context a new build depends on. Researches what the system already knows, then conducts a focused progressive interview (one question at a time, drilling on the gaps) to draw out the tacit part, captures it in the shape it will be retrieved, and hands off to dpf-route-learning-to-commons. The acquisition step that precedes routing: getting knowledge OUT of the head is the bottleneck, not finding it later."
+description: "Use in the DPF codebase when durable knowledge lives only in a human's head and needs to enter the system — a founder/operator decision rationale, the 'why' behind a choice, a profession technique, domain context a new build depends on. Researches what the system already knows, then interviews in rounds of numbered questions with candidate answers to draw out the tacit part, and captures it in the shape it will be retrieved."
 disable-model-invocation: false
 user-invocable: true
 allowed-tools: Grep Glob mcp__dpf__wiki_query mcp__dpf__search_knowledge mcp__dpf__search_code_graph mcp__dpf__doc_save mcp__dpf__save_build_notes
@@ -64,7 +64,28 @@ It is the **predecessor** to [`dpf-route-learning-to-commons`](../dpf-route-lear
 
 3. **Decide the retrieval shape first** (`shape-knowledge-for-retrieval`). State the question a future agent will ask to retrieve this knowledge. That determines the capture form (whole-document vs. typed entry vs. corpus technique) and which commons lane it will land in — and therefore what you need to ask.
 
-4. **Interview — one question at a time.** Ask a single focused question grounded in your research ("The code shows X; why was it built that way and when would you do it differently?"). Drill on vague answers; follow the thread the answer opens rather than reading a fixed list. Do not dump a questionnaire. Keep each turn short. Stop when new questions stop surfacing new knowledge — the well is dry, not when a quota is hit.
+4. **Interview in rounds, over a decision tree.** Map the gaps as a tree: every decision branches into the decisions that hang off it. The **frontier** is every decision whose prerequisites are already settled — ask only those. Settling a frontier decision exposes the next one, so the tree is worked in rounds rather than read as a fixed list.
+
+   Each round is a short **numbered list with candidate answers**:
+
+   ```
+   1. Who does the after-hours call reach first?
+      A. The on-call tech directly
+      B. A dispatcher who triages, then pages
+      C. An answering service that only takes a message
+   2. What overrides SLA tier?
+      A. Nothing — tier is the order
+      B. Life-safety, always
+      C. Geography when the tech is already nearby
+   ```
+
+   The human answers `1B, 2B, 3-none of these` in seconds. Cheap answers get answered; a paragraph-per-question interview quietly does not happen, and an interview that does not happen captures nothing.
+
+   Candidates must be **real competing positions**, not one obvious answer padded with strawmen — a candidate the human rejects teaches as much as one they pick, and "none of these" is the most informative reply on the list. Always leave it open. Keep a round to roughly 3-6 questions, and open the next round by drilling on anything answered "none of these" or accepted with a caveat.
+
+   Stop when the frontier is empty, or when a round stops surfacing new knowledge — the well is dry, not when a quota is hit.
+
+   This shape also survives a weak model. Composing six numbered questions with candidates is one bounded generation task; conducting an adaptive question-by-question interview is multi-turn planning, which is what low context retention breaks first. See the local-model priors in `packages/db/src/local-model-capabilities.ts`.
 
 5. **Capture in the retrieval shape, not the transcript** (`selective-memory-not-total-recall`). Write the decisions, rationale, and constraints — dense and structured for the query you named in step 3 — via `mcp__dpf__doc_save` (managed knowledge) or `mcp__dpf__save_build_notes` (build-context capture). Tag it with the role, phase, and topic the future query will filter on.
 
@@ -75,7 +96,8 @@ It is the **predecessor** to [`dpf-route-learning-to-commons`](../dpf-route-lear
 ## Guardrails
 
 - **Research is the price of admission.** If you ask the human something the system already knows, you have violated `do-the-work-dont-task-the-operator`. Ground every question in what you could not find.
-- **One question at a time; drill, don't dump.** A wall of questions gets shallow answers. A focused thread gets the tacit detail. This is an interview, not a form.
+- **Ask the frontier, not the tree.** A round holds only decisions whose prerequisites are settled. Questions that depend on an unanswered question get shallow answers, because the human is guessing at their own premise.
+- **Candidates, never a bare questionnaire.** A wall of open questions gets abandoned or answered thinly. The same questions with real candidate answers get answered — and the rejections carry as much signal as the picks. Never omit "none of these".
 - **Capture the judgment, not the chatter.** The output is decisions + rationale + constraints, not the raw Q&A. Re-derivable detail stays in its primary source.
 - **Durable only.** Don't elicit or capture knowledge that will be stale next week — that is noise, not memory.
 - **Bounded by the well, and by respect.** Stop when answers stop adding knowledge; never grind the operator past usefulness. Elicitation is sanctioned tasking of the operator *because the knowledge is genuinely impossible for the agent to get otherwise* — the moment it isn't, stop asking.
@@ -83,7 +105,7 @@ It is the **predecessor** to [`dpf-route-learning-to-commons`](../dpf-route-lear
 
 ## Worked example
 
-A coworker is about to build an after-hours dispatch flow. Research (step 2) finds the storefront archetype, the existing on-call schema, and a prior spec — but nothing on *how this operator actually triages calls*, which the build depends on. That is the gap. The coworker names the retrieval question (step 3): "How does a dispatcher triage after-hours calls for this archetype?" → a WSID profession technique, queried by the dispatcher corpus slug. It interviews (step 4): one question at a time — "Walk me through the last urgent after-hours call: what did you check first?" — drilling until the real rule emerges (life-safety → contractual SLA tier → geography), which no code revealed. It captures the rule and its rationale, structured for that query (step 5), confirms a search for "after-hours escalation" surfaces it (step 6), and hands to `dpf-route-learning-to-commons`, which routes it to the profession corpus and contributes it to the hive (step 7). The next build on any install reads the operator's real triage logic instead of guessing it.
+A coworker is about to build an after-hours dispatch flow. Research (step 2) finds the storefront archetype, the existing on-call schema, and a prior spec — but nothing on *how this operator actually triages calls*, which the build depends on. That is the gap. The coworker names the retrieval question (step 3): "How does a dispatcher triage after-hours calls for this archetype?" → a WSID profession technique, queried by the dispatcher corpus slug. It interviews (step 4): round one asks who the call reaches first and what overrides SLA tier, each with three candidate answers. The operator answers `1B, 2-none of these` in one line — and that rejection is the finding, because it says tier is not the top of the order. Round two drills exactly there and the real rule emerges: life-safety → contractual SLA tier → geography, which no code revealed. It captures the rule and its rationale, structured for that query (step 5), confirms a search for "after-hours escalation" surfaces it (step 6), and hands to `dpf-route-learning-to-commons`, which routes it to the profession corpus and contributes it to the hive (step 7). The next build on any install reads the operator's real triage logic instead of guessing it.
 
 ## See also
 

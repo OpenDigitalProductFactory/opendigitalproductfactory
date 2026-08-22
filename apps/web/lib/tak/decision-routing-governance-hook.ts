@@ -15,8 +15,13 @@
 // shadow_audit, margin 0.015 / low confidence — a genuine judgment call, so this
 // ships BOTH: it enforces a NARROW, unambiguous tool subset by default AND is
 // mode-configurable so the operator can drop to shadow/off without a redeploy):
-//   - Narrow scope: only CONSEQUENTIAL_DECISION_TOOLS, only source "agentic-loop"
-//     (external CLI = plane 1; direct REST/JSON-RPC = operator, out of scope).
+//   - Scope: DECLARED-consequential tools, only source "agentic-loop" (external
+//     CLI = plane 1; direct REST/JSON-RPC = operator, out of scope). The set is
+//     DERIVED from ToolDefinition.consequence (TAK §8.4.1) by
+//     consequential-tool-coverage.ts, unioned with CONSEQUENTIAL_DECISION_TOOLS
+//     as a transitional seed. It was an allowlist of two names and therefore
+//     governed 2 of 174 side-effecting tools; a tool now enters the gate by
+//     declaring what it is, at the place it is declared.
 //   - Consultation window: a principle_decide call (recorded via onPostToolUse)
 //     clears the gate for CONSULT_WINDOW_MS. The natural bypass is "consult first".
 //   - Mode DPF_DECISION_GATE_MODE = enforce (default) | shadow (audit only, no
@@ -40,17 +45,48 @@ import type {
 
 export type DecisionGateMode = "enforce" | "shadow" | "off";
 
-/** Narrow, unambiguous set of consequential decision-action tools. */
+/**
+ * TRANSITIONAL SEED — the backlog decision-actions whose consequence is the
+ * DECISION taken (defer / discard / duplicate / reorder) rather than a declared
+ * reach, so they do not derive from `ToolDefinition.consequence`. Unioned with
+ * the derived set by `deriveConsequentialToolNames`, never replaced: dropping
+ * it would silently shrink the gate.
+ */
 export const CONSEQUENTIAL_DECISION_TOOLS: ReadonlySet<string> = new Set([
   "triage_backlog_item",
   "retire_backlog_item",
 ]);
 
+/**
+ * Resolver for the live gated set. Indirected through a module-level slot so
+ * this module does not statically import the whole 96-pack tool catalog (the
+ * hook is loaded on every governed tool call, and its unit tests must stay
+ * catalog-free). `installConsequentialToolResolver` is called by
+ * register-tool-governance-hooks.ts at composition time.
+ *
+ * The default is the SEED, not an empty set: if installation is ever missed the
+ * gate degrades to its previous, narrower behaviour rather than to no gate.
+ */
+let _resolveGatedTools: () => ReadonlySet<string> = () => CONSEQUENTIAL_DECISION_TOOLS;
+
+export function installConsequentialToolResolver(resolver: () => ReadonlySet<string>): void {
+  _resolveGatedTools = resolver;
+}
+
+export function _resetConsequentialToolResolverForTests(): void {
+  _resolveGatedTools = () => CONSEQUENTIAL_DECISION_TOOLS;
+}
+
+/** The set the gate is currently enforcing. */
+export function gatedToolNames(): ReadonlySet<string> {
+  return _resolveGatedTools();
+}
+
 /** A principle_decide consultation clears the gate for this long. */
 export const CONSULT_WINDOW_MS = 30 * 60 * 1000;
 
 const DENY_GUIDANCE =
-  "Decision-routing gate (BI-B22DE548): a consequential backlog decision is being taken with no kernel consultation in this session. " +
+  "Decision-routing gate (BI-B22DE548): a consequential act is being taken with no kernel consultation in this session. " +
   "consult-scopes-before-asking is a commandment — call principle_decide (dpf-decision-via-kernel / WWMD) to weigh the outcome first, then retry. " +
   "Act on a high-confidence recommendation; only escalate to a human on low confidence or a commandment conflict. " +
   "Operator override: set DPF_DECISION_GATE_MODE=shadow (audit-only) or off.";
@@ -89,7 +125,7 @@ export function _resetConsultationLedgerForTests(): void {
  * surface? (The only surface + tool class this gate governs.)
  */
 export function isGovernedDecisionAction(event: Pick<ToolLifecycleEvent, "toolName" | "source">): boolean {
-  return event.source === "agentic-loop" && CONSEQUENTIAL_DECISION_TOOLS.has(event.toolName);
+  return event.source === "agentic-loop" && gatedToolNames().has(event.toolName);
 }
 
 /**

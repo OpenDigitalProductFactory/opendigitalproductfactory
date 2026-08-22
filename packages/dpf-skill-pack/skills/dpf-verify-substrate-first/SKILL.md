@@ -1,6 +1,6 @@
 ---
 name: dpf-verify-substrate-first
-description: "Use when working in the DPF codebase and tempted to propose a new substrate concept (table, type, enum value, capability, epic, MCP tool, agent role). The DPF architecture is denser than first reads suggest; the most common reflex of 'we'll need a new X' is wrong because X already exists. This skill walks the substrate-verification grep + live-backlog + main-branch sweep before the new-X claim is recorded. Has no upstream superpowers analog because it encodes DPF-specific substrate facts."
+description: "Use when working in the DPF codebase and tempted to propose a new substrate concept (table, type, enum value, capability, epic, MCP tool, agent role). The DPF architecture is denser than first reads suggest; the most common reflex of 'we'll need a new X' is wrong because X already exists. This skill walks the substrate-verification grep + live-backlog + main-branch sweep before the new-X claim is recorded."
 
 # Agent Skills standard fields (Surface A — Claude Code)
 disable-model-invocation: false

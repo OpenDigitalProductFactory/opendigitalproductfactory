@@ -6,7 +6,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { planRegenerate, evaluatePushExemption, evaluateCheckAll } from "./derived-artifacts-gate.mjs";
+import {
+  planRegenerate,
+  evaluatePushExemption,
+  evaluateCheckAll,
+  resolveDerivedArtifactInvocation,
+} from "./derived-artifacts-gate.mjs";
 
 const DOC_INDEX = {
   id: "doc-index",
@@ -33,6 +38,19 @@ const SBOM = {
   check: ["node", "scripts/sbom/check-sbom-drift.mjs"],
   autoStage: false,
 };
+
+test("derived-artifact commands resolve pnpm through ComSpec on Windows", () => {
+  assert.deepEqual(
+    resolveDerivedArtifactInvocation(["pnpm", "--filter", "web", "run", "check:route-manifest"], {
+      platform: "win32",
+      env: { ComSpec: "C:\\Windows\\System32\\cmd.exe" },
+    }),
+    {
+      command: "C:\\Windows\\System32\\cmd.exe",
+      args: ["/d", "/s", "/c", "pnpm --filter web run check:route-manifest"],
+    },
+  );
+});
 
 // ── planRegenerate ───────────────────────────────────────────────────────────
 

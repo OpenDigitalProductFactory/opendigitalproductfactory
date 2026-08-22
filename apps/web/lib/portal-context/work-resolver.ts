@@ -70,7 +70,7 @@ export async function resolvePortalWork(input: PortalContextInput, db: PortalCon
         attention.push({
           kind: "capsule_not_linked",
           severity: "warning",
-          message: "This Build Studio build is not linked to a Work Capsule.",
+          message: "This Build Studio build is not linked to a Workroom.",
           actionLabel: "Open Work Control",
           actionHref: "/build/work",
         });
@@ -163,8 +163,8 @@ function finalizeWork(args: {
     attention.push({
       kind: "lease_expired",
       severity: "warning",
-      message: `Work Capsule ${capsule.capsuleId} has an expired lease.`,
-      actionLabel: "Open capsule",
+      message: `Workroom ${capsule.capsuleId} has an expired lease.`,
+      actionLabel: "Open workroom",
       actionHref: capsule.href,
     });
   }

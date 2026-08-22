@@ -9,6 +9,9 @@ param(
     [switch]$LibraryOnly,
     [switch]$WithEdge,
     [switch]$NoEdge,
+    [switch]$Headless,
+    [switch]$Consumer,
+    [switch]$Contributor,
     [ValidateNotNullOrEmpty()][string]$OrganizationJoinPackage,
     [switch]$Help
 )
@@ -35,6 +38,10 @@ Flags:
                 A node added this way auto-approves at enrollment.
   -NoEdge       Force-skip the local Edge Node even if a prior install enabled
                 it (Edge is already off by default).
+  -Headless     Never prompt. Defaults to consumer mode and the recommended
+                install directory; fails with actionable credential guidance.
+  -Consumer     Install verified pre-built release assets (ready-to-go mode).
+  -Contributor  Clone the source workspace for platform contribution work.
   -OrganizationJoinPackage <file.dpfjoin>
                 Join an existing organization trust domain during install. The
                 private package is validated, consumed, and deleted on success;
@@ -44,8 +51,6 @@ Flags:
 Uninstall:
   powershell -ExecutionPolicy Bypass -File uninstall-dpf.ps1
 
-The POSIX installer (install-dpf.sh) carries additional flags -- --dry-run,
---headless, --customer, --contributor -- that this script does not yet accept.
 '@ | Write-Host
 }
 
@@ -67,6 +72,17 @@ if ($args.Count -gt 0) {
     Write-Host "Run 'powershell -File install-dpf.ps1 -Help' for usage." -ForegroundColor Red
     exit 2
 }
+if ($Consumer -and $Contributor) {
+    Write-Host "-Consumer and -Contributor are mutually exclusive." -ForegroundColor Red
+    exit 2
+}
+
+function Read-DPFInstallerInput {
+    param([Parameter(Mandatory)][string]$Prompt, [switch]$AsSecureString)
+    if ($Headless) { throw "headless_installer_prompt_blocked:$Prompt" }
+    return Read-Host $Prompt -AsSecureString:$AsSecureString
+}
+
 $OrganizationJoinPackagePath = if ($OrganizationJoinPackage) { [IO.Path]::GetFullPath($OrganizationJoinPackage) } else { $null }
 if ($OrganizationJoinPackagePath -and -not (Test-Path -LiteralPath $OrganizationJoinPackagePath -PathType Leaf)) {
     throw "organization_join_package_not_found:$OrganizationJoinPackagePath"
@@ -103,6 +119,43 @@ function Write-Action($msg) {
 
 function Write-Warn($msg) {
     Write-Host "  [!] $msg" -ForegroundColor Red
+}
+
+function Write-DPFImageIdentity {
+    param([Parameter(Mandatory)][string]$Image, [string]$Version = "latest")
+    try {
+        $inspection = (docker image inspect $Image 2>$null | ConvertFrom-Json | Select-Object -First 1)
+        $repoDigest = @($inspection.RepoDigests) | Select-Object -First 1
+        $createdAt = [DateTimeOffset]::Parse([string]$inspection.Created)
+        Write-OK "Image digest: $(if ($repoDigest) { $repoDigest } else { 'unavailable' })"
+        Write-OK "Image created at: $($createdAt.ToUniversalTime().ToString('u'))"
+        if ($Version -eq "latest") {
+            try {
+                $headers = @{ "User-Agent" = "dpf-installer"; "Accept" = "application/vnd.github+json" }
+                $main = Invoke-RestMethod -Uri "https://api.github.com/repos/OpenDigitalProductFactory/opendigitalproductfactory/commits/main" -Headers $headers -TimeoutSec 8
+                $mainDate = [DateTimeOffset]::Parse([string]$main.commit.committer.date)
+                if (($mainDate - $createdAt).TotalHours -gt 24) {
+                    Write-Warn "The latest image is older than main by more than 24 hours. Installation can continue, but the published release may be stale."
+                }
+            } catch {
+                Write-Warn "Could not compare latest image age with main; immutable digest and creation date are shown above."
+            }
+        }
+    } catch {
+        Write-Warn "Could not inspect the pulled image digest and creation date: $($_.Exception.Message)"
+    }
+}
+
+function Import-DPFComposeChain {
+    param([Parameter(Mandatory)][string]$InstallDir)
+    if (Get-Command Get-DPFComposeArgs -ErrorAction SilentlyContinue) { return }
+    $candidates = @(
+        (Join-Path $InstallDir "scripts\installer\lib\compose-chain.ps1"),
+        (Join-Path $PSScriptRoot "scripts\installer\lib\compose-chain.ps1")
+    )
+    $module = $candidates | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } | Select-Object -First 1
+    if (-not $module) { throw "compose_chain_helper_missing" }
+    . $module
 }
 
 function Get-Progress {
@@ -376,48 +429,6 @@ function Get-DPFDockerStorageRecommendation {
     }
 }
 
-function Get-DPFComposeArgs {
-    param(
-        [Parameter(Mandatory)][string]$InstallDir,
-        [bool]$IncludeEdge = $false,   # Edge is opt-in (BI-72CFF89D); both call sites pass this explicitly.
-        [bool]$IncludeOverride = $true,
-        [bool]$IncludeRelease = $false
-    )
-
-    $composeArgs = @("-f", "docker-compose.yml")
-
-    if ($IncludeRelease -and (Test-Path (Join-Path $InstallDir "docker-compose.release.yml"))) {
-        $composeArgs += @("-f", "docker-compose.release.yml")
-    }
-
-    if ($IncludeOverride -and (Test-Path (Join-Path $InstallDir "docker-compose.override.yml"))) {
-        $composeArgs += @("-f", "docker-compose.override.yml")
-    }
-
-    if ($IncludeEdge -and (Test-Path (Join-Path $InstallDir "docker-compose.edge.yml"))) {
-        $composeArgs += @("-f", "docker-compose.edge.yml")
-    }
-
-    $envPath = Join-Path $InstallDir ".env"
-    $organizationTrust = $env:DPF_ORGANIZATION_TRUST_ENABLED -eq "1"
-    if (-not $organizationTrust -and (Test-Path -LiteralPath $envPath)) {
-        $organizationTrust = [bool](Select-String -LiteralPath $envPath -Pattern '^DPF_ORGANIZATION_TRUST_ENABLED=1$' -Quiet)
-    }
-    if ($organizationTrust) {
-        $composeArgs += @("-f", "docker-compose.organization-trust.yml", "-f", "docker-compose.tls.yml")
-    }
-
-    $edgeActions = $env:DPF_EDGE_ACTION_DISPATCH_CONFIGURED -eq "1"
-    if (-not $edgeActions -and (Test-Path -LiteralPath $envPath)) {
-        $edgeActions = [bool](Select-String -LiteralPath $envPath -Pattern '^DPF_EDGE_ACTION_DISPATCH_CONFIGURED=1$' -Quiet)
-    }
-    if ($edgeActions -and (Test-Path (Join-Path $InstallDir "docker-compose.edge-actions.yml"))) {
-        $composeArgs += @("-f", "docker-compose.edge-actions.yml")
-    }
-
-    return $composeArgs
-}
-
 function Test-DPFReleaseAssetManifest {
     param(
         [Parameter(Mandatory)][string]$Root,
@@ -613,20 +624,10 @@ $includeEdge = Resolve-DpfEdgeEnabled -InstallDir $DPF_DIR
 $capabilityProjection = Resolve-DpfCapabilityComposeProfiles -InstallDir $DPF_DIR
 $env:COMPOSE_PROFILES = (@($capabilityProjection.composeProfiles) -join ',')
 
-$composeArgs = @("-f", "docker-compose.yml")
-if (Test-Path (Join-Path $DPF_DIR "docker-compose.release.yml")) {
-    $composeArgs += @("-f", "docker-compose.release.yml")
-}
-if (Test-Path (Join-Path $DPF_DIR "docker-compose.override.yml")) {
-    $composeArgs += @("-f", "docker-compose.override.yml")
-}
-$envPath = Join-Path $DPF_DIR ".env"
-if ((Test-Path -LiteralPath $envPath) -and (Select-String -LiteralPath $envPath -Pattern '^DPF_ORGANIZATION_TRUST_ENABLED=1$' -Quiet)) {
-    $composeArgs += @("-f", "docker-compose.organization-trust.yml", "-f", "docker-compose.tls.yml")
-}
-if (($env:DPF_EDGE_ACTION_DISPATCH_CONFIGURED -eq '1') -or ((Test-Path -LiteralPath $envPath) -and (Select-String -LiteralPath $envPath -Pattern '^DPF_EDGE_ACTION_DISPATCH_CONFIGURED=1$' -Quiet))) {
-    $composeArgs += @("-f", "docker-compose.edge-actions.yml")
-}
+$composeChainModule = Join-Path $DPF_DIR "scripts\installer\lib\compose-chain.ps1"
+if (-not (Test-Path -LiteralPath $composeChainModule)) { throw "compose_chain_helper_missing" }
+. $composeChainModule
+$composeArgs = Get-DPFComposeArgs -InstallDir $DPF_DIR -IncludeEdge:$includeEdge -IncludeRelease:$true
 docker compose @composeArgs up -d
 
 if ($includeEdge) {
@@ -673,13 +674,10 @@ param(
 
 Set-Location $DPF_DIR
 
-$composeArgs = @("-f", "docker-compose.yml")
-if (Test-Path (Join-Path $DPF_DIR "docker-compose.release.yml")) {
-    $composeArgs += @("-f", "docker-compose.release.yml")
-}
-if (Test-Path (Join-Path $DPF_DIR "docker-compose.override.yml")) {
-    $composeArgs += @("-f", "docker-compose.override.yml")
-}
+$composeChainModule = Join-Path $DPF_DIR "scripts\installer\lib\compose-chain.ps1"
+if (-not (Test-Path -LiteralPath $composeChainModule)) { throw "compose_chain_helper_missing" }
+. $composeChainModule
+$composeArgs = Get-DPFComposeArgs -InstallDir $DPF_DIR -Purpose Stop
 docker compose @composeArgs down
 Stop-ScheduledTask -TaskName "DPF-Native-Edge-Node" -ErrorAction SilentlyContinue
 Write-Host "Digital Product Factory stopped." -ForegroundColor Yellow
@@ -718,6 +716,7 @@ function Invoke-DPFEdgeNodeConvergence {
 
     $edgeModule = Resolve-DPFNativeEdgeModulePath -InstallDir $InstallDir
     . $edgeModule
+    Import-DPFComposeChain -InstallDir $InstallDir
     $edgeComposeArgs = Get-DPFComposeArgs -InstallDir $InstallDir -IncludeEdge:$false
 
     Write-Action "Converging this installation's Edge Node..."
@@ -772,6 +771,7 @@ function Invoke-DPFEdgeNodeConvergence {
         Write-OK "Existing Edge enrollment found; preserving its machine identity"
     }
     if (Install-DPFNativeEdgeNode -InstallDir $InstallDir -BootstrapToken $edgeToken -Version $Version) {
+        Import-DPFComposeChain -InstallDir $InstallDir
         $legacyComposeArgs = Get-DPFComposeArgs -InstallDir $InstallDir -IncludeEdge:$true
         docker compose @legacyComposeArgs stop edge-node 2>&1 | Out-Null
         return $true
@@ -812,7 +812,7 @@ if (-not $InstallDir) {
         Write-Host "  Docker storage note: $($dockerStorageRecommendation.Message)" -ForegroundColor Yellow
     }
 
-    $answer = Read-Host "  Install directory [$defaultDir]"
+    $answer = if ($Headless) { "" } else { Read-DPFInstallerInput "  Install directory [$defaultDir]" }
     if ([string]::IsNullOrWhiteSpace($answer)) {
         $InstallDir = $defaultDir
     } else {
@@ -1166,7 +1166,13 @@ if (-not (Test-StepDone "download")) {
         Write-Host "    [1] Ready to go   - Pre-built: Use Build Studio inside the portal to extend the platform." -ForegroundColor White
         Write-Host "    [2] Customizable  - Full source code: Build Studio + VS Code work from the same shared workspace." -ForegroundColor White
         Write-Host ""
-        $modeChoice = Read-Host "  Choose [1/2]"
+        $modeChoice = if ($Contributor) {
+            "2"
+        } elseif ($Consumer -or $Headless) {
+            "1"
+        } else {
+            Read-DPFInstallerInput "  Choose [1/2]"
+        }
 
         if ($modeChoice -eq "2") {
             $InstallMode = "customizer"
@@ -1251,13 +1257,17 @@ if (-not (Test-StepDone "download")) {
             $ErrorActionPreference = $oldEAP
 
             if ($needsAuth) {
+                if ($Headless) {
+                    Write-Warn "The release image requires GHCR authentication. Run 'docker login ghcr.io' before re-running -Headless."
+                    exit 1
+                }
                 Write-Host ""
                 Write-Host "  The platform images require a GitHub account (free) during early access." -ForegroundColor Cyan
                 Write-Host "  You need a Personal Access Token with 'read:packages' scope." -ForegroundColor Cyan
                 Write-Host "  Create one at: https://github.com/settings/tokens/new?scopes=read:packages" -ForegroundColor Cyan
                 Write-Host ""
-                $ghUser = Read-Host "  GitHub username"
-                $ghToken = Read-Host "  Personal Access Token" -AsSecureString
+                $ghUser = Read-DPFInstallerInput "  GitHub username"
+                $ghToken = Read-DPFInstallerInput "  Personal Access Token" -AsSecureString
                 $ghTokenPlain = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($ghToken))
                 $ghTokenPlain | docker login ghcr.io -u $ghUser --password-stdin 2>&1 | Out-Null
                 if ($LASTEXITCODE -ne 0) {
@@ -1274,6 +1284,7 @@ if (-not (Test-StepDone "download")) {
             # Materialize the exact release topology and lifecycle adapter carried by
             # the pulled portal image, then verify every byte before installation.
             Export-DPFConsumerReleaseAssets -InstallDir $DPF_DIR -Version $Version -Image "ghcr.io/opendigitalproductfactory/dpf-portal:$Version"
+            Write-DPFImageIdentity -Image "ghcr.io/opendigitalproductfactory/dpf-portal:$Version" -Version $Version
             Get-DPFEdgeComposeContent -Version $Version | Set-Content "$DPF_DIR\docker-compose.edge.yml" -Encoding UTF8
             Get-DPFStartScriptContent | Set-Content "$DPF_DIR\dpf-start.ps1" -Encoding ASCII
             Get-DPFStopScriptContent | Set-Content "$DPF_DIR\dpf-stop.ps1" -Encoding ASCII
@@ -1710,6 +1721,7 @@ if (-not (Test-StepDone "started")) {
     Set-DpfStateValue -Key "edge" -Value @{ enabled = $resolvedEdgeEnabled; mode = $(if ($resolvedEdgeEnabled) { "local" } else { $null }) }
     $capabilityProjection = Resolve-DpfCapabilityComposeProfiles -InstallDir $DPF_DIR
     $env:COMPOSE_PROFILES = (@($capabilityProjection.composeProfiles) -join ',')
+    Import-DPFComposeChain -InstallDir $DPF_DIR
     $coreComposeArgs = Get-DPFComposeArgs -InstallDir $DPF_DIR -IncludeEdge:$false -IncludeRelease:($InstallMode -eq "consumer")
 
     if ($InstallMode -eq "consumer") {

@@ -38,6 +38,20 @@ test("install-dpf.ps1 declares a -Help switch", () => {
   );
 });
 
+test("install-dpf.ps1 exposes non-interactive mode parity", () => {
+  for (const flag of ["Headless", "Consumer", "Contributor"]) {
+    assert.match(ps, new RegExp(`\\[switch\\]\\$${flag}\\b`), `missing -${flag}`);
+  }
+  assert.match(ps, /Consumer[^\r\n]+Contributor|Contributor[^\r\n]+Consumer/s, "mode flags must be checked together");
+  assert.match(ps, /cannot.*(?:Consumer.*Contributor|Contributor.*Consumer)|mutually exclusive/i);
+});
+
+test("headless PowerShell install never reaches Read-Host", () => {
+  assert.match(ps, /function\s+Read-DPFInstallerInput/i, "interactive reads need one headless-aware boundary");
+  const rawReads = [...ps.matchAll(/\bRead-Host\b/g)];
+  assert.equal(rawReads.length, 1, "all prompts must route through the single headless-aware input helper");
+});
+
 test("install-dpf.ps1 acts on -Help before doing any install work", () => {
   const helpGuard = ps.search(/if\s*\(\s*\$Help\s*\)/);
   assert.notEqual(helpGuard, -1, "-Help is declared but never checked");

@@ -58,6 +58,65 @@ Evidence records are immutable. If evidence is wrong or stale, use
 supersession link preserves the audit trail. A retention date is recorded
 context; it is not proof that an external file has been retained or deleted.
 
+## What Runs On Its Own
+
+### What it does
+
+Control reviews are watched, not just recorded. The **obligation assurance
+watch** works out when each active control is next due for review and raises a
+finding on the assurance ledger when that date falls inside the next 30 days, or
+has already passed.
+
+It reads the review date the way you would:
+
+- if the control has a **next review date**, that is the date;
+- if it has none but has a **last reviewed** date and a **review frequency**,
+  the due date is derived from the two;
+- if it declares a review frequency and has **neither** date, that is itself
+  reported — a control claiming a quarterly review that has never been reviewed
+  will never come due, so nobody will ever be told about it.
+
+Recurrence words it understands are the ordinary ones: daily, weekly, monthly,
+quarterly, semi-annual, annual, biennial. Free text it does not recognise is
+**not** guessed at — the control is reported as having no computable next date
+instead.
+
+### When it runs
+
+**Daily at 05:40 UTC**, looking 30 days ahead. It appears on
+`/admin/scheduled-jobs` as **Obligation assurance watch**, where the cadence is
+editable and a run-now is available.
+
+The compliance specialist reads the findings and reports them to you on its
+Proactivity setting — weekly at Balanced, daily at Assertive.
+
+### How it stays current
+
+Every run re-derives the due date from the current record, so recording a review
+today moves the next date tomorrow morning and closes the finding. Findings are
+keyed to the control **and its due date**, so a re-run updates rather than
+duplicates, and a control whose review has been completed drops off the list on
+the next sweep.
+
+### What it will not do
+
+- The automation **does not decide** whether a control is effective, and it does
+  not mark anything reviewed on your behalf. Assessing a control requires human
+  review and stays a human decision.
+- It says nothing about controls with no review frequency and no dates — a
+  control that declares no cadence is not treated as overdue, it is treated as
+  not scheduled.
+- It never fabricates a cadence from free text it cannot parse.
+
+### What you must do
+
+- Give each control a **review frequency** and either a last-reviewed or a
+  next-review date. A frequency on its own schedules nothing.
+- Use one of the recognised recurrence words, or set an explicit next review
+  date.
+- Do the review when the finding lands, record it, and set the next date. The
+  finding closes because the record changed, never because it was dismissed.
+
 ## Decisions And Consequences
 
 - Linking or unlinking a control changes obligation coverage and may change gap

@@ -22,9 +22,16 @@ describe("CapabilityCompletenessPanel", () => {
     expect(screen.getByTestId("plane-corpus").textContent).toContain("registry_read");
   });
 
-  it("shows a plane with no substrate as capped, not as an agent failure", () => {
+  it("shows a platform-capped plane as capped, not as an agent failure", () => {
+    // Shape was the example of a plane with NO substrate (ceiling 0, rendered
+    // "no substrate"). The work-shape registry landed and the ceiling rose to
+    // 2, so the expectation moves up rather than being deleted: an agent that
+    // has reached the platform's ceiling must read as at-ceiling, never as a
+    // shortfall. The ceiling-0 branch stays for the next plane that has none.
     render(<CapabilityCompletenessPanel agentId="compliance-officer" />);
-    expect(screen.getByTestId("plane-shape").textContent).toContain("no substrate");
+    const shape = screen.getByTestId("plane-shape").textContent ?? "";
+    expect(shape).toContain("2/2");
+    expect(shape).not.toContain("no substrate");
   });
 
   it("shows the graded level against its ceiling, not a pass/fail chip", () => {

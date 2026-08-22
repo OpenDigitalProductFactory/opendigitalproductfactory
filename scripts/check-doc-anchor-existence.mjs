@@ -101,11 +101,22 @@ export function interpretToolResponse(kind, id, body) {
   }
   if (!parsed || typeof parsed !== "object") return "unknown";
   if (parsed.error) return "unknown"; // JSON-RPC error (auth/scope/transport) — not evidence of absence
-  const text = JSON.stringify(parsed.result ?? parsed);
+  const result = parsed.result ?? parsed;
+  const text = JSON.stringify(result);
   if (kind === "epic") {
     return text.includes(id) ? "exists" : "missing";
   }
-  if (/not_found|not found/i.test(text)) return "missing";
+  // BI-34C7A7F8: a genuine miss is an ERROR RESULT carrying not_found — NOT the
+  // phrase "not found" appearing anywhere in the payload. The payload includes
+  // the item's own body and evidence records, and bug reports quote that phrase
+  // constantly ("Directory not found", "Build not found"), so a content match
+  // declared real items missing and blocked commits that cited them correctly.
+  // Reordering alone would not do: a real miss ALSO echoes the requested id.
+  const isErrorResult =
+    result && typeof result === "object" && result.isError === true;
+  if (isErrorResult) {
+    return /not_found/i.test(text) ? "missing" : "unknown";
+  }
   if (text.includes(id)) return "exists";
   return "unknown";
 }

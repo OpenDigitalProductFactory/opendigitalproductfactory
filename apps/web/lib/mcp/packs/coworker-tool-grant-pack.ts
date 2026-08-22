@@ -33,7 +33,8 @@ const definitions: ToolDefinition[] = [
     },
     requiredCapability: "manage_platform",
     sideEffect: true,
-    consequence: "irreversible",
+    // changes identity or authority → consult-gated (TAK §8.4.1).
+    consequence: "authority",
   },
 ];
 

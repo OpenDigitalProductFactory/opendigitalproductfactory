@@ -65,6 +65,30 @@ LIB_DIR="$REPO_ROOT/scripts/installer/lib"
 # Installer version (semver-ish; bump per release).
 DPF_INSTALLER_VERSION="2026.05.11-phase10a"
 
+dpf_report_image_identity() {
+  image="$1"
+  repo_digest="$(docker image inspect --format '{{join .RepoDigests ", "}}' "$image" 2>/dev/null || true)"
+  created_at="$(docker image inspect --format '{{.Created}}' "$image" 2>/dev/null || true)"
+  info "Image digest: ${repo_digest:-unavailable}"
+  info "Image created at: ${created_at:-unavailable}"
+
+  case "$image" in
+    *:latest)
+      main_created="$(curl -fsSL --max-time 8 -H 'Accept: application/vnd.github+json' -H 'User-Agent: dpf-installer' \
+        https://api.github.com/repos/OpenDigitalProductFactory/opendigitalproductfactory/commits/main 2>/dev/null \
+        | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{process.stdout.write(JSON.parse(s).commit.committer.date||"")}catch{}})' || true)"
+      if [ -n "$main_created" ] && [ -n "$created_at" ]; then
+        if DPF_IMAGE_CREATED_AT="$created_at" DPF_MAIN_CREATED_AT="$main_created" node -e \
+          'process.exit(Date.parse(process.env.DPF_MAIN_CREATED_AT)-Date.parse(process.env.DPF_IMAGE_CREATED_AT)>86400000?0:1)'; then
+          warn "The latest image is older than main by more than 24 hours. Installation can continue, but the published release may be stale."
+        fi
+      else
+        warn "Could not compare latest image age with main; immutable digest and creation date are shown above."
+      fi
+      ;;
+  esac
+}
+
 # ── CLI handling ────────────────────────────────────────────────────────────
 
 usage() {
@@ -915,6 +939,7 @@ if [ "$DPF_INSTALL_MODE" = "customer" ]; then
   step "Release image availability"
   if docker pull ghcr.io/opendigitalproductfactory/dpf-portal:latest >/dev/null 2>&1; then
     ok "Release images reachable"
+    dpf_report_image_identity ghcr.io/opendigitalproductfactory/dpf-portal:latest
   else
     warn "Could not pull the pre-built platform image."
     info "  During early access the images need a free GitHub login:"

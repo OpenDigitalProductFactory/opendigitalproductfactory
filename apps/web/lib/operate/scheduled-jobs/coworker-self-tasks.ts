@@ -257,6 +257,63 @@ export const COWORKER_SELF_TASKS: Record<string, CoworkerSelfTask> = {
       assertive: "19 17 * * 4,0",
     },
   },
+
+  // Compliance Officer — the `decide` stage of the obligation-assurance-watch
+  // work shape (apps/web/lib/work-management/work-shapes.ts, TAK §8.11).
+  //
+  // The DETERMINISTIC half of that shape is the daily obligation-assurance-watch
+  // cron: it sweeps the six recorded cadence columns and raises findings. This
+  // self-task is the coworker half — it reads what the sweep raised and puts a
+  // decision in front of the accountable owner. Until this entry existed the
+  // compliance officer had a Proactivity control that changed nothing at all:
+  // an autonomy dial with no shape and no cadence behind it (§8.11.2).
+  //
+  // Read-and-report by construction. It records no compliance conclusion and
+  // takes no consequential action on its own; a weak model run degrades to a
+  // bland summary, never to invented obligations or dates.
+  "compliance-officer": {
+    title: "Review obligations and control reviews falling due",
+    prompt: [
+      "You are running as a scheduled, autonomous task — no human is watching this",
+      "turn, so finish the work rather than asking questions.",
+      "",
+      "Goal: make sure nothing recorded as due is quietly going past its date.",
+      "",
+      "The obligation assurance watch runs daily and has already swept the recorded",
+      "obligations, control reviews, and licence requirements, raising a finding for",
+      "each one inside the 30-day horizon. Your job is the NEXT step, not the sweep.",
+      "",
+      "Steps:",
+      "1. Read the current compliance posture available to you — obligations, their",
+      "   owners and review dates, controls and their review cadence, and open",
+      "   findings.",
+      "2. Report to the owner, in plain language:",
+      "   - what is OVERDUE, oldest first, and who is recorded as accountable;",
+      "   - what falls due in the next 30 days;",
+      "   - anything that declares a recurrence with NO next date — that is a",
+      "     control that reads as in force and is not, and it is the most important",
+      "     thing on the list because nobody will ever be told about it again.",
+      "3. For each item, say what the owner must do and by when. Do NOT decide the",
+      "   response yourself: accepting, deferring, or remediating an obligation is",
+      "   the accountable owner's decision, and the work shape requires a governed",
+      "   decision for it.",
+      "4. If NOTHING is recorded — no obligations and no controls — say exactly that",
+      "   and say what to record first. Do not report a clean compliance position",
+      "   from an empty database; an unread estate and a clear one look identical",
+      "   and are not the same.",
+      "",
+      "Ground every date and every owner in recorded data. Never estimate a due",
+      "date, and never name a regulation you cannot point at a record for.",
+    ].join("\n"),
+    routeContext: "/compliance",
+    cadence: {
+      // Weekly Monday and daily at 06:11 UTC — after the 05:40 sweep, so the
+      // findings the coworker reads are from that morning's run rather than
+      // yesterday's. Off-peak minute the allocator can shift on collision.
+      balanced: "11 6 * * 1",
+      assertive: "11 6 * * *",
+    },
+  },
 };
 
 /** Friendly cadence label from a registry cron — "daily", "weekly", or

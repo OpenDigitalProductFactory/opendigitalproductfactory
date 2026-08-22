@@ -17,7 +17,7 @@ const GROUPS: Array<{ title: string; blurb: string; items: DeliveryLink[] }> = [
     blurb: "Compose and deliver new capability.",
     items: [
       { label: "Build Studio", href: "/build", description: "Create and ship new capability with AI help." },
-      { label: "Work control", href: "/build/work", description: "Work capsules across every surface and agent." },
+      { label: "Work control", href: "/build/work", description: "Workrooms across every surface and agent." },
     ],
   },
   {

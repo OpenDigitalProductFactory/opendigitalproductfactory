@@ -199,6 +199,8 @@ export async function getCodeGraphFreshness(
     workspaceDirty: state.workspaceDirty,
     indexedFileCount: state.indexedFileCount,
     lastError: state.lastError,
+    // BI-6CFC5429: let freshness see WHICH ref was indexed, not just when.
+    lastIndexedBranch: state.lastIndexedBranch,
     ...(relationshipHealth ? { relationshipCounts: relationshipHealth.counts } : {}),
     asOf: options.now,
   });
