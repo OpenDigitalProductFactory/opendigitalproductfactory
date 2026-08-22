@@ -11,6 +11,8 @@ type DashboardConfig = {
   ctaType: string;
   sectionCount: number;
   itemCount: number;
+  portalLabel?: string;
+  stakeholderLabel?: string;
 };
 
 type Counts = { inquiries: number; bookings: number; orders: number; donations: number };
@@ -18,6 +20,8 @@ type Counts = { inquiries: number; bookings: number; orders: number; donations: 
 export function StorefrontDashboard({ config, counts }: { config: DashboardConfig; counts: Counts }) {
   const [published, setPublished] = useState(config.isPublished);
   const [toggling, setToggling] = useState(false);
+  const portalLabel = config.portalLabel ?? "storefront";
+  const stakeholderLabel = (config.stakeholderLabel ?? "customers").toLowerCase();
 
   async function togglePublish() {
     setToggling(true);
@@ -63,10 +67,10 @@ export function StorefrontDashboard({ config, counts }: { config: DashboardConfi
         >
           <div style={{ flex: 1, minWidth: 220 }}>
             <div className="text-[var(--dpf-text)]" style={{ fontSize: 14, fontWeight: 700 }}>
-              Your storefront is ready — publish it now
+              Your {portalLabel} is ready — publish it now
             </div>
             <div className="text-[var(--dpf-muted)]" style={{ marginTop: 2, fontSize: 13 }}>
-              It is not live yet, so the public link returns a 404. Publish it so customers can find you.
+              It is not live yet, so the public link returns a 404. Publish it so {stakeholderLabel} can find you.
             </div>
           </div>
           <button

@@ -15,7 +15,9 @@ export default async function StorefrontSignUpPage({
   // getPublicStorefront is React-cached, so this reuses the layout's fetch.
   const storefront = await getPublicStorefront(slug, { includeUnpublished: true });
   const orgName = storefront?.orgName;
-  const trust = storefront ? resolveTrustProfile(storefront.archetypeCategory) : null;
+  const trust = storefront
+    ? resolveTrustProfile(storefront.archetypeCategory, storefront.archetypeId)
+    : null;
 
   return (
     <div style={{ paddingTop: 60, width: "100%", maxWidth: 400, margin: "0 auto" }}>

@@ -29,4 +29,22 @@ describe("StorefrontDashboard publish CTA", () => {
     render(<StorefrontDashboard config={{ ...baseConfig, isPublished: true }} counts={counts} />);
     expect(screen.queryByText(/your storefront is ready — publish it now/i)).toBeNull();
   });
+
+  it("publishes a nonprofit Supporter Hub to supporters", () => {
+    render(
+      <StorefrontDashboard
+        config={{
+          ...baseConfig,
+          isPublished: false,
+          portalLabel: "Supporter Hub",
+          stakeholderLabel: "Supporters",
+        }}
+        counts={counts}
+      />,
+    );
+
+    expect(screen.getByText(/your supporter hub is ready/i)).toBeTruthy();
+    expect(screen.getByText(/publish it so supporters can find you/i)).toBeTruthy();
+    expect(screen.queryByText(/customers can find you/i)).toBeNull();
+  });
 });

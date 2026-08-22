@@ -4,6 +4,7 @@ import { useState } from "react";
 import type { ProductMixDefinition } from "@dpf/storefront-templates";
 
 import type { ProductLineSelection } from "@/lib/products/setup-product-mix";
+import { getStorefrontPresentation } from "@/lib/storefront/archetype-vocabulary";
 
 export function defaultProductLineSelections(
   productMix: ProductMixDefinition,
@@ -17,14 +18,17 @@ export function defaultProductLineSelections(
 }
 
 export function ProductMixSetupFieldset({
+  archetypeCategory,
   productMix,
   value,
   onChange,
 }: {
+  archetypeCategory: string;
   productMix: ProductMixDefinition;
   value: ProductLineSelection[];
   onChange: (value: ProductLineSelection[]) => void;
 }) {
+  const copy = getStorefrontPresentation(archetypeCategory).productMix;
   const [customLabel, setCustomLabel] = useState("");
   const primary =
     value.find(
@@ -61,18 +65,17 @@ export function ProductMixSetupFieldset({
       style={{ borderRadius: 8, padding: 16, marginBottom: 16 }}
     >
       <legend style={{ paddingInline: 4, fontSize: 14, fontWeight: 700 }}>
-        What does your business sell?
+        {copy.legend}
       </legend>
       <p
         className="text-[var(--dpf-muted)]"
         style={{ fontSize: 12, margin: "0 0 12px" }}
       >
-        Start with the main line below. Add another only if customers buy
-        something meaningfully different from you.
+        {copy.help}
       </p>
 
       <label style={{ display: "block", fontSize: 12, fontWeight: 600 }}>
-        Main product line
+        {copy.primaryLabel}
         <input
           required
           type="text"
@@ -97,7 +100,7 @@ export function ProductMixSetupFieldset({
       {(productMix.adjacent ?? []).length > 0 && (
         <div style={{ marginTop: 14 }}>
           <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 6 }}>
-            Also sell
+            {copy.adjacentLabel}
           </div>
           <div style={{ display: "grid", gap: 8 }}>
             {(productMix.adjacent ?? []).map((line) => {
@@ -157,7 +160,7 @@ export function ProductMixSetupFieldset({
               style={{ display: "flex", gap: 8, alignItems: "center" }}
             >
               <label style={{ flex: 1, fontSize: 12, fontWeight: 600 }}>
-                Added product line
+                {copy.addedLabel}
                 <input
                   type="text"
                   value={line.label}
@@ -184,7 +187,7 @@ export function ProductMixSetupFieldset({
               </label>
               <button
                 type="button"
-                aria-label={`Remove ${line.label || "product line"}`}
+                aria-label={`Remove ${line.label || copy.removeFallback}`}
                 onClick={() =>
                   onChange(value.filter((current) => current !== line))
                 }
@@ -200,12 +203,12 @@ export function ProductMixSetupFieldset({
 
       <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
         <label style={{ minWidth: 220, flex: "0 1 320px", fontSize: 12 }}>
-          Another product line
+          {copy.anotherLabel}
           <input
             type="text"
             value={customLabel}
             maxLength={80}
-            placeholder="e.g. Conferences and events"
+            placeholder={copy.placeholder}
             onChange={(event) => setCustomLabel(event.target.value)}
             onKeyDown={(event) => {
               if (event.key === "Enter") {
@@ -237,7 +240,7 @@ export function ProductMixSetupFieldset({
             opacity: customLabel.trim() ? 1 : 0.6,
           }}
         >
-          Add product line
+          {copy.addLabel}
         </button>
       </div>
     </fieldset>

@@ -81,4 +81,20 @@ describe("StorefrontTrustFooter", () => {
     // With no email/phone, still offer a way to reach the business.
     expect(html).toContain("/s/copper-kettle/inquire");
   });
+
+  it("links pet-rescue visitors to adoption and surrender policies", () => {
+    const html = renderToStaticMarkup(
+      <StorefrontTrustFooter
+        storefront={{
+          ...base,
+          archetypeId: "pet-rescue",
+          archetypeCategory: "nonprofit-community",
+        }}
+        hours={hours}
+      />,
+    );
+
+    expect(html).toContain("Adoption &amp; surrender");
+    expect(html).not.toContain("Booking &amp; cancellation");
+  });
 });

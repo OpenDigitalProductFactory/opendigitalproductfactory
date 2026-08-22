@@ -67,6 +67,25 @@ describe("deriveStorefrontSetupModel", () => {
     expect(model.steps.find((s) => s.key === "inbox")?.title).toBe("Reservations");
   });
 
+  it("does not append a fabricated singular to an already-plural nonprofit label", () => {
+    const model = deriveStorefrontSetupModel(
+      restaurantInput({
+        vocabulary: {
+          ...RESTAURANT_VOCAB,
+          itemsLabel: "Campaigns & Appeals",
+          singleItemLabel: "Campaign",
+          portalLabel: "Supporter Hub",
+          stakeholderLabel: "Supporters",
+        },
+        capabilities: resolveSetupCapabilities("nonprofit-community"),
+      }),
+    );
+
+    expect(model.steps.find((step) => step.key === "items")?.title).toBe(
+      "Campaigns & Appeals",
+    );
+  });
+
   it("marks steps complete/attention/not-started from real data", () => {
     const model = deriveStorefrontSetupModel(
       restaurantInput({
