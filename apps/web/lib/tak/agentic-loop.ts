@@ -47,7 +47,7 @@ import { persistExecutionPlan, loadExecutionPlan } from "./execution-plan-store"
 import { estimateContextTokens, classifyContextPressure, deriveCompactionCaps } from "./context-pressure";
 import { clampToolResultForModel, resolveToolResultCharCap } from "./tool-result-budget";
 import { applyBacklogCreateClaimGuard } from "./backlog-create-claim-guard";
-import { applyEscalationLadderGuard } from "./escalation-ladder";
+import { applyEscalationLadderGuard, buildHumanHandoff } from "./escalation-ladder";
 import { assessToolSurface, computeToolSelectionAccuracy, contextEconomyTurnMetricFields } from "./context-economy-metrics";
 import { summarizeDroppedMessages } from "./compaction-digest";
 import { describeContextCapacityFailure } from "./context-capacity-failure";
@@ -604,13 +604,22 @@ function buildLocalToolCallFailureMessage(_result: RoutedInferenceResult): strin
   // provider install the promise was mathematically impossible; on a multi-
   // provider install the re-route call simply isn't wired. Replaced with
   // honest copy that points at the actual fix.
-  return (
-    "I'm on a local AI that wasn't strong enough to finish this. "
-    + "Connecting a stronger provider (Claude, Gemini, or OpenAI) at "
-    + "Platform > AI > Providers unlocks the work I'm built for. "
-    + "If a stronger provider is already connected, try rephrasing or breaking "
-    + "the request into a smaller step."
-  );
+  //
+  // Rung 4 of the escalation ladder (BI-33F1EA72): connecting a provider is
+  // work only the human can do, so this is a hand-off, not an apology. The
+  // prior copy was honest about the limitation but ended there, which leaves
+  // the user holding a dead end. buildHumanHandoff keeps the same facts and
+  // adds the two halves that make it actionable: the steps, and the promise
+  // that the work resumes.
+  return buildHumanHandoff({
+    blocker:
+      "I'm on the local AI here, and it couldn't carry this one through.",
+    steps: [
+      "Open Platform > AI > Providers.",
+      "Connect a stronger provider — Claude, Gemini, or OpenAI.",
+    ],
+    verify: "confirm the stronger provider is live",
+  });
 }
 
 type ExecutedTool = { name: string; args?: Record<string, unknown>; result: ToolResult };
