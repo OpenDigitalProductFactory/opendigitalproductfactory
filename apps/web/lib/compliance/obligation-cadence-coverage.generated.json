@@ -3,10 +3,10 @@
   "summary": {
     "archetypeCategories": 25,
     "archetypes": 107,
-    "categoriesCovered": 3,
-    "categoriesWithoutPack": 22,
+    "categoriesCovered": 11,
+    "categoriesWithoutPack": 14,
     "categoriesWithoutRecurring": 0,
-    "coveragePct": 12,
+    "coveragePct": 44,
     "common": {
       "packs": [
         "business-operations-compliance",
@@ -25,8 +25,8 @@
       "note": "DEFECT, not coverage. A pack with no structured RegulationApplicability falls back to the legacy industry string matcher (BI-9DED0CE8) and surfaces on installs the regime does not pertain to. It is not common — it is addressed to everyone."
     },
     "triggerClasses": {
-      "cadence": 40,
-      "continuous": 48,
+      "cadence": 59,
+      "continuous": 49,
       "event-driven": 43,
       "unrecognised": 0,
       "unspecified": 0
@@ -182,6 +182,32 @@
         "unrecognised": 0,
         "unspecified": 0
       }
+    },
+    {
+      "pack": "vertical-recurring-compliance",
+      "file": "packages/db/src/seed-vertical-recurring-compliance.ts",
+      "scope": "archetype",
+      "gatesOn": [
+        "automotive-services",
+        "beauty-personal-care",
+        "food-hospitality",
+        "healthcare-wellness",
+        "moving-and-logistics",
+        "professional-services",
+        "real-estate-construction",
+        "trades-maintenance"
+      ],
+      "gatesOnJurisdiction": true,
+      "gatesOnDataHandling": false,
+      "hasStructuredSpec": true,
+      "obligations": 20,
+      "byTriggerClass": {
+        "cadence": 19,
+        "continuous": 1,
+        "event-driven": 0,
+        "unrecognised": 0,
+        "unspecified": 0
+      }
     }
   ],
   "categories": [
@@ -204,10 +230,12 @@
     {
       "category": "automotive-services",
       "archetypes": 6,
-      "packs": [],
-      "obligations": 0,
-      "recurringObligations": 0,
-      "status": "no-pack"
+      "packs": [
+        "vertical-recurring-compliance"
+      ],
+      "obligations": 20,
+      "recurringObligations": 19,
+      "status": "covered"
     },
     {
       "category": "banking-financial-services",
@@ -222,10 +250,12 @@
     {
       "category": "beauty-personal-care",
       "archetypes": 6,
-      "packs": [],
-      "obligations": 0,
-      "recurringObligations": 0,
-      "status": "no-pack"
+      "packs": [
+        "vertical-recurring-compliance"
+      ],
+      "obligations": 20,
+      "recurringObligations": 19,
+      "status": "covered"
     },
     {
       "category": "education-training",
@@ -254,18 +284,22 @@
     {
       "category": "food-hospitality",
       "archetypes": 3,
-      "packs": [],
-      "obligations": 0,
-      "recurringObligations": 0,
-      "status": "no-pack"
+      "packs": [
+        "vertical-recurring-compliance"
+      ],
+      "obligations": 20,
+      "recurringObligations": 19,
+      "status": "covered"
     },
     {
       "category": "healthcare-wellness",
       "archetypes": 9,
-      "packs": [],
-      "obligations": 0,
-      "recurringObligations": 0,
-      "status": "no-pack"
+      "packs": [
+        "vertical-recurring-compliance"
+      ],
+      "obligations": 20,
+      "recurringObligations": 19,
+      "status": "covered"
     },
     {
       "category": "hoa-property-management",
@@ -302,10 +336,12 @@
     {
       "category": "moving-and-logistics",
       "archetypes": 5,
-      "packs": [],
-      "obligations": 0,
-      "recurringObligations": 0,
-      "status": "no-pack"
+      "packs": [
+        "vertical-recurring-compliance"
+      ],
+      "obligations": 20,
+      "recurringObligations": 19,
+      "status": "covered"
     },
     {
       "category": "nonprofit-community",
@@ -328,10 +364,12 @@
     {
       "category": "professional-services",
       "archetypes": 8,
-      "packs": [],
-      "obligations": 0,
-      "recurringObligations": 0,
-      "status": "no-pack"
+      "packs": [
+        "vertical-recurring-compliance"
+      ],
+      "obligations": 20,
+      "recurringObligations": 19,
+      "status": "covered"
     },
     {
       "category": "public-sector",
@@ -347,10 +385,12 @@
     {
       "category": "real-estate-construction",
       "archetypes": 2,
-      "packs": [],
-      "obligations": 0,
-      "recurringObligations": 0,
-      "status": "no-pack"
+      "packs": [
+        "vertical-recurring-compliance"
+      ],
+      "obligations": 20,
+      "recurringObligations": 19,
+      "status": "covered"
     },
     {
       "category": "retail-goods",
@@ -379,10 +419,12 @@
     {
       "category": "trades-maintenance",
       "archetypes": 11,
-      "packs": [],
-      "obligations": 0,
-      "recurringObligations": 0,
-      "status": "no-pack"
+      "packs": [
+        "vertical-recurring-compliance"
+      ],
+      "obligations": 20,
+      "recurringObligations": 19,
+      "status": "covered"
     },
     {
       "category": "warehousing-fulfilment",

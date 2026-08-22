@@ -30,45 +30,45 @@ Obligations reaching every install this way: **4**
 ## Archetype coverage
 
 - Archetype categories: **25** (over 107 archetypes)
-- Covered (a pack AND at least one real recurrence): **3** (12%)
-- No pack at all: **22**
+- Covered (a pack AND at least one real recurrence): **11** (44%)
+- No pack at all: **14**
 - Pack, but nothing recurring: **0**
 
 | Category | Archetypes | Packs | Obligations | Recurring | Status |
 |---|---:|---|---:|---:|---|
 | `agriculture-ranching` | 3 | — | 0 | 0 | **NO PACK** |
 | `asset-rental` | 3 | — | 0 | 0 | **NO PACK** |
-| `automotive-services` | 6 | — | 0 | 0 | **NO PACK** |
+| `automotive-services` | 6 | vertical-recurring-compliance | 20 | 19 | covered |
 | `banking-financial-services` | 3 | banking-compliance | 14 | 5 | covered |
-| `beauty-personal-care` | 6 | — | 0 | 0 | **NO PACK** |
+| `beauty-personal-care` | 6 | vertical-recurring-compliance | 20 | 19 | covered |
 | `education-training` | 4 | — | 0 | 0 | **NO PACK** |
 | `fabric-care-services` | 3 | — | 0 | 0 | **NO PACK** |
 | `fitness-recreation` | 3 | — | 0 | 0 | **NO PACK** |
-| `food-hospitality` | 3 | — | 0 | 0 | **NO PACK** |
-| `healthcare-wellness` | 9 | — | 0 | 0 | **NO PACK** |
+| `food-hospitality` | 3 | vertical-recurring-compliance | 20 | 19 | covered |
+| `healthcare-wellness` | 9 | vertical-recurring-compliance | 20 | 19 | covered |
 | `hoa-property-management` | 3 | — | 0 | 0 | **NO PACK** |
 | `live-events-venues` | 3 | — | 0 | 0 | **NO PACK** |
 | `manufacturing` | 1 | — | 0 | 0 | **NO PACK** |
 | `media-production` | 3 | — | 0 | 0 | **NO PACK** |
-| `moving-and-logistics` | 5 | — | 0 | 0 | **NO PACK** |
+| `moving-and-logistics` | 5 | vertical-recurring-compliance | 20 | 19 | covered |
 | `nonprofit-community` | 8 | cooperative-compliance | 8 | 6 | covered |
 | `pet-services` | 5 | — | 0 | 0 | **NO PACK** |
-| `professional-services` | 8 | — | 0 | 0 | **NO PACK** |
+| `professional-services` | 8 | vertical-recurring-compliance | 20 | 19 | covered |
 | `public-sector` | 3 | law-enforcement-compliance, public-sector-compliance | 26 | 10 | covered |
-| `real-estate-construction` | 2 | — | 0 | 0 | **NO PACK** |
+| `real-estate-construction` | 2 | vertical-recurring-compliance | 20 | 19 | covered |
 | `retail-goods` | 5 | — | 0 | 0 | **NO PACK** |
 | `security-services` | 2 | — | 0 | 0 | **NO PACK** |
 | `software-platform` | 1 | — | 0 | 0 | **NO PACK** |
-| `trades-maintenance` | 11 | — | 0 | 0 | **NO PACK** |
+| `trades-maintenance` | 11 | vertical-recurring-compliance | 20 | 19 | covered |
 | `warehousing-fulfilment` | 4 | — | 0 | 0 | **NO PACK** |
 
 ## Trigger classes across every pack
 
 | Class | Obligations |
 |---|---:|
-| `continuous` | 48 |
+| `cadence` | 59 |
+| `continuous` | 49 |
 | `event-driven` | 43 |
-| `cadence` | 40 |
 | `unrecognised` | 0 |
 | `unspecified` | 0 |
 
