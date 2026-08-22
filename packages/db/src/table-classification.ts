@@ -357,6 +357,18 @@ export const TABLE_CLASSIFICATION: Record<string, TableSensitivity> = {
   // and standing deduction instructions (including garnishments).
   PayComponentLine: "confidential",
   EmployeeDeductionElection: "confidential",
+  // -- mileage absorption (EP-MILEAGE-ABSORB) --
+  // Trip carries precise personal location for an identified employee — the most
+  // sensitive data this substrate holds. Vehicle and the consent record bind to a
+  // named driver; a commute-exclusion rule's predicate can embed a home radius,
+  // so the rule table is PII-bearing too and is classified with the rest.
+  Vehicle: "confidential",
+  Trip: "confidential",
+  TripClassificationRule: "confidential",
+  DriverLocationConsent: "confidential",
+  // Rate tables are org configuration, not personal data.
+  MileageRatePlan: "internal",
+  MileageRate: "internal",
 
 };
 

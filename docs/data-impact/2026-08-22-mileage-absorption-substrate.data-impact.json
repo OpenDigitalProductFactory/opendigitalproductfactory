@@ -24,7 +24,7 @@
       "kind": "model",
       "assetId": "data:mileage#trip",
       "prismaModel": "Trip",
-      "lifecycleDisposition": "Trip carries precise personal location data and is therefore consent-gated and retention-bounded: a row may only be created for a driver holding a granted DriverLocationConsent, and DriverLocationConsent.retentionDays governs how long geometry is kept. Rows leave service through the RecordLifecycle convention (lifecycle/lifecycleAt/lifecycleReason), never by silent deletion, so a reimbursement already claimed stays auditable after the underlying geometry is aged out.",
+      "lifecycleDisposition": "Trip carries precise personal location data and is therefore consent-gated: a row may only be created for a driver holding a granted DriverLocationConsent. DriverLocationConsent.retentionDays DECLARES the geometry retention bound; the field-level minimisation job that enforces it is a named follow-up and is NOT shipped in this substrate change. The row itself is never row-purged — a trip that priced a reimbursement is accounting evidence — so the disposition is domain-lifecycle-managed and minimisation must clear geometry columns rather than delete rows. Rows leave service through the RecordLifecycle convention (lifecycle/lifecycleAt/lifecycleReason), never by silent deletion, so a reimbursement already claimed stays auditable after the underlying geometry is aged out.",
       "fields": [
         {
           "fieldId": "data:mileage#trip-geometry",

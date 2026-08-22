@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Mileage, Payroll, and Payroll Tax Absorption Plan
 
 > **For agentic workers:** REQUIRED: Use `dpf-platform:dpf-writing-plans` conventions and execute phase-by-phase. Steps use checkbox (`- [ ]`) syntax for tracking.
