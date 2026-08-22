@@ -2,6 +2,8 @@ import { randomUUID } from "node:crypto";
 
 import { Prisma, prisma } from "@dpf/db";
 
+import { ok } from "@/lib/shared/action-result";
+
 import { validateInitiativeBaselineChainHead } from "./baseline-repository";
 
 export type InitiativeObjectiveMapping = {
@@ -40,6 +42,7 @@ type BaselinePayload = {
   supersedesBaselineId: string | null;
   artifactDigest: string;
   objectiveStatements: Array<{ objectiveId: string }>;
+  acceptanceStatements: Array<{ acceptanceId: string }>;
 };
 
 function parseBaseline(value: unknown): BaselinePayload | null {
@@ -49,13 +52,15 @@ function parseBaseline(value: unknown): BaselinePayload | null {
     || (row.supersedesBaselineId !== null && typeof row.supersedesBaselineId !== "string")
     || typeof row.artifactDigest !== "string"
     || !Array.isArray(row.objectiveStatements)
-    || !row.objectiveStatements.every((entry) => entry && typeof entry === "object" && typeof (entry as Record<string, unknown>).objectiveId === "string")) {
+    || !row.objectiveStatements.every((entry) => entry && typeof entry === "object" && typeof (entry as Record<string, unknown>).objectiveId === "string")
+    || !Array.isArray(row.acceptanceStatements)
+    || !row.acceptanceStatements.every((entry) => entry && typeof entry === "object" && typeof (entry as Record<string, unknown>).acceptanceId === "string")) {
     return null;
   }
   return row as unknown as BaselinePayload;
 }
 
-function normalizeMappings(
+export function normalizeInitiativeObjectiveMappings(
   mappings: readonly InitiativeObjectiveMapping[],
   objectiveIds: ReadonlySet<string>,
 ): InitiativeObjectiveMapping[] | null {
@@ -124,8 +129,12 @@ export async function recordInitiativeObjectiveMappingProposal(args: {
     if (!chain.ok) return { ok: false, code: "OBJECTIVE_BASELINE_CONFLICT", error: chain.error };
     const baseline = parsed.find((entry) => entry.baselineId === args.baselineId);
     if (!baseline) return { ok: false, code: "OBJECTIVE_BASELINE_REQUIRED", error: "The current objective baseline was not found." };
-    const mappings = normalizeMappings(args.mappings, new Set(baseline.objectiveStatements.map((entry) => entry.objectiveId)));
-    if (!mappings) return { ok: false, code: "OBJECTIVE_RECONCILIATION_REQUIRED", error: "Every proposal mapping must name one current objective and at least one evidence reference." };
+    const statementIds = new Set([
+      ...baseline.objectiveStatements.map((entry) => entry.objectiveId),
+      ...baseline.acceptanceStatements.map((entry) => entry.acceptanceId),
+    ]);
+    const mappings = normalizeInitiativeObjectiveMappings(args.mappings, statementIds);
+    if (!mappings) return { ok: false, code: "OBJECTIVE_RECONCILIATION_REQUIRED", error: "Every proposal mapping must name one current objective or acceptance statement and at least one evidence reference." };
 
     const proposalId = `initiative-${randomUUID()}`;
     const proposal: InitiativeObjectiveMappingProposal = {
@@ -158,6 +167,8 @@ export async function recordInitiativeObjectiveMappingProposal(args: {
       recordedById: args.proposerUserId,
       recordedByAgentId: args.proposerAgentId,
     } });
-    return { ok: true, proposalId, proposal };
+    const success = ok();
+    if (!success.ok) throw new Error("Canonical success constructor returned an error.");
+    return { ...success, proposalId, proposal };
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 }

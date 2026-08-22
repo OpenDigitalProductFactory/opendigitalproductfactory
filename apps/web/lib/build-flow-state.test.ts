@@ -19,9 +19,8 @@ vi.mock("@/lib/agent-event-bus", () => ({
 vi.mock("@/lib/self-upgrade/completion", () => ({
   isFeatureBuildDeployed: vi.fn(),
 }));
-vi.mock("@/lib/build/build-entry-gate", () => ({
-  enforceBuildInitiativeReadiness: vi.fn(async () => ({ allowed: true, message: "allowed" })),
-}));
+const terminalTransition = vi.hoisted(() => ({ completeFeatureBuildTransition: vi.fn() }));
+vi.mock("@/lib/backlog/initiative-readiness/build-terminal-transition", () => terminalTransition);
 
 import { prisma } from "@dpf/db";
 import { isFeatureBuildDeployed } from "@/lib/self-upgrade/completion";
@@ -108,6 +107,11 @@ function mockActivity(summary: string | null): void {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  terminalTransition.completeFeatureBuildTransition.mockResolvedValue({
+    ok: true,
+    authorityDecisionId: "DI-1",
+    decision: { verdict: "allowed", blockers: [], unmet: [] },
+  });
   mockDevConfig("selective");
   mockPack(null);
   mockActivity(null);
@@ -407,9 +411,9 @@ describe("reconcileBuildCompletion", () => {
     vi.mocked(prisma.featureBuild.update).mockResolvedValue({} as never);
     const changed = await reconcileBuildCompletion("FB-TEST-001");
     expect(changed).toBe(true);
-    expect(prisma.featureBuild.update).toHaveBeenCalledWith({
-      where: { buildId: "FB-TEST-001" },
-      data: { phase: "complete" },
+    expect(terminalTransition.completeFeatureBuildTransition).toHaveBeenCalledWith({
+      buildId: "FB-TEST-001",
+      expectedPhase: "ship",
     });
   });
 
@@ -446,9 +450,9 @@ describe("reconcileBuildCompletion", () => {
     vi.mocked(isFeatureBuildDeployed).mockResolvedValue(false);
     const changed = await reconcileBuildCompletion("FB-TEST-001");
     expect(changed).toBe(true);
-    expect(prisma.featureBuild.update).toHaveBeenCalledWith({
-      where: { buildId: "FB-TEST-001" },
-      data: { phase: "complete" },
+    expect(terminalTransition.completeFeatureBuildTransition).toHaveBeenCalledWith({
+      buildId: "FB-TEST-001",
+      expectedPhase: "ship",
     });
   });
 });
@@ -472,9 +476,9 @@ describe("completeLocalDeliveryBuild", () => {
     expect(prisma.changePromotion.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ status: "deployed" }) }),
     );
-    expect(prisma.featureBuild.update).toHaveBeenCalledWith({
-      where: { buildId: "FB-TEST-001" },
-      data: { phase: "complete" },
+    expect(terminalTransition.completeFeatureBuildTransition).toHaveBeenCalledWith({
+      buildId: "FB-TEST-001",
+      expectedPhase: "ship",
     });
   });
 

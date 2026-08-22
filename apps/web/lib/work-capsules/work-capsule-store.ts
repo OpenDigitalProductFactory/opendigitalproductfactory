@@ -24,6 +24,7 @@ import {
 } from "@/lib/work-capsules";
 import { admitRuntimeGuardedWork } from "@/lib/platform-runtime/work-admission";
 import { planCapsuleChangeImpact, type CapsuleChangeImpactContract } from "./change-impact-contract";
+import { completeGovernedWorkCapsuleStatus } from "./work-capsule-terminal-status";
 import {
   CapsuleBranchOccupiedError,
   isExternalLeaseExecutor,
@@ -36,9 +37,11 @@ import {
 } from "./work-capsule-branch-identity";
 import type { CapsuleDb, WorkCapsuleActor } from "./work-capsule-store-types";
 import { recordWorkCapsuleActivity as recordActivity } from "./work-capsule-activity-store";
+import { intentsConflict, scopeValuesOverlap } from "./work-capsule-scope-overlap";
 
 export type { CapsuleDb, WorkCapsuleActor } from "./work-capsule-store-types";
 export { CapsuleBranchOccupiedError } from "./work-capsule-branch-identity";
+export { WorkCapsuleCompletionDeniedError } from "./work-capsule-terminal-status";
 export { declareWorkCapsuleIntent } from "./work-capsule-intent-store";
 
 type CapsuleCreateInput = {
@@ -112,6 +115,9 @@ export async function createWorkCapsule(args: {
   }
   if (args.input.status && !isWorkCapsuleStatus(args.input.status)) {
     throw new Error("Invalid capsule status");
+  }
+  if (args.input.status === "complete") {
+    throw new Error("Create the Work Capsule in a non-terminal state, then request governed completion");
   }
   const scope = normalizeWorkCapsuleScopeInput(args.input.scope);
 
@@ -785,32 +791,6 @@ export class ScopeOverlapError extends Error {
   }
 }
 
-// `edit` is an exclusive intent: two `edit` claims on the same scope conflict, as
-// does an `edit` against a `read`. Two `read` claims coexist (non-exclusive).
-function intentsConflict(a: ScopeClaim["intent"], b: ScopeClaim["intent"]): boolean {
-  return a === "edit" || b === "edit";
-}
-
-// Normalize a path scope value so separators and trailing slashes don't defeat
-// containment checks ("src/", "src", and "src\\x" must compare consistently).
-function normalizePathScope(value: string): string {
-  return value.replace(/\\/g, "/").replace(/\/+$/g, "");
-}
-
-// Two scope values overlap when they claim the same resource. For `path` kinds a
-// directory claim covers its whole subtree, so an ancestor/descendant pair
-// overlaps; the trailing-"/" boundary keeps siblings that merely share a string
-// prefix (src/foo.ts vs src/foobar.ts) from colliding. All other kinds are
-// exact-match scopes.
-function scopeValuesOverlap(kind: ScopeClaim["kind"], a: string, b: string): boolean {
-  if (a === b) return true;
-  if (kind !== "path") return false;
-  const na = normalizePathScope(a);
-  const nb = normalizePathScope(b);
-  if (na === nb) return true;
-  return na.startsWith(`${nb}/`) || nb.startsWith(`${na}/`);
-}
-
 /**
  * Find active claims on OTHER capsules that conflict with `claims`. "Active" =
  * not archived, not in a terminal status, and (for lease-backed executors) the
@@ -1020,6 +1000,18 @@ export async function updateWorkCapsuleStatus(args: {
     where: { capsuleId: args.capsuleId },
   });
   if (!capsule) throw new Error(`Work Capsule ${args.capsuleId} not found`);
+
+  const hasGovernedLink = Boolean(capsule.backlogItemId || capsule.featureBuildId || capsule.taskRunId);
+  if (args.status === "complete" && hasGovernedLink) {
+    return completeGovernedWorkCapsuleStatus({
+      db: args.db,
+      capsuleId: args.capsuleId,
+      expectedStatus: capsule.status,
+      reason: args.reason,
+      actor: args.actor,
+      evaluatedAt: (args.now ?? new Date()).toISOString(),
+    });
+  }
 
   const currentWorkspaceState =
     capsule.workspaceState && typeof capsule.workspaceState === "object" && !Array.isArray(capsule.workspaceState)

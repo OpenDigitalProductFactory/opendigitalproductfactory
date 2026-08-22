@@ -65,6 +65,38 @@ function cleanStringArray(values: string[] | undefined): string[] {
   return [...new Set(values.map((v) => v.trim()).filter(Boolean))];
 }
 
+async function attemptEpicAutoClose(epicId: string, userId: string): Promise<void> {
+  const remaining = await prisma.backlogItem.count({
+    where: { epicId, status: { notIn: ["done", "retired"] } },
+  });
+  if (remaining !== 0) return;
+  const epic = await prisma.epic.findUnique({ where: { id: epicId }, select: { epicId: true, status: true } });
+  if (!epic || epic.status === "done") return;
+  const { completeEpicTransition } = await import(
+    "@/lib/backlog/initiative-readiness/epic-terminal-transition"
+  );
+  await completeEpicTransition({
+    epicId: epic.epicId,
+    expectedStatus: epic.status,
+    actor: { actorType: "human", actorRef: userId, humanContextRef: userId, agentContextRef: null },
+    authority: {
+      organizationId: null,
+      actionKey: "auto_close_epic",
+      objectRef: epic.epicId,
+      rationale: { capability: "manage_backlog", source: "backlog-child-terminal" },
+      authoritySnapshot: {
+        decision: "allow",
+        effectiveHumanCapability: "manage_backlog",
+        effectiveAgentGrant: "human-session",
+        tokenScope: "organization",
+        organizationId: "platform",
+        actionKey: "auto_close_epic",
+        policyVersion: "coworker-authority.v1",
+      },
+    },
+  });
+}
+
 // ─── BacklogItem actions ──────────────────────────────────────────────────────
 
 export async function createBacklogItem(input: BacklogItemInput): Promise<void> {
@@ -73,6 +105,9 @@ export async function createBacklogItem(input: BacklogItemInput): Promise<void> 
   if (error) throw new Error(error);
   if (input.status === "retired") {
     throw new Error("A new backlog item cannot start retired; use the governed retirement action for an existing item");
+  }
+  if (input.status === "done") {
+    throw new Error("Create the item as open, then request governed completion with objective and delivery evidence");
   }
 
   const deferralProjection = await deferralProjectionForInput(input);
@@ -190,6 +225,47 @@ export async function updateBacklogItem(id: string, input: BacklogItemInput): Pr
     ...deferralProjection,
   };
   const actorUserId = await getSessionUserId();
+  if (!actorUserId) throw new Error("An authenticated user is required to update backlog work");
+  if (input.status === "done" && !wasDone) {
+    const { completeBacklogItemTransition } = await import(
+      "@/lib/backlog/initiative-readiness/backlog-terminal-transition"
+    );
+    const organizationId = input.organizationId ?? existing?.organizationId ?? "platform";
+    const terminal = await completeBacklogItemTransition({
+      itemId: id,
+      expectedStatus: existing?.status ?? "open",
+      resolution: "Completed through the backlog editor by an authorized operator.",
+      completionEvidence: undefined,
+      additionalData: updateData,
+      actor: {
+        actorType: "human",
+        actorRef: actorUserId,
+        humanContextRef: actorUserId,
+        agentContextRef: null,
+      },
+      authority: {
+        organizationId: existing?.organizationId ?? null,
+        actionKey: "update_backlog_item",
+        objectRef: id,
+        rationale: { capability: "manage_backlog", source: "server-action" },
+        authoritySnapshot: {
+          decision: "allow",
+          effectiveHumanCapability: "manage_backlog",
+          effectiveAgentGrant: "human-session",
+          tokenScope: "organization",
+          organizationId,
+          actionKey: "update_backlog_item",
+          policyVersion: "coworker-authority.v1",
+        },
+      },
+    });
+    if (!terminal.ok) {
+      const codes = [...terminal.decision.blockers, ...terminal.decision.unmet].map((entry) => entry.code);
+      throw new Error(`This item is not ready to complete: ${codes.join(", ")}.`);
+    }
+    if (input.epicId) await attemptEpicAutoClose(input.epicId, actorUserId);
+    return;
+  }
   await prisma.$transaction(async (tx) => {
     await tx.backlogItem.update({ where: { id }, data: updateData });
     if (existing?.status !== input.status || input.status === "deferred") {
@@ -218,22 +294,6 @@ export async function updateBacklogItem(id: string, input: BacklogItemInput): Pr
     }
   });
 
-  // Deferred work is still wanted and therefore keeps its epic open. Only
-  // delivered or explicitly retired demand is terminal for epic completion.
-  if (isNowDone && !wasDone) {
-    const epicId = input.epicId ?? (await prisma.backlogItem.findUnique({ where: { id }, select: { epicId: true } }))?.epicId;
-    if (epicId) {
-      const remaining = await prisma.backlogItem.count({
-        where: { epicId, status: { notIn: ["done", "retired"] } },
-      });
-      if (remaining === 0) {
-        await prisma.epic.update({
-          where: { id: epicId },
-          data: { status: "done", completedAt: new Date() },
-        });
-      }
-    }
-  }
 }
 
 /**
@@ -265,7 +325,7 @@ export async function updateBacklogItemFields(id: string, patch: BacklogFieldPat
 
   const existing = await prisma.backlogItem.findUnique({
     where: { id },
-    select: { status: true, type: true, digitalProductId: true, epicId: true },
+    select: { status: true, type: true, digitalProductId: true, epicId: true, organizationId: true },
   });
   if (!existing) throw new Error("Backlog item not found");
 
@@ -322,20 +382,45 @@ export async function updateBacklogItemFields(id: string, patch: BacklogFieldPat
   }
 
   if (Object.keys(data).length === 0) return;
+  if (patch.status === "done" && !wasDone) {
+    const actorUserId = await getSessionUserId();
+    if (!actorUserId) throw new Error("An authenticated user is required to update backlog work");
+    const { completeBacklogItemTransition } = await import(
+      "@/lib/backlog/initiative-readiness/backlog-terminal-transition"
+    );
+    const organizationId = existing.organizationId ?? "platform";
+    const terminal = await completeBacklogItemTransition({
+      itemId: id,
+      expectedStatus: existing.status,
+      resolution: "Completed through the backlog grid by an authorized operator.",
+      completionEvidence: undefined,
+      additionalData: data,
+      actor: { actorType: "human", actorRef: actorUserId, humanContextRef: actorUserId, agentContextRef: null },
+      authority: {
+        organizationId: existing.organizationId,
+        actionKey: "update_backlog_item_fields",
+        objectRef: id,
+        rationale: { capability: "manage_backlog", source: "server-action" },
+        authoritySnapshot: {
+          decision: "allow",
+          effectiveHumanCapability: "manage_backlog",
+          effectiveAgentGrant: "human-session",
+          tokenScope: "organization",
+          organizationId,
+          actionKey: "update_backlog_item_fields",
+          policyVersion: "coworker-authority.v1",
+        },
+      },
+    });
+    if (!terminal.ok) {
+      const codes = [...terminal.decision.blockers, ...terminal.decision.unmet].map((entry) => entry.code);
+      throw new Error(`This item is not ready to complete: ${codes.join(", ")}.`);
+    }
+    if (existing.epicId) await attemptEpicAutoClose(existing.epicId, actorUserId);
+    return;
+  }
   await prisma.backlogItem.update({ where: { id }, data });
 
-  // Deferred work is still wanted and therefore keeps its epic open.
-  if (patch.status !== undefined && isNowDone && !wasDone && existing.epicId) {
-    const remaining = await prisma.backlogItem.count({
-      where: { epicId: existing.epicId, status: { notIn: ["done", "retired"] } },
-    });
-    if (remaining === 0) {
-      await prisma.epic.update({
-        where: { id: existing.epicId },
-        data: { status: "done", completedAt: new Date() },
-      });
-    }
-  }
 }
 
 export async function deleteBacklogItem(id: string): Promise<void> {
@@ -373,6 +458,9 @@ export async function createEpic(input: EpicInput): Promise<CreateEpicResult> {
   await requireManageBacklog();
   const error = validateEpicInput(input);
   if (error) throw new Error(error);
+  if (input.status === "done") {
+    throw new Error("Create the Epic as open, converge its canonical backlog receipt anchor, then request governed completion");
+  }
 
   // Check for similar existing epics before creating
   let similarEpics: EpicOverlap[] = [];
@@ -446,23 +534,58 @@ export async function updateEpic(id: string, input: EpicInput): Promise<void> {
   const error = validateEpicInput(input);
   if (error) throw new Error(error);
 
-  const existing = await prisma.epic.findUnique({ where: { id }, select: { status: true } });
+  const existing = await prisma.epic.findUnique({ where: { id }, select: { epicId: true, status: true } });
+  if (!existing) throw new Error("Epic not found");
   const isNowDone = input.status === "done";
-  const wasDone = existing?.status === "done";
+  const wasDone = existing.status === "done";
 
-  await prisma.$transaction(async (tx) => {
-    await tx.epic.update({
-      where: { id },
-      data: {
-        title:  input.title.trim(),
-        status: input.status,
-        ...(input.description !== undefined && {
-          description: input.description.trim() || null,
-        }),
-        ...(isNowDone && !wasDone ? { completedAt: new Date() } : {}),
-        ...(!isNowDone && wasDone ? { completedAt: null } : {}),
+  const epicData = {
+    title: input.title.trim(),
+    ...(input.description !== undefined && { description: input.description.trim() || null }),
+  };
+  if (isNowDone && !wasDone) {
+    const actorUserId = await getSessionUserId();
+    if (!actorUserId) throw new Error("An authenticated user is required to complete an Epic");
+    const { completeEpicTransition } = await import(
+      "@/lib/backlog/initiative-readiness/epic-terminal-transition"
+    );
+    const terminal = await completeEpicTransition({
+      epicId: existing.epicId,
+      expectedStatus: existing.status,
+      additionalData: epicData,
+      actor: { actorType: "human", actorRef: actorUserId, humanContextRef: actorUserId, agentContextRef: null },
+      authority: {
+        organizationId: null,
+        actionKey: "update_epic",
+        objectRef: existing.epicId,
+        rationale: { capability: "manage_backlog", source: "server-action" },
+        authoritySnapshot: {
+          decision: "allow",
+          effectiveHumanCapability: "manage_backlog",
+          effectiveAgentGrant: "human-session",
+          tokenScope: "organization",
+          organizationId: "platform",
+          actionKey: "update_epic",
+          policyVersion: "coworker-authority.v1",
+        },
       },
     });
+    if (!terminal.ok) {
+      throw new Error(`This Epic is not ready to complete: ${terminal.code}.`);
+    }
+  }
+
+  await prisma.$transaction(async (tx) => {
+    if (!(isNowDone && !wasDone)) {
+      await tx.epic.update({
+        where: { id },
+        data: {
+          ...epicData,
+          status: input.status,
+          ...(!isNowDone && wasDone ? { completedAt: null } : {}),
+        },
+      });
+    }
     await tx.epicPortfolio.deleteMany({ where: { epicId: id } });
     if (input.portfolioIds.length > 0) {
       await tx.epicPortfolio.createMany({

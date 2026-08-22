@@ -21,7 +21,118 @@ const transitionObject = {
   targetState: "working",
 };
 
+const baseline = {
+  schemaVersion: 1,
+  baselineId: "baseline-1",
+  subject: { kind: "backlog-item", id: "BI-ENTRY" },
+  profile: "cross-domain",
+  artifactDigest: "sha256:design",
+  supersedesBaselineId: null,
+  objectiveStatements: [{ objectiveId: "OBJ-1" }],
+  acceptanceStatements: [{ acceptanceId: "AC-1" }],
+  approvalReceiptId: "r-approval",
+  authoritySnapshot: { decision: "allow" },
+};
+
+function receipt(id: string, gateKey: string, decision: "pass" | "not-applicable" = "pass") {
+  return {
+    id,
+    kind: "initiative_gate_receipt",
+    gateKey,
+    recordedAt: new Date("2026-08-22T00:00:00.000Z"),
+    payload: {
+      schemaVersion: 1,
+      receiptId: id,
+      policyVersion: "initiative-readiness.v1",
+      gate: gateKey,
+      decision,
+      subject: { kind: "backlog-item", id: "BI-ENTRY" },
+      artifactRef: { kind: "document-version", versionId: "version-1" },
+      artifactDigest: "sha256:design",
+      artifactAuthorRef: "PRN-AUTHOR",
+      reviewerPrincipalId: "PRN-REVIEWER",
+      reviewerAgentId: "AGT-REVIEWER",
+      authorityDecisionId: "DI-1",
+      authoritySnapshot: {
+        decision: "allow",
+        effectiveHumanCapability: "manage_backlog",
+        effectiveAgentGrant: "initiative_review",
+        tokenScope: "organization",
+        organizationId: "ORG-1",
+        actionKey: "review_initiative",
+        policyVersion: "coworker-authority.v1",
+      },
+      reason: "Reviewed against the current canonical design.",
+      findingRefs: [],
+      resolvedFindingRefs: [],
+    },
+  };
+}
+
+function readyActivities() {
+  return [
+    { id: "baseline-row", kind: "initiative_scope_baseline", gateKey: null, recordedAt: new Date(), payload: baseline },
+    receipt("r-research", "research"),
+    receipt("r-approval", "spec-approval"),
+    receipt("r-architecture", "architecture-review"),
+    receipt("r-data", "data-review", "not-applicable"),
+    receipt("r-ux", "ux-fit-review", "not-applicable"),
+    receipt("r-security", "security-review", "not-applicable"),
+    receipt("r-compliance", "compliance-review", "not-applicable"),
+    receipt("r-domain", "domain-review", "not-applicable"),
+    receipt("r-plan-review", "plan-review"),
+    receipt("r-dependencies", "dependency-disposition", "not-applicable"),
+    {
+      id: "coverage-1",
+      kind: "plan_backlog_coverage",
+      gateKey: null,
+      recordedAt: new Date(),
+      payload: {
+        schemaVersion: 2,
+        decision: "atomic",
+        planPath: "docs/superpowers/plans/plan.md",
+        planArtifactRef: { kind: "repo-blob-at-commit", path: "docs/superpowers/plans/plan.md" },
+        planArtifactDigest: "sha256:plan",
+        scopeBaselineId: "baseline-1",
+        scopeBaselineArtifactDigest: "sha256:design",
+        deliverables: [],
+      },
+    },
+  ];
+}
+
 describe("projectBacklogItemReadiness", () => {
+  it("allows completion only when terminal facts reconcile against live evidence", () => {
+    const projected = projectBacklogItemReadiness({
+      item,
+      activities: readyActivities(),
+      target: "completion",
+      transitionObject: {
+        kind: "backlog-item",
+        id: "BI-ENTRY",
+        expectedVersion: "in-progress",
+        targetState: "done",
+      },
+      authorization: "pass",
+      capsuleIdentity: "pass",
+      completion: {
+        deliveryEvidence: "pass",
+        acceptanceEvidence: "pass",
+        objectiveReconciliation: "pass",
+        evidenceRefs: {
+          DELIVERY_EVIDENCE_REQUIRED: ["E-TEST", "E-BUILD"],
+          ACCEPTANCE_EVIDENCE_REQUIRED: ["E-ACCEPT"],
+          OBJECTIVE_RECONCILIATION_REQUIRED: ["E-TEST", "E-ACCEPT"],
+        },
+      },
+      evaluatedAt: "2026-08-22T08:00:00.000Z",
+    });
+
+    expect(projected.decision.verdict).toBe("allowed");
+    expect(projected.decision.satisfied.find((entry) => entry.code === "OBJECTIVE_RECONCILIATION_REQUIRED")?.evidenceRefs)
+      .toEqual(["E-TEST", "E-ACCEPT"]);
+  });
+
   it("allows governed design work before a canonical design exists", () => {
     const projection = projectBacklogItemReadiness({
       item,
@@ -59,61 +170,8 @@ describe("projectBacklogItemReadiness", () => {
   });
 
   it("projects current typed evidence and one valid baseline into an allowed plan transition", () => {
-    const baseline = {
-      schemaVersion: 1,
-      baselineId: "baseline-1",
-      subject: { kind: "backlog-item", id: "BI-ENTRY" },
-      profile: "cross-domain",
-      artifactDigest: "sha256:design",
-      supersedesBaselineId: null,
-      objectiveStatements: [{ objectiveId: "OBJ-1" }],
-      acceptanceStatements: [{ acceptanceId: "AC-1" }],
-      approvalReceiptId: "r-approval",
-      authoritySnapshot: { decision: "allow" },
-    };
-    const receipt = (id: string, gateKey: string, decision: "pass" | "not-applicable" = "pass") => ({
-      id,
-      kind: "initiative_gate_receipt",
-      gateKey,
-      recordedAt: new Date("2026-08-22T00:00:00.000Z"),
-      payload: {
-        schemaVersion: 1,
-        receiptId: id,
-        policyVersion: "initiative-readiness.v1",
-        gate: gateKey,
-        decision,
-        subject: { kind: "backlog-item", id: "BI-ENTRY" },
-        artifactRef: { kind: "document-version", versionId: "version-1" },
-        artifactDigest: "sha256:design",
-        artifactAuthorRef: "PRN-AUTHOR",
-        reviewerPrincipalId: "PRN-REVIEWER",
-        reviewerAgentId: "AGT-REVIEWER",
-        authorityDecisionId: "DI-1",
-        authoritySnapshot: {
-          decision: "allow",
-          effectiveHumanCapability: "manage_backlog",
-          effectiveAgentGrant: "initiative_review",
-          tokenScope: "organization",
-          organizationId: "ORG-1",
-          actionKey: "review_initiative",
-          policyVersion: "coworker-authority.v1",
-        },
-        reason: "Reviewed against the current canonical design.",
-        findingRefs: [],
-        resolvedFindingRefs: [],
-      },
-    });
-    const activities = [
-      { id: "baseline-row", kind: "initiative_scope_baseline", gateKey: null, recordedAt: new Date(), payload: baseline },
-      receipt("r-research", "research"),
-      receipt("r-approval", "spec-approval"),
-      receipt("r-architecture", "architecture-review"),
-      receipt("r-data", "data-review", "not-applicable"),
-      receipt("r-ux", "ux-fit-review", "not-applicable"),
-      receipt("r-security", "security-review", "not-applicable"),
-      receipt("r-compliance", "compliance-review", "not-applicable"),
-      receipt("r-domain", "domain-review", "not-applicable"),
-    ];
+    const activities = readyActivities().filter((entry) => entry.kind !== "plan_backlog_coverage"
+      && entry.gateKey !== "plan-review" && entry.gateKey !== "dependency-disposition");
 
     const projection = projectBacklogItemReadiness({
       item,

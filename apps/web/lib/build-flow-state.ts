@@ -16,7 +16,7 @@ import { PHASE_LABELS } from "@/lib/feature-build-types";
 import { isFeatureBuildDeployed } from "@/lib/self-upgrade/completion";
 import { recordReadyDependentsAfterCompletion } from "@/lib/build/feature-build-dependencies";
 import { readBuildPrDeliveryState } from "@/lib/build/build-pr-delivery-state";
-import { enforceBuildInitiativeReadiness } from "@/lib/build/build-entry-gate";
+import { completeFeatureBuildTransition } from "@/lib/backlog/initiative-readiness/build-terminal-transition";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -473,15 +473,8 @@ export async function reconcileBuildCompletion(buildId: string): Promise<boolean
   if (state.upstream.state !== "skipped" && !(await isFeatureBuildDeployed(buildId))) {
     return false;
   }
-  const readiness = await enforceBuildInitiativeReadiness({
-    buildId, target: "completion", targetPhase: "complete", expectedPhase: "ship",
-  });
-  if (!readiness.allowed) return false;
-
-  await prisma.featureBuild.update({
-    where: { buildId },
-    data: { phase: "complete" },
-  });
+  const readiness = await completeFeatureBuildTransition({ buildId, expectedPhase: "ship" });
+  if (!readiness.ok) return false;
   await recordReadyDependentsAfterCompletion({ db: prisma, buildId }).catch((err) => {
     console.error("[reconcileBuildCompletion] dependency readiness check failed:", err);
   });
