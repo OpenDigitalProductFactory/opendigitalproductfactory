@@ -1,0 +1,17 @@
+{
+  "version": "1",
+  "decidedOption": "restart-bounded-cycle",
+  "decisionInteractionId": "DI-52066CC21D08",
+  "scope": {
+    "files": [
+      "apps/web/app/(shell)/platform/ai/providers/loading.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "refresh-under-alert",
+      "restart-bounded-cycle"
+    ]
+  }
+}
