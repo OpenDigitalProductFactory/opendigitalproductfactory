@@ -366,6 +366,27 @@ export function AgentCoworkerShell({ userContext, useUnifiedCoworker, cooConvers
     };
   }, [threadContext, threadLoadRetryToken]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Drain a queued auto-message whose thread was ALREADY loaded when it was
+  // queued. The drain above lives inside the thread-load callback, whose effect
+  // keys on [threadContext, threadLoadRetryToken] — so a message queued while
+  // sitting on an already-loaded build stranded forever with no feedback. That
+  // is what made "Retry the AI call" silently discard every click: the owner
+  // saw a build reporting "waiting on a retry, not on you" while each retry
+  // went nowhere.
+  //
+  // Same guard as the load-callback drain (target build is the active build on
+  // /build, thread is ready, route context matches), so the race it warns about
+  // — activeBuildId advanced while threadId still holds the previous build —
+  // cannot happen here either.
+  useEffect(() => {
+    if (!queuedAutoMessage || !threadId || threadLoadState !== "ready") return;
+    const expectedBuildId = activeBuildId && pathname === "/build" ? activeBuildId : null;
+    if (queuedAutoMessage.targetBuildId !== expectedBuildId) return;
+    if (queuedAutoMessage.routeContext && queuedAutoMessage.routeContext !== threadContext) return;
+    setPendingAutoMessage(queuedAutoMessage.message);
+    setQueuedAutoMessage(null);
+  }, [queuedAutoMessage, threadId, threadLoadState, activeBuildId, pathname, threadContext]);
+
   useEffect(() => {
     if (
       !pendingProviderConsultation
