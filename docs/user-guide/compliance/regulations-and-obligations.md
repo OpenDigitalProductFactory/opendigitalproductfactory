@@ -82,9 +82,16 @@ controls when reviewing inactive history. The scope is retained in the URL.
 
 ### What it does
 
-The **obligation assurance watch** reads every active obligation's recorded
-review date and frequency and raises a finding on the assurance ledger for each
-one falling due. The coworker reviews what the sweep raised and reports it to you in plain
+The **obligation assurance watch** reads the recorded review date and frequency
+of every obligation **that applies to your business**, and raises a finding on
+the assurance ledger for each one falling due.
+
+That scoping matters more than it sounds. Compliance packs are loaded for every
+business type and then filtered to yours, so your database holds obligations
+from regimes that do not bind on you — bank supervision, municipal water
+testing, police training. The watch only ever reports the ones that apply. An
+obligation the platform cannot confirm applies to you is left alone: deciding
+whether a regime binds is your call, and a due-date reminder would pre-empt it. The coworker reviews what the sweep raised and reports it to you in plain
 language: what is overdue, oldest first, with the recorded owner; what
 falls due in the next 30 days; and — most important — any obligation that
 declares a recurrence with **no next date**.
@@ -142,7 +149,10 @@ thing.
   Accepting a lapse, deferring a review, or remediating it is your decision, and
   the platform requires an explicit governed decision to record it.
 - It does not read your regulator. It only reads what is recorded here, so an
-  obligation nobody entered is an obligation nobody is watching. **This is the
+  obligation nobody entered is an obligation nobody is watching.
+- It does not decide that a regime applies to you. Where applicability cannot be
+  confirmed from what you have recorded, the obligation shows as needing review
+  and the watch stays silent on its dates rather than assuming. **This is the
   biggest limit on the page.** Obligations arrive from a compliance pack matched
   to your business type, and today packs exist for 3 of the 25 business
   categories the platform supports. If yours is not one of them, this screen

@@ -9,6 +9,34 @@ import {
 import { DEADLINE_HORIZON_ADAPTER_KEY } from "./deadline-horizon-sweep";
 
 const NOW = new Date("2026-08-21T00:00:00.000Z");
+
+/** Minimal install context: a US software platform. */
+const CONTEXT = {
+  archetype: { archetypeId: "software-platform", name: "Software Platform", category: "software-platform" },
+  businessContext: { industry: "software", stateCode: "TX", handlesCardPayments: false },
+  regional: {
+    operatesIn: ["us"],
+    sellsTo: ["us"],
+    employsIn: ["us"],
+    dataResidency: ["us"],
+    archetype: "software-platform",
+    archetypeId: "software-platform",
+  },
+} as never;
+
+/** A regulation that binds on any US operating business. */
+const APPLIES = {
+  regulationId: "REG-X", name: "Applies", shortName: "X", jurisdiction: "US-federal",
+  industry: null, sourceType: "external", sourceUrl: null,
+  applicability: { basis: ["operating"], jurisdictions: ["us"] },
+};
+
+/** A regulation gated to an archetype this install is not. */
+const DOES_NOT_APPLY = {
+  regulationId: "REG-Y", name: "Elsewhere", shortName: "Y", jurisdiction: "US-state",
+  industry: "financial", sourceType: "external", sourceUrl: null,
+  applicability: { basis: ["operating"], jurisdictions: ["us"], archetypes: ["banking-financial-services"] },
+};
 const days = (n: number) => new Date(NOW.getTime() + n * 86_400_000);
 
 type Row = Record<string, unknown>;
@@ -72,10 +100,11 @@ describe("runDeadlineHorizonSweep", () => {
         frequency: "annual",
         reviewDate: days(12),
         status: "active",
+        regulation: APPLIES,
       }],
     });
 
-    const result = await runDeadlineHorizonSweep(db, { now: NOW, runKey: "20260821000000" });
+    const result = await runDeadlineHorizonSweep(db, { now: NOW, runKey: "20260821000000", context: CONTEXT });
 
     expect(result.stoppedBy).toBeNull();
     expect(result.findings).toHaveLength(1);
@@ -109,11 +138,12 @@ describe("runDeadlineHorizonSweep", () => {
         frequency: null,
         reviewDate: days(400), // pushed well beyond the horizon
         status: "active",
+        regulation: APPLIES,
       }],
       existingFindings: [{ findingKey: "stale-key", status: "open", reopenCount: 0 }],
     });
 
-    const result = await runDeadlineHorizonSweep(db, { now: NOW });
+    const result = await runDeadlineHorizonSweep(db, { now: NOW, context: CONTEXT });
 
     expect(result.findings).toEqual([]);
     expect(result.reconciled).toBe(1);
@@ -127,11 +157,55 @@ describe("runDeadlineHorizonSweep", () => {
       existingFindings: [{ findingKey: "stale-key", status: "open", reopenCount: 0 }],
     });
 
-    const result = await runDeadlineHorizonSweep(db, { now: NOW });
+    const result = await runDeadlineHorizonSweep(db, { now: NOW, context: CONTEXT });
 
     expect(result.stoppedBy?.kind).toBe("failure");
     // Resolving on an unread sweep would report compliance nobody observed.
     expect(result.reconciled).toBe(0);
     expect(updated).toEqual([]);
+  });
+});
+
+describe("applicability scoping, end to end", () => {
+  it("raises nothing for a regulation gated to another archetype", async () => {
+    // The live defect: this software-platform install was told its bank
+    // supervision filings were overdue, because the sweep read every seeded
+    // pack rather than the ones that bind on it.
+    const { db, created } = fakeDb({
+      obligations: [{
+        obligationId: "OBL-BANK",
+        title: "Bank supervision filing",
+        frequency: "annual",
+        reviewDate: days(-30),
+        status: "active",
+        regulation: DOES_NOT_APPLY,
+      }],
+    });
+
+    const result = await runDeadlineHorizonSweep(db, { now: NOW, context: CONTEXT });
+
+    expect(result.findings).toEqual([]);
+    expect(created).toEqual([]);
+    expect(result.scanned.obligationsOutOfScope).toBe(1);
+    // Read fine, nothing in scope — a clean sweep, not a failure.
+    expect(result.stoppedBy).toBeNull();
+  });
+
+  it("does not treat an unreadable regulation as applying by default", async () => {
+    const { db, created } = fakeDb({
+      obligations: [{
+        obligationId: "OBL-ORPHAN",
+        title: "Orphaned obligation",
+        frequency: "annual",
+        reviewDate: days(-30),
+        status: "active",
+        regulation: null,
+      }],
+    });
+
+    const result = await runDeadlineHorizonSweep(db, { now: NOW, context: CONTEXT });
+
+    expect(created).toEqual([]);
+    expect(result.scanned.obligationsOutOfScope).toBe(1);
   });
 });
