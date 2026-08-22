@@ -7,6 +7,34 @@ import { needsFieldDispatch } from "../field-dispatch";
 import { ALL_ARCHETYPES } from "./index";
 
 describe("archetype catalog", () => {
+  it("declares typed process defaults for restaurants and animal-welfare organizations", () => {
+    const restaurant = ALL_ARCHETYPES.find((archetype) => archetype.archetypeId === "restaurant");
+    const petRescue = ALL_ARCHETYPES.find((archetype) => archetype.archetypeId === "pet-rescue");
+    const animalShelter = ALL_ARCHETYPES.find((archetype) => archetype.archetypeId === "animal-shelter");
+
+    expect(restaurant?.activationProfile?.processProfile).toEqual({
+      catalogModes: ["priced"],
+      subjectTypes: [],
+      housesSubjects: false,
+      schedulesSubjects: false,
+      resourceKinds: [
+        { kindSlug: "table", capacityUnit: "seats", maxCapacity: 100 },
+      ],
+    });
+
+    for (const archetype of [petRescue, animalShelter]) {
+      expect(archetype?.activationProfile?.processProfile).toEqual({
+        catalogModes: ["donation", "unpriced"],
+        subjectTypes: ["animal"],
+        housesSubjects: true,
+        schedulesSubjects: true,
+        resourceKinds: [
+          { kindSlug: "kennel", capacityUnit: "animals", maxCapacity: 100 },
+        ],
+      });
+    }
+  });
+
   it("has at least 30 archetypes", () => {
     expect(ALL_ARCHETYPES.length).toBeGreaterThanOrEqual(30);
   });

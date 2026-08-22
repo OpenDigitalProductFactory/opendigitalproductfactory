@@ -68,6 +68,22 @@ export const foodHospitalityArchetypes: ArchetypeDefinition[] = [
       { name: "dietaryRequirements", label: "Dietary requirements", type: "textarea" as const, required: false },
     ],
     schedulingDefaults: FOOD_SCHEDULING,
+    activationProfile: {
+      profileType: "standard",
+      modules: [],
+      billingReadinessMode: "none",
+      customerGraph: "none",
+      estateSeparation: "shared",
+      processProfile: {
+        catalogModes: ["priced"],
+        subjectTypes: [],
+        housesSubjects: false,
+        schedulesSubjects: false,
+        resourceKinds: [
+          { kindSlug: "table", capacityUnit: "seats", maxCapacity: 100 },
+        ],
+      },
+    },
   },
   {
     archetypeId: "catering",

@@ -1,4 +1,16 @@
-import type { ActivationProfile, ArchetypeModule } from "./types";
+import type {
+  ActivationProfile,
+  ArchetypeModule,
+  ArchetypeProcessProfile,
+} from "./types";
+
+const INERT_PROCESS_PROFILE: ArchetypeProcessProfile = {
+  catalogModes: [],
+  subjectTypes: [],
+  housesSubjects: false,
+  schedulesSubjects: false,
+  resourceKinds: [],
+};
 
 /**
  * Merge a sequence of activation profiles (primary first) into one composite
@@ -51,6 +63,32 @@ export function mergeActivationProfiles(
     ...secondaryOverrides.filter((o) => !primaryKeys.has(o.capabilityKey)),
   ];
 
+  const processProfiles = profiles.map(
+    (profile) => profile.processProfile ?? INERT_PROCESS_PROFILE,
+  );
+  const processResourceKindsBySlug = new Map<
+    string,
+    ArchetypeProcessProfile["resourceKinds"][number]
+  >();
+  for (const processProfile of processProfiles) {
+    for (const resourceKind of processProfile.resourceKinds) {
+      if (!processResourceKindsBySlug.has(resourceKind.kindSlug)) {
+        processResourceKindsBySlug.set(resourceKind.kindSlug, resourceKind);
+      }
+    }
+  }
+  const processProfile: ArchetypeProcessProfile = {
+    catalogModes: Array.from(
+      new Set(processProfiles.flatMap((profile) => profile.catalogModes)),
+    ),
+    subjectTypes: Array.from(
+      new Set(processProfiles.flatMap((profile) => profile.subjectTypes)),
+    ),
+    housesSubjects: processProfiles.some((profile) => profile.housesSubjects),
+    schedulesSubjects: processProfiles.some((profile) => profile.schedulesSubjects),
+    resourceKinds: Array.from(processResourceKindsBySlug.values()),
+  };
+
   return {
     ...primary,
     modules: allModules,
@@ -78,5 +116,8 @@ export function mergeActivationProfiles(
       ...secondaries.flatMap((s) => s.seededChargeModels ?? []),
     ]),
     capabilityOverrides: mergedOverrides.length > 0 ? mergedOverrides : undefined,
+    ...(profiles.some((profile) => profile.processProfile !== undefined)
+      ? { processProfile }
+      : {}),
   };
 }

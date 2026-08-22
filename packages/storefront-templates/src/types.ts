@@ -554,6 +554,27 @@ export interface SeededChargeModel {
   label: string;
 }
 
+export type CatalogMode = "priced" | "donation" | "unpriced";
+
+export interface ResourceKindProfile {
+  kindSlug: string;
+  capacityUnit: string;
+  maxCapacity: number;
+}
+
+/**
+ * Operational semantics that accompany an archetype without leaking into its
+ * presentation vocabulary. Subject and resource slugs stay open for future
+ * verticals, while the activation-profile reader owns their validation.
+ */
+export interface ArchetypeProcessProfile {
+  catalogModes: CatalogMode[];
+  subjectTypes: string[];
+  housesSubjects: boolean;
+  schedulesSubjects: boolean;
+  resourceKinds: ResourceKindProfile[];
+}
+
 export interface ActivationProfile {
   profileType: ArchetypeProfileType;
   modules: ArchetypeModule[];
@@ -568,6 +589,7 @@ export interface ActivationProfile {
   seededConfigurationItemTypes?: SeededConfigurationItemType[];
   seededBillingUnitTypes?: SeededBillingUnitType[];
   seededChargeModels?: SeededChargeModel[];
+  processProfile?: ArchetypeProcessProfile;
 }
 
 /**

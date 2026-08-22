@@ -193,4 +193,43 @@ describe("mergeActivationProfiles", () => {
     const result = mergeActivationProfiles([primary, secondary]);
     expect(result.profileType).toBe("managed-service-provider");
   });
+
+  it("composes process semantics monotonically with primary resource precedence", () => {
+    const primary: ActivationProfile = {
+      ...base,
+      processProfile: {
+        catalogModes: ["priced"],
+        subjectTypes: ["patient-profile"],
+        housesSubjects: false,
+        schedulesSubjects: true,
+        resourceKinds: [
+          { kindSlug: "table", capacityUnit: "seats", maxCapacity: 100 },
+        ],
+      },
+    };
+    const secondary: ActivationProfile = {
+      ...base,
+      processProfile: {
+        catalogModes: ["donation", "unpriced"],
+        subjectTypes: ["animal", "patient-profile"],
+        housesSubjects: true,
+        schedulesSubjects: false,
+        resourceKinds: [
+          { kindSlug: "table", capacityUnit: "covers", maxCapacity: 20 },
+          { kindSlug: "kennel", capacityUnit: "animals", maxCapacity: 100 },
+        ],
+      },
+    };
+
+    expect(mergeActivationProfiles([primary, secondary]).processProfile).toEqual({
+      catalogModes: ["priced", "donation", "unpriced"],
+      subjectTypes: ["patient-profile", "animal"],
+      housesSubjects: true,
+      schedulesSubjects: true,
+      resourceKinds: [
+        { kindSlug: "table", capacityUnit: "seats", maxCapacity: 100 },
+        { kindSlug: "kennel", capacityUnit: "animals", maxCapacity: 100 },
+      ],
+    });
+  });
 });

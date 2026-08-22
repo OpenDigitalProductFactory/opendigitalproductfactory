@@ -1,4 +1,4 @@
-import type { ArchetypeDefinition } from "../types";
+import type { ActivationProfile, ArchetypeDefinition } from "../types";
 
 const CONTACT_FIELDS = [
   { name: "name", label: "Full name", type: "text" as const, required: true },
@@ -16,6 +16,23 @@ const DONATION_FORM_FIELDS = [
   { name: "isAnonymous", label: "Make donation anonymous?", type: "select" as const, required: false, options: ["No", "Yes"] },
   { name: "notes", label: "Message", type: "textarea" as const, required: false },
 ];
+
+const ANIMAL_WELFARE_ACTIVATION_PROFILE = {
+  profileType: "standard",
+  modules: [],
+  billingReadinessMode: "none",
+  customerGraph: "none",
+  estateSeparation: "shared",
+  processProfile: {
+    catalogModes: ["donation", "unpriced"],
+    subjectTypes: ["animal"],
+    housesSubjects: true,
+    schedulesSubjects: true,
+    resourceKinds: [
+      { kindSlug: "kennel", capacityUnit: "animals", maxCapacity: 100 },
+    ],
+  },
+} satisfies ActivationProfile;
 
 export const nonprofitCommunityArchetypes: ArchetypeDefinition[] = [
   {
@@ -39,6 +56,7 @@ export const nonprofitCommunityArchetypes: ArchetypeDefinition[] = [
       { type: "contact", title: "Get in Touch", sortOrder: 5 },
     ],
     formSchema: DONATION_FORM_FIELDS,
+    activationProfile: ANIMAL_WELFARE_ACTIVATION_PROFILE,
   },
   {
     archetypeId: "animal-shelter",
@@ -61,6 +79,7 @@ export const nonprofitCommunityArchetypes: ArchetypeDefinition[] = [
       { type: "contact", title: "Contact Us", sortOrder: 5 },
     ],
     formSchema: DONATION_FORM_FIELDS,
+    activationProfile: ANIMAL_WELFARE_ACTIVATION_PROFILE,
   },
   {
     archetypeId: "community-shelter",
