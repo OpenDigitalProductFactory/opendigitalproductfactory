@@ -100,7 +100,7 @@
     "net-snmp": "^3.26.3",
     "pg": "^8.22.0",
     "read-excel-file": "9.2.0",
-    "undici": "^8.9.0"
+    "undici": "^8.10.0"
   },
   "devDependencies": {
     "@types/pg": "^8.21.0",
