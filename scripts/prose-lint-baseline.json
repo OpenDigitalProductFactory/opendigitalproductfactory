@@ -8573,5 +8573,44 @@
     "readability": 0,
     "longSentences": 0,
     "textMass": 4
+  },
+  "apps/web/lib/build/customer-status-projection.ts": {
+    "retiredVocabulary": 1
+  },
+  "apps/web/lib/build/evidence-timeline.ts": {
+    "retiredVocabulary": 1
+  },
+  "apps/web/lib/mcp/packs/build-evidence-extra-pack.ts": {
+    "retiredVocabulary": 3
+  },
+  "apps/web/lib/mcp/packs/change-review-pack.ts": {
+    "retiredVocabulary": 4
+  },
+  "apps/web/lib/mcp/packs/decomposition-pack.ts": {
+    "retiredVocabulary": 1
+  },
+  "apps/web/lib/mcp/packs/runtime-coordination-pack.ts": {
+    "retiredVocabulary": 4
+  },
+  "apps/web/lib/mcp/packs/work-capsules-pack.ts": {
+    "retiredVocabulary": 6
+  },
+  "apps/web/lib/tak/change-reviewer-route.ts": {
+    "retiredVocabulary": 1
+  },
+  "apps/web/lib/tak/route-context/providers/build.ts": {
+    "retiredVocabulary": 1
+  },
+  "apps/web/lib/work-capsules/capsule-workitem-anchor.ts": {
+    "retiredVocabulary": 2
+  },
+  "apps/web/lib/work-capsules/mcp-result-errors.ts": {
+    "retiredVocabulary": 1
+  },
+  "apps/web/lib/work-capsules/work-capsule-reaper.ts": {
+    "retiredVocabulary": 1
+  },
+  "apps/web/lib/work-management/source-registry.ts": {
+    "retiredVocabulary": 1
   }
 }

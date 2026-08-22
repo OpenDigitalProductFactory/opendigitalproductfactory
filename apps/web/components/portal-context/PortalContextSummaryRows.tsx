@@ -5,7 +5,7 @@ export function PortalContextSummaryRows({ envelope }: { envelope: PortalContext
     ["Route", envelope.route.routeContext],
     ["Domain", envelope.route.domain],
     ["Build", envelope.work.featureBuild?.buildId ?? "None"],
-    ["Capsule", envelope.work.capsule?.capsuleId ?? "None"],
+    ["Workroom", envelope.work.capsule?.capsuleId ?? "None"],
     ["Backlog", envelope.work.backlogItem?.backlogItemId ?? "None"],
     ["Branch", envelope.work.branch?.branchName ?? "None"],
   ];

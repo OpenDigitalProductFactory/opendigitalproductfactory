@@ -2316,6 +2316,7 @@
         "naming-rules",
         "a-known-tension-accepted-deliberately",
         "what-is-deliberately-not-renamed-yet",
+        "what-a-human-reads-is-renamed-and-now-guarded",
         "related"
       ]
     },

@@ -208,7 +208,7 @@ describe("projectContributorChangeLanes", () => {
     expect(lane.source).toBe("git-branch");
     expect(lane.branch).toBe("feat/orphan-pr");
     expect(lane.pullRequestUrl).toBe("https://example.com/pr/1234");
-    expect(lane.blockers).toContain("PR exists but no Work Capsule attached");
+    expect(lane.blockers).toContain("PR exists but no Workroom attached");
     expect(lane.status).toBe("claimed");
   });
 
@@ -245,7 +245,7 @@ describe("projectContributorChangeLanes", () => {
     const lane = result.lanes[0]!;
     expect(lane.source).toBe("worktree");
     expect(lane.worktreePath).toBe("D:/DPF/.claude/worktrees/orphan");
-    expect(lane.blockers).toContain("Worktree has no active Work Capsule");
+    expect(lane.blockers).toContain("Worktree has no active Workroom");
     expect(lane.status).toBe("stale");
   });
 

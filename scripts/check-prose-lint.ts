@@ -49,11 +49,14 @@ import {
   analyzeReadability,
   withinReadingLevel,
 } from "../packages/validators/src/readability";
-import { isProseLintSource } from "./lib/gate-sensitivity.mjs";
+import { isProseLintSource, isRetiredVocabSource } from "./lib/gate-sensitivity.mjs";
 
 const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const WEB = join(REPO_ROOT, "apps", "web");
-const SCAN_DIRS = ["app", "components"].map((d) => join(WEB, d));
+// lib/ is scanned too: the attention-signal copy an operator reads on
+// /build/work is built in lib/portal-context/work-resolver.ts, not in a
+// component, so an app+components-only sweep could not see it (BI-D6BC8C18).
+const SCAN_DIRS = ["app", "components", "lib"].map((d) => join(WEB, d));
 const BASELINE_PATH = join(REPO_ROOT, "scripts", "prose-lint-baseline.json");
 
 // ─── Rule 1: archetype vocabulary conformance ───────────────────────────────
@@ -98,6 +101,39 @@ export function countVocabularyDrift(snippets: string[]): number {
   return count;
 }
 
+// ─── Rule 5: retired vocabulary ─────────────────────────────────────────────
+//
+// BI-D6BC8C18. A term the platform has RENAMED must not survive in owner-facing
+// copy. Phases 1-4 of the Workroom rename (BI-D2D190BF) moved the model, the
+// view types, the MCP tools and the doctrine, but seven UI strings kept saying
+// "capsule" because no gate could see them — docs/architecture/workroom-
+// vocabulary-boundary.md lists what is deliberately unrenamed, and UI copy was
+// never on that list. This axis is the mechanical half of that boundary doc.
+//
+// Scope is COPY ONLY. Internal identifiers keep their names until the item that
+// owns them lands: capsuleId, WC-* keys, workCapsuleId FKs, the work_capsule_*
+// grant names and @/lib/work-capsules import paths are BI-496CD36E's, not this
+// guard's. Extraction only sees JSX text and copy-bearing props, so an
+// identifier is out of reach by construction rather than by an exclusion list.
+//
+// Adding a term here is how a rename becomes enforceable: land the copy change
+// and the registry row in the same PR, and the old word cannot come back.
+export const RETIRED_TERMS: Array<{ term: RegExp; retired: string; use: string; owner: string }> = [
+  { term: /\bwork\s+capsules?\b|\bcapsules?\b/gi, retired: "capsule", use: "workroom", owner: "BI-D6BC8C18" },
+];
+
+/** Count retired owner-facing terms across a set of copy snippets. */
+export function countRetiredVocabulary(snippets: string[]): number {
+  if (snippets.length === 0) return 0;
+  const joined = snippets.join("\n");
+  let count = 0;
+  for (const { term } of RETIRED_TERMS) {
+    term.lastIndex = 0;
+    count += (joined.match(term) || []).length;
+  }
+  return count;
+}
+
 // ─── Copy extraction ─────────────────────────────────────────────────────────
 //
 // Not a full JSX/AST parse (check-style-drift.mjs sets that precedent — a
@@ -136,6 +172,31 @@ export function extractCopySnippets(text: string): string[] {
   return out;
 }
 
+// Widened attribute set, used ONLY by the retired-vocabulary axis.
+//
+// The four original axes are word-count/readability ratchets whose baselines
+// are calibrated against ATTR_COPY_RE's reach; widening that regex globally
+// re-scored ~40 unrelated files on textMass alone. A renamed term, though,
+// has to be caught wherever an operator can read it — "Open capsule" shipped
+// as an `actionLabel`, which the bare-prop, case-sensitive alternation cannot
+// see. So the wider net is scoped to the axis that needs it (BI-D6BC8C18).
+const ATTR_COPY_WIDE_RE =
+  /\b[a-z]*(?:label|title|placeholder|alt|aria-label|description|heading|subheading|subtitle|helperText|helpText|summary|message|tooltip|text|copy)\s*[:=]\s*(["'`])((?:(?!\1)[^\\]|\\.)*)\1/gi;
+
+/** Copy snippets for the retired-vocabulary axis: JSX text plus camelCase props. */
+export function extractCopySnippetsWide(text: string): string[] {
+  const out: string[] = [];
+  for (const m of text.matchAll(JSX_TEXT_RE)) {
+    const s = m[1].trim();
+    if (looksLikeCopy(s)) out.push(s);
+  }
+  for (const m of text.matchAll(ATTR_COPY_WIDE_RE)) {
+    const s = m[2].trim();
+    if (looksLikeCopy(s)) out.push(s);
+  }
+  return out;
+}
+
 function splitSentences(s: string): string[] {
   return s
     .split(/[.!?]+/)
@@ -164,6 +225,7 @@ function isExternalCopyPath(relPath: string): boolean {
 
 export type ProseAxes = {
   vocabulary: number;
+  retiredVocabulary: number;
   genericLabels: number;
   readability: number;
   longSentences: number;
@@ -172,6 +234,7 @@ export type ProseAxes = {
 
 export const PROSE_AXES: (keyof ProseAxes)[] = [
   "vocabulary",
+  "retiredVocabulary",
   "genericLabels",
   "readability",
   "longSentences",
@@ -201,10 +264,23 @@ export function analyzeFile(relPath: string, text: string): ProseAxes {
 
   return {
     vocabulary: countVocabularyDrift(snippets),
+    retiredVocabulary: countRetiredVocabulary(extractCopySnippetsWide(text)),
     genericLabels: countGenericDecisionLabels(text),
     readability,
     longSentences,
     textMass,
+  };
+}
+
+/** Axes for a file in scope for the retired-vocabulary rule only. */
+export function retiredVocabOnly(text: string): ProseAxes {
+  return {
+    vocabulary: 0,
+    retiredVocabulary: countRetiredVocabulary(extractCopySnippetsWide(text)),
+    genericLabels: 0,
+    readability: 0,
+    longSentences: 0,
+    textMass: 0,
   };
 }
 
@@ -235,9 +311,13 @@ function scan(): Record<string, ProseAxes> {
   for (const dir of SCAN_DIRS) {
     for (const file of listSourceFiles(dir)) {
       const rel = relative(REPO_ROOT, file).replace(/\\/g, "/");
-      if (!isProseLintSource(rel)) continue;
+      const fullScope = isProseLintSource(rel);
+      if (!fullScope && !isRetiredVocabSource(rel)) continue;
       const text = readFileSync(file, "utf8");
-      const axes = analyzeFile(rel, text);
+      // A lib/ file is in scope for the retired-vocabulary axis only. Scoring
+      // it on textMass/readability too would import a few thousand words of
+      // new baseline for an axis calibrated against app+components.
+      const axes = fullScope ? analyzeFile(rel, text) : retiredVocabOnly(text);
       if (!isZero(axes)) counts[rel] = axes;
     }
   }
@@ -300,6 +380,7 @@ function main() {
   if (newFiles.length > 0 || increased.length > 0) {
     console.error("Prose lint — new or grown UI-copy issues (EP-UX-SYSTEM L4, BI-88D8C725).\n");
     console.error("Axes: vocabulary (hardcoded archetype term — use getVocabulary()/resolveVocabularyKey),");
+    console.error("      retiredVocabulary (a RENAMED term in owner-facing copy — see RETIRED_TERMS for the replacement),");
     console.error("      genericLabels (owner-first/ux-audit.ts GENERIC_DECISION_LABELS in source),");
     console.error("      readability (marketing/storefront copy over the high-school Flesch-Kincaid grade),");
     console.error("      longSentences (a sentence over 25 words), textMass (total UI-copy word count).\n");

@@ -94,7 +94,7 @@ export function projectContributorChangeLanes(
       );
     }
     if (!capsule && target.kind !== "root-portal" && target.kind !== "dev-portal") {
-      blockers.push("No active Work Capsule attached");
+      blockers.push("No active Workroom attached");
     }
 
     const status = resolveLaneStatusForTarget({
@@ -249,7 +249,7 @@ export function projectContributorChangeLanes(
 
     const blockers: string[] = [];
     if (!pr) blockers.push("No open PR and no active WIP record");
-    else blockers.push("PR exists but no Work Capsule attached");
+    else blockers.push("PR exists but no Workroom attached");
 
     lanes.push({
       id: `branch:${branch.name}`,
@@ -273,7 +273,7 @@ export function projectContributorChangeLanes(
       latestVerification: presentVerification(null),
       blockers,
       nextAction: pr
-        ? "Attach a Work Capsule or close the PR"
+        ? "Attach a Workroom or close the PR"
         : "Open a PR or file a WIP handoff with TTL",
     });
   }
@@ -286,7 +286,7 @@ export function projectContributorChangeLanes(
 
     const blockers = [
       worktree.isRegistered
-        ? "Worktree has no active Work Capsule"
+        ? "Worktree has no active Workroom"
         : "Filesystem-only worktree (not registered with git)",
     ];
 
@@ -312,7 +312,7 @@ export function projectContributorChangeLanes(
       latestVerification: presentVerification(null),
       blockers,
       nextAction: worktree.isRegistered
-        ? "Attach a Work Capsule or remove the worktree"
+        ? "Attach a Workroom or remove the worktree"
         : "Register the worktree with git or remove the directory",
     });
   }

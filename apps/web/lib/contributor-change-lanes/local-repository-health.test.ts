@@ -125,7 +125,7 @@ describe("summarizeLocalRepositoryHealth", () => {
           source: "worktree",
           worktreePath: "/tmp/orphan",
           branch: null,
-          blockers: ["Worktree has no active Work Capsule"],
+          blockers: ["Worktree has no active Workroom"],
         }),
       ],
       freshness: [

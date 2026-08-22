@@ -636,7 +636,7 @@ export function FederationLinksAdminClient({
         {relationshipPreset === "same-organization" && (
           <p className="mt-3 rounded border p-2 text-xs text-[var(--dpf-muted)]" style={{ borderColor: "var(--dpf-border)" }}>
             Shared platform demand and dispositions are offered after both installations approve.
-            Local backlog details, work capsules, private planning, attachments, and customer context stay local.
+            Local backlog details, workrooms, private planning, attachments, and customer context stay local.
           </p>
         )}
         {relationshipPreset === "channel" && (

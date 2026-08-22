@@ -6,7 +6,7 @@ import type {
 import { RefreshContributorInventoryButton } from "./RefreshContributorInventoryButton";
 
 const SOURCE_LABEL: Record<LaneReadModelFreshness["source"], string> = {
-  "work-capsule": "Work Capsules",
+  "work-capsule": "Workrooms",
   "runtime-target": "Runtime Targets",
   "runtime-verification": "Runtime Verifications",
   "nonprod-lease": "Non-prod Leases",

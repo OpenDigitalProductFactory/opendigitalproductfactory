@@ -44,7 +44,7 @@ flowchart TB
         mcpwire["MCP wiring<br/>dpf connector"]
     end
 
-    mcp["DPF MCP coordination plane<br/>backlog · capsules · evidence · leases"]
+    mcp["DPF MCP coordination plane<br/>backlog · workrooms · evidence · leases"]
     lifecycle["Evidence-gated lifecycle<br/>ideate → plan → build → review → ship"]
     pr["PR against main<br/>DCO-signed · CI gates"]
     webhook["GitHub webhook<br/>promotion intake"]
