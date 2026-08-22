@@ -13,29 +13,29 @@ COPY promoter-contract.json /app/promoter-contract.json
 # Copy Dockerfile for portal rebuilds (baked in at promoter build time)
 COPY Dockerfile /promoter/portal.Dockerfile
 
-# Copy promotion script
-COPY scripts/promote.sh /promoter/promote.sh
-COPY scripts/governed-teardown.mjs /promoter/governed-teardown.mjs
-COPY scripts/salvage-sweep.mjs /promoter/salvage-sweep.mjs
-COPY scripts/apply-runtime-capability-transition.mjs /promoter/apply-runtime-capability-transition.mjs
-COPY scripts/runtime-transition-authority.mjs /promoter/runtime-transition-authority.mjs
-COPY scripts/rotate-runtime-transition-secret.mjs /promoter/rotate-runtime-transition-secret.mjs
-COPY scripts/lib/transition-signing.mjs /promoter/lib/transition-signing.mjs
-COPY scripts/promoter-migration-envelope.mjs /promoter/promoter-migration-envelope.mjs
-COPY scripts/installer/validate-install-state.mjs /promoter/installer/validate-install-state.mjs
-COPY scripts/installer/migrate-install-state.mjs /promoter/installer/migrate-install-state.mjs
-COPY scripts/installer/resolve-host-identity.mjs /promoter/installer/resolve-host-identity.mjs
-COPY scripts/installer/install-state-transaction.mjs /promoter/installer/install-state-transaction.mjs
-COPY scripts/installer/install-release-assets.mjs /promoter/installer/install-release-assets.mjs
-COPY scripts/installer/install-state-lock-contract.json /promoter/installer/install-state-lock-contract.json
-COPY scripts/installer/install-state-schema-registry.mjs /promoter/installer/install-state-schema-registry.mjs
-COPY scripts/installer/install-state.schema.json /promoter/installer/install-state.schema.json
-COPY scripts/installer/install-state.v1.schema.json /promoter/installer/install-state.v1.schema.json
-COPY scripts/installer/install-state.v2.schema.json /promoter/installer/install-state.v2.schema.json
-COPY scripts/lib/resolve-capability-compose-profiles.mjs /promoter/lib/resolve-capability-compose-profiles.mjs
-COPY scripts/lib/govern-capability-compose-args.mjs /promoter/lib/govern-capability-compose-args.mjs
-COPY scripts/lib/capability-state-hash.mjs /promoter/lib/capability-state-hash.mjs
-COPY scripts/capability-service-catalog.generated.json /promoter/capability-service-catalog.generated.json
+# Copy the promoter's script closure as a DIRECTORY, never file-by-file.
+#
+# The build context is staged by the DEPLOYED (N-1) portal from a list baked
+# into its own image, while this Dockerfile is candidate-owned. Enumerating
+# files here meant that adding one COPY made the candidate unbuildable by every
+# already-deployed portal: the older caller cannot know to stage a file that did
+# not exist when it was built, and the upgrade that would teach it IS the
+# blocked upgrade. Live: SUR-75DAF829 died on
+# `"/scripts/installer/install-release-assets.mjs": not found` (BI-A04D61B9).
+#
+# Copying the directory inverts the ownership correctly: the CALLER decides the
+# contents (staging stays minimal - only the files in
+# PROMOTER_BUILD_CONTEXT_SOURCES are ever placed in the context, so docker still
+# never walks apps/packages/docs, preserving the SUR-BF75ED2A OOM fix), and the
+# candidate stops demanding files an older caller could not supply. Every
+# scripts/X COPY mapped to /promoter/X, so this is exactly equivalent for a
+# current-version caller.
+#
+# This is not "whatever happened to be staged": promoter-contract.json's
+# requiredFiles is checked at readiness, so a genuinely missing dependency is a
+# named, pre-quiescence refusal (`required_file_unreadable`) instead of an
+# opaque docker checksum error.
+COPY scripts/ /promoter/
 RUN chmod +x /promoter/promote.sh
 
 ENTRYPOINT ["/promoter/promote.sh"]

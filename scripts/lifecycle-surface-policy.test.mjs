@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
 import { activeLifecycleFiles, assertHostStateWiring, auditLifecycleSurfaces, formatAuditFailure, legacyExceptions, promoterCopyInputs } from "./lifecycle-surface-policy.mjs";
 import { classifySensitivePath } from "./self-upgrade-sensitive-paths.mjs";
+import { readPromoterBuildContextSources } from "./lib/promoter-build-context-sources.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -24,11 +25,19 @@ test("lifecycle inventory is exact and contains no duplicates", () => {
 });
 
 test("promoter COPY inputs are derived from its Dockerfile", async () => {
+  // Dockerfile.promoter copies `scripts/` as a directory so a candidate stays
+  // buildable by an already-deployed N-1 portal whose staged context predates a
+  // newly added file (BI-A04D61B9). The Dockerfile therefore names the
+  // directory; the staged closure names the files.
   const dockerfile = await readFile(resolve(root, "Dockerfile.promoter"), "utf8");
   const inputs = promoterCopyInputs(dockerfile);
-  assert.ok(inputs.includes("scripts/promote.sh"));
-  assert.ok(inputs.includes("scripts/installer/install-state.schema.json"));
+  assert.ok(inputs.includes("scripts/"), "the script closure must arrive as one directory COPY");
   assert.equal(new Set(inputs).size, inputs.length);
+
+  const staged = await readPromoterBuildContextSources(root);
+  assert.ok(staged.includes("scripts/promote.sh"));
+  assert.ok(staged.includes("scripts/installer/install-state.schema.json"));
+  assert.equal(new Set(staged).size, staged.length);
 });
 
 // CodeQL js/redos alert #372 (high): the COPY matcher used `[^ ]+` for flag

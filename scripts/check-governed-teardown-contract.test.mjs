@@ -7,7 +7,7 @@ const valid = {
   action: 'requireCapability("manage_platform"); runPostgresTrialRestore({ sourceBackupRunId: backup.runId });',
   component: 'mode: "pointer-hold" Press and hold Release to cancel',
   runner: 'timingSafeEqual removeTreeContentsNoFollow --project-name teardown_evidence_inside_source',
-  dockerfile: 'COPY scripts/governed-teardown.mjs /promoter/governed-teardown.mjs\nCOPY scripts/salvage-sweep.mjs /promoter/salvage-sweep.mjs',
+  promoterClosure: ['scripts/governed-teardown.mjs', 'scripts/salvage-sweep.mjs'],
   portalDockerfile: 'COPY scripts/governed-teardown.mjs /promoter/scripts/governed-teardown.mjs\nCOPY scripts/salvage-sweep.mjs /promoter/scripts/salvage-sweep.mjs',
   mcpSources: ['name: "request_self_upgrade"'],
 };

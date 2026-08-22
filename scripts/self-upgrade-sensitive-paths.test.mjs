@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
+import { readPromoterBuildContextSources } from "./lib/promoter-build-context-sources.mjs";
 import {
   SELF_UPGRADE_SENSITIVE_PATH_RULES,
   classifySensitivePath,
@@ -50,11 +51,12 @@ test("lifecycle policy inventory fails closed when a path has no sensitive owner
 
 test("every file baked into the promoter image is self-upgrade sensitive", async () => {
   // The promoter image IS the upgrade mechanism, so its inputs are the exact set
-  // whose change can wedge an install. Deriving them from the Dockerfile means a
-  // newly baked file cannot silently escape the acceptance gate.
-  const dockerfile = await readFile(new URL("../Dockerfile.promoter", import.meta.url), "utf8");
-  const baked = [...dockerfile.matchAll(/^COPY\s+(\S+)\s+\S+\s*$/gm)].map(([, source]) => source);
-  assert.ok(baked.length >= 15, `expected the promoter closure, parsed ${baked.length} COPY inputs`);
+  // whose change can wedge an install. Deriving them from the staged closure
+  // means a newly baked file cannot silently escape the acceptance gate.
+  // (Dockerfile.promoter deliberately copies directories rather than files, so
+  // the closure — not the Dockerfile — is what enumerates them: BI-A04D61B9.)
+  const baked = await readPromoterBuildContextSources(new URL("..", import.meta.url).pathname);
+  assert.ok(baked.length >= 15, `expected the promoter closure, parsed ${baked.length} staged inputs`);
   assert.deepEqual(findUnownedLifecyclePaths(baked), [], "a file baked into the promoter image must trigger the self-upgrade acceptance gate");
 });
 
@@ -79,4 +81,9 @@ test("acceptance workflow is path-sensitive, nightly, least-privilege, bounded, 
   // capability check, which is why the gate could not see the wedge.
   assert.match(workflow, /Readiness migrates a v2 install carrying the previous catalog hash/);
   assert.match(workflow, /capabilityCatalogHash/);
+  // BI-A04D61B9: building the candidate from its OWN context proves nothing
+  // about the pairing an upgrade actually uses — an N-1 caller's staged context
+  // against a candidate-owned Dockerfile.
+  assert.match(workflow, /Candidate promoter is buildable by an N-1 caller's staged context/);
+  assert.match(workflow, /requiredFiles/);
 });

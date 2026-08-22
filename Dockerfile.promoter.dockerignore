@@ -19,7 +19,7 @@
 # Ignore the entire context first.
 **
 
-# Re-include only what Dockerfile.promoter COPYs.
+# Re-include only the staged promoter build closure.
 !promoter-contract.json
 !Dockerfile
 !Dockerfile.promoter

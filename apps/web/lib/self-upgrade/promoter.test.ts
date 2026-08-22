@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
-import { PROMOTER_BUILD_CONTEXT_FILES } from "./promoter-build-context";
+import { PROMOTER_BUILD_CONTEXT_FILES, PROMOTER_BUILD_CONTEXT_SOURCES } from "./promoter-build-context";
 import {
   buildPromoterCommand,
   buildCandidatePromoterImage,
@@ -32,11 +32,16 @@ const BASE = {
   healthUrl: "http://localhost:3000/api/health",
 };
 
-it("mechanically closes every Dockerfile.promoter COPY input through portal baking and JIT staging", () => {
+it("mechanically closes every staged promoter input through portal baking and JIT staging", () => {
+  // Keyed on the staged closure, not on Dockerfile.promoter's COPY lines:
+  // the Dockerfile copies `scripts/` as a directory so a candidate stays
+  // buildable by an already-deployed N-1 portal whose staged context predates a
+  // newly added file (BI-A04D61B9). PROMOTER_BUILD_CONTEXT_SOURCES is what
+  // enumerates the files, and it is what the portal must bake and the JIT
+  // recipe must stage.
   const root = resolve(__dirname, "../../../..");
-  const promoterDockerfile = readFileSync(join(root, "Dockerfile.promoter"), "utf8");
   const portalDockerfile = readFileSync(join(root, "Dockerfile"), "utf8");
-  const sources = [...promoterDockerfile.matchAll(/^COPY\s+(\S+)\s+\S+/gm)].map((match) => match[1]);
+  const sources = PROMOTER_BUILD_CONTEXT_SOURCES;
   for (const source of sources) {
     const baked = source === "promoter-contract.json" ? "/promoter/promoter-contract.json" : `/promoter/${source}`;
     expect(portalDockerfile, `portal image must bake ${source}`).toMatch(new RegExp(`^COPY\\s+${source.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s+${baked.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "m"));

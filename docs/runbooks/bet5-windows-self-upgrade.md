@@ -205,6 +205,39 @@ let the next cron tick retry. The `build-failure-classifier` now labels this cla
 (environment), so the failure surfaces as retryable rather than the old generic
 `promoter-readiness-failed (unclassified)`.
 
+## Failure class: promoter-context-n1 (a new COPY made the candidate unbuildable)
+
+The candidate promoter build fails at **preflight**, before quiescence, with a docker checksum error
+naming a file that plainly exists in the candidate tree:
+
+```
+promoter-readiness-failed: promoter_candidate_build_failed: release-assets.mjs
+ERROR: failed to compute cache key: "/scripts/installer/install-release-assets.mjs": not found
+```
+
+Canonical case **SUR-75DAF829 (2026-08-22)**: the file existed in the candidate checkout *and* in the
+upgrade workspace, which is what makes this one confusing. It was missing from the **build context**.
+
+**Why.** The promoter's docker build context is staged by the **deployed (N-1) portal** from a file list
+baked into its own image, while `Dockerfile.promoter` is **candidate-owned**. A release that added one
+`COPY` therefore made its own candidate unbuildable by every already-deployed portal — the older caller
+cannot stage a file that did not exist when it was built, and the upgrade that would teach it is the
+blocked upgrade. Same self-wedging shape as the capability-catalog class above.
+
+**Fixed.** `Dockerfile.promoter` now copies `scripts/` as a **directory**, so the caller decides the
+contents and the candidate never demands a file an older caller could not supply. Staging is still
+minimal, so the SUR-BF75ED2A OOM fix is intact. A CI step rebuilds the candidate promoter from a context
+staged by the *previous* release's closure, so an N-1-unbuildable promoter change cannot merge again.
+
+**Diagnosing a recurrence.** Compare what the deployed portal stages against what the candidate needs:
+
+```bash
+docker exec dpf-portal-1 grep -c '^COPY' /promoter/Dockerfile.promoter   # what the deployed caller knows
+docker exec dpf-portal-1 ls -R /promoter/scripts                          # the files it can stage
+```
+
+**Recovery:** none needed — nothing was deployed. Upgrade to a build carrying the directory COPY.
+
 ## Failure class: capability-state-stale (a release moved the capability catalog)
 
 Promoter **readiness** refuses before quiescence with:
