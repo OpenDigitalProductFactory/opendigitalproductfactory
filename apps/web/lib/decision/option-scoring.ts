@@ -325,6 +325,17 @@ export type DecisionResult = {
 export const DECISION_STAKES = ["routine", "elevated", "high"] as const;
 export type DecisionStakes = (typeof DECISION_STAKES)[number];
 
+/**
+ * BI-1BBB2136: parse a caller-supplied stakes value. An unrecognised value
+ * yields undefined so the caller falls back to the default rather than failing
+ * a governance consult over a typo.
+ */
+export function parseDecisionStakes(value: unknown): DecisionStakes | undefined {
+  return (DECISION_STAKES as readonly string[]).includes(String(value))
+    ? (value as DecisionStakes)
+    : undefined;
+}
+
 /** Multipliers applied to the base tie-margin to derive the upper band edge. */
 export const STAKES_BAND_MULTIPLIER: Record<DecisionStakes, number> = {
   routine: 0.5,

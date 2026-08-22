@@ -11,6 +11,7 @@
 // The definition moved verbatim out of the inline PLATFORM_TOOLS array; grants
 // mirror agent-grants.ts TOOL_TO_GRANTS, which stays the gating source.
 
+import { parseDecisionStakes } from "@/lib/decision/option-scoring";
 import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
 import {
@@ -80,6 +81,11 @@ const definitions: ToolDefinition[] = [
           type: "number",
           description:
             "Margin threshold below which confidence flips to 'low' and the reasoning recommends human review. Default 0.2.",
+        },
+        stakes: {
+          type: "string",
+          enum: ["routine", "elevated", "high"],
+          description: "How consequential this decision is (BI-1BBB2136). Stakes widen or narrow the UNCERTAIN band from both sides: a high-stakes call demands more separation before it calls anything an assurance, and less opposition before it declines. Defaults to 'elevated'. Pass your real risk tier — leaving it unset weighs every decision, however consequential, at the same bar.",
         },
         ringScope: {
           type: "array",
@@ -274,6 +280,7 @@ async function principleDecide(
     typeof params["tieMargin"] === "number"
       ? params["tieMargin"]
       : PRINCIPLE_DECIDE_DEFAULTS.tieMargin;
+  const stakes = parseDecisionStakes(params["stakes"]);
   const contextualThreshold =
     PRINCIPLE_DECIDE_DEFAULTS.contextualSimilarityThreshold;
   const semanticWarnRatio =
@@ -642,6 +649,7 @@ async function principleDecide(
 
   const result = decide(decisionOptions, cappedPrinciples, {
     tieMargin,
+    ...(stakes ? { stakes } : {}),
     semanticFallbackWarnRatio: semanticWarnRatio,
     minFeatureKeys,
     sensitivityEpsilon,

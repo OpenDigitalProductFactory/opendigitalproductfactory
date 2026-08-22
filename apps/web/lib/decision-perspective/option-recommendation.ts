@@ -17,8 +17,13 @@
 
 import { listPrinciplesByTier } from "@dpf/db/wiki-store";
 import { projectLocalAxisVector } from "@dpf/db/profession-local-axes";
-import { decide, type DecisionOption, type DecisionPrinciple } from "../decision/option-scoring";
-import type { DecisionScoredOption } from "./types";
+import {
+  decide,
+  type DecisionOption,
+  type DecisionPrinciple,
+  type DecisionStakes,
+} from "../decision/option-scoring";
+import type { DecisionRiskTier, DecisionScoredOption } from "./types";
 
 const TIER_DEFAULT_WEIGHT = 1.0; // commandments only; matches principle-decide-pack.ts's TIER_DEFAULT_WEIGHT.commandment.
 
@@ -57,12 +62,32 @@ function projectOptionFeaturesForProfession(
  * signal). Never throws on a retrieval failure — a gate's core verdict
  * (recommend/escalate/arbitrate/defer) must not depend on this succeeding.
  */
+/**
+ * BI-1BBB2136: one mapping from the gate's consequence tier to decision stakes,
+ * consumed by every caller so no call site invents its own vocabulary. Higher
+ * consequence widens the uncertain band from both sides — more separation
+ * required before an assurance, less opposition required before a decline.
+ */
+export function stakesForRiskTier(riskTier: DecisionRiskTier | null | undefined): DecisionStakes {
+  switch (riskTier) {
+    case "high":
+    case "critical":
+      return "high";
+    case "low":
+      return "routine";
+    default:
+      return "elevated";
+  }
+}
+
 export async function recommendOptionAgainstCommandments(input: {
   db: CommandmentClient;
   scoredOptions: DecisionScoredOption[];
   organizationId?: string | null;
   /** When set, namespaced local-axis features project onto the spine (Phase 3). */
   professionKey?: string | null;
+  /** BI-1BBB2136: the gate's consequence tier, which sets the band edges. */
+  riskTier?: DecisionRiskTier | null;
 }): Promise<string | null> {
   if (input.scoredOptions.length === 0) return null;
   const scoredOptions = projectOptionFeaturesForProfession(
@@ -97,7 +122,9 @@ export async function recommendOptionAgainstCommandments(input: {
     features: o.features,
   }));
 
-  const result = decide(options, principles);
+  const result = decide(options, principles, {
+    stakes: stakesForRiskTier(input.riskTier),
+  });
   return result.recommendation?.optionId ?? null;
 }
 
