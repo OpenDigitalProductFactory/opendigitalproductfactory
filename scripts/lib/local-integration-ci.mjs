@@ -1,6 +1,7 @@
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
+import { resolveHostCommandInvocation } from "./host-command-invocation.mjs";
 
 export function integrationBranchName(candidateBranch, slotKey = "") {
   const prefix = slotKey ? `local-integration/${slotKey}` : "local-integration";
@@ -113,11 +114,20 @@ export function executeLocalIntegrationPlan(plan, {
   let completedCommandCount = 0;
   for (const command of plan.commands) {
     log(`[local-integration-ci] ${command.join(" ")}`);
-    const invocation = resolveCommandInvocation(command, baseEnv);
+    const logicalInvocation = resolveCommandInvocation(command, baseEnv);
+    const hostInvocation = resolveHostCommandInvocation(
+      logicalInvocation.command,
+      logicalInvocation.args,
+      { platform, env: logicalInvocation.env },
+    );
+    const invocation = {
+      ...logicalInvocation,
+      ...hostInvocation,
+    };
     const commandStartedAt = now();
     const result = spawnSyncImpl(invocation.command, invocation.args, {
       stdio: "inherit",
-      shell: platform === "win32",
+      shell: false,
       env: invocation.env,
     });
     if (result.status !== 0) {

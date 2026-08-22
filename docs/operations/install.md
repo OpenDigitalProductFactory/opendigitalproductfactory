@@ -70,6 +70,41 @@ quiescence, recovery-point creation, source/image replacement, capability
 projection, health evidence, and rollback. Do not use an ad hoc `docker compose
 build` or `up` to refresh the live portal.
 
+After a consumer pull, both installers print the immutable repository digest and
+the image creation timestamp. For the moving `latest` tag they compare that
+timestamp with the current `main` commit time and warn when the image trails by
+more than 24 hours. The comparison is advisory because registry/GitHub access may
+be temporarily unavailable; the digest remains the authoritative identity of the
+bytes that were installed.
+
+### Fresh-install runtime and recovery
+
+The portal always configures its local durable-execution endpoint. Redis and
+Inngest are therefore core services and start without a Compose profile; the
+`runtime-durable-automation` profile only adds optional supporting services.
+Startup reconciliation discovers an empty provider, then retries uncalibrated
+seed profiles on later boots until a durable evaluation is recorded. The exact
+bundled Qwen 3.8 27B model carries a low-confidence provisional routing floor;
+smaller generic Qwen models do not inherit it.
+
+Windows and POSIX lifecycle commands share the same preservation contract. A
+normal stop or uninstall names every overlay that may have created resources but
+does not remove volumes. Permanent deletion is an explicit purge operation. On
+Windows, `uninstall-dpf.ps1 -Headless -Purge` is refused unless `-Yes` is also
+present.
+
+Before decommissioning a contributor machine, inspect only the repository roots
+you intend to evaluate:
+
+```text
+node scripts/salvage-sweep.mjs --operator-owner OpenDigitalProductFactory --json <repo>...
+```
+
+The report separates `LOCAL-ONLY`, `OPERATOR-REMOTE`, and third-party
+`UPSTREAM-CACHE` clones. Branch risk is the count from `git rev-list --count
+<branch> --not --remotes`, supplemented by dirty paths and stashes. An at-risk
+result exits 2; the command never scans a drive or deletes anything.
+
 ### Optional services, backup, and health
 
 Disabling a capability does not delete its volumes or data. New governed work

@@ -16,6 +16,8 @@ describe("LocalOnlyProviderNotice", () => {
 
     expect(html).toContain(`href="${AI_PROVIDER_CONNECTIONS_ROUTE}"`);
     expect(html).not.toContain("/platform/ai-operations/providers");
+    expect(html).toContain("built-in local AI is ready");
+    expect(html).toContain("cloud provider is optional");
   });
 
   it("keeps the recovery target registered as the AI Operations provider surface", () => {

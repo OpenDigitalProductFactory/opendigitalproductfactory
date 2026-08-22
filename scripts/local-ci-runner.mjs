@@ -29,6 +29,7 @@ import {
 import { ensureFullHistory } from "./lib/git-shallow-preflight.mjs";
 import { parseRepositoryPnpmVersion, resolvePinnedPnpmInvocation } from "./lib/pinned-pnpm.mjs";
 import { isEntryModule } from "./lib/entry-module.mjs";
+import { resolveHostCommandInvocation } from "./lib/host-command-invocation.mjs";
 
 function die(message) {
   // BI-8304AB09: write BOTH streams so gate-worktree log capture cannot drop the cause.
@@ -59,11 +60,25 @@ function redactUrl(url) {
   return url.replace(/\/\/.*@/, "//***@");
 }
 
-function executableOnPath(command, { env = process.env, platform = process.platform } = {}) {
+function environmentValue(env, name) {
+  const target = name.toLowerCase();
+  const entry = Object.entries(env).find(([key]) => key.toLowerCase() === target);
+  return entry?.[1] ?? "";
+}
+
+function withCanonicalPath(env, pathValue, platform) {
+  if (platform !== "win32") return { ...env, PATH: pathValue };
+  return Object.fromEntries([
+    ...Object.entries(env).filter(([key]) => key.toLowerCase() !== "path"),
+    ["PATH", pathValue],
+  ]);
+}
+
+export function executableOnPath(command, { env = process.env, platform = process.platform } = {}) {
   const extensions = platform === "win32"
-    ? (env.PATHEXT || ".COM;.EXE;.BAT;.CMD").split(";")
+    ? (environmentValue(env, "PATHEXT") || ".COM;.EXE;.BAT;.CMD").split(";")
     : [""];
-  for (const entry of (env.PATH || "").split(delimiter).filter(Boolean)) {
+  for (const entry of environmentValue(env, "PATH").split(delimiter).filter(Boolean)) {
     for (const extension of extensions) {
       const candidate = join(entry, `${command}${extension}`);
       try {
@@ -75,6 +90,16 @@ function executableOnPath(command, { env = process.env, platform = process.platf
     }
   }
   return "";
+}
+
+export function resolveLocalCiPnpmInvocation(
+  hostPnpm,
+  args,
+  { env = process.env, platform = process.platform } = {},
+) {
+  return platform === "win32"
+    ? resolveHostCommandInvocation("pnpm", args, { env, platform })
+    : { command: hostPnpm, args };
 }
 
 function shellSingleQuote(value) {
@@ -92,19 +117,43 @@ export function preparePinnedPnpmEnvironment({
   if (!expectedVersion) throw new Error(`local CI requires packageManager=pnpm@<version>; received ${packageManager || "missing"}`);
   const hostPnpm = executableOnPath("pnpm", { env, platform });
   if (!hostPnpm) throw new Error("local CI could not resolve pnpm on the admitted PATH");
-  const runOptions = { encoding: "utf8", env, shell: platform === "win32" };
-  const observed = spawnSyncImpl(hostPnpm, ["--version"], runOptions);
+  const runOptions = { encoding: "utf8", env };
+  const observedInvocation = resolveLocalCiPnpmInvocation(
+    hostPnpm,
+    ["--version"],
+    { env, platform },
+  );
+  const observed = spawnSyncImpl(
+    observedInvocation.command,
+    observedInvocation.args,
+    runOptions,
+  );
   if (observed.status !== 0) {
     throw new Error(`local CI could not inspect host pnpm: ${(observed.stderr || observed.stdout || "unknown error").trim()}`);
   }
   const actualVersion = observed.stdout.trim();
   if (actualVersion === expectedVersion) {
-    return { mode: "host-match", expectedVersion, actualVersion, hostPnpm, env: { ...env } };
+    return {
+      mode: "host-match",
+      expectedVersion,
+      actualVersion,
+      hostPnpm,
+      env: withCanonicalPath(env, environmentValue(env, "PATH"), platform),
+    };
   }
 
   const pinnedInvocation = resolvePinnedPnpmInvocation(hostPnpm, actualVersion, expectedVersion, []);
   const pinnedPrefix = pinnedInvocation.args;
-  const bootstrap = spawnSyncImpl(pinnedInvocation.command, [...pinnedPrefix, "--version"], runOptions);
+  const bootstrapInvocation = resolveLocalCiPnpmInvocation(
+    pinnedInvocation.command,
+    [...pinnedPrefix, "--version"],
+    { env, platform },
+  );
+  const bootstrap = spawnSyncImpl(
+    bootstrapInvocation.command,
+    bootstrapInvocation.args,
+    runOptions,
+  );
   if (bootstrap.status !== 0 || bootstrap.stdout.trim() !== expectedVersion) {
     throw new Error(
       `local CI could not provision repository-pinned pnpm ${expectedVersion}: ` +
@@ -132,8 +181,11 @@ export function preparePinnedPnpmEnvironment({
     actualVersion,
     hostPnpm,
     env: {
-      ...env,
-      PATH: `${toolchainDir}${delimiter}${env.PATH || ""}`,
+      ...withCanonicalPath(
+        env,
+        `${toolchainDir}${delimiter}${environmentValue(env, "PATH")}`,
+        platform,
+      ),
       DPF_LOCAL_CI_PINNED_PNPM_VERSION: expectedVersion,
     },
   };

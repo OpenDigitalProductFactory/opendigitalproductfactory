@@ -41,6 +41,7 @@ const REQUIRED_IN_BUNDLE = Object.freeze([
   "scripts/safety/dpf-shell-guard.sh",
   "scripts/safety/dpf-shell-guard-fallback-patterns.json",
   "scripts/installer/lib/state.ps1",
+  "scripts/installer/lib/compose-chain.ps1",
   "scripts/bootstrap-organization-pki.ps1",
   // The install guides tell operators to run these by name, so a consumer install
   // that lacks them fails the documented uninstall with "file not found" — the

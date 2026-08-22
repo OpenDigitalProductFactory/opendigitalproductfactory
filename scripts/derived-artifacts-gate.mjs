@@ -31,6 +31,7 @@ import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { DERIVED_ARTIFACTS, affectedEntries } from "./lib/derived-artifacts-registry.mjs";
+import { resolveHostCommandInvocation } from "./lib/host-command-invocation.mjs";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -121,13 +122,28 @@ function binaryAvailable(name) {
   return candidates.some((p) => existsSync(p));
 }
 
+export function resolveDerivedArtifactInvocation(
+  argv,
+  { platform = process.platform, env = process.env } = {},
+) {
+  return resolveHostCommandInvocation(argv[0], argv.slice(1), { platform, env });
+}
+
+function execDerivedArtifactCommand(argv, stdio) {
+  const invocation = resolveDerivedArtifactInvocation(argv);
+  return execFileSync(invocation.command, invocation.args, {
+    cwd: REPO_ROOT,
+    stdio,
+  });
+}
+
 function runCommand(argv) {
-  execFileSync(argv[0], argv.slice(1), { cwd: REPO_ROOT, stdio: "inherit" });
+  execDerivedArtifactCommand(argv, "inherit");
 }
 
 function runCheckLive(entry) {
   try {
-    execFileSync(entry.check[0], entry.check.slice(1), { cwd: REPO_ROOT, stdio: "pipe" });
+    execDerivedArtifactCommand(entry.check, "pipe");
     return true;
   } catch {
     return false;

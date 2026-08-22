@@ -83,6 +83,14 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       // failure mode here is shell exit-status semantics, not source text.
       node("--test", "scripts/installer/lib/state-cleanup-temps.test.mjs"),
     ]),
+    guard("fresh-install-reliability", "Fresh Install Reliability", [
+      node(
+        "--test",
+        "scripts/installer-image-identity.test.mjs",
+        "scripts/installer/powershell-compose-chain.test.mjs",
+        "scripts/salvage-sweep.test.mjs",
+      ),
+    ]),
     guard("published-image-freshness", "Published Image Freshness", [
       // Decision logic only — the live registry check needs Docker and runs on a
       // schedule (.github/workflows/published-image-freshness.yml).

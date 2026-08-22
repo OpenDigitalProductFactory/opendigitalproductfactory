@@ -3,7 +3,10 @@ import { getErrorMessage } from "@/lib/shared/get-error-message";
 // Do NOT hand-roll a second one: only this function is modelled as a taint
 // barrier, so a local copy would leave js/log-injection unbroken.
 import { sanitizeForLog } from "@/lib/security/safe-log";
-import { assertLocalProviderCapacityAvailable } from "@/lib/routing/local-provider-capacity";
+import {
+  assertLocalProviderCapacityAvailable,
+  LocalProviderCapacityDeferredError,
+} from "@/lib/routing/local-provider-capacity";
 // apps/web/lib/embedding.ts
 // Generate text embeddings via local LLM inference (Docker Model Runner or compatible).
 // Uses OpenAI-compatible /v1/embeddings endpoint.
@@ -65,6 +68,36 @@ function getLlmBaseUrl(): string {
  * — memory features degrade silently, chat still works.
  */
 export async function generateEmbedding(text: string): Promise<number[] | null> {
+  const result = await generateEmbeddingDetailed(text);
+  return result.status === "ok" ? result.embedding : null;
+}
+
+/**
+ * Why a detailed variant exists (BI-339C441F root cause).
+ *
+ * generateEmbedding() collapses every unhappy path to null, and one of those
+ * paths is not a failure at all. Embeddings are produced by the LOCAL provider,
+ * so this function first calls assertLocalProviderCapacityAvailable(), which
+ * throws LocalProviderCapacityDeferredError whenever a local-integration-ci
+ * lease is active or queued. The catch turned that into null, callers turned
+ * null into an empty result, and the platform reported "nothing matched".
+ *
+ * The effect is broad and was mistaken for an outage: while ANY session holds
+ * or queues the single local-CI slot, every embedding consumer on the install
+ * degrades at once — knowledge search, wiki/principle similarity, document
+ * embeddings, and WWWD stance retrieval. The embedding backend is healthy the
+ * whole time.
+ *
+ * `deferred` is a retryable capacity state and must never be reported as
+ * "no results" or as a model failure. Callers that can wait should retry;
+ * callers that cannot must say which one they hit.
+ */
+export type EmbeddingResult =
+  | { status: "ok"; embedding: number[] }
+  | { status: "deferred"; reason: string }
+  | { status: "failed"; reason: string };
+
+export async function generateEmbeddingDetailed(text: string): Promise<EmbeddingResult> {
   const baseUrl = getLlmBaseUrl();
   // Full-length attempt first, then shorter slices ONLY if the backend rejects
   // for size. Ordinary text still embeds at full fidelity; dense text degrades
@@ -106,7 +139,7 @@ export async function generateEmbedding(text: string): Promise<number[] | null> 
         console.warn(
           `[embedding] LLM inference returned ${Number(res.status)}${body ? `: ${sanitizeForLog(body.slice(0, 200))}` : ""}`,
         );
-        return null;
+        return { status: "failed", reason: `the embedding backend returned HTTP ${Number(res.status)}` };
       }
 
       const data = (await res.json()) as {
@@ -115,7 +148,7 @@ export async function generateEmbedding(text: string): Promise<number[] | null> 
       const embedding = data.data?.[0]?.embedding;
       if (!embedding || !Array.isArray(embedding)) {
         console.warn("[embedding] No embedding in response");
-        return null;
+        return { status: "failed", reason: "the embedding backend returned no vector" };
       }
 
       if (attempt > 0) {
@@ -123,13 +156,19 @@ export async function generateEmbedding(text: string): Promise<number[] | null> 
           `[embedding] embedded a ${Number(truncated.length)}-char head after ${Number(attempt)} oversize retry/retries — text was denser than the char cap assumes`,
         );
       }
-      return embedding;
+      return { status: "ok", embedding };
     }
 
-    return null;
+    return { status: "failed", reason: "every input length was rejected as oversize" };
   } catch (e) {
+    // A capacity deferral is NOT a failure — reporting it as one is what made
+    // a busy host look like a broken embedding model.
+    if (e instanceof LocalProviderCapacityDeferredError) {
+      console.warn(`[embedding] deferred — ${e.reason}`);
+      return { status: "deferred", reason: e.reason };
+    }
     console.warn("[embedding] Failed:", getErrorMessage(e));
-    return null;
+    return { status: "failed", reason: getErrorMessage(e) };
   }
 }
 

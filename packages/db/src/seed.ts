@@ -93,7 +93,10 @@ import {
   localInputModalities,
   localOutputModalities,
 } from "./local-model-capabilities.js";
-import { ensureDefaultProviderConnection } from "./provider-connection.js";
+import {
+  activateProviderWithDefaultConnection,
+  ensureDefaultProviderConnection,
+} from "./provider-connection.js";
 import { seedIntegrationCoverage } from "../scripts/seed-integration-coverage.js";
 import { seedAbsorptionPosture } from "./seed-absorption-posture.js";
 import * as crypto from "crypto";
@@ -1696,12 +1699,9 @@ async function seedLocalModels(): Promise<void> {
     provider.status === "disabled" ||
     (provider.sensitivityClearance as string[]).length === 0
   ) {
-    await prisma.modelProvider.update({
-      where: { providerId: "local" },
-      data: {
-        status: "active",
-        sensitivityClearance: ["public", "internal", "confidential", "restricted"],
-      },
+    await activateProviderWithDefaultConnection(prisma, {
+      providerId: "local",
+      sensitivityClearance: ["public", "internal", "confidential", "restricted"],
     });
   }
 

@@ -29,7 +29,7 @@ async function signedInstallStateHandoff(statePath, dir) {
     DPF_SELF_UPGRADE_RUN_ID: envelope.runId,
     DPF_PROMOTER_DIGEST: envelope.promoterDigest,
   };
-  const verified = spawnSync(process.execPath, [join(root, "scripts", "lib", "transition-signing.mjs")], {
+  const verified = spawnSync(process.execPath, [join(root, "scripts", "promoter-migration-envelope.mjs")], {
     encoding: "utf8",
     env: { ...process.env, ...handoff, DPF_RUNTIME_TRANSITION_SECRET_FILE: secretPath, DPF_PROMOTER_STATE_DIR: resolve(statePath, "..") },
   });
@@ -62,7 +62,7 @@ test("the real install-state handoff verifier rejects every mutated binding", as
     await mkdir(stateDir);
     await writeFile(statePath, "signed-state\n");
     const handoff = await signedInstallStateHandoff(statePath, dir);
-    const verifier = join(root, "scripts", "lib", "transition-signing.mjs");
+    const verifier = join(root, "scripts", "promoter-migration-envelope.mjs");
     const validEnv = { ...process.env, ...handoff, DPF_RUNTIME_TRANSITION_SECRET_FILE: join(dir, "transition.secret"), DPF_PROMOTER_STATE_DIR: stateDir };
     const run = (overrides = {}) => spawnSync(process.execPath, [verifier], { encoding: "utf8", env: { ...validEnv, ...overrides } });
     assert.equal(run().status, 0);
@@ -98,6 +98,7 @@ test("consumer release assets are integrity-bound and execute the canonical adap
       "scripts/installer/install-state-lock-contract.json",
       "scripts/installer/native-edge-host.ps1",
       "scripts/installer/lib/state.ps1",
+      "scripts/installer/lib/compose-chain.ps1",
     ];
     const manifest = [];
     for (const relative of files) {

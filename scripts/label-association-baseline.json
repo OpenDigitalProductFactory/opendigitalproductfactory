@@ -91,7 +91,6 @@
     "apps/web/components/knowledge/KnowledgeArticleForm.tsx": 8,
     "apps/web/components/platform/AgentModelAssignmentTable.tsx": 2,
     "apps/web/components/platform/AgentModelRoutingCard.tsx": 4,
-    "apps/web/components/platform/ProviderDetailForm.tsx": 9,
     "apps/web/components/platform/ServiceActivationForm.tsx": 8,
     "apps/web/components/portfolio/architecture/BusinessCapabilityForms.tsx": 1,
     "apps/web/components/storefront-admin/CatalogBuilderPanel.tsx": 1,
