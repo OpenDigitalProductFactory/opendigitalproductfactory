@@ -13,7 +13,28 @@ export type LocalProviderCapacityStatus =
 type LeaseReader = () => Promise<Array<{
   environmentKey: string;
   status?: string;
+  claimKey?: string | null;
 }>>;
+
+/**
+ * Does this lease actually contend for local INFERENCE capacity?
+ *
+ * The local-integration-ci environment is shared by two very different
+ * consumers. The pre-PR CI gate runs tests and builds, and genuinely competes
+ * with the local model for the host. The contributor preview (:3001) only binds
+ * a port and a worktree — it runs no inference at all.
+ *
+ * Treating both alike meant a preview claim suspended every AI coworker on the
+ * install. Worse, a preview client that retries a refused claim enqueues a new
+ * row each time (BI-D933A328), so a permanently non-empty queue became a
+ * permanent outage of the platform's own AI: builds sat unable to advance while
+ * the owner-facing surface reported "Waiting for AI capacity".
+ *
+ * A port binding is not an inference workload, so it must not reserve the GPU.
+ */
+function contendsForInference(lease: { claimKey?: string | null }): boolean {
+  return !(lease.claimKey ?? "").startsWith("dev-portal:");
+}
 
 export class LocalProviderCapacityDeferredError extends Error {
   constructor(public readonly reason: LocalProviderCapacityDeferralReason) {
@@ -31,7 +52,9 @@ export async function inspectLocalProviderCapacity(input: {
   try {
     const reservations = await listCapacityLeases();
     if (reservations.some((lease) => (
-      lease.environmentKey === "local-integration-ci" && lease.status === "active"
+      lease.environmentKey === "local-integration-ci"
+      && lease.status === "active"
+      && contendsForInference(lease)
     ))) {
       return { available: false, reason: "local-ci-active-capacity-reservation" };
     }
@@ -39,7 +62,9 @@ export async function inspectLocalProviderCapacity(input: {
     // it precedence over *new* local inference reserves the next safe host
     // window without killing provider work that was already in flight.
     if (reservations.some((lease) => (
-      lease.environmentKey === "local-integration-ci" && lease.status === "queued"
+      lease.environmentKey === "local-integration-ci"
+      && lease.status === "queued"
+      && contendsForInference(lease)
     ))) {
       return { available: false, reason: "local-ci-queued-capacity-reservation" };
     }
