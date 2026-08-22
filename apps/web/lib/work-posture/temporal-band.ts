@@ -81,6 +81,16 @@ export interface TemporalBandInput {
 
 export interface TemporalBandResult {
   band: TemporalBand;
+  /**
+   * True when `now` falls inside a declared low-traffic trough. Reported
+   * SEPARATELY from `band` on purpose: closed-ness and cheapness are different
+   * questions, and an install whose troughs are the complement of its business
+   * hours (the common case — the derived troughs literally are the closed
+   * hours) would otherwise have every out-of-hours instant masked as
+   * low-traffic, so "the business is closed" would never damp immediacy.
+   * Found against live data 2026-08-22.
+   */
+  lowTraffic: boolean;
   /** True when the family's exemption suppressed an out-of-hours result. */
   dampingExempt: boolean;
   /** Stable machine-readable code, for posture adjustment provenance. */
@@ -197,8 +207,8 @@ export function isDampingExempt(activityFamily: string | null | undefined): bool
  *
  *   breach-imminent  at or past the due boundary
  *   pre-deadline     inside the obligation's warning window
- *   low-traffic      inside a declared trough
  *   out-of-hours     business closed (suppressed for exempt families)
+ *   low-traffic      inside a declared trough AND open
  *   in-hours         everything else, including "we don't know"
  *
  * Fail-open: a missing, malformed or unparseable schedule resolves `in-hours`,
@@ -206,6 +216,7 @@ export function isDampingExempt(activityFamily: string | null | undefined): bool
  */
 export function resolveTemporalBand(input: TemporalBandInput): TemporalBandResult {
   const exempt = isDampingExempt(input.activityFamily);
+  let lowTraffic = false;
 
   try {
     const { dueAt, now } = input;
@@ -214,6 +225,7 @@ export function resolveTemporalBand(input: TemporalBandInput): TemporalBandResul
       if (minutesUntilDue <= 0) {
         return {
           band: "breach-imminent",
+          lowTraffic,
           dampingExempt: exempt,
           reasonCode: "deadline_breached",
           reason: "The obligation is at or past its due time.",
@@ -223,6 +235,7 @@ export function resolveTemporalBand(input: TemporalBandInput): TemporalBandResul
       if (minutesUntilDue <= warning) {
         return {
           band: "pre-deadline",
+          lowTraffic,
           dampingExempt: exempt,
           reasonCode: "deadline_near",
           reason: "The obligation falls due inside the warning window.",
@@ -232,20 +245,14 @@ export function resolveTemporalBand(input: TemporalBandInput): TemporalBandResul
 
     const { dayOfWeek, minuteOfDay } = localWallClock(now, input.timezone);
 
-    const lowTraffic = input.lowTrafficWindows ?? [];
-    if (lowTraffic.length > 0 && inLowTrafficWindow(lowTraffic, dayOfWeek, minuteOfDay)) {
-      return {
-        band: "low-traffic",
-        dampingExempt: exempt,
-        reasonCode: "low_traffic_window",
-        reason: "Inside a declared low-traffic window.",
-      };
-    }
+    const troughs = input.lowTrafficWindows ?? [];
+    lowTraffic = troughs.length > 0 && inLowTrafficWindow(troughs, dayOfWeek, minuteOfDay);
 
     const schedule = input.schedule;
     if (!schedule) {
       return {
         band: "in-hours",
+        lowTraffic,
         dampingExempt: exempt,
         reasonCode: "no_schedule",
         reason: "No operating schedule is configured, so no timing adjustment applies.",
@@ -254,18 +261,29 @@ export function resolveTemporalBand(input: TemporalBandInput): TemporalBandResul
 
     const dayKey = DAY_KEYS[dayOfWeek];
     if (isOpenNow(dayKey ? schedule[dayKey] : undefined, minuteOfDay)) {
-      return {
-        band: "in-hours",
-        dampingExempt: exempt,
-        reasonCode: "within_operating_hours",
-        reason: "The business is open.",
-      };
+      // Open, but inside a declared trough: cheap without being closed.
+      return lowTraffic
+        ? {
+            band: "low-traffic",
+            lowTraffic,
+            dampingExempt: exempt,
+            reasonCode: "low_traffic_window",
+            reason: "Open, but inside a declared low-traffic window.",
+          }
+        : {
+            band: "in-hours",
+            lowTraffic,
+            dampingExempt: exempt,
+            reasonCode: "within_operating_hours",
+            reason: "The business is open.",
+          };
     }
 
     if (exempt) {
       // The business is closed, but harm accrues regardless — do not damp.
       return {
         band: "in-hours",
+        lowTraffic,
         dampingExempt: true,
         reasonCode: "damping_exempt",
         reason:
@@ -273,8 +291,11 @@ export function resolveTemporalBand(input: TemporalBandInput): TemporalBandResul
       };
     }
 
+    // Closed outranks cheap. `lowTraffic` still rides along, so a caller can
+    // take the cost opportunity without losing the immediacy answer.
     return {
       band: "out-of-hours",
+      lowTraffic,
       dampingExempt: false,
       reasonCode: "outside_operating_hours",
       reason: "The business is closed.",
@@ -283,6 +304,7 @@ export function resolveTemporalBand(input: TemporalBandInput): TemporalBandResul
     // Fail-open: a clock helper must never throw into a posture resolution.
     return {
       band: "in-hours",
+      lowTraffic,
       dampingExempt: exempt,
       reasonCode: "temporal_resolution_failed",
       reason: "The business clock could not be read, so no timing adjustment applies.",

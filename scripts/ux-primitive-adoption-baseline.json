@@ -982,7 +982,6 @@
     "apps/web/components/storefront-admin/ScheduleEditor.tsx": 1,
     "apps/web/components/storefront-admin/ServiceLinesPanel.tsx": 1,
     "apps/web/components/storefront-admin/SetupWizard.tsx": 2,
-    "apps/web/components/storefront-admin/StorefrontDashboard.tsx": 3,
     "apps/web/components/storefront-admin/StorefrontSetupPanel.tsx": 1,
     "apps/web/components/storefront-admin/TeamManager.tsx": 3,
     "apps/web/components/storefront-admin/content-editing-ui.tsx": 1,

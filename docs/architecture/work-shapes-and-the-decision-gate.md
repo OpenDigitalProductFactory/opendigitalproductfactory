@@ -184,6 +184,15 @@ Stated plainly so nobody plans against a capability that is not there:
 - **None of this is visible as a picture yet.** The room surface renders no graphic at
   all; the shape view that would draw these gates and their verdicts is `BI-C7E2E924`.
 
+**Shape now also sets posture** ⟦runtime: added 2026-08-22, `BI-4F468192`⟧. The same four
+axes feed the room's *posture* — how persistently the coworker follows up and how it trades
+cost against quality against time — through `resolveWorkroomPosture`
+(`apps/web/lib/work-management/room-posture.ts`), layered over the existing proactivity and
+Golden Triangle engines. `WorkroomView.posture` carries the result and the reason for every
+clamp. The load-bearing rule mirrors the two-level rule above: a derivation may TIGHTEN the
+action boundary and may never widen it, so shape can restrict autonomy but never grant it.
+Design: [Work Posture](../superpowers/specs/2026-08-22-workroom-work-posture-design.md).
+
 ## Related
 
 - [Workroom vocabulary boundary](workroom-vocabulary-boundary.md) — what the word means at each layer

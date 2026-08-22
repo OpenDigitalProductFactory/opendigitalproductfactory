@@ -23,6 +23,7 @@ import {
 import { WorkroomCycles } from "./WorkroomCycles";
 import { WorkroomShapeSection } from "./WorkroomShapeSection";
 import { WorkroomParticipants } from "./WorkroomParticipants";
+import { WorkroomPosture } from "./WorkroomPosture";
 
 type Props = {
   detail: WorkspaceWorkCaseDetailView;
@@ -115,6 +116,8 @@ function ContextPanels({ room }: { room: WorkroomView }) {
           </div>
         </details>
       </section>
+
+      <WorkroomPosture room={room} />
 
       <section aria-label="Context" className="rounded-xl border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)]">
         <details>

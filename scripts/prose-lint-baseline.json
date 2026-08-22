@@ -2287,14 +2287,6 @@
     "longSentences": 0,
     "textMass": 16
   },
-  "apps/web/app/(shell)/storefront/settings/business/page.tsx": {
-    "vocabulary": 0,
-    "retiredVocabulary": 0,
-    "genericLabels": 0,
-    "readability": 0,
-    "longSentences": 0,
-    "textMass": 2
-  },
   "apps/web/app/(shell)/storefront/settings/capabilities/page.tsx": {
     "vocabulary": 0,
     "retiredVocabulary": 0,
@@ -2493,7 +2485,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 7
+    "textMass": 3
   },
   "apps/web/app/(storefront)/s/[slug]/layout.tsx": {
     "vocabulary": 0,
@@ -2541,7 +2533,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 1,
-    "textMass": 45
+    "textMass": 38
   },
   "apps/web/app/(storefront)/s/[slug]/sign-in/page.tsx": {
     "vocabulary": 0,
@@ -2685,7 +2677,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 45
+    "textMass": 29
   },
   "apps/web/app/api/onboarding/business-document/route.ts": {
     "vocabulary": 0,
@@ -3837,7 +3829,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 510
+    "textMass": 365
   },
   "apps/web/components/admin/BusinessDocumentUpload.tsx": {
     "vocabulary": 0,
@@ -6989,7 +6981,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 125
+    "textMass": 114
   },
   "apps/web/components/ops/StandardChangeCatalog.tsx": {
     "vocabulary": 0,
@@ -7209,6 +7201,7 @@
   },
   "apps/web/components/platform/BandTelemetryPanel.tsx": {
     "vocabulary": 0,
+    "retiredVocabulary": 0,
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
@@ -8740,7 +8733,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 134
+    "textMass": 117
   },
   "apps/web/components/storefront-admin/ItemsManager.tsx": {
     "vocabulary": 0,
@@ -8764,7 +8757,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 46
+    "textMass": 6
   },
   "apps/web/components/storefront-admin/ProductSoldTracePanel.tsx": {
     "vocabulary": 0,
@@ -8820,7 +8813,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 39
+    "textMass": 12
   },
   "apps/web/components/storefront-admin/StorefrontInbox.tsx": {
     "vocabulary": 0,
@@ -8956,7 +8949,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 25
+    "textMass": 24
   },
   "apps/web/components/storefront/StorefrontUnavailable.tsx": {
     "vocabulary": 0,
@@ -9023,14 +9016,6 @@
     "textMass": 5
   },
   "apps/web/components/twin/CogBanner.tsx": {
-    "vocabulary": 0,
-    "retiredVocabulary": 0,
-    "genericLabels": 0,
-    "readability": 0,
-    "longSentences": 0,
-    "textMass": 2
-  },
-  "apps/web/components/twin/OutcomesStrip.tsx": {
     "vocabulary": 0,
     "retiredVocabulary": 0,
     "genericLabels": 0,
@@ -9244,7 +9229,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 76
+    "textMass": 47
   },
   "apps/web/components/wiki/CraftOverrideForm.tsx": {
     "vocabulary": 0,
@@ -9680,6 +9665,7 @@
   },
   "apps/web/components/workspace/workroom/ShapeViewToggle.tsx": {
     "vocabulary": 0,
+    "retiredVocabulary": 0,
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
@@ -9717,8 +9703,17 @@
     "longSentences": 0,
     "textMass": 31
   },
+  "apps/web/components/workspace/workroom/WorkroomPosture.tsx": {
+    "vocabulary": 0,
+    "retiredVocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 16
+  },
   "apps/web/components/workspace/workroom/WorkroomShape.tsx": {
     "vocabulary": 0,
+    "retiredVocabulary": 0,
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,

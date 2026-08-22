@@ -67,14 +67,36 @@ describe("resolveTemporalBand", () => {
     ).toBe("out-of-hours");
   });
 
-  it("resolves low-traffic inside a declared trough", () => {
+  it("resolves low-traffic when a trough falls inside opening hours", () => {
+    const result = resolveTemporalBand({
+      now: WED_1000,
+      schedule: NINE_TO_FIVE,
+      timezone: "UTC",
+      lowTrafficWindows: [{ dayOfWeek: 3, start: "09:30", end: "11:00" }],
+    });
+    expect(result.band).toBe("low-traffic");
+    expect(result.lowTraffic).toBe(true);
+  });
+
+  it("CLOSED outranks CHEAP, while still reporting the trough", () => {
+    // The defect this guards, found against live data 2026-08-22: this install's
+    // troughs are the exact complement of its business hours, so ranking
+    // low-traffic above out-of-hours meant "the business is closed" never damped
+    // immediacy anywhere. Closed is the immediacy answer; cheap rides alongside.
     const result = resolveTemporalBand({
       now: WED_2200,
       schedule: NINE_TO_FIVE,
       timezone: "UTC",
-      lowTrafficWindows: [{ dayOfWeek: 3, start: "21:00", end: "23:00" }],
+      lowTrafficWindows: [{ dayOfWeek: 3, start: "17:00", end: "23:59" }],
     });
-    expect(result.band).toBe("low-traffic");
+    expect(result.band).toBe("out-of-hours");
+    expect(result.lowTraffic).toBe(true);
+  });
+
+  it("reports lowTraffic false outside any trough", () => {
+    expect(
+      resolveTemporalBand({ now: WED_1000, schedule: NINE_TO_FIVE, timezone: "UTC" }).lowTraffic,
+    ).toBe(false);
   });
 
   it("resolves pre-deadline inside the warning window, beating the operating clock", () => {
@@ -119,10 +141,10 @@ describe("resolveTemporalBand", () => {
       resolveTemporalBand({ now: WED_1000, schedule: NINE_TO_FIVE, timezone: "UTC" }).band,
       resolveTemporalBand({ now: WED_2200, schedule: NINE_TO_FIVE, timezone: "UTC" }).band,
       resolveTemporalBand({
-        now: WED_2200,
+        now: WED_1000,
         schedule: NINE_TO_FIVE,
         timezone: "UTC",
-        lowTrafficWindows: [{ dayOfWeek: 3, start: "21:00", end: "23:00" }],
+        lowTrafficWindows: [{ dayOfWeek: 3, start: "09:30", end: "11:00" }],
       }).band,
       resolveTemporalBand({
         now: WED_1000,

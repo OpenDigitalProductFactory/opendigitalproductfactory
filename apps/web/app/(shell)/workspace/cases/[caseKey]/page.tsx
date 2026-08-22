@@ -6,6 +6,7 @@ import { auth } from "@/lib/auth";
 import { getGrantedCapabilities } from "@/lib/permissions";
 import { loadEffectiveAuthContext } from "@/lib/identity/load-effective-auth-context";
 import { loadPrismaWorkroomParticipants } from "@/lib/work-management/room-participation-prisma.server";
+import { loadWorkroomPostureContext } from "@/lib/work-management/room-posture.server";
 import { resolveWorkroomStructureForCase } from "@/lib/work-management/room-structure.server";
 import { loadWorkspaceWorkCaseDetail } from "@/lib/work-management/workspace-case-loader";
 
@@ -38,6 +39,7 @@ export default async function WorkspaceCaseDetailPage({ params }: Props) {
     },
     participantLoader: loadPrismaWorkroomParticipants,
     structureLoader: resolveWorkroomStructureForCase,
+    postureContextLoader: loadWorkroomPostureContext,
   });
   if (!detail) notFound();
 
