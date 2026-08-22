@@ -1,5 +1,6 @@
 "use client";
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 
 type DashboardConfig = {
   id: string;
@@ -20,6 +21,7 @@ type Counts = { inquiries: number; bookings: number; orders: number; donations: 
 export function StorefrontDashboard({ config, counts }: { config: DashboardConfig; counts: Counts }) {
   const [published, setPublished] = useState(config.isPublished);
   const [toggling, setToggling] = useState(false);
+  const router = useRouter();
   const portalLabel = config.portalLabel ?? "storefront";
   const stakeholderLabel = (config.stakeholderLabel ?? "customers").toLowerCase();
 
@@ -31,7 +33,11 @@ export function StorefrontDashboard({ config, counts }: { config: DashboardConfi
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id: config.id, isPublished: !published }),
       });
-      if (res.ok) setPublished((p) => !p);
+      if (res.ok) {
+        const nextPublished = !published;
+        setPublished(nextPublished);
+        if (nextPublished) router.refresh();
+      }
     } finally {
       setToggling(false);
     }
@@ -76,7 +82,7 @@ export function StorefrontDashboard({ config, counts }: { config: DashboardConfi
           <button
             onClick={togglePublish}
             disabled={toggling}
-            className="bg-[var(--dpf-accent)] text-white"
+            className="bg-[var(--dpf-accent)] text-[var(--dpf-on-accent)]"
             style={{
               padding: "8px 18px",
               borderRadius: 6,
@@ -103,7 +109,9 @@ export function StorefrontDashboard({ config, counts }: { config: DashboardConfi
           View Live ↗
         </a>
         <button onClick={togglePublish} disabled={toggling}
-          className={published ? "bg-[var(--dpf-error)] text-white" : "bg-[var(--dpf-accent)] text-white"}
+          className={published
+            ? "bg-[var(--dpf-error)] text-[var(--dpf-on-accent)]"
+            : "bg-[var(--dpf-accent)] text-[var(--dpf-on-accent)]"}
           style={{ padding: "6px 14px", borderRadius: 6, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 600 }}>
           {toggling ? "..." : published ? "Unpublish" : "Publish"}
         </button>
