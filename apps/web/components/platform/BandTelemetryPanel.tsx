@@ -41,12 +41,15 @@ export function BandTelemetryPanel({ telemetry }: { telemetry: BandTelemetry }) 
         </h2>
         <p className="text-xs text-[var(--dpf-muted)]">
           {telemetry.scored} of {telemetry.total} decisions carried a margin
+          {telemetry.classified < telemetry.total
+            ? `, ${telemetry.classified} a verdict`
+            : ""}
         </p>
       </div>
 
       <p className="mt-1 text-sm text-[var(--dpf-muted)]">
         {share == null
-          ? "Not enough decisions to read a distribution yet."
+          ? "No decision here carries a verdict yet, so the band cannot be measured. Decisions recorded before the three bands existed cannot be classified after the fact — this reads as unmeasured, never as zero."
           : `${Math.round(share * 100)}% landed in the uncertain band. Tuning is working when this falls because decisions separate — not because the bar moved.`}
       </p>
 

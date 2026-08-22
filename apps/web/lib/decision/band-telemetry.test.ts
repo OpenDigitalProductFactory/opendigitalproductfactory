@@ -98,3 +98,38 @@ describe("BI-3217C098 — narrowing the bar is not improvement", () => {
     expect(isBetterTuned(before, after).improved).toBe(false);
   });
 });
+
+describe("BI-3217C098 — an unrecorded verdict is unmeasured, never zero", () => {
+  it("reports null rather than 0% when no decision carries a verdict", () => {
+    // Every row written before the three bands existed looks like this.
+    // Dividing by all rows rendered that absence as a flattering 0% — the
+    // instrument committing the exact failure it exists to catch.
+    const t = computeBandTelemetry([
+      row({ verdict: null, margin: 0.5 }),
+      row({ verdict: null, margin: 0.1 }),
+    ]);
+    expect(t.classified).toBe(0);
+    expect(t.uncertainShare).toBeNull();
+  });
+
+  it("measures the share over classified rows only, ignoring unclassifiable history", () => {
+    const t = computeBandTelemetry([
+      row({ verdict: null, margin: 0.5 }),
+      row({ verdict: null, margin: 0.5 }),
+      row({ verdict: "uncertain", margin: 0.05 }),
+      row({ verdict: "proceed", margin: 0.6 }),
+    ]);
+    expect(t.classified).toBe(2);
+    // 1 of the 2 classified, not 1 of 4.
+    expect(t.uncertainShare).toBe(0.5);
+  });
+
+  it("still counts every row in the histogram — a margin is readable even when a verdict is not", () => {
+    const t = computeBandTelemetry([
+      row({ verdict: null, margin: 0.5 }),
+      row({ verdict: "proceed", margin: 0.6 }),
+    ]);
+    expect(t.scored).toBe(2);
+    expect(t.total).toBe(2);
+  });
+});
