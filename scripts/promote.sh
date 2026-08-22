@@ -74,6 +74,35 @@ if [[ $_readiness -eq 1 ]]; then
   elif ! _state_error="$(node "$_state_validator" "$_state_file" 2>&1 >/dev/null)"; then
     _readiness_fail install_state_invalid "$_state_error"
   fi
+  # Build-context completeness. The candidate promoter image is built FROM the
+  # host source tree, so every COPY source in Dockerfile.promoter must exist
+  # there. When one does not, BuildKit reports it as an opaque cache-key
+  # checksum failure naming a single path, hours after the useful moment:
+  #
+  #   promoter_candidate_build_failed: ... failed to compute cache key:
+  #   "/scripts/installer/install-release-assets.mjs": not found
+  #
+  # Observed on SUR-75DAF829 and SUR-0C221FD3 (2026-08-22). The file was present
+  # in git and absent from the host WORKING TREE, because the host install path
+  # was checked out to a feature branch 44 commits behind main that predated it.
+  # Nothing in that error says "your host tree is stale", which is the only
+  # thing the operator needed to know.
+  #
+  # This probe reads the COPY sources out of the candidate's own
+  # Dockerfile.promoter, so it stays correct as that file changes, and names
+  # EVERY missing path at once rather than the first one BuildKit trips over.
+  _promoter_dockerfile="${PROMOTE_SOURCE:-}/Dockerfile.promoter"
+  if [[ -n "${PROMOTE_SOURCE:-}" && -r "$_promoter_dockerfile" ]]; then
+    _missing_context=()
+    while IFS= read -r _copy_src; do
+      [[ -n "$_copy_src" ]] || continue
+      [[ -e "${PROMOTE_SOURCE}/${_copy_src}" ]] || _missing_context+=("$_copy_src")
+    done < <(awk '/^COPY /{ for (i = 2; i < NF; i++) if ($i !~ /^--/) print $i }' "$_promoter_dockerfile")
+    if [[ ${#_missing_context[@]} -gt 0 ]]; then
+      _readiness_fail promoter_build_context_incomplete \
+        "host source tree ${PROMOTE_SOURCE} is missing ${#_missing_context[@]} file(s) the promoter image COPYs: ${_missing_context[*]} - if these exist in git, the host install path is checked out to a stale branch or has an incomplete working tree"
+    fi
+  fi
   _profile_adapter="${PROMOTE_SOURCE:-}/scripts/lib/resolve-capability-compose-profiles.mjs"
   if [[ ! -f "$_profile_adapter" ]]; then
     _readiness_fail capability_projection_failed "candidate source has no profile adapter at $_profile_adapter"
