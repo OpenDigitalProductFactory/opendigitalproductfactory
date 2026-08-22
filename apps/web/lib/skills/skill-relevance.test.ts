@@ -99,8 +99,12 @@ describe("no coworker's agent-invocable set exceeds the cap (BI-8AD9D018)", () =
       return {
         file: filePath,
         roles: assignTo.replace(/"/g, "").split(",").map((role) => role.trim()).filter(Boolean),
-        // Absent means true: the loader's default is agent-invocable.
-        agentInvocable: !/^agentInvocable: false$/m.test(frontmatter),
+        // Mirrors normalizeSkillFrontmatterForSeed: an explicit agentInvocable
+        // wins; absent, the loader derives it from disable-model-invocation, so
+        // a file carrying only the Surface A field still resolves correctly.
+        agentInvocable: /^agentInvocable:\s*(true|false)$/m.test(frontmatter)
+          ? /^agentInvocable:\s*true$/m.test(frontmatter)
+          : !/^disable-model-invocation:\s*true$/m.test(frontmatter),
       };
     });
 
