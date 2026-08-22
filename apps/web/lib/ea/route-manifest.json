@@ -1,6 +1,6 @@
 {
   "generator": "apps/web/scripts/build-route-manifest.ts",
-  "routeCount": 625,
+  "routeCount": 626,
   "routes": [
     {
       "routePath": "/",
@@ -6360,6 +6360,18 @@
       ],
       "dynamicParams": [],
       "file": "apps/web/app/(shell)/platform/tools/integrations/whatsapp-business/page.tsx"
+    },
+    {
+      "routePath": "/platform/tools/integrations/wordpress",
+      "kind": "page",
+      "segments": [
+        "platform",
+        "tools",
+        "integrations",
+        "wordpress"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/platform/tools/integrations/wordpress/page.tsx"
     },
     {
       "routePath": "/platform/tools/inventory",

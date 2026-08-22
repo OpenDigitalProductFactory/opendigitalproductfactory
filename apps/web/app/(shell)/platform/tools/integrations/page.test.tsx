@@ -28,6 +28,18 @@ beforeEach(() => {
 });
 
 describe("EnterpriseIntegrationsPage", () => {
+  it("surfaces the self-hosted WordPress channel without claiming hosting", async () => {
+    mockCount.mockResolvedValueOnce(3).mockResolvedValueOnce(1);
+
+    const { default: EnterpriseIntegrationsPage } = await import("./page");
+    const html = renderToStaticMarkup(await EnterpriseIntegrationsPage());
+
+    expect(html).toContain("WordPress (self-hosted)");
+    expect(html).toContain("/platform/tools/integrations/wordpress");
+    expect(html).toContain("Customer-owned website");
+    expect(html).not.toContain("WordPress hosting included");
+  });
+
   it("surfaces the Facebook Pages card on the native integrations landing page", async () => {
     mockCount.mockResolvedValueOnce(3).mockResolvedValueOnce(1);
 

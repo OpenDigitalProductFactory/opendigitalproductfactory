@@ -28,6 +28,7 @@ export default async function EnterpriseIntegrationsPage() {
             "google",
             "facebook",
             "mailchimp",
+            "wordpress",
           ],
         },
         status: "connected",
@@ -45,6 +46,7 @@ export default async function EnterpriseIntegrationsPage() {
             "google",
             "facebook",
             "mailchimp",
+            "wordpress",
           ],
         },
         status: "error",
@@ -190,6 +192,16 @@ export default async function EnterpriseIntegrationsPage() {
           metrics={[
             { label: "Category", value: "Email Marketing" },
             { label: "Model", value: "Native" },
+          ]}
+        />
+        <PlatformSummaryCard
+          title="WordPress (self-hosted)"
+          description="Projects approved DPF content into a customer-owned WordPress site. WordPress retains hosting, themes, URLs, and public delivery; DPF does not provide a public site or CDN."
+          href="/platform/tools/integrations/wordpress"
+          accent="var(--dpf-accent)"
+          metrics={[
+            { label: "Category", value: "Customer-owned website" },
+            { label: "Model", value: "External channel" },
           ]}
         />
       </div>
