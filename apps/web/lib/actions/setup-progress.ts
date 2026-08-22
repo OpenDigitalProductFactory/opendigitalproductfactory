@@ -1,31 +1,12 @@
 "use server";
 
 import { prisma } from "@dpf/db";
-import { SETUP_STEPS, type SetupStep, type StepStatus, type SetupContext } from "./setup-constants";
-import { runSetupCompletionSeeds } from "@/lib/onboarding/setup-completion-seeds";
-
-/**
- * Runs once when initial setup completes: the shared seed chain in
- * setup-completion-seeds.ts (mission prompt, WWWD corpus, portfolio
- * decomposition BI-2D452667, market offer BI-4503E6B9, archetype supply,
- * risk posture + envelope). Fail-open and idempotent — onboarding completion
- * must never block on embedding/seeding errors, and the seeds are safe to
- * re-run. The boot backfill (backfill-org-wwwd-on-boot.ts) runs the same
- * chain for installs that completed setup before these seeders existed.
- */
-async function finalizeSetupCompletion(organizationId: string | null): Promise<void> {
-  try {
-    const orgId =
-      organizationId ??
-      (await prisma.organization.findFirst({ select: { id: true } }))?.id ??
-      null;
-    if (!orgId) return;
-
-    await runSetupCompletionSeeds(orgId);
-  } catch (err) {
-    console.warn("[setup] mission/WWWD seeding on completion failed (fail-open):", err);
-  }
-}
+import { SETUP_STEPS, type StepStatus, type SetupContext } from "./setup-constants";
+import {
+  projectSetupStepCompletion,
+  projectSetupStepResolution,
+} from "@/lib/onboarding/setup-progress-projection";
+import { finalizeSetupCompletion } from "@/lib/onboarding/setup-progress-service.server";
 
 const BOOTSTRAP_PLATFORM_ORG = {
   orgId: "ORG-PLATFORM",
@@ -90,9 +71,7 @@ export async function advanceStep(
     where: { id: progressId },
   });
 
-  const steps = progress.steps as Record<string, StepStatus>;
   const context = { ...(progress.context as SetupContext), ...contextUpdate };
-  const currentIdx = SETUP_STEPS.indexOf(progress.currentStep as SetupStep);
 
   // The storefront step is only "complete" once the storefront actually exists.
   // The setup overlay's Continue must not advance past it (to operating-hours /
@@ -101,28 +80,31 @@ export async function advanceStep(
   // embedded SetupWizard creates the config; until then, Continue is a no-op that
   // keeps the user on the storefront setup.
   if (progress.currentStep === "storefront") {
-    const storefront = await prisma.storefrontConfig.findFirst({ select: { id: true } });
+    const storefront = await prisma.storefrontConfig.findFirst({
+      where: progress.organizationId ? { organizationId: progress.organizationId } : undefined,
+      select: { id: true },
+    });
     if (!storefront) {
       return { ...progress, blocked: "storefront-required" as const };
     }
   }
 
-  steps[progress.currentStep] = "completed";
-
-  const nextIdx = currentIdx + 1;
-  const nextStep = nextIdx < SETUP_STEPS.length ? SETUP_STEPS[nextIdx] : null;
+  const projection = projectSetupStepCompletion({
+    completedStep: progress.currentStep as (typeof SETUP_STEPS)[number],
+    steps: progress.steps as Record<string, StepStatus>,
+  });
 
   const updated = await prisma.platformSetupProgress.update({
     where: { id: progressId },
     data: {
-      currentStep: nextStep ?? progress.currentStep,
-      steps,
+      currentStep: projection.currentStep,
+      steps: projection.steps,
       context,
-      ...(nextStep === null ? { completedAt: new Date() } : {}),
+      ...(projection.isComplete ? { completedAt: new Date() } : {}),
     },
   });
 
-  if (nextStep === null) await finalizeSetupCompletion(progress.organizationId);
+  if (projection.isComplete) await finalizeSetupCompletion(progress.organizationId);
   return updated;
 }
 
@@ -132,30 +114,31 @@ export async function skipStep(progressId: string) {
     where: { id: progressId },
   });
 
-  const steps = progress.steps as Record<string, StepStatus>;
   const context = progress.context as SetupContext;
-  const currentIdx = SETUP_STEPS.indexOf(progress.currentStep as SetupStep);
-
-  steps[progress.currentStep] = "skipped";
-  context.skippedSteps = [
-    ...(context.skippedSteps ?? []),
-    progress.currentStep,
-  ];
-
-  const nextIdx = currentIdx + 1;
-  const nextStep = nextIdx < SETUP_STEPS.length ? SETUP_STEPS[nextIdx] : null;
+  const projection = projectSetupStepResolution({
+    resolvedStep: progress.currentStep as (typeof SETUP_STEPS)[number],
+    resolution: "skipped",
+    steps: progress.steps as Record<string, StepStatus>,
+  });
+  const updatedContext = {
+    ...context,
+    skippedSteps: [
+      ...(context.skippedSteps ?? []),
+      progress.currentStep,
+    ],
+  };
 
   const updated = await prisma.platformSetupProgress.update({
     where: { id: progressId },
     data: {
-      currentStep: nextStep ?? progress.currentStep,
-      steps,
-      context,
-      ...(nextStep === null ? { completedAt: new Date() } : {}),
+      currentStep: projection.currentStep,
+      steps: projection.steps,
+      context: updatedContext,
+      ...(projection.isComplete ? { completedAt: new Date() } : {}),
     },
   });
 
-  if (nextStep === null) await finalizeSetupCompletion(progress.organizationId);
+  if (projection.isComplete) await finalizeSetupCompletion(progress.organizationId);
   return updated;
 }
 
