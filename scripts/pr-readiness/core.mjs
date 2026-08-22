@@ -160,9 +160,12 @@ export function evaluateReadiness({ repo, gateResults = [], prBody = "", gateCon
       blockers.push("No diff against current origin/main; there is no PR payload to validate.");
     }
 
-    const unsigned = (repo.commits ?? []).filter((commit) => !isSignedOff(commit.body ?? ""));
+    const unsigned = (repo.commits ?? []).filter((commit) => !isSignedOff(
+      commit.body ?? "",
+      { authorName: commit.authorName, authorEmail: commit.authorEmail },
+    ));
     for (const commit of unsigned) {
-      blockers.push(`Commit ${commit.sha.slice(0, 12)} (${commit.subject}) is missing DCO sign-off.`);
+      blockers.push(`Commit ${commit.sha.slice(0, 12)} (${commit.subject}) is missing its author-matching DCO sign-off.`);
     }
   }
 

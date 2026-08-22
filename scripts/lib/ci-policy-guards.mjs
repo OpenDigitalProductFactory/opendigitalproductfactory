@@ -484,11 +484,8 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       node("scripts/check-design-grounding-decision.mjs"),
     ]),
     guard("decision-baseline", "Decision Baseline", [
-      git("config", "user.email", "dpf-ci@users.noreply.github.com"),
-      git("config", "user.name", "dpf-ci"),
       git("fetch", "--no-tags", "--quiet", "origin", "main"),
-      git("merge", "--no-edit", "origin/main"),
-      node("scripts/check-golden-decisions.mjs"),
+      node("scripts/check-golden-decisions.mjs", "--merge-with", "origin/main"),
       node("--test", "scripts/check-golden-decisions.test.mjs"),
     ]),
   ]),

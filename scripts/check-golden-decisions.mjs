@@ -23,6 +23,7 @@
 // both engines (this scorer + the canonical vitest test) run in CI against the same
 // corpus, so any behavioral divergence surfaces as one going red.
 
+import { execFileSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -123,14 +124,64 @@ function professionPrincipleFiles(dir) {
   return out;
 }
 
-export function loadCommandments(dir = PRINCIPLES_DIR, professionsDir = PROFESSIONS_DIR) {
-  return [...kernelPrincipleFiles(dir), ...professionPrincipleFiles(professionsDir)]
-    .map(({ path, slug }) => parsePrinciple(readFileSync(path, "utf8"), slug))
+function parseCommandmentFiles(files) {
+  return files
+    .map(({ raw, slug }) => parsePrinciple(raw, slug))
     .filter((p) => p.pageKind === "principle" && (!p.status || p.status === "published"))
     .filter((p) => p.tier === "commandment")
     .filter((p) => !p.appliesTo?.length || p.appliesTo.includes(POPULATION))
     .map((p) => ({ id: p.slug, weight: typeof p.weight === "number" ? p.weight : TIER_DEFAULT_WEIGHT.commandment, vec: p.vec ?? {} }))
     .sort((a, b) => a.id.localeCompare(b.id));
+}
+
+export function loadCommandments(dir = PRINCIPLES_DIR, professionsDir = PROFESSIONS_DIR) {
+  return parseCommandmentFiles(
+    [...kernelPrincipleFiles(dir), ...professionPrincipleFiles(professionsDir)]
+      .map(({ path, slug }) => ({ raw: readFileSync(path, "utf8"), slug })),
+  );
+}
+
+function defaultGit(args) {
+  return execFileSync("git", args, {
+    cwd: join(HERE, ".."),
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"],
+    maxBuffer: 32 * 1024 * 1024,
+  });
+}
+
+/**
+ * Build Git's synthetic merge tree for HEAD + ref. `git merge-tree --write-tree`
+ * writes only an unreachable tree object: it never checks out files, changes
+ * identity, updates refs, or creates a commit in the caller's worktree.
+ */
+export function resolveMergeTree(ref, { git = defaultGit } = {}) {
+  const tree = String(git(["merge-tree", "--write-tree", ref, "HEAD"]) ?? "").trim();
+  if (!/^[0-9a-f]{40,64}$/i.test(tree)) {
+    throw new Error(`git merge-tree did not return a tree object for ${ref}`);
+  }
+  return tree;
+}
+
+/** Read the decision corpus straight from a Git tree without materializing it. */
+export function loadCommandmentsFromGitTree(tree, { git = defaultGit } = {}) {
+  const prefix = "docs/";
+  const paths = String(git(["ls-tree", "-r", "--name-only", tree, "--", prefix]) ?? "")
+    .split(/\r?\n/)
+    .map((path) => path.trim())
+    .filter((path) =>
+      path.startsWith("docs/founder-kernel/wiki/principles/") && path.endsWith(".md")
+      || /^docs\/professions\/[^/]+\/wiki\/[^/]+\.md$/.test(path),
+    );
+
+  return parseCommandmentFiles(paths.map((path) => {
+    const kernelPrefix = "docs/founder-kernel/wiki/principles/";
+    const professionMatch = path.match(/^docs\/professions\/([^/]+)\/wiki\/(.+)\.md$/);
+    const slug = path.startsWith(kernelPrefix)
+      ? path.slice(kernelPrefix.length, -3)
+      : `professions/${professionMatch[1]}/${professionMatch[2]}`;
+    return { slug, raw: String(git(["show", `${tree}:${path}`]) ?? "") };
+  }));
 }
 
 // ─── Scoring (mirrors option-scoring.ts) ─────────────────────────────────────
@@ -145,24 +196,32 @@ function composite(features, commandments) {
   return commandments.reduce((s, p) => s + p.weight * alignment(features, p.vec), 0);
 }
 
-export function runCheck(dir = PRINCIPLES_DIR) {
-  const commandments = loadCommandments(dir);
+export function runCheck(dir = PRINCIPLES_DIR, { commandments } = {}) {
+  const resolvedCommandments = commandments ?? loadCommandments(dir);
   const results = SCENARIOS.map((s) => {
     const scored = Object.entries(s.options)
-      .map(([id, f]) => [id, composite(f, commandments)])
+      .map(([id, f]) => [id, composite(f, resolvedCommandments)])
       .sort((a, b) => b[1] - a[1]);
     const margin = scored[0][1] - scored[1][1];
     const winnerOk = scored[0][0] === s.expectedWinner;
     const marginOk = margin >= s.marginFloor;
     return { id: s.id, winner: scored[0][0], expectedWinner: s.expectedWinner, margin, marginFloor: s.marginFloor, winnerOk, marginOk, ok: winnerOk && marginOk };
   });
-  return { commandmentCount: commandments.length, results, ok: results.every((r) => r.ok) };
+  return { commandmentCount: resolvedCommandments.length, results, ok: results.every((r) => r.ok) };
 }
 
 // ─── CLI ─────────────────────────────────────────────────────────────────────
 const invokedDirectly = process.argv[1] && process.argv[1].replace(/\\/g, "/").endsWith("check-golden-decisions.mjs");
 if (invokedDirectly) {
-  const { commandmentCount, results, ok } = runCheck();
+  const mergeWithIndex = process.argv.indexOf("--merge-with");
+  const mergeWith = mergeWithIndex >= 0 ? process.argv[mergeWithIndex + 1] : null;
+  if (mergeWithIndex >= 0 && !mergeWith) {
+    throw new Error("--merge-with requires a Git ref");
+  }
+  const commandments = mergeWith
+    ? loadCommandmentsFromGitTree(resolveMergeTree(mergeWith))
+    : undefined;
+  const { commandmentCount, results, ok } = runCheck(PRINCIPLES_DIR, { commandments });
   console.log(`[golden-decisions] scored ${results.length} canonical decisions against ${commandmentCount} commandments`);
   for (const r of results) {
     const status = r.ok ? "OK" : "FAIL";

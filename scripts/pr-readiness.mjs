@@ -64,14 +64,20 @@ function usage() {
 }
 
 function readCommits() {
-  const raw = git(["log", "origin/main..HEAD", "--format=%H%x1f%s%x1f%B%x1e"], { allowFail: true });
+  const raw = git(["log", "origin/main..HEAD", "--format=%H%x1f%s%x1f%an%x1f%ae%x1f%B%x1e"], { allowFail: true });
   return raw
     .split("\x1e")
     .map((entry) => entry.trim())
     .filter(Boolean)
     .map((entry) => {
-      const [sha, subject, ...bodyParts] = entry.split("\x1f");
-      return { sha: sha ?? "", subject: subject ?? "", body: bodyParts.join("\x1f") };
+      const [sha, subject, authorName, authorEmail, ...bodyParts] = entry.split("\x1f");
+      return {
+        sha: sha ?? "",
+        subject: subject ?? "",
+        authorName: authorName ?? "",
+        authorEmail: authorEmail ?? "",
+        body: bodyParts.join("\x1f"),
+      };
     });
 }
 

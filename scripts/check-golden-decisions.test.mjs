@@ -13,7 +13,12 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { SCENARIOS, runCheck } from "./check-golden-decisions.mjs";
+import {
+  SCENARIOS,
+  loadCommandmentsFromGitTree,
+  resolveMergeTree,
+  runCheck,
+} from "./check-golden-decisions.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const CANON = readFileSync(
@@ -56,4 +61,36 @@ test("guard passes on the real principle corpus", () => {
     );
   }
   assert.ok(ok);
+});
+
+test("merge-state corpus uses a synthetic tree and never a checkout or merge commit", () => {
+  const calls = [];
+  const git = (args) => {
+    calls.push(args);
+    if (args[0] === "merge-tree") return "a".repeat(40) + "\n";
+    if (args[0] === "ls-tree") {
+      return [
+        "docs/founder-kernel/wiki/principles/example.md",
+        "docs/professions/software-engineer/wiki/example.md",
+        "apps/web/ignored.ts",
+      ].join("\n");
+    }
+    if (args[0] === "show") {
+      return [
+        "---",
+        "pageKind: principle",
+        "status: published",
+        "principleTier: commandment",
+        "principleDimensionVector: {\"governance_compliance\":1}",
+        "---",
+      ].join("\n");
+    }
+    throw new Error(`unexpected git ${args.join(" ")}`);
+  };
+
+  const tree = resolveMergeTree("origin/main", { git });
+  const commandments = loadCommandmentsFromGitTree(tree, { git });
+  assert.equal(commandments.length, 2);
+  assert.deepEqual(calls[0], ["merge-tree", "--write-tree", "origin/main", "HEAD"]);
+  assert.equal(calls.some((args) => ["checkout", "switch", "merge", "commit", "config"].includes(args[0])), false);
 });

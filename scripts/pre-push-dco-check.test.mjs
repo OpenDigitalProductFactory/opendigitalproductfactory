@@ -35,8 +35,8 @@ function fakeGit(handler) {
   };
 }
 
-function logRecord({ sha, subject, body }) {
-  return `${sha}${US}${subject}${US}${body}${RS}`;
+function logRecord({ sha, subject, body, authorName = "A", authorEmail = "a@b.co" }) {
+  return `${sha}${US}${subject}${US}${authorName}${US}${authorEmail}${US}${body}${RS}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -44,11 +44,33 @@ function logRecord({ sha, subject, body }) {
 // ---------------------------------------------------------------------------
 
 test("isSignedOff: matches a trailer line with a value", () => {
-  assert.equal(isSignedOff("feat: x\n\nSigned-off-by: A B <a@b.co>"), true);
+  assert.equal(
+    isSignedOff("feat: x\n\nSigned-off-by: A B <a@b.co>", {
+      authorName: "A B",
+      authorEmail: "a@b.co",
+    }),
+    true,
+  );
+});
+
+test("isSignedOff: rejects a trailer belonging to a different identity", () => {
+  assert.equal(
+    isSignedOff("feat: x\n\nSigned-off-by: Bot User <bot@example.com>", {
+      authorName: "A B",
+      authorEmail: "a@b.co",
+    }),
+    false,
+  );
 });
 
 test("isSignedOff: case-insensitive and mid-message", () => {
-  assert.equal(isSignedOff("wip\n\nsigned-off-by: A B <a@b.co>\n"), true);
+  assert.equal(
+    isSignedOff("wip\n\nsigned-off-by: A B <a@b.co>\n", {
+      authorName: "A B",
+      authorEmail: "a@b.co",
+    }),
+    true,
+  );
 });
 
 test("isSignedOff: missing trailer is unsigned", () => {
@@ -86,6 +108,22 @@ test("findUnsignedCommits: returns only unsigned commits, newest first", () => {
   assert.equal(unsigned.length, 1);
   assert.equal(unsigned[0].sha, "bbb");
   assert.equal(unsigned[0].subject, "unsigned merge");
+});
+
+test("findUnsignedCommits: rejects a present trailer that does not match %an <%ae>", () => {
+  const git = fakeGit(() => ({
+    stdout: logRecord({
+      sha: "ccc",
+      subject: "wrong signer",
+      authorName: "Human Author",
+      authorEmail: "human@example.com",
+      body: "Signed-off-by: Automation Bot <bot@example.com>",
+    }),
+  }));
+  const unsigned = findUnsignedCommits("origin/main..HEAD", { git });
+  assert.equal(unsigned.length, 1);
+  assert.equal(unsigned[0].authorName, "Human Author");
+  assert.equal(unsigned[0].authorEmail, "human@example.com");
 });
 
 test("findUnsignedCommits: empty range yields no commits", () => {
@@ -149,7 +187,7 @@ test("parseArgs: supports spaced and = forms", () => {
 test("evaluateDcoPush: code 0 when all commits signed", () => {
   const git = fakeGit({
     "rev-parse --verify --quiet origin/main^{commit}": { status: 0 },
-    "log --pretty=format:%H\x1f%s\x1f%b\x1e origin/main..HEAD": {
+    "log --pretty=format:%H\x1f%s\x1f%an\x1f%ae\x1f%b\x1e origin/main..HEAD": {
       stdout: logRecord({ sha: "aaa", subject: "signed", body: "Signed-off-by: A <a@b.co>" }),
     },
   });
@@ -161,7 +199,7 @@ test("evaluateDcoPush: code 0 when all commits signed", () => {
 test("evaluateDcoPush: code 1 lists unsigned commits", () => {
   const git = fakeGit({
     "rev-parse --verify --quiet origin/main^{commit}": { status: 0 },
-    "log --pretty=format:%H\x1f%s\x1f%b\x1e origin/main..HEAD": {
+    "log --pretty=format:%H\x1f%s\x1f%an\x1f%ae\x1f%b\x1e origin/main..HEAD": {
       stdout: logRecord({ sha: "deadbeef", subject: "unsigned", body: "no trailer" }),
     },
   });
@@ -183,7 +221,7 @@ test("evaluateDcoPush: code 2 when base ref unresolved and no explicit range", (
 test("evaluateDcoPush: DPF_PREPUSH_BASE_REF overrides default base", () => {
   const git = fakeGit({
     "rev-parse --verify --quiet accepted-base^{commit}": { status: 0 },
-    "log --pretty=format:%H\x1f%s\x1f%b\x1e accepted-base..HEAD": { stdout: "" },
+    "log --pretty=format:%H\x1f%s\x1f%an\x1f%ae\x1f%b\x1e accepted-base..HEAD": { stdout: "" },
   });
   const v = evaluateDcoPush({ argv: [], env: { DPF_PREPUSH_BASE_REF: "accepted-base" }, git });
   assert.equal(v.code, 0);
