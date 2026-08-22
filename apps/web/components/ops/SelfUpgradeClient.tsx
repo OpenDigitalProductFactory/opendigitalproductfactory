@@ -809,7 +809,7 @@ export default function SelfUpgradeClient({
         </div>
       )}
 
-      <UpgradeImpactPanel enabled={enabled} initialSummary={initialImpactSummary} />
+      <UpgradeImpactPanel enabled={enabled && !isFresh && Boolean(targetSha)} initialSummary={initialImpactSummary} />
 
       {enabled && !latestRun && (
         <div className="p-3 rounded-lg bg-[var(--dpf-surface-1)] border border-[var(--dpf-border)] text-xs text-[var(--dpf-muted)]">

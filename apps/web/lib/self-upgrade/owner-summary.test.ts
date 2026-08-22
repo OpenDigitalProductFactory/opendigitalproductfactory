@@ -82,6 +82,33 @@ describe("buildOwnerReleaseSummary", () => {
     expect(s.recommendedAction.label).toBe("No action needed");
   });
 
+  it("does not surface a stale no-target skip after release discovery proves the install is current", () => {
+    const sha = "f".repeat(40);
+    const s = buildOwnerReleaseSummary(
+      baseInput({
+        support: {
+          supported: true,
+          targetKind: "release-artifact",
+          reason: "enabled",
+          message: null,
+        },
+        isFresh: true,
+        targetSha: sha,
+        deployedSha: sha,
+        latestRun: {
+          status: "skipped",
+          reason: "no-target",
+          targetSha: null,
+        },
+      }),
+      NO_LOCAL_CHANGES,
+    );
+
+    expect(s.state).toBe("up-to-date");
+    expect(s.recommendedAction.detail).toBe("You're running the latest version. Nothing to install.");
+    expect(allCopy(s)).not.toContain("No target build could be resolved");
+  });
+
   it("reports update-available with a consequence/reversibility risk notice", () => {
     const s = buildOwnerReleaseSummary(
       baseInput({ isFresh: false, targetSha: "f".repeat(40) }),

@@ -28,12 +28,23 @@ function releaseMode(value: unknown): "consumer" | "customer" | null {
   return value === "consumer" || value === "customer" ? value : null;
 }
 
+function releaseComposeFile(value: string): string | null {
+  const file = value.trim().replaceAll("\\", "/").split("/").filter(Boolean).at(-1) ?? "";
+  return /^docker-compose(?:\.[A-Za-z0-9-]+)?\.ya?ml$/.test(file) ? file : null;
+}
+
 function composeFiles(value: unknown, fallback?: string): string[] {
   const recorded = Array.isArray(value)
-    ? value.filter((entry): entry is string => typeof entry === "string" && Boolean(entry.trim())).map((entry) => entry.trim())
+    ? value
+        .filter((entry): entry is string => typeof entry === "string")
+        .map(releaseComposeFile)
+        .filter((entry): entry is string => Boolean(entry))
     : [];
   if (recorded.length > 0) return recorded;
-  return fallback?.split(/\s+/).filter(Boolean) ?? [];
+  return fallback
+    ?.split(/\s+/)
+    .map(releaseComposeFile)
+    .filter((entry): entry is string => Boolean(entry)) ?? [];
 }
 
 /**

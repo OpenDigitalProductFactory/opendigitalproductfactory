@@ -58,6 +58,27 @@ describe("consumer release target", () => {
     expect(context?.composeFiles).toEqual(["docker-compose.yml", "docker-compose.release.yml"]);
   });
 
+  it("projects host-absolute compose paths onto the candidate release asset root", () => {
+    const context = parseReleaseInstallContext({
+      state: {
+        installMode: "consumer",
+        imageTag: "v2026.08.22",
+        installPath: "D:\\DPF",
+        composeFiles: [
+          "D:\\DPF\\docker-compose.yml",
+          "D:\\DPF\\docker-compose.release.yml",
+        ],
+      },
+      markerMode: null,
+      env: { GHCR_OWNER: "opendigitalproductfactory" },
+    });
+
+    expect(context?.composeFiles).toEqual([
+      "docker-compose.yml",
+      "docker-compose.release.yml",
+    ]);
+  });
+
   it("keeps contributor and explicit local installs on the source strategy", () => {
     expect(resolveUpgradeStrategy("upstream", null)).toBe("source");
     expect(resolveUpgradeStrategy("local", {

@@ -106,6 +106,25 @@ export function findComposeEnvViolations(rel, composeText, declaredKeys) {
   return out;
 }
 
+/**
+ * Release-image interpolation happens in the host Compose process, but the
+ * self-upgrade resolver runs inside portal. Keep that release identity on both
+ * sides of the container boundary or a consumer install is misclassified as a
+ * source checkout and falls back to Git.
+ */
+export function findReleaseRuntimeContextViolations(composeText) {
+  const portal = (composeText ?? "").match(
+    /^  portal:\r?\n([\s\S]*?)(?=^  [a-zA-Z0-9_-]+:\r?$)/m,
+  )?.[1] ?? "";
+  return /^      GHCR_OWNER: \$\{GHCR_OWNER:-opendigitalproductfactory\}$/m.test(portal)
+    ? []
+    : [{
+        where: "docker-compose.yml:portal.environment",
+        message:
+          "portal does not receive GHCR_OWNER, so a consumer release install cannot resolve its immutable self-upgrade target and falls back to Git",
+      }];
+}
+
 function main() {
   const root = join(dirname(fileURLToPath(import.meta.url)), "..");
   const envExample = join(root, ".env.example");
@@ -118,6 +137,9 @@ function main() {
     const file = join(root, rel);
     if (!existsSync(file)) continue;
     violations.push(...findComposeEnvViolations(rel, readFileSync(file, "utf8"), declared));
+    if (rel === "docker-compose.yml") {
+      violations.push(...findReleaseRuntimeContextViolations(readFileSync(file, "utf8")));
+    }
   }
 
   if (violations.length > 0) {

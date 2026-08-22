@@ -196,6 +196,10 @@ services:
       # into the portal so sourceless installs remain classifiable even when a
       # legacy installer did not write a host .install-mode marker.
       DPF_IMAGE_TAG: ${DPF_IMAGE_TAG:-}
+      # Keep the registry namespace visible to the runtime as well as Compose.
+      # Consumer self-upgrade needs this identity to resolve and launch the
+      # immutable promoter image instead of falling back to the Git path.
+      GHCR_OWNER: ${GHCR_OWNER:-opendigitalproductfactory}
       DPF_ENVIRONMENT: production
       DPF_HOST_INSTALL_PATH: ${DPF_HOST_INSTALL_PATH:-}
       DPF_HOST_PLATFORM: ${DPF_HOST_PLATFORM:-}
