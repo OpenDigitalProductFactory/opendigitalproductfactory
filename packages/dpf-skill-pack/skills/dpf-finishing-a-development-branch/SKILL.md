@@ -9,7 +9,7 @@ allowed-tools: Bash(git *) Bash(gh *) Grep mcp__dpf__review_semantic_change
 
 # DPF coworker fields (Surface B — in-portal seed loader)
 category: build
-assignTo: ["*"]
+assignTo: ["build-specialist", "platform-engineer", "external-coding-agent", "software-engineer"]
 capability: null
 taskType: workflow
 triggerPattern: "finish (the )?branch|wrap up|integration shape|ready to merge|split (this )?into PRs|done with this work|how should I land"
