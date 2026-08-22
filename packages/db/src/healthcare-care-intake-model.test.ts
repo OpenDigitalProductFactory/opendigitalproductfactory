@@ -23,23 +23,35 @@ describe("healthcare care intake Prisma substrate", () => {
       schema.indexOf("model CareIntakeAccessGrant {"),
       schema.indexOf("model CareConsentAttestation {"),
     );
+    const statusEvent = schema.slice(
+      schema.indexOf("model CareIntakeStatusEvent {"),
+    );
     const consent = schema.slice(
       schema.indexOf("model CareConsentAttestation {"),
       schema.indexOf("model CareCoverageEvidence {"),
     );
 
-    expect(packet).toContain("subjectType");
-    expect(packet).toContain("subjectId");
+    expect(packet).toContain("subjectKindSlug");
+    expect(packet).toContain("subjectRef");
     expect(packet).toMatch(/patientProfileId\s+String\?/);
     expect(packet).toContain("@@unique([id, organizationId])");
-    expect(packet).toContain("@@index([organizationId, subjectType, subjectId, status])");
+    expect(packet).toContain(
+      '@@index([organizationId, subjectKindSlug, subjectRef, status], map: "CareIntakePacket_organizationId_subjectKindSlug_subjectRef_idx")',
+    );
     expect(response).toMatch(/patientProfileId\s+String\?/);
     expect(response).toContain(
       "@relation(fields: [packetId, organizationId], references: [id, organizationId]",
     );
+    expect(response).toContain("@@index([supersedesResponseId, organizationId])");
     expect(grant).toMatch(/patientProfileId\s+String\?/);
     expect(grant).toContain(
       "@relation(fields: [packetId, organizationId], references: [id, organizationId]",
+    );
+    expect(grant).toContain(
+      "@relation(fields: [patientProfileId, organizationId], references: [id, organizationId]",
+    );
+    expect(statusEvent).toContain(
+      "@relation(fields: [patientProfileId, organizationId], references: [id, organizationId]",
     );
     expect(consent).toContain(
       "@relation(fields: [packetId, organizationId, patientProfileId]",

@@ -1,9 +1,9 @@
-const SUBJECT_TYPE_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
-const SUBJECT_TYPE_MAX_LENGTH = 63;
+const SUBJECT_KIND_SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+const SUBJECT_KIND_SLUG_MAX_LENGTH = 63;
 
 export type SubjectReference = {
-  subjectType: string;
-  subjectId: string;
+  subjectKindSlug: string;
+  subjectRef: string;
 };
 
 export function readSubjectReference(input: unknown): SubjectReference | null {
@@ -11,24 +11,24 @@ export function readSubjectReference(input: unknown): SubjectReference | null {
     return null;
   }
 
-  const { subjectType, subjectId } = input as Record<string, unknown>;
+  const { subjectKindSlug, subjectRef } = input as Record<string, unknown>;
   if (
-    typeof subjectType !== "string" ||
-    subjectType.length > SUBJECT_TYPE_MAX_LENGTH ||
-    !SUBJECT_TYPE_PATTERN.test(subjectType) ||
-    typeof subjectId !== "string" ||
-    subjectId.trim().length === 0
+    typeof subjectKindSlug !== "string" ||
+    subjectKindSlug.length > SUBJECT_KIND_SLUG_MAX_LENGTH ||
+    !SUBJECT_KIND_SLUG_PATTERN.test(subjectKindSlug) ||
+    typeof subjectRef !== "string" ||
+    subjectRef.trim().length === 0
   ) {
     return null;
   }
 
-  return { subjectType, subjectId: subjectId.trim() };
+  return { subjectKindSlug, subjectRef: subjectRef.trim() };
 }
 
 export function patientSubjectReference(patientProfileId: string): SubjectReference {
   const reference = readSubjectReference({
-    subjectType: "patient-profile",
-    subjectId: patientProfileId,
+    subjectKindSlug: "patient-profile",
+    subjectRef: patientProfileId,
   });
 
   if (!reference) {

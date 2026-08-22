@@ -38,9 +38,11 @@ model PatientProfile {
   careAppointments           CareAppointment[]
   careIntakePackets          CareIntakePacket[]
   careIntakeResponses        CareIntakeResponse[]
+  careIntakeAccessGrants     CareIntakeAccessGrant[]
   careConsentAttestations    CareConsentAttestation[]
   careCoverageEvidence       CareCoverageEvidence[]
   careIntakeExceptions       CareIntakeException[]
+  careIntakeStatusEvents     CareIntakeStatusEvent[]
 
   @@unique([organizationId, principalId])
   @@unique([id, organizationId])
@@ -246,8 +248,8 @@ model CareAppointment {
   appointmentId                   String                       @unique
   organizationId                  String
   storefrontBookingId             String?                      @unique
-  subjectType                     String
-  subjectId                       String
+  subjectKindSlug                 String
+  subjectRef                      String
   patientProfileId                String?
   visitTypeId                     String?
   locationId                      String?
@@ -289,7 +291,7 @@ model CareAppointment {
 
   @@unique([id, organizationId])
   @@unique([storefrontBookingId, organizationId])
-  @@index([organizationId, subjectType, subjectId, scheduledStart])
+  @@index([organizationId, subjectKindSlug, subjectRef, scheduledStart], map: "CareAppointment_organizationId_subjectKindSlug_subjectRef_idx")
   @@index([organizationId, patientProfileId, scheduledStart])
   @@index([organizationId, locationId, scheduledStart])
   @@index([organizationId, status, scheduledStart])
@@ -396,8 +398,8 @@ model CareIntakePacket {
   id                       String                   @id @default(cuid())
   packetId                 String                   @unique
   organizationId           String
-  subjectType              String
-  subjectId                String
+  subjectKindSlug          String
+  subjectRef               String
   patientProfileId         String?
   appointmentId            String?
   status                   String                   @default("assigned")
@@ -439,7 +441,7 @@ model CareIntakePacket {
   @@unique([id, organizationId])
   @@unique([id, organizationId, patientProfileId])
   @@unique([organizationId, sourceSystem, sourceId])
-  @@index([organizationId, subjectType, subjectId, status])
+  @@index([organizationId, subjectKindSlug, subjectRef, status], map: "CareIntakePacket_organizationId_subjectKindSlug_subjectRef_idx")
   @@index([organizationId, patientProfileId, status])
   @@index([organizationId, appointmentId])
   @@index([organizationId, status, dueAt])
@@ -492,7 +494,8 @@ model CareIntakeResponse {
   @@index([organizationId, packetId, status])
   @@index([organizationId, patientProfileId, authoredAt])
   @@index([dynamicFormId, dynamicFormVersion])
-  @@index([supersedesResponseId])
+  // Composite self-relation reverse lookup during response supersession/deletion.
+  @@index([supersedesResponseId, organizationId])
 }
 
 /// Expiring save/resume authority. Only a digest of the bearer token is stored.
@@ -513,10 +516,13 @@ model CareIntakeAccessGrant {
   revocationReason    String?
   createdAt           DateTime         @default(now())
   packet              CareIntakePacket @relation(fields: [packetId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  patientProfile      PatientProfile?  @relation(fields: [patientProfileId, organizationId], references: [id, organizationId], onDelete: Restrict)
   granteePrincipal    Principal?       @relation("CareIntakeAccessGrantee", fields: [granteePrincipalId], references: [id], onDelete: Restrict)
   issuedByPrincipal   Principal        @relation("CareIntakeAccessIssuer", fields: [issuedByPrincipalId], references: [id], onDelete: Restrict)
 
   @@index([organizationId, packetId, expiresAt])
+  // PatientProfile FK reverse lookup; nullable for non-patient subjects.
+  @@index([patientProfileId, organizationId])
   @@index([granteePrincipalId, expiresAt])
 }
 
@@ -636,8 +642,11 @@ model CareIntakeStatusEvent {
   actorPrincipalId String
   occurredAt       DateTime         @default(now())
   packet           CareIntakePacket @relation(fields: [packetId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  patientProfile   PatientProfile?  @relation(fields: [patientProfileId, organizationId], references: [id, organizationId], onDelete: Restrict)
   actorPrincipal   Principal        @relation("CareIntakeStatusActor", fields: [actorPrincipalId], references: [id], onDelete: Restrict)
 
   @@unique([organizationId, packetId, packetVersion])
   @@index([organizationId, packetId, occurredAt])
+  // PatientProfile FK reverse lookup; nullable for non-patient subjects.
+  @@index([patientProfileId, organizationId])
 }

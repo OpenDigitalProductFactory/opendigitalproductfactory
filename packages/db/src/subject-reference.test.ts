@@ -8,27 +8,27 @@ import {
 describe("subject reference", () => {
   it("creates the canonical patient-profile reference", () => {
     expect(patientSubjectReference("patient-a")).toEqual({
-      subjectType: "patient-profile",
-      subjectId: "patient-a",
+      subjectKindSlug: "patient-profile",
+      subjectRef: "patient-a",
     });
   });
 
   it.each(["animal", "asset", "vehicle-fleet-item"])(
     "accepts the open subject slug %s",
-    (subjectType) => {
-      expect(readSubjectReference({ subjectType, subjectId: "subject-a" })).toEqual({
-        subjectType,
-        subjectId: "subject-a",
+    (subjectKindSlug) => {
+      expect(readSubjectReference({ subjectKindSlug, subjectRef: "subject-a" })).toEqual({
+        subjectKindSlug,
+        subjectRef: "subject-a",
       });
     },
   );
 
   it.each([
-    { subjectType: "Animal", subjectId: "subject-a" },
-    { subjectType: "animal welfare", subjectId: "subject-a" },
-    { subjectType: "animal", subjectId: "" },
-    { subjectType: "animal", subjectId: "   " },
-    { subjectType: "animal", subjectId: null },
+    { subjectKindSlug: "Animal", subjectRef: "subject-a" },
+    { subjectKindSlug: "animal welfare", subjectRef: "subject-a" },
+    { subjectKindSlug: "animal", subjectRef: "" },
+    { subjectKindSlug: "animal", subjectRef: "   " },
+    { subjectKindSlug: "animal", subjectRef: null },
   ])("rejects malformed references", (input) => {
     expect(readSubjectReference(input)).toBeNull();
   });

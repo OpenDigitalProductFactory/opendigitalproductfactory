@@ -3,13 +3,21 @@ import { resolve } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-const migration = readFileSync(
+const initialMigration = readFileSync(
   resolve(
     import.meta.dirname,
     "../prisma/migrations/20260822164000_subject_agnostic_scheduling_and_resources/migration.sql",
   ),
   "utf8",
 );
+const alignmentMigration = readFileSync(
+  resolve(
+    import.meta.dirname,
+    "../prisma/migrations/20260822172800_subject_reference_guard_alignment/migration.sql",
+  ),
+  "utf8",
+);
+const migration = `${initialMigration}\n${alignmentMigration}`;
 
 describe("subject-agnostic scheduling and resource migration", () => {
   it("expands, backfills, validates, and then requires root subject identity", () => {
@@ -22,11 +30,18 @@ describe("subject-agnostic scheduling and resource migration", () => {
     const constrain = migration.indexOf(
       'ALTER TABLE "CareAppointment" ALTER COLUMN "subjectType" SET NOT NULL',
     );
+    const makeOpenVocabularyExplicit = migration.indexOf(
+      'RENAME COLUMN "subjectType" TO "subjectKindSlug"',
+    );
 
     expect(expand).toBeGreaterThan(-1);
     expect(backfill).toBeGreaterThan(expand);
     expect(constrain).toBeGreaterThan(backfill);
-    expect(migration).toContain('"subjectId" = "patientProfileId"');
+    expect(makeOpenVocabularyExplicit).toBeGreaterThan(constrain);
+    expect(initialMigration).toContain('"subjectId" = "patientProfileId"');
+    expect(alignmentMigration).toContain(
+      'RENAME COLUMN "subjectId" TO "subjectRef"',
+    );
     expect(migration).toContain('CONSTRAINT "CareAppointment_subject_contract_check"');
     expect(migration).toContain('CONSTRAINT "CareIntakePacket_subject_contract_check"');
   });
@@ -49,6 +64,15 @@ describe("subject-agnostic scheduling and resource migration", () => {
     );
     expect(migration).toContain(
       'CareIntakeAccessGrant_packetId_organizationId_fkey',
+    );
+    expect(migration).toContain(
+      'CareIntakeAccessGrant_patientProfileId_organizationId_fkey',
+    );
+    expect(migration).toContain(
+      'CareIntakeStatusEvent_patientProfileId_organizationId_fkey',
+    );
+    expect(migration).toContain(
+      'CareIntakeResponse_supersedesResponseId_organizationId_idx',
     );
     expect(migration).not.toContain(
       'DROP CONSTRAINT "CareConsentAttestation_packetId_organizationId_patientProfileId_fkey"',

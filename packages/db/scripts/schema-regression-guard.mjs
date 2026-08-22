@@ -277,6 +277,11 @@ export const INTENTIONAL_FIELD_REMOVALS = new Set([
 // field exemptions, so allowing one retired index cannot conceal another.
 // Prune each entry after the migration has shipped fleet-wide.
 export const INTENTIONAL_MODEL_ATTRIBUTE_REMOVALS = new Set([
+  // 2026-08-22 BI-2C80E6EA / DI-F289DBB51DCB: the supersession relation now
+  // joins by response+organization, so its tenant-safe composite index strictly
+  // subsumes the former single-column index. Migration:
+  // 20260822164000_subject_agnostic_scheduling_and_resources.
+  "CareIntakeResponse.@@index([supersedesResponseId])",
   // 2026-08-22 BI-D2AA1064: OutboundPublication is an immutable event receipt,
   // so create and later update receipts may reference the same remote resource.
   // Current remote-identity uniqueness is enforced by ExternalChannelProjection.

@@ -18,7 +18,7 @@ Keep the Workroom claim and impact contract current, and stop at the hybrid fall
 
 Generalise the existing scheduling, intake, resource, and archetype configuration seams without adding rescue-specific user behaviour:
 
-1. `CareAppointment` and `CareIntakePacket` gain one validated, queryable subject reference (`subjectType`, `subjectId`) while their patient relations become conditionally clinical rather than universally required.
+1. `CareAppointment` and `CareIntakePacket` gain one validated, queryable subject reference (`subjectKindSlug`, `subjectRef`) while their patient relations become conditionally clinical rather than universally required.
 2. Existing human-care writes backfill and continue as `patient-profile` subjects with the same recall, overbooking authorization, preparation/recovery footprint, optimistic version, evidence, and RLS behaviour.
 3. `Resource` becomes the canonical read/write projection for hospitality admin resources, with the legacy hospitality and provider rows retained as compatibility projections during the W19 soak.
 4. Archetype process semantics live in the already-persisted, strictly parsed `StorefrontArchetype.activationProfile`; `customVocabulary` remains presentation labels only.
@@ -74,7 +74,7 @@ No commandment conflict, new canonical model, or unresolved architecture excepti
 - **R1 — zero behaviour drift:** current care and hospitality callers receive the same success/error semantics, public IDs, DTOs, and clinical authorization behaviour.
 - **R2 — one process-profile home:** typed process semantics are nested in `activationProfile`, strictly parsed, and deterministically composed; vocabulary stays labels only.
 - **R3 — canonical Resource:** hospitality resources and availability are backfilled and dual-written to `Resource` / `ResourceAvailability`; canonical rows win reads by `sourceRef` while legacy projections remain rollback-safe.
-- **R4 — typed subject reference:** appointment and intake roots carry non-empty, validated `subjectType` and `subjectId`; existing rows backfill as `patient-profile:<patientProfileId>`.
+- **R4 — typed subject reference:** appointment and intake roots carry a non-empty, validated open `subjectKindSlug` and opaque `subjectRef`; existing rows backfill as `patient-profile:<patientProfileId>`.
 - **R5 — clinical preservation:** patient subjects still require matching patient, visit-type, and care-location relations and retain recall, overbooking, footprint, evidence, and RLS invariants.
 - **R6 — any-state data safety:** the migration is generated from `packages/db`, preserves unknown legacy vocabulary visibly, reconciles row counts/provenance, and has an explicit rollback disposition.
 
@@ -82,7 +82,7 @@ No commandment conflict, new canonical model, or unresolved architecture excepti
 
 - **C1 — process profile:** `catalogModes[]`, `subjectTypes[]`, `housesSubjects`, `schedulesSubjects`, and `resourceKinds[]` are code-typed and write-validated inside `ActivationProfile.processProfile`.
 - **C2 — subject reference:** subject types are open, validated slugs because identity homes grow by vertical; built-in constants are compiler-checked and subject IDs remain opaque identifiers, never JSON metadata.
-- **C3 — clinical discriminator:** a database check requires patient/visit/location fields for `patient-profile` appointments and requires `subjectId = patientProfileId`; non-patient subjects cannot carry a patient relation accidentally. The open subject reference deliberately cannot own a cross-table foreign key; later vertical writers must resolve their subject in the owning identity table before writing, and this BI exposes no such writer.
+- **C3 — clinical discriminator:** a database check requires patient/visit/location fields for `patient-profile` appointments and requires `subjectRef = patientProfileId`; non-patient subjects cannot carry a patient relation accidentally. The open subject reference deliberately cannot own a cross-table foreign key; later vertical writers must resolve their subject in the owning identity table before writing, and this BI exposes no such writer.
 - **C4 — intake relation:** packet/response/access/exception/status joins use packet + organization identity; patient-specific consent and coverage joins retain the stronger patient composite relation.
 - **C5 — resource compatibility:** restaurant attribute parsing stays in its vertical codec; the shared admin profile supplies kind, capacity unit, limit, and canonical/legacy mapping without learning restaurant vocabulary.
 - **C6 — bounded reads:** admin roster reads have a hard 5,000-row ceiling and fail through the route's existing internal-error status/envelope above it. Raising the ceiling requires cursor pagination and a separately filed BI.
@@ -107,7 +107,7 @@ No commandment conflict, new canonical model, or unresolved architecture excepti
 
 - **Decision:** atomic
 - **Parent:** `BI-2C80E6EA`
-- **Receipt:** blocked by the missing initiative scope-baseline authoring surface tracked in `BI-B9403248`; `record_plan_backlog_coverage` returned `traceability-incomplete`, while the branch-specific planning gate reports that no xlarge coverage decision is required for this BI. This section is the server-directed interim four-way coverage record.
+- **Receipt:** `record_plan_backlog_coverage` returned `traceability-incomplete` before the initiative artifact-author repair landed in PR #4422 (commit `1637cfa3b`); the branch-specific planning gate reports that no xlarge coverage decision is required for this BI. This section is the server-directed interim four-way coverage record.
 - **Rationale:** The process profile, canonical resource projection, subject reference, compatibility adapters, clinical constraints, RLS preservation, and backfill form one zero-behaviour architecture gate. Shipping any phase independently would leave two authorities, a write path without a read migration, or a polymorphic root without the constraints that preserve clinical safety. The phases below are implementation order, not independently shippable product slices.
 
 ## Architecture
@@ -133,9 +133,9 @@ Do not drop any legacy table, compatibility provider, or source reference in thi
 
 ### 3. Subject polymorphism is normalized into columns, not metadata
 
-Add the same `subjectType` + `subjectId` contract to appointment and intake roots. A pure `subject-reference.ts` module validates open slugs/opaque IDs and supplies `patientSubjectReference(patientProfileId)` for current care writers.
+Add the same `subjectKindSlug` + `subjectRef` contract to appointment and intake roots. The names make the open vocabulary and non-relational reference explicit. A pure `subject-reference.ts` module validates open slugs/opaque references and supplies `patientSubjectReference(patientProfileId)` for current care writers.
 
-Use single-table inheritance for this gate: existing care-specific nullable relations stay on the established physical records, with database checks making their conditional requirements explicit. This avoids a second appointment/intake authority and preserves the mature evidence/RLS graph. Existing rows are backfilled before `subjectType` and `subjectId` become required.
+Use single-table inheritance for this gate: existing care-specific nullable relations stay on the established physical records, with database checks making their conditional requirements explicit. This avoids a second appointment/intake authority and preserves the mature evidence/RLS graph. Existing rows are backfilled before `subjectKindSlug` and `subjectRef` become required.
 
 For intake children, remove patient identity from the generic packet join while retaining optional direct patient provenance. Consent and coverage remain patient-specific branches with their composite patient constraints. Patient-token RLS continues to reject rows with no allowed patient profile; staff review retains its exact purpose-and-actor-bound select policy. No generic non-patient write policy is introduced here.
 

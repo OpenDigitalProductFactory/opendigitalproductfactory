@@ -5,8 +5,8 @@ BEGIN
   IF NOT EXISTS (
     SELECT 1 FROM "CareAppointment"
     WHERE id = 'appointment-subject-fixture'
-      AND "subjectType" = 'patient-profile'
-      AND "subjectId" = "patientProfileId"
+      AND "subjectKindSlug" = 'patient-profile'
+      AND "subjectRef" = "patientProfileId"
       AND "recallAt" = '2027-09-01 15:00:00'
       AND "overbookAuthorizedByPrincipalId" = 'principal-subject-fixture'
       AND "overbookReason" = 'Fixture controlled overbooking'
@@ -21,8 +21,8 @@ BEGIN
   IF NOT EXISTS (
     SELECT 1 FROM "CareIntakePacket"
     WHERE id = 'packet-subject-fixture'
-      AND "subjectType" = 'patient-profile'
-      AND "subjectId" = "patientProfileId"
+      AND "subjectKindSlug" = 'patient-profile'
+      AND "subjectRef" = "patientProfileId"
       AND "legalHold" = true
       AND "retentionClass" = 'restricted-care'
   ) THEN
@@ -84,7 +84,7 @@ END $$;
 BEGIN;
 
 INSERT INTO "CareAppointment" (
-  id, "appointmentId", "organizationId", "subjectType", "subjectId",
+  id, "appointmentId", "organizationId", "subjectKindSlug", "subjectRef",
   "patientProfileId", "visitTypeId", "locationId", "scheduledStart",
   "scheduledEnd", "preparationMinutes", "recoveryMinutes", "footprintStart",
   "footprintEnd", version, "createdByPrincipalId", "createdAt", "updatedAt"
@@ -97,7 +97,7 @@ INSERT INTO "CareAppointment" (
 );
 
 INSERT INTO "CareIntakePacket" (
-  id, "packetId", "organizationId", "subjectType", "subjectId",
+  id, "packetId", "organizationId", "subjectKindSlug", "subjectRef",
   "patientProfileId", "sourceMode", "purposeOfUse", "requirementSnapshot",
   "recordedByPrincipalId", "createdAt", "updatedAt"
 ) VALUES (
@@ -110,7 +110,7 @@ DO $$
 BEGIN
   BEGIN
     UPDATE "CareAppointment"
-    SET "subjectId" = 'wrong-patient'
+    SET "subjectRef" = 'wrong-patient'
     WHERE id = 'appointment-subject-fixture';
     RAISE EXCEPTION 'patient appointment mismatch was accepted';
   EXCEPTION WHEN check_violation THEN
@@ -119,7 +119,7 @@ BEGIN
 
   BEGIN
     UPDATE "CareAppointment"
-    SET "subjectType" = 'animal', "subjectId" = 'animal-fixture'
+    SET "subjectKindSlug" = 'animal', "subjectRef" = 'animal-fixture'
     WHERE id = 'appointment-subject-fixture';
     RAISE EXCEPTION 'non-patient appointment retained a patient relation';
   EXCEPTION WHEN check_violation THEN

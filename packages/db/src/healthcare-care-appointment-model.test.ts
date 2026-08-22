@@ -16,13 +16,13 @@ describe("healthcare care appointment Prisma substrate", () => {
       schema.indexOf("model CareAppointmentParticipant {"),
     );
 
-    expect(appointment).toContain("subjectType");
-    expect(appointment).toContain("subjectId");
+    expect(appointment).toContain("subjectKindSlug");
+    expect(appointment).toContain("subjectRef");
     expect(appointment).toMatch(/patientProfileId\s+String\?/);
     expect(appointment).toMatch(/visitTypeId\s+String\?/);
     expect(appointment).toMatch(/locationId\s+String\?/);
     expect(appointment).toContain(
-      "@@index([organizationId, subjectType, subjectId, scheduledStart])",
+      '@@index([organizationId, subjectKindSlug, subjectRef, scheduledStart], map: "CareAppointment_organizationId_subjectKindSlug_subjectRef_idx")',
     );
     expect(appointment).toContain("recallAt");
     expect(appointment).toContain("overbookAuthorizedByPrincipalId");
