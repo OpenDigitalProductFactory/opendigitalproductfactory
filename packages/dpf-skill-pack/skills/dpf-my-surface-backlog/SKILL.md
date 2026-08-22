@@ -3,7 +3,7 @@ name: dpf-my-surface-backlog
 description: "See, open, and file backlog items for your OWN area — the BIs against your surface (portfolio) and occupation — and track their status. Scope is resolved from your identity and cannot be widened, so it stays safe on a small local model and for sensitive portfolios."
 
 # Agent Skills standard fields (Surface A — Claude Code)
-disable-model-invocation: false
+disable-model-invocation: true
 user-invocable: true
 allowed-tools: mcp__dpf__list_my_backlog mcp__dpf__get_backlog_item mcp__dpf__create_backlog_item mcp__dpf__get_my_coworker_profile
 
@@ -14,7 +14,7 @@ capability: null
 taskType: workflow
 triggerPattern: "my backlog|(BIs?|backlog|items?|work) for my (surface|area|portfolio|occupation)|what('?s| is) (in|on) my (backlog|queue|plate)|file (a )?BI for my (area|surface)|my capability (gaps?|needs?) as backlog"
 userInvocable: true
-agentInvocable: true
+agentInvocable: false
 allowedTools: ["mcp__dpf__list_my_backlog", "mcp__dpf__get_backlog_item", "mcp__dpf__create_backlog_item", "mcp__dpf__get_my_coworker_profile"]
 composesFrom: ["dpf-file-backlog-item"]
 contextRequirements: ["dpf MCP server reachable"]

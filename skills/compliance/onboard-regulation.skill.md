@@ -7,7 +7,7 @@ capability: "manage_compliance"
 taskType: "analysis"
 triggerPattern: "onboard|import|framework|standard"
 userInvocable: true
-agentInvocable: true
+agentInvocable: false
 allowedTools: [prefill_onboarding_wizard, search_public_web]
 composesFrom: []
 contextRequirements: []

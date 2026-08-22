@@ -2,7 +2,7 @@
 name: dpf-add-archetype
 description: "Use when adding a NEW business archetype to the DPF platform — a new industry or vertical the storefront-templates taxonomy does not yet cover, or when an archetype idea is floated and needs the paved road. Covers all four provisioning dimensions (template substrate, WSID profession corpus, AI coworker decision, skills/tools) and the completeness gate that blocks a shallow archetype from shipping."
 # Agent Skills standard fields (Surface A — Claude Code)
-disable-model-invocation: false
+disable-model-invocation: true
 user-invocable: true
 allowed-tools: Read Grep Glob Edit Write Bash mcp__dpf__principle_decide mcp__dpf__query_backlog mcp__dpf__create_backlog_item mcp__dpf__establish_coworker
 
@@ -13,7 +13,7 @@ capability: manage_platform
 taskType: code_generation
 triggerPattern: "new archetype|add .* archetype|new industry|new vertical|add .* vertical|archetype for|cover .* industry"
 userInvocable: true
-agentInvocable: true
+agentInvocable: false
 allowedTools: ["Read", "Grep", "Glob", "Edit", "Write", "Bash", "mcp__dpf__principle_decide", "mcp__dpf__query_backlog", "mcp__dpf__create_backlog_item", "mcp__dpf__establish_coworker"]
 composesFrom: ["dpf-verify-substrate-first", "dpf-decision-via-kernel", "dpf-file-backlog-item", "dpf-writing-plans", "dpf-establish-coworker", "dpf-pr-with-dco"]
 contextRequirements: []

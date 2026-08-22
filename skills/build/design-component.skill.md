@@ -7,7 +7,7 @@ capability: "view_platform"
 taskType: "code_generation"
 triggerPattern: "design component|ui component|component states|refactor component|new control|interface element"
 userInvocable: true
-agentInvocable: true
+agentInvocable: false
 allowedTools: [read_project_file, search_project_files, propose_file_change]
 composesFrom: []
 contextRequirements: []

@@ -7,7 +7,7 @@ capability: "view_customer"
 taskType: "conversation"
 triggerPattern: "add|register|new customer"
 userInvocable: true
-agentInvocable: true
+agentInvocable: false
 allowedTools: [create_customer_account]
 composesFrom: []
 contextRequirements: []

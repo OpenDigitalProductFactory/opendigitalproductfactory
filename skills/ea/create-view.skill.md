@@ -7,7 +7,7 @@ capability: "manage_ea_model"
 taskType: "conversation"
 triggerPattern: "create view|new view|ea view"
 userInvocable: true
-agentInvocable: true
+agentInvocable: false
 allowedTools: []
 composesFrom: []
 contextRequirements: []

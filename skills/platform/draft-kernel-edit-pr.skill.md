@@ -7,7 +7,7 @@ capability: null
 taskType: "conversation"
 triggerPattern: "edit kernel|update principle|edit principle|change kernel|kernel edit|propose kernel"
 userInvocable: true
-agentInvocable: true
+agentInvocable: false
 allowedTools: []
 composesFrom: []
 contextRequirements: []

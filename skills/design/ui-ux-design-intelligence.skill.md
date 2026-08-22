@@ -7,7 +7,7 @@ capability: "view_platform"
 taskType: "code_generation"
 triggerPattern: "design|ui|ux|style|color palette|typography|font|layout|accessibility|landing page|dashboard|component"
 userInvocable: true
-agentInvocable: true
+agentInvocable: false
 allowedTools: [read_project_file, search_project_files, propose_file_change, check_sandbox]
 composesFrom: []
 contextRequirements: []

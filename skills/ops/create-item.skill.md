@@ -7,7 +7,7 @@ capability: "manage_backlog"
 taskType: "conversation"
 triggerPattern: "create|new|add item|task"
 userInvocable: true
-agentInvocable: true
+agentInvocable: false
 allowedTools: [create_backlog_item]
 composesFrom: []
 contextRequirements: []

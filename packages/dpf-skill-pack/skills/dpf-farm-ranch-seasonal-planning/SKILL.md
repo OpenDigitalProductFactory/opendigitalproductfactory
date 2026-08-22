@@ -1,7 +1,7 @@
 ---
 name: dpf-farm-ranch-seasonal-planning
 description: "Use for agriculture-ranching operating plans and decision briefs spanning fields, pasture, crops, hay, livestock, working animals, equipment, inputs, vendors, weather, markets, and obligations. Keeps location, evidence date, authority, and human approval explicit."
-disable-model-invocation: false
+disable-model-invocation: true
 user-invocable: true
 allowed-tools: mcp__dpf__wiki_query mcp__dpf__search_knowledge mcp__dpf__search_knowledge_base mcp__dpf__query_backlog mcp__dpf__create_backlog_item
 
@@ -11,7 +11,7 @@ capability: null
 taskType: analysis
 triggerPattern: "farm plan|ranch plan|seasonal plan|fertiliz|hay cut|baling|grazing|pasture|calving|breeding|herd health|vaccination|farrier|tractor maintenance|implement|feed inventory|seed inventory|pesticide|applicator|market cattle|sell cattle|weather window"
 userInvocable: true
-agentInvocable: true
+agentInvocable: false
 allowedTools: ["mcp__dpf__wiki_query", "mcp__dpf__search_knowledge", "mcp__dpf__search_knowledge_base", "mcp__dpf__query_backlog", "mcp__dpf__create_backlog_item"]
 composesFrom: ["dpf-retrieve-decision-context", "dpf-decision-via-kernel"]
 contextRequirements: ["storefront archetype", "operating location", "dated farm or ranch records", "applicable profession corpus"]

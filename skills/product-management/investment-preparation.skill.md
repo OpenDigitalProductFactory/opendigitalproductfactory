@@ -7,7 +7,7 @@ capability: "view_portfolio"
 taskType: "analysis"
 triggerPattern: "investment preparation|funding decision|compare bets"
 userInvocable: true
-agentInvocable: true
+agentInvocable: false
 allowedTools: [query_backlog, score_demand_item, approve_demand_for_funding, evaluate_org_business_decision]
 composesFrom: []
 contextRequirements: []

@@ -2,7 +2,7 @@
 name: dpf-clear-dependabot-alerts
 description: "Use when clearing Dependabot or security-advisory alerts on the DPF repo — a batch of npm vulnerability alerts, a 'bump the vulnerable dependency' ask, or a security-tab sweep. Covers the DPF pattern for transitive vulnerabilities, lockfile regeneration, verification, and shipping a DCO PR."
 # Agent Skills standard fields (Surface A — Claude Code)
-disable-model-invocation: false
+disable-model-invocation: true
 user-invocable: true
 allowed-tools: Bash Read Edit Grep
 
@@ -13,7 +13,7 @@ capability: null
 taskType: workflow
 triggerPattern: "dependabot|security alert|vulnerability alert|clear .* (alert|CVE|advisory)|bump .* (vulnerable|CVE)|dependency (vuln|CVE|advisory)|security tab"
 userInvocable: true
-agentInvocable: true
+agentInvocable: false
 allowedTools: ["Bash", "Read", "Edit", "Grep"]
 composesFrom: ["dpf-verify-substrate-first"]
 contextRequirements: ["gh CLI authenticated", "pnpm available", "registry reachable"]

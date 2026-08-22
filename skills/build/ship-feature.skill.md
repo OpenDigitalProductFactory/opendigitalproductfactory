@@ -7,7 +7,7 @@ capability: "view_platform"
 taskType: "action"
 triggerPattern: "ship feature|deploy|release|launch|ready to ship|create release"
 userInvocable: true
-agentInvocable: true
+agentInvocable: false
 allowedTools: [deploy_feature, create_release_bundle]
 composesFrom: []
 contextRequirements: []

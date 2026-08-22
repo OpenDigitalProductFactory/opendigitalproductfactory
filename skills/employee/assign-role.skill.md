@@ -7,7 +7,7 @@ capability: "view_employee"
 taskType: "conversation"
 triggerPattern: "assign|role|update role"
 userInvocable: true
-agentInvocable: true
+agentInvocable: false
 allowedTools: [query_employees]
 composesFrom: []
 contextRequirements: []

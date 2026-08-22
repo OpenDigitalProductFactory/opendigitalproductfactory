@@ -7,7 +7,7 @@ capability: "manage_users"
 taskType: "conversation"
 triggerPattern: "user|account|role management"
 userInvocable: true
-agentInvocable: true
+agentInvocable: false
 allowedTools: []
 composesFrom: []
 contextRequirements: []

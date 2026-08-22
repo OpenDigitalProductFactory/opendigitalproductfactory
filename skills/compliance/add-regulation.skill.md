@@ -7,7 +7,7 @@ capability: "manage_compliance"
 taskType: "conversation"
 triggerPattern: "add regulation|new regulation|register regulation"
 userInvocable: true
-agentInvocable: true
+agentInvocable: false
 allowedTools: [create_backlog_item]
 composesFrom: []
 contextRequirements: []

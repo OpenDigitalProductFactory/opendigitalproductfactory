@@ -7,7 +7,7 @@ capability: null
 taskType: code_generation
 triggerPattern: "add skill|new skill|create skill|custom action|add button|quick action"
 userInvocable: true
-agentInvocable: true
+agentInvocable: false
 allowedTools: []
 composesFrom: []
 contextRequirements: []

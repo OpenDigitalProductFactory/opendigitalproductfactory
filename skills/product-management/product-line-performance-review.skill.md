@@ -7,7 +7,7 @@ capability: "view_portfolio"
 taskType: "analysis"
 triggerPattern: "product line performance|portfolio mix|line review"
 userInvocable: true
-agentInvocable: true
+agentInvocable: false
 allowedTools: [search_portfolio_context, query_backlog, evaluate_org_business_decision]
 composesFrom: []
 contextRequirements: []

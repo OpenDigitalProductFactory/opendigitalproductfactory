@@ -2,7 +2,7 @@
 name: dpf-drive-portal-and-observe-build
 description: "Use when driving the live DPF portal through the browser (Claude-in-Chrome) — messaging a coworker, clicking through a build's gates, filling an admin form — OR observing what the build/inference engine is doing: which model ran a phase, why a tool call failed, where a build is stuck. Covers the DOM mechanics that fail by default on live pages, and where build truth actually lives across the database, activity events, container logs and runtime-health surfaces."
 # Agent Skills standard fields (Surface A — Claude Code)
-disable-model-invocation: false
+disable-model-invocation: true
 user-invocable: true
 allowed-tools: Bash(docker logs *) Bash(docker exec *) Bash(curl *) Bash(nvidia-smi *) mcp__claude-in-chrome__navigate mcp__claude-in-chrome__read_page mcp__claude-in-chrome__find mcp__claude-in-chrome__get_page_text mcp__claude-in-chrome__computer mcp__claude-in-chrome__form_input mcp__dpf__resolve_model_selection mcp__dpf__get_build_sandbox_state mcp__dpf__list_build_activity_since
 
@@ -13,7 +13,7 @@ capability: null
 taskType: verification
 triggerPattern: "drive the portal|drive the (live|running) (portal|install)|via the browser|claude-in-chrome|chrome mcp|send (a |the )?coworker( a)? message|click through|fill (in |out )?(the )?form|why is .* (stuck|stalled|hung)|which model (ran|is running)|why did .* tool call fail|observe the build|build (phase|engine|dispatch)|inference (truth|logs)|portal logs|runtime health|model selection"
 userInvocable: true
-agentInvocable: true
+agentInvocable: false
 allowedTools: ["Bash", "mcp__claude-in-chrome__navigate", "mcp__claude-in-chrome__read_page", "mcp__claude-in-chrome__find", "mcp__claude-in-chrome__get_page_text", "mcp__claude-in-chrome__computer", "mcp__claude-in-chrome__form_input", "mcp__dpf__resolve_model_selection", "mcp__dpf__get_build_sandbox_state", "mcp__dpf__list_build_activity_since"]
 composesFrom: ["dpf-evidence-before-diagnosis", "dpf-verify-on-live-install"]
 contextRequirements: []

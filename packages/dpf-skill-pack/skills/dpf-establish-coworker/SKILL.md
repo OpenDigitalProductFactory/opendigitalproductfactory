@@ -3,7 +3,7 @@ name: dpf-establish-coworker
 description: "Use when creating a NEW AI coworker on the DPF platform, from any dev surface (Claude/Codex session, Build Studio, MCP client) — or when a coworker idea is floated and needs the paved road. Walks the enforced lifecycle: establish a draft through the establish_coworker factory door, complete the code-side definition checklist the CI conformance gate enforces, earn a behavioral certification from the nightly golden-journey sweep, then promote to production. A coworker created any other way ships incomplete and unsummonable; this skill is the single paved road that makes it robust by construction."
 
 # Agent Skills standard fields (Surface A — Claude Code)
-disable-model-invocation: false
+disable-model-invocation: true
 user-invocable: true
 allowed-tools: Read Grep Glob Edit Write Bash mcp__dpf__establish_coworker mcp__dpf__manage_coworker_tool_grant mcp__dpf__query_backlog mcp__dpf__create_backlog_item
 
@@ -14,7 +14,7 @@ capability: manage_platform
 taskType: code_generation
 triggerPattern: "new coworker|create .* coworker|add .* coworker|establish .* coworker|new agent role|hire .* (ai|digital) (coworker|worker)"
 userInvocable: true
-agentInvocable: true
+agentInvocable: false
 allowedTools: ["Read", "Grep", "Glob", "Edit", "Write", "Bash", "mcp__dpf__establish_coworker", "mcp__dpf__manage_coworker_tool_grant", "mcp__dpf__query_backlog", "mcp__dpf__create_backlog_item"]
 composesFrom: ["dpf-verify-substrate-first", "dpf-file-backlog-item", "dpf-pr-with-dco"]
 contextRequirements: []

@@ -7,7 +7,7 @@ capability: "view_platform"
 taskType: "action"
 triggerPattern: "sandbox|container|not running|start sandbox|sandbox down|sandbox status"
 userInvocable: true
-agentInvocable: true
+agentInvocable: false
 allowedTools: [check_sandbox, start_sandbox]
 composesFrom: []
 contextRequirements: []
