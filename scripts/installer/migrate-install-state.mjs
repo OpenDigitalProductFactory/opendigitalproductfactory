@@ -21,27 +21,44 @@ export async function projectInstallState({ bytes, hostIdentity, catalog }) {
   const canonicalSourceArch = new Map([["x64", "amd64"], ["amd64", "amd64"], ["x86_64", "x86_64"], ["arm64", "arm64"]]).get(source.arch);
   if ((source.schemaVersion === 2 || canonicalSourceArch) && canonicalSourceArch !== hostIdentity.arch) throw new Error("host_identity_contradictory");
 
+  // This function IS the migrator, so it always resolves in migrate mode. The
+  // catalog moves whenever a release adds or moves a service, which leaves the
+  // previous hash on every already-installed state — restamping that is the
+  // whole job. Migrate mode still fails closed on the causes migration must
+  // never paper over: a snapshot that disagrees with an UNCHANGED catalog, and
+  // a capability the candidate catalog no longer defines.
+  //
+  // Gating this on `schemaVersion === 1` wedged every live install instead: a
+  // v2 state took the strict path, so the first release to move the catalog
+  // failed promoter readiness with `capability_state_stale`, and the upgrade
+  // that would have restamped the state WAS the blocked upgrade (BI-AA6FBAD0,
+  // live run SUR-C45B5F4B).
   const capability = resolveCapabilityComposeProfiles({
     catalog,
     state: source,
     hostPlatform: hostIdentity.capabilityHostPlatform,
-    migrate: source.schemaVersion === 1,
+    migrate: true,
   });
-  const projectedState = source.schemaVersion === 2 ? source : {
-    ...source,
-    schemaVersion: 2,
-    platform: hostIdentity.platform,
-    arch: hostIdentity.arch,
+  const projectedCapability = {
     enabledRuntimeCapabilities: capability.enabledRuntimeCapabilities,
     capabilityCatalogHash: capability.capabilityCatalogHash,
     capabilityStateVersion: capability.capabilityStateVersion,
   };
+  const projectedState = source.schemaVersion === 2
+    ? { ...source, ...projectedCapability }
+    : { ...source, schemaVersion: 2, platform: hostIdentity.platform, arch: hostIdentity.arch, ...projectedCapability };
   const validated = await validateInstallState(projectedState);
   if (!validated.valid) throw new Error(validated.errors.join(", "));
+  // A catalog move is a real migration even though the schema version does not
+  // change, so `migrationRequired` tracks the projected capability snapshot as
+  // well. Without this the restamp is recomputed on every single upgrade and
+  // never persisted, because the promoter only writes when this flag is set.
+  const capabilityMoved = Object.entries(projectedCapability)
+    .some(([key, value]) => JSON.stringify(source[key]) !== JSON.stringify(value));
   return {
     sourceHash: sha256(sourceBytes),
     projectionHash: sha256(projectedBytes(projectedState)),
-    migrationRequired: source.schemaVersion !== 2,
+    migrationRequired: source.schemaVersion !== 2 || capabilityMoved,
     projectedState,
   };
 }

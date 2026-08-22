@@ -17,6 +17,7 @@ const examples = {
   contract: "scripts/promoter-contract.schema.json",
   workflow: ".github/workflows/self-upgrade-acceptance.yml",
   harness: "scripts/test-n-minus-one-upgrade.mjs",
+  promoterClosure: "scripts/capability-service-catalog.generated.json",
 };
 
 test("classifies every contract-owned path family", () => {
@@ -47,6 +48,16 @@ test("lifecycle policy inventory fails closed when a path has no sensitive owner
   ]);
 });
 
+test("every file baked into the promoter image is self-upgrade sensitive", async () => {
+  // The promoter image IS the upgrade mechanism, so its inputs are the exact set
+  // whose change can wedge an install. Deriving them from the Dockerfile means a
+  // newly baked file cannot silently escape the acceptance gate.
+  const dockerfile = await readFile(new URL("../Dockerfile.promoter", import.meta.url), "utf8");
+  const baked = [...dockerfile.matchAll(/^COPY\s+(\S+)\s+\S+\s*$/gm)].map(([, source]) => source);
+  assert.ok(baked.length >= 15, `expected the promoter closure, parsed ${baked.length} COPY inputs`);
+  assert.deepEqual(findUnownedLifecyclePaths(baked), [], "a file baked into the promoter image must trigger the self-upgrade acceptance gate");
+});
+
 test("acceptance workflow is path-sensitive, nightly, least-privilege, bounded, and retains evidence", async () => {
   const workflow = await readFile(new URL("../.github/workflows/self-upgrade-acceptance.yml", import.meta.url), "utf8");
   assert.match(workflow, /pull_request:/);
@@ -62,4 +73,10 @@ test("acceptance workflow is path-sensitive, nightly, least-privilege, bounded, 
   assert.match(workflow, /promote-install-state-rollback\.test\.mjs/);
   assert.match(workflow, /Invalid state refuses before quiescence/);
   assert.match(workflow, /\.quiescenceBegan == false/);
+  // BI-AA6FBAD0: readiness must be proven against the shape every live install
+  // actually has - schemaVersion 2 carrying the PREVIOUS release's catalog hash.
+  // A v1 fixture is unversioned for capability purposes and skips every
+  // capability check, which is why the gate could not see the wedge.
+  assert.match(workflow, /Readiness migrates a v2 install carrying the previous catalog hash/);
+  assert.match(workflow, /capabilityCatalogHash/);
 });
