@@ -109,6 +109,7 @@ const room: WorkroomView = {
     { kind: "work-item", id: "WI-1", status: "awaiting-input" },
   ],
   structure: null,
+  posture: null,
   projection: {
     confidence: "high",
     incompleteBoundary: false,

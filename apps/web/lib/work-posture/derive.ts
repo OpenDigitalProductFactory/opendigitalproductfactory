@@ -220,11 +220,10 @@ export function deriveTemporalBias(band: TemporalBand): PostureBias | null {
         reason: "The obligation falls due soon.",
       };
     case "low-traffic":
-      return {
-        priorityAxis: "cost",
-        reasonCode: "clock_low_traffic",
-        reason: "Inside a declared low-traffic window, so the work can be run cheaply.",
-      };
+      // The cost bias for a trough is applied from the lowTraffic FLAG
+      // (deriveLowTrafficBias), so it still fires while closed. Returning it
+      // here as well would double-count the nudge.
+      return null;
     case "out-of-hours":
       return {
         damp: true,
@@ -234,6 +233,21 @@ export function deriveTemporalBias(band: TemporalBand): PostureBias | null {
     case "in-hours":
       return null;
   }
+}
+
+/**
+ * The cost opportunity of a declared trough, independent of the band. Closed
+ * hours outrank cheap hours for IMMEDIACY (see temporal-band precedence), but
+ * the cost opportunity is still real while closed — so it is applied from the
+ * flag rather than from the band.
+ */
+export function deriveLowTrafficBias(lowTraffic: boolean): PostureBias | null {
+  if (!lowTraffic) return null;
+  return {
+    priorityAxis: "cost",
+    reasonCode: "clock_low_traffic",
+    reason: "Inside a declared low-traffic window, so the work can be run cheaply.",
+  };
 }
 
 export function shapeBiasFor(shapeKey: string | null | undefined): PostureBias | null {

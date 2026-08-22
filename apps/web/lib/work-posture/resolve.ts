@@ -43,6 +43,7 @@ import type {
 
 import {
   activityKindBiasFor,
+  deriveLowTrafficBias,
   deriveStreamBiases,
   deriveTemporalBias,
   modeBiasFor,
@@ -57,7 +58,12 @@ import {
   tightenProactivityLevel,
   tightenVerificationDepth,
 } from "./tighten";
-import { resolveTemporalBand, type TemporalBandInput, type TemporalBand } from "./temporal-band";
+import {
+  resolveTemporalBand,
+  type TemporalBandInput,
+  type TemporalBand,
+  type TemporalBandResult,
+} from "./temporal-band";
 
 /** Which precedence layer supplied a value — surfaced so the operator sees why. */
 export type PostureLayer =
@@ -152,7 +158,10 @@ function record(
 }
 
 /** Collect every derivation bias that applies, in a stable order. */
-function collectBiases(input: WorkPostureInput, band: TemporalBand | null): PostureBias[] {
+function collectBiases(
+  input: WorkPostureInput,
+  clock: TemporalBandResult | null,
+): PostureBias[] {
   const biases: PostureBias[] = [];
 
   const shapeBias = shapeBiasFor(input.shape?.shapeKey);
@@ -163,9 +172,12 @@ function collectBiases(input: WorkPostureInput, band: TemporalBand | null): Post
 
   biases.push(...deriveStreamBiases(input.stream));
 
-  if (band) {
-    const temporalBias = deriveTemporalBias(band);
+  if (clock) {
+    const temporalBias = deriveTemporalBias(clock.band);
     if (temporalBias) biases.push(temporalBias);
+    // Independent of the band: a trough is a cost opportunity even while closed.
+    const troughBias = deriveLowTrafficBias(clock.lowTraffic);
+    if (troughBias) biases.push(troughBias);
   }
 
   const mode = modeBiasFor(input.shape?.mode, input.shape?.cycleActive ?? false);
@@ -219,8 +231,9 @@ export function resolveWorkPosture(input: WorkPostureInput): ResolvedWorkPosture
   let minimumTier: QualityTier | undefined;
   let verificationDepth: VerificationDepth | undefined;
 
-  const band = input.temporal ? resolveTemporalBand(input.temporal).band : null;
-  const biases = collectBiases(input, band);
+  const clock = input.temporal ? resolveTemporalBand(input.temporal) : null;
+  const band: TemporalBand | null = clock?.band ?? null;
+  const biases = collectBiases(input, clock);
 
   // ── Layer 3: derived. Applied ONLY through the tighten-only clamps. ──
   const priorityAxes: Array<"quality" | "cost" | "time"> = [];

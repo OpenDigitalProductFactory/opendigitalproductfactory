@@ -168,9 +168,18 @@ it does not introduce a second calendar.
 | --- | --- | --- |
 | `in-hours` | inside the business's operating window | no change |
 | `out-of-hours` | business closed | immediacy damped one step; channel drops to in-app; **cadence only, authority unchanged** |
-| `low-traffic` | inside a declared low-traffic window | cost-tolerant priority; batch-friendly |
+| `low-traffic` | open, but inside a declared low-traffic window | cost-tolerant priority; batch-friendly |
 | `pre-deadline` | inside the obligation's warning window | immediacy raised one step |
 | `breach-imminent` | at or past the due boundary | assertive floor |
+
+**Closed outranks cheap** ⟦runtime: corrected 2026-08-22 against live install data⟧. The
+band is the *immediacy* answer; the low-traffic trough is a separate *cost* signal reported
+alongside it. Ranking `low-traffic` above `out-of-hours` looked reasonable and was wrong:
+an install's derived troughs are typically the exact complement of its business hours, so
+every closed instant resolved as `low-traffic` and "the business is closed" never damped
+immediacy anywhere. The live install proved it — Mon–Fri 09:00–17:00 America/Chicago with
+troughs covering 17:00–09:00. `out-of-hours` now wins the band, and `lowTraffic` rides
+along as a flag so the cost opportunity is still taken while closed.
 
 **Out-of-hours exemptions.** Damping is wrong for work whose harm accrues while the
 business is closed. These families are exempt and stay at their derived level:
