@@ -311,7 +311,6 @@
     "BusinessBuildBrief.backlogItemId",
     "BusinessBuildBrief.briefId",
     "BusinessBuildBrief.capabilityPackId",
-    "BusinessBuildBrief.featureBuildId",
     "BusinessBuildBrief.orgId",
     "BusinessBuildBrief.submittedByAgentId",
     "BusinessBuildBrief.submittedByUserId",

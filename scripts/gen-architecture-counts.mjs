@@ -52,7 +52,7 @@ export function renderCounts(counts) {
 
 Generated from source by \`scripts/gen-architecture-counts.mjs\` (registered in the
 derived-artifacts registry — a stale copy fails CI). Cite these numbers by LINKING
-this file; never retype them into prose, where they drift (BI-79BCE3F2, pass §3.5).
+this file; never retype them into prose, where they drift (Simplify & Strengthen pass §3.5).
 
 | Count | Value | Source of truth |
 |---|---:|---|

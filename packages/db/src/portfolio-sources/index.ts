@@ -10,6 +10,7 @@ export * from "./project-archetype-supply";
 export * from "./supported-integrations-manifest";
 export * from "./vertical-incumbents-manifest";
 export * from "./absorption-posture";
+export * from "./absorption-posture-resolver";
 export * from "./incumbent-coverage";
 export * from "./project-external-supply";
 export * from "./licensed-dependencies-manifest";
