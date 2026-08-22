@@ -25,20 +25,18 @@ ordered worst-first so the next piece of work is always the top row.
 ## Progress
 
 - Pages in scope: **56**
-- Complete (all five): **2**
+- Complete (all five): **5**
 
 | Question | Pages answering |
 |---|---|
-| What it does | 5 / 56 |
-| When it runs | 11 / 56 |
-| How it stays current | 6 / 56 |
-| What it will not do | 38 / 56 |
-| What you must do | 6 / 56 |
+| What it does | 8 / 56 |
+| When it runs | 14 / 56 |
+| How it stays current | 9 / 56 |
+| What it will not do | 40 / 56 |
+| What you must do | 9 / 56 |
 
 ## Checklist
 
-- [ ] `docs/user-guide/ai-workforce/coworker-proactivity.md` — 0/5
-  - missing: What it does · When it runs · How it stays current · What it will not do · What you must do
 - [ ] `docs/user-guide/ai-workforce/provider-anthropic.md` — 0/5
   - missing: What it does · When it runs · How it stays current · What it will not do · What you must do
 - [ ] `docs/user-guide/ai-workforce/provider-developer-notes.md` — 0/5
@@ -46,8 +44,6 @@ ordered worst-first so the next piece of work is always the top row.
 - [ ] `docs/user-guide/ai-workforce/provider-ollama.md` — 0/5
   - missing: What it does · When it runs · How it stays current · What it will not do · What you must do
 - [ ] `docs/user-guide/compliance/audits-and-corrective-actions.md` — 0/5
-  - missing: What it does · When it runs · How it stays current · What it will not do · What you must do
-- [ ] `docs/user-guide/compliance/controls-and-evidence.md` — 0/5
   - missing: What it does · When it runs · How it stays current · What it will not do · What you must do
 - [ ] `docs/user-guide/finance/expense-workflows.md` — 0/5
   - missing: What it does · When it runs · How it stays current · What it will not do · What you must do
@@ -82,8 +78,6 @@ ordered worst-first so the next piece of work is always the top row.
 - [ ] `docs/user-guide/compliance/policies-and-acknowledgements.md` — 1/5
   - missing: What it does · When it runs · How it stays current · What you must do
 - [ ] `docs/user-guide/compliance/posture-and-gaps.md` — 1/5
-  - missing: What it does · When it runs · How it stays current · What you must do
-- [ ] `docs/user-guide/compliance/regulations-and-obligations.md` — 1/5
   - missing: What it does · When it runs · How it stays current · What you must do
 - [ ] `docs/user-guide/compliance/regulatory-submissions.md` — 1/5
   - missing: What it does · When it runs · How it stays current · What you must do
@@ -145,8 +139,11 @@ ordered worst-first so the next piece of work is always the top row.
   - missing: What it does · How it stays current
 - [ ] `docs/user-guide/finance/index.md` — 3/5
   - missing: How it stays current · What you must do
+- [x] `docs/user-guide/ai-workforce/coworker-proactivity.md` — 5/5
+- [x] `docs/user-guide/compliance/controls-and-evidence.md` — 5/5
 - [x] `docs/user-guide/compliance/index.md` — 5/5
 - [x] `docs/user-guide/compliance/licensing-readiness.md` — 5/5
+- [x] `docs/user-guide/compliance/regulations-and-obligations.md` — 5/5
 
 ## Areas in scope, and what automates them
 

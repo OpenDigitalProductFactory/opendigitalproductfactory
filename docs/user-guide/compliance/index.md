@@ -84,17 +84,32 @@ business does with data so the right regulations apply, and open licensing
 readiness issues. It weighs its judgements against its profession corpus and the
 organization's own recorded stances rather than deciding unaided.
 
-**When it runs.** Today, only when you ask it. There is no recurring compliance
-audit: no scheduled job reviews obligations, controls, evidence freshness, policy
-review dates, or licence expiry, and the regulatory-change scan runs only when
-someone presses the button on the Regulations screen. The review dates and
-frequencies you record on obligations and controls are stored and displayed —
-nothing reads them to raise work when they fall due.
+**When it runs.** Two things now run without being asked, and one still does not.
 
-**How it stays current.** Through you. The change scan compares a regulation
-against what it last recorded, but it is not scheduled and it does not subscribe
-to any official source. Treat regulatory currency as a human responsibility on a
-calendar you own, not as something the platform is watching for you.
+The **obligation assurance watch** runs daily at 05:40 UTC. It reads the review
+dates and frequencies you record on obligations and controls, and the freshness
+budget on licence requirement references, and raises a finding for anything
+falling due inside the next 30 days or already past. It also reports anything
+that declares a recurrence with no date attached, because that reads on screen
+as a control in force and behaves as one that is not. You can change its cadence
+or run it now from `/admin/scheduled-jobs`.
+
+The **Compliance Officer** then reports those findings to you on its Proactivity
+setting — weekly at Balanced, daily at Assertive, not at all at Quiet.
+
+What still does **not** run on a schedule is the regulatory-change scan. It runs
+only when someone presses the button on the Regulations screen, and that is
+deliberate: it asks a model from recall rather than reading an authoritative
+feed, so running it daily would manufacture compliance noise rather than detect
+regulatory change.
+
+**How it stays current.** Your recorded dates are watched daily; the outside
+world is not. The watch re-reads the records on every run, so correcting a date
+is reflected the next morning and a completed review closes its finding. But
+nothing subscribes to any official source, and the change scan compares a
+regulation only against what it last recorded. Treat *regulatory* currency as a
+human responsibility on a calendar you own; the platform now watches whether you
+are keeping to that calendar, not whether the calendar is still right.
 
 **What it will not do.** The coworker does not decide that you are compliant,
 does not renew a licence, does not submit a filing, and does not change a control

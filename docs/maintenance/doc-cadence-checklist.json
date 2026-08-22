@@ -19,32 +19,17 @@
   },
   "summary": {
     "pagesInScope": 56,
-    "complete": 2,
+    "complete": 5,
     "byElement": {
-      "acts": 5,
-      "cadence": 11,
-      "currency": 6,
-      "boundary": 38,
-      "humanStep": 6
+      "acts": 8,
+      "cadence": 14,
+      "currency": 9,
+      "boundary": 40,
+      "humanStep": 9
     },
     "note": "Detection is lexical and presence-only. A tick means the question is answered somewhere on the page, never that the answer is correct."
   },
   "pages": [
-    {
-      "path": "docs/user-guide/ai-workforce/coworker-proactivity.md",
-      "area": "ai-workforce",
-      "automation": "Coworker self-tasks, nightly coworker certification, model discovery refresh",
-      "elements": {
-        "acts": false,
-        "cadence": false,
-        "currency": false,
-        "boundary": false,
-        "humanStep": false
-      },
-      "answered": 0,
-      "total": 5,
-      "complete": false
-    },
     {
       "path": "docs/user-guide/ai-workforce/provider-anthropic.md",
       "area": "ai-workforce",
@@ -92,21 +77,6 @@
     },
     {
       "path": "docs/user-guide/compliance/audits-and-corrective-actions.md",
-      "area": "compliance",
-      "automation": "Regulatory monitor, obligation and control review dates, licence renewal, policy review",
-      "elements": {
-        "acts": false,
-        "cadence": false,
-        "currency": false,
-        "boundary": false,
-        "humanStep": false
-      },
-      "answered": 0,
-      "total": 5,
-      "complete": false
-    },
-    {
-      "path": "docs/user-guide/compliance/controls-and-evidence.md",
       "area": "compliance",
       "automation": "Regulatory monitor, obligation and control review dates, licence renewal, policy review",
       "elements": {
@@ -362,21 +332,6 @@
     },
     {
       "path": "docs/user-guide/compliance/posture-and-gaps.md",
-      "area": "compliance",
-      "automation": "Regulatory monitor, obligation and control review dates, licence renewal, policy review",
-      "elements": {
-        "acts": false,
-        "cadence": false,
-        "currency": false,
-        "boundary": true,
-        "humanStep": false
-      },
-      "answered": 1,
-      "total": 5,
-      "complete": false
-    },
-    {
-      "path": "docs/user-guide/compliance/regulations-and-obligations.md",
       "area": "compliance",
       "automation": "Regulatory monitor, obligation and control review dates, licence renewal, policy review",
       "elements": {
@@ -841,6 +796,36 @@
       "complete": false
     },
     {
+      "path": "docs/user-guide/ai-workforce/coworker-proactivity.md",
+      "area": "ai-workforce",
+      "automation": "Coworker self-tasks, nightly coworker certification, model discovery refresh",
+      "elements": {
+        "acts": true,
+        "cadence": true,
+        "currency": true,
+        "boundary": true,
+        "humanStep": true
+      },
+      "answered": 5,
+      "total": 5,
+      "complete": true
+    },
+    {
+      "path": "docs/user-guide/compliance/controls-and-evidence.md",
+      "area": "compliance",
+      "automation": "Regulatory monitor, obligation and control review dates, licence renewal, policy review",
+      "elements": {
+        "acts": true,
+        "cadence": true,
+        "currency": true,
+        "boundary": true,
+        "humanStep": true
+      },
+      "answered": 5,
+      "total": 5,
+      "complete": true
+    },
+    {
       "path": "docs/user-guide/compliance/index.md",
       "area": "compliance",
       "automation": "Regulatory monitor, obligation and control review dates, licence renewal, policy review",
@@ -857,6 +842,21 @@
     },
     {
       "path": "docs/user-guide/compliance/licensing-readiness.md",
+      "area": "compliance",
+      "automation": "Regulatory monitor, obligation and control review dates, licence renewal, policy review",
+      "elements": {
+        "acts": true,
+        "cadence": true,
+        "currency": true,
+        "boundary": true,
+        "humanStep": true
+      },
+      "answered": 5,
+      "total": 5,
+      "complete": true
+    },
+    {
+      "path": "docs/user-guide/compliance/regulations-and-obligations.md",
       "area": "compliance",
       "automation": "Regulatory monitor, obligation and control review dates, licence renewal, policy review",
       "elements": {
