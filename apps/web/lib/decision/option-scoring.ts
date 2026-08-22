@@ -586,7 +586,6 @@ export function decide(
   const winner = ranked[0];
   const runnerUpComposite = ranked[1]?.composite ?? winner.composite;
   const margin = winner.composite - runnerUpComposite;
-  let confidence: "high" | "low" = margin < bands.upper ? "low" : "high";
 
   // Coverage: ratio of semantic-mode contributions across all option × principle pairs.
   const totalContribs = scores.reduce((sum, s) => sum + s.contributions.length, 0);
@@ -634,12 +633,6 @@ export function decide(
     sensitivityUnstable = flippingPrincipleIds.length > 0;
   }
 
-  // Force low confidence when coverage/sensitivity fail — still recommend
-  // for human review, but never claim high-confidence autonomy.
-  if (featureCoverageWeak || sensitivityUnstable) {
-    confidence = "low";
-  }
-
   // Commandment conflict against the top option.
   const conflictingPrinciples = winner.contributions
     .filter(
@@ -659,7 +652,11 @@ export function decide(
     featureCoverageWeak,
     sensitivityUnstable,
   });
-  confidence = verdict === "proceed" ? "high" : "low";
+  // Single derivation. Coverage-weak and sensitivity-unstable used to force
+  // "low" here in their own pass; resolveVerdict now returns `uncertain` for
+  // both, so the projection below carries them. Two derivations of one field in
+  // one function is how the two drift apart later.
+  const confidence: "high" | "low" = verdict === "proceed" ? "high" : "low";
 
   const recommendation: DecisionRecommendation = {
     optionId: winner.optionId,
