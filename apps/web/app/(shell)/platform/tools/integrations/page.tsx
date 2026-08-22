@@ -59,7 +59,7 @@ export default async function EnterpriseIntegrationsPage() {
       <div>
         <h1 className="text-xl font-bold text-[var(--dpf-text)]">Native Integrations</h1>
         <p className="mt-0.5 text-sm text-[var(--dpf-muted)]">
-          Native, first-class business integrations with customer-supplied credentials and platform-managed governance.
+          Business integrations with customer-supplied credentials and platform-managed governance.
         </p>
       </div>
 
@@ -206,8 +206,15 @@ export default async function EnterpriseIntegrationsPage() {
         />
       </div>
 
-      <section className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-5">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+      <details
+        data-testid="integration-coverage-disclosure"
+        className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-5"
+      >
+        <summary className="cursor-pointer text-sm font-semibold text-[var(--dpf-text)]">
+          Employee coverage
+        </summary>
+        <div className="mt-5">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
           <div>
             <p className="text-[11px] uppercase tracking-[0.18em] text-[var(--dpf-muted)]">
               Employee Work Coverage
@@ -309,8 +316,9 @@ export default async function EnterpriseIntegrationsPage() {
               ))}
             </tbody>
           </table>
+          </div>
         </div>
-      </section>
+      </details>
 
       <section className="space-y-3">
         <div>

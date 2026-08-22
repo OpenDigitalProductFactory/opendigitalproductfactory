@@ -109,4 +109,17 @@ describe("EnterpriseIntegrationsPage", () => {
     expect(html).toContain("Service Offering");
     expect(html).toContain("Strategy to Portfolio");
   });
+
+  it("defers the employee-work coverage matrix behind a collapsed disclosure", async () => {
+    mockCount.mockResolvedValueOnce(3).mockResolvedValueOnce(1);
+
+    const { default: EnterpriseIntegrationsPage } = await import("./page");
+    const html = renderToStaticMarkup(await EnterpriseIntegrationsPage());
+
+    expect(html).toContain('data-testid="integration-coverage-disclosure"');
+    expect(html).toContain(">Employee coverage</summary>");
+    expect(html).not.toContain(
+      '<details data-testid="integration-coverage-disclosure" open=""',
+    );
+  });
 });
