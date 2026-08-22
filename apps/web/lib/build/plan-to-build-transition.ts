@@ -41,6 +41,7 @@ import { logBuildActivity } from "@/lib/mcp/build-tool-helpers";
 import { resolvePlannedFilePaths } from "@/lib/decision-perspective/planned-file-paths";
 import type { DecisionOutcomeType } from "@/lib/decision-perspective/types";
 import type { AutonomousBuildExecutionProfileRefV1 } from "@/lib/build/autonomous-build-eligibility-reader";
+import { enforceBuildInitiativeReadiness } from "@/lib/build/build-entry-gate";
 
 /**
  * How many consecutive failed plan→build transition attempts before a build
@@ -268,6 +269,16 @@ export async function performPlanToBuildTransition(params: {
   if (!build) return { kind: "not-ready", reason: "build not found" };
   if (build.phase !== "plan" || !canTransitionPhase("plan", "build")) {
     return { kind: "not-ready", reason: `build is in phase ${build.phase}, not plan` };
+  }
+  const initiativeReadiness = await enforceBuildInitiativeReadiness({
+    buildId,
+    target: "implementation",
+    targetPhase: "build",
+    expectedPhase: "plan",
+  });
+  if (!initiativeReadiness.allowed) {
+    logBuildActivity(buildId, "phase:gate-blocked", initiativeReadiness.message);
+    return { kind: "gate-blocked", reason: initiativeReadiness.message };
   }
 
   // Already escalated → do not re-attempt the failing transition; keep the

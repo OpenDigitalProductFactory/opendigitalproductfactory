@@ -1,6 +1,6 @@
 // BI-EF42607A — versioned process spine + conformance test (spec §6.1).
 import assert from "node:assert/strict";
-import { readFileSync, existsSync } from "node:fs";
+import { readFileSync, existsSync, readdirSync, statSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { test } from "node:test";
@@ -97,5 +97,36 @@ test("typecheck gates include the bootstrap planning library", () => {
       bootstrapPackage.scripts?.typecheck,
       "@dpf/bootstrap must define a typecheck script for the recursive sweep to pick it up",
     );
+  }
+});
+
+test("every direct protected FeatureBuild phase writer references the canonical initiative gate", () => {
+  const root = join(repoRoot, "apps/web/lib");
+  const files = [];
+  const visit = (dir) => {
+    for (const name of readdirSync(dir)) {
+      const path = join(dir, name);
+      if (statSync(path).isDirectory()) visit(path);
+      else if (name.endsWith(".ts") && !name.endsWith(".test.ts")) files.push(path);
+    }
+  };
+  visit(root);
+  const directWriter = /featureBuild\.(?:update|updateMany)\s*\([\s\S]{0,300}?data:\s*\{[\s\S]{0,160}?phase:\s*(?:"plan"|"build"|"ship"|"complete"|targetPhase)/;
+  const writers = files
+    .filter((path) => directWriter.test(readFileSync(path, "utf8")))
+    .map((path) => path.slice(repoRoot.length + 1).replaceAll("\\", "/"))
+    .sort();
+  assert.deepEqual(writers, [
+    "apps/web/lib/actions/build.ts",
+    "apps/web/lib/build-flow-state.ts",
+    "apps/web/lib/build/build-on-plan-approval.ts",
+    "apps/web/lib/build/plan-to-build-transition.ts",
+    "apps/web/lib/build/ship-on-review-approval.ts",
+    "apps/web/lib/mcp/build-design-review-handler.ts",
+  ]);
+  for (const path of writers) {
+    const source = readFileSync(join(repoRoot, path), "utf8");
+    assert.match(source, /from "@\/lib\/build\/build-entry-gate"/);
+    assert.match(source, /(?:enforceBuildInitiativeReadiness|assertBuildPhaseInitiativeReadiness)/);
   }
 });

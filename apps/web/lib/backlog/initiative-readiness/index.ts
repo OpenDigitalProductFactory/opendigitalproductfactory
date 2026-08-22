@@ -3,6 +3,7 @@ export * from "./baseline-manifest";
 export * from "./baseline-repository";
 export * from "./objective-mapping-repository";
 export * from "./evaluate";
+export * from "./entry-adapter";
 export * from "./profiles";
 export * from "./projection";
 export * from "./receipt-reader";

@@ -19,6 +19,9 @@ vi.mock("@/lib/agent-event-bus", () => ({
 vi.mock("@/lib/self-upgrade/completion", () => ({
   isFeatureBuildDeployed: vi.fn(),
 }));
+vi.mock("@/lib/build/build-entry-gate", () => ({
+  enforceBuildInitiativeReadiness: vi.fn(async () => ({ allowed: true, message: "allowed" })),
+}));
 
 import { prisma } from "@dpf/db";
 import { isFeatureBuildDeployed } from "@/lib/self-upgrade/completion";

@@ -15,6 +15,7 @@ const startBuildBranchMock = vi.fn();
 const startBuildPhaseRunMock = vi.fn();
 const completeBuildPhaseRunMock = vi.fn();
 const dispatchBuildMock = vi.fn();
+const enforceInitiativeReadinessMock = vi.fn();
 
 vi.mock("@dpf/db", () => {
   const prisma = {
@@ -54,6 +55,9 @@ vi.mock("@/lib/build/build-phase-run", () => ({
 }));
 vi.mock("@/lib/build/build-on-plan-approval", () => ({
   dispatchBuildForApprovedPlan: (...a: unknown[]) => dispatchBuildMock(...a),
+}));
+vi.mock("@/lib/build/build-entry-gate", () => ({
+  enforceBuildInitiativeReadiness: (...a: unknown[]) => enforceInitiativeReadinessMock(...a),
 }));
 
 import {
@@ -132,6 +136,17 @@ describe("performPlanToBuildTransition (BI-05208DE5)", () => {
     startBuildPhaseRunMock.mockReset().mockResolvedValue(undefined);
     completeBuildPhaseRunMock.mockReset().mockResolvedValue(undefined);
     dispatchBuildMock.mockReset().mockResolvedValue({ kind: "dispatched" });
+    enforceInitiativeReadinessMock.mockReset().mockResolvedValue({ allowed: true, message: "allowed" });
+  });
+
+  it("blocks before branch mutation when canonical implementation readiness is not allowed", async () => {
+    enforceInitiativeReadinessMock.mockResolvedValueOnce({ allowed: false, message: "PLAN_COVERAGE_REQUIRED" });
+
+    const out = await performPlanToBuildTransition({ buildId: "FB-X", userId: "u1" });
+
+    expect(out).toEqual({ kind: "gate-blocked", reason: "PLAN_COVERAGE_REQUIRED" });
+    expect(startBuildBranchMock).not.toHaveBeenCalled();
+    expect(updateMock).not.toHaveBeenCalledWith(expect.objectContaining({ data: { phase: "build" } }));
   });
 
   it("advances a complete, reviewed, WWMD-recommended plan to build (initializes branch, flips phase, dispatches)", async () => {

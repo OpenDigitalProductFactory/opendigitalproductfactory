@@ -19,10 +19,35 @@ function candidate(overrides: Partial<RecommendCandidate>): RecommendCandidate {
     epicStatus: null,
     hasSpec: false,
     hasPlan: false,
+    implementationReadinessVerdict: "input-required",
     updatedAt: baseDate,
     ...overrides,
   };
 }
+
+describe("rankCandidates — readiness intent", () => {
+  it("does not recommend an underspecified initiative for implementation", () => {
+    const ranked = rankCandidates([
+      candidate({ itemId: "BI-DESIGN", hasSpec: true, hasPlan: true }),
+      candidate({ itemId: "BI-READY", implementationReadinessVerdict: "allowed" }),
+    ], { mode: "implementation-ready" });
+
+    expect(ranked.map((entry) => entry.itemId)).toEqual(["BI-READY"]);
+    expect(ranked[0]?.signals.implementationReadinessVerdict).toBe("allowed");
+  });
+
+  it("keeps underspecified initiatives visible as design candidates with an honest next action", () => {
+    const ranked = rankCandidates([
+      candidate({ itemId: "BI-DESIGN", hasSpec: true, hasPlan: false }),
+    ], { mode: "design-candidate" });
+
+    expect(ranked[0]).toMatchObject({
+      itemId: "BI-DESIGN",
+      nextAction: "continue-design",
+      signals: { implementationReadinessVerdict: "input-required" },
+    });
+  });
+});
 
 describe("rankCandidates — demand value", () => {
   it("ranks a higher demandScore ahead of a lower one (all else equal)", () => {

@@ -135,7 +135,7 @@ const definitions: ToolDefinition[] = [
   {
     name: "claim_backlog_item_for_work",
     description:
-      "Claim a BacklogItem for work by binding it to the worktree + branch + session you are starting in (soft claim-at-start). Creates, reuses+late-binds, or resumes the durable abandoned Workroom for the same BI and branch, then stamps the BI claim so a directly-working agent's BI no longer looks unclaimed to a parallel session. A branch bound to a different BI returns branch_occupied and preserves its history. Advisory, NOT a lock: if the BI already has active work elsewhere the call still binds this location but returns a non-blocking conflict — it does not steal the existing claim. Multiple branches per BI are expected and are not a conflict.",
+      "Claim a BacklogItem for work by binding it to the worktree + branch + session you are starting in. Governed work must declare design, review, plan, or implementation intent; legacy omission is evaluated as implementation and fails closed unless canonical readiness is allowed. Claim, intent event, readiness decision, and exact identity readback share one transaction. A branch bound to a different BI returns branch_occupied and preserves its history. The BI claim remains a soft coordination signal, not a lock.",
     inputSchema: {
       type: "object",
       properties: {
@@ -146,6 +146,7 @@ const definitions: ToolDefinition[] = [
         baseBranch: { type: "string", description: "Optional base branch (defaults to main)." },
         provider: { type: "string", description: "Provider string (claude, codex, grok) — mapped to the closest executor kind." },
         sessionRef: { type: "string", description: "Owner/session id, stored as the workroom executorRef." },
+        workIntent: { type: "string", enum: ["design", "review", "plan", "implementation"], description: "Lifecycle intent. Required for governed callers; omission is the legacy implementation-safe default." },
       },
       required: ["itemId", "worktreePath", "branchName", "provider", "sessionRef"],
     },
