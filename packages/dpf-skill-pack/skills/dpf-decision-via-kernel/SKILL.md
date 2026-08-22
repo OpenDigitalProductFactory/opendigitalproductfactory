@@ -10,7 +10,7 @@ allowed-tools: mcp__dpf__principle_decide mcp__dpf__wiki_query
 
 # DPF coworker fields (Surface B — in-portal seed loader)
 category: governance
-assignTo: ["ea-architect", "platform-engineer", "coo", "ops-coordinator", "external-coding-agent"]
+assignTo: ["*"]
 capability: null
 taskType: deliberation
 triggerPattern: "open question|trade-off|which approach|2-3 options|architectural decision|how should we"
