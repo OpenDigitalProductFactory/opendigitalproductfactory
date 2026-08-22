@@ -4,7 +4,9 @@ status: active
 
 # Subject-agnostic scheduling and resource substrate implementation plan
 
-> **For agentic workers:** implement test-first, keep the Workroom claim and impact contract current, and stop at the hybrid fallback if the clinical invariants below cannot be preserved. This is one governed architecture gate, not permission to build animal-welfare features early.
+> **For agentic workers:** execute this plan one independently reviewable backlog item at a time — one BI, one branch, one PR. Use dpf-tdd for red-green implementation, dpf-local-merge-ci-before-push plus the plan's completion gate before any success claim, and dpf-pr-with-dco for handoff.
+
+Keep the Workroom claim and impact contract current, and stop at the hybrid fallback if the clinical invariants below cannot be preserved. This is one governed architecture gate, not permission to build animal-welfare features early.
 
 **Backlog item:** `BI-2C80E6EA`  
 **Epic:** `EP-5102F494`  
@@ -22,7 +24,7 @@ Generalise the existing scheduling, intake, resource, and archetype configuratio
 4. Archetype process semantics live in the already-persisted, strictly parsed `StorefrontArchetype.activationProfile`; `customVocabulary` remains presentation labels only.
 5. Restaurant and pet-rescue archetypes declare typed resource/subject defaults, but this item does not create kennels, animals, care rounds, applications, or any other rescue feature.
 
-The current API paths, DTOs, IDs, error copy, and UI behaviour remain stable. The only observable change outside tests is an explicit failure if an admin roster exceeds the documented scale ceiling instead of an unbounded query.
+The current API paths, DTOs, IDs, error copy, and UI behaviour remain stable. An admin roster above the documented scale ceiling fails through the existing internal-error envelope, so the service becomes bounded without adding a new user-facing state or copy contract.
 
 ## Decision guard and fallback
 
@@ -51,6 +53,20 @@ The strongest contributors were Single Source of Truth and Research and Use Stan
 - HL7 FHIR R5 models appointment participants with typed references and QuestionnaireResponse with an independent typed `subject`, `author`, and `source`. DPF will adopt the typed-reference separation, not FHIR payloads or a new interoperability surface: <https://www.hl7.org/fhir/appointment.html> and <https://fhir.hl7.org/fhir/questionnaireresponse.html>.
 - Microsoft Dynamics 365 Field Service separates schedulable resource type/profile from the work being scheduled. DPF will mirror that separation through process-configured resource kinds and the canonical `Resource` family: <https://learn.microsoft.com/en-us/dynamics365/field-service/scheduling-resource-types>.
 
+## Chief-architect review disposition
+
+The reviewed design keeps the canonical authorities intact: `activationProfile` owns operating configuration, `Resource` owns the converging schedulable-resource projection, and the existing Care roots own their mature clinical evidence. No second process column, generic metadata identity, or appointment/intake clone is introduced.
+
+Review findings folded into this artifact:
+
+- Clarified that the roster ceiling reuses the existing internal-error envelope and adds no new UI state or copy.
+- Made the polymorphic-reference integrity boundary explicit: patient subjects are database-constrained; future non-patient writers must resolve their owning identity before write and are out of scope here.
+- Required provenance-keyed idempotent upserts, optimistic mutation checks, and one transaction across canonical and compatibility projections.
+- Made rollback conditional on a no-non-patient-row preflight instead of assuming source rollback is always safe.
+- Reordered the governance sequence so coverage is recorded against the stable reviewed blob, with only the receipt changing afterward.
+
+No commandment conflict, new canonical model, or unresolved architecture exception remains. The primary/hybrid fallback remains mandatory if the clinical invariants cannot be demonstrated by tests and migration evidence.
+
 ## Requirements, contracts, flows, and verification map
 
 ### Requirements
@@ -66,10 +82,10 @@ The strongest contributors were Single Source of Truth and Research and Use Stan
 
 - **C1 — process profile:** `catalogModes[]`, `subjectTypes[]`, `housesSubjects`, `schedulesSubjects`, and `resourceKinds[]` are code-typed and write-validated inside `ActivationProfile.processProfile`.
 - **C2 — subject reference:** subject types are open, validated slugs because identity homes grow by vertical; built-in constants are compiler-checked and subject IDs remain opaque identifiers, never JSON metadata.
-- **C3 — clinical discriminator:** a database check requires patient/visit/location fields for `patient-profile` appointments and requires `subjectId = patientProfileId`; non-patient subjects cannot carry a patient relation accidentally.
+- **C3 — clinical discriminator:** a database check requires patient/visit/location fields for `patient-profile` appointments and requires `subjectId = patientProfileId`; non-patient subjects cannot carry a patient relation accidentally. The open subject reference deliberately cannot own a cross-table foreign key; later vertical writers must resolve their subject in the owning identity table before writing, and this BI exposes no such writer.
 - **C4 — intake relation:** packet/response/access/exception/status joins use packet + organization identity; patient-specific consent and coverage joins retain the stronger patient composite relation.
 - **C5 — resource compatibility:** restaurant attribute parsing stays in its vertical codec; the shared admin profile supplies kind, capacity unit, limit, and canonical/legacy mapping without learning restaurant vocabulary.
-- **C6 — bounded reads:** admin roster reads have a hard 5,000-row ceiling and fail explicitly above it. Raising the ceiling requires cursor pagination and a separately filed BI.
+- **C6 — bounded reads:** admin roster reads have a hard 5,000-row ceiling and fail through the route's existing internal-error status/envelope above it. Raising the ceiling requires cursor pagination and a separately filed BI.
 
 ### Flows
 
@@ -111,7 +127,7 @@ Seed restaurant with `table` / `seats` / 100 and pet rescue + animal shelter wit
 
 Extract `admin-resource-profile.ts` as a small, injected service/adapter boundary. The hospitality routes keep their paths and restaurant attribute codec, but source `kindSlug`, `capacityUnit`, and capacity validation from the parsed process profile.
 
-Backfill `HospitalityResource` and availability into the canonical family with deterministic `sourceRef` keys. Treat legacy `blocked` as an active resource with its blocked reason, not as archived; preserve any unknown status as archived with `lifecycleReason=legacy-status:<value>`. Writes update canonical and legacy/provider projections in one transaction. Reads merge by provenance with canonical values winning while retaining the legacy public row ID expected by the current route and UI.
+Backfill `HospitalityResource` and availability into the canonical family with deterministic `sourceRef` keys. Treat legacy `blocked` as an active resource with its blocked reason, not as archived; preserve any unknown status as archived with `lifecycleReason=legacy-status:<value>`. Writes update canonical and legacy/provider projections in one transaction, using the unique provenance key for idempotent upserts and the existing optimistic/concurrency contract for mutations; a partial projection update must roll back the whole mutation. Reads merge by provenance with canonical values winning while retaining the legacy public row ID expected by the current route and UI.
 
 Do not drop any legacy table, compatibility provider, or source reference in this BI. That remains the operator-soak boundary in `2026-08-18-w19-vertical-clone-collapse-data-migration-plan.md`.
 
@@ -128,7 +144,7 @@ For intake children, remove patient identity from the generic packet join while 
 - Care appointment/intake records remain `restricted`; Resource remains `internal`. Subject-reference fields inherit the owner record classification.
 - Existing retention windows, legal-hold semantics, append-only triggers, and physical table names remain unchanged.
 - No new Prisma model is introduced, so the model-count baseline must not be ratcheted.
-- The migration is expand/backfill/constraint work and does not drop legacy columns/tables. Because this gate exposes no non-patient writer, a source revert can restore the prior NOT NULL clinical constraints; canonical hospitality rows are removable by their `Hospitality*:<id>` source refs while legacy rows remain authoritative.
+- The migration is expand/backfill/constraint work and does not drop legacy columns/tables. Because this gate exposes no non-patient writer, a source revert can restore the prior NOT NULL clinical constraints only after a rollback preflight proves there are no non-patient roots; otherwise rollback is blocked and the forward-compatible schema remains. Canonical hospitality rows are removable by their `Hospitality*:<id>` source refs while legacy rows remain authoritative.
 - Queries use organization + subject + schedule/status indexes. Route roster reads stop at 5,001 to detect the 5,000 ceiling without silent truncation; availability request limits remain 50 + 50.
 
 ## Refactoring budget
@@ -168,8 +184,8 @@ Modify:
 ### Phase 0 — Record and review the architecture plan
 
 1. Commit and push this plan with DCO sign-off.
-2. Record atomic four-way coverage for R1–R6 / C1–C6 / F1–F4 / V1–V6 against the immutable plan blob; add and revalidate the returned receipt.
-3. Run the DPF chief-architect review. Fold every concrete finding into this plan, regenerate doc projections, and recommit before source implementation.
+2. Run the DPF chief-architect review. Fold every concrete finding into this plan, regenerate doc projections, and commit the stable reviewed artifact before source implementation.
+3. Record atomic four-way coverage for R1–R6 / C1–C6 / F1–F4 / V1–V6 against that immutable reviewed blob; add the returned receipt in a receipt-only commit and revalidate it.
 
 ### Phase 1 — Process profile (Red → Green → Refactor)
 
@@ -182,7 +198,7 @@ Modify:
 ### Phase 2 — Canonical hospitality Resource (Red → Green → Refactor)
 
 1. Extend clone-adapter tests for blocked status, unknown-status provenance, canonical DTO mapping, and availability mapping.
-2. Write failing shared-profile tests proving table/seats/100 comes from process configuration and the 5,000 roster ceiling fails explicitly.
+2. Write failing shared-profile tests proving table/seats/100 comes from process configuration and the 5,000 roster ceiling fails through the existing route error contract.
 3. Extend both route suites to characterize current IDs/DTOs/errors and require atomic Resource + legacy/provider writes.
 4. Implement the injected profile/service and canonical-first provenance merge. Keep restaurant attributes in the existing codec and the route entrypoints thin.
 5. Run route, adapter, dual-read, prose-lint, and style-drift tests before proceeding.
