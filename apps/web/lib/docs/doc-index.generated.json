@@ -10613,6 +10613,7 @@
         "agent-authority-overview",
         "tool-execution-log",
         "effective-permissions",
+        "reading-decision-separation",
         "living-playbook-experiments",
         "tool-evaluation-pipeline",
         "development-surfaces"
