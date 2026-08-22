@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: active
 ---
 
 # Purpose-Aware Backlog Recovery

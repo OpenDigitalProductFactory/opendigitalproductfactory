@@ -64,7 +64,7 @@ The kernel selected the explicit bundle. It has the smallest governed blast radi
 - Parent: `BI-4A833B6D`
 - Decision: atomic
 - Plan: `docs/superpowers/plans/2026-08-21-purpose-aware-backlog-recovery.md`
-- Receipt: pending — the live resolver predates the human-authored external Workroom fix on current `main` and rejects the DCO author unless an unrelated AI-agent alias exists
+- Receipt: blocked by BI-MCP-EFF-3E441834 — the live coverage writer now verifies this immutable plan blob, but it requires an initiative scope baseline; the only baseline writer is unavailable to external MCP sessions, and the authorized Change Reviewer cannot currently route to an eligible model
 - Dependencies: none
 - Rationale: The manifest, validator, reconciler, tests, and operator runbook form one usable preservation capability; no part independently restores the governed graph safely.
 
@@ -72,7 +72,7 @@ The manifest, validator, reconciler, tests, and operator runbook form one atomic
 
 ### Governed traceability contract
 
-- **Requirements:** `OBJ-PABR-001`, `OBJ-PABR-002`, `OBJ-PABR-003`, and `OBJ-PABR-004` from the approved recovery scope baseline.
+- **Requirements:** `OBJ-PABR-001`, `OBJ-PABR-002`, `OBJ-PABR-003`, and `OBJ-PABR-004` from the committed recovery design awaiting its governed scope baseline.
 - **Contract:** `CONTRACT-PABR-RECOVERY-BUNDLE` binds the closed recovery manifest, create-missing/skip-existing reconciliation policy, and explicit operator entry point into one usable compatibility boundary.
 - **Flow:** `FLOW-PABR-RECONCILE` is preview → validate → open transaction → create missing epic/items/activities in dependency order → commit or roll back → report stable IDs and counts.
 - **Verification:** `AC-PABR-001`, `AC-PABR-002`, `AC-PABR-003`, `AC-PABR-004`, `AC-PABR-005`, and `AC-PABR-006` cover the complete atomic deliverable.
