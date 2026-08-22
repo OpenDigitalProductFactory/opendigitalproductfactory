@@ -149,7 +149,7 @@ describe("backlog recovery bundle", () => {
   it("preserves and restores the approved epic, umbrella, seven slices, and P0 provenance", async () => {
     const path = fileURLToPath(
       new URL(
-        "../data/backlog-recovery/purpose-aware-installation-ecosystem-productivity.json",
+        "../recovery/backlog/purpose-aware-installation-ecosystem-productivity.json",
         import.meta.url,
       ),
     );

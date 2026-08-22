@@ -12,7 +12,7 @@ import { prisma } from "../src/client";
 
 const DEFAULT_BUNDLE = fileURLToPath(
   new URL(
-    "../data/backlog-recovery/purpose-aware-installation-ecosystem-productivity.json",
+    "../recovery/backlog/purpose-aware-installation-ecosystem-productivity.json",
     import.meta.url,
   ),
 );

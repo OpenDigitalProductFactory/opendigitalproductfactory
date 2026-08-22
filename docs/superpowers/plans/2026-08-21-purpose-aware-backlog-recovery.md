@@ -110,7 +110,7 @@ Add failing in-memory store tests proving:
 
 Add:
 
-- `packages/db/data/backlog-recovery/purpose-aware-installation-ecosystem-productivity.json`;
+- `packages/db/recovery/backlog/purpose-aware-installation-ecosystem-productivity.json`;
 - `packages/db/scripts/reconcile-backlog-bundle.ts`;
 - package command `pnpm --filter @dpf/db backlog:reconcile -- <bundle> [--apply]`.
 
