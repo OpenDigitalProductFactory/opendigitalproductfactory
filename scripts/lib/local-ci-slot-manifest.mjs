@@ -1,5 +1,5 @@
 import { createRequire } from "node:module";
-import { dirname, basename, isAbsolute, join, relative, resolve } from "node:path";
+import { dirname, basename, isAbsolute, join, posix, relative, resolve, win32 } from "node:path";
 
 const require = createRequire(import.meta.url);
 const SLOT_RESOURCE_MANIFEST = require(
@@ -26,6 +26,30 @@ function requireAbsolutePath(name, value) {
     throw new Error(`${name} must be an absolute path`);
   }
   return resolve(value);
+}
+
+/**
+ * Resolve the repository root identity used by every local-CI caller.
+ *
+ * A normal clone reports `<clone>/.git` as its common directory, so the root
+ * is the clone directory. A centrally-managed worktree fleet reports the bare
+ * repository itself (for example `.opendigitalproductfactory.git`), which is
+ * already the root identity. Keeping this here prevents the gate and runner
+ * from independently guessing different scratch-worktree parents.
+ *
+ * @param {string} gitCommonDir
+ */
+export function resolveLocalCiRootClone(gitCommonDir) {
+  const pathApi = win32.isAbsolute(gitCommonDir)
+    ? win32
+    : posix.isAbsolute(gitCommonDir)
+      ? posix
+      : null;
+  if (!pathApi) throw new Error("gitCommonDir must be an absolute path");
+  const commonDir = pathApi.resolve(gitCommonDir);
+  return pathApi.basename(commonDir).toLowerCase() === ".git"
+    ? pathApi.dirname(commonDir)
+    : commonDir;
 }
 
 /**
@@ -76,6 +100,12 @@ export function createLocalCiSlotManifest(input) {
     "candidateGitDir",
     input.candidateGitDir ?? gitCommonDir,
   );
+  const canonicalRootClone = resolveLocalCiRootClone(gitCommonDir);
+  if (resolve(rootClone) !== resolve(canonicalRootClone)) {
+    throw new Error(
+      `rootClone must match the canonical Git common-dir root: ${canonicalRootClone}`,
+    );
+  }
   const worktreeBase = join(dirname(rootClone), `${basename(rootClone)}-worktrees`);
   const workspace = resources.ordinal === 0
     ? join(worktreeBase, ".local-ci-runner")
