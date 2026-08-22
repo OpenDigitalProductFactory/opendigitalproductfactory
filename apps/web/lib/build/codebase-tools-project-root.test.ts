@@ -73,7 +73,7 @@ describe("warnIfProjectRootSuspect", () => {
 
     expect(warn).toHaveBeenCalledTimes(1);
     const [format, rootArg] = warn.mock.calls[0] as [string, string];
-    expect(rootArg).toContain(stale);
+    expect(JSON.parse(rootArg)).toBe(stale);
     expect(format).toContain("not evidence the code is absent");
     expect(format).toContain("BI-6CFC5429");
   });
