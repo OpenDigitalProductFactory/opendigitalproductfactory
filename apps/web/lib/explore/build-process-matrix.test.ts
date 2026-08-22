@@ -476,3 +476,32 @@ describe("mapBuildDeliverableToRoutingSensitivity", () => {
     expect(mapBuildDeliverableToRoutingSensitivity("high")).toBe("confidential");
   });
 });
+
+// BI-B24D4C84: the Build Studio dispatch callers (ideate-on-approval,
+// plan-on-approval) used to call getModelTier WITHOUT opts, so they took the
+// legacy size-only branch and pinned every small/medium build to the `local`
+// tier. That forces residencyPolicy=local_only downstream, which excluded every
+// cloud engine — and on an install whose only active local model missed the
+// code-gen quality floor, NO small or medium build could dispatch at all.
+// These assertions pin the distinction the callers depend on.
+describe("getModelTier rightsizing opts (BI-B24D4C84)", () => {
+  it("legacy call (no opts) still routes small/medium to local — byte-identical contract", () => {
+    expect(getModelTier("bug", "small")).toBe("local");
+    expect(getModelTier("feature", "medium")).toBe("local");
+    expect(getModelTier("feature", "large")).toBe("robust");
+  });
+
+  it("quality-first routes substantive small/medium work to robust", () => {
+    expect(getModelTier("bug", "small", { qualityFirst: true, sensitivity: "low" })).toBe("robust");
+    expect(getModelTier("feature", "medium", { qualityFirst: true, sensitivity: "low" })).toBe("robust");
+  });
+
+  it("keeps the trivial doc/chore tail local so cheap work stays cheap", () => {
+    expect(getModelTier("doc", "small", { qualityFirst: true, sensitivity: "low" })).toBe("local");
+    expect(getModelTier("chore", "small", { qualityFirst: true, sensitivity: "low" })).toBe("local");
+  });
+
+  it("high sensitivity escalates to robust regardless of size", () => {
+    expect(getModelTier("doc", "small", { qualityFirst: true, sensitivity: "high" })).toBe("robust");
+  });
+});

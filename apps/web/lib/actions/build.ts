@@ -29,6 +29,7 @@ import {
   recordReadyDependentsAfterCompletion,
 } from "@/lib/build/feature-build-dependencies";
 import { evaluateBuildStudioPlanAdvancementGate } from "@/lib/decision-perspective/build-studio-gate";
+import { resolvePlannedFilePaths } from "@/lib/decision-perspective/planned-file-paths";
 import type { ResumeBuildImplementationOutcome } from "@/lib/build/progress-visibility-types";
 import {
   type BusinessBriefEvidenceKind,
@@ -559,6 +560,8 @@ export async function advanceBuildPhase(
       },
       triggeredByUserId: userId,
       riskTier: graduatedRiskTier,
+      // BI-70280889: without these the acumen consults never run.
+      plannedFilePaths: await resolvePlannedFilePaths({ db: prisma, buildId, buildRowId: build.id }),
     });
     if (!decisionGate.allowed) {
       throw new Error(decisionGate.operatorMessage);
