@@ -30,6 +30,7 @@ const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
 const dockerfile = readFileSync(join(repoRoot, "Dockerfile"), "utf8");
 const psInstaller = readFileSync(join(repoRoot, "install-dpf.ps1"), "utf8");
 const shInstaller = readFileSync(join(repoRoot, "install-dpf.sh"), "utf8");
+const promoteScript = readFileSync(join(repoRoot, "scripts/promote.sh"), "utf8");
 const agentPointerPath = "config/consumer-install/agent-pointer.md";
 
 /**
@@ -43,6 +44,7 @@ const REQUIRED_IN_BUNDLE = Object.freeze([
   "scripts/safety/dpf-shell-guard-fallback-patterns.json",
   "scripts/installer/lib/state.ps1",
   "scripts/installer/lib/compose-chain.ps1",
+  "scripts/installer/install-release-assets.mjs",
   "scripts/bootstrap-organization-pki.ps1",
   // The install guides tell operators to run these by name, so a consumer install
   // that lacks them fails the documented uninstall with "file not found" — the
@@ -90,7 +92,12 @@ test("every bundled asset is also COPYed into the build stage that assembles it"
   // through: the init stage COPYs each asset explicitly, so a file that is cp'd
   // but never COPYed fails the build with a bare `exit code: 1`. That exact gap
   // shipped once -- the cp was added without the COPY.
+  const initStageStart = dockerfile.indexOf("FROM deps AS init");
+  const releaseAssetStart = dockerfile.indexOf("RUN ", dockerfile.indexOf("/dpf-release-assets"));
+  assert.ok(initStageStart >= 0, "Dockerfile must still declare the init stage");
+  assert.ok(releaseAssetStart > initStageStart, "release assets must still be assembled in the init stage");
   const copiedIntoStage = dockerfile
+    .slice(initStageStart, releaseAssetStart)
     .split(/\r?\n/)
     .filter((l) => /^COPY\s/.test(l) || /^\s{5,}scripts\//.test(l))
     .join("\n");
@@ -129,7 +136,8 @@ test("every required path is actually referenced by an installer (no stale entri
     const win = p.replace(/\//g, "\\\\");
     const referenced =
       psInstaller.includes(p) || psInstaller.includes(p.replace(/\//g, "\\")) ||
-      psInstaller.includes(win) || shInstaller.includes(p);
+      psInstaller.includes(win) || shInstaller.includes(p) || promoteScript.includes(p) ||
+      promoteScript.includes(p.replace(/^scripts\//, ""));
     assert.ok(referenced, `${p} is shipped/required but no installer references it — stale entry?`);
   }
 });

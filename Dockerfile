@@ -99,6 +99,7 @@ COPY scripts/lib/capability-state-hash.mjs ./scripts/lib/
 COPY scripts/capability-service-catalog.generated.json ./scripts/
 COPY scripts/installer/validate-install-state.mjs ./scripts/installer/
 COPY scripts/installer/install-state-transaction.mjs ./scripts/installer/
+COPY scripts/installer/install-release-assets.mjs ./scripts/installer/
 COPY scripts/installer/install-state-lock-contract.json ./scripts/installer/
 COPY scripts/installer/install-state-schema-registry.mjs ./scripts/installer/
 COPY scripts/installer/install-state.schema.json ./scripts/installer/
