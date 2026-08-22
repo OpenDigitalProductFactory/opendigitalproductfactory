@@ -1372,3 +1372,42 @@ describe("deriveBuildStudioWorkflowAction — failed inference (BI-F0005EB0)", (
     expect(action.kind).not.toBe("retry-inference");
   });
 });
+
+describe("a stale AI failure must not hide a satisfied advance gate", () => {
+  it("offers Advance to Plan when the design is reviewed, even after an inference failure", () => {
+    // The defect that stalled a real build: brief, design doc and build plan
+    // were all saved and designReview was "pass", but a pending inference
+    // failure pre-empted the advance action. The only offered action was an AI
+    // call that could not run, so the build could not move at all.
+    const action = deriveBuildStudioWorkflowAction({
+      build: makeBuild({
+        phase: "ideate",
+        draftApprovedAt: new Date() as never,
+        designDoc: { problemStatement: "x", proposedApproach: "y" } as never,
+        designReview: { decision: "pass" } as never,
+      }),
+      governedBacklogEnabled: true,
+      progressVisibility: {
+        inferenceFailure: { failed: true, kind: "transient" },
+      } as never,
+    });
+    expect(action.kind).not.toBe("retry-inference");
+    expect(action.targetPhase).toBe("plan");
+  });
+
+  it("still offers Retry the AI call when the gate is NOT satisfied", () => {
+    const action = deriveBuildStudioWorkflowAction({
+      build: makeBuild({
+        phase: "ideate",
+        draftApprovedAt: new Date() as never,
+        designDoc: null,
+        designReview: null,
+      }),
+      governedBacklogEnabled: true,
+      progressVisibility: {
+        inferenceFailure: { failed: true, kind: "transient" },
+      } as never,
+    });
+    expect(action.kind).toBe("retry-inference");
+  });
+});
