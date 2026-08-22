@@ -34,8 +34,28 @@ Labels are intentional and conservative. Promote a row only when UX verification
 | Fixed assets / currency | asset & currency models | **experimental** | Not a full fixed-asset suite claim |
 | QuickBooks import / sync | QB bridge plans/specs, import staging | **bridge-only** | External SoR during bridge; see convergence doctrine |
 | Full multi-entity statutory accounting | — | **out-of-scope** (current) | Aligns with owner-positioning: do not claim full accounting suite replacement |
-| Payroll tax filing engine | — | **out-of-scope** / **bridge-only** via payroll vendors | Prefer Gusto/ADP-class bridges when needed |
+| Payroll tax filing engine | `lib/hr/payroll-tax-emission.ts`, `lib/hr/statutory-us.ts`, the `Tax*` spine | **experimental** (was out-of-scope) | Native absorb decided — DI-87A27C692B16, EP-PAYROLL-ABSORB. The calculation and emission mechanism exist; the real IRS/state rates are NOT seeded, so do not claim a business can file from DPF today |
 | Payments (cards) | Stripe-class adapters | **bridge-only** | Rails stay external |
+
+### Payroll absorption — stance reversal (2026-08-22)
+
+This matrix previously recorded payroll processing as **bridge-only** and payroll tax
+filing as **out-of-scope**, preferring Gusto/ADP-class bridges. That stance is reversed
+by kernel decision **DI-87A27C692B16** under **EP-PAYROLL-ABSORB**.
+
+Read the ledger rather than the headline: the kernel's own recommendation was to bridge
+payroll and absorb only mileage, on speed-to-value and reversibility grounds. Full
+absorption scored HIGHER on Architecture Over Shortcuts, Ground New Work In Existing
+Platform, Proper Fix Over Quick Fix and Optimize for the Whole. The objection was about
+sequencing, not scope, and the founder retained authority and answered it by shipping
+mileage first. `principle_decide` is advisory by contract.
+
+**What the new labels do and do not claim.** Both rows move to *experimental*, not
+*usable-now*. The mechanism exists and is tested; what is missing is the seeded
+jurisdiction data. A rate that cannot be cited must not be printed into source, so the
+statutory engine consumes effective-dated rules with a `sourceUrl` instead. Until those
+are seeded, **no install can run a real payroll or file a real return**, and no public
+claim may imply otherwise.
 
 ### Finance doc reconciliation rules
 
@@ -53,7 +73,7 @@ Labels are intentional and conservative. Promote a row only when UX verification
 | Timesheets | timesheet models | **experimental** | Present; owner UX varies by install |
 | Staffing / scheduling | workforce ops plans, scheduling specs | **experimental** / **planned** (depth) | Direction real; depth varies — do not claim Workday HCM |
 | Recruiting coworker | talent BIs | **planned** | Not a default claim |
-| Payroll processing | external adapters | **bridge-only** | Prefer integrate mode until native absorb criteria met |
+| Payroll processing | `PayRun`, `Payslip`, `PayComponentLine`, `lib/hr/payroll.ts`, `lib/hr/payroll-gl.ts` | **experimental** (was bridge-only) | Native absorb decided — DI-87A27C692B16. Gross-to-net, payslip component lines and GL posting ship; the manual NACHA disbursement rail also ships. The automated provider rail stays gated on a tool-evaluation |
 | Full Workday HCM admin | — | **out-of-scope** (current) | Complexity shield: ship jobs, not suite clones |
 
 ### Workforce doc reconciliation rules
