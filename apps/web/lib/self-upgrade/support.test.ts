@@ -21,14 +21,25 @@ function profile(
 }
 
 describe("resolveSelfUpgradeSupport", () => {
-  it("does not expose source self-upgrade as enabled on a consumer release", () => {
+  it("exposes the artifact-native updater on a consumer release", () => {
     expect(resolveSelfUpgradeSupport(profile("consumer"), true)).toEqual({
       configuredEnabled: true,
-      supported: false,
+      supported: true,
+      enabled: true,
+      targetKind: "release-artifact",
+      reason: "enabled",
+      message: null,
+    });
+  });
+
+  it("preserves an operator-disabled consumer preference without calling it unsupported", () => {
+    expect(resolveSelfUpgradeSupport(profile("consumer"), false)).toEqual({
+      configuredEnabled: false,
+      supported: true,
       enabled: false,
       targetKind: "release-artifact",
-      reason: "consumer-release-upgrade-unsupported",
-      message: "Automatic updates aren’t available for this install yet.",
+      reason: "disabled-by-config",
+      message: "Automatic updates are turned off for this release install.",
     });
   });
 

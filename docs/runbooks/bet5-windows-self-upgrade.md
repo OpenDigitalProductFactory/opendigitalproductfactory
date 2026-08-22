@@ -37,6 +37,29 @@ hit on the Mac: (1) `dpf-postgres-1` left in `Created` state (DB offline) becaus
 wedged at `[bet5-backfill] done.` never serving, because the old boot backfill never exits. Both are
 already fixed in `main` — the rebuild is what delivers those fixes to this box.
 
+## Consumer release installs — artifact-native upgrades
+
+A consumer install has release assets and tagged container images, but intentionally has no Git
+checkout. Do **not** use the source-install bootstrap in Step 1 for that shape. The first release that
+contains artifact-native self-upgrade still needs one governed installer/bootstrap run because the
+currently running portal cannot acquire capabilities that are not already in its image. After that
+bootstrap, use **Ops → Self-Upgrade → Upgrade now** for later releases.
+
+The consumer path:
+
+- resolves the next target only from a verified published release and the canonical install state;
+- pulls the portal and promoter for that exact tag and verifies the portal OCI revision and baked
+  source-content identity before swapping;
+- verifies `SHA256SUMS`, replaces only installer-managed lifecycle files, and preserves operator-owned
+  files and environment settings;
+- commits the release tag and install identity only after migration, health, SHA, and content checks
+  pass; and
+- restores the prior managed files, install state, and runtime tag if the identity commit fails.
+
+If the Upgrade Center reports that install identity is unverified, re-run the current consumer
+installer once to converge the canonical state; do not create a Git checkout beside the install.
+`self-upgrade.no-target` is safe and non-mutating: it means no newer verified release was available.
+
 ## Preconditions — capture current state first
 
 Run these and record the output before doing anything:

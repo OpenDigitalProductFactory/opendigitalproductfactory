@@ -1,3 +1,5 @@
+import type { ReleaseInstallContext } from "@/lib/self-upgrade/release-target";
+
 export const mockSession = {
   user: {
     id: "user-ops-1",
@@ -14,6 +16,23 @@ export const mockConfig = {
   healthTarget: 100,
   maintenanceWindows: [],
 };
+
+export const consumerReleaseSupport = {
+  configuredEnabled: true,
+  supported: true,
+  enabled: true,
+  targetKind: "release-artifact",
+  reason: "enabled",
+  message: null,
+} as const;
+
+export const consumerReleaseContext = {
+  installMode: "consumer",
+  imageTag: "v1.0.0",
+  installPath: "D:\\DPF",
+  composeFiles: ["docker-compose.yml", "docker-compose.release.yml"],
+  ghcrOwner: "opendigitalproductfactory",
+} satisfies ReleaseInstallContext;
 
 export const mockRun = {
   id: "cuid-1",

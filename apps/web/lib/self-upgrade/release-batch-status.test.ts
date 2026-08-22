@@ -73,26 +73,26 @@ describe("resolveReleaseBatchStatus", () => {
     expect(status.summary).toContain("2 of 10");
   });
 
-  it("does no Git or lineage work for an unsupported consumer release", async () => {
+  it("treats a verified release artifact as pre-batched without Git", async () => {
     mocks.readSelfUpgradeSupport.mockResolvedValue({
       configuredEnabled: true,
-      supported: false,
-      enabled: false,
+      supported: true,
+      enabled: true,
       targetKind: "release-artifact",
-      reason: "consumer-release-upgrade-unsupported",
-      message: "Automatic updates aren’t available for this install yet.",
+      reason: "enabled",
+      message: null,
     });
 
     const status = await resolveReleaseBatchStatus({ config: CONFIG, fresh: true });
 
     expect(status).toMatchObject({
       applicable: false,
-      eligible: false,
-      reason: "consumer-release-upgrade-unsupported",
+      eligible: true,
+      reason: "release-artifact",
       pendingCount: null,
       lineageSha: null,
-      summary: "Automatic updates aren’t available for this install yet.",
-      support: { supported: false, targetKind: "release-artifact" },
+      summary: "Published releases are already verified as a complete batch; Git commit batching does not apply.",
+      support: { supported: true, targetKind: "release-artifact" },
     });
     expect(mocks.getLatestSucceededRun).not.toHaveBeenCalled();
     expect(mocks.defaultGitRunner).not.toHaveBeenCalled();

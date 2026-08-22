@@ -83,6 +83,7 @@ describe("readLatestReleaseStamp", () => {
 
   const greenRun = {
     id: 100,
+    head_sha: "a".repeat(40),
     head_branch: "v6.1.0",
     event: "push",
     status: "completed",
@@ -99,6 +100,7 @@ describe("readLatestReleaseStamp", () => {
       ok: true,
       latest: {
         tag: "v6.1.0",
+        headSha: "a".repeat(40),
         runId: 100,
         runUrl: "https://github.com/o/r/actions/runs/100",
         status: "verified",

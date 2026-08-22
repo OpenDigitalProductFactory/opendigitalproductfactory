@@ -76,13 +76,13 @@ export async function buildCandidatePromoterArtifactImage(
 }
 
 export async function resolveCandidatePromoterArtifact(
-  params: { promoterImage?: string; targetSha: string; callerProtocol?: number },
+  params: { promoterImage?: string; candidateReference?: string; targetSha: string; callerProtocol?: number },
   runDocker: ArtifactDockerRunner,
 ): Promise<ResolvedPromoterArtifact> {
   const configured = params.promoterImage?.trim() || DEFAULT_PROMOTER_IMAGE;
-  const reference = configured.includes("@sha256:") || configured.startsWith("sha256:")
+  const reference = params.candidateReference ?? (configured.includes("@sha256:") || configured.startsWith("sha256:")
     ? configured
-    : `${configured.replace(/:[^/:]+$/, "")}:${params.targetSha}`;
+    : `${configured.replace(/:[^/:]+$/, "")}:${params.targetSha}`);
   if (!isLocalPromoterReference(configured)) {
     requireDockerSuccess(await runDocker(["pull", reference]), "promoter_pull");
   }

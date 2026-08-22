@@ -143,14 +143,14 @@ describe("requestSelfUpgrade", () => {
     expect(mocks.isUpgradeWindowOpen).not.toHaveBeenCalled();
   });
 
-  it("refuses to queue a source upgrade on a consumer release install", async () => {
+  it("queues an artifact-native upgrade on a consumer release install", async () => {
     mocks.readSelfUpgradeSupport.mockResolvedValue({
       configuredEnabled: true,
-      supported: false,
-      enabled: false,
+      supported: true,
+      enabled: true,
       targetKind: "release-artifact",
-      reason: "consumer-release-upgrade-unsupported",
-      message: "Automatic updates aren’t available for this install yet.",
+      reason: "enabled",
+      message: null,
     });
 
     const result = await requestSelfUpgrade({
@@ -158,15 +158,13 @@ describe("requestSelfUpgrade", () => {
       actorKind: "human",
     });
 
-    expect(result).toEqual({
+    expect(result).toMatchObject({
       success: true,
-      status: "unsupported_install_mode",
-      reason: "consumer-release-upgrade-unsupported",
-      targetKind: "release-artifact",
-      message: "Automatic updates aren’t available for this install yet.",
+      status: "queued",
+      runId: "SUR-QUEUED1",
     });
-    expect(mocks.createRun).not.toHaveBeenCalled();
-    expect(mocks.inngestSend).not.toHaveBeenCalled();
+    expect(mocks.createRun).toHaveBeenCalled();
+    expect(mocks.inngestSend).toHaveBeenCalled();
   });
 
   it.each(["running", "queued", "pending"])(

@@ -38,10 +38,6 @@ const mocks = vi.hoisted(() => ({
   getCooldownUntil: vi.fn().mockResolvedValue(null),
   recordCooldown: vi.fn().mockResolvedValue(undefined),
   clearCooldown: vi.fn().mockResolvedValue(undefined),
-  // Host-memory-headroom guard (BI-EFA383AA): mock so the unit test never reads
-  // real host memory. The real guard calls os.freemem(), which under-reports on
-  // macOS (cache-heavy) and defers the whole suite on any memory-constrained
-  // host. Default to "enough headroom"; the defer path is exercised via override.
   evaluateHostMemoryGuard: vi.fn().mockResolvedValue({ defer: false }),
   emitUpgradeEvent: vi.fn(),
   createSelfUpgradeRecoveryPoint: vi.fn(),
@@ -51,13 +47,11 @@ const mocks = vi.hoisted(() => ({
   signalSwapComplete: vi.fn(),
   failQuiescenceSwap: vi.fn(),
   captureActiveSessionBlockers: vi.fn().mockResolvedValue({ surfaces: [] }),
-  // 24/7 auto-window resolution defaults to operating hours.
   resolveAutoUpgradeWindow: vi.fn().mockReturnValue({ kind: "operating-hours" }),
-  // Operator blackout gate (BI-59591B14). Default null = no active blackout, so
-  // every existing scheduled test proceeds exactly as before.
   getActiveSelfUpgradeBlackout: vi.fn().mockResolvedValue(null),
   readFile: vi.fn(async (path: string) => path.endsWith("install-state.json") ? '{"platform":"linux","arch":"amd64"}' : "s".repeat(32)),
   resolveSelfUpgradeHostIdentity: vi.fn(() => ({ platform: "linux", arch: "amd64", provenance: "explicit" })),
+  readLatestReleaseStamp: vi.fn(),
 }));
 
 vi.mock("@/lib/self-upgrade/config", () => ({
@@ -70,6 +64,10 @@ vi.mock("@/lib/self-upgrade/support", () => ({
 }));
 
 vi.mock("node:fs/promises", () => ({ readFile: mocks.readFile }));
+
+vi.mock("@/lib/release-health/release-runs-reader", () => ({
+  readLatestReleaseStamp: mocks.readLatestReleaseStamp,
+}));
 
 vi.mock("@/lib/self-upgrade/window", () => ({
   isUpgradeWindowOpen: mocks.isUpgradeWindowOpen,
@@ -93,8 +91,6 @@ vi.mock("@/lib/self-upgrade/last-check", () => ({
   isCheckIntervalElapsed: mocks.isCheckIntervalElapsed,
 }));
 
-// Real (pure) argv builders so the orchestrator constructs proper git commands;
-// the mocked defaultGitRunner branches on them.
 vi.mock("@/lib/self-upgrade/version", () => ({
   buildFetchCommand: (i: { hostSourcePath: string; remote: string; branch: string }) => [
     "git",
@@ -152,7 +148,6 @@ vi.mock("@/lib/self-upgrade/cooldown", () => ({
   getCooldownUntil: mocks.getCooldownUntil,
   recordCooldown: mocks.recordCooldown,
   clearCooldown: mocks.clearCooldown,
-  // Pure gate kept real so the orchestrator's cooldown logic is exercised.
   isInCooldown: (until: Date | null, now: Date) =>
     !!until && now.getTime() < until.getTime(),
   DEFAULT_COOLDOWN_MINUTES: 30,
@@ -191,10 +186,6 @@ import {
 import { allFunctions } from "./index";
 import { PROMOTER_ALREADY_RUNNING_EXIT_CODE } from "@/lib/self-upgrade/promoter";
 
-/**
- * Helper to set up startQuiescence to return a successful ready-to-swap
- * outcome. Each test that wants the happy path calls this in its beforeEach.
- */
 function setupQuiescenceReady(quiescenceRunId = "QR-2026-05-24-test1234"): void {
   mocks.startQuiescence.mockResolvedValue({
     runId: quiescenceRunId,
@@ -219,11 +210,6 @@ function setupQuiescenceReady(quiescenceRunId = "QR-2026-05-24-test1234"): void 
   mocks.failQuiescenceSwap.mockResolvedValue(undefined);
 }
 
-/**
- * Set up the source-prep happy path: upstream resolves to `stamp` via the
- * mocked git runner (rev-parse), no prior succeeded run (lineage gate open),
- * and prepareUpgradeSource returns a clean merge with `stamp` as the identity.
- */
 function setupSourceReady(stamp = "abc1234deadbeef"): void {
   mocks.defaultGitRunner.mockImplementation(async (args: string[]) =>
     args.includes("rev-parse")
@@ -305,11 +291,6 @@ const ENABLED_CONFIG = {
 describe("success path", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    // Activity precheck default: no in-flight surfaces. mockReset (not just
-    // clearAllMocks, which leaves implementations and one-shot queues intact)
-    // clears any leftover mockResolvedValueOnce — the "force bypasses" test
-    // below queues a once-value that force never consumes, so without this it
-    // leaks into the next test and spuriously skips it with activity-in-flight.
     mocks.captureActiveSessionBlockers.mockReset();
     mocks.captureActiveSessionBlockers.mockResolvedValue({ surfaces: [] });
     mocks.getSelfUpgradeConfig.mockResolvedValue(ENABLED_CONFIG);
@@ -332,35 +313,30 @@ describe("success path", () => {
     expect(mocks.completeRun).toHaveBeenCalledWith("SUR-AAAABBBB");
   });
 
-  it("skips consumer releases before Git, cooldown, or quiescence work", async () => {
+  it("classifies a source-free consumer at the verified release as up to date without Git", async () => {
+    const sourceSha = "a".repeat(40);
+    const releaseState = JSON.stringify({ installMode: "consumer", imageTag: "v2.0.0", installPath: "/opt/dpf", composeFiles: ["docker-compose.yml", "docker-compose.release.yml"] });
+    vi.stubEnv("GHCR_OWNER", "opendigitalproductfactory");
     mocks.readSelfUpgradeSupport.mockResolvedValue({
       configuredEnabled: true,
-      supported: false,
-      enabled: false,
+      supported: true,
+      enabled: true,
       targetKind: "release-artifact",
-      reason: "consumer-release-upgrade-unsupported",
-      message: "Automatic updates aren’t available for this install yet.",
+      reason: "enabled",
+      message: null,
     });
-
-    const result = await runSelfUpgrade({
-      triggeredBy: "ops",
-      runId: "SUR-CONSUMER",
-    });
-
-    expect(result).toMatchObject({
-      skipped: true,
-      reason: "unsupported-install-mode",
-      runId: "SUR-CONSUMER",
-      supportReason: "consumer-release-upgrade-unsupported",
-      targetKind: "release-artifact",
-    });
-    expect(mocks.skipRun).toHaveBeenCalledWith(
-      "SUR-CONSUMER",
-      "unsupported-install-mode: consumer-release-upgrade-unsupported",
-    );
-    expect(mocks.getCooldownUntil).not.toHaveBeenCalled();
-    expect(mocks.defaultGitRunner).not.toHaveBeenCalled();
-    expect(mocks.startQuiescence).not.toHaveBeenCalled();
+    mocks.readFile.mockImplementation(async (path: string) => path.endsWith("install-state.json") ? releaseState : "consumer");
+    mocks.getDeployedSha.mockResolvedValue(sourceSha);
+    mocks.readLatestReleaseStamp.mockResolvedValue({ ok: true, latest: { tag: "v2.0.0", headSha: sourceSha, status: "verified" } });
+    try {
+      const result = await runSelfUpgrade({ triggeredBy: "ops" });
+      expect(result).toMatchObject({ skipped: true, reason: "up-to-date", releaseTag: "v2.0.0" });
+      expect(mocks.defaultGitRunner).not.toHaveBeenCalled();
+      expect(mocks.prepareUpgradeSource).not.toHaveBeenCalled();
+      expect(mocks.evaluateHostMemoryGuard).not.toHaveBeenCalled();
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 
   it.each([

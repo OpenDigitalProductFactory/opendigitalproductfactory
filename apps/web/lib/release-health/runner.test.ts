@@ -21,6 +21,7 @@ const NOW = new Date("2026-06-10T03:00:00Z");
 function snapshot(over: Partial<ReleaseStampSnapshot> = {}): ReleaseStampSnapshot {
   return {
     tag: "v6.1.0",
+    headSha: null,
     runId: 100,
     runUrl: "https://github.com/o/r/actions/runs/100",
     status: "verified",

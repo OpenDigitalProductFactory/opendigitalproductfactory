@@ -28,11 +28,11 @@ import { selfUpgradePack } from "./self-upgrade-pack";
 
 const support = {
   configuredEnabled: true,
-  supported: false,
-  enabled: false,
+  supported: true,
+  enabled: true,
   targetKind: "release-artifact",
-  reason: "consumer-release-upgrade-unsupported",
-  message: "Automatic updates aren’t available for this install yet.",
+  reason: "enabled",
+  message: null,
 };
 
 async function call(name: keyof typeof selfUpgradePack.handlers) {
@@ -45,44 +45,44 @@ describe("self-upgrade MCP tools on consumer installs", () => {
     mocks.readSelfUpgradeSupport.mockResolvedValue(support);
     mocks.resolveReleaseBatchStatus.mockResolvedValue({
       applicable: false,
-      eligible: false,
-      reason: support.reason,
+      eligible: true,
+      reason: "release-artifact",
       pendingCount: null,
       minPendingPrs: 10,
       maxWaitHours: 168,
       oldestPendingAt: null,
       lineageSha: null,
-      summary: support.message,
+      summary: "Published releases are already verified as a complete batch; Git commit batching does not apply.",
       support,
     });
     mocks.getLatestRun.mockResolvedValue(null);
   });
 
-  it("returns an honest no-dispatch result", async () => {
+  it("returns the queued artifact-native dispatch result", async () => {
     mocks.requestSelfUpgrade.mockResolvedValue({
       success: true,
-      status: "unsupported_install_mode",
-      reason: support.reason,
-      targetKind: support.targetKind,
-      message: support.message,
+      status: "queued",
+      runId: "SUR-CONSUMER",
+      triggeredBy: "mcp:codex",
+      eventIds: ["evt-1"],
     });
     expect(await call("request_self_upgrade")).toMatchObject({
       success: true,
-      data: { status: "unsupported_install_mode", reason: support.reason },
+      data: { status: "queued", runId: "SUR-CONSUMER" },
     });
   });
 
-  it("reports effectively disabled and ineligible", async () => {
+  it("reports enabled and routine-upgrade eligible", async () => {
     expect(await call("get_self_upgrade_queue_status")).toMatchObject({
       success: true,
-      data: { supported: false, enabled: false, routineUpgradeEligible: false },
+      data: { supported: true, enabled: true, routineUpgradeEligible: true },
     });
   });
 
-  it("does not offer source-promoter repair", async () => {
+  it("reports that the promoter is release-managed", async () => {
     expect(await call("repair_promoter_image")).toMatchObject({
       success: true,
-      data: { supported: false, targetKind: "release-artifact" },
+      data: { supported: true, targetKind: "release-artifact", repairMode: "release-managed" },
     });
   });
 });

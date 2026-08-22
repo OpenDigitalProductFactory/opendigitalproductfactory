@@ -118,6 +118,13 @@ _missing=()
 [[ -n "${PROMOTE_BACKUP_PATH:-}" ]] || _missing+=(PROMOTE_BACKUP_PATH)
 [[ -n "${PROMOTE_HEALTH_URL:-}"  ]] || _missing+=(PROMOTE_HEALTH_URL)
 
+_release_mode=0
+if [[ "${DPF_PROMOTION_MODE:-source}" == "release" ]]; then
+  _release_mode=1
+  [[ "${DPF_RELEASE_TAG:-}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([-+][A-Za-z0-9.-]+)?$ ]] || _missing+=(DPF_RELEASE_TAG)
+  [[ "${GHCR_OWNER:-}" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,254}$ ]] || _missing+=(GHCR_OWNER)
+fi
+
 if [[ ${#_missing[@]} -gt 0 ]]; then
   printf 'error: missing required variables: %s\n' "${_missing[*]}" >&2
   exit 1
@@ -141,7 +148,32 @@ fi
 # A stale catalog/state pair fails before Docker mutation. Copy the snapshot to
 # the recovery point and restore it atomically if any later promotion step fails.
 _install_state="${DPF_PROMOTER_STATE_DIR:-/dpf-state}/install-state.json"
-_profile_adapter="$PROMOTE_SOURCE/scripts/lib/resolve-capability-compose-profiles.mjs"
+_compose_root="$PROMOTE_SOURCE"
+_release_assets=""
+_candidate_portal=""
+if [[ $_release_mode -eq 1 && $_dry_run -eq 0 ]]; then
+  _candidate_portal="ghcr.io/${GHCR_OWNER}/dpf-portal:${DPF_RELEASE_TAG}"
+  docker pull "$_candidate_portal" >/dev/null
+  _candidate_revision="$(docker image inspect "$_candidate_portal" --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}' | tr -d '[:space:]')"
+  [[ "$_candidate_revision" == "$PROMOTE_TARGET_SHA" ]] || {
+    printf 'error: release portal revision %s does not match promote target %s\n' "${_candidate_revision:-missing}" "$PROMOTE_TARGET_SHA" >&2
+    exit 1
+  }
+  mkdir -p "$PROMOTE_BACKUP_PATH"
+  _release_assets="$(mktemp -d "$PROMOTE_BACKUP_PATH/candidate-release-assets.XXXXXX")"
+  _asset_container="$(docker create "$_candidate_portal")"
+  if ! docker cp "${_asset_container}:/dpf-release-assets/." "$_release_assets"; then
+    docker rm -f "$_asset_container" >/dev/null 2>&1 || true
+    exit 1
+  fi
+  docker rm "$_asset_container" >/dev/null
+  _asset_container=""
+  (cd "$_release_assets" && sha256sum -c SHA256SUMS >/dev/null)
+  _compose_root="$_release_assets"
+  export DPF_IMAGE_TAG="$DPF_RELEASE_TAG"
+  export GHCR_OWNER
+fi
+_profile_adapter="$_compose_root/scripts/lib/resolve-capability-compose-profiles.mjs"
 [[ -f "$_install_state" && -f "$_profile_adapter" ]] || { printf 'error: capability_state_stale\n' >&2; exit 1; }
 _capability_projection="$(node "$_profile_adapter" --state "$_install_state" --overlay promote --migrate)" || exit $?
 export COMPOSE_PROFILES="$(printf '%s' "$_capability_projection" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(JSON.parse(s).composeProfiles.join(",")))')"
@@ -173,7 +205,7 @@ _project="${PROMOTE_COMPOSE_PROJECT:-dpf}"
 _compose_files=(${PROMOTE_COMPOSE_FILES:-docker-compose.yml})
 _f_args=()
 for _f in "${_compose_files[@]}"; do
-  _f_args+=(-f "$PROMOTE_SOURCE/$_f")
+  _f_args+=(-f "$_compose_root/$_f")
 done
 _env_args=()
 if [[ -n "${PROMOTE_COMPOSE_ENV_FILE:-}" ]]; then
@@ -231,7 +263,7 @@ services:
     volumes: !override
       - ${_datavol}:/var/lib/postgresql/data
 YAML
-  docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$PROMOTE_SOURCE" -p "$_project" \
+  docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$_compose_root" -p "$_project" \
     "${_f_args[@]}" -f "$_ov" up -d --no-deps --force-recreate "$_svc" || _rc=1
   rm -f "$_ov"
   return "$_rc"
@@ -291,6 +323,10 @@ fi
 # not root, so git refuses to read it without this.
 export DPF_PLATFORM_VERSION=""
 if [[ $_dry_run -eq 0 ]]; then
+  if [[ $_release_mode -eq 1 ]]; then
+    DPF_PLATFORM_VERSION="${DPF_RELEASE_TAG#v}"
+    export DPF_PLATFORM_VERSION
+  else
   git config --global --add safe.directory '*' 2>/dev/null || true
   # BI-145214F0 — refresh tags before describe (same root cause as
   # install-dpf.sh). PROMOTE_SOURCE is the host source mount inside the
@@ -301,6 +337,7 @@ if [[ $_dry_run -eq 0 ]]; then
   git -C "$PROMOTE_SOURCE" fetch --tags --force origin 2>/dev/null || true
   DPF_PLATFORM_VERSION="$(git -C "$PROMOTE_SOURCE" describe --tags --always 2>/dev/null | sed 's/^v//' || true)"
   export DPF_PLATFORM_VERSION
+  fi
 fi
 
 # --- Step 3: docker-build ---
@@ -323,6 +360,14 @@ fi
 # the same build.
 emit_step docker-build
 if [[ $_dry_run -eq 0 ]]; then
+  if [[ $_release_mode -eq 1 ]]; then
+    _built_sha="$PROMOTE_TARGET_SHA"
+    export DPF_VERSION="$_built_sha"
+    docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$_compose_root" -p "$_project" \
+      "${_f_args[@]}" pull portal postgres
+    _built_hash=$(docker run --rm "$_candidate_portal" cat /app/.dpf-source-content-hash 2>/dev/null | tr -d '[:space:]' || true)
+    [[ -n "$_built_hash" ]] || { printf 'error: candidate release image has no source content hash\n' >&2; exit 1; }
+  else
   _built_sha=$(git -C "$PROMOTE_SOURCE" rev-parse HEAD 2>/dev/null | tr -d '[:space:]' || true)
   [[ -n "$_built_sha" ]] || {
     printf 'error: cannot resolve HEAD of build source %s\n' "$PROMOTE_SOURCE" >&2
@@ -347,7 +392,7 @@ if [[ $_dry_run -eq 0 ]]; then
   # build context is streamed to the daemon so it works from /host-source where
   # a host bind mount could not. The build is a single COPY over the cached
   # pgvector base — negligible cost.
-  docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$PROMOTE_SOURCE" -p "$_project" \
+  docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$_compose_root" -p "$_project" \
     "${_f_args[@]}" build portal postgres
   # Capture the source content hash baked into the FRESHLY BUILT image. It is
   # computed from the actual bundled source bytes (Dockerfile) independent of
@@ -359,6 +404,7 @@ if [[ $_dry_run -eq 0 ]]; then
     printf 'error: freshly built image has no /app/.dpf-source-content-hash\n' >&2
     exit 1
   }
+  fi
 fi
 
 # --- Step 3a: ensure Postgres provides pgvector ---
@@ -400,7 +446,7 @@ if [[ $_dry_run -eq 0 ]]; then
   # Scoped to this single migration, which fails at its first statement (CREATE EXTENSION), so
   # nothing was applied and rolling it back is a no-op on data. Best-effort (`|| true`): a
   # clean install has no such record and this is a harmless miss.
-  docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$PROMOTE_SOURCE" -p "$_project" \
+  docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$_compose_root" -p "$_project" \
     "${_f_args[@]}" run --rm -T --no-deps --entrypoint sh portal \
     -c 'cd /app && pnpm --filter @dpf/db exec prisma migrate resolve --rolled-back 20260714110000_bet5_pgvector_foundation' >/dev/null 2>&1 || true
 
@@ -411,7 +457,7 @@ if [[ $_dry_run -eq 0 ]]; then
   # migration bytes. Only that state may be rolled back so normal deploy can
   # apply the preparation migration first and then retry the immutable backfill.
   _human_principal_recovery="$(
-    docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$PROMOTE_SOURCE" -p "$_project" \
+    docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$_compose_root" -p "$_project" \
       "${_f_args[@]}" run --rm -T --no-deps --entrypoint sh portal \
       -c 'cd /app && node packages/db/scripts/recover-human-principal-backfill-migration.mjs'
   )" || {
@@ -421,10 +467,10 @@ if [[ $_dry_run -eq 0 ]]; then
   case "$_human_principal_recovery" in
     recover:*)
       _human_principal_migration_id="${_human_principal_recovery#recover:}"
-      docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$PROMOTE_SOURCE" -p "$_project" \
+      docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$_compose_root" -p "$_project" \
         "${_f_args[@]}" run --rm -T --no-deps --entrypoint sh portal \
         -c 'cd /app && pnpm --filter @dpf/db exec prisma migrate resolve --rolled-back 20260812110000_backfill_missing_human_principals'
-      docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$PROMOTE_SOURCE" -p "$_project" \
+      docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$_compose_root" -p "$_project" \
         "${_f_args[@]}" run --rm -T --no-deps --entrypoint sh portal \
         -c 'cd /app && node packages/db/scripts/recover-human-principal-backfill-migration.mjs --verify-rolled-back "$1"' \
         sh "$_human_principal_migration_id"
@@ -443,7 +489,7 @@ if [[ $_dry_run -eq 0 ]]; then
   # the exact pre-snapshot quarantine guard. Any mismatch aborts before the
   # portal swap.
   _inventory_snapshot_recovery="$(
-    docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$PROMOTE_SOURCE" -p "$_project" \
+    docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$_compose_root" -p "$_project" \
       "${_f_args[@]}" run --rm -T --no-deps --entrypoint sh portal \
       -c 'cd /app && node packages/db/scripts/recover-inventory-snapshot-migration.mjs'
   )" || {
@@ -453,10 +499,10 @@ if [[ $_dry_run -eq 0 ]]; then
   case "$_inventory_snapshot_recovery" in
     recover:*)
       _inventory_snapshot_migration_id="${_inventory_snapshot_recovery#recover:}"
-      docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$PROMOTE_SOURCE" -p "$_project" \
+      docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$_compose_root" -p "$_project" \
         "${_f_args[@]}" run --rm -T --no-deps --entrypoint sh portal \
         -c 'cd /app && pnpm --filter @dpf/db exec prisma migrate resolve --rolled-back 20260728115900_snapshot_inventory_observation_facts'
-      docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$PROMOTE_SOURCE" -p "$_project" \
+      docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$_compose_root" -p "$_project" \
         "${_f_args[@]}" run --rm -T --no-deps --entrypoint sh portal \
         -c 'cd /app && node packages/db/scripts/recover-inventory-snapshot-migration.mjs --verify-rolled-back "$1"' \
         sh "$_inventory_snapshot_migration_id"
@@ -488,7 +534,7 @@ fi
 # deploy is idempotent. Step 3b is still needed as the pre-swap schema guard.
 emit_step migrate
 if [[ $_dry_run -eq 0 ]]; then
-  docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$PROMOTE_SOURCE" -p "$_project" \
+  docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$_compose_root" -p "$_project" \
     "${_f_args[@]}" run --rm -T --no-deps --entrypoint sh portal \
     -c 'cd /app && pnpm --filter @dpf/db exec prisma migrate deploy'
 fi
@@ -500,7 +546,7 @@ fi
 # SHA of the code it is running at /api/health/sha.
 emit_step docker-up
 if [[ $_dry_run -eq 0 ]]; then
-  docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$PROMOTE_SOURCE" -p "$_project" \
+  docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$_compose_root" -p "$_project" \
     "${_f_args[@]}" up -d --no-deps --force-recreate portal
 fi  # DPF_PLATFORM_VERSION stays exported from above so any rebuild keeps the stamp
 
@@ -527,7 +573,7 @@ fi  # DPF_PLATFORM_VERSION stays exported from above so any rebuild keeps the st
 # pseudo-tty so structured log output reaches the promoter's stdout cleanly.
 emit_step seed
 if [[ $_dry_run -eq 0 ]]; then
-  docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$PROMOTE_SOURCE" -p "$_project" \
+  docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$_compose_root" -p "$_project" \
     "${_f_args[@]}" run --rm -T --no-deps --entrypoint /docker-entrypoint.sh portal
 fi
 
@@ -591,13 +637,36 @@ fi
 # is capable of failing.
 emit_step content-verify
 if [[ $_dry_run -eq 0 ]]; then
-  _running_hash=$(docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$PROMOTE_SOURCE" -p "$_project" \
+  _running_hash=$(docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$_compose_root" -p "$_project" \
     "${_f_args[@]}" exec -T portal cat /app/.dpf-source-content-hash 2>/dev/null | tr -d '[:space:]' || true)
   [[ -n "$_running_hash" && "$_running_hash" == "$_built_hash" ]] || {
     printf 'error: running content hash %s does not match freshly built %s — recreate did not deploy the new image\n' \
       "${_running_hash:-unknown}" "$_built_hash" >&2
     exit 1
   }
+fi
+
+# A verified release runtime and its restart identity are one transaction. Only
+# commit the candidate's manifest-covered lifecycle assets, .env tag, and
+# install-state after the running portal proves both health and source/content
+# identity. The installer helper restores every managed byte on failure; then
+# compose is rerun against the restored old tag to put the portal back too.
+emit_step release-identity-commit
+if [[ $_release_mode -eq 1 && $_dry_run -eq 0 ]]; then
+  if ! node "$_promoter_dir/installer/install-release-assets.mjs" \
+    --source "$_release_assets" \
+    --install "$PROMOTE_SOURCE" \
+    --state "$_install_state" \
+    --tag "$DPF_RELEASE_TAG" \
+    --owner "$GHCR_OWNER" \
+    --recovery "$PROMOTE_BACKUP_PATH/release-identity"; then
+    printf 'error: release identity commit failed; restoring the prior portal tag\n' >&2
+    _rollback_f_args=()
+    for _f in "${_compose_files[@]}"; do _rollback_f_args+=(-f "$PROMOTE_SOURCE/$_f"); done
+    docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$PROMOTE_SOURCE" -p "$_project" \
+      "${_rollback_f_args[@]}" up -d --no-deps --force-recreate portal || true
+    exit 1
+  fi
 fi
 
 # --- Step 7b: sandbox-refresh ---
@@ -642,11 +711,16 @@ if [[ $_dry_run -eq 0 ]]; then
     fi
   fi
   if [[ $_sandbox_ok -eq 1 ]]; then
-    docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$PROMOTE_SOURCE" -p "$_project" \
-      "${_f_args[@]}" build sandbox || _sandbox_ok=0
+    if [[ $_release_mode -eq 1 ]]; then
+      docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$_compose_root" -p "$_project" \
+        "${_f_args[@]}" pull sandbox || _sandbox_ok=0
+    else
+      docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$_compose_root" -p "$_project" \
+        "${_f_args[@]}" build sandbox || _sandbox_ok=0
+    fi
   fi
   if [[ $_sandbox_ok -eq 1 ]]; then
-    docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$PROMOTE_SOURCE" -p "$_project" \
+    docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$_compose_root" -p "$_project" \
       "${_f_args[@]}" up -d --no-deps --force-recreate sandbox || _sandbox_ok=0
   fi
   if [[ $_sandbox_ok -eq 0 ]]; then

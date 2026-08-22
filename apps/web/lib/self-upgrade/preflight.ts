@@ -43,6 +43,8 @@ export async function runCandidatePreflight(params: {
   readinessMode?: string;
   readinessOwner?: ReadinessOwner;
   promoterImage?: string;
+  /** Published immutable release promoter; bypasses source compilation. */
+  candidatePromoterReference?: string;
   callerProtocolVersion?: number;
   sourcePath: string;
   hostInstallPath: string;
@@ -78,11 +80,14 @@ export async function runCandidatePreflight(params: {
   const runtime = await params.runtime();
   const startedAt = new Date().toISOString();
   try {
-    const image = await runtime.buildCandidatePromoterImage({
+    const image = params.candidatePromoterReference ?? await runtime.buildCandidatePromoterImage({
       sourcePath: params.sourcePath, targetSha: params.targetSha, promoterImage: params.promoterImage,
     });
     const artifact = await runtime.resolvePromoterArtifact({
-      promoterImage: image, targetSha: params.targetSha, callerProtocol: params.callerProtocolVersion,
+      promoterImage: image,
+      candidateReference: params.candidatePromoterReference,
+      targetSha: params.targetSha,
+      callerProtocol: params.callerProtocolVersion,
     });
     const readiness = await runtime.runPromoterReadiness({
       hostInstallPath: params.hostInstallPath,
