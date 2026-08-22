@@ -16,7 +16,7 @@ status: active
 
 **Umbrella:** `BI-F50B1E46`
 
-**Workroom:** `WC-53A7FA07`
+**Workrooms:** `WC-53A7FA07` (analysis/design) and `WC-587EA55D` (BI/repository branch claim)
 
 **Kernel decision:** `DI-BC2255C06EC5` — `dpf-canonical-channel-projection` (5.108; high confidence; 1.706 margin; no commandment conflict)
 
@@ -313,8 +313,13 @@ Verification cases `VC-WP-01` through `VC-WP-10` are plan gates. Each child link
 
 This plan is deliberately decomposed. Every independently shippable deliverable maps to the live, build-triaged child BI in the delivery graph. The governed coverage receipt is recorded against the immutable repository plan artifact and must be revalidated before implementation:
 
-- **Coverage receipt:** pending immutable plan commit and governed recorder call
-- **Validation:** pending
+- **Coverage receipt:** **blocked; none fabricated**
+- **Submitted immutable artifact:** commit `233536d7aaa315f10e8588ed3a9a79ee66bd6645`, plan blob `04bc8d9826f1ec27a6e35ea45adce83b6dcdab4a`
+- **Submitted mapping:** all seven delivery-graph BIs, their requirement/contract/flow/verification references, and the dependencies shown above
+- **Recorder result (two attempts):** `plan-artifact-invalid` — “Repository artifact ownership is missing or ambiguous for this subject.”
+- **Concrete blocker:** `BI-F0715C9C`
+
+The branch was claimed to the parent BI and canonical repository as `WC-587EA55D`. Two `adopt_worktree` calls supplied the exact pushed head SHA but the live tool returned `headSha: null` both times. The immutable artifact resolver requires a subject-bound Workroom with an exact recorded head, so the exposed external-contributor path cannot reach the coverage validator. Once fixed, this new xlarge umbrella may also require an `initiative_scope_baseline`; no baseline/spec-approval writer is exposed in the current tool surface. Implementation must not begin until `BI-F0715C9C` restores an attainable governed path and a live coverage receipt is recorded and copied here.
 
 ## Completion criteria
 

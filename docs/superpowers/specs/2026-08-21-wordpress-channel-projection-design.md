@@ -10,7 +10,7 @@ status: active
 | Status | Proposed for implementation |
 | Epic | `EP-31C5A6C8` — External Website Channels and CMS Interoperability |
 | Parent backlog item | `BI-F50B1E46` |
-| Workroom | `WC-53A7FA07` |
+| Workrooms | `WC-53A7FA07` (analysis/design) · `WC-587EA55D` (BI/repository branch claim) |
 | Kernel decision | `DI-BC2255C06EC5` / contribution ledger `DI-BC2255C06EC5` |
 | Decision | Build a provider-neutral DPF channel-projection boundary, with WordPress as the first provider. Do not build or bundle a general-purpose public CMS. |
 
