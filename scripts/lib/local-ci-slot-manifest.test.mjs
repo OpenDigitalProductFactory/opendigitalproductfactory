@@ -70,6 +70,14 @@ test("Windows bare-common-dir layout does not grow a duplicate worktrees suffix"
   );
 });
 
+test("POSIX common-dir paths retain POSIX separators", () => {
+  assert.equal(
+    resolveLocalCiRootClone("/tmp/dpf-worktrees/.opendigitalproductfactory.git"),
+    "/tmp/dpf-worktrees/.opendigitalproductfactory.git",
+  );
+  assert.equal(resolveLocalCiRootClone("/tmp/dpf/.git"), "/tmp/dpf");
+});
+
 test("slot manifests are versioned and every mutable identity is isolated", () => {
   const paths = fixture();
   const slots = LOCAL_CI_SLOT_KEYS.map((slotKey) =>

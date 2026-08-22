@@ -40,10 +40,12 @@ function requireAbsolutePath(name, value) {
  * @param {string} gitCommonDir
  */
 export function resolveLocalCiRootClone(gitCommonDir) {
-  const pathApi = win32.isAbsolute(gitCommonDir)
-    ? win32
-    : posix.isAbsolute(gitCommonDir)
-      ? posix
+  // win32.isAbsolute('/tmp/repo') is also true, so POSIX must win for a
+  // slash-rooted path. Drive-letter and UNC paths then fall through to win32.
+  const pathApi = posix.isAbsolute(gitCommonDir)
+    ? posix
+    : win32.isAbsolute(gitCommonDir)
+      ? win32
       : null;
   if (!pathApi) throw new Error("gitCommonDir must be an absolute path");
   const commonDir = pathApi.resolve(gitCommonDir);
