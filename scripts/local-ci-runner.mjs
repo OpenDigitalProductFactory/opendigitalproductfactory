@@ -59,11 +59,25 @@ function redactUrl(url) {
   return url.replace(/\/\/.*@/, "//***@");
 }
 
-function executableOnPath(command, { env = process.env, platform = process.platform } = {}) {
+function environmentValue(env, name) {
+  const target = name.toLowerCase();
+  const entry = Object.entries(env).find(([key]) => key.toLowerCase() === target);
+  return entry?.[1] ?? "";
+}
+
+function withCanonicalPath(env, pathValue, platform) {
+  if (platform !== "win32") return { ...env, PATH: pathValue };
+  return Object.fromEntries([
+    ...Object.entries(env).filter(([key]) => key.toLowerCase() !== "path"),
+    ["PATH", pathValue],
+  ]);
+}
+
+export function executableOnPath(command, { env = process.env, platform = process.platform } = {}) {
   const extensions = platform === "win32"
-    ? (env.PATHEXT || ".COM;.EXE;.BAT;.CMD").split(";")
+    ? (environmentValue(env, "PATHEXT") || ".COM;.EXE;.BAT;.CMD").split(";")
     : [""];
-  for (const entry of (env.PATH || "").split(delimiter).filter(Boolean)) {
+  for (const entry of environmentValue(env, "PATH").split(delimiter).filter(Boolean)) {
     for (const extension of extensions) {
       const candidate = join(entry, `${command}${extension}`);
       try {
@@ -99,7 +113,13 @@ export function preparePinnedPnpmEnvironment({
   }
   const actualVersion = observed.stdout.trim();
   if (actualVersion === expectedVersion) {
-    return { mode: "host-match", expectedVersion, actualVersion, hostPnpm, env: { ...env } };
+    return {
+      mode: "host-match",
+      expectedVersion,
+      actualVersion,
+      hostPnpm,
+      env: withCanonicalPath(env, environmentValue(env, "PATH"), platform),
+    };
   }
 
   const pinnedInvocation = resolvePinnedPnpmInvocation(hostPnpm, actualVersion, expectedVersion, []);
@@ -132,8 +152,11 @@ export function preparePinnedPnpmEnvironment({
     actualVersion,
     hostPnpm,
     env: {
-      ...env,
-      PATH: `${toolchainDir}${delimiter}${env.PATH || ""}`,
+      ...withCanonicalPath(
+        env,
+        `${toolchainDir}${delimiter}${environmentValue(env, "PATH")}`,
+        platform,
+      ),
       DPF_LOCAL_CI_PINNED_PNPM_VERSION: expectedVersion,
     },
   };
