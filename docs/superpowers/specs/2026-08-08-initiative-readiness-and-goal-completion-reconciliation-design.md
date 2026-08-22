@@ -1,13 +1,19 @@
+---
+status: binding
+---
+
 # Initiative Readiness and Goal-Completion Reconciliation
 
 - **Date:** 2026-08-08
 - **Status:** Approved for implementation planning
-- **Epic:** EP-PROCESS-SPINE
-- **Backlog item:** BI-94B4AB38
-- **Work capsule:** WC-C2E77BDF
+- **Epic:** EP-129D11FD
+- **Backlog item:** BI-CF5A1078
+- **Traceability-repair Workroom:** WC-A285BC4B
 - **Scope:** platform — all DPF delivery surfaces and governed initiative work
-- **Related work:** BI-4A48AE7D (deterministic process matrix), BI-9C7F2190 (evidence-gated receipts), BI-1AE92E82 (missing-spec research), BI-68ECA8E1 (evidence trust), BI-D61F908D (evidence/capsule join), BI-121DC3A3 (PR readiness), BI-95E37EA1 (separate WorkCapsule adoption defect)
+- **Related work:** BI-4A48AE7D (deterministic process matrix), BI-9C7F2190 (evidence-gated receipts), BI-1AE92E82 (missing-spec research), BI-68ECA8E1 (evidence trust), BI-D61F908D (evidence/capsule join), BI-121DC3A3 (PR readiness), and PR #4451 (merged equivalent pre-mutation Workroom claim guard)
 - **Kernel decisions:** DI-43E534BC675B (new umbrella BI linked to existing work); DI-D0B0B4D24136 (shared readiness projection)
+
+> **2026-08-22 live-graph reconciliation:** PostgreSQL recovery replaced the original placeholder backlog identifiers. This file now names parent `BI-CF5A1078`, epic `EP-129D11FD`, and the live delivery graph recorded in the companion plan. The architecture, objectives, and acceptance contract are unchanged; fresh governed receipts bind the reconciled blob before further implementation.
 
 ---
 
@@ -45,8 +51,8 @@ After this change:
 - Do not make every captured idea produce a full specification.
 - Do not treat Build Studio as the only implementation surface.
 - Do not infer review applicability or completion from prose sentiment.
-- Do not repair BI-95E37EA1 in this branch; that branch/capsule adoption defect remains separately owned and must land independently.
-- Do not declare BI-94B4AB38, EP-PROCESS-SPINE's linked prevention outcome, or the external `/goal` complete until BI-95E37EA1 (or an equivalent separately reviewed pre-mutation claim guard) is merged and its unrelated-abandoned-capsule regression passes. The policy branch may merge independently, but the parent outcome remains blocked by this explicit dependency.
+- Do not reimplement the separately owned Workroom adoption defect in this design line; PR #4451 now supplies the independently reviewed equivalent pre-mutation claim guard and unrelated-abandoned-capsule regression.
+- Do not declare BI-CF5A1078, EP-129D11FD's linked prevention outcome, or the external `/goal` complete unless that pre-mutation guard remains merged and its regression evidence remains current. The policy slices may merge independently, but the parent outcome remains governed by this explicit dependency.
 - Do not claim that repository code controls the Codex desktop `/goal` primitive. DPF controls its own durable backlog, WorkCapsule, FeatureBuild, TaskRun, and MCP completion surfaces; external clients must reconcile through those governed records.
 
 ---
@@ -68,7 +74,7 @@ The following paths were verified in code and live state:
 | Backlog completion | Completion evidence checks source/tests/build plus UX/migration declarations. | It does not prove specification, reviews, dependency resolution, authorization, or objective satisfaction. |
 | Epic reconciliation | An epic may auto-close when all children are done/deferred. | Child terminal states are treated as equivalent to the initiative objective being met. |
 | Remote/child TaskRun | Successful agent content can directly mark a run `completed`. | Agent confidence is accepted without reconciling the governed objective or linked initiative state. |
-| WorkCapsule adoption | An unrelated abandoned capsule can be reused by repo/branch matching. | This is BI-95E37EA1, a separate identity defect; exact readback is required until it lands. |
+| WorkCapsule adoption | An unrelated abandoned capsule can be reused by repo/branch matching. | PR #4451 supplies the separate pre-mutation identity guard; exact readback remains defense in depth. |
 
 ### 2.1 Root cause
 
@@ -197,7 +203,7 @@ Promotion to Build Studio creates a **design build** in `ideate`; it does not pr
 - `implementation` invokes implementation readiness;
 - legacy callers that omit intent are treated as `implementation` for governed items, preventing silent bypass.
 
-`WorkCapsule.activityKind` is not reused: its closed values describe outcome activity (`delivery`, `support`, `improvement`, and so on), not lifecycle intent. The selected intent is persisted atomically as a `WorkCapsuleActivity` of kind `work-intent-declared`, with a versioned payload containing `design | review | plan | implementation`, policy version, and subject. The kind is added to the canonical WorkCapsule activity tuple and parity validators. A changed intent appends a new event and requires reevaluation; history is never overwritten. Latest intent is ordered by `(recordedAt DESC, id DESC)`, and work-intent events are covered by the append-only invariant. Claim success is followed by exact readback of capsule ID, subject, projected latest work intent, branch, worktree, executor, active lease, and non-abandoned status. BI-95E37EA1 separately fixes adoption identity; this policy also denies an adopted capsule whose readback does not match the requested subject/session/worktree tuple.
+`WorkCapsule.activityKind` is not reused: its closed values describe outcome activity (`delivery`, `support`, `improvement`, and so on), not lifecycle intent. The selected intent is persisted atomically as a `WorkCapsuleActivity` of kind `work-intent-declared`, with a versioned payload containing `design | review | plan | implementation`, policy version, and subject. The kind is added to the canonical WorkCapsule activity tuple and parity validators. A changed intent appends a new event and requires reevaluation; history is never overwritten. Latest intent is ordered by `(recordedAt DESC, id DESC)`, and work-intent events are covered by the append-only invariant. Claim success is followed by exact readback of capsule ID, subject, projected latest work intent, branch, worktree, executor, active lease, and non-abandoned status. PR #4451 supplies the separate pre-mutation adoption guard; this policy also denies an adopted capsule whose readback does not match the requested subject/session/worktree tuple.
 
 ---
 
@@ -497,7 +503,7 @@ The subject resolver treats caller-supplied IDs as lookup hints. It verifies use
 
 ### 10.7 External goal clients
 
-DPF clients must treat a DPF initiative goal as complete only after reading an allowed completion decision for the linked subject and listing any separately linked unfinished defects or child BIs. For this initiative, BI-95E37EA1 is an explicit blocking dependency: neither BI-94B4AB38 nor the external `/goal` can reconcile complete until that defect (or an independently reviewed equivalent pre-mutation guard) is terminal with its claim-path regression evidence. The server-side durable state is authoritative. Client prose cannot override it.
+DPF clients must treat a DPF initiative goal as complete only after reading an allowed completion decision for the linked subject and listing any separately linked unfinished defects or child BIs. For this initiative, PR #4451's independently reviewed pre-mutation guard is an explicit dependency: neither BI-CF5A1078 nor the external `/goal` can reconcile complete unless that guard is merged and its claim-path regression evidence remains current. The server-side durable state is authoritative. Client prose cannot override it.
 
 ---
 
@@ -664,7 +670,7 @@ Compatibility rules:
 
 Each adapter has an explicit activation record with owner, policy version, observation start, sample size, error rate, false-denial disposition, reliability/SLO threshold, deadline, rollback rule, terminal enforcement state, and enforcement timestamp. Observation mode may inform projections but can never label work ready. Build Studio's already-enforced phase gates may switch to the shared evaluator once equivalence tests pass. New implementation-claim behavior may enforce at launch because no legacy permission is removed. Backlog/epic/WorkCapsule/TaskRun completion enforcement waits for its receipt writers and central completion boundary to meet the process-spine reliability threshold. There is no global Boolean that silently enables every adapter at once.
 
-The initiative cannot be declared complete while any enumerated implementation or terminal-completion adapter remains observation-only, while a direct terminal writer remains, while its source-invariant test is red, or while BI-95E37EA1/equivalent pre-mutation capsule-claim protection lacks merged regression evidence. Exact post-claim readback remains defense in depth; it is not accepted as a substitute for preventing unrelated capsule reuse or mutation before claim success.
+The initiative cannot be declared complete while any enumerated implementation or terminal-completion adapter remains observation-only, while a direct terminal writer remains, while its source-invariant test is red, or while PR #4451's equivalent pre-mutation capsule-claim protection lacks merged regression evidence. Exact post-claim readback remains defense in depth; it is not accepted as a substitute for preventing unrelated capsule reuse or mutation before claim success.
 
 UI rollout converges the existing action/status story in place. It does not add a temporary readiness dashboard, route, or second Build Studio status band.
 
@@ -728,7 +734,7 @@ TDD is mandatory. The first regression fixtures reproduce the current permissive
 - build creators, direct database writes, cascades, document/blob/storage GC, repository-ref cleanup, and retention sweeps cannot delete a current or superseded baseline's pinned artifact bytes; a repository archive digest mismatch prevents approval;
 - long-history batch reads return exactly the newest row per item/gate with bounded `items × gates` cardinality, and a malformed newest row never falls back to an older pass;
 - `work-intent-declared` is registered in the canonical activity tuple/parity validators, uses `(recordedAt DESC, id DESC)`, and cannot be updated or deleted;
-- parent completion and external goal reconciliation remain denied until BI-95E37EA1/equivalent pre-mutation capsule identity evidence is terminal, even when post-claim readback would detect a mismatch;
+- parent completion and external goal reconciliation remain denied unless PR #4451's equivalent pre-mutation capsule identity evidence is merged and current, even when post-claim readback would detect a mismatch;
 - TaskRun stores `input-required` while the MCP wire projects `input_required`;
 - profile downgrades cannot erase stronger current or historical structured evidence;
 - plan coverage v2 detects dependency cycles, not only unknown keys.
@@ -812,7 +818,7 @@ Implementation must update:
 
 This design is approved for implementation planning after the following independent reviews were recorded and all blocking findings were resolved. The immutable repository commit and execution-evidence receipt bind the approval; any content change requires rereview:
 
-- architecture: ownership, adapter coverage, phase semantics, and rollout composition with EP-PROCESS-SPINE;
+- architecture: ownership, adapter coverage, phase semantics, and rollout composition with EP-129D11FD;
 - data architecture: receipt ownership, typed gate key/index, lifecycle, digest validity, conditional deletion guard, and migration compatibility;
 - UX fit: first viewport, action hierarchy, evidence disclosure, accessibility, and cross-surface consistency;
 - security/compliance: reviewer authority, separation of duties, audit retention, artifact visibility, and fail-closed behavior;
@@ -825,7 +831,7 @@ Review resolutions incorporated into this draft:
 3. Plan coverage gains schema version 2; the reader projects legacy version 1 for visibility, while governed implementation requires version 2 traceability.
 4. A governed approval atomically selects one subject-scoped canonical scope/design baseline; arbitrary locators and conflicting/forked baseline chains fail closed.
 5. Completion reconciles the immutable current baseline, not mutable BI/Epic/TaskRun/WorkCapsule prose; supersession is independently approved, CAS-protected, diffed, and append-only.
-6. BI-95E37EA1 remains a separate concern/branch but is an explicit blocking dependency of the overall prevention goal until pre-mutation claim protection has merged regression evidence.
+6. PR #4451's separate pre-mutation Workroom claim protection remains an explicit dependency of the overall prevention goal and must retain merged regression evidence.
 7. A server-produced manifest binds every marked objective/acceptance statement to the approved artifact and exact passing receipt; arbitrary, omitted, duplicated, unlinked, or wrong-digest entries fail closed.
 8. A permanent atomic retention pin protects current and superseded BuildArtifactRevision, DocumentVersion/DocumentBlob, and archived repository evidence from creator, cascade, cleanup, or purge deletion.
 

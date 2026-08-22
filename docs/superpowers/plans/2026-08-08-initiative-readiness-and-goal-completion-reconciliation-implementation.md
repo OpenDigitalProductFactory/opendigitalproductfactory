@@ -1,14 +1,18 @@
+---
+status: binding
+---
+
 # Initiative Readiness and Goal-Completion Reconciliation — Implementation Plan
 
 - **Date:** 2026-08-08
 - **Status:** Approved for implementation
-- **Parent backlog item:** BI-94B4AB38
-- **Epic:** EP-PROCESS-SPINE
+- **Parent backlog item:** BI-CF5A1078
+- **Epic:** EP-129D11FD
 - **Approved design:** `docs/superpowers/specs/2026-08-08-initiative-readiness-and-goal-completion-reconciliation-design.md`
-- **Design commit:** `c7c54771e4a`
+- **Original approved design commit:** `c7c54771e4a`; the current immutable locator is recorded by the fresh governed reconciliation receipts
 - **Spec-review evidence:** `cmskyl2mw053501o1ql6cta3y`
 - **Decomposition decision:** DI-7BE7FE938FF8 — `five_contract_slices`, high confidence, composite 16.149, margin 0.969
-- **Overall blocking dependency:** BI-95E37EA1 or independently reviewed equivalent pre-mutation WorkCapsule claim protection
+- **Overall blocking dependency:** PR #4451's merged, independently reviewed equivalent pre-mutation Workroom claim protection
 
 ## 1. Delivery decision
 
@@ -18,13 +22,13 @@ The sequence is foundation first, then entry and terminal adapters, then TaskRun
 
 | Key | Backlog item | Independently shippable concern | Depends on |
 |---|---|---|---|
-| FND | BI-64AF127B | Shared policy, canonical baselines, receipts, retention pins, migration, and read projection | — |
-| ENTRY | BI-FEE5986E | Recommendation, claim, and Build Studio entry/phase enforcement | FND |
-| TERM | BI-288B30F4 | Canonical terminal-transition repository for BI/Epic/FeatureBuild/WorkCapsule | FND |
-| TASK | BI-49E860B8 | TaskRun success-writer convergence and objective reconciliation | FND, TERM |
-| UX | BI-10BF97DE | Existing-route UX, observability, documentation, and enforcement rollout | ENTRY, TERM, TASK |
+| FND | Delivered in PR #4348 (no recovered live BI) | Shared policy, canonical baselines, receipts, retention pins, migration, and read projection | — |
+| ENTRY | BI-4D756545 | Recommendation, claim, and Build Studio entry/phase enforcement | FND |
+| TERM | BI-B770A083 | Canonical terminal-transition repository for BI/Epic/FeatureBuild/WorkCapsule | FND |
+| TASK | BI-441BECAC | TaskRun success-writer convergence and objective reconciliation | FND, TERM |
+| UX | BI-812AC0D8 | Existing-route UX, observability, documentation, and enforcement rollout | ENTRY, TERM, TASK |
 
-BI-95E37EA1 is not absorbed by these deliverables. ENTRY must integrate its merged contract or an equivalent independently reviewed guard, and the parent/external goal cannot complete until the separate regression evidence exists.
+The separate Workroom-adoption defect is not absorbed by these deliverables. ENTRY integrated the independently reviewed equivalent guard in PR #4451; the parent/external goal still requires that merged regression evidence.
 
 ## 2. Shared implementation rules
 
@@ -70,7 +74,7 @@ The source invariant starts from this verified inventory; implementation may add
 
 The invariant scans production source, not only this table. Reads, failure/cancel/recovery writes, and unrelated domain models named `completed` are excluded explicitly so the guard stays precise.
 
-## 3. Slice FND — BI-64AF127B
+## 3. Slice FND — delivered in PR #4348
 
 ### 3.1 Red tests: policy and receipt trust
 
@@ -171,9 +175,9 @@ Implement the review-finding lifecycle in the same shared receipt handler: stabl
 
 ### 3.5 FND verification and handoff
 
-Run affected Vitest files, Prisma validation/generation, migration apply against representative existing-data fixtures, `pnpm --filter web build`, documentation-impact checks, independent semantic review, and exact-tree local merged-code CI. Record live evidence on BI-64AF127B. ENTRY and TERM may start only after the stable FND commit/PR contract is available.
+Run affected Vitest files, Prisma validation/generation, migration apply against representative existing-data fixtures, `pnpm --filter web build`, documentation-impact checks, independent semantic review, and exact-tree local merged-code CI. PR #4348 is the immutable delivery record for this pre-recovery slice. ENTRY and TERM may start only after the stable FND commit/PR contract is available.
 
-## 4. Slice ENTRY — BI-FEE5986E
+## 4. Slice ENTRY — BI-4D756545
 
 ### 4.1 Red tests: every ingress and phase door
 
@@ -200,7 +204,7 @@ Prove red for plan-only `hasSpec`, underspecified implementation recommendation,
 - require `workIntent` for governed claims; treat legacy omission as implementation;
 - evaluate the corresponding lifecycle target before claim success;
 - append intent atomically and read back exact capsule, subject, intent, branch, worktree, executor, lease, and non-abandoned state;
-- integrate the separately delivered BI-95E37EA1 pre-mutation guard when available; do not implement that defect on this branch.
+- integrate the separately delivered pre-mutation guard; PR #4451 now records that equivalent implementation and regression.
 
 ### 4.4 Build Studio adapters
 
@@ -211,9 +215,9 @@ Prove red for plan-only `hasSpec`, underspecified implementation recommendation,
 
 ### 4.5 ENTRY verification
 
-Run focused tests and `pnpm --filter web build`; exercise design promotion and denied/allowed build transition in the canonical nonproduction environment once a lease is acquired; record docs impact, semantic review, and exact-tree CI evidence on BI-FEE5986E.
+Run focused tests and `pnpm --filter web build`; exercise design promotion and denied/allowed build transition in the canonical nonproduction environment once a lease is acquired; record docs impact, semantic review, and exact-tree CI evidence on BI-4D756545.
 
-## 5. Slice TERM — BI-288B30F4
+## 5. Slice TERM — BI-B770A083
 
 ### 5.1 Red tests: terminal bypasses and races
 
@@ -249,9 +253,9 @@ Route every BacklogItem done, Epic complete/auto-close, FeatureBuild terminal/sh
 
 ### 5.4 TERM verification
 
-Run focused tests, build, representative migration/read checks, and canonical-runtime happy/denied paths for backlog, Epic, Build Studio, and WorkCapsule completion. Record semantic review and exact-tree CI evidence on BI-288B30F4.
+Run focused tests, build, representative migration/read checks, and canonical-runtime happy/denied paths for backlog, Epic, Build Studio, and WorkCapsule completion. Record semantic review and exact-tree CI evidence on BI-B770A083.
 
-## 6. Slice TASK — BI-49E860B8
+## 6. Slice TASK — BI-441BECAC
 
 ### 6.1 Inventory and characterization
 
@@ -275,9 +279,9 @@ Migrate every inventoried writer and prohibit direct success updates outside thi
 
 ### 6.3 TASK verification
 
-Run every migrated writer's focused tests, invariant, web build, and canonical-runtime governed/ungoverned TaskRun paths. Record semantic review and exact-tree CI evidence on BI-49E860B8.
+Run every migrated writer's focused tests, invariant, web build, and canonical-runtime governed/ungoverned TaskRun paths. Record semantic review and exact-tree CI evidence on BI-441BECAC.
 
-## 7. Slice UX — BI-10BF97DE
+## 7. Slice UX — BI-812AC0D8
 
 ### 7.1 Presenter and route tests first
 
@@ -311,7 +315,7 @@ Update MCP schemas/examples, backlog semantics, Build Studio lifecycle, TaskRun 
 
 Acquire the governed nonproduction lease and run served-DOM verification on `/ops`, `/build`, and `/build/work` at desktop and narrow viewports. Run axe, light/dark/org themes, hardcoded-color/style-drift scans, route-budget ratchets, zero-dispatch assertions, and an exact-scope `docs/ux-fit/` sweep manifest.
 
-Record semantic review, exact-tree local CI, and canonical runtime evidence on BI-10BF97DE.
+Record semantic review, exact-tree local CI, and canonical runtime evidence on BI-812AC0D8.
 
 ## 8. Parent reconciliation and release order
 
@@ -319,7 +323,7 @@ Record semantic review, exact-tree local CI, and canonical runtime evidence on B
 2. Refresh ENTRY and TERM on the merged FND contract; they may proceed independently if their overlap sweep is clean.
 3. Merge TERM, then refresh and merge TASK.
 4. Refresh UX on all merged adapters and complete rollout/verification.
-5. Re-read BI-95E37EA1. If it is not terminal with merged pre-mutation regression evidence, keep BI-94B4AB38 and the external goal in progress.
+5. Re-read PR #4451's pre-mutation Workroom claim regression evidence. If the equivalent guard is no longer merged/current, keep BI-CF5A1078 and the external goal in progress.
 6. Revalidate the plan coverage receipt and each child BI live state.
 7. Run the parent gate/evidence matrix. Do not infer satisfaction from child prose; use live receipt IDs, PR/merge SHAs, CI, runtime, UX, migration, docs, and independent review evidence.
 8. Only then request the governed parent completion transition and reconcile the external goal.
@@ -357,7 +361,7 @@ Every child records its own exact evidence. The parent matrix is complete only w
 | Semantic review | required | required | required | required | required | stable committed tree receipts |
 | Local merged-code CI | required | required | required | required | required | exact-tree receipts, no red push |
 | PR/DCO/merge | ready PR | ready PR | ready PR | ready PR | ready PR | all merged via queue |
-| Separate capsule defect | — | consumes merged contract | — | — | documents condition | BI-95E37EA1/equivalent terminal with regression evidence |
+| Separate capsule defect | — | consumes merged contract | — | — | documents condition | PR #4451 equivalent remains merged with regression evidence |
 
 ## 11. Rollback and compatibility
 
@@ -373,26 +377,26 @@ Every child records its own exact evidence. The parent matrix is complete only w
 ### Backlog coverage
 
 - **Decision:** `decomposed`
-- **Receipt:** `cmskz2b8805tq01o1v6dyzvvc`
-- **Recorded/revalidated:** 2026-08-08 through `record_plan_backlog_coverage` and `check_plan_backlog_coverage`
+- **Superseded bootstrap receipt:** `cmskz2b8805tq01o1v6dyzvvc` (its placeholder BIs no longer resolve after PostgreSQL recovery)
+- **Current receipt:** must be recorded and revalidated against the immutable merged reconciliation commit before TASK implementation
 - **Exact graph:** FND → ENTRY; FND → TERM; FND + TERM → TASK; ENTRY + TERM + TASK → UX
-- **Mapped items:** FND `BI-64AF127B`; ENTRY `BI-FEE5986E`; TERM `BI-288B30F4`; TASK `BI-49E860B8`; UX `BI-10BF97DE`
+- **Mapped live items:** ENTRY `BI-4D756545`; TERM `BI-B770A083`; TASK `BI-441BECAC`; UX `BI-812AC0D8`. FND is an already-delivered prerequisite recorded by PR #4348, not an invented replacement BI.
 
-This receipt uses the currently deployed plan-coverage schema and is the authoritative bootstrap gate for FND. FND implements the approved version 2 contract because that contract cannot write its own pre-implementation receipt before it exists. Immediately after FND merges, record and revalidate a version 2 receipt bound to this immutable plan commit, with requirement/contract/flow/verification refs and the same acyclic dependency graph, before ENTRY, TERM, TASK, or UX source implementation continues. Version 1 remains visible afterward but cannot satisfy those governed implementation transitions.
+The superseded receipt was the bootstrap gate for FND before PostgreSQL recovery. FND later delivered the version 2 contract in PR #4348. Record and revalidate a new version 2 receipt bound to the immutable reconciliation commit, with requirement/contract/flow/verification refs and the live acyclic dependency graph, before TASK or UX source implementation continues. The historical version 1 receipt remains visible but cannot satisfy governed implementation transitions.
 
 Before source implementation:
 
 - an independent plan reviewer must confirm design traceability, exact adapter inventory, TDD ordering, migration/retention safety, UX verification, documentation impact, child dependencies, and 20% refactor allocation;
-- the decomposed receipt above must remain current and every mapped live BI must resolve;
-- after FND lands v2, a current immutable-plan v2 receipt must replace the bootstrap gate for all remaining slices;
-- the final reviewed plan commit and review/coverage receipt IDs must be recorded on BI-94B4AB38.
+- the new decomposed receipt must remain current and every mapped live BI must resolve;
+- the current immutable-plan v2 receipt must replace the bootstrap gate for all remaining slices;
+- the final reviewed plan commit and review/coverage receipt IDs must be recorded on BI-CF5A1078.
 
 ### Independent plan-review disposition
 
 The independent reviewer initially failed the plan on six findings and approved it after these resolutions:
 
 - `IPLAN-001`: FND now owns plan-coverage v2, immutable artifact identity, four-way traceability refs, legacy-v1 projection, cycle/dependency tests, and decomposition-tool changes.
-- `IPLAN-002`: live decomposed receipt `cmskz2b8805tq01o1v6dyzvvc` maps and revalidates the five-child graph; the bootstrap-v1 to post-FND-v2 transition is explicit.
+- `IPLAN-002`: the historical decomposed receipt `cmskz2b8805tq01o1v6dyzvvc` mapped the original five-slice graph; this reconciliation requires a fresh v2 receipt for the live four-BI graph plus the delivered FND prerequisite.
 - `IPLAN-003`: §2.1 enumerates verified BacklogItem, Epic, FeatureBuild, WorkCapsule, direct/indirect TaskRun update, already-completed TaskRun creation, and parent experiment transition paths before implementation.
 - `IPLAN-004`: TERM owns governed Epic originating-BI convergence, overlap checks, conflict denial, and veterinary legacy regression.
 - `IPLAN-005`: FND owns application/database deletion compatibility, permanent authority/hold retention, append-only, and specialist N/A abuse tests.
