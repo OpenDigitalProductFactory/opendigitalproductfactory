@@ -7,7 +7,7 @@ capability: null
 taskType: "code_generation"
 triggerPattern: "diagram|mermaid|flowchart|sequence"
 userInvocable: true
-agentInvocable: true
+agentInvocable: false
 allowedTools: []
 composesFrom: []
 contextRequirements: []

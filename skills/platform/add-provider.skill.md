@@ -7,7 +7,7 @@ capability: "manage_provider_connections"
 taskType: "conversation"
 triggerPattern: "add provider|new provider|register"
 userInvocable: true
-agentInvocable: true
+agentInvocable: false
 allowedTools: [add_provider]
 composesFrom: []
 contextRequirements: []

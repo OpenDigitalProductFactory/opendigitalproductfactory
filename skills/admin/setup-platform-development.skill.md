@@ -7,7 +7,7 @@ capability: "manage_platform_config"
 taskType: "conversation"
 triggerPattern: "platform development|contribution|governance|sharing|fork|contribute"
 userInvocable: true
-agentInvocable: true
+agentInvocable: false
 allowedTools: []
 composesFrom: []
 contextRequirements: []

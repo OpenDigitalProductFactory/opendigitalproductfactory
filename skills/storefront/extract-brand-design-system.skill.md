@@ -7,7 +7,7 @@ capability: "manage_branding"
 taskType: "conversation"
 triggerPattern: "brand|design system|extract brand|theme|refresh brand|analyze site"
 userInvocable: true
-agentInvocable: true
+agentInvocable: false
 allowedTools:
   - extract_brand_design_system
   - analyze_public_website_branding

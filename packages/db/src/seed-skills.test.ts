@@ -7,6 +7,7 @@ import {
   LEGACY_SKILL_SOURCE_TYPE,
   SKILL_WILDCARD_AGENT_IDS,
   discoverDpfPlatformSkillFiles,
+  discoverLegacySkillFiles,
   normalizeSkillFrontmatterForSeed,
   parseAllowedTools,
   parseFrontmatter,
@@ -403,5 +404,63 @@ describe("SKILL_WILDCARD_AGENT_IDS uniqueness", () => {
     await expect(
       reconcileSkillAssignments(prisma, "some-skill", ["agent-a", "agent-a"]),
     ).rejects.toThrow(/Unique constraint failed/);
+  });
+});
+
+describe("invocation classification is populated, not uniform (BI-8AD9D018)", () => {
+  // The frontmatter has always carried userInvocable / agentInvocable /
+  // disable-model-invocation, and for a long time every skill on both planes
+  // declared the identical triple. A field the whole corpus agrees on cannot
+  // steer anything: apps/web/lib/skills/skill-relevance.ts ranks the eligible
+  // set against a per-turn cap, and with nothing marked user-invocable-only a
+  // heavyweight setup flow competed for the same slot as the lookup the turn
+  // actually needed. Presence was seeded; population never was.
+  //
+  // These guards fail when a plane goes uniform again — the shape the original
+  // regression took — rather than pinning any particular skill's value.
+  const repoRoot = join(__dirname, "..", "..", "..");
+
+  function frontmattersIn(sources: { filePath: string }[]) {
+    return sources.map((source) => parseFrontmatter(readFileSync(source.filePath, "utf8")).frontmatter);
+  }
+
+  it("the coworker plane marks some skills user-invocable-only", () => {
+    const frontmatters = frontmattersIn(discoverLegacySkillFiles(join(repoRoot, "skills")));
+    expect(frontmatters.length).toBeGreaterThan(0);
+
+    const agentInvocable = frontmatters.filter((fm) => fm.agentInvocable === true);
+    const userOnly = frontmatters.filter((fm) => fm.agentInvocable === false);
+
+    // Both populations non-empty: an all-true corpus is the dead-field
+    // regression, an all-false one would leave coworkers unable to reach
+    // anything on their own.
+    expect(agentInvocable.length).toBeGreaterThan(0);
+    expect(userOnly.length).toBeGreaterThan(0);
+  });
+
+  it("the dpf-platform pack marks some skills user-invocable-only", () => {
+    const frontmatters = frontmattersIn(
+      discoverDpfPlatformSkillFiles(join(repoRoot, "packages", "dpf-skill-pack", "skills")),
+    );
+    expect(frontmatters.length).toBeGreaterThan(0);
+
+    expect(frontmatters.filter((fm) => fm.agentInvocable === true).length).toBeGreaterThan(0);
+    expect(frontmatters.filter((fm) => fm.agentInvocable === false).length).toBeGreaterThan(0);
+  });
+
+  it("keeps the pack's two invocation surfaces in agreement", () => {
+    // Surface A (disable-model-invocation, read by Claude Code / Codex / Grok)
+    // and Surface B (agentInvocable, read by the in-portal seed loader) express
+    // the same intent for the same skill. A skill the external clients may not
+    // auto-invoke but the portal may is a split brain across four clients.
+    const frontmatters = frontmattersIn(
+      discoverDpfPlatformSkillFiles(join(repoRoot, "packages", "dpf-skill-pack", "skills")),
+    );
+
+    const contradictions = frontmatters
+      .filter((fm) => fm["disable-model-invocation"] !== !fm.agentInvocable)
+      .map((fm) => fm.name);
+
+    expect(contradictions).toEqual([]);
   });
 });

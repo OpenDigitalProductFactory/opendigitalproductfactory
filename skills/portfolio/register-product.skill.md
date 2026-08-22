@@ -7,7 +7,7 @@ capability: "view_portfolio"
 taskType: "conversation"
 triggerPattern: "register|create|new product"
 userInvocable: true
-agentInvocable: true
+agentInvocable: false
 allowedTools: [create_digital_product]
 composesFrom: []
 contextRequirements: []

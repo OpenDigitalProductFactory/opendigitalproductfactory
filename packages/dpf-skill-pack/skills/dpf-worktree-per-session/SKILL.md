@@ -3,7 +3,7 @@ name: dpf-worktree-per-session
 description: "Use when starting, entering, auditing, or managing a concurrent DPF coding session that touches the working tree. Each thread gets its own git worktree (not a shared clone), seeded MCP config, isolated COMPOSE_PROJECT_NAME, and an explicit compile-ready vs source-only verification-readiness classification so agents do not claim unrun local gates. Composes with dpf-finishing-a-development-branch as the predecessor isolation step."
 
 # Agent Skills standard fields (Surface A — Claude Code)
-disable-model-invocation: false
+disable-model-invocation: true
 user-invocable: true
 allowed-tools: Bash(git fetch *) Bash(git worktree *) Bash(git branch *) Bash(git checkout *) Bash(git status *) Bash(git rev-parse *) Bash(git log *) Bash(grep *) Bash(test *) Bash(command -v *) Bash(pnpm *) Bash(corepack *) Bash(scripts/seed-worktree-mcp*) Bash(scripts/sync-mcp-worktrees*)
 
@@ -14,7 +14,7 @@ capability: null
 taskType: workflow
 triggerPattern: "new worktree|create worktree|spawn session|concurrent session|parallel work|isolated branch|worktree readiness|source-only worktree|compile-ready worktree"
 userInvocable: true
-agentInvocable: true
+agentInvocable: false
 allowedTools: ["Bash"]
 composesFrom: []
 contextRequirements: ["git available; scripts/seed-worktree-mcp.{ps1,sh} present; .mcp.json populated in root clone; worktree verification readiness must be classified"]

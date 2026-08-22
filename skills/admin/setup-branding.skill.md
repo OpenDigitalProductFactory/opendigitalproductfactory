@@ -7,7 +7,7 @@ capability: "manage_branding"
 taskType: "conversation"
 triggerPattern: "brand|theme|logo|color"
 userInvocable: true
-agentInvocable: true
+agentInvocable: false
 allowedTools: [analyze_brand_document, analyze_public_website_branding]
 composesFrom: []
 contextRequirements: []

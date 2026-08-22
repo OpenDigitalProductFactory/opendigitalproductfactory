@@ -7,7 +7,7 @@ capability: "view_portfolio"
 taskType: "analysis"
 triggerPattern: "commercial opportunity|what customers buy|offer review"
 userInvocable: true
-agentInvocable: true
+agentInvocable: false
 allowedTools: [search_portfolio_context, list_opportunities, list_quotes, evaluate_org_business_decision]
 composesFrom: []
 contextRequirements: []

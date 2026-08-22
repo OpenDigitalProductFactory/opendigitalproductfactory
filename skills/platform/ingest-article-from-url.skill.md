@@ -7,7 +7,7 @@ capability: null
 taskType: "conversation"
 triggerPattern: "ingest.*article|ingest.*url|add.*article.*wiki|wiki.*from.*url|ingest.*linkedin|pull.*into.*wiki"
 userInvocable: true
-agentInvocable: true
+agentInvocable: false
 allowedTools: ["fetch_public_website", "wiki_ingest"]
 composesFrom: []
 contextRequirements: []

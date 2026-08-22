@@ -7,7 +7,7 @@ capability: null
 taskType: analysis
 triggerPattern: "evaluate page|audit page|accessibility audit|ux review|usability review|contrast|a11y"
 userInvocable: true
-agentInvocable: true
+agentInvocable: false
 allowedTools: []
 composesFrom: []
 contextRequirements: []

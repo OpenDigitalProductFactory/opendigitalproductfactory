@@ -7,7 +7,7 @@ capability: "view_marketing"
 taskType: "conversation"
 triggerPattern: "email|newsletter|send|subject line|campaign email"
 userInvocable: true
-agentInvocable: true
+agentInvocable: false
 allowedTools: [get_marketing_summary]
 composesFrom: []
 contextRequirements: []
