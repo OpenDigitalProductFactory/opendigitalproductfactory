@@ -74,6 +74,8 @@ import {
   WorkHighlights,
   WorkOfferedPanel,
 } from "@/components/platform/coworker-record/OwnerCoworkerPanels";
+import { CoworkerShapePanel } from "@/components/platform/coworker-record/CoworkerShapePanel";
+import { projectCoworkerShape } from "@/lib/work-management/coworker-shape-projection";
 
 const BUDGET_CLASS_LABELS: Record<string, string> = {
   quality_first: "Quality first",
@@ -218,6 +220,31 @@ export default async function AgentDetailPage({
   // occupation + owned), shared with the list_my_backlog tool. Fail-open so a
   // read hiccup renders an empty-state panel rather than 500-ing the record.
   const backlogSlice = await getCoworkerBacklogSlice(record.runtime.agentId).catch(() => null);
+
+  // BI-DB302392: the coworker's own shape — its governed tool use, rendered
+  // with the same grammar the Workroom uses. Failure to load is not a reason to
+  // fail the page: an empty shape is honest, a thrown page is not.
+  const coworkerToolCalls = await prisma.toolExecution
+    .findMany({
+      where: { agentId: record.runtime.agentId },
+      orderBy: { createdAt: "desc" },
+      take: 12,
+      select: { id: true, toolName: true, success: true, auditClass: true, createdAt: true },
+    })
+    .catch(() => [] as Array<{ id: string; toolName: string; success: boolean; auditClass: string | null; createdAt: Date }>);
+  const coworkerShape = projectCoworkerShape({
+    agentId: record.runtime.agentId,
+    // "Established" here means live and summonable, which is what the agent
+    // row's own lifecycle stage says — not a status the page infers.
+    established: agent.lifecycleStage !== "retired" && agent.lifecycleStage !== "draft",
+    toolCalls: coworkerToolCalls.map((call) => ({
+      id: call.id,
+      toolName: call.toolName,
+      success: call.success,
+      auditClass: call.auditClass,
+      createdAt: call.createdAt ? call.createdAt.toISOString() : null,
+    })),
+  });
 
   const canWrite = !!session?.user && can(
     { platformRole: session.user.platformRole, isSuperuser: session.user.isSuperuser },
@@ -450,6 +477,8 @@ export default async function AgentDetailPage({
         <span className="mx-2 text-[var(--dpf-muted)]">/</span>
         <span className="text-[var(--dpf-text)]">{agent.displayName}</span>
       </div>
+
+      <CoworkerShapePanel graph={coworkerShape} />
 
       <header className="mb-5">
         <div className="flex flex-wrap items-start justify-between gap-3">

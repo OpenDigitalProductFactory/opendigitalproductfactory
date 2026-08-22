@@ -8,6 +8,7 @@ import {
 import { LocalTime } from "@/components/ui/LocalTime";
 import { EmptyState, Notice, StatusBadge } from "@/components/ui/report-kit";
 import { WorkItemCommentBox } from "@/components/workspace/WorkItemCommentBox";
+import { projectRoomShape } from "@/lib/work-management/shape-projection";
 import type { WorkspaceWorkCaseDetailView } from "@/lib/work-management/workspace-case-loader";
 import type {
   WorkroomActivityView,
@@ -20,6 +21,7 @@ import {
   roomLabel,
 } from "./presentation";
 import { WorkroomCycles } from "./WorkroomCycles";
+import { WorkroomShapeSection } from "./WorkroomShapeSection";
 import { WorkroomParticipants } from "./WorkroomParticipants";
 
 type Props = {
@@ -195,6 +197,9 @@ export function WorkroomBody({ detail, room }: Props) {
   return (
     <>
       <BoundaryNotice room={room} />
+
+      {/* BI-23DB08BB: the room's shape, before the prose that details it. */}
+      <WorkroomShapeSection graph={projectRoomShape(room)} />
 
       <WorkroomCycles room={room} />
 
