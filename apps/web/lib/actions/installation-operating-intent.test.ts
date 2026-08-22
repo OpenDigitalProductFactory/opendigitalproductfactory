@@ -143,15 +143,15 @@ describe("previewInstallationIdentityChange", () => {
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.impact.material).toBe(true);
-    expect(result.impact.changes.map((c) => c.field)).toEqual(["environmentClass"]);
-    expect(result.impact.stanceDeltas.find((d) => d.stance === "teardown")).toMatchObject({
+    expect(result.data.impact.material).toBe(true);
+    expect(result.data.impact.changes.map((c) => c.field)).toEqual(["environmentClass"]);
+    expect(result.data.impact.stanceDeltas.find((d) => d.stance === "teardown")).toMatchObject({
       from: "Capture work first",
       to: "Never",
       direction: "tightens",
     });
     // Installer state still says development, so the declaration would be shadowed.
-    expect(result.environmentAfter.environmentClass).toBe("development");
+    expect(result.data.environmentAfter.environmentClass).toBe("development");
     expect(mocks.transaction).not.toHaveBeenCalled();
     expect(mocks.upsert).not.toHaveBeenCalled();
   });
@@ -166,9 +166,11 @@ describe("declareInstallationIdentity", () => {
       primaryPurpose: "operate-organization",
     });
 
-    expect(result.ok).toBe(false);
-    if (result.ok) return;
-    expect(result.impact?.material).toBe(true);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.data.kind).toBe("needs-preview");
+    if (result.data.kind !== "needs-preview") return;
+    expect(result.data.impact.material).toBe(true);
     expect(mocks.transaction).not.toHaveBeenCalled();
   });
 
@@ -184,10 +186,12 @@ describe("declareInstallationIdentity", () => {
 
     const result = await declareInstallationIdentity(
       { ...DEV_DECLARATION, primaryPurpose: "grow-channel" },
-      preview.impact.previewToken,
+      preview.data.impact.previewToken,
     );
 
-    expect(result.ok).toBe(false);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.data.kind).toBe("needs-preview");
     expect(mocks.transaction).not.toHaveBeenCalled();
   });
 
@@ -202,9 +206,12 @@ describe("declareInstallationIdentity", () => {
     expect(preview.ok).toBe(true);
     if (!preview.ok) return;
 
-    const result = await declareInstallationIdentity(next, preview.impact.previewToken);
+    const result = await declareInstallationIdentity(next, preview.data.impact.previewToken);
 
-    expect(result).toMatchObject({ ok: true, changed: true, confirmationStatus: "confirmed" });
+    expect(result).toMatchObject({
+      ok: true,
+      data: { kind: "saved", changed: true, confirmationStatus: "confirmed" },
+    });
     const values = written();
     expect(values[OPERATING_INTENT_CONFIG_KEY]).toMatchObject({
       schemaVersion: 1,
@@ -230,7 +237,7 @@ describe("declareInstallationIdentity", () => {
     const preview = await previewInstallationIdentityChange(next);
     if (!preview.ok) throw new Error("preview failed");
 
-    await declareInstallationIdentity(next, preview.impact.previewToken);
+    await declareInstallationIdentity(next, preview.data.impact.previewToken);
 
     const keys = Object.keys(written());
     expect(keys.sort()).toEqual(
@@ -248,9 +255,12 @@ describe("declareInstallationIdentity", () => {
     const preview = await previewInstallationIdentityChange(next);
     if (!preview.ok) throw new Error("preview failed");
 
-    const result = await declareInstallationIdentity(next, preview.impact.previewToken);
+    const result = await declareInstallationIdentity(next, preview.data.impact.previewToken);
 
-    expect(result).toMatchObject({ ok: true, confirmationStatus: "needs-review" });
+    expect(result).toMatchObject({
+      ok: true,
+      data: { kind: "saved", confirmationStatus: "needs-review" },
+    });
     const intent = written()[OPERATING_INTENT_CONFIG_KEY] as {
       confidence: string;
       confirmation: { status: string };
@@ -270,7 +280,7 @@ describe("declareInstallationIdentity", () => {
     const next = { ...DEV_DECLARATION, primaryPurpose: "participate-community" };
     const preview = await previewInstallationIdentityChange(next);
     if (!preview.ok) throw new Error("preview failed");
-    await declareInstallationIdentity(next, preview.impact.previewToken);
+    await declareInstallationIdentity(next, preview.data.impact.previewToken);
 
     const intent = written()[OPERATING_INTENT_CONFIG_KEY] as {
       evidence: Array<{ source: string; claim: string }>;
@@ -296,7 +306,10 @@ describe("declareInstallationIdentity", () => {
 
     const result = await declareInstallationIdentity(DEV_DECLARATION);
 
-    expect(result).toMatchObject({ ok: true, changed: false, confirmationStatus: "confirmed" });
+    expect(result).toMatchObject({
+      ok: true,
+      data: { kind: "saved", changed: false, confirmationStatus: "confirmed" },
+    });
     expect(mocks.transaction).not.toHaveBeenCalled();
     expect(mocks.revalidatePath).not.toHaveBeenCalled();
   });
@@ -315,7 +328,10 @@ describe("declareInstallationIdentity", () => {
 
     const result = await declareInstallationIdentity(DEV_DECLARATION);
 
-    expect(result).toMatchObject({ ok: true, changed: true, confirmationStatus: "confirmed" });
+    expect(result).toMatchObject({
+      ok: true,
+      data: { kind: "saved", changed: true, confirmationStatus: "confirmed" },
+    });
     expect(written()[OPERATING_INTENT_CONFIG_KEY]).toMatchObject({
       confirmation: { status: "confirmed" },
     });
@@ -330,7 +346,7 @@ describe("declareInstallationIdentity", () => {
     const next = { ...DEV_DECLARATION, pairedProductionInstallationRef: "  " };
     const preview = await previewInstallationIdentityChange(next);
     if (!preview.ok) throw new Error("preview failed");
-    await declareInstallationIdentity(next, preview.impact.previewToken);
+    await declareInstallationIdentity(next, preview.data.impact.previewToken);
 
     expect(written()[OPERATING_INTENT_CONFIG_KEY]).not.toHaveProperty(
       "pairedProductionInstallationRef",

@@ -125,14 +125,16 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.preview.mockResolvedValue({
     ok: true,
-    impact: MATERIAL_IMPACT,
-    environmentAfter: VIEW.environment,
+    data: { impact: MATERIAL_IMPACT, environmentAfter: VIEW.environment },
   });
   mocks.declare.mockResolvedValue({
     ok: true,
-    changed: true,
-    confirmationStatus: "confirmed",
-    environmentAfter: VIEW.environment,
+    data: {
+      kind: "saved",
+      changed: true,
+      confirmationStatus: "confirmed",
+      environmentAfter: VIEW.environment,
+    },
   });
 });
 
@@ -238,9 +240,12 @@ describe("InstallationIdentityPanel change flow", () => {
 
   it("surfaces a refusal and the fresh preview it carries", async () => {
     mocks.declare.mockResolvedValue({
-      ok: false,
-      error: "This changes what the installation is. Look at the impact, then confirm it.",
-      impact: MATERIAL_IMPACT,
+      ok: true,
+      data: {
+        kind: "needs-preview",
+        reason: "This changes what the installation is. Look at the impact, then confirm it.",
+        impact: MATERIAL_IMPACT,
+      },
     });
 
     render(<InstallationIdentityPanel view={VIEW} />);
@@ -255,8 +260,16 @@ describe("InstallationIdentityPanel change flow", () => {
   it("reports plainly when the chosen identity is the one already in force", async () => {
     mocks.preview.mockResolvedValue({
       ok: true,
-      impact: { ...MATERIAL_IMPACT, material: false, changes: [], warnings: [], staleEvidence: [] },
-      environmentAfter: VIEW.environment,
+      data: {
+        impact: {
+          ...MATERIAL_IMPACT,
+          material: false,
+          changes: [],
+          warnings: [],
+          staleEvidence: [],
+        },
+        environmentAfter: VIEW.environment,
+      },
     });
 
     render(<InstallationIdentityPanel view={VIEW} />);

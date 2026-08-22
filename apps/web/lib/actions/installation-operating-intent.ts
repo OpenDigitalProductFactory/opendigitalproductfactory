@@ -34,6 +34,7 @@ import {
 } from "@dpf/db/installation-operating-intent";
 
 import { requireCapability } from "@/lib/actions/shared/guards";
+import { err, ok, type ActionResult } from "@/lib/shared/action-result";
 import { resolvePrincipalIdForUser } from "@/lib/identity/principal-linking";
 import {
   ENVIRONMENT_CLASS_CONFIG_KEY,
@@ -59,51 +60,63 @@ export interface InstallationIdentityInput {
   pairedProductionInstallationRef?: string | null;
 }
 
-export type PreviewInstallationIdentityResult =
-  | {
-      ok: true;
-      impact: InstallationIdentityImpact;
-      /** What the environment resolves to once the declaration is recorded. */
-      environmentAfter: EnvironmentClassResolution;
-    }
-  | { ok: false; error: string };
+export interface InstallationIdentityPreview {
+  impact: InstallationIdentityImpact;
+  /** What the environment resolves to once the declaration is recorded. */
+  environmentAfter: EnvironmentClassResolution;
+}
 
-export type DeclareInstallationIdentityResult =
+/**
+ * What declaring produced.
+ *
+ * A refused change is a designed outcome carrying data, not a string failure:
+ * the operator needs the fresh preview to look at, and `ActionFailure` only
+ * carries a message. `err()` stays for genuine failures — an unrecognised job or
+ * environment, which have nothing to show.
+ */
+export type DeclareInstallationIdentityOutcome =
   | {
-      ok: true;
+      kind: "saved";
       /** False when the identity already matched and nothing needed writing. */
       changed: boolean;
       confirmationStatus: InstallationIntentConfirmationStatus;
       environmentAfter: EnvironmentClassResolution;
     }
-  | { ok: false; error: string; impact?: InstallationIdentityImpact };
+  | {
+      kind: "needs-preview";
+      reason: string;
+      impact: InstallationIdentityImpact;
+    };
+
+export type PreviewInstallationIdentityResult = ActionResult<InstallationIdentityPreview>;
+export type DeclareInstallationIdentityResult = ActionResult<DeclareInstallationIdentityOutcome>;
 
 /** Longest accepted paired-installation reference. Matches the installer's field. */
 const MAX_PAIRED_REF_LENGTH = 200;
 
 type ValidatedInput =
-  | { ok: true; declaration: InstallationIdentityDeclaration }
-  | { ok: false; error: string };
+  | { valid: true; declaration: InstallationIdentityDeclaration }
+  | { valid: false; error: string };
 
 function validate(input: InstallationIdentityInput): ValidatedInput {
   if (!isInstallationOperatingPurpose(input.primaryPurpose)) {
     return {
-      ok: false,
+      valid: false,
       error: `Choose one of these jobs: ${INSTALLATION_OPERATING_PURPOSES.join(", ")}.`,
     };
   }
   if (!isInstallationEnvironmentClass(input.environmentClass)) {
     return {
-      ok: false,
+      valid: false,
       error: `Choose one of these environments: ${INSTALLATION_ENVIRONMENT_CLASSES.join(", ")}.`,
     };
   }
   const ref = input.pairedProductionInstallationRef?.trim() ?? "";
   if (ref.length > MAX_PAIRED_REF_LENGTH) {
-    return { ok: false, error: "The paired installation name is too long." };
+    return { valid: false, error: "The paired installation name is too long." };
   }
   return {
-    ok: true,
+    valid: true,
     declaration: normalizeIdentityDeclaration({
       primaryPurpose: input.primaryPurpose,
       environmentClass: input.environmentClass,
@@ -215,7 +228,7 @@ export async function previewInstallationIdentityChange(
   input: InstallationIdentityInput,
 ): Promise<PreviewInstallationIdentityResult> {
   const validated = validate(input);
-  if (!validated.ok) return { ok: false, error: validated.error };
+  if (!validated.valid) return err(validated.error);
 
   const { userId } = await requireCapability("manage_platform");
   const principalId = (await resolvePrincipalIdForUser(userId)) ?? userId;
@@ -229,7 +242,7 @@ export async function previewInstallationIdentityChange(
     declaredByPrincipalId: principalId,
   });
 
-  return { ok: true, impact, environmentAfter };
+  return ok({ impact, environmentAfter });
 }
 
 /**
@@ -245,7 +258,7 @@ export async function declareInstallationIdentity(
   previewToken?: string,
 ): Promise<DeclareInstallationIdentityResult> {
   const validated = validate(input);
-  if (!validated.ok) return { ok: false, error: validated.error };
+  if (!validated.valid) return err(validated.error);
 
   const { userId } = await requireCapability("manage_platform");
   const principalId = (await resolvePrincipalIdForUser(userId)) ?? userId;
@@ -255,11 +268,11 @@ export async function declareInstallationIdentity(
   const impact = impactFor(context, next);
 
   if (impact.material && previewToken !== impact.previewToken) {
-    return {
-      ok: false,
-      error: "This changes what the installation is. Look at the impact, then confirm it.",
+    return ok({
+      kind: "needs-preview",
+      reason: "This changes what the installation is. Look at the impact, then confirm it.",
       impact,
-    };
+    });
   }
 
   const now = new Date().toISOString();
@@ -282,12 +295,12 @@ export async function declareInstallationIdentity(
     && environmentTakesEffect
     && context.environmentNow.portalDeclaration?.environmentClass === next.environmentClass
   ) {
-    return {
-      ok: true,
+    return ok({
+      kind: "saved",
       changed: false,
       confirmationStatus: "confirmed",
       environmentAfter,
-    };
+    });
   }
 
   // The declared identity is only "confirmed" when it is also the identity in
@@ -343,7 +356,7 @@ export async function declareInstallationIdentity(
   ]);
 
   revalidatePath("/workspace");
-  return { ok: true, changed: true, confirmationStatus, environmentAfter };
+  return ok({ kind: "saved", changed: true, confirmationStatus, environmentAfter });
 }
 
 /**

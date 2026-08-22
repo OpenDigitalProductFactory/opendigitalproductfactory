@@ -104,8 +104,8 @@ export function InstallationIdentityPanel({ view }: { view: InstallationIdentity
         setError(result.error);
         return;
       }
-      setImpact(result.impact);
-      if (!result.impact.material) {
+      setImpact(result.data.impact);
+      if (!result.data.impact.material) {
         setMessage("Nothing changes. Saving records that you checked it.");
       }
     });
@@ -118,12 +118,18 @@ export function InstallationIdentityPanel({ view }: { view: InstallationIdentity
       const result = await declareInstallationIdentity(input, impact?.previewToken);
       if (!result.ok) {
         setError(result.error);
-        if (result.impact) setImpact(result.impact);
+        return;
+      }
+      // A refused change is an outcome, not a failure: it carries the fresh
+      // preview the operator now has to look at.
+      if (result.data.kind === "needs-preview") {
+        setError(result.data.reason);
+        setImpact(result.data.impact);
         return;
       }
       setImpact(null);
       setMessage(
-        result.confirmationStatus === "confirmed"
+        result.data.confirmationStatus === "confirmed"
           ? "Saved. This is what the installation is."
           : "Saved, but a higher authority sets the environment. See the note above.",
       );

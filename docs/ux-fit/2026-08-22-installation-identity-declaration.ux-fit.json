@@ -3,8 +3,7 @@
   "decidedOption": "extend the existing workspace panel: identity statement as the lead band, four stance rows carrying the resolver's own rationale, and the change form plus impact preview behind one disclosure",
   "scope": {
     "files": [
-      "apps/web/components/workspace/InstallationIdentityPanel.tsx",
-      "apps/web/app/(shell)/workspace/page.tsx"
+      "apps/web/components/workspace/InstallationIdentityPanel.tsx"
     ]
   },
   "notes": {
