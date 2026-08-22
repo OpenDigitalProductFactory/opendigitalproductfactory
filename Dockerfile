@@ -305,14 +305,14 @@ COPY version.json ./version.json
 # Decoupling it from DPF_VERSION is the fix for BI-C8E90A79 — a stamped label
 # can no longer mask which source was built. Exclusions keep it reproducible
 # across builds of the same source (node_modules / .next / generated / tsbuildinfo).
-RUN (find /app/apps/web-src /app/packages-src /app/scripts /app/docs/professions /app/patches -type f \
+RUN (find /app/apps/web-src /app/packages-src /app/scripts /app/config /app/docs/professions /app/patches -type f \
       -not -path '*/node_modules/*' \
       -not -path '*/.pnpm-store/*' \
       -not -path '*/.next/*' \
       -not -path '*/generated/*' \
       -not -name '*.tsbuildinfo' \
       -exec sha256sum {} +; \
-     sha256sum /app/pnpm-workspace.yaml /app/pnpm-lock.yaml /app/package.json /app/tsconfig.base.json /app/.gitignore) \
+     sha256sum /app/pnpm-workspace.yaml /app/pnpm-lock.yaml /app/package.json /app/tsconfig.base.json /app/.gitignore /app/version.json) \
       | sort -k 2 | sha256sum | cut -d ' ' -f 1 > /app/.dpf-source-content-hash
 
 # Operator-facing image version baked in at build time. The explicit

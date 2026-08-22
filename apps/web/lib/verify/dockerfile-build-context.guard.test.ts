@@ -197,4 +197,15 @@ describe("Docker runtime source bundle is complete for Build Studio", () => {
     expect(entrypoint).toContain('docs/professions/*)');
     expect(entrypoint).toContain("${1#docs/professions/}");
   });
+
+  it("bootstraps root configuration and version metadata into the managed workspace", () => {
+    const entrypoint = readFileSync(DOCKER_ENTRYPOINT, "utf8");
+    expect(entrypoint).toContain('cp -r /app/config/. "$WORKSPACE/config/"');
+    expect(entrypoint).toContain('cp /app/version.json "$WORKSPACE/"');
+    expect(entrypoint).toContain('config/*)');
+    expect(entrypoint).toContain("${1#config/}");
+    expect(entrypoint).toContain('version.json)');
+    expect(dockerfile).toMatch(/find \/app\/apps\/web-src[^\n]*\/app\/config/);
+    expect(dockerfile).toMatch(/sha256sum[^\n]*\/app\/version\.json/);
+  });
 });
