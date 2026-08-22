@@ -1,189 +1,128 @@
-﻿#Requires -Version 5.1
-param([string]$InstallDir = "C:\\DPF")
+#Requires -Version 5.1
+param(
+    [string]$InstallDir = $PSScriptRoot,
+    [switch]$Purge,
+    [switch]$KeepEnv,
+    [switch]$KeepState,
+    [switch]$Headless,
+    [switch]$Yes,
+    [switch]$DryRun
+)
 
 $ErrorActionPreference = "Stop"
-
-$DPF_DIR = [System.IO.Path]::GetFullPath($InstallDir)
+$DPF_DIR = [IO.Path]::GetFullPath($InstallDir).TrimEnd('\')
 $AUTOSTART_TASK_NAME = "DPF-AutoStart"
+$NATIVE_EDGE_TASK_NAME = "DPF-Native-Edge-Node"
 
-Write-Host ""
-Write-Host "========================================================" -ForegroundColor Red
-Write-Host "  Digital Product Factory  Uninstall                 " -ForegroundColor Red
-Write-Host "  This will remove the platform and all its data      " -ForegroundColor Red
-Write-Host "========================================================" -ForegroundColor Red
-Write-Host ""
-Write-Host "This will:" -ForegroundColor Yellow
-Write-Host "   Stop and remove all Docker containers"
-Write-Host "   Delete all platform data (database, AI models, messages)"
-Write-Host "   Remove the $DPF_DIR directory"
-Write-Host "   Remove the DPF AutoStart scheduled task"
-Write-Host "   Remove DPF from your PATH"
-Write-Host ""
-Write-Host "Docker Desktop will NOT be uninstalled (you may need it for other things)."
-Write-Host ""
+function Invoke-DPFUninstallCommand {
+    param([Parameter(Mandatory)][scriptblock]$Action, [Parameter(Mandatory)][string]$Description)
+    if ($DryRun) { Write-Host "  would: $Description"; return }
+    & $Action
+}
 
-$confirm = Read-Host "Type 'yes' to confirm uninstall"
-if ($confirm -ne "yes") {
-    Write-Host "Uninstall cancelled." -ForegroundColor Green
-    exit 0
+function Assert-DPFPurgeTarget {
+    param([Parameter(Mandatory)][string]$Path)
+    $resolved = [IO.Path]::GetFullPath($Path).TrimEnd('\')
+    $driveRoot = [IO.Path]::GetPathRoot($resolved).TrimEnd('\')
+    $profileRoot = if ($env:USERPROFILE) { [IO.Path]::GetFullPath($env:USERPROFILE).TrimEnd('\') } else { "" }
+    if (-not $resolved -or $resolved -eq $driveRoot -or $resolved -eq $profileRoot) {
+        throw "unsafe_uninstall_target:$resolved"
+    }
+    return $resolved
+}
+
+if (($KeepEnv -or $KeepState) -and -not $Purge) {
+    throw "-KeepEnv and -KeepState only apply with -Purge"
+}
+if ($Headless -and $Purge -and -not $Yes) {
+    throw "-Headless -Purge requires -Yes to confirm destructive intent"
 }
 
 Write-Host ""
+Write-Host "Open Digital Product Factory - Uninstaller" -ForegroundColor Cyan
+Write-Host "  Install: $DPF_DIR"
+Write-Host "  Tier:    $(if ($Purge) { 'PURGE (destructive)' } else { 'soft (data preserved)' })$(if ($DryRun) { ' [dry-run]' })"
+Write-Host ""
 
-Write-Host "========================================================" 
+if ($Purge -and -not $Yes) {
+    Write-Host "Purge permanently deletes DPF volumes, install files, and local state." -ForegroundColor Red
+    $confirmation = Read-Host "Type 'purge' to continue"
+    if ($confirmation -cne "purge") {
+        Write-Host "Uninstall cancelled." -ForegroundColor Yellow
+        exit 0
+    }
+}
 
-Write-Host "Step 1: Stopping and removing containers..." -ForegroundColor Cyan
-if (Test-Path "$DPF_DIR\docker-compose.yml") {
-    try {
-        Set-Location $DPF_DIR
-        docker compose down -v --remove-orphans 2>$null
-        Write-Host "   Containers and volumes removed" -ForegroundColor Green
-    } catch {
-        Write-Host "   Could not stop containers (Docker may not be running)" -ForegroundColor Yellow
+if (Test-Path -LiteralPath (Join-Path $DPF_DIR "docker-compose.yml")) {
+    $composeChainModule = Join-Path $DPF_DIR "scripts\installer\lib\compose-chain.ps1"
+    if (-not (Test-Path -LiteralPath $composeChainModule)) {
+        $composeChainModule = Join-Path $PSScriptRoot "scripts\installer\lib\compose-chain.ps1"
+    }
+    if (-not (Test-Path -LiteralPath $composeChainModule)) { throw "compose_chain_helper_missing" }
+    . $composeChainModule
+    $composeArgs = Get-DPFComposeArgs -InstallDir $DPF_DIR -Purpose Stop
+    Set-Location $DPF_DIR
+    $downArgs = @("compose") + @($composeArgs) + @("down", "--remove-orphans")
+    if ($Purge) { $downArgs += @("--volumes", "--rmi", "local") }
+    Invoke-DPFUninstallCommand -Description "stop the complete compose stack$(if ($Purge) { ' and remove volumes' })" -Action {
+        & docker @downArgs
+        if ($LASTEXITCODE -ne 0) { throw "compose_down_failed:$LASTEXITCODE" }
     }
 } else {
-    Write-Host "   No docker-compose.yml found, skipping" -ForegroundColor Yellow
+    Write-Host "  No docker-compose.yml found; compose shutdown skipped." -ForegroundColor Yellow
 }
 
-Write-Host "========================================================" 
-
-Write-Host "Step 2: Removing Docker images..." -ForegroundColor Cyan
-try {
-    $images = docker images --filter "reference=*dpf*" --filter "reference=*opendigitalproductfactory*" -q 2>$null
-    if ($images) {
-        docker rmi $images -f 2>$null
-    }
-    # Also remove the built portal images
-    $composeImages = docker images --filter "reference=*feature-windows-installer*" --filter "reference=*c-dpf*" -q 2>$null
-    if ($composeImages) {
-        docker rmi $composeImages -f 2>$null
-    }
-    Write-Host "   Docker images cleaned" -ForegroundColor Green
-} catch {
-    Write-Host "   Could not remove some images" -ForegroundColor Yellow
-}
-
-Write-Host "========================================================" 
-
-Write-Host "Step 3: Removing $DPF_DIR..." -ForegroundColor Cyan
-Set-Location $env:USERPROFILE  # Move out of the directory first
-
-# Post-relocation (DPF_BACKUPS_HOST_PATH in .env), operator backup history
-# lives OUTSIDE the install root at $DPF_DIR-backups\ and is untouched by
-# the Step 3 rm. This block handles the legacy in-tree case: if backups
-# are still inside $DPF_DIR\backups\ from a pre-relocation install, prompt
-# the operator (defaulting to PRESERVE) before the rm destroys them.
-# On a fully-relocated install $DPF_DIR\backups\ does not exist and this
-# block is a no-op.
-$backupsSrc = Join-Path $DPF_DIR "backups"
-$preserveBackups = $false
-if (Test-Path $backupsSrc) {
-    $hasContent = $false
-    try {
-        $first = Get-ChildItem -LiteralPath $backupsSrc -Force -ErrorAction SilentlyContinue | Select-Object -First 1
-        $hasContent = [bool]$first
-    } catch {
-        $hasContent = $false
-    }
-    if ($hasContent) {
-        Write-Host ""
-        Write-Host "   Found legacy in-tree backups at $backupsSrc" -ForegroundColor Yellow
-        Write-Host "   (Relocated installs keep backups at $DPF_DIR-backups\ outside the install root,"
-        Write-Host "   which uninstall does NOT touch. These appear to predate the relocation.)"
-        Write-Host "   These are the only persisted copies of your database dumps."
-        $keep = Read-Host "   Preserve them at $DPF_DIR-backups\ for a future install? (yes/no, default yes)"
-        if ($keep -eq "" -or $keep -eq "yes" -or $keep -eq "y") {
-            $preserveBackups = $true
+foreach ($taskName in @($AUTOSTART_TASK_NAME, $NATIVE_EDGE_TASK_NAME)) {
+    if (Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue) {
+        Invoke-DPFUninstallCommand -Description "remove scheduled task $taskName" -Action {
+            Unregister-ScheduledTask -TaskName $taskName -Confirm:$false
         }
     }
 }
 
-if ($preserveBackups) {
-    $preserveDir = "$DPF_DIR-backups"
-    try {
-        if (-not (Test-Path $preserveDir)) {
-            New-Item -ItemType Directory -Path $preserveDir | Out-Null
+if ($Purge) {
+    $safeTarget = Assert-DPFPurgeTarget -Path $DPF_DIR
+    $preservedEnv = "$safeTarget.env.preserved"
+    if ($KeepEnv -and (Test-Path -LiteralPath (Join-Path $safeTarget ".env"))) {
+        Invoke-DPFUninstallCommand -Description "preserve .env at $preservedEnv" -Action {
+            Copy-Item -LiteralPath (Join-Path $safeTarget ".env") -Destination $preservedEnv -Force
         }
-        Get-ChildItem -LiteralPath $backupsSrc -Force | ForEach-Object {
-            $dest = Join-Path $preserveDir $_.Name
-            if (Test-Path $dest) {
-                Write-Host "   Skipped $($_.Name): already present in $preserveDir" -ForegroundColor Yellow
-            } else {
-                Move-Item -LiteralPath $_.FullName -Destination $dest -Force
+    }
+
+    $safeWorkingDirectory = if ($env:USERPROFILE) { $env:USERPROFILE } else { [IO.Path]::GetPathRoot($safeTarget) }
+    Set-Location $safeWorkingDirectory
+    if (Test-Path -LiteralPath $safeTarget) {
+        Invoke-DPFUninstallCommand -Description "remove verified install directory $safeTarget" -Action {
+            Remove-Item -LiteralPath $safeTarget -Recurse -Force
+        }
+    }
+
+    if (-not $KeepState) {
+        $stateDir = if ($env:DPF_STATE_DIR) { $env:DPF_STATE_DIR } else { Join-Path $env:USERPROFILE ".dpf" }
+        if ($stateDir -and (Test-Path -LiteralPath $stateDir)) {
+            $safeState = Assert-DPFPurgeTarget -Path $stateDir
+            Invoke-DPFUninstallCommand -Description "remove verified state directory $safeState" -Action {
+                Remove-Item -LiteralPath $safeState -Recurse -Force
             }
         }
-        Write-Host "   Backups preserved at $preserveDir" -ForegroundColor Green
-    } catch {
-        Write-Host "   Could not preserve backups: $_" -ForegroundColor Red
-        Write-Host "   Refusing to delete $DPF_DIR while backups are present." -ForegroundColor Red
-        Write-Host "   Move $backupsSrc somewhere safe by hand, then re-run." -ForegroundColor Red
-        exit 1
     }
 }
 
-if (Test-Path $DPF_DIR) {
-    try {
-        Remove-Item $DPF_DIR -Recurse -Force
-        Write-Host "   $DPF_DIR removed" -ForegroundColor Green
-    } catch {
-        Write-Host "   Could not fully remove $DPF_DIR  some files may be locked" -ForegroundColor Yellow
-        Write-Host "    Try closing any open files or terminals in that directory, then delete manually" -ForegroundColor Yellow
-    }
-} else {
-    Write-Host "   $DPF_DIR not found, skipping" -ForegroundColor Yellow
-}
-
-Write-Host "========================================================" 
-
-Write-Host "Step 4: Removing from PATH..." -ForegroundColor Cyan
 $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
 if ($userPath -like "*$DPF_DIR*") {
-    $newPath = ($userPath -split ";" | Where-Object { $_ -ne $DPF_DIR -and $_ -ne "" }) -join ";"
-    [Environment]::SetEnvironmentVariable("Path", $newPath, "User")
-    Write-Host "   Removed $DPF_DIR from PATH" -ForegroundColor Green
-} else {
-    Write-Host "   Not in PATH, skipping" -ForegroundColor Yellow
-}
-
-Write-Host "========================================================" 
-
-Write-Host "Step 5: Removing DPF auto-start task..." -ForegroundColor Cyan
-try {
-    if (Get-ScheduledTask -TaskName $AUTOSTART_TASK_NAME -ErrorAction SilentlyContinue) {
-        Unregister-ScheduledTask -TaskName $AUTOSTART_TASK_NAME -Confirm:$false -ErrorAction Stop
-Write-Host "   Removed DPF auto-start task" -ForegroundColor Green
-    } else {
-Write-Host "   Auto-start task not found, skipping" -ForegroundColor Yellow
+    Invoke-DPFUninstallCommand -Description "remove DPF from the user PATH" -Action {
+        $newPath = ($userPath -split ";" | Where-Object { $_ -and $_ -ne $DPF_DIR }) -join ";"
+        [Environment]::SetEnvironmentVariable("Path", $newPath, "User")
     }
-} catch {
-    Write-Host "  Could not remove auto-start task (continuing uninstall)" -ForegroundColor Yellow
 }
-Write-Host "Step 6: Cleaning up..." -ForegroundColor Cyan
-# Remove any temp files from install
-Remove-Item "$env:TEMP\dpf-*" -Force -ErrorAction SilentlyContinue
-Remove-Item "$env:TEMP\DockerDesktopInstaller.exe" -Force -ErrorAction SilentlyContinue
-Write-Host "   Temp files cleaned" -ForegroundColor Green
-
-Write-Host "========================================================" 
 
 Write-Host ""
-Write-Host "========================================================" -ForegroundColor Green
-Write-Host "  Uninstall complete!                                 " -ForegroundColor Green
-Write-Host "                                                      " -ForegroundColor Green
-Write-Host "  What was removed:                                   " -ForegroundColor Green
-Write-Host "   All DPF containers and data volumes               " -ForegroundColor Green
-Write-Host "   The $DPF_DIR directory                              " -ForegroundColor Green
-Write-Host "   DPF from your system PATH                         " -ForegroundColor Green
-Write-Host "   Remove the DPF auto-start task (if configured)"
-Write-Host "                                                      " -ForegroundColor Green
-Write-Host "  What was kept:                                      " -ForegroundColor Green
-Write-Host "   Docker Desktop (uninstall separately if needed)   " -ForegroundColor Green
-Write-Host "   WSL2 (Windows feature, safe to keep)              " -ForegroundColor Green
-Write-Host "   Platform backups (if you chose to preserve them)  " -ForegroundColor Green
-Write-Host "     at $DPF_DIR-backups\                            " -ForegroundColor Green
-Write-Host "                                                      " -ForegroundColor Green
-Write-Host "  To reinstall, run install-dpf.ps1 again.            " -ForegroundColor Green
-Write-Host "========================================================" -ForegroundColor Green
-
-
-
+if ($DryRun) {
+    Write-Host "Dry-run complete; no changes made." -ForegroundColor Green
+} elseif ($Purge) {
+    Write-Host "Purge complete. DPF data and install files were removed." -ForegroundColor Green
+    if ($KeepEnv) { Write-Host "Preserved environment: $DPF_DIR.env.preserved" }
+} else {
+    Write-Host "Soft uninstall complete. Containers stopped; volumes, .env, install files, and state were preserved." -ForegroundColor Green
+    Write-Host "Re-run install-dpf.ps1 to resume, or use -Purge for permanent removal."
+}

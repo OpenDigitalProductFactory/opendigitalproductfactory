@@ -1,0 +1,21 @@
+{
+  "version": "1",
+  "accountableOwner": "Mark Bodman (markdbodman@gmail.com)",
+  "summary": "TAK §8.11 (governed activity shapes and triggers). Add one nullable column `cadence` to SkillDefinition so a skill can DECLARE that it runs on a schedule — before this, 0 of 68 skills could say 'runs weekly' and the schedule existed only in a hand-written self-task registry. Additive, non-destructive: one new nullable TEXT column, no default, no changes to existing rows and no backfill. Absent means 'only when invoked', which is the existing behaviour of every skill, so every current row remains valid and correct without being touched. The column holds a five-field cron expression (e.g. '11 6 * * *') — a platform scheduling identifier, never tenant, subject, or personal data. It is written only from .skill.md frontmatter at seed time, and only when taskType is 'recurring' and the value parses as a cron expression; anything else is dropped rather than stored, so the column never holds a schedule nothing will read (§8.11.1, dead-intent rule). Migration: 20260821120000_skill_declared_cadence (ADD COLUMN \"cadence\" TEXT, nullable).",
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "SkillDefinition",
+      "lifecycleDisposition": "domain-lifecycle-managed",
+      "fields": [
+        {
+          "name": "cadence",
+          "resolution": "not-applicable",
+          "reason": "A five-field cron expression declaring when a recurring skill runs. A platform scheduling identifier, not personal data and not tied to a data subject. Nullable and backfill-free; existing rows keep NULL and behave exactly as they do today (invoke-only).",
+          "provenance": "Parsed from the `cadence` key in a .skill.md YAML frontmatter by normalizeSkillFrontmatterForSeed (packages/db/src/seed-skills.ts) during the repo-skills seed, and stored only when taskType === 'recurring' and isCronExpression() accepts the value. Repo-authored content; no external or tenant source of data.",
+          "flags": []
+        }
+      ]
+    }
+  ]
+}

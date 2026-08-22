@@ -46,27 +46,35 @@ generated measure at `docs/maintenance/capability-completeness.md`.
 
 ## 0. Conformance summary
 
-DPF currently **fails `TAK-003`** — the default proposal safety rule — and the
-assertions derived from it. This is stated plainly because the rubric is ours and
-the failure is measurable rather than arguable:
+DPF still **fails `TAK-003`** — the default proposal safety rule — but the
+assertions derived from it have moved. Numbers below are read from
+`apps/web/lib/coworker-lifecycle/capability-completeness.generated.json`, not
+estimated:
 
 | Assertion | Requirement | DPF status |
 |---|---|---|
-| `TAK-003` | Undeclared consequential tool defaults to `proposal` | **Fail** — undeclared defaults to ordinary; gated set is an opt-in list of 2 against 174 side-effecting tools |
-| `TAK-020` | Every side-effecting tool carries a consequence class | **Fail** — 0 of 174 |
-| `TAK-021` | Gating derived, not an enumerated allowlist | **Fail** — `CONSEQUENTIAL_DECISION_TOOLS` is a 2-item literal |
-| `TAK-022` | Gate coverage reportable | **Pass** — `summary.consequentialGate`, per agent via `reachableGatedTools` |
+| `TAK-003` | Undeclared consequential tool defaults to `proposal` | **Fail** — an undeclared side-effecting tool is still ordinary by default. Flipping that default moves 120 tools behind the gate in one step and is deliberately its own change |
+| `TAK-020` | Every side-effecting tool carries a consequence class | **Fail, materially narrowed** — 54 of 174 (31%), up from 0. The assertion requires *every* side-effecting tool plus an unclassified-means-consequential default, so it does not pass until `TAK-003` does |
+| `TAK-021` | Gating derived, not an enumerated allowlist | **Pass** — `deriveConsequentialToolNames` computes the gated set from `ToolDefinition.consequence`; `CONSEQUENTIAL_DECISION_TOOLS` survives only as a unioned transitional seed, and a CI ratchet fails the build if the composition root stops installing the derived resolver |
+| `TAK-022` | Gate coverage reportable | **Pass** — `summary.consequentialGate` reports coverage, the split by consequence class, and whether the runtime resolver is installed; rise-only floor in `scripts/agent-capability-baseline.json` |
 | — | Skill/service reference integrity | **Pass** — enforced by `scripts/check-agent-capability-integrity.mjs` in CI |
 | `TAK-023` | Autonomy bounded by coverage | **Fail** — not enforced; §7 states the rule, admission criterion A4 is its machine form |
-| `TAK-024` | Activity shapes bounded | **Partial** — `StoredCycleBoundary` carries the fields; no shape registry binds them |
-| `TAK-025` | Triggers declared; dead intent detected | **Partial** — trigger classes exist in practice, undeclared; six dead cadence columns found by hand |
+| `TAK-024` | Activity shapes bounded | **Pass for declared shapes** — `work-shapes.ts` registers a named, versioned shape with stages, an accountable principal each, governed-decision advances, stop conditions including the failure exit, and a review point; `validateWorkShape` enforces those as a conformance test. One shape is declared, so the assertion holds where it applies and says nothing about activity not yet bound |
+| `TAK-025` | Triggers declared; dead intent detected | **Partial** — the §8.11.1 vocabulary is a closed set and every shape declares from it; the six dead cadence columns now have a reader (`deadline-horizon-sweep.ts`). A general scan for *unread* recorded intentions does not exist, so dead intent is still found by hand |
 | `TAK-026` | Decision-to-action linkage | **Fail** — no edge from decision to execution |
 | `TAK-027` | Outcome feedback under autonomy | **Fail** — loop closes on human rulings only |
 | `TAK-028` | Decision-procedure drift detection | **Pass** — golden-scenario drift |
 
-The controls themselves are built and correct. **What fails is reach.** That
-distinction is the whole content of this assessment, and it is why §8 is
-organized by coverage rather than by feature.
+The controls themselves were always built and correct. **What failed was reach**,
+and that is what this pass moved: the gate went from governing 2 tools to 54, a
+coworker acquired a declared shape and a declared cadence, and six columns that
+read as controls in force acquired the reader that makes them so.
+
+`TAK-020` is worth being precise about, because a 31% figure invites being read
+as a pass in progress. It is not: the assertion's own criterion is that an
+*unclassified* tool is treated as consequential. Until that default flips, 120
+side-effecting tools remain ordinary by omission, and the honest status is Fail
+with a much smaller remainder.
 
 ## 1. How DPF realizes the TAK model
 
@@ -307,21 +315,35 @@ item without a status claim.
 | 9 | Graduated transition gate | **Built, Build Studio only** | `graduated-autonomy.ts` | BI-D996C238 | — |
 | 10 | Workroom governance anchor | **Built** | `CoworkerActionEnvelope` + autonomy gate | BI-E0BFFF77 (done) | — |
 | 11 | Cycle boundary: trigger, stop conditions, review point | **Built** | `StoredCycleBoundary` | — | — |
-| 12 | **Consequence classification on tools** — TAK §8.1, `TAK-020` | **Missing** | 0 of 174 declare it | **BI-B54D5B65** (P1) | `summary.consequentialGate.coveragePct` |
-| 13 | **Derived consequential set + CI check** — TAK §8.4.1, `TAK-021` | **Missing** | set is a 2-item literal | BI-B54D5B65 | `gateClassified` |
+| 12 | **Consequence classification on tools** — TAK §8.1, `TAK-020` | **Partial (54/174)** | `ToolConsequence` gained `authority`; every tool that moves money, reaches a third party, changes identity/authority, or destroys state now declares a class | **BI-B54D5B65** (P1) | `summary.consequentialGate.coveragePct` = 31 |
+| 12a | **Default for an unclassified side-effecting tool** — TAK §8.1, `TAK-003` | **Missing** | still ordinary by omission for 120 tools; deliberately deferred to its own change | BI-B54D5B65 | `summary.consequentialGate.ungated` |
+| 13 | **Derived consequential set + CI check** — TAK §8.4.1, `TAK-021` | **Built** | `consequential-tool-coverage.ts` derives from `consequence`, seed unioned; rise-only floor + resolver-install check in `check-agent-capability-integrity.mjs` | BI-B54D5B65 | `gateClassified` |
 | 14 | **Action-outcome feedback** — TAK §13.3, `TAK-026`/`TAK-027` | **Missing** | no edge to `ToolExecution`; no observed outcome | **BI-23BF8131** | — |
 | 15 | Durable consult ledger | **Partial** | per-process in-memory map | **BI-AF7CE2BC** | — |
-| 16 | **Work-shape registry (stages + gates)** — TAK §8.11, `TAK-024` | **Missing** | plane 4 ceiling 0 | EP-WORK-CONVERGENCE / BI-A2234157 | `planeLevels.shape` |
+| 16 | **Work-shape registry (stages + gates)** — TAK §8.11, `TAK-024` | **Built (1 shape)** | `work-shapes.ts`; projects onto `StoredCycleBoundary` rather than adding a substrate; `validateWorkShape` is the §8.11 MUSTs as a check | EP-WORK-CONVERGENCE / BI-A2234157 | `planeLevels.shape` ceiling 0 → 2 |
 | 17 | Screen-manifest registry | **Empty** | `ALL_MANIFESTS = []` — the envelope's `manifestActionId` resolves against nothing | — *(unfiled)* | — |
-| 18 | Cadence trigger coverage | **Partial** | 4 of 82 agents registered | BI-E2DB8A43 | `planeLevels.cadence` |
-| 19 | Skills can declare a cadence | **Missing** | 0 of 68 | BI-EA406643 | `summary.skills.cadenceCapable` |
-| 20 | Deadline-horizon trigger — TAK §8.11.1, `TAK-025` | **Missing** | six dead columns | BI-B57CA395 | — |
+| 18 | Cadence trigger coverage | **Partial** | 6 of 82 agents registered (`compliance-officer` added) | BI-E2DB8A43 | `planeLevels.cadence` ceiling 2 → 3 |
+| 19 | Skills can declare a cadence | **Built** | `taskType: "recurring"` + cron `cadence` in skill frontmatter, persisted to `SkillDefinition.cadence` | BI-EA406643 | `summary.skills.cadenceCapable` 0 → 1 |
+| 20 | Deadline-horizon trigger — TAK §8.11.1, `TAK-025` | **Built** | `deadline-horizon-sweep.ts` reads all six columns; daily `obligation-assurance-watch` cron raises findings onto the Assurance Ledger | BI-B57CA395 | `AssuranceFinding` where `findingKind = "obligation-deadline"` |
 | 21 | Autonomy admission criteria (A1–A6) enforced — TAK §7.12.2, `TAK-023` | **Missing** | A4 fails for every agent | **BI-1DF04B7A** | `planes.governance.*` |
 
 | 22 | Skill `assignTo` referential integrity | **Built** | `scripts/check-agent-capability-integrity.mjs` + CI workflow; stranded skills enforced at zero | `BI-B6157AAB` | `summary.skills.stranded` |
 | 23 | Unbacked `backingSkillIds` ratchet | **Built (baseline 7)** | shrink-only `scripts/agent-capability-baseline.json` | `BI-5C1978C7` | `summary.unbackedSkillIds` |
 
 ### 8.0 Landed in this pass
+
+Recurring-obligation pass (this change):
+
+| Change | Effect on the measure |
+|---|---|
+| Consult gate derived from `ToolDefinition.consequence`, seed unioned; `authority` class added; 39 tools classified | `summary.consequentialGate` 2/174 (1%) → 54/174 (31%) |
+| Work-shape registry with §8.11 conformance check | `planeLevels.shape` 82/0/0/0 ceiling 0 → 81/0/1/0 ceiling 2 |
+| Skill cadence declaration + `compliance-officer` self-task | `planeLevels.cadence` 77/0/5/0 ceiling 2 → 76/0/5/1 ceiling 3; `skills.cadenceCapable` 0 → 1 |
+| Daily deadline-horizon sweep over the six dead columns | `AssuranceFinding` gains `obligation-deadline`; six columns acquire a reader |
+| Rise-only consult-gate floor + resolver-install check in CI | a coverage regression, and a dropped resolver install, both fail the build |
+| Compliance and proactivity pages rewritten to what now happens | doc-cadence checklist complete rows 2/56 → 5/56 |
+
+Earlier capability-integrity pass:
 
 | Change | Effect on the measure |
 |---|---|
@@ -341,9 +363,11 @@ Rows 1–11 are **built** — do not redesign them. The recurring error in this
 programme has been proposing new machinery where the machinery exists and only
 its *reach* was never asserted.
 
-Rows 12–21 are the actual scope. Of those, **12 and 13 are the critical path**:
-they unblock 14 (an outcome edge is worth little while 2 tools produce records)
-and they are the machine-checkable form of the §7 sequencing rule.
+Rows 12–21 were the actual scope. **13, 16, 19, and 20 landed**; 12 moved from
+0 to 54 of 174. Row **12a is now the critical path**: flipping the default for an
+unclassified side-effecting tool is what turns `TAK-020` and `TAK-003` from a
+narrowed failure into a pass, and it is held back deliberately because it changes
+gate behaviour for 120 tools at once.
 
 Row 17 is worth separate attention: the workroom action envelope is built and
 governs actions resolved through a screen manifest — and the manifest registry is

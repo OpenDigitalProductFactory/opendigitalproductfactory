@@ -13,15 +13,35 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   canCall,
   expandGrants,
   objectLiteralBody,
+  normalizeGeneratedPath,
   parseSkillFrontmatter,
   parseStringArrayMap,
   parseTopLevelKeys,
   stripLineComments,
 } from "./measure-capability-completeness.mjs";
+
+test("generated capability paths use repository-stable separators", () => {
+  assert.equal(
+    normalizeGeneratedPath("skills\\platform\\ingest-article.skill.md"),
+    "skills/platform/ingest-article.skill.md",
+  );
+});
+
+const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+
+function shippedArtifact() {
+  return JSON.parse(fs.readFileSync(
+    path.join(REPO_ROOT, "apps", "web", "lib", "coworker-lifecycle", "capability-completeness.generated.json"),
+    "utf8",
+  ));
+}
 
 test("objectLiteralBody brace-matches instead of stopping at the first close", () => {
   const src = `export const X = { a: ["p"], b: { c: ["q"] }, d: ["r"] };`;
@@ -185,4 +205,36 @@ test("an agent with nothing scores zero rather than throwing", () => {
   );
   assert.equal(scored.planes.governance.level, 0);
   assert.equal(scored.planes.corpus.level, 0);
+});
+
+// ── the consult gate is derived, not enumerated (TAK §8.4.1) ────────────────
+
+test("the shipped artifact reports gate coverage derived from declared consequence", () => {
+  const artifact = shippedArtifact();
+  const gate = artifact.summary.consequentialGate;
+
+  // The seed is CARRIED, not replaced: dropping it would silently shrink reach.
+  for (const seeded of gate.seedOnly) {
+    assert.ok(gate.classifiedTools.includes(seeded), `seed ${seeded} must stay gated`);
+  }
+  // Coverage is materially above the two-name allowlist it replaced.
+  assert.ok(gate.gateClassified > gate.seedOnly.length);
+  assert.ok(gate.coveragePct >= 25, `coverage ${gate.coveragePct}% is below the ratchet floor`);
+  // The gate only REACHES the derived set if the composition root installs it.
+  assert.equal(gate.resolverInstalled, true);
+  // Every consequence class is represented, so no criterion was skipped.
+  for (const cls of ["outward", "irreversible", "authority"]) {
+    assert.ok(gate.byConsequenceClass[cls] > 0, `no tool declares ${cls}`);
+  }
+});
+
+test("the shipped artifact shows a coworker with a declared shape AND a declared cadence", () => {
+  const artifact = shippedArtifact();
+  assert.ok(artifact.summary.planeLevels.shape.ceiling > 0, "shape ceiling is still zero");
+  assert.ok(artifact.summary.skills.cadenceCapable > 0, "no skill can declare a cadence");
+
+  const shaped = artifact.agents.filter((a) => a.planes.shape.level > 0);
+  assert.ok(shaped.length > 0, "no agent has a declared work shape");
+  // Its cadence must be declared on the skill, not only in a registry.
+  assert.ok(shaped.some((a) => a.planes.cadence.level === 3));
 });

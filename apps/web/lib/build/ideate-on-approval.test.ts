@@ -24,6 +24,7 @@ vi.mock("@/lib/build/build-studio-config", () => ({
   getBuildStudioConfig: mockGetBuildStudioConfig,
   getAutonomousPlaybookMode: () => "off",
   isModelTierRoutingEnabled: async () => false,
+  isQualityFirstRightsizingEnabled: async () => true,
 }));
 
 vi.mock("@/lib/mcp-tools", () => ({

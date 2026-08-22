@@ -38,6 +38,7 @@ import {
   FEATURE_BUILD_DEPENDENCY_GATE_SELECT,
 } from "@/lib/build/feature-build-dependencies";
 import { logBuildActivity } from "@/lib/mcp/build-tool-helpers";
+import { resolvePlannedFilePaths } from "@/lib/decision-perspective/planned-file-paths";
 import type { DecisionOutcomeType } from "@/lib/decision-perspective/types";
 import type { AutonomousBuildExecutionProfileRefV1 } from "@/lib/build/autonomous-build-eligibility-reader";
 
@@ -353,6 +354,13 @@ export async function performPlanToBuildTransition(params: {
         >[0]["build"]["deliberationSummary"],
       },
       triggeredByUserId: userId,
+      // BI-70280889: the acumen consults are keyed off these paths; without
+      // them deriveImpactedAcumens sees an empty set and the layer stays inert.
+      plannedFilePaths: await resolvePlannedFilePaths({
+        db: prisma,
+        buildId: build.buildId,
+        buildRowId: build.id,
+      }),
       ...(autonomousMode !== "off"
         ? {
             riskTier: deriveTransitionRiskTier({

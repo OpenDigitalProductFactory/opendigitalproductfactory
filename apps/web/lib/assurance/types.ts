@@ -11,6 +11,11 @@ export const ASSURANCE_FINDING_KINDS = [
   // EP-COWORKER-LIFECYCLE Phase 2: a coworker failed a certification oracle
   // (no tool call, fabrication, false refusal, empty tool surface).
   "coworker-certification",
+  // TAK §8.11 obligation assurance watch: a recorded obligation, control
+  // review, or licence expiry has entered the look-ahead window — or declares a
+  // recurrence with no next date, which is a control that reads as in force and
+  // is not (§8.11.1, dead-intent rule).
+  "obligation-deadline",
 ] as const;
 
 export type AssuranceFindingKind = (typeof ASSURANCE_FINDING_KINDS)[number];
@@ -23,6 +28,9 @@ export const ASSURANCE_AFFECTED_TYPES = [
   "release-bundle",
   // EP-COWORKER-LIFECYCLE Phase 2: certification findings target a coworker.
   "agent",
+  // The obligation assurance watch targets a compliance record: an Obligation,
+  // a Control, or a LicenseRequirementReference.
+  "compliance-record",
 ] as const;
 
 export type AssuranceAffectedType = (typeof ASSURANCE_AFFECTED_TYPES)[number];

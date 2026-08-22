@@ -32,20 +32,10 @@ try {
 $capabilityProjection = Resolve-DpfCapabilityComposeProfiles -InstallDir $DPF_DIR
 $env:COMPOSE_PROFILES = (@($capabilityProjection.composeProfiles) -join ',')
 
-$composeArgs = @("-f", "docker-compose.yml")
-if (Test-Path (Join-Path $DPF_DIR "docker-compose.override.yml")) {
-    $composeArgs += @("-f", "docker-compose.override.yml")
-}
-$envPath = Join-Path $DPF_DIR ".env"
-if ((Test-Path -LiteralPath $envPath) -and (Select-String -LiteralPath $envPath -Pattern '^DPF_ORGANIZATION_TRUST_ENABLED=1$' -Quiet)) {
-    $composeArgs += @("-f", "docker-compose.organization-trust.yml", "-f", "docker-compose.tls.yml")
-}
-if ((Test-Path -LiteralPath $envPath) -and (Select-String -LiteralPath $envPath -Pattern '^DPF_EDGE_ACTION_DISPATCH_CONFIGURED=1$' -Quiet)) {
-    $composeArgs += @("-f", "docker-compose.edge-actions.yml")
-}
-if ($includeEdge -and (Test-Path (Join-Path $DPF_DIR "docker-compose.edge.yml"))) {
-    $composeArgs += @("-f", "docker-compose.edge.yml")
-}
+$composeChainModule = Join-Path $DPF_DIR "scripts\installer\lib\compose-chain.ps1"
+if (-not (Test-Path -LiteralPath $composeChainModule)) { throw "compose_chain_helper_missing" }
+. $composeChainModule
+$composeArgs = Get-DPFComposeArgs -InstallDir $DPF_DIR -IncludeEdge:$includeEdge -IncludeRelease:(Test-Path (Join-Path $DPF_DIR "docker-compose.release.yml"))
 
 docker compose @composeArgs up -d
 

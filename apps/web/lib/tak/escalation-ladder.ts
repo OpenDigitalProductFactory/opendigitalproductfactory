@@ -21,7 +21,7 @@
 import type { ExecutedToolLike } from "./backlog-create-claim-guard";
 
 /** Ladder rungs, cheapest and least disruptive first. */
-export type LadderRung = "reroute" | "consult" | "convene" | "file";
+export type LadderRung = "reroute" | "consult" | "convene" | "handoff" | "file";
 
 /**
  * Rung 1 — re-route. Read-only roster discovery by intent (BI-5FB59BC6). Costs
@@ -51,7 +51,20 @@ const CONVENE_TOOLS = [
 ] as const;
 
 /**
- * Rung 4 — file. Genuinely no path forward in this conversation. Last resort,
+ * Rung 4 — hand off (BI-33F1EA72). The blocker is one only a human can clear:
+ * entering a credential, completing an interactive sign-in, granting host or
+ * physical access, running a privileged command. No peer coworker can unblock
+ * it, so rungs 1-3 cannot, and filing it buries a two-minute fix in a queue.
+ *
+ * Deliberately has NO tools. Every other rung is evidenced by a tool call;
+ * this rung's artifact is the reply itself — numbered steps the human can run
+ * plus a check the coworker can re-run afterwards. buildHumanHandoff() below is
+ * the canonical shape, so the rung is a formatter, not a tool grant.
+ */
+const HANDOFF_TOOLS = [] as const;
+
+/**
+ * Rung 5 — file. Genuinely no path forward in this conversation. Last resort,
  * not first.
  */
 const FILE_TOOLS = ["create_backlog_item", "report_quality_issue"] as const;
@@ -60,6 +73,7 @@ const RUNG_TOOLS: Record<LadderRung, readonly string[]> = {
   reroute: REROUTE_TOOLS,
   consult: CONSULT_TOOLS,
   convene: CONVENE_TOOLS,
+  handoff: HANDOFF_TOOLS,
   file: FILE_TOOLS,
 };
 
@@ -77,7 +91,8 @@ export const ESCALATION_LADDER_BLOCK = `WHEN YOU CANNOT ANSWER — WORK THE LADD
 2. RE-ROUTE — the question belongs to another specialist's area (a platform or deployment failure is not a delivery-process question; a billing dispute is not an engineering question). Call find_coworker with the intent, hand the work to the peer it names, and tell the user who is picking it up. This costs the user nothing — do it silently and do it first.
 3. CONSULT — you own the surface but need a peer's knowledge for one bounded question. Call request_coworker, then answer in your own voice with the peer's grounded result and say who you checked with.
 4. CONVENE — the work needs more than one party, more than one turn, or a human decision. Call summon_coworker to bring peers into this conversation, or open a work room and invite the participants who can actually resolve it.
-5. FILE — only when there is no path forward in this conversation at all. Say plainly which peers you tried and why the work could not proceed, then file it.
+5. HAND OFF — the blocker is one only a person can clear: typing a credential, finishing a sign-in, granting access on their machine, running something that needs their permission. No colleague can do it for them, so do not route it and do not file it. Give them the shortest numbered list of steps that clears it, say what you will check once they are done, and offer to pick the work straight back up. Never end on what you could not do; end on what they can do next.
+6. FILE — only when there is no path forward in this conversation at all. Say plainly which peers you tried and why the work could not proceed, then file it.
 NEVER file a backlog item as a substitute for asking a colleague. A filed item with no attempt to reach a peer is a dead end handed to the user. When you describe a peer, use their role in plain language ("our platform engineer", "the finance specialist") — never a tool name or an internal id.`;
 
 /**
@@ -97,7 +112,14 @@ export const COORDINATOR_BLOCK = `THE COO COORDINATES; SPECIALISTS DO THE WORK. 
 - If you are the COO: you route, consult, and convene — you do not re-do specialist work, and you do not answer for a specialist when bringing them in is one call away. Hold the thread: a question you route is still yours to track until someone owns it.
 - Either way, coordination is visible, and no one speaks as the decider: recommendations carry their own attribution, and approval always belongs to the human.`;
 
-/** Rungs 1-3: an actual attempt to involve another coworker. */
+/**
+ * Rungs 1-3: an actual attempt to involve another coworker.
+ *
+ * `handoff` is deliberately absent. This list answers "did the coworker try a
+ * PEER before filing", and a handoff involves the human, not a peer — counting
+ * it here would let "I told the user to fix it themselves, then filed anyway"
+ * satisfy a guard that exists to catch exactly that.
+ */
 export const ESCALATION_RUNGS: readonly LadderRung[] = ["reroute", "consult", "convene"];
 
 function rungForTool(toolName: string): LadderRung | null {
@@ -146,6 +168,47 @@ export function classifyLadderActivity(
     filed,
     filedWithoutEscalating: filed && attemptedRungs.length === 0,
   };
+}
+
+/**
+ * The canonical rung-4 artifact (BI-33F1EA72).
+ *
+ * A blocker only the human can clear has no tool call behind it, so the reply
+ * IS the escalation. Before this existed the loop's only vocabulary for it was
+ * an apology — buildLocalToolCallFailureMessage told the user the coworker
+ * "wasn't strong enough to finish this" — which names a limitation and stops.
+ * A hand-off names the limitation and then does something with it.
+ *
+ * Three parts, all required:
+ *   blocker — what stopped the work, in the user's terms, one sentence.
+ *   steps   — the SHORTEST sequence that clears it. Imperative, numbered on
+ *             render, no explanation the step does not need.
+ *   verify  — what the coworker will re-check afterwards. This is the half that
+ *             makes it a hand-off rather than a brush-off: the work comes back.
+ *
+ * Kept as a formatter rather than free-form prose because the local tier is
+ * where this rung matters most and is least able to improvise it. Filling three
+ * named slots is a bounded task; composing a well-shaped hand-off from scratch
+ * is not (see the local-model priors in packages/db/src/local-model-capabilities.ts).
+ */
+export type HumanHandoff = {
+  blocker: string;
+  steps: readonly string[];
+  verify: string;
+};
+
+export function buildHumanHandoff(handoff: HumanHandoff): string {
+  const steps = handoff.steps
+    .map((step, index) => `${index + 1}. ${step}`)
+    .join("\n");
+
+  return [
+    handoff.blocker,
+    "",
+    steps,
+    "",
+    `Once that's done, tell me and I'll ${handoff.verify} — then pick this straight back up.`,
+  ].join("\n");
 }
 
 /**

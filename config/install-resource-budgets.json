@@ -22,14 +22,19 @@
       "memory": "3g",
       "cpus": "2.0",
       "rationale": "Next.js production runtime; largest always-on app process."
-    }
-  },
-  "optionalProfileServices": {
+    },
     "redis": {
       "memory": "512m",
       "cpus": "0.5",
-      "profiles": ["runtime-durable-automation"]
+      "rationale": "Durable automation queue store; promoted to the core runtime with a small idle footprint."
     },
+    "inngest": {
+      "memory": "1g",
+      "cpus": "1.0",
+      "rationale": "Durable execution engine; promoted to the core runtime and bounded independently from the portal."
+    }
+  },
+  "optionalProfileServices": {
     "dpf-tts": {
       "memory": "2g",
       "cpus": "2.0",

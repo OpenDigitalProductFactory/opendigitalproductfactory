@@ -89,6 +89,7 @@ const definitions: ToolDefinition[] = [
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: true,
+    consequence: "irreversible", // destroys state → consult-gated (TAK §8.4.1)
     buildPhases: ["build", "review", "ship"],
     annotations: {
       readOnlyHint: false,

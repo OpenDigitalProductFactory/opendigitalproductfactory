@@ -207,6 +207,8 @@ const definitions: ToolDefinition[] = [
     },
     requiredCapability: "manage_provider_connections",
     sideEffect: true,
+    // changes identity or authority → consult-gated (TAK §8.4.1).
+    consequence: "authority",
   },
   {
     name: "draft_marketing_asset",

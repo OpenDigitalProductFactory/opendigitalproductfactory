@@ -3,7 +3,11 @@ import { prisma } from "@dpf/db";
 import { createCompletionEvidenceGovernanceHook } from "@/lib/backlog/completion-evidence-governance-hook";
 import { registerToolLifecycleHook } from "@/lib/mcp-governed-execute";
 import { PLATFORM_TOOLS } from "@/lib/mcp-tools";
-import { createDecisionRoutingGovernanceHook } from "@/lib/tak/decision-routing-governance-hook";
+import {
+  createDecisionRoutingGovernanceHook,
+  installConsequentialToolResolver,
+} from "@/lib/tak/decision-routing-governance-hook";
+import { getConsequentialToolNames } from "@/lib/tak/consequential-tool-coverage";
 import type { WorkroomParticipantRole } from "@/lib/work-management/room-types";
 
 import {
@@ -108,6 +112,11 @@ async function recordWorkroomShapeShadow(
 }
 
 export function registerServerToolGovernanceHooks(): void {
+  // Give the decision-routing gate its real reach BEFORE the hook is live:
+  // derived from every ToolDefinition.consequence, not the two-name seed
+  // (TAK §8.4.1). Installed here because the hook must not statically import
+  // the tool catalog. A conformance test pins that this call is present.
+  installConsequentialToolResolver(getConsequentialToolNames);
   registerToolLifecycleHook(createDecisionRoutingGovernanceHook());
   registerToolLifecycleHook(createCompletionEvidenceGovernanceHook());
   registerToolLifecycleHook(

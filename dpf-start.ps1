@@ -32,13 +32,10 @@ try {
 $capabilityProjection = Resolve-DpfCapabilityComposeProfiles -InstallDir $DPF_DIR
 $env:COMPOSE_PROFILES = (@($capabilityProjection.composeProfiles) -join ',')
 
-$composeArgs = @("-f", "docker-compose.yml")
-if (Test-Path (Join-Path $DPF_DIR "docker-compose.override.yml")) {
-    $composeArgs += @("-f", "docker-compose.override.yml")
-}
-if ($includeEdge -and (Test-Path (Join-Path $DPF_DIR "docker-compose.edge.yml"))) {
-    $composeArgs += @("-f", "docker-compose.edge.yml")
-}
+$composeChainModule = Join-Path $DPF_DIR "scripts\installer\lib\compose-chain.ps1"
+if (-not (Test-Path -LiteralPath $composeChainModule)) { throw "compose_chain_helper_missing" }
+. $composeChainModule
+$composeArgs = Get-DPFComposeArgs -InstallDir $DPF_DIR -IncludeEdge:$includeEdge -IncludeRelease:(Test-Path (Join-Path $DPF_DIR "docker-compose.release.yml"))
 
 docker compose @composeArgs up -d
 

@@ -37,7 +37,40 @@ The licensing readiness workspace is authoritative for the platform's tracked po
 
 ## AI Coworker Support
 
-The licensing specialist can investigate likely authority layers, summarize visible evidence, persist factual findings, and create readiness issues. It should ask for the next useful piece of context when the business posture is unclear and must avoid inventing legal conclusions.
+**What it does.** The licensing specialist investigates likely authority layers
+for a location and activity, summarizes the evidence it can see, persists factual
+findings against the record, and opens readiness issues for what it cannot
+resolve. It asks for the next useful piece of context when your business posture
+is unclear.
+
+**When it runs.** The specialist itself runs only when you ask it. One thing now
+runs on its own: the **obligation assurance watch**, daily at 05:40 UTC, reads
+each requirement reference's freshness budget (its `stale after` days, 180 by
+default) against when it was last verified, and raises a finding when the
+evidence is about to go stale or already has. A reference that has never been
+verified is reported immediately, because its budget is already spent. The
+renewal cadence hint on the record is carried into the finding so you know what
+the renewal rhythm is meant to be.
+
+Permit expiry dates, fee due dates, and staff credential expiries are still only
+recorded and shown. The watch covers requirement-reference freshness; it does
+**not** yet read those three, so an expiring permit still does not raise itself.
+
+**How it stays current.** Only its own freshness is watched, not the requirement.
+The watch tells you that a reference has passed its budget; it cannot tell you
+whether the authority changed the rule. Re-verify against the issuing authority
+before relying on a recorded requirement, and record the verification so the
+budget resets and the finding closes.
+
+**What it will not do.** The coworker does not grant permission to operate, does
+not renew a licence, does not pay a fee, and does not convert a likely lead into
+a confirmed requirement. Resolving a readiness issue asserts that the question was
+answered by a person; it is not a determination the coworker makes.
+
+**What you must do.** Own the renewal calendar yourself, open the official source
+rather than accepting a search result or an AI summary, and re-open readiness
+questions whenever you add a location, service, regulated activity, or credentialed
+member of staff.
 
 ## Decisions And Consequences
 

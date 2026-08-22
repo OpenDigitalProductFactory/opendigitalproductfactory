@@ -78,6 +78,41 @@ silent drift.
 - **Dated specs and plans** under `docs/superpowers/` keep their original
   filenames and wording. They are the record of what was decided when, not live
   contracts.
+- **Agent-facing MCP copy** — tool descriptions and error payloads under
+  `apps/web/lib/mcp/packs/` still say "Work Capsule" (27 occurrences, recorded in
+  `scripts/prose-lint-baseline.json`). They are read by clients inside the alias
+  window, not by an operator, so they retire with the aliases (`BI-8D968679`).
+
+## What a human reads is renamed, and now guarded
+
+⟦runtime: enforced by `pnpm check:prose-lint` — a new "capsule" in owner copy fails CI⟧
+
+`BI-D6BC8C18`. Phases 1-4 moved the model, the view types, the tools and the
+doctrine, but eleven owner-facing strings kept saying capsule — the portal
+context strip, the Build Studio work-control table and panel, the change-lane
+facet and its blocker text, the delivery nav, and the MCP token-template
+description. Phase 2's only UX gate was `workspace/cases/[caseKey]`, so no gate
+ever looked at them.
+
+The list above is what this page can promise stays unrenamed. **Owner-facing
+copy is not on it and never was** — that omission is what let the drift read as
+deliberate. It is now mechanical rather than aspirational: the
+`retiredVocabulary` axis of `scripts/check-prose-lint.ts` carries a
+`RETIRED_TERMS` registry, and the term `capsule` is in it.
+
+Two properties of that guard are load-bearing:
+
+- It scans `apps/web/lib/` as well as `app/` and `components/`. The string the
+  owner actually reported (`actionLabel: "Open capsule"`) is built in
+  `lib/portal-context/work-resolver.ts`, which an app+components sweep cannot
+  see.
+- It matches camelCase copy props case-insensitively. The original bare-prop
+  regex could not see `actionLabel` at all, which is the mechanical reason four
+  shipped phases walked past the defect.
+
+**Renaming anything else on this page means adding its term to `RETIRED_TERMS`
+in the same PR.** Landing the copy change without the registry row leaves the
+old word free to come back, which is exactly how this one survived.
 
 ## Related
 

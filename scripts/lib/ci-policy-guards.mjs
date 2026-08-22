@@ -83,6 +83,14 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       // failure mode here is shell exit-status semantics, not source text.
       node("--test", "scripts/installer/lib/state-cleanup-temps.test.mjs"),
     ]),
+    guard("fresh-install-reliability", "Fresh Install Reliability", [
+      node(
+        "--test",
+        "scripts/installer-image-identity.test.mjs",
+        "scripts/installer/powershell-compose-chain.test.mjs",
+        "scripts/salvage-sweep.test.mjs",
+      ),
+    ]),
     guard("published-image-freshness", "Published Image Freshness", [
       // Decision logic only — the live registry check needs Docker and runs on a
       // schedule (.github/workflows/published-image-freshness.yml).
@@ -406,6 +414,10 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         // the wrong gating decision. This list is hand-enumerated with no glob —
         // a test that is not named here never runs.
         "scripts/measure-doc-staleness-coverage.test.mjs",
+        // Doc cadence contract: same rule — the counts are advisory, but the
+        // detection is tested, because an over-reporting checklist claims work
+        // is done when it is not.
+        "scripts/measure-doc-cadence-coverage.test.mjs",
         // Same rule for the capability measure: the report is advisory, but its
         // parsing and scoring are tested here because a mis-parsed registry
         // under-reports gaps, and an under-reported gap reads as an all-clear.

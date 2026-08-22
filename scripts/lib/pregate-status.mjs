@@ -63,6 +63,57 @@ function rank(verdict) {
  *             candidateSha: string, staleness: string, evidenceId: string,
  *             recordedAt: string, expiresAt: string }}
  */
+/**
+ * BI-465B3D60. A failing gate record carries `status: "failed"`, `gatePassed:
+ * false`, and — in the observed cases — no failureReason, no error, and no
+ * failedCommand. `pnpm run pregate:status` could only say "this SHA has not
+ * passed", which reads as "your code is bad" when the actual event was losing a
+ * contended slot.
+ *
+ * That matters because local-integration-ci runs at effectiveCapacity 1 on a
+ * host that may have several sessions gating at once. A run that queued,
+ * started, and was released early is a RETRY, not a verdict on the diff.
+ *
+ * This is a reader, so it cannot fix the missing reason. It can stop presenting
+ * absence as a finding, and name the lease outcome the record does carry.
+ */
+function describeFailure(state, metadata) {
+  const status = state?.status || "unknown";
+  const stated = state?.failureReason || state?.error || metadata?.execution?.failedCommand;
+  if (stated) return `gate record status ${status} — ${typeof stated === "string" ? stated : "see the gate record"}`;
+
+  const events = Array.isArray(state?.leaseEvents) ? state.leaseEvents : [];
+  const started = events.some((e) => e?.type === "started");
+  const queued = events.some((e) => e?.type === "queued");
+  const replaced = events.some((e) => e?.type === "terminal-claim-replaced");
+
+  if (started && !stated) {
+    const suffix = queued || replaced
+      ? " The run held the slot and was released without recording a failing command, and this claim queued behind another session — a contended slot is a retry, not a verdict on your diff."
+      : " The run started and was released without recording a failing command, so this is not evidence that the diff is bad.";
+    return `gate record status ${status} with NO recorded reason — re-run before treating this as a real failure.${suffix}`;
+  }
+
+  return `gate record status ${status} with NO recorded reason — this SHA has not passed, but the record does not say why. Re-run pregate.`;
+}
+
+/**
+ * The two records are written by different processes, and the failing runs
+ * observed in BI-465B3D60 never rewrote dpf-local-ci-metadata.json at all — so
+ * it kept reporting the PREVIOUS run's `execution.status: "passed"`. Reading it
+ * after a failure yields a confident, wrong "it passed"; only the file mtime
+ * gave it away.
+ *
+ * Presence of the file was always checked. Freshness never was.
+ */
+function metadataDescribesAnotherRun(state, metadata) {
+  const boundSha = String(state?.sha || "");
+  const candidateSha = String(metadata?.candidateSha || "");
+  if (!boundSha || !candidateSha) return false;
+  if (boundSha === candidateSha) return false;
+  return true;
+}
+
 export function classifySlotRecord({ state, metadata, headSha, headBranch = "", now = Date.now() }) {
   const boundSha = String(state?.sha || "");
   const boundBranch = String(state?.branch || "");
@@ -108,7 +159,8 @@ export function classifySlotRecord({ state, metadata, headSha, headBranch = "", 
     return {
       ...base,
       verdict: "FAIL",
-      reason: `gate record status ${state.status || "unknown"} — this SHA has not passed`,
+      reason: describeFailure(state, metadata),
+      staleness: metadataDescribesAnotherRun(state, metadata) ? "metadata-describes-another-run" : "",
     };
   }
 

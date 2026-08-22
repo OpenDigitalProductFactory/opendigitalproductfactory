@@ -68,18 +68,6 @@ export function scheduleInitialCodeGraphBootstrap(input: {
 }
 
 /**
- * Enqueue background dimension evals for every active ModelProfile under the
- * given provider. Sends one `ai/eval.run` event per model so Inngest dispatches
- * them with the function's own concurrency cap (limit 2) and retry policy.
- * Errors are swallowed because this runs in startup context — the operator
- * can re-trigger via Run Probes if anything fails. Exported for testing.
- *
- * BI-INST-001: this is the missing step in the first-boot auto-provisioning
- * chain. Without it, ModelProfile rows existed but EndpointTaskPerformance
- * was empty, so the router rejected every LLM task with "No eligible
- * endpoints found."
- */
-/**
  * Mirror the canonical platform version (from version.json) into the
  * PlatformConfig["platform.version"] row so the DB-backed runtime metadata
  * agrees with the file-backed loader. Non-fatal: failures log loudly but
@@ -911,45 +899,6 @@ export async function resumeStrandedBuildsOnBoot(
   }
 }
 
-export async function enqueueFirstBootEvals(providerId: string): Promise<{
-  enqueued: number;
-  error: string | null;
-}> {
-  if (process.env.NEXT_RUNTIME && process.env.NEXT_RUNTIME !== "nodejs") return { enqueued: 0, error: null };
-  try {
-    const { prisma } = await import("@dpf/db");
-    const profiles = await prisma.modelProfile.findMany({
-      where: {
-        providerId,
-        modelStatus: "active",
-        retiredAt: null,
-      },
-      select: { modelId: true },
-    });
-    if (profiles.length === 0) return { enqueued: 0, error: null };
-
-    const { inngest } = await import("@/lib/queue/inngest-client");
-    await inngest.send(
-      profiles.map((p) => ({
-        name: "ai/eval.run",
-        data: {
-          endpointId: providerId,
-          modelId: p.modelId,
-          userId: "first-boot",
-        },
-      })),
-    );
-    console.log(
-      `[first-boot] Enqueued ${profiles.length} dimension eval(s) for ${providerId} (background via Inngest)`,
-    );
-    return { enqueued: profiles.length, error: null };
-  } catch (err) {
-    const msg = getErrorMessage(err);
-    console.warn(`[first-boot] Failed to enqueue evals for ${providerId}: ${msg}`);
-    return { enqueued: 0, error: msg };
-  }
-}
-
 /**
  * Next.js global error hook — fires for every unhandled server-side error.
  * Counts them into dpf_http_unhandled_errors_total{route,method} so the
@@ -1359,21 +1308,11 @@ export async function register() {
     }
 
     // ── First-boot auto-provisioning ───────────────────────────────────────
-    // Runs 15s after startup. Detects active providers with zero model
-    // profiles (the exact state after a fresh install where the seed +
-    // post-init SQL activated providers but no discovery has run yet).
-    // This keeps provider catalog/model readiness as background maintenance
-    // instead of asking operators to run catalog or eval chores by hand.
-    //
-    // BI-INST-001 (2026-05-23): the original first-boot hook stopped after
-    // discoverModels + profileModels. ModelProfile rows existed but the
-    // router still failed every LLM task with "No active endpoint manifests
-    // found" because no probes had populated EndpointTaskPerformance. This
-    // hook now enqueues `ai/eval.run` events for each freshly-profiled
-    // model so dimension evals run in the background via Inngest. The
-    // evals' new circuit breaker (BI-INST-008, eval-runner.ts
-    // errorLooksLikeInfrastructure) keeps a single transient failure from
-    // poisoning every model.
+    // Runs 15s after startup and reconciles both pristine and interrupted
+    // provider setup. ModelProfile is the routing source: seed priors keep it
+    // usable immediately, then the durable eval queue replaces those priors
+    // with measured dimensions. Existing seed profiles must be retried too,
+    // or one unavailable queue startup can strand calibration indefinitely.
     if (optionalStartupTasksEnabled) {
       setTimeout(async () => {
         try {
@@ -1395,31 +1334,20 @@ export async function register() {
 
           for (const provider of activeProviders.filter(canRunStartupModelDiscovery)) {
             const { providerId } = provider;
-            const profileCount = await prisma.modelProfile.count({
-              where: { providerId },
+            const { reconcileFirstBootProvider } = await import(
+              "@/lib/routing/first-boot-provider-reconciliation"
+            );
+            const { autoDiscoverAndProfile, queueUncalibratedModelEvals } = await import(
+              "@/lib/inference/ai-provider-internals"
+            );
+            const result = await reconcileFirstBootProvider({
+              countProfiles: () => prisma.modelProfile.count({ where: { providerId } }),
+              discoverAndProfile: () => autoDiscoverAndProfile(providerId),
+              queueUncalibratedEvals: () => queueUncalibratedModelEvals(providerId),
             });
-            if (profileCount === 0) {
-              console.log(
-                `[first-boot] Provider "${providerId}" is active but has 0 model profiles — running auto-discovery...`,
-              );
-              const { autoDiscoverAndProfile } = await import(
-                "@/lib/inference/ai-provider-internals"
-              );
-              const result = await autoDiscoverAndProfile(providerId);
-              console.log(
-                `[first-boot] ${providerId}: discovered=${result.discovered}, profiled=${result.profiled}${result.error ? ` (${result.error})` : ""}`,
-              );
-
-              // BI-INST-001 — enqueue background dimension evals for each
-              // freshly profiled model. Without this step the router stays
-              // empty of EndpointTaskPerformance rows and every LLM task
-              // throws "No eligible endpoints" until the operator manually
-              // clicks Run Probes. Inngest enforces concurrency=2 on
-              // ai/eval.run so this doesn't swamp local model runners.
-              if (result.profiled > 0) {
-                await enqueueFirstBootEvals(providerId);
-              }
-            }
+            console.log(
+              `[first-boot] ${providerId}: discovered=${result.discovered}, profiled=${result.profiled}, queued=${result.queued}${result.discoveryError ? ` (${result.discoveryError})` : ""}`,
+            );
           }
         } catch (err) {
           console.warn("[first-boot] Auto-provisioning failed (non-fatal):", err);

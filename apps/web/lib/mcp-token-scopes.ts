@@ -316,7 +316,7 @@ export const MCP_TOKEN_TEMPLATES: readonly McpTokenTemplate[] = [
     category: "development",
     tier: "write",
     description:
-      "Coding agent: read code/specs/backlog, write backlog and work capsules, run sandbox, ship via Build Studio (sandbox_execute + iac_execute).",
+      "Coding agent: read code/specs/backlog, write backlog and workrooms, run sandbox, ship via Build Studio (sandbox_execute + iac_execute).",
     grants: DEVELOPMENT_TEMPLATE_GRANTS,
   },
   {

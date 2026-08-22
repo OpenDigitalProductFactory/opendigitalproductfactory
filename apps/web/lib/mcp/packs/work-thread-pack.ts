@@ -39,6 +39,8 @@ const definitions: ToolDefinition[] = [
     },
     requiredCapability: null,
     sideEffect: true,
+    // destroys state → consult-gated (TAK §8.4.1).
+    consequence: "irreversible",
   },
   {
     name: "get_thread_result",

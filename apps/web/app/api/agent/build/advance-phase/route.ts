@@ -15,6 +15,7 @@ import {
   type ReviewResult,
 } from "@/lib/feature-build-types";
 import { evaluateBuildStudioPlanAdvancementGate } from "@/lib/decision-perspective/build-studio-gate";
+import { resolvePlannedFilePaths } from "@/lib/decision-perspective/planned-file-paths";
 
 export const dynamic = "force-dynamic";
 
@@ -45,6 +46,7 @@ export async function POST(request: NextRequest): Promise<Response> {
   const build = await prisma.featureBuild.findUnique({
     where: { buildId },
     select: {
+      id: true,
       buildId: true,
       title: true,
       phase: true,
@@ -132,6 +134,14 @@ export async function POST(request: NextRequest): Promise<Response> {
         deliberationSummary: build.deliberationSummary as BuildDeliberationSummary | null,
       },
       triggeredByUserId: user.id ?? null,
+      // BI-70280889: hand the gate the paths this phase intends to touch so the
+      // impacted acumens are actually consulted. Fails open to [] — the gate
+      // then behaves exactly as it did before.
+      plannedFilePaths: await resolvePlannedFilePaths({
+        db: prisma,
+        buildId: build.buildId,
+        buildRowId: build.id,
+      }),
     });
     if (!decisionGate.allowed) {
       return NextResponse.json(

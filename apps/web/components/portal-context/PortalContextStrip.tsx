@@ -112,9 +112,9 @@ function formatBuildLabel(build: FeatureBuildAnchor | null, showInternalIds: boo
 }
 
 function formatCapsuleLabel(capsule: WorkCapsuleAnchor | null, showInternalIds: boolean): string {
-  if (!capsule) return "No capsule selected";
+  if (!capsule) return "No workroom selected";
   if (showInternalIds) return capsule.capsuleId;
-  return capsule.title || "Work capsule";
+  return capsule.title || "Workroom";
 }
 
 function formatBuildTitle(build: FeatureBuildAnchor | null, showInternalIds: boolean): string | undefined {
@@ -125,8 +125,8 @@ function formatBuildTitle(build: FeatureBuildAnchor | null, showInternalIds: boo
 
 function formatCapsuleTitle(capsule: WorkCapsuleAnchor | null, showInternalIds: boolean): string | undefined {
   if (!capsule) return undefined;
-  if (showInternalIds) return `${capsule.title || "Work capsule"} (${capsule.capsuleId})`;
-  return capsule.title || "Work capsule";
+  if (showInternalIds) return `${capsule.title || "Workroom"} (${capsule.capsuleId})`;
+  return capsule.title || "Workroom";
 }
 
 function AttentionChip({
@@ -155,7 +155,7 @@ function severityClassName(severity: AttentionSignal["severity"]): string {
 
 function signalLabel(signal: AttentionSignal, showInternalIds: boolean): string {
   if (signal.kind === "no_active_build") return "No build selected";
-  if (signal.kind === "capsule_not_linked") return "Capsule not linked";
+  if (signal.kind === "capsule_not_linked") return "Workroom not linked";
   if (signal.kind === "missing_evidence") return showInternalIds ? "Missing evidence" : "Waiting on you";
   if (signal.kind === "lease_expired") return "Lease expired";
   return signal.kind.replace(/_/g, " ");

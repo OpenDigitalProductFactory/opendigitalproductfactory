@@ -14,9 +14,12 @@ import {
   analyzeFile,
   buildArchetypeTerms,
   compareProse,
+  countRetiredVocabulary,
   countVocabularyDrift,
   extractCopySnippets,
+  extractCopySnippetsWide,
   PROSE_AXES,
+  retiredVocabOnly,
 } from "./check-prose-lint";
 
 // ─── Rule 1: archetype vocabulary conformance ───────────────────────────────
@@ -132,6 +135,71 @@ test("compareProse flags a file with a signal that has no baseline entry at all"
 test("every declared axis is covered by PROSE_AXES", () => {
   assert.deepEqual(
     [...PROSE_AXES].sort(),
-    ["genericLabels", "longSentences", "readability", "textMass", "vocabulary"],
+    [
+      "genericLabels",
+      "longSentences",
+      "readability",
+      "retiredVocabulary",
+      "textMass",
+      "vocabulary",
+    ],
   );
+});
+
+// ─── Rule 5: retired vocabulary (BI-D6BC8C18) ───────────────────────────────
+
+test("retiredVocabulary catches a renamed term in JSX text", () => {
+  const bad = `<p>No active capsules yet.</p>`;
+  assert.equal(countRetiredVocabulary(extractCopySnippetsWide(bad)), 1);
+});
+
+test("retiredVocabulary catches the exact regression that shipped — a camelCase actionLabel", () => {
+  // The literal defect: apps/web/lib/portal-context/work-resolver.ts built the
+  // lease-expired attention card with actionLabel: "Open capsule". The original
+  // bare-prop, case-sensitive ATTR_COPY_RE could not see it, which is why four
+  // shipped phases of the rename left it standing.
+  const bad = `attention.push({ actionLabel: "Open capsule", actionHref: href });`;
+  assert.equal(countRetiredVocabulary(extractCopySnippetsWide(bad)), 1);
+});
+
+test("retiredVocabulary counts every occurrence, singular and plural", () => {
+  const bad = `<p>Work capsules and one capsule: the capsule is the unit.</p>`;
+  assert.equal(countRetiredVocabulary(extractCopySnippetsWide(bad)), 3);
+});
+
+test("retiredVocabulary is clean once the copy says workroom", () => {
+  const good = `<p>No active workrooms yet.</p>`;
+  assert.equal(countRetiredVocabulary(extractCopySnippetsWide(good)), 0);
+});
+
+test("retiredVocabulary does not fire on internal identifiers", () => {
+  // capsuleId / WC-* keys / workCapsuleId FKs / work_capsule_* grants belong to
+  // BI-496CD36E and must survive this guard untouched. Extraction only reaches
+  // JSX text and copy-bearing props, so an identifier is out of scope by
+  // construction rather than by an exclusion list.
+  const identifiers = [
+    `const capsuleId = stringParam(params, "capsuleId");`,
+    `import { recordWorkroomEvidence } from "@/lib/work-capsules/work-capsule-store";`,
+    `list_workrooms: ["work_capsule_read"],`,
+    `if (capsule) anchors.push({ kind: "capsule", id: capsule.capsuleId });`,
+  ].join("\n");
+  assert.equal(countRetiredVocabulary(extractCopySnippetsWide(identifiers)), 0);
+});
+
+test("the regex is stateful-safe — repeated calls do not skip matches", () => {
+  // RETIRED_TERMS entries carry the /g flag, so a shared lastIndex would make
+  // every second call under-count. The counter resets it; this pins that.
+  const bad = extractCopySnippetsWide(`<p>No active capsules yet.</p>`);
+  assert.equal(countRetiredVocabulary(bad), 1);
+  assert.equal(countRetiredVocabulary(bad), 1);
+  assert.equal(countRetiredVocabulary(bad), 1);
+});
+
+test("retiredVocabOnly scores lib files on the rename axis alone", () => {
+  // lib/ is in scope for this axis only; scoring it on textMass would import
+  // thousands of words of baseline for an axis calibrated on app+components.
+  const axes = retiredVocabOnly(`<p>A long sentence about capsules and other things entirely.</p>`);
+  assert.equal(axes.retiredVocabulary, 1);
+  assert.equal(axes.textMass, 0);
+  assert.equal(axes.longSentences, 0);
 });
