@@ -57,6 +57,7 @@ type PendingSupportSession = {
 
 type OpenAgentPanelDetail = {
   autoMessage?: string;
+  displayMessage?: string;
   welcomeMessage?: string;
   targetBuildId?: string;
   routeContext?: string;
@@ -166,6 +167,7 @@ export function AgentCoworkerShell({ userContext, useUnifiedCoworker, cooConvers
   const threadAutoRetryUsedRef = useRef(false);
   const prevThreadContextRef = useRef<string | null>(null);
   const [pendingAutoMessage, setPendingAutoMessage] = useState<string | null>(null);
+  const [pendingAutoMessageDisplay, setPendingAutoMessageDisplay] = useState<string | null>(null);
   const [pendingProviderConsultation, setPendingProviderConsultation] =
     useState<PendingProviderConsultation | null>(null);
   const providerConsultationInFlightRef = useRef<string | null>(null);
@@ -494,6 +496,7 @@ export function AgentCoworkerShell({ userContext, useUnifiedCoworker, cooConvers
       savePanelOpen(userKey, true);
 
       if (detail?.autoMessage) {
+        setPendingAutoMessageDisplay(detail.displayMessage ?? null);
         const signature = `${detail.autoMessage}::${detail.targetBuildId ?? ""}`;
         const now = Date.now();
         if (shouldSuppressAutoMessage({
@@ -765,7 +768,11 @@ export function AgentCoworkerShell({ userContext, useUnifiedCoworker, cooConvers
             onClose={handleClose}
             onDragStart={handleDragStart}
             pendingAutoMessage={pendingAutoMessage}
-            onAutoMessageConsumed={() => setPendingAutoMessage(null)}
+            pendingAutoMessageDisplay={pendingAutoMessageDisplay}
+            onAutoMessageConsumed={() => {
+              setPendingAutoMessage(null);
+              setPendingAutoMessageDisplay(null);
+            }}
             onConversationCleared={() => setInitialMessages([])}
             routeContextOverride={guidedRouteContext ?? undefined}
             isDocked={usesFixedFrame}

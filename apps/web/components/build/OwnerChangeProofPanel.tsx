@@ -4,6 +4,7 @@ import { StatusBadge } from "@/components/ui/report-kit";
 import { Surface } from "@/components/ui/Surface";
 import type { BuildDecisionLedgerEntry } from "@/lib/build/decision-ledger";
 import type { BuildChangeNarrative } from "@/lib/feature-build-types";
+import { hasReadableProof } from "@/lib/build/owner-change-view";
 import type { OwnerChangeView, OwnerProofState } from "@/lib/build/owner-change-view";
 import { BuildChangeSummaryBand } from "./BuildChangeSummaryBand";
 import { BuildDecisionLedgerBand } from "./BuildDecisionLedgerBand";
@@ -111,8 +112,11 @@ export function OwnerChangeProofPanel({
           ) : null}
         </article>
 
+        {/* Early in a build every check reads "not applicable" / "not recorded".
+            Three cards saying "nothing yet" cost attention and return none; the
+            checks still run and appear as soon as any has an answer. */}
         <div className="grid gap-2" aria-label="Recorded proof">
-          {view.proof.checks.map((check) => (
+          {(hasReadableProof(view.proof) ? view.proof.checks : []).map((check) => (
             <Surface
               as="article"
               key={check.key}

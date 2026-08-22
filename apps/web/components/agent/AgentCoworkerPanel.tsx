@@ -61,6 +61,17 @@ type Props = {
   onClose: () => void;
   onDragStart: (e: React.MouseEvent) => void;
   pendingAutoMessage?: string | null;
+  /**
+   * What the OWNER should see for an auto-sent message, when the text actually
+   * sent to the coworker is machine-precise. The UI dispatches nudges on the
+   * owner's behalf; those nudges name tools and evidence fields the coworker
+   * needs but the owner cannot act on, and they rendered in the transcript as
+   * if the owner had typed them. Sending stays exact; the transcript stays
+   * plain (see prompt-assembler's business-expert-not-a-developer rule, which
+   * already governs what the coworker SAYS but not what the UI puts in the
+   * owner's mouth).
+   */
+  pendingAutoMessageDisplay?: string | null;
   onAutoMessageConsumed?: () => void;
   onConversationCleared?: () => void;
   /** When set, overrides pathname for agent routing and message routeContext.
@@ -126,6 +137,7 @@ export function AgentCoworkerPanel({
   onClose,
   onDragStart,
   pendingAutoMessage,
+  pendingAutoMessageDisplay,
   onAutoMessageConsumed,
   onConversationCleared,
   routeContextOverride,
@@ -627,7 +639,13 @@ export function AgentCoworkerPanel({
   // Auto-send a message when triggered by build creation or other events
   useEffect(() => {
     if (pendingAutoMessage && threadId) {
-      submitMessage(pendingAutoMessage);
+      submitMessage(
+        pendingAutoMessage,
+        createOptimisticUserMessage(
+          pendingAutoMessageDisplay ?? pendingAutoMessage,
+          effectiveRoute,
+        ),
+      );
       onAutoMessageConsumed?.();
     }
   }, [pendingAutoMessage, threadId]); // eslint-disable-line react-hooks/exhaustive-deps
