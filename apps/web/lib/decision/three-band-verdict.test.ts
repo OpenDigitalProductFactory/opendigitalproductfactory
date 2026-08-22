@@ -180,3 +180,33 @@ describe("BI-2107B5D2 — the ledger records real margins, not constants", () =>
     }
   });
 });
+
+describe("BI-1BBB2136 — stakes reach the band edges from real call sites", () => {
+  it("maps consequence tiers onto stakes with one shared mapping", async () => {
+    const { stakesForRiskTier } = await import("../decision-perspective/option-recommendation");
+    expect(stakesForRiskTier("critical")).toBe("high");
+    expect(stakesForRiskTier("high")).toBe("high");
+    expect(stakesForRiskTier("medium")).toBe("elevated");
+    expect(stakesForRiskTier("low")).toBe("routine");
+    // An absent tier keeps the historical behaviour rather than guessing.
+    expect(stakesForRiskTier(null)).toBe("elevated");
+    expect(stakesForRiskTier(undefined)).toBe("elevated");
+  });
+
+  it("makes a high-stakes call demand more separation than a routine one", () => {
+    const options = [
+      option("a", { speed_to_value: 0.75, blast_radius: 0.5, cognitive_load: 0.5 }),
+      option("b", { speed_to_value: 0.5, blast_radius: 0.5, cognitive_load: 0.5 }),
+    ];
+    const principles = [principle()];
+
+    const routine = decide(options, principles, { stakes: "routine" });
+    const high = decide(options, principles, { stakes: "high" });
+
+    // Same options, same principles — only the bar moved. The whole point of
+    // stakes: a margin that is an assurance for a routine call is not one when
+    // the consequence is high.
+    expect(high.recommendation?.bands?.upper).toBeGreaterThan(routine.recommendation!.bands!.upper);
+    expect(routine.recommendation?.margin).toBe(high.recommendation?.margin);
+  });
+});

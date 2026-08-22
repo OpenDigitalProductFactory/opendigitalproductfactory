@@ -216,6 +216,30 @@ Agent tool availability is the **intersection** of two authority systems:
 
 An action is only possible if BOTH allow it. This prevents agents from exceeding their design scope, even when triggered by a user with broad permissions.
 
+## Reading Decision Separation
+
+The decision review inbox (`/platform/ai/founder-review`) opens with **Decision separation** — how
+your coworkers' decisions are landing, and whether the confident ones held up.
+
+Every decision the kernel weighs produces a *margin*: how far the winning option beat the
+runner-up. Decisions fall in three bands. **Proceed** and **decline** are both settled answers.
+The **uncertain** band in the middle is where the platform could not call it either way, and it
+is the only band that costs someone's attention.
+
+The chart shows where decisions landed. Bars left of the band edge are the uncertain ones. The
+headline percentage is the share that landed there — the number to drive down by improving the
+corpora and principles your coworkers decide against, so that decisions separate cleanly.
+
+Beneath it, **reversed** shows how often a settled answer was later overturned by a person. This
+is the honesty check on the first number. Lowering the bar would shrink the uncertain band
+without making anything clearer, and the reversal rate is what shows the difference: a shrinking
+middle band alongside a rising reversal rate is a step backwards, not progress. Where a decision
+has no recorded human choice to compare against, the table says **no call could be checked**
+rather than counting it as agreement.
+
+A thin sample is labelled as one: the panel states how many decisions carried a margin, so a
+tidy-looking chart over a handful of rows is not mistaken for a settled picture.
+
 ## Living Playbook experiments
 
 An approved Living Playbook candidate can carry an evidence-cleared replay definition. For those

@@ -14,7 +14,11 @@ import { useRouter } from "next/navigation";
 import { publishBusinessStance, saveBusinessStance } from "@/lib/actions/business-stance";
 import { DECISION_AREAS } from "@/lib/wiki/business-stance";
 
-export function BusinessStanceForm() {
+type BusinessStanceFormProps = {
+  examples: { title: string; body: string; summary: string };
+};
+
+export function BusinessStanceForm({ examples }: BusinessStanceFormProps) {
   const router = useRouter();
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
@@ -64,7 +68,7 @@ export function BusinessStanceForm() {
         type="text"
         value={title}
         onChange={(e) => setTitle(e.target.value)}
-        placeholder="How we decide refunds"
+        placeholder={examples.title}
         className="w-full rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-3 py-2 text-sm text-[var(--dpf-text)] mb-3"
       />
 
@@ -76,7 +80,7 @@ export function BusinessStanceForm() {
         value={body}
         onChange={(e) => setBody(e.target.value)}
         rows={4}
-        placeholder="We refund within 30 days, no questions asked. Beyond 30 days a manager decides based on the account relationship."
+        placeholder={examples.body}
         className="w-full rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-3 py-2 text-sm text-[var(--dpf-text)] mb-3"
       />
 
@@ -88,7 +92,7 @@ export function BusinessStanceForm() {
         type="text"
         value={summary}
         onChange={(e) => setSummary(e.target.value)}
-        placeholder="30-day no-questions refunds; manager discretion after"
+        placeholder={examples.summary}
         className="w-full rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-3 py-2 text-sm text-[var(--dpf-text)] mb-3"
       />
 

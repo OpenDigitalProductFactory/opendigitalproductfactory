@@ -88,6 +88,15 @@
     ],
     "SessionStart": [
       {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PROJECT_DIR}/packages/dpf-skill-pack/hooks/shared-clone-occupancy.mjs\""
+          }
+        ]
+      },
+      {
         "hooks": [
           {
             "type": "command",

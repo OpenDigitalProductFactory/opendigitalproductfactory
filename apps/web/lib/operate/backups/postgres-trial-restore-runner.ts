@@ -39,6 +39,11 @@ const RUNNER_TIMEOUT_MS = 10 * 60 * 1000; // 10-minute hard cap
 export interface RunPostgresTrialRestoreArgs {
   /** Override the backups root for tests (default: /backups). */
   backupsRoot?: string;
+  /**
+   * Bind verification to one BackupRun. Teardown uses this so a newer cron
+   * backup can never satisfy the recovery gate for a different dump.
+   */
+  sourceBackupRunId?: string;
   /** Override the script path for tests. */
   scriptPath?: string;
   /** Override critical-table list (default: BacklogItem, Epic, ModelProvider, User). */
@@ -139,7 +144,22 @@ export function parseResultLine(stdout: string): ParsedResult | null {
 async function findLatestEligibleBackup(
   prisma: PrismaLike,
   backupsRoot: string,
+  sourceBackupRunId?: string,
 ): Promise<{ runId: string; dumpPath: string } | null> {
+  if (sourceBackupRunId) {
+    const row = await prisma.backupRun.findUnique({
+      where: { id: sourceBackupRunId },
+      select: { id: true, storagePath: true, target: true, status: true, prunedAt: true },
+    });
+    if (!row || row.target !== "postgres" || row.status !== "ok" || row.prunedAt) return null;
+    const dumpPath = path.posix.join(backupsRoot, row.storagePath, "dpf.dump");
+    try {
+      await fs.access(dumpPath);
+      return { runId: row.id, dumpPath };
+    } catch {
+      return null;
+    }
+  }
   const rows = await prisma.backupRun.findMany({
     where: { target: "postgres", status: "ok", prunedAt: null },
     orderBy: { finishedAt: "desc" },
@@ -188,7 +208,7 @@ export async function runPostgresTrialRestore(
     lastError: null,
   });
 
-  const source = await findLatestEligibleBackup(prisma, backupsRoot);
+  const source = await findLatestEligibleBackup(prisma, backupsRoot, args.sourceBackupRunId);
   if (!source) {
     trialTraceLog("skip reason=no eligible backup found");
     await recordJobHeartbeat(prisma, POSTGRES_TRIAL_RESTORE_JOB_ID, {

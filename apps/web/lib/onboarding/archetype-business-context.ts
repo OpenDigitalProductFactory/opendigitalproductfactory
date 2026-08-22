@@ -17,6 +17,11 @@
 // deepen a specific business model. Keep entries to broad, true, editable
 // starters — do not encode brittle specifics that read as fabricated.
 
+import { NONPROFIT_STANCE_VECTORS } from "./archetype-stance-presentation";
+
+export { resolveStanceAuthoringExamples } from "./archetype-stance-presentation";
+export type { StanceAuthoringExamples } from "./archetype-stance-presentation";
+
 export type ArchetypeBusinessProfile = {
   /** Completes the clause "we exist to …". */
   missionTheme: string;
@@ -698,14 +703,7 @@ const INDUSTRY_STANCE_VECTORS: Record<string, Partial<ArchetypeStanceVectors>> =
         "Fees are set in public session and applied uniformly. There are no discounts or improvised exceptions — changing a fee is a public decision, not a service gesture.",
     },
   },
-  "nonprofit-community": {
-    "spend-authority": {
-      title: "Spending donors' money without asking",
-      stance:
-        "Program supplies within the approved budget proceed up to the ceiling per purchase. Anything outside budget or above it goes to the director — every dollar carries a donor's trust.",
-      ceilingUsd: 150,
-    },
-  },
+  "nonprofit-community": NONPROFIT_STANCE_VECTORS,
 };
 
 /**

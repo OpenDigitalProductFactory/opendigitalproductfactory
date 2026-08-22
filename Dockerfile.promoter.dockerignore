@@ -24,6 +24,8 @@
 !Dockerfile
 !Dockerfile.promoter
 !scripts/promote.sh
+!scripts/governed-teardown.mjs
+!scripts/salvage-sweep.mjs
 !scripts/apply-runtime-capability-transition.mjs
 !scripts/runtime-transition-authority.mjs
 !scripts/rotate-runtime-transition-secret.mjs

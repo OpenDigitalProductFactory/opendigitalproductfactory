@@ -22,6 +22,7 @@ import { checkHostDiskSpace } from "./lib/disk-space-preflight.mjs";
 import {
   createLocalCiSlotManifest,
   LOCAL_CI_SLOT_KEYS,
+  resolveLocalCiRootClone,
 } from "./lib/local-ci-slot-manifest.mjs";
 import {
   isRecoverableInterruptedGateState,
@@ -148,7 +149,7 @@ export function resolvePregateGateContext({
     sha,
     worktreePath,
     gitCommonDir,
-    rootClone: dirname(gitCommonDir),
+    rootClone: resolveLocalCiRootClone(gitCommonDir),
     candidateGitDir,
   };
 }

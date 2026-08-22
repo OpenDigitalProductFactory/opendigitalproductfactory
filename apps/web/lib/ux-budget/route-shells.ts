@@ -205,6 +205,12 @@ export const ROUTE_SWEEP_EXCLUSIONS = {
   // recorded. Excluded for the same reason as the other wall-clock routes; becomes eligible
   // when the sweep fixture pins the clock.
   "/ops/stack-currency": "wall-clock-collection",
+  // /ops/teardown reads the surviving host evidence journal on arrival. A teardown
+  // sibling can append or terminalize that collection while an unrelated route sweep
+  // is running, so its roles-only snapshot is not stable under concurrent operations.
+  // Measure it in the governed teardown journey; re-include it once the sweep owns an
+  // isolated evidence directory.
+  "/ops/teardown": "wall-clock-collection",
 } as const satisfies Record<string, RouteSweepExclusionReason>;
 
 export type RouteShellPolicy = {

@@ -91,11 +91,11 @@ function GroupedNav({ config }: { config: GroupedSectionNavConfig }) {
       data-component={config.dataComponent}
     >
       {config.groups.map((group) => (
-        <div key={group.label} className="flex flex-col gap-1">
+        <div key={group.label} className="min-w-0 max-w-full flex flex-col gap-1">
           <span className="px-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--dpf-muted)]">
             {group.label}
           </span>
-          <div className="flex gap-1">
+          <div className="flex flex-wrap gap-1">
             {group.tabs.map((tab) => (
               <Link key={tab.href} href={tab.href} className={tabLinkClass(tab.active)}>
                 {tab.label}

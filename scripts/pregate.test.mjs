@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { join, resolve } from "node:path";
 import test from "node:test";
 
 import {
@@ -8,9 +9,35 @@ import {
   runGateWithQueuedRevival,
   detectWorkingShell,
   recoverInterruptedGateState,
+  resolvePregateGateContext,
   reviveInterruptedQueuedGateState,
   shouldUseShell,
 } from "./pregate.mjs";
+
+test("pregate recovery uses the bare common directory as the canonical root", () => {
+  const fixtureRoot = resolve(".pregate-bare-layout");
+  const worktreePath = join(fixtureRoot, "worktrees", "candidate");
+  const gitCommonDir = join(fixtureRoot, ".opendigitalproductfactory.git");
+  const candidateGitDir = join(gitCommonDir, "worktrees", "candidate");
+  const responses = new Map([
+    ["rev-parse --show-toplevel", worktreePath],
+    ["rev-parse --abbrev-ref HEAD", "fix/local-ci-scratch-identity"],
+    ["rev-parse HEAD", "a".repeat(40)],
+    ["rev-parse --git-common-dir", gitCommonDir],
+    ["rev-parse --git-path dpf-local-ci-gate.json", join(candidateGitDir, "dpf-local-ci-gate.json")],
+  ]);
+  const spawnSyncImpl = (_command, args) => ({
+    status: 0,
+    error: null,
+    stdout: `${responses.get(args.join(" ")) ?? ""}\n`,
+  });
+
+  const context = resolvePregateGateContext({ cwd: worktreePath, spawnSyncImpl });
+
+  assert.equal(context.gitCommonDir, gitCommonDir);
+  assert.equal(context.rootClone, gitCommonDir);
+  assert.equal(context.candidateGitDir, candidateGitDir);
+});
 
 test("queued gate revivals share the original bounded admission deadline", () => {
   const startedAtMs = Date.parse("2026-08-12T03:00:00.000Z");

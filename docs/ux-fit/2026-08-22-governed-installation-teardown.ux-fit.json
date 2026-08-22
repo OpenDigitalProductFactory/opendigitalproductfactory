@@ -1,0 +1,26 @@
+{
+  "version": "1",
+  "decidedOption": "calm scope-first lifecycle surface with consequence map, progressive safety gates, continuous hold confirmation, and external evidence history",
+  "scope": {
+    "files": [
+      "apps/web/app/(shell)/ops/teardown/page.tsx",
+      "apps/web/components/ops/TeardownControl.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "sweep-measurement",
+    "baselineComparison": "new-route",
+    "measured": {
+      "/ops/teardown": {
+        "defaultVisibleWords": 300,
+        "leadBandWords": 25,
+        "primaryActions": 1,
+        "visibleFields": 4,
+        "maxChoicesPerControl": 0,
+        "subLegibleControls": 0,
+        "buriedPrimaryAction": 0,
+        "axeViolations": 0
+      }
+    }
+  }
+}

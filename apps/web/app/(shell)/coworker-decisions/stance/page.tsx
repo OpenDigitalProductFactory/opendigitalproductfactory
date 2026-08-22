@@ -14,6 +14,7 @@ import { HowYouDecideCards, type StanceCard } from "@/components/onboarding/HowY
 import { BUSINESS_STANCE_SLUG_PREFIX } from "@/lib/wiki/business-stance";
 import {
   resolveStanceVectors,
+  resolveStanceAuthoringExamples,
   STANCE_VECTOR_KEYS,
 } from "@/lib/onboarding/archetype-business-context";
 import { stanceVectorSlug } from "@/lib/onboarding/seed-org-wwwd-corpus";
@@ -56,6 +57,7 @@ export default async function BusinessStancePage() {
   // shown until the owner confirms them. Confirmed = the vector's primary
   // material sits at the owner-confirmed tier (A / >=0.9).
   let cards: StanceCard[] = [];
+  let authoringExamples = resolveStanceAuthoringExamples({ industry: null });
   if (organizationId) {
     const [storefront, profileId] = await Promise.all([
       prisma.storefrontConfig.findFirst({
@@ -65,6 +67,9 @@ export default async function BusinessStancePage() {
     ]);
     const defaults = resolveStanceVectors({
       archetypeId: storefront?.archetypeId ?? null,
+      industry: storefront?.archetype?.category ?? null,
+    });
+    authoringExamples = resolveStanceAuthoringExamples({
       industry: storefront?.archetype?.category ?? null,
     });
     const vectorSlugs = STANCE_VECTOR_KEYS.map((key) => stanceVectorSlug(key));
@@ -179,7 +184,7 @@ export default async function BusinessStancePage() {
         )}
       </section>
 
-      <BusinessStanceForm />
+      <BusinessStanceForm examples={authoringExamples} />
 
       <p className="text-xs text-[var(--dpf-muted)] mt-6">
         Reviewing what your AI has already decided?{" "}

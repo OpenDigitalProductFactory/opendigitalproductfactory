@@ -21,6 +21,7 @@ import { dirname, resolve as resolvePath } from "node:path";
 import {
   createLocalCiSlotManifest,
   LOCAL_CI_SLOT_KEYS,
+  resolveLocalCiRootClone,
 } from "./lib/local-ci-slot-manifest.mjs";
 import {
   classifySlotRecord,
@@ -45,21 +46,37 @@ function readJson(path) {
   }
 }
 
+export function worktreeContextFromGit({
+  worktreePath,
+  gitCommonDirRaw,
+  statePathRaw,
+  headBranch,
+  headSha,
+}) {
+  const gitCommonDir = resolvePath(worktreePath, gitCommonDirRaw);
+  return {
+    worktreePath,
+    gitCommonDir,
+    rootClone: resolveLocalCiRootClone(gitCommonDir),
+    candidateGitDir: dirname(resolvePath(worktreePath, statePathRaw)),
+    headBranch,
+    headSha,
+  };
+}
+
 export function resolveWorktreeContext(cwd = process.cwd()) {
   const worktreePath = gitText(["rev-parse", "--show-toplevel"], cwd);
   if (!worktreePath) return null;
   const gitCommonDirRaw = gitText(["rev-parse", "--git-common-dir"], worktreePath);
   const statePathRaw = gitText(["rev-parse", "--git-path", "dpf-local-ci-gate.json"], worktreePath);
   if (!gitCommonDirRaw || !statePathRaw) return null;
-  const gitCommonDir = resolvePath(worktreePath, gitCommonDirRaw);
-  return {
+  return worktreeContextFromGit({
     worktreePath,
-    gitCommonDir,
-    rootClone: dirname(gitCommonDir),
-    candidateGitDir: dirname(resolvePath(worktreePath, statePathRaw)),
+    gitCommonDirRaw,
+    statePathRaw,
     headBranch: gitText(["rev-parse", "--abbrev-ref", "HEAD"], worktreePath),
     headSha: gitText(["rev-parse", "HEAD"], worktreePath),
-  };
+  });
 }
 
 /** Read and classify every slot's records for this worktree. */
