@@ -4,37 +4,46 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/Button";
-import { Skeleton } from "@/components/ui/report-kit";
+import { Notice, Skeleton } from "@/components/ui/report-kit";
 
 const PROVIDER_LOAD_TIMEOUT_MS = 15_000;
 
 export default function ProvidersLoading() {
   const router = useRouter();
   const [timedOut, setTimedOut] = useState(false);
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => setTimedOut(true), PROVIDER_LOAD_TIMEOUT_MS);
     return () => window.clearTimeout(timeout);
-  }, []);
+  }, [attempt]);
+
+  function retryProviderLoad() {
+    setTimedOut(false);
+    setAttempt((current) => current + 1);
+    router.refresh();
+  }
 
   if (timedOut) {
     return (
       <main className="mx-auto max-w-5xl p-4 sm:p-6">
-        <section
-          role="alert"
-          className="rounded-xl border border-[var(--dpf-warning)] bg-[var(--dpf-surface-1)] p-5 text-[var(--dpf-text)] shadow-sm"
-        >
-          <p className="text-xs font-semibold uppercase tracking-wide text-[var(--dpf-warning)]">
-            Provider service unavailable
-          </p>
-          <h1 className="mt-2 text-lg font-semibold">We couldn&apos;t load provider data</h1>
-          <p className="mt-2 max-w-2xl text-sm text-[var(--dpf-muted)]">
-            The local job service may still be starting. Your provider settings are safe; retry
-            after a moment or check Platform Health if this keeps happening.
-          </p>
-          <Button className="mt-4" onClick={() => router.refresh()}>
-            Try again
-          </Button>
+        <section role="alert" aria-labelledby="provider-load-failure-heading">
+          <Notice variant="warn" title="Provider service unavailable" className="p-5 shadow-sm">
+            <h1 id="provider-load-failure-heading" className="text-lg font-semibold">
+              We couldn&apos;t load provider data
+            </h1>
+            <p className="mt-2 max-w-2xl text-sm text-[var(--dpf-muted)]">
+              The local job service may still be starting. Your provider settings are safe; retry
+              after a moment or check Platform Health if this keeps happening.
+            </p>
+            <Button
+              className="mt-4 min-h-11"
+              data-dpf-primary-action
+              onClick={retryProviderLoad}
+            >
+              Try again
+            </Button>
+          </Notice>
         </section>
       </main>
     );
