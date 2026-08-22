@@ -286,6 +286,7 @@ export async function dispatchPlanForApprovedBuild(params: {
         id: true,
         phase: true,
         title: true,
+        description: true,
         buildPlan: true,
         designDoc: true,
         kind: true,
@@ -334,13 +335,22 @@ export async function dispatchPlanForApprovedBuild(params: {
       biEffortSize = bi?.effortSize ?? null;
     }
 
-    // EP-MODEL-TIER-ROUTING: route plan generation by the build's tier — local
-    // for small/medium, robust/frontier for large/xlarge. Flag-gated; inert until
-    // DPF_BUILD_MODEL_TIER_ROUTING is on.
-    const { getModelTier } = await import("@/lib/explore/build-process-matrix");
-    const { isModelTierRoutingEnabled } = await import("./build-studio-config");
+    // EP-MODEL-TIER-ROUTING: route plan generation by the build's tier.
+    // BI-B24D4C84: pass the rightsizing opts (as the autonomous callers do) so
+    // this takes the quality-first branch rather than the legacy size-only one,
+    // which pinned every small/medium build to the local tier.
+    const { getModelTier, deriveDeliverableSensitivity } = await import("@/lib/explore/build-process-matrix");
+    const { isModelTierRoutingEnabled, isQualityFirstRightsizingEnabled } = await import("./build-studio-config");
+    const planSensitivity = deriveDeliverableSensitivity({
+      text: `${build.title ?? ""}\n${build.description ?? ""}`,
+      workType: build.kind,
+    });
+    const planQualityFirst = await isQualityFirstRightsizingEnabled();
     const planModelTier = (await isModelTierRoutingEnabled())
-      ? getModelTier(build.kind, biEffortSize)
+      ? getModelTier(build.kind, biEffortSize, {
+          qualityFirst: planQualityFirst,
+          sensitivity: planSensitivity,
+        })
       : undefined;
 
     // 2b. Search the codebase for files related to the build to give the plan

@@ -38,6 +38,66 @@ export function getProjectRoot(): string {
   return path.resolve(getCwd(), "..", "..");
 }
 
+// ─── Root sanity (BI-6CFC5429) ──────────────────────────────────────────────
+//
+// PROJECT_ROOT is an env var, so a misconfigured deployment silently points
+// every agent codebase tool at the wrong tree. Not hypothetical: on 2026-08-19
+// the live portal had PROJECT_ROOT=/workspace resolving to a volume pinned at a
+// 2026-06-08 commit on a stray branch holding 4,444 of the repo's ~10,000
+// files. `search_project_files` and `list_project_directory` returned
+// `success=true` with EMPTY results for files that plainly existed, the Build
+// Studio ideate agent looped searching for its own target file, and the
+// operator was shown "the local AI wasn't strong enough — connect a stronger
+// provider." An environment variable was surfaced as a model-capability
+// problem, which is the worst possible misattribution.
+//
+// A wrong root cannot be auto-corrected here — only the operator knows which
+// tree is intended — but it must be LOUD rather than silent. These sentinels
+// are workspace-defining entries present at the root of any DPF checkout.
+
+const ROOT_SENTINELS = ["pnpm-workspace.yaml", "apps/web"] as const;
+
+let rootWarningEmitted = false;
+
+/**
+ * True when the resolved project root looks like a DPF checkout. Exported for
+ * the boot check and for tests.
+ */
+export function projectRootLooksValid(root: string = getProjectRoot()): boolean {
+  try {
+    const fs = getFs();
+    const path = getPath();
+    return ROOT_SENTINELS.every((sentinel) => fs.existsSync(path.join(root, sentinel)));
+  } catch {
+    // A probe failure is not proof of a bad root — stay quiet rather than cry wolf.
+    return true;
+  }
+}
+
+/**
+ * Warn ONCE per process when the resolved root fails the sentinel check, so an
+ * empty search result is traceable to the root rather than read as "this code
+ * does not exist". Advisory only — it never blocks a read.
+ */
+export function warnIfProjectRootSuspect(): void {
+  if (rootWarningEmitted) return;
+  rootWarningEmitted = true;
+  const root = getProjectRoot();
+  if (projectRootLooksValid(root)) return;
+  console.warn(
+    "[codebase-tools] PROJECT_ROOT=%s does not look like a DPF checkout (missing %s). "
+    + "Agent code search will return EMPTY results for files that DO exist. "
+    + "Empty results from this root are not evidence the code is absent (BI-6CFC5429).",
+    JSON.stringify(root),
+    JSON.stringify(ROOT_SENTINELS.join(", ")),
+  );
+}
+
+/** Test seam: reset the once-per-process warning latch. */
+export function resetProjectRootWarningForTests(): void {
+  rootWarningEmitted = false;
+}
+
 // ─── Path Security ──────────────────────────────────────────────────────────
 
 const BLOCKED_PATTERNS = [
@@ -146,6 +206,7 @@ export async function searchProjectFiles(
   options?: { glob?: string; maxResults?: number },
 ): Promise<{ results: Array<{ path: string; line: number; text: string }> } | { error: string }> {
   if (!isDevInstance()) return { error: DEV_ONLY_ERROR };
+  warnIfProjectRootSuspect();
   const max = options?.maxResults ?? 20;
   const projectRoot = getProjectRoot();
 
@@ -279,6 +340,7 @@ export async function listProjectDirectory(
   _options?: { maxDepth?: number },
 ): Promise<{ entries: Array<{ name: string; type: "file" | "dir"; path: string }> } | { error: string }> {
   if (!isDevInstance()) return { error: DEV_ONLY_ERROR };
+  warnIfProjectRootSuspect();
   const safePath = dirPath === "" || dirPath === "." ? "." : dirPath;
   if (safePath !== "." && !isPathAllowedSync(safePath)) {
     return { error: `Access denied: ${safePath}` };
