@@ -62,7 +62,16 @@ async function fetchAlerts(surface) {
     // 404 here means the feature is disabled for the repo, not that it is clean —
     // report it as unknown rather than folding it into a zero.
     if (res.status === 404) return { ok: false, alerts: [], reason: "surface not enabled or not visible to this token (404)" };
-    if (res.status === 403) return { ok: false, alerts: [], reason: "token lacks security-events: read (403)" };
+    // The default GITHUB_TOKEN reads Code Scanning but 403s on Dependabot and
+    // Secret Scanning even with `security-events: read`. Name the remedy here —
+    // a bare "403" reads like a transient outage and gets ignored.
+    if (res.status === 403) {
+      return {
+        ok: false,
+        alerts: [],
+        reason: "403 — the default GITHUB_TOKEN cannot read this surface; set the DEPENDABOT_ALERTS_TOKEN secret (security_events scope)",
+      };
+    }
     if (!res.ok) return { ok: false, alerts: [], reason: `HTTP ${res.status}` };
     const batch = await res.json();
     if (!Array.isArray(batch)) return { ok: false, alerts: [], reason: "unexpected non-array response" };
