@@ -14,6 +14,7 @@ test("readiness contract is non-mutating and reports every required dependency",
     "state_mount_unreadable", "install_state_invalid",
     "capability_projection_failed", "compose_identity_missing",
     "recovery_parent_unavailable", "transition_secret_parent_unavailable",
+    "promoter_build_context_incomplete",
   ]) assert.match(block, new RegExp(code));
   assert.match(block, /"quiescenceBegan":false/);
   assert.match(block, /validate-install-state\.mjs.*\$_state_file/s);
@@ -22,4 +23,34 @@ test("readiness contract is non-mutating and reports every required dependency",
   assert.match(block, /docker --version/);
   assert.doesNotMatch(block, /-w "\$_state_dir"/);
   assert.doesNotMatch(block, /docker compose (?:down|up)|docker stop|docker rm|cp .*install-state/);
+});
+
+test("the build-context probe reads COPY sources from the candidate's own Dockerfile", async () => {
+  // Hard-coding the list would go stale the first time someone adds a COPY, and
+  // the failure mode of a stale list is silence — the probe would pass while the
+  // build fails on the file it did not know to check.
+  const script = await readFile(resolve(root, "scripts/promote.sh"), "utf8");
+  assert.match(script, /PROMOTE_SOURCE.*Dockerfile\.promoter/s);
+  assert.match(script, /awk .*\/\^COPY \//);
+  // It must name EVERY missing path, not stop at the first: BuildKit reports one
+  // per attempt, so a first-only probe just moves the guessing game.
+  assert.match(script, /_missing_context\[\*\]/);
+});
+
+test("the probe's COPY parser sees every COPY source in Dockerfile.promoter", async () => {
+  const dockerfile = await readFile(resolve(root, "Dockerfile.promoter"), "utf8");
+  // Mirror of the awk in promote.sh: every whitespace-separated argument of a
+  // COPY except the flags and the final destination.
+  const parsed = dockerfile
+    .split(/\r?\n/)
+    .filter((line) => line.startsWith("COPY "))
+    .flatMap((line) => line.split(/\s+/).slice(1, -1).filter((a) => !a.startsWith("--")));
+
+  assert.ok(parsed.length > 10, `expected the promoter to COPY many files, parsed ${parsed.length}`);
+  // The file whose absence produced the opaque BuildKit failure this probe exists for.
+  assert.ok(parsed.includes("scripts/installer/install-release-assets.mjs"));
+  for (const source of parsed) {
+    assert.doesNotMatch(source, /^--/, `flag leaked into COPY sources: ${source}`);
+    assert.doesNotMatch(source, /^\//, `destination leaked into COPY sources: ${source}`);
+  }
 });

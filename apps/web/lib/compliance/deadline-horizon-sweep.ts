@@ -43,6 +43,21 @@ export type SweepObligation = {
   frequency: string | null;
   reviewDate: Date | null;
   status: string;
+  /**
+   * Whether the obligation's REGULATION actually applies to this install, as
+   * decided by classifyRegulationForInstall. Compliance packs are seeded
+   * unconditionally and filtered at read time, so an install carries every
+   * pack's obligations in its database whether or not they bind on it.
+   *
+   * Only "applies" is swept. This is not a refinement — without it the watch
+   * tells a software business its municipal water testing and its bank
+   * supervision filings are overdue, which is what it did on the live install
+   * before this field existed. "review" means the regulation MIGHT bind but a
+   * required detail was never captured; the honest work there is confirming
+   * scope, not chasing a due date, and raising a deadline finding pre-empts a
+   * decision the operator has not made.
+   */
+  appliesToInstall: boolean;
 };
 
 export type SweepControl = {
@@ -75,7 +90,13 @@ export type DeadlineHorizonResult = {
   findings: NormalizedAssuranceFinding[];
   /** Non-null when a declared stop condition ended the run early. */
   stoppedBy: { kind: "failure" | "budget"; reason: string } | null;
-  scanned: { obligations: number; controls: number; licenseReferences: number };
+  scanned: {
+    obligations: number;
+    /** Read, then skipped because the regulation does not bind on this install. */
+    obligationsOutOfScope: number;
+    controls: number;
+    licenseReferences: number;
+  };
   horizonDays: number;
 };
 
@@ -148,13 +169,18 @@ export function sweepDeadlineHorizon(input: DeadlineHorizonInput): DeadlineHoriz
   const horizonDays = input.horizonDays ?? DEFAULT_HORIZON_DAYS;
   const now = input.now;
   const horizonEnd = new Date(now.getTime() + horizonDays * DAY_MS);
+  const inScope = input.obligations.filter((o) => o.appliesToInstall);
   const scanned = {
-    obligations: input.obligations.length,
+    obligations: inScope.length,
+    obligationsOutOfScope: input.obligations.length - inScope.length,
     controls: input.controls.length,
     licenseReferences: input.licenseReferences.length,
   };
 
-  if (scanned.obligations + scanned.controls + scanned.licenseReferences === 0) {
+  // Read NOTHING at all — the substrate is empty or unreadable. A failure stop:
+  // an unread estate and a clear one look identical and are not the same.
+  const rowsRead = input.obligations.length + input.controls.length + input.licenseReferences.length;
+  if (rowsRead === 0) {
     return {
       findings: [],
       stoppedBy: {
@@ -168,11 +194,21 @@ export function sweepDeadlineHorizon(input: DeadlineHorizonInput): DeadlineHoriz
     };
   }
 
+  // Read fine, but nothing in scope. NOT a failure — this is the correct and
+  // common answer for an install whose archetype no seeded pack binds on, and
+  // the distinction matters: reporting it as a failure would train the operator
+  // to ignore the one signal that means the sweep is actually broken.
+  if (scanned.obligations + scanned.controls + scanned.licenseReferences === 0) {
+    return { findings: [], stoppedBy: null, scanned, horizonDays };
+  }
+
   const findings: NormalizedAssuranceFinding[] = [];
 
   // ── Obligation.frequency + reviewDate ──────────────────────────────────────
   for (const obligation of input.obligations) {
     if (obligation.status !== "active") continue;
+    // Out of scope for this install — never a finding. See `appliesToInstall`.
+    if (!obligation.appliesToInstall) continue;
     const cadence = classifyObligationFrequency(obligation.frequency);
     const cadenceDays = cadence.periodDays;
 
