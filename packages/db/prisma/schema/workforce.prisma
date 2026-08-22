@@ -86,6 +86,7 @@ model EmployeeProfile {
   changeRequestsApproved       ChangeRequest[]               @relation("ChangeApprovedBy")
   changeRequestsExecuted       ChangeRequest[]               @relation("ChangeExecutedBy")
   standardChangesApproved      StandardChangeCatalog[]       @relation("StandardChangeApprover")
+  deductionElections           EmployeeDeductionElection[]   @relation("EmployeeDeductionElections")
 
   @@index([status])
   @@index([departmentId])
@@ -527,6 +528,8 @@ model Payslip {
   employeeProfile EmployeeProfile @relation(fields: [employeeProfileId], references: [id], onDelete: Cascade)
 
   // One payslip per employee per run — makes a re-run idempotent.
+  componentLines PayComponentLine[]
+
   @@unique([payRunId, employeeProfileId])
   @@index([employeeProfileId])
   @@index([disbursementStatus])
@@ -1244,4 +1247,95 @@ model DemographicResponse {
 
   @@index([applicationId])
   @@index([jurisdiction])
+}
+
+// ---------------------------------------------------------------------------
+// Payslip component lines and deduction elections (BI-EAC670F1)
+//
+// Payslip currently stores earnings / employeeDeductions / employerCosts as Json
+// blobs. That is fine for display and wrong for everything else: GL posting,
+// reimbursement-in-payroll and payroll-tax emission all need to read the SAME
+// line shape, and a Json blob cannot be joined, aggregated or constrained.
+//
+// This is the EXPAND half of an expand->contract migration. Rows are written
+// alongside the existing Json; a later migration backfills historical payslips
+// and drops the Json columns. Nothing here removes or rewrites existing data.
+// ---------------------------------------------------------------------------
+
+enum PayComponentKind {
+  earning
+  pre_tax_deduction
+  statutory
+  post_tax_deduction
+  employer_cost
+  reimbursement
+}
+
+enum DeductionElectionKind {
+  benefit
+  retirement
+  garnishment
+  charitable
+  loan_repayment
+  other
+}
+
+/// One money line on a payslip. `taxable` is explicit rather than inferred from
+/// the kind because a reimbursement and a non-taxable benefit are both excluded
+/// from the tax base for different reasons, and the emitter must not have to
+/// re-derive that rule.
+model PayComponentLine {
+  id              String           @id @default(cuid())
+  payslipId       String
+  componentKind   PayComponentKind
+  code            String
+  label           String
+  amount          Decimal          @db.Decimal(14, 2)
+  currency        String           @default("USD")
+  taxable         Boolean          @default(true)
+  ledgerAccountId String?
+  sortOrder       Int              @default(0)
+  createdAt       DateTime         @default(now())
+
+  payslip       Payslip        @relation(fields: [payslipId], references: [id], onDelete: Cascade)
+  ledgerAccount LedgerAccount? @relation("PayComponentLedgerAccount", fields: [ledgerAccountId], references: [id], onDelete: SetNull)
+
+  // One line per code per payslip — makes recomputing a run idempotent.
+  @@unique([payslipId, code])
+  // FK-leading (payslipId): render or post a payslip's lines in order.
+  @@index([payslipId, componentKind, sortOrder])
+  // FK-leading (ledgerAccountId): trace a ledger account back to the payroll lines behind it.
+  @@index([ledgerAccountId])
+}
+
+/// A standing instruction to deduct something from an employee's pay.
+/// Effective-dated so a mid-year change never rewrites what an earlier run
+/// already computed.
+model EmployeeDeductionElection {
+  id                          String                @id @default(cuid())
+  employeeDeductionElectionId String                @unique
+  employeeProfileId           String
+  electionKind                DeductionElectionKind
+  code                        String
+  label                       String
+  /// Fixed money per period. Exactly one of amount / percentOfGross is set.
+  amount                      Decimal?              @db.Decimal(14, 2)
+  /// Percentage of gross, e.g. 0.05 for 5%.
+  percentOfGross              Decimal?              @db.Decimal(6, 4)
+  currency                    String                @default("USD")
+  preTax                      Boolean               @default(false)
+  /// Statutory ceiling for garnishments — the run must not deduct beyond it.
+  annualCapAmount             Decimal?              @db.Decimal(14, 2)
+  effectiveFrom               DateTime
+  effectiveTo                 DateTime?
+  lifecycle                   RecordLifecycle       @default(active)
+  lifecycleAt                 DateTime?
+  lifecycleReason             String?
+  createdAt                   DateTime              @default(now())
+  updatedAt                   DateTime              @updatedAt
+
+  employeeProfile EmployeeProfile @relation("EmployeeDeductionElections", fields: [employeeProfileId], references: [id], onDelete: Cascade)
+
+  // FK-leading (employeeProfileId): resolve an employee's live elections for a run date.
+  @@index([employeeProfileId, lifecycle, effectiveFrom])
 }

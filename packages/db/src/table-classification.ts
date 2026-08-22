@@ -352,6 +352,12 @@ export const TABLE_CLASSIFICATION: Record<string, TableSensitivity> = {
   // Payroll pay records (recruiting→hiring→paying seam) — pay amounts + PII.
   PayRun: "confidential",
   Payslip: "confidential",
+  // -- payroll component lines (BI-EAC670F1) --
+  // Both carry regulated employee financial detail: individual pay components
+  // and standing deduction instructions (including garnishments).
+  PayComponentLine: "confidential",
+  EmployeeDeductionElection: "confidential",
+
 };
 
 /** Fallback for tables not yet classified — defaults to confidential (obfuscate). */

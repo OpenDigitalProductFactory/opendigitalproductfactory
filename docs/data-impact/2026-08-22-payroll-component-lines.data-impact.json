@@ -1,0 +1,55 @@
+{
+  "version": "1",
+  "accountableOwner": "data-steward",
+  "affectedCopies": [
+    "PayComponentLine becomes the single source of truth for a payslip's money lines; Payslip's earnings/employeeDeductions/employerCosts Json columns remain in place during the expand phase and are NOT yet authoritative.",
+    "EmployeeDeductionElection is the single source of truth for standing deduction instructions; a PayRun reads elections in force on the run date rather than carrying its own copy.",
+    "No existing Payslip row is rewritten, backfilled, or deleted by this change."
+  ],
+  "migration": {
+    "name": "20260822110000_add_payroll_component_lines",
+    "backfill": "None in this migration. This is the EXPAND half of an expand->contract change: new tables only, existing Json columns untouched, so it applies cleanly against any existing data state. The CONTRACT migration that backfills historical payslips into PayComponentLine rows and drops the Json columns is a separate, later change and must not run until every reader has moved to the rows. Rollback here is a drop of the two new tables; no existing data depends on them."
+  },
+  "tests": [
+    "apps/web/lib/hr/payroll-gl.test.ts",
+    "packages/db/scripts/migration-safety-guard.mjs",
+    "scripts/check-fk-index-coverage.mjs",
+    "scripts/check-no-new-closed-set-strings.mjs"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:pay-component-line",
+      "prismaModel": "PayComponentLine",
+      "lifecycleDisposition": "Cascade-deleted with its parent Payslip and retained for as long as payroll and tax law require that payslip. Never independently aged: a purge window here would gut historical pay records while leaving the payslip header intact.",
+      "fields": [
+        {
+          "fieldId": "data:pay-component-line#amount",
+          "resolution": "governed",
+          "reason": "Individual pay component amounts are regulated employee financial detail. They exist so GL posting, reimbursement-in-payroll and payroll-tax emission can read one line shape instead of re-parsing a Json blob, and are exposed only through an authorized payroll projection with masking applied.",
+          "provenance": "BI-EAC670F1; EP-PAYROLL-ABSORB"
+        },
+        {
+          "fieldId": "data:pay-component-line#taxable",
+          "resolution": "governed",
+          "reason": "taxable is stored explicitly rather than inferred from componentKind because a reimbursement and a non-taxable benefit are both excluded from the tax base for different reasons; the payroll-tax emitter must not have to re-derive that rule.",
+          "provenance": "BI-EAC670F1"
+        }
+      ]
+    },
+    {
+      "kind": "model",
+      "assetId": "data:employee-deduction-election",
+      "prismaModel": "EmployeeDeductionElection",
+      "lifecycleDisposition": "Effective-dated and retired through the RecordLifecycle convention rather than deleted, so a closed pay run can always explain what it deducted and under which instruction. Retained as a regulated record.",
+      "fields": [
+        {
+          "fieldId": "data:employee-deduction-election#garnishment",
+          "resolution": "governed",
+          "reason": "A garnishment election discloses a legal judgement against an identified employee — among the most sensitive facts in an HR system. It is registered as a regulated record with masked projection, and annualCapAmount exists so a run cannot deduct beyond a statutory ceiling.",
+          "provenance": "BI-EAC670F1; EP-PAYROLL-ABSORB"
+        }
+      ]
+    }
+  ]
+}
