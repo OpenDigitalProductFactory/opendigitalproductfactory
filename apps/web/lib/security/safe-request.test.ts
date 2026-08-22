@@ -65,6 +65,25 @@ describe("safeJsonRequest", () => {
     expect(resolve).toHaveBeenCalledTimes(2);
   });
 
+  it("quarantines a write redirect instead of replaying the mutation", async () => {
+    const transport = vi.fn(async () =>
+      response(307, "", { location: "/wp-json/wp/v2/posts/42" }),
+    );
+
+    await expect(safeJsonRequest({
+      url: "https://wordpress.example/wp-json/wp/v2/posts",
+      method: "POST",
+      body: JSON.stringify({ title: "Approved update" }),
+      resolve: publicDns,
+      transport,
+    })).rejects.toMatchObject({
+      code: "write_redirect",
+      retryable: false,
+      ambiguous: true,
+    });
+    expect(transport).toHaveBeenCalledTimes(1);
+  });
+
   it("rejects oversized and malformed JSON responses without echoing credentials", async () => {
     const secret = "application-password-secret";
     const transport = vi.fn(async () => response(200, "x".repeat(65), { "content-type": "application/json" }));

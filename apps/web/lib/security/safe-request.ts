@@ -8,6 +8,7 @@ export type SafeRequestErrorCode =
   | "dns_failed"
   | "private_network"
   | "cross_origin_redirect"
+  | "write_redirect"
   | "redirect_limit"
   | "network_timeout"
   | "network_failed"
@@ -173,7 +174,7 @@ export async function safeJsonRequest<T = unknown>(input: SafeJsonRequestInput):
   const maxResponseBytes = input.maxResponseBytes ?? DEFAULT_MAX_BYTES;
   const maxRedirects = input.maxRedirects ?? DEFAULT_MAX_REDIRECTS;
   const original = safeUrl(input.url);
-  const method = input.method ?? "GET";
+  const method = (input.method ?? "GET").toUpperCase();
   let current = original;
 
   for (let redirectCount = 0; ; redirectCount += 1) {
@@ -197,6 +198,14 @@ export async function safeJsonRequest<T = unknown>(input: SafeJsonRequestInput):
 
     if (response.status >= 300 && response.status < 400) {
       await readBoundedResponse(response.body, maxResponseBytes, method);
+      if (method !== "GET" && method !== "HEAD") {
+        throw new SafeRequestError(
+          "write_redirect",
+          "A remote write redirected after transmission, so its outcome must be reconciled before retrying.",
+          false,
+          true,
+        );
+      }
       if (redirectCount >= maxRedirects) throw new SafeRequestError("redirect_limit", "The remote server exceeded the redirect limit.");
       const location = response.headers.get("location");
       if (!location) throw new SafeRequestError("invalid_url", "The remote redirect did not include a target.");
