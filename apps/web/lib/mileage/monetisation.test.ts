@@ -77,7 +77,7 @@ describe("priceTrips", () => {
       id: "rate_2025",
       amountPerMile: 0.7,
       effectiveFrom: new Date("2025-01-01T00:00:00.000Z"),
-      effectiveTo: new Date("2026-01-01T00:00:00.000Z"),
+      effectiveTo: new Date("2026-01-01T00:00:00.000Z"), // clock-bomb-guard: allow effective-dating fixture — resolveRateForDate is given an explicit trip date and never reads the wall clock
     };
     const result = priceTrips(
       [trip({ startedAt: new Date("2025-09-01T00:00:00.000Z") })],

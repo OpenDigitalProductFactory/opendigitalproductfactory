@@ -25,7 +25,7 @@ describe("resolveRateForDate", () => {
       id: "rate_2025",
       amountPerMile: 0.7,
       effectiveFrom: new Date("2025-01-01T00:00:00.000Z"),
-      effectiveTo: new Date("2026-01-01T00:00:00.000Z"),
+      effectiveTo: new Date("2026-01-01T00:00:00.000Z"), // clock-bomb-guard: allow effective-dating fixture — resolveRateForDate is given an explicit trip date and never reads the wall clock
     });
     const y2026 = rate({ id: "rate_2026", amountPerMile: 0.725 });
 
@@ -42,7 +42,7 @@ describe("resolveRateForDate", () => {
     const closing = rate({
       id: "closing",
       effectiveFrom: new Date("2025-01-01T00:00:00.000Z"),
-      effectiveTo: new Date("2026-01-01T00:00:00.000Z"),
+      effectiveTo: new Date("2026-01-01T00:00:00.000Z"), // clock-bomb-guard: allow effective-dating fixture — resolveRateForDate is given an explicit trip date and never reads the wall clock
     });
     const opening = rate({ id: "opening", effectiveFrom: new Date("2026-01-01T00:00:00.000Z") });
 
