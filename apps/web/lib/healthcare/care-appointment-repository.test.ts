@@ -126,6 +126,8 @@ describe("care appointment repository", () => {
       data: expect.objectContaining({
         organizationId: "org-a",
         storefrontBookingId: "booking-a",
+        subjectType: "patient-profile",
+        subjectId: "patient-a",
         patientProfileId: "patient-a",
         scheduledStart: new Date("2026-08-01T14:00:00.000Z"),
         scheduledEnd: new Date("2026-08-01T14:45:00.000Z"),

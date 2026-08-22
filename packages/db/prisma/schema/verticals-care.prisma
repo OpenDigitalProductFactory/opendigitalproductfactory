@@ -246,9 +246,11 @@ model CareAppointment {
   appointmentId                   String                       @unique
   organizationId                  String
   storefrontBookingId             String?                      @unique
-  patientProfileId                String
-  visitTypeId                     String
-  locationId                      String
+  subjectType                     String
+  subjectId                       String
+  patientProfileId                String?
+  visitTypeId                     String?
+  locationId                      String?
   status                          String                       @default("pending")
   scheduledStart                  DateTime
   scheduledEnd                    DateTime
@@ -271,9 +273,9 @@ model CareAppointment {
   updatedAt                       DateTime                     @updatedAt
   organization                    Organization                 @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   storefrontBooking               StorefrontBooking?           @relation(fields: [storefrontBookingId, organizationId], references: [id, organizationId], onDelete: Restrict)
-  patientProfile                  PatientProfile               @relation(fields: [patientProfileId, organizationId], references: [id, organizationId], onDelete: Restrict)
-  visitType                       CareVisitType                @relation(fields: [visitTypeId, organizationId], references: [id, organizationId], onDelete: Restrict)
-  location                        CareLocation                 @relation(fields: [locationId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  patientProfile                  PatientProfile?              @relation(fields: [patientProfileId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  visitType                       CareVisitType?               @relation(fields: [visitTypeId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  location                        CareLocation?                @relation(fields: [locationId, organizationId], references: [id, organizationId], onDelete: Restrict)
   recurrenceSchedule              RecurrenceSchedule?          @relation(fields: [recurrenceScheduleId], references: [id], onDelete: Restrict)
   rescheduledFrom                 CareAppointment?             @relation("CareAppointmentReschedule", fields: [rescheduledFromAppointmentId, organizationId], references: [id, organizationId], onDelete: Restrict)
   rescheduledTo                   CareAppointment[]            @relation("CareAppointmentReschedule")
@@ -287,6 +289,7 @@ model CareAppointment {
 
   @@unique([id, organizationId])
   @@unique([storefrontBookingId, organizationId])
+  @@index([organizationId, subjectType, subjectId, scheduledStart])
   @@index([organizationId, patientProfileId, scheduledStart])
   @@index([organizationId, locationId, scheduledStart])
   @@index([organizationId, status, scheduledStart])
@@ -393,7 +396,9 @@ model CareIntakePacket {
   id                       String                   @id @default(cuid())
   packetId                 String                   @unique
   organizationId           String
-  patientProfileId         String
+  subjectType              String
+  subjectId                String
+  patientProfileId         String?
   appointmentId            String?
   status                   String                   @default("assigned")
   version                  Int                      @default(1)
@@ -420,7 +425,7 @@ model CareIntakePacket {
   createdAt                DateTime                 @default(now())
   updatedAt                DateTime                 @updatedAt
   organization             Organization             @relation(fields: [organizationId], references: [id], onDelete: Restrict)
-  patientProfile           PatientProfile           @relation(fields: [patientProfileId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  patientProfile           PatientProfile?          @relation(fields: [patientProfileId, organizationId], references: [id, organizationId], onDelete: Restrict)
   appointment              CareAppointment?         @relation(fields: [appointmentId, organizationId], references: [id, organizationId], onDelete: Restrict)
   sourcePrincipal          Principal?               @relation("CareIntakePacketSource", fields: [sourcePrincipalId], references: [id], onDelete: Restrict)
   recordedByPrincipal      Principal                @relation("CareIntakePacketRecorder", fields: [recordedByPrincipalId], references: [id], onDelete: Restrict)
@@ -431,8 +436,10 @@ model CareIntakePacket {
   exceptions               CareIntakeException[]
   statusEvents             CareIntakeStatusEvent[]
 
+  @@unique([id, organizationId])
   @@unique([id, organizationId, patientProfileId])
   @@unique([organizationId, sourceSystem, sourceId])
+  @@index([organizationId, subjectType, subjectId, status])
   @@index([organizationId, patientProfileId, status])
   @@index([organizationId, appointmentId])
   @@index([organizationId, status, dueAt])
@@ -445,7 +452,7 @@ model CareIntakeResponse {
   responseId            String                   @unique
   organizationId        String
   packetId              String
-  patientProfileId      String
+  patientProfileId      String?
   dynamicFormId         String
   dynamicFormVersion    Int
   formSnapshot          Json
@@ -470,15 +477,16 @@ model CareIntakeResponse {
   enteredInErrorAt      DateTime?
   createdAt             DateTime                 @default(now())
   updatedAt             DateTime                 @updatedAt
-  packet                CareIntakePacket         @relation(fields: [packetId, organizationId, patientProfileId], references: [id, organizationId, patientProfileId], onDelete: Restrict)
-  patientProfile        PatientProfile           @relation(fields: [patientProfileId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  packet                CareIntakePacket         @relation(fields: [packetId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  patientProfile        PatientProfile?          @relation(fields: [patientProfileId, organizationId], references: [id, organizationId], onDelete: Restrict)
   dynamicForm           DynamicForm              @relation(fields: [dynamicFormId, dynamicFormVersion], references: [id, version], onDelete: Restrict, onUpdate: Restrict)
   sourcePrincipal       Principal?               @relation("CareIntakeResponseSource", fields: [sourcePrincipalId], references: [id], onDelete: Restrict)
   recordedByPrincipal   Principal                @relation("CareIntakeResponseRecorder", fields: [recordedByPrincipalId], references: [id], onDelete: Restrict)
-  supersedesResponse    CareIntakeResponse?      @relation("CareIntakeResponseVersion", fields: [supersedesResponseId, organizationId, patientProfileId], references: [id, organizationId, patientProfileId], onDelete: Restrict)
+  supersedesResponse    CareIntakeResponse?      @relation("CareIntakeResponseVersion", fields: [supersedesResponseId, organizationId], references: [id, organizationId], onDelete: Restrict)
   supersededByResponses CareIntakeResponse[]     @relation("CareIntakeResponseVersion")
   consentAttestations   CareConsentAttestation[]
 
+  @@unique([id, organizationId])
   @@unique([id, organizationId, patientProfileId])
   @@unique([organizationId, sourceSystem, sourceId])
   @@index([organizationId, packetId, status])
@@ -493,7 +501,7 @@ model CareIntakeAccessGrant {
   grantId             String           @unique
   organizationId      String
   packetId            String
-  patientProfileId    String
+  patientProfileId    String?
   tokenDigest         String           @unique
   granteePrincipalId  String?
   permittedOperations String[]         @default([])
@@ -504,7 +512,7 @@ model CareIntakeAccessGrant {
   revokedAt           DateTime?
   revocationReason    String?
   createdAt           DateTime         @default(now())
-  packet              CareIntakePacket @relation(fields: [packetId, organizationId, patientProfileId], references: [id, organizationId, patientProfileId], onDelete: Restrict)
+  packet              CareIntakePacket @relation(fields: [packetId, organizationId], references: [id, organizationId], onDelete: Restrict)
   granteePrincipal    Principal?       @relation("CareIntakeAccessGrantee", fields: [granteePrincipalId], references: [id], onDelete: Restrict)
   issuedByPrincipal   Principal        @relation("CareIntakeAccessIssuer", fields: [issuedByPrincipalId], references: [id], onDelete: Restrict)
 
@@ -590,7 +598,7 @@ model CareIntakeException {
   exceptionId           String           @unique
   organizationId        String
   packetId              String
-  patientProfileId      String
+  patientProfileId      String?
   exceptionType         String
   status                String           @default("open")
   severity              String           @default("routine")
@@ -603,8 +611,8 @@ model CareIntakeException {
   resolvedAt            DateTime?
   createdAt             DateTime         @default(now())
   updatedAt             DateTime         @updatedAt
-  packet                CareIntakePacket @relation(fields: [packetId, organizationId, patientProfileId], references: [id, organizationId, patientProfileId], onDelete: Restrict)
-  patientProfile        PatientProfile   @relation(fields: [patientProfileId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  packet                CareIntakePacket @relation(fields: [packetId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  patientProfile        PatientProfile?  @relation(fields: [patientProfileId, organizationId], references: [id, organizationId], onDelete: Restrict)
   assignedToPrincipal   Principal?       @relation("CareIntakeExceptionAssignee", fields: [assignedToPrincipalId], references: [id], onDelete: Restrict)
   resolvedByPrincipal   Principal?       @relation("CareIntakeExceptionResolver", fields: [resolvedByPrincipalId], references: [id], onDelete: Restrict)
 
@@ -619,7 +627,7 @@ model CareIntakeStatusEvent {
   eventId          String           @unique
   organizationId   String
   packetId         String
-  patientProfileId String
+  patientProfileId String?
   packetVersion    Int
   fromStatus       String?
   toStatus         String
@@ -627,7 +635,7 @@ model CareIntakeStatusEvent {
   sourceMode       String
   actorPrincipalId String
   occurredAt       DateTime         @default(now())
-  packet           CareIntakePacket @relation(fields: [packetId, organizationId, patientProfileId], references: [id, organizationId, patientProfileId], onDelete: Restrict)
+  packet           CareIntakePacket @relation(fields: [packetId, organizationId], references: [id, organizationId], onDelete: Restrict)
   actorPrincipal   Principal        @relation("CareIntakeStatusActor", fields: [actorPrincipalId], references: [id], onDelete: Restrict)
 
   @@unique([organizationId, packetId, packetVersion])

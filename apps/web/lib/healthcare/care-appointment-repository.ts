@@ -8,6 +8,7 @@ import {
   type CareAppointmentStatus,
   type ControlledOverbooking,
 } from "@dpf/db/healthcare-care-appointment";
+import { patientSubjectReference } from "@dpf/db/subject-reference";
 import { isExclusionViolation } from "@/lib/db/exclusion-violation";
 
 export type AcceptCareAppointmentRequest = {
@@ -359,6 +360,7 @@ export async function acceptStorefrontBookingAsCareAppointment(
           organizationId: request.organizationId,
           storefrontBookingId: request.storefrontBookingId,
           patientProfileId: request.patientProfileId,
+          ...patientSubjectReference(request.patientProfileId),
           visitTypeId: request.visitTypeId,
           locationId: request.locationId,
           status: "pending",

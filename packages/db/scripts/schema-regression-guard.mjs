@@ -259,6 +259,17 @@ export const INTENTIONAL_FIELD_REMOVALS = new Set([
   "FeatureBuild.uxVerificationStatus",
   "Workroom.decisionScope",
   "Workroom.portfolioRole",
+  // 2026-08-22 BI-2C80E6EA / DI-F289DBB51DCB: generic intake evidence
+  // now joins its packet by tenant-safe packet identity. Nullable direct
+  // patient provenance remains on the rows; consent and coverage deliberately
+  // retain their stronger packet+organization+patient relations. Migration:
+  // 20260822164000_subject_agnostic_scheduling_and_resources. The reviewed
+  // architecture plan owns the cardinality change and hybrid fallback.
+  "CareIntakeResponse.packet",
+  "CareIntakeResponse.supersedesResponse",
+  "CareIntakeAccessGrant.packet",
+  "CareIntakeException.packet",
+  "CareIntakeStatusEvent.packet",
 ]);
 
 // Model attributes intentionally removed through a steward-reviewed migration.

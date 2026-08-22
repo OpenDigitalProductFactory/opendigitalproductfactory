@@ -65,6 +65,7 @@
     "./healthcare-patient-authority": "./src/healthcare-patient-authority.ts",
     "./healthcare-care-appointment": "./src/healthcare-care-appointment.ts",
     "./healthcare-care-intake": "./src/healthcare-care-intake.ts",
+    "./subject-reference": "./src/subject-reference.ts",
     "./seed-skills": "./src/seed-skills.ts",
     "./portfolio-sources/types": "./src/portfolio-sources/types.ts",
     "./portfolio-sources/vertical-incumbents-manifest": "./src/portfolio-sources/vertical-incumbents-manifest.ts",

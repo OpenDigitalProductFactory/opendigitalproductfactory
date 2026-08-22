@@ -1,0 +1,95 @@
+{
+  "version": "1",
+  "accountableOwner": "data-architect",
+  "affectedCopies": [
+    "CareAppointment clinical scheduling authority and its existing patient relation",
+    "CareIntakePacket plus generic response, access-grant, exception, and status-event evidence",
+    "Patient-specific CareConsentAttestation and CareCoverageEvidence composite relations",
+    "HospitalityResource and HospitalityResourceAvailability compatibility projections",
+    "Canonical Resource and ResourceAvailability projections",
+    "Patient-context and purpose-bound staff-review RLS policies"
+  ],
+  "migration": {
+    "name": "20260822164000_subject_agnostic_scheduling_and_resources",
+    "backfill": "Expand CareAppointment and CareIntakePacket with nullable subject columns, backfill every existing root as patient-profile:<patientProfileId>, reconcile, then require validated subject identity and conditionally require the clinical tuple. Generic intake children move to packet+organization joins while consent and coverage retain patient-composite joins. Hospitality resources and availability are idempotently copied to Resource and ResourceAvailability by deterministic Hospitality* sourceRef, with blocked state kept active and unknown legacy vocabulary retained in lifecycleReason/reason. No legacy row, clinical invariant field, evidence row, policy, or compatibility table is deleted. Rollback is source-only while roots remain patient-profile; restoring former clinical NOT NULL constraints requires a no-non-patient-row preflight."
+  },
+  "tests": [
+    "packages/db/src/subject-agnostic-scheduling-migration.test.ts",
+    "packages/db/test/fixtures/subject-agnostic-pre-migration.sql",
+    "packages/db/test/fixtures/subject-agnostic-post-migration-assertions.sql",
+    "packages/db/src/subject-reference.test.ts",
+    "packages/db/src/healthcare-care-appointment-model.test.ts",
+    "packages/db/src/healthcare-care-intake-model.test.ts",
+    "packages/db/src/healthcare-care-intake-staff-rls.test.ts",
+    "packages/db/src/healthcare-care-intake-evidence-immutability.test.ts",
+    "apps/web/lib/healthcare/care-appointment-repository.test.ts",
+    "apps/web/lib/resource-scheduling/clone-adapters.test.ts",
+    "apps/web/app/api/storefront/admin/hospitality-resources/route.test.ts",
+    "apps/web/app/api/storefront/admin/hospitality-resources/[id]/route.test.ts",
+    "scripts/check-data-impact.test.mjs"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:care-appointment#subject-reference",
+      "prismaModel": "CareAppointment",
+      "lifecycleDisposition": "The existing restricted clinical record remains authoritative and keeps recall, controlled-overbooking authorization, preparation/recovery footprints, optimistic versioning, and status evidence. Existing rows become explicit patient-profile subjects. Non-patient roots may omit clinical relations, but no writer or access policy for them is introduced in this gate.",
+      "fields": [
+        {
+          "fieldId": "data:care-appointment#subjectType",
+          "resolution": "governed",
+          "reason": "A validated open slug selects the owning identity domain without creating a second appointment authority.",
+          "provenance": "BI-2C80E6EA; DI-F289DBB51DCB; subject-reference contract",
+          "flags": [
+            "subject"
+          ],
+          "fieldPolicy": "Restricted with the appointment record. Accept only lowercase validated slugs; expose no generic lookup endpoint and authorize through the owning vertical before any future non-patient write."
+        },
+        {
+          "fieldId": "data:care-appointment#subjectId",
+          "resolution": "governed",
+          "reason": "The opaque identifier makes subject identity queryable while avoiding JSON metadata joins.",
+          "provenance": "Existing PatientProfile.id for migrated/current care writes; a future vertical-owned identity row for later writers",
+          "flags": [
+            "subject"
+          ],
+          "fieldPolicy": "Restricted with the appointment record. Patient subjects must equal patientProfileId by database check; future subject IDs require owning-vertical resolution before write."
+        }
+      ]
+    },
+    {
+      "kind": "model",
+      "assetId": "data:care-intake-packet#subject-reference",
+      "prismaModel": "CareIntakePacket",
+      "lifecycleDisposition": "The restricted packet remains the intake authority. Generic evidence joins by tenant-safe packet identity and keeps optional patient provenance; consent and coverage remain patient-specific. Existing retention, legal hold, append-only evidence, patient-token RLS, and purpose-bound staff-review RLS are unchanged.",
+      "fields": [
+        {
+          "fieldId": "data:care-intake-packet#subjectType",
+          "resolution": "governed",
+          "reason": "The packet subject is independent of its evidence author/source and supports later vertical-owned intake without cloning the packet family.",
+          "provenance": "BI-2C80E6EA; DI-F289DBB51DCB; FHIR QuestionnaireResponse subject separation",
+          "flags": [
+            "subject"
+          ],
+          "fieldPolicy": "Restricted with the packet; lowercase validated slug only. Null patient provenance stays inaccessible to patient-token policies unless a later BI adds a governed subject-specific policy."
+        },
+        {
+          "fieldId": "data:care-intake-packet#subjectId",
+          "resolution": "governed",
+          "reason": "The opaque subject key is normalized into a queryable column rather than evidence metadata.",
+          "provenance": "Existing PatientProfile.id for backfilled packets; future owning-vertical identity after separate governance",
+          "flags": [
+            "subject"
+          ],
+          "fieldPolicy": "Restricted with the packet. Patient subjects must equal patientProfileId; no generic non-patient read or write policy is granted by this migration."
+        }
+      ]
+    },
+    {
+      "kind": "projection",
+      "derivedContractId": "projection:hospitality-resource#canonical-resource",
+      "cleanupTest": "subject-agnostic-scheduling-migration.test.ts proves no legacy table/column is dropped and the rollback selector remains provenance-bounded.",
+      "reconciliationTest": "subject-agnostic-scheduling-migration.test.ts plus the migration count checks prove one canonical Resource/ResourceAvailability sourceRef per HospitalityResource/HospitalityResourceAvailability row; route tests prove canonical-first reads preserve legacy public IDs and DTOs."
+    }
+  ]
+}
