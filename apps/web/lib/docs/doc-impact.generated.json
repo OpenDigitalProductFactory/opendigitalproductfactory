@@ -619,6 +619,9 @@
       "docs/architecture/decision-vectors.md",
       "docs/architecture/vector-decisioning-and-jsi.md"
     ],
+    "apps/web/lib/decision-perspective/planned-file-paths.ts": [
+      "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md"
+    ],
     "apps/web/lib/decision-perspective/stance-promotion.ts": [
       "docs/architecture/vector-decisioning-and-jsi.md"
     ],
@@ -2028,6 +2031,7 @@
       "apps/web/lib/build/progress-visibility.ts",
       "apps/web/lib/coworker/authorized-surface-runtime.ts",
       "apps/web/lib/decision-perspective/build-studio-gate.ts",
+      "apps/web/lib/decision-perspective/planned-file-paths.ts",
       "apps/web/lib/explore/feature-build-types.ts",
       "apps/web/lib/marketing/scheduler.ts",
       "apps/web/lib/mcp/packs/surface-pack.ts",
