@@ -125,6 +125,23 @@ describe("CI policy guard registry", () => {
     ]);
   });
 
+  it("evaluates the decision baseline without mutating the caller's Git state", () => {
+    const baseline = POLICY_GUARD_PROFILES["pull-request"].find(
+      (entry) => entry.id === "decision-baseline",
+    );
+    assert.ok(baseline);
+    assert.deepEqual(baseline.commands, [
+      ["git", ["fetch", "--no-tags", "--quiet", "origin", "main"]],
+      ["node", ["scripts/check-golden-decisions.mjs", "--merge-with", "origin/main"]],
+      ["node", ["--test", "scripts/check-golden-decisions.test.mjs"]],
+    ]);
+    assert.equal(
+      baseline.commands.some(([command, args]) =>
+        command === "git" && ["config", "merge", "commit", "checkout", "switch"].includes(args[0])),
+      false,
+    );
+  });
+
   it("runs every named guard and retains all failures", async () => {
     const calls = [];
     const result = await runPolicyProfile({

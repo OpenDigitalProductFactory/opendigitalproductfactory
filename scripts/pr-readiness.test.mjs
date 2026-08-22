@@ -26,6 +26,8 @@ const cleanRepo = {
     {
       sha: "1111111",
       subject: "feat: add example",
+      authorName: "Mark Bodman",
+      authorEmail: "markdbodman@gmail.com",
       body: "feat: add example\n\nSigned-off-by: Mark Bodman <markdbodman@gmail.com>",
     },
   ],
@@ -162,7 +164,7 @@ test("evaluateReadiness blocks unsafe or queue-hostile repository state", () => 
   assert.match(result.blockers.join("\n"), /working tree has uncommitted changes/);
   assert.match(result.blockers.join("\n"), /2 local commit\(s\) are not pushed/);
   assert.match(result.blockers.join("\n"), /branch is main/);
-  assert.match(result.blockers.join("\n"), /missing DCO sign-off/);
+  assert.match(result.blockers.join("\n"), /missing its author-matching DCO sign-off/);
 });
 
 test("evaluateReadiness accepts a detached exact published ref but no other detached head", () => {
@@ -252,6 +254,8 @@ test("formatReadinessReport uses plain-language headings and changed-file summar
       derivedArtifacts: [],
       routes: [],
       migrations: [],
+      guardObligations: [],
+      testImpact: [],
       verification: ["run the readiness command"],
     },
   });

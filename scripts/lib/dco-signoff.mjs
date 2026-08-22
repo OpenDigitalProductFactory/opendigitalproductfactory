@@ -16,18 +16,20 @@
 
 import { spawnSync } from "node:child_process";
 
-// A commit is signed off when its message body carries a `Signed-off-by:`
-// trailer line with a value. Line-anchored (multiline) and requiring at least
-// one non-space character after the colon: this matches the historical
-// scripts/pr-readiness/core.mjs predicate on every real commit while refusing a
-// bare/empty trailer. Kept deliberately narrow rather than validating the
-// author/email match the DCO app performs — the failure this must catch is a
-// MISSING sign-off, and a stricter regex risks false-positives that would erode
-// trust in a local gate faster than a missed one would.
-const SIGNED_OFF_LINE = /^[ \t]*Signed-off-by:[ \t]*\S.*$/im;
+// The DCO app requires the commit author's own identity, not merely any
+// Signed-off-by trailer. Multiple sign-offs are valid, but one must exactly
+// match Git's `%an <%ae>` for this commit. Keep keyword matching
+// case-insensitive while preserving identity bytes: changing an email's case or
+// spelling is a different author as far as the commit payload is concerned.
+const SIGNED_OFF_LINE = /^[ \t]*Signed-off-by:[ \t]*(\S.*?)[ \t]*$/gim;
 
-export function isSignedOff(body) {
-  return SIGNED_OFF_LINE.test(String(body ?? ""));
+export function isSignedOff(body, { authorName, authorEmail } = {}) {
+  const name = String(authorName ?? "").trim();
+  const email = String(authorEmail ?? "").trim();
+  if (!name || !email) return false;
+  const expected = `${name} <${email}>`;
+  return [...String(body ?? "").matchAll(SIGNED_OFF_LINE)]
+    .some((match) => match[1] === expected);
 }
 
 // Default git executor: returns { status, stdout, stderr }. Kept separate so
@@ -66,7 +68,7 @@ const RS = "\x1e";
  */
 export function findUnsignedCommits(range, { git = defaultGit, cwd } = {}) {
   if (!range) return [];
-  const format = ["%H", "%s", "%b"].join(US);
+  const format = ["%H", "%s", "%an", "%ae", "%b"].join(US);
   const result = git(
     ["log", `--pretty=format:${format}${RS}`, range],
     { cwd },
@@ -85,12 +87,15 @@ export function findUnsignedCommits(range, { git = defaultGit, cwd } = {}) {
     .map((entry) => entry.replace(/^\n/, ""))
     .filter((entry) => entry.trim().length > 0)
     .map((entry) => {
-      const [sha = "", subject = "", ...bodyParts] = entry.split(US);
-      return { sha, subject, body: bodyParts.join(US) };
+      const [sha = "", subject = "", authorName = "", authorEmail = "", ...bodyParts] = entry.split(US);
+      return { sha, subject, authorName, authorEmail, body: bodyParts.join(US) };
     });
   // A commit's full message = subject + body; `git log %s%b` splits them, so a
   // trailer on the subject line (rare) or in the body both satisfy the check.
-  return commits.filter((commit) => !isSignedOff(`${commit.subject}\n${commit.body}`));
+  return commits.filter((commit) => !isSignedOff(
+    `${commit.subject}\n${commit.body}`,
+    { authorName: commit.authorName, authorEmail: commit.authorEmail },
+  ));
 }
 
 /**

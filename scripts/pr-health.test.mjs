@@ -137,6 +137,19 @@ test("parseLocalCiAttestation matches Evidence and Override trailers", () => {
   assert.equal(parseLocalCiAttestation(null), null);
 });
 
+test("parseLocalCiAttestation prefers durable commit trailers over the PR body", () => {
+  assert.deepEqual(
+    parseLocalCiAttestation(
+      "PR prose with no gate answer",
+      ["chore: evidence\n\nLocal-CI-Override: external-contribution-no-install: source-only worktree"],
+    ),
+    {
+      kind: "override",
+      value: "external-contribution-no-install: source-only worktree",
+    },
+  );
+});
+
 test("classifyLocalCiOverride accepts closed codes and rejects free text (BI-563F6AB6)", () => {
   assert.deepEqual(classifyLocalCiOverride("operator-emergency"), {
     ok: true,
@@ -252,7 +265,7 @@ test("localCi: allowlisted PR-body override is ready", () => {
     },
   });
   assert.equal(r.ready, true);
-  assert.match(r.notes.join("\n"), /override attestation in PR body.*operator-emergency/);
+  assert.match(r.notes.join("\n"), /override attestation.*operator-emergency/);
 });
 
 test("localCi: free-text PR-body override is NOT READY (BI-563F6AB6)", () => {
