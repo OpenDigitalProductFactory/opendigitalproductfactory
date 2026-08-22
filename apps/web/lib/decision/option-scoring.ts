@@ -255,6 +255,38 @@ export type DecisionFlags = {
   };
 };
 
+/**
+ * BI-2107B5D2: why a verdict is not `proceed`. A decline names its cause, because
+ * a decline without a reason is indistinguishable from a failure to decide.
+ */
+export const DECISION_VERDICT_CAUSES = [
+  "commandment-conflict",
+  "all-options-opposed",
+  "low-margin",
+  "coverage-weak",
+  "sensitivity-unstable",
+] as const;
+export type DecisionVerdictCause = (typeof DECISION_VERDICT_CAUSES)[number];
+
+/**
+ * BI-2107B5D2: the three-band verdict. `proceed` and `decline` are both
+ * assurances — each carries its own next step and costs no human turn.
+ * `uncertain` is the only band where doubt lives, and the only one with a
+ * retry edge.
+ */
+export const DECISION_VERDICTS = ["proceed", "uncertain", "decline"] as const;
+export type DecisionVerdict = (typeof DECISION_VERDICTS)[number];
+
+/** The band edges actually in force for one decision (stakes-scaled). */
+export type DecisionBands = {
+  /** margin at or above this is an assurance to proceed. */
+  upper: number;
+  /** winner composite at or below this is an assurance to decline. */
+  lower: number;
+  /** The stakes tier the edges were derived from. */
+  stakes: DecisionStakes;
+};
+
 export type DecisionRecommendation = {
   optionId: string;
   composite: number;
@@ -262,6 +294,19 @@ export type DecisionRecommendation = {
   margin: number;
   /** "low" when margin < tieMargin OR no principles applied. */
   confidence: "high" | "low";
+  /**
+   * BI-2107B5D2: three-band verdict. `confidence` above is retained as the
+   * back-compatible projection — "high" iff verdict is `proceed`.
+   *
+   * Optional for the same reason the newer `flags` fields are: decision results
+   * persisted before this shipped carry neither verdict nor bands, and a stored
+   * row must stay readable. `readVerdict` projects those legacy shapes.
+   */
+  verdict?: DecisionVerdict;
+  /** Why the verdict is not `proceed`; null when it is. */
+  verdictCause?: DecisionVerdictCause | null;
+  /** The band edges in force, echoed so a later histogram can tell a moved bar from a changed result. */
+  bands?: DecisionBands;
 };
 
 export type DecisionResult = {
@@ -272,8 +317,25 @@ export type DecisionResult = {
   reasoning: string;
 };
 
+/**
+ * BI-2107B5D2: decision stakes widen or narrow the uncertain band. A
+ * high-consequence decision demands more separation before it will call
+ * anything an assurance; a routine one demands less.
+ */
+export const DECISION_STAKES = ["routine", "elevated", "high"] as const;
+export type DecisionStakes = (typeof DECISION_STAKES)[number];
+
+/** Multipliers applied to the base tie-margin to derive the upper band edge. */
+export const STAKES_BAND_MULTIPLIER: Record<DecisionStakes, number> = {
+  routine: 0.5,
+  elevated: 1,
+  high: 2,
+};
+
 export type DecideConfig = {
   tieMargin?: number;
+  /** Consequence tier; drives the band edges. Defaults to "elevated" (today's behaviour). */
+  stakes?: DecisionStakes;
   semanticFallbackWarnRatio?: number;
   /**
    * A commandment contributes "strongly negatively" to the top option when
@@ -299,6 +361,147 @@ const DEFAULT_SEMANTIC_FALLBACK_WARN_RATIO = 0.4;
 const DEFAULT_COMMANDMENT_CONFLICT_THRESHOLD = 0.5;
 const DEFAULT_MIN_FEATURE_KEYS = 3;
 const DEFAULT_SENSITIVITY_EPSILON = 0.1;
+/**
+ * BI-2107B5D2: base lower edge. A winner whose composite sits at or below this
+ * is opposed by the principles that applied — every option on the table is bad,
+ * which is a confident NO, not a failure to choose.
+ */
+const DEFAULT_DECLINE_COMPOSITE = -0.2;
+const DEFAULT_STAKES: DecisionStakes = "elevated";
+
+/**
+ * BI-2107B5D2: derive the band edges in force for one decision. Stakes scale
+ * BOTH edges — a high-stakes call demands more separation to proceed and less
+ * opposition to decline, so the uncertain band widens from both sides.
+ */
+export function resolveDecisionBands(
+  tieMargin: number,
+  stakes: DecisionStakes,
+): DecisionBands {
+  const multiplier = STAKES_BAND_MULTIPLIER[stakes];
+  return {
+    upper: tieMargin * multiplier,
+    lower: DEFAULT_DECLINE_COMPOSITE / multiplier,
+    stakes,
+  };
+}
+
+/**
+ * BI-2107B5D2: the three-band verdict, with its cause when it is not `proceed`.
+ *
+ * Ordering is deliberate and is the whole point of the split: a commandment
+ * conflict is a DECLINE with a named reason, not an uncertainty. Collapsing it
+ * into "low confidence" is what made a decisive no indistinguishable from a
+ * coin-flip.
+ */
+export function resolveVerdict(input: {
+  margin: number;
+  winnerComposite: number;
+  bands: DecisionBands;
+  commandmentConflict: boolean;
+  featureCoverageWeak: boolean;
+  sensitivityUnstable: boolean;
+}): { verdict: DecisionVerdict; verdictCause: DecisionVerdictCause | null } {
+  if (input.commandmentConflict) {
+    return { verdict: "decline", verdictCause: "commandment-conflict" };
+  }
+  if (input.winnerComposite <= input.bands.lower) {
+    return { verdict: "decline", verdictCause: "all-options-opposed" };
+  }
+  if (input.featureCoverageWeak) {
+    return { verdict: "uncertain", verdictCause: "coverage-weak" };
+  }
+  if (input.sensitivityUnstable) {
+    return { verdict: "uncertain", verdictCause: "sensitivity-unstable" };
+  }
+  if (input.margin < input.bands.upper) {
+    return { verdict: "uncertain", verdictCause: "low-margin" };
+  }
+  return { verdict: "proceed", verdictCause: null };
+}
+
+/**
+ * BI-2107B5D2: confidence in the VERDICT, computed from the real margin rather
+ * than stamped as a constant. Confidence is how far inside its band the result
+ * sits: an assurance deepens as it moves away from the edge, and an uncertain
+ * result is weakest in the middle of the band.
+ *
+ * Ranges: assurances (proceed / decline) land in [0.5, 1]; uncertain lands in
+ * [0, 0.5). The boundary is therefore meaningful — 0.5 is exactly the edge.
+ */
+/**
+ * BI-2107B5D2: read the verdict off a recommendation, projecting legacy shapes.
+ * A result persisted before the three bands existed carries only the boolean,
+ * which can distinguish proceed from not-proceed but never a decline from an
+ * uncertainty — so legacy rows project to `uncertain`, never to a false
+ * assurance.
+ */
+export function readVerdict(
+  recommendation: DecisionRecommendation,
+  flags?: Pick<DecisionFlags, "commandmentConflict">,
+): {
+  verdict: DecisionVerdict;
+  verdictCause: DecisionVerdictCause | null;
+  bands: DecisionBands;
+} {
+  const bands = recommendation.bands ?? resolveDecisionBands(DEFAULT_TIE_MARGIN, DEFAULT_STAKES);
+  if (recommendation.verdict) {
+    return {
+      verdict: recommendation.verdict,
+      verdictCause: recommendation.verdictCause ?? null,
+      bands,
+    };
+  }
+  // Legacy shape. A commandment conflict outranks the boolean: a conflicted
+  // result must NEVER project to an assurance to proceed just because the old
+  // field said "high". Everything else that is not "high" projects to
+  // `uncertain`, never to a decline we cannot evidence.
+  if (flags?.commandmentConflict) {
+    return { verdict: "decline", verdictCause: "commandment-conflict", bands };
+  }
+  return {
+    verdict: recommendation.confidence === "high" ? "proceed" : "uncertain",
+    verdictCause: recommendation.confidence === "high" ? null : "low-margin",
+    bands,
+  };
+}
+
+export function verdictConfidence(recommendation: DecisionRecommendation): number {
+  const { margin, composite } = recommendation;
+  const { verdict, bands } = readVerdict(recommendation);
+  const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, n));
+  // Saturating, never-clamping curve: depth/(1+depth) approaches 1 without ever
+  // reaching it, so two decisions that differ in margin ALWAYS differ in score.
+  // A hard clamp would collapse every decisive result onto 1.0 and rebuild the
+  // exact constant-stamping problem this replaces.
+  const deepen = (depth: number) => 0.5 + 0.5 * (depth / (1 + depth));
+
+  if (verdict === "proceed") {
+    const depth = bands.upper <= 0 ? margin : (margin - bands.upper) / bands.upper;
+    return deepen(Math.max(0, depth));
+  }
+  if (verdict === "decline") {
+    const span = Math.abs(bands.lower) || 1;
+    const depth = (bands.lower - composite) / span;
+    return deepen(Math.max(0, depth));
+  }
+  // Uncertain: rises toward the proceed edge but never reaches an assurance.
+  const upper = bands.upper <= 0 ? 1 : bands.upper;
+  return clamp(clamp(margin / upper, 0, 1) / 2, 0, 0.499);
+}
+
+/**
+ * BI-2107B5D2: which uncertain causes can be retried with a changed input, and
+ * what the caller must change. A retry that changes nothing returns the same
+ * answer forever, so the cause dictates the input to move — never a bare re-run.
+ */
+export const VERDICT_RETRY_HINTS: Record<DecisionVerdictCause, string | null> = {
+  "commandment-conflict": null,
+  "all-options-opposed": "Offer different options — every option on the table is opposed by the principles that applied.",
+  "low-margin": "Separate the options: add discriminating features, or drop options that are near-duplicates of each other.",
+  "coverage-weak": "Supply richer per-option feature maps — some options score too few axes to discriminate.",
+  "sensitivity-unstable": "Stabilise the inputs: the winner flips under small weight swings, so the option set or the weights need firmer grounding.",
+};
 
 /**
  * Top-level advisory decision call. Wraps buildOptionScores with the
@@ -313,6 +516,7 @@ export function decide(
   config: DecideConfig = {},
 ): DecisionResult {
   const tieMargin = config.tieMargin ?? DEFAULT_TIE_MARGIN;
+  const bands = resolveDecisionBands(tieMargin, config.stakes ?? DEFAULT_STAKES);
   const semanticWarnRatio =
     config.semanticFallbackWarnRatio ?? DEFAULT_SEMANTIC_FALLBACK_WARN_RATIO;
   const commandmentConflictThreshold =
@@ -382,7 +586,7 @@ export function decide(
   const winner = ranked[0];
   const runnerUpComposite = ranked[1]?.composite ?? winner.composite;
   const margin = winner.composite - runnerUpComposite;
-  let confidence: "high" | "low" = margin < tieMargin ? "low" : "high";
+  let confidence: "high" | "low" = margin < bands.upper ? "low" : "high";
 
   // Coverage: ratio of semantic-mode contributions across all option × principle pairs.
   const totalContribs = scores.reduce((sum, s) => sum + s.contributions.length, 0);
@@ -445,11 +649,26 @@ export function decide(
     )
     .map((c) => c.principleId);
 
-  const recommendation = {
+  // BI-2107B5D2: the three-band verdict. `confidence` stays as the
+  // back-compatible projection — "high" iff the verdict is `proceed`.
+  const { verdict, verdictCause } = resolveVerdict({
+    margin,
+    winnerComposite: winner.composite,
+    bands,
+    commandmentConflict: conflictingPrinciples.length > 0,
+    featureCoverageWeak,
+    sensitivityUnstable,
+  });
+  confidence = verdict === "proceed" ? "high" : "low";
+
+  const recommendation: DecisionRecommendation = {
     optionId: winner.optionId,
     composite: winner.composite,
     margin,
     confidence,
+    verdict,
+    verdictCause,
+    bands,
   };
 
   const provisionalFlags: DecisionFlags = {

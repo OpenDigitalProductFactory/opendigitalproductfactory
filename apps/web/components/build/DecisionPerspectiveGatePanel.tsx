@@ -29,6 +29,9 @@ function outcomeLabel(outcomeType: DecisionInteractionGateView["outcomeType"]): 
       return "Escalation required";
     case "defer":
       return "Coverage gap - deferred";
+    // BI-2107B5D2: a decline is an assurance, not a pending item.
+    case "decline":
+      return "Declined";
   }
 }
 

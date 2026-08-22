@@ -87,19 +87,28 @@ function makeDb(overrides: {
 
 describe("mapConsultOutcome", () => {
   it("maps a confident, conflict-free recommendation to recommend/low-risk", () => {
-    expect(mapConsultOutcome(makeResult())).toEqual({
-      outcomeType: "recommend",
-      riskTier: "low",
-      confidenceScore: 0.9,
-    });
+    const outcome = mapConsultOutcome(makeResult());
+    expect(outcome.outcomeType).toBe("recommend");
+    expect(outcome.riskTier).toBe("low");
+    // BI-2107B5D2: the score is now COMPUTED from the real margin, not the
+    // constant 0.9 this used to assert. Constants meant every recommend row
+    // carried the same number, so the margin distribution did not exist.
+    expect(outcome.confidenceScore).toBeGreaterThanOrEqual(0.5);
+    expect(outcome.verdictCause).toBeNull();
   });
 
-  it("maps a commandment conflict to escalate/high-risk", () => {
+  // BI-2107B5D2: a commandment conflict is a DECLINE — the gate weighed the
+  // question and the answer is no, with a named cause. It used to escalate,
+  // which made a decisive no indistinguishable from an unresolved maybe.
+  it("maps a commandment conflict to decline/high-risk with its cause named", () => {
     const result = makeResult();
     result.flags.commandmentConflict = true;
     result.flags.commandmentConflictPrinciples = ["never-fabricate"];
-    expect(mapConsultOutcome(result).outcomeType).toBe("escalate");
+    expect(mapConsultOutcome(result).outcomeType).toBe("decline");
     expect(mapConsultOutcome(result).riskTier).toBe("high");
+    expect(mapConsultOutcome(result).verdictCause).toBe("commandment-conflict");
+    // Retrying cannot resolve a conflict with a commandment.
+    expect(mapConsultOutcome(result).retryHint).toBeNull();
   });
 
   it("maps a low-margin call to escalate (needs human review)", () => {
@@ -124,6 +133,10 @@ describe("mapConsultOutcome", () => {
       outcomeType: "escalate",
       riskTier: "medium",
       confidenceScore: 0,
+      // BI-2107B5D2: a corpus gap is named, and says what to change — an
+      // identical retry against the same empty corpus returns the same nothing.
+      verdictCause: "insufficient-signal",
+      retryHint: expect.any(String),
     });
   });
 });
