@@ -271,6 +271,93 @@ export function isRootCloneGitStateMutation(seg, cwd, isDir = () => false) {
   return cloneRoot !== null && target === cloneRoot;
 }
 
+// ── shell writes (BI-D471606A) ───────────────────────────────────────────────
+//
+// The file-tool block above is only half the surface. A session told to "make
+// file changes with sed, heredocs, or short scripts rather than the dedicated
+// Write/Edit tools" — which is what bypass-permissions mode instructs — routes
+// every edit around `Write|Edit|MultiEdit` and never touches that guard. On
+// 2026-08-21 exactly that happened: hours of edits landed in the shared root
+// clone with no guard consulted, and were destroyed when a second session
+// cleaned the tree.
+//
+// So the same rule is enforced on the shell surface. Deliberately conservative:
+// a write must be IDENTIFIABLE (a redirect target, a tee/sed -i/cp/mv
+// destination) or an interpreter that plainly writes. A read-only command in
+// the clone root stays allowed — a guard that blocks `cat` gets disabled, and a
+// disabled guard protects nothing.
+
+/** Redirect targets: `> f`, `>> f`, `2> f`, `&> f`. Heredocs land here too (`cat > f <<EOF`). */
+function redirectTargets(seg) {
+  const out = [];
+  const re = /(?:\d*|&)>{1,2}\s*("[^"]+"|'[^']+'|[^\s;|&<>]+)/g;
+  let m;
+  while ((m = re.exec(seg)) !== null) {
+    const raw = m[1].replace(/^['"]|['"]$/g, "");
+    if (raw && raw !== "/dev/null") out.push(raw);
+  }
+  return out;
+}
+
+/** Destinations of the common write verbs. */
+function writeVerbTargets(seg) {
+  const tokens = tokenize(seg);
+  if (tokens.length === 0) return [];
+  const verb = baseName(tokens[0] ?? "").toLowerCase();
+  const rest = tokens.slice(1);
+  // POSIX flags only. The shared isFlag() also treats a leading "/" as a
+  // Windows switch, which would swallow every absolute path operand here.
+  const operands = rest.filter((t) => !t.startsWith("-"));
+
+  if (verb === "tee") return operands;
+  if (verb === "sed") {
+    // Only `-i` mutates in place; a plain sed writes to stdout.
+    const inPlace = rest.some((t) => t === "-i" || /^-i\S*$/.test(t) || t === "--in-place");
+    // The script operand is not a path; the remaining operands are.
+    return inPlace ? operands.slice(1) : [];
+  }
+  if (verb === "cp" || verb === "mv" || verb === "install" || verb === "rsync") {
+    return operands.length >= 2 ? [operands[operands.length - 1]] : [];
+  }
+  if (verb === "truncate" || verb === "touch") return operands;
+  return [];
+}
+
+const INTERPRETERS = new Set(["python", "python3", "node", "ruby", "perl", "php", "bash", "sh", "zsh"]);
+/** Write verbs that appear in a one-liner or heredoc body we cannot resolve to a path. */
+// A WRITE, not merely a file touch. `open(path)` for reading is the most common
+// one-liner in this repo, so an open only counts when a write mode appears as
+// its OWN argument — matching a bare [wax] after the quote flagged
+// `open('a.json')` on the filename's first letter. Erring toward allowing reads. A guard that blocks reading gets switched off,
+// and a switched-off guard protects nothing.
+const WRITE_INTENT = /(\bopen\s*\([^)]*,\s*(mode\s*=\s*)?["'][wax]|\bwriteFileSync\b|\bwriteFile\b|\.write\s*\(|\bos\.remove\b|\bshutil\.(copy|move|rmtree)|\bfs\.rm\b|\bunlink\b|\bmkdirs?\b|\brename\s*\()/;
+
+/**
+ * An interpreter invoked with inline code or a heredoc, whose body plainly
+ * writes. The path is unknowable from the command, so this only fires when the
+ * session is standing IN the clone root — the same precondition decideFileWrite
+ * uses. A read-only one-liner is left alone.
+ */
+export function isRootCloneInterpreterWrite(command, cwd, isDir = () => false) {
+  // Evaluated over the WHOLE command, not a segment: segments() splits on
+  // newlines, and a heredoc body lives on the lines after its interpreter.
+  const firstLine = String(command).split("\n")[0] ?? "";
+  const tokens = tokenize(firstLine);
+  const verb = baseName(tokens[0] ?? "").toLowerCase();
+  if (!INTERPRETERS.has(verb)) return false;
+  const inlineCode = tokens.some((t) => t === "-c" || t === "-e");
+  const heredoc = /<<-?\s*['"]?\w+/.test(firstLine);
+  if (!inlineCode && !heredoc) return false;
+  if (!WRITE_INTENT.test(String(command))) return false;
+  const cloneRoot = deriveCloneRoot(cwd, isDir);
+  return cloneRoot !== null && norm(cwd) === cloneRoot;
+}
+
+/** Every identifiable write destination in one segment. */
+export function shellWriteTargets(seg) {
+  return [...redirectTargets(seg), ...writeVerbTargets(seg)];
+}
+
 const FILE_WRITE_TOOL_NAMES = new Set(["Write", "Edit", "MultiEdit"]);
 
 function fileWriteTargets(toolInput) {
@@ -341,6 +428,14 @@ export function decide({ command, cwd = "", env = {}, isSymlink = () => false, i
       return { block: true, reason: ROOT_GIT_STATE_GUIDANCE };
     }
 
+    // BI-D471606A: a shell write into the shared root clone is the same defect
+    // the file-tool guard already refuses; only the surface differs.
+    for (const target of shellWriteTargets(seg)) {
+      if (isUnderRootSharedArea(resolveAgainst(cwd, target), cloneRoot())) {
+        return { block: true, reason: ROOT_FILE_WRITE_GUIDANCE };
+      }
+    }
+
     // `git clean -fdx` follows junctioned/ignored dirs into the shared root.
     if (isDestructiveGitClean(seg)) {
       return { block: true, reason: GUIDANCE };
@@ -356,6 +451,10 @@ export function decide({ command, cwd = "", env = {}, isSymlink = () => false, i
       //     or names the clone's own packages/node_modules/etc).
       if (isUnderRootSharedArea(resolved, cloneRoot())) return { block: true, reason: GUIDANCE };
     }
+  }
+
+  if (isRootCloneInterpreterWrite(command, cwd, isDir)) {
+    return { block: true, reason: ROOT_FILE_WRITE_GUIDANCE };
   }
 
   return { block: false };
