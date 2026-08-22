@@ -2,7 +2,7 @@
 
 import { requireUserId } from "@/lib/actions/shared/guards";
 import { can } from "@/lib/permissions";
-import { prisma } from "@dpf/db";
+import { prisma, type Prisma } from "@dpf/db";
 import { revalidatePath } from "next/cache";
 import {
   DEFAULT_OPERATING_HOURS_TIMEZONE,
@@ -12,6 +12,10 @@ import {
 import type { DaySchedule, WeeklySchedule } from "@/lib/operating-hours-types";
 import { deriveTimezoneFromBusinessLocation } from "@/lib/operating-hours-read";
 import { newId } from "@/lib/shared/new-id";
+import {
+  fromHospitalityAvailability,
+  fromHospitalityResource,
+} from "@/lib/resource-scheduling/clone-adapters";
 import { ALL_ARCHETYPES } from "@dpf/storefront-templates";
 
 const DAY_NAMES = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"] as const;
@@ -449,29 +453,95 @@ export async function saveOperatingHours(input: {
           status: "active",
           legacyServiceProviderId: { in: providerIds },
         },
-        select: { id: true, organizationId: true },
+        select: {
+          id: true,
+          resourceId: true,
+          organizationId: true,
+          storefrontId: true,
+          kind: true,
+          label: true,
+          status: true,
+          capacity: true,
+          capacityUnit: true,
+          serviceArea: true,
+          blockedReason: true,
+          attributes: true,
+          version: true,
+          legacyServiceProviderId: true,
+        },
       });
       if (resources.length > 0) {
         const resourceIds = resources.map((resource) => resource.id);
         await tx.hospitalityResourceAvailability.deleteMany({
           where: { resourceId: { in: resourceIds } },
         });
+        const availabilityByResource = resources.map((resource) => ({
+          resource,
+          rows: Array.from(grouped.entries()).map(([key, days]) => {
+            const [startTime, endTime] = key.split("|");
+            return {
+              id: newId(),
+              availabilityId: `HRA-${newId(10).toUpperCase()}`,
+              organizationId: resource.organizationId,
+              resourceId: resource.id,
+              kind: "available",
+              days,
+              startTime: startTime ?? "09:00",
+              endTime: endTime ?? "17:00",
+            };
+          }),
+        }));
         await tx.hospitalityResourceAvailability.createMany({
-          data: resources.flatMap((resource) =>
-            Array.from(grouped.entries()).map(([key, days]) => {
-              const [startTime, endTime] = key.split("|");
-              return {
-                availabilityId: `HRA-${newId(10).toUpperCase()}`,
-                organizationId: resource.organizationId,
-                resourceId: resource.id,
-                kind: "available",
-                days,
-                startTime: startTime ?? "09:00",
-                endTime: endTime ?? "17:00",
-              };
-            }),
-          ),
+          data: availabilityByResource.flatMap(({ rows }) => rows),
         });
+
+        // Canonical reads take precedence over the compatibility clone, so
+        // replace both projections in this transaction. Explicit clone row
+        // ids keep each canonical sourceRef stable and migration-compatible.
+        for (const { resource, rows } of availabilityByResource) {
+          const canonical = fromHospitalityResource(resource).draft;
+          const canonicalData = {
+            ...canonical,
+            attributes: canonical.attributes as Prisma.InputJsonValue,
+          };
+          const canonicalResource = await tx.resource.upsert({
+            where: { sourceRef: canonical.sourceRef },
+            create: canonicalData,
+            update: canonicalData,
+          });
+          await tx.resourceAvailability.deleteMany({
+            where: {
+              resourceId: canonicalResource.id,
+              organizationId: resource.organizationId,
+            },
+          });
+          await tx.resourceAvailability.createMany({
+            data: rows.map((row) =>
+              fromHospitalityAvailability(
+                {
+                  id: row.id,
+                  organizationId: row.organizationId,
+                  kind: row.kind,
+                  days: row.days,
+                  startTime: row.startTime,
+                  endTime: row.endTime,
+                  date: null,
+                  startsAt: null,
+                  endsAt: null,
+                  reason: null,
+                  version: 1,
+                },
+                {
+                  unifiedResourceId: canonicalResource.id,
+                  timezone:
+                    profile.timezone ??
+                    timezone ??
+                    DEFAULT_OPERATING_HOURS_TIMEZONE,
+                },
+              ).draft,
+            ),
+          });
+        }
       }
     }
   });
