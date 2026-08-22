@@ -211,6 +211,9 @@ export function mapCloneStatus(status: string): {
   warning: string | null;
 } {
   if (status === "active") return { lifecycle: "active", lifecycleReason: null, warning: null };
+  // Blocked is an operational availability state, not retirement. Preserve the
+  // reason on Resource.blockedReason while keeping the canonical row active.
+  if (status === "blocked") return { lifecycle: "active", lifecycleReason: null, warning: null };
   if (status === "retired") return { lifecycle: "retired", lifecycleReason: null, warning: null };
   if (status === "archived") return { lifecycle: "archived", lifecycleReason: null, warning: null };
   return {

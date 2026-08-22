@@ -1,9 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma, type Prisma } from "@dpf/db";
+import { readActivationProfile } from "@dpf/storefront-templates";
 
 import { auth } from "@/lib/auth";
 import { apiErrorResponse } from "@/lib/api/error";
 import { newId } from "@/lib/shared/new-id";
+import {
+  isAdminResourceCapacityValid,
+  resolveAdminResourceProfile,
+} from "@/lib/resource-scheduling/admin-resource-profile";
+import {
+  fromHospitalityAvailability,
+  fromHospitalityResource,
+  type CloneResourceRow,
+} from "@/lib/resource-scheduling/clone-adapters";
 import {
   parseRestaurantTableAttributes,
   serializeRestaurantTableAttributes,
@@ -12,6 +22,19 @@ import {
 
 const STATUSES = new Set(["active", "blocked", "retired"]);
 const TIME = /^([01]\d|2[0-3]):[0-5]\d$/;
+
+function canonicalResourceData(
+  row: CloneResourceRow & { legacyServiceProviderId?: string | null },
+) {
+  const { draft } = fromHospitalityResource(row);
+  return {
+    draft,
+    data: {
+      ...draft,
+      attributes: draft.attributes as Prisma.InputJsonValue,
+    },
+  };
+}
 
 type AvailabilityInput = {
   days: number[];
@@ -125,7 +148,23 @@ export async function PUT(
       id: true,
       organizationId: true,
       legacyServiceProviderId: true,
+      resourceId: true,
+      storefrontId: true,
+      kind: true,
+      label: true,
+      status: true,
+      capacity: true,
+      capacityUnit: true,
+      serviceArea: true,
+      blockedReason: true,
+      version: true,
       attributes: true,
+      storefront: {
+        select: {
+          timezone: true,
+          archetype: { select: { activationProfile: true } },
+        },
+      },
     },
   });
   if (!current) {
@@ -136,6 +175,12 @@ export async function PUT(
     const availability = body.availability!;
     const exceptions = body.exceptions!;
     const updated = await prisma.$transaction(async (transaction) => {
+      const canonical = canonicalResourceData(current);
+      const canonicalResource = await transaction.resource.upsert({
+        where: { sourceRef: canonical.draft.sourceRef },
+        create: canonical.data,
+        update: canonical.data,
+      });
       await transaction.hospitalityResourceAvailability.deleteMany({
         where: {
           resourceId: current.id,
@@ -144,6 +189,7 @@ export async function PUT(
       });
       const hospitalityRows = [
         ...availability.map((row) => ({
+          id: newId(),
           availabilityId: `HRA-${newId(10).toUpperCase()}`,
           organizationId: current.organizationId,
           resourceId: current.id,
@@ -151,8 +197,11 @@ export async function PUT(
           days: row.days,
           startTime: row.startTime,
           endTime: row.endTime,
+          date: null,
+          reason: null,
         })),
         ...exceptions.map((row) => ({
+          id: newId(),
           availabilityId: `HRA-${newId(10).toUpperCase()}`,
           organizationId: current.organizationId,
           resourceId: current.id,
@@ -167,6 +216,39 @@ export async function PUT(
       if (hospitalityRows.length > 0) {
         await transaction.hospitalityResourceAvailability.createMany({
           data: hospitalityRows,
+        });
+      }
+
+      await transaction.resourceAvailability.deleteMany({
+        where: {
+          resourceId: canonicalResource.id,
+          organizationId: current.organizationId,
+        },
+      });
+      if (hospitalityRows.length > 0) {
+        const canonicalRows = hospitalityRows.map((row) =>
+          fromHospitalityAvailability(
+            {
+              id: row.id,
+              organizationId: row.organizationId,
+              kind: row.kind,
+              days: row.days,
+              startTime: row.startTime,
+              endTime: row.endTime,
+              date: row.date,
+              startsAt: null,
+              endsAt: null,
+              reason: row.reason,
+              version: 1,
+            },
+            {
+              unifiedResourceId: canonicalResource.id,
+              timezone: current.storefront.timezone,
+            },
+          ).draft,
+        );
+        await transaction.resourceAvailability.createMany({
+          data: canonicalRows,
         });
       }
 
@@ -242,6 +324,16 @@ export async function PUT(
   }
 
   const label = body.label?.trim();
+  const activationProfile = readActivationProfile(
+    current.storefront.archetype.activationProfile,
+  );
+  const adminProfile = resolveAdminResourceProfile(
+    activationProfile?.processProfile,
+    current.kind,
+  );
+  if (!adminProfile) {
+    return apiErrorResponse("INTERNAL_ERROR", "Internal server error", 500);
+  }
   const currentAttributes = parseRestaurantTableAttributes(current.attributes);
   const attributes = validateRestaurantTableAttributesInput({
     shape: body.shape ?? currentAttributes.shape,
@@ -257,9 +349,7 @@ export async function PUT(
   });
   if (
     !label ||
-    !Number.isInteger(body.capacity) ||
-    Number(body.capacity) < 1 ||
-    Number(body.capacity) > 100 ||
+    !isAdminResourceCapacityValid(body.capacity, adminProfile) ||
     !body.status ||
     !STATUSES.has(body.status) ||
     !Number.isInteger(body.expectedVersion) ||
@@ -308,11 +398,13 @@ export async function PUT(
           },
         });
       }
-      return transaction.hospitalityResource.findUnique({
+      const updated = await transaction.hospitalityResource.findUnique({
         where: { id },
         select: {
           id: true,
           resourceId: true,
+          organizationId: true,
+          storefrontId: true,
           label: true,
           kind: true,
           status: true,
@@ -322,6 +414,7 @@ export async function PUT(
           blockedReason: true,
           attributes: true,
           version: true,
+          legacyServiceProviderId: true,
           availability: {
             orderBy: { createdAt: "asc" },
             select: {
@@ -336,6 +429,15 @@ export async function PUT(
           },
         },
       });
+      if (updated) {
+        const canonical = canonicalResourceData(updated);
+        await transaction.resource.upsert({
+          where: { sourceRef: canonical.draft.sourceRef },
+          create: canonical.data,
+          update: canonical.data,
+        });
+      }
+      return updated;
     });
     return NextResponse.json({
       resource: resource
