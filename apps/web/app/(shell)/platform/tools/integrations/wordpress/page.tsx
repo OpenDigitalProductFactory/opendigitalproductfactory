@@ -75,7 +75,7 @@ export default async function WordPressIntegrationPage() {
         </nav>
         <h1 className="mt-dpf-xs text-dpf-heading font-dpf-bold text-dpf-text">WordPress (self-hosted)</h1>
         <p className="mt-dpf-xs max-w-3xl text-dpf-body text-dpf-muted">
-          Project approved DPF content into a customer-owned WordPress site. DPF needs outbound HTTPS only; it does not host the site, expose this install publicly, or provide a CDN.
+          Send approved DPF content to a site your customer owns. DPF only needs outbound HTTPS. DPF does not host the site. It does not expose this install or provide a CDN.
         </p>
       </header>
 
@@ -88,8 +88,8 @@ export default async function WordPressIntegrationPage() {
         publications={recentPublications}
       />
 
-      <aside className="rounded-dpf-lg border border-dpf-border bg-dpf-surface-1 p-dpf-lg">
-        <h2 className="text-dpf-title font-dpf-semibold text-dpf-text">Ownership boundary</h2>
+      <details className="rounded-dpf-lg border border-dpf-border bg-dpf-surface-1 p-dpf-lg">
+        <summary className="cursor-pointer text-dpf-title font-dpf-semibold text-dpf-text">Ownership boundary</summary>
         <div className="mt-dpf-md grid gap-dpf-md md:grid-cols-2">
           <div>
             <h3 className="text-dpf-body font-dpf-semibold text-dpf-text">DPF owns</h3>
@@ -100,7 +100,7 @@ export default async function WordPressIntegrationPage() {
             <p className="mt-dpf-xs text-dpf-caption text-dpf-muted">Themes, blocks and layout, plugins, permalinks, SEO delivery, hosting, CDN, and the public visitor experience.</p>
           </div>
         </div>
-      </aside>
+      </details>
     </div>
   );
 }
@@ -138,12 +138,12 @@ function WordPressActivity({
         <div>
           <h2 className="text-dpf-title font-dpf-semibold text-dpf-text">Content activity</h2>
           <p className="mt-dpf-xs text-dpf-caption text-dpf-muted">
-            {total} current {total === 1 ? "projection" : "projections"}; immutable publication receipts remain available for audit.
+            {total} current {total === 1 ? "projection" : "projections"}. Audit receipts stay available.
           </p>
         </div>
         <StatusBadge
-          intent={attention > 0 ? "warning" : "success"}
-          label={attention > 0 ? `${attention} need review` : "No drift detected"}
+          intent={attention > 0 ? "warning" : total > 0 ? "success" : "neutral"}
+          label={attention > 0 ? `${attention} need review` : total > 0 ? "No drift detected" : "No projections yet"}
         />
       </div>
 
@@ -159,7 +159,7 @@ function WordPressActivity({
         <div className="mt-dpf-md">
           <EmptyState
             title="No WordPress activity yet"
-            description="Approve a WordPress draft in Customer Marketing, then explicitly create it from the Ready to publish queue."
+            description="Approve a WordPress draft in Customer Marketing. Then create it from Ready to publish."
             action={
               <a
                 href="/customer/marketing#marketing-publish-queue"

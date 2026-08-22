@@ -16,6 +16,7 @@
  *   pnpm --filter web ux:sweep                     # measure + ratchet (exit 1 on regression)
  *   pnpm --filter web ux:sweep -- --update-baseline # freeze current as the new baseline
  *   pnpm --filter web ux:sweep -- --base-url http://localhost:3000
+ *   pnpm --filter web ux:sweep -- --routes /customer/marketing,/platform/tools/integrations
  */
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -108,6 +109,21 @@ type MeasuredRoute = {
 function arg(name: string, fallback: string): string {
   const i = process.argv.indexOf(`--${name}`);
   return i !== -1 && process.argv[i + 1] ? process.argv[i + 1] : fallback;
+}
+
+export function selectSweepRows(inventory: ShellRow[], rawSelector: string): ShellRow[] {
+  const eligible = inventory.filter((row) => row.sweepEligible);
+  const requested = [...new Set(rawSelector.split(",").map((route) => route.trim()).filter(Boolean))];
+  if (requested.length === 0) return eligible;
+
+  const eligiblePaths = new Set(eligible.map((row) => row.routePath));
+  const unresolved = requested.filter((routePath) => !eligiblePaths.has(routePath)).sort();
+  if (unresolved.length > 0) {
+    throw new Error(`unknown or ineligible route selector(s): ${unresolved.join(", ")}`);
+  }
+
+  const selected = new Set(requested);
+  return eligible.filter((row) => selected.has(row.routePath));
 }
 
 /**
@@ -517,6 +533,7 @@ export function executionOutcome(
   status: "measured" | "failed";
   durationMs: number;
   phases?: RoutePhaseTimings;
+  axeViolations?: number;
   reason?: string;
 } {
   return outcome.status === "measured"
@@ -525,6 +542,7 @@ export function executionOutcome(
         status: outcome.status,
         durationMs: outcome.durationMs,
         phases: outcome.value.phases,
+        axeViolations: outcome.value.measurement.axeViolations,
       }
     : {
         routePath: outcome.routePath,
@@ -540,12 +558,13 @@ async function main(): Promise<void> {
   const workerCount = parseSweepWorkerCount(
     arg("workers", process.env.UX_SWEEP_WORKERS ?? "2"),
   );
+  const routeSelector = arg("routes", process.env.UX_SWEEP_ROUTES ?? "");
   const updateBaseline = process.argv.includes("--update-baseline");
 
   const inventory = (
     JSON.parse(readFileSync(join(ROOT, SHELLS_REL), "utf8")) as { routes: ShellRow[] }
   ).routes;
-  const rows = inventory.filter((row) => row.sweepEligible);
+  const rows = selectSweepRows(inventory, routeSelector);
   const excluded = inventory
     .filter((row) => !row.sweepEligible)
     .map((row) => ({

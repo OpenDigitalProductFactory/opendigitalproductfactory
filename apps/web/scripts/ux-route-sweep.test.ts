@@ -6,6 +6,7 @@ import {
   captureAccessibilityStructure,
   executionOutcome,
   findDroppedBaselineRoutes,
+  selectSweepRows,
   uxSweepAxeOptions,
   waitForRouteDomToSettle,
   withIsolatedSweepPage,
@@ -26,6 +27,33 @@ describe("axe result collection", () => {
       },
       resultTypes: ["violations"],
     });
+  });
+});
+
+describe("targeted route selection", () => {
+  const inventory = [
+    { routePath: "/alpha", sweepEligible: true },
+    { routePath: "/beta", sweepEligible: false },
+    { routePath: "/gamma", sweepEligible: true },
+  ] as never;
+
+  it("keeps the full eligible inventory when no selector is supplied", () => {
+    expect(selectSweepRows(inventory, "").map((row) => row.routePath)).toEqual([
+      "/alpha",
+      "/gamma",
+    ]);
+  });
+
+  it("selects an explicit comma-separated changed-route set in inventory order", () => {
+    expect(
+      selectSweepRows(inventory, "/gamma,/alpha").map((row) => row.routePath),
+    ).toEqual(["/alpha", "/gamma"]);
+  });
+
+  it("rejects unknown or ineligible routes instead of silently producing partial evidence", () => {
+    expect(() => selectSweepRows(inventory, "/alpha,/missing,/beta")).toThrow(
+      "unknown or ineligible route selector(s): /beta, /missing",
+    );
   });
 });
 
@@ -83,7 +111,7 @@ describe("route phase evidence", () => {
         durationMs: 151,
         value: {
           phases,
-          measurement: {} as never,
+          measurement: { axeViolations: 2 } as never,
         },
       }),
     ).toEqual({
@@ -91,6 +119,7 @@ describe("route phase evidence", () => {
       status: "measured",
       durationMs: 151,
       phases,
+      axeViolations: 2,
     });
   });
 });

@@ -130,7 +130,7 @@ export function WordPressConnectPanel({ initialState }: { initialState: WordPres
           <div>
             <h2 className="text-dpf-title font-dpf-semibold text-dpf-text">Connect your WordPress site</h2>
             <p className="mt-dpf-xs max-w-2xl text-dpf-body text-dpf-muted">
-              Use a dedicated WordPress Application Password. DPF checks the site over outbound HTTPS; your DPF install does not need a public URL.
+              Use a dedicated WordPress Application Password. DPF connects over HTTPS. This install needs no public URL.
             </p>
           </div>
           <StatusBadge
@@ -297,9 +297,9 @@ function ConnectionForm({
 }) {
   return (
     <form onSubmit={onSubmit} className="mt-dpf-md space-y-dpf-md">
-      <TextField name="siteUrl" label="WordPress site URL" type="url" value={siteUrl} onValueChange={onSiteUrlChange} autoComplete="url" required placeholder="https://www.example.org" hint="HTTPS address for the customer-owned WordPress site." />
-      <TextField name="username" label="WordPress username" value={username} onValueChange={onUsernameChange} autoComplete="username" required hint="Use a dedicated WordPress user with only the permissions needed for this connection." />
-      <TextField name="applicationPassword" label="Application Password" type="password" value={applicationPassword} onValueChange={onApplicationPasswordChange} autoComplete="new-password" required hint="Create this in WordPress under Users > Profile > Application Passwords. DPF never shows it again." />
+      <TextField name="siteUrl" label="WordPress site URL" type="url" value={siteUrl} onValueChange={onSiteUrlChange} autoComplete="url" required placeholder="https://www.example.org" hint="HTTPS address of the WordPress site." />
+      <TextField name="username" label="WordPress username" value={username} onValueChange={onUsernameChange} autoComplete="username" required hint="Use a dedicated user. Give it only the access this connection needs." />
+      <TextField name="applicationPassword" label="Application Password" type="password" value={applicationPassword} onValueChange={onApplicationPasswordChange} autoComplete="new-password" required hint="Create it in WordPress. Go to Users > Profile > Application Passwords. DPF never shows it again." />
       <SubmitButton
         pending={pending}
         pendingLabel="Checking connection…"

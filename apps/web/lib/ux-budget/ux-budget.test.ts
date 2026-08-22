@@ -425,7 +425,10 @@ describe("generated route-shell registry", () => {
     // 199 -> 200: /workforce (EP-COWORKER-IDENTITY-360) — the AI Coworkers directory,
     // a business-domain peer to /employee and /customer, reusing the roster read-model;
     // static, no wall-clock or live-orchestration state, so it is sweep-eligible.
-    expect(registry.routes.filter((route) => route.sweepEligible)).toHaveLength(200);
+    // 200 -> 201: /platform/tools/integrations/wordpress is a bounded operator detail
+    // route over connection, projection, receipt, and drift read models; its measured
+    // preview is deterministic and carries an explicit page-purpose contract.
+    expect(registry.routes.filter((route) => route.sweepEligible)).toHaveLength(201);
     // 110 -> 113: the three exclusions above. Product Direction then adds seven
     // explicitly classified dynamic routes, bringing the combined total to 120.
     // 120 -> 121: /platform/ai/operations-map.

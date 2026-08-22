@@ -30,6 +30,29 @@ vi.mock("@/components/integrations/WordPressConnectPanel", () => ({
 }));
 
 describe("WordPressIntegrationPage", () => {
+  it("uses a neutral projection state before the first publication", async () => {
+    mocks.auth.mockResolvedValue({ user: { platformRole: "superadmin", isSuperuser: true } });
+    mocks.can.mockReturnValue(true);
+    mocks.readSetupState.mockResolvedValue({
+      integrationId: "wordpress-self-hosted",
+      provider: "wordpress",
+      status: "not-connected",
+      safeProjection: {},
+      lastErrorMsg: null,
+      lastTestedAt: null,
+    });
+    mocks.projectionCount.mockResolvedValueOnce(0).mockResolvedValueOnce(0);
+    mocks.projectionFindMany.mockResolvedValue([]);
+    mocks.publicationFindMany.mockResolvedValue([]);
+
+    const { default: Page } = await import("./page");
+    const html = renderToStaticMarkup(await Page());
+
+    expect(html).toContain("No projections yet");
+    expect(html).not.toContain("No drift detected");
+    expect(html).toContain(">Ownership boundary</summary>");
+  });
+
   it("renders the canonical ownership boundary, attention state, and safe activity receipts", async () => {
     mocks.auth.mockResolvedValue({ user: { platformRole: "superadmin", isSuperuser: true } });
     mocks.can.mockReturnValue(true);
