@@ -3,30 +3,29 @@
   "summary": {
     "archetypeCategories": 25,
     "archetypes": 107,
-    "categoriesCovered": 11,
-    "categoriesWithoutPack": 14,
+    "categoriesCovered": 25,
+    "categoriesWithoutPack": 0,
     "categoriesWithoutRecurring": 0,
-    "coveragePct": 44,
+    "coveragePct": 100,
     "common": {
       "packs": [
         "business-operations-compliance",
         "hr-employment-compliance",
-        "software-horizontal-compliance"
+        "software-horizontal-compliance",
+        "uk-corp-gov-compliance"
       ],
-      "obligations": 79,
-      "recurringObligations": 17,
+      "obligations": 83,
+      "recurringObligations": 19,
       "note": "Obligations that apply whatever the business IS, gated instead by jurisdiction or by what it DOES with data. Every qualifying install inherits these; they do NOT substitute for an archetype pack, whose whole purpose is what a generic pack cannot know."
     },
     "ungatedPacks": {
-      "packs": [
-        "uk-corp-gov-compliance"
-      ],
-      "obligations": 4,
+      "packs": [],
+      "obligations": 0,
       "note": "DEFECT, not coverage. A pack with no structured RegulationApplicability falls back to the legacy industry string matcher (BI-9DED0CE8) and surfaces on installs the regime does not pertain to. It is not common — it is addressed to everyone."
     },
     "triggerClasses": {
-      "cadence": 59,
-      "continuous": 49,
+      "cadence": 89,
+      "continuous": 51,
       "event-driven": 43,
       "unrecognised": 0,
       "unspecified": 0
@@ -110,6 +109,32 @@
       }
     },
     {
+      "pack": "industrial-vertical-compliance",
+      "file": "packages/db/src/seed-industrial-vertical-compliance.ts",
+      "scope": "archetype",
+      "gatesOn": [
+        "agriculture-ranching",
+        "asset-rental",
+        "fabric-care-services",
+        "live-events-venues",
+        "manufacturing",
+        "media-production",
+        "software-platform",
+        "warehousing-fulfilment"
+      ],
+      "gatesOnJurisdiction": true,
+      "gatesOnDataHandling": false,
+      "hasStructuredSpec": true,
+      "obligations": 17,
+      "byTriggerClass": {
+        "cadence": 16,
+        "continuous": 1,
+        "event-driven": 0,
+        "unrecognised": 0,
+        "unspecified": 0
+      }
+    },
+    {
       "pack": "law-enforcement-compliance",
       "file": "packages/db/src/seed-law-enforcement-compliance.ts",
       "scope": "archetype",
@@ -124,6 +149,30 @@
         "cadence": 2,
         "continuous": 3,
         "event-driven": 3,
+        "unrecognised": 0,
+        "unspecified": 0
+      }
+    },
+    {
+      "pack": "people-premises-compliance",
+      "file": "packages/db/src/seed-people-premises-compliance.ts",
+      "scope": "archetype",
+      "gatesOn": [
+        "education-training",
+        "fitness-recreation",
+        "hoa-property-management",
+        "pet-services",
+        "retail-goods",
+        "security-services"
+      ],
+      "gatesOnJurisdiction": true,
+      "gatesOnDataHandling": false,
+      "hasStructuredSpec": true,
+      "obligations": 15,
+      "byTriggerClass": {
+        "cadence": 14,
+        "continuous": 1,
+        "event-driven": 0,
         "unrecognised": 0,
         "unspecified": 0
       }
@@ -169,11 +218,11 @@
     {
       "pack": "uk-corp-gov-compliance",
       "file": "packages/db/src/seed-uk-corp-gov-compliance.ts",
-      "scope": "ungated",
+      "scope": "conditional",
       "gatesOn": [],
       "gatesOnJurisdiction": false,
       "gatesOnDataHandling": false,
-      "hasStructuredSpec": false,
+      "hasStructuredSpec": true,
       "obligations": 4,
       "byTriggerClass": {
         "cadence": 2,
@@ -214,18 +263,22 @@
     {
       "category": "agriculture-ranching",
       "archetypes": 3,
-      "packs": [],
-      "obligations": 0,
-      "recurringObligations": 0,
-      "status": "no-pack"
+      "packs": [
+        "industrial-vertical-compliance"
+      ],
+      "obligations": 17,
+      "recurringObligations": 16,
+      "status": "covered"
     },
     {
       "category": "asset-rental",
       "archetypes": 3,
-      "packs": [],
-      "obligations": 0,
-      "recurringObligations": 0,
-      "status": "no-pack"
+      "packs": [
+        "industrial-vertical-compliance"
+      ],
+      "obligations": 17,
+      "recurringObligations": 16,
+      "status": "covered"
     },
     {
       "category": "automotive-services",
@@ -260,26 +313,32 @@
     {
       "category": "education-training",
       "archetypes": 4,
-      "packs": [],
-      "obligations": 0,
-      "recurringObligations": 0,
-      "status": "no-pack"
+      "packs": [
+        "people-premises-compliance"
+      ],
+      "obligations": 15,
+      "recurringObligations": 14,
+      "status": "covered"
     },
     {
       "category": "fabric-care-services",
       "archetypes": 3,
-      "packs": [],
-      "obligations": 0,
-      "recurringObligations": 0,
-      "status": "no-pack"
+      "packs": [
+        "industrial-vertical-compliance"
+      ],
+      "obligations": 17,
+      "recurringObligations": 16,
+      "status": "covered"
     },
     {
       "category": "fitness-recreation",
       "archetypes": 3,
-      "packs": [],
-      "obligations": 0,
-      "recurringObligations": 0,
-      "status": "no-pack"
+      "packs": [
+        "people-premises-compliance"
+      ],
+      "obligations": 15,
+      "recurringObligations": 14,
+      "status": "covered"
     },
     {
       "category": "food-hospitality",
@@ -304,34 +363,42 @@
     {
       "category": "hoa-property-management",
       "archetypes": 3,
-      "packs": [],
-      "obligations": 0,
-      "recurringObligations": 0,
-      "status": "no-pack"
+      "packs": [
+        "people-premises-compliance"
+      ],
+      "obligations": 15,
+      "recurringObligations": 14,
+      "status": "covered"
     },
     {
       "category": "live-events-venues",
       "archetypes": 3,
-      "packs": [],
-      "obligations": 0,
-      "recurringObligations": 0,
-      "status": "no-pack"
+      "packs": [
+        "industrial-vertical-compliance"
+      ],
+      "obligations": 17,
+      "recurringObligations": 16,
+      "status": "covered"
     },
     {
       "category": "manufacturing",
       "archetypes": 1,
-      "packs": [],
-      "obligations": 0,
-      "recurringObligations": 0,
-      "status": "no-pack"
+      "packs": [
+        "industrial-vertical-compliance"
+      ],
+      "obligations": 17,
+      "recurringObligations": 16,
+      "status": "covered"
     },
     {
       "category": "media-production",
       "archetypes": 3,
-      "packs": [],
-      "obligations": 0,
-      "recurringObligations": 0,
-      "status": "no-pack"
+      "packs": [
+        "industrial-vertical-compliance"
+      ],
+      "obligations": 17,
+      "recurringObligations": 16,
+      "status": "covered"
     },
     {
       "category": "moving-and-logistics",
@@ -356,10 +423,12 @@
     {
       "category": "pet-services",
       "archetypes": 5,
-      "packs": [],
-      "obligations": 0,
-      "recurringObligations": 0,
-      "status": "no-pack"
+      "packs": [
+        "people-premises-compliance"
+      ],
+      "obligations": 15,
+      "recurringObligations": 14,
+      "status": "covered"
     },
     {
       "category": "professional-services",
@@ -395,26 +464,32 @@
     {
       "category": "retail-goods",
       "archetypes": 5,
-      "packs": [],
-      "obligations": 0,
-      "recurringObligations": 0,
-      "status": "no-pack"
+      "packs": [
+        "people-premises-compliance"
+      ],
+      "obligations": 15,
+      "recurringObligations": 14,
+      "status": "covered"
     },
     {
       "category": "security-services",
       "archetypes": 2,
-      "packs": [],
-      "obligations": 0,
-      "recurringObligations": 0,
-      "status": "no-pack"
+      "packs": [
+        "people-premises-compliance"
+      ],
+      "obligations": 15,
+      "recurringObligations": 14,
+      "status": "covered"
     },
     {
       "category": "software-platform",
       "archetypes": 1,
-      "packs": [],
-      "obligations": 0,
-      "recurringObligations": 0,
-      "status": "no-pack"
+      "packs": [
+        "industrial-vertical-compliance"
+      ],
+      "obligations": 17,
+      "recurringObligations": 16,
+      "status": "covered"
     },
     {
       "category": "trades-maintenance",
@@ -429,10 +504,12 @@
     {
       "category": "warehousing-fulfilment",
       "archetypes": 4,
-      "packs": [],
-      "obligations": 0,
-      "recurringObligations": 0,
-      "status": "no-pack"
+      "packs": [
+        "industrial-vertical-compliance"
+      ],
+      "obligations": 17,
+      "recurringObligations": 16,
+      "status": "covered"
     }
   ]
 }

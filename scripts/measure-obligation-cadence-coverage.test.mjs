@@ -60,6 +60,24 @@ test("reads every archetype category from the canonical definitions", () => {
   assert.ok(byCategory.get("food-hospitality").has("restaurant"));
 });
 
+test("a pack that IMPORTS a shared applicability spec is not called ungated", () => {
+  // The false positive this prevents: the first cut looked only for an inline
+  // `basis: [` and reported seed-uk-corp-gov-compliance as ungated. It is not —
+  // it imports UK_CORP_GOV_CODE_APPLICABILITY and is gated on jurisdiction and
+  // premium listing. A measure that invents a defect is worse than one that
+  // hides a real one: someone would have "fixed" a pack that was correct.
+  const packs = readCompliancePacks();
+  const uk = packs.find((p) => p.pack === "uk-corp-gov-compliance");
+  assert.ok(uk, "expected the UK corp-gov pack to be discovered");
+  assert.notEqual(uk.scope, "ungated");
+  assert.equal(uk.hasStructuredSpec, true);
+});
+
+test("no pack ships without a structured applicability spec", () => {
+  const ungated = readCompliancePacks().filter((p) => p.scope === "ungated").map((p) => p.pack);
+  assert.deepEqual(ungated, []);
+});
+
 test("an ungated pack is reported as a defect, never as common coverage", () => {
   const report = buildReport({
     byCategory: new Map([["food-hospitality", new Set(["restaurant"])]]),

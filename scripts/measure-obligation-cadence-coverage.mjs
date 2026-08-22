@@ -81,6 +81,11 @@ export function readArchetypes(dir = P("packages", "storefront-templates", "src"
 export function readCompliancePacks(dir = P("packages", "db", "src")) {
   const packs = [];
   if (!fs.existsSync(dir)) return packs;
+  // Shared applicability constants live here; a pack may import one instead of
+  // writing the spec inline.
+  const applicabilityModule = fs.existsSync(path.join(dir, "regulation-applicability.ts"))
+    ? fs.readFileSync(path.join(dir, "regulation-applicability.ts"), "utf8")
+    : "";
   for (const file of fs.readdirSync(dir)) {
     if (!/^seed-.*compliance.*\.ts$/.test(file) || file.includes(".test.")) continue;
     const src = fs.readFileSync(path.join(dir, file), "utf8");
@@ -90,9 +95,21 @@ export function readCompliancePacks(dir = P("packages", "db", "src")) {
     );
     // A pack with NO structured RegulationApplicability falls back to the legacy
     // industry string matcher and surfaces on installs the regime does not
-    // pertain to (BI-9DED0CE8). That is not "common" — it is ungoverned, and it
-    // is the opposite of addressed: it is addressed to everyone.
-    const hasStructuredSpec = /\bbasis:\s*\[/.test(src);
+    // pertain to (BI-9DED0CE8). That is not "common" — it is ungoverned.
+    //
+    // A spec counts whether it is written inline OR imported as a shared
+    // constant. The first cut of this check looked only for an inline
+    // `basis: [` and reported seed-uk-corp-gov-compliance as ungated — it is
+    // not: it uses UK_CORP_GOV_CODE_APPLICABILITY from regulation-applicability.ts
+    // and is gated on jurisdiction AND premium listing status. A measure that
+    // invents a defect is the same failure as one that hides a real one, and it
+    // is worse here because someone would have "fixed" a pack that was correct.
+    const sharedSpecs = new Set(
+      [...applicabilityModule.matchAll(/export const ([A-Z0-9_]+_APPLICABILITY)[^=]*=\s*\{[^}]*basis:\s*\[/g)]
+        .map((m) => m[1]),
+    );
+    const usesSharedSpec = [...sharedSpecs].some((name) => new RegExp(`\\b${name}\\b`).test(src));
+    const hasStructuredSpec = /\bbasis:\s*\[/.test(src) || usesSharedSpec;
     const gatesOnJurisdiction = /\bjurisdictions:\s*\[/.test(src);
     const gatesOnDataHandling = /\bdataHandling:\s*\[/.test(src);
     const byClass = { cadence: 0, continuous: 0, "event-driven": 0, unrecognised: 0, unspecified: 0 };

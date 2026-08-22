@@ -1,6 +1,6 @@
 import type { PrismaClient } from "../generated/client/client";
-import * as crypto from "crypto";
-import { type RegulationApplicability, type RegulationDomain } from "./regulation-applicability";
+import { type RegulationApplicability } from "./regulation-applicability";
+import { seedVerticalCompliancePack, type VerticalRegulationSeed } from "./vertical-compliance-pack";
 
 // ARCHETYPE recurring-obligation packs.
 //
@@ -30,35 +30,6 @@ import { type RegulationApplicability, type RegulationDomain } from "./regulatio
 // two-year certificate) the real period is declared instead, because inventing
 // urgency there would be its own kind of noise.
 
-function makeId(prefix: string): string {
-  const hex = crypto.randomUUID().replace(/-/g, "").slice(0, 8).toUpperCase();
-  return `${prefix}-${hex}`;
-}
-
-type ObligationSeed = {
-  title: string;
-  reference: string;
-  description: string;
-  category: string;
-  frequency: string;
-  applicability: string;
-  penaltySummary: string | null;
-};
-
-type RegulationSeed = {
-  regulationId: string;
-  name: string;
-  shortName: string;
-  jurisdiction: string;
-  industry: string | null;
-  sourceType: "external";
-  sourceUrl: string | null;
-  applicability: RegulationApplicability;
-  domain: RegulationDomain;
-  notes: string;
-  obligations: ObligationSeed[];
-};
-
 // Gate on the archetype CATEGORY, so every archetype inside it inherits the
 // pack. Written as literal specs rather than built by a helper, deliberately:
 // scripts/measure-obligation-cadence-coverage.mjs reads the archetype gate from
@@ -87,7 +58,7 @@ const MOVING_AND_LOGISTICS: RegulationApplicability = {
   basis: ["operating"], jurisdictions: ["us"], archetypes: ["moving-and-logistics"],
 };
 
-export const VERTICAL_RECURRING_REGULATIONS: RegulationSeed[] = [
+export const VERTICAL_RECURRING_REGULATIONS: VerticalRegulationSeed[] = [
   // ── Food and hospitality ───────────────────────────────────────────────────
   {
     regulationId: "REG-US-FOOD-SERVICE-OPS",
@@ -525,51 +496,9 @@ export const VERTICAL_RECURRING_REGULATIONS: RegulationSeed[] = [
 ];
 
 export async function seedVerticalRecurringCompliance(prisma: PrismaClient): Promise<void> {
-  let regUpserts = 0;
-  let oblCreated = 0;
-
-  for (const { obligations, applicability, ...regData } of VERTICAL_RECURRING_REGULATIONS) {
-    const regulation = await prisma.regulation.upsert({
-      where: { regulationId: regData.regulationId },
-      update: {
-        name: regData.name,
-        shortName: regData.shortName,
-        jurisdiction: regData.jurisdiction,
-        sourceUrl: regData.sourceUrl,
-        notes: regData.notes,
-        applicability: applicability as never,
-        domain: regData.domain,
-      },
-      create: { ...regData, applicability: applicability as never },
-    });
-    regUpserts++;
-
-    for (const obl of obligations) {
-      const existing = await prisma.obligation.findFirst({
-        where: { regulationId: regulation.id, reference: obl.reference, status: "active" },
-        select: { id: true },
-      });
-      if (existing) continue;
-      await prisma.obligation.create({
-        data: {
-          obligationId: makeId("OBL"),
-          regulationId: regulation.id,
-          title: obl.title,
-          description: obl.description,
-          reference: obl.reference,
-          category: obl.category,
-          frequency: obl.frequency,
-          applicability: obl.applicability,
-          penaltySummary: obl.penaltySummary,
-        },
-      });
-      oblCreated++;
-    }
-  }
-
-  const expected = VERTICAL_RECURRING_REGULATIONS.reduce((n, r) => n + r.obligations.length, 0);
-  console.log(
-    `[seed] Vertical recurring compliance packs: ${regUpserts}/${VERTICAL_RECURRING_REGULATIONS.length} regulations upserted, `
-      + `${oblCreated} obligations created (${expected} expected total)`,
+  await seedVerticalCompliancePack(
+    prisma,
+    "Vertical recurring compliance packs",
+    VERTICAL_RECURRING_REGULATIONS,
   );
 }

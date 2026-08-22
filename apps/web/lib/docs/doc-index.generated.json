@@ -5108,7 +5108,6 @@
       "publishedPortal": false,
       "anchors": [
         "obligation-cadence-coverage",
-        "ungated-packs-a-defect-not-coverage",
         "common-applies-whatever-the-business-is",
         "archetype-coverage",
         "trigger-classes-across-every-pack"
