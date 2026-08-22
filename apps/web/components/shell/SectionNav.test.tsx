@@ -89,5 +89,7 @@ describe("SectionNav", () => {
     expect(html).toContain("Backlog");
     expect(html).toContain('href="/ops/changes"');
     expect(html).toContain("border-b-2"); // active Backlog tab
+    expect(html).toContain("min-w-0 max-w-full");
+    expect(html).toContain("flex flex-wrap gap-1");
   });
 });

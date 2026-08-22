@@ -169,6 +169,17 @@ body {
   from { background-position: 200% 0; }
   to   { background-position: -200% 0; }
 }
+
+@keyframes teardown-hold {
+  from { width: 0%; }
+  to { width: 100%; }
+}
+
+.animate-dpf-teardown-hold {
+  animation-name: teardown-hold;
+  animation-timing-function: linear;
+  animation-fill-mode: forwards;
+}
 .dpf-shimmer { animation: dpf-shimmer 1.6s ease-in-out infinite; }
 
 /* Reduced-motion: honor the OS "Reduce Motion" preference platform-wide. The

@@ -168,7 +168,7 @@ export function isTerminalQuiescenceStatus(status: string): boolean {
   return TERMINAL_QUIESCENCE_STATUSES.has(status as QuiescenceRunStatus);
 }
 
-export type QuiescenceTrigger = "self-upgrade" | "manual" | "sandbox-recovery";
+export type QuiescenceTrigger = "self-upgrade" | "manual" | "sandbox-recovery" | "installation-teardown";
 
 /**
  * Per-state entry timestamps stored in QuiescenceRun.enteredStateAt.

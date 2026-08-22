@@ -15,6 +15,8 @@ COPY Dockerfile /promoter/portal.Dockerfile
 
 # Copy promotion script
 COPY scripts/promote.sh /promoter/promote.sh
+COPY scripts/governed-teardown.mjs /promoter/governed-teardown.mjs
+COPY scripts/salvage-sweep.mjs /promoter/salvage-sweep.mjs
 COPY scripts/apply-runtime-capability-transition.mjs /promoter/apply-runtime-capability-transition.mjs
 COPY scripts/runtime-transition-authority.mjs /promoter/runtime-transition-authority.mjs
 COPY scripts/rotate-runtime-transition-secret.mjs /promoter/rotate-runtime-transition-secret.mjs
