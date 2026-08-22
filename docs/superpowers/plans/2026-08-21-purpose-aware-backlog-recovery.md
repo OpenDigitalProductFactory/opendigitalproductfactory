@@ -9,7 +9,8 @@ status: active
 - **Backlog item:** `BI-4A833B6D`
 - **Program:** `EP-1FABA22D` / `BI-34667080`
 - **Decision:** `DI-78024D57939D` (`explicit-recovery-bundle`, high confidence, autonomy eligible)
-- **Source design:** `docs/superpowers/specs/2026-08-08-purpose-aware-installation-ecosystem-productivity-design.md`
+- **Source design:** `docs/superpowers/specs/2026-08-21-purpose-aware-backlog-recovery-design.md`
+- **Source program design:** `docs/superpowers/specs/2026-08-08-purpose-aware-installation-ecosystem-productivity-design.md`
 - **Source plan:** `docs/superpowers/plans/2026-08-08-purpose-aware-installation-ecosystem-productivity.md`
 
 > **For agentic workers:** execute this plan as one independently reviewable backlog item, one branch, and one PR. Use `dpf-tdd` for red-green implementation, `dpf-local-merge-ci-before-push` plus this plan's completion gate before any success claim, and `dpf-pr-with-dco` for handoff.
