@@ -1,7 +1,7 @@
 // apps/web/lib/semantic-memory.ts
 // Store and recall conversation memories using Qdrant vector database.
 
-import { generateEmbedding } from "./embedding";
+import { generateEmbedding, generateEmbeddingDetailed } from "./embedding";
 import {
   upsertVectors,
   searchSimilar,
@@ -443,18 +443,24 @@ export async function searchPlatformKnowledge(params: {
   entityType?: string;
   limit?: number;
 }): Promise<PlatformKnowledgeSearch> {
-  const embedding = await generateEmbedding(params.query);
-  if (!embedding) {
+  const embedded = await generateEmbeddingDetailed(params.query);
+  if (embedded.status !== "ok") {
+    // The reason matters. A capacity deferral is retryable and says nothing
+    // about the corpus or the model; a failure is neither. Reporting the
+    // former as the latter is what made a busy host look like a broken
+    // embedding model for the whole session this was found in.
     console.warn(
-      "[semantic-memory] searchPlatformKnowledge could not embed the query — " +
-        "reporting unavailable rather than an empty result set.",
+      `[semantic-memory] searchPlatformKnowledge did not query the corpus — ${embedded.status}: ${embedded.reason}`,
     );
     return {
       status: "unavailable",
-      reason: "the embedding model did not return a vector for this query",
+      reason: embedded.status === "deferred"
+        ? `semantic search is deferred while local CI holds host capacity (${embedded.reason}) — retryable`
+        : `the embedding step failed (${embedded.reason})`,
       results: [],
     };
   }
+  const embedding = embedded.embedding;
 
   const filter = params.entityType
     ? { must: [{ key: "entityType", match: { value: params.entityType } }] }
