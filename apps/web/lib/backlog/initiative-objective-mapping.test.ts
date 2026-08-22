@@ -32,6 +32,7 @@ function transactionDb() {
         supersedesBaselineId: null,
         artifactDigest: "sha256:design",
         objectiveStatements: [{ objectiveId: "OBJ-TEST-001" }],
+        acceptanceStatements: [{ acceptanceId: "ACCEPT-TEST-001" }],
       } }]),
       create: mocks.create.mockImplementation(async ({ data }) => data),
     },

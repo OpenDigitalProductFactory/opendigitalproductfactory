@@ -44,7 +44,7 @@ describe("parseFixContextFromBody (BI-E7BB3816)", () => {
   });
 });
 
-const mockPrisma = {
+const mockPrisma = vi.hoisted(() => ({
   platformDevConfig: {
     findUnique: vi.fn(),
   },
@@ -79,7 +79,7 @@ const mockPrisma = {
     updateMany: vi.fn(),
   },
   $transaction: vi.fn(),
-};
+}));
 
 vi.mock("@dpf/db", () => ({
   prisma: mockPrisma,
