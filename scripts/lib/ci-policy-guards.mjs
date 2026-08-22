@@ -481,6 +481,10 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       ),
       node(
         "--test",
+        "packages/dpf-skill-pack/hooks/shared-clone-occupancy.test.mjs",
+      ),
+      node(
+        "--test",
         "scripts/process-spine-conformance.test.mjs",
         "scripts/lib/ensure-post-checkout-hook.test.mjs",
       ),
