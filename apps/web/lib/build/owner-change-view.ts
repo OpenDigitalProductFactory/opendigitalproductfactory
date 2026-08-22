@@ -246,6 +246,19 @@ export const OUTCOME_STATEMENT_MAX = 240;
  * in one line; anything longer belongs behind disclosure.
  */
 export function toOutcomeStatement(raw: string): string {
+  return clampStatement(toProseStatement(raw), OUTCOME_STATEMENT_MAX);
+}
+
+/**
+ * Strip markdown structure and return the first prose paragraph, unclamped.
+ *
+ * Shared by every operator-facing surface that may be handed a raw BI body —
+ * the Outcome slot and the "What we're building" band both were, and both
+ * leaked literal "##", ">" and "**" onto the canvas because each had its own
+ * idea of "tidy this up" (one collapsed whitespace, the other did nothing).
+ * One stripper, so a new surface cannot reintroduce the wall.
+ */
+export function toProseStatement(raw: string): string {
   let text = raw.trim();
   if (!text) return text;
 
@@ -293,20 +306,23 @@ export function toOutcomeStatement(raw: string): string {
     .replace(/\s+/g, " ")
     .trim();
 
-  if (statement.length <= OUTCOME_STATEMENT_MAX) return statement;
+  return statement;
+}
 
-  // Prefer a sentence boundary inside the budget; otherwise clamp on a word.
-  const window = statement.slice(0, OUTCOME_STATEMENT_MAX);
+/** Clamp at a sentence boundary inside the budget; else a word boundary. */
+export function clampStatement(statement: string, maxLength: number): string {
+  if (statement.length <= maxLength) return statement;
+  const window = statement.slice(0, maxLength);
   const sentenceEnd = Math.max(
     window.lastIndexOf(". "),
     window.lastIndexOf("? "),
     window.lastIndexOf("! "),
   );
-  if (sentenceEnd > OUTCOME_STATEMENT_MAX * 0.4) {
+  if (sentenceEnd > maxLength * 0.4) {
     return statement.slice(0, sentenceEnd + 1);
   }
   const wordEnd = window.lastIndexOf(" ");
-  return `${statement.slice(0, wordEnd > 0 ? wordEnd : OUTCOME_STATEMENT_MAX).trimEnd()}\u2026`;
+  return `${statement.slice(0, wordEnd > 0 ? wordEnd : maxLength).trimEnd()}\u2026`;
 }
 
 function firstText(...values: Array<string | null | undefined>): string {

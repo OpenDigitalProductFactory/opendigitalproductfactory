@@ -15,6 +15,7 @@
 
 import { StatusBadge } from "@/components/ui/report-kit";
 import type { Intent } from "@/components/ui/report-kit/statusColors";
+import { clampStatement, toProseStatement } from "@/lib/build/owner-change-view";
 import type { AutonomousBuildCustodyView } from "@/lib/build/autonomous-build-custody";
 
 type Props = {
@@ -36,12 +37,15 @@ function normalizeCopy(value: string): string {
   return value.replace(/\s+/g, " ").trim();
 }
 
+/**
+ * This band is handed the originating backlog item's description, which for a
+ * promoted BI is the whole markdown body. It previously only collapsed
+ * whitespace, so "## Problem" and "> **...**" rendered literally on the canvas
+ * — the same wall the Outcome slot showed, one card lower. Both now share the
+ * one stripper.
+ */
 function compactCopy(value: string, maxLength: number): string {
-  const normalized = normalizeCopy(value);
-  if (normalized.length <= maxLength) return normalized;
-  const sentenceBreak = normalized.lastIndexOf(".", maxLength);
-  const cutAt = sentenceBreak >= 80 ? sentenceBreak + 1 : maxLength;
-  return `${normalized.slice(0, cutAt).trim()}...`;
+  return clampStatement(normalizeCopy(toProseStatement(value)), maxLength);
 }
 
 function isTechnicalPlanCopy(value: string): boolean {
