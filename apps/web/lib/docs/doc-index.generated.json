@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 673,
+  "pageCount": 674,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -917,6 +917,29 @@
         "101-the-rental-shared-asset-utilization-loop-now-modelled-upstream-asset-rental-agricultural-cooperative",
         "102-the-field-dispatch-mobile-resource-to-customer-loop-now-modelled-gap-a-leaves-dispatch-native-gap-b-leaves-2026-06-13",
         "11-changelog"
+      ]
+    },
+    "docs/architecture/archetype-operating-model-audit.md": {
+      "publicHref": "/architecture/archetype-operating-model-audit/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "archetype-operating-model-audit",
+        "purpose",
+        "the-failure-this-exists-to-prevent",
+        "study-unit",
+        "method",
+        "step-1-write-the-operating-day-before-touching-the-platform",
+        "step-2-extract-operational-nouns-and-verbs",
+        "step-3-classify-each-noun-against-the-substrate",
+        "step-4-hunt-the-canonical-analogue",
+        "step-5-score-then-file",
+        "coverage-score",
+        "traps",
+        "definition-of-done",
+        "standards-basis-do-not-re-derive",
+        "change-control"
       ]
     },
     "docs/architecture/archetype-owner-positioning.md": {
