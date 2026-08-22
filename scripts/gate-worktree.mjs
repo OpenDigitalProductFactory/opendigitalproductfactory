@@ -37,6 +37,7 @@ import {
   LOCAL_CI_SLOT_KEYS,
   createLocalCiSlotManifest,
   localCiSlotEnvironment,
+  resolveLocalCiRootClone,
 } from "./lib/local-ci-slot-manifest.mjs";
 import { classifyBaseResilience } from "./lib/local-ci-base-freshness.mjs";
 import {
@@ -846,7 +847,7 @@ async function main() {
     worktreePath,
     gitOrEmpty(gitBin, ["rev-parse", "--git-common-dir"], worktreePath),
   );
-  const rootClone = dirname(gitCommonDir);
+  const rootClone = resolveLocalCiRootClone(gitCommonDir);
   const queueObserverDirectory = process.env.DPF_LOCAL_QUEUE_OBSERVER_DIR
     || resolvePath(gitCommonDir, "dpf-local-ci-queue-observers");
   let slotManifest = createLocalCiSlotManifest({

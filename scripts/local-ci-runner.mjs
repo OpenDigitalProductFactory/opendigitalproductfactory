@@ -20,6 +20,7 @@ import {
   assertLocalCiCleanupTarget,
   createLocalCiSlotManifest,
   localCiSlotEnvironment,
+  resolveLocalCiRootClone,
 } from "./lib/local-ci-slot-manifest.mjs";
 import {
   LOCAL_CI_BASE_FRESHNESS,
@@ -319,15 +320,6 @@ async function resolveDatabaseUrl(env, manifest) {
   return "";
 }
 
-function resolveRootClone(repoTop) {
-  const result = git(["worktree", "list", "--porcelain"], repoTop);
-  if (result.status !== 0) die(`could not list worktrees: ${result.stderr}`);
-  for (const line of result.stdout.split("\n")) {
-    if (line.startsWith("worktree ")) return line.slice("worktree ".length).trim();
-  }
-  return "";
-}
-
 export const LOCAL_CI_MISSING_DATABASE_URL = "postgresql://dpf:dpf_dev@127.0.0.1:1/dpf_local_ci_missing_database";
 
 export function createLocalIntegrationChildInvocation({
@@ -425,10 +417,8 @@ async function main() {
   if (!baseRef) die("--base-ref cannot be empty");
 
   const repoTop = gitOrEmpty(["rev-parse", "--show-toplevel"]);
-  const root = resolveRootClone(repoTop);
-  if (!root) die("could not resolve the root clone");
-
   const gitCommonDir = gitOrEmpty(["rev-parse", "--path-format=absolute", "--git-common-dir"], repoTop);
+  const root = resolveLocalCiRootClone(gitCommonDir);
   const candidateGitDir = gitOrEmpty(["rev-parse", "--absolute-git-dir"], repoTop);
   const manifest = createLocalCiSlotManifest({
     slotKey,

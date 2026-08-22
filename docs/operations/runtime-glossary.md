@@ -34,6 +34,11 @@ leased convergence environment for exact merged-tree tests and production
 builds, not a per-worktree runtime and not a customer-facing portal. A typed
 slot manifest isolates its scratch checkout, process fence, Compose project,
 portal/PostgreSQL ports, database/volume, dependency state, and evidence.
+All local-CI entry points derive those resources from one canonical Git
+common-dir identity: the clone parent of a conventional `.git` directory, or
+the bare repository directory itself for the centrally managed worktree fleet.
+The manifest then owns the sibling scratch path and its exact cleanup boundary;
+a topic worktree path is never treated as a second runtime root.
 Automatic capacity is one; the second declared identity remains unavailable to
 automatic admission until its governed pilot.
 

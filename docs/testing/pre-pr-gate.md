@@ -193,6 +193,15 @@ runtime is declared in `docker-compose.local-ci.yml` behind the `local-ci`
 profile. A versioned slot manifest owns every mutable identity: scratch
 checkout, process fence, Compose project, portal and PostgreSQL ports,
 container/database/volume, dependency convergence state, output, and evidence.
+Every entry point derives that manifest from the same canonical Git common-dir
+identity. In a conventional clone, `<clone>/.git` resolves to `<clone>`; in the
+centrally managed worktree fleet, the bare `.opendigitalproductfactory.git`
+directory is already the root identity. The scratch checkout is then created
+as a sibling under `<root>-worktrees` (slot 0 uses `.local-ci-runner`), and
+cleanup is fenced to that exact manifest-owned scratch boundary. Gate, runner,
+status, and cleanup code must not independently derive the root from the topic
+worktree path: doing so can point cleanup at a different sibling and is rejected
+before host state is mutated.
 Slot 0 preserves the singleton portal on `http://localhost:3010` and uses its
 dedicated PostgreSQL endpoint on port `15432`; it may still consume shared,
 read-only or concurrency-safe development services such as Qdrant and Neo4j.
@@ -789,7 +798,8 @@ Fix a surface's labels, then `--update` to retighten — the guard prints a
 `shrank in N file(s)` line to prompt you. For the rare label that names a
 composite widget rather than one control (a radio-group heading), add a
 `label-association-allow` comment on the same line stating why. Tracked debt
-paydown: `BI-6CDC9ADB`.
+is the checked-in baseline itself; file a live BI before proposing a separate
+paydown campaign.
 
 ## What this gate is NOT
 

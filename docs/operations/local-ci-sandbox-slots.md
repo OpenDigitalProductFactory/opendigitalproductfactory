@@ -64,8 +64,12 @@ Slot 0 preserves the established external endpoints:
 
 - portal: `http://localhost:3010`
 - PostgreSQL host port: `15432`
-- scratch checkout: `D:/DPF-worktrees/.local-ci-runner` on the canonical
-  Windows host layout
+- scratch checkout: `<root-parent>/<root-name>-worktrees/.local-ci-runner`;
+  for example `D:/DPF-worktrees/.local-ci-runner` for a conventional
+  `D:/DPF` clone, or
+  `D:/DPF-worktrees/.opendigitalproductfactory.git-worktrees/.local-ci-runner`
+  when the Git common directory is the central bare
+  `D:/DPF-worktrees/.opendigitalproductfactory.git`
 
 The versioned public slot resources (slot keys, ordinals, portal ports, and
 PostgreSQL ports) live once in
@@ -186,6 +190,13 @@ filesystem target remains inside the slot scratch boundary. The command must
 come from the lease record or diagnosed slot state; never guess a peer slot.
 Use `--dry-run` when investigating so the exact targets are visible without
 mutation.
+
+The gate, runner, status reader, and cleanup planner all resolve the same root
+from `git rev-parse --git-common-dir`. Only a conventional common directory
+named `.git` is reduced to its parent clone; a central bare common directory is
+already the root. If a caller supplies a different root, manifest construction
+fails before cleanup or other host mutation. This prevents a linked topic
+worktree from inventing a second `*-worktrees` boundary.
 
 If freshness convergence cannot prove the dependency graph, the result is
 `blocked_sandbox_drift`, not a product failure. Each slot has its own

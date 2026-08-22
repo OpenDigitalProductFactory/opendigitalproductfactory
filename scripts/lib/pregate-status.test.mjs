@@ -1,5 +1,10 @@
 import assert from "node:assert/strict";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { test } from "node:test";
+
+import { worktreeContextFromGit } from "../pregate-status.mjs";
 
 import {
   classifySlotRecord,
@@ -11,6 +16,41 @@ import {
 const HEAD = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 const OLD = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
 const NOW = Date.parse("2026-08-04T12:00:00.000Z");
+
+test("status reader preserves the central bare common-dir as the canonical root", () => {
+  const hostRoot = mkdtempSync(join(tmpdir(), "dpf-pregate-status-"));
+  const worktreePath = join(hostRoot, "candidate");
+  const gitCommonDir = join(hostRoot, ".opendigitalproductfactory.git");
+  const statePath = join(gitCommonDir, "worktrees", "candidate", "dpf-local-ci-gate.json");
+
+  const context = worktreeContextFromGit({
+    worktreePath,
+    gitCommonDirRaw: gitCommonDir,
+    statePathRaw: statePath,
+    headBranch: "fix/example",
+    headSha: "abc123",
+  });
+
+  assert.equal(context.gitCommonDir, gitCommonDir);
+  assert.equal(context.rootClone, gitCommonDir);
+  assert.equal(context.candidateGitDir, join(gitCommonDir, "worktrees", "candidate"));
+});
+
+test("status reader still resolves a normal clone root from its .git common-dir", () => {
+  const hostRoot = mkdtempSync(join(tmpdir(), "dpf-pregate-status-normal-"));
+  const worktreePath = join(hostRoot, "clone");
+  const gitCommonDir = join(worktreePath, ".git");
+
+  const context = worktreeContextFromGit({
+    worktreePath,
+    gitCommonDirRaw: gitCommonDir,
+    statePathRaw: join(gitCommonDir, "dpf-local-ci-gate.json"),
+    headBranch: "fix/example",
+    headSha: "abc123",
+  });
+
+  assert.equal(context.rootClone, worktreePath);
+});
 
 function passingState(overrides = {}) {
   return {
