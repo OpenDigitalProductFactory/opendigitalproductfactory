@@ -238,7 +238,9 @@ has no recorded human choice to compare against, the table says **no call could 
 rather than counting it as agreement.
 
 A thin sample is labelled as one: the panel states how many decisions carried a margin, so a
-tidy-looking chart over a handful of rows is not mistaken for a settled picture.
+tidy-looking chart over a handful of rows is not mistaken for a settled picture. Decisions taken
+before the three bands existed cannot be classified after the fact, and the panel says so rather
+than counting them as settled — an unmeasured band reads as unmeasured, never as zero.
 
 ## Living Playbook experiments
 

@@ -55,8 +55,18 @@ export interface BandReversal {
 
 export interface BandTelemetry {
   buckets: HistogramBucket[];
-  /** Share of decisions that landed in the uncertain band. The number to drive down. */
+  /**
+   * Share of CLASSIFIED decisions that landed in the uncertain band — the
+   * number to drive down. Null when nothing carried a verdict.
+   */
   uncertainShare: number | null;
+  /**
+   * Rows that carried a verdict at all. Decisions recorded before the three
+   * bands existed carry none, and dividing by every row would render that
+   * absence as a flattering 0% — the exact failure this instrument exists to
+   * catch, committed by the instrument itself.
+   */
+  classified: number;
   reversals: BandReversal[];
   /** Rows the histogram could use (a margin was recorded). */
   scored: number;
@@ -136,11 +146,13 @@ export function computeBandTelemetry(
     buckets[index]!.count += 1;
   }
 
-  const uncertainCount = rows.filter((r) => r.verdict === "uncertain").length;
+  const classified = rows.filter((r) => r.verdict != null);
+  const uncertainCount = classified.filter((r) => r.verdict === "uncertain").length;
 
   return {
     buckets,
-    uncertainShare: rows.length === 0 ? null : uncertainCount / rows.length,
+    classified: classified.length,
+    uncertainShare: classified.length === 0 ? null : uncertainCount / classified.length,
     reversals: (["proceed", "decline", "uncertain"] as const).map((v) => reversalFor(v, rows)),
     scored: scored.length,
     total: rows.length,
