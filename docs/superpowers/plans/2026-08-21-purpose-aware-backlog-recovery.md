@@ -5,7 +5,7 @@ status: active
 # Purpose-Aware Backlog Recovery — Implementation Plan
 
 - **Date:** 2026-08-21
-- **Status:** planned
+- **Status:** implemented; verification and promotion in progress
 - **Backlog item:** `BI-4A833B6D`
 - **Program:** `EP-1FABA22D` / `BI-34667080`
 - **Decision:** `DI-78024D57939D` (`explicit-recovery-bundle`, high confidence, autonomy eligible)
@@ -58,12 +58,14 @@ The kernel selected the explicit bundle. It has the smallest governed blast radi
 - overwrite/update behavior for an already-present epic, item, or activity;
 - a full-database restore step.
 
-## 4. Backlog coverage
+## Backlog coverage
 
 - Parent: `BI-4A833B6D`
-- Decision: `atomic`
+- Decision: atomic
 - Plan: `docs/superpowers/plans/2026-08-21-purpose-aware-backlog-recovery.md`
-- Receipt: pending initial immutable plan publication
+- Receipt: pending — the live resolver predates the human-authored external Workroom fix on current `main` and rejects the DCO author unless an unrelated AI-agent alias exists
+- Dependencies: none
+- Rationale: The manifest, validator, reconciler, tests, and operator runbook form one usable preservation capability; no part independently restores the governed graph safely.
 
 The manifest, validator, reconciler, tests, and operator runbook form one atomic deliverable: the manifest without a validated importer is not recoverable, and an importer without this governed bundle does not preserve the requested work.
 
@@ -132,14 +134,14 @@ Update `docs/architecture/backlog-and-planning-runbook.md` with the replacement-
 - no migration and no UI verification required;
 - source-local docs/seed-fit guards and cloud build gate.
 
-The current worktree is source-only until dependency bootstrap or shared-sandbox evidence proves otherwise. An unrun gate is reported as unrun.
+The worktree is compile-ready. The focused suite and package typecheck run locally. The broad DB suite requires a test database: its database-backed files fail when the worktree cannot reach the Compose-only `postgres` hostname, while 253 files pass. A live CLI preview likewise requires execution inside the Compose network; the pure reconciliation suite covers the same create/skip plan without database writes.
 
 ## 7. Scale, security, and data architecture
 
 - **Authority:** PostgreSQL remains the only current-state backlog. The bundle is immutable recovery input with source references.
 - **Normal form:** no denormalized runtime table or parallel model is added.
 - **Scale ceiling:** the initial bundle is nine coordination records plus three P0 activities. The generic algorithm is linear in epics, items, and activities and rejects duplicate identifiers before database work. Operator recovery bundles are intentionally bounded; full fleet backup remains the path for whole-install state.
-- **Security:** strict key validation prevents credentials, internal CUID relations, claims, user IDs, or customer context from entering a portable bundle accidentally.
+- **Security:** strict closed keys exclude credential, internal CUID relation, claim, actor, and customer-context fields; recursive payload-key validation rejects common secret and identity keys. Repository review remains responsible for free-text content.
 - **Privacy:** this bundle contains platform roadmap text already public in the repository and no organization/customer data.
 
 ## 8. Risks and rollback

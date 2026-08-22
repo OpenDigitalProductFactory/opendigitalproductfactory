@@ -78,6 +78,7 @@
     "migrate": "prisma migrate dev",
     "migrate:deploy": "prisma migrate deploy",
     "seed": "tsx src/seed.ts",
+    "backlog:reconcile": "tsx scripts/reconcile-backlog-bundle.ts",
     "graph:rebuild-doc-impact": "tsx src/rebuild-doc-impact-graph.ts",
     "graph:rebuild-knowledge-and-portfolio": "tsx src/rebuild-knowledge-and-portfolio-graph.ts",
     "graph:rebuild-projections": "pnpm run graph:rebuild-doc-impact && pnpm run graph:rebuild-knowledge-and-portfolio",
