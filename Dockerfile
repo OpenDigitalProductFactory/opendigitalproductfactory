@@ -96,6 +96,13 @@ COPY scripts/set-hooks-path.mjs ./scripts/
 COPY scripts/lib/resolve-capability-compose-profiles.mjs ./scripts/lib/
 COPY scripts/lib/govern-capability-compose-args.mjs ./scripts/lib/
 COPY scripts/lib/capability-state-hash.mjs ./scripts/lib/
+# apps/web-src is copied from this stage into the runner for Build Studio's
+# first-install sandbox. Keep every repo-relative import used by that source in
+# the same source bundle; otherwise the production portal can be healthy while
+# the sandbox's `next dev` exits with "Module not found".
+COPY scripts/lib/capability-service-projection.mjs ./scripts/lib/
+COPY scripts/lib/transition-signing.mjs ./scripts/lib/
+COPY scripts/installer/resolve-host-identity.mjs ./scripts/installer/
 COPY scripts/capability-service-catalog.generated.json ./scripts/
 COPY scripts/installer/validate-install-state.mjs ./scripts/installer/
 COPY scripts/installer/install-state-transaction.mjs ./scripts/installer/

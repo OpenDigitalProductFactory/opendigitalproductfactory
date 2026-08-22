@@ -76,10 +76,11 @@ fi
 
 sync_image_source_to_workspace() {
   echo "  Syncing source volume from image version $IMAGE_VERSION..."
-  mkdir -p "$WORKSPACE/apps" "$WORKSPACE/packages" "$WORKSPACE/scripts"
-  rm -rf "$WORKSPACE/apps/web" "$WORKSPACE/packages" "$WORKSPACE/scripts"
-  mkdir -p "$WORKSPACE/apps/web" "$WORKSPACE/packages" "$WORKSPACE/scripts"
+  mkdir -p "$WORKSPACE/apps" "$WORKSPACE/docs" "$WORKSPACE/packages" "$WORKSPACE/scripts"
+  rm -rf "$WORKSPACE/apps/web" "$WORKSPACE/docs/professions" "$WORKSPACE/packages" "$WORKSPACE/scripts"
+  mkdir -p "$WORKSPACE/apps/web" "$WORKSPACE/docs/professions" "$WORKSPACE/packages" "$WORKSPACE/scripts"
   cp -r /app/apps/web-src/. "$WORKSPACE/apps/web/"
+  cp -r /app/docs/professions/. "$WORKSPACE/docs/professions/"
   cp -r /app/packages-src/. "$WORKSPACE/packages/"
   rm -rf "$WORKSPACE/apps/web/.next" \
          "$WORKSPACE/apps/web/tsconfig.tsbuildinfo" \
@@ -143,6 +144,9 @@ image_source_path_for_workspace_path() {
       ;;
     scripts/*)
       printf '/app/scripts/%s\n' "${1#scripts/}"
+      ;;
+    docs/professions/*)
+      printf '/app/docs/professions/%s\n' "${1#docs/professions/}"
       ;;
     pnpm-workspace.yaml | pnpm-lock.yaml | package.json | tsconfig.base.json | .gitignore)
       printf '/app/%s\n' "$1"
