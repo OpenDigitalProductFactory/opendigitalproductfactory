@@ -105,11 +105,11 @@ No commandment conflict, new canonical model, or unresolved architecture excepti
 
 ## Backlog coverage
 
-- **Decision:** atomic
-- **Parent:** `BI-2C80E6EA`
-- **Receipt:** `record_plan_backlog_coverage` returned `traceability-incomplete` before the initiative artifact-author repair landed in PR #4422 (commit `1637cfa3b`); the branch-specific planning gate reports that no xlarge coverage decision is required for this BI. This section is the server-directed interim four-way coverage record.
-- **Dependencies:** none
-- **Rationale:** The process profile, canonical resource projection, subject reference, compatibility adapters, clinical constraints, RLS preservation, and backfill form one zero-behaviour architecture gate. Shipping any phase independently would leave two authorities, a write path without a read migration, or a polymorphic root without the constraints that preserve clinical safety. The phases below are implementation order, not independently shippable product slices.
+- Decision: atomic
+- Parent: `BI-2C80E6EA`
+- Receipt: `record_plan_backlog_coverage` returned `traceability-incomplete` before the initiative artifact-author repair landed in PR #4422 (commit `1637cfa3b`); the branch-specific planning gate reports that no xlarge coverage decision is required for this BI. This section is the server-directed interim four-way coverage record.
+- Dependencies: none
+- Rationale: The process profile, canonical resource projection, subject reference, compatibility adapters, clinical constraints, RLS preservation, and backfill form one zero-behaviour architecture gate. Shipping any phase independently would leave two authorities, a write path without a read migration, or a polymorphic root without the constraints that preserve clinical safety. The phases below are implementation order, not independently shippable product slices.
 
 ## Architecture
 
