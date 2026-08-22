@@ -7,7 +7,6 @@ export type SelfUpgradeTargetKind = "git-source" | "release-artifact" | "unknown
 export type SelfUpgradeSupportReason =
   | "enabled"
   | "disabled-by-config"
-  | "consumer-release-upgrade-unsupported"
   | "install-identity-unverified";
 
 type SelfUpgradeSupportBase = {
@@ -20,16 +19,9 @@ export type SelfUpgradeSupport = SelfUpgradeSupportBase &
     | {
         supported: true;
         enabled: boolean;
-        targetKind: "git-source";
+        targetKind: "git-source" | "release-artifact";
         reason: "enabled" | "disabled-by-config";
         message: string | null;
-      }
-    | {
-        supported: false;
-        enabled: false;
-        targetKind: "release-artifact";
-        reason: "consumer-release-upgrade-unsupported";
-        message: string;
       }
     | {
         supported: false;
@@ -56,11 +48,13 @@ export function resolveSelfUpgradeSupport(
   if (profile.kind === "consumer") {
     return {
       configuredEnabled,
-      supported: false,
-      enabled: false,
+      supported: true,
+      enabled: configuredEnabled,
       targetKind: "release-artifact",
-      reason: "consumer-release-upgrade-unsupported",
-      message: "Automatic updates aren’t available for this install yet.",
+      reason: configuredEnabled ? "enabled" : "disabled-by-config",
+      message: configuredEnabled
+        ? null
+        : "Automatic updates are turned off for this release install.",
     };
   }
 

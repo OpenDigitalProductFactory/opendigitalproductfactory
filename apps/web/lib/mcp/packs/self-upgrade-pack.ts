@@ -147,6 +147,17 @@ async function repairPromoterImageTool(): Promise<ToolResult> {
     };
   }
 
+  if (support.targetKind === "release-artifact") {
+    return {
+      success: true,
+      message: "Release installs pull the promoter that belongs to the verified target release; no source-built promoter repair is needed.",
+      data: {
+        ...support,
+        repairMode: "release-managed",
+      } as unknown as Record<string, unknown>,
+    };
+  }
+
   const { ensurePromoterImage } = await import("@/lib/self-upgrade/promoter");
   const image = config.promoterImage ?? "dpf-promoter";
   const result = await ensurePromoterImage(config.promoterImage);

@@ -11,6 +11,10 @@ import { generatePromotionId } from "@/lib/version-tracking";
 import { getSelfUpgradeConfig, nextMaintenanceWindowStart } from "@/lib/self-upgrade/config";
 import { resolveReleaseBatchStatus } from "@/lib/self-upgrade/release-batch-status";
 import { readSelfUpgradeSupport } from "@/lib/self-upgrade/support";
+import {
+  loadReleaseInstallContext,
+  resolveReleaseUpgradeCandidate,
+} from "@/lib/self-upgrade/release-target";
 import { computeNextScheduledUpgradeCheckAt } from "@/lib/self-upgrade/next-check";
 import { resolveTargetSha, isShaFresh } from "@/lib/self-upgrade/version";
 import { getDeployedSha } from "@/lib/self-upgrade/completion";
@@ -684,9 +688,27 @@ export async function getSelfUpgradeStatus() {
     checkIntervalHours: config.checkIntervalHours,
     now,
   });
-  const targetSha = support.supported
-    ? await resolveTargetSha(config.channel, config)
-    : null;
+  let targetSha: string | null = null;
+  if (support.supported && support.targetKind === "release-artifact") {
+    const releaseContext = await loadReleaseInstallContext({
+      hostSourcePath:
+        config.hostSourceMountPath ??
+        process.env.DPF_SELF_UPGRADE_HOST_SOURCE_MOUNT ??
+        "/host-dpf",
+    });
+    if (releaseContext) {
+      const releaseTarget = await resolveReleaseUpgradeCandidate({
+        context: releaseContext,
+        currentSourceSha: deployedSha,
+      }).catch(() => null);
+      targetSha =
+        !releaseTarget || releaseTarget.kind === "no-published-target"
+          ? null
+          : releaseTarget.sourceSha;
+    }
+  } else if (support.supported) {
+    targetSha = await resolveTargetSha(config.channel, config);
+  }
   // Merge-mode-aware freshness. In upstream/merge mode the deployed stamp is the
   // merge-commit identity, which CONTAINS but never EQUALS the upstream target —
   // so strict deployedSha===targetSha alone reports "Update available" forever,

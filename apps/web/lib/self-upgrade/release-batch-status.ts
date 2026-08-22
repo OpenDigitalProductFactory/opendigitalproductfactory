@@ -26,7 +26,7 @@ import {
 export type ReleaseBatchStatus = Omit<ReleaseBatchDecision, "reason"> & {
   reason:
     | ReleaseBatchDecision["reason"]
-    | "consumer-release-upgrade-unsupported"
+    | "release-artifact"
     | "install-identity-unverified";
   support: SelfUpgradeSupport;
   /** False when the install does not track an upstream (local sourceMode) — batching does not apply. */
@@ -69,6 +69,21 @@ export async function resolveReleaseBatchStatus(
       oldestPendingAt: null,
       lineageSha: null,
       summary: support.message,
+      support,
+    };
+  }
+
+  if (support.targetKind === "release-artifact") {
+    return {
+      applicable: false,
+      eligible: true,
+      reason: "release-artifact",
+      pendingCount: null,
+      minPendingPrs: config.batchMinPendingPrs,
+      maxWaitHours: config.batchMaxWaitHours,
+      oldestPendingAt: null,
+      lineageSha: null,
+      summary: "Published releases are already verified as a complete batch; Git commit batching does not apply.",
       support,
     };
   }

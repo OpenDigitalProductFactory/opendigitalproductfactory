@@ -40,6 +40,8 @@ vi.mock("@/lib/self-upgrade/support", () => ({
   readSelfUpgradeSupport: vi.fn(),
 }));
 
+vi.mock("@/lib/self-upgrade/release-target", () => ({ loadReleaseInstallContext: vi.fn(), resolveReleaseUpgradeCandidate: vi.fn() }));
+
 vi.mock("@/lib/self-upgrade/version", () => ({
   resolveTargetSha: vi.fn(),
   isShaFresh: vi.fn(),
@@ -169,6 +171,7 @@ import { getSelfUpgradeConfig } from "@/lib/self-upgrade/config";
 import { resolveTargetSha, isShaFresh } from "@/lib/self-upgrade/version";
 import { getDeployedSha } from "@/lib/self-upgrade/completion";
 import { readSelfUpgradeSupport } from "@/lib/self-upgrade/support";
+import { loadReleaseInstallContext, resolveReleaseUpgradeCandidate } from "@/lib/self-upgrade/release-target";
 import { createRun, getLatestRun, getLatestSucceededRun } from "@/lib/self-upgrade/run-store";
 import {
   getCurrentImpactSummaryId,
@@ -189,7 +192,7 @@ import {
   rollbackSelfUpgrade,
   triggerSelfUpgrade,
 } from "./promotions";
-import { mockConfig, mockRun, mockSession } from "./promotions.self-upgrade.test-fixtures";
+import { consumerReleaseContext, consumerReleaseSupport, mockConfig, mockRun, mockSession } from "./promotions.self-upgrade.test-fixtures";
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -206,6 +209,7 @@ beforeEach(() => {
       ? null
       : "Automatic updates are turned off for this source-backed install.",
   }));
+  vi.mocked(loadReleaseInstallContext).mockResolvedValue(null);
   vi.mocked(getLatestRun).mockResolvedValue(null);
   vi.mocked(getLatestSucceededRun).mockResolvedValue(null);
   vi.mocked(createRun).mockResolvedValue({
@@ -274,6 +278,19 @@ describe("getSelfUpgradeStatus – access control", () => {
 // ─── getSelfUpgradeStatus ─────────────────────────────────────────────────────
 
 describe("getSelfUpgradeStatus", () => {
+  it("uses the verified release stamp for a consumer without resolving Git", async () => {
+    const sourceSha = "f".repeat(40);
+    vi.mocked(readSelfUpgradeSupport).mockResolvedValue(consumerReleaseSupport);
+    vi.mocked(loadReleaseInstallContext).mockResolvedValue(consumerReleaseContext);
+    vi.mocked(resolveReleaseUpgradeCandidate).mockResolvedValue({ kind: "target", tag: "v2.0.0", sourceSha });
+    vi.mocked(getDeployedSha).mockResolvedValue("e".repeat(40));
+    vi.mocked(isShaFresh).mockReturnValue(false);
+    const result = await getSelfUpgradeStatus();
+
+    expect(result.targetSha).toBe(sourceSha);
+    expect(resolveTargetSha).not.toHaveBeenCalled();
+  });
+
   it("returns config fields, window status, sha info, and latest run", async () => {
     vi.mocked(getSelfUpgradeConfig).mockResolvedValue(mockConfig as never);
     vi.mocked(isUpgradeWindowOpen).mockReturnValue(true);

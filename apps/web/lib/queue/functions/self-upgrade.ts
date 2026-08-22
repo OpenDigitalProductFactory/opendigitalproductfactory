@@ -9,6 +9,11 @@ import { resolveOperatingScheduleForSystem } from "@/lib/operating-hours-read";
 import { getLastCheckedAt, recordCheckedAt, isCheckIntervalElapsed } from "@/lib/self-upgrade/last-check";
 import { buildFetchCommand, buildRemoteHeadCommand } from "@/lib/self-upgrade/version";
 import {
+  loadReleaseInstallContext,
+  resolveReleaseUpgradeCandidate,
+  resolveUpgradeStrategy,
+} from "@/lib/self-upgrade/release-target";
+import {
   countPendingUpstreamCommits,
   evaluateReleaseBatch,
 } from "@/lib/self-upgrade/release-batch";
@@ -306,12 +311,6 @@ export async function runSelfUpgrade(
       ? config.upgradeWorkspaceHostPath ?? `${hostInstallPathResolved.replace(/\/$/, "")}/.upgrade-workspace`
       : undefined;
 
-  // The platform-correct compose chain the install recorded. Without this the
-  // promoter falls back to base-only, which would drop a needed overlay
-  // (e.g. docker-compose.linux.yml's ollama LLM_BASE_URL). Prefer the DB config,
-  // then the .env-injected DPF_SELF_UPGRADE_COMPOSE_FILES (space-separated),
-  // which install-dpf.sh writes from the same chain it records in
-  // install-state.json. Empty => promote.sh uses its base-only fallback.
   const composeFiles =
     config.composeFiles ??
     (process.env.DPF_SELF_UPGRADE_COMPOSE_FILES
@@ -320,13 +319,27 @@ export async function runSelfUpgrade(
   const composeProject =
     config.composeProject ?? process.env.COMPOSE_PROJECT_NAME ?? undefined;
 
-  // ── Detection: resolve the upstream target and apply the lineage gate ──────
-  // In upstream mode we fetch first (fresh ref) and skip when the running build
-  // already contains this upstream SHA. The running deployedSha is the merge
-  // identity, NOT the upstream SHA it absorbed, so freshness is gated on the
-  // latest succeeded run's targetSha (the upstream lineage marker), per §5.0.
+  const releaseInstall = await loadReleaseInstallContext({ hostSourcePath });
+  const upgradeStrategy = resolveUpgradeStrategy(config.sourceMode, releaseInstall);
+  const promotionComposeFiles = composeFiles ?? releaseInstall?.composeFiles;
+
   let upstreamSha: string | null = null;
-  if (config.sourceMode === "upstream") {
+  let releaseTag: string | null = null;
+  const deployedSha = await getDeployedSha();
+  if (upgradeStrategy === "release" && releaseInstall) {
+    const target = await resolveReleaseUpgradeCandidate({ context: releaseInstall, currentSourceSha: deployedSha });
+    if (target.kind === "no-published-target") {
+      return await skipAttempt("no-published-target", `no-published-target: ${target.reason}`, { releaseStatus: target.reason });
+    }
+    if (target.kind === "up-to-date" && !params.force && !params.dryRun) {
+      return await skipAttempt("up-to-date", `up-to-date: ${target.tag}`, {
+        releaseTag: target.tag,
+        upstreamSha: target.sourceSha,
+      });
+    }
+    upstreamSha = target.sourceSha;
+    releaseTag = target.tag;
+  } else if (config.sourceMode === "upstream") {
     await gitRun(buildFetchCommand({ hostSourcePath, remote, branch }).slice(1));
     const head = await gitRun(buildRemoteHeadCommand({ hostSourcePath, remote, branch }).slice(1));
     upstreamSha = head.code === 0 ? head.stdout.trim() : null;
@@ -338,13 +351,6 @@ export async function runSelfUpgrade(
         return await skipAttempt("up-to-date", `up-to-date: ${upstreamSha}`, { upstreamSha });
       }
     }
-    // Release-batching gate — ROUTINE triggers only (the scheduled cron and
-    // agent-requested runs; see SelfUpgradeRunEventData.routine). Every upgrade
-    // drains the portal, so upgrading on any single new commit costs one full
-    // drain per merged PR. Accumulate merged PRs and proceed only when the
-    // batch threshold is met or the oldest pending change has outwaited the
-    // bounded-staleness valve. Fail-open on an uncomputable tally (shallow
-    // clone), and never gate operator manual / force / dryRun triggers.
     if ((params.scheduled || params.routine) && !params.dryRun && !params.force) {
       const sinceSha = lastOk?.targetSha ?? null;
       const tally = sinceSha
@@ -352,9 +358,7 @@ export async function runSelfUpgrade(
             { hostSourcePath, remote, branch, sinceSha },
             gitRun,
           )
-        : // No succeeded-run lineage marker (first governed upgrade): nothing to
-          // count against — treat as uncomputable so the upgrade proceeds.
-          { pendingCount: null, oldestPendingAt: null };
+        : { pendingCount: null, oldestPendingAt: null };
       const batch = evaluateReleaseBatch({
         tally,
         minPendingPrs: config.batchMinPendingPrs,
@@ -389,15 +393,11 @@ export async function runSelfUpgrade(
     });
   }
 
-  const deployedSha = await getDeployedSha();
-
-  // ── Source preparation: merge upstream into the durable install branch
-  // (upstream) or stamp the working tree (local). The honest stamp returned
-  // here is the identity the promoter must build and verify. dryRun must not
-  // mutate the host clone, so the merge is skipped and a placeholder stamp used.
   let builtStamp: string;
   if (params.dryRun) {
     builtStamp = upstreamSha ?? deployedSha ?? "dry-run";
+  } else if (upgradeStrategy === "release") {
+    builtStamp = upstreamSha!;
   } else {
     const prep = await prepareUpgradeSource(
       {
@@ -406,9 +406,6 @@ export async function runSelfUpgrade(
         remote,
         branch,
         installBranch: config.installBranch,
-        // BI-A8A7CCFD — pass the in-container workspace path when isolation is
-        // enabled. prepare-source switches to the workspace-merge code path
-        // automatically; undefined falls back to the legacy direct-merge.
         workspacePath: upgradeWorkspaceMountPath,
       },
       gitRun,
@@ -459,11 +456,7 @@ export async function runSelfUpgrade(
     return await skipAttempt("up-to-date", `up-to-date: ${builtStamp}`, { builtStamp });
   }
 
-  // Host-memory-headroom guard (SUR-BF75ED2A, 2026-08-11). The candidate promoter
-  // `docker build` is memory-heavy; under host exhaustion buildkit's context
-  // sender OOMs and the run dies at preflight. DEFER (skip + cooldown) rather than
-  // fail — the next cron tick retries once memory recovers. See host-memory-preflight.
-  if (!params.dryRun && !params.force) {
+  if (upgradeStrategy === "source" && !params.dryRun && !params.force) {
     const guard = await evaluateHostMemoryGuard();
     if (guard.defer) {
       await recordCooldown(now, cooldownMinutes);
@@ -503,10 +496,13 @@ export async function runSelfUpgrade(
   const preflight = await runCandidatePreflight({
     dryRun: params.dryRun, readinessMode: config.readinessMode, readinessOwner: config.readinessOwner,
     promoterImage: config.promoterImage, callerProtocolVersion: config.callerProtocolVersion,
+    candidatePromoterReference: releaseTag && releaseInstall
+      ? `ghcr.io/${releaseInstall.ghcrOwner}/dpf-promoter:${releaseTag}`
+      : undefined,
     sourcePath: upgradeWorkspaceMountPath ?? hostSourcePath,
     hostInstallPath: upgradeWorkspaceHostPath ?? hostInstallPathResolved,
     canonicalInstallPath: hostInstallPathResolved, targetSha: builtStamp, baselineSha: deployedSha,
-    runId: run.runId, composeFiles: composeFiles ?? [], composeProject,
+    runId: run.runId, composeFiles: promotionComposeFiles ?? [], composeProject,
     healthUrl: config.healthUrl ?? process.env.PROMOTE_HEALTH_URL ?? "",
     runtime: loadPromoterRuntime, recordReadiness: recordPromoterReadiness, failRun,
     emitFailure,
@@ -643,10 +639,13 @@ export async function runSelfUpgrade(
       // Recreate the portal with the install's own platform chain so an overlay
       // (linux ollama URL, macOS host TTS) is applied only on the host that
       // recorded it — never force-applied to the wrong substrate.
-      composeFiles,
+      composeFiles: promotionComposeFiles,
       composeProject,
       healthUrl: config.healthUrl ?? process.env.PROMOTE_HEALTH_URL ?? "",
       promoterImage: resolvedPromoterDigest ?? config.promoterImage,
+      release: releaseTag && releaseInstall
+        ? { tag: releaseTag, ghcrOwner: releaseInstall.ghcrOwner }
+        : undefined,
       stateDirHostPath: process.env.DPF_STATE_DIR_HOST,
       installStateMigrationEnvelope: migrationHandoff ? Buffer.from(JSON.stringify(migrationHandoff.envelope)).toString("base64url") : undefined,
       installStateMigrationSignature: migrationHandoff?.signature,

@@ -49,7 +49,7 @@ function allCopy(s: ReturnType<typeof buildOwnerReleaseSummary>): string {
 }
 
 describe("buildOwnerReleaseSummary", () => {
-  it("reports consumer release updates as unavailable instead of up to date", () => {
+  it("reports an unidentified install as unavailable instead of up to date", () => {
     const s = buildOwnerReleaseSummary(
       baseInput({
         enabled: false,
@@ -57,9 +57,9 @@ describe("buildOwnerReleaseSummary", () => {
         targetSha: null,
         support: {
           supported: false,
-          targetKind: "release-artifact",
-          reason: "consumer-release-upgrade-unsupported",
-          message: "Automatic updates aren’t available for this install yet.",
+          targetKind: "unknown",
+          reason: "install-identity-unverified",
+          message: "Automatic updates are unavailable until this install’s identity is verified.",
         },
       }),
       NO_LOCAL_CHANGES,
@@ -67,7 +67,7 @@ describe("buildOwnerReleaseSummary", () => {
 
     expect(s.state).toBe("unavailable");
     expect(s.tone).toBe("warning");
-    expect(s.headline).toBe("Automatic updates aren’t available for this install yet");
+    expect(s.headline).toBe("Automatic updates are unavailable until this install’s identity is verified");
     expect(s.recommendedAction.label).toBe("No automatic update action");
     expect(s.ifYouDoNothing).toContain("current release keeps running");
     expect(s.riskNotice).toBeNull();

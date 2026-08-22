@@ -55,8 +55,8 @@ export type RequestSelfUpgradeResult =
   | {
       success: true;
       status: "unsupported_install_mode";
-      reason: "consumer-release-upgrade-unsupported" | "install-identity-unverified";
-      targetKind: "release-artifact" | "unknown";
+      reason: "install-identity-unverified";
+      targetKind: "unknown";
       message: string;
     }
   | {
