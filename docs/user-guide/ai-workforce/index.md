@@ -38,6 +38,27 @@ An availability label is not a runtime guess. It is projected from the current s
 
 Missing declarations or unevaluated readiness appear as **Coverage not defined**. Missing backing appears as **Setup needed**, and lifecycle, safety, or routing blockers appear as **Needs attention**. These states fail closed and do not show the Ask action. A recovery action appears only when DPF has an owner-capable destination that the signed-in operator can access, such as business type, capabilities, capability needs, the runnable certification job, or AI readiness. Platform-managed catalog defects remain visible in Availability evidence without a misleading operator action. Coworker-specific actions preserve the current roster filters. Opening a named Ask action never sends work automatically; the operator must submit a message explicitly.
 
+### Reading a Coworker's Shape
+
+The coworker record opens with **Shape** — a picture of the gates that coworker's work passes
+through, left to right, with one status mark per row. It answers "where is this coworker, and
+what is holding it" without reading a paragraph.
+
+Each stage shows one of five states: **passed**, **holding**, **declined**, **awaiting a
+person**, or **not reached**. Declined and awaiting-a-person are deliberately different marks —
+a decline is a settled answer to act on, while awaiting a person is an open question. A stage
+with no records says **No records yet** rather than guessing: the picture shows only what the
+audit trail recorded, so it never disagrees with the ledger.
+
+**Governed action** lists the coworker's recent governed tool calls, each traceable to its audit
+row; a call that did not land shows as declined. The **Decision gate** stage stays empty for now:
+the decision record does not yet identify which coworker acted, and DPF will not attribute another
+coworker's decisions on a guess.
+
+Use **Shape / Detail** at the top right to choose whether the picture leads. The full record is
+shown either way, and your choice is remembered on this browser. The same picture and the same
+toggle appear on a Workroom, so what you learn to read here reads the same there.
+
 Model assignments explicitly saved by an operator remain unchanged during upgrades. Platform-supplied defaults are system-owned and converge to the current release declaration, so an obsolete default from an earlier release cannot silently leave a coworker unavailable after the platform has corrected that default.
 
 ## Key Concepts

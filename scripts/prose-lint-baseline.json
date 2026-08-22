@@ -1376,7 +1376,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 92
+    "textMass": 95
   },
   "apps/web/app/(shell)/platform/ai/assignments/bindings/[bindingId]/page.tsx": {
     "vocabulary": 0,
@@ -8448,6 +8448,13 @@
     "longSentences": 0,
     "textMass": 39
   },
+  "apps/web/components/workspace/workroom/ShapeViewToggle.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 2
+  },
   "apps/web/components/workspace/workroom/WorkroomBody.tsx": {
     "vocabulary": 0,
     "genericLabels": 0,
@@ -8475,6 +8482,13 @@
     "readability": 0,
     "longSentences": 0,
     "textMass": 31
+  },
+  "apps/web/components/workspace/workroom/WorkroomShape.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 26
   },
   "apps/web/components/workspace/workroom/WorkroomStructurePanel.tsx": {
     "vocabulary": 0,

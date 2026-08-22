@@ -510,6 +510,42 @@ describe("recordPlanBacklogCoverage", () => {
     });
   });
 
+  // BI-B9403248: an external session that hits this has no route forward and no
+  // way to learn there is one — the baseline is minted by the initiative
+  // spec-approval gate, which no MCP tool exposes. The message must say so.
+  it("names the missing scope baseline and how it is minted, instead of failing opaquely", async () => {
+    const { db, activityCreate } = fakeDb();
+    db.backlogItemActivity.findMany = vi.fn(async () => []);
+    const result = await recordPlanBacklogCoverage({
+      itemId: "BI-PARENT",
+      planPath: "docs/superpowers/plans/example.md",
+      planArtifactRef,
+      decision: "decomposed",
+      deliverables: [
+        {
+          key: "slice-1",
+          title: "First",
+          independentlyShippable: true,
+          backlogItemId: "BI-EXISTING-1",
+          dependsOn: [],
+          ...traceability,
+        },
+      ],
+      userId: "user-1",
+      agentId: "agent-1",
+      db,
+      now: () => new Date("2026-07-20T03:00:00.000Z"),
+      resolveArtifact: resolvePlan,
+    });
+
+    expect(result).toMatchObject({ ok: false, code: "traceability-incomplete" });
+    const error = (result as { error: string }).error;
+    expect(error).toContain("initiative_scope_baseline");
+    expect(error).toContain("spec-approval");
+    expect(error).toContain("BI-B9403248");
+    expect(activityCreate).not.toHaveBeenCalled();
+  });
+
   it("does not write a receipt when a mapped BI does not exist", async () => {
     const { db, activityCreate } = fakeDb();
     const result = await recordPlanBacklogCoverage({
