@@ -113,8 +113,14 @@ test("every direct protected FeatureBuild phase writer references the canonical 
   visit(root);
   const directWriter = /featureBuild\.(?:update|updateMany)\s*\([\s\S]{0,300}?data:\s*\{[\s\S]{0,160}?phase:\s*(?:"plan"|"build"|"ship"|"complete"|targetPhase)/;
   const writers = files
-    .filter((path) => !path.includes(`${join("initiative-readiness")}\\`) && directWriter.test(readFileSync(path, "utf8")))
-    .map((path) => path.slice(repoRoot.length + 1).replaceAll("\\", "/"))
+    .map((path) => ({
+      path,
+      repoPath: path.slice(repoRoot.length + 1).replaceAll("\\", "/"),
+    }))
+    .filter(({ path, repoPath }) =>
+      !repoPath.startsWith("apps/web/lib/backlog/initiative-readiness/")
+      && directWriter.test(readFileSync(path, "utf8")))
+    .map(({ repoPath }) => repoPath)
     .sort();
   assert.deepEqual(writers, [
     "apps/web/lib/actions/build.ts",
