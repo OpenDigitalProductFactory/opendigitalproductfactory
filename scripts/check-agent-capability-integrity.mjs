@@ -21,6 +21,12 @@
 // re-deriving, so there is ONE parser and the derived-artifacts gate already
 // guarantees the artifact matches source.
 //
+//   3. The consult-before-consequential-act gate covers only what tools DECLARE
+//      (TAK §8.4.2 — coverage is a governed metric). Coverage that silently
+//      falls is indistinguishable from coverage that was never there: a tool
+//      losing its `consequence`, or the composition root losing the resolver
+//      install, both leave a gate that still passes every one of its own tests.
+//
 // RATCHET, not a cliff. Stranded skills are enforced at zero — they were driven
 // to zero in the same change that added this gate, so any regression is new.
 // Unbacked backingSkillIds carry a baseline of the known-outstanding set: the
@@ -33,7 +39,7 @@
 //
 // Usage:
 //   node scripts/check-agent-capability-integrity.mjs           # check
-//   node scripts/check-agent-capability-integrity.mjs --update  # rewrite baseline (must shrink)
+//   node scripts/check-agent-capability-integrity.mjs --update  # rewrite baseline (debt must shrink, coverage must not fall)
 
 import fs from "node:fs";
 import path from "node:path";
@@ -60,9 +66,11 @@ function main() {
   const report = JSON.parse(fs.readFileSync(ARTIFACT, "utf8"));
   const stranded = report.orphans?.strandedSkills ?? [];
   const unbacked = [...(report.orphans?.unbackedSkillIds ?? [])].sort();
+  const gate = report.summary?.consequentialGate ?? {};
   const baseline = readBaseline();
   const bootstrapping = baseline === null;
   const known = new Set(baseline?.unbackedSkillIds ?? []);
+  const floor = baseline?.consequentialGateFloor ?? null;
 
   if (update) {
     // First adoption seeds the baseline from the current state. Afterwards it
@@ -73,6 +81,15 @@ function main() {
       console.error("[agent-capability-integrity] refusing --update: the baseline may only SHRINK.");
       for (const id of grew) console.error(`  net-new: ${id}`);
       console.error("\nWrite the missing skill, or retire the service that cites it.");
+      process.exit(1);
+    }
+    // Gate coverage ratchets the OTHER way: it is not debt to burn down, it is
+    // reach to hold. --update may raise the floor and must never lower it,
+    // otherwise re-baselining becomes the fix for a coverage regression.
+    if (floor && Number(gate.gateClassified) < Number(floor.gateClassified)) {
+      console.error("[agent-capability-integrity] refusing --update: consult-gate coverage may only RISE.");
+      console.error(`  floor: ${floor.gateClassified} tool(s); now: ${gate.gateClassified}`);
+      console.error("\nRestore the missing `consequence` declaration(s) rather than lowering the floor.");
       process.exit(1);
     }
     // Preserve the budget shape (owner + expiry). A baseline with neither turns
@@ -87,9 +104,20 @@ function main() {
           baseline?.note ??
           "Known-outstanding unbacked backingSkillIds. SHRINK-ONLY. See BI-5C1978C7.",
         unbackedSkillIds: unbacked,
+        consequentialGateFloor: {
+          note:
+            "TAK §8.4.2 — consult-gate coverage is a governed metric. RISE-ONLY: this floor is reach to hold, not debt to burn down. It falls only by a tool losing its declared `consequence` or the composition root losing the resolver install, both of which leave a gate that still passes its own tests.",
+          gateClassified: Number(gate.gateClassified ?? 0),
+          sideEffectingTools: Number(gate.sideEffectingTools ?? 0),
+          coveragePct: Number(gate.coveragePct ?? 0),
+          resolverInstalled: true,
+        },
       }, null, 2) + "\n",
     );
-    console.log(`[agent-capability-integrity] baseline updated — ${unbacked.length} outstanding.`);
+    console.log(
+      `[agent-capability-integrity] baseline updated — ${unbacked.length} outstanding, `
+      + `consult-gate floor ${gate.gateClassified}/${gate.sideEffectingTools} (${gate.coveragePct}%).`,
+    );
     return;
   }
 
@@ -122,6 +150,27 @@ function main() {
     );
   }
 
+  if (floor) {
+    if (gate.resolverInstalled !== true) {
+      failures.push(
+        "the decision-routing gate no longer receives its DERIVED tool set:",
+        "    apps/web/lib/governance/register-tool-governance-hooks.ts must call",
+        "    installConsequentialToolResolver(getConsequentialToolNames).",
+        "  Without it the gate silently falls back to the two-name transitional seed —",
+        "  every `consequence` declaration in the codebase stops reaching the gate, and",
+        "  the gate goes on passing all of its own tests.",
+      );
+    }
+    if (Number(gate.gateClassified) < Number(floor.gateClassified)) {
+      failures.push(
+        `consult-gate coverage FELL: ${gate.gateClassified} tool(s) gated, floor is ${floor.gateClassified}.`,
+        "  A side-effecting tool that moves money, reaches a third party, changes identity",
+        "  or authority, or destroys state must declare `consequence` on its ToolDefinition.",
+        "  Restore the declaration; do NOT lower the floor.",
+      );
+    }
+  }
+
   if (failures.length > 0) {
     console.error("[agent-capability-integrity] FAILED\n");
     for (const line of failures) console.error(`  ${line}`);
@@ -131,8 +180,14 @@ function main() {
 
   const cleared = [...known].filter((id) => !unbacked.includes(id));
   console.log(
-    `[agent-capability-integrity] ok — 0 stranded skills, ${unbacked.length} unbacked backing id(s) within baseline.`,
+    `[agent-capability-integrity] ok — 0 stranded skills, ${unbacked.length} unbacked backing id(s) within baseline, `
+    + `consult-gate ${gate.gateClassified}/${gate.sideEffectingTools} (${gate.coveragePct}%) at or above floor.`,
   );
+  if (floor && Number(gate.gateClassified) > Number(floor.gateClassified)) {
+    console.log(
+      `  coverage rose above the floor (${floor.gateClassified} -> ${gate.gateClassified}) — run --update to ratchet up.`,
+    );
+  }
   if (cleared.length > 0) {
     console.log(`  ${cleared.length} baseline entr(y/ies) now resolved — run --update to ratchet down:`);
     for (const id of cleared) console.log(`    ${id}`);
