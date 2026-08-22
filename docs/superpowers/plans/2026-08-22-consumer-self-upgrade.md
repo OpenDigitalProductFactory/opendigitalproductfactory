@@ -21,7 +21,8 @@ A source-free consumer install discovers a verified immutable release, reaches g
 - Decision: atomic
 - Rationale: target resolution, candidate verification, release-mode promotion, and installer-state convergence are one safety invariant. Shipping any subset either remains unreachable, selects an unverifiable artifact, or permits a successful swap to revert on the next restart. No phase is independently useful or safe to release.
 - Dependencies: none
-- Receipt: blocked by BI-B9403248 — `record_plan_backlog_coverage` verified commit `ea5407d625e274b28d7452ffc9c8009e59220524` / blob `60b53a21110db17e16044da3caed9ad830c99d13`, then rejected the write because BI-89887875 has no `initiative_scope_baseline` and external MCP sessions cannot create one (`traceability-incomplete`, 2026-08-22).
+- Receipt: blocked-by-BI-B9403248-traceability-incomplete-2026-08-22
+- Receipt evidence: `record_plan_backlog_coverage` verified commit `ea5407d625e274b28d7452ffc9c8009e59220524` / blob `60b53a21110db17e16044da3caed9ad830c99d13`, then rejected the write because BI-89887875 has no `initiative_scope_baseline` and external MCP sessions cannot create one.
 - Mapping: `consumer-release-self-upgrade` -> `BI-89887875` (not independently shippable; requirements, contracts, flow, and verification references were supplied to the live writer).
 - Governed-process blocker: BI-B9403248
 
