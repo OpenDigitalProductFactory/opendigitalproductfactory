@@ -2,7 +2,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
-import { mkdir, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
 import { restoreInstallState, updateInstallState } from "./install-state-transaction.mjs";
 
 const VERSION = /^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$/;
