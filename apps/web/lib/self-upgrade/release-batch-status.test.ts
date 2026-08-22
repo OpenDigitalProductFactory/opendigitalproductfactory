@@ -4,6 +4,7 @@ const mocks = vi.hoisted(() => ({
   getSelfUpgradeConfig: vi.fn(),
   getLatestSucceededRun: vi.fn(),
   defaultGitRunner: vi.fn(),
+  readSelfUpgradeSupport: vi.fn(),
 }));
 
 vi.mock("./config", () => ({
@@ -14,6 +15,9 @@ vi.mock("./run-store", () => ({
 }));
 vi.mock("./prepare-source", () => ({
   defaultGitRunner: mocks.defaultGitRunner,
+}));
+vi.mock("./support", () => ({
+  readSelfUpgradeSupport: mocks.readSelfUpgradeSupport,
 }));
 
 import { resolveReleaseBatchStatus } from "./release-batch-status";
@@ -41,6 +45,14 @@ describe("resolveReleaseBatchStatus", () => {
     vi.clearAllMocks();
     mocks.getSelfUpgradeConfig.mockResolvedValue(CONFIG);
     mocks.getLatestSucceededRun.mockResolvedValue({ targetSha: "lineage-sha" });
+    mocks.readSelfUpgradeSupport.mockResolvedValue({
+      configuredEnabled: true,
+      supported: true,
+      enabled: true,
+      targetKind: "git-source",
+      reason: "enabled",
+      message: null,
+    });
     mocks.defaultGitRunner.mockImplementation(async (args: string[]) =>
       args.includes("log")
         ? { stdout: "1700000000\n1700000100\n", stderr: "", code: 0 }
@@ -59,6 +71,31 @@ describe("resolveReleaseBatchStatus", () => {
     expect(status.eligible).toBe(false);
     expect(status.reason).toBe("below-threshold");
     expect(status.summary).toContain("2 of 10");
+  });
+
+  it("does no Git or lineage work for an unsupported consumer release", async () => {
+    mocks.readSelfUpgradeSupport.mockResolvedValue({
+      configuredEnabled: true,
+      supported: false,
+      enabled: false,
+      targetKind: "release-artifact",
+      reason: "consumer-release-upgrade-unsupported",
+      message: "Automatic updates aren’t available for this install yet.",
+    });
+
+    const status = await resolveReleaseBatchStatus({ config: CONFIG, fresh: true });
+
+    expect(status).toMatchObject({
+      applicable: false,
+      eligible: false,
+      reason: "consumer-release-upgrade-unsupported",
+      pendingCount: null,
+      lineageSha: null,
+      summary: "Automatic updates aren’t available for this install yet.",
+      support: { supported: false, targetKind: "release-artifact" },
+    });
+    expect(mocks.getLatestSucceededRun).not.toHaveBeenCalled();
+    expect(mocks.defaultGitRunner).not.toHaveBeenCalled();
   });
 
   it("fetches first when fresh:true is requested", async () => {

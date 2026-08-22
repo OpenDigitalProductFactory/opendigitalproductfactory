@@ -19,6 +19,7 @@ import {
   type ResolvedMcpToken,
 } from "@/lib/auth/mcp-api-token";
 import { deriveCallerClient } from "@/lib/mcp/caller-client";
+import { buildMcpInitializeResult } from "@/lib/mcp/initialize";
 import { verifyMcpSessionToken } from "@/lib/mcp/session-token";
 import { governedExecuteTool } from "@/lib/mcp-governed-execute";
 import { PLATFORM_TOOLS, resolveAnnotations, type ToolDefinition } from "@/lib/mcp-tools";
@@ -40,9 +41,8 @@ import {
   type McpToolTier,
 } from "@/lib/mcp/tool-tier";
 import { getLoadedToolNames, loadToolsForSession } from "@/lib/mcp/tool-session-store";
-import { SUPPORTED_PROTOCOL_VERSIONS, FALLBACK_PROTOCOL_VERSION } from "@/lib/mcp/protocol-versions";
+import { SUPPORTED_PROTOCOL_VERSIONS } from "@/lib/mcp/protocol-versions";
 import {
-  shouldAdvertiseTasksCapability,
   tasksLifecycleEnabled,
   handleTasksGet,
   handleTasksResult,
@@ -50,7 +50,7 @@ import {
   handleTasksCancel,
   type TaskLifecycleResult,
 } from "@/lib/mcp/tasks-lifecycle";
-import { LOAD_TOOLS_LISTED, MCP_PROGRESSIVE_DISCLOSURE_INSTRUCTIONS, buildLoadToolsResult, buildUnknownToolResult, loadToolsSseResponse } from "@/lib/mcp/load-tools";
+import { LOAD_TOOLS_LISTED, buildLoadToolsResult, buildUnknownToolResult, loadToolsSseResponse } from "@/lib/mcp/load-tools";
 import { can, type CapabilityKey, type UserContext } from "@/lib/permissions";
 import { prisma } from "@dpf/db";
 
@@ -67,9 +67,6 @@ type ResolvedAuth = ResolvedMcpToken & {
 
 // Protocol revisions: the governed N/N-1 window + grandfathered set, declared
 // ONLY in @/lib/mcp/protocol-versions.ts (W12, BI-EE64547B; guard-enforced).
-const SERVER_NAME = "dpf-platform";
-const SERVER_VERSION = "1.0.0";
-
 // JSON-RPC 2.0 standard error codes
 const JSONRPC_PARSE_ERROR = -32700;
 const JSONRPC_INVALID_REQUEST = -32600;
@@ -493,59 +490,21 @@ async function handleTasksSubmit(
   return jsonRpcOk(id, outcome.result);
 }
 
-async function handleInitialize(id: JsonRpcId, params?: Record<string, unknown>): Promise<Response> {
-  const requested = typeof params?.["protocolVersion"] === "string" ? params["protocolVersion"] : null;
-  const negotiated = SUPPORTED_PROTOCOL_VERSIONS.find((v) => v === requested) ?? FALLBACK_PROTOCOL_VERSION;
-
-  // BI-HDLEMP-02 (Seam 2): compose the org-identity context for external callers
-  // so an agent carries the org's mission / archetype / locale / stance — and the
-  // decisionDomain routing directive that activates BI-HDLEMP-01 — from connect,
-  // instead of only a bare tool list. Fail-open: any compose error falls back to
-  // the base note; initialize must never break.
-  let instructions = MCP_PROGRESSIVE_DISCLOSURE_INSTRUCTIONS;
-  try {
-    const [{ buildOrgContextBundle, formatOrgContextInstructions }, { prisma }] =
-      await Promise.all([
-        import("@/lib/mcp/org-context-bundle"),
-        import("@dpf/db"),
-      ]);
-    const bundle = await buildOrgContextBundle(
-      prisma as unknown as Parameters<typeof buildOrgContextBundle>[0],
-    );
-    instructions = formatOrgContextInstructions(MCP_PROGRESSIVE_DISCLOSURE_INSTRUCTIONS, bundle);
-  } catch (err) {
-    console.warn("[mcp/initialize] org-context compose failed (fail-open):", err);
-  }
-
-  return jsonRpcOk(id, {
-    protocolVersion: negotiated,
-    capabilities: {
-      // listChanged: load_tools emits notifications/tools/list_changed (over an
-      // SSE response on the load_tools POST for clients that Accept it); clients
-      // that ignore it still work — the lean core tier is always the floor.
-      tools: { listChanged: true },
-      // Standard MCP Tasks (Phase 0, read-only): tasks/get|result|list|cancel
-      // over the durable TaskRun substrate. Advertise ONLY when the negotiated
-      // protocol is Tasks-aware (2025-11-25+) AND the feature flag is on.
-      // Advertising on 2024-11-05 / 2025-03-26 breaks clients that reject
-      // unknown capability keys at initialize (Grok Build 1.0.0 → CustomResult
-      // handshake failure). Methods remain routable; discovery is gated.
-      // Value shape is spec-load-bearing: tasks.list/.cancel are `object`
-      // (present-if-supported), NOT boolean. A boolean fails strict client
-      // capability validation — Claude Code rejects the whole initialize and
-      // loads zero tools. Empty object = supported (cf. logging/completions).
-      ...(shouldAdvertiseTasksCapability(negotiated)
-        ? { tasks: { list: {}, cancel: {} } }
-        : {}),
-    },
-    serverInfo: {
-      name: SERVER_NAME,
-      version: SERVER_VERSION,
-      description:
-        "Digital Product Factory MCP transport — governed backlog, planning, coworker, and build tools for external coding agents.",
-    },
-    instructions,
-  });
+async function handleInitialize(
+  id: JsonRpcId,
+  token: ResolvedAuth,
+  params?: Record<string, unknown>,
+): Promise<Response> {
+  return jsonRpcOk(
+    id,
+    await buildMcpInitializeResult({
+      params,
+      authority: {
+        scope: normalizeTokenScope(token),
+        scopes: token.scopes,
+      },
+    }),
+  );
 }
 
 async function handleToolsList(
@@ -820,7 +779,7 @@ export async function POST(request: Request): Promise<Response> {
         if (isNotification) {
           return new Response(null, { status: 202 });
         }
-        return await handleInitialize(body.id ?? null, body.params);
+        return await handleInitialize(body.id ?? null, token, body.params);
 
       case "notifications/initialized":
         return new Response(null, { status: 202 });

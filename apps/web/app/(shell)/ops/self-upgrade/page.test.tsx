@@ -154,6 +154,14 @@ beforeEach(() => {
 
 const baseStatus = {
   enabled: false,
+  support: {
+    configuredEnabled: false,
+    supported: true as const,
+    enabled: false,
+    targetKind: "git-source" as const,
+    reason: "disabled-by-config" as const,
+    message: "Automatic updates are turned off for this source-backed install.",
+  },
   channel: "stable",
   inMaintenanceWindow: false,
   windowConfigured: true,
