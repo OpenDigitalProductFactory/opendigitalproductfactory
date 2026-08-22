@@ -38,7 +38,7 @@ vi.mock("@/lib/actions/promotions", () => ({
 // `shared.triggerResult` and try to render it. Stub the impact panel so the
 // trigger-control tests stay focused on this component's behavior.
 vi.mock("@/components/ops/UpgradeImpactPanel", () => ({
-  default: () => null,
+  default: ({ enabled }: { enabled: boolean }) => <div data-impact-enabled={enabled} />,
 }));
 
 import SelfUpgradeClient, { conciseFailureReason } from "./SelfUpgradeClient";
@@ -1004,7 +1004,7 @@ describe("Update-available banner — at-a-glance scope", () => {
       <SelfUpgradeClient {...baseStatus} isFresh={true} initialImpactSummary={okSummary} />,
     );
     expect(html).not.toContain('data-update-glance="true"');
-    expect(html).not.toContain('data-impact-scope-headline="available"');
+    expect(html).toContain('data-impact-enabled="false"');
   });
 
   it("omits the glance ribbon when the summary did not resolve", () => {

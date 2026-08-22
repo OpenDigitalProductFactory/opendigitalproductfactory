@@ -191,7 +191,12 @@ export function buildOwnerReleaseSummary(
       : null;
 
   // "Why nothing happened" copy for the routine no-op path (run skipped).
-  const skip = runStatus === "skipped" ? describeSkipReason(input.latestRun?.reason) : null;
+  // A resolved, fresh target is newer evidence than an older skipped run. Do
+  // not let a historical Git-era "no-target" result overwrite the current
+  // release-artifact verdict after a consumer install has recovered discovery.
+  const skip = runStatus === "skipped" && !input.isFresh
+    ? describeSkipReason(input.latestRun?.reason)
+    : null;
 
   // What's kept from the owner's own install.
   const localCount = localChanges.available ? localChanges.changes.length : 0;
