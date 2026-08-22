@@ -60,7 +60,7 @@ The live backlog contains one umbrella and eight independently shippable deliver
 
 - Parent: `BI-9549EE48`
 - Decision: `decomposed`
-- Receipt: `PENDING-FIRST-COMMIT`
+- Receipt: blocked by `BI-MCP-EFF-3E441834`. The live writer resolved and validated immutable commit `efe0710bc2c2f5e1912cf15eae0b47a21eb5ea57` / plan blob `6187bf09c69cdbbb302082d800a1a54bd317016c`, then refused the write because the new umbrella has no `initiative_scope_baseline`; that baseline is created by the initiative spec-approval lane and is not reachable from an external MCP session. The table below remains the coverage of record until the governed baseline/receipt path is available.
 
 | Key | Backlog item | Deliverable | Depends on |
 |---|---|---|---|
