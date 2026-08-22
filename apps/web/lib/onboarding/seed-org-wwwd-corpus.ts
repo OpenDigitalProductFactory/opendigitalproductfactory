@@ -35,7 +35,7 @@
 import { prisma } from "@dpf/db";
 import { upsertWikiPage, appendRevision } from "@dpf/db/wiki-store";
 import { storeWikiPage, type StoreWikiPageInput } from "@/lib/wiki/embeddings";
-import { DECISION_DOMAIN_CLASSES, type DecisionDomainClass } from "@/lib/decision-perspective/types";
+import { type DecisionDomainClass } from "@/lib/decision-perspective/types";
 import {
   projectDeclaredStanceAlignment,
   projectStanceDimensionVector,
@@ -49,10 +49,12 @@ import {
   STANCE_VECTOR_KEYS,
   type StanceVectorKey,
 } from "./archetype-business-context";
+import {
+  ensureOrgDecisionPerspectiveProfile,
+  type EnsureOrgDecisionPerspectiveProfileClient,
+} from "./ensure-org-decision-perspective-profile";
 
-/** Platform fallback our org profile chains to (material.ts:14). */
-export const ORG_PERSPECTIVE_FALLBACK_PROFILE_ID = "dpf-organizational-principles";
-const PLAN_READINESS_DOMAIN_CLASS = "plan-readiness";
+export { ORG_PERSPECTIVE_FALLBACK_PROFILE_ID } from "./ensure-org-decision-perspective-profile";
 
 /**
  * Which decision classes each stance vector's material lands in (the "gate
@@ -73,24 +75,11 @@ export function stanceVectorSlug(key: StanceVectorKey): string {
   return `stances/${key}`;
 }
 
-const DEFAULT_AUTONOMY_POLICY = {
-  allowRecommendation: true,
-  allowArbitration: false,
-  maxRiskForArbitration: "low",
-  minimumConfidenceForRecommendation: 0.55,
-  minimumConfidenceForArbitration: 0.9,
-};
-
 /** Structural client — satisfied by the real PrismaClient and by test fakes. */
-export type SeedOrgWwwdClient = {
+export type SeedOrgWwwdClient = EnsureOrgDecisionPerspectiveProfileClient & {
   businessContext: { findUnique: (args: unknown) => Promise<unknown> };
   storefrontConfig: { findFirst: (args: unknown) => Promise<unknown> };
   organization: { findUnique: (args: unknown) => Promise<unknown> };
-  decisionPerspectiveProfile: {
-    upsert: (args: unknown) => Promise<unknown>;
-    update: (args: unknown) => Promise<unknown>;
-  };
-  decisionPerspectiveProfileVersion: { upsert: (args: unknown) => Promise<unknown> };
   perspectiveMaterial: { upsert: (args: unknown) => Promise<unknown> };
   wikiPage: {
     findFirst: (args: unknown) => Promise<unknown>;
@@ -305,9 +294,6 @@ export async function seedOrgWwwdCorpus(
   const embed = input.embed ?? storeWikiPage;
   const organizationId = input.organizationId;
 
-  const profileId = `org-perspective-${organizationId}`;
-  const versionId = `${profileId}-v1`;
-
   const [bc, sf, org] = await Promise.all([
     db.businessContext.findUnique({
       where: { organizationId },
@@ -329,68 +315,15 @@ export async function seedOrgWwwdCorpus(
   const industry = sf?.archetype?.category ?? bc?.industry ?? null;
   const orgName = org?.name ?? null;
 
-  // 0. Ensure the platform fallback profile ROW exists. The org profile's
-  // fallbackProfileId carries an FK to it, but the fallback shipped only as an
-  // in-code constant (default-profile.ts) — no seed ever materialized it, so
-  // this upsert threw P2003 on every install and the fail-open completion
-  // chain swallowed it: THE reason the WWWD substrate stayed dormant
-  // (observed live 2026-07-06, BI-44526F3E). Minimal row, no version — the
-  // resolution chain only needs the profile to exist.
-  await db.decisionPerspectiveProfile.upsert({
-    where: { profileId: ORG_PERSPECTIVE_FALLBACK_PROFILE_ID },
-    update: {},
-    create: {
-      profileId: ORG_PERSPECTIVE_FALLBACK_PROFILE_ID,
-      name: "DPF Organizational Principles",
-      kind: "organization",
-      scope: { domains: ["platform-governance", PLAN_READINESS_DOMAIN_CLASS] },
-      fallbackProfileId: null,
-      defaultResolver: { type: "build-studio-owner" },
-      autonomyPolicy: DEFAULT_AUTONOMY_POLICY,
-      status: "active",
-    },
+  // Ensure the shared profile/version container before seeding its corpus.
+  // The same narrow factory is used by other valid WWWD write paths.
+  const { profileId, versionId } = await ensureOrgDecisionPerspectiveProfile({
+    organizationId,
+    organizationName: orgName,
+    db,
   });
 
-  // 1. Profile (container).
-  await db.decisionPerspectiveProfile.upsert({
-    where: { profileId },
-    update: {
-      name: `${orgName ?? "Organization"} perspective`,
-      kind: "organization",
-      scope: { domains: [...DECISION_DOMAIN_CLASSES] },
-      ownerOrganizationId: organizationId,
-      fallbackProfileId: ORG_PERSPECTIVE_FALLBACK_PROFILE_ID,
-      defaultResolver: { type: "build-studio-owner" },
-      autonomyPolicy: DEFAULT_AUTONOMY_POLICY,
-      status: "active",
-    },
-    create: {
-      profileId,
-      name: `${orgName ?? "Organization"} perspective`,
-      kind: "organization",
-      scope: { domains: [...DECISION_DOMAIN_CLASSES] },
-      ownerOrganizationId: organizationId,
-      fallbackProfileId: ORG_PERSPECTIVE_FALLBACK_PROFILE_ID,
-      defaultResolver: { type: "build-studio-owner" },
-      autonomyPolicy: DEFAULT_AUTONOMY_POLICY,
-      status: "active",
-    },
-  });
-
-  // 2. Version v1.
-  await db.decisionPerspectiveProfileVersion.upsert({
-    where: { versionId },
-    update: { changeSummary: "Organization perspective seeded at onboarding." },
-    create: {
-      versionId,
-      profileId,
-      versionNumber: 1,
-      materialFingerprint: `seed:${profileId}:v1`,
-      changeSummary: "Organization perspective seeded at onboarding.",
-    },
-  });
-
-  // 3. Org-overlay wiki pages (the working WWWD lever) + materials.
+  // Org-overlay wiki pages (the working WWWD lever) + materials.
   const pages = buildPages(bc, archetypeId, industry, orgName);
   const wikiPageIds: string[] = [];
   let embedded = true;
@@ -501,12 +434,6 @@ export async function seedOrgWwwdCorpus(
       });
     }
   }
-
-  // 4. Point the profile at v1.
-  await db.decisionPerspectiveProfile.update({
-    where: { profileId },
-    data: { currentVersionId: versionId },
-  });
 
   return {
     profileId,

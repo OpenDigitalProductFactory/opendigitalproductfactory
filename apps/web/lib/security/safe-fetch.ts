@@ -116,7 +116,7 @@ function classifyIpv6(host: string): string | null {
  * Test the hostname for known-private forms. Returns a reason if
  * blocked, null if it appears to be a public address.
  */
-function classifyHostname(rawHost: string): string | null {
+export function classifyOutboundHost(rawHost: string): string | null {
   // Node's URL.hostname preserves brackets around IPv6 (e.g. `[::1]`).
   // Strip them before classification so the IPv6 matchers see the bare
   // address. Single pass — host is lowercased after.
@@ -217,7 +217,7 @@ export function assertSafeOutboundUrl(
   // Default true — opt out is explicit.
   const blockPrivate = options.blockPrivateNetworks !== false;
   if (blockPrivate) {
-    const reason = classifyHostname(url.hostname);
+    const reason = classifyOutboundHost(url.hostname);
     if (reason !== null) {
       throw new Error(
         `safe-fetch: host "${url.hostname}" is a private network address (${reason}). ` +

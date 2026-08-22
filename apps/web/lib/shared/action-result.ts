@@ -23,16 +23,16 @@
 // Pure types + pure functions only (no Prisma / server-only / React imports) so
 // server actions, API routes, and client components can all import it.
 
-export type ActionResult<T = void> =
-  | (T extends void ? { ok: true } : { ok: true; data: T })
-  | { ok: false; error: string };
+export type ActionSuccess<T = void> = T extends void ? { ok: true } : { ok: true; data: T };
+export type ActionFailure = { ok: false; error: string };
+export type ActionResult<T = void> = ActionSuccess<T> | ActionFailure;
 
 /** Success with no payload — `{ ok: true }`. */
-export function ok(): ActionResult<void>;
+export function ok(): ActionSuccess<void>;
 /** Success carrying a payload — `{ ok: true, data }`. */
-export function ok<T>(data: T): ActionResult<T>;
-export function ok<T>(data?: T): ActionResult<T> {
-  return (data === undefined ? { ok: true } : { ok: true, data }) as ActionResult<T>;
+export function ok<T>(data: T): ActionSuccess<T>;
+export function ok<T>(data?: T): ActionSuccess<T> {
+  return (data === undefined ? { ok: true } : { ok: true, data }) as ActionSuccess<T>;
 }
 
 /**
@@ -41,6 +41,6 @@ export function ok<T>(data?: T): ActionResult<T> {
  * `T` (the failure branch is identical across all payload types), so `err(...)`
  * can be returned from any action regardless of its success payload.
  */
-export function err(message: string): { ok: false; error: string } {
+export function err(message: string): ActionFailure {
   return { ok: false, error: message };
 }

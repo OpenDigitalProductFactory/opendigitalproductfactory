@@ -7,6 +7,14 @@
 // scheduling, and UX; the adapter only knows the provider-specific
 // fetch/serialize semantics.
 
+import type {
+  ExternalChannelPublishResult,
+  ProjectionPublicationContext,
+  ProjectionPublicationIntent,
+} from "@/lib/integrations/external-channel-publication";
+
+export type { ProjectionPublicationContext, ProjectionPublicationIntent } from "@/lib/integrations/external-channel-publication";
+
 // Structural types reflect the Prisma OutboundDraft and OutboundPublication
 // rows. Re-declaring locally avoids importing Prisma generated names through
 // @dpf/db (which only re-exports `prisma` + `Prisma` namespace) and keeps
@@ -48,6 +56,9 @@ export type OutboundPublicationLike = {
 export type ChannelCapability =
   | "draft-preview"
   | "publish-post"
+  | "publish-page"
+  | "upload-media"
+  | "upsert-content"
   | "send-email"
   | "place-ad"
   | "fetch-engagement"
@@ -57,19 +68,7 @@ export type AdapterValidationResult =
   | { ok: true }
   | { ok: false; reason: string };
 
-export type PublishResult =
-  | {
-      ok: true;
-      externalId: string;
-      externalUrl: string | null;
-      channelMetadata?: Record<string, unknown>;
-    }
-  | {
-      ok: false;
-      error: string;
-      retryable: boolean;
-      channelMetadata?: Record<string, unknown>;
-    };
+export type PublishResult = ExternalChannelPublishResult;
 
 export type EngagementSnapshot = {
   channelId: string;
@@ -99,9 +98,15 @@ export interface OutboundChannelAdapter {
 
   validateDraft(draft: OutboundDraftLike): AdapterValidationResult;
 
+  projectionIntent?(
+    draft: OutboundDraftLike,
+    credential: ChannelCredentialBundle,
+  ): ProjectionPublicationIntent;
+
   publish?(
     draft: OutboundDraftLike,
     credential: ChannelCredentialBundle,
+    context?: ProjectionPublicationContext,
   ): Promise<PublishResult>;
 
   fetchEngagement?(

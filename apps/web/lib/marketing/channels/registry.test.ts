@@ -40,4 +40,10 @@ describe("channel adapter registry", () => {
     expect(adapter?.capabilities).toContain("place-ad");
     expect(adapter?.capabilities).toContain("fetch-engagement");
   });
+
+  it("registers WordPress as projection-aware post/page/media publishing", () => {
+    const adapter = getAdapter("wordpress-self-hosted");
+    expect(adapter?.capabilities).toEqual(expect.arrayContaining(["publish-post", "publish-page", "upload-media", "upsert-content"]));
+    expect(adapter?.projectionIntent).toBeTypeOf("function");
+  });
 });
