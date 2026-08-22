@@ -7,6 +7,12 @@ const NO_LOCAL_CHANGES: LocalChangesResult = { available: true, changes: [] };
 function baseInput(overrides: Partial<OwnerReleaseInput> = {}): OwnerReleaseInput {
   return {
     enabled: true,
+    support: {
+      supported: true,
+      targetKind: "git-source",
+      reason: "enabled",
+      message: null,
+    },
     isFresh: true,
     targetSha: null,
     deployedSha: "abc1234def",
@@ -43,6 +49,30 @@ function allCopy(s: ReturnType<typeof buildOwnerReleaseSummary>): string {
 }
 
 describe("buildOwnerReleaseSummary", () => {
+  it("reports an unidentified install as unavailable instead of up to date", () => {
+    const s = buildOwnerReleaseSummary(
+      baseInput({
+        enabled: false,
+        isFresh: false,
+        targetSha: null,
+        support: {
+          supported: false,
+          targetKind: "unknown",
+          reason: "install-identity-unverified",
+          message: "Automatic updates are unavailable until this install’s identity is verified.",
+        },
+      }),
+      NO_LOCAL_CHANGES,
+    );
+
+    expect(s.state).toBe("unavailable");
+    expect(s.tone).toBe("warning");
+    expect(s.headline).toBe("Automatic updates are unavailable until this install’s identity is verified");
+    expect(s.recommendedAction.label).toBe("No automatic update action");
+    expect(s.ifYouDoNothing).toContain("current release keeps running");
+    expect(s.riskNotice).toBeNull();
+  });
+
   it("reports up-to-date when the build is fresh with no target", () => {
     const s = buildOwnerReleaseSummary(baseInput({ isFresh: true, targetSha: null }), NO_LOCAL_CHANGES);
     expect(s.state).toBe("up-to-date");

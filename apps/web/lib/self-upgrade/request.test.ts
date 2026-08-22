@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   createRun: vi.fn(),
   failRun: vi.fn(),
   resolveReleaseBatchStatus: vi.fn(),
+  readSelfUpgradeSupport: vi.fn(),
 }));
 
 vi.mock("@/lib/queue/inngest-client", () => ({
@@ -40,6 +41,10 @@ vi.mock("@/lib/self-upgrade/window", () => ({
 
 vi.mock("@/lib/self-upgrade/release-batch-status", () => ({
   resolveReleaseBatchStatus: mocks.resolveReleaseBatchStatus,
+}));
+
+vi.mock("@/lib/self-upgrade/support", () => ({
+  readSelfUpgradeSupport: mocks.readSelfUpgradeSupport,
 }));
 
 vi.mock("@/lib/self-upgrade/run-store", () => ({
@@ -104,6 +109,14 @@ describe("requestSelfUpgrade", () => {
     mocks.inngestSend.mockResolvedValue({ ids: ["evt-1"] });
     mocks.failRun.mockResolvedValue({});
     mocks.resolveReleaseBatchStatus.mockResolvedValue(BATCH_ELIGIBLE);
+    mocks.readSelfUpgradeSupport.mockResolvedValue({
+      configuredEnabled: true,
+      supported: true,
+      enabled: true,
+      targetKind: "git-source",
+      reason: "enabled",
+      message: null,
+    });
   });
 
   it("queues the same event as the human action in manual mode", async () => {
@@ -128,6 +141,30 @@ describe("requestSelfUpgrade", () => {
       },
     });
     expect(mocks.isUpgradeWindowOpen).not.toHaveBeenCalled();
+  });
+
+  it("queues an artifact-native upgrade on a consumer release install", async () => {
+    mocks.readSelfUpgradeSupport.mockResolvedValue({
+      configuredEnabled: true,
+      supported: true,
+      enabled: true,
+      targetKind: "release-artifact",
+      reason: "enabled",
+      message: null,
+    });
+
+    const result = await requestSelfUpgrade({
+      requestedBy: "manual:user-ops-1",
+      actorKind: "human",
+    });
+
+    expect(result).toMatchObject({
+      success: true,
+      status: "queued",
+      runId: "SUR-QUEUED1",
+    });
+    expect(mocks.createRun).toHaveBeenCalled();
+    expect(mocks.inngestSend).toHaveBeenCalled();
   });
 
   it.each(["running", "queued", "pending"])(

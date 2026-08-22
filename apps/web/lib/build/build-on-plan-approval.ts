@@ -18,6 +18,7 @@
 // Called from: reviewBuildPlan success path in mcp-tools.ts (fire-and-forget).
 
 import { prisma } from "@dpf/db";
+import { enforceBuildInitiativeReadiness } from "@/lib/build/build-entry-gate";
 
 function logBuildActivity(buildId: string, tool: string, summary: string): Promise<void> {
   return prisma.buildActivity.create({ data: { buildId, tool, summary } }).then(() => void 0).catch(() => void 0);
@@ -73,6 +74,15 @@ export async function dispatchBuildForApprovedPlan(params: {
     if (!build.buildPlan) {
       await log("Skipped — no buildPlan");
       return { kind: "skipped-no-plan", reason: "buildPlan is null" };
+    }
+    if (build.phase === "plan") {
+      const readiness = await enforceBuildInitiativeReadiness({
+        buildId, target: "implementation", targetPhase: "build", expectedPhase: "plan",
+      });
+      if (!readiness.allowed) {
+        await log(`Skipped — ${readiness.message}`);
+        return { kind: "dispatched-failure", error: readiness.message, durationMs: Date.now() - t0 };
+      }
     }
 
     const plan = build.buildPlan as { fileStructure?: unknown[]; tasks?: unknown[] };

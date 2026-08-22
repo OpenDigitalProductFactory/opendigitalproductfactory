@@ -76,7 +76,55 @@ model IntegrationCredential {
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
+  externalChannelProjections          ExternalChannelProjection[] @relation("ExternalChannelProjectionCredential")
+  externalChannelProjectionConnections ExternalChannelProjection[] @relation("ExternalChannelProjectionConnection")
+
   @@index([provider, status])
+}
+
+// Provider-neutral current binding between one versioned DPF source and one
+// resource at an external channel. OutboundPublication remains the immutable
+// event receipt; IntegrationImportStagedRecord remains read/import staging.
+// connectionId is the stable IntegrationCredential.integrationId value, never
+// the rotatable credential row id. credentialId is optional audit provenance.
+model ExternalChannelProjection {
+  id                String                         @id @default(cuid())
+  externalChannelProjectionId String                         @unique
+  connectorKey      String
+  connectionId      String
+  credentialId      String?
+  sourceType        ExternalChannelProjectionSourceType
+  sourceRef         String
+  sourceVersion     String
+  resourceKind      ExternalChannelResourceKind
+  locale            String                         @default("und")
+  externalRef       String?
+  externalUrl       String?
+  localFingerprint  String
+  remoteFingerprint String?
+  remoteModifiedAt  DateTime?
+  state             ExternalChannelProjectionState @default(reserved)
+  metadata          Json                           @default("{}")
+  reservedAt        DateTime                       @default(now())
+  projectedAt       DateTime?
+  observedAt        DateTime?
+  driftedAt         DateTime?
+  detachedAt        DateTime?
+  lifecycle         RecordLifecycle                 @default(active)
+  lifecycleAt       DateTime?
+  lifecycleReason   String?
+  createdAt         DateTime                       @default(now())
+  updatedAt         DateTime                       @updatedAt
+
+  connectionCredential IntegrationCredential  @relation("ExternalChannelProjectionConnection", fields: [connectionId], references: [integrationId], onDelete: Restrict)
+  credential           IntegrationCredential? @relation("ExternalChannelProjectionCredential", fields: [credentialId], references: [id], onDelete: SetNull)
+
+  @@unique([connectorKey, connectionId, sourceType, sourceRef, resourceKind, locale], map: "ExternalChannelProjection_source_binding_key")
+  @@unique([connectorKey, connectionId, resourceKind, externalRef], map: "ExternalChannelProjection_remote_binding_key")
+  @@index([connectionId])
+  @@index([credentialId])
+  @@index([connectorKey, connectionId, state, updatedAt])
+  @@index([sourceType, sourceRef])
 }
 
 // Browser-driving session binding (EP-BROWSER-DRIVE, spec 2026-06-05 §8.7).
@@ -674,4 +722,30 @@ model McpToolSession {
   updatedAt       DateTime @default(now()) @updatedAt
 
   @@index([expiresAt])
+}
+
+enum ExternalChannelProjectionState {
+  reserved
+  current
+  drifted
+  ambiguous
+  detached
+}
+
+enum ExternalChannelProjectionSourceType {
+  outbound_draft
+  document
+  knowledge_article
+  product
+  product_offering
+  catalog_item
+  storefront_section
+  storefront_item
+  marketing_asset
+}
+
+enum ExternalChannelResourceKind {
+  post
+  page
+  media
 }

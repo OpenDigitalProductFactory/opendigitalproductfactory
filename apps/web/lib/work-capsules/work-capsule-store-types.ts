@@ -12,10 +12,19 @@ export type CapsuleDb = {
     findMany(args: unknown): Promise<any[]>;
     update(args: unknown): Promise<any>;
   };
-  workroomActivity: { create(args: unknown): Promise<any> };
+  workroomActivity: {
+    create(args: unknown): Promise<any>;
+    findFirst?(args: unknown): Promise<any>;
+  };
   backlogItem?: {
     findFirst(args: unknown): Promise<any>;
+    findUnique?(args: unknown): Promise<any>;
     update(args: unknown): Promise<any>;
+  };
+  backlogItemActivity?: {
+    count(args: unknown): Promise<number>;
+    findMany(args: unknown): Promise<any[]>;
+    create(args: unknown): Promise<any>;
   };
   $transaction?<T>(fn: (tx: CapsuleDb) => Promise<T>): Promise<T>;
   $queryRaw?(strings: TemplateStringsArray, ...values: unknown[]): Promise<unknown>;

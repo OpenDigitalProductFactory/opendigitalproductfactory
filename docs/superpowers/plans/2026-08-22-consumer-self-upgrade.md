@@ -15,6 +15,21 @@ status: active
 
 A source-free consumer install discovers a verified immutable release, reaches governed preflight without executing Git, promotes the tagged release images through its recorded Compose topology, and atomically persists the matching release assets and installer identity. Contributor source upgrades remain unchanged.
 
+## UX fit review — consumer release self-upgrade
+
+- Decision: fits-with-guardrails
+- Owning area: Platform operations
+- Route family: the existing `/ops/self-upgrade` Upgrade Center remains canonical
+- Primary persona: the installation operator deciding whether to install a platform update without needing to know whether the install has a Git checkout
+- Navigation layer touched: contextual action only; no global, section, or local navigation is added
+- Reuse/convergence: reuse `OwnerReleaseCard`, `SelfUpgradeTriggerControl`, and the host-profile-derived `SelfUpgradeSupport` read model introduced on `main`; the release updater replaces the temporary consumer-unsupported branch instead of adding a second status/control path
+- Source truth: `InstallHostProfile` owns install classification, installer state owns current release identity and Compose topology, and the verified GitHub release stamp owns the available release SHA/tag
+- Empty/failure behavior: an unidentified install remains honestly unavailable; an enabled consumer shows the existing update action; missing or unverified published targets remain a no-mutation status, never a Git fallback
+- AI boundary: no prompt is sent; the existing explicit operator action queues the governed upgrade workflow
+- Required plan/spec edits: cover the new support/read-model substrate and prove release batching/status never invoke Git
+- Evidence before merge: support, request, MCP pack, owner-summary, Upgrade Center/action, queue, release-target, and real promoter functional tests; live `/ops/self-upgrade` verification after the bootstrap release
+- Captured in: this plan and decision `DI-2AB64991D7A4`
+
 ## Backlog coverage
 
 - Parent: BI-89887875
@@ -43,6 +58,10 @@ A source-free consumer install discovers a verified immutable release, reaches g
 - `apps/web/lib/self-upgrade/release-target.test.ts`
 - `apps/web/lib/self-upgrade/version.ts`
 - `apps/web/lib/self-upgrade/version.test.ts`
+- `apps/web/lib/self-upgrade/support.ts`
+- `apps/web/lib/self-upgrade/support.test.ts`
+- `apps/web/lib/self-upgrade/release-batch-status.ts`
+- `apps/web/lib/self-upgrade/release-batch-status.test.ts`
 
 **TDD sequence:**
 
@@ -89,6 +108,12 @@ A source-free consumer install discovers a verified immutable release, reaches g
 - `scripts/promote.sh`
 - `apps/web/lib/actions/self-upgrade.ts`
 - `apps/web/lib/actions/self-upgrade.test.ts`
+- `apps/web/lib/actions/promotions.ts`
+- `apps/web/lib/actions/promotions.self-upgrade.test.ts`
+- `apps/web/lib/self-upgrade/request.ts`
+- `apps/web/lib/self-upgrade/request.test.ts`
+- `apps/web/lib/mcp/packs/self-upgrade-pack.ts`
+- `apps/web/lib/mcp/packs/self-upgrade-pack.consumer.test.ts`
 
 **TDD sequence:**
 

@@ -50,6 +50,10 @@ import { seedBankingCompliance } from "./seed-banking-compliance.js";
 import { seedUkCorpGovCompliance } from "./seed-uk-corp-gov-compliance.js";
 import { seedSoftwareHorizontalCompliance } from "./seed-software-horizontal-compliance.js";
 import { seedHrEmploymentCompliance } from "./seed-hr-employment-compliance.js";
+import { seedBusinessOperationsCompliance } from "./seed-business-operations-compliance.js";
+import { seedVerticalRecurringCompliance } from "./seed-vertical-recurring-compliance.js";
+import { seedPeoplePremisesCompliance } from "./seed-people-premises-compliance.js";
+import { seedIndustrialVerticalCompliance } from "./seed-industrial-vertical-compliance.js";
 import { seedBusinessCapabilityPerspective } from "./business-capability-perspectives.js";
 import { seedGeographicData } from "./seed-geographic-data.js";
 import { seedTaxJurisdictions } from "./seed-tax-jurisdictions.js";
@@ -2554,6 +2558,10 @@ async function main(): Promise<void> {
   await step("ukCorpGovCompliance", () => seedUkCorpGovCompliance(prisma));
   await step("softwareHorizontalCompliance", () => seedSoftwareHorizontalCompliance(prisma));
   await step("hrEmploymentCompliance", () => seedHrEmploymentCompliance(prisma));
+  await step("businessOperationsCompliance", () => seedBusinessOperationsCompliance(prisma));
+  await step("verticalRecurringCompliance", () => seedVerticalRecurringCompliance(prisma));
+  await step("peoplePremisesCompliance", () => seedPeoplePremisesCompliance(prisma));
+  await step("industrialVerticalCompliance", () => seedIndustrialVerticalCompliance(prisma));
   await step("businessCapabilityPerspective", async () => {
     const capabilityPerspectiveSeed = await seedBusinessCapabilityPerspective(prisma);
     console.log(

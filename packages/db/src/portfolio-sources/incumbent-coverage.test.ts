@@ -8,7 +8,9 @@ import {
   coveringBusinessCapabilityForCategory,
   isAssessmentVia,
   isCoverageVerdict,
+  normalizeAbsorptionIdentityKey,
   providerOfIncumbent,
+  resolveAbsorptionPosture,
 } from "./incumbent-coverage";
 
 // D3 P1 tests (BI-548060D5). PrismaClient is injected, so a mock stands in —
@@ -17,6 +19,7 @@ import {
 function makeDb(opts: {
   incumbents?: { productId: string; name: string; observationConfig: unknown }[];
   posture?: { verdict: string; coveringPrimitive: string | null; confidence: number; providerName: string; integrationCategory: string } | null;
+  postures?: { verdict: string; coveringPrimitive: string | null; confidence: number; providerName: string; integrationCategory: string; catalogIdentityId?: string | null; archetypeIds?: string[] }[];
   existing?: { verdict: string; assessedVia: string; status: string } | null;
 }) {
   const create = vi.fn().mockResolvedValue({});
@@ -27,6 +30,7 @@ function makeDb(opts: {
     },
     absorptionPosture: {
       findFirst: vi.fn().mockResolvedValue(opts.posture ?? null),
+      findMany: vi.fn().mockResolvedValue(opts.postures ?? (opts.posture ? [opts.posture] : [])),
     },
     incumbentCoverageAssessment: {
       findUnique: vi.fn().mockResolvedValue(opts.existing ?? null),
@@ -69,6 +73,77 @@ describe("providerOfIncumbent / assessmentIdFor", () => {
   });
 });
 
+describe("resolveAbsorptionPosture", () => {
+  const cms = {
+    ...POSTURE,
+    providerName: "WordPress",
+    integrationCategory: "content-management",
+    catalogIdentityId: "catalog-wordpress",
+    archetypeIds: ["professional-services"],
+  };
+  const commerce = {
+    ...POSTURE,
+    providerName: "WordPress",
+    integrationCategory: "commerce",
+    catalogIdentityId: "catalog-wordpress-commerce",
+    archetypeIds: ["retail"],
+  };
+
+  it("normalizes identity keys once for case and separator variation", () => {
+    expect(normalizeAbsorptionIdentityKey("  WordPress.COM / CMS  ")).toBe("wordpress-com-cms");
+  });
+
+  it("prefers normalized catalog identity over provider ambiguity", async () => {
+    const { db } = makeDb({ postures: [cms, commerce] });
+    await expect(resolveAbsorptionPosture(db as never, {
+      providerName: "WORDPRESS",
+      catalogIdentityId: " CATALOG-WORDPRESS ",
+    })).resolves.toMatchObject({ status: "matched", matchedBy: "catalog-identity", posture: cms });
+  });
+
+  it("uses an explicit normalized category when one provider has several postures", async () => {
+    const { db } = makeDb({ postures: [cms, commerce] });
+    await expect(resolveAbsorptionPosture(db as never, {
+      providerName: "WORDPRESS ",
+      integrationCategory: "Content Management",
+    })).resolves.toMatchObject({ status: "matched", matchedBy: "provider-category", posture: cms });
+  });
+
+  it("falls back to provider-only only when exactly one normalized row exists", async () => {
+    const { db } = makeDb({ postures: [cms] });
+    await expect(resolveAbsorptionPosture(db as never, { providerName: " WORDPRESS " }))
+      .resolves.toMatchObject({ status: "matched", matchedBy: "unique-provider", posture: cms });
+  });
+
+  it("uses an explicit capability when category is unavailable", async () => {
+    const { db } = makeDb({
+      postures: [
+        { ...cms, coveringPrimitive: "managed-content" },
+        { ...commerce, coveringPrimitive: "commerce-catalog" },
+      ],
+    });
+    await expect(resolveAbsorptionPosture(db as never, {
+      providerName: "WordPress",
+      capabilityKey: "MANAGED CONTENT",
+    })).resolves.toMatchObject({ status: "matched", matchedBy: "provider-capability", posture: { integrationCategory: "content-management" } });
+  });
+
+  it("returns evidenced ambiguity instead of choosing an arbitrary provider row", async () => {
+    const { db } = makeDb({ postures: [commerce, cms] });
+    const result = await resolveAbsorptionPosture(db as never, { providerName: "WORDPRESS" });
+    expect(result).toMatchObject({
+      status: "ambiguous",
+      evidence: { providerKey: "wordpress", candidateCategories: ["commerce", "content-management"] },
+    });
+  });
+
+  it("returns an evidenced gap when no normalized posture matches", async () => {
+    const { db } = makeDb({ postures: [] });
+    await expect(resolveAbsorptionPosture(db as never, { providerName: "Unknown CMS" }))
+      .resolves.toMatchObject({ status: "missing", evidence: { providerKey: "unknown-cms" } });
+  });
+});
+
 describe("assessIncumbentsViaPostureMatrix", () => {
   const inc = { productId: "DP-incumbent-mindbody", name: "Mindbody", observationConfig: { vendor: "Mindbody" } };
 
@@ -88,6 +163,34 @@ describe("assessIncumbentsViaPostureMatrix", () => {
     const result = await assessIncumbentsViaPostureMatrix(db as never);
     expect(result.gaps).toBe(1);
     expect(create.mock.calls[0]![0].data.verdict).toBe("gap");
+  });
+
+  it("records multi-category ambiguity as a gap proposal instead of selecting the first row", async () => {
+    const postures = [
+      { ...POSTURE, providerName: "WordPress", integrationCategory: "commerce", catalogIdentityId: null, archetypeIds: [] },
+      { ...POSTURE, providerName: "WordPress", integrationCategory: "content-management", catalogIdentityId: null, archetypeIds: [] },
+    ];
+    const { db, create } = makeDb({ incumbents: [{ ...inc, name: "WordPress", observationConfig: null }], postures });
+    const result = await assessIncumbentsViaPostureMatrix(db as never);
+    expect(result).toMatchObject({ assessed: 1, matched: 0, gaps: 1 });
+    expect(create.mock.calls[0]![0].data.evidence).toMatchObject({
+      resolution: "ambiguous",
+      candidateCategories: ["commerce", "content-management"],
+    });
+  });
+
+  it("uses an intake-recorded category to resolve the same multi-category provider", async () => {
+    const postures = [
+      { ...POSTURE, providerName: "WordPress", integrationCategory: "commerce", catalogIdentityId: null, archetypeIds: [] },
+      { ...POSTURE, providerName: "WordPress", integrationCategory: "content-management", catalogIdentityId: null, archetypeIds: [] },
+    ];
+    const { db, create } = makeDb({
+      incumbents: [{ ...inc, name: "WordPress", observationConfig: { vendor: "wordpress", integrationCategory: "CONTENT MANAGEMENT" } }],
+      postures,
+    });
+    const result = await assessIncumbentsViaPostureMatrix(db as never);
+    expect(result).toMatchObject({ assessed: 1, matched: 1, gaps: 0 });
+    expect(create.mock.calls[0]![0].data.evidence.matchedPosture).toBe("WordPress/content-management");
   });
 
   it("is idempotent — an unchanged posture_matrix default is left alone", async () => {
@@ -148,7 +251,13 @@ describe("stage 2 — rule (covering business capability)", () => {
           { productId: "DP-incumbent-mindbody", name: "Mindbody", observationConfig: { vendor: "Mindbody" } },
         ]),
       },
-      absorptionPosture: { findFirst: vi.fn().mockResolvedValue({ archetypeIds: ["gym", "yoga-studio"] }) },
+      absorptionPosture: {
+        findMany: vi.fn().mockResolvedValue([{
+          ...POSTURE,
+          catalogIdentityId: null,
+          archetypeIds: ["gym", "yoga-studio"],
+        }]),
+      },
       storefrontArchetype: { findFirst: vi.fn().mockResolvedValue({ category: "fitness-recreation" }) },
       incumbentCoverageAssessment: {
         findUnique: vi.fn().mockResolvedValue(opts.existing),

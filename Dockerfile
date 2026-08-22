@@ -194,6 +194,7 @@ RUN mkdir -p /dpf-release-assets/scripts/lib /dpf-release-assets/scripts/install
     cp scripts/installer/install-state.v2.schema.json /dpf-release-assets/scripts/installer/ && \
     cp scripts/installer/native-edge-host.ps1 /dpf-release-assets/scripts/installer/ && \
     cp scripts/installer/lib/state.ps1 scripts/installer/lib/compose-chain.ps1 /dpf-release-assets/scripts/installer/lib/ && \
+    cp config/consumer-install/agent-pointer.md /dpf-release-assets/AGENTS.md && \
     mkdir -p /dpf-release-assets/scripts/safety && \
     cp scripts/safety/dpf-shell-guard.ps1 scripts/safety/dpf-shell-guard.sh \
        scripts/safety/dpf-shell-guard-fallback-patterns.json \

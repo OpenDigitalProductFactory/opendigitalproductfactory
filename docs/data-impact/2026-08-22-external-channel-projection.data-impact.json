@@ -1,0 +1,71 @@
+{
+  "version": "1",
+  "accountableOwner": "data-steward",
+  "affectedCopies": [
+    "ExternalChannelProjection is a compact current binding over canonical DPF source versions and customer-owned external resources; source content, remote content bodies, and credentials are not copied into it.",
+    "OutboundPublication remains the immutable publication-event receipt and IntegrationImportStagedRecord remains read/import staging. Neither authority moves into the new binding.",
+    "The optional credentialId is audit provenance only. Stable identity uses IntegrationCredential.integrationId copied as connectionId, so credential-secret rotation cannot fork the binding.",
+    "Metadata accepts at most 24 bounded scalar fields and rejects credential, authorization, content, body, HTML, payload, raw, and secret-like keys before persistence."
+  ],
+  "migration": {
+    "name": "20260822044500_add_external_channel_projection",
+    "backfill": "Additive expand-only migration creates three enums and one empty table. No existing row is read or changed. Rollback disables projection writers/readers while retaining rows as operational identity and drift evidence; a later governed cleanup may remove retired bindings only after external publication receipts and source lifecycle dependencies are reconciled."
+  },
+  "tests": [
+    "apps/web/lib/integrations/external-channel-projection.test.ts",
+    "packages/db/src/external-channel-projection-schema.test.ts",
+    "apps/web/lib/govern/data/assets.test.ts",
+    "apps/web/lib/govern/data/coverage.test.ts",
+    "apps/web/lib/govern/data/coverage.live.test.ts",
+    "packages/db/scripts/migration-safety-guard.mjs",
+    "scripts/check-data-impact.mjs"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:external-channel-projection",
+      "prismaModel": "ExternalChannelProjection",
+      "lifecycleDisposition": "The binding is retained while current, drifted, ambiguous, or deliberately detached because it prevents duplicate remote creation and explains authority history. Disconnect uses the canonical RecordLifecycle retirement fields rather than deleting it. Removal follows the owning source/integration lifecycle only after publication receipts and unresolved ambiguity are reconciled; there is no routine age-based purge.",
+      "fields": [
+        {
+          "fieldId": "data:external-channel-projection#source-identity",
+          "resolution": "inherited",
+          "reason": "connectorKey, stable connectionId, sourceType, sourceId, sourceVersion, resourceKind, and locale preserve the canonical source/version target identity without copying source content.",
+          "provenance": "BI-93507D83; DI-BC2255C06EC5; source binding unique constraint"
+        },
+        {
+          "fieldId": "data:external-channel-projection#remote-identity",
+          "resolution": "governed",
+          "reason": "externalId and externalUrl identify the customer-owned remote resource and are necessary to update rather than duplicate it.",
+          "provenance": "Connector bind/reconcile operation after provider evidence",
+          "flags": [
+            "sensitive"
+          ],
+          "fieldPolicy": "Internal, local-only operational metadata; exposed only to authorized integration operators and never used as a credential or content cache."
+        },
+        {
+          "fieldId": "data:external-channel-projection#fingerprints-and-state",
+          "resolution": "governed",
+          "reason": "Local/remote fingerprints, state, and observation/projection timestamps make drift, ambiguous outcomes, detach, and retry safety deterministic without retaining the compared payloads.",
+          "provenance": "Provider-neutral projection service state machine and canonical normalized fingerprints"
+        },
+        {
+          "fieldId": "data:external-channel-projection#metadata",
+          "resolution": "governed",
+          "reason": "Bounded scalar reconciliation evidence is useful, but credentials and full source/remote payloads would create a prohibited parallel copy.",
+          "provenance": "sanitizeExternalChannelProjectionMetadata allowlist-by-shape and prohibited-key guard",
+          "flags": [
+            "sensitive"
+          ],
+          "fieldPolicy": "Maximum 24 scalar keys, 4 KiB total, 256-character strings; reject secret/auth/credential/token/cookie/username/body/content/html/payload/raw keys and nested values."
+        }
+      ]
+    },
+    {
+      "kind": "projection",
+      "derivedContractId": "projection:external-channel-binding",
+      "cleanupTest": "apps/web/lib/integrations/external-channel-projection.test.ts proves detach and retire preserve binding evidence rather than deleting or silently orphaning a remote resource",
+      "reconciliationTest": "apps/web/lib/integrations/external-channel-projection.test.ts proves ambiguity blocks automatic retry and can become current only through compare-and-set reconciliation evidence"
+    }
+  ]
+}

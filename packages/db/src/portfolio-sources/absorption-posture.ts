@@ -14,6 +14,7 @@ import {
   connectorTierForCategory,
   type ConnectorTier,
 } from "./vertical-incumbents-manifest";
+import { normalizeAbsorptionIdentityKey } from "./absorption-posture-resolver";
 
 // ─── Verdict vocabulary (== IncumbentCoverageAssessment) ────────────────────
 export const ABSORPTION_VERDICTS = [
@@ -70,15 +71,7 @@ export function defaultVerdictForTier(tier: ConnectorTier): AbsorptionVerdict {
 
 /** A stable, deterministic posture key (no Date.now/random — seed idempotency). */
 export function postureIdFor(providerName: string, integrationCategory: string): string {
-  const slug = (s: string) =>
-    s
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      // The collapse above leaves at most one leading/trailing "-", so a single
-      // non-quantified strip suffices — avoids the polynomial `-+` (ReDoS) form.
-      .replace(/^-/, "")
-      .replace(/-$/, "");
-  return `posture-${slug(providerName)}-${slug(integrationCategory)}`;
+  return `posture-${normalizeAbsorptionIdentityKey(providerName)}-${normalizeAbsorptionIdentityKey(integrationCategory)}`;
 }
 
 export interface AbsorptionPostureSeedRow {
