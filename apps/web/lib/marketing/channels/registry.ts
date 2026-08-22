@@ -2,6 +2,7 @@ import type { OutboundChannelAdapter } from "./contracts";
 import { createLinkedInPersonalSocialAdapter } from "./linkedin-personal-social/adapter";
 import { createEmailPostmarkAdapter } from "./email-postmark/adapter";
 import { createLinkedInAdsAdapter } from "./linkedin-ads/adapter";
+import { createWordPressOutboundAdapter } from "./wordpress-self-hosted/adapter";
 
 // Channel adapter registry. Phases 2/3 register two adapters
 // (linkedin-personal-social, email-postmark) plus channel-id aliases so a
@@ -16,6 +17,7 @@ function getAdapters(): OutboundChannelAdapter[] {
       createLinkedInPersonalSocialAdapter(),
       createEmailPostmarkAdapter(),
       createLinkedInAdsAdapter(),
+      createWordPressOutboundAdapter(),
     ];
   }
   return registeredAdapters;

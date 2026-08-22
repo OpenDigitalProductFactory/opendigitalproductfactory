@@ -17,6 +17,7 @@ import {
 } from "./execution";
 import { getAdapter } from "./channels/registry";
 import type { ChannelCredentialBundle } from "./channels/contracts";
+import { executeProjectedPublication } from "@/lib/integrations/external-channel-publication";
 import { assessArchetypeFit } from "./archetype-fit";
 import { resolveOrgArchetypeCategory } from "./fit-guard";
 
@@ -146,7 +147,13 @@ export async function publishApprovedDraft(input: {
     }
   }
 
-  const result = await adapter.publish(draft, credential);
+  const result = adapter.projectionIntent
+    ? await executeProjectedPublication({
+        db: prisma,
+        intent: adapter.projectionIntent(draft, credential),
+        publish: (context) => adapter.publish!(draft, credential, context),
+      })
+    : await adapter.publish(draft, credential);
   if (!result.ok) {
     return {
       ok: false,

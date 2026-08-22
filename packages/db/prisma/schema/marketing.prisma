@@ -329,7 +329,9 @@ model OutboundPublication {
 
   draft OutboundDraft @relation(fields: [draftId], references: [draftId], onDelete: Cascade)
 
-  @@unique([channelId, externalId])
+  // One remote binding can accumulate immutable create/update receipts.
+  // ExternalChannelProjection owns current identity and duplicate prevention.
+  @@index([channelId, externalId], map: "OutboundPublication_channel_external_idx")
   @@index([draftId])
   @@index([channelId, publishedAt])
 }
