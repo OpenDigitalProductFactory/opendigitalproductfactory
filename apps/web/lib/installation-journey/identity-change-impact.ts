@@ -292,8 +292,11 @@ function buildWarnings(input: {
 
   const peerLoosened = loosened.find((d) => d.stance === "peerWrite");
   if (peerLoosened) {
+    // Deliberately not phrased as "writes": adding a pairing to a development
+    // install loosens the stance from "no peer" to "read only", which is a wider
+    // reach without being a write.
     warnings.push(
-      `Writes to ${refLabel(next.pairedProductionInstallationRef)} move from "${peerLoosened.from}" to "${peerLoosened.to}".`,
+      `What this installation may do to ${refLabel(next.pairedProductionInstallationRef)} moves from "${peerLoosened.from}" to "${peerLoosened.to}".`,
     );
   }
 
