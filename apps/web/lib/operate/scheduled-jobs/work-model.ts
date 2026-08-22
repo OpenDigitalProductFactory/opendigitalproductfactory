@@ -173,7 +173,14 @@ export function describeSchedule(schedule: string): string {
   if (minStep) return `Every ${minStep[1]} minutes`;
   const hourStep = hour.match(/^\*\/(\d+)$/);
   if (hourStep) return `Every ${hourStep[1]}h at :${pad(min)}`;
-  if (hour === "*") return `Hourly at :${pad(min)}`;
+  if (hour === "*") {
+    // A deconflicted cron spreads its fires across an evenly-spaced minute list
+    // (`2,7,12,…,57`). Rendering the list is accurate and unreadable; the gap is
+    // what an operator is actually asking about.
+    const spacing = evenMinuteSpacing(min);
+    if (spacing) return `Every ${spacing} minutes`;
+    return `Hourly at :${pad(min)}`;
+  }
 
   const at = `${pad(hour)}:${pad(min)}`;
 
@@ -191,6 +198,19 @@ export function describeSchedule(schedule: string): string {
   }
   if (dom !== "*") return `Monthly on the ${dom}${ordinal(Number(dom))} at ${at}`;
   return `Daily at ${at}`;
+}
+
+/** The common gap of an evenly-spaced, hour-filling minute list, else null. */
+function evenMinuteSpacing(min: string): number | null {
+  if (!min.includes(",")) return null;
+  const mins = min.split(",");
+  if (!mins.every((m) => /^\d+$/.test(m))) return null;
+  const ns = mins.map(Number).sort((a, b) => a - b);
+  if (ns.length < 3) return null;
+  const gap = ns[1]! - ns[0]!;
+  if (gap <= 0 || 60 % gap !== 0 || ns.length !== 60 / gap) return null;
+  for (let i = 1; i < ns.length; i++) if (ns[i]! - ns[i - 1]! !== gap) return null;
+  return gap;
 }
 
 function ordinal(n: number): string {
@@ -213,6 +233,50 @@ export function deriveKind(schedule: string): WorkKind {
   return "recurring";
 }
 
+/**
+ * Gap between fires for the sub-hourly and hourly cron shapes, or null when the
+ * expression is not one of them.
+ *
+ * `computeNextCronRun` — the agent dispatcher's projector — deliberately treats
+ * minute and hour as CONCRETE fields and returns a 24h fallback for anything
+ * else. Delegating to it made every `*​/5 * * * *` cron look daily, which put
+ * jobs that fire twelve times an hour in the "no fire inside this window" list.
+ * This layer answers the shapes it does not cover, and leaves the rest to it.
+ */
+export function stepCronIntervalMs(schedule: string): number | null {
+  const parts = schedule.trim().split(/\s+/);
+  if (parts.length !== 5) return null;
+  const [min, hour, dom, mon, dow] = parts as [string, string, string, string, string];
+  // A step/wildcard minute or hour only repeats sub-daily when the date fields
+  // are unconstrained; `*/5 * 1 * *` fires every 5 min on the 1st, not always.
+  if (dom !== "*" || mon !== "*" || dow !== "*") return null;
+
+  const minStep = min.match(/^\*\/(\d+)$/);
+  if (minStep && hour === "*") {
+    const n = Number(minStep[1]);
+    return n > 0 ? n * 60_000 : null;
+  }
+  if (min === "*" && hour === "*") return 60_000;
+
+  const hourStep = hour.match(/^\*\/(\d+)$/);
+  if (hourStep && /^\d+$/.test(min)) {
+    const n = Number(hourStep[1]);
+    return n > 0 ? n * 3_600_000 : null;
+  }
+  // A concrete minute with a wildcard hour fires once an hour.
+  if (hour === "*" && /^\d+$/.test(min)) return 3_600_000;
+  return null;
+}
+
+/** True when the cron's minute and hour are concrete, which is the only shape
+ *  `computeNextCronRun` can project a real next fire for. */
+export function hasProjectableCronTime(schedule: string): boolean {
+  const parts = schedule.trim().split(/\s+/);
+  if (parts.length !== 5) return false;
+  const [min, hour] = parts as [string, string];
+  return /^\d+$/.test(min) && /^\d+$/.test(hour);
+}
+
 /** Expected gap between runs, for overdue detection. Null when unknowable. */
 export function cadenceIntervalMs(schedule: string): number | null {
   const token = SCHEDULE_INTERVALS_MS[schedule as keyof typeof SCHEDULE_INTERVALS_MS];
@@ -221,6 +285,9 @@ export function cadenceIntervalMs(schedule: string): number | null {
   if (schedule === "every-6-hours") return 6 * 3_600_000;
   const parts = schedule.trim().split(/\s+/);
   if (parts.length !== 5) return null;
+  const step = stepCronIntervalMs(schedule);
+  if (step !== null) return step;
+  if (!hasProjectableCronTime(schedule)) return null;
   // Measure the real gap by projecting two consecutive fires.
   const base = new Date(0);
   const first = computeNextCronRun(schedule, base);
@@ -413,16 +480,20 @@ export function buildWorkView(
       }
     : null;
 
-  const purpose =
+  const name = entry?.name ?? task?.title ?? job?.name ?? jobId;
+  const purposeText =
     entry?.purpose ??
     task?.title ??
     (kind === "slot-lock"
       ? "Not a scheduled job — a run-slot claim recorded in the schedule table."
       : "No registered purpose. This row is not in the code cron registry and has no agent task behind it.");
+  // An agent task's title is already the row's name; repeating it as the purpose
+  // just prints the same sentence twice.
+  const purpose = purposeText === name ? "" : purposeText;
 
   return {
     jobId,
-    name: entry?.name ?? task?.title ?? job?.name ?? jobId,
+    name,
     purpose,
     kind,
     substrate,

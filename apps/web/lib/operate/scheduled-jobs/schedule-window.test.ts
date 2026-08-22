@@ -63,6 +63,31 @@ describe("buildScheduleWindow", () => {
     expect(day.continuous.map((c) => c.jobId)).toEqual(["code-graph-reconcile"]);
   });
 
+  it("lists a step-cron as continuous instead of stranding it as quiet", () => {
+    // Alert delivery bridge (*/5) and Task-run watchdog (0 * * * *) appeared
+    // under "enabled, but no fire inside this window" on the live register.
+    const stepped = [
+      view({ jobId: "alert-delivery-bridge", schedule: "*/5 * * * *" }),
+      view({ jobId: "task-run-watchdog", schedule: "0 * * * *" }),
+    ];
+    const day = buildScheduleWindow(stepped, "day", NOW);
+    expect(day.quiet).toHaveLength(0);
+    expect(day.continuous.map((c) => c.jobId).sort()).toEqual([
+      "alert-delivery-bridge",
+      "task-run-watchdog",
+    ]);
+  });
+
+  it("anchors on the register's own next run for a token cadence", () => {
+    // "daily" carries no time of day; projecting from the window start puts the
+    // first fire exactly at the 24h edge, so a daily job read as never firing.
+    const soon = new Date(NOW.getTime() + 3 * 3_600_000).toISOString();
+    const daily = [view({ jobId: "all-backups", schedule: "daily", nextRunAt: soon })];
+    const day = buildScheduleWindow(daily, "day", NOW);
+    expect(day.quiet).toHaveLength(0);
+    expect(day.buckets.flatMap((b) => b.occurrences).map((o) => o.at)).toContain(soon);
+  });
+
   it("excludes work that will not fire", () => {
     const views = [
       view({ jobId: "spent", kind: "one-shot", schedule: "15 6 21 8 *", health: "spent" }),

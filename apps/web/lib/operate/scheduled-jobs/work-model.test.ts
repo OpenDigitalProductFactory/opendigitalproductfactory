@@ -11,9 +11,11 @@ import {
   deriveHealth,
   deriveKind,
   describeSchedule,
+  hasProjectableCronTime,
   isProjectionStale,
   isQuarantined,
   overdueGraceMs,
+  stepCronIntervalMs,
 } from "./work-model";
 
 const NOW = new Date("2026-08-22T02:30:00.000Z");
@@ -60,6 +62,17 @@ describe("describeSchedule", () => {
     expect(describeSchedule("15 6 21 8 *")).toBe("Once on Aug 21 at 06:15");
   });
 
+  it("reads a deconflicted minute list as its interval", () => {
+    // The scheduling allocator spreads fires across the hour; the raw list is
+    // accurate and unreadable.
+    expect(describeSchedule("2,7,12,17,22,27,32,37,42,47,52,57 * * * *")).toBe("Every 5 minutes");
+    expect(describeSchedule("6,21,36,51 * * * *")).toBe("Every 15 minutes");
+  });
+
+  it("keeps an uneven minute list literal", () => {
+    expect(describeSchedule("3,17,42 * * * *")).toBe("Hourly at :3,17,42");
+  });
+
   it("never invents a cadence for an unparseable value", () => {
     expect(describeSchedule("unknown")).toBe("unknown");
   });
@@ -79,6 +92,42 @@ describe("cadenceIntervalMs", () => {
 
   it("returns null when the cadence is unknowable", () => {
     expect(cadenceIntervalMs("manual")).toBeNull();
+  });
+});
+
+describe("stepCronIntervalMs", () => {
+  it("reads the sub-hourly step shapes the dispatcher's projector cannot", () => {
+    // computeNextCronRun treats minute/hour as concrete and returns a 24h
+    // fallback for these, which made a 5-minute cron look daily and stranded
+    // twelve-times-an-hour jobs in "no fire inside this window".
+    expect(stepCronIntervalMs("*/5 * * * *")).toBe(5 * 60_000);
+    expect(stepCronIntervalMs("*/15 * * * *")).toBe(15 * 60_000);
+    expect(stepCronIntervalMs("0 * * * *")).toBe(3_600_000);
+    expect(stepCronIntervalMs("37 */6 * * *")).toBe(6 * 3_600_000);
+  });
+
+  it("does not claim a sub-daily gap when the date fields are pinned", () => {
+    // `*/5 * 1 * *` fires every 5 minutes on the 1st, not continuously.
+    expect(stepCronIntervalMs("*/5 * 1 * *")).toBeNull();
+  });
+
+  it("leaves concrete-time crons to the projector", () => {
+    expect(stepCronIntervalMs("0 3 * * *")).toBeNull();
+  });
+});
+
+describe("cadenceIntervalMs — step shapes", () => {
+  it("reports a 5-minute cron as five minutes, not a day", () => {
+    expect(cadenceIntervalMs("*/5 * * * *")).toBe(5 * 60_000);
+    expect(cadenceIntervalMs("0 * * * *")).toBe(3_600_000);
+  });
+});
+
+describe("hasProjectableCronTime", () => {
+  it("is true only for concrete minute and hour", () => {
+    expect(hasProjectableCronTime("0 3 * * *")).toBe(true);
+    expect(hasProjectableCronTime("*/5 * * * *")).toBe(false);
+    expect(hasProjectableCronTime("0 * * * *")).toBe(false);
   });
 });
 
@@ -202,6 +251,10 @@ describe("buildWorkView", () => {
       lastTaskRunId: "TR-SCHED-C77B43A9",
       lastThreadId: null,
     });
+  });
+
+  it("does not repeat the task title as its own purpose", () => {
+    expect(buildWorkView(task.taskId, undefined, task, NOW).purpose).toBe("");
   });
 
   it("offers a manual trigger for agent work that had none before", () => {

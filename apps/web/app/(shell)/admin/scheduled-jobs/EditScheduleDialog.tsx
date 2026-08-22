@@ -88,7 +88,7 @@ export function EditScheduleDialog({
       <div
         onClick={(e) => e.stopPropagation()}
         className="w-[560px] max-w-full max-h-full overflow-y-auto rounded p-6"
-        style={{ background: "var(--dpf-surface)", border: "1px solid var(--dpf-border)" }}
+        style={{ background: "var(--dpf-surface-1)", border: "1px solid var(--dpf-border)" }}
       >
         <h2 className="text-lg font-bold" style={{ color: "var(--dpf-text)" }}>
           Edit cadence — {job.name}

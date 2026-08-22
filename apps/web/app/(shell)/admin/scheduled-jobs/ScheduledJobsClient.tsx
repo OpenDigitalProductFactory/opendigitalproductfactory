@@ -419,9 +419,14 @@ export function ScheduledJobsClient({ initialJobs }: { initialJobs: ScheduledWor
                             </Pill>
                           )}
                         </div>
-                        <div className="text-dpf-caption mt-0.5 max-w-lg" style={{ color: "var(--dpf-muted)" }}>
-                          {job.purpose}
-                        </div>
+                        {job.purpose && (
+                          <div
+                            className="text-dpf-caption mt-0.5 max-w-lg"
+                            style={{ color: "var(--dpf-muted)" }}
+                          >
+                            {job.purpose}
+                          </div>
+                        )}
                         <div className="text-dpf-caption mt-0.5 font-mono" style={{ color: "var(--dpf-muted)" }}>
                           {job.jobId}
                         </div>

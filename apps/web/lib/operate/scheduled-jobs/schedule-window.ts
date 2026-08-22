@@ -13,7 +13,11 @@
 import { computeNextCronRun } from "@/lib/operate/cron-next-run";
 import { computeNextRunAt } from "@/lib/inference/ai-provider-types";
 
-import { cadenceIntervalMs, type ScheduledWorkView } from "./work-model";
+import {
+  cadenceIntervalMs,
+  hasProjectableCronTime,
+  type ScheduledWorkView,
+} from "./work-model";
 
 export type WindowRange = "day" | "week" | "month";
 
@@ -66,10 +70,14 @@ export interface ScheduleWindow {
   quiet: { jobId: string; name: string; cadence: string; isAgent: boolean }[];
 }
 
-/** Next fire strictly after `from`, for either cadence form. */
+/** Next fire strictly after `from`, for either cadence form. Null when the
+ *  expression's minute/hour cannot be projected — the caller lists those as
+ *  continuous rather than inventing a fire time for them. */
 function nextFire(schedule: string, from: Date): Date | null {
   const parts = schedule.trim().split(/\s+/);
-  if (parts.length === 5) return computeNextCronRun(schedule, from);
+  if (parts.length === 5) {
+    return hasProjectableCronTime(schedule) ? computeNextCronRun(schedule, from) : null;
+  }
   return computeNextRunAt(schedule, from);
 }
 
@@ -116,18 +124,33 @@ export function buildScheduleWindow(
     const isAgent = view.substrate === "agent-task";
     const entry = { jobId: view.jobId, name: view.name, cadence: view.cadence, isAgent };
 
-    // Firing more often than one bucket: a bar per fire would be a solid block.
+    // Two reasons a job is listed rather than plotted:
+    //  - it fires more often than one bucket, so a bar per fire is a solid block;
+    //  - its cron pins no concrete minute/hour, so there is no fire time to place
+    //    it at. Such a shape always repeats sub-daily (`*​/5 * * * *`,
+    //    `0 * * * *`), so listing it is right and inventing a bar would be wrong.
     const interval = cadenceIntervalMs(view.schedule);
-    if (interval !== null && interval < bucketMs) {
+    const isCron = view.schedule.trim().split(/\s+/).length === 5;
+    if ((interval !== null && interval < bucketMs) || (isCron && !hasProjectableCronTime(view.schedule))) {
       continuous.push(entry);
       continue;
     }
 
-    let cursor = new Date(startMs);
+    // Anchor on the register's own next run when it falls inside the window. A
+    // named-token cadence ("daily") carries no time of day, so projecting it
+    // from the window start puts the first fire exactly at the window edge and
+    // a daily job reads as "no fire in the next 24 hours". The stored next run
+    // is the truthful anchor, and it is what the row already shows.
+    const stored = view.nextRunAt ? new Date(view.nextRunAt).getTime() : NaN;
+    const anchored = Number.isFinite(stored) && stored >= startMs && stored < endMs;
+
+    let cursor = new Date(anchored ? stored : startMs);
     let placed = 0;
     for (let i = 0; i < MAX_OCCURRENCES_PER_JOB; i++) {
-      const fire = nextFire(view.schedule, cursor);
-      if (!fire || fire.getTime() <= cursor.getTime()) break;
+      // The anchor itself is the first fire; afterwards project forward.
+      const fire = i === 0 && anchored ? new Date(stored) : nextFire(view.schedule, cursor);
+      if (!fire || fire.getTime() < startMs) break;
+      if (i > 0 && fire.getTime() <= cursor.getTime()) break;
       if (fire.getTime() >= endMs) break;
       const index = Math.floor((fire.getTime() - startMs) / bucketMs);
       if (index >= 0 && index < bucketCount) {
