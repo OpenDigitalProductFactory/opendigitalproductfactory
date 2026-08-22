@@ -46,17 +46,22 @@ export { LOCAL_CI_OVERRIDE_REASON_CODES, classifyLocalCiOverride };
 const FAILING_BUCKETS = new Set(["fail", "cancel"]);
 const PENDING_BUCKETS = new Set(["pending"]);
 
-// PR-body attestation trailers for the local-CI sandbox gate (BI-C74F4DE9).
+// Commit/PR attestation trailers for the local-CI sandbox gate (BI-C74F4DE9).
 // `Local-CI-Evidence:` carries an evidence record id from a passing
 // `pnpm run pregate` run; `Local-CI-Override:` is an explicit operator
 // attestation that the sandbox gate was consciously skipped and why.
 // BI-563F6AB6: Override values must use a closed reason code (see local-ci-override.mjs).
 const LOCAL_CI_TRAILER_RE = /^\s*Local-CI-(Evidence|Override):\s*(\S.*)$/m;
 
-export function parseLocalCiAttestation(prBody) {
-  const match = LOCAL_CI_TRAILER_RE.exec(prBody || "");
-  if (!match) return null;
-  return { kind: match[1].toLowerCase(), value: match[2].trim() };
+export function parseLocalCiAttestation(prBody, commitMessages = []) {
+  // Commit trailers are durable and create a fresh webhook payload when pushed;
+  // prefer them over the mutable PR body, whose value is frozen in an already-
+  // running pull_request event. Body parsing stays as a compatibility fallback.
+  for (const source of [...commitMessages, prBody]) {
+    const match = LOCAL_CI_TRAILER_RE.exec(source || "");
+    if (match) return { kind: match[1].toLowerCase(), value: match[2].trim() };
+  }
+  return null;
 }
 
 const DOCS_ONLY_RE = /^docs\/|^memory\/|\.md$/;
@@ -124,7 +129,7 @@ export function evaluatePrHealth({ meta = {}, checks = [], threads = [], localCi
 
   // Local-CI sandbox evidence (BI-C74F4DE9 + BI-563F6AB6 P1): a runtime-code PR
   // must carry a passing local-integration-ci gate for its head SHA, a recorded
-  // pre-push override with an allowlisted reason code, or a PR-body attestation
+  // pre-push override with an allowlisted reason code, or a commit/PR attestation
   // (Evidence id, or Override with allowlisted code). Free-text overrides are
   // blockers — agents cannot green-wash "unit tests only".
   if (localCi) {
@@ -150,13 +155,13 @@ export function evaluatePrHealth({ meta = {}, checks = [], threads = [], localCi
     } else if (localCi.attestation) {
       if (localCi.attestation.kind === "evidence") {
         notes.push(
-          `local-CI evidence attestation in PR body: ${localCi.attestation.value}`,
+          `local-CI evidence attestation in commit history or PR body: ${localCi.attestation.value}`,
         );
       } else if (localCi.attestation.kind === "override") {
         const classified = classifyLocalCiOverride(localCi.attestation.value);
         if (classified.ok) {
           notes.push(
-            `local-CI override attestation in PR body (code=${classified.code}` +
+            `local-CI override attestation in commit history or PR body (code=${classified.code}` +
               (classified.detail ? `; ${classified.detail}` : "") +
               ")",
           );
@@ -230,7 +235,7 @@ function fetchPrState(prArg) {
   }
 
   const meta = JSON.parse(
-    gh(["pr", "view", number, "--json", "number,title,state,mergeable,mergeStateStatus,isDraft,headRefOid,body,files"]),
+    gh(["pr", "view", number, "--json", "number,title,state,mergeable,mergeStateStatus,isDraft,headRefOid,body,files,commits"]),
   );
 
   let checks = [];
@@ -271,7 +276,8 @@ function fetchPrState(prArg) {
 
   // Local-CI sandbox evidence inputs (BI-C74F4DE9). The git-local gate record
   // only proves anything when pr:health runs from the branch's own worktree;
-  // for remote PRs the PR-body attestation trailer is the portable signal.
+  // for remote PRs a commit trailer is the durable signal; PR body remains a
+  // compatibility fallback for older contributions.
   let stateRecord = null;
   try {
     const stateFile = execFileSync("git", ["rev-parse", "--git-path", "dpf-local-ci-gate.json"], {
@@ -284,7 +290,11 @@ function fetchPrState(prArg) {
   const localCi = {
     headSha: meta.headRefOid,
     docsOnly: isDocsOnlyFileSet(meta.files),
-    attestation: parseLocalCiAttestation(meta.body),
+    attestation: parseLocalCiAttestation(
+      meta.body,
+      (meta.commits ?? []).map((commit) =>
+        [commit.messageHeadline, commit.messageBody].filter(Boolean).join("\n\n")),
+    ),
     stateRecord,
   };
 
