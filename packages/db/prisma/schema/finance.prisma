@@ -1039,6 +1039,7 @@ model LedgerAccount {
   parent       LedgerAccount?  @relation("LedgerAccountTree", fields: [parentId], references: [id])
   children     LedgerAccount[] @relation("LedgerAccountTree")
   journalLines JournalLine[]
+  payComponentLines PayComponentLine[] @relation("PayComponentLedgerAccount")
 
   @@unique([organizationId, code])
   @@index([organizationId, type, isActive])

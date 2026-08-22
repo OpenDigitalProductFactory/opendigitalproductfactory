@@ -119,3 +119,5 @@ MacVendorOui  reference-data  # IEEE OUI registry seeded from packages/db/data/o
 McpToolSession  domain-lifecycle-managed  # short-TTL discovery state; rows are removed by their own expiresAt sweep (sweepExpiredToolSessions + lazy delete on read), not the retention engine
 FederationIntroductionCandidate  derived-projection  # Reconciled from a trusted introducer, expired/withdrawn by that exchange, and cascade-removed with its introducer link; it is never an independent source of trust.
 ExternalChannelProjection  derived-projection  # Rebuilt or explicitly retired from canonical DPF source plus external-channel evidence; age alone cannot decide whether a live source-to-remote binding is still authoritative.
+PayComponentLine  domain-lifecycle-managed  # Payslip money lines (BI-EAC670F1); cascade-deleted with their parent Payslip and retained for as long as payroll/tax law requires that payslip. A purge window here would gut historical pay records.
+EmployeeDeductionElection  domain-lifecycle-managed  # Standing deduction instructions (BI-EAC670F1); effective-dated and retired via RecordLifecycle so a closed run still explains what it deducted and why.

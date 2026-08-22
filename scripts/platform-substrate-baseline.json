@@ -17,11 +17,11 @@
     },
     "prismaModelCount": {
       "direction": "non-increasing",
-      "value": 598
+      "value": 600
     },
     "prismaSchemaLines": {
       "direction": "informational",
-      "value": 17646
+      "value": 17824
     },
     "productionModuleHotspotCount": {
       "direction": "non-increasing",
