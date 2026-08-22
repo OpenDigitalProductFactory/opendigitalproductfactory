@@ -38,10 +38,13 @@ export interface BacklogRecoveryItem {
   workType: WorkType;
   source: Source;
   priority?: number;
-  effortSize: EffortSize;
-  triageOutcome: TriageOutcome;
+  /** Absent when the source installation had not sized the item. */
+  effortSize?: EffortSize;
+  /** Absent when the source installation had not triaged the item. */
+  triageOutcome?: TriageOutcome;
   scopeKind: ScopeKind;
-  scopeRationale: string;
+  /** Absent when the source installation recorded no scope rationale. */
+  scopeRationale?: string;
   dependsOn: string[];
   externalDependencies: string[];
   createdAt?: string;
@@ -57,7 +60,8 @@ export interface BacklogRecoveryEpic {
   status: EpicStatus;
   priority?: number;
   scopeKind: ScopeKind;
-  scopeRationale: string;
+  /** Absent when the source installation recorded no scope rationale. */
+  scopeRationale?: string;
   createdAt?: string;
   completedAt?: string;
 }
@@ -141,6 +145,14 @@ function enumValue<const T extends readonly string[]>(value: unknown, values: T,
   return value as T[number];
 }
 
+function optionalEnum<const T extends readonly string[]>(
+  value: unknown,
+  values: T,
+  path: string,
+): T[number] | undefined {
+  return value === undefined ? undefined : enumValue(value, values, path);
+}
+
 function dateValue(value: unknown, path: string): string {
   const text = stringValue(value, path);
   if (
@@ -217,8 +229,9 @@ function parseEpic(value: unknown): BacklogRecoveryEpic {
     description: stringValue(input.description, `${path}.description`),
     status: enumValue(input.status, EPIC_STATUSES, `${path}.status`),
     scopeKind: enumValue(input.scopeKind, SCOPE_KINDS, `${path}.scopeKind`),
-    scopeRationale: stringValue(input.scopeRationale, `${path}.scopeRationale`),
   };
+  const epicScopeRationale = optionalString(input.scopeRationale, `${path}.scopeRationale`);
+  if (epicScopeRationale !== undefined) epic.scopeRationale = epicScopeRationale;
   const priority = optionalInteger(input.priority, `${path}.priority`);
   const createdAt = optionalDate(input.createdAt, `${path}.createdAt`);
   const completedAt = optionalDate(input.completedAt, `${path}.completedAt`);
@@ -250,10 +263,7 @@ function parseItem(value: unknown, index: number): BacklogRecoveryItem {
     type: enumValue(input.type, ITEM_TYPES, `${path}.type`),
     workType: enumValue(input.workType, WORK_TYPES, `${path}.workType`),
     source: enumValue(input.source, SOURCES, `${path}.source`),
-    effortSize: enumValue(input.effortSize, EFFORT_SIZES, `${path}.effortSize`),
-    triageOutcome: enumValue(input.triageOutcome, TRIAGE_OUTCOMES, `${path}.triageOutcome`),
     scopeKind: enumValue(input.scopeKind, SCOPE_KINDS, `${path}.scopeKind`),
-    scopeRationale: stringValue(input.scopeRationale, `${path}.scopeRationale`),
     dependsOn: stringArray(input.dependsOn, `${path}.dependsOn`).map((id, dependencyIndex) =>
       semanticId(id, "BI", `${path}.dependsOn[${dependencyIndex}]`),
     ),
@@ -264,6 +274,12 @@ function parseItem(value: unknown, index: number): BacklogRecoveryItem {
       parseActivity(activity, `${path}.activities[${activityIndex}]`),
     ),
   };
+  const effortSize = optionalEnum(input.effortSize, EFFORT_SIZES, `${path}.effortSize`);
+  const triageOutcome = optionalEnum(input.triageOutcome, TRIAGE_OUTCOMES, `${path}.triageOutcome`);
+  const itemScopeRationale = optionalString(input.scopeRationale, `${path}.scopeRationale`);
+  if (effortSize !== undefined) item.effortSize = effortSize;
+  if (triageOutcome !== undefined) item.triageOutcome = triageOutcome;
+  if (itemScopeRationale !== undefined) item.scopeRationale = itemScopeRationale;
   const priority = optionalInteger(input.priority, `${path}.priority`);
   const createdAt = optionalDate(input.createdAt, `${path}.createdAt`);
   const completedAt = optionalDate(input.completedAt, `${path}.completedAt`);
@@ -380,4 +396,285 @@ export async function reconcileBacklogRecoveryBundle(
     }
     return summary;
   });
+}
+
+/** An item the capture could not represent, and why. Never silently dropped. */
+export interface BacklogCaptureSkip {
+  itemId: string;
+  reason: "done-item-has-no-evidence-activity" | "item-has-no-epic";
+}
+
+/**
+ * The outcome of a capture: the reconcilable bundle plus everything it excluded.
+ *
+ * Callers must surface `skipped`. A capture that silently omitted work would read
+ * as a complete backup and lose exactly the thing it promised to protect.
+ */
+export interface BacklogCaptureResult {
+  /** `null` when no item in the epic could be represented — never an empty bundle. */
+  bundle: BacklogRecoveryBundle | null;
+  skipped: BacklogCaptureSkip[];
+}
+
+/** A backlog item as read from the database, before bundle shaping. */
+export interface BacklogCaptureItemRow {
+  itemId: string;
+  epicId: string;
+  title: string;
+  body: string;
+  status: ItemStatus;
+  type: ItemType;
+  workType: WorkType;
+  source: Source;
+  priority?: number | null;
+  effortSize?: EffortSize | string | null;
+  triageOutcome?: TriageOutcome | string | null;
+  scopeKind?: ScopeKind | string | null;
+  scopeRationale?: string | null;
+  createdAt?: Date | string | null;
+  completedAt?: Date | string | null;
+  resolution?: string | null;
+  activities: Array<{
+    id: string;
+    kind: string;
+    summary: string;
+    recordedAt: Date | string;
+    payload?: unknown;
+  }>;
+}
+
+/** An epic as read from the database, before bundle shaping. */
+export interface BacklogCaptureEpicRow {
+  epicId: string;
+  title: string;
+  description: string;
+  status: EpicStatus;
+  priority?: number | null;
+  scopeKind?: ScopeKind | string | null;
+  scopeRationale?: string | null;
+  createdAt?: Date | string | null;
+  completedAt?: Date | string | null;
+}
+
+/**
+ * Normalise a timestamp to the ISO 8601 UTC form the bundle contract requires.
+ *
+ * Prisma hands back `Date`, but rows read through a raw query arrive as driver
+ * strings such as `2026-08-19 12:34:56.789+00`, which the validator rejects.
+ * Normalising here keeps both paths capturable; an unparseable value is dropped
+ * rather than passed through to fail validation later.
+ */
+function isoOrUndefined(value: Date | string | null | undefined): string | undefined {
+  if (value === null || value === undefined) return undefined;
+  if (value instanceof Date) {
+    return Number.isFinite(value.getTime()) ? value.toISOString() : undefined;
+  }
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? new Date(parsed).toISOString() : undefined;
+}
+
+/**
+ * Normalise an item/activity pair into the lowercase semantic recovery key the
+ * bundle validator requires.
+ *
+ * The key is the reconciler's idempotency handle, so it is derived only from the
+ * stable item and activity identifiers — never from an array position, which
+ * would shift between captures and re-create activities on every recovery.
+ */
+function recoveryKeyFor(itemId: string, activitySuffix: string): string {
+  const key = `${itemId}-${activitySuffix}`
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80);
+  // The validator demands at least three characters after the leading one.
+  return key.length >= 3 ? key : `${key}-capture`.slice(0, 80);
+}
+
+/**
+ * Recursively drop keys the bundle contract forbids.
+ *
+ * Activity payloads on a live installation routinely carry install-local
+ * identifiers (`principalId`, `agentId`, …). Those are meaningless on the
+ * installation that recovers the bundle, and the validator rejects them outright.
+ * Stripping them keeps the surrounding work capturable instead of failing the
+ * whole capture over a field recovery would discard anyway.
+ */
+/**
+ * Coerce a recorded scope kind into the closed vocabulary.
+ *
+ * `unknown` is the format's own escape hatch, so an installation that never
+ * classified an item is represented truthfully rather than guessed into a class.
+ */
+function scopeKindOrUnknown(value: string | null | undefined): ScopeKind {
+  return value && (SCOPE_KINDS as readonly string[]).includes(value)
+    ? (value as ScopeKind)
+    : "unknown";
+}
+
+/** Keep a recorded value only when it is a usable non-empty string. */
+function presentString(value: string | null | undefined): string | undefined {
+  return typeof value === "string" && value.trim() !== "" ? value : undefined;
+}
+
+/** Keep a recorded value only when it is in the closed vocabulary. */
+function presentEnum<const T extends readonly string[]>(
+  value: string | null | undefined,
+  values: T,
+): T[number] | undefined {
+  return typeof value === "string" && (values as readonly string[]).includes(value)
+    ? (value as T[number])
+    : undefined;
+}
+
+function stripSensitive(value: unknown): JsonValue {
+  if (Array.isArray(value)) return value.map(stripSensitive);
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>)
+        .filter(([key]) => !SENSITIVE_KEY.test(key))
+        .map(([key, entry]) => [key, stripSensitive(entry)]),
+    );
+  }
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+  if (value === null || typeof value === "string" || typeof value === "boolean") return value;
+  return null;
+}
+
+function safePayload(value: unknown): { [key: string]: JsonValue } {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return {};
+  try {
+    const plain = JSON.parse(JSON.stringify(value)) as unknown;
+    const stripped = stripSensitive(plain);
+    if (typeof stripped !== "object" || stripped === null || Array.isArray(stripped)) return {};
+    return stripped as { [key: string]: JsonValue };
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * Build a reconcilable recovery bundle from live backlog rows.
+ *
+ * This is the capture half of the recovery contract: `reconcileBacklogRecoveryBundle`
+ * could already restore a bundle, but nothing produced one, so work created on an
+ * installation had no path off it. The result is round-tripped through
+ * `parseBacklogRecoveryBundle`, so a bundle that builds is guaranteed to reconcile.
+ *
+ * A `done` item must carry a `status_change` activity recording its resolution. When
+ * the stored activities do not include one, the item's own `resolution` column is
+ * projected into that shape — the same fact the invariant asks for, read from the
+ * column that holds it rather than invented.
+ */
+export function buildBacklogRecoveryBundle(input: {
+  bundleId: string;
+  description: string;
+  capturedAt: string;
+  repository: string;
+  planPath: string;
+  sourcePullRequest?: string;
+  epic: BacklogCaptureEpicRow;
+  items: BacklogCaptureItemRow[];
+}): BacklogCaptureResult {
+  const skipped: BacklogCaptureSkip[] = [];
+  const capturable = input.items.filter((row) => {
+    // A completed item must carry real evidence to be recoverable. Evidence is
+    // never synthesised — an item that lacks it is reported, not invented.
+    if (row.status !== "done") return true;
+    if (row.activities.some((activity) => activity.kind === "evidence")) return true;
+    skipped.push({
+      itemId: row.itemId,
+      reason: "done-item-has-no-evidence-activity",
+    });
+    return false;
+  });
+
+  const items: BacklogRecoveryItem[] = capturable.map((row) => {
+    const activities: BacklogRecoveryActivity[] = row.activities.map((activity) => ({
+      recoveryKey: recoveryKeyFor(row.itemId, activity.id),
+      kind: activity.kind,
+      summary: activity.summary,
+      recordedAt: isoOrUndefined(activity.recordedAt) ?? input.capturedAt,
+      payload: safePayload(activity.payload),
+    }));
+
+    const hasResolutionActivity = activities.some(
+      (activity) =>
+        activity.kind === "status_change" && typeof activity.payload.resolution === "string",
+    );
+    if (row.status === "done" && !hasResolutionActivity) {
+      activities.push({
+        recoveryKey: recoveryKeyFor(row.itemId, "resolution"),
+        kind: "status_change",
+        summary: "Captured resolution recorded on the item.",
+        recordedAt: isoOrUndefined(row.completedAt) ?? input.capturedAt,
+        payload: { resolution: row.resolution ?? "completed" },
+      });
+    }
+
+    const item: BacklogRecoveryItem = {
+      itemId: row.itemId,
+      epicId: row.epicId,
+      title: row.title,
+      body: row.body,
+      status: row.status,
+      type: row.type,
+      workType: row.workType,
+      source: row.source,
+      scopeKind: scopeKindOrUnknown(row.scopeKind),
+      dependsOn: [],
+      externalDependencies: [],
+      activities,
+    };
+    const effortSize = presentEnum(row.effortSize, EFFORT_SIZES);
+    const triageOutcome = presentEnum(row.triageOutcome, TRIAGE_OUTCOMES);
+    const itemScopeRationale = presentString(row.scopeRationale);
+    if (effortSize) item.effortSize = effortSize;
+    if (triageOutcome) item.triageOutcome = triageOutcome;
+    if (itemScopeRationale) item.scopeRationale = itemScopeRationale;
+    if (typeof row.priority === "number") item.priority = row.priority;
+    const createdAt = isoOrUndefined(row.createdAt);
+    if (createdAt) item.createdAt = createdAt;
+    if (row.status === "done") {
+      const completedAt = isoOrUndefined(row.completedAt);
+      if (completedAt) item.completedAt = completedAt;
+      if (row.resolution) item.resolution = row.resolution;
+    }
+    return item;
+  });
+
+  const epic: BacklogRecoveryEpic = {
+    epicId: input.epic.epicId,
+    title: input.epic.title,
+    description: input.epic.description,
+    status: input.epic.status,
+    scopeKind: scopeKindOrUnknown(input.epic.scopeKind),
+  };
+  const epicScopeRationale = presentString(input.epic.scopeRationale);
+  if (epicScopeRationale) epic.scopeRationale = epicScopeRationale;
+  if (typeof input.epic.priority === "number") epic.priority = input.epic.priority;
+  const epicCreatedAt = isoOrUndefined(input.epic.createdAt);
+  if (epicCreatedAt) epic.createdAt = epicCreatedAt;
+  const epicCompletedAt = isoOrUndefined(input.epic.completedAt);
+  if (epicCompletedAt) epic.completedAt = epicCompletedAt;
+
+  const bundle = {
+    schemaVersion: BACKLOG_RECOVERY_SCHEMA_VERSION,
+    bundleId: input.bundleId,
+    description: input.description,
+    source: {
+      capturedAt: input.capturedAt,
+      repository: input.repository,
+      planPath: input.planPath,
+      ...(input.sourcePullRequest ? { sourcePullRequest: input.sourcePullRequest } : {}),
+    },
+    epic,
+    items,
+  };
+
+  // An epic whose every item was skipped yields no bundle rather than an empty one.
+  if (items.length === 0) return { bundle: null, skipped };
+
+  // Round-trip so an unreconcilable bundle fails at capture, not at recovery.
+  return { bundle: parseBacklogRecoveryBundle(bundle), skipped };
 }

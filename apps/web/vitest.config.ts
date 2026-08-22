@@ -142,6 +142,14 @@ export default defineConfig({
         replacement: resolve(rootDir, "packages/db/src/reference-model-projection.ts"),
       },
       { find: "@", replacement: webDir },
+      {
+        find: "@dpf/db/installation-instance-stance",
+        replacement: resolve(rootDir, "packages/db/src/installation-instance-stance.ts"),
+      },
+      {
+        find: "@dpf/db/installation-operating-intent",
+        replacement: resolve(rootDir, "packages/db/src/installation-operating-intent.ts"),
+      },
       { find: "@dpf/db", replacement: resolve(rootDir, "packages/db/src/client.ts") },
       {
         find: "@dpf/finance-templates",

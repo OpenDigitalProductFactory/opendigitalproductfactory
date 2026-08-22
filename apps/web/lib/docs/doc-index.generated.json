@@ -5016,6 +5016,8 @@
         "what-the-installer-does",
         "login",
         "day-to-day",
+        "declare-what-the-installation-is-for",
+        "work-created-on-an-installation-lives-only-there",
         "docker-memory",
         "llm-provider",
         "voice-stt-tts",

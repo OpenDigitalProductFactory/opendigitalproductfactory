@@ -1,3 +1,8 @@
+import {
+  formatInstanceStanceBriefing,
+  type InstanceStanceProfile,
+} from "@dpf/db/installation-instance-stance";
+
 import type { McpTokenScope } from "@/lib/auth/mcp-api-token";
 import type { InstallHostProfile } from "@/lib/install/host-profile";
 
@@ -35,6 +40,7 @@ const AUTHORITY_INSTRUCTIONS: Record<AgentAuthorityTier, string> = {
 export function buildAgentHostInstructions(
   profile: InstallHostProfile,
   token: EffectiveTokenAuthority,
+  stance?: InstanceStanceProfile,
 ): string {
   const authority = resolveAgentAuthorityTier(token);
   const host = profile.kind === "consumer"
@@ -42,6 +48,10 @@ export function buildAgentHostInstructions(
     : profile.kind === "source"
       ? "SOURCE-CAPABLE HOST: a Git-backed checkout is present. MCP is authoritative for coordination and governance; follow the repository rulebook for source work."
       : "UNVERIFIED HOST: source capability could not be established. MCP is authoritative. Do not edit host files or run source-based upgrade work until install identity is verified.";
-  return `DPF AGENT HOST — ${host} Your effective authority: ${authority}. ${AUTHORITY_INSTRUCTIONS[authority]}`;
+  const base = `DPF AGENT HOST — ${host} Your effective authority: ${authority}. ${AUTHORITY_INSTRUCTIONS[authority]}`;
+  // The stance briefing states what this installation *is* and which brakes apply.
+  // It follows the host and authority lines so an agent reads identity before it
+  // reads the tool catalogue.
+  return stance ? `${base}\n\n${formatInstanceStanceBriefing(stance)}` : base;
 }
 

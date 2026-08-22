@@ -12,6 +12,10 @@ param(
     [switch]$Headless,
     [switch]$Consumer,
     [switch]$Contributor,
+    # Declares what this installation IS, so agents and lifecycle tooling can tell a
+    # production install from a disposable one. Recorded in installer state as the
+    # canonical local host fact; an undeclared install is treated as production.
+    [ValidateSet("production", "development", "test")][string]$EnvironmentClass,
     [ValidateNotNullOrEmpty()][string]$OrganizationJoinPackage,
     [switch]$Help
 )
@@ -42,6 +46,11 @@ Flags:
                 install directory; fails with actionable credential guidance.
   -Consumer     Install verified pre-built release assets (ready-to-go mode).
   -Contributor  Clone the source workspace for platform contribution work.
+  -EnvironmentClass <production|development|test>
+                Declare what this installation is. Shapes what connected AI
+                agents may do -- teardown, credential handling, and writes to a
+                paired installation. An undeclared install is treated as
+                production.
   -OrganizationJoinPackage <file.dpfjoin>
                 Join an existing organization trust domain during install. The
                 private package is validated, consumed, and deleted on success;
@@ -1725,6 +1734,15 @@ if (-not (Test-StepDone "started")) {
         installMode = $InstallMode
         imageTag = $(if ($InstallMode -eq "consumer") { $Version } else { $null })
         edge = @{ enabled = $resolvedEdgeEnabled; mode = $(if ($resolvedEdgeEnabled) { "local" } else { $null }) }
+    }
+    # Record the environment class only when the operator declared one. Writing a
+    # default here would let an unasserted install claim to be development and
+    # unlock teardown it should never have.
+    if ($EnvironmentClass) {
+        Set-DpfStateValues -Values @{ environmentClass = $EnvironmentClass }
+        Write-OK "Installation environment class: $EnvironmentClass"
+    } else {
+        Write-Host "  No environment class declared; this install is treated as production until one is set." -ForegroundColor Yellow
     }
     $capabilityProjection = Resolve-DpfCapabilityComposeProfiles -InstallDir $DPF_DIR
     $env:COMPOSE_PROFILES = (@($capabilityProjection.composeProfiles) -join ',')

@@ -129,6 +129,52 @@ release pull, the installer prints the repository digest and image creation date
 When `latest` is more than 24 hours older than `main`, it also warns that the
 published release may be stale without blocking an otherwise valid install.
 
+### Declare what the installation is for
+
+`-EnvironmentClass production|development|test` records what this installation
+**is**, so connected AI agents get the right limits. The value is written to
+installer state and read back at MCP connect time.
+
+```powershell
+# A production business installation.
+powershell -ExecutionPolicy Bypass -File install-dpf.ps1 -Headless -Consumer -EnvironmentClass production
+
+# A development companion you can rebuild.
+powershell -ExecutionPolicy Bypass -File install-dpf.ps1 -Headless -Consumer -EnvironmentClass development
+```
+
+The declaration changes agent behaviour:
+
+| Declared | Teardown | Credentials | Writes to a paired peer |
+| --- | --- | --- | --- |
+| `production` | never | operator enters them | allowed through an approved federation link |
+| `development` or `test` | only after the backlog is captured | agent may handle local ones | never |
+
+**An installation with no declaration is treated as production.** That is the
+safe default, not an oversight: a missing declaration must never be the reason
+an agent tears something down. You can declare it later by re-running the
+installer with the flag.
+
+Managed-service and channel operators should declare every customer-facing hub
+`production` and every rehearsal install `development`. A development companion
+can read from the production installation it is paired with, and can never
+write to it.
+
+The same flag on Linux and macOS is `--environment-class production|development|test`.
+
+### Work created on an installation lives only there
+
+Backlog items are database records, not repository files. A teardown, a purge
+uninstall, or a volume removal destroys them. Capture them first:
+
+```powershell
+pnpm --filter @dpf/db backlog:capture -- --out D:\DPF-backups\backlog\capture
+```
+
+That writes one recovery bundle per epic, a manifest, and a list of anything it
+could not represent. Restore on another installation with
+`pnpm --filter @dpf/db backlog:reconcile -- <bundle.json> --apply`.
+
 ## Docker memory
 
 The Next.js production build needs ~4 GB of Node.js heap; with parallel
