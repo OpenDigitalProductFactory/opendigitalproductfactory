@@ -371,6 +371,28 @@ describe("createLocalIntegrationPlan", () => {
 });
 
 describe("executeLocalIntegrationPlan", () => {
+  it("keeps spaced Windows path arguments out of shell-string parsing", () => {
+    const calls = [];
+    const output = "C:\\Users\\Mark Bodman\\repo\\dpf-ci-evidence-plan.json";
+    const result = executeLocalIntegrationPlan({
+      commands: [["node", "scripts/ci-evidence-plan.mjs", "--output", output]],
+    }, {
+      baseEnv: { ComSpec: "C:\\Windows\\System32\\cmd.exe" },
+      platform: "win32",
+      log: () => {},
+      error: () => {},
+      spawnSyncImpl(command, args, options) {
+        calls.push({ command, args, options });
+        return { status: 0, signal: null };
+      },
+    });
+
+    assert.equal(result.status, 0);
+    assert.equal(calls[0].command, "node");
+    assert.deepEqual(calls[0].args, ["scripts/ci-evidence-plan.mjs", "--output", output]);
+    assert.equal(calls[0].options.shell, false);
+  });
+
   it("does not launch exhaustive tests or a production build after typecheck fails", () => {
     const launched = [];
     const errors = [];
