@@ -211,7 +211,7 @@ describe("BuildStudio DetailsDrawer integration", () => {
     fireEvent.click(screen.getByTestId(BUILD_STUDIO_TEST_IDS.detailsDrawerPill));
     const sectionHeaders = document.querySelectorAll("[data-section-id]");
     const ids = Array.from(sectionHeaders).map((s) => s.getAttribute("data-section-id"));
-    expect(ids).toEqual(["canonical-doc", "progress", "brief", "review", "bs-queue"]);
+    expect(ids).toEqual(["canonical-doc", "progress", "brief", "review"]);
   });
 
   it("phase=ideate → Brief is default-open", () => {
@@ -281,19 +281,18 @@ describe("BuildStudio DetailsDrawer integration", () => {
 
     await waitFor(() => {
       expect(screen.getByTestId(BUILD_STUDIO_TEST_IDS.detailsDrawer)).toHaveAttribute("data-open", "true");
-      const queueSection = document.querySelector(`[data-testid="${BUILD_STUDIO_TEST_IDS.detailsDrawerQueue}"]`);
-      expect(queueSection).toHaveAttribute("data-open", "true");
+      // The fleet header used to open a duplicate BS-Queue panel; it now opens
+      // real progress detail (BI readable-canvas).
+      const progressSection = document.querySelector('[data-testid="details-drawer-section-progress"]');
+      expect(progressSection).toHaveAttribute("data-open", "true");
     });
   });
 
-  it("BS-Queue section lists builds with kind + buildId", () => {
+  it("does not re-list the fleet inside the drawer — the rail is the one list", () => {
     render(
       <BuildStudio
         builds={[
           makeBuild({ buildId: "FB-RUNRUNRUN", phase: "build" }),
-          // BI-5939B62F: ideate/plan now derive to "running", so use a still-idle
-          // phase (ship with acceptance recorded → idle, not needs-you) to keep
-          // the running → idle sort covered.
           makeBuild({
             buildId: "FB-IDLEEEEEE",
             phase: "ship",
@@ -307,17 +306,14 @@ describe("BuildStudio DetailsDrawer integration", () => {
       />,
     );
     fireEvent.click(screen.getByTestId("build-studio-fleet-header"));
-    const queueSection = document.querySelector(`[data-testid="${BUILD_STUDIO_TEST_IDS.detailsDrawerQueue}"]`);
-    expect(queueSection).toBeInTheDocument();
-    // Both rows rendered, sorted running → idle.
-    const rows = queueSection!.querySelectorAll("[data-build-id]");
-    expect(rows).toHaveLength(2);
-    expect(rows[0]).toHaveAttribute("data-build-id", "FB-RUNRUNRUN");
-    expect(rows[0]).toHaveAttribute("data-queue-kind", "running");
-    expect(rows[1]).toHaveAttribute("data-build-id", "FB-IDLEEEEEE");
-    expect(rows[1]).toHaveAttribute("data-queue-kind", "idle");
+    // The duplicate queue panel is gone: no drawer section re-renders the
+    // build list, and its counters (which tallied only running/blocked/queued
+    // while listing every row) can no longer disagree with what it shows.
+    expect(
+      document.querySelector('[data-testid="details-drawer-section-bs-queue"]'),
+    ).toBeNull();
+    expect(document.body.textContent).not.toContain("AI Coworker workload");
   });
-
   it("close button unmounts the drawer from the owner-facing DOM", async () => {
     render(
       <BuildStudio

@@ -53,13 +53,13 @@ export function projectOwnerChangeView(input: {
   previewDrivingBuildId?: string | null;
 }): OwnerChangeView {
   const { build, status } = input;
-  const outcome = firstText(
+  const outcome = toOutcomeStatement(firstText(
     build.businessBuildBrief?.businessOutcome,
     build.designDoc?.problemStatement,
     build.description,
     build.originator?.resolution,
     build.title,
-  );
+  ));
   const previewAvailable =
     build.sandboxPort !== null && ["build", "review", "ship"].includes(build.phase);
   const pendingDecision = build.decisionInteraction;
@@ -225,6 +225,104 @@ export function fallbackNext(phase: BuildPhase): string {
   if (phase === "abandoned") return "Resume only if this outcome is still valuable.";
   if (phase === "ship") return "Review the proof before release.";
   return "No action is needed unless Build Studio asks for a decision.";
+}
+
+
+/** Longest an outcome statement may be before it is clamped. */
+export const OUTCOME_STATEMENT_MAX = 240;
+
+/**
+ * Reduce whatever the fallback chain found to ONE readable sentence.
+ *
+ * The chain's third entry is `build.description`, which for any build promoted
+ * from the backlog is the WHOLE markdown BI body — "## Problem ... ## Scope ...
+ * ## Acceptance criteria". BuildOperatorOverview rendered that into a single
+ * plain <p>, so the operator's first viewport was a wall of unrendered markdown
+ * (literal "##" and "> **" on screen), unclamped and occluded by the details
+ * drawer. The full text is not lost: the drawer's Canonical doc section already
+ * renders the same string as proper formatted markdown.
+ *
+ * So this is deliberately lossy. The Outcome slot answers "what did I ask for?"
+ * in one line; anything longer belongs behind disclosure.
+ */
+export function toOutcomeStatement(raw: string): string {
+  return clampStatement(toProseStatement(raw), OUTCOME_STATEMENT_MAX);
+}
+
+/**
+ * Strip markdown structure and return the first prose paragraph, unclamped.
+ *
+ * Shared by every operator-facing surface that may be handed a raw BI body —
+ * the Outcome slot and the "What we're building" band both were, and both
+ * leaked literal "##", ">" and "**" onto the canvas because each had its own
+ * idea of "tidy this up" (one collapsed whitespace, the other did nothing).
+ * One stripper, so a new surface cannot reintroduce the wall.
+ */
+export function toProseStatement(raw: string): string {
+  let text = raw.trim();
+  if (!text) return text;
+
+  // Drop fenced code blocks entirely — never a useful outcome statement.
+  text = text.replace(/```[\s\S]*?```/g, " ");
+
+  const lines = text.split(/\r?\n/);
+  const prose: string[] = [];
+  for (const line of lines) {
+    let s = line.trim();
+    if (!s) {
+      // A blank line ends the first paragraph once we have prose.
+      if (prose.length > 0) break;
+      continue;
+    }
+    // Skip structural markdown: headings, list bullets, table rows, rules.
+    if (/^#{1,6}\s/.test(s)) continue;
+    if (/^[-*+]\s/.test(s) || /^\d+\.\s/.test(s)) continue;
+    if (/^\|/.test(s) || /^[-=]{3,}$/.test(s)) continue;
+    // Blockquote markers are noise, but the quoted text may be the statement.
+    s = s.replace(/^>\s?/, "");
+    if (!s) continue;
+    prose.push(s);
+  }
+
+  // When a body carries no prose at all (headings + bullets only), fall back to
+  // the raw text — but still strip the structural markers, or the operator sees
+  // literal "##" and "-" in the Outcome slot.
+  let statement = (
+    prose.length > 0
+      ? prose.join(" ")
+      : text
+        .replace(/^#{1,6}\s+/gm, "")
+        .replace(/^[-*+]\s+/gm, "")
+        .replace(/^\d+\.\s+/gm, "")
+        .replace(/^>\s?/gm, "")
+  ).trim();
+
+  // Strip inline markdown emphasis/code, and reduce links to their label.
+  statement = statement
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
+    .replace(/`([^`]*)`/g, "$1")
+    .replace(/\*\*([^*]+)\*\*/g, "$1")
+    .replace(/(?<!\w)[*_]([^*_]+)[*_](?!\w)/g, "$1")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  return statement;
+}
+
+/** Clamp at a sentence boundary inside the budget; else a word boundary. */
+export function clampStatement(statement: string, maxLength: number): string {
+  if (statement.length <= maxLength) return statement;
+  const window = statement.slice(0, maxLength);
+  const sentenceEnd = Math.max(
+    window.lastIndexOf(". "),
+    window.lastIndexOf("? "),
+    window.lastIndexOf("! "),
+  );
+  if (sentenceEnd > maxLength * 0.4) {
+    return statement.slice(0, sentenceEnd + 1);
+  }
+  const wordEnd = window.lastIndexOf(" ");
+  return `${statement.slice(0, wordEnd > 0 ? wordEnd : maxLength).trimEnd()}\u2026`;
 }
 
 function firstText(...values: Array<string | null | undefined>): string {

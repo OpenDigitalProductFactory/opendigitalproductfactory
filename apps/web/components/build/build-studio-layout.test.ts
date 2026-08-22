@@ -45,7 +45,6 @@ describe("BUILD_STUDIO_TEST_IDS", () => {
       nodeInspector: expect.any(String),
       detailsDrawer: expect.any(String),
       detailsDrawerPill: expect.any(String),
-      detailsDrawerQueue: expect.any(String),
       buildListItem: expect.any(String),
       phaseMiniRail: expect.any(String),
       queueStateBadge: expect.any(String),
