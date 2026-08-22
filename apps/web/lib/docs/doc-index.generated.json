@@ -8557,6 +8557,7 @@
         "step-4-verify-postgres-only-done-criteria",
         "if-it-fails-anyway-recovery",
         "failure-class-host-out-of-memory-candidate-build-enomem",
+        "failure-class-promoter-context-n1-a-new-copy-made-the-candidate-unbuildable",
         "failure-class-capability-state-stale-a-release-moved-the-capability-catalog",
         "failure-class-migration-unique-violation-p3018-23505",
         "references"

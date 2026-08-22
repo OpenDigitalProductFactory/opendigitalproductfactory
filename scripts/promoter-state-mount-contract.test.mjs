@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
+import { readPromoterBuildContextSources } from "./lib/promoter-build-context-sources.mjs";
+
 const root = resolve(import.meta.dirname, "..");
 const promoter = readFileSync(resolve(root, "apps/web/lib/self-upgrade/promoter.ts"), "utf8");
 const script = readFileSync(resolve(root, "scripts/promote.sh"), "utf8");
@@ -37,10 +39,13 @@ function assertNoHostStateNamespace(relative, source) {
   assert.doesNotMatch(executableSource, /\bDPF_STATE_DIR\b/, `${relative} must neither read nor write the host interpolation namespace`);
 }
 
-test("the complete promoter scripts closure never reads or writes host DPF_STATE_DIR", () => {
-  const dockerfile = readFileSync(resolve(root, "Dockerfile.promoter"), "utf8");
-  const copiedScripts = [...dockerfile.matchAll(/^COPY (scripts\/[^ ]+) /gm)].map((match) => match[1]);
-  assert.ok(copiedScripts.length > 0, "promoter closure must be discovered from Dockerfile.promoter");
+test("the complete promoter scripts closure never reads or writes host DPF_STATE_DIR", async () => {
+  // Discovered from the staged closure, not from Dockerfile.promoter: the
+  // Dockerfile copies `scripts/` as a directory so a candidate stays buildable
+  // by an already-deployed N-1 portal, so it no longer enumerates the files
+  // (BI-A04D61B9). The closure list is what decides which files ship.
+  const copiedScripts = (await readPromoterBuildContextSources(root)).filter((source) => source.startsWith("scripts/"));
+  assert.ok(copiedScripts.length > 0, "promoter closure must be discovered from the staged build context sources");
   for (const relative of copiedScripts) {
     const source = readFileSync(resolve(root, relative), "utf8");
     assertNoHostStateNamespace(relative, source);

@@ -4,6 +4,8 @@ import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
+import { readPromoterBuildContextSources } from "./lib/promoter-build-context-sources.mjs";
+
 export function evaluateGovernedTeardownContract(input) {
   const findings = [];
   if (!/requireCapability\(\s*["']manage_platform["']\s*\)/.test(input.action)) findings.push("teardown actions must require manage_platform");
@@ -14,7 +16,12 @@ export function evaluateGovernedTeardownContract(input) {
   if (!/removeTreeContentsNoFollow/.test(input.runner)) findings.push("teardown runner must use no-follow source deletion");
   if (!/--project-name/.test(input.runner)) findings.push("teardown Docker mutation must remain project-scoped");
   if (!/teardown_evidence_inside_source/.test(input.runner)) findings.push("teardown runner must reject evidence nested inside source");
-  for (const [label, source] of [["promoter", input.dockerfile], ["portal", input.portalDockerfile]]) {
+  // The promoter's assets are decided by the STAGED CLOSURE, not by
+  // Dockerfile.promoter: that Dockerfile copies `scripts/` as a directory so a
+  // candidate stays buildable by an already-deployed N-1 portal (BI-A04D61B9),
+  // and so it no longer names individual files. The portal image still bakes
+  // them file-by-file, so it is still checked against its own Dockerfile.
+  for (const [label, source] of [["promoter", (input.promoterClosure ?? []).join("\n")], ["portal", input.portalDockerfile]]) {
     if (!/governed-teardown\.mjs/.test(source) || !/salvage-sweep\.mjs/.test(source)) findings.push(`${label} image must carry teardown and salvage runner assets`);
   }
   if (input.mcpSources.some((source) => /name\s*:\s*["'][^"']*teardown[^"']*["']/i.test(source))) findings.push("MCP teardown verbs are forbidden; human UI confirmation is required");
@@ -40,7 +47,7 @@ async function main() {
     action: await readFile(join(root, "apps/web/lib/actions/teardown.ts"), "utf8"),
     component: await readFile(join(root, "apps/web/components/ops/TeardownControl.tsx"), "utf8"),
     runner: await readFile(join(root, "scripts/governed-teardown.mjs"), "utf8"),
-    dockerfile: await readFile(join(root, "Dockerfile.promoter"), "utf8"),
+    promoterClosure: await readPromoterBuildContextSources(root),
     portalDockerfile: await readFile(join(root, "Dockerfile"), "utf8"),
     mcpSources: await collectMcpSources(join(root, "apps/web/lib/mcp/packs")),
   };
