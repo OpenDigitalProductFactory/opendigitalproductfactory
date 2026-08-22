@@ -4,6 +4,7 @@ import {
   resolveBusinessProfile,
   GENERIC_BUSINESS_PROFILE,
   resolveStanceVectors,
+  resolveStanceAuthoringExamples,
   GENERIC_STANCE_VECTORS,
 } from "./archetype-business-context";
 
@@ -174,5 +175,31 @@ describe("resolveStanceVectors (BI-70ADC71F)", () => {
     const v = resolveStanceVectors({ industry: "public-sector" });
     expect(v["customer-goodwill"].ceilingUsd).toBeUndefined();
     expect(v["customer-goodwill"].stance).toMatch(/resident|process|equal/i);
+  });
+
+  it("projects all five nonprofit-community vectors without commercial assumptions (BI-5220C674)", () => {
+    const vectors = resolveStanceVectors({
+      archetypeId: "pet-rescue",
+      industry: "nonprofit-community",
+    });
+    const rendered = Object.values(vectors)
+      .flatMap((vector) => [vector.title, vector.stance])
+      .join(" ");
+
+    expect(rendered).toMatch(/mission|people we serve|supporter|donor|steward/i);
+    expect(rendered).not.toMatch(/prices|quotes|discounts|customer|refund|sell/i);
+    expect(vectors["customer-goodwill"].ceilingUsd).toBeUndefined();
+    expect(vectors["pricing-integrity"].ceilingUsd).toBeUndefined();
+  });
+
+  it("keeps commercial defaults unchanged while giving nonprofits a relevant authoring example", () => {
+    expect(resolveStanceVectors({ industry: "no-such-industry" })).toEqual(GENERIC_STANCE_VECTORS);
+
+    const nonprofit = resolveStanceAuthoringExamples({ industry: "nonprofit-community" });
+    expect(`${nonprofit.title} ${nonprofit.body} ${nonprofit.summary}`).toMatch(/mission|support|need/i);
+    expect(`${nonprofit.title} ${nonprofit.body} ${nonprofit.summary}`).not.toMatch(/refund|customer|price/i);
+
+    const commercial = resolveStanceAuthoringExamples({ industry: "food-hospitality" });
+    expect(commercial.title).toBe("How we decide refunds");
   });
 });
