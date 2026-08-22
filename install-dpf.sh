@@ -113,6 +113,11 @@ Flags:
   --contributor Customizable install: build the full stack from local source,
                 enable contributor git hooks, and run the agent-toolchain
                 bootstrap. Skips the interactive mode prompt.
+  --environment-class <class>
+                Declare what this installation is: production, development, or
+                test. Shapes what connected AI agents may do — teardown,
+                credential handling, and writes to a paired installation. An
+                undeclared install is treated as production.
   --dev-workspace-path <path>
                 Contributor-only. Absolute path to the operator's dev workspace
                 (where 'git worktree add' creates feature branches and where

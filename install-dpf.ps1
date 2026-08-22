@@ -46,6 +46,11 @@ Flags:
                 install directory; fails with actionable credential guidance.
   -Consumer     Install verified pre-built release assets (ready-to-go mode).
   -Contributor  Clone the source workspace for platform contribution work.
+  -EnvironmentClass <production|development|test>
+                Declare what this installation is. Shapes what connected AI
+                agents may do -- teardown, credential handling, and writes to a
+                paired installation. An undeclared install is treated as
+                production.
   -OrganizationJoinPackage <file.dpfjoin>
                 Join an existing organization trust domain during install. The
                 private package is validated, consumed, and deleted on success;
