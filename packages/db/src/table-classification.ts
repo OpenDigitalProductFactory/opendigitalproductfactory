@@ -137,6 +137,9 @@ export const TABLE_CLASSIFICATION: Record<string, TableSensitivity> = {
   McpCatalogSync: "internal",
   // Per-customer incumbent coverage verdicts — operational, no PII (BI-548060D5).
   IncumbentCoverageAssessment: "internal",
+  // Compact source/remote identity, fingerprints, timestamps, and lifecycle
+  // only; the service rejects secrets and full content payloads (BI-93507D83).
+  ExternalChannelProjection: "internal",
   StorefrontConfig: "internal",
   StorefrontSection: "internal",
   StorefrontItem: "internal",
