@@ -338,8 +338,8 @@ export function BuildStudio({
     && isValidSandboxPort(drivingBuild.sandboxPort)
       ? `http://localhost:${drivingBuild.sandboxPort}`
       : null;
-  const ownerStateIsTerminal = ownerStatus?.ownerState === "complete"
-    || ownerStatus?.ownerState === "failed";
+  // Only COMPLETE suppresses the action band — "failed" covers `abandoned`, and both have a recovery action.
+  const ownerStateIsTerminal = ownerStatus?.ownerState === "complete";
   const workflowAction = activeBuild && !ownerStateIsTerminal
     ? deriveBuildStudioWorkflowAction({
       build: activeBuild,
