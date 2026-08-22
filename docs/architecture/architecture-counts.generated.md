@@ -10,6 +10,6 @@ this file; never retype them into prose, where they drift (BI-79BCE3F2, pass §3
 |---|---:|---|
 | Prisma models | 597 | `packages/db/prisma/schema/` |
 | Prisma enums | 52 | `packages/db/prisma/schema/` |
-| Migrations | 537 | `packages/db/prisma/migrations/` |
+| Migrations | 538 | `packages/db/prisma/migrations/` |
 | Kernel principles | 96 | `docs/founder-kernel/wiki/principles/` |
 | App routes | 624 | `apps/web/lib/ea/route-manifest.json` |

@@ -333,6 +333,8 @@ const definitions: ToolDefinition[] = [
     },
     requiredCapability: "view_operations",
     sideEffect: true,
+    // changes identity or authority → consult-gated (TAK §8.4.1).
+    consequence: "authority",
   },
   {
     name: "get_coworker_room_engagement",

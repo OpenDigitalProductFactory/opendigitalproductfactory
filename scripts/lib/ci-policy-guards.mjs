@@ -406,6 +406,10 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         // the wrong gating decision. This list is hand-enumerated with no glob —
         // a test that is not named here never runs.
         "scripts/measure-doc-staleness-coverage.test.mjs",
+        // Doc cadence contract: same rule — the counts are advisory, but the
+        // detection is tested, because an over-reporting checklist claims work
+        // is done when it is not.
+        "scripts/measure-doc-cadence-coverage.test.mjs",
         // Same rule for the capability measure: the report is advisory, but its
         // parsing and scoring are tested here because a mis-parsed registry
         // under-reports gaps, and an under-reported gap reads as an all-clear.
