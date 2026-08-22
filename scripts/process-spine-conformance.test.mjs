@@ -17,6 +17,19 @@ test("surface pointers reference AGENTS.md", () => {
   assert.match(claudeMd, /AGENTS\.md/);
 });
 
+// BI-C6308D90: a markdown link to AGENTS.md is inert prose — the harness auto-loads
+// CLAUDE.md only, and whether the rulebook entered context depended on the model
+// choosing to follow the pointer. It silently stopped. `@AGENTS.md` is the harness's
+// own import directive and inlines the rulebook deterministically; assert it stays.
+test("CLAUDE.md imports AGENTS.md rather than only linking to it", () => {
+  const claudeMd = readFileSync(join(repoRoot, "CLAUDE.md"), "utf8");
+  assert.match(
+    claudeMd,
+    /^@AGENTS\.md\s*$/m,
+    "CLAUDE.md must contain a bare `@AGENTS.md` import line — a markdown link does not load the rulebook",
+  );
+});
+
 test("plugin hooks.json wires uncommitted-work guard on SessionEnd and Stop", () => {
   const hooks = JSON.parse(
     readFileSync(join(repoRoot, "packages/dpf-skill-pack/hooks/hooks.json"), "utf8"),
