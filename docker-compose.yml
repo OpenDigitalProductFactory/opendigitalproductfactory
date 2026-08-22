@@ -192,6 +192,10 @@ services:
       # explicit value here (deploy pipeline) still takes precedence. See spec
       # §4.1 of docs/superpowers/specs/2026-05-23-governed-platform-upgrade-lifecycle-design.md.
       DEPLOYED_SHA: ${DEPLOYED_SHA:-${DPF_VERSION:-}}
+      # The release overlay selects images with this tag. Pass the same value
+      # into the portal so sourceless installs remain classifiable even when a
+      # legacy installer did not write a host .install-mode marker.
+      DPF_IMAGE_TAG: ${DPF_IMAGE_TAG:-}
       DPF_ENVIRONMENT: production
       DPF_HOST_INSTALL_PATH: ${DPF_HOST_INSTALL_PATH:-}
       DPF_HOST_PLATFORM: ${DPF_HOST_PLATFORM:-}

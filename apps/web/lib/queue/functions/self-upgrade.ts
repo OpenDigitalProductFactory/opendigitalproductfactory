@@ -1,6 +1,7 @@
 import { cron } from "inngest";
 import { inngest } from "../inngest-client";
 import { getSelfUpgradeConfig } from "@/lib/self-upgrade/config";
+import { readSelfUpgradeSupport } from "@/lib/self-upgrade/support";
 import { isUpgradeWindowOpen } from "@/lib/self-upgrade/window";
 import { resolveAutoUpgradeWindow } from "@/lib/self-upgrade/auto-window";
 import { getActiveSelfUpgradeBlackout } from "@/lib/self-upgrade/blackout";
@@ -59,11 +60,21 @@ import {
   signalSwapComplete,
   failQuiescenceSwap,
 } from "@/lib/self-upgrade/quiescence";
+import {
+  SELF_UPGRADE_CRON,
+  SELF_UPGRADE_EVENT,
+  SELF_UPGRADE_FUNCTION_ID_MANUAL,
+  SELF_UPGRADE_FUNCTION_ID_SCHEDULED,
+  type SelfUpgradeRunEventData,
+} from "./self-upgrade-contract";
 
-export const SELF_UPGRADE_FUNCTION_ID_SCHEDULED = "ops/self-upgrade-scheduled";
-export const SELF_UPGRADE_FUNCTION_ID_MANUAL = "ops/self-upgrade-manual";
-export const SELF_UPGRADE_CRON = "0 * * * *";
-export const SELF_UPGRADE_EVENT = "ops/self-upgrade.run";
+export {
+  SELF_UPGRADE_CRON,
+  SELF_UPGRADE_EVENT,
+  SELF_UPGRADE_FUNCTION_ID_MANUAL,
+  SELF_UPGRADE_FUNCTION_ID_SCHEDULED,
+  type SelfUpgradeRunEventData,
+} from "./self-upgrade-contract";
 
 type PromoterRuntime = Pick<
   typeof import("@/lib/self-upgrade/promoter"),
@@ -73,41 +84,6 @@ type PromoterRuntime = Pick<
 async function loadPromoterRuntime(): Promise<PromoterRuntime> {
   return await import("@/lib/self-upgrade/promoter");
 }
-
-export type SelfUpgradeRunEventData = {
-  runId?: string;
-  triggeredBy?: string;
-  dryRun?: boolean;
-  buildId?: string;
-  /**
-   * Operator emergency override. Bypasses the maintenance-window gate so a
-   * manual trigger runs immediately, AND force-applies even when quiescence
-   * would defer the upgrade (surfaces as ship-force to the coordinator, which
-   * records the override on QuiescenceRun.forcedSurfaces for audit).
-   * Operator-confirmed only; never set by the scheduled cron.
-   */
-  force?: boolean;
-  /**
-   * Wait budget in ms to pass to the coordinator. Defaults to the
-   * coordinator's own DEFAULT_BUDGET_MS (5 minutes). Operators can
-   * raise/lower per upgrade attempt.
-   */
-  budgetMs?: number;
-  /**
-   * Set only by the scheduled cron. Gates the run on checkIntervalHours so the
-   * hourly tick polls no more often than the operator configured. Manual runs
-   * leave this unset and are never interval-throttled.
-   */
-  scheduled?: boolean;
-  /**
-   * Set by agent-requested runs (request_self_upgrade). Routine runs are
-   * release-batch gated like the scheduled cron — they wait until enough
-   * merged PRs have accumulated — but are not window/interval throttled
-   * (the request layer already applied the agent window gate). Operator
-   * manual triggers leave this unset; force always bypasses.
-   */
-  routine?: boolean;
-};
 
 export async function runSelfUpgrade(
   params: SelfUpgradeRunEventData,
@@ -128,6 +104,19 @@ export async function runSelfUpgrade(
       ...(params.runId ? { runId: params.runId } : {}),
       ...extra,
     };
+  }
+
+  const support = await readSelfUpgradeSupport(config.enabled);
+  if (!support.supported) {
+    return await skipAttempt(
+      "unsupported-install-mode",
+      `unsupported-install-mode: ${support.reason}`,
+      {
+        supportReason: support.reason,
+        targetKind: support.targetKind,
+        message: support.message,
+      },
+    );
   }
 
   if (!config.enabled && !params.dryRun) return await skipAttempt("disabled");

@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Plan — consumer install as a first-class agent host
 
 | Field | Value |

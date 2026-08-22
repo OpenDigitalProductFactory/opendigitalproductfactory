@@ -10,6 +10,8 @@ import { generateRfcId } from "./change-management";
 import { generatePromotionId } from "@/lib/version-tracking";
 import { getSelfUpgradeConfig, nextMaintenanceWindowStart } from "@/lib/self-upgrade/config";
 import { resolveReleaseBatchStatus } from "@/lib/self-upgrade/release-batch-status";
+import { readSelfUpgradeSupport } from "@/lib/self-upgrade/support";
+import { computeNextScheduledUpgradeCheckAt } from "@/lib/self-upgrade/next-check";
 import { resolveTargetSha, isShaFresh } from "@/lib/self-upgrade/version";
 import { getDeployedSha } from "@/lib/self-upgrade/completion";
 import { getJobEngineHealth } from "@/lib/queue/job-engine-health";
@@ -49,48 +51,6 @@ import { readBuildPipelineLimit } from "@/lib/queue/admission";
 import { buildAdmissionSnapshot } from "@/lib/queue/admission-observability";
 import { SELF_UPGRADE_EVENT } from "@/lib/queue/functions/self-upgrade";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
-
-const HOUR_MS = 60 * 60 * 1000;
-
-function nextHourlyCronAtOrAfter(base: Date, now: Date): Date {
-  let candidate = new Date(base);
-  candidate.setUTCMinutes(0, 0, 0);
-  if (candidate.getTime() < base.getTime()) {
-    candidate = new Date(candidate.getTime() + HOUR_MS);
-  }
-  if (candidate.getTime() <= now.getTime()) {
-    candidate = new Date(candidate.getTime() + HOUR_MS);
-  }
-  return candidate;
-}
-
-function computeNextScheduledUpgradeCheckAt(args: {
-  enabled: boolean;
-  inMaintenanceWindow: boolean;
-  nextWindowStart: Date | null;
-  lastCheckedAt: Date | null;
-  checkIntervalHours: number;
-  now: Date;
-}): Date | null {
-  if (!args.enabled) return null;
-
-  const intervalEligibleAt =
-    args.lastCheckedAt && args.checkIntervalHours > 0
-      ? new Date(args.lastCheckedAt.getTime() + args.checkIntervalHours * HOUR_MS)
-      : args.now;
-
-  if (!args.inMaintenanceWindow && !args.nextWindowStart) return null;
-
-  const base = new Date(
-    Math.max(
-      args.now.getTime(),
-      intervalEligibleAt.getTime(),
-      args.inMaintenanceWindow ? args.now.getTime() : args.nextWindowStart?.getTime() ?? 0,
-    ),
-  );
-
-  return nextHourlyCronAtOrAfter(base, args.now);
-}
 
 async function requireOpsAccess(): Promise<string> {
   return (await requireCapability("view_operations")).userId;
@@ -650,6 +610,7 @@ export async function getSelfUpgradeStatus() {
     // the panel explains a paused schedule instead of leaving it opaque.
     getActiveSelfUpgradeBlackout(),
   ]);
+  const support = await readSelfUpgradeSupport(config.enabled);
 
   // Human-readable "what did this run carry?" for the Latest Run card, loaded by
   // the run's OWN impactSummaryId (the summary the operator reviewed at launch).
@@ -716,14 +677,16 @@ export async function getSelfUpgradeStatus() {
           : nextUpgradeWindowOpen(schedule, now, timezone)?.toISOString() ?? null;
   const nextWindowStartDate = nextWindowStart ? new Date(nextWindowStart) : null;
   const nextScheduledCheckAt = computeNextScheduledUpgradeCheckAt({
-    enabled: config.enabled,
+    enabled: support.enabled,
     inMaintenanceWindow,
     nextWindowStart: nextWindowStartDate,
     lastCheckedAt,
     checkIntervalHours: config.checkIntervalHours,
     now,
   });
-  const targetSha = await resolveTargetSha(config.channel, config);
+  const targetSha = support.supported
+    ? await resolveTargetSha(config.channel, config)
+    : null;
   // Merge-mode-aware freshness. In upstream/merge mode the deployed stamp is the
   // merge-commit identity, which CONTAINS but never EQUALS the upstream target —
   // so strict deployedSha===targetSha alone reports "Update available" forever,
@@ -734,7 +697,7 @@ export async function getSelfUpgradeStatus() {
   // already equals the target. This is the same signal the §5.0 worker skip-gate
   // (self-upgrade.ts: `lastOk?.targetSha === upstreamSha`) and the impact summary
   // use, so all three surfaces agree.
-  const isFresh = targetSha
+  const isFresh = support.supported && targetSha
     ? isShaFresh(deployedSha, targetSha) ||
       isShaFresh(latestSucceededRun?.targetSha ?? null, targetSha)
     : false;
@@ -743,10 +706,11 @@ export async function getSelfUpgradeStatus() {
   // No fetch here — display rides the hourly scheduled fetch; a stale-by-
   // minutes tally is fine for a status line and keeps page load off the
   // network. Never throws (degrades to an uncomputable tally).
-  const releaseBatch = await resolveReleaseBatchStatus({ config, now });
+  const releaseBatch = await resolveReleaseBatchStatus({ config, now, support });
 
   return {
-    enabled: config.enabled,
+    enabled: support.enabled,
+    support,
     channel: config.channel,
     inMaintenanceWindow,
     windowConfigured,
@@ -768,14 +732,14 @@ export async function getSelfUpgradeStatus() {
     targetSha,
     isFresh,
     releaseBatch: {
-      applicable: releaseBatch.applicable,
-      eligible: releaseBatch.eligible,
-      reason: releaseBatch.reason,
+      applicable: support.supported && releaseBatch.applicable,
+      eligible: support.enabled && releaseBatch.eligible,
+      reason: support.supported ? releaseBatch.reason : support.reason,
       pendingCount: releaseBatch.pendingCount,
       minPendingPrs: releaseBatch.minPendingPrs,
       maxWaitHours: releaseBatch.maxWaitHours,
       oldestPendingAt: releaseBatch.oldestPendingAt?.toISOString() ?? null,
-      summary: releaseBatch.summary,
+      summary: support.message ?? releaseBatch.summary,
     },
     latestRun,
     latestRunImpact,
@@ -799,10 +763,19 @@ export async function getSelfUpgradeStatus() {
 export async function triggerSelfUpgrade(opts?: { dryRun?: boolean; force?: boolean }) {
   const userId = await requireOpsAccess();
   const triggeredBy = `manual:${userId}`;
+  const config = await getSelfUpgradeConfig();
+  const support = await readSelfUpgradeSupport(config.enabled);
+
+  if (!support.supported) {
+    return {
+      queued: false,
+      reason: support.reason,
+      message: support.message,
+    } as const;
+  }
 
   if (!opts?.dryRun) {
-    const config = await getSelfUpgradeConfig();
-    if (!config.enabled) {
+    if (!support.enabled) {
       return { queued: false, reason: "disabled" } as const;
     }
     // A manual trigger is NOT window-gated: the operator clicking "Upgrade now"
@@ -895,6 +868,10 @@ export async function repairPromoterImage(): Promise<{
 }> {
   await requireOpsAccess();
   const config = await getSelfUpgradeConfig();
+  const support = await readSelfUpgradeSupport(config.enabled);
+  if (!support.supported) {
+    return { ok: false, message: support.message };
+  }
   const image = config.promoterImage ?? "dpf-promoter";
   const result = await (await import("@/lib/self-upgrade/promoter")).ensurePromoterImage(config.promoterImage);
 

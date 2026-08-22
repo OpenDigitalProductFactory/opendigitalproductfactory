@@ -58,7 +58,15 @@ test("portal runtime exposes the host source mount as the git repo root for live
   );
 });
 
-test("postgres exporter starts with an explicit config file in compose and installer output", () => {
+test("portal runtime receives the release image tag for install-host classification", () => {
+  assert.match(
+    compose,
+    /portal:[\s\S]*environment:[\s\S]*DPF_IMAGE_TAG:\s*\$\{DPF_IMAGE_TAG:-\}/,
+    "consumer containers need the resolved release tag even when the host has no .install-mode marker",
+  );
+});
+
+test("postgres exporter starts with an explicit config through the installer's compose chain", () => {
   assert.equal(existsSync(postgresExporterConfigUrl), true);
   assert.match(readFileSync(postgresExporterConfigUrl, "utf8"), /^auth_modules:\s*\{\}\s*$/m);
 
@@ -68,10 +76,9 @@ test("postgres exporter starts with an explicit config file in compose and insta
     /postgres-exporter:[\s\S]*\.\/monitoring\/postgres-exporter\/postgres_exporter\.yml:\/postgres_exporter\.yml:ro/,
   );
 
-  assert.match(installer, /postgres-exporter:[\s\S]*command:\s*\["--config\.file=\/postgres_exporter\.yml"\]/);
   assert.match(
     installer,
-    /postgres-exporter:[\s\S]*\.\/monitoring\/postgres-exporter\/postgres_exporter\.yml:\/postgres_exporter\.yml:ro/,
+    /Import-DPFComposeChain -InstallDir \$DPF_DIR[\s\S]*Get-DPFComposeArgs -InstallDir \$DPF_DIR/,
+    "the installer must launch the shipped base compose contract rather than duplicate its YAML",
   );
-  assert.match(installer, /postgres-exporter\\postgres_exporter\.yml/);
 });

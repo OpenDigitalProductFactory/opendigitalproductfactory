@@ -73,6 +73,19 @@ beforeEach(() => {
 // ─── Disabled ─────────────────────────────────────────────────────────────────
 
 describe("SelfUpgradeTriggerControl – disabled", () => {
+  it("shows an explicit unavailable notice for consumer releases", () => {
+    const html = renderToStaticMarkup(
+      <SelfUpgradeTriggerControl
+        {...baseProps}
+        enabled={false}
+        unavailableReason="Automatic updates aren’t available for this install yet."
+      />,
+    );
+    expect(html).toContain("Automatic updates aren’t available for this install yet.");
+    expect(html).not.toContain("Enable it in settings");
+    expect(html).toContain('data-upgrade-status="unavailable"');
+  });
+
   it("does not render the Upgrade now button when disabled", () => {
     const html = renderToStaticMarkup(
       <SelfUpgradeTriggerControl {...baseProps} enabled={false} />,

@@ -1,0 +1,21 @@
+{
+  "version": "1",
+  "decidedOption": "honest unsupported state on the existing Upgrade Center",
+  "decisionInteractionId": "DI-88D1C6E4B937",
+  "scope": {
+    "files": [
+      "apps/web/app/(shell)/ops/self-upgrade/page.tsx",
+      "apps/web/components/ops/OwnerReleaseCard.tsx",
+      "apps/web/components/ops/SelfUpgradeClient.tsx",
+      "apps/web/components/ops/SelfUpgradeTriggerControl.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "honest unsupported state on the existing Upgrade Center",
+      "registry digest signal without a complete upgrade lifecycle",
+      "full OCI release updater in this change"
+    ]
+  }
+}

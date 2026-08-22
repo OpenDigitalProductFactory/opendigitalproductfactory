@@ -1,3 +1,7 @@
+---
+status: binding
+---
+
 # Consumer install as a first-class agent host
 
 **Date:** 2026-08-22  
