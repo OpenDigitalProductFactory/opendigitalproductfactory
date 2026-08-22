@@ -9,11 +9,12 @@
     "coveragePct": 12,
     "common": {
       "packs": [
+        "business-operations-compliance",
         "hr-employment-compliance",
         "software-horizontal-compliance"
       ],
-      "obligations": 70,
-      "recurringObligations": 11,
+      "obligations": 79,
+      "recurringObligations": 17,
       "note": "Obligations that apply whatever the business IS, gated instead by jurisdiction or by what it DOES with data. Every qualifying install inherits these; they do NOT substitute for an archetype pack, whose whole purpose is what a generic pack cannot know."
     },
     "ungatedPacks": {
@@ -24,9 +25,9 @@
       "note": "DEFECT, not coverage. A pack with no structured RegulationApplicability falls back to the legacy industry string matcher (BI-9DED0CE8) and surfaces on installs the regime does not pertain to. It is not common — it is addressed to everyone."
     },
     "triggerClasses": {
-      "cadence": 34,
-      "continuous": 46,
-      "event-driven": 42,
+      "cadence": 40,
+      "continuous": 48,
+      "event-driven": 43,
       "unrecognised": 0,
       "unspecified": 0
     },
@@ -50,6 +51,23 @@
         "cadence": 5,
         "continuous": 5,
         "event-driven": 4,
+        "unrecognised": 0,
+        "unspecified": 0
+      }
+    },
+    {
+      "pack": "business-operations-compliance",
+      "file": "packages/db/src/seed-business-operations-compliance.ts",
+      "scope": "conditional",
+      "gatesOn": [],
+      "gatesOnJurisdiction": true,
+      "gatesOnDataHandling": false,
+      "hasStructuredSpec": true,
+      "obligations": 9,
+      "byTriggerClass": {
+        "cadence": 6,
+        "continuous": 2,
+        "event-driven": 1,
         "unrecognised": 0,
         "unspecified": 0
       }

@@ -24,8 +24,8 @@ Obligations reaching every install this way: **4**
 
 ## Common — applies whatever the business IS
 
-- Packs: `hr-employment-compliance`, `software-horizontal-compliance`
-- Obligations: **70**, of which **11** recur on a computable cadence
+- Packs: `business-operations-compliance`, `hr-employment-compliance`, `software-horizontal-compliance`
+- Obligations: **79**, of which **17** recur on a computable cadence
 
 ## Archetype coverage
 
@@ -66,9 +66,9 @@ Obligations reaching every install this way: **4**
 
 | Class | Obligations |
 |---|---:|
-| `continuous` | 46 |
-| `event-driven` | 42 |
-| `cadence` | 34 |
+| `continuous` | 48 |
+| `event-driven` | 43 |
+| `cadence` | 40 |
 | `unrecognised` | 0 |
 | `unspecified` | 0 |
 
