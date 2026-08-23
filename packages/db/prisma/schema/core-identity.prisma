@@ -510,6 +510,11 @@ model Organization {
   workforceCandidateFacts           WorkforceCandidateFact[]
   gearInterfaces                    GearInterface[]
   staffingConstraintRules           StaffingConstraintRule[]
+  vehicles                 Vehicle[]                @relation("VehicleOrganization")
+  trips                    Trip[]                   @relation("TripOrganization")
+  tripClassificationRules  TripClassificationRule[] @relation("TripRuleOrganization")
+  driverLocationConsents   DriverLocationConsent[]  @relation("DriverConsentOrganization")
+  mileageRatePlans         MileageRatePlan[]        @relation("MileageRatePlanOrganization")
 }
 
 // EP-PARTNER-CHANNEL Phase 1b. Generic per-organization opt-in overlay on top of
