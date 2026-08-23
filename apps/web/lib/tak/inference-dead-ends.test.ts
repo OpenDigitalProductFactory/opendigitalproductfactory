@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
+  describeCapacityWindow,
   describeToolRouteFailureOutcome,
   describeToolRouteFailure,
   localCapacityHeldHandoff,
@@ -146,5 +147,60 @@ describe("describeToolRouteFailure classifies the deferral that stranded the own
 
     expect(outcome.kind).toBe("model-missing");
     expect(outcome.message).not.toMatch(/busy|rate-limit/i);
+  });
+});
+
+// BI-94D44FDB. The owner-facing half: a deferral is a bounded wait, so say how
+// long rather than leaving them to guess or poll.
+describe("the capacity reply names the window when it knows one", () => {
+  const now = new Date("2026-08-23T20:14:00.000Z");
+
+  it("turns a lease expiry into a plain relative window", () => {
+    expect(describeCapacityWindow(new Date("2026-08-23T20:17:00.000Z"), now))
+      .toBe("about 3 minutes");
+    expect(describeCapacityWindow(new Date("2026-08-23T20:14:40.000Z"), now))
+      .toBe("about a minute");
+  });
+
+  it("says nothing rather than something wrong", () => {
+    // Already past, implausibly far out, absent, or unparseable — in every case
+    // a made-up number would be worse than the generic wait.
+    expect(describeCapacityWindow(new Date("2026-08-23T20:13:00.000Z"), now)).toBeNull();
+    expect(describeCapacityWindow(new Date("2026-08-23T22:00:00.000Z"), now)).toBeNull();
+    expect(describeCapacityWindow(null, now)).toBeNull();
+    expect(describeCapacityWindow(new Date("nonsense"), now)).toBeNull();
+  });
+
+  it("puts the window in the step, not in a separate sentence to skim past", () => {
+    const message = localCapacityHeldHandoff(false, new Date("2026-08-23T20:17:00.000Z"), now);
+    expect(message).toMatch(/^1\. Send the message again in about 3 minutes/m);
+    expect(message).toMatch(/Nothing is misconfigured/);
+  });
+
+  it("falls back to the generic wait when no window is known", () => {
+    const message = localCapacityHeldHandoff(false, null, now);
+    expect(message).toMatch(/^1\. Give it a couple of minutes/m);
+  });
+
+  it("reads the window off the thrown error the routing layer produced", () => {
+    const thrown = Object.assign(
+      new Error("Local provider dispatch deferred: local-ci-active-capacity-reservation"),
+      {
+        name: "LocalProviderCapacityDeferredError",
+        expectedFreeAt: new Date(Date.now() + 3 * 60_000),
+      },
+    );
+
+    expect(describeToolRouteFailure(thrown.message, 0, thrown)).toMatch(/about 3 minutes/);
+  });
+
+  it("survives the window arriving as a serialized string across a queue boundary", () => {
+    const thrown = {
+      name: "LocalProviderCapacityDeferredError",
+      message: "Local provider dispatch deferred: local-ci-active-capacity-reservation",
+      expectedFreeAt: new Date(Date.now() + 2 * 60_000).toISOString(),
+    };
+
+    expect(describeToolRouteFailure(thrown.message, 0, thrown)).toMatch(/about 2 minutes/);
   });
 });
