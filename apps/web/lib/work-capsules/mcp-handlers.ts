@@ -559,7 +559,7 @@ export async function createWorkCapsuleTool(
       objective,
       source,
       idempotencyKey,
-      executorKind: validatedExecutorKind,
+      executorKind: validatedExecutorKind, repositoryFullName: stringParam(params, "repositoryFullName"),
       scope: parseScopeInput(params),
     },
     actor: await actor(userId, context),
