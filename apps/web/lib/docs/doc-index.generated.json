@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 681,
+  "pageCount": 682,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -10753,6 +10753,22 @@
         "chatgpt-openai-subscription",
         "docker-model-runner-local",
         "troubleshooting"
+      ]
+    },
+    "docs/user-guide/ai-workforce/priority-and-outcomes.md": {
+      "publicHref": "/user-guide/ai-workforce/priority-and-outcomes/",
+      "portalHref": "/docs/ai-workforce/priority-and-outcomes",
+      "publishedPublic": true,
+      "publishedPortal": true,
+      "anchors": [
+        "what-this-covers",
+        "what-it-is-and-what-it-deliberately-is-not",
+        "two-properties-that-make-it-safe",
+        "the-work-itself-can-raise-the-bar",
+        "reading-the-outcomes-view",
+        "the-calibration-suggestion",
+        "honest-limits",
+        "related"
       ]
     },
     "docs/user-guide/ai-workforce/provider-anthropic.md": {
