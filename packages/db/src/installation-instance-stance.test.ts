@@ -92,7 +92,7 @@ describe("resolveInstanceStance", () => {
   it("holds a paired production peer read-only from a development instance", () => {
     const stance = stanceFor("development", { pairedRef: "operator-production" });
     expect(stance.peerWrite).toBe("read-only");
-    expect(stance.rationale.peerWrite).toContain("never write to it");
+    expect(stance.rationale.peerWrite).toContain("never mutate a record it owns");
   });
 
   it("allows governed peer writes only between production installations", () => {
@@ -139,5 +139,37 @@ describe("formatInstanceStanceBriefing", () => {
   it("carries no secrets or tool catalogue", () => {
     const briefing = formatInstanceStanceBriefing(stanceFor("production"));
     expect(briefing).not.toMatch(/Bearer|token|password/i);
+  });
+});
+
+describe("workSync — mirroring our own work is not a peer write", () => {
+  it("mirrors work to a paired organization peer even from a development install", () => {
+    const stance = stanceFor("development", { pairedRef: "operator-production" });
+    expect(stance.workSync).toBe("same-organization");
+    // The peer brake stays on for records the PEER owns.
+    expect(stance.peerWrite).toBe("read-only");
+  });
+
+  it("explains that only this side may change the mirrored records", () => {
+    const stance = stanceFor("development", { pairedRef: "operator-production" });
+    expect(stance.rationale.workSync).toContain("only this side may change");
+    expect(stance.rationale.peerWrite).toContain("never mutate a record it owns");
+  });
+
+  it("has nothing to mirror when no peer is paired", () => {
+    expect(stanceFor("development").workSync).toBe("none");
+  });
+
+  it("mirrors from a production install too", () => {
+    expect(stanceFor("production", { pairedRef: "operator-production" }).workSync).toBe(
+      "same-organization",
+    );
+  });
+
+  it("states work sync in the briefing", () => {
+    const briefing = formatInstanceStanceBriefing(
+      stanceFor("development", { pairedRef: "operator-production" }),
+    );
+    expect(briefing).toContain("Work sync — same-organization");
   });
 });
