@@ -1,13 +1,19 @@
 ---
-status: draft
+status: active
 ---
 
 # Initiative readiness traversal and external evidence reconciliation
 
-**Backlog item:** BI-F0715C9C  
-**Workroom:** WC-2ABA65F7  
-**Binding design:** `docs/superpowers/specs/2026-08-08-initiative-readiness-and-goal-completion-reconciliation-design.md`  
+**Backlog item:** BI-F0715C9C
+**Workroom:** WC-2ABA65F7
+**Status:** active — architecture and the one-time repository contribution envelope are ratified
+**Binding design:** `docs/superpowers/specs/2026-08-08-initiative-readiness-and-goal-completion-reconciliation-design.md`
 **Policy change:** `initiative-readiness.v1` -> `initiative-readiness.v2`
+**Kernel consults:** `DI-053D69EADEDC` (policy-authority bridge) · `DI-568FF23AF27B` (bootstrap authorizer) · `DI-5B6BF3990A83` (corroborating) · `DI-AA4E4F26593C` (inconclusive, §4) · `DI-ECE6A1FCFFCA` (abstained) · `DI-F7361DD540E2` (superseded)
+**Budget:** ~80% refactor/integration of existing substrate, ~20% new surface — the inverted allocation
+(`docs/design/golden-triangle-design.md:654` still states the retired 80/20 feature-first split). Every decision
+below extends a named existing module; §10's projector is the only new component, and it composes three
+existing tables.
 
 ## Problem
 
@@ -101,25 +107,43 @@ receipt type, grant, or reviewer role is needed.
 themselves. They identify ownership, not how many contracts or domains a change
 crosses.
 
-Profile derivation remains monotonic from stronger evidence:
+Profile derivation stays monotonic: `deriveAuthoritativeReadinessProfile`
+collects every signal and returns the strongest, so a change can only ever be
+raised by adding evidence, never lowered by omitting it.
 
-1. A recorded approved baseline/profile wins over weaker current metadata.
+1. A recorded approved baseline/profile is one of the collected signals, so it
+   can raise the profile but never lowers a stronger current signal.
 2. Explicit cross-domain/platform-wide, archetype, or active build-kind signals
    still raise the profile.
 3. Archetype scope/categories remain conservative.
 4. A bug with no stronger signal derives `fix`, including platform-owned code.
 
+Only the ownership-to-risk mapping changes: `scopeKind` values `platform` and
+`common` stop contributing a `cross-domain` candidate. `scopeKind=cross-domain`,
+`workType=platform-wide`, and every archetype scope keep their current strength.
+
 ### 2. Encode a material, monotonic policy matrix
 
 Version 2 implements the approved profile meanings.
 
-| Profile | Plan-entry obligations | Additional implementation obligations |
+Each column is strictly additive over the row above it: a profile carries every obligation of the
+weaker profiles plus the ones named in its own cell. `evaluate.ts` deduplicates by
+`code:accountableRole`, so a repeated obligation is stated once.
+
+| Profile | Plan-entry obligations | Implementation adds |
 |---|---|---|
-| `doc-only` | classification and authorization | capsule identity; delivery/acceptance at completion |
-| `fix` | classification, authorization, reproduction/causal research | canonical plan evidence, dependency disposition (N/A allowed), capsule identity |
-| `feature` | fix plus canonical design, spec approval, architecture review, objective baseline, artifact author | plan review, coverage, traceability, dependency disposition, capsule identity |
-| `cross-domain` | feature plus data, UX, security, compliance, and domain review/disposition | feature implementation obligations |
-| `archetype` | cross-domain obligations | cross-domain plus archetype provisioning and completeness |
+| `doc-only` | classification, authorization | *(none — but see OQ-1)* |
+| `fix` | adds reproduction/causal research | adds canonical plan evidence, dependency disposition (N/A allowed), capsule identity |
+| `feature` | adds canonical design, spec approval, architecture review, objective baseline, artifact author | adds plan review, plan coverage, traceability |
+| `cross-domain` | adds data, UX-fit, security, compliance, and domain review/disposition | *(none beyond feature)* |
+| `archetype` | *(none beyond cross-domain)* | adds archetype provisioning and completeness |
+
+Completion is a fourth target and is uniform across profiles: it adds delivery evidence, acceptance
+evidence, objective baseline, and objective reconciliation on top of the implementation set.
+
+**This table was reshaped to be strictly additive, and two cells changed meaning in the process. Both
+are open questions (§OQ), not ratified decisions** — the earlier prose described obligations that
+`evaluate.ts` does not implement, and it is not settled which side is wrong.
 
 For a fix, `PLAN_REQUIRED` uses the canonical plan-coverage artifact projection
 already used by the adapter. This keeps immutable plan verification without
@@ -179,8 +203,12 @@ collaboration-card path.
 
 This supersedes the earlier transport-session proposal. DPF supports MCP
 2025-11-25 sessions, but the 2026-07-28 MCP release candidate removes protocol
-sessions and `Mcp-Session-Id`. Existing auth-bound tasks are already implemented
-and follow the stateless direction.
+sessions and `Mcp-Session-Id`
+⟦runtime: upstream spec state read 2026-08-23 — re-verify against the published
+MCP changelog before citing it as settled; the decision below does not depend on
+it⟧. Existing auth-bound tasks are already implemented and follow the stateless
+direction, so reusing them is the smallest architecture-consistent repair even if
+protocol sessions survive upstream.
 
 The superseded transport-session design and plan are removed from this branch.
 Their commits remain in Git history for audit, but they are not part of the
@@ -221,6 +249,12 @@ against that digest; a different digest is `stale`, not satisfied. A malformed
 or absent `design-spec` receipt provides no permissive fallback: dependent
 review lanes remain missing or stale.
 
+The `design-spec` receipt that supplies the digest is itself projected with no
+anchor (`canonicalDigest=null`); every other gate is projected against the digest
+it yields. Without that exemption the anchor would be circular. Only the latest
+`design-spec` receipt is consulted, matching `latestGateStates`, which already
+keeps one receipt per gate.
+
 This uses the existing receipt artifact digest and chronological append-only
 log. It adds no candidate table or mutable pointer. Re-reviewing a revised
 design appends a new `design-spec` receipt, making prior specialist receipts
@@ -229,14 +263,14 @@ digest as the baseline.
 
 ### 7. Reconcile provider-verified external evidence through adoption
 
-Extend `record_external_development_evidence` with optional `headSha`.
+Extend `record_external_development_evidence` with the canonical repository
+identity and infer a reconciliation candidate only when `commits` contains
+exactly one full 40-hex published SHA.
 
-- An explicit `headSha` must be 40-hex and, when `commits` is non-empty, must be
-  present there.
-- For compatibility, exactly one full SHA in `commits` is inferred when
-  `headSha` is omitted.
-- Ambiguous/non-immutable refs do not update the head and return an exact next
-  action.
+- The caller never supplies a trusted `headSha`; it supplies development
+  evidence, and the server derives the only immutable candidate.
+- Zero, multiple, abbreviated, or malformed SHAs leave the Workroom head
+  unchanged.
 - The server resolves the canonical repository and provider branch ref. The
   provider branch head must equal the candidate SHA.
 - Only a verified match reaches `captureExternalSessionEvidence`, which passes
@@ -244,16 +278,17 @@ Extend `record_external_development_evidence` with optional `headSha`.
 - Evidence remains durable when verification is unavailable, but the response
   says `not-reconciled`; artifact resolution remains blocked.
 
-The response reports `reconciled`, `not-requested`, or `not-reconciled`, the
-Workroom when known, accepted SHA when verified, and one next action. No parallel
-Workroom writer is introduced.
+The evidence record remains durable when reconciliation is unavailable, but no
+head is adopted and artifact resolution remains blocked. No parallel Workroom
+writer is introduced.
 
 ### 8. Existing Workroom reconciliation is replay, not migration
 
 No schema migration is needed. Replay the canonical external-development
-evidence call with the same BI, branch, worktree, session, commit list, and
-explicit head SHA. Adoption updates the existing Workroom and records the old
-and new heads. The artifact resolver then performs provider blob and DCO checks.
+evidence call with the same BI, repository, branch, worktree, session, and a
+commit list containing exactly the published branch-head SHA. Adoption updates
+the existing Workroom and records the old and new heads. The artifact resolver
+then performs provider blob and DCO checks.
 Unverified, mismatched, ambiguous, or foreign artifacts remain blocked.
 
 ### 9. Keep provider verification outside the plan-coverage transaction
@@ -365,8 +400,11 @@ An unattended allow requires all of these facts:
 
 Missing or stale evidence, a superseded policy version, revoked delegation,
 wrong gate, cross-organization or cross-profession reuse, artifact drift, or a
-non-affirmative result returns deny or escalate. It never falls back to a
-generic platform subject, superuser authority, or per-work approval proxy.
+non-affirmative result never receives autonomous authority. It never falls back
+to a generic platform subject or superuser authority. A messy-maybe result may
+enter the existing exact-call human approval path as human resolution, but that
+approval is not represented as a policy-derived authorization. An explicit
+decline/conflict or an unmet dual-control floor cannot use that fallback.
 
 The projected standing-policy version is the existing
 `DecisionPerspectiveProfileVersion.versionId`, with
@@ -409,7 +447,10 @@ one executable next step instead of an impossible checklist:
 - `deny`: show the owning gate's explicit reason and stop;
 - `defer` or `escalate`: route to that gate's existing human decision surface;
 - missing or stale judgment: return the exact WWMD, WWWD, or WSID evaluation
-  packet for the current subject/action/artifact;
+  packet for the current subject/action/artifact or a bounded exact-call human
+  resolution envelope;
+- dual-control floor: require a fresh distinct-human approval with the exact
+  approval-binding fingerprint; never substitute the initiating-human envelope;
 - eligible “yes” but unavailable reviewer receipt authority: dispatch or name
   the independently eligible reviewer through the recovery route in section 3.
 
@@ -469,8 +510,8 @@ initiative-readiness claim, satisfy or fabricate a receipt, grant reviewer
 authority, turn a DecisionInteraction into RBAC, mutate the WordPress branch,
 or authorize an out-of-envelope file.
 
-The writer audit found three adjacent substrates, none of which can activate
-this warrant today:
+The writer audit found three adjacent substrates, none of which should be
+misrepresented as runtime activation of the new projector:
 
 - `record_workroom_evidence` can preserve an immutable pointer and evidence
   packet, but its contract is evidence, not action authority;
@@ -482,56 +523,133 @@ this warrant today:
   to approve it. There is no registered source-implementation action binding
   for BI-F0715C9C, and this path does not project an autonomy-eligible DI.
 
-Consequently, the repository envelope is an architecture-approved
-first-deployment proposal, not yet an active authorization. A Workroom note,
-DI id, semantic review, or operator chat message alone cannot activate it. The
-exact activation path must either (a) expose an existing governed action writer
-that server-resolves and atomically persists the ratification, DI, policy
-version, subject/action/artifacts, expiry, revocation, and consumption binding,
-or (b) receive an explicit human bootstrap ratification that names the
-repository contribution boundary itself as the one-time authority and whose
-durable governed pointer is independently verifiable before Red. Until one of
-those paths is proven and ratified, the envelope is inactive.
+The operator selected the second, non-circular first-deployment path. Workroom
+activity `cmt5xoo250jj401rm57xnzi6f`, recorded at
+`2026-08-23T15:00:06.989Z`, preserves the explicit human ratification of the
+repository contribution boundary, the three-DI lineage, the exact ratified
+design tree/commit/blobs, semantic-review receipt, three-band semantics, and
+prohibitions. A second evidence entry, `cmt5xqem60jjv01rms0eubr7l`, preserves
+the operator's systemic trusted-autonomy directive and `DI-6A25809B4683`.
 
-The envelope expires at the earliest of 72 hours after ratification, explicit
-revocation, protected merge, branch/base/design/plan drift, an out-of-envelope
+That ratification activates source authorship under this one-time repository
+envelope only. It deliberately does not create an `AuthorizationDecisionLog`,
+approve a runtime initiative action, or claim the projector is deployed. The
+first deployment is instead governed by the independently verifiable
+contribution chain: explicit human directive, immutable design identity,
+DCO-signed exact diff, fresh independent exact-tree review, protected checks,
+and merge queue. After merge, the runtime projector becomes the canonical
+writer for later action-specific authorizations.
+
+The envelope expires at the earliest of `2026-08-26T15:00:06.989Z`, explicit
+revocation, protected merge, unexplained branch/design/plan drift, an out-of-envelope
 path, a non-DCO candidate, review or check failure, a commandment conflict, or
 a new `no`, `revise`, `defer`, or `escalate` judgment. Amend/rebase/squash is
-allowed only if the result stays within the ratified base/path contract and
-receives a fresh exact-tree review. The envelope is consumed by one protected
-merge and can never authorize later work.
+allowed only onto a newer `main` when the resulting patch stays within the
+ratified path contract and receives a fresh exact-tree review. The envelope is
+consumed by one protected merge and can never authorize later work.
 
-#### Current implementation stop and ratification text
+#### Active first-deployment boundary
 
-The earlier operator reply `go` predates this universal bridge and exact
-bootstrap envelope, so it is not production implementation authority. Design
-and plan evidence may be amended, published, and reviewed. Production source
-or test mutation starts only after the operator supplies this text with the
-post-amendment immutable values filled in:
+The exact ratified design identity is commit
+`a537d7a1ebb19b40f9ccc1426d9fb62fc0312b89`, tree
+`7033afb666113bb5e3dc33122a21552028c37fb0`, design blob
+`dedf8f19a94e5bcb126f2e5774e60237974ff4da`, plan blob
+`de1703b6cae2f6ec1b555c20e66346b5311a6ebd`, and semantic-review receipt
+`cmt5xkrai0jhk01rm4apogtih`. The repository was subsequently refreshed onto a
+newer `main`; that does not widen the authorized patch. Every edited path is
+claimed exactly on `WC-2ABA65F7`, and the final rebased tree still requires a
+fresh independent semantic and architecture review.
 
-> I ratify the one-time first-deployment bootstrap envelope for BI-F0715C9C
-> and WC-2ABA65F7 in OpenDigitalProductFactory/opendigitalproductfactory on
-> fix/initiative-readiness-bootstrap. My authority is the current
-> Mark-approved WWMD criteria; I accept DI-568FF23AF27B's explicit,
-> autonomy-eligible policy-derived-second-check recommendation, corroborated
-> by DI-5B6BF3990A83. This
-> ratification is bound to base `<base-sha>`, design/plan commit
-> `<design-plan-sha>`, design blob `<design-blob>`, plan blob `<plan-blob>`,
-> and only the actions and paths in the ratified design. It authorizes
-> test-first implementation, verification, DCO publication, independent
-> exact-tree semantic and architecture review, protected PR checks, and merge
-> queue delivery. It does not satisfy initiative receipts, authorize the
-> WordPress branch, grant reviewer authority, treat DecisionInteraction as
-> RBAC, or permit out-of-scope work. It expires at the earliest of 72 hours
-> from this ratification, my revocation, protected merge, artifact/scope drift,
-> review or check failure, commandment conflict, or a no/revise/defer/escalate
-> judgment; it is single-use and consumed at merge.
+No direct DB write, synthetic principal, reused human, AI proxy, superuser
+fallback, fabricated receipt, or relabelled design mutation is valid. The
+normal initiative implementation denial remains visible until the deployed
+repair lawfully changes its prerequisites.
 
-Until that exact ratification is received, its governed persistence path is
-proven, and the resulting immutable authorization identity is durably pointed
-to from the Workroom, implementation remains stopped. No direct DB write, synthetic
-principal, reused human, AI proxy, superuser fallback, fabricated receipt, or
-relabelled design mutation is valid.
+## Research & Benchmarking
+
+Nine of the ten decisions repair named DPF modules and need no external
+comparison. §10 is the exception: projecting a policy judgment into a bounded,
+expiring action authority is a general authorization problem with mature prior
+art, so it is benchmarked here before DPF commits to a shape (AGENTS.md §7).
+
+The vocabulary is XACML's: a **PAP** authors policy, a **PDP** decides, a **PEP**
+enforces, a **PIP** supplies facts. DPF already has all four —
+`DecisionPerspectiveProfileVersion` is the PAP, the WWMD/WWWD/WSID gate is the
+PDP, the coworker tool authority gate is the PEP, and the evidence bundle is the
+PIP. What DPF lacks is the artifact that carries a PDP result to a PEP that runs
+later, in a different transaction, under a different actor.
+
+### Open Policy Agent (OPA) / Rego
+
+The reference decoupled PDP. Policy is data-driven and versioned, evaluation is
+deny-by-default, and the decision log is a first-class audit artifact.
+
+- **Adopt:** deny-by-default with an explicit registered affirmative outcome —
+  DPF's closed action registry is the same idea, and it is why free text,
+  confidence alone, or a caller's interpretation can never mean "yes".
+- **Adopt:** the decision log as an audit artifact separate from the decision.
+- **Reject:** OPA's re-evaluate-per-call model. DPF's owning judgments are
+  human-weighted deliberations with evidence bundles and scored options, not
+  microsecond rule evaluations; re-running one per action call is neither
+  affordable nor auditable. DPF needs the result to be durable and consumable.
+
+### AWS Cedar / Amazon Verified Permissions
+
+Cedar types every request as principal / action / resource / context against a
+schema, and returns allow-or-deny plus the determining policies.
+
+- **Adopt:** the typed request quadruple as the exact binding shape. §10's
+  fingerprint is deliberately the same: actor, action key, subject, organization,
+  route, artifact digest, constraints.
+- **Adopt:** returning the determining policy, not just the verdict — the
+  projected `AuthorizationDecisionLog` cites the `DecisionInteraction`, profile
+  version, and contribution digest for exactly this reason.
+- **Reject:** adopting a second policy language. DPF's policy already lives in
+  versioned perspective profiles with a human promoter; a Cedar schema would be a
+  parallel home for a rule that already has one (AGENTS.md §1).
+
+### Macaroons / Biscuit, and OAuth 2.0 Rich Authorization Requests (RFC 9396)
+
+The capability-token lineage: macaroons (Birgisson et al., 2014) and Biscuit mint
+a bearer credential that can be *attenuated* — a holder may add caveats that
+narrow scope, never widen it. RFC 9396 gives the structured counterpart, an
+`authorization_details` object naming the type, actions, locations, and
+identifiers a grant covers, replacing an opaque scope string.
+
+- **Adopt:** the attenuation invariant. §10 states it as "the projection cannot
+  widen the original delegation"; this is the same monotone-narrowing rule that
+  makes caveated capabilities safe to delegate.
+- **Adopt:** RFC 9396's structured authorization detail as the model for the
+  `CoworkerActionEnvelope` constraint set — a named action plus explicit
+  locations and identifiers, not a coarse scope word.
+- **Adopt:** bounded lifetime and bounded use count as intrinsic properties of
+  the grant rather than of the caller.
+- **Reject:** the bearer-token transport. A macaroon's value is that it travels
+  off-box; DPF's envelope is server-side, resolved by the PEP from its own
+  tables, and consumed transactionally. There is no token to exfiltrate, and
+  server-side consumption is what makes single-use enforceable.
+
+### Google Zanzibar / SpiceDB
+
+Relationship-tuple authorization with `zookie` consistency tokens that pin a
+decision to the data version it was computed against.
+
+- **Adopt:** the consistency token. §10's requirement that the immutable artifact
+  digest and current policy version be re-derived at consumption is a zookie in
+  DPF's terms — it is what makes artifact drift fail closed instead of silently
+  authorizing a different tree.
+- **Reject:** relationship tuples as the authority store. DPF authority is
+  derived from a deliberated judgment about a specific action, not from a
+  standing relation between subjects; ReBAC would model the wrong thing.
+
+### What DPF builds
+
+One transactional projector: PDP result in, `AuthorizationDecisionLog` +
+`CoworkerActionEnvelope` out, with Cedar's typed binding, RFC 9396's structured
+detail, the macaroon narrowing invariant, and a Zanzibar-style consistency pin.
+No new policy language, no new table, no bearer credential. The three substrates
+it writes to already exist and already carry expiry, delegation provenance, and
+execution lifecycle.
 
 ## Trust boundaries
 
@@ -574,6 +692,60 @@ relabelled design mutation is valid.
 | `AC-FIRST-DEPLOY-WARRANT` | The one-time envelope is ineffective without the exact human root, DI, BI/Workroom, repository/branch, base, design/plan artifacts, action/path scope, expiry, and a governed authorization identity; an evidence note alone is insufficient. | Bootstrap contract/pregate fixture plus immutable authority and Workroom-pointer inspection. |
 | `AC-FIRST-DEPLOY-INDEPENDENCE` | The candidate needs fresh independent exact-tree semantic and architecture review and every protected check; repository automation is never reported as a human approval. | Review-receipt identity, branch-rule snapshot, exact-tree CI, and PR-health evidence. |
 | `AC-FIRST-DEPLOY-CONSUME` | Drift, failure, revocation, timeout, non-affirmative judgment, or merge invalidates the envelope; one merge consumes it and no later work can reuse it. | Bootstrap contract negative/replay fixtures and protected-merge audit. |
+
+
+## Related
+
+- Binding design:
+  [`2026-08-08-initiative-readiness-and-goal-completion-reconciliation-design.md`](2026-08-08-initiative-readiness-and-goal-completion-reconciliation-design.md)
+  — this document changes its policy version and adds §10; it does not replace it.
+- Implementation plan:
+  [`../plans/2026-08-23-initiative-readiness-traversal-repair.md`](../plans/2026-08-23-initiative-readiness-traversal-repair.md).
+- Superseded within this branch: the transport-session readiness design and plan
+  (§4). They were removed rather than marked `superseded` because they never
+  reached `main`; commits `c1f6b9af5..3a9a5a732` carry them for audit.
+- Superseded recommendation: `DI-F7361DD540E2` (BI-specific two-human binding),
+  by `DI-053D69EADEDC` (§10).
+- Decision-scope doctrine: `docs/founder-kernel/wiki/principles/decisions-belong-to-their-scope.md`
+  — the reason §10 resolves the owning gate server-side and forbids WWWD/WSID
+  inheriting WWMD authority.
+
+## Open questions
+
+These are unresolved discrepancies between the design prose and `evaluate.ts`,
+surfaced while reshaping the §2 matrix. **Neither is decided here.** The
+implementing thread and the accountable reviewer own the resolution; until then
+the table above reflects current code behavior with these markers, and no test
+should be written to lock in either reading.
+
+### OQ-1 — Does `doc-only` carry a capsule-identity obligation at implementation?
+
+- **Earlier design prose said yes:** the `doc-only` row read "capsule identity;
+  delivery/acceptance at completion".
+- **`evaluate.ts` says no:** `implementationRequirements` guards `PLAN_REQUIRED`,
+  `DEPENDENCY_UNRESOLVED`, and `CAPSULE_IDENTITY_MISMATCH` behind
+  `if (facts.profile !== "doc-only")`, so a documentation change acquires none of
+  the three.
+- **Why it matters:** capsule identity is what binds work to a Workroom. If
+  `doc-only` genuinely needs it, the current guard is a real hole — documentation
+  changes would reach implementation with no capsule binding. If it does not, the
+  prose was aspirational and should stay dropped.
+- **Not inferable from the repair:** this behavior predates BI-F0715C9C. It is not
+  something §1 or §2 changed, so it is out of this repair's blast radius either way.
+
+### OQ-2 — Should the `feature` row restate `PLAN_REQUIRED`?
+
+- **Earlier design prose omitted it:** the `feature` implementation cell listed
+  "plan review, coverage, traceability, dependency disposition, capsule identity"
+  — repeating two `fix` obligations while dropping a third.
+- **`evaluate.ts` includes it:** `feature` inherits all three `fix` implementation
+  obligations, `PLAN_REQUIRED` among them.
+- **Most likely a prose slip, not a policy difference** — the omission is
+  inconsistent with the same cell repeating the other two. Recorded rather than
+  silently corrected because the additive rewrite changes what a reader infers.
+
+If OQ-1 resolves toward "yes", it is a separate defect with its own backlog item;
+folding it into this branch would widen a repair that already spans nine slices.
 
 ## Non-goals
 

@@ -646,6 +646,17 @@ export async function recordPlanBacklogCoverage(args: {
     return { ok: false, code: "plan-artifact-invalid", error: "Serializable plan coverage persistence is unavailable." };
   }
 
+  // Provider I/O is immutable and may exceed the interactive transaction
+  // budget. Resolve it before opening the serializable transaction; mutable
+  // Workroom/head identity is revalidated under lock below.
+  const resolvedPlan = await (args.resolveArtifact ?? resolveRepositoryArtifact)({
+    locator: args.planArtifactRef,
+    subject: { kind: "backlog-item", id: parent.itemId },
+  });
+  if (!resolvedPlan.ok) {
+    return { ok: false, code: "plan-artifact-invalid", error: resolvedPlan.error };
+  }
+
   return db.$transaction(async (tx) => {
     if (!tx.$queryRaw) {
       return { ok: false as const, code: "plan-artifact-invalid" as const, error: "Plan coverage lock support is unavailable." };
@@ -663,12 +674,24 @@ export async function recordPlanBacklogCoverage(args: {
     if (!currentParent || currentParent.id !== parent.id) {
       return { ok: false as const, code: "backlog-item-not-found" as const, error: `BacklogItem ${args.itemId} was not found.` };
     }
-    const resolvedPlan = await (args.resolveArtifact ?? resolveRepositoryArtifact)({
-      locator: args.planArtifactRef,
-      subject: { kind: "backlog-item", id: currentParent.itemId },
-    });
-    if (!resolvedPlan.ok) {
-      return { ok: false as const, code: "plan-artifact-invalid" as const, error: resolvedPlan.error };
+    const matchingHeads = await tx.$queryRaw<Array<{ id: string; createdByPrincipalId: string | null }>>`
+      SELECT "id", "createdByPrincipalId" FROM "WorkCapsule"
+      WHERE "backlogItemId" = ${currentParent.itemId}
+        AND "repositoryFullName" = ${args.planArtifactRef.repositoryFullName}
+        AND "headSha" = ${args.planArtifactRef.commitSha}
+        AND "archivedAt" IS NULL
+        AND "status" NOT IN ('abandoned', 'cancelled')
+      FOR SHARE
+    `;
+    if (
+      matchingHeads.length !== 1
+      || matchingHeads[0]?.createdByPrincipalId !== resolvedPlan.artifact.authorPrincipalId
+    ) {
+      return {
+        ok: false as const,
+        code: "plan-artifact-invalid" as const,
+        error: "The immutable plan commit and author no longer match exactly one live governed Workroom head.",
+      };
     }
     const requestedIds = Array.from(new Set(
       args.deliverables.map((deliverable) => deliverable.backlogItemId).filter((id): id is string => Boolean(id)),

@@ -17,6 +17,12 @@ import {
 import type { CoworkerAuthorityInputResolver } from "./coworker-tool-authority-gate";
 
 type AuthorityDb = {
+  backlogItem: {
+    findUnique(args: unknown): Promise<{
+      itemId: string;
+      organizationId: string | null;
+    } | null>;
+  };
   agent: {
     findFirst(args: unknown): Promise<{
       id: string;
@@ -56,6 +62,7 @@ export function deriveCoworkerAuthoritySubject(
   const candidates: Array<
     [keyof Record<string, unknown>, CoworkerAuthoritySubject["kind"]]
   > = [
+    ["itemId", "backlog-item"],
     ["employeeId", "employee"],
     ["accountId", "account"],
     ["contactId", "contact"],
@@ -68,6 +75,44 @@ export function deriveCoworkerAuthoritySubject(
     if (id) return { kind, id };
   }
   return { kind: "platform", id: "dpf" };
+}
+
+type InitiativeAuthorityDb = Pick<AuthorityDb, "backlogItem">;
+
+/** Resolve initiative subject and organization from the canonical item. Caller
+ * organization fields are ignored; authenticated context can only narrow. */
+export async function resolveInitiativeAuthorityContext(input: {
+  params: Record<string, unknown>;
+  authenticatedOrganizationId?: string | null;
+  db: InitiativeAuthorityDb;
+}): Promise<{
+  subject: CoworkerAuthoritySubject;
+  organizationId: string | null;
+}> {
+  const subject = deriveCoworkerAuthoritySubject(input.params);
+  if (subject.kind !== "backlog-item") {
+    return {
+      subject,
+      organizationId: input.authenticatedOrganizationId ?? null,
+    };
+  }
+  const item = await input.db.backlogItem.findUnique({
+    where: { itemId: subject.id },
+    select: { itemId: true, organizationId: true },
+  });
+  if (!item) throw new Error("The governed backlog item does not exist.");
+  if (!item.organizationId) {
+    throw new Error("The governed backlog item has no organization authority context.");
+  }
+  if (!input.authenticatedOrganizationId) {
+    throw new Error("Backlog-item authority requires an authenticated organization context.");
+  }
+  if (
+    input.authenticatedOrganizationId !== item.organizationId
+  ) {
+    throw new Error("The governed backlog item does not match the authenticated organization.");
+  }
+  return { subject, organizationId: item.organizationId };
 }
 
 export function deriveCoworkerApprovalPolicy(input: {
@@ -113,7 +158,7 @@ export const resolveCoworkerToolAuthorityInput: CoworkerAuthorityInputResolver =
       throw new Error("Coworker authority resolution requires an agent identity.");
     }
 
-    const [agent, delegation, task] = await Promise.all([
+    const [agent, delegation, task, initiativeAuthority] = await Promise.all([
       db.agent.findFirst({
         where: {
           OR: [
@@ -153,6 +198,11 @@ export const resolveCoworkerToolAuthorityInput: CoworkerAuthorityInputResolver =
             select: { taskRunId: true, parentTaskRunId: true },
           })
         : Promise.resolve(null),
+      resolveInitiativeAuthorityContext({
+        params: execution.rawParams,
+        authenticatedOrganizationId: execution.context?.organizationId,
+        db,
+      }),
     ]);
     if (!agent) {
       throw new Error("The executing coworker identity is not active.");
@@ -193,6 +243,7 @@ export const resolveCoworkerToolAuthorityInput: CoworkerAuthorityInputResolver =
 
     const input: CoworkerAuthorityInput = {
       authContext: effectiveAuth,
+      organizationId: initiativeAuthority.organizationId,
       action: {
         toolName: execution.toolName,
         requiredCapability: tool.requiredCapability,
@@ -204,7 +255,7 @@ export const resolveCoworkerToolAuthorityInput: CoworkerAuthorityInputResolver =
         approvalPolicy,
         requiresDelegationChain: Boolean(execution.context?.delegationChainId),
       },
-      subject: deriveCoworkerAuthoritySubject(execution.rawParams),
+      subject: initiativeAuthority.subject,
       delegation: delegation
         ? {
             chainId: delegation.chainId,

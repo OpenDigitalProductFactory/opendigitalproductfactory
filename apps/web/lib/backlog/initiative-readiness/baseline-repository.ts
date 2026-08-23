@@ -256,11 +256,11 @@ export async function recordInitiativeSpecApproval(args: {
   if (!authority || authority.decision !== "allow" || authority.actionKey !== "record_initiative_design_review") {
     return { ok: false, code: "AUTHORIZATION_DENIED", error: "The current tool call has no matching design-review allow decision." };
   }
-  const organizationId = authority.organizationId ?? item.organizationId;
-  if (!organizationId) {
+  const organizationId = item.organizationId;
+  if (!organizationId || !authority.organizationId) {
     return { ok: false, code: "AUTHORIZATION_DENIED", error: "Spec approval requires an organization-bound authority decision." };
   }
-  if (item.organizationId && authority.organizationId !== item.organizationId) {
+  if (authority.organizationId !== organizationId) {
     return { ok: false, code: "AUTHORIZATION_DENIED", error: "Reviewer authority does not match the initiative organization." };
   }
   const reviewerAliases = await prisma.principalAlias.findMany({

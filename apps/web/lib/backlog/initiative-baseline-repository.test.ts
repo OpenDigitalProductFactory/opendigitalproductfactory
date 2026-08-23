@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   transaction: vi.fn(),
   activityCreate: vi.fn(),
   pinCreate: vi.fn(),
+  backlogItemFind: vi.fn(),
 }));
 
 vi.mock("@/lib/documents/blob-storage", () => ({ writeDocumentBlob: mocks.writeBlob }));
@@ -14,20 +15,7 @@ vi.mock("@dpf/db", () => ({
   Prisma: { TransactionIsolationLevel: { Serializable: "Serializable" } },
   prisma: {
     backlogItem: {
-      findUnique: vi.fn(async () => ({
-        id: "bi-row",
-        itemId: "BI-TEST",
-        title: "Test initiative",
-        organizationId: null,
-        type: "feature",
-        source: null,
-        workType: null,
-        scopeKind: null,
-        archetypeCategories: [],
-        archetypeIds: [],
-        activeBuild: null,
-        featureBuilds: [],
-      })),
+      findUnique: mocks.backlogItemFind,
     },
     authorizationDecisionLog: {
       findUnique: vi.fn(async () => ({
@@ -92,6 +80,20 @@ function tx() {
 describe("recordInitiativeSpecApproval", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.backlogItemFind.mockResolvedValue({
+      id: "bi-row",
+      itemId: "BI-TEST",
+      title: "Test initiative",
+      organizationId: "org-1",
+      type: "feature",
+      source: null,
+      workType: null,
+      scopeKind: null,
+      archetypeCategories: [],
+      archetypeIds: [],
+      activeBuild: null,
+      featureBuilds: [],
+    });
     mocks.resolveArtifact.mockResolvedValue({
       ok: true,
       artifact: {
@@ -138,6 +140,39 @@ describe("recordInitiativeSpecApproval", () => {
         documentBlobId: "blob-1",
       }),
     });
+  });
+
+  it("fails closed when the canonical governed item has no organization", async () => {
+    mocks.backlogItemFind.mockResolvedValueOnce({
+      id: "bi-row",
+      itemId: "BI-TEST",
+      title: "Test initiative",
+      organizationId: null,
+      type: "feature",
+      source: null,
+      workType: null,
+      scopeKind: null,
+      archetypeCategories: [],
+      archetypeIds: [],
+      activeBuild: null,
+      featureBuilds: [],
+    });
+
+    await expect(recordInitiativeSpecApproval({
+      itemId: "BI-TEST",
+      profile: "feature",
+      artifactRole: "design-spec",
+      artifactRef: locator,
+      expectedCurrentBaselineId: null,
+      supersessionDispositions: [],
+      resolvedFindingRefs: [],
+      reason: "Independent checklist review passed.",
+      reviewerUserId: "user-reviewer",
+      reviewerAgentId: "agent-reviewer",
+      authorityDecisionId: "decision-1",
+      tokenScope: "write",
+    })).resolves.toMatchObject({ ok: false, code: "AUTHORIZATION_DENIED" });
+    expect(mocks.transaction).not.toHaveBeenCalled();
   });
 
   it("rolls back when the canonical artifact changes between resolution and the locked transaction", async () => {

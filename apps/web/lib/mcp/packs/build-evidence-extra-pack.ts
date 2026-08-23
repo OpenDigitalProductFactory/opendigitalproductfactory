@@ -100,6 +100,7 @@ const definitions: ToolDefinition[] = [
         backlogItemId: { type: "string", description: "Optional BI-* to bind the captured Work Capsule to, even without a build (closes the direct-agent binding gap)" },
         worktreePath: { type: "string", description: "Optional local worktree path — when given with branchName the capsule also records the work location" },
         branchName: { type: "string", description: "Optional branch (head) for this work — pairs with worktreePath to bind location" },
+        repositoryFullName: { type: "string", description: "Canonical repository owner/name for provider verification" },
         buildId: { type: "string", description: "Optional FB-* build id" },
         taskRunId: { type: "string", description: "Optional TaskRun id" },
         routeContext: { type: "string", description: "Route context where the work belongs, usually /build" },
@@ -373,6 +374,7 @@ const recordExternalDevelopmentEvidence: ToolPackHandler = async (params, userId
     unresolvedQuestions: stringArray("unresolvedQuestions"),
     skillIds: stringArray("skillIds"),
   };
+  const publishedCommits = details.commits.filter((commit) => /^[a-f0-9]{40}$/i.test(commit));
   const evidence = await recordExternalEvidence({
     actorUserId: userId,
     routeContext,
@@ -404,6 +406,8 @@ const recordExternalDevelopmentEvidence: ToolPackHandler = async (params, userId
       backlogItemId: stringValue("backlogItemId") || null,
       worktreePath: stringValue("worktreePath") || null,
       branchName: stringValue("branchName") || null,
+      repositoryFullName: stringValue("repositoryFullName") || null,
+      publishedCommitSha: publishedCommits.length === 1 ? publishedCommits[0] : null,
     });
   } catch (captureError) {
     console.warn(

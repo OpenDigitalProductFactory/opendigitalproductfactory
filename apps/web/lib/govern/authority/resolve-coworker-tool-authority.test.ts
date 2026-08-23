@@ -4,6 +4,7 @@ import {
   deriveAllowedRouteContexts,
   deriveCoworkerApprovalPolicy,
   deriveCoworkerAuthoritySubject,
+  resolveInitiativeAuthorityContext,
 } from "./resolve-coworker-tool-authority";
 
 describe("deriveAllowedRouteContexts", () => {
@@ -36,6 +37,60 @@ describe("deriveCoworkerAuthoritySubject", () => {
         authorityOverride: true,
       }),
     ).toEqual({ kind: "platform", id: "dpf" });
+  });
+
+  it("preserves the canonical backlog item instead of collapsing it to platform scope", () => {
+    expect(deriveCoworkerAuthoritySubject({
+      itemId: " BI-F0715C9C ",
+      organizationId: "caller-org",
+    })).toEqual({ kind: "backlog-item", id: "BI-F0715C9C" });
+  });
+});
+
+describe("resolveInitiativeAuthorityContext", () => {
+  it("derives organization authority server-side from the governed item", async () => {
+    const db = {
+      backlogItem: {
+        findUnique: async () => ({ itemId: "BI-F0715C9C", organizationId: "org-canonical" }),
+      },
+    };
+    await expect(resolveInitiativeAuthorityContext({
+      params: { itemId: "BI-F0715C9C", organizationId: "caller-org" },
+      authenticatedOrganizationId: "org-canonical",
+      db,
+    })).resolves.toEqual({
+      subject: { kind: "backlog-item", id: "BI-F0715C9C" },
+      organizationId: "org-canonical",
+    });
+  });
+
+  it.each([
+    [null, "The governed backlog item has no organization"],
+    ["org-other", "does not match the authenticated organization"],
+  ])("fails closed for an unusable canonical organization %s", async (organizationId, message) => {
+    const db = {
+      backlogItem: {
+        findUnique: async () => ({ itemId: "BI-F0715C9C", organizationId }),
+      },
+    };
+    await expect(resolveInitiativeAuthorityContext({
+      params: { itemId: "BI-F0715C9C" },
+      authenticatedOrganizationId: "org-canonical",
+      db,
+    })).rejects.toThrow(message);
+  });
+
+  it("does not broaden an organizationless caller from the backlog item's organization", async () => {
+    const db = {
+      backlogItem: {
+        findUnique: async () => ({ itemId: "BI-F0715C9C", organizationId: "org-canonical" }),
+      },
+    };
+    await expect(resolveInitiativeAuthorityContext({
+      params: { itemId: "BI-F0715C9C" },
+      authenticatedOrganizationId: null,
+      db,
+    })).rejects.toThrow("requires an authenticated organization context");
   });
 });
 

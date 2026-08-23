@@ -4,9 +4,13 @@ const collab = vi.hoisted(() => ({
   requestCoworker: vi.fn(),
   summonCoworker: vi.fn(),
 }));
+const remote = vi.hoisted(() => ({ submit: vi.fn() }));
 vi.mock("@/lib/tak/coworker-collaboration", () => ({
   requestCoworker: (...a: unknown[]) => collab.requestCoworker(...a),
   summonCoworker: (...a: unknown[]) => collab.summonCoworker(...a),
+}));
+vi.mock("@/lib/mcp-task-submit", () => ({
+  submitRemoteCoworkerTask: (...args: unknown[]) => remote.submit(...args),
 }));
 
 import { coworkerPack } from "./coworker-pack";
@@ -44,14 +48,41 @@ describe("coworker pack — registration", () => {
 });
 
 describe("coworker pack — handler behavior (delegation preserved)", () => {
-  it("request_coworker requires caller thread context", async () => {
+  it("request_coworker requires a deterministic request key without caller thread context", async () => {
     const res = await coworkerPack.handlers.request_coworker(
       { targetAgent: "ea-architect", objective: "review schema" },
       "u1",
       {},
     );
     expect(res.success).toBe(false);
-    expect(res.error).toBe("missing_threadId");
+    expect(res.error).toBe("missing_requestKey");
+    expect(collab.requestCoworker).not.toHaveBeenCalled();
+  });
+
+  it("routes an external no-thread request through the governed remote task substrate", async () => {
+    remote.submit.mockResolvedValue({
+      kind: "result",
+      result: { taskRunId: "TASK-REMOTE", status: "working", idempotentReplay: false },
+    });
+    const res = await coworkerPack.handlers.request_coworker(
+      {
+        targetAgent: "AGT-WS-REVIEW",
+        objective: "Review the exact initiative design artifact.",
+        requestKey: "BI-F0715C9C:design-review:sha256",
+      },
+      "u1",
+      { apiTokenId: "token-1", authSource: "pat", tokenScope: "write", routeContext: "/build" },
+    );
+
+    expect(res).toMatchObject({ success: true, entityId: "TASK-REMOTE" });
+    expect(remote.submit).toHaveBeenCalledWith(expect.objectContaining({
+      token: expect.objectContaining({ tokenId: "token-1", capability: "write", source: "pat" }),
+      params: expect.objectContaining({
+        agentId: "AGT-WS-REVIEW",
+        idempotencyKey: "BI-F0715C9C:design-review:sha256",
+        riskClass: "bounded-write",
+      }),
+    }));
     expect(collab.requestCoworker).not.toHaveBeenCalled();
   });
 

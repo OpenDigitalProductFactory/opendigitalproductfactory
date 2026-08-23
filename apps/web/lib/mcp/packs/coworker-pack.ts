@@ -25,6 +25,7 @@ const definitions: ToolDefinition[] = [
         targetAgent: { type: "string", description: "Target coworker — canonical agentId (AGT-*) or slug alias (e.g. 'ea-architect')." },
         objective: { type: "string", description: "The scoped sub-task for the peer coworker." },
         questionPacketSummary: { type: "string", description: "Optional one-line summary of the intent/question shown on the handoff card." },
+        requestKey: { type: "string", description: "Deterministic idempotency key required for external MCP/PAT calls without a parent thread." },
         tier: { type: "number", enum: [2, 3], description: "Interaction tier (default 2). Tier 3 requires depth-2 spawn support." },
         enteredVia: { type: "string", enum: ["handoff", "escalation", "spawn"], description: "How the peer is entering (default 'handoff')." },
       },
@@ -85,13 +86,52 @@ async function requestCoworkerHandler(
   userId: string,
   context?: Parameters<ToolPackHandler>[2],
 ): Promise<ToolResult> {
-  if (!context?.threadId) {
-    return { success: false, error: "missing_threadId", message: "request_coworker requires caller thread context." };
-  }
   const targetAgent = String(params["targetAgent"] ?? "").trim();
   const objective = String(params["objective"] ?? "").trim();
   if (!targetAgent || !objective) {
     return { success: false, error: "invalid_params", message: "request_coworker requires targetAgent and objective." };
+  }
+  if (!context?.threadId) {
+    const requestKey = typeof params["requestKey"] === "string" ? params["requestKey"].trim() : "";
+    if (!requestKey) {
+      return {
+        success: false,
+        error: "missing_requestKey",
+        message: "External request_coworker requires a deterministic requestKey when no parent thread exists.",
+      };
+    }
+    const { submitRemoteCoworkerTask } = await import("@/lib/mcp-task-submit");
+    const remote = await submitRemoteCoworkerTask({
+      token: {
+        tokenId: context?.apiTokenId ?? `session:${userId}`,
+        userId,
+        capability: context?.tokenScope === "read" ? "read" : "write",
+        source: context?.authSource === "pat" ? "pat" : "session-jwt",
+      },
+      userContext: { platformRole: null, isSuperuser: false },
+      params: {
+        agentId: targetAgent,
+        routeContext: context?.routeContext ?? "/build",
+        title: typeof params["questionPacketSummary"] === "string" ? params["questionPacketSummary"] : objective.slice(0, 120),
+        objective,
+        prompt: objective,
+        idempotencyKey: requestKey,
+        riskClass: "bounded-write",
+        authorityScope: [],
+      },
+    });
+    if (remote.kind === "invalid_params") {
+      return { success: false, error: "invalid_params", message: remote.message };
+    }
+    const structured = remote.result;
+    const failed = structured.isError === true;
+    return {
+      success: !failed,
+      error: failed ? String((structured.structuredContent as Record<string, unknown> | undefined)?.error ?? "remote_handoff_failed") : undefined,
+      entityId: typeof structured.taskRunId === "string" ? structured.taskRunId : undefined,
+      message: failed ? "Remote coworker handoff was rejected." : "Queued governed remote coworker handoff.",
+      data: structured,
+    };
   }
   const tierParam = Number(params["tier"]);
   const enteredViaParam = typeof params["enteredVia"] === "string" ? params["enteredVia"] : undefined;

@@ -12,6 +12,10 @@ import {
   type WorkIntent,
 } from "@/lib/work-capsules";
 import { err, ok, type ActionResult } from "@/lib/shared/action-result";
+import {
+  resolveInitiativeReviewerRecovery,
+  type InitiativeReviewerRecovery,
+} from "@/lib/tak/initiative-readiness-tool-grants";
 
 import { claimBacklogItemWorkspace } from "./work-capsule-store";
 import { declareWorkCapsuleIntent } from "./work-capsule-intent-store";
@@ -61,6 +65,7 @@ type GovernedClaimFailure = {
   code: "initiative_not_ready" | "capsule_identity_mismatch" | "readiness_projection_failed";
   workIntent: WorkIntent;
   readiness: InitiativeReadinessDecision;
+  recovery: InitiativeReviewerRecovery;
 };
 
 type GovernedClaimSuccessResult = Exclude<ActionResult<GovernedClaimSuccess>, { error: string }>;
@@ -231,10 +236,15 @@ export async function claimGovernedBacklogWorkspace(args: {
       });
       evaluated = decisionWithId(projection.decision);
       if (projection.governed && evaluated.verdict !== "allowed") {
+        const recovery = await resolveInitiativeReviewerRecovery({
+          decision: evaluated,
+          currentAgentId: args.actor.agentId,
+          db: tx,
+        });
         await recordDecision({ db: tx, backlogItemRowId: item.id, decision: evaluated, workIntent, actor: args.actor });
         return {
           ...err(`Cannot start ${workIntent}: ${[...evaluated.blockers, ...evaluated.unmet].map((entry) => entry.code).join(", ")}.`),
-          data: { code: "initiative_not_ready" as const, workIntent, readiness: evaluated },
+          data: { code: "initiative_not_ready" as const, workIntent, readiness: evaluated, recovery },
         };
       }
 
@@ -279,7 +289,12 @@ export async function claimGovernedBacklogWorkspace(args: {
     await recordDecision({ db: args.db, backlogItemRowId, decision: denied, workIntent, actor: args.actor });
     return {
       ...err(error.message),
-      data: { code: "capsule_identity_mismatch", workIntent, readiness: denied },
+      data: {
+        code: "capsule_identity_mismatch",
+        workIntent,
+        readiness: denied,
+        recovery: { reviewerRoutes: [], escalations: [] },
+      },
     };
   }
 }

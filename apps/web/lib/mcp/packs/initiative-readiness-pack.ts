@@ -5,26 +5,11 @@ import {
   recordInitiativeSpecApproval,
 } from "@/lib/backlog/initiative-readiness";
 import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
+import {
+  INITIATIVE_READINESS_LANES as LANES,
+  type InitiativeReadinessLane as Lane,
+} from "@/lib/tak/initiative-readiness-tool-grants";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
-
-type Lane = {
-  capability: NonNullable<ToolDefinition["requiredCapability"]>;
-  grant: string;
-  gates: readonly InitiativeGateKey[];
-  independent: boolean;
-};
-
-const LANES: Record<string, Lane> = {
-  record_initiative_evidence: { capability: "manage_backlog", grant: "initiative_evidence_write", gates: ["classification", "research", "dependency-disposition"], independent: false },
-  record_initiative_design_review: { capability: "manage_backlog", grant: "initiative_design_review", gates: ["design-spec", "spec-approval", "plan-review"], independent: true },
-  record_initiative_architecture_review: { capability: "manage_ea_model", grant: "initiative_architecture_review", gates: ["architecture-review"], independent: true },
-  record_initiative_data_review: { capability: "manage_ea_model", grant: "initiative_data_review", gates: ["data-review"], independent: true },
-  record_initiative_ux_review: { capability: "manage_backlog", grant: "initiative_ux_review", gates: ["ux-fit-review"], independent: true },
-  record_initiative_security_review: { capability: "manage_compliance", grant: "initiative_security_review", gates: ["security-review"], independent: true },
-  record_initiative_compliance_review: { capability: "manage_compliance", grant: "initiative_compliance_review", gates: ["compliance-review"], independent: true },
-  record_initiative_domain_review: { capability: "manage_backlog", grant: "initiative_domain_review", gates: ["domain-review"], independent: true },
-  record_initiative_archetype_review: { capability: "manage_taxonomy", grant: "initiative_archetype_review", gates: ["archetype-provisioning", "archetype-completeness"], independent: true },
-};
 
 const artifactRefSchema = {
   type: "object",

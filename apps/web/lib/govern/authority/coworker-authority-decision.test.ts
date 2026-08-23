@@ -193,6 +193,23 @@ describe("evaluateCoworkerAuthority", () => {
     });
   });
 
+  it("denies a backlog subject until its canonical organization is resolved", () => {
+    const withoutOrganization = evaluateCoworkerAuthority(base({
+      subject: { kind: "backlog-item", id: "BI-F0715C9C" },
+      organizationId: null,
+    }));
+    expect(withoutOrganization).toMatchObject({
+      outcome: "deny",
+      reasonCode: "subject-scope-denied",
+    });
+
+    const withOrganization = evaluateCoworkerAuthority(base({
+      subject: { kind: "backlog-item", id: "BI-F0715C9C" },
+      organizationId: "org-canonical",
+    }));
+    expect(withOrganization.outcome).toBe("require-approval");
+  });
+
   it.each([
     [
       "disconnected integration",

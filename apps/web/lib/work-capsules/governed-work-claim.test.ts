@@ -65,6 +65,20 @@ function database(activities: unknown[] = []) {
         },
       }),
     },
+    agentToolGrant: {
+      findMany: vi.fn().mockResolvedValue([
+        {
+          grantKey: "initiative_design_review",
+          agent: {
+            agentId: "AGT-INDEPENDENT-REVIEWER",
+            displayName: "Independent Design Reviewer",
+            status: "active",
+            archived: false,
+            lifecycleStage: "production",
+          },
+        },
+      ]),
+    },
     $transaction: vi.fn(async (fn: (tx: unknown) => Promise<unknown>) => fn(db)),
   };
   return db as unknown as CapsuleDb;
@@ -86,12 +100,60 @@ describe("claimGovernedBacklogWorkspace", () => {
 
     expect(result).toMatchObject({
       ok: false,
-      data: { code: "initiative_not_ready", workIntent: "implementation" },
+      data: {
+        code: "initiative_not_ready",
+        workIntent: "implementation",
+        recovery: {
+          reviewerRoutes: expect.arrayContaining([expect.objectContaining({
+            toolName: "record_initiative_design_review",
+            targetAgentId: "AGT-INDEPENDENT-REVIEWER",
+            independent: true,
+          })]),
+        },
+      },
     });
     expect(claimWorkspace).not.toHaveBeenCalled();
     expect(db.backlogItemActivity?.create).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({ kind: "initiative_readiness_decision" }),
     }));
+  });
+
+  it("returns an explicit escalation when no independently eligible receipt grant exists", async () => {
+    const db = database();
+    (db.agentToolGrant!.findMany as ReturnType<typeof vi.fn>).mockResolvedValueOnce([
+      {
+        grantKey: "initiative_design_review",
+        agent: {
+          agentId: actor.agentId,
+          displayName: "Current Author",
+          status: "active",
+          archived: false,
+          lifecycleStage: "production",
+        },
+      },
+    ]);
+
+    const result = await claimGovernedBacklogWorkspace({
+      db,
+      input,
+      actor,
+      workIntent: "implementation",
+      now: new Date("2026-08-22T00:00:00.000Z"),
+      dependencies: { claimWorkspace: vi.fn() },
+    });
+
+    expect(result).toMatchObject({
+      ok: false,
+      data: {
+        recovery: {
+          escalations: expect.arrayContaining([expect.objectContaining({
+            grant: "initiative_design_review",
+            reason: "no-eligible-reviewer",
+            nextAction: expect.stringContaining("Assign or activate"),
+          })]),
+        },
+      },
+    });
   });
 
   it("atomically declares design intent and returns exact readback for governed design work", async () => {
