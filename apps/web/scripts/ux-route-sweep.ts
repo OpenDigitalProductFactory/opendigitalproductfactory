@@ -31,9 +31,9 @@ import {
 import AxeBuilder from "@axe-core/playwright";
 
 import { measureUxBudget } from "../lib/ux-budget/measure";
+import { confirmBlockingRoutes } from "./ux-sweep-reproducibility";
 import {
   evaluateSweep,
-  findNotReproducibleBlocking,
   formatSweepReport,
   freezeBaseline,
   normaliseVolatileText,
@@ -609,59 +609,31 @@ async function main(): Promise<void> {
           }
         }),
     );
-    // REPRODUCIBILITY GATE (BI-69FE5504).
-    //
-    // A blocking verdict has to be attributable to a real defect. Several routes
-    // render from mutable database state — /storefront/settings/operations, for
-    // one, renders confirmed hours or archetype-derived defaults depending on
-    // what is seeded — so their word counts move between runs with no code
-    // change at all. Observed live: that route blocked a PR touching only a
-    // Dockerfile and shell scripts at 147 -> 157 words, and the identical SHA
-    // passed on re-run.
-    //
-    // A gate that invents a regression is worse than one that misses a real one:
-    // it teaches every author to re-run red rather than read it, which is
-    // exactly how a genuine regression gets waved through. So a blocking route
-    // is measured a SECOND time and only blocks if the verdict reproduces. A
-    // real regression is deterministic and reproduces; an unstable measurement
-    // does not.
-    //
-    // This is not a free pass. A route that fails to reproduce is reported
-    // loudly and recorded in the execution report as a measurement defect to
-    // fix, because an unreliable gate is itself a defect.
+    // A blocking verdict must be attributable to a real defect: some routes
+    // render from state the sweep does not pin, so a delta can be noise. Only
+    // block if it reproduces (BI-69FE5504 — see findNotReproducibleBlocking).
     if (!updateBaseline && routeRun) {
-      const firstPass = routeRun.outcomes.flatMap((outcome) =>
-        outcome.status === "measured" ? [outcome.value.measurement] : [],
-      );
+      const firstPass = routeRun.outcomes.flatMap((o) => (o.status === "measured" ? [o.value.measurement] : []));
       const provisional = evaluateSweep(firstPass, loadBaseline(join(ROOT, BASELINE_REL)));
-      const blockingPaths = new Set(provisional.verdicts.filter((v) => !v.ok).map((v) => v.routePath));
-      if (provisional.blocked && blockingPaths.size > 0) {
-        const confirmRows = rows.filter((row) => blockingPaths.has(row.routePath));
-        console.error(
-          `[ux-sweep] confirming ${confirmRows.length} blocking route(s) with a second measurement (BI-69FE5504)`,
-        );
-        const confirmRun = await runBoundedRouteWork(
-          confirmRows,
-          Math.min(workerCount, confirmRows.length),
-          async (row, workerIndex) =>
-            withIsolatedSweepPage(contexts[workerIndex], async (page) => measureRoute(page, row, baseUrl)),
-        );
-        const confirmMeasurements = confirmRun.outcomes.flatMap((outcome) =>
-          outcome.status === "measured" ? [outcome.value.measurement] : [],
-        );
-        const confirmed = evaluateSweep(confirmMeasurements, loadBaseline(join(ROOT, BASELINE_REL)));
-        const stillBlocking = new Set(confirmed.verdicts.filter((v) => !v.ok).map((v) => v.routePath));
-        // A route that could not be re-measured at all keeps its blocking
-        // verdict: silence is not evidence of stability.
-        const unmeasured = new Set(
-          confirmRun.outcomes.filter((outcome) => outcome.status !== "measured").map((outcome) => outcome.routePath),
-        );
-        notReproducible = findNotReproducibleBlocking({
-          firstPassBlocking: [...blockingPaths],
-          confirmPassBlocking: [...stillBlocking],
-          unmeasuredOnConfirm: [...unmeasured],
-        });
-      }
+      notReproducible = await confirmBlockingRoutes({
+        rows,
+        firstPassBlocking: provisional.blocked ? provisional.verdicts.filter((v) => !v.ok).map((v) => v.routePath) : [],
+        onConfirmStart: (count) =>
+          console.error(`[ux-sweep] confirming ${count} blocking route(s) with a second measurement (BI-69FE5504)`),
+        remeasure: async (confirmRows) => {
+          const run = await runBoundedRouteWork(
+            [...confirmRows],
+            Math.min(workerCount, confirmRows.length),
+            async (row, workerIndex) =>
+              withIsolatedSweepPage(contexts[workerIndex], async (page) => measureRoute(page, row, baseUrl)),
+          );
+          const measured = run.outcomes.flatMap((o) => (o.status === "measured" ? [o.value.measurement] : []));
+          return {
+            blocking: evaluateSweep(measured, loadBaseline(join(ROOT, BASELINE_REL))).verdicts.filter((v) => !v.ok).map((v) => v.routePath),
+            unmeasured: run.outcomes.filter((o) => o.status !== "measured").map((o) => o.routePath),
+          };
+        },
+      });
     }
   } finally {
     await Promise.all(contexts.map((context) => context.close().catch(() => {})));
