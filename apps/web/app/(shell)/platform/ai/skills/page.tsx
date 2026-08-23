@@ -231,7 +231,28 @@ export default async function SkillsObservatoryPage({
                   Patch the seed file in the same PR so a fresh install keeps this change.
                 </div>
               )}
-              {!review.seedDrift.inSync && review.seedDrift.seedBody === null && (
+              {review.seedDrift.seedStatus === "missing-in-repo" && (
+                <div
+                  className="mb-3 rounded border px-3 py-2 text-xs"
+                  style={{
+                    borderColor: "color-mix(in srgb, var(--dpf-warning) 35%, var(--dpf-border))",
+                    background: "color-mix(in srgb, var(--dpf-warning) 8%, transparent)",
+                    color: "var(--dpf-text)",
+                  }}
+                >
+                  <strong>Drift can&rsquo;t be checked.</strong> The repo is present but this
+                  skill has no seed file, so an approval can&rsquo;t be compared with what ships.
+                  Looked in:{" "}
+                  {review.seedDrift.candidatePaths.map((candidate, index) => (
+                    <span key={candidate}>
+                      {index > 0 && ", "}
+                      <code>{candidate}</code>
+                    </span>
+                  ))}
+                  .
+                </div>
+              )}
+              {review.seedDrift.seedStatus === "repo-unavailable" && (
                 <div
                   className="mb-3 rounded border px-3 py-2 text-xs"
                   style={{
@@ -240,8 +261,8 @@ export default async function SkillsObservatoryPage({
                     color: "var(--dpf-muted)",
                   }}
                 >
-                  Seed file not found at <code>{review.seedDrift.seedPath}</code> (normal for production
-                  installs where the repo isn&rsquo;t checked out next to the app).
+                  No repo checkout is reachable, so seed drift can&rsquo;t be checked (normal on
+                  production).
                 </div>
               )}
               <div className="mb-4">
