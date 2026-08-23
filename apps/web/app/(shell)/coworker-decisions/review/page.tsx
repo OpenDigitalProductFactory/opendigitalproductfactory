@@ -26,6 +26,8 @@ import {
 import { GapAnswerForm } from "./gap-answer-form";
 import { WeightProposalForm } from "./weight-proposal-form";
 import { listOpenWeightAdjustmentProposals } from "@/lib/decision-perspective/weight-proposal-store";
+import { listHeldProfessionMaterial } from "@/lib/decision-perspective/held-material-store";
+import { HeldMaterialList } from "./held-material-list";
 import { clusterDecisionReviewRowsSemantic } from "@/lib/decision/review-clustering";
 
 export const dynamic = "force-dynamic";
@@ -105,6 +107,7 @@ export default async function DecisionReviewPage() {
     openOrgRows,
     principleRows,
     weightProposalRows,
+    heldMaterialFamilies,
   ] = await Promise.all([
       prisma.decisionInteraction.findMany({
         where: {
@@ -185,6 +188,7 @@ export default async function DecisionReviewPage() {
         },
       }),
       listOpenWeightAdjustmentProposals(prisma),
+      listHeldProfessionMaterial(prisma),
     ]);
 
   // Re-score the canonical decisions against the current corpus and surface any
@@ -264,6 +268,8 @@ export default async function DecisionReviewPage() {
           call.
         </p>
       </header>
+
+      <HeldMaterialList families={heldMaterialFamilies} />
 
       <OrgDecisionCaptureList decisions={openOrgDecisions} />
 

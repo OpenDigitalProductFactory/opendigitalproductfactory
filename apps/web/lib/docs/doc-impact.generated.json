@@ -1315,6 +1315,9 @@
     "packages/db/src/profession-local-axes.ts": [
       "docs/architecture/decision-vectors.md"
     ],
+    "packages/db/src/profession-material-promotion.ts": [
+      "docs/architecture/decision-vectors.md"
+    ],
     "packages/db/src/provider-compliance-source-registry.ts": [
       "docs/operations/ai-provider-compliance-source-renewal-runbook.md"
     ],
@@ -2293,7 +2296,8 @@
     "docs/architecture/decision-vectors.md": [
       "apps/web/lib/decision-perspective/material.ts",
       "packages/db/src/dimension-scope.ts",
-      "packages/db/src/profession-local-axes.ts"
+      "packages/db/src/profession-local-axes.ts",
+      "packages/db/src/profession-material-promotion.ts"
     ],
     "docs/architecture/delivery-ia.md": [
       "apps/web/app/(shell)/delivery/page.tsx",
