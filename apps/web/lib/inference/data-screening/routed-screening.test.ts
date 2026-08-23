@@ -167,3 +167,62 @@ describe("routed inference screening", () => {
     expect(replaced.screenInput.systemPrompt).toBe("Limited mode.");
   });
 });
+
+// BI-463BE12A / BI-9C14CB5D. The end-to-end assertion, at the seam routing
+// actually consumes. Four channels clamp a turn to local-only — sensitivity
+// clearance, the per-class export decision, the vertical policy packs, and a
+// mask obligation that clamps residencyPolicy — so a unit test on the
+// classifier alone proves nothing about whether a coworker can reach a provider.
+describe("prompt provenance decides whether a turn may leave the box", () => {
+  const persona =
+    "You are the COO. You coordinate operations: payroll runs, invoice approvals, " +
+    "salary review cycles, and team performance.";
+
+  const screenWith = (systemPrompt: string, content: string, spans?: string[]) =>
+    createRoutedInferenceScreen({
+      messages: [{ role: "user", content }],
+      systemPrompt,
+      systemPromptInstructionSpans: spans,
+      taskType: "conversation",
+      routeContext: { sensitivity: "confidential", residencyPolicy: "any_enabled" },
+    }).screen;
+
+  it("lets a job description with no governed data reach a cloud provider", () => {
+    const screen = screenWith(persona, "What needs my attention this morning?", [persona]);
+
+    expect(screen.receipt.routeEffect).toBe("allow");
+    expect(screen.routeContext.residencyPolicy).toBe("any_enabled");
+  });
+
+  it("keeps reporting the detected classes even when they change nothing", () => {
+    const screen = screenWith(persona, "What needs my attention this morning?", [persona]);
+
+    expect(screen.receipt.classifiedDataClasses).toContain("employee-records");
+    expect(screen.receipt.matchProvenance?.every((m) => m.path.startsWith("systemPrompt.instruction["))).toBe(true);
+  });
+
+  it("clamps to local-only for a real value in a message", () => {
+    const screen = screenWith(persona, "Set Dana's salary to 125000 Monday.", [persona]);
+
+    expect(screen.receipt.routeEffect).toBe("local-only");
+    expect(screen.routeContext.residencyPolicy).toBe("local_only");
+  });
+
+  it("clamps to local-only for a real value in an UNDECLARED prompt segment", () => {
+    const screen = screenWith(
+      `${persona}\n\n--- PAGE DATA ---\nDana Whitfield, salary 125000, payroll id 88213.`,
+      "Summarise this.",
+      [persona],
+    );
+
+    expect(screen.receipt.routeEffect).toBe("local-only");
+    expect(screen.routeContext.residencyPolicy).toBe("local_only");
+  });
+
+  it("is unchanged for a caller that declares nothing", () => {
+    const screen = screenWith(persona, "What needs my attention this morning?");
+
+    expect(screen.routeContext.sensitivity).toBe("restricted");
+    expect(screen.receipt.routeEffect).toBe("local-only");
+  });
+});

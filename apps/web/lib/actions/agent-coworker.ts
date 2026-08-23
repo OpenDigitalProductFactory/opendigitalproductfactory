@@ -31,7 +31,8 @@ import { getRouteDataContext } from "@/lib/route-context";
 import { observeConversation } from "@/lib/process-observer-hook";
 import { isUnifiedCoworkerEnabled } from "@/lib/feature-flags";
 import { resolveRouteContext } from "@/lib/route-context-map";
-import { assembleSystemPrompt } from "@/lib/prompt-assembler";
+import { assembleSystemPromptWithProvenance } from "@/lib/prompt-assembler";
+import { composeCoworkerDomainContext } from "@/lib/tak/coworker-prompt-provenance";
 import { buildInitiativeBlock } from "@/lib/tak/initiative-block";
 import { getCoworkerProactivityPreference } from "@/lib/actions/proactivity";
 import { resolveReadingLevelForRoute } from "@/lib/readability/policy";
@@ -684,6 +685,7 @@ export async function sendMessage(input: {
   let professionInjectedIntoPrompt = false;
 
   let populatedPrompt: string;
+  let systemPromptInstructionSpans: string[] = [];
   // Governed Hermes learning Slice 1: active coworker skill (if any).
   // Set inside the unified-prompt branch when the user message invokes a
   // known eligible skill via the canonical `Use the <id> skill.` marker.
@@ -830,17 +832,20 @@ export async function sendMessage(input: {
     const selectedDomain = result.selected.find((s) => s.source === "domain")?.content ?? routeCtx.domainContext;
     const selectedPageData = result.selected.find((s) => s.source === "page-data")?.content?.replace("--- PAGE DATA ---\n", "") ?? null;
     const selectedAttachments = result.selected.find((s) => s.source === "attachments")?.content ?? null;
-    const selectedKnowledge = result.selected.find((s) => s.source === "knowledge")?.content ?? null;
-    const selectedMemory = result.selected.find((s) => s.source === "semantic-memory")?.content ?? null;
     // WSID Phase 3: the profession corpus block that survived arbitration (null
     // if it was dropped under budget — recorded as a usage miss below).
     const selectedProfessionContext = result.selected.find((s) => s.source === "profession-corpus")?.content ?? null;
     professionInjectedIntoPrompt = selectedProfessionContext !== null;
 
     // Merge knowledge and semantic memory into domain context if they made the budget
-    let finalDomainContext = `${selectedDomain}\n\n${AUTHORIZED_SURFACE_PROMPT}`;
-    if (selectedKnowledge) finalDomainContext += "\n\n" + selectedKnowledge;
-    if (selectedMemory) finalDomainContext += "\n\n" + selectedMemory;
+    // Knowledge and memory are recalled from the org's own records — DATA, and
+    // deliberately not declared as instruction. See coworker-prompt-provenance.
+    const domain = composeCoworkerDomainContext({
+      persona: selectedDomain,
+      surfaceInstruction: AUTHORIZED_SURFACE_PROMPT,
+      knowledge: result.selected.find((s) => s.source === "knowledge")?.content ?? null,
+      memory: result.selected.find((s) => s.source === "semantic-memory")?.content ?? null,
+    });
 
     // EP-WIKI-001 Phase 3b1: passive wiki context injection.
     // Pulls the top-K kernel + overlay pages relevant to the user's
@@ -942,14 +947,15 @@ export async function sendMessage(input: {
     });
     resolvedBuildId = coworkerExtra.resolvedBuildId;
 
-    populatedPrompt = await assembleSystemPrompt({
+    const assembled = await assembleSystemPromptWithProvenance({
+      instructionSpans: domain.instructionSpans,
       hrRole: user.platformRole ?? "none",
       grantedCapabilities: granted,
       deniedCapabilities: denied,
       mode: (input.coworkerMode as "advise" | "act") ?? "advise",
       sensitivity: routeCtx.sensitivity,
-      domainContext: finalDomainContext,
-      domainTools: [], // Already included in domain block
+      domainContext: domain.domainContext,
+      domainTools: [],
       routeData: selectedPageData,
       attachmentContext: selectedAttachments,
       professionContext: selectedProfessionContext,
@@ -958,12 +964,12 @@ export async function sendMessage(input: {
       extraSections: coworkerExtra.sections,
       skills: skillSummaries,
       questionPacket: input.questionPacket ?? null,
-      // BI-8F8C5F28: on customer-copy surfaces, hold the coworker to the org's
-      // reading level (high-school by default). Null on internal surfaces.
+      // BI-8F8C5F28 reading level; BI-E35A8AA4 proactivity → in-task initiative.
       readingLevel: await resolveReadingLevelForRoute(input.routeContext),
-      // BI-E35A8AA4: Proactivity → in-task initiative.
       proactivityLevel,
     });
+    populatedPrompt = assembled.text;
+    systemPromptInstructionSpans = assembled.instructionSpans;
 
     if (eligibleSkillIds.length > 0) {
       void recordSkillUsageEvents({
@@ -1010,6 +1016,19 @@ export async function sendMessage(input: {
     // and instead dead-ends or deflects to "ask an admin".
     const { loadLimitationResponseBlock } = await import("@/lib/tak/limitation-response-block");
     const legacyLimitationResponseBlock = await loadLimitationResponseBlock();
+    // BI-E35A8AA4: Proactivity → in-task initiative — surface-uniform with the
+    // unified path, which injects the same block via assembleSystemPrompt.
+    const legacyInitiativeBlock = buildInitiativeBlock(proactivityLevel);
+    // BI-463BE12A: the coworker's brief. Everything pushed onto promptSections
+    // below (page context, form-assist, Build Studio) is DATA and stays
+    // undeclared. This is the install default while USE_UNIFIED_COWORKER is off.
+    systemPromptInstructionSpans = [
+      agent.systemPrompt,
+      legacyDecisionRoutingBlock,
+      legacyLimitationResponseBlock,
+      legacyInitiativeBlock,
+      AUTHORIZED_SURFACE_PROMPT,
+    ].filter((span): span is string => Boolean(span?.trim()));
     const promptSections = [
       agent.systemPrompt,
       "",
@@ -1017,9 +1036,7 @@ export async function sendMessage(input: {
       "",
       legacyLimitationResponseBlock,
       "",
-      // BI-E35A8AA4: Proactivity → in-task initiative — surface-uniform with the
-      // unified path, which injects the same block via assembleSystemPrompt.
-      buildInitiativeBlock(proactivityLevel), "", AUTHORIZED_SURFACE_PROMPT,
+      legacyInitiativeBlock, "", AUTHORIZED_SURFACE_PROMPT,
       "",
       "Current context:",
       `- Route: ${input.routeContext}`,
@@ -1922,6 +1939,7 @@ export async function sendMessage(input: {
       () => executeAutonomousAgenticLoop({
         chatHistory,
         systemPrompt: populatedPrompt,
+        systemPromptInstructionSpans,
         sensitivity: agent.sensitivity,
         tools: attachedTools,
         toolsForProvider,

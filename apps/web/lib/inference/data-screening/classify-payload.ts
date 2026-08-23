@@ -257,10 +257,16 @@ export function classifyInferencePayload(
 
   const dedupedMatches = dedupeMatches(matches);
   const dataClasses = uniqueSorted(dedupedMatches.map((match) => match.dataClass));
+  const dataEvidencedClasses = uniqueSorted(
+    dedupedMatches
+      .filter((match) => !isInstructionProvenance(match))
+      .map((match) => match.dataClass),
+  );
   const overallSensitivity = inferOverallSensitivity(dedupedMatches, input.governedData);
   const inputHash = hashCanonical({
     messages: input.messages,
     systemPrompt: input.systemPrompt,
+    systemPromptInstructionSpans: input.systemPromptInstructionSpans ?? [],
     tools: input.tools ?? [],
     taskType: input.taskType ?? null,
     governedData: input.governedData ?? [],
@@ -269,6 +275,7 @@ export function classifyInferencePayload(
   return {
     overallSensitivity,
     dataClasses,
+    dataEvidencedClasses,
     matches: dedupedMatches,
     receipt: {
       screenId: `screen_${inputHash.slice(0, 16)}`,
@@ -291,7 +298,18 @@ function normalizeProbePath(path: string): string {
 function collectTextProbes(input: InferencePayloadClassificationInput): TextProbe[] {
   const probes: TextProbe[] = [];
   if (input.systemPrompt) {
-    probes.push({ path: "systemPrompt", text: input.systemPrompt });
+    const split = splitPromptByProvenance(
+      input.systemPrompt,
+      input.systemPromptInstructionSpans,
+    );
+    split.instruction.forEach((span, index) => {
+      probes.push({ path: `${INSTRUCTION_PATH_PREFIX}${index}]`, text: span });
+    });
+    // The remainder keeps the bare `systemPrompt` path: it is data, and every
+    // caller that supplies no spans lands here with the whole prompt, unchanged.
+    if (split.data.trim().length > 0) {
+      probes.push({ path: "systemPrompt", text: split.data });
+    }
   }
 
   input.messages.forEach((message, index) => {
@@ -466,7 +484,88 @@ function uniqueSorted<T extends string>(values: readonly T[]): T[] {
  * 2.70, no commandment conflict); granting external clearance scored worst,
  * opposed by "Outbound and irreversible actions require explicit go" and
  * "Least privilege, deny by default".
+ *
+ * DI-BF2FEDA18D81 (2026-08-23) revisited the provenance half of that decision on
+ * live measurement DI-0A58373E26D0 did not have, and added the instruction-path
+ * rule documented on INSTRUCTION_PROBE_PATHS above. It did NOT reopen external
+ * clearance, which remains rejected for the same two commandments.
  */
+/**
+ * Probe-path prefix for a span of the system prompt the caller marked as
+ * platform-authored INSTRUCTION (BI-463BE12A / BI-9C14CB5D).
+ *
+ * A coworker's system prompt describes the job it does. A COO's says "payroll";
+ * a finance controller's says "invoice"; an HR director's says "salary". Those
+ * are `employee-records` and `payments-finance` text patterns, and because
+ * neither is `ambiguousVocabulary` they took the hasPreciseEvidence branch below
+ * and escalated the turn to `restricted` — which hard-denies every external
+ * provider. Measured on the live install over seven days: coo 36/36,
+ * hr-specialist 33/33, admin-assistant 38/38, market-research-analyst 50/50 and
+ * finance-agent 7/7 turns routed restricted, against 0/45 for platform-engineer.
+ * Those coworkers had never once reached a cloud provider, and since only
+ * `local` and `speaches` carry restricted clearance — and `speaches` offers no
+ * toolUse — their candidate pool was one endpoint with no fallback. One held
+ * lease and the turn was a dead end (BI-A89E4827).
+ *
+ * This is the same category of evidence the tool-declaration exemption already
+ * recognises in collectTextProbes: a static schema field named `payment` is not
+ * a payment. The rule stated at the top of CLASS_RULES — "text probes must
+ * contain value-shaped evidence, not merely governance or instructional
+ * vocabulary that happens to name a protected data class" — simply was not being
+ * applied to the largest block of instructional vocabulary in the payload.
+ *
+ * WHY SPANS RATHER THAN EXEMPTING THE PROMPT. The assembled prompt is a mix.
+ * `finalDomainContext` alone concatenates the coworker persona, an authorized-
+ * surface instruction, retrieved knowledge, and semantic memory into one string,
+ * and text is appended after assembly in at least two more places. Exempting the
+ * whole prompt would open a real egress path for every one of those. Naming the
+ * instruction spans instead means anything unlabelled — including any future
+ * append — is data, so the control fails closed by construction.
+ *
+ * WHY NOT DEMOTE INSTRUCTION MATCHES TO ambiguousVocabulary. That was the first
+ * approach (`prompt-corroboration`, DI-BF2FEDA18D81) and it does not work. The
+ * COO prompt produces three distinct restricted-class reasons on its own, so it
+ * satisfies `distinctAmbiguousReasons >= 2` and escalates anyway. Worse, four
+ * independent channels clamp a turn to local-only — sensitivity clearance, the
+ * per-class export decision, the vertical policy packs, and a mask obligation
+ * that clamps residencyPolicy — and only provenance at the source closes all
+ * four. See docs/superpowers/plans/2026-08-23-prompt-provenance-in-inference-screening.md.
+ */
+const INSTRUCTION_PATH_PREFIX = "systemPrompt.instruction[";
+
+function isInstructionProvenance(match: InferencePayloadMatch): boolean {
+  return match.path.startsWith(INSTRUCTION_PATH_PREFIX);
+}
+
+/**
+ * Split the prompt into instruction spans and the data remainder.
+ *
+ * Spans are matched literally and every occurrence is removed, so a block that
+ * appears twice cannot leave one copy classified as data. A span the caller
+ * names but that is not present is ignored rather than treated as an error —
+ * assembly may legitimately drop a block under a token budget.
+ */
+function splitPromptByProvenance(
+  systemPrompt: string,
+  instructionSpans: readonly string[] | undefined,
+): { instruction: string[]; data: string } {
+  const spans = (instructionSpans ?? [])
+    .map((span) => span.trim())
+    .filter((span) => span.length > 0);
+  if (spans.length === 0) return { instruction: [], data: systemPrompt };
+
+  const present: string[] = [];
+  let remainder = systemPrompt;
+  // Longest first: a short span that is a substring of a longer one must not
+  // carve a hole out of the middle of the longer span before it is matched.
+  for (const span of [...spans].sort((a, b) => b.length - a.length)) {
+    if (!remainder.includes(span)) continue;
+    present.push(span);
+    remainder = remainder.split(span).join("\n");
+  }
+  return { instruction: present, data: remainder };
+}
+
 function inferOverallSensitivity(
   matches: readonly InferencePayloadMatch[],
   governedData: readonly GovernedPayloadHint[] | undefined,
@@ -475,7 +574,20 @@ function inferOverallSensitivity(
     return "restricted";
   }
 
-  const restrictedMatches = matches.filter((match) => RESTRICTED_CLASSES.has(match.dataClass));
+  // Sensitivity rests on the turn's DATA only. Instruction-provenance matches
+  // stay in `matches` and `dataClasses` so the receipt reports everything
+  // detected, but they set no floor at all: a job description naming payroll is
+  // not evidence that payroll data is present, and holding it at `confidential`
+  // still summoned the PDP, which attached a mask obligation, which clamped
+  // residencyPolicy to local_only — the fourth of four channels, and the one
+  // that survived every narrower fix (BI-463BE12A).
+  //
+  // This is only safe BECAUSE provenance is declared at the source rather than
+  // inferred: anything the caller does not name as instruction — including an
+  // injected briefing or PAGE DATA block inside the prompt — is classified as
+  // data and escalates exactly as a message would.
+  const dataMatches = matches.filter((match) => !isInstructionProvenance(match));
+  const restrictedMatches = dataMatches.filter((match) => RESTRICTED_CLASSES.has(match.dataClass));
   const hasPreciseEvidence = restrictedMatches.some(
     (match) => !AMBIGUOUS_REASONS.has(match.reason),
   );
@@ -488,7 +600,7 @@ function inferOverallSensitivity(
     return "restricted";
   }
 
-  const dataClasses = matches.map((match) => match.dataClass);
+  const dataClasses = dataMatches.map((match) => match.dataClass);
   if (
     restrictedMatches.length > 0 ||
     governedData?.some((hint) => hint.sensitivity === "confidential") ||

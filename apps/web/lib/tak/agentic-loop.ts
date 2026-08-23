@@ -1038,6 +1038,8 @@ export type RunAgenticLoopParams = {
 
   chatHistory: ChatMessage[];
   systemPrompt: string;
+  /** Instruction spans in `systemPrompt`; see RouteAndCallOptions (BI-463BE12A). */
+  systemPromptInstructionSpans?: string[];
   sensitivity: import("@/lib/agent-sensitivity").RouteSensitivity;
   tools: ToolDefinition[];
   toolsForProvider: Array<Record<string, unknown>> | undefined;
@@ -1190,6 +1192,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
   const {
     chatHistory,
     systemPrompt,
+    systemPromptInstructionSpans,
     sensitivity,
     tools,
     toolsForProvider,
@@ -1280,6 +1283,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
   // Build routeAndCall options once (reused every iteration)
   const routeOptions = {
     ...(toolsForProvider ? { tools: toolsForProvider } : {}),
+    ...(systemPromptInstructionSpans?.length ? { systemPromptInstructionSpans } : {}),
     taskType: turnRoute.taskType,
     ...effectiveConfig,
     ...(requireTools ? { requireTools: true } : {}),

@@ -196,6 +196,7 @@ async function prepareRoute(
   const { screenInput, screen, rehydrationHandle } = createRoutedInferenceScreen({
     messages,
     systemPrompt,
+    systemPromptInstructionSpans: options?.systemPromptInstructionSpans,
     tools: options?.tools,
     taskType,
     routeContext: initialRouteContext,

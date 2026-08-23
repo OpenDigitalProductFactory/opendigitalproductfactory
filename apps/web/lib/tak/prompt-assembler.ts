@@ -18,6 +18,15 @@ import { readingLevelDirective, type ReadingLevel } from "@dpf/validators";
 import { SYSTEM_PROMPT_DYNAMIC_BOUNDARY } from "./prompt-boundary";
 
 export type PromptInput = {
+  /**
+   * Spans of caller-supplied context that are platform- or operator-authored
+   * INSTRUCTION rather than the turn's data (BI-463BE12A). The assembler cannot
+   * infer these: `domainContext` arrives as one string that may concatenate the
+   * coworker persona with retrieved knowledge and semantic memory, and only the
+   * caller knows which part is which. Omitted means "all of it is data", which
+   * is the safe default.
+   */
+  instructionSpans?: string[];
   hrRole: string;
   grantedCapabilities: string[];
   deniedCapabilities: string[];
@@ -156,7 +165,31 @@ Values: Quality over speed. Transparency. Continuous improvement. Human authorit
 
 // ─── Assembler ──────────────────────────────────────────────────────────────
 
+/**
+ * The assembled prompt plus the spans of it that are platform-authored
+ * INSTRUCTION rather than the turn's data (BI-463BE12A / BI-9C14CB5D).
+ *
+ * Anything NOT listed in `instructionSpans` is classified as data by the
+ * inference screener, so this list is deliberately conservative: the static
+ * contract blocks and the fixed sentences this function generates, plus
+ * whatever the caller declares via `input.instructionSpans`. Retrieved
+ * knowledge, semantic memory, the profession corpus, wiki recall, working
+ * notes, PAGE DATA, attachments and extra sections are all data and are
+ * deliberately absent.
+ */
+export type AssembledSystemPrompt = {
+  text: string;
+  instructionSpans: string[];
+};
+
+/** Back-compatible wrapper — callers that do not care about provenance. */
 export async function assembleSystemPrompt(input: PromptInput): Promise<string> {
+  return (await assembleSystemPromptWithProvenance(input)).text;
+}
+
+export async function assembleSystemPromptWithProvenance(
+  input: PromptInput,
+): Promise<AssembledSystemPrompt> {
   // Load identity, mode, and mission blocks from DB (falls back to hardcoded constants)
   const modeSlug = input.mode === "advise" ? "advise-mode" : "act-mode";
   const loaded = await loadPrompts([
@@ -171,6 +204,9 @@ export async function assembleSystemPrompt(input: PromptInput): Promise<string> 
 
   // --- Static blocks (cacheable across turns for same role+mode) ---
   const staticBlocks: string[] = [];
+  // Fixed sentences this function generates. Instruction, but not static, so
+  // they are collected separately from the cacheable block list.
+  const generatedInstruction: string[] = [];
 
   // Block 1: Identity (static)
   staticBlocks.push(loaded.get("platform-identity/identity-block") ?? IDENTITY_BLOCK);
@@ -211,27 +247,33 @@ export async function assembleSystemPrompt(input: PromptInput): Promise<string> 
 
   // Current date for temporal grounding
   const today = new Date().toISOString().slice(0, 10);
-  dynamicBlocks.push(`Today's date is ${today}.`);
+  const dateBlock = `Today's date is ${today}.`;
+  dynamicBlocks.push(dateBlock);
+  generatedInstruction.push(dateBlock);
 
   // Block 2: Authority (dynamic — varies by user)
   const granted = input.grantedCapabilities.join(", ");
   const denied = input.deniedCapabilities.length > 0
     ? input.deniedCapabilities.join(", ")
     : "none — but do not assume unlimited authority";
-  dynamicBlocks.push(
-    `The employee you're working with holds role ${input.hrRole}. They are authorized to: ${granted}. They are NOT authorized to: ${denied}. All actions you take execute under their authority. Never exceed it.`
-  );
+  const authorityBlock =
+    `The employee you're working with holds role ${input.hrRole}. They are authorized to: ${granted}. They are NOT authorized to: ${denied}. All actions you take execute under their authority. Never exceed it.`;
+  dynamicBlocks.push(authorityBlock);
+  generatedInstruction.push(authorityBlock);
 
   // Block 2b: Initiative (dynamic — the employee's Proactivity choice for this
   // coworker). Scales in-task effort by level; sits after the cache boundary
   // because it varies per user/session. BI-E35A8AA4.
-  dynamicBlocks.push(buildInitiativeBlock(input.proactivityLevel));
+  const initiativeBlock = buildInitiativeBlock(input.proactivityLevel);
+  dynamicBlocks.push(initiativeBlock);
+  generatedInstruction.push(initiativeBlock);
 
   // Block 4: Sensitivity
   const level = input.sensitivity.toUpperCase();
-  dynamicBlocks.push(
-    `This page is classified ${level}. Only endpoints cleared for ${level} are handling requests. Do not include classified data in sub-tasks routed to lower-clearance endpoints.`
-  );
+  const sensitivityBlock =
+    `This page is classified ${level}. Only endpoints cleared for ${level} are handling requests. Do not include classified data in sub-tasks routed to lower-clearance endpoints.`;
+  dynamicBlocks.push(sensitivityBlock);
+  generatedInstruction.push(sensitivityBlock);
 
   const questionPacketBlock = formatQuestionPacketPromptBlock(input.questionPacket);
   if (questionPacketBlock) {
@@ -293,7 +335,24 @@ export async function assembleSystemPrompt(input: PromptInput): Promise<string> 
     }
   }
 
-  return withCoworkerInteractionContract(staticBlocks.join("\n\n")
+  const text = withCoworkerInteractionContract(staticBlocks.join("\n\n")
     + SYSTEM_PROMPT_DYNAMIC_BOUNDARY
     + dynamicBlocks.join("\n\n"));
+
+  // The reading-level directive is a written instruction to the coworker, not
+  // data, and it is embedded inside the domain block rather than pushed as its
+  // own entry — spans match literally, so being embedded is not a problem.
+  const readingLevelSpan = input.readingLevel
+    ? readingLevelDirective(input.readingLevel)
+    : null;
+
+  return {
+    text,
+    instructionSpans: [
+      ...staticBlocks,
+      ...generatedInstruction,
+      ...(readingLevelSpan ? [readingLevelSpan] : []),
+      ...(input.instructionSpans ?? []),
+    ].filter((span): span is string => Boolean(span && span.trim())),
+  };
 }

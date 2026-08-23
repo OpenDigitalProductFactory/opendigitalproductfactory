@@ -328,3 +328,140 @@ describe("ambiguous-vocabulary corroboration (BI-CD13D818)", () => {
     expect(result.dataClasses).toContain("unknown-governed-data");
   });
 });
+
+// BI-463BE12A / BI-9C14CB5D. Measured on the live install over seven days: coo
+// 36/36, market-research-analyst 50/50, admin-assistant 38/38, hr-specialist
+// 33/33 and finance-agent 7/7 turns routed `restricted`, solely because their
+// system prompts describe employment and finance work. `restricted` denies every
+// external provider, so those five had one endpoint and no fallback.
+describe("a coworker's job description is instruction, not payload", () => {
+  // Close to the real assembled COO persona: it names payroll and invoices
+  // because that is the job, and carries no actual employee or payment values.
+  const persona =
+    "You are the COO. You coordinate operations across the business: payroll " +
+    "runs, invoice approvals, salary review cycles, and team performance.";
+  const ask = { role: "user" as const, content: "What needs my attention this morning?" };
+
+  it("does not escalate on a declared instruction span", () => {
+    const result = classifyInferencePayload({
+      messages: [ask],
+      systemPrompt: persona,
+      systemPromptInstructionSpans: [persona],
+      taskType: "conversation",
+    });
+
+    expect(result.overallSensitivity).toBe("internal");
+    expect(result.dataEvidencedClasses).toEqual([]);
+  });
+
+  it("still reports every detected class on the receipt", () => {
+    // Suppressed for routing, never hidden from audit.
+    const result = classifyInferencePayload({
+      messages: [ask],
+      systemPrompt: persona,
+      systemPromptInstructionSpans: [persona],
+      taskType: "conversation",
+    });
+
+    expect(result.dataClasses).toContain("employee-records");
+    expect(result.matches.some((m) => m.path.startsWith("systemPrompt.instruction["))).toBe(true);
+  });
+
+  // The load-bearing safety property. An assembly path that declares nothing —
+  // the legacy persona path, and every append made after assembly — classifies
+  // the whole prompt as data and behaves exactly as it did before this existed.
+  it("classifies the whole prompt as data when nothing is declared", () => {
+    const result = classifyInferencePayload({
+      messages: [ask],
+      systemPrompt: persona,
+      taskType: "conversation",
+    });
+
+    expect(result.overallSensitivity).toBe("restricted");
+  });
+
+  it("escalates on a real value in an UNDECLARED part of the prompt", () => {
+    // An injected briefing or PAGE DATA block sits in the same string as the
+    // persona. Declaring the persona must not launder what surrounds it.
+    const result = classifyInferencePayload({
+      messages: [ask],
+      systemPrompt: `${persona}\n\n--- PAGE DATA ---\nDana Whitfield, salary 125000.`,
+      systemPromptInstructionSpans: [persona],
+      taskType: "conversation",
+    });
+
+    expect(result.overallSensitivity).toBe("restricted");
+  });
+
+  it("escalates on a real value in a message", () => {
+    const result = classifyInferencePayload({
+      messages: [{ role: "user", content: "Set Dana's salary to 125000 effective Monday." }],
+      systemPrompt: persona,
+      systemPromptInstructionSpans: [persona],
+      taskType: "conversation",
+    });
+
+    expect(result.overallSensitivity).toBe("restricted");
+  });
+
+  it("escalates on a real value in a tool-call argument", () => {
+    const result = classifyInferencePayload({
+      messages: [{
+        role: "assistant",
+        content: "",
+        toolCalls: [{ id: "c1", name: "update_person", arguments: { salary: 125000 } }],
+      }],
+      systemPrompt: persona,
+      systemPromptInstructionSpans: [persona],
+      taskType: "conversation",
+    });
+
+    expect(result.overallSensitivity).toBe("restricted");
+  });
+
+  it("leaves an explicit governed hint at full force", () => {
+    const result = classifyInferencePayload({
+      messages: [ask],
+      systemPrompt: persona,
+      systemPromptInstructionSpans: [persona],
+      taskType: "conversation",
+      governedData: [{ assetId: "asset-1", classificationKnown: true, sensitivity: "restricted" }],
+    });
+
+    expect(result.overallSensitivity).toBe("restricted");
+  });
+
+  it("ignores a declared span that assembly dropped under a token budget", () => {
+    const result = classifyInferencePayload({
+      messages: [ask],
+      systemPrompt: "Be concise.",
+      systemPromptInstructionSpans: [persona],
+      taskType: "conversation",
+    });
+
+    expect(result.overallSensitivity).toBe("internal");
+  });
+
+  it("removes every occurrence of a span, not just the first", () => {
+    const result = classifyInferencePayload({
+      messages: [ask],
+      systemPrompt: `${persona}\n\nReminder:\n${persona}`,
+      systemPromptInstructionSpans: [persona],
+      taskType: "conversation",
+    });
+
+    expect(result.overallSensitivity).toBe("internal");
+  });
+
+  it("matches the longest span first so a nested span cannot carve a hole", () => {
+    const outer = `${persona} Escalate anything you cannot resolve.`;
+    const result = classifyInferencePayload({
+      messages: [ask],
+      systemPrompt: outer,
+      systemPromptInstructionSpans: [persona, outer],
+      taskType: "conversation",
+    });
+
+    expect(result.overallSensitivity).toBe("internal");
+  });
+});
