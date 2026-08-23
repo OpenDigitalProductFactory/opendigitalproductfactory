@@ -136,6 +136,13 @@ array. Each actionable entry contains:
 Recovery never changes the verdict and never grants the caller reviewer
 authority.
 
+The operator-facing action must preserve the recommended agent's canonical
+`agentId` from projection through dispatch. A portal launcher may render the
+agent's display name, but it must open or submit to that exact identity. If the
+identity is no longer eligible, show the stale-route reason and refresh
+recovery; never fall back to the first/default coworker. This is the UI
+invariant violated by `WC-B0DD2B2F`.
+
 ### 4. Reuse auth-bound tasks for threadless handoff
 
 Do not add a reviewer-dispatch tool or session table. Do not require legacy
@@ -239,6 +246,7 @@ Unverified, mismatched, ambiguous, or foreign artifacts remain blocked.
 | `AC-PROFILE-MONOTONIC` | Recorded cross-domain/archetype evidence still wins. | Profile regression tests. |
 | `AC-POLICY-DIFFERENT` | Fix, feature, and cross-domain have materially different sets. | Table-driven pure-policy tests. |
 | `AC-RECOVERY-ROUTE` | Missing grants identify exact eligible agents and request packet. | Recovery resolver and claim tests. |
+| `AC-UI-TARGET` | Following a recovery action preserves the exact eligible agent identity or fails visibly; it never opens a default coworker. | Recovery-action/launcher component test. |
 | `AC-REVIEW-SEPARATION` | External fallback executes as target reviewer and never grants caller authority. | Coworker/task and receipt separation tests. |
 | `AC-SPEC-AUTHORITY` | A correctly granted independent reviewer gets an organization-bound allow decision for the governed item; missing/mismatched subjects fail closed. | Authority-gate and exact spec-approval traversal tests. |
 | `AC-HEAD-RECONCILE` | Provider-verified evidence updates the existing subject Workroom through adoption. | Provider, evidence handler, and capture tests. |
