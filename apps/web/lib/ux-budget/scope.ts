@@ -2,11 +2,13 @@
 //
 // L2 measurement scoping — EP-UX-SYSTEM spec §6 L2 (BI-B9BE9A29).
 //
-// THE RULE THIS FILE ENCODES: progressive disclosure is REWARDED, never taxed.
-// A budget that counted every word in the markup would punish the exact fix it is
-// supposed to encourage — moving professional detail behind a <details> or a
-// disclosure region. So before anything is measured, collapsed subtrees are
-// EXCISED. Content the owner cannot see on arrival does not count against them.
+// THE RULE THIS FILE ENCODES: secondary disclosure is REWARDED; hiding the page
+// purpose is not. A budget that counted every word in the markup would punish
+// moving professional detail behind a <details>. So collapsed SECONDARY subtrees
+// are excised. A region marked `data-dpf-purpose-key` is the page's work object
+// (the roster, the account list) — collapsing it used to drop the word count to
+// a "good" score while adding a click before the owner can do the job
+// (BI-0147EB89 / DI-B2D851A5AF86). Those regions stay in the measured scope.
 //
 // Why a tag scanner rather than a regex: a regex cannot match a closing tag to its
 // opening tag, so `<details><div>…</div></details>` would be truncated at the first
@@ -54,6 +56,13 @@ export const DISCLOSURE_TRIGGER_ATTR = "data-dpf-disclosure-trigger";
 
 /** Marks the lead band — the first thing the owner reads. Budgeted separately. */
 export const LEAD_ATTR = "data-dpf-lead";
+
+/**
+ * Marks a region the page-purpose contract names as default-visible (e.g.
+ * `roster-list`). Never excised, even inside a collapsed `<details>` — hiding
+ * the page purpose must not buy the word budget (BI-0147EB89).
+ */
+export const PURPOSE_KEY_ATTR = "data-dpf-purpose-key";
 
 export type TagToken = {
   /** Lowercased tag name. */
@@ -226,6 +235,18 @@ export function isDisclosureRegion(tag: TagToken): boolean {
   );
 }
 
+/** True when the tag is a declared page-purpose region. */
+export function isPurposeRegion(tag: TagToken): boolean {
+  return PURPOSE_KEY_ATTR in tag.attrs;
+}
+
+/** Collapsed disclosure whose body is not shown on arrival. */
+function isCollapsedDisclosure(tag: TagToken): boolean {
+  if (tag.name === "details" && !("open" in tag.attrs)) return true;
+  if (DISCLOSURE_ATTR in tag.attrs && !("open" in tag.attrs)) return true;
+  return false;
+}
+
 /**
  * The scope a budget is measured against: what the owner actually sees on arrival.
  * Non-rendered tags go first so a `<script>` containing markup-shaped strings
@@ -233,7 +254,40 @@ export function isDisclosureRegion(tag: TagToken): boolean {
  */
 export function defaultVisibleHtml(html: string): string {
   const rendered = removeSubtrees(html, (tag) => NON_RENDERED.has(tag.name));
-  return removeSubtrees(promoteClosedSummaries(rendered), isStructurallyHidden);
+  return removeSubtrees(
+    promoteClosedSummaries(promotePurposeRegions(rendered)),
+    isStructurallyHidden,
+  );
+}
+
+/**
+ * Purpose-key regions stay in the measured scope even when wrapped in a
+ * collapsed disclosure. The disclosure's unmarked body is still excised.
+ *
+ * Lifted before `promoteClosedSummaries` so a closed <details> that contains
+ * the roster is replaced with (summary + purpose regions), not just the
+ * summary label the owner had to click.
+ */
+function promotePurposeRegions(html: string): string {
+  const collapsed = extractSubtrees(html, isCollapsedDisclosure);
+  let out = html;
+  for (const block of collapsed) {
+    const purpose = extractSubtrees(block, isPurposeRegion);
+    if (purpose.length === 0) continue;
+    const summary =
+      extractSubtrees(block, (tag) => tag.name === "summary")[0] ?? "";
+    const replacement = `${summary}${purpose.join("")}`;
+    out = out.replace(block, replacement);
+  }
+  return out;
+}
+
+/** True when a purpose-key region sits inside a collapsed disclosure. */
+export function isPurposeRegionBuried(html: string): boolean {
+  const rendered = removeSubtrees(html, (tag) => NON_RENDERED.has(tag.name));
+  return extractSubtrees(rendered, isCollapsedDisclosure).some(
+    (block) => extractSubtrees(block, isPurposeRegion).length > 0,
+  );
 }
 
 /**

@@ -58,6 +58,7 @@ export type RouteBaseline = {
   maxChoicesPerControl: number;
   subLegibleControls: number;
   buriedPrimaryAction: number;
+  buriedPrimaryRegion?: number;
   axeViolations: number;
   ariaSnapshot: string;
 };
@@ -78,6 +79,7 @@ export const RATCHET_AXES = [
   "maxChoicesPerControl",
   "subLegibleControls",
   "buriedPrimaryAction",
+  "buriedPrimaryRegion",
   "axeViolations",
 ] as const;
 export type RatchetAxis = (typeof RATCHET_AXES)[number];
@@ -92,6 +94,7 @@ const RATCHET_AXIS_POLARITY: Record<RatchetAxis, RatchetAxisPolarity> = {
   maxChoicesPerControl: "max",
   subLegibleControls: "max",
   buriedPrimaryAction: "max",
+  buriedPrimaryRegion: "max",
   axeViolations: "max",
 };
 
@@ -116,6 +119,7 @@ export const NOISE_FLOOR: Record<RatchetAxis, number> = {
   maxChoicesPerControl: 0,
   subLegibleControls: 0,
   buriedPrimaryAction: 0,
+  buriedPrimaryRegion: 0,
   axeViolations: 0,
 };
 
@@ -127,6 +131,7 @@ const AXIS_LABEL: Record<RatchetAxis, string> = {
   maxChoicesPerControl: "choices in one control",
   subLegibleControls: "sub-legible controls",
   buriedPrimaryAction: "buried primary action (was reachable, now behind a collapse)",
+  buriedPrimaryRegion: "buried page-purpose region (was reachable, now behind a collapse)",
   axeViolations: "axe violations",
 };
 
@@ -156,7 +161,13 @@ export type RouteVerdict = {
 };
 
 function measurementValue(m: RouteMeasurement, axis: RatchetAxis): number {
-  return axis === "axeViolations" ? m.axeViolations : m.metrics[axis];
+  if (axis === "axeViolations") return m.axeViolations;
+  return m.metrics[axis];
+}
+
+function baselineAxisValue(baseline: RouteBaseline, axis: RatchetAxis): number {
+  if (axis === "axeViolations") return baseline.axeViolations;
+  return baseline[axis] ?? 0;
 }
 
 function ratchetAxisRegressed(axis: RatchetAxis, was: number, now: number): boolean {
@@ -189,7 +200,7 @@ export function verdictForRoute(
   if (baseline) {
     for (const axis of RATCHET_AXES) {
       const now = measurementValue(measurement, axis);
-      const was = baseline[axis];
+      const was = baselineAxisValue(baseline, axis);
       // A negative value means the measurement was UNAVAILABLE this run (e.g. the axe
       // scan threw). Comparing it would manufacture a phantom regression the next time
       // the scan works — 0 > -1 is not an increase in violations, it is a scan that
@@ -613,6 +624,7 @@ export function freezeBaseline(measurements: RouteMeasurement[], generator: stri
       maxChoicesPerControl: m.metrics.maxChoicesPerControl,
       subLegibleControls: m.metrics.subLegibleControls,
       buriedPrimaryAction: m.metrics.buriedPrimaryAction,
+      buriedPrimaryRegion: m.metrics.buriedPrimaryRegion,
       axeViolations: m.axeViolations,
       ariaSnapshot: normaliseSnapshot(m.ariaSnapshot),
     };
@@ -655,12 +667,14 @@ export function compareBaselineReproducibility(
       continue;
     }
     for (const axis of RATCHET_AXES) {
-      if (Math.abs(a[axis] - b[axis]) > NOISE_FLOOR[axis]) {
+      const first = baselineAxisValue(a, axis);
+      const second = baselineAxisValue(b, axis);
+      if (Math.abs(first - second) > NOISE_FLOOR[axis]) {
         issues.push({
           routePath,
           axis,
-          first: a[axis],
-          second: b[axis],
+          first,
+          second,
         });
       }
     }
@@ -709,6 +723,7 @@ export function mergeReproducibleBaselines(
       maxChoicesPerControl: Math.max(a.maxChoicesPerControl, b.maxChoicesPerControl),
       subLegibleControls: Math.max(a.subLegibleControls, b.subLegibleControls),
       buriedPrimaryAction: Math.max(a.buriedPrimaryAction, b.buriedPrimaryAction),
+      buriedPrimaryRegion: Math.max(a.buriedPrimaryRegion ?? 0, b.buriedPrimaryRegion ?? 0),
       axeViolations: Math.max(a.axeViolations, b.axeViolations),
       ariaSnapshot: normaliseSnapshot(a.ariaSnapshot),
     };

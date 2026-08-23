@@ -1,0 +1,33 @@
+{
+  "version": "1",
+  "decidedOption": "primary-always-counts",
+  "decisionInteractionId": "DI-B2D851A5AF86",
+  "scope": {
+    "files": [
+      "apps/web/lib/ux-budget/scope.ts",
+      "apps/web/lib/ux-budget/measure.ts",
+      "apps/web/lib/ux-budget/evaluate.ts",
+      "apps/web/lib/ux-budget/budgets.ts",
+      "apps/web/lib/ux-budget/ratchet.ts",
+      "apps/web/app/(shell)/workforce/page.tsx",
+      "apps/web/components/platform/coworker-record/RosterView.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "decisionInteractionId": "DI-B2D851A5AF86",
+    "consideredOptions": [
+      "discount-disclosed",
+      "full-count-disclosed",
+      "primary-always-counts",
+      "first-viewport-regions"
+    ]
+  },
+  "rationale": {
+    "primary-always-counts": "CHOSEN. Kernel composite 10.58, margin 2.58, high confidence, autonomyEligible. Secondary asides still excise at zero; a marked page-purpose region (roster-list, the account list) always bills, and burying it is a blocking reachability finding. Matches the ratified /workforce purpose contract, which already names roster-list as default-visible.",
+    "discount-disclosed": "REJECTED. Kernel composite 2.99. A fraction still rewards hiding — hide more, score better. An over-reporting or gameable measure is a defect.",
+    "full-count-disclosed": "REJECTED. Kernel composite 5.70. Counting every aside at full weight punishes the disclosure construct the kernel already prescribes for short secondary help.",
+    "first-viewport-regions": "REJECTED this round. Kernel composite 7.99. Right long-term shape (count rendered regions in the first viewport) but a larger rewrite than the purpose-key promotion already sitting next to the page-purpose contract."
+  },
+  "notes": "BI-0147EB89. Live /workforce (authenticated) hid 78 coworker cards behind a closed All coworkers details; the same RosterView on /platform/ai/overview baselines at 2946 words. Packaging decision DI-A5C301A8C39C was a near-tie; operator chose one PR. axeViolations:2 on 149/200 routes is shared chrome and is not re-baselined as a pass."
+}

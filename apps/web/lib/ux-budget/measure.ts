@@ -26,6 +26,7 @@ import {
 import {
   countDisclosureRegions,
   defaultVisibleHtml,
+  isPurposeRegionBuried,
   leadBandHtml,
   routeContentHtml,
 } from "./scope";
@@ -98,7 +99,13 @@ export type UxBudgetMetrics = {
    * catches a 0→1 transition on a pre-existing route.
    */
   buriedPrimaryAction: number;
-/**
+  /**
+   * 1 when a `data-dpf-purpose-key` region exists inside a collapsed disclosure.
+   * The word budget still counts that region (hiding is not free); this axis
+   * catches that the owner cannot reach the page purpose on arrival (BI-0147EB89).
+   */
+  buriedPrimaryRegion: number;
+  /**
    * Flesch–Kincaid grade of the route's own default-visible copy, measured one
    * UI utterance at a time (BI-0ED0F6B3). Scored over `<main>` where the shell
    * marks one, so the number describes this page rather than the shared chrome.
@@ -132,6 +139,7 @@ export function measureUxBudget(html: string): UxBudgetMetrics {
     disclosureRegions: countDisclosureRegions(html),
     hasNextActionMarker: visible.includes(OWNER_FIRST_NEXT_ACTION_ATTR),
     buriedPrimaryAction: buried ? 1 : 0,
+    buriedPrimaryRegion: isPurposeRegionBuried(html) ? 1 : 0,
     // An empty surface has no prose to grade; report 0 rather than a fabricated score.
     readingGradeLevel:
       utterances.length === 0 ? 0 : analyzeUtteranceReadability(utterances).gradeLevel,

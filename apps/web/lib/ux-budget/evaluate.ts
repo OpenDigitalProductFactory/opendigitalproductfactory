@@ -177,6 +177,19 @@ export function evaluateUxBudget(
           ? "primary action reachable on arrival"
           : "primary action is marked but buried behind a collapsed disclosure — not visible on arrival",
     },
+    {
+      // BI-0147EB89: collapsing the page purpose (the roster, the directory) used
+      // to satisfy the word budget while adding a click before the owner can do
+      // the job. Blocking on net-new cockpit/list routes; pre-existing routes
+      // are held by the buriedPrimaryRegion ratchet (0→1).
+      check: "primary-region-reachable",
+      ok: budget.requirePrimaryRegionReachable ? metrics.buriedPrimaryRegion === 0 : true,
+      severity: "blocking",
+      detail:
+        metrics.buriedPrimaryRegion === 0
+          ? "page-purpose region reachable on arrival"
+          : "page-purpose region is marked but buried behind a collapsed disclosure — hiding the job is not a budget win",
+    },
   ];
 
   const findings = raw

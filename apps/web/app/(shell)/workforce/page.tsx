@@ -9,7 +9,6 @@
 // health/coverage panels; this business surface is the clean identity directory.
 import { loadRoster } from "@/lib/coworker-record/roster";
 import { RosterView } from "@/components/platform/coworker-record/RosterView";
-import { OwnerFirstDisclosure } from "@/components/owner-first/OwnerFirstDisclosure";
 import { auth } from "@/lib/auth";
 import { getGrantedCapabilities } from "@/lib/permissions";
 
@@ -33,47 +32,27 @@ export default async function WorkforceDirectoryPage({
 
   return (
     <div className="space-y-5">
-      {/* Owner-first lead band. Net-new business shells must lead with a
-          data-dpf-lead band, plain high-school-grade copy, and a marked next
-          action (UX budget, spec §4.2). The directory itself — the rich,
-          searchable RosterView, the same component the platform overview uses —
-          is deferred one click away, so arrival is a calm summary rather than a
-          wall of coworker cards. This deferral IS the progressive disclosure this
-          epic is about. Copy stays short and plain on purpose: the grade is
-          measured over the whole default-visible surface. */}
+      {/* The ratified purpose contract (coworker-identity.ts) names roster-list
+          and roster-filters as default-visible. Wrapping the roster in
+          OwnerFirstDisclosure made the page purpose one click away and bought
+          the word budget for free (BI-0147EB89). The roster is the page. */}
       <header className="space-y-2" data-dpf-lead>
         <h1 className="text-xl font-bold text-[var(--dpf-text)]">AI Coworkers</h1>
         <p className="max-w-2xl text-sm leading-5 text-[var(--dpf-muted)]">
           {coworkerCount > 0
-            ? `You have ${coworkerCount} AI coworkers. Each is a teammate. Each does real work. Some plan. Some build. Some write. Tap a name to open it. See what it does. See its cost. See its team. Start with the list below.`
-            : "You have no AI coworkers yet. Each would be a teammate. None are set up yet."}
+            ? `You have ${coworkerCount} AI coworkers, each a teammate doing real work. Open a name to see what it does, what it costs, and which team it sits on.`
+            : "You have no AI coworkers yet."}
         </p>
-        {coworkerCount > 0 && (
-          <a
-            href="#all-coworkers"
-            data-dpf-primary-action
-            data-owner-first-next-action="open-coworker-directory"
-            className="inline-flex text-sm font-semibold text-[var(--dpf-accent)] underline-offset-2 hover:underline"
-          >
-            Browse the list
-          </a>
-        )}
       </header>
 
       {coworkerCount > 0 ? (
-        <section id="all-coworkers">
-          <OwnerFirstDisclosure
-            summary="All coworkers"
-            hint="Search and open any one."
-          >
-            <RosterView
-              rows={rows}
-              facets={facets}
-              initialQuery={initialQuery}
-              grantedCapabilities={grantedCapabilities}
-            />
-          </OwnerFirstDisclosure>
-        </section>
+        <RosterView
+          rows={rows}
+          facets={facets}
+          initialQuery={initialQuery}
+          grantedCapabilities={grantedCapabilities}
+          returnTo="/workforce"
+        />
       ) : (
         <div className="border-l-2 border-[var(--dpf-accent)] py-1 pl-4">
           <h2 className="text-sm font-semibold text-[var(--dpf-text)]">No coworkers to show</h2>

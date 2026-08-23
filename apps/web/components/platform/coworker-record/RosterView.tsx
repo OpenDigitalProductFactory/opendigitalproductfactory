@@ -66,11 +66,14 @@ export function RosterView({
   facets,
   initialQuery = "",
   grantedCapabilities = [],
+  returnTo = "/platform/ai/overview",
 }: {
   rows: RosterRow[];
   facets: RosterFacets;
   initialQuery?: string;
   grantedCapabilities?: CapabilityKey[];
+  /** Roster filter-preserving back path. Defaults to the admin overview. */
+  returnTo?: string;
 }) {
   const kindOpts = useMemo(() => kindOptions(rows), [rows]);
   const grantedCapabilitySet = useMemo(
@@ -165,11 +168,14 @@ export function RosterView({
     filters,
     new URLSearchParams(initialQuery),
   ).toString();
-  const returnHref = `/platform/ai/overview${currentQuery ? `?${currentQuery}` : ""}`;
+  const returnHref = `${returnTo}${currentQuery ? `?${currentQuery}` : ""}`;
 
   return (
     <div>
-      <div className="mb-5 border-y border-[var(--dpf-border)] py-4">
+      <div
+        className="mb-5 border-y border-[var(--dpf-border)] py-4"
+        data-dpf-purpose-key="roster-filters"
+      >
         <div className="grid gap-3 lg:grid-cols-[minmax(260px,1fr)_repeat(3,minmax(150px,0.45fr))]">
           <label className="relative block">
             <span className="mb-1 block text-xs font-medium text-[var(--dpf-text-secondary)]">
@@ -184,6 +190,8 @@ export function RosterView({
               value={filters.query}
               onChange={(event) => set({ query: event.target.value })}
               placeholder="Name or work"
+              data-dpf-primary-action=""
+              data-owner-first-next-action="find-coworker"
               className="h-11 w-full rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] pl-9 pr-3 text-sm text-[var(--dpf-text)] outline-none focus:border-[var(--dpf-accent)]"
             />
           </label>
@@ -352,7 +360,7 @@ export function RosterView({
         {filtered.length} coworker{filtered.length === 1 ? "" : "s"}
       </p>
 
-      <div className="space-y-8">
+      <div className="space-y-8" data-dpf-purpose-key="roster-list">
         {groups.map(({ area, rows: areaRows }) => (
           <section key={area.key} aria-labelledby={`area-${area.key}`}>
             <div className="mb-3 flex items-baseline justify-between gap-3 border-b border-[var(--dpf-border)] pb-2">

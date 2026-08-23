@@ -178,6 +178,27 @@ describe("buried primary action is a ratchet regression (BI-D77BF495)", () => {
   });
 });
 
+describe("buried page-purpose region is a ratchet regression (BI-0147EB89)", () => {
+  const roster = `<article data-dpf-purpose-key="roster-list"><p>${"coworker ".repeat(20)}</p></article>`;
+  const reachable = `<main data-dpf-lead><h1>AI Coworkers</h1>${roster}</main>`;
+  const buried = `<main data-dpf-lead><h1>AI Coworkers</h1><details><summary>All coworkers</summary>${roster}</details></main>`;
+
+  it("catches a pre-existing route that hides its purpose region behind a collapse", () => {
+    const before = measurement({ routePath: "/workforce", shell: "cockpit", html: reachable });
+    const after = measurement({ routePath: "/workforce", shell: "cockpit", html: buried });
+    const v = verdictForRoute(after, baselineFrom(before).routes["/workforce"]);
+    expect(v.ok).toBe(false);
+    expect(v.regressions.join(" ")).toMatch(/buried page-purpose region/);
+  });
+
+  it("does not treat wrapping a purpose region as a word-count improvement", () => {
+    const before = measurement({ routePath: "/workforce", shell: "cockpit", html: reachable });
+    const after = measurement({ routePath: "/workforce", shell: "cockpit", html: buried });
+    const v = verdictForRoute(after, baselineFrom(before).routes["/workforce"]);
+    expect(v.regressions.join(" ")).not.toMatch(/words visible on arrival/);
+  });
+});
+
 describe("structural hierarchy snapshot (rev 2 D2)", () => {
   it("flags a changed accessibility tree as a regression", () => {
     const before = measurement();

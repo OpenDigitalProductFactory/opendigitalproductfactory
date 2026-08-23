@@ -1,8 +1,9 @@
 // BI-B9BE9A29 (EP-UX-SYSTEM L2) — budget module contract.
 //
-// The two assertions that earn this module: collapsed disclosure is NOT counted
-// (progressive disclosure rewarded, never taxed), and a net-new route cannot be born
-// as a wall of text (spec rev 2 D1 — a pure ratchet would let it).
+// The two assertions that earn this module: collapsed SECONDARY disclosure is NOT
+// counted (progressive disclosure rewarded), a marked page-purpose region IS counted
+// even when collapsed (BI-0147EB89), and a net-new route cannot be born as a wall of
+// text (spec rev 2 D1 — a pure ratchet would let it).
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -377,6 +378,55 @@ describe("primary action reachability (BI-D77BF495 — the self-upgrade lesson)"
 
   it("a page with no marked primary action at all is not penalised", () => {
     expect(measureUxBudget(`<main><p>just content, no action</p></main>`).buriedPrimaryAction).toBe(0);
+  });
+});
+
+describe("primary purpose region (BI-0147EB89 — hiding the page purpose is not free)", () => {
+  // /workforce wrapped its roster in OwnerFirstDisclosure so defaultVisibleWords
+  // dropped from the sibling-route ~2900 to 121. The purpose contract already
+  // names roster-list as default-visible; collapsing it must not buy the budget.
+  const hiddenBody = `<article data-dpf-purpose-key="roster-list"><p>${"coworker ".repeat(40)}</p></article>`;
+  const buried = `<main data-dpf-lead><h1>AI Coworkers</h1><p>Lead copy here.</p><details><summary>All coworkers</summary>${hiddenBody}</details></main>`;
+  const reachable = `<main data-dpf-lead><h1>AI Coworkers</h1><p>Lead copy here.</p>${hiddenBody}</main>`;
+
+  it("still counts purpose-key words when they sit inside a collapsed details", () => {
+    expect(measureUxBudget(buried).defaultVisibleWords).toBeGreaterThanOrEqual(
+      measureUxBudget(reachable).defaultVisibleWords,
+    );
+    expect(defaultVisibleHtml(buried)).toContain("coworker");
+  });
+
+  it("flags a purpose region buried behind a collapse", () => {
+    expect(measureUxBudget(buried).buriedPrimaryRegion).toBe(1);
+    expect(measureUxBudget(reachable).buriedPrimaryRegion).toBe(0);
+  });
+
+  it("still excises unmarked collapsed disclosure — secondary asides stay free", () => {
+    const html = `<div><p>visible words here</p><details><summary>More</summary><p>${"hidden ".repeat(50)}</p></details></div>`;
+    expect(countWords(defaultVisibleHtml(html))).toBeLessThan(10);
+  });
+
+  it("blocks a net-new cockpit whose purpose region is buried", () => {
+    const v = auditUxBudget(buried, "cockpit", { routeStatus: "net-new" });
+    expect(v.ok).toBe(false);
+    expect(v.findings.find((f) => f.check === "primary-region-reachable")?.ok).toBe(false);
+  });
+
+  it("passes once the purpose region is on arrival", () => {
+    const v = auditUxBudget(reachable, "cockpit", { routeStatus: "net-new" });
+    expect(v.findings.find((f) => f.check === "primary-region-reachable")?.ok).toBe(true);
+  });
+
+  it("does not require purpose-region reachability on public shells", () => {
+    expect(
+      auditUxBudget(buried, "public", { routeStatus: "net-new" }).findings.find(
+        (f) => f.check === "primary-region-reachable",
+      )?.ok,
+    ).toBe(true);
+  });
+
+  it("a page with no purpose-key at all is not penalised", () => {
+    expect(measureUxBudget(`<main><p>just content, no roster</p></main>`).buriedPrimaryRegion).toBe(0);
   });
 });
 
