@@ -15,12 +15,14 @@ profile/policy, actionable reviewer routing, organization-bound reviewer
 authority, provider-verified Workroom reconciliation, existing-Workroom replay,
 and bounded plan-coverage persistence.
 Production implementation starts only after governed implementation intent is
-allowed; design/plan work proceeds under design intent.
+allowed by the deployed policy bridge or by the ratified one-time
+first-deployment repository envelope in the design; design/plan work proceeds
+under design intent.
 
 This committed plan is intentionally pre-implementation. Its Red tests are
 traceability commitments, not claims that production code or tests already
-exist. The first code mutation occurs only after a fresh readiness decision
-authorizes implementation intent.
+exist. The first production/test mutation occurs only after the exact
+post-amendment operator ratification makes the one-time envelope effective.
 
 ## Traceability matrix
 
@@ -38,6 +40,7 @@ authorizes implementation intent.
 | `AC-COVERAGE-TX` | slow-preflight, five-mapping commit, stale-binding, and transaction-expiry tests | plan coverage recorder and repository binding recheck |
 | `AC-POLICY-BRIDGE-YES`, `AC-POLICY-BRIDGE-DENY` | affirmative, non-affirmative, signal-quality, conflict, and owning-gate fixtures | policy-authority projector, decision ledger, authorization log/envelope |
 | `AC-POLICY-BRIDGE-SCOPE`, `AC-POLICY-NOT-RBAC`, `AC-POLICY-RECOVERY` | policy/delegation/artifact/expiry/replay, direct-DI prohibition, and exact-route tests | governed authority gate, delegation, envelope lifecycle, readiness recovery |
+| `AC-FIRST-DEPLOY-WARRANT`, `AC-FIRST-DEPLOY-INDEPENDENCE`, `AC-FIRST-DEPLOY-CONSUME` | immutable bootstrap-contract, drift/revocation/replay, exact-tree review, branch-rule, and merge-consumption evidence | design/plan, Workroom audit, DCO/review/pregate/PR boundary |
 
 ## Task 0 - Establish the policy-authority boundary
 
@@ -52,21 +55,43 @@ Before any production source or test mutation:
 3. Bind the design-only commit, design blob, plan blob, BI, Workroom,
    repository, and branch in durable Workroom evidence. Do not treat that
    evidence as implementation authority or an initiative receipt.
-4. Resolve the owning WWMD evaluation for the exact BI-F0715C9C production
-   implementation envelope. The action is allowed only if the deployed bridge
-   can project a current, explicit, autonomy-eligible affirmative judgment into
-   the existing scoped authorization substrate.
-5. If the bridge is unavailable, or the judgment is no/defer/escalate,
-   ambiguous, stale, or advisory-only, stop and return that exact reason and
-   owning decision route. Do not use direct DecisionInteraction reads, a
-   second-human proxy, an AI reviewer, superuser execution, direct DB writes,
-   or the null-organization spec-approval writer.
+4. Preserve `DI-053D69EADEDC` as the bridge architecture decision,
+   `DI-568FF23AF27B` as the canonical first-deployment authorizer decision, and
+   `DI-5B6BF3990A83` as its corroborating architecture-local comparison.
+   Preserve abstained `DI-ECE6A1FCFFCA` and superseded
+   `DI-F7361DD540E2` as non-authorizing audit history.
+5. Publish and independently review the amended design/plan exact tree. Then
+   return the design's exact ratification text filled with the immutable base,
+   commit, design blob, and plan blob. The earlier `go` is not sufficient.
+6. Prove the governed persistence path before requesting activation. The audit
+   currently finds no callable writer that atomically binds the DI, standing
+   policy, human ratification, exact subject/action/artifacts, expiry,
+   revocation, and consumption. `record_workroom_evidence` is evidence only;
+   the generic authority-log helper is not an action-specific projector; the
+   current approval envelope is a 15-minute human exact-tool proposal with no
+   source-implementation binding.
+7. After the operator ratifies the proven path, persist its immutable
+   authorization identity and record a Workroom pointer to that identity,
+   instruction, and timestamp. The envelope expires 72 hours later at the
+   latest. Verify the repository/branch/base/artifacts and permitted path/action
+   set before the first Red mutation.
+8. Keep the normal implementation claim and its denial visible; do not mark it
+   allowed or fabricate receipts. The external repository envelope authorizes
+   only the first-deployment authorship needed to create the canonical bridge.
+9. If the persistence path is unproven, ratification is
+   absent/revoked/expired, a judgment is non-affirmative, a
+   policy floor requires a distinct human unavailable on this install, or any
+   binding drifts, stop with the exact reason. Do not use direct
+   DecisionInteraction reads, an AI or second-human proxy, superuser execution,
+   direct DB writes, or the null-organization spec-approval writer.
 
-The current live audit reaches step 5. `DI-053D69EADEDC` decides the bridge
-architecture; it is not the production-action judgment, and the projector is
-not deployed. The one-human roster proves the superseded per-work dual-approval
-shape is non-traversable, but it does not weaken independent specialist review
-or invalidate the human-rooted standing WWMD criteria.
+The current live audit reaches step 6. Existing governed writers can assemble
+and audit the DI, Workroom, DCO, review, check, and merge evidence but none can
+currently persist the complete linked authorization for repository
+implementation. The proposed external repository envelope remains inactive
+until its exact activation/persistence path is proven and ratified. GitHub
+currently requires zero approving reviews, so independent governed exact-tree
+review is explicit and may not be inferred from the merge queue.
 
 ## Task 1 - Rebase and refresh Workroom scope
 
@@ -119,8 +144,10 @@ budget and may not broaden untested behavior.
 
 ## Task 4A - Red/green universal policy-authority bridge
 
-This task may begin only after Task 0 yields a scoped implementation
-authorization through the governing policy path.
+This task may begin only after Task 0 yields either a scoped implementation
+authorization through the deployed governing policy path or an effective,
+unexpired one-time first-deployment envelope. The latter never changes the
+failed readiness claim and is consumed by the protected merge.
 
 1. Add a pure, closed projector input that combines the server-resolved action
    binding with the sealed DecisionInteraction, current profile/version and
@@ -235,7 +262,9 @@ Commit with one DCO trailer, synchronize WC-2ABA65F7 to the stable commit,
 obtain fresh independent semantic review, run shared-lease exact-tree local CI
 and full pregate, push only green reviewed SHA, open a ready PR, read bot
 findings, run `pnpm pr:health`, and use the protected merge queue. Verify the
-live install before closing BI-F0715C9C.
+live install before closing BI-F0715C9C. Before merge, prove the bootstrap
+envelope is still bound, unexpired, unrevoked, and path-confined. Protected
+merge consumes it; record that consumption and reject any replay.
 
 ## Task 13 - Existing blocked-Workroom recovery proof
 
