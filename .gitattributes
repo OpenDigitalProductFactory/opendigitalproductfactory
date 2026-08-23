@@ -72,6 +72,10 @@ scripts/archetype-completeness-baseline.txt merge=union
 scripts/stewardship-scope-baseline.txt merge=union
 scripts/stewardship-exemptions.txt merge=union
 
+# Ambient-host-state test ratchet baseline (BI-95A83B47) — line-oriented pairs;
+# min-wins on duplicates, so union merges never loosen the ratchet.
+scripts/ambient-host-test-baseline.txt merge=union
+
 # The tool-pack registry is one-pack-per-line precisely so concurrent PRs that
 # each add a pack merge with the built-in union driver instead of colliding on
 # a shared line (BI-3B0AD9CF pattern applied to composeToolPacks). The
