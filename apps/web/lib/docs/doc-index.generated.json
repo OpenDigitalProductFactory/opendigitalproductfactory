@@ -1099,6 +1099,7 @@
         "authority-flow",
         "profiles-and-host-filtering",
         "capability-transitions",
+        "retiring-a-capability",
         "install-upgrade-consumer-assets-and-rollback",
         "backup-and-health-semantics",
         "observation-and-diagnostics-boundary",
