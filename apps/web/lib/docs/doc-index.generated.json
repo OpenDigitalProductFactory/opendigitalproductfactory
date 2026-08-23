@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 678,
+  "pageCount": 679,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -8729,6 +8729,25 @@
         "provenance-baseline",
         "discovery-channel-note",
         "approval-and-probe-work-still-required"
+      ]
+    },
+    "docs/security/tool-evaluations/2026-08-23-authentik.md": {
+      "publicHref": "/security/tool-evaluations/2026-08-23-authentik/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "tool-evaluation-authentik",
+        "corrections-to-claims-previously-asserted-in-dpf-documents",
+        "verified-facts",
+        "cosai-security-findings",
+        "compliance",
+        "architecture-fit",
+        "integration-evidence",
+        "verdict",
+        "conditions",
+        "re-evaluation",
+        "sources"
       ]
     },
     "docs/specs/device-identification-and-portfolio-placement-spec.md": {
