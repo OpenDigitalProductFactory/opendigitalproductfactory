@@ -160,6 +160,11 @@ This supersedes the earlier transport-session proposal. DPF supports MCP
 sessions and `Mcp-Session-Id`. Existing auth-bound tasks are already implemented
 and follow the stateless direction.
 
+The superseded transport-session design and plan are removed from this branch.
+Their commits remain in Git history for audit, but they are not part of the
+approved architecture artifact and no transport-session production code exists
+in this design-stage tree.
+
 The kernel comparison could not autonomously recommend because feature-vector
 ingestion returned no usable signal (`DI-AA4E4F26593C`). The BI owner specified
 the decision criterion: smallest architecture-consistent repair. Reusing the
