@@ -126,3 +126,26 @@ exists for this plan**; do not report one.
 
 Umbrella: **BI-299C953D**. Epic: **EP-5560770F**. Workroom: **WC-0D395540**.
 Kernel decision for phase 3: **DI-48014BCBA44F**.
+
+---
+
+## Delivery status — 2026-08-23
+
+| Phase | BI | State | Notes |
+|---|---|---|---|
+| 1 — governed MCP in every worktree | BI-90585312 | **Landed** | GUI env injection now runs every bootstrap + LaunchAgent for reboot; both banners probe an authenticated 200. End-to-end client restart not yet observed. |
+| 2 — conformance module + work-shape banner | BI-21B04901 | **Landed, one item open** | Banner is first at SessionStart. The other six SessionStart hooks are ordered beneath it but not folded into it. |
+| 3 — hook-injected doctrine | BI-E659ED37 | **Landed** | Resolved from the root clone; injected only when the pointer would not load it. Verified on a pre-#4477 worktree. |
+| 4 — workroom claim guard | BI-865E1755 | **Landed** | Denies on `Write\|Edit\|MultiEdit` and mutating `Bash`; remediation commands exempt; one attributed bypass door. |
+| 5 — canonical worktree base | BI-076BCD26 | **Prevention + detection landed; reconciliation open** | Dual registration was the wrong fix and was reverted (creates two worktrees). Detection now refuses nested worktrees at session start. 24 legacy dirs await an explicit operator go — 9 live worktrees, **4 with uncommitted work**, 20 orphaned dirs, 11G. |
+| 6a — bind an existing workroom | BI-29673B7C | **Not started** | Server-side MCP tool change, outside this workroom's claimed scope. |
+| 6b — scope granularity / container paths | BI-5A1B0D36 | **Not started** | Same. |
+| 7 — guard liveness + CI backstop | BI-E8E7FCDF | **Prober landed; backstop not started** | 3 of 13 guards deny-proven, 10 reported UNPROBED. The CI backstop needs a `.github/workflows` change outside claimed scope. |
+| — root-clone-guard coverage gap | BI-B49665EA | **Landed** | Found by the prober on its first run. Guard was inert in 88 of 99 worktrees. |
+
+**Known open, in priority order**
+
+1. **BI-B49665EA is fixed but the class is not swept.** Other guards may resolve by path shape too; only three are deny-proven.
+2. **CI backstop (BI-E8E7FCDF).** Until it exists, a fail-open surface — notably Codex, where hooks are inert until a human clicks Trust — can still land ungoverned work. This is the only layer no surface can opt out of, and it is the largest remaining hole.
+3. **Legacy nested worktrees (BI-076BCD26).** Four hold uncommitted work inside the root clone; commit and push those before any reap.
+4. **Workroom API ergonomics (BI-29673B7C, BI-5A1B0D36).** The documented sequence still mints a duplicate capsule, and a directory-level edit claim still locks out file-level claims platform-wide.
