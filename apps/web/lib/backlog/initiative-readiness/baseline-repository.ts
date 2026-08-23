@@ -15,6 +15,7 @@ import type {
 } from "./receipt-schema";
 import { validateInitiativeGateReceiptDraft } from "./receipt-schema";
 import type { InitiativeSubject, ReadinessProfile } from "./types";
+import { resolveReviewerIdentity } from "./reviewer-identity";
 
 export type InitiativeBaselineChainEntry = {
   baselineId: string;
@@ -263,15 +264,21 @@ export async function recordInitiativeSpecApproval(args: {
   if (item.organizationId && authority.organizationId !== item.organizationId) {
     return { ok: false, code: "AUTHORIZATION_DENIED", error: "Reviewer authority does not match the initiative organization." };
   }
-  const reviewerAliases = await prisma.principalAlias.findMany({
-    where: { aliasType: "user", aliasValue: args.reviewerUserId, issuer: "" },
-    select: { principal: { select: { principalId: true } } },
-    take: 2,
+  // BI-72F368BC: attribute the review to the ACTOR — the coworker's own
+  // principal when the call carries one — not unconditionally to the
+  // delegating human. See reviewer-identity.ts.
+  const reviewer = await resolveReviewerIdentity(prisma, {
+    reviewerUserId: args.reviewerUserId,
+    reviewerAgentId: args.reviewerAgentId,
   });
-  const reviewerPrincipalId = reviewerAliases.length === 1 ? reviewerAliases[0]?.principal.principalId : null;
-  if (!reviewerPrincipalId) {
-    return { ok: false, code: "ARTIFACT_AUTHOR_REQUIRED", error: "Reviewer principal identity is unavailable." };
+  if (!reviewer) {
+    return {
+      ok: false,
+      code: "ARTIFACT_AUTHOR_REQUIRED",
+      error: `Reviewer principal identity is unavailable: neither agent alias ${args.reviewerAgentId ?? "(none)"} nor user alias ${args.reviewerUserId} resolves to exactly one Principal. Link the reviewer identity to a Principal before recording a governed receipt.`,
+    };
   }
+  const reviewerPrincipalId = reviewer.principalId;
   const subject: InitiativeSubject = { kind: "backlog-item", id: item.itemId };
   if (args.artifactRef.kind === "repo-blob-at-commit"
     && !/^docs\/superpowers\/specs\/[^/]+\.md$/.test(args.artifactRef.path)) {
