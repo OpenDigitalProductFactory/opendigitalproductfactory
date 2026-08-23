@@ -98,7 +98,15 @@ function toGapClusters(
   }));
 }
 
-export default async function DecisionReviewPage() {
+/** Arrives from a decision record's "answer it once" step (BI-6700AF66). */
+type ReviewSearchParams = Promise<{ focus?: string; from?: string }>;
+
+export default async function DecisionReviewPage({
+  searchParams,
+}: {
+  searchParams?: ReviewSearchParams;
+}) {
+  const { focus: focusDomainClass = null } = (await searchParams) ?? {};
   const [
     conflictRows,
     unresolvedRows,
@@ -286,6 +294,7 @@ export default async function DecisionReviewPage() {
           {findings.map((f) => (
             <li
               key={f.id}
+              id={f.answer ? `finding-${f.answer.domainClass}` : undefined}
               className="rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-3"
               style={{ borderLeftWidth: "3px", borderLeftColor: CLASS_ACCENT[f.findingClass] }}
             >
@@ -321,6 +330,7 @@ export default async function DecisionReviewPage() {
                 <GapAnswerForm
                   domainClass={f.answer.domainClass}
                   question={f.answer.question}
+                  autoOpen={f.answer.domainClass === focusDomainClass}
                 />
               )}
               {f.weightProposal && (
