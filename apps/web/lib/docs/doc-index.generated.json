@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 678,
+  "pageCount": 679,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -10580,6 +10580,7 @@
       "anchors": [
         "what-this-covers",
         "how-the-defaults-are-set",
+        "this-page-sets-a-starting-point-not-the-final-answer",
         "the-levels",
         "the-two-hard-floors",
         "what-you-can-do",
@@ -10636,6 +10637,27 @@
         "related-specs"
       ]
     },
+    "docs/user-guide/ai-workforce/how-governed-work-runs.md": {
+      "publicHref": "/user-guide/ai-workforce/how-governed-work-runs/",
+      "portalHref": "/docs/ai-workforce/how-governed-work-runs",
+      "publishedPublic": true,
+      "publishedPortal": true,
+      "anchors": [
+        "what-this-covers",
+        "the-one-sentence-version",
+        "1-the-workroom-holds-the-work",
+        "2-the-shape-bounds-what-may-happen",
+        "3-the-posture-sets-the-pace",
+        "the-two-rules-that-make-this-safe",
+        "the-priority-half",
+        "4-the-corpus-decides-the-question",
+        "5-the-gate-checks-the-tool",
+        "the-floors-nothing-crosses",
+        "6-the-receipt-is-what-you-review",
+        "known-limits",
+        "related"
+      ]
+    },
     "docs/user-guide/ai-workforce/index.md": {
       "publicHref": "/user-guide/ai-workforce/",
       "portalHref": "/docs/ai-workforce/index",
@@ -10643,6 +10665,7 @@
       "publishedPortal": true,
       "anchors": [
         "overview",
+        "start-with-the-end-to-end-picture",
         "find-and-work-with-a-coworker",
         "reading-a-coworkers-shape",
         "key-concepts",

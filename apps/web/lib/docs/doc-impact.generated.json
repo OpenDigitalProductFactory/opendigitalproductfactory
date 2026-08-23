@@ -758,7 +758,8 @@
     ],
     "apps/web/lib/mcp-governed-execute.ts": [
       "docs/architecture/ai-agent-meta-model.md",
-      "docs/architecture/mcp-tool-surface-ergonomics-audit.md"
+      "docs/architecture/mcp-tool-surface-ergonomics-audit.md",
+      "docs/user-guide/ai-workforce/how-governed-work-runs.md"
     ],
     "apps/web/lib/mcp/load-tools.ts": [
       "docs/architecture/agent-standards-dpf-conformance.md"
@@ -1022,6 +1023,9 @@
     "apps/web/lib/tak/compaction-digest.ts": [
       "docs/architecture/context-engineering-standards.md"
     ],
+    "apps/web/lib/tak/consequential-tool-policy.ts": [
+      "docs/user-guide/ai-workforce/how-governed-work-runs.md"
+    ],
     "apps/web/lib/tak/context-arbitrator.ts": [
       "docs/architecture/agent-standards-dpf-conformance.md"
     ],
@@ -1076,7 +1080,8 @@
       "docs/architecture/work-shapes-and-the-decision-gate.md"
     ],
     "apps/web/lib/work-management/autonomy-envelope.ts": [
-      "docs/architecture/work-shapes-and-the-decision-gate.md"
+      "docs/architecture/work-shapes-and-the-decision-gate.md",
+      "docs/user-guide/ai-workforce/how-governed-work-runs.md"
     ],
     "apps/web/lib/work-management/room-channel-continuity.ts": [
       "docs/user-guide/workspace/work-rooms.md"
@@ -1091,10 +1096,12 @@
       "docs/user-guide/workspace/work-rooms.md"
     ],
     "apps/web/lib/work-management/room-posture.ts": [
-      "docs/architecture/work-shapes-and-the-decision-gate.md"
+      "docs/architecture/work-shapes-and-the-decision-gate.md",
+      "docs/user-guide/ai-workforce/how-governed-work-runs.md"
     ],
     "apps/web/lib/work-management/room-shapes.ts": [
-      "docs/architecture/work-shapes-and-the-decision-gate.md"
+      "docs/architecture/work-shapes-and-the-decision-gate.md",
+      "docs/user-guide/ai-workforce/how-governed-work-runs.md"
     ],
     "apps/web/lib/work-management/room-types.ts": [
       "docs/architecture/work-shapes-and-the-decision-gate.md"
@@ -1107,6 +1114,12 @@
     ],
     "apps/web/lib/work-management/workspace-room-access.ts": [
       "docs/user-guide/workspace/work-rooms.md"
+    ],
+    "apps/web/lib/work-posture/derive.ts": [
+      "docs/user-guide/ai-workforce/how-governed-work-runs.md"
+    ],
+    "apps/web/lib/work-posture/temporal-band.ts": [
+      "docs/user-guide/ai-workforce/how-governed-work-runs.md"
     ],
     "apps/web/lib/workbooks/backlog-adapter-mapping.ts": [
       "docs/architecture/backlog-archetype-scope.md"
@@ -2885,6 +2898,15 @@
     "docs/user-guide/ai-workforce/decision-perspective.md": [
       "apps/web/lib/founder-review/queue.ts",
       "apps/web/lib/tak/route-context.ts"
+    ],
+    "docs/user-guide/ai-workforce/how-governed-work-runs.md": [
+      "apps/web/lib/mcp-governed-execute.ts",
+      "apps/web/lib/tak/consequential-tool-policy.ts",
+      "apps/web/lib/work-management/autonomy-envelope.ts",
+      "apps/web/lib/work-management/room-posture.ts",
+      "apps/web/lib/work-management/room-shapes.ts",
+      "apps/web/lib/work-posture/derive.ts",
+      "apps/web/lib/work-posture/temporal-band.ts"
     ],
     "docs/user-guide/ai-workforce/model-routing-lifecycle.md": [
       "docker-entrypoint.sh"

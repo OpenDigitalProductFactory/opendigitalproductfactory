@@ -58,7 +58,7 @@ each owned by a different part of the substrate. A room picks one value on each.
 | **Activity kind** — what the work *is* | `delivery`, `support`, `improvement`, `governance`, `launch-readiness`, `craft-judgment`, `lifecycle`, `remediation` | `WORK_CAPSULE_SCOPE_ACTIVITY_KINDS` in `apps/web/lib/work-capsules.ts` |
 | **Mode** — how long it lives | `finite` (one bounded decision or action), `standing` (ongoing activity) | `WorkroomMode` in `apps/web/lib/work-management/room-types.ts` |
 | **Participant roles** — who is in it, as what | `accountable`, `coordinator`, `contributor`, `specialist`, `approver`, `reviewer`, `observer` | `WorkroomParticipantRole`, same file |
-| **Collaboration shape** — how a gate inside it routes | `specialist-alignment`, `approval / sign-off`, `outward-review`, `change / consequential`, `escalation` | [governance-gate spec](../superpowers/specs/2026-08-13-wwwd-constitutional-alignment-gate.md) |
+| **Collaboration shape** — how a gate inside it routes | `specialist-alignment`, `approval-sign-off`, `outward-review`, `change-consequential`, `escalation`, `craft-stewardship` | `WORKROOM_SHAPE_KEYS` in `apps/web/lib/work-management/room-shapes.ts` |
 
 The first three are live code. The fourth **is now a registry with a write path**
 ⟦runtime: `BI-8C54B216`, 2026-08-23⟧: `WORKROOM_SHAPE_KEYS` in
@@ -190,13 +190,27 @@ disposition is what keeps the next cycle honest.
 
 Stated plainly so nobody plans against a capability that is not there:
 
-- **Collaboration shapes are not a registry.** Five shapes are specified; no enum, no
-  binding, nothing queryable. Binding them per gate pattern is `BI-51CCB81C`.
-- **Gate coverage is two tools on one surface.** The interceptor over all consequential
-  tool calls is specified, not built (EP-1C37C089).
-- **The consultation ledger is in-memory and per-process.**
-- **None of this is visible as a picture yet.** The room surface renders no graphic at
-  all; the shape view that would draw these gates and their verdicts is `BI-C7E2E924`.
+- **The consultation ledger is in-memory and per-process.** A decision consulted in one
+  process is not visible to another; only the receipt it writes survives the turn.
+- **The decision-gate stage cannot be attributed to a coworker.** The decision record does
+  not identify which coworker acted, so the shape view leaves that stage empty rather than
+  attributing another coworker's decision on a guess.
+
+Three gaps listed here previously have closed; they are recorded so a reader returning to
+this page does not plan against a stale limitation:
+
+- **Collaboration shape is a registry** ⟦runtime: `BI-8C54B216`, 2026-08-23⟧ —
+  `WORKROOM_SHAPE_KEYS` is the enum, `bindWorkroomShape` is the binding, and a room's shape
+  is queryable through `readWorkroomShapeClaim`. Six shapes, not five: `craft-stewardship`
+  joined the five originally specified.
+- **The interceptor runs on the governed execution path** — `classifyConsequentialTool` is
+  called from `mcp-governed-execute.ts`, so classification covers every governed tool call
+  rather than a hand-listed pair. The legacy name-keyed list survives only for tools that
+  predate the declared `ToolDefinition.consequence` axis, and a conformance test now asserts
+  every name in it resolves to a real tool.
+- **The shape view is rendered** ⟦runtime: `BI-C7E2E924`⟧ — `WorkroomShapeSection` on the
+  room and `CoworkerShapePanel` on the coworker record draw the same picture, behind the
+  same Shape / Detail toggle.
 
 **Shape now also sets posture** ⟦runtime: added 2026-08-22, `BI-4F468192`⟧. The same four
 axes feed the room's *posture* — how persistently the coworker follows up and how it trades
