@@ -686,6 +686,9 @@
     "apps/web/lib/govern/auth-redirect.ts": [
       "docs/install/platform-support-watchlist.md"
     ],
+    "apps/web/lib/govern/auth.ts": [
+      "docs/security/tool-evaluations/2026-08-23-authentik.md"
+    ],
     "apps/web/lib/govern/data/field-classification.ts": [
       "docs/architecture/backlog-and-planning-runbook.md"
     ],
@@ -2754,6 +2757,9 @@
     ],
     "docs/security/tool-evaluations/2026-08-01-marketing-media-stack.md": [
       "scripts/probes/marketing-media/local-render-receipt.json"
+    ],
+    "docs/security/tool-evaluations/2026-08-23-authentik.md": [
+      "apps/web/lib/govern/auth.ts"
     ],
     "docs/specs/device-identification-and-portfolio-placement-spec.md": [
       "apps/web/lib/queue/functions/hive-scout-ingest.ts",
