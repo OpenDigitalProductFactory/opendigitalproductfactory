@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 679,
+  "pageCount": 680,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
