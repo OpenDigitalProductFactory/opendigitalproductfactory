@@ -1,0 +1,23 @@
+{
+  "version": "1",
+  "decidedOption": "progressive-disclosure",
+  "decisionInteractionId": "DI-E92F5ED532E9",
+  "scope": {
+    "files": [
+      "apps/web/app/(shell)/coworker-decisions/review/held-material-list.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "decisionInteractionId": "DI-E92F5ED532E9",
+    "consideredOptions": [
+      "progressive-disclosure",
+      "flat-list"
+    ]
+  },
+  "rationale": {
+    "progressive-disclosure": "CHOSEN. Kernel composite 6.856, margin 4.293, high confidence, autonomy eligible. One collapsed row per profession family carrying just the craft area and its page count, with a single 'Review this' control; expanding reveals what it costs that coworker, the held pages with their evidence grades, and one 'Approve for use' action. Lowest human_cognitive_load of the two (0.25) and highest legibility_of_consequence (0.85): the owner sees WHICH coworker is affected before any doctrine detail, and the arrival cost does not scale with the number of held families. No reject control, because the hold already is the rejection until someone acts — offering 'Reject' would imply a state the substrate does not have.",
+    "flat-list": "REJECTED. Kernel composite 2.564. Rendering every held page for every family expanded, each with its own approve control, scores worst on human_cognitive_load (0.8) and scores NEGATIVE against 'Preserve the model; disclose complexity progressively' (-0.055 vs +0.054). It also fragments one governance act into per-page approvals, when the unit the operator actually reasons about is the family — approving 'security' as a craft area, not six individual pages."
+  },
+  "notes": "BI-5F3BFD13, EP-413F2602 Objective 2. Arrival cost is deliberately decoupled from the number of held families: the collapsed row carries only the craft area and its page count, and the consequence sentence (\"this coworker uses general platform doctrine instead of its own craft judgement\") is stated once in the section intro and again only inside the expanded detail, where someone is actually deciding. An earlier revision repeated that sentence per family and measured 169 -> 294 words on arrival in the UX route sweep; an earlier version of this manifest wrongly claimed the first viewport was unchanged because the section renders nothing when no material is held — true only on an install with no high-stakes family held, which is NOT the seeded default. Copy is deliberately non-technical: it never says draft/candidate/promotionState, it says the coworker falls back to general platform doctrine. Colour is --dpf-* tokens only; no hardcoded hex and no *-gray-* utilities. Composed from ui/Surface and ui/Button rather than re-typed card and control markup."
+}

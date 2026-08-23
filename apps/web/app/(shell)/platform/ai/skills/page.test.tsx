@@ -137,6 +137,12 @@ describe("PlatformAiSkillsPage", () => {
       revisions: [],
       seedDrift: {
         inSync: true,
+        seedStatus: "in-sync",
+        repoAvailable: true,
+        candidatePaths: [
+          "skills/build/build-page.skill.md",
+          "packages/dpf-skill-pack/skills/build-page/SKILL.md",
+        ],
         dbBody: "v0",
         seedBody: "v0",
         seedPath: "skills/build/build-page.skill.md",

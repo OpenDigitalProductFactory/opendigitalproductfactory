@@ -5,6 +5,7 @@ import { ensureCapsuleWorkItemAnchorWithPrisma } from "@/lib/work-capsules/capsu
 import { providerToExecutorKind } from "./external-session-capture";
 import { claimGovernedBacklogWorkspace } from "./governed-work-claim";
 import { branchOccupiedResult } from "./mcp-result-errors";
+import { defaultPlatformRepositoryFullName } from "./work-capsule-branch-identity";
 import type { CapsuleDb, WorkCapsuleActor } from "./work-capsule-store-types";
 
 type ToolContext = { agentId?: string; threadId?: string; taskRunId?: string; routeContext?: string } | undefined;
@@ -35,8 +36,7 @@ export async function claimBacklogItemForWork(args: {
     return { success: false, error: "invalid_work_intent", message: `workIntent must be one of: ${WORK_INTENTS.join(", ")}.` };
   }
   const repositoryFullName = stringParam(params, "repositoryFullName")
-    ?? process.env.DPF_REPO_FULL_NAME?.trim()
-    ?? "OpenDigitalProductFactory/opendigitalproductfactory";
+    ?? defaultPlatformRepositoryFullName();
   try {
     const governed = await claimGovernedBacklogWorkspace({
       db: args.db,

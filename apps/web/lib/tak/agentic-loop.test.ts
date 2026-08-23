@@ -778,7 +778,7 @@ describe("runAgenticLoop", () => {
       agentId: "admin-assistant",
     });
 
-    expect(result.content).toContain("try again in about 30 seconds");
+    expect(result.content).toMatch(/Nothing is misconfigured/); // BI-33F1EA72 hand-off
     expect(result.content).not.toContain("Model Assignment");
   });
 

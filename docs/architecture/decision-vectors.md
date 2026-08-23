@@ -333,6 +333,32 @@ material scores **zero outright** rather than being argued down; and because con
 adding weakly-graded material to a strong domain **dilutes** it. More sources is not automatically
 more confidence.
 
+### 5.3 The high-stakes hold, and how it is released
+
+An unattended platform seed does **not** make craft doctrine live for a high-stakes profession.
+`packages/db/src/profession-material-promotion.ts` withholds derived-tier material for any family
+whose registry `contextSlugs` touch finance or compliance: those rows land `reviewStatus: draft` /
+`promotionState: candidate`. Per §5.2 that is a 0.35 × 0.45 discount — but the gate never gets that
+far, because it selects only `approved` + `promoted` material. Held material is therefore invisible
+to the gate entirely, and the profession falls back to platform doctrine with
+`professionProfileSelected: false`.
+
+That is deliberate: machine-seeded doctrine for a compliance-adjacent craft should not govern
+decisions until a human has read it. `security` (`contextSlugs: ["data-security", "compliance"]`) is
+held; `data-architect` (`["data-model", "data-security"]`) is not — the trigger is the
+compliance/finance slugs specifically.
+
+**The release path is the operator queue on `/coworker-decisions/review`.** Held families surface
+there as "Craft doctrine waiting on you", and approving one flips its rows to approved+promoted and
+records the approving user (`reviewedByUserId` / `reviewedAt`). The write is scoped by the held
+state itself, so it is idempotent and can never pull an already-approved row backwards — the same
+non-downgrade invariant the promotion module holds on the write side.
+
+Before that surface existed the hold had **no release at all** (BI-5F3BFD13): nothing listed the
+held rows, `list_open_decision_reviews` did not return them, and no tool could promote them, so a
+high-stakes profession stayed permanently mute on a fresh install. A hold with no release is
+indistinguishable from a silent drop, which is the failure this section exists to prevent recurring.
+
 ---
 
 ## 6. What the registry currently gets wrong

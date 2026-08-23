@@ -99,8 +99,14 @@ export function professionLocalAttenuationFactor(
 }
 
 export type ConsumerContextAttenuationInput = {
-  /** `principleConsumerArchetype` column value, or null/undefined. */
-  consumerArchetype: string | null | undefined;
+  /**
+   * `principleConsumerArchetype` column value. NO LONGER GATES this lever —
+   * it encodes populations, not route/domain (see the note on
+   * `consumerContextWeightMultiplier`). Retained on the input so callers keep
+   * passing it and the reason it is not consulted stays discoverable here
+   * rather than becoming folklore.
+   */
+  consumerArchetype?: string | null | undefined;
   /** The row's own `principleConsumerContexts`. Empty/undefined for non-route archetypes and un-backfilled rows. */
   principleConsumerContexts: readonly string[] | null | undefined;
   /** The caller's declared `consumerContexts`, or undefined when the caller declared none. */
@@ -112,10 +118,32 @@ export type ConsumerContextAttenuationInput = {
 /**
  * The combined weight multiplier for a single commandment row.
  *
- * - Not `route-domain-specific` → 1 (no-op; this lever only concerns the
- *   defect's own archetype).
- * - The row's own `principleConsumerContexts` is empty → 1 (backward compat;
- *   same as the retrieval filter's treatment of un-backfilled rows).
+ * KEYED ON DECLARED CONTEXTS, NOT ON ARCHETYPE (BI-86EF5900 follow-up).
+ * This lever originally gated on `principleConsumerArchetype ===
+ * "route-domain-specific"` and was therefore INERT: measured across all 96
+ * kernel principle pages the archetype distribution is universal 72,
+ * ai-coworker-universal 23, specialist 1 — route-domain-specific ZERO. The
+ * function returned 1 on its first line for every principle, always, so the
+ * defect BI-5BB1A364 set out to fix was never actually mitigated.
+ *
+ * The archetype could not carry this: per the seed's coherence matrix
+ * (seed-wiki-kernel.ts, spec §8A.1) `universal` REQUIRES two or more
+ * `principleAppliesTo` populations, so archetype encodes WHICH POPULATIONS a
+ * principle binds. `principleConsumerContexts` encodes WHICH ROUTE/DOMAIN.
+ * Those axes are orthogonal: `no-hardcoded-colors` is correctly `universal`
+ * (all three populations must bind theme tokens) AND correctly `ui`-scoped.
+ * Gating a domain lever on a population field made route-domain-specific
+ * structurally unreachable for any rule spanning populations — which is
+ * nearly all of them.
+ *
+ * Keying on the contexts field also makes this lever agree with the
+ * retrieval-side filter, which already keys on `principleConsumerContexts`
+ * alone with no archetype check (wiki-store.ts `listPrinciplesByTier`). The
+ * two halves of BI-5BB1A364 disagreeing is what left the gap.
+ *
+ * - The row declares no `principleConsumerContexts` → 1. No declared domain
+ *   scope means the rule is domain-universal; unchanged, and the majority
+ *   case (53 of 96 pages).
  * - Caller declared NO context → attenuate (contextless-caller bucket,
  *   BI-5BB1A364 scope item 2) rather than exclude.
  * - Caller declared a context that INTERSECTS this row's contexts → 1 (the
@@ -131,8 +159,6 @@ export type ConsumerContextAttenuationInput = {
 export function consumerContextWeightMultiplier(
   input: ConsumerContextAttenuationInput,
 ): number {
-  if (input.consumerArchetype !== "route-domain-specific") return 1;
-
   const rowContexts = input.principleConsumerContexts ?? [];
   if (rowContexts.length === 0) return 1;
 

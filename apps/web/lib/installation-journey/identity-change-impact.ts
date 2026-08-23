@@ -59,6 +59,9 @@ const CAUTION_RANK: Record<StanceKey, Record<string, number>> = {
   teardown: { permitted: 0, "capture-required": 1, forbidden: 2 },
   sourceAuthority: { "governed-worktree": 0, none: 1 },
   peerWrite: { "governed-write": 0, "read-only": 1, none: 2 },
+  // Having somewhere to mirror work is the safer state: losing the peer means a
+  // teardown would take the backlog with it.
+  workSync: { "same-organization": 0, none: 1 },
 };
 
 const EMPTY_REF_LABEL = "None";

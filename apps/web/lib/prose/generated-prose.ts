@@ -78,11 +78,47 @@ export type GeneratedProseAxes = {
 export type GeneratedProseZone = "clean" | "noticeable" | "slop";
 
 export type GeneratedProseReading = GeneratedProseAxes & {
-  /** Total tells across the three content axes. Long sentences are reported
-   *  but excluded — a long sentence can be the right sentence. */
+  /** Total tells across the three word-list axes. */
   tells: number;
+  /** Long sentences as a share of all sentences. The axis that actually
+   *  carries signal in this corpus — see LONG_SENTENCE_RATIO_BASELINE. */
+  longSentenceRatio: number;
   zone: GeneratedProseZone;
 };
+
+/**
+ * Measured on the live install, 2026-08-23, over 899 model-written coworker
+ * messages (BI-41F15FD7):
+ *
+ *   word-list tells   2 puffery + 1 superficial -ing + 0 chatbot filler
+ *                     -> 0.3% of messages scored anything at all
+ *   long sentences    686 of 3,582 sentences (19.2%)
+ *                     575 of 899 messages contained at least one (64%)
+ *                     per-message ratio: median 0.25, p90 0.33
+ *
+ * The word lists were ported from a critique of long-form AI marketing prose.
+ * DPF coworker output is short operational status text, which has no room for
+ * puffery and no reason for throat-clearing, so those axes fire on almost
+ * nothing. Sentence length is the readability problem this corpus actually has.
+ *
+ * CHOOSING THE THRESHOLD. The ratio is lumpy, because most messages are only
+ * three or four sentences long, so values pile up on 0, 0.25 and one third.
+ * p75, p90 and p95 are ALL 0.33. That makes the quantiles useless as a dial:
+ *
+ *   > 1/3   ->  31 messages   3.4%
+ *   >= 1/3  -> 226 messages  25.1%
+ *
+ * The rule is therefore "MORE than a third of the sentences run long", which
+ * excludes the very common one-long-sentence-in-three shape. That shape is not
+ * a defect, and flagging a quarter of all output every day produces a number
+ * nobody reads. Strictly-greater comparison against 1/3 does this exactly:
+ * a computed 1/3 is not greater than the literal 1/3.
+ *
+ * Derived from one corpus measurement, not a law. Re-derive it when the corpus
+ * changes rather than nudging it by feel — and note the metric is dominated by
+ * message length, so it is a weak signal on very short replies.
+ */
+export const LONG_SENTENCE_RATIO_BASELINE = 1 / 3;
 
 function countOccurrences(haystack: string, needle: string): number {
   if (!needle) return 0;
@@ -124,6 +160,9 @@ export function analyzeGeneratedProse(text: string): GeneratedProseReading {
   const longSentences = sentenceList.filter((s) => wordCount(s) > LONG_SENTENCE_WORDS).length;
 
   const tells = puffery + superficialIng + chatbotFiller;
+  const longSentenceRatio = sentenceList.length
+    ? longSentences / sentenceList.length
+    : 0;
 
   return {
     puffery,
@@ -132,24 +171,34 @@ export function analyzeGeneratedProse(text: string): GeneratedProseReading {
     longSentences,
     sentences: sentenceList.length,
     tells,
-    zone: classifyGeneratedProse(tells, sentenceList.length),
+    longSentenceRatio,
+    zone: classifyGeneratedProse(tells, sentenceList.length, longSentenceRatio),
   };
 }
 
 /**
- * Band the tell count by density rather than absolute count, so a long report
- * is not penalized for being long and a two-sentence alert is not excused for
- * being short.
+ * Band by density rather than absolute count, so a long report is not penalized
+ * for being long and a two-sentence alert is not excused for being short.
  *
- * Thresholds are heuristic and deliberately loose — this gauge exists to make
- * a regression visible, not to adjudicate style. Tighten them from a baseline,
- * not from taste.
+ * Two independent signals, because they mean different things. A word-list tell
+ * is rare and specific — worth surfacing on its own. A high long-sentence ratio
+ * is common and diffuse — worth surfacing only past the measured p90.
+ *
+ * These thresholds now come from a corpus measurement rather than taste; the
+ * word-list bands are unchanged and remain unvalidated at the `slop` end, which
+ * production has never reached.
  */
-export function classifyGeneratedProse(tells: number, sentences: number): GeneratedProseZone {
-  if (tells === 0) return "clean";
+export function classifyGeneratedProse(
+  tells: number,
+  sentences: number,
+  longSentenceRatio = 0,
+): GeneratedProseZone {
   const density = tells / Math.max(sentences, 1);
   if (density >= 0.5 || tells >= 6) return "slop";
-  return "noticeable";
+  if (tells > 0) return "noticeable";
+  // No word-list tells: the sentence-length axis decides.
+  if (longSentenceRatio > LONG_SENTENCE_RATIO_BASELINE) return "noticeable";
+  return "clean";
 }
 
 /**

@@ -545,6 +545,35 @@ export type SweepVerdict = {
   leagueTable: { routePath: string; shell: UxShell; words: number; controls: number }[];
 };
 
+/**
+ * Which blocking verdicts failed to reproduce on a second measurement.
+ *
+ * A gate must attribute its refusal to a real defect. Some routes render from
+ * database state the sweep does not pin, so their metrics move between runs with
+ * no code change — observed live on /storefront/settings/operations, which
+ * blocked a PR touching only a Dockerfile and shell scripts, then passed on an
+ * identical-SHA re-run (BI-69FE5504).
+ *
+ * A real regression is deterministic and reproduces. An unstable measurement
+ * does not. So a route only keeps its blocking verdict if the SECOND pass agrees.
+ *
+ * Fails safe in both directions that matter:
+ *  - a route that could not be re-measured keeps blocking (silence is not
+ *    evidence of stability);
+ *  - a route that reproduces keeps blocking, unchanged.
+ */
+export function findNotReproducibleBlocking(input: {
+  firstPassBlocking: readonly string[];
+  confirmPassBlocking: readonly string[];
+  unmeasuredOnConfirm: readonly string[];
+}): string[] {
+  const stillBlocking = new Set(input.confirmPassBlocking);
+  const unmeasured = new Set(input.unmeasuredOnConfirm);
+  return [...new Set(input.firstPassBlocking)]
+    .filter((routePath) => !stillBlocking.has(routePath) && !unmeasured.has(routePath))
+    .sort();
+}
+
 export function evaluateSweep(
   measurements: RouteMeasurement[],
   baselineFile: BaselineFile,

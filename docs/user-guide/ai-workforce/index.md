@@ -23,6 +23,14 @@ identity sits in the workforce hierarchy. A coworker appears in one of the four
 areas only when an active service is assigned there. Unassigned work remains in
 **Other** instead of being guessed from a title or team.
 
+## Start With the End-to-End Picture
+
+If you are new to how coworkers are governed, read
+[How Governed Work Actually Runs](how-governed-work-runs.md) first. It walks one piece of work
+from convening a room to reading the receipt, and names which control acts at each step — the
+room's shape, the pace it sets, the corpus it consults, the gate on the tool, and where the
+outcome is reviewed. The pages in this area own the detail for each of those steps.
+
 ## Find and Work With a Coworker
 
 1. Open `/platform/ai/overview`.
@@ -102,7 +110,7 @@ Skills are grouped by category and collapsed. Open a category to see its skills;
 
 Search and the status/source filters work across the whole catalog, and the groups open automatically when a filter is active so you see matches straight away.
 
-If any skill has drifted from the seed, a warning appears under the summary: a fresh install would not match this one. The drift detail, along with route-level skills, observability, and the curator report, sits under **Technical details** — one control at the foot of the page. Those are diagnostics for when you are investigating something specific, not part of reading the catalog.
+If any skill has drifted from the seed, a warning appears under the summary: a fresh install would not match this one. A second warning says drift **can't be checked** for a skill — the repository is there but that skill has no seed file, so an approval can't be compared with what ships. Treat that as unresolved, not as healthy. When no repository is reachable at all, the page says so plainly; that one is normal on a production install. The drift detail, along with route-level skills, observability, and the curator report, sits under **Technical details** — one control at the foot of the page. Those are diagnostics for when you are investigating something specific, not part of reading the catalog.
 
 ## Related Routes
 

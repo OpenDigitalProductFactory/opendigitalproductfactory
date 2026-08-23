@@ -17,6 +17,7 @@ import {
   type WorkCapsuleActor,
 } from "./work-capsule-store";
 import type { WorkCapsuleExecutorKind } from "@/lib/work-capsules";
+import { defaultPlatformRepositoryFullName } from "./work-capsule-branch-identity";
 
 /** Map a self-declared provider string to the closest desktop executor kind. */
 export function providerToExecutorKind(provider: string): WorkCapsuleExecutorKind {
@@ -112,10 +113,7 @@ export async function ensureExternalSessionCapsule(args: {
       input: {
         title,
         objective,
-        repositoryFullName:
-          args.repositoryFullName?.trim() ||
-          process.env.DPF_REPO_FULL_NAME?.trim() ||
-          "OpenDigitalProductFactory/opendigitalproductfactory",
+        repositoryFullName: args.repositoryFullName?.trim() || defaultPlatformRepositoryFullName(),
         headBranch: branchName,
         worktreePath,
         baseBranch: args.baseBranch?.trim() || "main",

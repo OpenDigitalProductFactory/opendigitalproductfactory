@@ -1,6 +1,6 @@
 ---
 name: dpf-systematic-debugging
-description: "Use when a DPF symptom needs a root cause — a failing build, a wedged runtime, a stuck job, wrong output. Runs a 4-phase root-cause process, DPF-adapted: gather live evidence before any hypothesis, check whether a peer session/worktree is already acting on the same substrate before declaring it broken, verify the substrate before declaring something missing, and prove the fix functionally (a structural pass is not verification)."
+description: "Use when a DPF symptom needs a root cause — a failing build, a wedged runtime, a stuck job, wrong output."
 
 # Agent Skills standard fields (Surface A — Claude Code)
 disable-model-invocation: false
