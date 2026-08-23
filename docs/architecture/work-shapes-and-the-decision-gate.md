@@ -126,6 +126,22 @@ this coworker takes the turn or hands it to a human. That projection lives in
 | `supervised-action` | acts, with a supervising human in the loop |
 | `autonomous-action` | **the sole mode that permits acting without a human turn** |
 
+**The two ladders are now one projection** ⟦runtime: `BI-13ED1BE1` / `BI-06C41FDC`, 2026-08-23⟧.
+The decision mode above and the proactivity `actionBoundary` (`advise` · `propose` ·
+`preauthorized`) used to decide the same question separately and never meet, so a
+`preauthorized` posture could imply autonomy the envelope would deny and vice versa.
+`joinAutonomy` (`work-management/hitl-join.ts`) now returns the **stricter** of the two —
+neither ladder may purchase autonomy the other withholds. `advise` maps to `shadow-only`,
+not `propose-for-approval`: advising is saying what should happen, not putting an action
+forward to be approved.
+
+**Verification is load-bearing.** A consequential action at the kernel floor
+(`RiskClass.outbound-or-floor` — outward, financial, irreversible, access-control) is denied
+by name — `missing_verification_evidence` — unless verification evidence exists on the case.
+A room's posture may ADD a verification requirement to work that would not otherwise carry
+one; nothing can remove the floor's. Until this landed, `verificationDepth` was compiled,
+rendered as a "Deep verification" chip and written to receipts while gating nothing.
+
 The trust level feeding this is already risk-capped before it arrives, and
 `requiresCoworkerEnvelope` can demand an approved envelope either `always` or only
 `when-supervised`, per the action descriptor in `action-registry.ts`. Denials come back
@@ -193,7 +209,10 @@ Stated plainly so nobody plans against a capability that is not there:
 - **Collaboration shapes are not a registry.** Five shapes are specified; no enum, no
   binding, nothing queryable. Binding them per gate pattern is `BI-51CCB81C`.
 - **Gate coverage is two tools on one surface.** The interceptor over all consequential
-  tool calls is specified, not built (EP-1C37C089).
+  tool calls is specified, not built (EP-1C37C089). Separately, the workroom-shape hook
+  (`lib/governance/workroom-shape-governance-hook.ts`) governs consequential tool calls
+  bound to a room; as of `BI-06C41FDC` its computed decision mode actually decides the turn
+  rather than only being recorded in the shadow verdict.
 - **The consultation ledger is in-memory and per-process.**
 - **None of this is visible as a picture yet.** The room surface renders no graphic at
   all; the shape view that would draw these gates and their verdicts is `BI-C7E2E924`.

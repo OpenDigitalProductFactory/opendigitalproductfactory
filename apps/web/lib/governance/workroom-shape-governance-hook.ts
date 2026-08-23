@@ -43,6 +43,9 @@ import type {
   WorkroomParticipantView,
 } from "@/lib/work-management/room-types";
 import type { WorkroomAccessLevel } from "@/lib/work-management/room-participation";
+import { joinAutonomy } from "@/lib/work-management/hitl-join";
+import { readWorkroomPostureClaim } from "@/lib/work-management/workroom-posture-claim";
+import { shapeBiasFor } from "@/lib/work-posture";
 import { readWorkroomShapeClaim } from "@/lib/work-management/workroom-shape-claim";
 
 export type WorkroomShapeGateMode = "enforce" | "shadow" | "off";
@@ -88,7 +91,17 @@ export type WorkroomShapeVerdict = {
   gaps: readonly string[];
   authorityLadderLevel: WorkroomAccessLevel | null;
   stepUpRequired: boolean;
+  /** The decision mode AFTER joining the room's posture — what actually governs. */
   decisionMode: WorkCaseAutonomyDecisionMode;
+  /**
+   * EP-WORK-POSTURE (BI-06C41FDC). Which ladder set `decisionMode`. Before this,
+   * the hook computed a decision mode and only RECORDED it — it never affected
+   * the decision. Recording which ladder won is how an operator can tell a room
+   * constraint from a trust constraint.
+   */
+  autonomyConstrainedBy: "envelope" | "posture" | "both-agree";
+  /** The action boundary the room's posture contributed, if any. */
+  postureActionBoundary: string | null;
 };
 
 export type WorkroomShapeShadowRecord = {
@@ -235,6 +248,8 @@ export function createWorkroomShapeGovernanceHook(
             authorityLadderLevel: null,
             stepUpRequired: false,
             decisionMode,
+            autonomyConstrainedBy: "envelope",
+            postureActionBoundary: null,
           });
           return { decision: "allow" };
         }
@@ -250,6 +265,17 @@ export function createWorkroomShapeGovernanceHook(
           participants: shapeParticipants(room),
           sensitivityCeiling: room.sensitivityCeiling ?? null,
         });
+        // EP-WORK-POSTURE (BI-06C41FDC): the room's posture now GOVERNS this
+        // turn instead of being computed and discarded. A posture the room
+        // DECLARED wins; otherwise the shape it is bound against implies one.
+        // Both are read synchronously from data the hook already holds — no I/O
+        // is added to a PreToolUse path.
+        const postureActionBoundary =
+          readWorkroomPostureClaim(room.scopeClaims)?.actionBoundary
+          ?? shapeBiasFor(shape)?.actionBoundary
+          ?? null;
+        const joined = joinAutonomy(decisionMode, postureActionBoundary);
+
         const verdict: WorkroomShapeVerdict = {
           mode,
           toolName: event.toolName,
@@ -261,7 +287,9 @@ export function createWorkroomShapeGovernanceHook(
           gaps: binding.gaps,
           authorityLadderLevel: binding.authorityLadderLevel,
           stepUpRequired: binding.stepUpRequired,
-          decisionMode,
+          decisionMode: joined.decisionMode,
+          autonomyConstrainedBy: joined.constrainedBy,
+          postureActionBoundary,
         };
         await record(verdict);
 
@@ -273,6 +301,22 @@ export function createWorkroomShapeGovernanceHook(
               : `workroom-shape: shadow — ${shape} envelope gaps: ${gapSummary(binding.gaps)} (audit-only)`,
           };
         }
+        // A room whose posture is advise-only joins to shadow-only: the action is
+        // recorded, never taken. Denying is the only honest response to a
+        // consequential call in that room — allowing it would take an action the
+        // room explicitly said should only be advised on.
+        if (joined.decisionMode === "shadow-only") {
+          return {
+            decision: "deny",
+            reason:
+              `Workroom posture gate (BI-06C41FDC): this consequential call is bound to room `
+              + `${room.capsuleId ?? room.id}, whose posture is advise-only, so the action is `
+              + `recorded rather than taken. ${joined.reason} `
+              + "Change the room's posture, or raise the request with its accountable owner. "
+              + "Operator override: DPF_WORKROOM_GATE_MODE=shadow (audit-only) or off.",
+          };
+        }
+
         if (!binding.allowed) {
           return {
             decision: "deny",

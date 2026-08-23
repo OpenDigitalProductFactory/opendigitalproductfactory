@@ -211,6 +211,14 @@ declared `propose`.
 
 ## 8. Triggers on scheduled work
 
+⟦runtime: shipped 2026-08-23, `BI-5087F34F`⟧ The record lives on the existing
+`ScheduledAgentTask.taskConfig` JSON under a `trigger` key — migration-free, the same
+discipline the workroom shape and posture claims use on `scopeClaims`. It carries the
+trigger kind (the four sources below, not a fifth taxonomy), the room served, and the
+obligation discharged. `temporalInputForTrigger` feeds the obligation's due date — not the
+cron time — into the band resolver, so the 03:00-tick-for-a-09:00-deadline case now reads
+`pre-deadline`. A task with no trigger recorded behaves exactly as before.
+
 Finding 7: a scheduled job knows *when* it fires and nothing about *why*. The four
 trigger sources are already named in the governed value-stream design (§5.1) — time,
 user request, incoming message, detected need. Scheduled work records:
@@ -236,6 +244,7 @@ Each slice is independently shippable and independently inert until the next lan
 | **D** | Room declaration + room-derived posture — `scopeClaims` reader/writer, shape and archetype derivation, wired at the room-scoped seams. | — |
 | **E** | Verification becomes load-bearing — stake classes, the envelope join, the new named denial reason. | — |
 | **F** | Scheduled-work trigger record — trigger kind, room/shape link, obligation link, posture at fire time. | — |
+| — | **Shipped state ⟦runtime: 2026-08-23⟧.** A, B, C, D, E, F and G have landed; H (the rich provenance surface) has not. `taskClass` is live, verification refuses, the two HITL ladders are one projection, scheduled work records why it exists, and a conformance test covers the whole archetype catalogue. | — |
 | **G** | Archetype conformance — a test asserting every leaf archetype resolves a posture from its own OVSM. | — |
 | **H** | Surface — the posture and its provenance rendered on the room, answering "why is it behaving like this". | D |
 
