@@ -309,6 +309,26 @@ recommendation and contribution evidence. It supersedes the earlier
 BI-specific two-human binding recommendation `DI-F7361DD540E2`; the earlier
 row remains immutable audit history.
 
+The bridge's first deployment needs a separate, non-circular authority
+boundary because the projector cannot authorize the code that first deploys
+it. A follow-up kernel comparison considered three bootstrap shapes. The
+authoritative bootstrap-authorizer consult is `DI-568FF23AF27B`; an independent
+architecture-local comparison, `DI-5B6BF3990A83`, reached the same ordering:
+
+| Shape | Composite | Disposition |
+|---|---:|---|
+| Universal second distinct human | `1.282` in the corroborating consult | Reject as the default. It recreates per-work approval and makes a single-owner install structurally non-traversable. It remains mandatory when a standing policy, regulation, risk class, commandment conflict, or irreversible/outbound floor explicitly requires dual-human control. |
+| Human-rooted standing policy + explicit eligible judgment + independent exact-tree review + scoped warrant | `7.574` in the corroborating consult | Select. It preserves the human root and independent control without mistaking review for authority. |
+| Root human instruction alone | `0.338` in the corroborating consult | Reject. It lacks the sealed policy judgment, immutable artifact binding, independent review, expiry, and consumption boundary. |
+
+`DI-568FF23AF27B` selected `policy-derived-second-check` with high confidence,
+composite `16.683`, margin `5.305`, `autonomyEligible=true`, and no commandment
+conflict. Corroborating `DI-5B6BF3990A83` selected the same middle shape with
+high confidence, margin `6.293`, stable sensitivity, and no conflict.
+`DI-ECE6A1FCFFCA` is retained as an abstained, unusable evidence attempt; it
+grants nothing. The selected bootstrap does not change the universal bridge
+design and is not a reusable break-glass path.
+
 #### Judgment input
 
 The bridge is universal across the three owning policy gates:
@@ -397,19 +417,121 @@ The bridge does not remove independent review. It removes the unrelated demand
 for a second human to ratify every policy decision that already falls within a
 human-approved standing autonomy envelope.
 
-#### Current implementation stop
+#### One-time first-deployment bootstrap envelope
 
-The live install has one active human principal and no deployed
-policy-authority projector. The former makes the superseded two-human bootstrap
-shape impossible; it does not invalidate Mark's human-rooted standing WWMD
-criteria. The latter is the current fail-closed boundary: `DI-053D69EADEDC` is
-an architecture decision about which bridge to build, not an action
-authorization for production implementation of BI-F0715C9C. Design and plan
-evidence may be published. Production mutation begins only after the owning
-WWMD action judgment for the exact implementation envelope yields an eligible
-affirmative result and the governed bridge can emit the scoped authorization;
-until then, no direct DB write, synthetic principal, reused human, AI proxy,
-superuser fallback, or fabricated receipt is valid.
+The existing repository contribution boundary is independent of the broken
+runtime projector and can lawfully bootstrap its first deployment, but only as
+one conjunctive, immutable envelope. It consists of:
+
+1. Mark's versioned approval of the WWMD criteria as the human root;
+2. the explicit, autonomy-eligible recommendation `DI-568FF23AF27B` for this
+   bootstrap shape, corroborating `DI-5B6BF3990A83`, and a fresh operator
+   ratification of the exact published design/plan identity after this
+   amendment;
+3. one DCO-signed candidate derived from the ratified base and confined to the
+   permitted paths below;
+4. a fresh independent semantic and architecture review bound to the exact
+   candidate base tree, head tree, and diff digest;
+5. the protected repository's required checks, linear-history rule,
+   conversation resolution, and merge queue.
+
+Live branch-rule evidence on 2026-08-23 confirms required `DCO`, `Merge
+Readiness`, and `UX Route Budget Sweep` checks, enforced administrators,
+linear history, blocked force-push/deletion, conversation resolution, and the
+merge queue. It also confirms `required_approving_review_count=0`, no code-owner
+review requirement, and no last-push approval requirement. Therefore this
+design does not misstate GitHub automation as a second human. Independent
+exact-tree review is a governed precondition. A distinct human GitHub approval
+is additionally required only when a policy floor explicitly requires it; on
+this one-human install such a floor must fail closed until another eligible
+human exists or the root policy is explicitly amended.
+
+The envelope is bound to:
+
+- BI `BI-F0715C9C`, Workroom `WC-2ABA65F7`, repository
+  `OpenDigitalProductFactory/opendigitalproductfactory`, and branch
+  `fix/initiative-readiness-bootstrap`;
+- the exact design and plan commit/blobs named by the post-amendment
+  ratification, plus the ratified base commit;
+- test-first authorship, refactoring inside the same contracts, documentation,
+  verification, DCO publication, independent review, protected PR, and merge
+  queue actions only;
+- these path envelopes and their colocated tests:
+  `apps/web/lib/backlog/initiative-readiness/**`,
+  `apps/web/lib/work-capsules/{governed-work-claim,work-capsule-store,external-session-capture,mcp-handlers}*`,
+  `apps/web/lib/mcp/packs/{initiative-readiness-pack,work-capsules-pack,build-evidence-extra-pack,decomposition-pack,workforce-pack}*`,
+  `apps/web/lib/{mcp-task-submit,planning/plan-backlog-coverage}*`,
+  `apps/web/lib/govern/authority/{coworker-tool-authority-gate,resolve-coworker-tool-authority}*`,
+  the two BI-F0715C9C design/plan documents, and the generated docs index.
+
+When effective, it authorizes production authorship only. It does not change the failed
+initiative-readiness claim, satisfy or fabricate a receipt, grant reviewer
+authority, turn a DecisionInteraction into RBAC, mutate the WordPress branch,
+or authorize an out-of-envelope file.
+
+The writer audit found three adjacent substrates, none of which can activate
+this warrant today:
+
+- `record_workroom_evidence` can preserve an immutable pointer and evidence
+  packet, but its contract is evidence, not action authority;
+- `createAuthorizationDecisionLog` is a server helper used by specific
+  governed actions, not a generic callable authorization writer, and it does
+  not validate or consume this policy/artifact bundle;
+- `ensureAuthorityApprovalEnvelope` persists a 15-minute exact-tool approval
+  proposal linked to an authority decision, then requires the initiating human
+  to approve it. There is no registered source-implementation action binding
+  for BI-F0715C9C, and this path does not project an autonomy-eligible DI.
+
+Consequently, the repository envelope is an architecture-approved
+first-deployment proposal, not yet an active authorization. A Workroom note,
+DI id, semantic review, or operator chat message alone cannot activate it. The
+exact activation path must either (a) expose an existing governed action writer
+that server-resolves and atomically persists the ratification, DI, policy
+version, subject/action/artifacts, expiry, revocation, and consumption binding,
+or (b) receive an explicit human bootstrap ratification that names the
+repository contribution boundary itself as the one-time authority and whose
+durable governed pointer is independently verifiable before Red. Until one of
+those paths is proven and ratified, the envelope is inactive.
+
+The envelope expires at the earliest of 72 hours after ratification, explicit
+revocation, protected merge, branch/base/design/plan drift, an out-of-envelope
+path, a non-DCO candidate, review or check failure, a commandment conflict, or
+a new `no`, `revise`, `defer`, or `escalate` judgment. Amend/rebase/squash is
+allowed only if the result stays within the ratified base/path contract and
+receives a fresh exact-tree review. The envelope is consumed by one protected
+merge and can never authorize later work.
+
+#### Current implementation stop and ratification text
+
+The earlier operator reply `go` predates this universal bridge and exact
+bootstrap envelope, so it is not production implementation authority. Design
+and plan evidence may be amended, published, and reviewed. Production source
+or test mutation starts only after the operator supplies this text with the
+post-amendment immutable values filled in:
+
+> I ratify the one-time first-deployment bootstrap envelope for BI-F0715C9C
+> and WC-2ABA65F7 in OpenDigitalProductFactory/opendigitalproductfactory on
+> fix/initiative-readiness-bootstrap. My authority is the current
+> Mark-approved WWMD criteria; I accept DI-568FF23AF27B's explicit,
+> autonomy-eligible policy-derived-second-check recommendation, corroborated
+> by DI-5B6BF3990A83. This
+> ratification is bound to base `<base-sha>`, design/plan commit
+> `<design-plan-sha>`, design blob `<design-blob>`, plan blob `<plan-blob>`,
+> and only the actions and paths in the ratified design. It authorizes
+> test-first implementation, verification, DCO publication, independent
+> exact-tree semantic and architecture review, protected PR checks, and merge
+> queue delivery. It does not satisfy initiative receipts, authorize the
+> WordPress branch, grant reviewer authority, treat DecisionInteraction as
+> RBAC, or permit out-of-scope work. It expires at the earliest of 72 hours
+> from this ratification, my revocation, protected merge, artifact/scope drift,
+> review or check failure, commandment conflict, or a no/revise/defer/escalate
+> judgment; it is single-use and consumed at merge.
+
+Until that exact ratification is received, its governed persistence path is
+proven, and the resulting immutable authorization identity is durably pointed
+to from the Workroom, implementation remains stopped. No direct DB write, synthetic
+principal, reused human, AI proxy, superuser fallback, fabricated receipt, or
+relabelled design mutation is valid.
 
 ## Trust boundaries
 
@@ -421,6 +543,7 @@ superuser fallback, or fabricated receipt is valid.
 | PAT -> TaskRun | User, token capability, clearance, lifecycle, idempotency, and risk class use the existing task checks. |
 | Receipt call -> authority log | The server derives the backlog subject and organization; caller-supplied organization claims are ignored. |
 | Policy judgment -> action authority | Only a current, explicit, autonomy-eligible owning-policy “yes” with human-rooted version/delegation provenance can project a scoped, expiring authorization; the runtime never treats DecisionInteraction itself as RBAC. |
+| First deployment -> repository boundary | Only the exact operator-ratified, DCO-signed, path-confined candidate with fresh independent exact-tree review and protected checks/merge may bootstrap the projector; runtime claim denial remains visible and the envelope is consumed at merge. |
 | Proposed design -> receipts | Latest valid design-spec digest anchors pre-baseline reviews; superseded artifact digests are stale. |
 | Evidence -> Workroom | Only a full provider branch-head match reaches adoption. |
 | Workroom -> author | Exact subject/repo/head, provider blob, one DCO identity, and accountable owner remain required. |
@@ -448,6 +571,9 @@ superuser fallback, or fabricated receipt is valid.
 | `AC-POLICY-BRIDGE-SCOPE` | Subject, organization, action, actor, route, policy version, delegation, artifact, expiry, and use limits are revalidated; cross-scope, stale, revoked, expired, or replayed authority fails closed. | Binding mutation, expiry, revocation, reuse, and cross-WWMD/WWWD/WSID tests. |
 | `AC-POLICY-NOT-RBAC` | A DecisionInteraction id alone never grants access, and projection never creates a role/grant or marks an initiative receipt satisfied. | Prohibition tests at the policy and governed-execution gates. |
 | `AC-POLICY-RECOVERY` | A developer receives the exact owning evaluation/escalation or eligible independent-reviewer route rather than an impossible receipt checklist. | Claim-response and recovery-action tests. |
+| `AC-FIRST-DEPLOY-WARRANT` | The one-time envelope is ineffective without the exact human root, DI, BI/Workroom, repository/branch, base, design/plan artifacts, action/path scope, expiry, and a governed authorization identity; an evidence note alone is insufficient. | Bootstrap contract/pregate fixture plus immutable authority and Workroom-pointer inspection. |
+| `AC-FIRST-DEPLOY-INDEPENDENCE` | The candidate needs fresh independent exact-tree semantic and architecture review and every protected check; repository automation is never reported as a human approval. | Review-receipt identity, branch-rule snapshot, exact-tree CI, and PR-health evidence. |
+| `AC-FIRST-DEPLOY-CONSUME` | Drift, failure, revocation, timeout, non-affirmative judgment, or merge invalidates the envelope; one merge consumes it and no later work can reuse it. | Bootstrap contract negative/replay fixtures and protected-merge audit. |
 
 ## Non-goals
 
