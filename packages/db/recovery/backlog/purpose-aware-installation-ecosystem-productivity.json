@@ -1,137 +1,40 @@
 {
   "schemaVersion": 1,
   "bundleId": "purpose-aware-installation-ecosystem-productivity",
-  "description": "Operator-invoked recovery input for the approved purpose-aware installation epic, umbrella, seven delivery slices, and merged P0 provenance.",
+  "description": "Operator-invoked recovery input for the approved purpose-aware installation epic, umbrella for install identity and ecosystem productivity work.",
   "source": {
-    "capturedAt": "2026-08-22T04:02:53.253Z",
+    "capturedAt": "2026-08-23T00:54:15.000Z",
     "repository": "OpenDigitalProductFactory/opendigitalproductfactory",
     "planPath": "docs/superpowers/plans/2026-08-08-purpose-aware-installation-ecosystem-productivity.md"
   },
   "epic": {
     "epicId": "EP-1FABA22D",
     "title": "Purpose-Aware Installation and Ecosystem Productivity",
-    "description": "Unify installation purpose, journey orchestration, federation shape, standards readiness, first value, and Hive participation into one coherent path from setup to ecosystem productivity.",
+    "description": "Make installation operating intent shape onboarding, federation, first value, standards readiness, and Hive participation so each DPF installation becomes a productive ecosystem member.",
     "status": "in-progress",
-    "priority": 1,
     "scopeKind": "platform",
     "scopeRationale": "Cross-cutting DPF platform journey spanning installation, Workspace, federation, standards, and Hive.",
+    "priority": 1,
     "createdAt": "2026-08-22T04:02:36.794Z"
   },
   "items": [
     {
-      "itemId": "BI-34667080",
+      "itemId": "BI-0A40E66A",
       "epicId": "EP-1FABA22D",
-      "title": "Deliver purpose-aware installation to ecosystem productivity",
-      "body": "## Problem\nDPF setup currently treats installations alike even though production, development-companion, managed-service, channel, and community purposes require different federation shapes and paths to value.\n\n## Scope\nCoordinate the seven independently shippable slices in the approved design and plan. P0 is complete; P1, R1, P2, P3, P4, and P5 remain.\n\n## Acceptance\n- Every child slice ships through its own PR.\n- The profile-specific installation journey proves first value and honest ecosystem productivity.\n- Existing trust, authority, identity, qualification, and contribution boundaries remain canonical.\n- The completion audit in the implementation plan is satisfied.\n\n## Children\nBI-A9F60372, BI-91EF130B, BI-4FCBA4B2, BI-1E91D091, BI-AE128860, BI-3E99ACFA, BI-669D2B04.\n\nPlan: docs/superpowers/plans/2026-08-08-purpose-aware-installation-ecosystem-productivity.md",
-      "status": "in-progress",
-      "type": "portfolio",
+      "title": "Compile archetype and GTM operating context into executable external-agent work",
+      "body": "Project existing archetype value streams, operating profiles, WorkUnit definitions, work shapes, outcomes, measures, evidence, and exceptions into Work Packets and Authorized Surface entry references. Add GTM work context for offer, audience, channel, lifecycle stage, constraints, and success measures while keeping product/marketing/sales/partner records canonical. Prove at least one end-to-end value stream per supported archetype family; vocabulary-only overlays do not pass. Do not clone workflow or authority substrate per vertical.",
+      "status": "open",
+      "type": "product",
       "workType": "feature",
       "source": "user-request",
+      "scopeKind": "platform",
+      "dependsOn": [],
+      "externalDependencies": [],
+      "activities": [],
       "effortSize": "xlarge",
       "triageOutcome": "build",
-      "scopeKind": "platform",
-      "scopeRationale": "DPF platform installation-to-ecosystem-productivity program.",
-      "dependsOn": [],
-      "externalDependencies": [],
-      "createdAt": "2026-08-22T04:02:36.845Z",
-      "activities": []
-    },
-    {
-      "itemId": "BI-A9F60372",
-      "epicId": "EP-1FABA22D",
-      "title": "Establish the typed installation operating-intent contract and compatibility path",
-      "body": "## Outcome\nOne versioned semantic-intent repository plus Contract 12-compliant environment-class capture/projection. Existing installs derive a suggestion but gain no authority or capability.\n\n## Acceptance\n- Closed purpose and environment vocabularies are typed and validated.\n- Installer state carries environment class and optional bootstrap intent compatibly.\n- PlatformConfig persists confirmed semantic intent.\n- Existing-install derivation stays suggested until human confirmation.\n- Confirmation never mutates federation trust, grants, or capability activation.\n\nDepends on: none.\nDelivered by PR #4334: https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/4334\nPlan §5: docs/superpowers/plans/2026-08-08-purpose-aware-installation-ecosystem-productivity.md",
-      "status": "done",
-      "type": "product",
-      "workType": "feature",
-      "source": "user-request",
-      "effortSize": "medium",
-      "triageOutcome": "build",
-      "scopeKind": "platform",
-      "scopeRationale": "DPF platform installation-to-ecosystem-productivity program.",
-      "dependsOn": [],
-      "externalDependencies": [],
-      "createdAt": "2026-08-22T04:02:37.021Z",
-      "completedAt": "2026-08-22T04:02:53.249Z",
-      "resolution": "Delivered by merged PR #4334: typed operating-intent contract, install-state compatibility, PlatformConfig persistence/derivation, documentation, and targeted tests.",
-      "activities": [
-        {
-          "recoveryKey": "p0-pr-4334-merged",
-          "kind": "evidence",
-          "summary": "Typed operating-intent foundation merged in PR #4334",
-          "recordedAt": "2026-08-22T04:02:44.635Z",
-          "payload": {
-            "evidenceKind": "external_link",
-            "url": "https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/4334",
-            "body": "PR #4334 implemented the typed installation operating-intent contract, PlatformConfig repository and derivation, installer state schema compatibility, documentation, and release-contract tests. Merged 2026-08-15."
-          }
-        },
-        {
-          "recoveryKey": "p0-pr-4334-source-verified",
-          "kind": "evidence",
-          "summary": "Merged P0 source and tests verified on current main",
-          "recordedAt": "2026-08-22T04:02:53.197Z",
-          "payload": {
-            "evidenceKind": "source_verified",
-            "url": "https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/4334/files",
-            "body": "Current main contains the P0 contract, repository, installer-state schemas, docs, and tests listed in PR #4334."
-          }
-        },
-        {
-          "recoveryKey": "p0-delivery-completed",
-          "kind": "status_change",
-          "summary": "open → done",
-          "recordedAt": "2026-08-22T04:02:53.253Z",
-          "payload": {
-            "from": "open",
-            "to": "done",
-            "resolution": "Delivered by merged PR #4334: typed operating-intent contract, install-state compatibility, PlatformConfig persistence/derivation, documentation, and targeted tests.",
-            "recoveryEvidenceKeys": [
-              "p0-pr-4334-merged",
-              "p0-pr-4334-source-verified"
-            ],
-            "workClass": "verified-existing",
-            "uxDisposition": "not-applicable",
-            "migrationDisposition": "not-applicable"
-          }
-        }
-      ]
-    },
-    {
-      "itemId": "BI-91EF130B",
-      "epicId": "EP-1FABA22D",
-      "title": "Build the deterministic journey compiler and productivity projection",
-      "body": "## Outcome\nGeneralize the existing activation orchestrator into the single deterministic journey compiler, with profile-specific first-value mission descriptors and evidence-backed readiness.\n\n## Acceptance\n- Five purposes × three environment classes compile deterministically.\n- Milestones resolve canonical evidence as satisfied, attention, blocked, deferred, or not-applicable.\n- Existing activation plans and legacy setup progress remain compatible.\n- Productive cannot be returned without the profile's first-value receipt.\n- No sibling orchestration substrate is introduced.\n\nBlocked by: BI-A9F60372.\nPlan §6: docs/superpowers/plans/2026-08-08-purpose-aware-installation-ecosystem-productivity.md",
-      "status": "open",
-      "type": "product",
-      "workType": "feature",
-      "source": "user-request",
-      "effortSize": "large",
-      "triageOutcome": "build",
-      "scopeKind": "platform",
-      "scopeRationale": "DPF platform installation-to-ecosystem-productivity program.",
-      "dependsOn": ["BI-A9F60372"],
-      "externalDependencies": [],
-      "createdAt": "2026-08-22T04:02:37.229Z",
-      "activities": []
-    },
-    {
-      "itemId": "BI-4FCBA4B2",
-      "epicId": "EP-1FABA22D",
-      "title": "Converge static setup and readiness orchestration",
-      "body": "## Outcome\nOne activation/journey package, one setup-progress service, one environment vocabulary, and adapters over existing domain actions.\n\n## Capacity contract\nThis independently reviewable refactor represents roughly 20% of epic implementation capacity. It removes duplicated orchestration before the UI migration and is not a broad rewrite.\n\n## Acceptance\n- Static list-index sequencing is replaced by stable compiler milestones behind a rollback adapter.\n- JSON decoding moves into the typed projection service.\n- Environment parsing converges on the shared contract.\n- Dead setup helpers are removed only after reference and regression proof.\n- The diff demonstrates convergence and deletions, not only wrappers.\n\nBlocked by: BI-A9F60372, BI-91EF130B.\nPlan §7: docs/superpowers/plans/2026-08-08-purpose-aware-installation-ecosystem-productivity.md",
-      "status": "open",
-      "type": "product",
-      "workType": "refactor",
-      "source": "user-request",
-      "effortSize": "large",
-      "triageOutcome": "build",
-      "scopeKind": "platform",
-      "scopeRationale": "DPF platform installation-to-ecosystem-productivity program.",
-      "dependsOn": ["BI-A9F60372", "BI-91EF130B"],
-      "externalDependencies": [],
-      "createdAt": "2026-08-22T04:02:37.414Z",
-      "activities": []
+      "scopeRationale": "Universal DPF external-agent operating substrate reused across installations, archetypes, and business portfolios.",
+      "createdAt": "2026-08-22T14:32:06.451Z"
     },
     {
       "itemId": "BI-1E91D091",
@@ -142,32 +45,32 @@
       "type": "product",
       "workType": "feature",
       "source": "user-request",
+      "scopeKind": "platform",
+      "dependsOn": [],
+      "externalDependencies": [],
+      "activities": [],
       "effortSize": "large",
       "triageOutcome": "build",
-      "scopeKind": "platform",
       "scopeRationale": "DPF platform installation-to-ecosystem-productivity program.",
-      "dependsOn": ["BI-A9F60372", "BI-91EF130B", "BI-4FCBA4B2"],
-      "externalDependencies": [],
-      "createdAt": "2026-08-22T04:02:37.555Z",
-      "activities": []
+      "createdAt": "2026-08-22T04:02:37.555Z"
     },
     {
-      "itemId": "BI-AE128860",
+      "itemId": "BI-34667080",
       "epicId": "EP-1FABA22D",
-      "title": "Shape topology and federation orchestration from installation purpose",
-      "body": "## Outcome\nJourney adapters compile appropriate development, managed-service, channel, and community relationship plans while existing federation and partner domains remain the only writers.\n\n## Acceptance\n- Profile confirmation changes no link approval, token, grant, contract, or authority field.\n- Development companions cannot mutate production directly.\n- Managed-estate, sovereign-peer, channel, and community shapes use shared relationship contracts.\n- Discovery remains only a candidate until canonical trust and identity evidence exists.\n- A2A readiness is consumed from its owning capability rather than synthesized.\n\nBlocked by: BI-A9F60372, BI-91EF130B.\nCapability dependencies: BI-BE0E14E0, BI-E2398997.\nPlan §9: docs/superpowers/plans/2026-08-08-purpose-aware-installation-ecosystem-productivity.md",
-      "status": "open",
-      "type": "product",
+      "title": "Deliver purpose-aware installation to ecosystem productivity",
+      "body": "## Problem\nDPF setup currently treats installations alike even though production, development-companion, managed-service, channel, and community purposes require different federation shapes and paths to value.\n\n## Scope\nCoordinate the seven independently shippable slices in the approved design and plan. P0 is complete; P1, R1, P2, P3, P4, and P5 remain.\n\n## Acceptance\n- Every child slice ships through its own PR.\n- The profile-specific installation journey proves first value and honest ecosystem productivity.\n- Existing trust, authority, identity, qualification, and contribution boundaries remain canonical.\n- The completion audit in the implementation plan is satisfied.\n\n## Children\nBI-A9F60372, BI-91EF130B, BI-4FCBA4B2, BI-1E91D091, BI-AE128860, BI-3E99ACFA, BI-669D2B04.\n\nPlan: docs/superpowers/plans/2026-08-08-purpose-aware-installation-ecosystem-productivity.md",
+      "status": "in-progress",
+      "type": "portfolio",
       "workType": "feature",
       "source": "user-request",
-      "effortSize": "large",
-      "triageOutcome": "build",
       "scopeKind": "platform",
+      "dependsOn": [],
+      "externalDependencies": [],
+      "activities": [],
+      "effortSize": "xlarge",
+      "triageOutcome": "build",
       "scopeRationale": "DPF platform installation-to-ecosystem-productivity program.",
-      "dependsOn": ["BI-A9F60372", "BI-91EF130B"],
-      "externalDependencies": ["BI-BE0E14E0", "BI-E2398997"],
-      "createdAt": "2026-08-22T04:02:37.823Z",
-      "activities": []
+      "createdAt": "2026-08-22T04:02:36.845Z"
     },
     {
       "itemId": "BI-3E99ACFA",
@@ -178,14 +81,65 @@
       "type": "product",
       "workType": "feature",
       "source": "user-request",
+      "scopeKind": "platform",
+      "dependsOn": [],
+      "externalDependencies": [],
+      "activities": [],
       "effortSize": "large",
       "triageOutcome": "build",
-      "scopeKind": "platform",
       "scopeRationale": "DPF platform installation-to-ecosystem-productivity program.",
-      "dependsOn": ["BI-91EF130B", "BI-1E91D091", "BI-AE128860"],
-      "externalDependencies": ["BI-BE0E14E0"],
-      "createdAt": "2026-08-22T04:02:38.034Z",
-      "activities": []
+      "createdAt": "2026-08-22T04:02:38.034Z"
+    },
+    {
+      "itemId": "BI-4B171FF0",
+      "epicId": "EP-1FABA22D",
+      "title": "Serve the principal-bound external-agent operating profile and generated install pointer",
+      "body": "Implement the source-free entry contract from BI-11D611B3: one versioned compiler projects installation purpose, dual-principal identity, organization/archetype context, policy/stop rules, compatibility, and work/surface entry references. Expose it through authenticated MCP and A2A capability metadata. Generate a tiny digest-bound install-local AGENTS.md/README pointer with no copied doctrine or secrets. Add tier/topology filtering, drift repair, compatibility errors, installer parity, and negative authority tests. Do not ship the source repository or a static tool catalog.",
+      "status": "retired",
+      "type": "product",
+      "workType": "feature",
+      "source": "user-request",
+      "scopeKind": "platform",
+      "dependsOn": [],
+      "externalDependencies": [],
+      "activities": [
+        {
+          "recoveryKey": "bi-4b171ff0-cmt4hj9bo0iwv01pkdc43lfot",
+          "kind": "status_change",
+          "summary": "Retired BI-4B171FF0 as duplicate",
+          "recordedAt": "2026-08-22T14:40:14.580Z",
+          "payload": {
+            "to": "retired",
+            "from": "open",
+            "reason": null,
+            "outcome": "duplicate",
+            "rationale": "BI-11D611B3 already owns the source-free orientation/profile/pointer slice and has an active Workroom. The broader design is now coordinated by BI-9549EE48.",
+            "duplicateOfId": "BI-11D611B3"
+          }
+        }
+      ],
+      "effortSize": "large",
+      "triageOutcome": "duplicate",
+      "scopeRationale": "Universal DPF external-agent operating substrate reused across installations, archetypes, and business portfolios.",
+      "createdAt": "2026-08-22T14:32:06.075Z"
+    },
+    {
+      "itemId": "BI-4FCBA4B2",
+      "epicId": "EP-1FABA22D",
+      "title": "Converge static setup and readiness orchestration",
+      "body": "## Outcome\nOne activation/journey package, one setup-progress service, one environment vocabulary, and adapters over existing domain actions.\n\n## Capacity contract\nThis independently reviewable refactor represents roughly 20% of epic implementation capacity. It removes duplicated orchestration before the UI migration and is not a broad rewrite.\n\n## Acceptance\n- Static list-index sequencing is replaced by stable compiler milestones behind a rollback adapter.\n- JSON decoding moves into the typed projection service.\n- Environment parsing converges on the shared contract.\n- Dead setup helpers are removed only after reference and regression proof.\n- The diff demonstrates convergence and deletions, not only wrappers.\n\nBlocked by: BI-A9F60372, BI-91EF130B.\nPlan §7: docs/superpowers/plans/2026-08-08-purpose-aware-installation-ecosystem-productivity.md",
+      "status": "open",
+      "type": "product",
+      "workType": "refactor",
+      "source": "user-request",
+      "scopeKind": "platform",
+      "dependsOn": [],
+      "externalDependencies": [],
+      "activities": [],
+      "effortSize": "large",
+      "triageOutcome": "build",
+      "scopeRationale": "DPF platform installation-to-ecosystem-productivity program.",
+      "createdAt": "2026-08-22T04:02:37.414Z"
     },
     {
       "itemId": "BI-669D2B04",
@@ -196,14 +150,188 @@
       "type": "product",
       "workType": "feature",
       "source": "user-request",
+      "scopeKind": "platform",
+      "dependsOn": [],
+      "externalDependencies": [],
+      "activities": [
+        {
+          "recoveryKey": "bi-669d2b04-cmt3uralb0h4d01pep6r76un8",
+          "kind": "intake_origin",
+          "summary": "Possible existing implementation: packages/db/prisma/migrations/20260720190000_repair_collation_drift_index_rebuild/migration.sql",
+          "recordedAt": "2026-08-22T04:02:38.303Z",
+          "payload": {
+            "advisory": true,
+            "createdBy": "implementation-scan",
+            "candidates": [
+              {
+                "path": "packages/db/prisma/migrations/20260720190000_repair_collation_drift_index_rebuild/migration.sql",
+                "score": 3,
+                "matchedTerms": [
+                  "drift",
+                  "repair"
+                ]
+              },
+              {
+                "path": "packages/db/prisma/migrations/20260721180000_repair_collation_drift_index_rebuild_reporting/migration.sql",
+                "score": 3,
+                "matchedTerms": [
+                  "drift",
+                  "repair"
+                ]
+              }
+            ]
+          }
+        }
+      ],
       "effortSize": "large",
       "triageOutcome": "build",
-      "scopeKind": "platform",
       "scopeRationale": "DPF platform installation-to-ecosystem-productivity program.",
-      "dependsOn": ["BI-3E99ACFA"],
+      "createdAt": "2026-08-22T04:02:38.173Z"
+    },
+    {
+      "itemId": "BI-91EF130B",
+      "epicId": "EP-1FABA22D",
+      "title": "Build the deterministic journey compiler and productivity projection",
+      "body": "## Outcome\nGeneralize the existing activation orchestrator into the single deterministic journey compiler, with profile-specific first-value mission descriptors and evidence-backed readiness.\n\n## Acceptance\n- Five purposes × three environment classes compile deterministically.\n- Milestones resolve canonical evidence as satisfied, attention, blocked, deferred, or not-applicable.\n- Existing activation plans and legacy setup progress remain compatible.\n- Productive cannot be returned without the profile's first-value receipt.\n- No sibling orchestration substrate is introduced.\n\nBlocked by: BI-A9F60372.\nPlan §6: docs/superpowers/plans/2026-08-08-purpose-aware-installation-ecosystem-productivity.md",
+      "status": "open",
+      "type": "product",
+      "workType": "feature",
+      "source": "user-request",
+      "scopeKind": "platform",
+      "dependsOn": [],
       "externalDependencies": [],
-      "createdAt": "2026-08-22T04:02:38.173Z",
-      "activities": []
+      "activities": [],
+      "effortSize": "large",
+      "triageOutcome": "build",
+      "scopeRationale": "DPF platform installation-to-ecosystem-productivity program.",
+      "createdAt": "2026-08-22T04:02:37.229Z"
+    },
+    {
+      "itemId": "BI-9549EE48",
+      "epicId": "EP-1FABA22D",
+      "title": "Deliver the source-free external-agent operating contract",
+      "body": "Design and delivery umbrella for the canonical source-free external-agent interaction architecture across DPF installations.\n\nThe program composes existing installation intent, dual-principal identity, Authorized Surface, Work Case/WorkUnit/TaskRun, governed actions and receipts, A2A/GAID/federation, archetype value streams, GTM context, and Hive. It must support local and remote agents, multiple simultaneous agents, managed and sovereign topologies, and production business operation without making source, chat, prompts, static files, or a generic agent mesh the system of record.\n\nArtifacts:\n- docs/superpowers/specs/2026-08-22-external-agent-operating-contract-design.md\n- docs/superpowers/plans/2026-08-22-external-agent-operating-contract.md\n\nKernel decisions: DI-A60C7D8F35B1 and DI-C75C83499B57.\n\nThe existing consumer-orientation BI-11D611B3 remains an independently owned child slice. This umbrella must not compete with its active Workroom.",
+      "status": "open",
+      "type": "portfolio",
+      "workType": "feature",
+      "source": "user-request",
+      "scopeKind": "platform",
+      "dependsOn": [],
+      "externalDependencies": [],
+      "activities": [],
+      "effortSize": "xlarge",
+      "triageOutcome": "build",
+      "scopeRationale": "Universal DPF external-agent interaction and governance architecture across all installations, archetypes, portfolios, and ecosystem topologies.",
+      "createdAt": "2026-08-22T14:39:54.101Z"
+    },
+    {
+      "itemId": "BI-AE128860",
+      "epicId": "EP-1FABA22D",
+      "title": "Shape topology and federation orchestration from installation purpose",
+      "body": "## Outcome\nJourney adapters compile appropriate development, managed-service, channel, and community relationship plans while existing federation and partner domains remain the only writers.\n\n## Acceptance\n- Profile confirmation changes no link approval, token, grant, contract, or authority field.\n- Development companions cannot mutate production directly.\n- Managed-estate, sovereign-peer, channel, and community shapes use shared relationship contracts.\n- Discovery remains only a candidate until canonical trust and identity evidence exists.\n- A2A readiness is consumed from its owning capability rather than synthesized.\n\nBlocked by: BI-A9F60372, BI-91EF130B.\nCapability dependencies: BI-BE0E14E0, BI-E2398997.\nPlan §9: docs/superpowers/plans/2026-08-08-purpose-aware-installation-ecosystem-productivity.md",
+      "status": "open",
+      "type": "product",
+      "workType": "feature",
+      "source": "user-request",
+      "scopeKind": "platform",
+      "dependsOn": [],
+      "externalDependencies": [],
+      "activities": [],
+      "effortSize": "large",
+      "triageOutcome": "build",
+      "scopeRationale": "DPF platform installation-to-ecosystem-productivity program.",
+      "createdAt": "2026-08-22T04:02:37.823Z"
+    },
+    {
+      "itemId": "BI-AF8A8173",
+      "epicId": "EP-1FABA22D",
+      "title": "Expose external-agent work, leases, and intervention needs in existing operator surfaces",
+      "body": "Add the human control surface described by BI-11D611B3 using existing Workspace, Work/Case, Attention, and platform/federation administration navigation. Show outcome, state, sponsor, agents, leases, blockers, consequence, evidence, receipts, compatibility, health, and revocation with progressive disclosure. Chat links to canonical work and receipts. Do not add a global AI command-center dashboard.",
+      "status": "open",
+      "type": "product",
+      "workType": "feature",
+      "source": "user-request",
+      "scopeKind": "platform",
+      "dependsOn": [],
+      "externalDependencies": [],
+      "activities": [
+        {
+          "recoveryKey": "bi-af8a8173-cmt4h8syh0iph01pk6hrsl44u",
+          "kind": "intake_origin",
+          "summary": "Possible existing implementation: apps/web/components/agent/agent-external-access-session.ts",
+          "recordedAt": "2026-08-22T14:32:06.809Z",
+          "payload": {
+            "advisory": true,
+            "createdBy": "implementation-scan",
+            "candidates": [
+              {
+                "path": "apps/web/components/agent/agent-external-access-session.ts",
+                "score": 5,
+                "matchedTerms": [
+                  "external",
+                  "agent"
+                ]
+              },
+              {
+                "path": "apps/web/lib/agent-external-access-permission.ts",
+                "score": 5,
+                "matchedTerms": [
+                  "external",
+                  "agent"
+                ]
+              },
+              {
+                "path": "packages/db/prisma/migrations/20260721210000_add_agent_surface_readiness/migration.sql",
+                "score": 3,
+                "matchedTerms": [
+                  "agent",
+                  "surface"
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "effortSize": "large",
+      "triageOutcome": "build",
+      "scopeRationale": "Universal DPF external-agent operating substrate reused across installations, archetypes, and business portfolios.",
+      "createdAt": "2026-08-22T14:32:06.631Z"
+    },
+    {
+      "itemId": "BI-D4C110BC",
+      "epicId": "EP-1FABA22D",
+      "title": "Bind external-agent Work Packets, leases, and multi-agent collaboration to Work Cases",
+      "body": "Extend the existing Work Case/WorkUnit/TaskRun substrate for external-agent assignment and simultaneous-agent collaboration. Define the portable Work Packet projection, bounded claim/lease semantics, dependency and handoff rules, independent review constraints, evidence requirements, typed conflicts/expiry, and durable resume. Re-enter existing policy/action/receipt/completion boundaries; do not add a shadow task bus, shared agent memory, or agent-granted authority.",
+      "status": "open",
+      "type": "product",
+      "workType": "feature",
+      "source": "user-request",
+      "scopeKind": "platform",
+      "dependsOn": [],
+      "externalDependencies": [],
+      "activities": [],
+      "effortSize": "xlarge",
+      "triageOutcome": "build",
+      "scopeRationale": "Universal DPF external-agent operating substrate reused across installations, archetypes, and business portfolios.",
+      "createdAt": "2026-08-22T14:32:06.252Z"
+    },
+    {
+      "itemId": "BI-F509CC59",
+      "epicId": "EP-1FABA22D",
+      "title": "Converge external-agent ingress, session, work, and completion adapters",
+      "body": "Reserve the external-agent program's independent convergence stream. Unify MCP connect instructions, generated pointer, and A2A capability metadata on one profile compiler; converge embedded/external dual-principal sessions; route Workroom/WorkItem/TaskRun collaboration through WorkUnit/Work Case; centralize lease/completion/receipt projection; and retire browser/chat/broad-tool shortcuts only after parity evidence. Keep this bounded to touched seams and target roughly 20% of program delivery capacity.",
+      "status": "open",
+      "type": "product",
+      "workType": "refactor",
+      "source": "user-request",
+      "scopeKind": "platform",
+      "dependsOn": [],
+      "externalDependencies": [],
+      "activities": [],
+      "effortSize": "large",
+      "triageOutcome": "build",
+      "scopeRationale": "Universal DPF external-agent operating substrate reused across installations, archetypes, and business portfolios.",
+      "createdAt": "2026-08-22T14:32:06.849Z"
     }
   ]
 }

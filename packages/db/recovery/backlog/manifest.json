@@ -1,0 +1,74 @@
+{
+  "schemaVersion": 1,
+  "capturedAt": "2026-08-23T00:54:15.000Z",
+  "scope": "not-done",
+  "bundles": [
+    {
+      "epicId": "EP-5102F494",
+      "file": "animal-welfare-operations-vertical.json",
+      "itemCount": 10
+    },
+    {
+      "epicId": "EP-31C5A6C8",
+      "file": "external-website-channels-cms-interoperability.json",
+      "itemCount": 3
+    },
+    {
+      "epicId": "EP-129D11FD",
+      "file": "initiative-readiness-governed-completion.json",
+      "itemCount": 5
+    },
+    {
+      "epicId": "EP-1FABA22D",
+      "file": "purpose-aware-installation-ecosystem-productivity.json",
+      "itemCount": 13
+    },
+    {
+      "epicId": "EP-56AE0F69",
+      "file": "reset-cycle-3-platform-findings.json",
+      "itemCount": 6
+    },
+    {
+      "epicId": "EP-55AF36AC",
+      "file": "veterinary-clinic-operating-system.json",
+      "itemCount": 6
+    }
+  ],
+  "capturedItemCount": 43,
+  "unassignedItemCount": 8,
+  "unfinishedItemCount": 51,
+  "skipped": [
+    {
+      "itemId": "BI-0E8B29C3",
+      "reason": "item-has-no-epic"
+    },
+    {
+      "itemId": "BI-68A72876",
+      "reason": "item-has-no-epic"
+    },
+    {
+      "itemId": "BI-MCP-EFF-036B0401",
+      "reason": "item-has-no-epic"
+    },
+    {
+      "itemId": "BI-MCP-EFF-3E441834",
+      "reason": "item-has-no-epic"
+    },
+    {
+      "itemId": "BI-MCP-EFF-9E98E206",
+      "reason": "item-has-no-epic"
+    },
+    {
+      "itemId": "BI-MCP-EFF-D14572FA",
+      "reason": "item-has-no-epic"
+    },
+    {
+      "itemId": "BI-MCP-EFF-DB6D63A2",
+      "reason": "item-has-no-epic"
+    },
+    {
+      "itemId": "BI-MCP-EFF-E8495F21",
+      "reason": "item-has-no-epic"
+    }
+  ]
+}
