@@ -72,6 +72,18 @@ items is more dangerous than no bundle, because it reads as protected. Anything
 that is a snapshot goes stale — re-verify it against live state, do not trust its
 existence.
 
+**A rehearsal that skips the expensive step is not a rehearsal.** An uninstaller's
+`-DryRun` printed a clean plan; the real run aborted immediately, every time, on
+the default configuration. The dry run printed intentions without invoking the
+thing that failed, so it never exercised the failing path. When a dry run passes,
+ask which parts it did not execute.
+
+**Your tooling can hold a resource the thing under test needs.** A monitor
+tailing an installer's log held the file open; the installer then died with
+*"cannot access the file ... used by another process"* — an error that names the
+installer and blames the wrong component. Before filing a defect against
+something you are watching, check whether watching it is the cause.
+
 **Your own verification is a prime suspect.** In one cycle the checking code was
 wrong four separate times: a regex that threw on every path, a column-offset read
 that misparsed a filename with a space, a three-dot git diff that reported every
@@ -83,6 +95,18 @@ re-measure a different way before believing it.**
 11/11, published a correct public site, and had no operating model at all behind
 it. See the
 [Archetype Operating-Model Audit](../architecture/archetype-operating-model-audit.md).
+
+### Budget for the model download
+
+A zero-footprint teardown clears the Docker Model Runner store, so the next
+install re-downloads the whole local model — roughly 20 GB, and the longest
+single step in the cycle. Plan for it, or decide deliberately to retain the model
+between cycles and say so in your report.
+
+Check `docker model ls` afterwards for stub entries: a partial pull can leave a
+row that looks like an installed model but has no size, no parameters, and a
+1970-epoch creation date rendered as "56 years ago". `docker model inspect` shows
+`"created": 0` and an empty config.
 
 ## What to record
 
