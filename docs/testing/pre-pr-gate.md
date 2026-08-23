@@ -364,7 +364,7 @@ the reader exists (BI-B1065D41):
 
 | Signal | How it lies |
 | --- | --- |
-| The **exit code** | `pregate …; echo $?; tail …` reports *tail's* status. And a run that gave up while queued exits 0 having gated nothing (BI-2C7F51BA). |
+| The **exit code** | `pregate …; echo $?; tail …` reports *tail's* status. A run that gives up while queued, or reports 0 with no PASS record at HEAD, now exits **7** instead of 0 (BI-A9CF0D69; the historical exit-0 lie was BI-2C7F51BA) — but a chained/piped reading still surfaces someone else's status, so the record remains the verdict. |
 | The **log tail** | A *tolerated* `GuardRuntimeEnvironmentError` prints `Error:` and a red ✖ ~28,000 lines before a **passing** verdict. A watcher grepping `Error:` fabricates a failure. |
 | **`gate passed`** | True about the run you watched; silent about whether HEAD has moved since. `pregate:status` compares. |
 
@@ -766,7 +766,7 @@ Name them so you catch yourself.
 | Reaching for `DPF_SKIP_*` to get past a hook | Bypasses are for verified false positives only | Fix the underlying error; CI gates it anyway |
 | Verifying UX against worktree `next dev` | Not the production-bundled runtime | Use the canonical install or sandbox lease (AGENTS.md §13) |
 | Treating a local green as the merge gate | The binding gate is the CI **Unit Tests** check | Local pass = evidence; CI pass = the gate |
-| Reading a `pregate` exit code as the verdict | A run killed while queued exits 0 without running | `pnpm run pregate:status` — it reads the SHA-bound record and exits 0 only for a PASS at HEAD |
+| Reading a `pregate` exit code as the verdict | A pipeline surfaces the last command's status, not pregate's (an abandoned/uncorroborated run itself now exits 7, not 0 — BI-A9CF0D69) | `pnpm run pregate:status` — it reads the SHA-bound record and exits 0 only for a PASS at HEAD |
 | Piping `pregate` to `head`/`grep` | The verdict is the LAST line, so a truncating reader removes exactly what you wanted (and it used to SIGPIPE-kill the run mid-install) | Let it print its ~30 lines; open the log path it prints for detail |
 | Backgrounding `pregate` (`&` / `run_in_background`) | The harness caps and kills a backgrounded run mid-install | Run it in the FOREGROUND — on timeout the harness migrates it and it continues |
 | Wrapping `pregate` in `timeout` | Cuts it off mid-queue and manufactures a false green | Run it unbounded in the foreground |
