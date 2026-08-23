@@ -1,3 +1,6 @@
+---
+status: draft
+---
 # Interaction Shape Graph & design shaping — design
 
 **Status:** draft for operator review · 2026-08-15

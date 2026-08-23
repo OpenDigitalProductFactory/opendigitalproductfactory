@@ -1,3 +1,6 @@
+---
+status: draft
+---
 # Portfolio-shaped information architecture — design
 
 **Status:** draft for operator review · 2026-08-14
