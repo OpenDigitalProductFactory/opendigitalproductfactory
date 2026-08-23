@@ -85,7 +85,15 @@ export function ScheduleWindowChart({
   const model = useMemo(() => buildScheduleWindow(jobs, range), [jobs, range]);
 
   const BAR_AREA = 96;
-  const seg = model.peak > 0 ? Math.max(3, Math.min(18, Math.floor(BAR_AREA / model.peak))) : 18;
+  // Segment height must let the TALLEST column fit inside BAR_AREA, gaps
+  // included. Flooring it at a comfortable minimum overflowed the column
+  // upward — on the month range a busy day carries ~40 fires, and the bars
+  // rendered on top of the heading and the range toggle.
+  const GAP = 1;
+  const seg =
+    model.peak > 0
+      ? Math.max(1, Math.min(18, Math.floor((BAR_AREA - (model.peak - 1) * GAP) / model.peak)))
+      : 18;
   const total = model.buckets.reduce((n, b) => n + b.occurrences.length, 0);
 
   return (
@@ -129,7 +137,7 @@ export function ScheduleWindowChart({
         </div>
       </div>
 
-      <div className="flex items-end gap-px" style={{ height: BAR_AREA }}>
+      <div className="flex items-end gap-px overflow-hidden" style={{ height: BAR_AREA }}>
         {model.buckets.map((b) => (
           <div
             key={b.startsAt}

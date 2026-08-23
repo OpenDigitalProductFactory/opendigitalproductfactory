@@ -391,6 +391,7 @@ export interface JobRow {
   category: string;
   locked: boolean;
   enabled: boolean;
+  metadata?: unknown;
 }
 
 export interface AgentTaskRow {
@@ -420,6 +421,7 @@ export const JOB_SELECT = {
   category: true,
   locked: true,
   enabled: true,
+  metadata: true,
 } as const;
 
 export const TASK_SELECT = {
@@ -443,6 +445,44 @@ const QUARANTINE_PREFIX = "__dpf_quarantined__";
 
 export function isQuarantined(jobId: string): boolean {
   return jobId.startsWith(QUARANTINE_PREFIX);
+}
+
+/**
+ * True when an operator has explicitly retired this spent entry. Retire is
+ * non-destructive (the eval slot-locks are a live GPU mutex keyed on their own
+ * lastRunAt), so the row survives — but it must leave the register, or the
+ * button reports success and visibly does nothing.
+ */
+export function isRetired(metadata: unknown): boolean {
+  return (
+    metadata != null
+    && typeof metadata === "object"
+    && typeof (metadata as Record<string, unknown>).retiredAt === "string"
+  );
+}
+
+/**
+ * Which ids belong in the register, given the catalog and both substrates.
+ *
+ * Pure and separately tested because this is where a retired entry leaked back
+ * in: an aiops one-shot exists as BOTH a ScheduledJob mirror and a
+ * ScheduledAgentTask, so excluding it from one source left the other re-adding
+ * it — Retire reported success and the row stayed on screen.
+ */
+export function selectRegisterIds(
+  catalogIds: readonly string[],
+  jobRows: readonly { jobId: string; metadata?: unknown }[],
+  taskIds: readonly string[],
+): string[] {
+  const retired = new Set(jobRows.filter((r) => isRetired(r.metadata)).map((r) => r.jobId));
+  const ids = new Set<string>();
+  for (const id of catalogIds) if (!retired.has(id)) ids.add(id);
+  for (const id of taskIds) if (!retired.has(id)) ids.add(id);
+  for (const r of jobRows) {
+    if (isQuarantined(r.jobId) || retired.has(r.jobId)) continue;
+    ids.add(r.jobId);
+  }
+  return [...ids];
 }
 
 /**

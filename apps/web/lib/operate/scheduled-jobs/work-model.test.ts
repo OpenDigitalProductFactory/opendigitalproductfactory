@@ -14,7 +14,9 @@ import {
   hasProjectableCronTime,
   isProjectionStale,
   isQuarantined,
+  isRetired,
   overdueGraceMs,
+  selectRegisterIds,
   stepCronIntervalMs,
 } from "./work-model";
 
@@ -314,6 +316,49 @@ describe("buildWorkView", () => {
     expect(view.health).toBe("spent");
     expect(view.retirable).toBe(true);
     expect(view.scheduleEditable).toBe(false);
+  });
+});
+
+describe("selectRegisterIds", () => {
+  const RET = { retiredAt: "2026-08-23T03:49:31.018Z", retiredBy: "op" };
+
+  it("drops a retired entry that exists in BOTH substrates", () => {
+    // mcp-efficiency-aiops-20260805 is a ScheduledJob mirror AND a
+    // ScheduledAgentTask. Excluding it from one source only left the other
+    // re-adding it, so Retire reported success and the row stayed on screen.
+    const ids = selectRegisterIds(
+      [],
+      [{ jobId: "mcp-efficiency-aiops-20260805", metadata: RET }],
+      ["mcp-efficiency-aiops-20260805"],
+    );
+    expect(ids).toEqual([]);
+  });
+
+  it("drops a retired entry that is also a catalog cron", () => {
+    expect(selectRegisterIds(["x"], [{ jobId: "x", metadata: RET }], [])).toEqual([]);
+  });
+
+  it("keeps everything not retired, and drops quarantine debris", () => {
+    const ids = selectRegisterIds(
+      ["cron-a"],
+      [{ jobId: "row-b", metadata: null }, { jobId: "__dpf_quarantined__x", metadata: null }],
+      ["task-c"],
+    );
+    expect(ids.sort()).toEqual(["cron-a", "row-b", "task-c"]);
+  });
+});
+
+describe("isRetired", () => {
+  it("recognises an operator-retired entry", () => {
+    // Retire is non-destructive, so the row survives; the register must still
+    // drop it or the button reports success and visibly does nothing.
+    expect(isRetired({ retiredAt: "2026-08-23T01:00:00.000Z", retiredBy: "op" })).toBe(true);
+  });
+
+  it("leaves an ordinary metadata blob alone", () => {
+    expect(isRetired({ lastEditedBy: "op" })).toBe(false);
+    expect(isRetired(null)).toBe(false);
+    expect(isRetired(undefined)).toBe(false);
   });
 });
 

@@ -9,7 +9,7 @@ import { prisma } from "@dpf/db";
 import { SCHEDULED_JOB_CATALOG } from "./catalog";
 import {
   buildWorkView,
-  isQuarantined,
+  selectRegisterIds,
   JOB_SELECT,
   TASK_SELECT,
   type AgentTaskRow,
@@ -36,10 +36,11 @@ export async function listScheduledWork(now: Date = new Date()): Promise<Schedul
   const jobById = new Map(jobRows.map((r) => [r.jobId, r]));
   const taskById = new Map(taskRows.map((t) => [t.taskId, t]));
 
-  const ids = new Set<string>();
-  for (const e of SCHEDULED_JOB_CATALOG) ids.add(e.jobId);
-  for (const t of taskRows) ids.add(t.taskId);
-  for (const r of jobRows) if (!isQuarantined(r.jobId)) ids.add(r.jobId);
+  const ids = selectRegisterIds(
+    SCHEDULED_JOB_CATALOG.map((e) => e.jobId),
+    jobRows,
+    taskRows.map((t) => t.taskId),
+  );
 
-  return [...ids].map((id) => buildWorkView(id, jobById.get(id), taskById.get(id), now));
+  return ids.map((id) => buildWorkView(id, jobById.get(id), taskById.get(id), now));
 }
