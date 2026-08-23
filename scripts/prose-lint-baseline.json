@@ -741,7 +741,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 52
+    "textMass": 46
   },
   "apps/web/app/(shell)/coworker-decisions/review/page.tsx": {
     "vocabulary": 0,
@@ -6973,7 +6973,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 21
+    "textMass": 35
   },
   "apps/web/components/ops/SelfUpgradeClient.tsx": {
     "vocabulary": 0,
