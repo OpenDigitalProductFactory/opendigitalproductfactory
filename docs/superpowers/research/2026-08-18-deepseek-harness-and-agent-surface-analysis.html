@@ -315,7 +315,7 @@ section.ws { scroll-margin-top: var(--sp-lg); }
 <header>
   <p class="eyebrow">DPF · working brief · 18 Aug 2026</p>
   <h1>Harness, Router, Cockpit</h1>
-  <p class="lede prose">Three workstreams pulled out of the DeepSeek Harness teardown, the T3 terminal critique, and a grep-level check of what DPF already has. Every claim below is tagged by how it was established — a lot of what looked like a gap turned out to be built already, and one thing I predicted as a hypothetical turned out to be a live defect in this repo.</p>
+  <p class="lede prose">Three workstreams pulled out of the DeepSeek Harness teardown, the T3 terminal critique, and a grep-level check of what DPF already has. Every claim below is tagged by how it was established — a lot of what looked like a gap turned out to be built already, and one thing I predicted as a hypothetical looked like a live defect in this repo. <strong>Revised 2026-08-22:</strong> that one was not a defect either. A live sweep — running portal, live Docker Model Runner, authenticated backlog — falsified it, so the tally is now that <em>everything</em> the grep-level pass read as a harness gap was already built. Corrections are marked in place and the original text is struck, not deleted.</p>
 
   <div class="ws-index">
     <div class="ws-card">
@@ -336,9 +336,9 @@ section.ws { scroll-margin-top: var(--sp-lg); }
 
 <div class="frontmatter">
   <dl>
-    <div><dt>Status</dt><dd>Advisory — findings only, nothing filed</dd></div>
-    <div><dt>Date</dt><dd>2026-08-18</dd></div>
-    <div><dt>BI</dt><dd>none yet — see <a href="#caveats">what I could not check</a></dd></div>
+    <div><dt>Status</dt><dd>Advisory — findings only, nothing filed. <strong>Revised 2026-08-22</strong> after the live sweep the original run could not do; the harness workstream's lead finding and first two next steps are withdrawn.</dd></div>
+    <div><dt>Date</dt><dd>2026-08-18 · revised 2026-08-22</dd></div>
+    <div><dt>BI</dt><dd>none — the live backlog sweep found no duplicate to file against, and the work the harness section recommended was already shipped. See <a href="#caveats">what I could not check</a>.</dd></div>
     <div><dt>Epic</dt><dd>unassigned</dd></div>
     <div><dt>Repo state</dt><dd><span class="mono">350779b</span> (main)</dd></div>
   </dl>
@@ -371,7 +371,7 @@ section.ws { scroll-margin-top: var(--sp-lg); }
   <div class="ws-head">
     <p class="eyebrow">Workstream</p>
     <h2>Harness — make the local Qwen path survive a long session</h2>
-    <p class="sub prose">DPF runs <code>qwen3-coder</code> on Docker Model Runner at <code>localhost:12434</code>. The dsh teardown said the thing that kills a small local model isn't the model — it's unmeasured context. That exact failure is wired into this repo right now.</p>
+    <p class="sub prose">DPF runs its local generation model on Docker Model Runner at <code>localhost:12434</code> (<code>qwen3-coder</code> when this was written; <code>qwen3.8-27b</code> since). The dsh teardown said the thing that kills a small local model isn't the model — it's unmeasured context. <strong>Correction (2026-08-22):</strong> that failure is <em>not</em> wired into this repo — the served-context path below was already built and running. See the corrections on each item.</p>
   </div>
 
   <div class="stack">
@@ -380,10 +380,12 @@ section.ws { scroll-margin-top: var(--sp-lg); }
         <span class="title">The local endpoint has no context window, so the capacity gate never applies to it</span>
         <span class="chip chip-verified">Code reading verified</span>
         <span class="chip chip-inferred">Diagnosis previously rejected — BI-9DFAFB4A</span>
+        <span class="chip chip-verified">Premise falsified — verified live 2026-08-22</span>
       </div>
       <p><code>metadata-extractor.ts:86</code> sets <code>maxContextTokens: null</code> for Ollama with the comment "Ollama doesn't report this in <code>/api/tags</code>." <code>task-router.ts:154</code> then gates on <code>endpoint.maxContextTokens !== null &amp;&amp; … &lt; minContextTokens</code>. A null capacity doesn't fail the check — it <em>skips</em> it. The local model is the one endpoint whose real window is smallest and the only one exempt from the size gate.</p>
       <p><strong>Correction (2026-08-18, on merge).</strong> The code reading above is accurate, but the conclusion that it is a live defect is not. <code>BI-9DFAFB4A</code> investigated this exact asymmetry in July 2026 and <em>rejected</em> it as the core defect: the pipeline-v2 Stage-5b tier sort already ranks <code>user_configured</code> ahead of <code>bundled</code>, so the local endpoint only wins when every paid endpoint was excluded by a hard constraint. In that case the null-capacity exemption is a deliberate last-resort safety net — gating it closed would fail the request outright instead of degrading. The shippable part of that BI was banner honesty, and it shipped: <code>routed-inference.ts:700</code> carries the <code>BI-9DFAFB4A</code> rationale in-tree today. Treat this section as a re-derivation of settled analysis, not a new finding.</p>
-      <p class="src">apps/web/lib/routing/metadata-extractor.ts:86 · apps/web/lib/routing/task-router.ts:154 · rebutted by apps/web/lib/routing/pipeline-v2.ts (Stage 5b) · apps/web/lib/inference/routed-inference.ts:700 · BI-9DFAFB4A</p>
+      <p><strong>Second correction (2026-08-22, live sweep).</strong> The code reading is accurate about the two files it cites, but neither is load-bearing, so the premise is wrong twice over. First, <code>extractModelMetadata</code> — and with it <code>extractOllama</code> and its <code>null</code> — has <em>no production caller</em>: the only references in the tree are the <code>index.ts</code> re-export and its own test file. It populates nothing. Second, the endpoint's <code>maxContextTokens</code> is not null in practice; it is written from the true served context by a reconcile that already ships (see the struck next step below). The divergence between the two gate forms is likewise not live-versus-live: <code>pipeline.ts:172</code> sits in <code>getExclusionReason</code>, and <code>getExclusionReason</code>, <code>filterHard</code>, and <code>routeEndpoint</code> have no production callers — <code>pipeline-v2</code> imports only <code>filterByPolicy</code> from that module. The live check is <code>pipeline-v2.ts:158</code>, which uses the same fails-open <code>!== null</code> form as <code>task-router.ts:154</code>. The live paths agree; the fails-closed variant is dead code.</p>
+      <p class="src">apps/web/lib/routing/metadata-extractor.ts:86 (no production caller) · apps/web/lib/routing/task-router.ts:154 · live gate: apps/web/lib/routing/pipeline-v2.ts:158 · dead: apps/web/lib/routing/pipeline.ts:172 (getExclusionReason) · rebutted by apps/web/lib/routing/pipeline-v2.ts (Stage 5b) · apps/web/lib/inference/routed-inference.ts:700 · BI-9DFAFB4A</p>
     </div>
 
     <div class="finding gap">
@@ -417,13 +419,14 @@ section.ws { scroll-margin-top: var(--sp-lg); }
   <h3>Next steps</h3>
   <ol class="steps">
     <li><div class="body">
-      <h4>Give the local endpoint a real served-context number</h4>
-      <p>Query <code>/engines/_configure</code> — not <code>/models</code>, whose metadata is static and lies about the live window — and populate <code>maxContextTokens</code> for the DMR endpoint. Your own observe-build skill already documents this distinction in section B4; the router just isn't using it.</p>
-      <p class="why">Everything downstream reads this number. Nothing else on this list works while it's null.</p>
+      <h4><s>Give the local endpoint a real served-context number</s> — already shipped</h4>
+      <p>Withdrawn 2026-08-22: this was built before the analysis was written. The claim that "nothing in the repo queries <code>/engines/_configure</code>" came from a grep that filtered out <code>not_configured</code>/<code>user_configured</code> and discarded the real hits along with them.</p>
+      <p>The loop is closed end-to-end on <code>main</code>: <code>getServedContextTokens</code>/<code>setServedContextTokens</code> in <code>dmr-runtime-config.ts</code> read and write DMR's <code>/engines/_configure</code>; <code>reconcileLocalModelContext</code> runs at boot and on a 20-minute interval from <code>instrumentation.ts</code>, reads the true served context (explicitly <em>not</em> <code>/v1/models</code>, whose card default it calls out as misleading), writes <code>ModelProfile.maxContextTokens</code> for <code>providerId in ("local","ollama")</code>, and self-heals the column when re-profiling drifts it; <code>loader.ts:218</code> then feeds it to <code>endpoint.maxContextTokens</code>. Verified live 2026-08-22: DMR reports <code>context-size: 131072</code> for the installed generation model and the matching <code>ModelProfile</code> row holds <code>131072</code>.</p>
+      <p class="why">The reusable lesson is the grep, not the router: an exclusion pattern chosen to suppress noise (<code>not_configured</code>, <code>user_configured</code>) silently suppressed every true positive, and the resulting absence claim read as verified substrate. An absence claim needs the unfiltered hit count before it is recorded.</p>
     </div></li>
     <li><div class="body">
       <h4><s>Make a null capacity fail closed, not open</s> — withdrawn</h4>
-      <p>Withdrawn on merge. <code>BI-9DFAFB4A</code> already considered and rejected this change: because Stage 5b only reaches the local endpoint after every paid endpoint has been hard-excluded, failing closed on unknown capacity would turn a degraded answer into no answer at all. The null exemption is load-bearing, not an oversight. The recommendation immediately above — populate a real served-context number for the DMR endpoint — stands on its own and is the one that actually removes the ambiguity.</p>
+      <p>Withdrawn on merge. <code>BI-9DFAFB4A</code> already considered and rejected this change: because Stage 5b only reaches the local endpoint after every paid endpoint has been hard-excluded, failing closed on unknown capacity would turn a degraded answer into no answer at all. The null exemption is load-bearing, not an oversight. The recommendation immediately above — populate a real served-context number for the DMR endpoint — would have removed the ambiguity on its own, and has since turned out to be already shipped (see its withdrawal note).</p>
       <p class="why">The prior analysis is in-tree; re-deriving it cost a round trip, which is the reusable lesson.</p>
     </div></li>
     <li><div class="body">
@@ -445,7 +448,8 @@ section.ws { scroll-margin-top: var(--sp-lg); }
 
   <div class="first-move">
     <p class="eyebrow">First move</p>
-    <p>Steps 1 and 2 are a small, self-contained, testable change with a clear failing-test shape — a good <code>dpf-tdd</code> candidate and worth filing as one BI before any of the architecture work starts.</p>
+    <p><s>Steps 1 and 2 are a small, self-contained, testable change with a clear failing-test shape — a good <code>dpf-tdd</code> candidate and worth filing as one BI before any of the architecture work starts.</s></p>
+    <p><strong>Revised 2026-08-22.</strong> Both steps are withdrawn — step 1 was already shipped, step 2 was already rejected — so there is no BI to file here. The remaining harness item is the context-strategy decision at step 3, which is a <code>dpf-decision-via-kernel</code> question rather than a build.</p>
   </div>
 </section>
 
@@ -644,10 +648,10 @@ section.ws { scroll-margin-top: var(--sp-lg); }
       </thead>
       <tbody>
         <tr>
-          <td><strong>Fix the null context window</strong></td>
+          <td><s><strong>Fix the null context window</strong></s> — withdrawn</td>
           <td>Harness</td>
-          <td>Verified defect, self-contained, TDD-shaped, and every other harness item depends on it</td>
-          <td class="num">S</td>
+          <td><strong>Already shipped (2026-08-22).</strong> The served-context reconcile was in <code>main</code> before this brief was written; the endpoint carries a real number. The list starts at the router item below.</td>
+          <td class="num">—</td>
         </tr>
         <tr>
           <td><strong>Surface <code>selectionRationale</code></strong></td>
@@ -676,16 +680,16 @@ section.ws { scroll-margin-top: var(--sp-lg); }
   </div>
 
   <ul class="plain prose">
-    <li><strong>The live backlog.</strong> <code>DPF_MCP_BEARER_TOKEN</code> is unset in this session, so the <code>dpf</code> MCP server can't authenticate. I could not check whether any of these findings duplicate an existing BI — and several feel like things that may already be filed. <code>dpf-verify-substrate-first</code> wants that sweep before anything new is recorded.</li>
+    <li><strong>The live backlog.</strong> <s><code>DPF_MCP_BEARER_TOKEN</code> is unset in this session, so the <code>dpf</code> MCP server can't authenticate. I could not check whether any of these findings duplicate an existing BI — and several feel like things that may already be filed.</s> <strong>Resolved 2026-08-22:</strong> the sweep ran (389 items across open, in-progress, deferred and triaging). No BI duplicates the harness finding — but the recommendation it led to was already implemented in <code>main</code>, which the backlog sweep alone would not have caught. The suspicion was right; the mechanism was code, not a filed item.</li>
     <li><strong>Anything at runtime.</strong> This worktree is source-only — no <code>node_modules</code>, no Prisma client. Every finding here is read from source or from published package contracts. Nothing was observed executing.</li>
-    <li><strong>Absence claims.</strong> "No conversation compaction" and "no cross-build view" each rest on a handful of greps over three or four directories. Treat them as leads to confirm, not as established facts.</li>
+    <li><strong>Absence claims.</strong> "No conversation compaction" and "no cross-build view" each rest on a handful of greps over three or four directories. Treat them as leads to confirm, not as established facts. <strong>Borne out 2026-08-22:</strong> a third absence claim from this run — "nothing queries <code>/engines/_configure</code>" — was false, and false in a specific way worth naming. The grep excluded <code>not_configured</code> and <code>user_configured</code> to cut noise, and that same filter removed every true hit, so a filtered-to-zero result was recorded as verified absence. Check the unfiltered count before writing down that something does not exist.</li>
     <li><strong>The dsh repo itself.</strong> <code>github.com/deepseek-ai/deepseek-harness</code> returned 404 from this environment, so the harness findings come from the published npm tarballs at <code>0.1.0-rc.7</code> — authoritative, and shipped with full READMEs, but not the source tree.</li>
   </ul>
 </section>
 
 <footer>
   <p class="fine">Sources — DeepSeek Harness packages at <span class="mono">0.1.0-rc.7</span> (<span class="mono">dsh-compaction-basic</span>, <span class="mono">dsh-token-meter</span>, <span class="mono">dsh-llm-retry</span>, <span class="mono">dsh-tool-ralph</span>, <span class="mono">dsh-llm-pi-ai</span>); <span class="mono">@earendil-works/pi-ai</span> 0.84.2 provider catalog; deepseek-harness discussion #2107; T3 terminal transcript; DPF repo at <span class="mono">350779b</span>.</p>
-  <p class="fine">Findings are advisory. Nothing here has been filed, and no code has been changed.</p>
+  <p class="fine">Findings are advisory. Nothing here has been filed, and no code has been changed. Revised 2026-08-22 with corrections from a live sweep (running portal, live DMR, authenticated backlog) that the original source-only session could not run; original text is struck rather than deleted so the corrected claims stay traceable.</p>
 </footer>
 
 </div>

@@ -100,6 +100,22 @@ export function evaluatePrHealth({ meta = {}, checks = [], threads = [], localCi
   if (meta.isDraft) {
     blockers.push("PR is a draft — mark it ready for review");
   }
+  // AGENTS.md §3: "All changes land via PR against `main`." That is not just
+  // convention here — .github/workflows/ci.yml triggers on
+  // `pull_request: branches: [main]`, so a PR based on anything else runs only
+  // DCO / classify / acceptance. No Typecheck, no Unit Tests, no Policy Guards,
+  // no Production Build — and `mergeStateStatus` still reports CLEAN, because
+  // every required check it knows about did pass. This function is the
+  // mechanical merge-readiness answer doctrine points at, so it is where the
+  // off-contract base has to stop being invisible (#4483, 2026-08-23).
+  if (meta.baseRefName && meta.baseRefName !== "main") {
+    blockers.push(
+      `base is ${meta.baseRefName}, not main — AGENTS.md §3 requires PRs against main, and ` +
+        "ci.yml only runs the heavy suite (Typecheck, Unit Tests, Policy Guards, Production " +
+        "Build) for main-based PRs. Green here does NOT mean verified. Rebase onto origin/main " +
+        "and retarget the PR.",
+    );
+  }
   if (meta.mergeable === "CONFLICTING") {
     blockers.push("mergeable=CONFLICTING — rebase onto origin/main and resolve conflicts");
   } else if (meta.mergeable === "UNKNOWN") {
@@ -235,7 +251,7 @@ function fetchPrState(prArg) {
   }
 
   const meta = JSON.parse(
-    gh(["pr", "view", number, "--json", "number,title,state,mergeable,mergeStateStatus,isDraft,headRefOid,body,files,commits"]),
+    gh(["pr", "view", number, "--json", "number,title,state,mergeable,mergeStateStatus,isDraft,baseRefName,headRefOid,body,files,commits"]),
   );
 
   let checks = [];
