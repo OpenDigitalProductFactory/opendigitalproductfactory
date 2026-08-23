@@ -4,7 +4,7 @@ status: draft
 
 # Decision Concierge — the review queue proposes, the owner rules
 
-Phase 1 (BI-6700AF66) is implemented on this branch; phases 2-4 are proposed.
+Phase 1 (BI-6700AF66) shipped in #4601. Phase 2 (BI-3D0FB84B) is implemented on this branch; phases 3-4 are proposed.
 Owner: platform (WWMD)
 Epic: EP-0AF96937 (Decision Governance Surface — close the review-and-adjust loop)
 Workroom: WC-69329196
@@ -130,10 +130,10 @@ Resolution order, each step evidence-backed and skipped when it yields nothing:
    belongs to the review page, and a record page that needs embeddings to render
    fails whenever the embedding runtime is down.
 
-**Forward fix (Phase 2):** the gate writes `workroomId` onto
+**Forward fix (Phase 3):** the gate writes `workroomId` onto
 `DecisionInteraction` when the caller context carries one, so future rows do not
-depend on the resolver's inference. It rides the Phase 2 migration rather than
-spending one of its own. The resolver stays for historic rows either way, and
+depend on the resolver's inference. The column lands WITH its writer, not
+before it: a column nothing writes reads as capability and is not. The resolver stays for historic rows either way, and
 reports which step it used so the page says "matched through the session token"
 rather than implying certainty.
 

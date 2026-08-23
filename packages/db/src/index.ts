@@ -24,6 +24,13 @@ export type {
   CapacityAllocationState,
 } from "../generated/client/client";
 export { WriteGateRequirement } from "../generated/client/client";
+// Decision-resolution proposal vocabulary (BI-3D0FB84B). Exported as values so
+// the app composes from the generated enum instead of re-typing its members.
+export {
+  DecisionProposalAction,
+  DecisionProposalScope,
+  DecisionProposalStatus,
+} from "../generated/client/client";
 export {
   PRINCIPAL_SENSITIVITIES,
   isPrincipalSensitivity,

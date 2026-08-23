@@ -17,6 +17,9 @@ import {
   resolveDecisionOrigin,
   type DecisionOriginDb,
 } from "@/lib/decision/decision-origin";
+import { presentProposal } from "@/lib/decision/proposal-presentation";
+import { getOpenProposalForInteraction, type ProposalClient } from "@/lib/decision/resolution-proposal-store";
+import { ProposalCard } from "./proposal-card";
 import {
   buildOptionConsequences,
   consequencesByOption,
@@ -83,6 +86,24 @@ export default async function DecisionRecordPage({ params }: { params: Params })
   const consequences = consequencesByOption(
     buildOptionConsequences(parseScoredOptions(row.scoredOptions)),
   );
+  // A drafted resolution, when one exists. Absent for every decision no panel
+  // has looked at, and the page reads exactly as it did before in that case.
+  const proposalRow = await getOpenProposalForInteraction(
+    prisma as unknown as ProposalClient,
+    row.id,
+  );
+  const proposal = proposalRow
+    ? presentProposal({
+      proposalId: proposalRow.proposalId,
+      actionKind: proposalRow.actionKind,
+      status: proposalRow.status,
+      lifecycle: proposalRow.lifecycle,
+      summary: proposalRow.summary,
+      draftPayload: proposalRow.draftPayload,
+      dissent: proposalRow.dissent,
+      confidence: proposalRow.confidence,
+    })
+    : null;
 
   const tier = tierForRow(row);
   const tierLabel = TIER_LABELS[tier];
@@ -302,6 +323,11 @@ export default async function DecisionRecordPage({ params }: { params: Params })
         <h2 className="text-sm font-semibold uppercase tracking-wide text-[var(--dpf-muted)] mb-2">
           Employee review
         </h2>
+        {proposal ? (
+          <div className="mb-3">
+            <ProposalCard proposal={proposal} />
+          </div>
+        ) : null}
         {row.escalationCapture ? (
           <div className="rounded-lg border border-[var(--dpf-border)] p-3 text-sm">
             <p className="text-[var(--dpf-text)]">

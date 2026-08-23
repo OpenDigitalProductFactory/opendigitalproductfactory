@@ -74,6 +74,29 @@ decision on the contributor preview.
    nothing-auto-applies invariant, and supersession when the interaction
    resolves elsewhere.
 
+**Approved substrate delta.** `prismaModelCount` ratchets 606 -> 607 for
+`DecisionResolutionProposal`. The alternative — folding a drafted resolution
+into `DeliberationOutcome` or `DecisionInteraction.outcomePayload` JSON — was
+rejected: a proposal needs its own identity (one per thing-being-decided, so a
+re-run cannot pile duplicates), its own ruling lifecycle with a first-ruling-wins
+conditional update, and foreign keys to the decision, the profile, the panel run
+and the ruling user. None of that survives inside a JSON blob. Its closed sets
+are real Prisma enums (`DecisionProposalScope|Action|Status`), and row liveness
+uses the canonical `RecordLifecycle` convention rather than a sixth spelling of
+"not active": `status` records what the HUMAN ruled, `lifecycle` records whether
+the row is still live, and a draft retired because its decision was settled
+elsewhere still reads `proposed` — because nobody ever ruled on it. No other
+non-increasing substrate metric is relaxed.
+
+**Status:** implemented on `feat/decision-resolution-proposals`. The model,
+migration, store, write-through adapters, the inline accept/amend/reject card
+and the review-queue section are in; `amend-stance` and `release-material`
+deliberately REFUSE rather than reporting a success they cannot deliver, and
+stay that way until their write paths are wired. The `workroomId` column is
+NOT in this migration after all: nothing writes it until the panel exists, and
+a column with no writer is dead substrate that reads as capability. It lands
+with its writer in Phase 3.
+
 ---
 
 ## Phase 3 — The panel (BI-19B350FD)

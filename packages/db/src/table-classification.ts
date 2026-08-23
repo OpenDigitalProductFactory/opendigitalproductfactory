@@ -80,6 +80,7 @@ export const TABLE_CLASSIFICATION: Record<string, TableSensitivity> = {
   Epic: "internal",
   EpicPortfolio: "internal",
   ImprovementProposal: "internal",
+  DecisionResolutionProposal: "internal",
   WeightAdjustmentProposal: "internal",
   BrandingConfig: "internal",
   EaReferenceModel: "internal",

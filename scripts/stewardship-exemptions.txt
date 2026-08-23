@@ -51,6 +51,12 @@ WorkLocation         reference-data  # HR work-location lookup.
 # A row's meaningful lifecycle (when it stops being live evidence a human
 # should still look at) is owned by an explicit domain action, not by age.
 
+DecisionResolutionProposal  domain-lifecycle-managed  # BI-3D0FB84B. A drafted
+  # resolution moves proposed -> accepted/amended/rejected/superseded/expired by a
+  # human ruling or by its decision being settled elsewhere; it is never aged out on
+  # a clock. Rows cascade with the DecisionInteraction they belong to, and a ruled
+  # row is kept deliberately — the draft-versus-accepted delta is the only record of
+  # whether the drafting was worth its cost, and a rejection is doctrine too.
 WeightAdjustmentProposal  domain-lifecycle-managed  # BI-D88DFEEA. status transitions from
   # proposed to ruled/rejected only via an explicit human ruling
   # (ruleWeightAdjustmentProposal); a ruled/rejected row is retained
