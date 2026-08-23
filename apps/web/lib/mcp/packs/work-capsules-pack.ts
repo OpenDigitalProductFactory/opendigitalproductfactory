@@ -94,6 +94,7 @@ const definitions: ToolDefinition[] = [
         source: { type: "string", enum: ENUMS.sources, description: "Origin of the capsule." },
         idempotencyKey: { type: "string", description: "Stable caller-provided key used to make create retries idempotent." },
         executorKind: { type: "string", enum: ENUMS.executors, description: "Optional executor expected to work the capsule." },
+        repositoryFullName: { type: "string", description: "Optional GitHub repository full name; defaults to the platform repo. The workroom's durable branch identity is keyed on (repository, branch)." },
         ...scopeProperties,
       },
       required: ["title", "objective", "source", "idempotencyKey"],

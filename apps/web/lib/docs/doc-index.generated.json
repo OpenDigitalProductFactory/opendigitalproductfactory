@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 680,
+  "pageCount": 681,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -2580,6 +2580,24 @@
         "what-i-did-not-do-tonight",
         "known-environment-artifact",
         "next-step-proposal-for-your-morning"
+      ]
+    },
+    "docs/dogfood/reset-cycle-playbook.md": {
+      "publicHref": "/dogfood/reset-cycle-playbook/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "reset-cycle-playbook",
+        "who-this-is-for",
+        "before-you-start",
+        "the-phases",
+        "what-to-look-for",
+        "what-to-record",
+        "where-findings-go",
+        "augmenting-this-playbook",
+        "automation",
+        "known-manual-steps"
       ]
     },
     "docs/edge-node/deployment-topology.md": {
@@ -10383,6 +10401,7 @@
         "appsweb-and-packagesdb-vitest",
         "degenerate-environment-fixtures",
         "common-drift-and-how-to-stay-on-script",
+        "live-blocker-references-guard",
         "label-association-guard-ratchet",
         "what-this-gate-is-not"
       ]
@@ -11910,6 +11929,7 @@
         "ai-coworker-support",
         "reading-the-decision-log",
         "escalated-and-deferred-decisions-what-to-do",
+        "suggestions-your-coworkers-drafted",
         "review-adjust-findings",
         "what-to-watch"
       ]

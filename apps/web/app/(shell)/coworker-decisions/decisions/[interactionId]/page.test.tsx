@@ -3,7 +3,14 @@ import { describe, expect, it, vi } from "vitest";
 
 vi.mock("@dpf/db", () => ({
   prisma: {
-    decisionInteraction: { findUnique: vi.fn() },
+    decisionInteraction: { findUnique: vi.fn(), findMany: vi.fn(async () => []) },
+    // The record looks for a drafted resolution and for the work behind the
+    // decision; both must answer "nothing" rather than blow up (BI-3D0FB84B).
+    decisionResolutionProposal: { findFirst: vi.fn(async () => null) },
+    workroom: { findFirst: vi.fn(async () => null) },
+    taskRun: { findUnique: vi.fn(async () => null) },
+    featureBuild: { findUnique: vi.fn(async () => null) },
+    agent: { findUnique: vi.fn(async () => null) },
   },
 }));
 

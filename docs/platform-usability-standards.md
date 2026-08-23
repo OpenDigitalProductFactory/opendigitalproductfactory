@@ -462,7 +462,9 @@ are part of what the owner meets on arrival.
   copy with `analyzeUtteranceReadability` against the tier in
   `apps/web/lib/ux-budget/budgets.ts`. Advisory on pre-existing routes, blocking on
   net-new ones. It is an absolute check, not a ratcheted axis, so it carries no entry
-  in `route-budget-baseline.json`.
+  in `route-budget-baseline.json`. **Every audience is held to its shell's tier** —
+  the admin/builder college exception was withdrawn once the corrected measure showed
+  every route that justified it clearing grade 9 (`/admin/graph-explorer` 11.1 → 3.4).
 - **Operator visibility (planned):** showing the live Flesch–Kincaid score to the operator while they edit marketing/storefront copy, the way a word processor does. The shared scorer (`@dpf/validators`) is ready; surfacing it in the copy editor is the remaining step.
 
 ### Coworker rule

@@ -1,0 +1,24 @@
+{
+  "version": "1",
+  "decidedOption": "accept-amend-reject-inline",
+  "decisionInteractionId": "DI-C992EBD1A356",
+  "scope": {
+    "files": [
+      "apps/web/app/(shell)/coworker-decisions/decisions/[interactionId]/proposal-card.tsx",
+      "apps/web/app/(shell)/coworker-decisions/review/page.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "decisionInteractionId": "DI-C992EBD1A356",
+    "consideredOptions": [
+      "accept-amend-reject-inline",
+      "accept-reject-only"
+    ]
+  },
+  "rationale": {
+    "accept-amend-reject-inline": "CHOSEN. Kernel composite 9.379, margin 3.085, high confidence, autonomy eligible. Three controls on the decision record itself: Accept as drafted, Edit-then-accept (the draft becomes editable in place and what the owner accepts is what gets recorded), Reject with a reason. Lowest operator_effort (0.15 vs 0.6) and highest legibility_of_consequence (0.8 vs 0.55), and it is the only option that scores POSITIVE on 'Do the work; don't task the operator with what an agent can do' (+0.149 vs -0.166). The card states what accepting actually does for that kind of proposal, including that a business answer still lands as draft, so the consequence is read before the confirm.",
+    "accept-reject-only": "REJECTED. Kernel composite 6.294. Two controls reads simpler, but anyone who wants different wording is sent to the stance editor to author it themselves — the exact dead-end this whole feature exists to remove — and no draft-versus-accepted signal is ever captured, so nothing measures whether the drafting is worth its cost. It scores negative on both 'Never ask the user to run commands' (-0.075) and 'Preserve the model; disclose complexity progressively' (-0.016)."
+  },
+  "notes": "BI-3D0FB84B, EP-0AF96937, spec docs/superpowers/specs/2026-08-23-decision-concierge-design.md §4.4-§4.5. Arrival cost is bounded and conditional: the card renders only when a coworker has drafted a resolution for that decision, and the edit box and the reason box appear only after the owner picks that path — the resting state is a summary, one consequence sentence, the draft, and three controls. Dissent is shown when coworkers disagreed and agreement is stated explicitly when they did not, so silence and consensus never look alike. Confidence is stated in words and warns rather than reassures below 0.45. Every string comes from lib/decision/proposal-presentation.ts and lib/decision/proposal-messages.ts; the component holds no copy of its own, colour is --dpf-* tokens only, and both textareas carry an aria-label. Nothing on this card applies doctrine directly: accepting routes through the existing write path for its action kind, and a corpus answer still lands as draft for review."
+}

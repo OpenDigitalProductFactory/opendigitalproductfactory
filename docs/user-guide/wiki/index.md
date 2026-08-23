@@ -55,6 +55,12 @@ Following **Answer it once** from a decision now opens that finding on Review & 
 
 Do not work the log line by line. Review & adjust groups the waiting rows into themes; answering a theme once — or adding a stance or craft guidance that covers it — teaches your AI so that question stops needing a human. Exact repeated asks appear once with a matching-ask count. Marking that item reviewed or dismissed applies the same disposition to every exact match, so the completed cluster leaves the queue while each original interaction remains in the audit ledger.
 
+## Suggestions Your Coworkers Drafted
+
+When your coworkers have worked out what you should do about a decision, the record carries their suggestion: what they recommend, what accepting it would change, and whether any of them disagreed. You can accept it as written, edit the wording and accept your version, or reject it with a reason so it does not come back.
+
+Nothing is applied behind you. Accepting a business answer still saves it as draft doctrine for you to review, exactly as answering a gap does, and a suggestion whose decision gets settled somewhere else quietly expires instead of waiting to be accepted later. Suggestions still waiting on you are listed at the top of Review & adjust.
+
 ## Review & Adjust Findings
 
 `/coworker-decisions/review` surfaces findings over the accumulating decision ledger so you can keep governance sharp without reading every row: conflicting principles, gaps where the doctrine has no settled answer yet, a canonical decision that quietly drifted under a doctrine change, and stale decision material. It shows only findings with enough recorded context and a real owner action. Open a finding to see the specific evidence, why it needs attention, the available resolution, and what completion will change. Empty or internal-only records stay in audit history instead of becoming unusable work.
