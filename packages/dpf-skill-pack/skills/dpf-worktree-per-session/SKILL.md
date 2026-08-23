@@ -89,24 +89,43 @@ For normal feature/fix work: commit from the worktree, then route runtime-bound 
 
    The bootstrap copies `.mcp.json` and `.vscode/mcp.json` from the root clone, sets `COMPOSE_PROJECT_NAME=dpf-<slug>` in `.env`, converges the Claude Code + Codex client profiles to the DPF-scoped baseline (DPF MCP only + `dpf-platform` only; generic plugins/MCP servers disabled; the canonical worktree base + this worktree trusted in Codex), and writes the explicit `?tier=full` endpoint required by those lazy-host registries. It seeds kernel memory, runs probes, and prints a readiness banner that flags residual drift. The legacy `scripts/seed-worktree-mcp.{ps1,sh}` shim still works for one release cycle.
 
-4. **Restart your agent in the worktree.** Claude Code / Codex need a fresh session to pick up the new `.mcp.json` — the `dpf` MCP connector won't appear in `/mcp` otherwise.
+4. **Claim a Workroom for the worktree — before you edit anything.** AGENTS.md §12 and
+   `claim-a-workroom-before-you-work` require it, and since BI-865E1755 a PreToolUse guard
+   ENFORCES it: a mutating `Write`/`Edit`/`MultiEdit` or shell command in an unclaimed DPF
+   worktree is denied. One call binds the BI, the branch and the worktree together:
+
+   ```
+   claim_backlog_item_for_work(
+     itemId="BI-…", worktreePath="<abs worktree path>",
+     branchName="<prefix>/<slug>", provider="claude", sessionRef="<session id>")
+   ```
+
+   Use this rather than `create_workroom` + `adopt_worktree`: `create_workroom` takes no
+   branch, so it cannot be bound afterwards and the pair mints a DUPLICATE capsule
+   (BI-29673B7C). `claim_backlog_item_for_work` is the single correct entry point.
+
+   Genuinely blocked — portal down, live incident? `DPF_WORKROOM_BYPASS="<reason>"` allows
+   the call. The reason is required, it is echoed on every call, and the session is reported
+   as UNGOVERNED. Never use it to skip a claim you could simply make.
+
+5. **Restart your agent in the worktree.** Claude Code / Codex need a fresh session to pick up the new `.mcp.json` — the `dpf` MCP connector won't appear in `/mcp` otherwise.
 
    If the connector is healthy but a named DPF tool is absent from the attached set, use `load_tools` with an exact `names` entry or natural-language `query`. Notification-aware/generic clients then honor `notifications/tools/list_changed` or re-fetch `tools/list`. Codex must receive the full authorized catalogue at initial connection through its bootstrapped `?tier=full` URL because its HTTP requests do not reliably identify the client and its top-level registry does not refresh mid-turn: inspect `ALL_TOOLS` inside `functions.exec` and invoke a present governed call through `tools.mcp__dpf__<tool_name>(arguments)`. If a fresh task still omits the tool, confirm the configured URL contains `tier=full` and re-run bootstrap/restart the client before classifying it. If `load_tools` succeeds but the qualified tool remains absent from `ALL_TOOLS`, stop and diagnose the Codex connector/session snapshot; do not claim it is callable, install another plugin, use raw JSON-RPC, or bypass MCP authority.
 
-5. **Verify compose isolation.** Before running any `docker compose` command in the worktree:
+6. **Verify compose isolation.** Before running any `docker compose` command in the worktree:
    ```
    grep COMPOSE_PROJECT_NAME .env
    ```
    The output should be `COMPOSE_PROJECT_NAME=dpf-<slug>`, NOT `dpf`. Compose commands from a worktree without isolation will collide with the root `dpf` stack — at best wasting cycles, at worst stomping on the root install's containers and volumes.
 
-6. **Confirm worktree health.**
+7. **Confirm worktree health.**
    ```
    git status --short --branch
    git rev-parse --abbrev-ref HEAD     # should show your topic branch
    git log origin/main..HEAD --oneline  # should be empty (no commits yet)
    ```
 
-7. **Classify verification readiness.** Run the probe — do **not** hand-check with `test -d node_modules`:
+8. **Classify verification readiness.** Run the probe — do **not** hand-check with `test -d node_modules`:
    ```
    node scripts/lib/bootstrap-worktree-deps.mjs . --classify-only
    ```
