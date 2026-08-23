@@ -331,6 +331,13 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
     guard("package-boundary-guard", "Package Boundary Guard", [
       node("scripts/check-package-boundaries.mjs"),
     ]),
+    // BI-96033E25 — a vitest test must resolve repo paths from __dirname, not
+    // process.cwd(), or `vitest run --root <pkg>` reads outside the repo and
+    // fails as a misleading missing file.
+    guard("test-cwd-independence-guard", "Test Cwd Independence Guard", [
+      node("--test", "scripts/check-test-cwd-independence.test.mjs"),
+      node("scripts/check-test-cwd-independence.mjs"),
+    ]),
     guard("build-studio-namespace-guard", "Build Studio Namespace Guard", [
       node("scripts/check-build-namespace.mjs"),
     ]),

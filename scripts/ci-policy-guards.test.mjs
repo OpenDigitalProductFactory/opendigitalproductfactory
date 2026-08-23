@@ -71,6 +71,7 @@ const EXPECTED_LEGACY_JOBS = [
   "stewardship-scope-guard",
   "style-drift-guard",
   "test-clock-bomb-guard",
+  "test-cwd-independence-guard",
   "tool-surface-guard",
   "ux-fit-gate",
   "ux-primitive-adoption-guard",

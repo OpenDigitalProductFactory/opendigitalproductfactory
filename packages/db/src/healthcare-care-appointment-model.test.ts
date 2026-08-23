@@ -8,7 +8,7 @@ import { prisma } from "./client";
 describe("healthcare care appointment Prisma substrate", () => {
   it("models one typed subject while retaining conditional clinical relations", () => {
     const schema = readFileSync(
-      resolve(process.cwd(), "prisma/schema/verticals-care.prisma"),
+      resolve(__dirname, "../prisma/schema/verticals-care.prisma"),
       "utf8",
     );
     const appointment = schema.slice(
