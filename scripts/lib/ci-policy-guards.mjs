@@ -462,6 +462,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       ),
       node("--test", "packages/dpf-skill-pack/hooks/root-clone-guard.test.mjs"),
       node("--test", "packages/dpf-skill-pack/hooks/compose-guard.test.mjs"),
+      node("--test", "packages/dpf-skill-pack/hooks/portal-image-guard.test.mjs"),
       node("--test", "packages/dpf-skill-pack/hooks/worktree-create.test.mjs"),
       // BI-B1065D41 / BI-1C1483C6: the sixth PreToolUse guard and the
       // SessionStart readiness banner. Both are hand-added here for the same
