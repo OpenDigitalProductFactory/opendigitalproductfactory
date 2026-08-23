@@ -4,7 +4,7 @@
 # being split/refactored under the ceiling, never by expanding the baseline.
 # Regenerate with: node scripts/check-module-size.mjs --update
 apps/web/app/api/mcp/v1/route.test.ts	1532
-apps/web/app/api/mcp/v1/route.ts	901
+apps/web/app/api/mcp/v1/route.ts	860
 apps/web/app/api/v1/edge/discovery-runs/route.test.ts	982
 apps/web/components/admin/BusinessModelBuilder.tsx	821
 apps/web/components/admin/McpTokenManager.tsx	1326
@@ -33,7 +33,7 @@ apps/web/lib/actions/ea.ts	918
 apps/web/lib/actions/mcp-tokens.test.ts	1254
 apps/web/lib/actions/platform-dev-config.ts	1254
 apps/web/lib/actions/promotions.self-upgrade.test.ts	1098
-apps/web/lib/actions/promotions.ts	994
+apps/web/lib/actions/promotions.ts	993
 apps/web/lib/actions/tax-remittance.test.ts	1080
 apps/web/lib/actions/tax-remittance.ts	978
 apps/web/lib/ai-operations-map/load-map-data.test.ts	928
@@ -48,7 +48,7 @@ apps/web/lib/mcp/packs/contribution-hive-pack.ts	855
 apps/web/lib/mcp/packs/sandbox-pack.ts	921
 apps/web/lib/navigation/portal-navigation-model.ts	965
 apps/web/lib/operate/coworker-regression-detector.ts	935
-apps/web/lib/queue/functions/self-upgrade.test.ts	1422
+apps/web/lib/queue/functions/self-upgrade.test.ts	1380
 apps/web/lib/routing/chat-adapter.test.ts	1073
 apps/web/lib/routing/eval-runner.ts	803
 apps/web/lib/routing/fallback.test.ts	1140
@@ -61,9 +61,9 @@ apps/web/lib/tak/agent-routing.ts	1168
 apps/web/lib/tak/agentic-loop.test.ts	2501
 apps/web/lib/tak/agentic-loop.ts	2809
 apps/web/lib/tak/route-context-map.ts	1390
-apps/web/lib/work-capsules/mcp-handlers.ts	844
+apps/web/lib/work-capsules/mcp-handlers.ts	847
 apps/web/lib/work-capsules/work-capsule-store.test.ts	1191
-apps/web/lib/work-capsules/work-capsule-store.ts	1047
+apps/web/lib/work-capsules/work-capsule-store.ts	1052
 apps/web/lib/workbooks/platform-tables.ts	938
 apps/web/lib/workforce/calendar-data.ts	1134
 apps/web/lib/workspace-home/command-center.ts	1118

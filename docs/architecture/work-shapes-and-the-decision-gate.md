@@ -60,10 +60,24 @@ each owned by a different part of the substrate. A room picks one value on each.
 | **Participant roles** — who is in it, as what | `accountable`, `coordinator`, `contributor`, `specialist`, `approver`, `reviewer`, `observer` | `WorkroomParticipantRole`, same file |
 | **Collaboration shape** — how a gate inside it routes | `specialist-alignment`, `approval / sign-off`, `outward-review`, `change / consequential`, `escalation` | [governance-gate spec](../superpowers/specs/2026-08-13-wwwd-constitutional-alignment-gate.md) |
 
-The first three are live code. The fourth is **designed and specified but not yet a
-registry** — the shapes exist as a table in the spec, not as an enum any code reads.
-Treat a claim that a room "has" a collaboration shape as intent, not as state you can
-query today.
+The first three are live code. The fourth **is now a registry with a write path**
+⟦runtime: `BI-8C54B216`, 2026-08-23⟧: `WORKROOM_SHAPE_KEYS` in
+`apps/web/lib/work-management/room-shapes.ts` is the enum, and a room is convened with a
+shape by passing `workroomShape` to `create_workroom` or `adopt_worktree`. It persists as a
+`scopeClaims` entry — no migration — and is read back by `readWorkroomShapeClaim`.
+
+A room that never declared one gets a **derived** shape from what it already is
+(`derive-workroom-shape.ts`): a standing WSID room is craft stewardship by definition,
+`launch-readiness` is an approval sign-off, `governance` and `remediation` are consequential
+changes. The derivation deliberately returns **null** for `delivery`, `support`,
+`improvement`, `lifecycle`, a bare `wwmd`/`wwwd` scope, or no signal — several shapes could
+fit and the room has not said which, so it is reported unshaped rather than guessed.
+
+Measured on the reference install at the time of writing: shape coverage went from **0% to
+9.2%** (30 of 327 rooms), because the scope signals the derivation reads exist on only
+~13% of rooms. The remainder closes as rooms are convened with a shape, not by backfill.
+So a claim that a room "has" a collaboration shape is now queryable — but check whether it
+was **declared or derived**, and expect most older rooms to have neither.
 
 Finite and standing rooms are explained for end users in
 [Work Rooms](../user-guide/workspace/work-rooms.md).

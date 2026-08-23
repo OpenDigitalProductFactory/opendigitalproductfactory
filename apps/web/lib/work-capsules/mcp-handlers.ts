@@ -25,6 +25,7 @@ import {
   isWorkCapsuleSource,
   isWorkCapsuleStatus,
   normalizeWorkCapsuleScopeInput,
+  WORK_CAPSULE_WORKROOM_SHAPES,
   type ScopeClaim,
   type WorkCapsuleEvidenceKind,
   type WorkCapsuleScopeInput,
@@ -67,6 +68,7 @@ export function workCapsuleToolEnums() {
     decisionScopes: [...WORK_CAPSULE_DECISION_SCOPES],
     portfolioRoles: [...WORK_CAPSULE_PORTFOLIO_ROLES],
     scopeActivityKinds: [...WORK_CAPSULE_SCOPE_ACTIVITY_KINDS],
+    workroomShapes: [...WORK_CAPSULE_WORKROOM_SHAPES],
     outcomeAnchorKinds: [...WORK_CAPSULE_OUTCOME_ANCHOR_KINDS],
     agentActivityKinds: [...AGENT_ACTIVITY_KINDS],
   };
@@ -104,6 +106,7 @@ function numberParam(params: Record<string, unknown>, key: string): number | nul
 
 function parseScopeInput(params: Record<string, unknown>): WorkCapsuleScopeInput {
   return {
+    workroomShape: params.workroomShape,
     decisionScope: params.decisionScope,
     portfolioRole: params.portfolioRole,
     servedPersona: params.servedPersona,
