@@ -1,5 +1,5 @@
 import { prisma } from "@dpf/db";
-import { COWORKER_SLUG_TO_CANONICAL_AGENT_ID } from "@dpf/db/agent-identity";
+import { collapseDualSeedDuplicates } from "@/lib/coworker-record/selectable-coworker";
 
 import {
   projectInternalAIDoc,
@@ -40,26 +40,6 @@ export type AgentIdentitySnapshotSummary = {
   staleAgents: number;
   portableAuthorizationClassCount: number;
 };
-
-/**
- * Collapse dual-seed pairs: a coworker seeded in BOTH its slug form and its
- * canonical AGT-* form is ONE identity, not two, and this page sorts by name so
- * the twins render adjacent — a visible duplicate (the BI-74FD6420 failure, fixed
- * for the roster and never here).
- *
- * Deliberately NARROWER than the roster's dropDualSeedAliasAgents: that one also
- * drops a canonical row whose slug twin is absent, which is right for a roster of
- * seeded coworkers and wrong for an IDENTITY page, where a declared agent that was
- * never seeded under a slug must still be visible. This drops the slug row only
- * when its canonical twin is actually present.
- */
-function collapseDualSeedRows<T extends { agentId: string }>(rows: T[]): T[] {
-  const present = new Set(rows.map((r) => r.agentId));
-  return rows.filter((r) => {
-    const canonical = COWORKER_SLUG_TO_CANONICAL_AGENT_ID[r.agentId];
-    return !(canonical && canonical !== r.agentId && present.has(canonical));
-  });
-}
 
 export async function listAgentIdentitySnapshots(
   db: SnapshotDb = prisma,
@@ -105,7 +85,7 @@ export async function listAgentIdentitySnapshots(
     },
   });
 
-  const agents = collapseDualSeedRows(agentsRaw);
+  const agents = collapseDualSeedDuplicates(agentsRaw);
 
   const [aliases, modelConfigs, memoryFacts] = await Promise.all([
     db.principalAlias.findMany({
