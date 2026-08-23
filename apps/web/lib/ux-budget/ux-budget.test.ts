@@ -8,6 +8,7 @@ import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import {
+  AUDIENCE_READING_LEVELS,
   auditUxBudget,
   budgetFor,
   countDisclosureRegions,
@@ -223,18 +224,23 @@ describe("budget axes", () => {
   });
 });
 
-describe("reading tier resolves from audience, not shell alone (BI-1DE6F69E)", () => {
+describe("reading tier resolves from audience and shell (BI-1DE6F69E, BI-0ED0F6B3)", () => {
   it("keeps the shell default for every audience without an override", () => {
-    for (const audience of ["owner", "worker", "customer", "public", "auth-setup"] as const) {
+    for (const audience of ["owner", "worker", "customer", "public", "auth-setup", "admin", "builder"] as const) {
       expect(readingLevelFor("detail", audience)).toBe("high-school");
       expect(readingLevelFor("cockpit", audience)).toBe("high-school");
     }
   });
 
-  it("gives operator surfaces the college tier the readability policy specifies", () => {
-    expect(readingLevelFor("detail", "admin")).toBe("college");
-    expect(readingLevelFor("list", "admin")).toBe("college");
-    expect(readingLevelFor("detail", "builder")).toBe("college");
+  it("holds operator surfaces to the strict tier, the re-tier having been withdrawn", () => {
+    // BI-1DE6F69E loosened admin/builder to college because EVERY /admin route
+    // failed at 9. Those grades were produced by counting full stops, not
+    // difficulty (BI-0ED0F6B3); corrected, /admin/graph-explorer reads 3.4 and
+    // /admin 8.2. The premise is withdrawn, so the exception is too.
+    expect(AUDIENCE_READING_LEVELS).toEqual({});
+    expect(readingLevelFor("detail", "admin")).toBe("high-school");
+    expect(readingLevelFor("list", "admin")).toBe("high-school");
+    expect(readingLevelFor("detail", "builder")).toBe("high-school");
   });
 
   it("falls back to the shell default when no audience is supplied", () => {
@@ -250,15 +256,16 @@ describe("reading tier resolves from audience, not shell alone (BI-1DE6F69E)", (
     expect(readingLevelFor("unclassified", "admin")).toBe("college");
   });
 
-  it("re-tiers the bar without deleting it — an operator surface still has a cap", () => {
-    // The whole point: 11.0 (the plainest admin surface measured) passes, but the
-    // family's real debt — 15.4, 18.6, 29.4, 57.9 — still fails.
+  it("holds an operator surface to grade 9, which the corrected measure lets it clear", () => {
+    // The measured admin family after BI-0ED0F6B3: graph-explorer 3.4, cockpit
+    // 6.4, data-stewardship 6.5, business-models 8.4, /admin 8.2 — all pass. The
+    // family's remaining debt (archetypes 14.9) is a visible advisory finding.
     const budget = budgetFor("detail", "admin");
-    expect(budget.readingLevel).toBe("college");
-    expect(meetsReadingLevel({ readingGradeLevel: 11 } as never, budget.readingLevel)).toBe(true);
-    expect(meetsReadingLevel({ readingGradeLevel: 13 } as never, budget.readingLevel)).toBe(true);
-    expect(meetsReadingLevel({ readingGradeLevel: 15.4 } as never, budget.readingLevel)).toBe(false);
-    expect(meetsReadingLevel({ readingGradeLevel: 57.9 } as never, budget.readingLevel)).toBe(false);
+    expect(budget.readingLevel).toBe("high-school");
+    for (const grade of [3.4, 6.4, 6.5, 8.2, 8.4]) {
+      expect(meetsReadingLevel({ readingGradeLevel: grade } as never, budget.readingLevel)).toBe(true);
+    }
+    expect(meetsReadingLevel({ readingGradeLevel: 14.9 } as never, budget.readingLevel)).toBe(false);
   });
 
   it("does not loosen a customer-facing surface", () => {
