@@ -8,6 +8,10 @@ status: draft
 **Design:** `docs/superpowers/specs/2026-08-23-external-coworker-context-bootstrap-design.md`  
 **Shape:** one atomic corrective deliverable; partial transport or claim behavior is not independently useful
 
+## Traceability contract
+
+The one atomic deliverable covers design requirements `OBJ-CLAIM-SNAPSHOT`, `OBJ-SESSION-BOUNDARY`, `OBJ-REVIEW-BOOTSTRAP`, and `OBJ-FAIL-CLOSED-COMPAT` through canonical contracts `CONTRACT-WORKROOM-CLAIM-SNAPSHOT` and `CONTRACT-MCP-TRANSPORT-SESSION`. Its end-to-end flows are `FLOW-CLAIM-AND-PIN-ARTIFACT` and `FLOW-EXTERNAL-REVIEW-BOOTSTRAP`. Verification covers `AC-CLAIM-ATOMIC`, `AC-CLAIM-READOPT`, `AC-PAT-SESSION`, `AC-COWORKER-CONTEXT`, `AC-SESSION-ISOLATION`, `AC-MULTI-SESSION`, `AC-INTERNAL-COMPAT`, and `AC-REVIEW-BOOTSTRAP`.
+
 ## Existing substrate to preserve
 
 - `apps/web/app/api/mcp/v1/route.ts` is the external JSON-RPC transport and sole builder of external `ToolExecutionContext`.

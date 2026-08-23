@@ -18,6 +18,13 @@ An authenticated Codex, Claude, or Grok task can claim a DPF Workroom and produc
 
 The second refusal is a safety property, not a defect in coworker routing. Accepting an arbitrary `threadId` from tool arguments would allow a caller to name a thread it does not own. Fabricating an `agentId` would also misstate authority and could accidentally apply an agent's delegation grants.
 
+## Governed objectives
+
+- **OBJ-CLAIM-SNAPSHOT:** An external contributor can establish or refresh one subject-bound Workroom with the repository, branch, base SHA, head SHA, principal, session, and worktree identity needed for immutable artifact resolution.
+- **OBJ-SESSION-BOUNDARY:** Every PAT-authenticated MCP transport session receives a distinct server-owned thread boundary without treating the session identifier as authentication or agent authority.
+- **OBJ-REVIEW-BOOTSTRAP:** An external human-principal task can route work to designated independent reviewers through that server-owned thread and persist their governed receipts without inheriting reviewer grants.
+- **OBJ-FAIL-CLOSED-COMPAT:** Existing Workroom ambiguity, ownership, DCO, clearance, grant, internal-session, and request-authentication protections remain fail-closed and backward compatible.
+
 ## Verified current substrate
 
 The original report covered several failures. Current main has already repaired most of them:
@@ -113,14 +120,16 @@ No raw JWT, internal thread id, PAT id, or signing detail is shown to the user.
 
 ## Acceptance criteria
 
-1. A single `claim_backlog_item_for_work` call can create or reuse a subject-bound Workroom and return the submitted base/head SHAs with repository, branch, principal, session, and worktree identity.
-2. Re-adoption still advances SHAs, and ambiguity, foreign branch identity, and DCO mismatch remain fail-closed.
-3. PAT `initialize` returns a unique `Mcp-Session-Id` and creates one user-owned root `AgentThread`.
-4. A later call with the same PAT + session id reaches `request_coworker` with that root thread and `agentId=null`.
-5. A session id cannot be replayed with a different PAT/user, cannot be supplied as `X-MCP-Session`, and cannot grant reviewer authority.
-6. Two initialized sessions sharing one PAT receive distinct root threads.
-7. Internal session-JWT behavior remains unchanged.
-8. A regression flow covers external design/spec/specialist/plan review routing and reaches coverage validation rather than `plan-artifact-invalid` or `missing_threadId`.
+| Acceptance ID | Objective IDs | Verifiable statement |
+|---|---|---|
+| AC-CLAIM-ATOMIC | OBJ-CLAIM-SNAPSHOT | One `claim_backlog_item_for_work` call creates or reuses a subject-bound Workroom and returns the submitted base/head SHAs with repository, branch, principal, session, and worktree identity. |
+| AC-CLAIM-READOPT | OBJ-CLAIM-SNAPSHOT, OBJ-FAIL-CLOSED-COMPAT | Re-adoption advances SHAs while ambiguity, foreign branch identity, and DCO mismatch remain fail-closed. |
+| AC-PAT-SESSION | OBJ-SESSION-BOUNDARY | PAT `initialize` returns a unique `Mcp-Session-Id` and creates one user-owned root `AgentThread`. |
+| AC-COWORKER-CONTEXT | OBJ-SESSION-BOUNDARY, OBJ-REVIEW-BOOTSTRAP | A later call with the same PAT and session id reaches `request_coworker` with the verified root thread and `agentId=null`. |
+| AC-SESSION-ISOLATION | OBJ-SESSION-BOUNDARY, OBJ-FAIL-CLOSED-COMPAT | A session id cannot be replayed with a different PAT/user, cannot be supplied as `X-MCP-Session`, and cannot grant reviewer authority. |
+| AC-MULTI-SESSION | OBJ-SESSION-BOUNDARY | Two initialized sessions sharing one PAT receive distinct root threads. |
+| AC-INTERNAL-COMPAT | OBJ-FAIL-CLOSED-COMPAT | Internal session-JWT behavior and request-scoped bearer validation remain unchanged. |
+| AC-REVIEW-BOOTSTRAP | OBJ-REVIEW-BOOTSTRAP, OBJ-CLAIM-SNAPSHOT | A regression flow routes external design/spec/specialist/plan reviews and reaches coverage validation rather than `plan-artifact-invalid` or `missing_threadId`. |
 
 ## Non-goals
 
