@@ -6,7 +6,7 @@ status: draft
 
 **Date:** 2026-08-23
 
-**Status:** Revised after independent review of `02d4847ad95e`; ready for fresh re-review
+**Status:** Revised after independent review of `19552b0849c2`; ready for fresh re-review
 
 **Backlog:** `BI-11D611B3`
 
@@ -153,27 +153,28 @@ type ExternalAgentOperatingProfileV1 = {
   };
 };
 
+type OperatingProfileGetError =
+  | { code: "operating_profile_unavailable"; recovery: "reconnect" }
+  | { code: "operating_profile_incompatible"; recovery: "request-compatible-client" }
+  | { code: "external_agent_not_sponsored"; recovery: "request-sponsorship" }
+  | { code: "external_agent_not_authorized"; recovery: "request-authorization" };
+
 type OperatingProfileGetResult =
   | { ok: true; profile: ExternalAgentOperatingProfileV1 }
   | {
       ok: false;
-      error: {
-        code:
-          | "operating_profile_unavailable"
-          | "operating_profile_incompatible"
-          | "external_agent_not_sponsored"
-          | "external_agent_not_authorized";
-        recovery: "reconnect" | "request-sponsorship" | "request-compatible-client";
-      };
+      error: OperatingProfileGetError;
     };
 ```
 
 The compiler receives already-authenticated principal and authority context plus loaders for installation and organization facts. It returns either the exact profile or a closed typed failure:
 
-- `operating_profile_unavailable`
-- `operating_profile_incompatible`
-- `external_agent_not_sponsored`
-- `external_agent_not_authorized`
+- `operating_profile_unavailable` → `reconnect`
+- `operating_profile_incompatible` → `request-compatible-client`
+- `external_agent_not_sponsored` → `request-sponsorship`
+- `external_agent_not_authorized` → `request-authorization`
+
+The discriminated union makes every failure/recovery pair exhaustive and rejects cross-paired values at compile and schema-validation time.
 
 The four digests have separate owners and preimages:
 
@@ -181,7 +182,7 @@ The four digests have separate owners and preimages:
 | --- | --- | --- |
 | `compatibility.profileSchema.digest` | MCP, public A2A, pointer | The RFC 8785 canonical UTF-8 bytes of the checked-in V1 JSON Schema object. The schema object contains neither this digest nor release/principal data. `compatibility.profileSchema` is the sole owner of schema version, digest, and digest algorithm. |
 | `profileDigest` | Authenticated profile only | The RFC 8785 canonical UTF-8 bytes of the complete profile after removing only `profileDigest`. `generatedAt` and `principal.expiresAt` remain in the preimage, so this identifies the exact response. |
-| `authorityDigest` | Authenticated profile only | The RFC 8785 bytes of the exact `AuthorityDigestPreimageV1` below. Raw identifiers and grants are not returned. |
+| `authorityDigest` | Authenticated profile only | The RFC 8785 bytes of the exact `AuthorityDigestPreimageV1` below. Token id/version, raw token scopes, and effective grant ids are not returned. Allow-listed `delegatingPrincipalId`, `actingAgentId`, and `sponsorRef` remain explicit authenticated profile fields and are excluded from public A2A output. |
 | `releaseImageDigest` | Pointer and release metadata | The OCI/release identity already owned by installer/self-upgrade. It is not a profile or schema digest. |
 
 `sha256-rfc8785-v1` means RFC 8785 JCS, UTF-8 encoding, then SHA-256 rendered as lower-case hexadecimal with the `sha256:` prefix. Object members follow JCS lexical ordering. Arrays whose semantics are sets are sorted by their canonical string id before they enter the canonicalizer; ordered protocol arrays retain declared order.
@@ -291,8 +292,8 @@ The compiler must:
 1. require a resolved installation identity and environment class;
 2. require organization, sponsor, delegating principal, and acting agent;
 3. derive token tier through the existing authority-tier function;
-4. compute schema, profile, and authority digests from their separate preimages, consume release identity only in the installer-owned pointer projection, and never expose raw authority identifiers or grants;
-5. project the existing relationship-intent registry unchanged and map installation stance to typed brakes and closed stop codes;
+4. compute schema, profile, and authority digests from their separate preimages, consume release identity only in the installer-owned pointer projection, and never expose token id/version, raw scopes, or effective grant ids;
+5. project the existing relationship-intent registry unchanged, map installation stance to `ExternalAgentProfileActiveBrakeCode`, attach the closed `ExternalAgentProfileInvalidatorCode` refresh events, and return an `OperatingProfileGetError` for failure-only states;
 6. mark `workCatalog` and `attention` as `deferred` to `BI-D4C110BC` until their authenticated targets exist, while advertising the already-resolvable `load_tools` capability entry;
 7. omit `agentCard` when no access-appropriate card route is resolvable, and otherwise emit only the route already selected by the A2A exposure owner;
 8. keep work and surface inventories out of the profile;
@@ -314,7 +315,7 @@ The allocation is deterministic:
 | organization summary/locale | the existing organization-context bundle and locale resolver | `operating_profile_unavailable` when organization identity or locale is absent. |
 | egress policy | no canonical universal owner found in P0 substrate | omitted. Adding it requires a reviewed owner rather than a nullable invented reference. |
 
-`ExternalAgentProfileStopCode` is a closed TypeScript constant/union owned beside the profile compiler. Each emitted code is derived from a specific failed or cautious source row above. Human-readable recovery text is formatted at the MCP edge from that code; it is not part of the authority calculation.
+There is no umbrella stop-code registry. `ExternalAgentProfileActiveBrakeCode` owns current cautious restrictions, `ExternalAgentProfileInvalidatorCode` owns future refresh events, and `OperatingProfileGetError` owns failure-only code/recovery pairs. Each value is derived from a specific source row above. Additional human-readable explanation may be formatted at the MCP edge from the typed value, but it is not part of the authority calculation.
 
 ## 6. MCP entry
 
@@ -412,7 +413,7 @@ P0 does not claim cross-install fan-out, Work Packet throughput, lease throughpu
 Write failing tests before production changes for:
 
 1. pure compilation for all four token tiers;
-2. missing/contradictory identity and authority inputs;
+2. missing/contradictory identity and authority inputs plus exhaustive rejection of every invalid failure-code/recovery cross-pair;
 3. RFC 8785 primitive, authority-preimage, and complete-profile vectors; separation of all four digest identities; exact profile-integrity field removal; and secret-field absence;
 4. MCP tool definition and output schema, authenticated context resolution, core-tier listing, backwards-compatible text plus structured content, and bounded result;
 5. initialize instructions pointing to the profile before `load_tools`, plus conformance with the mechanically amended consumer-host contract;
@@ -458,6 +459,14 @@ The independent re-review of `02d4847ad95e` also returned **revise / do not appr
 | parent refinement was incomplete | disposition every §6.1 parent field, including delegator, surface, Work Packet, and surface-contract fields, with an owner or explicit omission. |
 | `stopConditions` conflated state classes | split current `activeBrakes` from future `invalidatesOn`, map every canonical stance value, and make unverified installation a compile failure. |
 | authority domain separation lacked an exact preimage | define the literal domain tag and preimage schema and add primitive, authority, and complete-profile fixed vectors. |
+
+The independent review of `19552b0849c2` returned **revise / do not approve** on three residual taxonomy statements. This revision disposes them:
+
+| Finding | Disposition |
+| --- | --- |
+| stale generic stop-code owner | remove the undefined umbrella registry and name the active-brake, invalidator, and failure owners independently. |
+| failure code/recovery cross-product | replace independent unions with one exhaustive discriminated `OperatingProfileGetError` union and require negative cross-pair tests. |
+| privacy statement contradicted returned principal refs | name only token id/version, raw scopes, and effective grant ids as hidden preimage fields; retain allow-listed authenticated principal refs and keep them out of public A2A. |
 
 The revised design extends the existing install, authority, Work Case policy, MCP tier, and A2A extension seams and adds no persistence. The profile is a read model with one compiler, while durable facts remain in their canonical owners. Schema, profile, authority, and release identities have non-overlapping preimages and visibility. Response size is bounded independently of estate and tool cardinality. Deferred entries cannot masquerade as live references. The local pointer is a release projection and never a second authority.
 
