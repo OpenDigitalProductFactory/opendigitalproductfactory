@@ -24,16 +24,16 @@ ordered worst-first so the next piece of work is always the top row.
 
 ## Progress
 
-- Pages in scope: **57**
+- Pages in scope: **59**
 - Complete (all five): **5**
 
 | Question | Pages answering |
 |---|---|
-| What it does | 9 / 57 |
-| When it runs | 14 / 57 |
-| How it stays current | 9 / 57 |
-| What it will not do | 40 / 57 |
-| What you must do | 9 / 57 |
+| What it does | 9 / 59 |
+| When it runs | 14 / 59 |
+| How it stays current | 9 / 59 |
+| What it will not do | 41 / 59 |
+| What you must do | 10 / 59 |
 
 ## Checklist
 
@@ -63,6 +63,10 @@ ordered worst-first so the next piece of work is always the top row.
   - missing: What it does · When it runs · How it stays current · What you must do
 - [ ] `docs/user-guide/ai-workforce/decision-perspective-in-practice.md` — 1/5
   - missing: What it does · When it runs · How it stays current · What you must do
+- [ ] `docs/user-guide/ai-workforce/how-governed-work-runs.md` — 1/5
+  - missing: What it does · When it runs · How it stays current · What you must do
+- [ ] `docs/user-guide/ai-workforce/priority-and-outcomes.md` — 1/5
+  - missing: What it does · When it runs · How it stays current · What it will not do
 - [ ] `docs/user-guide/ai-workforce/provider-codex.md` — 1/5
   - missing: What it does · When it runs · How it stays current · What it will not do
 - [ ] `docs/user-guide/ai-workforce/provider-xai.md` — 1/5

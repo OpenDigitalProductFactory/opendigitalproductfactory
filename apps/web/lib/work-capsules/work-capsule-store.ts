@@ -32,7 +32,9 @@ import {
   isTerminalCapsuleStatus,
   leaseUntil,
   planAbandonedCapsuleResume,
+  readBranchIdentityCapsule,
   TERMINAL_CAPSULE_STATUSES,
+  defaultPlatformRepositoryFullName,
   type CapsuleAdoptionInput,
 } from "./work-capsule-branch-identity";
 import type { CapsuleDb, WorkCapsuleActor } from "./work-capsule-store-types";
@@ -52,6 +54,8 @@ type CapsuleCreateInput = {
   executorKind?: WorkCapsuleExecutorKind | null;
   executorRef?: string | null;
   status?: WorkCapsuleStatus;
+  /** Keyed branch identity is (repositoryFullName, headBranch) — never null (BI-F83CF689). */
+  repositoryFullName?: string | null;
   backlogItemId?: string | null;
   epicId?: string | null;
   featureBuildId?: string | null;
@@ -139,6 +143,7 @@ export async function createWorkCapsule(args: {
           source: args.input.source,
           executorKind: args.input.executorKind ?? null,
           executorRef: args.input.executorRef ?? null,
+          repositoryFullName: args.input.repositoryFullName?.trim() || defaultPlatformRepositoryFullName(),
           backlogItemId: args.input.backlogItemId ?? null,
           epicId: args.input.epicId ?? null,
           featureBuildId: args.input.featureBuildId ?? null,
@@ -194,17 +199,7 @@ export async function adoptWorktreeCapsule(args: {
   }
   const scope = normalizeWorkCapsuleScopeInput(args.input.scope);
 
-  // The schema deliberately owns one capsule identity per (repository, branch).
-  // Read that row regardless of lifecycle: an abandoned same-BI capsule is the
-  // durable identity to resume, while a foreign/terminal identity must refuse
-  // instead of falling through to an impossible duplicate create (BI-E363A524).
-  const existing = await args.db.workroom.findFirst({
-    where: {
-      repositoryFullName: args.input.repositoryFullName,
-      headBranch: args.input.headBranch,
-    },
-    orderBy: { updatedAt: "desc" },
-  });
+  const { existing, repositoryUnbound } = await readBranchIdentityCapsule(args.db, args.input);
 
   const now = new Date();
   const resumePlan = planAbandonedCapsuleResume({ existing, input: args.input, actor: args.actor, now });
@@ -223,6 +218,10 @@ export async function adoptWorktreeCapsule(args: {
     // capsule instead of leaving the work orphaned — this is what lets a worktree
     // cut before the BI was chosen still join the BI↔location record.
     const lateBind = Boolean(args.input.backlogItemId) && existing.backlogItemId == null;
+    // BI-F83CF689: bind the repository onto a capsule that predates the
+    // create/plan default, so its branch identity becomes keyed and the next
+    // caller matches it directly.
+    const repoBound = repositoryUnbound;
     // Head sync (BI-B9403248): headSha used to be written only on CREATE, so a
     // capsule adopted or claimed before the artifact commit existed could never
     // satisfy the plan-coverage ownership check, and any amend/rebase/squash
@@ -230,7 +229,7 @@ export async function adoptWorktreeCapsule(args: {
     // state, not privileged data, so re-adopting the same branch advances it.
     const headSynced = Boolean(args.input.headSha) && args.input.headSha !== existing.headSha;
     const baseSynced = Boolean(args.input.baseSha) && args.input.baseSha !== existing.baseSha;
-    if (lateBind || headSynced || baseSynced) {
+    if (lateBind || headSynced || baseSynced || repoBound) {
       const bound = await inTransaction(args.db, async (tx) => {
         const updated = await tx.workroom.update({
           where: { capsuleId: existing.capsuleId },
@@ -239,14 +238,11 @@ export async function adoptWorktreeCapsule(args: {
               ? {
                 backlogItemId: args.input.backlogItemId,
                 ...(args.input.epicId && existing.epicId == null ? { epicId: args.input.epicId } : {}),
-                ...(args.input.executorRef && existing.executorRef == null
-                  ? { executorRef: args.input.executorRef }
-                  : {}),
-                ...(args.input.worktreePath && existing.worktreePath !== args.input.worktreePath
-                  ? { worktreePath: args.input.worktreePath }
-                  : {}),
+                ...(args.input.executorRef && existing.executorRef == null ? { executorRef: args.input.executorRef } : {}),
+                ...(args.input.worktreePath && existing.worktreePath !== args.input.worktreePath ? { worktreePath: args.input.worktreePath } : {}),
               }
               : {}),
+            ...(repoBound ? { repositoryFullName: args.input.repositoryFullName } : {}),
             ...(headSynced ? { headSha: args.input.headSha } : {}),
             ...(baseSynced ? { baseSha: args.input.baseSha } : {}),
             ...(headSynced || baseSynced ? { lastSyncedAt: now } : {}),
@@ -255,11 +251,12 @@ export async function adoptWorktreeCapsule(args: {
         await recordActivity(tx, {
           workCapsuleId: existing.id,
           kind: "adopted",
-          summary: lateBind
-            ? `Late-bound ${existing.capsuleId} to ${args.input.backlogItemId}`
+          summary: lateBind ? `Late-bound ${existing.capsuleId} to ${args.input.backlogItemId}`
+            : repoBound ? `Bound ${existing.capsuleId} to ${args.input.repositoryFullName} for ${args.input.headBranch}`
             : `Synced ${existing.capsuleId} branch state for ${args.input.headBranch}`,
           payload: {
             ...(lateBind ? { backlogItemId: args.input.backlogItemId, lateBind: true } : {}),
+            ...(repoBound ? { repositoryFullName: args.input.repositoryFullName, repositoryLateBind: true } : {}),
             ...(headSynced ? { headSha: args.input.headSha, previousHeadSha: existing.headSha ?? null } : {}),
             ...(baseSynced ? { baseSha: args.input.baseSha, previousBaseSha: existing.baseSha ?? null } : {}),
           },
@@ -598,6 +595,8 @@ export async function planCapsuleWorkspace(args: {
         worktreePath,
         branchTaxonomy: input.taxonomy,
         baseBranch: capsule.baseBranch ?? "main",
+        // Planning IS the moment a capsule acquires branch identity (BI-F83CF689).
+        repositoryFullName: capsule.repositoryFullName ?? defaultPlatformRepositoryFullName(),
         status: capsule.status === "draft" ? "ready" : capsule.status,
       },
     });
@@ -605,7 +604,7 @@ export async function planCapsuleWorkspace(args: {
       workCapsuleId: capsule.id,
       kind: "workspace-planned",
       summary: `Planned ${headBranch} at ${worktreePath}`,
-      payload: { headBranch, worktreePath, branchTaxonomy: input.taxonomy },
+      payload: { headBranch, worktreePath, branchTaxonomy: input.taxonomy, repositoryFullName: updated.repositoryFullName },
       actor: args.actor,
     });
     return updated;

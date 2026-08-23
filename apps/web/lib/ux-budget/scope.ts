@@ -283,3 +283,30 @@ export function countDisclosureRegions(html: string): number {
   const rendered = removeSubtrees(html, (tag) => NON_RENDERED.has(tag.name));
   return extractSubtrees(rendered, isDisclosureRegion).length;
 }
+
+/**
+ * The ROUTE-OWNED region of a surface: the `<main>` landmark when the shell
+ * marks one, otherwise the whole scope unchanged.
+ *
+ * Only the reading-level axis uses this (BI-0ED0F6B3). Every other budget is
+ * about what the owner MEETS on arrival, and the shell's header and rail are
+ * part of that; but a reading grade computed over shared chrome measures the
+ * chrome, identically, on all 202 routes, and drowns whatever the page itself
+ * says. Word and control counts keep their existing whole-surface scope.
+ */
+export function routeContentHtml(html: string): string {
+  const mains = extractSubtrees(html, (tag) => tag.name === "main");
+  if (mains.length === 0) return html;
+  const scoped = mains.join("\n");
+  // A `<main>` that does not actually hold the page's words is not the route's
+  // content — it is a landmark wrapped around a client shell, a portal target, or
+  // (in a component test) a mocked-out subtree. Scoping to it would grade a
+  // scrap: /platform/ai/skills renders a one-word <main> under test and would
+  // have been graded on that single word. Below half the surface's words, keep
+  // the whole scope; a diluted grade beats a grade of the wrong thing.
+  return words(scoped) * 2 >= words(html) ? scoped : html;
+}
+
+function words(html: string): number {
+  return (html.replace(/<[^>]*>/g, " ").match(/[a-zA-Z0-9]+/g) ?? []).length;
+}

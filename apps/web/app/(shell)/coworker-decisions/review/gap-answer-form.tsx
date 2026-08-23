@@ -13,11 +13,18 @@ import { answerGovernanceGap } from "./actions";
 export function GapAnswerForm({
   domainClass,
   question,
+  autoOpen = false,
 }: {
   domainClass: string;
   question: string;
+  /**
+   * True when the reader arrived from a decision record's "answer it once"
+   * step. The box opens already showing the question they were just reading,
+   * so following the advice never lands on an empty form (BI-6700AF66).
+   */
+  autoOpen?: boolean;
 }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(autoOpen);
   const [answer, setAnswer] = useState("");
   const [result, setResult] = useState<{ ok: boolean; message: string } | null>(
     null,
@@ -61,6 +68,7 @@ export function GapAnswerForm({
         Answer in your own words — it&#39;s saved as a draft for you to review, not
         published automatically.
       </p>
+      <p className="text-xs text-[var(--dpf-text)]">{question}</p>
       <textarea
         value={answer}
         onChange={(e) => setAnswer(e.target.value)}

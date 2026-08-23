@@ -34,6 +34,9 @@ type BranchCapsuleRecord = {
   baseSha?: string | null;
   headSha?: string | null;
   headBranch?: string | null;
+  epicId?: string | null;
+  worktreePath?: string | null;
+  repositoryFullName?: string | null;
 };
 
 export const TERMINAL_CAPSULE_STATUSES: WorkCapsuleStatus[] = ["complete", "abandoned", "archived"];
@@ -138,4 +141,59 @@ export function planAbandonedCapsuleResume(args: {
       },
     },
   };
+}
+
+/**
+ * The repository a Workroom is bound to when the caller did not name one.
+ *
+ * BI-F83CF689: three call sites each inlined this fallback, and the two that
+ * did NOT — `create_workroom` and `plan_workroom_worktree` — left
+ * `repositoryFullName` null. Because a branch's durable identity is keyed on
+ * (repositoryFullName, headBranch), a null repo cannot match, so the documented
+ * paved road produced a SECOND live capsule on a branch that already had one.
+ * One resolver, used everywhere a capsule is created or planned.
+ */
+export function defaultPlatformRepositoryFullName(): string {
+  return process.env.DPF_REPO_FULL_NAME?.trim() || "OpenDigitalProductFactory/opendigitalproductfactory";
+}
+
+type BranchIdentityReader = {
+  workroom: { findFirst: (args: unknown) => Promise<BranchCapsuleRecord | null> };
+};
+
+/**
+ * Read the one capsule that owns this branch's durable identity.
+ *
+ * The schema deliberately owns one capsule identity per (repository, branch).
+ * That row is read regardless of lifecycle: an abandoned same-BI capsule is
+ * the durable identity to resume, while a foreign/terminal identity must
+ * refuse instead of falling through to an impossible duplicate create
+ * (BI-E363A524).
+ *
+ * BI-F83CF689: rows created before the repository was persisted on create and
+ * plan carry a null repositoryFullName, so the keyed read cannot see them and
+ * the caller forks a SECOND live capsule on a branch that already has one. A
+ * live repo-less row on the same branch IS that branch's identity — return it
+ * and let the caller bind the repository. A TERMINAL repo-less row is history,
+ * not identity: adopting it would newly refuse branch names that were
+ * previously free, which is a regression rather than enforcement.
+ */
+export async function readBranchIdentityCapsule(
+  db: BranchIdentityReader,
+  input: Pick<CapsuleAdoptionInput, "repositoryFullName" | "headBranch">,
+): Promise<{ existing: Awaited<ReturnType<BranchIdentityReader["workroom"]["findFirst"]>>; repositoryUnbound: boolean }> {
+  const keyed = await db.workroom.findFirst({
+    where: { repositoryFullName: input.repositoryFullName, headBranch: input.headBranch },
+    orderBy: { updatedAt: "desc" },
+  });
+  if (keyed) return { existing: keyed, repositoryUnbound: false };
+  const unkeyed = await db.workroom.findFirst({
+    where: {
+      repositoryFullName: null,
+      headBranch: input.headBranch,
+      status: { notIn: TERMINAL_CAPSULE_STATUSES },
+    },
+    orderBy: { updatedAt: "desc" },
+  });
+  return { existing: unkeyed, repositoryUnbound: unkeyed !== null };
 }

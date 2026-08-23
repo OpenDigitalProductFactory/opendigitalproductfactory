@@ -44,6 +44,7 @@ const EXPECTED_LEGACY_JOBS = [
   "instruction-plane-rule-coverage",
   "janitor-tests",
   "label-association-guard",
+  "live-blocker-references",
   "mcp-tool-pack-guard",
   "mobile-jest-pin-guard",
   "module-size-guard",

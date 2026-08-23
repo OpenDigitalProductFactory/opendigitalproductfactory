@@ -61,6 +61,10 @@ scripts/spec-status-frontmatter-baseline.txt merge=union
 scripts/instruction-plane-baseline.txt merge=union
 scripts/instruction-plane-rule-baseline.txt merge=union
 
+# CI test-inventory allowlist — line-oriented; concurrent guard PRs each append
+# their own self-test and should never conflict on adjacent lines.
+scripts/ci-policy-test-inventory-allowlist.txt merge=union
+
 # Archetype completeness ratchet baseline — concurrent PRs that each re-run
 # --update must not conflict; union-merge and let --update re-dedupe/sort.
 scripts/archetype-completeness-baseline.txt merge=union

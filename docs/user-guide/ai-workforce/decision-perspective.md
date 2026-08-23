@@ -8,10 +8,10 @@ order: 5
 
 This page documents two adjacent capabilities that ship together:
 
-- **Decision Perspective Gate (WWMD / WWTD)** — the canonical handler the platform calls whenever a coworker hits an ambiguity or an open product question. Returns one of `recommend` / `arbitrate` / `escalate` / `defer` with a confidence score, the principles that governed the decision, and an audit ledger entry.
+- **Decision Perspective Gate (WWMD / WWWD)** — the canonical handler the platform calls whenever a coworker hits an ambiguity or an open product question. Returns one of `recommend` / `arbitrate` / `escalate` / `defer` with a confidence score, the principles that governed the decision, and an audit ledger entry.
 - **Persona Voice Layer** — an optional audio modality. Speech-to-text (STT) is on by default for voice input; text-to-speech (TTS) is opt-in per profile and narrates decision rationales in the persona's voice.
 
-The naming: **WWMD** is "What Would Mark Do" — the first profile, seeded for the DPF platform itself. **WWTD** is "What Would They Do" — the generalized model that lets a customer organization encode an executive, a domain expert, or an organizational archetype as its own profile. **WWWD** is the customer-organization variant of WWMD; in this DPF portal instance, WWMD and WWWD point at the same profile because the business and the product are the same thing.
+The naming: **WWMD** is "What Would Mark Do" — the platform profile, seeded for DPF itself, carrying founder and platform doctrine. **WWWD** is "What Would We Do" — the organization profile, which lets a customer organization encode its own stance: an executive, a domain expert, or an organizational archetype. The two are sibling scopes, not a hierarchy, and a customer's business decision does not inherit platform judgment as authority. In this DPF portal instance WWMD and WWWD happen to point at the same profile, because here the business and the product are the same thing — that coincidence is specific to this install and is not the model.
 
 There is a third scope in the same family. **WSID** is "What Should I Do" — the *profession* profile. Where WWMD encodes founder/platform doctrine and WWWD encodes organization doctrine, WSID encodes what a competent professional in a given role should do. Each coworker role family gets its own profile (`WSID-DATA-ARCHITECT`, `WSID-FINANCE`, `WSID-MARKETING`, …) backed by a source-traced professional corpus, reusing the same profile + corpus + retrieval + gate architecture. See [The Profession Scope (WSID)](#the-profession-scope-wsid) below.
 
@@ -24,7 +24,7 @@ The full design lives in three specs:
 
 - `docs/superpowers/specs/2026-05-17-wwmd-decision-perspective-kernel-design.md` — the kernel
 - `docs/superpowers/specs/2026-05-19-wwmd-mcp-exposure-design.md` — the MCP tool
-- `docs/superpowers/specs/2026-05-19-persona-voice-layer-wwtd-design.md` — voice and WWTD profile kinds
+- `docs/superpowers/specs/2026-05-19-persona-voice-layer-wwtd-design.md` — voice and organization (WWWD) profile kinds ⟦the `wwtd` in this filename is a superseded working name; the concept shipped as WWWD⟧
 - `docs/superpowers/specs/2026-08-13-wwwd-constitutional-alignment-gate.md` — consequential-action WWWD×WSID enforcement
 
 ## What Decision Perspective Does
@@ -135,7 +135,7 @@ Tool grants and oversight levels apply: the gate is callable, but high-risk outc
 
 A persona has three independently configurable layers. None requires the others.
 
-| Layer | What it is | Required for WWTD |
+| Layer | What it is | Required for WWWD |
 |-------|-----------|-------------------|
 | **Decision materials** | The principles, decisions, and writings that encode how this person thinks. Stored as `PerspectiveMaterial` records linked to the profile. This is what the gate evaluates. | Yes |
 | **Generation style** | A persona prompt that shapes how the LLM expresses the rationale text — phrasing, cadence, vocabulary. Doesn't change the decision logic. | Recommended |
@@ -220,7 +220,7 @@ A coworker chat opened alongside `/coworker-decisions` can now read the same gov
 
 Three constraints are non-negotiable:
 
-1. **Voice is a presentation layer.** It does not change the decision logic, the confidence model, the escalation rules, or the governance authority. A WWTD profile with a celebrity voice clone follows the same `recommend / arbitrate / escalate / defer` rules as a text-only profile. Voice makes the output richer; it does not make the profile more authoritative.
+1. **Voice is a presentation layer.** It does not change the decision logic, the confidence model, the escalation rules, or the governance authority. A WWWD profile with a celebrity voice clone follows the same `recommend / arbitrate / escalate / defer` rules as a text-only profile. Voice makes the output richer; it does not make the profile more authoritative.
 
 2. **Consent is required for any `persona-real` voice.** A structured consent record is stored before any training job can run. Without that record, the training pipeline refuses to start. This is enforced at the data layer, not the UI layer.
 
@@ -257,7 +257,7 @@ Tracked under EP-WWMD, EP-VOICE-LAYER, and EP-WSID:
 
 - `docs/superpowers/specs/2026-05-17-wwmd-decision-perspective-kernel-design.md` — the kernel design (V1 WWMD)
 - `docs/superpowers/specs/2026-05-19-wwmd-mcp-exposure-design.md` — the MCP tool surface
-- `docs/superpowers/specs/2026-05-19-persona-voice-layer-wwtd-design.md` — voice layer + WWTD profile kinds
+- `docs/superpowers/specs/2026-05-19-persona-voice-layer-wwtd-design.md` — voice layer + organization (WWWD) profile kinds
 - `docs/superpowers/specs/2026-05-16-voice-input-and-transcription-design.md` — STT design
 - `docs/superpowers/specs/2026-05-17-voice-input-slice-1-5-default-on-cpu.md` — CPU-default STT + the 3-tier hardware ladder
 - `docs/superpowers/specs/2026-05-21-chatterbox-tts-self-hosted.md` — self-hosted Chatterbox TTS (Linux/NVIDIA default)

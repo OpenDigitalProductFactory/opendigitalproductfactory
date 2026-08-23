@@ -49,12 +49,15 @@ export interface ReadabilityScore {
   gradeLevel: number;
 }
 
-export function analyzeReadability(rawText: string): ReadabilityScore {
-  const text = toProse(rawText);
-  const sentences = Math.max(
-    text.split(/[.!?]+/).map((s) => s.trim()).filter(Boolean).length,
-    1,
-  );
+/** Sentences a run of PROSE contains, split on terminal punctuation. */
+function proseSentences(text: string): string[] {
+  return text.split(/[.!?]+/).map((s) => s.trim()).filter(Boolean);
+}
+
+/** The Flesch–Kincaid arithmetic, given text and a sentence count established
+ *  by the caller. Both public analyzers differ only in how they count sentences. */
+function score(text: string, sentenceCount: number): ReadabilityScore {
+  const sentences = Math.max(sentenceCount, 1);
   const words = text.split(/\s+/).filter((w) => /[a-z0-9]/i.test(w));
   const wordCount = Math.max(words.length, 1);
   const syllables = words.reduce((n, w) => n + countSyllables(w), 0);
@@ -69,6 +72,53 @@ export function analyzeReadability(rawText: string): ReadabilityScore {
     readingEase: round1(206.835 - 1.015 * wps - 84.6 * spw),
     gradeLevel: round1(0.39 * wps + 11.8 * spw - 15.59),
   };
+}
+
+/**
+ * Flesch–Kincaid over PROSE — text whose sentence boundaries are full stops.
+ * Correct for a paragraph, a marketing snippet, a doc body.
+ *
+ * DO NOT use this on a rendered UI surface. See `analyzeUtteranceReadability`.
+ */
+export function analyzeReadability(rawText: string): ReadabilityScore {
+  const text = toProse(rawText);
+  return score(text, proseSentences(text).length);
+}
+
+/**
+ * Flesch–Kincaid over a UI SURFACE — BI-0ED0F6B3.
+ *
+ * THE DEFECT THIS EXISTS TO FIX. Flesch–Kincaid divides words by sentences, and
+ * `analyzeReadability` finds sentences by looking for full stops. A user
+ * interface has almost none: it is headings, table cells, button labels, nav
+ * items and list items, and none of those are punctuated. Flatten such a page
+ * into one string and every label in it collapses into a single enormous
+ * "sentence", words-per-sentence explodes, and the grade climbs for text that
+ * carries no complexity at all.
+ *
+ * Measured proof (packages/validators/src/readability.test.ts): the same fifteen
+ * words, at the same 1.4 syllables per word, score grade 3.9 unpunctuated and
+ * grade 1.5 with a stop after each label. Identical vocabulary; the only variable
+ * is punctuation the UI had no reason to carry. On a real 200-word surface the
+ * same mechanism produced grades in the teens, and that inflation is what drove
+ * every /admin route over the high-school cap.
+ *
+ * THE CORRECTION. In a UI the SENTENCE BOUNDARY IS THE ELEMENT BOUNDARY. Each
+ * utterance — one heading, one cell, one label — is at least one sentence, and
+ * genuine prose inside an utterance still splits on its own full stops. Feed the
+ * utterances in separately and words-per-sentence becomes what it should be: a
+ * measure of how long the surface's actual phrases are.
+ *
+ * The result is dominated by syllables-per-word for a label-shaped surface, which
+ * is the punctuation-independent signal that separates plain copy from jargon,
+ * while still catching a genuinely long sentence in real body copy. It also
+ * cannot be gamed by adding full stops — a stop inside an utterance only ever
+ * splits a sentence that was already counted.
+ */
+export function analyzeUtteranceReadability(utterances: readonly string[]): ReadabilityScore {
+  const texts = utterances.map((u) => toProse(u)).filter((t) => /[a-z0-9]/i.test(t));
+  const sentences = texts.reduce((n, t) => n + Math.max(proseSentences(t).length, 1), 0);
+  return score(texts.join(" "), sentences);
 }
 
 // ── Reading levels & the tiered policy ──────────────────────────────────────

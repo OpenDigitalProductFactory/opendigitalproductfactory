@@ -1,7 +1,7 @@
 // apps/web/lib/voice-synthesis/persona-style.ts
 //
 // Persona generation style pass: rewrites narration text through a persona's
-// system prompt so the voice output matches the WWTD persona's tone and style.
+// system prompt so the voice output matches the WWWD persona's tone and style.
 // Returns narrationText unchanged when no personaSystemPrompt is present.
 
 import { callLLM } from "../llm-call"

@@ -49,10 +49,8 @@ import { clampToolResultForModel, resolveToolResultCharCap } from "./tool-result
 import { applyBacklogCreateClaimGuard } from "./backlog-create-claim-guard";
 import { applyEscalationLadderGuard, buildHumanHandoff } from "./escalation-ladder";
 import { logGeneratedProse } from "../prose/generated-prose"; // BI-41F15FD7
-import { noEligibleModelHandoff, providersBusyHandoff, providerUnreachableHandoff } from "./inference-dead-ends";
 import { assessToolSurface, computeToolSelectionAccuracy, contextEconomyTurnMetricFields } from "./context-economy-metrics";
 import { summarizeDroppedMessages } from "./compaction-digest";
-import { describeContextCapacityFailure } from "./context-capacity-failure";
 import {
   detectToolRefusedDespiteAvailability,
   appendToolRefusedRecoveryMessages,
@@ -103,111 +101,9 @@ const COMPLETION_CLAIM_PATTERN =
 export const HARD_COMPLETION_CLAIM_PATTERN =
   /\bI(?:'ve| have| just)?\s*(?:have\s+)?(?:saved|created|published|posted|sent|scheduled|recorded|queued|logged|added|drafted and saved|placed)\b|\b(?:saved|published|posted|sent|scheduled|queued|added|recorded)\s+(?:it|that|your|the)\b|\b(?:is|are|has been|have been)\s+(?:now\s+)?(?:live|saved|published|sent|scheduled|posted|queued|recorded)\b|in\s+(?:your\s+)?approval\s+queue|\b(?:prospect\s+)?account\s+created\b|\bACCT-[A-Z0-9]{4,}\b/i;
 
-/**
- * Build a plain-language, non-technical explanation when an agent turn fails
- * because routing could not complete a tool-using call (BI-23E0714C).
- *
- * The old behavior lumped every tool-route failure into one message that told
- * the operator to "Configure an active model that supports tools in
- * Platform > AI > Model Assignment" — which is wrong and a dead end whenever a
- * tool-capable provider IS already configured (the common case). This classifier
- * distinguishes the real situations so we never send a non-technical operator to
- * fix config that is already correct:
- *
- *  - REQUEST_TOO_LARGE  → context overflow; start a new thread.
- *  - No credential for ANY non-local provider → permanent config gap; point to setup.
- *    MUST be checked before the threshold branch: a threshold skip layered on top of
- *    a credential gap matches the threshold pattern but the real fix is "connect a
- *    provider", not "wait for a rate-limit to clear" (BI-AUDIT-003).
- *  - local bypassed for tool count + paid providers transiently down → rate-limit;
- *    nothing is misconfigured.
- *  - genuinely no tool-capable endpoint active → point to the REAL surface.
- *  - other endpoint failures → transient; retry shortly.
- */
-export function describeToolRouteFailure(
-  errorMessage: string,
-  toolCount: number,
-): string {
-  const msg = errorMessage ?? "";
-
-  if (msg.startsWith("REQUEST_TOO_LARGE:")) {
-    return "Your conversation is too long for this AI provider. Please start a new thread to continue.";
-  }
-
-  // Local runner rejected the request because prompt + tool schemas exceed the
-  // model's served context window (e.g. Docker Model Runner HTTP 400
-  // exceed_context_size_error). This is DETERMINISTIC, not a transient rate-limit,
-  // so the "try again shortly" branches below would mislead — and a fresh thread
-  // alone won't help if the tool surface itself is too big. Point at the real
-  // levers (shorter input / fewer active tools / larger-context model).
-  if (/exceed_context_size|exceeds the available context size/i.test(msg)) {
-    return (
-      "That request was too large for the active AI model's context window — usually too many " +
-      "tools active at once, or a long conversation. Try a shorter message or start a new thread. " +
-      "If it keeps happening, this coworker has more tools active than the local model can hold and needs right-sizing."
-    );
-  }
-
-  // Permanent configuration gap: a non-local provider is in the chain but has no
-  // credential row. This is NOT transient — the operator must connect a provider.
-  // Check this BEFORE the threshold branch: when codex has no credential AND local
-  // is threshold-blocked, the threshold pattern matches but the user needs to
-  // configure a provider, not wait for a rate-limit.
-  if (/No credential for/i.test(msg)) {
-    return (
-      "No AI provider credentials are configured for this feature. " +
-      "Open Platform › AI Operations › Providers & Routing, connect a cloud provider " +
-      "(Claude, OpenAI, Google, or similar), then try again."
-    );
-  }
-
-  // Most common real cause: the bundled local model was bypassed because this
-  // coworker exposes more tools than a small local model can reliably handle,
-  // and no paid provider was available to take the work. This is NOT a
-  // misconfiguration, so do not point the operator at a settings page.
-  if (/exceeds threshold|skipped local fallback/i.test(msg)) {
-    // Prefer the exact count the router reported ("58 tools exceeds threshold");
-    // fall back to the tool count we were handed.
-    const reported = msg.match(/(\d+)\s+tools?\s+exceeds threshold/i);
-    const count = reported ? Number(reported[1]) : toolCount;
-    const tools = count > 0 ? `${count} of them` : "many";
-    return (
-      "Your paid AI providers (such as Claude or GPT) are briefly unavailable right now — " +
-      "usually a short rate-limit that clears within a minute — and this coworker uses too many " +
-      `tools (${tools}) for the bundled local model to run on its own. Nothing is misconfigured. ` +
-      "Please wait a moment and try again."
-    );
-  }
-
-  // Genuine config gap: routing found no active model that supports tools at all.
-  if (/No eligible endpoints/i.test(msg) && /toolUse/i.test(msg)) {
-    return (
-      "No AI model that supports tools is active right now. Open Platform > AI > " +
-      "Providers & Routing to activate a tool-capable provider, then try again."
-    );
-  }
-
-  const contextCapacityFailure = describeContextCapacityFailure(msg);
-  if (contextCapacityFailure) return contextCapacityFailure;
-
-  // Config/capacity gap: routing eliminated EVERY candidate (e.g. the cloud
-  // provider's sign-in expired AND the bundled local model's context window is
-  // too small for this coworker's larger requests). This reaches here as a plain
-  // "No eligible endpoints for task type '…'" with no `toolUse` token, so the
-  // branch above misses it and — before this fix — it fell through to the generic
-  // "temporarily unavailable, try again in 30 seconds" below. That is a LIE for a
-  if (/No eligible endpoints/i.test(msg)) {
-    return noEligibleModelHandoff();
-  }
-
-  // Endpoints exist but all transiently failed (rate-limit / overload / network).
-  if (/All endpoints failed/i.test(msg)) {
-    return providersBusyHandoff();
-  }
-
-  // Most common dead end on a real install: 114 of 196 (BI-33F1EA72).
-  return providerUnreachableHandoff();
-}
+// The dead-end classifier and its copy live in ./inference-dead-ends (BI-A89E4827).
+import { describeToolRouteFailure } from "./inference-dead-ends";
+export { describeToolRouteFailure };
 
 // Narration patterns: agent describes code or announces intent instead of calling tools.
 // Includes preamble narration ("Let me check", "I need to fix") and intent announcements
@@ -1790,7 +1686,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
       console.warn(`[agentic-loop] routeAndCall threw: ${msg}`);
       logTurnSummary("unknown", "unknown");
       return {
-        content: describeToolRouteFailure(msg, routeOptions.tools?.length ?? 0),
+        content: describeToolRouteFailure(msg, routeOptions.tools?.length ?? 0, routeErr),
         providerId: "unknown",
         modelId: "unknown",
         downgraded: false,

@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 679,
+  "pageCount": 682,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -2580,6 +2580,24 @@
         "what-i-did-not-do-tonight",
         "known-environment-artifact",
         "next-step-proposal-for-your-morning"
+      ]
+    },
+    "docs/dogfood/reset-cycle-playbook.md": {
+      "publicHref": "/dogfood/reset-cycle-playbook/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "reset-cycle-playbook",
+        "who-this-is-for",
+        "before-you-start",
+        "the-phases",
+        "what-to-look-for",
+        "what-to-record",
+        "where-findings-go",
+        "augmenting-this-playbook",
+        "automation",
+        "known-manual-steps"
       ]
     },
     "docs/edge-node/deployment-topology.md": {
@@ -5698,6 +5716,7 @@
         "choice-load-is-disclosure-too-bi-d6135b88",
         "readability-plain-language",
         "audience-tiers",
+        "prose-is-not-a-user-interface-bi-0ed0f6b3",
         "enforcement-points",
         "coworker-rule",
         "name-the-role-not-the-species-bi-f2ec4699",
@@ -10382,6 +10401,7 @@
         "appsweb-and-packagesdb-vitest",
         "degenerate-environment-fixtures",
         "common-drift-and-how-to-stay-on-script",
+        "live-blocker-references-guard",
         "label-association-guard-ratchet",
         "what-this-gate-is-not"
       ]
@@ -10602,6 +10622,7 @@
       "anchors": [
         "what-this-covers",
         "how-the-defaults-are-set",
+        "this-page-sets-a-starting-point-not-the-final-answer",
         "the-levels",
         "the-two-hard-floors",
         "what-you-can-do",
@@ -10658,6 +10679,27 @@
         "related-specs"
       ]
     },
+    "docs/user-guide/ai-workforce/how-governed-work-runs.md": {
+      "publicHref": "/user-guide/ai-workforce/how-governed-work-runs/",
+      "portalHref": "/docs/ai-workforce/how-governed-work-runs",
+      "publishedPublic": true,
+      "publishedPortal": true,
+      "anchors": [
+        "what-this-covers",
+        "the-one-sentence-version",
+        "1-the-workroom-holds-the-work",
+        "2-the-shape-bounds-what-may-happen",
+        "3-the-posture-sets-the-pace",
+        "the-two-rules-that-make-this-safe",
+        "the-priority-half",
+        "4-the-corpus-decides-the-question",
+        "5-the-gate-checks-the-tool",
+        "the-floors-nothing-crosses",
+        "6-the-receipt-is-what-you-review",
+        "known-limits",
+        "related"
+      ]
+    },
     "docs/user-guide/ai-workforce/index.md": {
       "publicHref": "/user-guide/ai-workforce/",
       "portalHref": "/docs/ai-workforce/index",
@@ -10665,6 +10707,7 @@
       "publishedPortal": true,
       "anchors": [
         "overview",
+        "start-with-the-end-to-end-picture",
         "find-and-work-with-a-coworker",
         "reading-a-coworkers-shape",
         "key-concepts",
@@ -10710,6 +10753,22 @@
         "chatgpt-openai-subscription",
         "docker-model-runner-local",
         "troubleshooting"
+      ]
+    },
+    "docs/user-guide/ai-workforce/priority-and-outcomes.md": {
+      "publicHref": "/user-guide/ai-workforce/priority-and-outcomes/",
+      "portalHref": "/docs/ai-workforce/priority-and-outcomes",
+      "publishedPublic": true,
+      "publishedPortal": true,
+      "anchors": [
+        "what-this-covers",
+        "what-it-is-and-what-it-deliberately-is-not",
+        "two-properties-that-make-it-safe",
+        "the-work-itself-can-raise-the-bar",
+        "reading-the-outcomes-view",
+        "the-calibration-suggestion",
+        "honest-limits",
+        "related"
       ]
     },
     "docs/user-guide/ai-workforce/provider-anthropic.md": {
@@ -11886,6 +11945,7 @@
         "ai-coworker-support",
         "reading-the-decision-log",
         "escalated-and-deferred-decisions-what-to-do",
+        "suggestions-your-coworkers-drafted",
         "review-adjust-findings",
         "what-to-watch"
       ]

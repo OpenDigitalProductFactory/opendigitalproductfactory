@@ -18,14 +18,14 @@
     "storefront": "Marketing scheduler, discovery attribution"
   },
   "summary": {
-    "pagesInScope": 57,
+    "pagesInScope": 59,
     "complete": 5,
     "byElement": {
       "acts": 9,
       "cadence": 14,
       "currency": 9,
-      "boundary": 40,
-      "humanStep": 9
+      "boundary": 41,
+      "humanStep": 10
     },
     "note": "Detection is lexical and presence-only. A tick means the question is answered somewhere on the page, never that the answer is correct."
   },
@@ -220,6 +220,36 @@
         "currency": false,
         "boundary": true,
         "humanStep": false
+      },
+      "answered": 1,
+      "total": 5,
+      "complete": false
+    },
+    {
+      "path": "docs/user-guide/ai-workforce/how-governed-work-runs.md",
+      "area": "ai-workforce",
+      "automation": "Coworker self-tasks, nightly coworker certification, model discovery refresh",
+      "elements": {
+        "acts": false,
+        "cadence": false,
+        "currency": false,
+        "boundary": true,
+        "humanStep": false
+      },
+      "answered": 1,
+      "total": 5,
+      "complete": false
+    },
+    {
+      "path": "docs/user-guide/ai-workforce/priority-and-outcomes.md",
+      "area": "ai-workforce",
+      "automation": "Coworker self-tasks, nightly coworker certification, model discovery refresh",
+      "elements": {
+        "acts": false,
+        "cadence": false,
+        "currency": false,
+        "boundary": false,
+        "humanStep": true
       },
       "answered": 1,
       "total": 5,

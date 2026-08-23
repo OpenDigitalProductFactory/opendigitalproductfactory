@@ -47,7 +47,19 @@ Rows marked **escalate** or **defer** carry an "awaiting review" chip until a hu
 
 Neither outcome silently blocks work. The coworker that asked handled its own moment and moved on; the one exception is a Build Studio build paused at a decision gate, and that row says so. The log header totals what is waiting per tier, and each decision's drill-in now explains, in plain language, what its outcome means, whether anything is waiting on you, and the next steps with links.
 
+Each decision opens with **Where this came from**: the work room the coworker was inside and what that room is for, the coworker by name and role, what it was doing at the time, and how that link was established. When the same question has come back before, the record says how many times and how many are still waiting on you. If the work behind a decision cannot be traced, the record says that plainly rather than showing you an agent id and a token.
+
+Where the AI scored the options against real criteria, each option also carries what it is best at and what it costs, relative to the alternatives. An option that was never scored shows no such claim — a made-up consequence would be worse than none.
+
+Following **Answer it once** from a decision now opens that finding on Review & adjust with your answer box already open and the question restated, so you never restart from a blank field.
+
 Do not work the log line by line. Review & adjust groups the waiting rows into themes; answering a theme once — or adding a stance or craft guidance that covers it — teaches your AI so that question stops needing a human. Exact repeated asks appear once with a matching-ask count. Marking that item reviewed or dismissed applies the same disposition to every exact match, so the completed cluster leaves the queue while each original interaction remains in the audit ledger.
+
+## Suggestions Your Coworkers Drafted
+
+When your coworkers have worked out what you should do about a decision, the record carries their suggestion: what they recommend, what accepting it would change, and whether any of them disagreed. You can accept it as written, edit the wording and accept your version, or reject it with a reason so it does not come back.
+
+Nothing is applied behind you. Accepting a business answer still saves it as draft doctrine for you to review, exactly as answering a gap does, and a suggestion whose decision gets settled somewhere else quietly expires instead of waiting to be accepted later. Suggestions still waiting on you are listed at the top of Review & adjust.
 
 ## Review & Adjust Findings
 

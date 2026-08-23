@@ -1,6 +1,6 @@
 ---
 name: dpf-pr-with-dco
-description: "Use when ready to open a DPF pull request. Encodes the full DPF PR contract, including a fresh independent semantic-review receipt for the stable local commit before pregate/first publication, DCO, overlap sweep, exact-tree local CI, and a regular non-draft ready PR."
+description: "Use when ready to open a DPF pull request."
 
 # Agent Skills standard fields (Surface A — Claude Code)
 disable-model-invocation: false

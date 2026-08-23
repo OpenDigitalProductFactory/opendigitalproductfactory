@@ -49,6 +49,7 @@ export const STANCE_KEYS = [
   "teardown",
   "sourceAuthority",
   "peerWrite",
+  "workSync",
 ] as const;
 export type StanceKey = (typeof STANCE_KEYS)[number];
 
@@ -81,6 +82,7 @@ export const STANCE_LABEL: Record<StanceKey, string> = {
   teardown: "Teardown",
   sourceAuthority: "Source changes",
   peerWrite: "Paired installation",
+  workSync: "Work sync",
 };
 
 /** Plain-language stance values, keyed by stance then by the resolver's value. */
@@ -103,6 +105,10 @@ export const STANCE_VALUE_LABEL: Record<StanceKey, Record<string, string>> = {
     "read-only": "Read only",
     "governed-write": "Governed writes",
   },
+  workSync: {
+    none: "Nowhere to mirror",
+    "same-organization": "Mirrored to the organization",
+  },
 };
 
 /**
@@ -120,6 +126,9 @@ export const STANCE_VALUE_INTENT: Record<
   teardown: { permitted: "neutral", "capture-required": "warning", forbidden: "danger" },
   sourceAuthority: { "governed-worktree": "neutral", none: "warning" },
   peerWrite: { none: "neutral", "read-only": "warning", "governed-write": "neutral" },
+  // Mirroring is how work survives a teardown, so having nowhere to mirror is
+  // the state that deserves the brake, not the state that has a peer.
+  workSync: { "same-organization": "neutral", none: "warning" },
 };
 
 /** How each confirmation status is shown. Owned here, not in the component. */
