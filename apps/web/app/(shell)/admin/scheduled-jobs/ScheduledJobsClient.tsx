@@ -496,7 +496,7 @@ export function ScheduledJobsClient({ initialJobs }: { initialJobs: ScheduledWor
                           </div>
                         ) : (
                           <div className="text-dpf-caption" style={{ color: "var(--dpf-muted)" }}>
-                            this cron records no run data
+                            records no run data
                           </div>
                         )}
                         {job.lastError && (
@@ -575,7 +575,7 @@ export function ScheduledJobsClient({ initialJobs }: { initialJobs: ScheduledWor
                                 <span
                                   className="text-dpf-caption"
                                   style={{ color: "var(--dpf-muted)" }}
-                                  title="This cron never reads the enabled column, so disabling it here would not stop it. Tracked as BI-7E49FA15."
+                                  title="This cron ignores the enabled column; disabling would not stop it."
                                 >
                                   no kill switch
                                 </span>
