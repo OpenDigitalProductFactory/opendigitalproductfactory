@@ -18,10 +18,10 @@
     "storefront": "Marketing scheduler, discovery attribution"
   },
   "summary": {
-    "pagesInScope": 56,
+    "pagesInScope": 57,
     "complete": 5,
     "byElement": {
-      "acts": 8,
+      "acts": 9,
       "cadence": 14,
       "currency": 9,
       "boundary": 40,
@@ -107,6 +107,21 @@
     },
     {
       "path": "docs/user-guide/platform/authority-and-audit.md",
+      "area": "platform",
+      "automation": "Discovery sweeps, estate patch posture, token expiry monitor, runtime janitors",
+      "elements": {
+        "acts": false,
+        "cadence": false,
+        "currency": false,
+        "boundary": false,
+        "humanStep": false
+      },
+      "answered": 0,
+      "total": 5,
+      "complete": false
+    },
+    {
+      "path": "docs/user-guide/platform/wordpress-self-hosted.md",
       "area": "platform",
       "automation": "Discovery sweeps, estate patch posture, token expiry monitor, runtime janitors",
       "elements": {
@@ -272,21 +287,6 @@
     },
     {
       "path": "docs/user-guide/build-studio/index.md",
-      "area": "build-studio",
-      "automation": "Build Studio PR delivery reconcile, sandbox build GC, task-run watchdog",
-      "elements": {
-        "acts": false,
-        "cadence": false,
-        "currency": false,
-        "boundary": true,
-        "humanStep": false
-      },
-      "answered": 1,
-      "total": 5,
-      "complete": false
-    },
-    {
-      "path": "docs/user-guide/build-studio/sandbox.md",
       "area": "build-studio",
       "automation": "Build Studio PR delivery reconcile, sandbox build GC, task-run watchdog",
       "elements": {
@@ -670,6 +670,21 @@
         "currency": false,
         "boundary": true,
         "humanStep": true
+      },
+      "answered": 2,
+      "total": 5,
+      "complete": false
+    },
+    {
+      "path": "docs/user-guide/build-studio/sandbox.md",
+      "area": "build-studio",
+      "automation": "Build Studio PR delivery reconcile, sandbox build GC, task-run watchdog",
+      "elements": {
+        "acts": true,
+        "cadence": false,
+        "currency": false,
+        "boundary": true,
+        "humanStep": false
       },
       "answered": 2,
       "total": 5,

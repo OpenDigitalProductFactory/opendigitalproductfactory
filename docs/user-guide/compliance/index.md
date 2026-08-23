@@ -76,49 +76,40 @@ the obligation record.
 
 ## What The Compliance Coworker Does
 
-**What it does.** The Compliance Officer coworker can onboard a regulation and
-draft its obligation structure from a source you point it at, run a gap
-assessment over obligations that have no active control, report the posture
-score and name its detractors, draft and version policies, capture what your
-business does with data so the right regulations apply, and open licensing
-readiness issues. It weighs its judgements against its profession corpus and the
-organization's own recorded stances rather than deciding unaided.
+**What it does.** Two things, and they are deliberately separate. A daily
+**obligation assurance watch** sweeps what you have recorded — obligation
+frequencies, control review dates and cadences, and licence requirement
+staleness — and raises a finding on the assurance ledger for anything falling
+due inside the next 30 days. The **Compliance Officer** coworker then works those
+findings: it reviews what came due, drafts the follow-up, and brings you the
+decision. It can also onboard a regulation and draft its obligation structure,
+run a gap assessment over obligations with no active control, report the posture
+score and name its detractors, draft and version policies, and open licensing
+readiness issues.
 
-**When it runs.** Two things now run without being asked, and one still does not.
+**When it runs.** The sweep runs **daily at 05:40 UTC**, so a finding is waiting
+before the working day starts — it is not triggered by you opening a screen. How
+often the coworker then reviews those findings follows its Proactivity setting:
+weekly at Balanced, daily at Assertive, never at Quiet. Recorded review dates and
+frequencies are now read; they are no longer inert.
 
-The **obligation assurance watch** runs daily at 05:40 UTC. It reads the review
-dates and frequencies you record on obligations and controls, and the freshness
-budget on licence requirement references, and raises a finding for anything
-falling due inside the next 30 days or already past. It also reports anything
-that declares a recurrence with no date attached, because that reads on screen
-as a control in force and behaves as one that is not. You can change its cadence
-or run it now from `/admin/scheduled-jobs`.
+**How it stays current.** For what you have already recorded, the watch keeps
+pace — a date cannot pass unnoticed. For whether the recorded requirement still
+matches the law, it cannot: the regulatory-change scan runs only when someone
+presses the button on the Regulations screen, and it does not subscribe to any
+official source. Re-checking the authority remains yours.
 
-The **Compliance Officer** then reports those findings to you on its Proactivity
-setting — weekly at Balanced, daily at Assertive, not at all at Quiet.
+**What it will not do.** The sweep raises findings; it never decides the
+response. The coworker does not determine that you are compliant, does not renew
+a licence, does not submit a filing, and does not close an obligation on its own.
+Deciding what to do about a finding is a governed decision owned by the
+accountable compliance owner, and raising Proactivity changes how often the watch
+runs — never who answers for the response.
 
-What still does **not** run on a schedule is the regulatory-change scan. It runs
-only when someone presses the button on the Regulations screen, and that is
-deliberate: it asks a model from recall rather than reading an authoritative
-feed, so running it daily would manufacture compliance noise rather than detect
-regulatory change.
-
-**How it stays current.** Your recorded dates are watched daily; the outside
-world is not. The watch re-reads the records on every run, so correcting a date
-is reflected the next morning and a completed review closes its finding. But
-nothing subscribes to any official source, and the change scan compares a
-regulation only against what it last recorded. Treat *regulatory* currency as a
-human responsibility on a calendar you own; the platform now watches whether you
-are keeping to that calendar, not whether the calendar is still right.
-
-**What it will not do.** The coworker does not decide that you are compliant,
-does not renew a licence, does not submit a filing, and does not change a control
-status on its own. Consequential actions require your approval, and low-confidence
-or conflicting judgements escalate rather than resolve themselves.
-
-**What you must do.** Set and keep your own review cadence, re-check the official
-source before relying on any recorded requirement, and treat an unchanged posture
-score as evidence of nothing — it does not move when a deadline passes unnoticed.
+**What you must do.** Own the decision on each finding, and keep re-checking the
+official source, because currency of the requirement itself is still a human
+responsibility. Treat a quiet ledger as evidence that nothing recorded is due —
+not that nothing is wrong.
 
 ## Read Posture Carefully
 
