@@ -206,7 +206,14 @@ Decision: `atomic`.
 
 The schema, command transaction, capacity projection, and operator workflow are one safety invariant. Shipping any subset independently would either create unused substrate or expose a placement UI without enforced capacity/history. The goal also requires one PR per epic item. All work maps to `BI-D2A51B36`; no independent delivery boundary is left only in this document.
 
-Coverage receipt: pending `record_plan_backlog_coverage` after this immutable plan blob is persisted.
+Coverage receipt: blocked. `record_plan_backlog_coverage` resolved the immutable
+provider blob at commit `835a30eddf5376702d234eada11ab3240afe7e96`, then returned
+`traceability-incomplete` because `BI-D2A51B36` has no
+`initiative_scope_baseline`. The server states that the baseline is not reachable
+from an MCP session. Its suggested `BI-B9403248` anchor is not live; the verified
+live remediation item is `BI-0996913C` ("Make plan-coverage baseline remediation
+reachable and live-anchor safe"). This plan's atomic mapping remains the durable
+fallback record; it is not represented as a successful coverage receipt.
 
 ## Risk and rollback
 
@@ -225,4 +232,3 @@ Coverage receipt: pending `record_plan_backlog_coverage` after this immutable pl
 - Data impact: additive enum value and table; no backfill; no destructive DDL; rollback by forward compensating migration.
 - Seed contribution fit: adds the already-required foster-home resource kind to the animal-welfare process profile; it does not add demo records or pet-rescue-only platform behavior outside that profile.
 - Refactoring budget: shared canonical resource/occupancy repositories and replacement of hand-rolled Animals form/status patterns are the deliberate ~20% convergence work.
-
