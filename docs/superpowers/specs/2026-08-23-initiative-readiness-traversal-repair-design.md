@@ -29,6 +29,20 @@ The WordPress reproduction is authoritative:
   `6b4ea6b906836b8e67b2afa53cf2aab25fdf03b1` and the design/plan paths, but
   left `Workroom.headSha=null`.
 
+A separate pet-rescue initiative reproduces the reviewer-routing failure:
+
+- `BI-D2A51B36` / `WC-B0DD2B2F` is pinned to provider commit
+  `49140d33a9f7c2d62abcf1ffc28e0fbff50b1203`.
+- External coworker handoff rejected `missing_threadId`; native build routing
+  could not load the handoff tool after discovery; the workforce UI opened an
+  ineligible/default coworker instead of the requested Enterprise Architect.
+- Manual-check evidence `cmt5b0dy006gd01rmfykifyq3` records the blocked route.
+
+Independent traversal on this repair BI also exposed a second authority
+defect. `record_initiative_design_review(gate="spec-approval")`, executed by
+the correctly granted `AGT-WS-REVIEW`, failed with `AUTHORIZATION_DENIED` and
+"Spec approval requires an organization-bound authority decision."
+
 This is not permission to skip readiness. The gate denies implementation
 correctly but does not expose a governed path to satisfy the denial.
 
@@ -40,19 +54,22 @@ correctly but does not expose a governed path to satisfy the denial.
 | Requirement policy | `evaluate.ts` gives fix, feature, and cross-domain the same plan requirements and almost the same implementation requirements | The approved profile semantics were not encoded. |
 | Tool disclosure | Exact `load_tools` requests for every initiative receipt writer returned no granted tools | The developer correctly lacks reviewer grants, but the response does not identify who can act. |
 | Reviewer routing | `request_coworker` and `summon_coworker` reject PAT calls without `threadId` | The collaboration adapter assumes a portal thread and ignores the existing auth-bound `tasks/submit` substrate. |
+| Workforce routing | WC-B0DD2B2F exhausted native discovery and the workforce UI opened a default/ineligible coworker | Handoff intent and exact eligible reviewer identity are not carried end to end. |
 | Eligible reviewers | The live agent/grant registry has separate design, architecture, data, UX, security, compliance, domain, and evidence agents | The existing roster is not joined to unmet receipt authority. |
+| Spec-approval authority | `writeAuthorizationDecision` persists `organizationId=null`; `deriveCoworkerAuthoritySubject` ignores `itemId`; the baseline repository requires an allow decision bound to the initiative organization | The generic authority gate discards the canonical initiative subject and organization before the independently authorized reviewer reaches receipt persistence. |
 | Workroom synchronization | `adoptWorktreeCapsule` already updates `baseSha`, `headSha`, and `lastSyncedAt` | External evidence never verifies a provider branch head or passes a SHA to adoption. |
 | Artifact author | `resolveRepositoryArtifact` requires one subject Workroom whose head equals the immutable commit | `ARTIFACT_AUTHOR_REQUIRED` is downstream of the missing head sync. |
 
 The defect is a combination of profile derivation, per-profile policy,
-progressive disclosure/recovery, external reviewer dispatch, Workroom head
-synchronization, and downstream artifact-author resolution. No new table,
-receipt type, grant, or reviewer role is needed.
+progressive disclosure/recovery, external reviewer dispatch, authority-decision
+subject binding, Workroom head synchronization, and downstream artifact-author
+resolution. No new table, receipt type, grant, or reviewer role is needed.
 
 ## Existing substrate to preserve
 
 - `BacklogItemActivity` remains the receipt and decision audit log.
 - Initiative lane tools and grants remain the only receipt authority.
+- `AuthorizationDecisionLog` remains the reviewer allow-decision audit record.
 - The agent registry plus live `Agent.toolGrants` remains reviewer authority.
 - `submitRemoteCoworkerTask` remains the auth-bound external TaskRun executor.
 - `adoptWorktreeCapsule` remains the only Workroom head writer.
@@ -149,7 +166,26 @@ the decision criterion: smallest architecture-consistent repair. Reusing the
 existing task substrate meets it; no authority is inferred from the
 inconclusive score.
 
-### 5. Reconcile provider-verified external evidence through adoption
+### 5. Bind reviewer authority to the governed initiative
+
+Do not accept an organization identifier from the receipt caller. Extend the
+existing subject derivation so the server-recognized `itemId` becomes
+`{ kind: "backlog-item", id }`. Before writing the generic authority decision,
+resolve that canonical BacklogItem server-side and copy its `organizationId`
+into `AuthorizationDecisionLog`.
+
+The decision writer must bind `objectRef` to the derived backlog subject and
+must fail closed when the item is absent, the item has no governed organization,
+or the resolved organization conflicts with any authenticated execution
+context. Other subject kinds keep their current behavior until they have an
+equally canonical server-side organization resolver; there is no permissive
+fallback from caller input.
+
+This lets an independently granted design reviewer traverse the existing
+`spec-approval` repository checks. It does not relax the checks, grant the
+author review authority, or manufacture an organization for platform scope.
+
+### 6. Reconcile provider-verified external evidence through adoption
 
 Extend `record_external_development_evidence` with optional `headSha`.
 
@@ -170,7 +206,7 @@ The response reports `reconciled`, `not-requested`, or `not-reconciled`, the
 Workroom when known, accepted SHA when verified, and one next action. No parallel
 Workroom writer is introduced.
 
-### 6. Existing Workroom reconciliation is replay, not migration
+### 7. Existing Workroom reconciliation is replay, not migration
 
 No schema migration is needed. Replay the canonical external-development
 evidence call with the same BI, branch, worktree, session, commit list, and
@@ -186,6 +222,7 @@ Unverified, mismatched, ambiguous, or foreign artifacts remain blocked.
 | Decision -> recovery | Recovery is advice/routing only; it cannot mutate receipt state. |
 | Developer -> reviewer | The caller cannot load or borrow reviewer tools; an eligible agent executes with its own grant. |
 | PAT -> TaskRun | User, token capability, clearance, lifecycle, idempotency, and risk class use the existing task checks. |
+| Receipt call -> authority log | The server derives the backlog subject and organization; caller-supplied organization claims are ignored. |
 | Evidence -> Workroom | Only a full provider branch-head match reaches adoption. |
 | Workroom -> author | Exact subject/repo/head, provider blob, one DCO identity, and accountable owner remain required. |
 
@@ -198,10 +235,11 @@ Unverified, mismatched, ambiguous, or foreign artifacts remain blocked.
 | `AC-POLICY-DIFFERENT` | Fix, feature, and cross-domain have materially different sets. | Table-driven pure-policy tests. |
 | `AC-RECOVERY-ROUTE` | Missing grants identify exact eligible agents and request packet. | Recovery resolver and claim tests. |
 | `AC-REVIEW-SEPARATION` | External fallback executes as target reviewer and never grants caller authority. | Coworker/task and receipt separation tests. |
+| `AC-SPEC-AUTHORITY` | A correctly granted independent reviewer gets an organization-bound allow decision for the governed item; missing/mismatched subjects fail closed. | Authority-gate and exact spec-approval traversal tests. |
 | `AC-HEAD-RECONCILE` | Provider-verified evidence updates the existing subject Workroom through adoption. | Provider, evidence handler, and capture tests. |
 | `AC-AUTHOR-AFTER-SYNC` | Artifact author resolves after synchronization. | Repository-artifact integration fixture. |
 | `AC-FAIL-CLOSED` | Unverified, mismatched, ambiguous, foreign, unsigned, or DCO-conflicting artifacts do not resolve. | Negative tests. |
-| `AC-REPLAY` | Replaying evidence reconciles null/stale heads idempotently. | Reuse/adopt regression test. |
+| `AC-REPLAY` | Replaying evidence reconciles null/stale heads idempotently, and blocked Workrooms receive an exact reviewer route. | WC-E8275570- and WC-B0DD2B2F-shaped regression tests. |
 
 ## Non-goals
 
