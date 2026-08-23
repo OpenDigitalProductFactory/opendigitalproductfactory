@@ -1076,6 +1076,9 @@
       "docs/architecture/context-engineering-standards.md",
       "docs/architecture/mcp-tool-authorization-runbook.md"
     ],
+    "apps/web/lib/ux-budget/budgets.ts": [
+      "docs/platform-usability-standards.md"
+    ],
     "apps/web/lib/ux-budget/measure.ts": [
       "docs/platform-usability-standards.md"
     ],
@@ -2719,6 +2722,7 @@
       "apps/web/lib/shell/shell-action-contract.ts",
       "apps/web/lib/tak/escalation-ladder.ts",
       "apps/web/lib/tak/prompt-assembler.ts",
+      "apps/web/lib/ux-budget/budgets.ts",
       "apps/web/lib/ux-budget/measure.ts",
       "apps/web/lib/workforce/oversight-copy.ts",
       "packages/validators/src/readability.ts",
