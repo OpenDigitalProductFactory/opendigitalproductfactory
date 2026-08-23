@@ -22,6 +22,7 @@ import {
   isRunnerFailureResult,
   runPreflight,
 } from "./lib/pregate-preflight.mjs";
+import { POLICY_GUARD_PROFILES } from "./lib/ci-policy-guards.mjs";
 import { RUNNER_FAILURE_EXIT_CODE } from "./check-guards.mjs";
 import { loadPinnedGuardTypeScript } from "./lib/load-pinned-guard-typescript.mjs";
 import { shouldRunPreflight } from "./pregate.mjs";
@@ -79,6 +80,25 @@ test("buildPreflightPlan includes only commit-range-safe pull-request gates", ()
   // PR-body-dependent and tree-mutating gates must never run host-side.
   assert.ok(!ids.has("seed-fit-gate"), "seed-fit-gate reads the PR body");
   assert.ok(!ids.has("decision-baseline"), "decision-baseline merges origin/main");
+});
+
+test("buildPreflightPlan runs every pull-request gate that can answer host-side", () => {
+  // Parity with CI's pull-request profile is the point of the preflight. A gate
+  // omitted here is one a push can only discover in CI — which is what happened
+  // to Docs Impact on #4558. Only the two gates that CANNOT answer before a push
+  // may be missing; anything else added to the profile must be triaged into or
+  // out of LOCAL_SAFE_PR_GUARD_IDS deliberately, and this test is the prompt.
+  const CANNOT_ANSWER_HOST_SIDE = new Set(["seed-fit-gate", "decision-baseline"]);
+  const planned = new Set(buildPreflightPlan().map((entry) => entry.id));
+  const missing = POLICY_GUARD_PROFILES["pull-request"]
+    .map((entry) => entry.id)
+    .filter((id) => !planned.has(id) && !CANNOT_ANSWER_HOST_SIDE.has(id));
+  assert.deepEqual(
+    missing,
+    [],
+    `pull-request gate(s) absent from the preflight: ${missing.join(", ")}. ` +
+      "Add to LOCAL_SAFE_PR_GUARD_IDS, or to CANNOT_ANSWER_HOST_SIDE with the reason.",
+  );
 });
 
 test("buildPreflightPlan contains no --test invocations at all", () => {
