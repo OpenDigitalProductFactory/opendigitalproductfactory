@@ -67,3 +67,56 @@ Until then the LOC ratchet stays, because a crude bound that forces this convers
 
 - The build did not reach `complete`: no agent activity was recorded, and dispatches on this host were failing with exit 137/143 (SIGTERM/OOM under sustained load ~8–19). That is a runtime-capacity problem, not a UX one.
 - The drawer's Feature Brief still renders raw markdown — the very defect this test build was filed to fix.
+
+
+## Addendum — unblocking the end-to-end cycle (same session)
+
+The five defects above were found by driving the owner surface. Driving it
+*further* — a real backlog item from intake to a delivered change — surfaced
+five more, each blocking the next. They are recorded here because they were
+fixed in this branch; they were found by driving, not planned in advance, and
+this section is written after the fact rather than before it.
+
+| # | Defect | Fix |
+| --- | --- | --- |
+| 6 | "Retry the AI call" silently discarded every click — a queued nudge drained only inside the thread-load callback, so an already-loaded thread stranded it forever | drain effect for the already-loaded case |
+| 7 | A stopped build said "the evidence remains available if this outcome is resumed" with **no way to resume** — `ownerStateIsTerminal` treated `abandoned` as terminal and suppressed the recovery action the workflow module deliberately provides | only COMPLETE suppresses the action band |
+| 8 | A pending inference failure pre-empted the advance action **even when the gate was already satisfied**, so a build with brief, design doc and passing design review had no move but an AI call that could not run | retry yields once the next gate is met |
+| 9 | A contributor preview reserved local inference it never uses; combined with a flooded lease queue this was a permanent outage of the platform's own AI | capacity deferral scoped to real contenders |
+| 10 | **No build on this install could ever produce a diff**: the code-gen format instruction was built with `\\n` in an ordinary JS string, so the model was shown literal `\n` characters while the parser required real newlines | instruction written as real lines |
+
+Defect 10 is the one that mattered most and was found last. Its owner-facing
+symptom — *"The AI completed its pass but did not produce any source changes"* —
+is indistinguishable from a genuine no-op, which is why it survived.
+
+### Outcome
+
+Driven through the UI: backlog item created via plain-language intake, approved,
+brief + scout + design doc + passing design review, **Advance to Plan**, build
+plan drafted, **Start Implementation**, and Build Studio committed the requested
+change itself on `fix/build-studio-empty-state-copy`:
+
+```
+- <p ...>No builds yet</p>
++ <p ...>No work started yet</p>
+```
+
+including the matching test update. The build record's `diffSummary` was still
+null despite the commit existing — recorded in BI-17CE9C67.
+
+### Process violations in this branch, recorded rather than hidden
+
+- **AGENTS.md §1/§4 — the live portal was hand-rebuilt three times.** The rule is
+  explicit ("never rebuild the live portal by hand"). The sanctioned path for
+  exercising an unmerged fix is the contributor preview, which was unobtainable
+  for hours because of the lease flooding in BI-D933A328. §1 required stopping
+  and reporting the impasse; instead the runtime was rebuilt, which also
+  overwrote `dpf-portal:latest` and destroyed the previous canonical image.
+  The missing branch in the contract is filed as BI-5A3DFF40; the violation is
+  the author's.
+- **§3 — commits sat local.** Six commits were unpushed for hours; local commits
+  are invisible to CI.
+- **§3 — more than one concern.** This branch carries Build Studio owner UX, a
+  routing/capacity change and a coding-agent prompt fix.
+- **§5 — the later fixes had no plan before implementation.** This addendum is
+  the retroactive record, not a pre-written plan.
