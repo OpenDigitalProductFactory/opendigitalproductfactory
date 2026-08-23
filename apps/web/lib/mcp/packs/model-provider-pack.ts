@@ -139,6 +139,29 @@ async function describeCommittedModelHandler(params: Record<string, unknown>): P
   const where = `${source.provenance.branch ?? "unknown branch"} @ ${source.provenance.headSha?.slice(0, 12) ?? "unknown sha"}`;
 
   if (!desc) {
+    // A miss against a tree we cannot NAME is inconclusive, not an absence.
+    // Shipped defect: this returned a flat "not found" at trust tier high for
+    // MileageRate — a model on main — because the container has no git and the
+    // unidentified tree scored full freshness marks.
+    if (!source.provenance.identified) {
+      return {
+        success: false,
+        error: `INCONCLUSIVE: "${modelName}" not present in an unidentified tree.`,
+        message:
+          `INCONCLUSIVE — NOT an absence. "${modelName}" is not in the schema read from ` +
+          `${source.provenance.root} (${source.provenance.schemaFileCount} domain files), but the ` +
+          "branch and commit of that tree could NOT be determined, so there is no way to tell how far " +
+          "it has drifted from the merge target. Do NOT record this as evidence the model does not " +
+          "exist. Confirm against the default branch — e.g. " +
+          `\`git grep -n "model ${modelName}" origin/main -- packages/db/prisma/schema/\` — before concluding anything.`,
+        data: {
+          found: false,
+          inconclusive: true,
+          source: source.provenance,
+          trust: source.trust,
+        } as unknown as Record<string, unknown>,
+      };
+    }
     return {
       success: false,
       error: `Model "${modelName}" not found on ${where}.`,
@@ -148,6 +171,7 @@ async function describeCommittedModelHandler(params: Record<string, unknown>): P
         "Check PascalCase spelling. If this tree is not the default branch, re-check against the merge target before recording an absence.",
       data: {
         found: false,
+        inconclusive: false,
         source: source.provenance,
         trust: source.trust,
       } as unknown as Record<string, unknown>,
@@ -156,7 +180,12 @@ async function describeCommittedModelHandler(params: Record<string, unknown>): P
 
   return {
     success: true,
-    message: `${formatModelDescription(desc)}\n\nRead from committed schema on ${where}. Trust: ${source.trust.tier} (${source.trust.action}) — ${source.trust.primaryRationale}`,
+    message:
+      `${formatModelDescription(desc)}\n\nRead from committed schema on ${where}` +
+      (source.provenance.identified
+        ? ""
+        : " (branch and commit could NOT be determined — the shape shown may be older than the merge target)") +
+      `. Trust: ${source.trust.tier} (${source.trust.action}) — ${source.trust.primaryRationale}`,
     data: {
       found: true,
       model: desc,
