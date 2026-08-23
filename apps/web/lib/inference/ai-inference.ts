@@ -458,7 +458,7 @@ export async function callProvider(
   // Host capacity is a dispatch constraint, not a routing hint. Enforce it at
   // the shared adapter boundary so direct, agentic, evaluation and fallback
   // callers cannot start a local model while governed local CI owns the host.
-  await assertProviderDispatchCapacity(providerId);
+  await assertProviderDispatchCapacity(providerId, { buildDispatch: !!attribution?.buildId });
 
   // 0. EP-COST-001 Phase 2 — pre-call budget gate.
   // Check the agent's daily token budget before dispatching. If the agent has

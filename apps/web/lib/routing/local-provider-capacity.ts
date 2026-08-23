@@ -86,9 +86,17 @@ export async function assertLocalProviderCapacityAvailable(input: {
 /** Completion-adapter boundary: remote providers remain independent of host leases. */
 export async function assertProviderDispatchCapacity(
   providerId: string,
-  input: { listCapacityLeases?: LeaseReader } = {},
+  input: { listCapacityLeases?: LeaseReader; buildDispatch?: boolean } = {},
 ): Promise<void> {
   if (!isLocalProviderId(providerId)) return;
+  // BI-8B4359DE: A Build Studio build is user-facing product delivery and takes
+  // precedence over internal local-CI's host reservation. On a single-host,
+  // local-first install the on-box model is the ONLY routed inference endpoint,
+  // and local-CI is almost always active or queued — so fencing build inference
+  // behind it starves every build at ideate ("Local provider dispatch deferred").
+  // Internal CI can wait/retry; a user's build must not fail because CI owns the
+  // host. Build dispatches therefore preempt the local-CI capacity reservation.
+  if (input.buildDispatch) return;
   await assertLocalProviderCapacityAvailable(input);
 }
 

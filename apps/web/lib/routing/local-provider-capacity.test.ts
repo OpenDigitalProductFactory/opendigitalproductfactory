@@ -74,6 +74,22 @@ describe("local provider capacity reservation", () => {
       assertProviderDispatchCapacity("ollama", { listCapacityLeases }),
     ).rejects.toMatchObject({ reason: "local-ci-active-capacity-reservation" });
   });
+
+  it("exempts a Build Studio build dispatch from the local-CI reservation (BI-8B4359DE)", async () => {
+    const listCapacityLeases = vi.fn().mockResolvedValue([
+      { environmentKey: "local-integration-ci", status: "active" },
+    ]);
+    // A non-build local dispatch is fenced while local-CI owns the host…
+    await expect(
+      assertProviderDispatchCapacity("local", { listCapacityLeases }),
+    ).rejects.toMatchObject({ reason: "local-ci-active-capacity-reservation" });
+    // …but a user-facing Build Studio build preempts the reservation: the on-box
+    // model is the only routed inference endpoint, so a build must not be starved
+    // of it by internal CI on a single-host install.
+    await expect(
+      assertProviderDispatchCapacity("local", { listCapacityLeases, buildDispatch: true }),
+    ).resolves.toBeUndefined();
+  });
 });
 
 describe("a contributor preview must not reserve inference capacity", () => {
