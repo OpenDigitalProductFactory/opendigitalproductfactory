@@ -72,7 +72,7 @@ describe("approveHeldProfessionMaterial (BI-5F3BFD13)", () => {
       now,
     });
 
-    expect(result).toEqual({ ok: true, approved: 6 });
+    expect(result).toEqual({ ok: true, data: 6 });
     const args = updateMany.mock.calls[0][0] as {
       where: Record<string, unknown>;
       data: Record<string, unknown>;

@@ -18,6 +18,8 @@
 
 import type { Prisma } from "@dpf/db";
 
+import { err, ok, type ActionResult } from "@/lib/shared/action-result";
+
 /** Narrow client surface so tests can pass a stub instead of a real Prisma client. */
 export type HeldMaterialClient = {
   perspectiveMaterial: {
@@ -101,9 +103,8 @@ export async function listHeldProfessionMaterial(
   return [...byProfile.values()];
 }
 
-export type ApproveHeldMaterialResult =
-  | { ok: true; approved: number }
-  | { ok: false; error: "no-held-material" };
+/** Success carries the number of rows released to the gate. */
+export type ApproveHeldMaterialResult = ActionResult<number>;
 
 /**
  * Release one family's held material to the gate.
@@ -133,6 +134,6 @@ export async function approveHeldProfessionMaterial(
     },
   });
 
-  if (result.count === 0) return { ok: false, error: "no-held-material" };
-  return { ok: true, approved: result.count };
+  if (result.count === 0) return err("no-held-material");
+  return ok(result.count);
 }

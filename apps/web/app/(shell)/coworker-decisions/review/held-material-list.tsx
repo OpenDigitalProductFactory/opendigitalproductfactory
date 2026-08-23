@@ -7,8 +7,16 @@
 // structured (which family, which pages, what grade), so this shows that
 // evidence and offers a single Approve — there is no Reject, because the hold
 // already IS the rejection until someone acts.
+//
+// Composed from ui/Surface and ui/Button rather than re-typed card and control
+// markup (BI-D25ED55D).
 
 import { useState, useTransition } from "react";
+
+import { Button } from "@/components/ui/Button";
+import { Surface } from "@/components/ui/Surface";
+
+import type { ActionResult } from "@/lib/shared/action-result";
 
 import { approveHeldMaterial } from "./actions";
 
@@ -26,7 +34,7 @@ function pageLabel(materialId: string): string {
 
 function HeldFamily({ family }: { family: HeldFamilyView }) {
   const [open, setOpen] = useState(false);
-  const [result, setResult] = useState<{ ok: boolean; message: string } | null>(null);
+  const [result, setResult] = useState<ActionResult<string> | null>(null);
   const [pending, startTransition] = useTransition();
 
   const approve = () => {
@@ -37,49 +45,43 @@ function HeldFamily({ family }: { family: HeldFamilyView }) {
   };
 
   return (
-    <li className="rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-3">
+    <Surface as="li" level={1} padding="sm" rounded="md">
       <div className="flex items-center gap-3 flex-wrap">
-        <span className="rounded px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide border border-[var(--dpf-warning)] text-[var(--dpf-warning)]">
+        <span className="rounded px-2 py-0.5 text-dpf-caption font-medium uppercase tracking-wide border border-[var(--dpf-warning)] text-[var(--dpf-warning)]">
           Held for review
         </span>
-        <span className="text-sm font-medium text-[var(--dpf-text)] min-w-0 flex-1">
+        <span className="text-dpf-body font-medium text-[var(--dpf-text)] min-w-0 flex-1">
           {family.professionKey}
         </span>
-        <span className="text-xs text-[var(--dpf-muted)] shrink-0">
+        <span className="text-dpf-caption text-[var(--dpf-muted)] shrink-0">
           {family.rows.length} {family.rows.length === 1 ? "page" : "pages"}
         </span>
       </div>
 
-      <p className="mt-1 text-xs text-[var(--dpf-muted)]">
-        This is a high-stakes craft area, so its doctrine was not made live
-        automatically. Until you approve it, this coworker falls back to general
-        platform doctrine instead of its own craft judgement.
+      <p className="mt-1 text-dpf-caption text-[var(--dpf-muted)]">
+        Until you approve it, this coworker uses general platform doctrine
+        instead of its own craft judgement.
       </p>
 
       {result ? (
         <p
-          className={`mt-2 ml-1 text-xs ${
+          className={`mt-2 ml-1 text-dpf-caption ${
             result.ok ? "text-[var(--dpf-success)]" : "text-[var(--dpf-danger)]"
           }`}
         >
-          {result.ok ? "✓ " : ""}
-          {result.message}
+          {result.ok ? `✓ ${result.data}` : result.error}
         </p>
       ) : !open ? (
         <div className="mt-2 ml-1">
-          <button
-            type="button"
-            onClick={() => setOpen(true)}
-            className="rounded-md border border-[var(--dpf-border)] px-2.5 py-1 text-xs text-[var(--dpf-text)] hover:bg-[var(--dpf-surface-2)]"
-          >
+          <Button variant="secondary" size="sm" onClick={() => setOpen(true)}>
             Review this →
-          </button>
+          </Button>
         </div>
       ) : (
         <div className="mt-2 ml-1">
           <ul className="mb-2 flex flex-col gap-1">
             {family.rows.map((row) => (
-              <li key={row.materialId} className="text-xs text-[var(--dpf-text)]">
+              <li key={row.materialId} className="text-dpf-caption text-[var(--dpf-text)]">
                 <span className="font-medium">{pageLabel(row.materialId)}</span>
                 <span className="text-[var(--dpf-muted)]">
                   {" "}
@@ -92,26 +94,16 @@ function HeldFamily({ family }: { family: HeldFamilyView }) {
             ))}
           </ul>
           <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={approve}
-              disabled={pending}
-              className="rounded-md border border-[var(--dpf-border)] px-2.5 py-1 text-xs text-[var(--dpf-text)] hover:bg-[var(--dpf-surface-2)] disabled:opacity-60"
-            >
+            <Button variant="primary" size="sm" onClick={approve} disabled={pending}>
               {pending ? "Approving…" : "Approve for use"}
-            </button>
-            <button
-              type="button"
-              onClick={() => setOpen(false)}
-              disabled={pending}
-              className="text-xs text-[var(--dpf-muted)] hover:text-[var(--dpf-text)] disabled:opacity-60"
-            >
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => setOpen(false)} disabled={pending}>
               Not now
-            </button>
+            </Button>
           </div>
         </div>
       )}
-    </li>
+    </Surface>
   );
 }
 
@@ -120,13 +112,12 @@ export function HeldMaterialList({ families }: { families: HeldFamilyView[] }) {
 
   return (
     <section className="mb-6">
-      <h2 className="mb-1 text-sm font-semibold text-[var(--dpf-text)]">
+      <h2 className="mb-1 text-dpf-body font-semibold text-[var(--dpf-text)]">
         Craft doctrine waiting on you
       </h2>
-      <p className="mb-2 text-xs text-[var(--dpf-muted)]">
-        Doctrine for these areas was written but deliberately not switched on,
-        because the subject matter is high-stakes. It stays inactive until you
-        approve it.
+      <p className="mb-2 text-dpf-caption text-[var(--dpf-muted)]">
+        These areas are high-stakes, so their doctrine was written but not
+        switched on. It stays inactive until you approve it.
       </p>
       <ul className="flex flex-col gap-2">
         {families.map((family) => (

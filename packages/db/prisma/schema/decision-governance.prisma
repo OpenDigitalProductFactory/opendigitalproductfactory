@@ -355,9 +355,11 @@ model PerspectiveMaterial {
   updatedAt        DateTime                           @updatedAt
   profile          DecisionPerspectiveProfile         @relation(fields: [profileId], references: [profileId], onDelete: Cascade)
   profileVersion   DecisionPerspectiveProfileVersion? @relation(fields: [profileVersionId], references: [versionId], onDelete: SetNull)
+  reviewedByUser   User?                              @relation(fields: [reviewedByUserId], references: [id], onDelete: SetNull)
 
   @@index([profileId, freshness])
   @@index([profileId, reviewStatus, promotionState])
+  @@index([reviewedByUserId])
   @@index([profileId, domainClass])
   @@index([profileVersionId])
   @@index([domainClass])

@@ -73,6 +73,7 @@ model User {
   decisionEscalationsResolved    EscalationCapture[]           @relation("DecisionEscalationResolverUser")
   triggeredDecisionInteractions  DecisionInteraction[]         @relation("DecisionInteractionTriggeredByUser")
   weightAdjustmentProposalsRuled WeightAdjustmentProposal[]
+  perspectiveMaterialReviewed    PerspectiveMaterial[]
   scheduledAgentTasks            ScheduledAgentTask[]          @relation("ScheduledAgentTaskOwner")
   addedLocalities                City[]                        @relation("CityAddedByUser")
   workbooksCreated               Workbook[]                    @relation("WorkbookCreatedBy")

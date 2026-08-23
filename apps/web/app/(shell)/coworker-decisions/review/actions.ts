@@ -13,6 +13,7 @@ import { revalidatePath } from "next/cache";
 
 import { requireCapability, requireUserId } from "@/lib/actions/shared/guards";
 import { approveHeldProfessionMaterial } from "@/lib/decision-perspective/held-material-store";
+import { err, ok, type ActionResult } from "@/lib/shared/action-result";
 import { captureOrgBusinessAnswer } from "@/lib/wiki/capture-org-answer";
 import { createProductionInference } from "@/lib/wiki/inference-adapter";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
@@ -137,12 +138,12 @@ export async function ruleWeightProposal(input: {
  */
 export async function approveHeldMaterial(input: {
   profileId: string;
-}): Promise<{ ok: boolean; message: string }> {
+}): Promise<ActionResult<string>> {
   const { userId } = await requireCapability("manage_platform");
 
   const profileId = (input.profileId ?? "").trim();
   if (!profileId) {
-    return { ok: false, message: "No craft area was named." };
+    return err("No craft area was named.");
   }
 
   try {
@@ -152,20 +153,13 @@ export async function approveHeldMaterial(input: {
     });
 
     if (!result.ok) {
-      return {
-        ok: false,
-        message: "Nothing is waiting for approval here — it may already be approved.",
-      };
+      return err("Nothing is waiting for approval here — it may already be approved.");
     }
 
     revalidatePath("/coworker-decisions/review");
-    return {
-      ok: true,
-      message: `Approved. This coworker now decides with its own craft doctrine (${result.approved} ${
-        result.approved === 1 ? "page" : "pages"
-      }).`,
-    };
+    const pages = `${result.data} ${result.data === 1 ? "page" : "pages"}`;
+    return ok(`Approved. This coworker now decides with its own craft doctrine (${pages}).`);
   } catch (error) {
-    return { ok: false, message: getErrorMessage(error) };
+    return err(getErrorMessage(error));
   }
 }
