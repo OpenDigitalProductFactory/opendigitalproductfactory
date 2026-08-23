@@ -3524,7 +3524,8 @@
           "backlog_read",
           "backlog_write",
           "tool_evaluation_create",
-          "registry_read"
+          "registry_read",
+          "web_search"
         ]
       }
     }

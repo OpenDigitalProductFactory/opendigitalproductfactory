@@ -11882,8 +11882,8 @@
           "level": 3,
           "missingGrants": [],
           "escalatesTo": "AGT-ORCH-000",
-          "reachableSideEffectingTools": 54,
-          "reachableGatedTools": 11,
+          "reachableSideEffectingTools": 55,
+          "reachableGatedTools": 12,
           "ungatedConsequenceNote": null,
           "detail": "principle_decide reachable; escalates to AGT-ORCH-000",
           "levelKey": "proven",
@@ -11908,7 +11908,7 @@
           "level": 3,
           "directSkills": 6,
           "wildcardSkills": 5,
-          "reachableTools": 115,
+          "reachableTools": 119,
           "heldGrants": [
             "policy_write",
             "data_governance_validate",
@@ -11916,11 +11916,12 @@
             "backlog_read",
             "backlog_write",
             "tool_evaluation_create",
+            "web_search",
             "registry_read"
           ],
           "services": 1,
           "unbackedSkillIds": [],
-          "detail": "6 skill(s), 115 tool(s), all service backings resolve",
+          "detail": "6 skill(s), 119 tool(s), all service backings resolve",
           "levelKey": "proven",
           "ceiling": 3,
           "atCeiling": true
