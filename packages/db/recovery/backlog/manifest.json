@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "capturedAt": "2026-08-23T01:31:32.616Z",
+  "capturedAt": "2026-08-23T02:00:56.767Z",
   "scope": "not-done",
   "bundles": [
     {
@@ -12,6 +12,11 @@
       "epicId": "EP-1FABA22D",
       "file": "purpose-aware-installation-ecosystem-productivity.json",
       "itemCount": 13
+    },
+    {
+      "epicId": "EP-24741BBF",
+      "file": "dpf-directory-service-identity-absorption.json",
+      "itemCount": 5
     },
     {
       "epicId": "EP-31C5A6C8",
@@ -34,9 +39,9 @@
       "itemCount": 7
     }
   ],
-  "capturedItemCount": 44,
+  "capturedItemCount": 49,
   "unassignedItemCount": 9,
-  "unfinishedItemCount": 53,
+  "unfinishedItemCount": 58,
   "skipped": [
     {
       "itemId": "BI-0E8B29C3",
