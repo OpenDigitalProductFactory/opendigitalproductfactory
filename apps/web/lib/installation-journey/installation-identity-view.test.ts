@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   ENVIRONMENT_CLASS_CONFIG_KEY,
   type EnvironmentClassResolution,
-} from "@/lib/install/environment-class";
+} from "@/lib/install/environment-class-contract";
 import { OPERATING_INTENT_CONFIG_KEY } from "@/lib/install/instance-stance";
 import type { InstallationIntentDb } from "@/lib/installation-journey/operating-intent";
 

@@ -27,9 +27,7 @@ vi.mock("@dpf/db", () => ({
   },
 }));
 
-import {
-  ENVIRONMENT_CLASS_CONFIG_KEY,
-} from "@/lib/install/environment-class";
+import { ENVIRONMENT_CLASS_CONFIG_KEY } from "@/lib/install/environment-class-contract";
 import { OPERATING_INTENT_CONFIG_KEY } from "@/lib/install/instance-stance";
 
 import {

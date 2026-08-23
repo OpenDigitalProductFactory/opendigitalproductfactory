@@ -3,10 +3,12 @@ import { describe, expect, it } from "vitest";
 import type { InstallationOperatingIntentV1 } from "@dpf/db/installation-operating-intent";
 
 import {
-  buildInstallationIdentityImpact,
-  computeIdentityPreviewToken,
   normalizeIdentityDeclaration,
   type InstallationIdentityDeclaration,
+} from "./identity-presentation";
+import {
+  buildInstallationIdentityImpact,
+  computeIdentityPreviewToken,
 } from "./identity-change-impact";
 
 const DEV_INTENT: InstallationOperatingIntentV1 = {

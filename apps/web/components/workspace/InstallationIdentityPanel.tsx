@@ -22,31 +22,21 @@ import {
   declareInstallationIdentity,
   previewInstallationIdentityChange,
 } from "@/lib/actions/installation-operating-intent";
-import {
-  ENVIRONMENT_CLASS_LABEL,
-  PURPOSE_LABEL,
-  type InstallationIdentityImpact,
-} from "@/lib/installation-journey/identity-change-impact";
+// Values come ONLY from identity-presentation: its siblings reach `node:crypto`
+// and `node:fs/promises`, and importing a label out of either drags the
+// filesystem into this client chunk and fails the production build.
 import {
   CONFIRMATION_PRESENTATION,
+  ENVIRONMENT_CLASS_LABEL,
+  ENVIRONMENT_OPTIONS,
+  PURPOSE_OPTIONS,
+  type InstallationIdentityImpact,
   type InstallationIdentityView,
-} from "@/lib/installation-journey/installation-identity-view";
-import {
-  INSTALLATION_ENVIRONMENT_CLASSES,
-  INSTALLATION_OPERATING_PURPOSES,
-  type InstallationEnvironmentClass,
-  type InstallationOperatingPurpose,
+} from "@/lib/installation-journey/identity-presentation";
+import type {
+  InstallationEnvironmentClass,
+  InstallationOperatingPurpose,
 } from "@dpf/db/installation-operating-intent";
-
-const PURPOSE_OPTIONS = INSTALLATION_OPERATING_PURPOSES.map((value) => ({
-  value,
-  label: PURPOSE_LABEL[value],
-}));
-
-const ENVIRONMENT_OPTIONS = INSTALLATION_ENVIRONMENT_CLASSES.map((value) => ({
-  value,
-  label: ENVIRONMENT_CLASS_LABEL[value],
-}));
 
 const DIRECTION_INTENT = {
   tightens: "success",
@@ -222,7 +212,7 @@ export function InstallationIdentityPanel({ view }: { view: InstallationIdentity
               onValueChange={edited((next: string) =>
                 setPurpose(next as InstallationOperatingPurpose),
               )}
-              options={PURPOSE_OPTIONS}
+              options={[...PURPOSE_OPTIONS]}
               disabled={isPending}
             />
             <SelectField
@@ -232,7 +222,7 @@ export function InstallationIdentityPanel({ view }: { view: InstallationIdentity
               onValueChange={edited((next: string) =>
                 setEnvironmentClass(next as InstallationEnvironmentClass),
               )}
-              options={ENVIRONMENT_OPTIONS}
+              options={[...ENVIRONMENT_OPTIONS]}
               hint={
                 view.environment.installerStateValue
                   ? `The installer set ${ENVIRONMENT_CLASS_LABEL[view.environment.installerStateValue].toLowerCase()}. That value wins here.`

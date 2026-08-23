@@ -44,12 +44,12 @@ import {
   type EnvironmentClassResolution,
   type PortalEnvironmentClassDeclarationV1,
 } from "@/lib/install/environment-class";
+import { buildInstallationIdentityImpact } from "@/lib/installation-journey/identity-change-impact";
 import {
-  buildInstallationIdentityImpact,
   normalizeIdentityDeclaration,
   type InstallationIdentityDeclaration,
   type InstallationIdentityImpact,
-} from "@/lib/installation-journey/identity-change-impact";
+} from "@/lib/installation-journey/identity-presentation";
 import { loadInstanceStance, prismaInstanceStanceStore } from "@/lib/install/instance-stance";
 import { INSTALLATION_OPERATING_INTENT_KEY } from "@/lib/installation-journey/operating-intent";
 

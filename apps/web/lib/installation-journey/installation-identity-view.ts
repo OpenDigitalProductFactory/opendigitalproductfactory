@@ -5,6 +5,9 @@
 // component." Everything the panel renders is assembled here from the canonical
 // authorities, so the sentence an operator reads and the briefing an agent
 // receives come from one resolver.
+//
+// Server-only: this reaches installer state and the database. The types and
+// label maps the client component needs are in `./identity-presentation`.
 
 import type { InstanceStanceProfile } from "@dpf/db/installation-instance-stance";
 import {
@@ -28,48 +31,13 @@ import {
   STANCE_LABEL,
   STANCE_VALUE_INTENT,
   STANCE_VALUE_LABEL,
-  type InstallationIdentityDeclaration,
-  type StanceKey,
-} from "@/lib/installation-journey/identity-change-impact";
+  type InstallationIdentityView,
+  type StanceRow,
+} from "@/lib/installation-journey/identity-presentation";
 import {
   loadInstallationOperatingIntent,
   type InstallationIntentDb,
 } from "@/lib/installation-journey/operating-intent";
-
-/** One stance row: what the brake is, and the resolver's reason for it. */
-export interface StanceRow {
-  stance: StanceKey;
-  label: string;
-  value: string;
-  valueLabel: string;
-  intent: "neutral" | "warning" | "danger";
-  rationale: string;
-}
-
-/** How each confirmation status is shown. Owned here, not in the component. */
-export const CONFIRMATION_PRESENTATION: Record<
-  InstallationIntentConfirmationStatus,
-  { label: string; intent: "success" | "info" | "warning" }
-> = {
-  confirmed: { label: "Confirmed", intent: "success" },
-  suggested: { label: "Suggested", intent: "info" },
-  "needs-review": { label: "Needs review", intent: "warning" },
-};
-
-export interface InstallationIdentityView {
-  stance: InstanceStanceProfile;
-  environment: EnvironmentClassResolution;
-  /** Whether a readable intent record exists at all. */
-  intentStatus: "valid" | "missing" | "invalid";
-  confirmationStatus: InstallationIntentConfirmationStatus;
-  /** The identity actually in force, which the change form starts from. */
-  declaration: InstallationIdentityDeclaration;
-  /** One sentence naming what this installation is. */
-  headline: string;
-  /** A second sentence for the pairing and the environment's authority, when either has something to say. */
-  detail: string | null;
-  stances: StanceRow[];
-}
 
 function environmentDetail(environment: EnvironmentClassResolution): string | null {
   if (environment.shadowedPortalDeclaration) {

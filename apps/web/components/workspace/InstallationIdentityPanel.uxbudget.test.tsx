@@ -26,7 +26,7 @@ vi.mock("@/lib/actions/installation-operating-intent", () => ({
   declareInstallationIdentity: vi.fn(),
 }));
 
-import type { InstallationIdentityView } from "@/lib/installation-journey/installation-identity-view";
+import type { InstallationIdentityView } from "@/lib/installation-journey/identity-presentation";
 
 import { InstallationIdentityPanel } from "./InstallationIdentityPanel";
 

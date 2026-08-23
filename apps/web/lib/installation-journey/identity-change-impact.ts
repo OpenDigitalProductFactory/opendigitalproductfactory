@@ -10,7 +10,11 @@
 // reports the difference. So the copy an operator reads is the same resolver
 // output an agent will honour afterwards; the two cannot drift.
 //
-// This module is pure. It never reads a database, a file, or the clock.
+// This module is pure, but NOT client-safe: it hashes with `node:crypto`. The
+// display half of the contract — labels, option lists, and the shape of the data
+// the panel renders — lives in `./identity-presentation`, which the client
+// component imports instead. Keep it that way; moving a label back here bundles
+// crypto into the browser.
 
 import { createHash } from "node:crypto";
 
@@ -21,99 +25,28 @@ import {
 } from "@dpf/db/installation-instance-stance";
 import {
   buildInstallationOperatingProfileSnapshot,
-  type InstallationEnvironmentClass,
   type InstallationEvidenceSource,
   type InstallationOperatingIntentEvidence,
   type InstallationOperatingIntentV1,
-  type InstallationOperatingPurpose,
 } from "@dpf/db/installation-operating-intent";
 
-/** What an operator can declare about this installation from the portal. */
-export interface InstallationIdentityDeclaration {
-  primaryPurpose: InstallationOperatingPurpose;
-  environmentClass: InstallationEnvironmentClass;
-  /** Null clears the pairing. Trimmed by the caller. */
-  pairedProductionInstallationRef: string | null;
-}
-
-export const IDENTITY_FIELDS = [
-  "primaryPurpose",
-  "environmentClass",
-  "pairedProductionInstallationRef",
-] as const;
-export type IdentityField = (typeof IDENTITY_FIELDS)[number];
-
-export const STANCE_KEYS = [
-  "credentials",
-  "teardown",
-  "sourceAuthority",
-  "peerWrite",
-] as const;
-export type StanceKey = (typeof STANCE_KEYS)[number];
-
-/** Plain-language field names. Owned here so no component invents its own. */
-export const IDENTITY_FIELD_LABEL: Record<IdentityField, string> = {
-  primaryPurpose: "Its main job",
-  environmentClass: "Environment",
-  pairedProductionInstallationRef: "Paired installation",
-};
-
-export const PURPOSE_LABEL: Record<InstallationOperatingPurpose, string> = {
-  "operate-organization": "Run our organization",
-  "evolve-dpf": "Safely improve another DPF",
-  "deliver-managed-services": "Operate DPF for customers",
-  "grow-channel": "Grow DPF in a market or region",
-  "participate-community": "Join the DPF community",
-};
-
-export const ENVIRONMENT_CLASS_LABEL: Record<InstallationEnvironmentClass, string> = {
-  production: "Production",
-  development: "Development",
-  test: "Test",
-};
-
-export const STANCE_LABEL: Record<StanceKey, string> = {
-  credentials: "Credentials",
-  teardown: "Teardown",
-  sourceAuthority: "Source changes",
-  peerWrite: "Paired installation",
-};
-
-/** Plain-language stance values, keyed by stance then by the resolver's value. */
-export const STANCE_VALUE_LABEL: Record<StanceKey, Record<string, string>> = {
-  credentials: {
-    "operator-only": "Operator only",
-    "local-permitted": "Local test keys allowed",
-  },
-  teardown: {
-    forbidden: "Never",
-    "capture-required": "Capture work first",
-    permitted: "Allowed",
-  },
-  sourceAuthority: {
-    none: "Not here",
-    "governed-worktree": "Governed worktree",
-  },
-  peerWrite: {
-    none: "No peer",
-    "read-only": "Read only",
-    "governed-write": "Governed writes",
-  },
-};
-
-/**
- * The report-kit intent each stance value renders with.
- *
- * `neutral` means no extra caution applies, `warning` means a brake is on, and
- * `danger` means the action is never available. Nothing here reads as a grant,
- * because a permissive stance is the absence of a brake and not a permission.
- */
-export const STANCE_VALUE_INTENT: Record<StanceKey, Record<string, "neutral" | "warning" | "danger">> = {
-  credentials: { "local-permitted": "neutral", "operator-only": "warning" },
-  teardown: { permitted: "neutral", "capture-required": "warning", forbidden: "danger" },
-  sourceAuthority: { "governed-worktree": "neutral", none: "warning" },
-  peerWrite: { none: "neutral", "read-only": "warning", "governed-write": "neutral" },
-};
+import {
+  ENVIRONMENT_CLASS_LABEL,
+  IDENTITY_FIELD_LABEL,
+  PURPOSE_LABEL,
+  STANCE_KEYS,
+  STANCE_LABEL,
+  STANCE_VALUE_LABEL,
+  normalizeIdentityDeclaration,
+  type IdentityField,
+  type IdentityFieldChange,
+  type InstallationIdentityDeclaration,
+  type InstallationIdentityImpact,
+  type StanceDelta,
+  type StanceDirection,
+  type StanceKey,
+  type StaleEvidenceNote,
+} from "@/lib/installation-journey/identity-presentation";
 
 /**
  * How cautious each stance value is, higher being more cautious.
@@ -128,65 +61,10 @@ const CAUTION_RANK: Record<StanceKey, Record<string, number>> = {
   peerWrite: { "governed-write": 0, "read-only": 1, none: 2 },
 };
 
-export type StanceDirection = "tightens" | "loosens" | "unchanged";
-
-export interface IdentityFieldChange {
-  field: IdentityField;
-  label: string;
-  from: string;
-  to: string;
-}
-
-export interface StanceDelta {
-  stance: StanceKey;
-  label: string;
-  from: string;
-  to: string;
-  direction: StanceDirection;
-  /** The rationale the resolver will give once the change is in force. */
-  rationale: string;
-}
-
-export interface StaleEvidenceNote {
-  source: InstallationEvidenceSource;
-  claim: string;
-  /** Why this entry stops describing the installation. */
-  reason: string;
-}
-
-export interface InstallationIdentityImpact {
-  /** True when any identity field changes. Only a material change needs confirming. */
-  material: boolean;
-  changes: IdentityFieldChange[];
-  stanceDeltas: StanceDelta[];
-  /** Only the stances that actually move, for the "what loosens" summary. */
-  loosenedStances: StanceDelta[];
-  staleEvidence: StaleEvidenceNote[];
-  warnings: string[];
-  /**
-   * Binds a confirmation to the preview that produced it. The action recomputes
-   * the preview and refuses a token that does not match, so a change can never
-   * be confirmed against a preview the operator never saw.
-   */
-  previewToken: string;
-}
-
 const EMPTY_REF_LABEL = "None";
 
 function refLabel(ref: string | null | undefined): string {
   return ref && ref.trim().length > 0 ? ref.trim() : EMPTY_REF_LABEL;
-}
-
-/** Normalise a declaration so an empty pairing is always `null`, never `""`. */
-export function normalizeIdentityDeclaration(
-  input: InstallationIdentityDeclaration,
-): InstallationIdentityDeclaration {
-  const ref = input.pairedProductionInstallationRef?.trim() ?? "";
-  return {
-    primaryPurpose: input.primaryPurpose,
-    environmentClass: input.environmentClass,
-    pairedProductionInstallationRef: ref.length > 0 ? ref : null,
-  };
 }
 
 /**
