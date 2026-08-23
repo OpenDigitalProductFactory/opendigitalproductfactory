@@ -28,6 +28,18 @@ beforeEach(() => {
 });
 
 describe("EnterpriseIntegrationsPage", () => {
+  it("surfaces the self-hosted WordPress channel without claiming hosting", async () => {
+    mockCount.mockResolvedValueOnce(3).mockResolvedValueOnce(1);
+
+    const { default: EnterpriseIntegrationsPage } = await import("./page");
+    const html = renderToStaticMarkup(await EnterpriseIntegrationsPage());
+
+    expect(html).toContain("WordPress (self-hosted)");
+    expect(html).toContain("/platform/tools/integrations/wordpress");
+    expect(html).toContain("Customer-owned website");
+    expect(html).not.toContain("WordPress hosting included");
+  });
+
   it("surfaces the Facebook Pages card on the native integrations landing page", async () => {
     mockCount.mockResolvedValueOnce(3).mockResolvedValueOnce(1);
 
@@ -82,19 +94,27 @@ describe("EnterpriseIntegrationsPage", () => {
     expect(html).toContain("No integration coverage rows configured");
   });
 
-  it("surfaces the employee-work integration coverage matrix", async () => {
+  it("keeps the employee-work integration coverage matrix out of the arrival DOM", async () => {
     mockCount.mockResolvedValueOnce(3).mockResolvedValueOnce(1);
 
     const { default: EnterpriseIntegrationsPage } = await import("./page");
     const html = renderToStaticMarkup(await EnterpriseIntegrationsPage());
 
-    expect(html).toContain("Employee Work Coverage");
-    expect(html).toContain("Bookkeeper / Accountant");
-    expect(html).toContain("QuickBooks Online");
-    expect(html).toContain("Xero");
-    expect(html).toContain("Benchmark");
-    expect(html).toContain("for_employees/financial_management");
-    expect(html).toContain("Service Offering");
-    expect(html).toContain("Strategy to Portfolio");
+    expect(html).toContain("Employee coverage");
+    expect(html).not.toContain("Employee Work Coverage");
+    expect(html).not.toContain("for_employees/financial_management");
+  });
+
+  it("defers the employee-work coverage matrix behind a collapsed disclosure", async () => {
+    mockCount.mockResolvedValueOnce(3).mockResolvedValueOnce(1);
+
+    const { default: EnterpriseIntegrationsPage } = await import("./page");
+    const html = renderToStaticMarkup(await EnterpriseIntegrationsPage());
+
+    expect(html).toContain('data-testid="integration-coverage-disclosure"');
+    expect(html).toContain('aria-expanded="false"');
+    expect(html).toContain('aria-controls="integration-coverage-disclosure-panel"');
+    expect(html).not.toContain("<details");
+    expect(html).not.toContain('id="integration-coverage-disclosure-panel"');
   });
 });

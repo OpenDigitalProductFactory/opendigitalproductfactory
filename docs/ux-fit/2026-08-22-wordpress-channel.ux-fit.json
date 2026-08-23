@@ -1,0 +1,28 @@
+{
+  "version": "1",
+  "decidedOption": "customer-owned-wordpress-channel-with-progressive-disclosure",
+  "scope": {
+    "files": [
+      "apps/web/app/(shell)/platform/tools/integrations/wordpress/page.tsx",
+      "apps/web/components/integrations/WordPressConnectPanel.tsx",
+      "apps/web/components/customer-marketing/ApprovalQueuePanel.tsx",
+      "apps/web/components/customer-marketing/ExternalPublicationControl.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "sweep-measurement",
+    "baselineComparison": "new-route",
+    "measured": {
+      "/platform/tools/integrations/wordpress": {
+        "defaultVisibleWords": 262,
+        "leadBandWords": 69,
+        "primaryActions": 1,
+        "visibleFields": 3,
+        "maxChoicesPerControl": 0,
+        "subLegibleControls": 0,
+        "buriedPrimaryAction": 0,
+        "axeViolations": 2
+      }
+    }
+  }
+}

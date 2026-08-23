@@ -2053,7 +2053,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 274
+    "textMass": 302
   },
   "apps/web/app/(shell)/platform/tools/integrations/quickbooks/page.tsx": {
     "vocabulary": 0,
@@ -2182,6 +2182,13 @@
     "readability": 0,
     "longSentences": 0,
     "textMass": 69
+  },
+  "apps/web/app/(shell)/platform/tools/integrations/wordpress/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 134
   },
   "apps/web/app/(shell)/portfolio/product/[id]/inventory/page.tsx": {
     "vocabulary": 0,
@@ -5157,7 +5164,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 121
+    "textMass": 126
   },
   "apps/web/components/customer-marketing/ApprovalQueueReview.tsx": {
     "vocabulary": 0,
@@ -5174,6 +5181,13 @@
     "readability": 0,
     "longSentences": 0,
     "textMass": 6
+  },
+  "apps/web/components/customer-marketing/ExternalPublicationControl.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 12
   },
   "apps/web/components/customer-marketing/MarketingStrategyOverview.tsx": {
     "vocabulary": 0,
@@ -6438,6 +6452,13 @@
     "readability": 0,
     "longSentences": 0,
     "textMass": 40
+  },
+  "apps/web/components/integrations/WordPressConnectPanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 130
   },
   "apps/web/components/inventory/AddDiscoveryConnection.tsx": {
     "vocabulary": 0,
@@ -9830,5 +9851,13 @@
     "readability": 0,
     "longSentences": 0,
     "textMass": 0
+  },
+  "apps/web/components/integrations/IntegrationCoverageDisclosure.tsx": {
+    "vocabulary": 0,
+    "retiredVocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 2
   }
 }

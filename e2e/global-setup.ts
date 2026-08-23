@@ -8,16 +8,17 @@ import { dirname, resolve } from "node:path";
  * so individual tests don't need to re-authenticate.
  */
 export default async function globalSetup(_config: FullConfig) {
+  const login = resolveE2eLoginConfig();
   const browser = await chromium.launch({ headless: true });
   const context = await browser.newContext();
   const page = await context.newPage();
 
-  await page.goto("http://localhost:3000/login");
+  await page.goto(`${login.baseUrl}/login`);
   // Wait for Next.js to hydrate the form
   await page.waitForSelector('input[name="email"]', { timeout: 15_000 });
 
-  await page.fill('input[name="email"]', "admin@dpf.local");
-  await page.fill('input[name="password"]', resolveAdminPassword());
+  await page.fill('input[name="email"]', login.email);
+  await page.fill('input[name="password"]', login.password);
 
   // Click the Sign in button and wait for navigation away from /login
   await Promise.all([
@@ -34,11 +35,23 @@ export default async function globalSetup(_config: FullConfig) {
   await browser.close();
 }
 
-function resolveAdminPassword(): string {
+export function resolveE2eLoginConfig(env: NodeJS.ProcessEnv = process.env): {
+  baseUrl: string;
+  email: string;
+  password: string;
+} {
+  return {
+    baseUrl: (env.E2E_BASE_URL || "http://localhost:3000").replace(/\/+$/, ""),
+    email: env.E2E_USER_EMAIL || "admin@dpf.local",
+    password: env.E2E_USER_PASSWORD || resolveAdminPassword(env),
+  };
+}
+
+function resolveAdminPassword(env: NodeJS.ProcessEnv): string {
   return (
-    process.env.ADMIN_PASSWORD ||
+    env.ADMIN_PASSWORD ||
     readRootEnvValue("ADMIN_PASSWORD") ||
-    process.env.DPF_ADMIN_PASSWORD ||
+    env.DPF_ADMIN_PASSWORD ||
     "changeme123"
   );
 }
