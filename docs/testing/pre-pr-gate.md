@@ -803,6 +803,42 @@ Name them so you catch yourself.
 | Trusting a green test run without naming the tree | Sibling worktrees hold identical paths; shell cwd persists between calls | Check the runner's root banner; reconcile the test count against your file |
 | Adding a `<label>` next to its input and checking it in the browser | It renders, screenshots and inspects correctly while a screen reader announces an *unlabelled* field — every human check passes, so the Label Association Guard is the only thing that sees it | Bind it: `htmlFor={id}` with a matching `id`, or wrap the control inside the label |
 
+### Live Blocker References Guard
+
+`scripts/check-live-blocker-references.mjs` fails a PR whose **changed source**
+cites a **closed** `BI-`/`EP-` id from user-facing text — a message that tells
+the reader a fixed defect is their live blocker.
+
+It is the missing half of Doc Anchor Existence. That guard proves a cited id
+EXISTS; nothing proved it was still OPEN. `record_plan_backlog_coverage` spent
+two days instructing every caller to "cite BI-B9403248 for the blocked
+receipt" after BI-B9403248 shipped, so contributors recorded the wrong cause in
+their plans and auditors reading those plans found a closed id and concluded the
+block was stale. Remediation text is written inline as a literal and then never
+revisited when the referenced work closes.
+
+The scope is deliberately narrow, because a guard that invents a defect is worse
+than one that hides a defect:
+
+- only string literals that also carry citation language (`cite`, `blocked by`,
+  `tracked in`, `see`, `filed as`) — a bare mention is not an instruction;
+- **never a comment.** A closed id recorded as provenance above the code it
+  explains is exactly what you want; flagging it would be noise;
+- never a test file; only changed files under `apps/` and `packages/`;
+- existing pairs are grandfathered in `scripts/live-blocker-baseline.txt`;
+- no token, unreachable endpoint, or ambiguous response ⇒ WARN and pass, naming
+  what was skipped. A runner with no live install can neither fail nor invent.
+
+```bash
+node scripts/check-live-blocker-references.mjs            # check (what CI runs)
+pnpm check:live-blockers                                  # same
+node scripts/check-live-blocker-references.mjs --update   # regenerate the grandfather baseline
+```
+
+Prefer naming the **condition** the reader is hitting over any id: a condition
+does not go stale when the work behind it ships. If an id genuinely belongs in
+the text, repoint it at the live item.
+
 ### Label Association Guard (ratchet)
 
 `scripts/check-label-association.mjs` fails a PR that adds a **net-new** form

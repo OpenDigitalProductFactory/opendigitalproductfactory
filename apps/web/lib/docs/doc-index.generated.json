@@ -10382,6 +10382,7 @@
         "appsweb-and-packagesdb-vitest",
         "degenerate-environment-fixtures",
         "common-drift-and-how-to-stay-on-script",
+        "live-blocker-references-guard",
         "label-association-guard-ratchet",
         "what-this-gate-is-not"
       ]
