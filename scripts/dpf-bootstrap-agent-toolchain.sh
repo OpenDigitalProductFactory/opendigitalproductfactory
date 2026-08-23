@@ -337,12 +337,81 @@ persist_mcp_token_posix() {
     fi
     printf '%s\n' "$_src_line" >> "$_prof"
   done
-  # GUI-launched apps (e.g. Codex.app) are not started from a shell, so they do
-  # not read the profile. launchctl setenv injects the var for the current boot.
-  # (Reboot persistence for GUI apps is a follow-up; terminal clients are durable.)
-  if [ "$(uname -s)" = "Darwin" ] && command -v launchctl >/dev/null 2>&1; then
-    launchctl setenv DPF_MCP_BEARER_TOKEN "$_tok" 2>/dev/null || true
-  fi
+  persist_mcp_token_gui_env
+}
+
+# --- GUI-app env durability (BI-90585312) ------------------------------------
+#
+# GUI-launched clients (Claude Code desktop, Codex.app) are not started from a
+# shell, so they never read the profile and `${DPF_MCP_BEARER_TOKEN}` in
+# .mcp.json expands to nothing -> every governed MCP call returns HTTP 401.
+#
+# This used to live inline in persist_mcp_token_posix, which is called ONLY on
+# the mint path. With a token already present the whole function is skipped, so
+# `launchctl setenv` never re-ran and — being boot-scoped — was lost at the
+# first reboot after minting. A GUI client then had no token, permanently,
+# while every shell still had one: the exact split that made worktree sessions
+# ungoverned while the root clone looked healthy.
+#
+# Fixed by (a) making this its own function called on EVERY bootstrap run, not
+# only on mint, and (b) installing a LaunchAgent so the injection survives
+# reboot. The agent re-reads the managed env file rather than embedding a second
+# copy of the secret, so the env file stays the single source of truth.
+persist_mcp_token_gui_env() {
+  [ "$(uname -s)" = "Darwin" ] || return 0
+  command -v launchctl >/dev/null 2>&1 || return 0
+  [ -f "$mcp_token_envfile" ] || return 0
+
+  # Current boot.
+  # shellcheck disable=SC1090
+  ( . "$mcp_token_envfile" && [ -n "${DPF_MCP_BEARER_TOKEN:-}" ] \
+    && launchctl setenv DPF_MCP_BEARER_TOKEN "$DPF_MCP_BEARER_TOKEN" ) 2>/dev/null || true
+
+  # Subsequent boots.
+  _agent_dir="$HOME/Library/LaunchAgents"
+  _agent_plist="$_agent_dir/com.dpf.mcp-token.plist"
+  mkdir -p "$_agent_dir"
+  ( umask 077; cat > "$_agent_plist" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.dpf.mcp-token</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/sh</string>
+    <string>-c</string>
+    <string>. "$mcp_token_envfile" &amp;&amp; launchctl setenv DPF_MCP_BEARER_TOKEN "\$DPF_MCP_BEARER_TOKEN"</string>
+  </array>
+  <key>RunAtLoad</key><true/>
+</dict>
+</plist>
+PLIST
+  )
+  chmod 600 "$_agent_plist" 2>/dev/null || true
+}
+
+# --- Authenticated MCP reachability probe (BI-90585312) ----------------------
+#
+# "token present in this shell" is NOT "the client can authenticate". The old
+# report read an env var that bootstrap itself always has, because bootstrap
+# runs in a shell — a false green that hid a 401 in every worktree. Presence is
+# not liveness: probe the endpoint and assert a real 200.
+#
+# Echoes: authenticated | unauthenticated | unreachable | no-probe
+probe_mcp_authenticated() {
+  command -v curl >/dev/null 2>&1 || { printf 'no-probe\n'; return 0; }
+  _code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 \
+    -X POST "$MCP_ENDPOINT" \
+    -H "Authorization: Bearer ${DPF_MCP_BEARER_TOKEN:-}" \
+    -H "Content-Type: application/json" \
+    -H "Accept: application/json, text/event-stream" \
+    --data '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' 2>/dev/null)"
+  case "$_code" in
+    200) printf 'authenticated\n' ;;
+    401|403) printf 'unauthenticated\n' ;;
+    *) printf 'unreachable\n' ;;
+  esac
 }
 
 # The token is minted INSIDE the portal container, not on the host: on a
@@ -413,6 +482,39 @@ if [ "$HAS_TOKEN" -eq 0 ] && [ "$AUTO_MINT" -eq 1 ]; then
       sed -n '1,20p' "$MINT_ERR" >&2 || true
     fi
     rm -f "$MINT_ERR"
+  fi
+fi
+
+# --- Reconcile GUI-app env + prove authentication (BI-90585312) --------------
+#
+# Runs on EVERY bootstrap, token freshly minted or not. The old code only
+# injected the GUI env on the mint path, so an existing token was never
+# re-injected after a reboot and GUI-launched clients silently lost governed
+# MCP while shells kept it.
+if [ "$HAS_TOKEN" -eq 1 ] && [ "$DRY_RUN" -eq 0 ]; then
+  persist_mcp_token_gui_env
+fi
+
+if [ "$DRY_RUN" -eq 0 ]; then
+  MCP_AUTH_STATE="$(probe_mcp_authenticated)"
+  case "$MCP_AUTH_STATE" in
+    authenticated)
+      ok "DPF MCP: authenticated (HTTP 200 from $MCP_ENDPOINT)." ;;
+    unauthenticated)
+      warn "DPF MCP: token present but REJECTED (HTTP 401/403). Governed tools will fail."
+      warn "  Re-run with --auto-mint, or check the token scope in Admin > Platform Development > MCP." ;;
+    unreachable)
+      warn "DPF MCP: endpoint unreachable at $MCP_ENDPOINT (portal down?). Authentication NOT proven." ;;
+    *)
+      warn "DPF MCP: no probe available (curl missing). Authentication NOT proven." ;;
+  esac
+  if [ "$(uname -s)" = "Darwin" ] && command -v launchctl >/dev/null 2>&1; then
+    if [ -n "$(launchctl getenv DPF_MCP_BEARER_TOKEN 2>/dev/null)" ]; then
+      ok "GUI-launched clients: token injected (launchctl + LaunchAgent for reboot)."
+    else
+      warn "GUI-launched clients: token NOT in the GUI environment — a desktop-launched"
+      warn "  client will get HTTP 401 even though this shell has the token."
+    fi
   fi
 fi
 

@@ -24,6 +24,9 @@ from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 PLUGIN_NAME = "dpf-platform"
 CODEX_PLUGIN_ID = f"{PLUGIN_NAME}@personal"
 MARKETPLACE_NAME = "dpf-platform-local"
+import urllib.error
+import urllib.request
+
 TOKEN_ENV_VAR = "DPF_MCP_BEARER_TOKEN"
 DEFAULT_MCP_URL = "http://127.0.0.1:3000/api/mcp/v1"
 
@@ -1554,6 +1557,41 @@ def hook_roster(skill_pack: Path) -> list[str]:
     return lines
 
 
+def probe_mcp_authenticated() -> str:
+    """Report whether governed MCP actually authenticates, not whether an env var exists.
+
+    Presence is not liveness (BI-90585312). This script runs in a shell, which always
+    has DPF_MCP_BEARER_TOKEN sourced from ~/.zshenv, so an env-presence check reported
+    "present" while every GUI-launched client was getting HTTP 401. Probe the endpoint
+    and state what is actually true.
+    """
+    token = os.environ.get(TOKEN_ENV_VAR)
+    if not token:
+        return f"missing ({TOKEN_ENV_VAR} not set in this environment)"
+    url = os.environ.get("DPF_MCP_URL", DEFAULT_MCP_URL)
+    req = urllib.request.Request(
+        url,
+        data=b'{"jsonrpc":"2.0","id":1,"method":"tools/list"}',
+        headers={
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json",
+            "Accept": "application/json, text/event-stream",
+        },
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            if resp.status == 200:
+                return "authenticated (HTTP 200)"
+            return f"NOT authenticated (HTTP {resp.status})"
+    except urllib.error.HTTPError as exc:
+        if exc.code in (401, 403):
+            return f"present but REJECTED (HTTP {exc.code}) — governed tools will fail"
+        return f"NOT authenticated (HTTP {exc.code})"
+    except Exception:
+        return "unproven (endpoint unreachable — portal down?)"
+
+
 def guard_liveness_advisory() -> list[str]:
     """Per-surface caveats about whether the plane-1 guards actually FIRE.
 
@@ -1697,8 +1735,7 @@ def main(argv: list[str]) -> int:
             )
         print(f"  Claude competitive: {claude_competitive_status}")
 
-    token_present = bool(os.environ.get(TOKEN_ENV_VAR))
-    print(f"  MCP token  : {'present' if token_present else 'missing'} ({TOKEN_ENV_VAR})")
+    print(f"  MCP token  : {probe_mcp_authenticated()}")
     for line in guard_liveness_advisory():
         print(line)
 

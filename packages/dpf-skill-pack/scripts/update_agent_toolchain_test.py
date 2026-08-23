@@ -1097,5 +1097,44 @@ class ProbeGrokExposedSkillsTest(unittest.TestCase):
             mock_probe.assert_not_called()
 
 
+
+class ProbeMcpAuthenticatedTest(unittest.TestCase):
+    """The readiness banner must prove authentication, not env-var presence.
+
+    Regression for BI-90585312: the old banner read DPF_MCP_BEARER_TOKEN, which
+    this script always has because it runs in a shell, and reported "present"
+    while every GUI-launched client was getting HTTP 401.
+    """
+
+    def test_missing_token_is_reported_as_missing(self):
+        with patch.dict(os.environ, {}, clear=True):
+            self.assertIn("missing", updater.probe_mcp_authenticated())
+
+    def test_http_200_is_authenticated(self):
+        class _Resp:
+            status = 200
+            def __enter__(self): return self
+            def __exit__(self, *a): return False
+        with patch.dict(os.environ, {updater.TOKEN_ENV_VAR: "dpfmcp_x"}, clear=True):
+            with patch.object(updater.urllib.request, "urlopen", return_value=_Resp()):
+                self.assertIn("authenticated", updater.probe_mcp_authenticated())
+
+    def test_401_is_reported_as_rejected_not_present(self):
+        err = updater.urllib.error.HTTPError("u", 401, "Unauthorized", None, None)
+        with patch.dict(os.environ, {updater.TOKEN_ENV_VAR: "dpfmcp_x"}, clear=True):
+            with patch.object(updater.urllib.request, "urlopen", side_effect=err):
+                out = updater.probe_mcp_authenticated()
+        self.assertIn("REJECTED", out)
+        # The critical assertion: a rejected token must never read as a pass.
+        self.assertNotEqual(out.strip(), "present")
+
+    def test_unreachable_endpoint_is_unproven_not_pass(self):
+        with patch.dict(os.environ, {updater.TOKEN_ENV_VAR: "dpfmcp_x"}, clear=True):
+            with patch.object(updater.urllib.request, "urlopen", side_effect=OSError("down")):
+                out = updater.probe_mcp_authenticated()
+        self.assertIn("unproven", out)
+        self.assertNotIn("authenticated (HTTP 200)", out)
+
+
 if __name__ == "__main__":
     unittest.main()

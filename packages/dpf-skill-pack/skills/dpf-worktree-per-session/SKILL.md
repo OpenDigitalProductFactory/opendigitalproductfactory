@@ -83,7 +83,7 @@ For normal feature/fix work: commit from the worktree, then route runtime-bound 
    - **Canonical worktree base** (the 2026-06-05 unified-delivery-surfaces decision #1): both host surfaces (Claude Code and Codex) put topic worktrees in the dedicated sibling dir `D:/DPF-worktrees/<slug>` on Windows, `~/dpf-worktrees/<slug>` on macOS/Linux. Do NOT use Claude Code's default `.claude/worktrees/<random>` nesting inside the root clone, and do NOT use the older `D:/DPF-<slug>` alongside-the-clone form — one base, both surfaces. The dedicated base keeps worktrees out of the root clone's tree and gives the janitor one place to reap. → spec [`2026-06-05-unified-delivery-surfaces-execution-alignment-design.md`](../../../../docs/superpowers/specs/2026-06-05-unified-delivery-surfaces-execution-alignment-design.md) §4.1 + decision #1.
    - **Never** branch from local `main` — local main may carry unpushed commits that sweep into your PR and fail DCO.
 
-3. **Seed the MCP config + agent toolchain.** `.mcp.json` and `.vscode/mcp.json` are gitignored (they carry your local `dpfmcp_...` bearer token), so `git worktree add` does NOT carry them across. Run the bootstrap from inside the new worktree:
+3. **Seed the MCP config + agent toolchain.** `.mcp.json` is **tracked** and carries no secret — it references `${DPF_MCP_BEARER_TOKEN}`, which the client process must resolve. (`.gitignore` lists `.mcp.json`, but the file was committed before that rule, so the rule is inert — do not put a token in it.) `.vscode/mcp.json` is genuinely gitignored. Run the bootstrap from inside the new worktree:
    - Windows: `pwsh scripts/dpf-bootstrap-agent-toolchain.ps1`
    - macOS / Linux: `bash scripts/dpf-bootstrap-agent-toolchain.sh`
 
@@ -116,6 +116,26 @@ For normal feature/fix work: commit from the worktree, then route runtime-bound 
    - The probe must report the repository-pinned pnpm version and zero `ignoredBuilds` before `compile-ready`. If it returns `dependencyPolicyReviewKeys`, reuse those exact keys as backlog intake origins; they deliberately coalesce identical base-SHA + package/version + policy-reason findings across worktrees while keeping distinct dependency events separate.
    - Since BI-1C1483C6 a SessionStart hook (`worktree-readiness-banner.mjs`) prints this automatically. Its silence means compile-ready.
    - To become compile-ready, use the **managed** bootstrap — `node scripts/lib/bootstrap-worktree-deps.mjs .` — never a bare `pnpm install` in a worktree. A worktree's `node_modules` is normally a junction to the root clone, so a bare install writes **through** it into the root clone (which it has previously gutted); `root-clone-guard.mjs` now denies that shape. If bootstrap is unavailable or would distract from the task, stay `source-only` and do not claim local gate passes.
+
+## Trap: the shell has the token, the client may not
+
+`.mcp.json` resolves `${DPF_MCP_BEARER_TOKEN}` from the **client process** environment.
+A shell gets it from `~/.zshenv`; a GUI-launched client does not. When they diverge,
+every governed MCP call returns HTTP 401 while every check you run in a terminal says
+the token is present — so the session looks healthy and is actually ungoverned.
+
+Prove authentication rather than presence:
+
+```
+curl -s -o /dev/null -w '%{http_code}\n' -X POST http://127.0.0.1:3000/api/mcp/v1 \
+  -H "Authorization: Bearer $DPF_MCP_BEARER_TOKEN" \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: application/json, text/event-stream' \
+  --data '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
+```
+
+`200` is governed; `401` is not. `bash scripts/dpf-bootstrap-agent-toolchain.sh` repairs
+the GUI environment and reports the probe result (BI-90585312).
 
 ## Instructions for agents entering an existing worktree
 
@@ -156,7 +176,7 @@ This is a *false green*, not a flake: nothing errors, and the pass is real — f
 - **Never share a working tree across sessions.** Branches alone don't help; index/HEAD collisions are silent and corrupting.
 - **Never run `docker compose up`/`down`/`rm` from a worktree without `COMPOSE_PROJECT_NAME` set.** A `docker compose down --volumes` against the root `dpf` project from a worktree is the destructive operation that wiped the volume in the 2026-05-23 incident (`project_2026_05_23_volume_wipe_recovery`).
 - **Never base a topic branch on local `main`.** Always `origin/main` after `git fetch`.
-- **Never commit MCP config files.** `.mcp.json` and `.vscode/mcp.json` are gitignored for a reason — they carry bearer tokens.
+- **Never put a bearer token in `.mcp.json`.** It is tracked, so a token written there is committed. The token reaches clients through the environment: `~/.dpf/agent-toolchain.env` for shells, and `launchctl setenv` plus the `com.dpf.mcp-token` LaunchAgent for GUI-launched clients. `.vscode/mcp.json` is gitignored and must still never be committed.
 - **Never modify or move the root clone for active feature work.** The root clone is the merge/release/install worktree per `keep-root-clone-as-merge-worktree`; raw `git switch`, `git checkout`, `git reset`, `git pull`, `git merge`, and `git rebase` in that clone are root mutations, not setup.
 - Don't treat the worktree as a runtime by default. Commit from the worktree, verify against the canonical install. 'Make the worktree runnable' is a dedicated platform task, not a side-effect of every feature thread.
 - **Never claim unrun gates passed.** A `source-only` worktree can hold correct code, but its local typecheck/build/test status is unknown until proven in that worktree or in canonical runtime/local-CI.
