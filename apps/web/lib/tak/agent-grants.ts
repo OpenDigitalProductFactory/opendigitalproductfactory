@@ -453,6 +453,11 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   write_sandbox_file: ["sandbox_execute"],
   validate_schema: ["sandbox_execute"],
   describe_model: ["sandbox_execute"],
+  // BI-F9CAF214: reads the COMMITTED schema from disk with explicit tree
+  // provenance — no build, no sandbox. file_read (not sandbox_execute) so a
+  // read-scoped external CLI token can hold it; it reads committed source
+  // files exactly as read_project_file does.
+  describe_committed_model: ["file_read"],
   search_sandbox: ["sandbox_execute"],
   // Programmatic tool calling (R4 / P7). Its own grant, default-deny → the tool
   // is invisible to every agent until deliberately granted; the runtime also

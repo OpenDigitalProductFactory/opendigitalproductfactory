@@ -1,5 +1,6 @@
 import { scoreTrustVector } from "@/lib/trust-vector/score";
 import type { TrustAssessment, TrustDimensionInput } from "@/lib/trust-vector/types";
+import { OFF_DEFAULT_BRANCH_FRESHNESS_CAP, isOffDefaultBranch } from "@/lib/trust-vector/default-branch";
 
 type CodeGraphFreshnessTrustInput = {
   graphKey: string;
@@ -21,21 +22,10 @@ type CodeGraphFreshnessTrustInput = {
 };
 
 /**
- * Branch names that mean "the tree everyone builds against". Anything else is a
- * side branch: it may be perfectly current, but it is not what the default
- * branch says, so the graph cannot claim unqualified freshness.
+ * Off-default-branch vocabulary now lives in ../default-branch so the
+ * committed-source adapter scores a side branch identically (SSoT).
  */
-const DEFAULT_BRANCH_NAMES = new Set(["main", "master", "HEAD"]);
-
-/** Recency alone cannot score above this when the graph indexed a side branch. */
-const OFF_DEFAULT_BRANCH_FRESHNESS_CAP = 0.4;
-
-function indexedOffDefaultBranch(branch: string | null | undefined): boolean {
-  if (typeof branch !== "string") return false;
-  const trimmed = branch.trim();
-  if (trimmed.length === 0) return false;
-  return !DEFAULT_BRANCH_NAMES.has(trimmed);
-}
+const indexedOffDefaultBranch = isOffDefaultBranch;
 
 type CodeGraphCoverageTrustInput = {
   graphKey: string;
