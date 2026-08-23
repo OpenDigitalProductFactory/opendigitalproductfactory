@@ -42,6 +42,8 @@ export interface CapabilityServiceProjection {
 
 interface GeneratedCapability {
   capabilityId: string;
+  /** Absent means active. "retired" = the platform withdrew it; installs migrate off it (BI-5AA0345E). */
+  lifecycle?: "retired";
   dependencies: string[];
   activationPolicy: string;
   workGuards: string[];

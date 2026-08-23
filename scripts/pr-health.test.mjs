@@ -315,3 +315,34 @@ test("localCi omitted (null) leaves legacy behavior untouched", () => {
   const r = evalPr({ meta: okMeta, checks: [pass("Typecheck")], threads: [], localCi: null });
   assert.equal(r.ready, true);
 });
+
+// AGENTS.md §3 — PRs land against main. ci.yml is `pull_request: branches: [main]`,
+// so a feature-branch base silently skips the whole heavy suite while still
+// reporting CLEAN. #4483 sat like that with 4 checks instead of ~34.
+test("blocks a PR whose base is not main, even when every check it ran passed", () => {
+  const r = evaluatePrHealth({
+    meta: { ...okMeta, baseRefName: "feat/some-other-branch" },
+    checks: [pass("DCO"), pass("classify"), pass("acceptance")],
+    threads: [],
+  });
+  assert.equal(r.ready, false);
+  const text = r.blockers.join(" | ");
+  assert.match(text, /base is feat\/some-other-branch, not main/);
+  assert.match(text, /Green here does NOT mean verified/);
+});
+
+test("a main-based PR is not blocked by the base check", () => {
+  const r = evaluatePrHealth({
+    meta: { ...okMeta, baseRefName: "main" },
+    checks: [pass("Typecheck"), pass("Production Build")],
+    threads: [],
+  });
+  assert.equal(r.ready, true);
+  assert.deepEqual(r.blockers, []);
+});
+
+test("absent baseRefName does not invent a blocker", () => {
+  // Older callers and fixtures omit the field; missing evidence is not a failure.
+  const r = evaluatePrHealth({ meta: okMeta, checks: [pass("Typecheck")], threads: [] });
+  assert.equal(r.ready, true);
+});

@@ -147,6 +147,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         "scripts/lib/ci-policy-test-inventory.test.mjs",
         "scripts/lib/git-shallow-preflight.test.mjs",
         "scripts/pregate-preflight.test.mjs",
+        "scripts/pregate-exit-honesty.test.mjs",
         "scripts/gate-context.test.mjs",
         "scripts/lib/gate-context-runtime-contract.test.mjs",
         "scripts/pre-push-dco-check.test.mjs",
@@ -462,6 +463,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       ),
       node("--test", "packages/dpf-skill-pack/hooks/root-clone-guard.test.mjs"),
       node("--test", "packages/dpf-skill-pack/hooks/compose-guard.test.mjs"),
+      node("--test", "packages/dpf-skill-pack/hooks/portal-image-guard.test.mjs"),
       node("--test", "packages/dpf-skill-pack/hooks/worktree-create.test.mjs"),
       // BI-B1065D41 / BI-1C1483C6: the sixth PreToolUse guard and the
       // SessionStart readiness banner. Both are hand-added here for the same
@@ -487,6 +489,10 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       node(
         "--test",
         "packages/dpf-skill-pack/hooks/shared-clone-occupancy.test.mjs",
+      ),
+      node(
+        "--test",
+        "scripts/lib/dev-portal-lease-claim-key.test.mjs",
       ),
       node(
         "--test",

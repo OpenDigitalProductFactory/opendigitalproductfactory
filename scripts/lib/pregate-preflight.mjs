@@ -44,17 +44,26 @@ import { RUNNER_FAILURE_EXIT_CODE } from "../check-guards.mjs";
 export const PREFLIGHT_SKIP_ENV = "DPF_SKIP_PREGATE_PREFLIGHT_REASON";
 
 // Pull-request-profile gates that are commit-range-driven and therefore give a
-// truthful answer on a host worktree without PR context. Everything else in
-// that profile is excluded on purpose:
+// truthful answer on a host worktree without PR context.
+//
+// docs-impact / data-impact / spec-plan-doc were the "later slice once their
+// host-side behavior is proven" this list originally deferred. Proven on
+// 2026-08-23: the self-test dependencies that motivated the deferral are
+// removed by stripSelfTests() before anything runs, and what remains is four
+// commit-range scans totalling ~2.1s on a ~95s preflight. Leaving them out cost
+// a full CI round trip on #4558, where Docs Impact failed in CI on an edge the
+// preflight had just declared clean.
+//
+// Two gates stay excluded, and these reasons do NOT expire:
 //   - seed-fit-gate reads the PR body, which does not exist before push;
-//   - docs-impact-gate / data-impact-gate / spec-plan-doc-gate carry heavier
-//     self-test dependencies and are candidates for a later slice once their
-//     host-side behavior is proven;
 //   - decision-baseline MERGES origin/main into the branch — a tree mutation
 //     the preflight must never perform.
 export const LOCAL_SAFE_PR_GUARD_IDS = Object.freeze([
   "ux-fit-gate",
   "design-grounding-gate",
+  "docs-impact-gate",
+  "data-impact-gate",
+  "spec-plan-doc-gate",
 ]);
 
 // Exit-output signatures that mean "this host cannot run the guard", not

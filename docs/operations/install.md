@@ -26,6 +26,15 @@ service because provider configuration remains live state. Previously disabled
 ADP and development capabilities are not enabled by migration. This is the
 compatibility set, rather than every optional service.
 
+A capability the platform has **retired** is migrated off rather than refused.
+The catalog still carries the entry, marked retired, so a governed upgrade drops
+it from `enabledRuntimeCapabilities`, restamps the snapshot, and reports it as a
+dropped capability — an operator sees the withdrawal instead of an install that
+silently stops upgrading. A capability id the catalog does not carry at all is
+still an unknown capability and still fails closed, because nothing vouches for
+it. See [Retiring a capability](../architecture/capability-driven-runtime-profiles.md)
+for the two-phase contract this depends on.
+
 A newly initialized state is different from a previous-release state: its
 explicit empty capability selection migrates to the dependency-required core
 closure only. Optional runtime profiles remain inactive until enabled through
