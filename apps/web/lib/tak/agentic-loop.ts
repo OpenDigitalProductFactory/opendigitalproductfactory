@@ -49,6 +49,7 @@ import { clampToolResultForModel, resolveToolResultCharCap } from "./tool-result
 import { applyBacklogCreateClaimGuard } from "./backlog-create-claim-guard";
 import { applyEscalationLadderGuard, buildHumanHandoff } from "./escalation-ladder";
 import { logGeneratedProse } from "../prose/generated-prose"; // BI-41F15FD7
+import { noEligibleModelHandoff, providersBusyHandoff, providerUnreachableHandoff } from "./inference-dead-ends";
 import { assessToolSurface, computeToolSelectionAccuracy, contextEconomyTurnMetricFields } from "./context-economy-metrics";
 import { summarizeDroppedMessages } from "./compaction-digest";
 import { describeContextCapacityFailure } from "./context-capacity-failure";
@@ -196,24 +197,16 @@ export function describeToolRouteFailure(
   // branch above misses it and — before this fix — it fell through to the generic
   // "temporarily unavailable, try again in 30 seconds" below. That is a LIE for a
   if (/No eligible endpoints/i.test(msg)) {
-    return (
-      "No AI model can handle this request right now. No eligible model met this " +
-      "turn's routing requirements. The cause can be provider availability, data-policy " +
-      "or residency limits, capability requirements, or context size — not necessarily " +
-      "a disconnected provider. Open Platform > AI Operations > Providers & Routing " +
-      "to review the active route and provider status."
-    );
+    return noEligibleModelHandoff();
   }
 
   // Endpoints exist but all transiently failed (rate-limit / overload / network).
   if (/All endpoints failed/i.test(msg)) {
-    return (
-      "The AI providers are momentarily busy (usually rate-limited or overloaded). " +
-      "Please try again in about 30 seconds — no setup change is needed."
-    );
+    return providersBusyHandoff();
   }
 
-  return "The AI provider is temporarily unavailable. Please try again in about 30 seconds.";
+  // Most common dead end on a real install: 114 of 196 (BI-33F1EA72).
+  return providerUnreachableHandoff();
 }
 
 // Narration patterns: agent describes code or announces intent instead of calling tools.
