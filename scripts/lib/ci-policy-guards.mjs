@@ -172,6 +172,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       node("--test", "scripts/check-docker-patch-context.test.mjs"),
     ]),
     guard("bundle-boundary-guard", "Bundle Boundary Guard", [
+      node("--test", "scripts/check-bundle-boundaries.test.mjs"),
       node("scripts/check-bundle-boundaries.mjs"),
     ]),
     guard("application-boundary-guard", "Application Boundary Guard", [
