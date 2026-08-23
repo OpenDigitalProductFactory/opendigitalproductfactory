@@ -21,25 +21,64 @@ function optionalString(value: unknown): string | null {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
 }
 
-/** Shape a code-graph query result into a ToolResult, surfacing unavailability. */
-function codeGraphReadToolResult(
-  result: Record<string, unknown> & { available?: unknown; summary?: unknown },
-): ToolResult {
-  const message = typeof result.summary === "string" && result.summary.trim()
+/**
+ * Shape a code-graph query result into a ToolResult, surfacing unavailability
+ * AND degraded trust.
+ *
+ * BI-86EF5900: these tools returned a bare `{ results: [] }` while the graph
+ * reported `ready`. The trust vector that says otherwise was already computed
+ * and simply never reached the caller, so absence read as evidence — an agent
+ * asking whether a model exists got silence from an EMPTY graph and could
+ * reasonably conclude it does not exist. Measured live: search_code_graph
+ * ("MileageRate") returned [] for a model merged to main.
+ *
+ * Every read now carries the trust vector when the graph is degraded, and an
+ * empty result on a degraded graph is stated as NO EVIDENCE rather than as a
+ * finding. Reuses the existing trust-vector shape rather than inventing a
+ * second staleness convention.
+ */
+async function codeGraphReadToolResult(
+  result: Record<string, unknown> & { available?: unknown; summary?: unknown; results?: unknown },
+): Promise<ToolResult> {
+  const baseMessage = typeof result.summary === "string" && result.summary.trim()
     ? result.summary
     : "Code graph query completed.";
+
   if (result.available === false) {
     return {
       success: false,
       error: "Code graph unavailable",
-      message,
+      message: baseMessage,
       data: result,
     };
   }
+
+  let trust: unknown = undefined;
+  let message = baseMessage;
+  try {
+    const { getCodeGraphFreshness } = await import("@/lib/build/code-graph-access");
+    const freshness = await getCodeGraphFreshness(
+      typeof result.graphKey === "string" ? result.graphKey : undefined,
+      { inspectStructuralHealth: true },
+    );
+    const assessment = freshness.trust;
+    if (assessment && (assessment.tier === "low" || assessment.action === "qualify")) {
+      trust = assessment;
+      const empty = Array.isArray(result.results) && result.results.length === 0;
+      message = empty
+        ? `${baseMessage} — but this graph is ${assessment.tier} trust (${assessment.action}): ` +
+          `${assessment.primaryRationale} AN EMPTY RESULT HERE IS NO EVIDENCE OF ABSENCE. ` +
+          "Verify with a direct grep against the merge target before concluding the substrate does not exist."
+        : `${baseMessage} — graph trust is ${assessment.tier} (${assessment.action}): ${assessment.primaryRationale}`;
+    }
+  } catch {
+    // Trust enrichment is advisory; never fail a read because scoring failed.
+  }
+
   return {
     success: true,
     message,
-    data: result,
+    data: trust ? { ...result, trust } : result,
   };
 }
 
@@ -193,7 +232,7 @@ async function searchCodeGraphHandler(params: Record<string, unknown>): Promise<
     graphKey: optionalString(params["graphKey"]) ?? undefined,
     limit: typeof params["limit"] === "number" ? params["limit"] : undefined,
   });
-  return codeGraphReadToolResult(result as unknown as Record<string, unknown> & {
+  return await codeGraphReadToolResult(result as unknown as Record<string, unknown> & {
     available?: unknown;
     summary?: unknown;
   });
@@ -207,7 +246,7 @@ async function traceCodeSurfaceHandler(params: Record<string, unknown>): Promise
     model: optionalString(params["model"]) ?? undefined,
     graphKey: optionalString(params["graphKey"]) ?? undefined,
   });
-  return codeGraphReadToolResult(result as unknown as Record<string, unknown> & {
+  return await codeGraphReadToolResult(result as unknown as Record<string, unknown> & {
     available?: unknown;
     summary?: unknown;
   });
@@ -220,7 +259,7 @@ async function findRelatedTestsHandler(params: Record<string, unknown>): Promise
     graphKey: optionalString(params["graphKey"]) ?? undefined,
     limit: typeof params["limit"] === "number" ? params["limit"] : undefined,
   });
-  return codeGraphReadToolResult(result as unknown as Record<string, unknown> & {
+  return await codeGraphReadToolResult(result as unknown as Record<string, unknown> & {
     available?: unknown;
     summary?: unknown;
   });

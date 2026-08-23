@@ -106,9 +106,13 @@ describe("getCodeGraphFreshness", () => {
       indexedFileCount: 42,
       lastError: null,
     } as never);
+    // Merged query (BI-86EF5900): benchmark relationship counts AND population
+    // in one round trip, so rows are tagged { kind, label, count }.
     mockQueryRawUnsafe.mockResolvedValue([
-      { relationship: "DEFINES", count: 10 },
-      { relationship: "IMPORTS", count: 20 },
+      { kind: "rel", label: "DEFINES", count: 10 },
+      { kind: "rel", label: "IMPORTS", count: 20 },
+      { kind: "pop", label: "nodes", count: 42 },
+      { kind: "pop", label: "edges", count: 30 },
     ]);
 
     const result = await getCodeGraphFreshness("source-code", {
@@ -126,6 +130,40 @@ describe("getCodeGraphFreshness", () => {
     expect(result.warnings).toContain(
       "Code graph structural relationships are missing: IMPLEMENTS_ROUTE, EXPOSES_TOOL, TESTED_BY.",
     );
+    expect(result.nodeCount).toBe(42);
+    expect(result.edgeCount).toBe(30);
+  });
+
+  // BI-86EF5900: the live failure shape — file hashes present, graph empty,
+  // status "ready". The warning must say so rather than letting the caller read
+  // an empty graph as an authoritative empty answer.
+  it("warns that an empty projection is not evidence of absence", async () => {
+    vi.mocked(prisma.codeGraphIndexState.findUnique).mockResolvedValue({
+      graphKey: "source-code",
+      indexStatus: "ready",
+      graphVersion: 3,
+      workspaceRoot: "/workspace",
+      lastIndexedAt: new Date("2026-05-13T00:00:00.000Z"),
+      lastIndexedBranch: "main",
+      lastIndexedHeadSha: "abc123",
+      workspaceDirty: false,
+      workspaceDirtyObservedAt: null,
+      indexedFileCount: 4406,
+      lastError: null,
+    } as never);
+    mockQueryRawUnsafe.mockResolvedValue([
+      { kind: "pop", label: "nodes", count: 0 },
+      { kind: "pop", label: "edges", count: 0 },
+    ]);
+
+    const result = await getCodeGraphFreshness("source-code", {
+      inspectStructuralHealth: true,
+      now: new Date("2026-05-13T01:00:00.000Z"),
+    });
+
+    expect(result.nodeCount).toBe(0);
+    expect(result.warnings.join(" ")).toMatch(/NO EVIDENCE of absence/);
+    expect(result.trust?.tier).not.toBe("high");
   });
 });
 
