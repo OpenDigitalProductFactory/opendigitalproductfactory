@@ -93,6 +93,17 @@ vi.mock("@/lib/shared/lazy-node", () => ({
 }));
 
 import { prisma } from "@dpf/db";
+
+// Git calls now carry a scoped `-c safe.directory=<root>` exception
+// (BI-86EF5900: the portal container runs as a different uid than the checkout,
+// so an unprefixed git refuses outright). These fixtures assert on the git
+// SUBCOMMAND, not on the exact invocation, so the transport-level flag does not
+// have to be restated in every mock.
+const gitSub = (command: unknown): string =>
+  typeof command === "string"
+    ? command.replace(/ -c safe\.directory=(?:"[^"]*"|\S+)/g, "")
+    : String(command);
+
 import {
   buildListTrackedFilesCommand,
   CODE_GRAPH_GRAPH_KEY,
@@ -127,16 +138,16 @@ describe("reconcileCodeGraph", () => {
     vi.mocked(prisma.codeGraphIndexState.findUnique).mockResolvedValue(null);
 
     mockExec.mockImplementation(async (command: string) => {
-      if (command === "git rev-parse HEAD") return { stdout: "head-1\n", stderr: "" };
-      if (command === "git rev-parse --abbrev-ref HEAD") return { stdout: "main\n", stderr: "" };
-      if (command === "git status --porcelain") return { stdout: "", stderr: "" };
-      if (command.startsWith("git ls-files -- ")) {
+      if (gitSub(command) === "git rev-parse HEAD") return { stdout: "head-1\n", stderr: "" };
+      if (gitSub(command) === "git rev-parse --abbrev-ref HEAD") return { stdout: "main\n", stderr: "" };
+      if (gitSub(command) === "git status --porcelain") return { stdout: "", stderr: "" };
+      if (gitSub(command).startsWith("git ls-files -- ")) {
         return {
           stdout: "apps/web/lib/integrate/change-impact.ts\npackages/db/prisma/schema.prisma\n",
           stderr: "",
         };
       }
-      if (command === "git rev-parse --is-inside-work-tree") return { stdout: "true\n", stderr: "" };
+      if (gitSub(command) === "git rev-parse --is-inside-work-tree") return { stdout: "true\n", stderr: "" };
       throw new Error(`Unexpected command: ${command}`);
     });
 
@@ -181,16 +192,16 @@ describe("reconcileCodeGraph", () => {
     vi.mocked(prisma.codeGraphIndexState.findUnique).mockResolvedValue(null);
 
     mockExec.mockImplementation(async (command: string) => {
-      if (command === "git rev-parse HEAD") return { stdout: "head-1\n", stderr: "" };
-      if (command === "git rev-parse --abbrev-ref HEAD") return { stdout: "main\n", stderr: "" };
-      if (command === "git status --porcelain") return { stdout: "", stderr: "" };
-      if (command.startsWith("git ls-files -- ")) {
+      if (gitSub(command) === "git rev-parse HEAD") return { stdout: "head-1\n", stderr: "" };
+      if (gitSub(command) === "git rev-parse --abbrev-ref HEAD") return { stdout: "main\n", stderr: "" };
+      if (gitSub(command) === "git status --porcelain") return { stdout: "", stderr: "" };
+      if (gitSub(command).startsWith("git ls-files -- ")) {
         return {
           stdout: "apps/web/lib/integrate/multi-symbol.ts\n",
           stderr: "",
         };
       }
-      if (command === "git rev-parse --is-inside-work-tree") return { stdout: "true\n", stderr: "" };
+      if (gitSub(command) === "git rev-parse --is-inside-work-tree") return { stdout: "true\n", stderr: "" };
       throw new Error(`Unexpected command: ${command}`);
     });
 
@@ -218,16 +229,16 @@ describe("reconcileCodeGraph", () => {
     vi.mocked(prisma.codeGraphIndexState.findUnique).mockResolvedValue(null);
 
     mockExec.mockImplementation(async (command: string) => {
-      if (command === "git rev-parse HEAD") return { stdout: "head-1\n", stderr: "" };
-      if (command === "git rev-parse --abbrev-ref HEAD") return { stdout: "main\n", stderr: "" };
-      if (command === "git status --porcelain") return { stdout: "", stderr: "" };
-      if (command.startsWith("git ls-files -- ")) {
+      if (gitSub(command) === "git rev-parse HEAD") return { stdout: "head-1\n", stderr: "" };
+      if (gitSub(command) === "git rev-parse --abbrev-ref HEAD") return { stdout: "main\n", stderr: "" };
+      if (gitSub(command) === "git status --porcelain") return { stdout: "", stderr: "" };
+      if (gitSub(command).startsWith("git ls-files -- ")) {
         return {
           stdout: "apps/web/lib/one.ts\napps/web/lib/two.ts\n",
           stderr: "",
         };
       }
-      if (command === "git rev-parse --is-inside-work-tree") return { stdout: "true\n", stderr: "" };
+      if (gitSub(command) === "git rev-parse --is-inside-work-tree") return { stdout: "true\n", stderr: "" };
       throw new Error(`Unexpected command: ${command}`);
     });
 
@@ -259,16 +270,16 @@ describe("reconcileCodeGraph", () => {
     } as never);
 
     mockExec.mockImplementation(async (command: string) => {
-      if (command === "git rev-parse HEAD") return { stdout: "head-2\n", stderr: "" };
-      if (command === "git rev-parse --abbrev-ref HEAD") return { stdout: "main\n", stderr: "" };
-      if (command === "git status --porcelain") return { stdout: "", stderr: "" };
-      if (command === "git diff --name-only head-1..head-2") {
+      if (gitSub(command) === "git rev-parse HEAD") return { stdout: "head-2\n", stderr: "" };
+      if (gitSub(command) === "git rev-parse --abbrev-ref HEAD") return { stdout: "main\n", stderr: "" };
+      if (gitSub(command) === "git status --porcelain") return { stdout: "", stderr: "" };
+      if (gitSub(command) === "git diff --name-only head-1..head-2") {
         return {
           stdout: "apps/web/lib/integrate/change-impact.ts\napps/web/lib/integrate/removed.ts\n",
           stderr: "",
         };
       }
-      if (command === "git rev-parse --is-inside-work-tree") return { stdout: "true\n", stderr: "" };
+      if (gitSub(command) === "git rev-parse --is-inside-work-tree") return { stdout: "true\n", stderr: "" };
       throw new Error(`Unexpected command: ${command}`);
     });
 
@@ -302,10 +313,10 @@ describe("reconcileCodeGraph", () => {
     } as never);
 
     mockExec.mockImplementation(async (command: string) => {
-      if (command === "git rev-parse HEAD") return { stdout: "head-2\n", stderr: "" };
-      if (command === "git rev-parse --abbrev-ref HEAD") return { stdout: "main\n", stderr: "" };
-      if (command === "git status --porcelain") return { stdout: " M apps/web/lib/foo.ts\n", stderr: "" };
-      if (command === "git rev-parse --is-inside-work-tree") return { stdout: "true\n", stderr: "" };
+      if (gitSub(command) === "git rev-parse HEAD") return { stdout: "head-2\n", stderr: "" };
+      if (gitSub(command) === "git rev-parse --abbrev-ref HEAD") return { stdout: "main\n", stderr: "" };
+      if (gitSub(command) === "git status --porcelain") return { stdout: " M apps/web/lib/foo.ts\n", stderr: "" };
+      if (gitSub(command) === "git rev-parse --is-inside-work-tree") return { stdout: "true\n", stderr: "" };
       throw new Error(`Unexpected command: ${command}`);
     });
 
@@ -330,10 +341,10 @@ describe("reconcileCodeGraph", () => {
     } as never);
 
     mockExec.mockImplementation(async (command: string) => {
-      if (command === "git rev-parse HEAD") return { stdout: "head-2\n", stderr: "" };
-      if (command === "git rev-parse --abbrev-ref HEAD") return { stdout: "main\n", stderr: "" };
-      if (command === "git rev-parse --is-inside-work-tree") return { stdout: "true\n", stderr: "" };
-      if (command === "git status --porcelain") {
+      if (gitSub(command) === "git rev-parse HEAD") return { stdout: "head-2\n", stderr: "" };
+      if (gitSub(command) === "git rev-parse --abbrev-ref HEAD") return { stdout: "main\n", stderr: "" };
+      if (gitSub(command) === "git rev-parse --is-inside-work-tree") return { stdout: "true\n", stderr: "" };
+      if (gitSub(command) === "git status --porcelain") {
         throw new Error("Command failed: git status --porcelain");
       }
       throw new Error(`Unexpected command: ${command}`);
@@ -362,16 +373,16 @@ describe("reconcileCodeGraph", () => {
     } as never);
 
     mockExec.mockImplementation(async (command: string) => {
-      if (command === "git rev-parse HEAD") return { stdout: "head-2\n", stderr: "" };
-      if (command === "git rev-parse --abbrev-ref HEAD") return { stdout: "main\n", stderr: "" };
-      if (command === "git status --porcelain") return { stdout: "", stderr: "" };
-      if (command.startsWith("git ls-files -- ")) {
+      if (gitSub(command) === "git rev-parse HEAD") return { stdout: "head-2\n", stderr: "" };
+      if (gitSub(command) === "git rev-parse --abbrev-ref HEAD") return { stdout: "main\n", stderr: "" };
+      if (gitSub(command) === "git status --porcelain") return { stdout: "", stderr: "" };
+      if (gitSub(command).startsWith("git ls-files -- ")) {
         return {
           stdout: "apps/web/lib/integrate/code-graph/graph-queries.ts\n",
           stderr: "",
         };
       }
-      if (command === "git rev-parse --is-inside-work-tree") return { stdout: "true\n", stderr: "" };
+      if (gitSub(command) === "git rev-parse --is-inside-work-tree") return { stdout: "true\n", stderr: "" };
       throw new Error(`Unexpected command: ${command}`);
     });
 
