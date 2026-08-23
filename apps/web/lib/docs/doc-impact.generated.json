@@ -1065,6 +1065,12 @@
       "docs/architecture/agent-standards-dpf-conformance.md",
       "docs/architecture/context-engineering-standards.md"
     ],
+    "apps/web/lib/testing/degenerate-env/index.ts": [
+      "docs/testing/pre-pr-gate.md"
+    ],
+    "apps/web/lib/testing/degenerate-env/probe-conformance.test.ts": [
+      "docs/testing/pre-pr-gate.md"
+    ],
     "apps/web/lib/tool-description-hygiene.test.ts": [
       "docs/architecture/agent-standards-dpf-conformance.md",
       "docs/architecture/context-engineering-standards.md",
@@ -1320,6 +1326,9 @@
       "docs/architecture/operational-precedent-corpus.md"
     ],
     "packages/db/src/profession-local-axes.ts": [
+      "docs/architecture/decision-vectors.md"
+    ],
+    "packages/db/src/profession-material-promotion.ts": [
       "docs/architecture/decision-vectors.md"
     ],
     "packages/db/src/provider-compliance-source-registry.ts": [
@@ -2300,7 +2309,8 @@
     "docs/architecture/decision-vectors.md": [
       "apps/web/lib/decision-perspective/material.ts",
       "packages/db/src/dimension-scope.ts",
-      "packages/db/src/profession-local-axes.ts"
+      "packages/db/src/profession-local-axes.ts",
+      "packages/db/src/profession-material-promotion.ts"
     ],
     "docs/architecture/delivery-ia.md": [
       "apps/web/app/(shell)/delivery/page.tsx",
@@ -2870,6 +2880,8 @@
       ".github/workflows/ci.yml",
       ".github/workflows/codeql.yml",
       ".github/workflows/policy-guards-recheck.yml",
+      "apps/web/lib/testing/degenerate-env/index.ts",
+      "apps/web/lib/testing/degenerate-env/probe-conformance.test.ts",
       "docker-compose.local-ci.yml",
       "packages/dpf-skill-pack/hooks/pregate-evidence-guard.mjs",
       "scripts/check-guards.mjs",

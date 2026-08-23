@@ -1295,6 +1295,7 @@
         "5-where-a-weight-comes-from-sourcing-classes",
         "51-the-revealed-class-in-detail",
         "52-confidence-is-discounted-before-any-of-this-is-acted-on",
+        "53-the-high-stakes-hold-and-how-it-is-released",
         "6-what-the-registry-currently-gets-wrong",
         "7-crowd-validation-and-hive-intake",
         "71-what-exists-today",
@@ -10379,6 +10380,7 @@
         "test-runner-pins-must-hold",
         "appsmobile-jest-must-stay-on-29x",
         "appsweb-and-packagesdb-vitest",
+        "degenerate-environment-fixtures",
         "common-drift-and-how-to-stay-on-script",
         "label-association-guard-ratchet",
         "what-this-gate-is-not"

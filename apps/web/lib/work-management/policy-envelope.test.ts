@@ -216,3 +216,73 @@ describe("evaluateWorkCasePolicy", () => {
     });
   });
 });
+
+// EP-WORK-POSTURE (BI-13ED1BE1) — verificationDepth stops being decorative.
+//
+// Before this, the Golden Triangle compiled a verification depth, the room
+// rendered a "Deep verification" chip, receipts recorded it — and nothing
+// stopped a consequential action closing unverified. An operator could set
+// Assured on a payroll run, see the chip, and have it complete with no
+// verification at all. These tests are the difference between showing a
+// promise and keeping one.
+describe("verification enforcement", () => {
+  const VERIFYING_ENVELOPE = {
+    ...GOVERNED_ENVELOPE,
+    requiresVerification: true,
+  } as const;
+
+  it("DENIES a consequential action that requires verification and has none", () => {
+    const decision = evaluateWorkCasePolicy({
+      caseRef: CASE_REF,
+      sourceKey: "backlog-item",
+      action: "claim",
+      currentState: ACTIVE_STATE,
+      envelope: VERIFYING_ENVELOPE,
+    });
+    expect(decision.ok).toBe(false);
+    if (!decision.ok) {
+      // A NAMED policy denial, not a generic refusal — so the operator is told
+      // what is missing rather than that something went wrong.
+      expect(decision.reason).toBe("missing_verification_evidence");
+      expect(decision.message).toMatch(/verification evidence/i);
+    }
+  });
+
+  it("DENIES when evidence exists but nothing was actually verified", () => {
+    const decision = evaluateWorkCasePolicy({
+      caseRef: CASE_REF,
+      sourceKey: "backlog-item",
+      action: "claim",
+      currentState: ACTIVE_STATE,
+      envelope: VERIFYING_ENVELOPE,
+      verificationEvidence: [{ verifiedAt: null }],
+    });
+    expect(decision.ok).toBe(false);
+    if (!decision.ok) expect(decision.reason).toBe("missing_verification_evidence");
+  });
+
+  it("ALLOWS once verification evidence is present", () => {
+    const decision = evaluateWorkCasePolicy({
+      caseRef: CASE_REF,
+      sourceKey: "backlog-item",
+      action: "claim",
+      currentState: ACTIVE_STATE,
+      envelope: VERIFYING_ENVELOPE,
+      verificationEvidence: [{ verifiedAt: "2026-08-23T00:00:00.000Z" }],
+    });
+    expect(decision.ok).toBe(true);
+  });
+
+  it("is inert for work that does not require verification", () => {
+    // No regression: every existing caller omits requiresVerification.
+    expect(
+      evaluateWorkCasePolicy({
+        caseRef: CASE_REF,
+        sourceKey: "backlog-item",
+        action: "claim",
+        currentState: ACTIVE_STATE,
+        envelope: GOVERNED_ENVELOPE,
+      }).ok,
+    ).toBe(true);
+  });
+});
