@@ -16,7 +16,8 @@ import { AgentCoworkerPanel } from "./AgentCoworkerPanel";
 import type { ThreadLoadState } from "./composer-state";
 import type { ProviderReviewPacket } from "@/lib/routing/provider-suitability/provider-review-packet";
 import {
-  shouldDispatchAutoMessageImmediately,
+  planAutoMessage,
+  queuedAutoMessageIsForThread,
   shouldSuppressAutoMessage,
 } from "./agent-auto-message";
 import {
@@ -344,14 +345,13 @@ export function AgentCoworkerShell({ userContext, useUnifiedCoworker, cooConvers
 
       // Release a queued auto-message targeted at THIS build now that its
       // thread is loaded. Draining inside the load callback avoids the race
-      // where a separate effect fires with activeBuildId already updated
-      // but threadId still holding the previous build's id, which would
-      // submit the message to the wrong thread.
+      // where a separate effect fires with activeBuildId already updated but
+      // threadId still holding the previous build's id.
       const queued = queuedAutoMessageRef.current;
-      const expectedBuildId = activeBuildId && pathname === "/build" ? activeBuildId : null;
-      const matchesRouteContext = !queued?.routeContext || queued.routeContext === threadContext;
-      if (queued && snapshot.threadId && queued.targetBuildId === expectedBuildId && matchesRouteContext) {
-        setPendingAutoMessage(queued.message);
+      if (queuedAutoMessageIsForThread({
+        queued, threadId: snapshot.threadId, activeBuildId, pathname, threadContext,
+      })) {
+        setPendingAutoMessage(queued!.message);
         setQueuedAutoMessage(null);
       }
     })().catch((error) => {
@@ -366,24 +366,15 @@ export function AgentCoworkerShell({ userContext, useUnifiedCoworker, cooConvers
     };
   }, [threadContext, threadLoadRetryToken]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Drain a queued auto-message whose thread was ALREADY loaded when it was
-  // queued. The drain above lives inside the thread-load callback, whose effect
-  // keys on [threadContext, threadLoadRetryToken] — so a message queued while
-  // sitting on an already-loaded build stranded forever with no feedback. That
-  // is what made "Retry the AI call" silently discard every click: the owner
-  // saw a build reporting "waiting on a retry, not on you" while each retry
-  // went nowhere.
-  //
-  // Same guard as the load-callback drain (target build is the active build on
-  // /build, thread is ready, route context matches), so the race it warns about
-  // — activeBuildId advanced while threadId still holds the previous build —
-  // cannot happen here either.
+  // The drain above runs inside the thread-load callback, so a message queued
+  // while sitting on an ALREADY-loaded thread stranded forever — which is what
+  // made the retry action discard every click with no feedback.
   useEffect(() => {
-    if (!queuedAutoMessage || !threadId || threadLoadState !== "ready") return;
-    const expectedBuildId = activeBuildId && pathname === "/build" ? activeBuildId : null;
-    if (queuedAutoMessage.targetBuildId !== expectedBuildId) return;
-    if (queuedAutoMessage.routeContext && queuedAutoMessage.routeContext !== threadContext) return;
-    setPendingAutoMessage(queuedAutoMessage.message);
+    if (threadLoadState !== "ready") return;
+    if (!queuedAutoMessageIsForThread({
+      queued: queuedAutoMessage, threadId, activeBuildId, pathname, threadContext,
+    })) return;
+    setPendingAutoMessage(queuedAutoMessage!.message);
     setQueuedAutoMessage(null);
   }, [queuedAutoMessage, threadId, threadLoadState, activeBuildId, pathname, threadContext]);
 
@@ -537,34 +528,14 @@ export function AgentCoworkerShell({ userContext, useUnifiedCoworker, cooConvers
           });
           return;
         }
-        // If the event targets a specific build, queue the message until the
-        // Shell's threadContext advances to that build. Otherwise submit
-        // immediately (legacy behaviour — route-level auto-messages, e.g.
-        // the onboarding COO introducing each setup step, don't have a
-        // targetBuildId and must fire right away).
-        const routeSwitchRequested =
-          Boolean(requestedRouteContext) && requestedRouteContext !== threadContext;
-        if (routeSwitchRequested) {
-          setQueuedAutoMessage({
-            message: detail.autoMessage,
-            targetBuildId: detail.targetBuildId ?? null,
-            routeContext: requestedRouteContext,
-          });
-        } else if (shouldDispatchAutoMessageImmediately({
+        const plan = planAutoMessage({
+          message: detail.autoMessage,
           targetBuildId: detail.targetBuildId ?? null,
-          activeBuildId,
-          threadId,
-        })) {
-          setPendingAutoMessage(detail.autoMessage);
-        } else if (detail.targetBuildId) {
-          setQueuedAutoMessage({
-            message: detail.autoMessage,
-            targetBuildId: detail.targetBuildId,
-            routeContext: null,
-          });
-        } else {
-          setPendingAutoMessage(detail.autoMessage);
-        }
+          requestedRouteContext: requestedRouteContext ?? null,
+          threadContext, activeBuildId, threadId,
+        });
+        if (plan.send) setPendingAutoMessage(plan.message);
+        else setQueuedAutoMessage(plan);
       }
       // welcomeMessage: inject a pre-written assistant message without LLM call
       if (detail?.welcomeMessage) {

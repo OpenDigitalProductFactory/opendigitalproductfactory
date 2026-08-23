@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  planAutoMessage,
+  queuedAutoMessageIsForThread,
   shouldDispatchAutoMessageImmediately,
   shouldSuppressAutoMessage,
 } from "./agent-auto-message";
@@ -98,5 +100,81 @@ describe("auto-message dispatch — a retry must never be silently stranded", ()
     expect(shouldSuppressAutoMessage({ last, nextSignature: "retry::FB-1", now: 1_200 })).toBe(true);
     // The owner pressing retry again a minute later must NOT be swallowed.
     expect(shouldSuppressAutoMessage({ last, nextSignature: "retry::FB-1", now: 61_000 })).toBe(false);
+  });
+});
+
+describe("planAutoMessage", () => {
+  const base = {
+    message: "do the thing",
+    targetBuildId: null as string | null,
+    requestedRouteContext: null as string | null,
+    threadContext: "build:FB-1",
+    activeBuildId: "FB-1",
+    threadId: "th-1",
+  };
+
+  it("sends a route-level message with no target build right away", () => {
+    // The onboarding COO introducing each setup step depends on this.
+    expect(planAutoMessage(base).send).toBe(true);
+  });
+
+  it("queues until threadContext catches up with a requested route switch", () => {
+    const plan = planAutoMessage({ ...base, requestedRouteContext: "build:FB-2" });
+    expect(plan).toEqual({
+      send: false, message: "do the thing", targetBuildId: null, routeContext: "build:FB-2",
+    });
+  });
+
+  it("sends immediately when the target build is already the active one", () => {
+    expect(planAutoMessage({ ...base, targetBuildId: "FB-1" }).send).toBe(true);
+  });
+
+  it("queues a message aimed at a build that is not active yet", () => {
+    const plan = planAutoMessage({ ...base, targetBuildId: "FB-2", activeBuildId: "FB-1" });
+    expect(plan).toEqual({
+      send: false, message: "do the thing", targetBuildId: "FB-2", routeContext: null,
+    });
+  });
+
+  it("queues rather than sending when no thread exists yet", () => {
+    expect(planAutoMessage({ ...base, targetBuildId: "FB-1", threadId: null }).send).toBe(false);
+  });
+});
+
+describe("queuedAutoMessageIsForThread", () => {
+  const base = {
+    queued: { targetBuildId: "FB-1", routeContext: null } as {
+      targetBuildId?: string | null; routeContext?: string | null;
+    } | null,
+    threadId: "th-1" as string | null,
+    activeBuildId: "FB-1" as string | null,
+    pathname: "/build",
+    threadContext: "build:FB-1" as string | null,
+  };
+
+  it("releases a message whose target build is the active build on /build", () => {
+    expect(queuedAutoMessageIsForThread(base)).toBe(true);
+  });
+
+  it("holds while the thread has not loaded", () => {
+    expect(queuedAutoMessageIsForThread({ ...base, threadId: null })).toBe(false);
+  });
+
+  it("holds when a different build is active — never submit to the wrong thread", () => {
+    expect(queuedAutoMessageIsForThread({ ...base, activeBuildId: "FB-2" })).toBe(false);
+  });
+
+  it("holds off /build, where no build is the expected target", () => {
+    expect(queuedAutoMessageIsForThread({ ...base, pathname: "/workspace" })).toBe(false);
+  });
+
+  it("holds when the queued route context does not match the thread's", () => {
+    expect(queuedAutoMessageIsForThread({
+      ...base, queued: { targetBuildId: "FB-1", routeContext: "build:FB-9" },
+    })).toBe(false);
+  });
+
+  it("is false for nothing queued rather than throwing", () => {
+    expect(queuedAutoMessageIsForThread({ ...base, queued: null })).toBe(false);
   });
 });
