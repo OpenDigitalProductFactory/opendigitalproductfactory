@@ -6,7 +6,7 @@ status: draft
 
 **Date:** 2026-08-23
 
-**Status:** Revised after independent review of `d0a658eacd2c`; ready for fresh re-review
+**Status:** Revised after independent review of `d10340400b07`; ready for fresh re-review
 
 **Backlog:** `BI-11D611B3`
 
@@ -195,14 +195,16 @@ type AuthorityDigestPreimageV1 = {
     | {
         kind: "pat";
         tokenId: string;
-        scope: string[]; // sorted canonical scope ids
+        coarseScope: "read" | "write" | "admin";
+        grantScopes: string[]; // sorted canonical granular scope ids
         expiresAt: string | null;
       }
     | {
         kind: "session-jwt";
         subject: string;
         actingAgentId: string | null;
-        scope: string[]; // sorted canonical scope ids
+        coarseScope: "read" | "write";
+        grantScopes: string[]; // sorted canonical granular scope ids
         issuedAtUnixSeconds: number;
         expiresAtUnixSeconds: number;
       };
@@ -212,9 +214,9 @@ type AuthorityDigestPreimageV1 = {
 };
 ```
 
-The PAT adapter selects the existing `McpApiToken.id` and nullable `expiresAt` into the resolved authority DTO. The internal adapter retains the already-signed and verified JWT `sub`, `iat`, and `exp` claims instead of inventing a row id; verification rejects an internal credential when either NumericDate claim is missing or invalid. Neither adapter adds persistence or a token-version field.
+The PAT adapter selects the existing `McpApiToken.id`, normalized `scope`, granular `scopes`, and nullable `expiresAt` into the resolved authority DTO. The internal adapter maps verified JWT `capability` to `coarseScope`, retains granular `scopes` plus the already-signed `sub`, `iat`, and `exp` claims, and does not invent a row id; verification rejects an internal credential when either NumericDate claim is missing or invalid. Neither adapter adds persistence or a token-version field.
 
-The implementation ships four fixed vectors. The first proves the shared JCS/SHA-256 primitive:
+The implementation ships five fixed vectors. The first proves the shared JCS/SHA-256 primitive:
 
 ```text
 canonical bytes: {"compatibility":{"protocols":["a2a","mcp"]},"principal":{"tokenTier":"observer"},"schemaVersion":"dpf.external-agent-operating-profile/1"}
@@ -224,18 +226,25 @@ sha256:          c1085222f991336a52915886d41373b8e4f03b98a3b4b1a7ef8cf5a635e5eef
 The second proves authority domain separation, set ordering, and the canonical nullable expiry for a never-expiring PAT:
 
 ```text
-canonical bytes: {"actingAgentId":"AGT-TEST","credential":{"expiresAt":null,"kind":"pat","scope":["mcp:read","work:read"],"tokenId":"TOK-TEST"},"domain":"dpf.external-agent-operating-profile.authority/v1","effectiveGrantIds":["grant:a","grant:z"],"sponsorId":"USR-TEST"}
-sha256:          29ae4e2fb5b1fdeff172dc7f313bdc6dc2b3bdaf9e941aec41f4d10a12ecfdf9
+canonical bytes: {"actingAgentId":"AGT-TEST","credential":{"coarseScope":"read","expiresAt":null,"grantScopes":["mcp:read","work:read"],"kind":"pat","tokenId":"TOK-TEST"},"domain":"dpf.external-agent-operating-profile.authority/v1","effectiveGrantIds":["grant:a","grant:z"],"sponsorId":"USR-TEST"}
+sha256:          46dfd42c1968e9c4441c6ed3ecb8e5c92cb408e7dfb56d9a11920b1e9a275470
 ```
 
 The third proves the verified session-JWT branch and its NumericDate claims:
 
 ```text
-canonical bytes: {"actingAgentId":"AGT-TEST","credential":{"actingAgentId":"AGT-TEST","expiresAtUnixSeconds":1893456300,"issuedAtUnixSeconds":1893456000,"kind":"session-jwt","scope":["mcp:read","work:read"],"subject":"USR-TEST"},"domain":"dpf.external-agent-operating-profile.authority/v1","effectiveGrantIds":["grant:a","grant:z"],"sponsorId":"USR-TEST"}
-sha256:          8998a5a5d4e2012d8c41a08802319d36176d808f3cc7b80750746e67a7427d93
+canonical bytes: {"actingAgentId":"AGT-TEST","credential":{"actingAgentId":"AGT-TEST","coarseScope":"read","expiresAtUnixSeconds":1893456300,"grantScopes":["mcp:read","work:read"],"issuedAtUnixSeconds":1893456000,"kind":"session-jwt","subject":"USR-TEST"},"domain":"dpf.external-agent-operating-profile.authority/v1","effectiveGrantIds":["grant:a","grant:z"],"sponsorId":"USR-TEST"}
+sha256:          2464807bb12f26e8dcfbe12946e74911d252f6928db61f90ab2a61aa6e6ce757
 ```
 
-The fourth is a complete V1 profile fixture after removing only `profileDigest`. Optional `archetypeRef` and `agentCard` are absent by design; all other V1 fields are present:
+The fourth changes only the PAT `coarseScope` from `read` to `write`; its different digest proves the coarse authority axis is integrity-bearing:
+
+```text
+canonical bytes: {"actingAgentId":"AGT-TEST","credential":{"coarseScope":"write","expiresAt":null,"grantScopes":["mcp:read","work:read"],"kind":"pat","tokenId":"TOK-TEST"},"domain":"dpf.external-agent-operating-profile.authority/v1","effectiveGrantIds":["grant:a","grant:z"],"sponsorId":"USR-TEST"}
+sha256:          02b740eba08c1c18d435d9e6c3506623ba5d6e7aeff4f57355b3b15bb54df980
+```
+
+The fifth is a complete V1 profile fixture after removing only `profileDigest`. Optional `archetypeRef` and `agentCard` are absent by design; all other V1 fields are present:
 
 ```text
 canonical bytes: {"compatibility":{"profileSchema":{"digest":"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","digestAlgorithm":"sha256-rfc8785-v1","version":"dpf.external-agent-operating-profile/1"},"protocols":["a2a","mcp"]},"entry":{"attention":{"backlogItemId":"BI-D4C110BC","recovery":"Wait for the attention slice.","status":"deferred"},"capabilityDiscovery":{"protocol":"mcp","status":"available","tool":"load_tools"},"workCatalog":{"backlogItemId":"BI-D4C110BC","recovery":"Wait for the work-catalog slice.","status":"deferred"}},"generatedAt":"2030-01-01T00:00:00.000Z","installation":{"environmentClass":"test","instanceId":"INST-TEST","primaryPurpose":"evolve-dpf","relationshipIntents":[],"sourceCapable":false},"organization":{"locale":"en-US","organizationId":"ORG-TEST","purposeSummary":"Test purpose","timezone":"UTC"},"policy":{"activeBrakes":["source-authority-none","work-policy-unresolved"],"instanceBrakes":{"credentials":"local-permitted","peerWrite":"none","sourceAuthority":"none","teardown":"permitted"},"invalidatesOn":["authority-revoked","profile-expired"],"workPolicy":{"instruction":"Resolve a Work Case before action.","owner":"WorkCasePolicyEnvelope","status":"requires-work-context"}},"principal":{"actingAgentId":"AGT-TEST","authorityDigest":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","delegatingPrincipalId":"USR-TEST","profileExpiresAt":"2030-01-01T00:05:00.000Z","sponsorRef":"USR-TEST","tokenTier":"observer"}}
@@ -328,7 +337,7 @@ The allocation is deterministic:
 | purpose/relationships | `InstallationOperatingIntentV1.primaryPurpose` and its canonical `FederationRelationshipPreset[]` | reject malformed values through the existing intent validator; cross-install topology remains deferred to `BI-AE128860`. |
 | installation brakes | `InstanceStanceProfile` closed registries | preserve the cautious resolved stance. |
 | sponsor/delegating/acting identity | authenticated MCP context and canonical `Principal`/`PrincipalAlias` resolution | `external_agent_not_sponsored` or `operating_profile_unavailable`; never use caller arguments. |
-| token tier | `resolveAgentAuthorityTier` over server-resolved scope/grants | `external_agent_not_authorized`. Tier is descriptive and does not create allowed actions. |
+| token tier and credential authority axes | `resolveAgentAuthorityTier` plus normalized PAT `scope` or session-JWT `capability` and granular server-resolved scopes/grants | include `coarseScope`, `grantScopes`, and sorted effective grant ids in the authority preimage; return `external_agent_not_authorized` when resolution fails. Tier is descriptive and does not create allowed actions. |
 | profile/credential expiry | compiler `PROFILE_TTL_MS` plus canonical nullable `McpApiToken.expiresAt` for PATs or verified JWT `exp` for internal sessions, retained in the resolved MCP authority DTO | five-minute profile for null PAT expiry; cap at a nearer PAT/JWT expiry; reject an already-expired credential through existing authentication. No token version or request-derived session id is invented. |
 | work autonomy/confirmation | `WorkCasePolicyEnvelope` after a work context is selected | emit `requires-work-context` and `work-policy-unresolved`; no global default is guessed. |
 | consequence gating | action/source registries and the work policy evaluator at action time | no allowed-tier projection in P0. Existing `ConsequenceTier` remains local to the coordination action family until a universal registry exists. |
@@ -434,7 +443,7 @@ Write failing tests before production changes for:
 
 1. pure compilation for all four token tiers;
 2. missing/contradictory identity and authority inputs; external PAT and internal session-JWT paths; expiring and never-expiring PATs; rejection of JWTs without verified `iat`/`exp`; five-minute/capped profile expiry; absence of fabricated token version/session id; and exhaustive rejection of every invalid failure-code/recovery cross-pair;
-3. RFC 8785 primitive, PAT-authority, session-JWT-authority, and complete-profile vectors; separation of all four digest identities; exact profile-integrity field removal; and secret-field absence;
+3. RFC 8785 primitive, PAT-authority, session-JWT-authority, coarse-scope-only delta, and complete-profile vectors; separation of all four digest identities; exact profile-integrity field removal; and secret-field absence;
 4. MCP tool definition and output schema, authenticated context resolution, core-tier listing, backwards-compatible text plus structured content, and bounded result;
 5. initialize instructions pointing to the profile before `load_tools`, plus conformance with the mechanically amended consumer-host contract;
 6. exhaustive stance-to-`activeBrakes` mapping, `invalidatesOn` behavior, failure-only unverified installation, `requires-work-context` behavior, and absence of invented autonomy/consequence/egress policy;
@@ -494,6 +503,12 @@ The independent review of `d0a658eacd2c` returned **revise / do not approve** af
 | --- | --- |
 | authority preimage required nonexistent token version and non-null expiry | remove version; use a discriminated PAT/session-JWT credential preimage; make PAT expiry nullable from canonical `McpApiToken.expiresAt`; retain verified JWT `iat`/`exp`; add a null-expiry PAT vector; and cap a separate five-minute profile lifetime when credential expiry is present. |
 | mandatory session id had no external-PAT owner | remove `sessionId` from P0, explicitly defer the parent field to `BI-D4C110BC`, and test external PAT and internal session-JWT paths without synthesizing a session. |
+
+The independent review of `d10340400b07` returned **revise / do not approve** on one remaining authority-integrity axis. This revision disposes it:
+
+| Finding | Disposition |
+| --- | --- |
+| authority digest omitted canonical coarse read/write/admin scope | rename the granular array to `grantScopes`, add normalized `coarseScope` to both credential variants, source it from PAT `scope` or session-JWT `capability`, and add a fixed read/write delta vector plus tests proving the digest changes. |
 
 The revised design extends the existing install, authority, Work Case policy, MCP tier, and A2A extension seams and adds no persistence. The profile is a read model with one compiler, while durable facts remain in their canonical owners. Schema, profile, authority, and release identities have non-overlapping preimages and visibility. Response size is bounded independently of estate and tool cardinality. Deferred entries cannot masquerade as live references. The local pointer is a release projection and never a second authority.
 
