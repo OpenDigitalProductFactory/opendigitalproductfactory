@@ -10,6 +10,14 @@ import {
 } from "@/lib/autonomy/trust-graduation";
 
 import { getWorkCaseAction } from "./action-registry";
+import {
+  joinAutonomy,
+  resolveVerificationRequirement,
+  type JoinedAutonomy,
+  type VerificationRequirement,
+} from "./hitl-join";
+import type { ProactivityActionBoundary } from "@/lib/proactivity/proactivity-types";
+import type { VerificationDepth } from "@/lib/golden-triangle";
 import type { WorkCaseActionVerb } from "./case-types";
 import {
   getWorkCaseSourceEntry,
@@ -32,6 +40,15 @@ export interface WorkCaseAutonomyEnvelopeInput {
   thresholds?: Partial<Record<AutonomyLevel, GraduationThreshold>>;
   ceilings?: Record<RiskClass, AutonomyLevel>;
   regulatoryCeiling?: AutonomyLevel;
+  /**
+   * EP-WORK-POSTURE (BI-06C41FDC): the action boundary of the ROOM this turn is
+   * happening in. Optional — absent means no room posture applies and the
+   * envelope decides alone, exactly as before the join existed. Present, it can
+   * only make the turn stricter (hitl-join.ts).
+   */
+  postureActionBoundary?: ProactivityActionBoundary | null;
+  /** EP-WORK-POSTURE (BI-13ED1BE1): verification the room's posture asked for. */
+  postureVerificationDepth?: VerificationDepth | null;
 }
 
 export interface WorkCaseAutonomyEnvelopeResolution {
@@ -43,6 +60,10 @@ export interface WorkCaseAutonomyEnvelopeResolution {
   requiresCoworkerEnvelope: boolean;
   envelope: WorkCasePolicyEnvelope;
   reason: string;
+  /** How the two HITL ladders resolved against each other. */
+  autonomyJoin: JoinedAutonomy;
+  /** Whether this turn must show verification evidence before it may close. */
+  verification: VerificationRequirement;
 }
 
 /**
@@ -112,12 +133,23 @@ export function resolveWorkCaseAutonomyEnvelope(
     ceilings: input.ceilings,
     regulatoryCeiling: input.regulatoryCeiling,
   });
-  const { autonomyMode, decisionMode } = toWorkCaseAutonomy(effectiveTrustLevel);
+  const { autonomyMode, decisionMode: envelopeDecisionMode } =
+    toWorkCaseAutonomy(effectiveTrustLevel);
   const requiredReceiptKind = receiptKindFor(input.sourceKey);
+
+  // The join: neither ladder may purchase autonomy the other withholds.
+  const autonomyJoin = joinAutonomy(envelopeDecisionMode, input.postureActionBoundary);
+  const decisionMode = autonomyJoin.decisionMode;
+  const verification = resolveVerificationRequirement({
+    risk: input.risk,
+    verificationDepth: input.postureVerificationDepth,
+  });
 
   return {
     autonomyMode,
     decisionMode,
+    autonomyJoin,
+    verification,
     effectiveTrustLevel,
     ceiling,
     trustRecommendation,
@@ -128,10 +160,13 @@ export function resolveWorkCaseAutonomyEnvelope(
         required: true,
         kind: requiredReceiptKind,
       },
+      requiresVerification: verification.required,
     },
     reason:
-      effectiveTrustLevel === input.trustLevel
-        ? trustRecommendation.reason
-        : `trust ${input.trustLevel} capped to ${effectiveTrustLevel} by ${capSourceLabel(input, riskCeiling, ceiling)}`,
+      autonomyJoin.constrainedBy === "posture"
+        ? autonomyJoin.reason
+        : effectiveTrustLevel === input.trustLevel
+          ? trustRecommendation.reason
+          : `trust ${input.trustLevel} capped to ${effectiveTrustLevel} by ${capSourceLabel(input, riskCeiling, ceiling)}`,
   };
 }
