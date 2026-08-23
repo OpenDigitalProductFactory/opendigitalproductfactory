@@ -35,7 +35,8 @@ non-reconcilable record described below.
 
 `manifest.json` must satisfy `capturedItemCount + unassignedItemCount ==
 unfinishedItemCount`. When that arithmetic does not close, an item is
-unaccounted for and teardown is not safe.
+unaccounted for and teardown is not safe. Check it, do not assume it: the
+backlog moves in minutes, and every count in these files is a snapshot.
 
 ## Capture
 
@@ -43,8 +44,17 @@ unaccounted for and teardown is not safe.
 pnpm --filter @dpf/db backlog:capture -- --out packages/db/recovery/backlog
 ```
 
-Captures `triaging`, `open`, and `in-progress` items. Pass `--all` to include
-`done`, `deferred`, and `retired`.
+Captures every item that is not `done` — `triaging`, `open`, `in-progress`,
+`deferred`, and `retired`. Deferred and retired work is included because a reset
+destroys the row either way, and "we decided to stop" is a judgement someone may
+revisit. Pass `--all` to include `done` items too (you almost never want this).
+
+Re-capture **overwrites an epic's existing bundle in place**, keeping its
+filename, `bundleId`, `description`, and `planPath`. It does not write a second
+file under a generated name, which would leave the curated one stale on disk
+while still looking authoritative. A genuinely new epic gets a generated
+`ep-<id>.json` name; rename it to something meaningful and the next capture will
+keep that name.
 
 Do not hand-write a bundle. `buildBacklogRecoveryBundle` round-trips its output
 through `parseBacklogRecoveryBundle`, so a bundle that builds is guaranteed to
@@ -89,5 +99,10 @@ Two classes currently sit there by decision, not by oversight:
   `SOURCES` vocabulary, so these cannot be represented without rewriting the
   field. Where a trace has been analysed into a human-authored finding, that
   finding is bundled and carries the durable knowledge.
+
+- **Automated capability-need items (`BI-CAP-*`).** Filed by the capability-need
+  engine from a coworker's tool-surface pressure signal (`CWN-*` origin), the
+  same shape of derived observation as the `BI-MCP-EFF-*` items above and
+  regenerated the same way once the signal recurs.
 
 Anything else with no epic should be linked to one and captured, not left here.

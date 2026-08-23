@@ -1,18 +1,8 @@
 {
   "schemaVersion": 1,
-  "capturedAt": "2026-08-23T00:54:15.000Z",
+  "capturedAt": "2026-08-23T01:31:32.616Z",
   "scope": "not-done",
   "bundles": [
-    {
-      "epicId": "EP-5102F494",
-      "file": "animal-welfare-operations-vertical.json",
-      "itemCount": 10
-    },
-    {
-      "epicId": "EP-31C5A6C8",
-      "file": "external-website-channels-cms-interoperability.json",
-      "itemCount": 3
-    },
     {
       "epicId": "EP-129D11FD",
       "file": "initiative-readiness-governed-completion.json",
@@ -24,19 +14,29 @@
       "itemCount": 13
     },
     {
-      "epicId": "EP-56AE0F69",
-      "file": "reset-cycle-3-platform-findings.json",
-      "itemCount": 6
+      "epicId": "EP-31C5A6C8",
+      "file": "external-website-channels-cms-interoperability.json",
+      "itemCount": 3
+    },
+    {
+      "epicId": "EP-5102F494",
+      "file": "animal-welfare-operations-vertical.json",
+      "itemCount": 10
     },
     {
       "epicId": "EP-55AF36AC",
       "file": "veterinary-clinic-operating-system.json",
       "itemCount": 6
+    },
+    {
+      "epicId": "EP-56AE0F69",
+      "file": "reset-cycle-3-platform-findings.json",
+      "itemCount": 7
     }
   ],
-  "capturedItemCount": 43,
-  "unassignedItemCount": 8,
-  "unfinishedItemCount": 51,
+  "capturedItemCount": 44,
+  "unassignedItemCount": 9,
+  "unfinishedItemCount": 53,
   "skipped": [
     {
       "itemId": "BI-0E8B29C3",
@@ -44,6 +44,10 @@
     },
     {
       "itemId": "BI-68A72876",
+      "reason": "item-has-no-epic"
+    },
+    {
+      "itemId": "BI-CAP-FC4033F6",
       "reason": "item-has-no-epic"
     },
     {

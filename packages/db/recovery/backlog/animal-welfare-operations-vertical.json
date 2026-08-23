@@ -3,7 +3,7 @@
   "bundleId": "animal-welfare-operations-vertical",
   "description": "Operator-invoked recovery input for the animal-welfare operations vertical epic (pet-rescue archetype operating model).",
   "source": {
-    "capturedAt": "2026-08-23T00:54:15.000Z",
+    "capturedAt": "2026-08-23T01:31:32.616Z",
     "repository": "OpenDigitalProductFactory/opendigitalproductfactory",
     "planPath": "docs/architecture/archetype-operating-model-audit.md"
   },
@@ -608,7 +608,239 @@
       "scopeKind": "platform",
       "dependsOn": [],
       "externalDependencies": [],
-      "activities": [],
+      "activities": [
+        {
+          "recoveryKey": "bi-d2a51b36-cmt548lx0011b01rm7d3em5tz",
+          "kind": "initiative_readiness_decision",
+          "summary": "design readiness: allowed",
+          "recordedAt": "2026-08-23T01:15:48.852Z",
+          "payload": {
+            "unmet": [],
+            "target": "design",
+            "profile": "cross-domain",
+            "subject": {
+              "id": "BI-D2A51B36",
+              "kind": "backlog-item"
+            },
+            "verdict": "allowed",
+            "blockers": [],
+            "authority": {
+              "actionKey": "claim_backlog_item_for_work",
+              "enforcementState": "enforced"
+            },
+            "satisfied": [
+              {
+                "code": "CLASSIFICATION_REQUIRED",
+                "state": "pass",
+                "evidenceRefs": [],
+                "accountableRole": "product-owner"
+              },
+              {
+                "code": "AUTHORIZATION_DENIED",
+                "state": "pass",
+                "evidenceRefs": [],
+                "accountableRole": "platform-governance"
+              }
+            ],
+            "decisionId": "IRD-5AC890C6B2C2",
+            "workIntent": "design",
+            "evaluatedAt": "2026-08-23T01:15:48.837Z",
+            "factsDigest": "f20646c25f81d88dc713083cb7dc1b9e5b7aca08e606a8a5b63ea73460433743",
+            "stableCodes": {
+              "unmet": [],
+              "blockers": [],
+              "satisfied": [
+                "CLASSIFICATION_REQUIRED",
+                "AUTHORIZATION_DENIED"
+              ]
+            },
+            "policyVersion": "initiative-readiness.v1",
+            "schemaVersion": 1,
+            "transitionObject": {
+              "id": "OpenDigitalProductFactory/opendigitalproductfactory#feat/bi-d2a51b36-resource-occupancy",
+              "kind": "work-capsule",
+              "targetState": "design",
+              "expectedVersion": "claim.v1"
+            }
+          }
+        },
+        {
+          "recoveryKey": "bi-d2a51b36-cmt54lmrl01d301rm4zjb90s9",
+          "kind": "initiative_readiness_decision",
+          "summary": "implementation readiness: input-required",
+          "recordedAt": "2026-08-23T01:25:56.481Z",
+          "payload": {
+            "unmet": [
+              {
+                "code": "CANONICAL_DESIGN_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "design-checklist-reviewer"
+              },
+              {
+                "code": "RESEARCH_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "design-author"
+              },
+              {
+                "code": "SPEC_APPROVAL_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "design-checklist-reviewer"
+              },
+              {
+                "code": "REVIEW_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "architecture-reviewer"
+              },
+              {
+                "code": "REVIEW_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "data-reviewer"
+              },
+              {
+                "code": "REVIEW_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "ux-reviewer"
+              },
+              {
+                "code": "REVIEW_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "security-reviewer"
+              },
+              {
+                "code": "REVIEW_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "compliance-reviewer"
+              },
+              {
+                "code": "REVIEW_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "domain-reviewer"
+              },
+              {
+                "code": "OBJECTIVE_BASELINE_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "design-checklist-reviewer"
+              },
+              {
+                "code": "ARTIFACT_AUTHOR_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "artifact-resolver"
+              },
+              {
+                "code": "PLAN_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "implementation-planner"
+              },
+              {
+                "code": "PLAN_REVIEW_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "plan-reviewer"
+              },
+              {
+                "code": "PLAN_COVERAGE_REQUIRED",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "portfolio-management"
+              },
+              {
+                "code": "TRACEABILITY_INCOMPLETE",
+                "state": "missing",
+                "evidenceRefs": [],
+                "accountableRole": "portfolio-management"
+              }
+            ],
+            "target": "implementation",
+            "profile": "cross-domain",
+            "subject": {
+              "id": "BI-D2A51B36",
+              "kind": "backlog-item"
+            },
+            "verdict": "input-required",
+            "blockers": [],
+            "authority": {
+              "actionKey": "claim_backlog_item_for_work",
+              "enforcementState": "enforced"
+            },
+            "satisfied": [
+              {
+                "code": "CLASSIFICATION_REQUIRED",
+                "state": "pass",
+                "evidenceRefs": [],
+                "accountableRole": "product-owner"
+              },
+              {
+                "code": "AUTHORIZATION_DENIED",
+                "state": "pass",
+                "evidenceRefs": [],
+                "accountableRole": "platform-governance"
+              },
+              {
+                "code": "DEPENDENCY_UNRESOLVED",
+                "state": "not-applicable",
+                "evidenceRefs": [],
+                "accountableRole": "portfolio-management"
+              },
+              {
+                "code": "CAPSULE_IDENTITY_MISMATCH",
+                "state": "pass",
+                "evidenceRefs": [],
+                "accountableRole": "delivery-coordinator"
+              }
+            ],
+            "decisionId": "IRD-63E785B55D6B",
+            "workIntent": "implementation",
+            "evaluatedAt": "2026-08-23T01:25:56.473Z",
+            "factsDigest": "5cd67f6af00037907d75fc85281667477bb8cf066df92631e0915a73b9d79e62",
+            "stableCodes": {
+              "unmet": [
+                "CANONICAL_DESIGN_REQUIRED",
+                "RESEARCH_REQUIRED",
+                "SPEC_APPROVAL_REQUIRED",
+                "REVIEW_REQUIRED",
+                "REVIEW_REQUIRED",
+                "REVIEW_REQUIRED",
+                "REVIEW_REQUIRED",
+                "REVIEW_REQUIRED",
+                "REVIEW_REQUIRED",
+                "OBJECTIVE_BASELINE_REQUIRED",
+                "ARTIFACT_AUTHOR_REQUIRED",
+                "PLAN_REQUIRED",
+                "PLAN_REVIEW_REQUIRED",
+                "PLAN_COVERAGE_REQUIRED",
+                "TRACEABILITY_INCOMPLETE"
+              ],
+              "blockers": [],
+              "satisfied": [
+                "CLASSIFICATION_REQUIRED",
+                "AUTHORIZATION_DENIED",
+                "DEPENDENCY_UNRESOLVED",
+                "CAPSULE_IDENTITY_MISMATCH"
+              ]
+            },
+            "policyVersion": "initiative-readiness.v1",
+            "schemaVersion": 1,
+            "transitionObject": {
+              "id": "OpenDigitalProductFactory/opendigitalproductfactory#feat/bi-d2a51b36-resource-occupancy",
+              "kind": "work-capsule",
+              "targetState": "implementation",
+              "expectedVersion": "claim.v1"
+            }
+          }
+        }
+      ],
       "effortSize": "large",
       "triageOutcome": "build",
       "createdAt": "2026-08-22T04:39:13.864Z"
