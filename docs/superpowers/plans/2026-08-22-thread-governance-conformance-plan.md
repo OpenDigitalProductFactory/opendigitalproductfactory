@@ -95,3 +95,34 @@ Implements kernel decision DI-48014BCBA44F.
 ## Sequencing note
 
 Phase 1 is a hard prerequisite for verifying 2–7. Phases 4 and 5 must not land before 2 and 3: enforcing a rule the thread has not been told about, in a session that cannot see why it was denied, is the failure mode this program exists to remove. Enforcement follows legibility, never precedes it.
+
+---
+
+## Plan → backlog coverage
+
+`record_plan_backlog_coverage` was called against BI-299C953D at commit
+`979aece0737e1f65b61b484e3a84cad3e4b2f3c8` and was **refused**:
+
+> BacklogItem BI-299C953D has no initiative scope baseline, so plan coverage cannot be
+> bound to a governed scope. The baseline is recorded as an `initiative_scope_baseline`
+> activity when the initiative's spec-approval gate passes; it is not currently reachable
+> from an MCP session.
+
+That is the known provenance defect **BI-B9403248** — the baseline an MCP caller is required
+to have cannot be created from an MCP session. Per the tool's own remediation, the coverage
+table is recorded here and the blocked receipt cites BI-B9403248. **No coverage receipt
+exists for this plan**; do not report one.
+
+| Phase | Deliverable | BI | Independently shippable | Depends on |
+|---|---|---|---|---|
+| 1 | Restore governed MCP in every worktree | BI-90585312 | yes | — |
+| 2 | Shared conformance module + work-shape banner | BI-21B04901 | yes | phase 1 |
+| 3 | Hook-injected doctrine + load assertion | BI-E659ED37 | yes | phase 2 |
+| 4 | Workroom claim guard (Write/Edit + Bash) | BI-865E1755 | yes | phases 2, 3 |
+| 5 | Canonical worktree base enforcement | BI-076BCD26 | yes | — |
+| 6a | Bind existing workroom to a worktree | BI-29673B7C | yes | — |
+| 6b | Scope granularity + container-path bindings | BI-5A1B0D36 | yes | — |
+| 7 | Cross-surface guard liveness + CI backstop | BI-E8E7FCDF | yes | phases 2, 4 |
+
+Umbrella: **BI-299C953D**. Epic: **EP-5560770F**. Workroom: **WC-0D395540**.
+Kernel decision for phase 3: **DI-48014BCBA44F**.
