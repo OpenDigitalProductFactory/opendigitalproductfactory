@@ -1,3 +1,11 @@
+---
+title: "Plan — Bookkeeping Work Room (decomposed umbrella)"
+date: 2026-08-16
+bi: BI-1585FA9E
+epic: EP-EMAIL-COMMS
+status: active
+---
+
 # Plan — Bookkeeping Work Room (BI-1585FA9E, decomposed umbrella)
 
 **BI:** BI-1585FA9E · **Epic:** EP-EMAIL-COMMS · **Priority:** P2 · **Triage:** build/large
