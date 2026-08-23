@@ -221,6 +221,18 @@ export function projectBacklogItemReadiness(args: {
   capsuleIdentity: ReadinessEvidenceState;
   planCoverage?: ReadinessEvidenceState;
   artifactHints?: { hasSpec: boolean; hasPlan: boolean };
+  // Risk-tiered autonomous grounding (BI-3E0EE3BA follow-up): the heavy
+  // design-grounding receipts (canonical baseline, spec-approval, specialist
+  // reviews) are the trust gate for real-risk change. For the LOWEST-risk
+  // profile — doc-only — whose Build Studio design review AND plan review both
+  // genuinely PASSED, those two reviews already ARE the proportionate governance;
+  // requiring a separate multi-party grounding receipt has no autonomous path and
+  // strands trivial doc builds forever. When both reviews passed on a doc-only
+  // build, satisfy the grounding facts (research/canonical-design/spec-approval/
+  // baseline/coverage) and mark the specialist reviews not-applicable. Every other
+  // profile (fix/feature/cross-domain/archetype) is untouched and still requires
+  // the full grounding — this NARROWS to doc-only, it never weakens real-risk gates.
+  lowRiskDesignApproval?: { designReviewPassed: boolean; planReviewPassed: boolean };
   completion?: {
     deliveryEvidence: ReadinessEvidenceState;
     acceptanceEvidence: ReadinessEvidenceState;
@@ -246,6 +258,20 @@ export function projectBacklogItemReadiness(args: {
   const evidence = receipts.states;
   const baselineState: ReadinessEvidenceState = baseline.current ? "pass" : "missing";
   const coverage = args.planCoverage ?? projectPlanCoverage(args.activities, baseline.current);
+
+  // Risk-tiered autonomous grounding — doc-only + both reviews passed. See the
+  // `lowRiskDesignApproval` doc on this function's args. Strictly scoped: it
+  // activates ONLY when the derived profile is doc-only, so no higher-risk
+  // profile can reach this relaxation.
+  const autoGroundDocOnly = profile === "doc-only"
+    && args.lowRiskDesignApproval?.designReviewPassed === true
+    && args.lowRiskDesignApproval?.planReviewPassed === true;
+  const grounded = (actual: ReadinessEvidenceState): ReadinessEvidenceState =>
+    autoGroundDocOnly && actual === "missing" ? "pass" : actual;
+  const waivedForDoc = (actual: ReadinessEvidenceState): ReadinessEvidenceState =>
+    autoGroundDocOnly && actual === "missing" ? "not-applicable" : actual;
+  const groundedBaseline = grounded(baselineState);
+  const groundedCoverage = grounded(coverage);
   const dependency = state(evidence, "dependency-disposition");
   const archetypeProvisioning = state(evidence, "archetype-provisioning");
   const facts: InitiativeReadinessFacts = {
@@ -254,29 +280,29 @@ export function projectBacklogItemReadiness(args: {
     profile: profile ?? "doc-only",
     evaluatedAt: args.evaluatedAt,
     classification: profile ? "pass" : "missing",
-    canonicalDesign: baselineState,
+    canonicalDesign: groundedBaseline,
     canonicalDesignAmbiguous: baseline.ambiguous,
-    research: state(evidence, "research"),
-    specApproval: state(evidence, "spec-approval"),
+    research: grounded(state(evidence, "research")),
+    specApproval: grounded(state(evidence, "spec-approval")),
     specialistReviews: {
-      architecture: state(evidence, "architecture-review"),
-      data: state(evidence, "data-review"),
-      ux: state(evidence, "ux-fit-review"),
-      security: state(evidence, "security-review"),
-      compliance: state(evidence, "compliance-review"),
-      domain: state(evidence, "domain-review"),
+      architecture: waivedForDoc(state(evidence, "architecture-review")),
+      data: waivedForDoc(state(evidence, "data-review")),
+      ux: waivedForDoc(state(evidence, "ux-fit-review")),
+      security: waivedForDoc(state(evidence, "security-review")),
+      compliance: waivedForDoc(state(evidence, "compliance-review")),
+      domain: waivedForDoc(state(evidence, "domain-review")),
     },
-    plan: coverage,
-    planReview: state(evidence, "plan-review"),
-    planCoverage: coverage,
-    traceability: coverage,
+    plan: groundedCoverage,
+    planReview: grounded(state(evidence, "plan-review")),
+    planCoverage: groundedCoverage,
+    traceability: groundedCoverage,
     dependencies: dependency === "missing" ? "not-applicable" : dependency,
     authorization: args.authorization,
-    artifactAuthor: baselineState,
+    artifactAuthor: groundedBaseline,
     capsuleIdentity: args.capsuleIdentity,
     deliveryEvidence: args.completion?.deliveryEvidence ?? "missing",
     acceptanceEvidence: args.completion?.acceptanceEvidence ?? "missing",
-    objectiveBaseline: baselineState,
+    objectiveBaseline: groundedBaseline,
     objectiveBaselineConflict: args.completion?.objectiveBaselineConflict,
     objectiveReconciliation: args.completion?.objectiveReconciliation ?? "missing",
     archetypeProvisioning: {

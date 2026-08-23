@@ -30,6 +30,9 @@ export function buildInitialRouteContext(input: {
         ? "local_only"
         : options?.residencyPolicy,
     requiredModelClass: options?.requiredModelClass,
+    // BI-3E0EE3BA follow-up: a local-tier build (getModelTier → "local") caps the
+    // code-gen frontier floor at strong so the on-box coder is eligible.
+    localTierCodegenRelax: options?.modelTier === "local",
   };
 }
 

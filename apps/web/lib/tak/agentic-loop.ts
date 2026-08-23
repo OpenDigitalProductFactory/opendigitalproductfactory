@@ -1150,6 +1150,9 @@ export type RunAgenticLoopParams = {
   chatHistory: ChatMessage[];
   systemPrompt: string;
   sensitivity: import("@/lib/agent-sensitivity").RouteSensitivity;
+  /** BI-3E0EE3BA follow-up: "local" caps the code-gen frontier floor at strong
+   *  (localTierCodegenRelax) for the trivial doc/chore build tail. */
+  modelTier?: "local" | "robust";
   tools: ToolDefinition[];
   toolsForProvider: Array<Record<string, unknown>> | undefined;
   /** Read-only turn already grounded in authorized semantic state. */
@@ -1392,6 +1395,10 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
   const routeOptions = {
     ...(toolsForProvider ? { tools: toolsForProvider } : {}),
     taskType: turnRoute.taskType,
+    // BI-3E0EE3BA follow-up: a local-tier build passes modelTier so the code-gen
+    // frontier floor is capped at strong (see localTierCodegenRelax) — the on-box
+    // coder is proportionate for the trivial doc/chore tail.
+    ...(params.modelTier ? { modelTier: params.modelTier } : {}),
     ...effectiveConfig,
     ...(requireTools ? { requireTools: true } : {}),
     ...(agentDisplayName ? { agentDisplayName } : {}),

@@ -964,15 +964,26 @@ async function dispatchSpecialist(params: {
       chatHistory: [{ role: "user", content: taskPrompt }],
       systemPrompt,
       sensitivity: "development", // code clearance; payload screening still applies
+      // BI-3E0EE3BA follow-up: local-tier build caps the code-gen frontier floor
+      // at strong so the on-box coder is eligible for this specialist task.
+      ...(config.modelTier ? { modelTier: config.modelTier } : {}),
       tools: scopedTools,
       toolsForProvider,
       userId,
       routeContext: "/build",
       agentId,
       threadId: thread.id,
-      modelRequirements: agenticFallbackProviderId || config.selection?.selected?.engine === "agentic"
-        ? { ...modelReqs, allowedProviders: [agenticFallbackProviderId ?? config.selection!.selected!.providerId] }
-        : modelReqs,
+      // BI-3E0EE3BA follow-up: a local-tier build runs code-gen on the on-box
+      // routed model. The agentic fallback pins the allowlist to a non-local
+      // provider id, which excludes "local" (the opencode engine isn't a
+      // registered build engine on this install) — so a local-tier build could
+      // never route its own on-box coder. Pin to "local" for the local tier so
+      // the routed on-box endpoint is eligible; robust-tier keeps the fallback pin.
+      modelRequirements: config.modelTier === "local"
+        ? { ...modelReqs, allowedProviders: ["local"] }
+        : agenticFallbackProviderId || config.selection?.selected?.engine === "agentic"
+          ? { ...modelReqs, allowedProviders: [agenticFallbackProviderId ?? config.selection!.selected!.providerId] }
+          : modelReqs,
       requireTools: true,
       onProgress: (event: AgentEvent) => agentEventBus.emit(parentThreadId, event),
     });
@@ -1149,9 +1160,27 @@ export async function runBuildOrchestrator(params: {
   // capability, and hard-pin gates before any specialist side effect begins.
   const { deriveDeliverableSensitivity, mapBuildDeliverableToRoutingSensitivity } = await import("@/lib/explore/build-process-matrix");
   const buildSensitivity = deriveDeliverableSensitivity({ text: buildContext });
+  // BI-3E0EE3BA follow-up: resolve the capability tier for this build so the
+  // trivial doc/chore tail ("local") caps the per-task code-gen frontier floor at
+  // strong (on-box coder is proportionate). Robust-tier builds keep the frontier
+  // floor. Best-effort: fall back to no tier (existing behaviour) if unavailable.
+  let buildModelTier: import("@/lib/explore/build-process-matrix").BuildModelTier | undefined;
+  try {
+    const { getModelTier } = await import("@/lib/explore/build-process-matrix");
+    const tierBuild = await prisma.featureBuild.findUnique({
+      where: { buildId },
+      select: { kind: true, originator: { select: { workType: true, effortSize: true } } },
+    });
+    const type = tierBuild?.originator?.workType ?? tierBuild?.kind ?? null;
+    const size = tierBuild?.originator?.effortSize ?? null;
+    buildModelTier = getModelTier(type, size, { qualityFirst: true });
+  } catch (err) {
+    console.warn("[orchestrator] Could not resolve build model tier (non-fatal):", (err as Error).message);
+  }
   const preflightConfig = await getBuildStudioConfig({
     // low→development; elevated→internal; high→confidential (founder ruling).
     sensitivity: mapBuildDeliverableToRoutingSensitivity(buildSensitivity),
+    ...(buildModelTier ? { modelTier: buildModelTier } : {}),
   });
 
   if (preflightConfig.selection) {

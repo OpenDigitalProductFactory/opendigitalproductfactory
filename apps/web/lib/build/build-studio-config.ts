@@ -31,6 +31,10 @@ export type BuildStudioDispatchConfig = {
   codexModel: string;
   grokModel: string;
   opencodeModel: string;
+  /** BI-3E0EE3BA follow-up: the capability tier resolved for this build. "local"
+   *  (trivial doc/chore) caps the per-task code-gen frontier floor at strong so
+   *  the on-box coder is eligible during orchestration. */
+  modelTier?: BuildModelTier;
 };
 
 const DEFAULTS: BuildStudioDispatchConfig = {
@@ -351,5 +355,6 @@ export async function getBuildStudioConfig(
     enginePolicy: policy.mode,
     pinnedEngine: policy.pinnedEngine,
     selection,
+    ...(opts?.modelTier ? { modelTier: opts.modelTier } : {}),
   };
 }

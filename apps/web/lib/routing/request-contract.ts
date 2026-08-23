@@ -138,6 +138,12 @@ export type RequestRouteContext = {
   reasoningDepth?: RequestContract["reasoningDepth"];
   minimumTier?: string;
   minimumDimensions?: Record<string, number>;
+  // BI-3E0EE3BA follow-up: a local-tier build (getModelTier → "local": the
+  // trivial doc/chore tail) does not need a FRONTIER (85) code-gen engine — the
+  // on-box strong-tier model is proportionate. When set, the code-gen task's
+  // frontier floor is capped at "strong" so the on-box coder qualifies. Applies
+  // ONLY to the local tier; robust-tier builds keep the frontier floor.
+  localTierCodegenRelax?: boolean;
 };
 
 export async function inferContract(
@@ -326,7 +332,12 @@ export async function inferContract(
   // frontier task to a strong-tier model just because it's cheaper.
   try {
     const { TIER_MINIMUM_DIMENSIONS, isValidTier } = await import("./quality-tiers");
-    const tier = taskReq?.minimumTier;
+    // BI-3E0EE3BA follow-up: cap a code-gen FRONTIER floor at "strong" for a
+    // local-tier build (see localTierCodegenRelax). Trivial doc/chore code-gen
+    // runs on the on-box strong model; robust-tier builds are untouched.
+    const tier = routeContext?.localTierCodegenRelax && taskReq?.minimumTier === "frontier"
+      ? "strong"
+      : taskReq?.minimumTier;
     if (tier && isValidTier(tier)) {
       const tierFloor = TIER_MINIMUM_DIMENSIONS[tier];
       if (Object.keys(tierFloor).length > 0) {

@@ -77,6 +77,10 @@ export async function enforceBuildInitiativeReadiness(args: {
       id: true,
       buildId: true,
       kind: true,
+      // BI-3E0EE3BA follow-up: the build's own design + plan reviews feed the
+      // risk-tiered autonomous grounding for doc-only builds (see projectBacklogItemReadiness).
+      designReview: true,
+      planReview: true,
       originatingBacklogItemId: true,
       originator: {
         select: {
@@ -103,6 +107,10 @@ export async function enforceBuildInitiativeReadiness(args: {
     return { allowed: false, error: "classification_required", message: "Build has no canonical originating backlog subject.", decision };
   }
 
+  const reviewDecision = (review: unknown): string | null =>
+    review && typeof review === "object" && typeof (review as { decision?: unknown }).decision === "string"
+      ? (review as { decision: string }).decision
+      : null;
   const projected = (args.dependencies?.projectReadiness ?? projectBacklogItemReadiness)({
     item: { ...build.originator, activeBuildKind: build.kind },
     activities: build.originator.activities as InitiativeReadinessActivity[],
@@ -115,6 +123,10 @@ export async function enforceBuildInitiativeReadiness(args: {
     },
     authorization: "pass",
     capsuleIdentity: "pass",
+    lowRiskDesignApproval: {
+      designReviewPassed: reviewDecision(build.designReview) === "pass",
+      planReviewPassed: reviewDecision(build.planReview) === "pass",
+    },
     evaluatedAt,
   });
   const decision = withDecisionId(projected.decision);
