@@ -10,11 +10,11 @@ status: draft
 
 ## Delivery contract
 
-The repair has five testable slices: profile/policy, actionable reviewer
+The repair has six testable slices: profile/policy, actionable reviewer
 routing, organization-bound reviewer authority, provider-verified Workroom
-reconciliation, and existing-Workroom replay. Production implementation starts
-only after governed implementation intent is allowed; design/plan work proceeds
-under design intent.
+reconciliation, existing-Workroom replay, and bounded plan-coverage persistence.
+Production implementation starts only after governed implementation intent is
+allowed; design/plan work proceeds under design intent.
 
 This committed plan is intentionally pre-implementation. Its Red tests are
 traceability commitments, not claims that production code or tests already
@@ -34,6 +34,7 @@ authorizes implementation intent.
 | `AC-RECEIPT-FRESHNESS` | pre-baseline and post-baseline supersession tests | readiness entry adapter / receipt projection |
 | `AC-HEAD-RECONCILE`, `AC-REPLAY` | provider, handler, capture/adopt tests | external evidence and external session capture |
 | `AC-AUTHOR-AFTER-SYNC`, `AC-FAIL-CLOSED` | repository-artifact positive/negative fixtures | existing artifact resolver |
+| `AC-COVERAGE-TX` | slow-preflight, five-mapping commit, stale-binding, and transaction-expiry tests | plan coverage recorder and repository binding recheck |
 
 ## Task 1 - Rebase and refresh Workroom scope
 
@@ -136,14 +137,34 @@ evidence, resolve the immutable artifact/author, then repeat with mismatched
 head, unsigned commit, conflicting DCO principal, ambiguous Workrooms, and
 provider failure. No artifact-author relaxation belongs in production code.
 
-## Task 10 - Verification and reviews
+## Task 10 - Red/green bounded plan-coverage persistence
+
+1. Reproduce WC-A31DBE53 with five valid mappings and a provider resolver that
+   takes longer than five seconds; prove the delay occurs before the transaction
+   callback starts.
+2. Carry the resolved immutable plan identity plus exact capsule binding into
+   the serializable callback.
+3. Lock and revalidate subject, repository, head, owner, baseline, and mapped
+   BacklogItems without provider/network work inside the transaction.
+4. Prove the five mappings append one governed receipt within the default
+   interactive transaction window.
+5. Prove head/owner/baseline/mapping races, provider mismatch, and ambiguous
+   Workrooms remain fail-closed with no create call.
+6. Map Prisma transaction timeout/conflict to a typed retry action; never report
+   it as plan-artifact-invalid or a partial success.
+
+Refactoring allocation: split provider preflight from mutable binding
+revalidation in the existing repository-artifact module. Reuse both halves in
+the plan recorder; do not duplicate DCO or Workroom-selection rules.
+
+## Task 11 - Verification and reviews
 
 Run focused suites after every Red/Green slice, then related projection,
 baseline, receipt, Workroom, coworker, MCP task/route, and external-evidence
 suites; typecheck; blast-radius analysis; independent architecture review; UX
 review of model-facing recovery copy; and `pnpm run pregate:preflight`.
 
-## Task 11 - Governed publication
+## Task 12 - Governed publication
 
 Commit with one DCO trailer, synchronize WC-2ABA65F7 to the stable commit,
 obtain fresh independent semantic review, run shared-lease exact-tree local CI
@@ -151,7 +172,7 @@ and full pregate, push only green reviewed SHA, open a ready PR, read bot
 findings, run `pnpm pr:health`, and use the protected merge queue. Verify the
 live install before closing BI-F0715C9C.
 
-## Task 12 - Existing blocked-Workroom recovery proof
+## Task 13 - Existing blocked-Workroom recovery proof
 
 After merge/live deployment:
 
@@ -173,3 +194,10 @@ exact eligible agent and that threadless dispatch creates an auth-bound TaskRun
 rather than returning `missing_threadId` or opening a default coworker. Preserve
 manual-check evidence `cmt5b0dy006gd01rmfykifyq3` in the audit trail, and notify
 the owning task only after the protected repair is merged and verified live.
+
+Finally, replay coverage for `BI-79449954` / `WC-A31DBE53` with plan blob
+`8f933b3c9312f0a3b2f01794f421ac4b9cace01e` and the same five mappings. Confirm
+the receipt commits without holding provider I/O inside the transaction. Preserve
+repair evidence `cmt5c515e07e101rmafeg61tg` and veterinary evidence
+`cmt5c516h07e301rm7dkeokmu`; no direct database edit or fabricated receipt is a
+valid recovery step.

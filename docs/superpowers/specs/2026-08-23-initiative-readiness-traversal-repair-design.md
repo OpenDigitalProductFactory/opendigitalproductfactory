@@ -60,6 +60,7 @@ correctly but does not expose a governed path to satisfy the denial.
 | Receipt freshness | With no approved baseline, `entry-adapter.ts` passes `canonicalDigest=null`, so specialist receipts bound to superseded commit `e89f362` still project as satisfied against the current `ad873ed` design | Pre-baseline review evidence has no canonical proposed-design digest anchor. |
 | Workroom synchronization | `adoptWorktreeCapsule` already updates `baseSha`, `headSha`, and `lastSyncedAt` | External evidence never verifies a provider branch head or passes a SHA to adoption. |
 | Artifact author | `resolveRepositoryArtifact` requires one subject Workroom whose head equals the immutable commit | `ARTIFACT_AUTHOR_REQUIRED` is downstream of the missing head sync. |
+| Plan coverage persistence | WC-A31DBE53 now resolves plan blob `8f933b3c9312f0a3b2f01794f421ac4b9cace01e` and validates five mappings, but commit attempts expire at 5,532 ms and 8,431 ms against Prisma's 5,000 ms interactive-transaction limit | `recordPlanBacklogCoverage` performs provider commit, DCO, blob, alias, and Workroom resolution while holding a serializable parent-row lock. |
 
 The defect is a combination of profile derivation, per-profile policy,
 progressive disclosure/recovery, external reviewer dispatch, authority-decision
@@ -76,6 +77,8 @@ resolution. No new table, receipt type, grant, or reviewer role is needed.
 - `adoptWorktreeCapsule` remains the only Workroom head writer.
 - `resolveRepositoryArtifact` remains the immutable blob, DCO, Workroom owner,
   and author resolver.
+- Serializable parent/baseline/mapped-item validation remains the plan coverage
+  commit boundary; provider network I/O does not run while that lock is held.
 - Branch ambiguity, subject mismatch, reviewer/author separation, provider
   failure, and DCO mismatch remain fail-closed.
 - Superseded receipts remain immutable audit history but never satisfy a newer
@@ -244,6 +247,35 @@ explicit head SHA. Adoption updates the existing Workroom and records the old
 and new heads. The artifact resolver then performs provider blob and DCO checks.
 Unverified, mismatched, ambiguous, or foreign artifacts remain blocked.
 
+### 9. Keep provider verification outside the plan-coverage transaction
+
+The veterinary recovery fixture proves provenance is no longer its active
+boundary. `WC-A31DBE53` is synchronized to base
+`abaa0452d199b058bbdcb638c7d370075947f82a` and head
+`d7470e7457e958b5919e98e017fd5865ea4c22fb`; the immutable plan resolves and
+all five mappings validate. The remaining failure is transaction shape, not a
+reason to increase a global timeout.
+
+Resolve the immutable provider commit, DCO identity, and plan blob before
+opening the interactive transaction. Carry the resolved digest, bytes, author,
+and exact capsule/repository/commit binding into the transaction. Under the
+existing serializable boundary:
+
+1. lock the parent BacklogItem;
+2. lock and re-read the exact subject Workroom;
+3. require its repository, head, accountable principal, and non-terminal state
+   to match the preflight binding;
+4. re-read the current scope baseline and mapped BacklogItems;
+5. validate the supplied mappings against the pre-resolved immutable bytes;
+6. append the coverage receipt.
+
+No fetch, credential lookup, provider call, or DCO parsing occurs while the
+database locks are held. A changed head, owner, baseline, mapping target, or
+ambiguous Workroom fails closed and writes no receipt. A Prisma transaction
+expiry/conflict returns a typed, actionable retry response for the same
+immutable packet; it is never reported as `plan-artifact-invalid` and never
+implies a partial receipt.
+
 ## Trust boundaries
 
 | Boundary | Fail-closed rule |
@@ -256,6 +288,7 @@ Unverified, mismatched, ambiguous, or foreign artifacts remain blocked.
 | Proposed design -> receipts | Latest valid design-spec digest anchors pre-baseline reviews; superseded artifact digests are stale. |
 | Evidence -> Workroom | Only a full provider branch-head match reaches adoption. |
 | Workroom -> author | Exact subject/repo/head, provider blob, one DCO identity, and accountable owner remain required. |
+| Provider preflight -> coverage commit | Immutable bytes/digest may be reused; mutable Workroom, author ownership, baseline, and mapped items are locked and revalidated before append. |
 
 ## Acceptance and traceability
 
@@ -273,6 +306,7 @@ Unverified, mismatched, ambiguous, or foreign artifacts remain blocked.
 | `AC-AUTHOR-AFTER-SYNC` | Artifact author resolves after synchronization. | Repository-artifact integration fixture. |
 | `AC-FAIL-CLOSED` | Unverified, mismatched, ambiguous, foreign, unsigned, or DCO-conflicting artifacts do not resolve. | Negative tests. |
 | `AC-REPLAY` | Replaying evidence reconciles null/stale heads idempotently, and blocked Workrooms receive an exact reviewer route. | WC-E8275570- and WC-B0DD2B2F-shaped regression tests. |
+| `AC-COVERAGE-TX` | A slow provider preflight does not consume the interactive transaction window; five valid mappings commit, while changed bindings or transaction expiry write no receipt and return an exact retry action. | WC-A31DBE53-shaped timing, race, and failure tests. |
 
 ## Non-goals
 
