@@ -168,6 +168,47 @@ describe("budget axes", () => {
   it("does not fabricate a reading grade for an empty surface", () => {
     expect(measureUxBudget("<div></div>").readingGradeLevel).toBe(0);
   });
+
+  // ── BI-0ED0F6B3 — the reading grade measures difficulty, not punctuation ──
+
+  /** The /finance/mileage surface, in the markup shape that exposed the defect. */
+  const LABEL_SURFACE = `<main><h1>Mileage</h1><p>3 to sort</p><a>See my drives</a>
+    <table><tr><th>Date</th><th>Route</th><th>Miles</th><th>Sorted</th><th>Owed</th></tr></table>
+    <ul><li>Business</li><li>Personal</li><li>Commute</li></ul></main>`;
+
+  it("grades a surface of plain labels as plain", () => {
+    // Every word here is ordinary English. Before the fix the whole page
+    // collapsed into one "sentence" and graded in the teens.
+    const grade = measureUxBudget(LABEL_SURFACE).readingGradeLevel;
+    expect(grade).toBeLessThan(9);
+  });
+
+  it("cannot be gamed by punctuating the labels", () => {
+    const stopped = LABEL_SURFACE.replace(/<\/(h1|p|a|th|li)>/g, ".</$1>");
+    expect(measureUxBudget(stopped).readingGradeLevel).toBe(
+      measureUxBudget(LABEL_SURFACE).readingGradeLevel,
+    );
+  });
+
+  it("still fails a surface whose own words are dense", () => {
+    const dense = `<main><h1>Infrastructure</h1><p>Optimization</p>
+      <ul><li>Administrative</li><li>Documentation</li><li>Organizational</li></ul></main>`;
+    expect(measureUxBudget(dense).readingGradeLevel).toBeGreaterThan(9);
+  });
+
+  it("scores the route's own copy, not the shell chrome around it", () => {
+    const dense = `<main><h1>Infrastructure Optimization</h1><p>Administrative documentation.</p></main>`;
+    const chrome = `<header><a>Home</a><a>Work</a><a>Money</a></header><nav><ul><li>Jobs</li><li>Bills</li></ul></nav>`;
+    // Adding a rail of short, easy nav labels must not dilute the page's grade.
+    expect(measureUxBudget(chrome + dense).readingGradeLevel).toBe(
+      measureUxBudget(dense).readingGradeLevel,
+    );
+  });
+
+  it("falls back to the whole surface when the shell marks no <main>", () => {
+    const noMain = `<div><h1>Date</h1><p>Route</p></div>`;
+    expect(measureUxBudget(noMain).readingGradeLevel).not.toBe(0);
+  });
 });
 
 describe("reading tier resolves from audience, not shell alone (BI-1DE6F69E)", () => {

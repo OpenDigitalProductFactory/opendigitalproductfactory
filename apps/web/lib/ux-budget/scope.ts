@@ -283,3 +283,18 @@ export function countDisclosureRegions(html: string): number {
   const rendered = removeSubtrees(html, (tag) => NON_RENDERED.has(tag.name));
   return extractSubtrees(rendered, isDisclosureRegion).length;
 }
+
+/**
+ * The ROUTE-OWNED region of a surface: the `<main>` landmark when the shell
+ * marks one, otherwise the whole scope unchanged.
+ *
+ * Only the reading-level axis uses this (BI-0ED0F6B3). Every other budget is
+ * about what the owner MEETS on arrival, and the shell's header and rail are
+ * part of that; but a reading grade computed over shared chrome measures the
+ * chrome, identically, on all 202 routes, and drowns whatever the page itself
+ * says. Word and control counts keep their existing whole-surface scope.
+ */
+export function routeContentHtml(html: string): string {
+  const mains = extractSubtrees(html, (tag) => tag.name === "main");
+  return mains.length > 0 ? mains.join("\n") : html;
+}
