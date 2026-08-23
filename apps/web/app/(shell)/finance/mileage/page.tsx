@@ -36,7 +36,7 @@ export default async function MileagePage() {
         <FinanceTabNav />
         <h1 className="text-xl font-bold text-[var(--dpf-text)]">Mileage</h1>
         <p className="mt-4 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface)] p-4 text-sm text-[var(--dpf-muted)]">
-          No employee record is linked to your account. An admin can link it.
+          You have no staff record. Ask an admin to add one.
         </p>
       </div>
     );
@@ -85,8 +85,8 @@ export default async function MileagePage() {
         <h1 className="text-xl font-bold text-[var(--dpf-text)]">Mileage</h1>
         <p className="max-w-3xl text-sm leading-5 text-[var(--dpf-muted)]">
           {unclassified > 0
-            ? `${unclassified} drive${unclassified === 1 ? "" : "s"} to sort.`
-            : "All drives sorted."}
+            ? `${unclassified} to sort.`
+            : "All sorted."}
         </p>
         <a
           href="#mileage-drives"
@@ -94,7 +94,7 @@ export default async function MileagePage() {
           data-owner-first-next-action="classify-drives"
           className="inline-flex text-sm font-semibold text-[var(--dpf-accent)] underline-offset-2 hover:underline"
         >
-          Go to my drives
+          See my drives
         </a>
       </header>
 

@@ -1,6 +1,6 @@
 {
   "generator": "apps/web/scripts/build-route-manifest.ts",
-  "routeCount": 627,
+  "routeCount": 630,
   "routes": [
     {
       "routePath": "/",
@@ -3292,6 +3292,48 @@
       ],
       "dynamicParams": [],
       "file": "apps/web/app/api/v1/integrations/coverage/route.ts"
+    },
+    {
+      "routePath": "/api/v1/mileage/consent",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "mileage",
+        "consent"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/v1/mileage/consent/route.ts",
+      "exposure": "authenticated"
+    },
+    {
+      "routePath": "/api/v1/mileage/trips",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "mileage",
+        "trips"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/v1/mileage/trips/route.ts",
+      "exposure": "authenticated"
+    },
+    {
+      "routePath": "/api/v1/mileage/trips/[tripId]",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "mileage",
+        "trips",
+        "[tripId]"
+      ],
+      "dynamicParams": [
+        "tripId"
+      ],
+      "file": "apps/web/app/api/v1/mileage/trips/[tripId]/route.ts",
+      "exposure": "authenticated"
     },
     {
       "routePath": "/api/v1/notifications",

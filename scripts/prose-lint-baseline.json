@@ -3503,6 +3503,30 @@
     "longSentences": 0,
     "textMass": 4
   },
+  "apps/web/app/api/v1/mileage/consent/route.ts": {
+    "vocabulary": 0,
+    "retiredVocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 8
+  },
+  "apps/web/app/api/v1/mileage/trips/[tripId]/route.ts": {
+    "vocabulary": 0,
+    "retiredVocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 4
+  },
+  "apps/web/app/api/v1/mileage/trips/route.ts": {
+    "vocabulary": 0,
+    "retiredVocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 8
+  },
   "apps/web/app/api/v1/notifications/[id]/read/route.ts": {
     "vocabulary": 0,
     "retiredVocabulary": 0,

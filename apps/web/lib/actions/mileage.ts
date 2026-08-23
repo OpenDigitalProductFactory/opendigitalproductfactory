@@ -25,7 +25,7 @@ import {
   setTripClassification,
   type RecordTripPayload,
 } from "@/lib/mileage/trip-service";
-import { resolveRateForDate, type ResolvableRate } from "@/lib/mileage/rates";
+import type { ResolvableRate } from "@/lib/mileage/rates";
 import type { TripClassification } from "@/lib/mileage/classification";
 
 const MILEAGE_PATH = "/finance/mileage";

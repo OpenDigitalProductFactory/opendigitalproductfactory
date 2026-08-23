@@ -78,12 +78,12 @@ export function MileageTripsTable({
     },
     {
       key: "classification",
-      header: "Sorted as",
+      header: "Sorted",
       cell: (row) =>
         row.claimed ? (
           // A claimed drive is accounting evidence — its classification must
           // not change after the money moved.
-          <span className="text-xs text-[var(--dpf-muted)]">{row.classification} · claimed</span>
+          <span className="text-xs text-[var(--dpf-muted)]">{row.classification} · paid</span>
         ) : (
           <div className="flex gap-1">
             {CHOICES.map((choice) => (
@@ -104,7 +104,7 @@ export function MileageTripsTable({
     },
     {
       key: "amount",
-      header: "You are owed",
+      header: "Owed",
       align: "right",
       cell: (row) =>
         // An unpriced drive shows a placeholder, never a zero — "not yet
@@ -137,7 +137,7 @@ export function MileageTripsTable({
         initialSort={{ key: "date", dir: "desc" }}
         empty={
           <div className="p-6 text-center text-sm text-[var(--dpf-muted)]">
-            No drives yet. Turn on capture in the mobile app.
+            No drives yet. Turn it on in the app.
           </div>
         }
       />
