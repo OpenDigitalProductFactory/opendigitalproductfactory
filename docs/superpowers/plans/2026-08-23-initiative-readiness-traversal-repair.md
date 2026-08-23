@@ -10,10 +10,11 @@ status: draft
 
 ## Delivery contract
 
-The repair has four testable slices: profile/policy, actionable reviewer
-routing, provider-verified Workroom reconciliation, and existing-Workroom
-replay. Production implementation starts only after governed implementation
-intent is allowed; design/plan work proceeds under design intent.
+The repair has five testable slices: profile/policy, actionable reviewer
+routing, organization-bound reviewer authority, provider-verified Workroom
+reconciliation, and existing-Workroom replay. Production implementation starts
+only after governed implementation intent is allowed; design/plan work proceeds
+under design intent.
 
 ## Traceability matrix
 
@@ -23,6 +24,7 @@ intent is allowed; design/plan work proceeds under design intent.
 | `AC-POLICY-DIFFERENT` | table-driven fix/feature/cross-domain tests | `evaluate.ts` and policy version |
 | `AC-RECOVERY-ROUTE` | recovery resolver and claim-response tests | lane registry, recovery adapter, claim handler |
 | `AC-REVIEW-SEPARATION` | external no-thread request tests and receipt separation tests | coworker pack -> `submitRemoteCoworkerTask` |
+| `AC-SPEC-AUTHORITY` | authority writer and exact spec-approval traversal tests | subject derivation, authority decision log, baseline repository |
 | `AC-HEAD-RECONCILE`, `AC-REPLAY` | provider, handler, capture/adopt tests | external evidence and external session capture |
 | `AC-AUTHOR-AFTER-SYNC`, `AC-FAIL-CLOSED` | repository-artifact positive/negative fixtures | existing artifact resolver |
 
@@ -79,7 +81,20 @@ budget and may not broaden untested behavior.
    behavior.
 5. Reuse existing TaskRun lifecycle, clearance, grants, and audit code.
 
-## Task 6 - Red/green provider-verified head reconciliation
+## Task 6 - Red/green organization-bound reviewer authority
+
+Before head reconciliation, repair the independently reproduced spec-approval
+authority path:
+
+1. Add `itemId` as a server-recognized backlog-item authority subject.
+2. Resolve the BacklogItem organization server-side before the authority log is
+   written; do not accept caller-supplied organization authority.
+3. Prove an eligible independent reviewer receives a matching organization-bound
+   allow decision and can traverse the existing spec-approval repository.
+4. Prove missing item, missing organization, conflicting authenticated context,
+   wrong reviewer grant, and author/reviewer collision remain denied.
+
+## Task 7 - Red/green provider-verified head reconciliation
 
 1. Explicit head plus matching provider branch passes SHA to capture.
 2. A single full SHA in `commits` is inferred for compatibility.
@@ -94,21 +109,21 @@ Refactoring allocation: share canonical provider identity/header/full-SHA
 helpers where contracts truly match. Keep branch-head verification separate
 from blob/DCO verification because their failure semantics differ.
 
-## Task 7 - Artifact-author and fail-closed integration
+## Task 8 - Artifact-author and fail-closed integration
 
 Start with a subject Workroom whose head is null. Reconcile it through external
 evidence, resolve the immutable artifact/author, then repeat with mismatched
 head, unsigned commit, conflicting DCO principal, ambiguous Workrooms, and
 provider failure. No artifact-author relaxation belongs in production code.
 
-## Task 8 - Verification and reviews
+## Task 9 - Verification and reviews
 
 Run focused suites after every Red/Green slice, then related projection,
 baseline, receipt, Workroom, coworker, MCP task/route, and external-evidence
 suites; typecheck; blast-radius analysis; independent architecture review; UX
 review of model-facing recovery copy; and `pnpm run pregate:preflight`.
 
-## Task 9 - Governed publication
+## Task 10 - Governed publication
 
 Commit with one DCO trailer, synchronize WC-2ABA65F7 to the stable commit,
 obtain fresh independent semantic review, run shared-lease exact-tree local CI
@@ -116,7 +131,7 @@ and full pregate, push only green reviewed SHA, open a ready PR, read bot
 findings, run `pnpm pr:health`, and use the protected merge queue. Verify the
 live install before closing BI-F0715C9C.
 
-## Task 10 - WordPress recovery proof
+## Task 11 - Existing blocked-Workroom recovery proof
 
 After merge/live deployment:
 
@@ -131,3 +146,10 @@ After merge/live deployment:
 6. Re-claim implementation and confirm only fix obligations remain.
 7. Continue the WordPress task through its own tests, semantic review, pregate,
    exact-tree CI, PR health, and merge. Never proxy the old missing receipts.
+
+Then replay the reviewer route for `BI-D2A51B36` / `WC-B0DD2B2F` at immutable
+head `49140d33a9f7c2d62abcf1ffc28e0fbff50b1203`. Confirm readiness recommends an
+exact eligible agent and that threadless dispatch creates an auth-bound TaskRun
+rather than returning `missing_threadId` or opening a default coworker. Preserve
+manual-check evidence `cmt5b0dy006gd01rmfykifyq3` in the audit trail, and notify
+the owning task only after the protected repair is merged and verified live.
