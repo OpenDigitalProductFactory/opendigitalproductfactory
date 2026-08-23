@@ -6,8 +6,9 @@
 | Epic | `EP-5102F494` |
 | Workroom | `WC-B0DD2B2F` |
 | Branch | `feat/bi-d2a51b36-resource-occupancy` |
-| Status | Design complete; implementation planned |
+| Status | Canonical spec review-ready; implementation gated |
 | Governing decision | `DI-C955877F245D` — `canonical-resource-occupancy`, high confidence, autonomy eligible |
+| Canonical spec candidate | `docs/superpowers/specs/2026-08-23-bi-d2a51b36-canonical-resource-occupancy-design.md` |
 
 > **For agentic workers:** execute this plan one independently reviewable backlog item at a time — one BI, one branch, one PR. Use `dpf-tdd` for red-green implementation, `dpf-local-merge-ci-before-push` plus the plan's completion gate before any success claim, and `dpf-pr-with-dco` for handoff.
 
@@ -51,6 +52,7 @@ No external runtime package is added.
 
 - `goal-objective.md` for `EP-5102F494`, including the dependency order and subject-agnostic constraint.
 - `BI-D2A51B36` in full.
+- `docs/superpowers/specs/2026-08-23-bi-d2a51b36-canonical-resource-occupancy-design.md`, the review-ready objective and acceptance baseline candidate.
 - `docs/platform-usability-standards.md`.
 - `docs/superpowers/plans/2026-05-26-portal-ux-simplification-spine.md`.
 - `apps/web/components/ui/report-kit/README.md`.
@@ -224,7 +226,7 @@ fallback record; it is not represented as a successful coverage receipt.
 | Hospitality behavior regresses during refactor | keep legacy clone compatibility and existing route tests; shared repository changes canonical write/read only | revert adapter consumption while retaining additive schema |
 | New route/UI drifts from portal UX | no new page/nav, existing primitives, measured UX budget, desktop+narrow browser test | remove contextual controls while retaining substrate behind APIs |
 | Migration collides with concurrent main | timestamp-collision check immediately before commit and rebase/update from origin/main | rebump migration directory through `git mv` before publication |
-| Generated route files overlap WordPress work | wait for `WC-38FD13D8` terminal release, refresh from merged main, regenerate once | do not co-claim or hand-merge generated JSON |
+| Generated route files overlapped WordPress work | resolved: PR #4478 merged at `2b3ea261f841df1f68fcfe6720bda546044aaf92` and `WC-38FD13D8` released all claims; refresh from merged main and regenerate once implementation is authorized | regenerate from current main; do not reuse stale generated JSON |
 
 ## Documentation and gate decisions
 
