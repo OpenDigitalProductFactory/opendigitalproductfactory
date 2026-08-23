@@ -196,7 +196,7 @@ export function BuildStudioWorkflowActionCard({
         // (the same recovery the user does by re-prompting today) by opening the
         // coworker panel with a retry message. The server-side bounded auto-retry
         // handles transient failures before we ever get here.
-        openCoworkerPanel(action.coworkerPrompt);
+        openCoworkerPanel(action.coworkerPrompt, action.message);
       } else if (action.kind === "retry-build") {
         await retryBuildExecution(build.buildId);
       } else if (action.kind === "reset-build") {
@@ -245,14 +245,18 @@ export function BuildStudioWorkflowActionCard({
   }
 
   function handleCoworkerAction() {
-    openCoworkerPanel(action.coworkerPrompt);
+    openCoworkerPanel(action.coworkerPrompt, action.message);
   }
 
-  function openCoworkerPanel(prompt: string) {
+  /** Nudge the coworker on the owner's behalf. `prompt` stays machine-precise;
+   *  `display` is what the owner sees — otherwise internal tool names land in
+   *  their own transcript as if they had typed them. */
+  function openCoworkerPanel(prompt: string, display?: string) {
     document.dispatchEvent(
       new CustomEvent("open-agent-panel", {
         detail: {
           autoMessage: prompt,
+          displayMessage: display,
           targetBuildId: build.buildId,
         },
       }),
@@ -264,7 +268,7 @@ export function BuildStudioWorkflowActionCard({
       await handlePrimaryAction();
       return;
     }
-    openCoworkerPanel(prompt.coworkerPrompt);
+    openCoworkerPanel(prompt.coworkerPrompt, prompt.recommendedAction);
   }
 
   async function handleDecisionCapture(capture: DecisionGateCaptureDraft) {

@@ -2798,14 +2798,6 @@
     "longSentences": 0,
     "textMass": 4
   },
-  "apps/web/app/api/storefront/admin/hospitality-resources/route.ts": {
-    "vocabulary": 0,
-    "retiredVocabulary": 0,
-    "genericLabels": 0,
-    "readability": 0,
-    "longSentences": 0,
-    "textMass": 4
-  },
   "apps/web/app/api/storefront/admin/items/[id]/route.ts": {
     "vocabulary": 0,
     "retiredVocabulary": 0,
@@ -4188,7 +4180,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 2,
-    "textMass": 212
+    "textMass": 218
   },
   "apps/web/components/agent/AgentFAB.tsx": {
     "vocabulary": 0,

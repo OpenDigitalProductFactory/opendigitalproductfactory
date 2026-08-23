@@ -76,6 +76,51 @@ describe("local provider capacity reservation", () => {
   });
 });
 
+describe("a contributor preview must not reserve inference capacity", () => {
+  it("ignores a queued dev-portal preview claim", async () => {
+    // BI-D933A328: a preview client retrying a refused claim enqueues a new row
+    // every ~31s, so this queue is never empty. Deferring on it made the
+    // platform's own AI permanently unavailable.
+    const status = await inspectLocalProviderCapacity({
+      listCapacityLeases: async () => [
+        {
+          environmentKey: "local-integration-ci",
+          status: "queued",
+          claimKey: "dev-portal:dev-portal-39151:feat/some-branch",
+        },
+      ],
+    });
+    expect(status.available).toBe(true);
+  });
+
+  it("ignores an active dev-portal preview claim", async () => {
+    const status = await inspectLocalProviderCapacity({
+      listCapacityLeases: async () => [
+        {
+          environmentKey: "local-integration-ci",
+          status: "active",
+          claimKey: "dev-portal:dev-portal-1:feat/x",
+        },
+      ],
+    });
+    expect(status.available).toBe(true);
+  });
+
+  it("still defers for a real CI gate, which does contend for the host", async () => {
+    const status = await inspectLocalProviderCapacity({
+      listCapacityLeases: async () => [
+        {
+          environmentKey: "local-integration-ci",
+          status: "active",
+          claimKey: "local-ci:session-1:abc123",
+        },
+      ],
+    });
+    expect(status.available).toBe(false);
+    expect(status.reason).toBe("local-ci-active-capacity-reservation");
+  });
+});
+
 describe("short-call capacity policy (BI-0AA939DF / DI-405E6765ED90)", () => {
   const lease = (status: string) => ({ environmentKey: "local-integration-ci", status });
   const noSleep = async () => {};
