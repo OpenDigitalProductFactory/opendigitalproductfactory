@@ -326,6 +326,17 @@ export {
   type OrganizationCrosswalk,
 } from "./federated-record-sync";
 export {
+  ENROLLMENT_DECISIONS,
+  MANUAL_APPROVAL_REASONS,
+  evaluateOrganizationEnrollment,
+  type EnrollmentDecision,
+  type EnrollmentEvaluation,
+  type EnrollmentProposal,
+  type ManualApprovalReason,
+  type OrganizationTrustAnchor,
+  type PeerEnrollmentEvidence,
+} from "./organization-federation-enrollment";
+export {
   syncDigitalProduct,
   syncTaxonomyNode,
   syncPortfolio,
