@@ -352,6 +352,79 @@ export async function getOrCreateThread(input?: {
   return snapshot ? { threadId: snapshot.threadId } : null;
 }
 
+/**
+ * BI-2C88CD53: flatten a design-doc text field the local model returned as a
+ * nested object/array of labelled sections into a single readable string.
+ *
+ * The frontier CLI ideate path returns proposedApproach/problemStatement/
+ * reusePlan as plain prose strings, which saveBuildEvidence validates. The
+ * on-box local model (qwen3 via routeAndCall) instead nests them — e.g.
+ * proposedApproach: { "Data Model": "...", "API Routes": "..." } — so a
+ * structurally-complete local design doc failed the "must be a non-empty
+ * string" gate and the ideate phase could never complete on a fully-local
+ * install. Rendering the object as "Label: value" lines preserves every
+ * section the model produced while satisfying the string contract.
+ */
+function flattenDesignDocField(value: unknown): unknown {
+  if (value === null || value === undefined) return value;
+  if (typeof value === "string") return value;
+  if (Array.isArray(value)) {
+    const parts = value
+      .map((item) => (typeof item === "string" ? item : flattenDesignDocField(item)))
+      .filter((item): item is string => typeof item === "string" && item.trim().length > 0);
+    return parts.join("\n");
+  }
+  if (typeof value === "object") {
+    const parts: string[] = [];
+    for (const [key, raw] of Object.entries(value as Record<string, unknown>)) {
+      const rendered = flattenDesignDocField(raw);
+      if (typeof rendered === "string" && rendered.trim().length > 0) {
+        parts.push(`${key}: ${rendered}`);
+      }
+    }
+    return parts.join("\n");
+  }
+  return value;
+}
+
+/**
+ * Coerce the string-typed required design-doc fields (the ones saveBuildEvidence
+ * validates) into strings, flattening any nested-object output from the local
+ * model. Non-required fields (e.g. dataModel, acceptanceCriteria[]) are left
+ * untouched so their own schema still applies.
+ */
+export function coerceDesignDocTextFields(
+  doc: Record<string, unknown>,
+): Record<string, unknown> {
+  const REQUIRED_TEXT_FIELDS = [
+    "problemStatement",
+    "proposedApproach",
+    "reusePlan",
+    "existingFunctionalityAudit",
+    "existingCodeAudit",
+  ] as const;
+  const out: Record<string, unknown> = { ...doc };
+  for (const field of REQUIRED_TEXT_FIELDS) {
+    if (field in out && typeof out[field] !== "string") {
+      const flattened = flattenDesignDocField(out[field]);
+      if (typeof flattened === "string" && flattened.trim().length > 0) {
+        out[field] = flattened;
+      }
+    }
+  }
+  // Diagnostic (BI-2C88CD53): record when the local model's output needed
+  // flattening, so the frequency of this on fully-local installs is visible.
+  for (const field of ["problemStatement", "proposedApproach", "reusePlan"] as const) {
+    const before = doc[field];
+    if (before !== undefined && typeof before !== "string") {
+      console.log(
+        `[coworker] coerceDesignDocTextFields: flattened non-string "${field}" (${Array.isArray(before) ? "array" : typeof before}) -> ${String(out[field]).length} chars`,
+      );
+    }
+  }
+  return out;
+}
+
 export async function sendMessage(input: {
   threadId: string;
   content: string;
@@ -2125,12 +2198,24 @@ export async function sendMessage(input: {
           console.log(`[coworker] Ideate result: success=${ideateResult.success}, hasDesignDoc=${!!ideateResult.designDoc}, docKeys=${ideateResult.designDoc ? Object.keys(ideateResult.designDoc as Record<string, unknown>).join(",") : "none"}`);
 
           if (ideateResult.success && ideateResult.designDoc) {
+            // BI-2C88CD53: the on-box local model (qwen3) reliably returns the
+            // required design-doc text fields as nested OBJECTS/arrays of
+            // labelled sections instead of a single string. saveBuildEvidence
+            // validates proposedApproach/problemStatement/reusePlan as
+            // non-empty strings (min 5 chars), so a structurally-complete local
+            // design doc was rejected and the ideate phase could never complete
+            // on a fully-local install. Flatten those fields to readable strings
+            // before saving — the same "make the local model's output conform"
+            // treatment the existingCodeAudit auto-patch already applies below.
+            const normalizedDesignDoc = coerceDesignDocTextFields(
+              ideateResult.designDoc as Record<string, unknown>,
+            );
             // Save design doc via the same tool handler
             console.log(`[coworker] Saving design doc + triggering review...`);
             const { executeTool } = await import("@/lib/mcp-tools");
             const saveResult = await executeTool(
               "saveBuildEvidence",
-              { buildId: resolvedBuildId, field: "designDoc", value: ideateResult.designDoc },
+              { buildId: resolvedBuildId, field: "designDoc", value: normalizedDesignDoc },
               user.id!,
               { routeContext: input.routeContext },
             );
@@ -2138,7 +2223,7 @@ export async function sendMessage(input: {
             console.log(`[coworker] saveBuildEvidence result: success=${saveResult.success}, msg=${JSON.stringify(saveResult.message?.slice(0, 100))}`);
 
             if (saveResult.success) {
-              const approach = String((ideateResult.designDoc as Record<string, unknown>).proposedApproach ?? "").trim();
+              const approach = String(normalizedDesignDoc.proposedApproach ?? "").trim();
               console.log(`[coworker] Approach length: ${approach.length}`);
               if (approach.length < 30) {
                 // Design doc saved but approach is blank — research engine produced an empty doc.
@@ -2164,7 +2249,7 @@ export async function sendMessage(input: {
               // If the only issue is a missing/short codebase audit, auto-patch the doc and retry once.
               // This prevents an infinite loop where the agent calls start_ideate_research repeatedly
               // when the research engine produced valid content but omitted the audit field.
-              const rawDoc = ideateResult.designDoc as Record<string, unknown>;
+              const rawDoc = normalizedDesignDoc;
               const auditRaw = String(rawDoc?.existingCodeAudit ?? rawDoc?.existingFunctionalityAudit ?? "");
               if (saveResult.error === "Design doc missing codebase research." && auditRaw.length < 20) {
                 const reusePlan = String(rawDoc?.reusePlan ?? "").slice(0, 150);
