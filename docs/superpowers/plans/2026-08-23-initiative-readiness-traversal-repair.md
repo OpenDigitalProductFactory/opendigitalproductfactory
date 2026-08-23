@@ -28,6 +28,7 @@ authorizes implementation intent.
 | `AC-PROFILE-FIX`, `AC-PROFILE-MONOTONIC` | policy and adapter fixtures | `profiles.ts` |
 | `AC-POLICY-DIFFERENT` | table-driven fix/feature/cross-domain tests | `evaluate.ts` and policy version |
 | `AC-RECOVERY-ROUTE` | recovery resolver and claim-response tests | lane registry, recovery adapter, claim handler |
+| `AC-UI-TARGET` | exact-target and stale-target launcher tests | recovery action / coworker launcher |
 | `AC-REVIEW-SEPARATION` | external no-thread request tests and receipt separation tests | coworker pack -> `submitRemoteCoworkerTask` |
 | `AC-SPEC-AUTHORITY` | authority writer and exact spec-approval traversal tests | subject derivation, authority decision log, baseline repository |
 | `AC-HEAD-RECONCILE`, `AC-REPLAY` | provider, handler, capture/adopt tests | external evidence and external session capture |
@@ -73,7 +74,9 @@ budget and may not broaden untested behavior.
 3. Exclude the current author agent.
 4. Return one escalation when no eligible agent exists.
 5. Add recovery to unsuccessful claims without changing their verdict.
-6. Centralize lane metadata in the existing initiative tool-grant module and
+6. Preserve the recommended canonical `agentId` through any recovery launcher;
+   stale targets fail visibly and refresh, never fall back to a default agent.
+7. Centralize lane metadata in the existing initiative tool-grant module and
    make the receipt pack consume it.
 
 ## Task 5 - Red/green external reviewer dispatch
